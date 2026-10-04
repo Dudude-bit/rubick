@@ -101,7 +101,9 @@ export const ROWS_PER_CLUSTER = 5;
  * both are visible afterwards as a chip.
  */
 export type Scope =
-  { kind: "current" } | { kind: "all" } | { kind: "context"; context: string };
+  | { kind: "current" }
+  | { kind: "all" }
+  | { kind: "context"; context: string };
 
 /** One rendered line. Only some of them are places the arrows stop. */
 export type Entry =

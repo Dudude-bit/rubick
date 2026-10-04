@@ -77,7 +77,7 @@ function InternalIpCell({ address }: { address: string | undefined }) {
 
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 export const columns = (
   /** Keyed by node name; a node the metrics API missed gets an empty reading. */
   nodeMetricsByName: Map<string, NodeMetrics>

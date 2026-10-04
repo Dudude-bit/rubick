@@ -151,7 +151,6 @@ export function PodTerminal({
   // ends up calling setSessionId inside. Genuine side-effect (talks
   // to the backend); not derivable.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     connect();
 
     // Cleanup on unmount - use ref to get current sessionId
@@ -162,7 +161,7 @@ export function PodTerminal({
         commands.closeTerminal(sid).catch(() => {});
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Poll for pod status while connected

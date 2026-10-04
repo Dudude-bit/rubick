@@ -81,7 +81,7 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
 
 // The cell needs the translator, so it is a component; `columns` is exported
 // for `column-widths.test.ts`, which costs this file its fast refresh.
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 function LastSchedule({ at }: { at: string | null }) {
   const t = useT();
   return (

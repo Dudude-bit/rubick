@@ -21,7 +21,8 @@ export interface LabelSelector {
 }
 
 export type Labels =
-  Readonly<Record<string, string>> | ReadonlyMap<string, string>;
+  | Readonly<Record<string, string>>
+  | ReadonlyMap<string, string>;
 
 export type Requirement =
   | { key: string; operator: "In" | "NotIn"; values: readonly string[] }

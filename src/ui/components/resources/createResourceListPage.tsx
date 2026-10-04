@@ -72,7 +72,8 @@ export interface ResourceListPageConfig<T extends ListableResource> {
    * called.
    */
   description?:
-    string | ((deps: { scope: NamespaceScope; t: Translator }) => string);
+    | string
+    | ((deps: { scope: NamespaceScope; t: Translator }) => string);
   /**
    * Optional watch subscription factory. When supplied, the page subscribes to
    * backend `resource-event` updates and the polling `refresh` rate is

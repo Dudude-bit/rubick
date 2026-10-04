@@ -74,7 +74,7 @@ const MONO = "font-mono text-fg-mid";
  * sentence stays one catalogue string with a placeholder, which is what lets a
  * translator move the monospace word wherever their word order wants it.
  */
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 function Sentence({
   k,
   token,
@@ -158,7 +158,10 @@ export function describeAuth(context: ContextInfo): ReactNode {
 }
 
 export type ContextStatus =
-  "connected" | "ready" | "cannot connect" | "cannot tell";
+  | "connected"
+  | "ready"
+  | "cannot connect"
+  | "cannot tell";
 
 export interface ContextReading {
   how: ReactNode;

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { CheckOutcome } from "@/generated/types";
 import { addressesIn, parseHostPort, verdictOf } from "./checks";

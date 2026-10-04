@@ -2094,7 +2094,10 @@ export type PolicySelects =
 export type BudgetUnit = "cpu" | "memory" | "count";
 
 export type MetricsStatusKind =
-  "available" | "notInstalled" | "forbidden" | "error";
+  | "available"
+  | "notInstalled"
+  | "forbidden"
+  | "error";
 
 export type TcpProbeReason = "refused" | "timedOut";
 
@@ -2107,7 +2110,10 @@ export type DebugStatus =
   | { type: "timeout" };
 
 export type EnvVarSourceType =
-  "configMapKeyRef" | "secretKeyRef" | "fieldRef" | "resourceFieldRef";
+  | "configMapKeyRef"
+  | "secretKeyRef"
+  | "fieldRef"
+  | "resourceFieldRef";
 
 export type ContainerPhase = "app" | "init" | "sidecar";
 
@@ -2210,7 +2216,11 @@ export type SearchFailureKind =
   | "other";
 
 export type SearchContextStatus =
-  "connecting" | "searching" | "done" | "failed" | "skipped";
+  | "connecting"
+  | "searching"
+  | "done"
+  | "failed"
+  | "skipped";
 
 export type DryRunOutcome =
   | { says: "created" }
@@ -2228,7 +2238,12 @@ export type AnsiColor =
 export type LogFormat = "plain" | "json" | "logfmt" | "klog" | "logback";
 
 export type LogLevel =
-  "debug" | "info" | "warn" | "error" | "fatal" | "unknown";
+  | "debug"
+  | "info"
+  | "warn"
+  | "error"
+  | "fatal"
+  | "unknown";
 
 export type QueryTerm =
   | { kind: "text"; value: string }
@@ -2383,7 +2398,11 @@ export type ContainerState =
   | { type: "unknown" };
 
 export type ListingFailure =
-  "noTools" | "unopenable" | "refused" | "notRunning" | "failed";
+  | "noTools"
+  | "unopenable"
+  | "refused"
+  | "notRunning"
+  | "failed";
 
 export type ListedWith = "gnuFind" | "busyboxStat";
 
@@ -2392,7 +2411,10 @@ export type FileKind = "file" | "dir" | "symlink" | "other";
 export type DrainOutcome = "drained" | "stopped" | "cancelled" | "failed";
 
 export type DrainRefusal =
-  "notNow" | "nothingWouldReplaceIt" | "holdsLocalData" | "other";
+  | "notNow"
+  | "nothingWouldReplaceIt"
+  | "holdsLocalData"
+  | "other";
 
 export type AuthOutcome =
   | { says: "said"; text: string }
@@ -2403,14 +2425,18 @@ export type AuthOutcome =
   | { says: "switchedAway" };
 
 export type StreamFailureKind =
-  "gone" | "broken" | "no-previous-run" | "log-not-kept";
+  | "gone"
+  | "broken"
+  | "no-previous-run"
+  | "log-not-kept";
 
 export type WatchOp = "applied" | "deleted" | "restarted" | "synced" | "failed";
 
 export type CheckAnswer = "yes" | "no" | "unanswered" | "noTool";
 
 export type Check =
-  { kind: "dns"; name: string } | { kind: "tcp"; host: string; port: number };
+  | { kind: "dns"; name: string }
+  | { kind: "tcp"; host: string; port: number };
 
 export type FileRead =
   | { state: "preview"; preview: FilePreview }

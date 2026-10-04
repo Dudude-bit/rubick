@@ -12,7 +12,7 @@
  * side ever reads that cluster differently, this stops passing.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { routeTraces } from "./route-trace";
 import { translate } from "@/i18n";

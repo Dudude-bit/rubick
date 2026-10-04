@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import live from "@/lib/__fixtures__/live-prometheus-operator.json";
 import type {

@@ -6,7 +6,7 @@
  * reader to ignore the one line that was ever going to matter.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 vi.mock("@/lib/commands", () => ({
   commands: { listCustomResources: vi.fn() },

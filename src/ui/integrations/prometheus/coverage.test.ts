@@ -7,7 +7,7 @@
  * pods, every number real and none of them yours.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 vi.mock("@/lib/commands", () => ({
   commands: { listNodes: vi.fn(), prometheusQuery: vi.fn() },

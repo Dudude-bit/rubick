@@ -6,7 +6,7 @@
  * could not look. The row is better with no number on it.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import {
   alertsMark,

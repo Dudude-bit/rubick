@@ -6,7 +6,7 @@
  * only ever entitled to the first one.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { type ReactElement } from "react";
 import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";

@@ -198,7 +198,7 @@ export function LogDensityStrip({
   // times a second, on the one component that is redrawing anyway.
   const cursorRef = useRef<DensityCursor>({ ...INITIAL_CURSOR });
   const density = useMemo(
-    // eslint-disable-next-line react-hooks/refs
+    // oxlint-disable-next-line react-hooks/refs
     () => advanceDensity(cursorRef.current, logs, budget, scope),
     [logs, budget, scope]
   );

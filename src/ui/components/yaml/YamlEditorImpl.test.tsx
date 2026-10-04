@@ -1,5 +1,5 @@
 import { render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 const captured: { props?: Record<string, unknown> } = {};
 vi.mock("@uiw/react-codemirror", () => ({

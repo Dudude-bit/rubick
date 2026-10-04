@@ -490,7 +490,7 @@ export function CommandPalette() {
   // Reset on every open/close transition. Genuine sync-prop-into-state —
   // a `key`-style remount would be cleaner but the palette is mounted at
   // the app root.
-  /* eslint-disable react-hooks/set-state-in-effect */
+  /* oxlint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     if (open) {
       inputRef.current?.focus();
@@ -509,7 +509,7 @@ export function CommandPalette() {
       setAlert(null);
     }
   }, [open]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  /* oxlint-enable react-hooks/set-state-in-effect */
 
   // Arrowing past the fold has to bring the row with it — the field keeps
   // the focus, so the browser will not do it. Optional call because jsdom

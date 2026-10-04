@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 import { MAX_PINNED_PER_CONTEXT, pinsOf } from "@/lib/my-services";
 import { usePinnedServicesStore } from "./pinnedServicesStore";

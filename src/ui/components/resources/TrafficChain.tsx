@@ -271,7 +271,7 @@ export function RoutesNote({ routes }: { routes: ServiceRoute[] | undefined }) {
 }
 
 /** The address a client types for this route, scheme included where known. */
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 export function routeAddress(route: ServiceRoute): string {
   const tail = route.path === "/" ? "" : route.path;
   return route.tls === null

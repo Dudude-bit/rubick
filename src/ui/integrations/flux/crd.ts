@@ -21,7 +21,8 @@ const helmReleaseColumns: CrdColumn[] = [
     header: "ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
-        Array<{ type: string; status: string; reason?: string }> | undefined;
+        | Array<{ type: string; status: string; reason?: string }>
+        | undefined;
 
       if (!Array.isArray(conditions)) return "Unknown";
 
@@ -110,7 +111,8 @@ const helmRepositoryColumns: CrdColumn[] = [
     header: "ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
-        Array<{ type: string; status: string }> | undefined;
+        | Array<{ type: string; status: string }>
+        | undefined;
 
       if (!Array.isArray(conditions)) return "Unknown";
 
@@ -138,7 +140,8 @@ const helmRepositoryColumns: CrdColumn[] = [
     header: "type",
     accessor: (resource) => {
       const repoType = getValueByPath(resource, "spec.type") as
-        string | undefined;
+        | string
+        | undefined;
       return repoType ?? "default";
     },
     cell: (value) => String(value ?? "-"),
@@ -172,7 +175,8 @@ const helmChartColumns: CrdColumn[] = [
     header: "ready",
     accessor: (resource) => {
       const conditions = getValueByPath(resource, "status.conditions") as
-        Array<{ type: string; status: string }> | undefined;
+        | Array<{ type: string; status: string }>
+        | undefined;
 
       if (!Array.isArray(conditions)) return "Unknown";
 

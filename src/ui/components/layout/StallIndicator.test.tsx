@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { REPAINT_MS, stallWatch } from "@/lib/stall-watch";

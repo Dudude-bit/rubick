@@ -5,7 +5,7 @@
  * dialog would have spun forever. This runs the real handler.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { DiffAnswer, DiffRequest } from "./diff.worker";
 

@@ -75,7 +75,7 @@ Claims here are settled by running things, not by reasoning about them.
 - **Sabotage your own test.** Break the code and confirm it fails _for the right
   reason_. A test that passes against broken code is worse than none.
 - **There is no pre-push hook.** Run `bun run test` and `bunx tsc --noEmit`
-  yourself. The pre-commit hook formats what you stage with prettier and
+  yourself. The pre-commit hook formats what you stage with `vp fmt` and
   rustfmt and stages the result; `ci.yml` checks both again, in the Frontend
   and Rust jobs — a squash merge runs no hook, so main arrived at 4.18.0 red
   on both, and every open PR inherited the failure.
@@ -308,14 +308,19 @@ the recorder; the rules that fail silently are these.
   binding. If it refuses because the command count dropped, that is the guard
   working: `git checkout -- src/ui/generated/`, or say `REMOVED=n` if you deleted
   n commands on purpose.
-- Keep every `no-restricted-syntax` selector in the **one** config block in
-  `eslint.config.js`. A second config object naming that rule _replaces_ the
-  list rather than extending it, switching off all of the guards above at once.
+- Lint, format and test run through Vite+ (`vp lint`, `vp fmt`, `vp test`),
+  configured in `vite.config.ts`. Test files import from `vite-plus/test`,
+  not `vitest`; a lint rule refuses the old path.
+- The project's own guards (role tokens, no vendor imports, no
+  `refetchInterval`, untranslated `status`, no native `<select>`) are the
+  local oxlint plugin `scripts/lint/rubick.mjs`, one rule each. A rule the
+  config does not switch on guards nothing and fails nothing;
+  `src/ui/test/lint-guards.test.ts` lints one violation per rule to catch that.
 - `bun run lint` runs with `--max-warnings 0 --report-unused-disable-directives`,
-  so every "warn" rule is a hard failure and a stale `eslint-disable` is an
+  so every "warn" rule is a hard failure and a stale `oxlint-disable` is an
   error. An unused caught error must be `catch {` with no binding — `catch (_e)`
   is not exempt.
-- ESLint never reads `src/tauri/`, `src/website/`, `src/ui/generated/`, `dist/` or any
+- The linter never reads `src/tauri/`, `src/website/`, `src/ui/generated/`, `dist/` or any
   `*.config.*`. Nothing guards the code there.
 - A duplicated npm package is fixed by `rm -rf node_modules bun.lock &&
 bun install` — never `bun add pkg@ver`, never an `overrides` entry. Two copies

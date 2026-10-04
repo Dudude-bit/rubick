@@ -8,7 +8,7 @@
  * `localhost` URL that used to work.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 vi.mock("@/lib/commands", () => ({
   commands: {

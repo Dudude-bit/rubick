@@ -18,7 +18,8 @@ const virtualServiceColumns: CrdColumn[] = [
     header: "hosts",
     accessor: (resource) => {
       const hosts = getValueByPath(resource, "spec.hosts") as
-        string[] | undefined;
+        | string[]
+        | undefined;
       return hosts ?? [];
     },
     cell: (value) => {
@@ -32,7 +33,8 @@ const virtualServiceColumns: CrdColumn[] = [
     header: "gateways",
     accessor: (resource) => {
       const gateways = getValueByPath(resource, "spec.gateways") as
-        string[] | undefined;
+        | string[]
+        | undefined;
       return gateways ?? [];
     },
     cell: (value) => {
@@ -45,7 +47,8 @@ const virtualServiceColumns: CrdColumn[] = [
     header: "httpRoutes",
     accessor: (resource) => {
       const http = getValueByPath(resource, "spec.http") as
-        unknown[] | undefined;
+        | unknown[]
+        | undefined;
       return http?.length ?? 0;
     },
     cell: (value) =>
@@ -108,7 +111,8 @@ const destinationRuleColumns: CrdColumn[] = [
     header: "trafficPolicy",
     accessor: (resource) => {
       const policy = getValueByPath(resource, "spec.trafficPolicy") as
-        Record<string, unknown> | undefined;
+        | Record<string, unknown>
+        | undefined;
       if (!policy) return "None";
 
       const features: string[] = [];
@@ -126,7 +130,8 @@ const destinationRuleColumns: CrdColumn[] = [
     header: "subsets",
     accessor: (resource) => {
       const subsets = getValueByPath(resource, "spec.subsets") as
-        Array<{ name: string }> | undefined;
+        | Array<{ name: string }>
+        | undefined;
       return subsets?.map((s) => s.name) ?? [];
     },
     cell: (value) => {
@@ -139,7 +144,8 @@ const destinationRuleColumns: CrdColumn[] = [
     header: "exportTo",
     accessor: (resource) => {
       const exportTo = getValueByPath(resource, "spec.exportTo") as
-        string[] | undefined;
+        | string[]
+        | undefined;
       return exportTo ?? ["*"];
     },
     cell: (value) => {
@@ -160,7 +166,8 @@ const gatewayColumns: CrdColumn[] = [
     header: "selector",
     accessor: (resource) => {
       const selector = getValueByPath(resource, "spec.selector") as
-        Record<string, string> | undefined;
+        | Record<string, string>
+        | undefined;
       if (!selector) return null;
 
       // Common pattern: istio: ingressgateway
@@ -224,7 +231,8 @@ const serviceEntryColumns: CrdColumn[] = [
     header: "hosts",
     accessor: (resource) => {
       const hosts = getValueByPath(resource, "spec.hosts") as
-        string[] | undefined;
+        | string[]
+        | undefined;
       return hosts ?? [];
     },
     cell: (value) => {
@@ -269,7 +277,8 @@ const serviceEntryColumns: CrdColumn[] = [
     header: "endpoints",
     accessor: (resource) => {
       const endpoints = getValueByPath(resource, "spec.endpoints") as
-        unknown[] | undefined;
+        | unknown[]
+        | undefined;
       return endpoints?.length ?? 0;
     },
     cell: (value) =>
@@ -292,7 +301,8 @@ const authorizationPolicyColumns: CrdColumn[] = [
     header: "selector",
     accessor: (resource, t) => {
       const selector = getValueByPath(resource, "spec.selector.matchLabels") as
-        Record<string, string> | undefined;
+        | Record<string, string>
+        | undefined;
       if (!selector) return t("readings", "istioAllWorkloads");
 
       return Object.entries(selector)
@@ -306,7 +316,8 @@ const authorizationPolicyColumns: CrdColumn[] = [
     header: "rules",
     accessor: (resource) => {
       const rules = getValueByPath(resource, "spec.rules") as
-        unknown[] | undefined;
+        | unknown[]
+        | undefined;
       return rules?.length ?? 0;
     },
     cell: (value, t) =>

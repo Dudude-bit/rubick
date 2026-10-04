@@ -561,7 +561,7 @@ function DataTableInner<TData extends RowData>({
   // so it declines to compile this component. The runtime cost is the same
   // either way — the table re-renders cheaply — and the disable goes away when
   // the fix lands upstream.
-  // eslint-disable-next-line react-hooks/incompatible-library
+  // oxlint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: items.length,
     enabled: shouldVirtualScroll,

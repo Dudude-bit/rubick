@@ -1,7 +1,7 @@
 // Vitest global setup file, run before every test file under jsdom or node.
 // Stubs the @tauri-apps/api surface; the DOM half loads only under jsdom.
 
-import { vi } from "vitest";
+import { vi } from "vite-plus/test";
 import { loadLocale } from "@/i18n";
 
 // Loaded as the window loads it before its first render; the one test of the

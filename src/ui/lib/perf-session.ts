@@ -12,7 +12,11 @@ import { startFrameWatch } from "@/lib/perf-frames";
  * a smooth one.
  */
 export type SessionPhase =
-  "idle" | "starting" | "recording" | "stopping" | "stopped";
+  | "idle"
+  | "starting"
+  | "recording"
+  | "stopping"
+  | "stopped";
 
 export interface SessionState {
   phase: SessionPhase;

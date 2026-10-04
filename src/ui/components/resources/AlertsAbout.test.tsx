@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { screen, waitFor } from "@testing-library/react";
 import type { QueryClient } from "@tanstack/react-query";
 

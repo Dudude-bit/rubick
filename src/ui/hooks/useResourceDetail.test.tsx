@@ -6,7 +6,7 @@
  * away the page the reader is working in.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { act, waitFor } from "@testing-library/react";
 
 vi.mock("@/stores/clusterStore", () => {

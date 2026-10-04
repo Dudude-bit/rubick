@@ -14,7 +14,12 @@ import { clusterLink, listLink, type AppLink } from "@/lib/links";
 import { ResourceType } from "@/lib/resource-registry";
 
 export type ShortcutSection =
-  "global" | "navigate" | "page" | "tabs" | "table" | "logs";
+  | "global"
+  | "navigate"
+  | "page"
+  | "tabs"
+  | "table"
+  | "logs";
 
 export interface Shortcut {
   id: string;

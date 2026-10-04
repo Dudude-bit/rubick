@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { CustomResourceInfo, ServiceInfo } from "@/generated/types";
 import { translate } from "@/i18n";

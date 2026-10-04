@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { act } from "@testing-library/react";
 import type { AnyRouter } from "@tanstack/react-router";
 import type { QueryClient } from "@tanstack/react-query";

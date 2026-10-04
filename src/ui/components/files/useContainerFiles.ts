@@ -244,7 +244,7 @@ export function useContainerFiles(target: ContainerFilesTarget | null): {
     };
     // `target` is read through `key`: a new object with the same facts is
     // the same listing, and re-subscribing on it would restart the read.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
 
   const stop = useCallback(() => {

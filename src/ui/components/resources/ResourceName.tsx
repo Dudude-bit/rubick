@@ -47,7 +47,7 @@ export type ResourceNameSize = "row" | "title";
  */
 // Kept beside the component that applies it: a scale in its own module drifts
 // from its only user.
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 export const RESOURCE_NAME_SIZE: Record<ResourceNameSize, string> = {
   row: "text-xs",
   title: "text-[13px]",

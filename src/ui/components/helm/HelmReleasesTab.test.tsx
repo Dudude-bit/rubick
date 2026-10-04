@@ -6,7 +6,7 @@
  * the isRefusal split puts the silent-empty-table back.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import type { HelmRelease } from "@/generated/types";

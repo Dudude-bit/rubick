@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { QueryClient, type QueryKey } from "@tanstack/react-query";
 
 import { EVERY_NAMESPACE, queryKeys } from "./query-keys";

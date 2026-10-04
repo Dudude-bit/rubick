@@ -404,7 +404,8 @@ function sourceRefOf(
   fallbackKind: string
 ): SourceRef | null {
   const ref = getValueByPath(object, path) as
-    { kind?: string; name?: string; namespace?: string } | undefined;
+    | { kind?: string; name?: string; namespace?: string }
+    | undefined;
   if (!ref?.name) return null;
   return {
     kind: ref.kind ?? fallbackKind,

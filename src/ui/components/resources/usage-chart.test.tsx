@@ -6,7 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it } from "vite-plus/test";
 import { UsageChart } from "@/components/resources/usage-chart";
 import type { UsageSample } from "@/lib/usage-history";
 import { useLocaleStore } from "@/stores/localeStore";

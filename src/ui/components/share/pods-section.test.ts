@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { T } from "@/i18n/useT";
 import type { PodInfo } from "@/generated/types";

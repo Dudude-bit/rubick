@@ -50,5 +50,5 @@ Badge.displayName = "Badge";
 // Splitting into badge-variants.ts would force every consumer to
 // take a second import for marginal HMR gain. Same trade-off
 // documented in quick-actions.tsx.
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 export { Badge, badgeVariants };

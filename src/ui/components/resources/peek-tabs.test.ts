@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { ResourceType } from "@/lib/resource-registry";
 import { peekTabsFor, resolvePeekTab, type PeekTabId } from "./peek-tabs";

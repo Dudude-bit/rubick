@@ -50,7 +50,7 @@ function toTerms(query: string): string[] {
  * remembers. Walking the node reaches them; it stops at a component
  * boundary, which is what the `keywords` prop is for.
  */
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 export function nodeText(node: React.ReactNode): string {
   if (node == null || typeof node === "boolean") return "";
   if (typeof node === "string" || typeof node === "number") return String(node);
@@ -120,7 +120,7 @@ export function SettingsSearchProvider({
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 export function useSettingsSearch(): SearchValue {
   const value = React.useContext(SearchContext);
   if (!value) {
@@ -158,7 +158,7 @@ export function SettingsGroupScope({
  * Outside the settings shell there is no provider and every row is
  * visible, which is what lets the same primitives be used in a dialog.
  */
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 export function useSettingSearchMatch(...parts: React.ReactNode[]): boolean {
   const search = React.useContext(SearchContext);
   const sectionId = React.useContext(SectionContext);
@@ -184,7 +184,7 @@ export function useSettingSearchMatch(...parts: React.ReactNode[]): boolean {
 }
 
 /** Whether any indexed row inside this group survives the query. */
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 export function useGroupHasMatch(groupId: string): boolean {
   const search = React.useContext(SearchContext);
   if (!search || search.terms.length === 0) return true;

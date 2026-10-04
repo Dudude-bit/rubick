@@ -122,7 +122,8 @@ export function selectionOf(policy: CustomResourceInfo): Selection {
     return { kind: "notHere" };
   }
   const labels = getValueByPath(policy, "spec.endpointSelector.matchLabels") as
-    Record<string, string> | undefined;
+    | Record<string, string>
+    | undefined;
   const expressions = getValueByPath(
     policy,
     "spec.endpointSelector.matchExpressions"

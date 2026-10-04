@@ -1128,7 +1128,13 @@ export interface NodeLabels {
  * vendor claims the name.
  */
 export type ClusterProvider =
-  "k3d" | "k3s" | "eks" | "gke" | "aks" | "minikube" | "generic";
+  | "k3d"
+  | "k3s"
+  | "eks"
+  | "gke"
+  | "aks"
+  | "minikube"
+  | "generic";
 
 /**
  * What a vendor's kubeconfig context looks like, and the mark it wears —

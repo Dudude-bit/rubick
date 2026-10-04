@@ -29,7 +29,7 @@ import { useT } from "@/i18n/useT";
 
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
   createNameColumn<PersistentVolumeClaimInfo>(
     ResourceType.PersistentVolumeClaim

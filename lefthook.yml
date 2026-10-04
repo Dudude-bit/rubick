@@ -25,8 +25,8 @@
 
 # The formatters fix rather than refuse, and stage what they fixed: a refusal
 # only sent you back to run the same formatter by hand, and formatting after
-# `git add` left the old bytes staged. In order, not in parallel, so eslint
-# never reads a file prettier is halfway through writing.
+# `git add` left the old bytes staged. In order, not in parallel, so the
+# linter never reads a file the formatter is halfway through writing.
 pre-commit:
   piped: true
   commands:
@@ -37,17 +37,15 @@ pre-commit:
       # .rustfmt.toml supplies the edition.
       run: rustfmt {staged_files}
       stage_fixed: true
-    prettier:
+    fmt:
       priority: 2
       glob: "*.{ts,tsx,css,json,md}"
-      run: bunx prettier --write {staged_files}
+      # Staged-file mode hands both tools files their config ignores, and a
+      # commit of only those would otherwise fail on "no files".
+      run: bunx vp fmt --no-error-on-unmatched-pattern {staged_files}
       stage_fixed: true
-    eslint:
+    lint:
       priority: 3
       glob: "*.{ts,tsx}"
-      # --max-warnings 0 matches `bun run lint`, which CI requires. The
-      # react-hooks@7 backlog this used to be waived for is empty.
-      # --no-warn-ignored because staged-file mode hands eslint files its
-      # config ignores — src/ui/generated — and the "file ignored" warning
-      # would fail the zero-warning gate that project-mode lint never sees.
-      run: bunx eslint --max-warnings 0 --no-warn-ignored {staged_files}
+      # --max-warnings 0 matches `bun run lint`, which CI requires.
+      run: bunx vp lint --max-warnings 0 --no-error-on-unmatched-pattern {staged_files}

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { CustomResourceInfo } from "@/generated/types";
 import { coverageOf, labelsOf, selects } from "./coverage";

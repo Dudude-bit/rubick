@@ -1,5 +1,5 @@
 import { screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { CustomResourceInfo } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";

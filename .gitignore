@@ -59,3 +59,4 @@ repo/
 *.flatpak
 ldd.txt
 run.log
+.vitest/

@@ -60,7 +60,9 @@ export interface TableShare {
 /** The header in the reader's language, or `null` where the app never names it in words. */
 function headerOf(column: Column, t: T): string | null {
   const header = column.columnDef.header as
-    { saying?: HeaderSaying } | string | undefined;
+    | { saying?: HeaderSaying }
+    | string
+    | undefined;
   if (typeof header === "string") return header;
   const saying =
     header?.saying ??
@@ -95,7 +97,9 @@ function statusOf(original: unknown): string | null {
     phase?: unknown;
   } | null;
   const status = row?.status as
-    { display?: unknown; phase?: unknown } | string | undefined;
+    | { display?: unknown; phase?: unknown }
+    | string
+    | undefined;
   if (typeof status === "string" && status) return status;
   if (status && typeof status === "object") {
     if (typeof status.display === "string") return status.display;

@@ -269,7 +269,8 @@ export function schedulerShare(
         {
           text: `${used}/${total}${unit} · ${Math.round(share * 100)}%`,
           role: (share >= PRESSURE_WARN ? "warn" : undefined) as
-            StatusRole | undefined,
+            | StatusRole
+            | undefined,
         },
       ],
     };

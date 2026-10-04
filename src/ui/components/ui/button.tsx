@@ -60,5 +60,5 @@ Button.displayName = "Button";
 
 // `buttonVariants` co-located with the Button component — same
 // HMR / consumer-ergonomics trade-off as Badge / quick-actions.
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 export { Button, buttonVariants };

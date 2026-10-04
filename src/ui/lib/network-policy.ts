@@ -18,7 +18,10 @@ import type {
 
 /** What a policy does in one direction, as one of four answers. */
 export type DirectionVerdict =
-  "notGoverned" | "deniesEverything" | "opensToEverything" | "restricts";
+  | "notGoverned"
+  | "deniesEverything"
+  | "opensToEverything"
+  | "restricts";
 
 export function verdictOf(direction: PolicyDirection): DirectionVerdict {
   if (!direction.governed) return "notGoverned";
@@ -49,7 +52,9 @@ export function directionWords(
 
 /** How many pods the policy picks, with the read that never happened kept. */
 export type Reach =
-  { kind: "cannotSay" } | { kind: "nothing" } | { kind: "pods"; count: number };
+  | { kind: "cannotSay" }
+  | { kind: "nothing" }
+  | { kind: "pods"; count: number };
 
 /**
  * `null` is a pod list this reader was refused, and it is not zero. Zero is
@@ -116,7 +121,8 @@ export function namespacesOf(selects: PolicySelects): PeerNamespaces {
 
 /** What a peer's `podSelector` reaches, on the axis where absent is wide. */
 export type PeerPods =
-  { kind: "everyPod" } | { kind: "written"; query: string };
+  | { kind: "everyPod" }
+  | { kind: "written"; query: string };
 
 export function podsOf(selects: PolicySelects): PeerPods {
   switch (selects.kind) {

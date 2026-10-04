@@ -6,7 +6,7 @@
  * at the same moment.
  */
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { render, screen } from "@testing-library/react";
 
 import { useLocaleStore } from "@/stores/localeStore";

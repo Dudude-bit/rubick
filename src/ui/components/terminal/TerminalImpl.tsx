@@ -221,7 +221,7 @@ export function Terminal({
       xterm.dispose();
       // DON'T call disconnect here - session lifecycle is managed by parent component
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Update theme dynamically without reconnecting

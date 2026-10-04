@@ -1,5 +1,5 @@
 import { render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import type { AppColumnMeta, ColumnDef } from "@/components/ui/table-features";
 import { translate } from "@/i18n";

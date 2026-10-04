@@ -21,7 +21,7 @@ make dev
 ```
 
 The hooks (defined in `lefthook.yml`) format the staged files with rustfmt
-and prettier, stage the result, and run `eslint` on them before each commit. Skip them for a
+and `vp fmt`, stage the result, and run `vp lint` on them before each commit. Skip them for a
 single commit with `LEFTHOOK=0 git commit ...`.
 
 Nothing runs on push — `lefthook.yml` says why. Run `bun run test` yourself
@@ -31,7 +31,7 @@ before pushing something you want to land green.
 
 - **Rust:** `cargo fmt` must pass, and so must `cargo clippy` — CI runs it
   with `-D warnings`.
-- **TypeScript:** ESLint + Prettier (configs are in the repo).
+- **TypeScript:** Vite+ (`vp lint` is oxlint, `vp fmt` is oxfmt), configured in `vite.config.ts`.
 
 A block of lint rules exists to stop the codebase drifting back to habits it
 has already left. Each fails the commit, and each has a reason:
@@ -54,9 +54,10 @@ has already left. Each fails the commit, and each has a reason:
 - **No native `<select>` outside `components/ui`.** The OS paints it, so it is
   white in a dark window whatever the app's theme says.
 
-They all live in one `no-restricted-syntax` block in `eslint.config.js`, and
-they have to: a second config object naming that rule replaces the selector
-list rather than extending it, which would switch the others off silently.
+They are the rules of the local oxlint plugin in `scripts/lint/rubick.mjs`,
+switched on in `vite.config.ts`. `src/ui/test/lint-guards.test.ts` lints one
+violation of each, so a rule the config forgets fails a test instead of
+quietly guarding nothing.
 
 Before committing:
 
@@ -70,7 +71,7 @@ All three fail CI. Clippy became a gate in 4.4.0 — `ci.yml` runs it exactly as
 written above — and the backlog it once had is at zero, so anything it reports
 is yours. The crate turns on `clippy::pedantic` in `src/tauri/src/lib.rs`.
 
-There is no pre-push hook, so run the tests yourself before pushing. Prettier
+There is no pre-push hook, so run the tests yourself before pushing. `vp fmt`
 and rustfmt run in the pre-commit hook and again in CI, so a commit that
 bypasses the hook fails there instead.
 

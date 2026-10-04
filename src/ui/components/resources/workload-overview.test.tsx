@@ -1,4 +1,4 @@
-import { afterEach, describe, it, expect } from "vitest";
+import { afterEach, describe, it, expect } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import { CountBlock } from "./workload-overview";

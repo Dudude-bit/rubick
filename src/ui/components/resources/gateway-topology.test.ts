@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
@@ -318,7 +318,7 @@ describe("the gateway topology map", () => {
     const data = gatewayTopology(
       [gateway("edge")],
       [route("promo")],
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       backing as any,
       t
     );
@@ -446,7 +446,7 @@ describe("the gateway topology map", () => {
     const data = gatewayTopology(
       [gateway("edge")],
       [route("promo")],
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       backing as any,
       t,
       {
@@ -457,7 +457,7 @@ describe("the gateway topology map", () => {
           pod("stray", [], { ready: false }),
           pod("elsewhere", rs, { namespace: "other" }),
           pod("unlabelled", rs, { labels: { app: "cart" } }),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          // oxlint-disable-next-line @typescript-eslint/no-explicit-any
         ] as any,
         deployments: [{ name: "promo", namespace: "gwtest" }],
       }

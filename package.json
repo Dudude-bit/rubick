@@ -5,14 +5,14 @@
   "license": "GPL-3.0-or-later",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "lint": "eslint . --cache --cache-location node_modules/.cache/eslint/ --report-unused-disable-directives --max-warnings 0",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "dev": "vp dev",
+    "build": "tsc && vp build",
+    "preview": "vp preview",
+    "lint": "vp lint --report-unused-disable-directives --max-warnings 0",
+    "test": "vp test run",
+    "test:watch": "vp test",
     "routes": "bun scripts/gen-routes.mjs",
-    "format": "prettier --write \"src/ui/**/*.{ts,tsx,css}\"",
+    "format": "vp fmt \"src/ui/**/*.{ts,tsx,css}\"",
     "tauri": "tauri",
     "prepare": "lefthook install"
   },
@@ -68,7 +68,6 @@
     "zustand": "^5.0.15"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@tailwindcss/postcss": "^4.3.3",
     "@tanstack/router-plugin": "^1.168.42",
     "@tauri-apps/cli": "^2.12.0",
@@ -79,19 +78,13 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.1",
-    "eslint": "^10.9.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.6",
-    "globals": "^17.11.0",
     "jsdom": "^30.0.1",
     "lefthook": "^2.1.12",
     "postcss": "^8.5.26",
-    "prettier": "^3.9.6",
     "tailwindcss": "^4.3.3",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.70.0",
-    "vite": "^8.3.0",
-    "vitest": "^5.0.0"
+    "vite": "npm:@voidzero-dev/vite-plus-core@1.0.0",
+    "vite-plus": "1.0.0"
   }
 }

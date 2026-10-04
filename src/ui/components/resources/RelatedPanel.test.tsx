@@ -8,7 +8,7 @@
  * the app inventing a claim it never checked.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import { RelatedPanel } from "./RelatedPanel";

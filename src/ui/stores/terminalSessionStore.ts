@@ -11,7 +11,10 @@
 import { create } from "zustand";
 
 export type TerminalSessionStatus =
-  "connecting" | "connected" | "disconnected" | "error";
+  | "connecting"
+  | "connected"
+  | "disconnected"
+  | "error";
 
 /**
  * Terminal session entry

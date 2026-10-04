@@ -234,7 +234,12 @@ export function diffRevisions(older: Revision, newer: Revision): FieldChange[] {
 }
 
 export type JournalField =
-  "created" | "deleted" | "generation" | "image" | "replicas" | "annotation";
+  | "created"
+  | "deleted"
+  | "generation"
+  | "image"
+  | "replicas"
+  | "annotation";
 
 export interface JournalEntry {
   id: string;

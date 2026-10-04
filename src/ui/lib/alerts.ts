@@ -46,7 +46,10 @@ export interface AlertObject {
 }
 
 export type AlertFormat =
-  "alertmanagerText" | "alertmanagerSubject" | "grafana" | "datadog";
+  | "alertmanagerText"
+  | "alertmanagerSubject"
+  | "grafana"
+  | "datadog";
 
 /**
  * The tone a severity label earns, as a total map rather than one colour for
@@ -511,7 +514,10 @@ function claimOf(text: string): string | null {
 
 /** Why a context is being offered for an alert that did not settle one. */
 export type WhyThisCluster =
-  "namedExactly" | "nameAppearsInIt" | "inTheSourceHost" | "yoursToPick";
+  | "namedExactly"
+  | "nameAppearsInIt"
+  | "inTheSourceHost"
+  | "yoursToPick";
 
 export interface ClusterChoice {
   context: string;

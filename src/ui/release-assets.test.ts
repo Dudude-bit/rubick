@@ -14,7 +14,7 @@
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 const root = resolve(__dirname, "../..");
 const config = JSON.parse(

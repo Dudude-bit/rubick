@@ -9,7 +9,14 @@
  */
 
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 
 vi.mock("@/components/ui/use-toast", () => ({ toast: vi.fn() }));
 vi.mock("@/i18n/useT", () => ({ useT: () => () => "" }));

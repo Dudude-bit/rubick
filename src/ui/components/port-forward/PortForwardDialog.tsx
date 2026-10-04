@@ -72,7 +72,7 @@ export function PortForwardDialog({
   // `open` state by hand.
   useEffect(() => {
     if (open && initialPort) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // oxlint-disable-next-line react-hooks/set-state-in-effect
       setForm((prev) => ({
         ...prev,
         localPort: String(initialPort),
@@ -88,7 +88,7 @@ export function PortForwardDialog({
   // refactor at every callsite.
   useEffect(() => {
     if (!open) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // oxlint-disable-next-line react-hooks/set-state-in-effect
       setForm({
         localPort: "",
         remotePort: "",

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { DANGER_CLUSTER_COLOR } from "@/lib/cluster-identity";
 import type { ShareTargetInfo } from "@/generated/types";

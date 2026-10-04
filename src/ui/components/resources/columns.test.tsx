@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { columns as persistentVolumeColumns } from "./PersistentVolumeList";
 import { columns as persistentVolumeClaimColumns } from "./PersistentVolumeClaimList";

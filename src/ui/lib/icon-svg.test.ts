@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { Box, CircleDashed } from "lucide-react";
 
 import { iconSvg } from "./icon-svg";

@@ -138,7 +138,7 @@ function LogListInner({
   // The compiler cannot memoize a virtualizer and so skips whatever component
   // holds one. That skip is the reason this file exists separately from
   // LogViewer, and it stops here.
-  // eslint-disable-next-line react-hooks/incompatible-library
+  // oxlint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,

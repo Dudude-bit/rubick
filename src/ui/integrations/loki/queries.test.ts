@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { LogScope } from "../registry";
 import { escapeLabel, LOKI_LABELS, streamSelector } from "./queries";

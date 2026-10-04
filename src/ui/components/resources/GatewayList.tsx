@@ -38,7 +38,7 @@ function programmedOf(
         : { text: t("empty", "gwPolicyUnknown"), tone: "mute" };
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 function ProgrammedCell({ gateway }: { gateway: GatewayInfo }) {
   const t = useT();
   const said = programmedOf(gateway, t);
@@ -54,13 +54,13 @@ function listenersOf(gateway: GatewayInfo, t: T): string {
   }`;
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 function ListenersCell({ gateway }: { gateway: GatewayInfo }) {
   const t = useT();
   return <span className="text-fg-fnt">{listenersOf(gateway, t)}</span>;
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 function AddressesCell({ gateway }: { gateway: GatewayInfo }) {
   const t = useT();
   const addresses = gateway.addresses;

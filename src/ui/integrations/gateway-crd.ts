@@ -32,7 +32,8 @@ const routeColumns: CrdColumn[] = [
     header: "attachesTo",
     accessor: (resource) => {
       const parents = getValueByPath(resource, "spec.parentRefs") as
-        Array<{ name?: string; kind?: string }> | undefined;
+        | Array<{ name?: string; kind?: string }>
+        | undefined;
       return (parents ?? []).map((parent) =>
         parent.kind && parent.kind !== "Gateway"
           ? `${parent.name} (${parent.kind})`
@@ -57,7 +58,8 @@ const backendTlsPolicyColumns: CrdColumn[] = [
     header: "targets",
     accessor: (resource) => {
       const targets = getValueByPath(resource, "spec.targetRefs") as
-        Array<{ name?: string; kind?: string }> | undefined;
+        | Array<{ name?: string; kind?: string }>
+        | undefined;
       return (targets ?? []).map((target) =>
         target.kind && target.kind !== "Service"
           ? `${target.name} (${target.kind})`
@@ -121,7 +123,8 @@ const gatewayColumns: CrdColumn[] = [
     header: "addresses",
     accessor: (resource) => {
       const addresses = getValueByPath(resource, "status.addresses") as
-        Array<{ value?: string }> | undefined;
+        | Array<{ value?: string }>
+        | undefined;
       return (addresses ?? []).map((address) => address.value ?? "?");
     },
     cell: names,
@@ -160,7 +163,8 @@ const referenceGrantColumns: CrdColumn[] = [
     header: "grantFrom",
     accessor: (resource) => {
       const from = getValueByPath(resource, "spec.from") as
-        Array<{ kind?: string; namespace?: string }> | undefined;
+        | Array<{ kind?: string; namespace?: string }>
+        | undefined;
       return (from ?? []).map(
         (entry) => `${entry.kind ?? "?"} in ${entry.namespace ?? "?"}`
       );
@@ -172,7 +176,8 @@ const referenceGrantColumns: CrdColumn[] = [
     header: "grantTo",
     accessor: (resource) => {
       const to = getValueByPath(resource, "spec.to") as
-        Array<{ kind?: string }> | undefined;
+        | Array<{ kind?: string }>
+        | undefined;
       return (to ?? []).map((entry) => entry.kind ?? "?");
     },
     cell: names,

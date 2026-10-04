@@ -80,7 +80,8 @@ export interface MutationToastConfig<TData, TVariables> {
   successTitle: string;
   /** Success toast description (can be function) */
   successDescription?:
-    string | ((data: TData, variables: TVariables) => string);
+    | string
+    | ((data: TData, variables: TVariables) => string);
   /** Error message prefix */
   errorPrefix: string;
 }

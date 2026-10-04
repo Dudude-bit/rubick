@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import type { ColumnDef } from "@/components/ui/table-features";
 
 import { columns } from "./PodList";

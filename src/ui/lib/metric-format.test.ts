@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { formatQuantity, splitUnit, usageRole } from "@/lib/metric-format";
 import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
 

@@ -5,7 +5,7 @@
  * `useShareSection` calls in `page.tsx`, and these fail.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
 import type { ControllerInfo } from "./data";

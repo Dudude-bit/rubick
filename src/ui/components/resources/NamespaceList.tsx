@@ -54,7 +54,7 @@ function PodsCell({ row }: CellContext<NamespaceInfo>) {
   );
 }
 
-// eslint-disable-next-line react-refresh/only-export-components
+// oxlint-disable-next-line react-refresh/only-export-components
 export const columns: ColumnDef<NamespaceInfo>[] = [
   {
     size: 420,

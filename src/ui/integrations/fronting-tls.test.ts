@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { renderHook } from "@testing-library/react";
 
 import type { ServiceInfo } from "@/generated/types";

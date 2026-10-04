@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 
 import { eventReasonMark, type EventFamily } from "./event-reason";
 import { RESOURCE_REGISTRY } from "./resource-registry";

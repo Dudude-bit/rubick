@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach } from "vite-plus/test";
 import { act, renderHook } from "@testing-library/react";
 import { useIsDark } from "./use-is-dark";
 

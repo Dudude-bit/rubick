@@ -7,7 +7,7 @@
  * neither one can be read alone to answer which hostname is not being served.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type {
   CustomResourceInfo,

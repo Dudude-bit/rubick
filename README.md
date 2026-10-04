@@ -150,7 +150,7 @@ Needs [Bun](https://bun.sh) 1.3+, Rust 1.91+, and the [Tauri prerequisites](http
 
 ```bash
 bunx tsc --noEmit                                     # types
-bun run lint                                          # eslint, zero warnings
+bun run lint                                          # oxlint, zero warnings
 bun run test                                          # frontend tests
 cargo test --workspace                                # Rust tests
 ```

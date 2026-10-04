@@ -36,7 +36,7 @@ export function usePodReplacementSearch(
   // need to find a replacement.
   useEffect(() => {
     if (pod?.labels && Object.keys(pod.labels).length > 0) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+      // oxlint-disable-next-line react-hooks/set-state-in-effect
       setSavedLabels(pod.labels);
     }
   }, [pod?.labels]);

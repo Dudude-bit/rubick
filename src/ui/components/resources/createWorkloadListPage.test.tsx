@@ -4,7 +4,7 @@
  * here too: nothing of it reaches rows that come from outside.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { act, screen } from "@testing-library/react";
 import type { ComponentType } from "react";
 import { QueryClient } from "@tanstack/react-query";

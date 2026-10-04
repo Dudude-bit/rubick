@@ -9,7 +9,7 @@
  * route's own — the case a hand-written fixture would most easily get wrong.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { routesBoard } from "./route-rows";
 import { routeTraces } from "./route-trace";

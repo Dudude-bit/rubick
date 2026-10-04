@@ -4,7 +4,11 @@ import { useT } from "@/i18n/useT";
 import { listenEvent } from "@/lib/events";
 
 export type SessionStatus =
-  "idle" | "connecting" | "connected" | "closed" | "error";
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "closed"
+  | "error";
 
 interface UseGenericTerminalSessionProps {
   sessionId: string | null;

@@ -9,7 +9,7 @@
  * behind one, and the `http://` link offered to open it with.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 vi.mock("@/lib/commands", () => ({
   commands: { getIngress: vi.fn() },

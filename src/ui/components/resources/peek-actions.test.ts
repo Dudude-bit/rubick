@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { QueryClient } from "@tanstack/react-query";
 
 // The plan never calls a command; it only needs the module to load.

@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import type { CellContext, ColumnDef } from "@/components/ui/table-features";
 
 import { columns } from "./PodList";

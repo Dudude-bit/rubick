@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { listSegment } from "./resource-registry";
 import { carriedSearch } from "./carried-search";

@@ -1,4 +1,11 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 import { act, fireEvent, screen } from "@testing-library/react";
 import type { AnyRouter } from "@tanstack/react-router";
 

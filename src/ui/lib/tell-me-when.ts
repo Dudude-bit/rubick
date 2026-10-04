@@ -29,7 +29,12 @@ export const COALESCE_MS = 10_000;
 export const LOST_SIGHT_MS = 2 * 60 * 1000;
 
 export type Ask =
-  "rollout" | "podReady" | "jobOutcome" | "drain" | "renewed" | "forwardAlive";
+  | "rollout"
+  | "podReady"
+  | "jobOutcome"
+  | "drain"
+  | "renewed"
+  | "forwardAlive";
 
 export type WatchKind =
   | "Deployment"

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 import { render } from "@testing-library/react";
 import type { LogLine, StyledSegment, TextStyle } from "@/generated/types";
 import { contrast, type Rgb } from "@/lib/color";

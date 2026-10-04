@@ -7,7 +7,7 @@
  * true and useless, because nothing said which address goes dark.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { IngressInfo } from "@/generated/types";
 import { certificateUse, uncovered } from "./serves";

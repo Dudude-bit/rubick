@@ -1,6 +1,6 @@
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { changesReplicaCount } from "@/components/yaml/manifest-reads";
 
 const t: T = (section, key, values) => translate("en", section, key, values);

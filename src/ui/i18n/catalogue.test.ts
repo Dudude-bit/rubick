@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { RESOURCE_REGISTRY, toPlural } from "@/lib/resource-registry";
 import { en } from "./catalogue";

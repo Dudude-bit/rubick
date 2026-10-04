@@ -7,7 +7,7 @@
  */
 
 import type { ReactElement } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 vi.mock("@/lib/commands", () => ({

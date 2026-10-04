@@ -126,7 +126,10 @@ export function picksUpWords(
 
 /** The one line above the list, as a key so each branch is distinguishable. */
 export type Headline =
-  "someUnread" | "needAttention" | "allScraped" | "scrapeUnchecked";
+  | "someUnread"
+  | "needAttention"
+  | "allScraped"
+  | "scrapeUnchecked";
 
 export function headlineKey(picture: Picture, rows: MonitorRow[]): Headline {
   const unread = [picture.serviceMonitors, picture.podMonitors].some(

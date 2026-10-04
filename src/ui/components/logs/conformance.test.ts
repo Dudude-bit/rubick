@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "vite-plus/test";
 
 import type { LogLevel, QueryTerm } from "@/generated/types";
 import { LEVEL_RANK, matchesQuery, type StreamedLogLine } from "./types";

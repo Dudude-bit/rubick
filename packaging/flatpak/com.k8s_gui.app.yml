@@ -32,7 +32,7 @@
 # reader installs with `flatpak install ./Rubick.flatpak`.
 app-id: com.k8s_gui.app
 runtime: org.gnome.Platform
-runtime-version: '50'
+runtime-version: "50"
 sdk: org.gnome.Sdk
 command: Rubick
 separate-locales: false

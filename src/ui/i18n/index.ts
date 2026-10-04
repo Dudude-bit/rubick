@@ -117,7 +117,8 @@ export function translate<S extends Section>(
   const entry =
     translated ??
     ((en[section] as Record<string, string | Plural>)[key as string] as
-      string | Plural);
+      | string
+      | Plural);
 
   if (isPlural(entry)) {
     const n = Number(values?.n ?? 0);

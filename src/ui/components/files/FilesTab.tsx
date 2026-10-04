@@ -692,7 +692,7 @@ function Rows({
   const t = useT();
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const count = rows.length + (canGoUp ? 1 : 0);
-  // eslint-disable-next-line react-hooks/incompatible-library
+  // oxlint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count,
     getScrollElement: () => scrollRef.current,

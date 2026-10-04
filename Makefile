@@ -47,7 +47,7 @@ gen-entities-tauri:
 	@# The generator writes one long line per import list and per signature;
 	@# the committed files are formatted. Without this every regeneration
 	@# reads as ~900 changed lines and the one real change hides in them.
-	@bunx prettier --write src/ui/generated/commands.ts src/ui/generated/types.ts >/dev/null
+	@bunx vp fmt src/ui/generated/commands.ts src/ui/generated/types.ts >/dev/null
 
 # Regenerate every platform's icon from src/tauri/icons/base.png.
 #

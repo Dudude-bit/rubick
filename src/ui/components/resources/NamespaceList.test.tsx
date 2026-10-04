@@ -1,5 +1,5 @@
 import { act, screen } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vite-plus/test";
 import { DataTable } from "@/components/ui/data-table";
 import type { ColumnDef } from "@/components/ui/table-features";
 import type { NamespaceInfo } from "@/generated/types";

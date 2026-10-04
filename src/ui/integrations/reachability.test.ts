@@ -8,7 +8,7 @@
  * about the one thing that fixes it.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { explain, unreachable } from "./reachability";
 

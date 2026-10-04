@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { containerStatus } from "./pod-status";
 import type { ContainerState, TerminationInfo } from "@/generated/types";

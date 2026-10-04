@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vite-plus/test";
 import { createMemoryHistory, createRouter } from "@tanstack/react-router";
 import { QueryClient } from "@tanstack/react-query";
 

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { en, type Plural } from "./catalogue";
 import { ru } from "./ru";

@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import { en } from "@/i18n/catalogue";
 import { ru } from "@/i18n/ru";

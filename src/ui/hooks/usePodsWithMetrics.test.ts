@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { createElement, type ReactNode } from "react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vite-plus/test";
 import { renderHook as render } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PodMetrics, Scoped, UnreadNamespace } from "@/generated/types";
@@ -20,7 +20,8 @@ const state = vi.hoisted(() => ({
   unread: [] as UnreadNamespace[],
   placeholder: false,
   read: undefined as
-    ((ctx: { signal: AbortSignal }) => Promise<unknown>) | undefined,
+    | ((ctx: { signal: AbortSignal }) => Promise<unknown>)
+    | undefined,
   fresh: { rows: [], unread: [] } as unknown,
   metricsAsked: undefined as unknown,
   metrics: [] as PodMetrics[],

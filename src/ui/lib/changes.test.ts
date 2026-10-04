@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { DeploymentContainerInfo } from "@/generated/types";
 import { en } from "@/i18n/catalogue";

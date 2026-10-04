@@ -173,7 +173,13 @@ function useDataCache(
 
 // Filter options for source types
 type FilterOption =
-  "all" | "direct" | "secret" | "configmap" | "field" | "resource" | "envFrom";
+  | "all"
+  | "direct"
+  | "secret"
+  | "configmap"
+  | "field"
+  | "resource"
+  | "envFrom";
 
 function mapSourceType(sourceType: EnvVarSourceType): SourceType {
   switch (sourceType) {

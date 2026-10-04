@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 import { renderHook } from "@testing-library/react";
 
 import type { T } from "@/i18n/useT";

@@ -7,7 +7,14 @@
  * costs something.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 import { act, render, screen } from "@testing-library/react";
 
 import { computeLineDiff, SYNC_LINES } from "@/lib/line-diff";

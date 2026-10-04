@@ -7,7 +7,7 @@
  * that fails produces a 401 from Azure with no Kubernetes symptom at all.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 vi.mock("@/lib/commands", () => ({
   commands: { getObjectMetadata: vi.fn() },

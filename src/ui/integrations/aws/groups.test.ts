@@ -7,7 +7,7 @@
  * is shared. From either Ingress's own page the neighbour does not exist.
  */
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { CustomResourceInfo, IngressInfo } from "@/generated/types";
 import {

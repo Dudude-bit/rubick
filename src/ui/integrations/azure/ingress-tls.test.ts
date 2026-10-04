@@ -5,7 +5,7 @@
  * shape is the ordinary one. Read through `spec.tls` alone it was plain HTTP.
  */
 
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vite-plus/test";
 
 vi.mock("@/lib/commands", () => ({
   commands: { getIngress: vi.fn() },

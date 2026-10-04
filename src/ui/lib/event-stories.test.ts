@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "vite-plus/test";
 
 import type { EventInfo } from "@/generated/types";
 import { translate } from "@/i18n";

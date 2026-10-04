@@ -46,7 +46,13 @@ import type { T } from "@/i18n/useT";
  */
 
 export type PeekActionId =
-  "shell" | "debug" | "portForward" | "restart" | "scale" | "delete" | "tell";
+  | "shell"
+  | "debug"
+  | "portForward"
+  | "restart"
+  | "scale"
+  | "delete"
+  | "tell";
 
 export interface PeekAction {
   id: PeekActionId;

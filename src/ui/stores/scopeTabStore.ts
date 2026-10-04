@@ -422,7 +422,8 @@ export const useScopeTabStore = create<ScopeTabState>()(
       // before `/c/<cluster>` matches nothing the app serves.
       migrate: (persisted) => {
         const state = persisted as
-          { tabs?: Partial<ScopeTab>[]; activeId?: string } | undefined;
+          | { tabs?: Partial<ScopeTab>[]; activeId?: string }
+          | undefined;
         const tabs = (state?.tabs ?? [])
           .filter((tab) => typeof tab?.id === "string")
           .map((tab) =>

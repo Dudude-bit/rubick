@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { fireEvent, screen } from "@testing-library/react";
 
 import { RouteLink } from "./route-link";

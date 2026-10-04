@@ -259,6 +259,7 @@ export function useLogStream({
   // Read by the release closure below, which the stream effect owns: a
   // freeze must reach the next batch without restarting the stream.
   const frozenRef = useRef(frozen);
+  // oxlint-disable-next-line react-hooks/refs
   frozenRef.current = frozen;
   const frozenKey = frozen ? `${frozen.from}-${frozen.to}` : "";
   useEffect(() => {
@@ -319,6 +320,7 @@ export function useLogStream({
     [sourcesKey]
   );
   const sourcesRef = useRef(sources);
+  // oxlint-disable-next-line react-hooks/refs
   sourcesRef.current = sources;
 
   const intakeKey = JSON.stringify(intake);
@@ -340,6 +342,7 @@ export function useLogStream({
   const session = useRef<Session | null>(null);
 
   const wiped = useRef(onWiped);
+  // oxlint-disable-next-line react-hooks/refs
   wiped.current = onWiped;
 
   const clearLogs = useCallback(() => {

@@ -70,7 +70,8 @@ type NavKey = keyof typeof en.nav;
  * case: a row with neither, which renders as a clickable blank.
  */
 type NavName =
-  { label: string; labelKey?: never } | { labelKey: NavKey; label?: never };
+  | { label: string; labelKey?: never }
+  | { labelKey: NavKey; label?: never };
 
 type NavItem = NavName & {
   path: AppLink;
