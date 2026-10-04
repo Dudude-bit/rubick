@@ -60,3 +60,4 @@ repo/
 ldd.txt
 run.log
 .vitest/
+*.tsbuildinfo
