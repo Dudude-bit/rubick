@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { DeleteAction } from "../../../-object/DeleteAction";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -12,7 +13,6 @@ import {
   Network,
   RefreshCw,
   SquareTerminal,
-  Trash2,
 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -714,14 +714,14 @@ export function PodDetail() {
               disabled={!pod}
               busy={restartMutation.isPending}
             />
-            <InterceptedAction
+            <DeleteAction
+              kind={ResourceType.Pod}
+              name={pod?.name || name || "Pod"}
+              namespace={pod?.namespace || namespace}
+              detail={pod}
               intercept={intercept("Delete")}
-              label={t("action", "delete")}
-              icon={Trash2}
-              onClick={() => deleteMutation?.mutate()}
+              mutation={deleteMutation}
               disabled={!pod}
-              busy={deleteMutation?.isPending}
-              danger
             />
           </>
         }

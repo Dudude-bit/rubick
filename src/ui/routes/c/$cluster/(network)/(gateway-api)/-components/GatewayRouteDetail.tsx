@@ -10,7 +10,8 @@
  * reads, so a route broken here is broken there in the same words.
  */
 
-import { Info, Route as RouteGlyph, Tag, Trash2 } from "lucide-react";
+import { Info, Route as RouteGlyph, Tag } from "lucide-react";
+import { DeleteAction } from "../../../-object/DeleteAction";
 
 import {
   Table,
@@ -35,7 +36,6 @@ import { ResourceRef } from "@/components/object/ResourceRef";
 import { RouteTraceSection } from "./RouteTrace";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
-import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
 import { useT } from "@/i18n/useT";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
@@ -353,13 +353,13 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
       onTabChange={setActiveTab}
       delivery={deliveryQuery}
       actions={
-        <InterceptedAction
+        <DeleteAction
+          kind={kind}
+          name={route?.name || ""}
+          namespace={route?.namespace}
+          detail={route}
           intercept={intercept("Delete")}
-          label={t("action", "delete")}
-          icon={Trash2}
-          onClick={() => deleteMutation?.mutate()}
-          busy={deleteMutation?.isPending}
-          danger
+          mutation={deleteMutation}
         />
       }
     />

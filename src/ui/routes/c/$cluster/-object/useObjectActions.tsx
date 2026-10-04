@@ -96,7 +96,7 @@ export interface ObjectActionsOptions {
  * and "and the controller puts it straight back" is the part that changes what
  * you would do.
  */
-function warned(
+export function warned(
   description: string,
   intercept: { lead: string; description: string } | null
 ): string {

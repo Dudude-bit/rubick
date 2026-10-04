@@ -1,5 +1,6 @@
 import { useCallback } from "react";
-import { Info, SlidersHorizontal, Trash2 } from "lucide-react";
+import { DeleteAction } from "../../../-object/DeleteAction";
+import { Info, SlidersHorizontal } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
 import { storageClassFactsSection } from "@/lib/share/storage-class-share";
@@ -11,7 +12,6 @@ import { recordToKeyValues } from "@/components/object/key-values";
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { StorageClassInfo } from "@/generated/types";
@@ -143,13 +143,12 @@ export function StorageClassDetail() {
       onTabChange={setActiveTab}
       tabs={tabs}
       actions={
-        <InterceptedAction
+        <DeleteAction
+          kind={ResourceType.StorageClass}
+          name={sc?.name || name || ""}
+          detail={sc}
           intercept={intercept("Delete")}
-          label={t("action", "delete")}
-          icon={Trash2}
-          onClick={() => deleteMutation?.mutate()}
-          busy={deleteMutation?.isPending}
-          danger
+          mutation={deleteMutation}
         />
       }
     />

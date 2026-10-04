@@ -12,6 +12,7 @@ import { CopyableAddress } from "@/components/ui/copyable-value";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { Info, Plug, Waypoints } from "lucide-react";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
+import { DeleteAction } from "../../../-object/DeleteAction";
 import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
@@ -46,6 +47,7 @@ export function EndpointsDetail() {
     setActiveTab,
     goBack,
     freshness,
+    deleteMutation,
   } = useResourceDetail<EndpointsInfo>({
     resourceKind: ResourceType.Endpoints,
     fetchResource: (name, ns) => commands.getEndpoints(name, ns),
@@ -311,6 +313,16 @@ export function EndpointsDetail() {
         </span>
       }
       onBack={goBack}
+      actions={
+        <DeleteAction
+          kind={ResourceType.Endpoints}
+          name={endpoints?.name || name || ""}
+          namespace={endpoints?.namespace || namespace}
+          detail={endpoints}
+          intercept={null}
+          mutation={deleteMutation}
+        />
+      }
       activeTab={activeTab}
       onTabChange={setActiveTab}
       tabs={tabs}

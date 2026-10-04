@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import {
@@ -8,7 +9,6 @@ import {
   Info,
   Layers2,
   RefreshCw,
-  Trash2,
 } from "lucide-react";
 
 import { LogViewer } from "../../../-logs/LogViewer";
@@ -443,13 +443,13 @@ export function DaemonSetDetail() {
               onClick={() => restartMutation.mutate(undefined)}
               busy={restartMutation.isPending}
             />
-            <InterceptedAction
+            <DeleteAction
+              kind={ResourceType.DaemonSet}
+              name={daemonSet?.name || name || ""}
+              namespace={daemonSet?.namespace || namespace}
+              detail={daemonSet}
               intercept={intercept("Delete")}
-              label={t("action", "delete")}
-              icon={Trash2}
-              onClick={() => deleteMutation?.mutate()}
-              busy={deleteMutation?.isPending}
-              danger
+              mutation={deleteMutation}
             />
           </>
         }

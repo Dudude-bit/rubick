@@ -1,6 +1,7 @@
 import { useCallback } from "react";
+import { DeleteAction } from "../../../-object/DeleteAction";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { Info, Trash2 } from "lucide-react";
+import { Info } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
 import { pvcFactsSection, pvcStatusOf } from "@/lib/share/pvc-share";
@@ -22,7 +23,6 @@ import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type {
@@ -235,13 +235,13 @@ export function PersistentVolumeClaimDetail() {
       onTabChange={setActiveTab}
       tabs={tabs}
       actions={
-        <InterceptedAction
+        <DeleteAction
+          kind={ResourceType.PersistentVolumeClaim}
+          name={pvc?.name || name || ""}
+          namespace={pvc?.namespace || namespace}
+          detail={pvc}
           intercept={intercept("Delete")}
-          label={t("action", "delete")}
-          icon={Trash2}
-          onClick={() => deleteMutation?.mutate()}
-          busy={deleteMutation?.isPending}
-          danger
+          mutation={deleteMutation}
         />
       }
     />

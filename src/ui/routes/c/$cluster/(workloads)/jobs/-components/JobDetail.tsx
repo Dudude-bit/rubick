@@ -1,7 +1,8 @@
 import { useMemo } from "react";
+import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { AlignLeft, BadgeCheck, Info, Layers2, Trash2 } from "lucide-react";
+import { AlignLeft, BadgeCheck, Info, Layers2 } from "lucide-react";
 
 import { LogViewer } from "../../../-logs/LogViewer";
 import { lanePodOf } from "../../../-logs/lanes";
@@ -25,7 +26,6 @@ import {
 } from "../../-components/workload-overview";
 import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { Composition, ConditionRows } from "@/components/object/detail-blocks";
 import { serviceAccountRow } from "../../-components/identity-rows";
@@ -333,13 +333,13 @@ export function JobDetail() {
       }
       onBack={goBack}
       actions={
-        <InterceptedAction
+        <DeleteAction
+          kind={ResourceType.Job}
+          name={job?.name || name || ""}
+          namespace={job?.namespace || namespace}
+          detail={job}
           intercept={intercept("Delete")}
-          label={t("action", "delete")}
-          icon={Trash2}
-          onClick={() => deleteMutation?.mutate()}
-          busy={deleteMutation?.isPending}
-          danger
+          mutation={deleteMutation}
         />
       }
       tabs={tabs}

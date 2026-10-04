@@ -16,6 +16,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
+import { DeleteAction } from "../../../-object/DeleteAction";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
   countMark,
   kindGlyph,
@@ -153,6 +155,7 @@ export function IngressDetail() {
     setActiveTab,
     goBack,
     freshness,
+    deleteMutation,
   } = useResourceDetail<IngressInfo>({
     resourceKind: ResourceType.Ingress,
     fetchResource: async (name, ns) => {
@@ -358,6 +361,7 @@ export function IngressDetail() {
   ];
 
   const deliveryQuery = deliveryOfKind(ResourceType.Ingress, ingress);
+  const intercept = useDeliveryIntercept(deliveryQuery);
 
   const tabs = [
     {
@@ -772,6 +776,16 @@ export function IngressDetail() {
         </>
       }
       onBack={goBack}
+      actions={
+        <DeleteAction
+          kind={ResourceType.Ingress}
+          name={ingress?.name || name || ""}
+          namespace={ingress?.namespace || namespace}
+          detail={ingress}
+          intercept={intercept("Delete")}
+          mutation={deleteMutation}
+        />
+      }
       activeTab={activeTab}
       onTabChange={setActiveTab}
       tabs={tabs}

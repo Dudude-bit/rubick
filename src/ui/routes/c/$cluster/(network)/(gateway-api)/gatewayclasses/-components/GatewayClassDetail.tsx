@@ -6,7 +6,8 @@
  * what the reader deletes with it.
  */
 
-import { Info, Tag, Trash2 } from "lucide-react";
+import { Info, Tag } from "lucide-react";
+import { DeleteAction } from "../../../../-object/DeleteAction";
 import { errorToShow } from "@/lib/error-utils";
 
 import { yamlTab } from "../../../../-object/yaml-tab";
@@ -17,7 +18,6 @@ import { recordToKeyValues } from "@/components/object/key-values";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
-import { InterceptedAction } from "../../../../-delivery/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
 import { useT } from "@/i18n/useT";
 import { useDeliveryIntercept } from "../../../../-delivery/useDelivery";
@@ -233,13 +233,12 @@ export function GatewayClassDetail() {
       onTabChange={setActiveTab}
       tabs={tabs}
       actions={
-        <InterceptedAction
+        <DeleteAction
+          kind={ResourceType.GatewayClass}
+          name={cls?.name || name || ""}
+          detail={cls}
           intercept={intercept("Delete")}
-          label={t("action", "delete")}
-          icon={Trash2}
-          onClick={() => deleteMutation?.mutate()}
-          busy={deleteMutation?.isPending}
-          danger
+          mutation={deleteMutation}
         />
       }
     />

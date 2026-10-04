@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
+import { DeleteAction } from "../../../-object/DeleteAction";
 import {
   keepPreviousData,
   useMutation,
   useQueryClient,
 } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { AlignLeft, Info, Layers2, Play, Trash2 } from "lucide-react";
+import { AlignLeft, Info, Layers2, Play } from "lucide-react";
 
 import { LogViewer } from "../../../-logs/LogViewer";
 import { lanePodOf } from "../../../-logs/lanes";
@@ -484,13 +485,13 @@ export function CronJobDetail() {
               }}
               busy={runMutation.isPending}
             />
-            <InterceptedAction
+            <DeleteAction
+              kind={ResourceType.CronJob}
+              name={cronJob?.name || name || ""}
+              namespace={cronJob?.namespace || namespace}
+              detail={cronJob}
               intercept={intercept("Delete")}
-              label={t("action", "delete")}
-              icon={Trash2}
-              onClick={() => deleteMutation?.mutate()}
-              busy={deleteMutation?.isPending}
-              danger
+              mutation={deleteMutation}
             />
           </>
         }

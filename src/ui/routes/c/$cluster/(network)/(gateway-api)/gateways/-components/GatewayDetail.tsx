@@ -10,8 +10,9 @@
  */
 
 import { useMemo } from "react";
+import { DeleteAction } from "../../../../-object/DeleteAction";
 import { useQuery } from "@tanstack/react-query";
-import { Info, Route as RouteGlyph, Tag, Trash2 } from "lucide-react";
+import { Info, Route as RouteGlyph, Tag } from "lucide-react";
 
 import {
   Table,
@@ -38,7 +39,6 @@ import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { CertificateLine } from "../../../../-object/CertificateFacts";
-import { InterceptedAction } from "../../../../-delivery/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
 import { useT, type T } from "@/i18n/useT";
 import { verdictOf } from "@/lib/route-verdict";
@@ -609,13 +609,13 @@ export function GatewayDetail() {
       onTabChange={setActiveTab}
       delivery={deliveryQuery}
       actions={
-        <InterceptedAction
+        <DeleteAction
+          kind={ResourceType.Gateway}
+          name={gateway?.name || ""}
+          namespace={gateway?.namespace}
+          detail={gateway}
           intercept={intercept("Delete")}
-          label={t("action", "delete")}
-          icon={Trash2}
-          onClick={() => deleteMutation?.mutate()}
-          busy={deleteMutation?.isPending}
-          danger
+          mutation={deleteMutation}
         />
       }
     />

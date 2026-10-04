@@ -1,6 +1,7 @@
 import { useCallback } from "react";
+import { DeleteAction } from "../../../-object/DeleteAction";
 import { useQuery } from "@tanstack/react-query";
-import { Table2, Tag, Trash2 } from "lucide-react";
+import { Table2, Tag } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
 import { secretKeysSection, secretTypeOf } from "@/lib/share/secret-share";
@@ -21,7 +22,6 @@ import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { SecretInfo } from "@/generated/types";
@@ -175,13 +175,13 @@ export function SecretDetail() {
       }
       onBack={goBack}
       actions={
-        <InterceptedAction
+        <DeleteAction
+          kind={ResourceType.Secret}
+          name={secret?.name || name || ""}
+          namespace={secret?.namespace || namespace}
+          detail={secret}
           intercept={intercept("Delete")}
-          label={t("action", "delete")}
-          icon={Trash2}
-          onClick={() => deleteMutation?.mutate()}
-          busy={deleteMutation?.isPending}
-          danger
+          mutation={deleteMutation}
         />
       }
       tabs={tabs}

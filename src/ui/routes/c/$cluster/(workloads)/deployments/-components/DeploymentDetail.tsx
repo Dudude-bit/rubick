@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import {
@@ -8,7 +9,6 @@ import {
   Layers2,
   RefreshCw,
   Scale,
-  Trash2,
   History,
 } from "lucide-react";
 
@@ -586,13 +586,13 @@ export function DeploymentDetail() {
               onClick={() => restartMutation.mutate()}
               busy={restartMutation.isPending}
             />
-            <InterceptedAction
+            <DeleteAction
+              kind={ResourceType.Deployment}
+              name={deployment?.name || ""}
+              namespace={deployment?.namespace}
+              detail={deployment}
               intercept={intercept("Delete")}
-              label={t("action", "delete")}
-              icon={Trash2}
-              onClick={() => deleteMutation?.mutate()}
-              busy={deleteMutation?.isPending}
-              danger
+              mutation={deleteMutation}
             />
           </>
         }

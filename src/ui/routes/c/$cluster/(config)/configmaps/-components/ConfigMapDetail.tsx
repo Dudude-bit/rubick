@@ -1,6 +1,7 @@
 import { useCallback } from "react";
+import { DeleteAction } from "../../../-object/DeleteAction";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Table2, Tag, Trash2 } from "lucide-react";
+import { Table2, Tag } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
 import { configMapKeysSection } from "@/lib/share/config-map-share";
@@ -18,7 +19,6 @@ import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { ConfigMapInfo } from "@/generated/types";
@@ -175,13 +175,13 @@ export function ConfigMapDetail() {
       }
       onBack={goBack}
       actions={
-        <InterceptedAction
+        <DeleteAction
+          kind={ResourceType.ConfigMap}
+          name={configMap?.name || name || ""}
+          namespace={configMap?.namespace || namespace}
+          detail={configMap}
           intercept={intercept("Delete")}
-          label={t("action", "delete")}
-          icon={Trash2}
-          onClick={() => deleteMutation?.mutate()}
-          busy={deleteMutation?.isPending}
-          danger
+          mutation={deleteMutation}
         />
       }
       tabs={tabs}

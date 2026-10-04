@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import {
@@ -9,7 +10,6 @@ import {
   Layers2,
   RefreshCw,
   Scale,
-  Trash2,
 } from "lucide-react";
 
 import { LogViewer } from "../../../-logs/LogViewer";
@@ -465,13 +465,13 @@ export function StatefulSetDetail() {
               onClick={() => restartMutation.mutate(undefined)}
               busy={restartMutation.isPending}
             />
-            <InterceptedAction
+            <DeleteAction
+              kind={ResourceType.StatefulSet}
+              name={statefulSet?.name || name || ""}
+              namespace={statefulSet?.namespace || namespace}
+              detail={statefulSet}
               intercept={intercept("Delete")}
-              label={t("action", "delete")}
-              icon={Trash2}
-              onClick={() => deleteMutation?.mutate()}
-              busy={deleteMutation?.isPending}
-              danger
+              mutation={deleteMutation}
             />
           </>
         }

@@ -1,11 +1,11 @@
-import { ArrowDownToLine, Info, Trash2 } from "lucide-react";
+import { ArrowDownToLine, Info } from "lucide-react";
+import { DeleteAction } from "../../../-object/DeleteAction";
 
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { Peer, ReachCell } from "../../../-object/network-policy-cells";
 import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { yamlTab } from "../../../-object/yaml-tab";
-import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { useNetworkPolicyShare } from "./useNetworkPolicyShare";
@@ -234,13 +234,13 @@ export function NetworkPolicyDetail() {
       onTabChange={setActiveTab}
       tabs={tabs}
       actions={
-        <InterceptedAction
+        <DeleteAction
+          kind={ResourceType.NetworkPolicy}
+          name={policy?.name || name || ""}
+          namespace={namespace}
+          detail={policy}
           intercept={intercept("Delete")}
-          label={t("action", "delete")}
-          icon={Trash2}
-          onClick={() => deleteMutation?.mutate()}
-          busy={deleteMutation?.isPending}
-          danger
+          mutation={deleteMutation}
         />
       }
     />

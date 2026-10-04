@@ -14,6 +14,8 @@ import {
 import { yamlTab } from "../../../-object/yaml-tab";
 import { ExternalLink, Filter, Info, Plug, Tag, Waypoints } from "lucide-react";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
+import { DeleteAction } from "../../../-object/DeleteAction";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
@@ -45,6 +47,7 @@ export function ServiceDetail() {
     setActiveTab,
     goBack,
     freshness,
+    deleteMutation,
   } = useResourceDetail<ServiceInfo>({
     resourceKind: ResourceType.Service,
     fetchResource: (name, ns) => commands.getService(name, ns),
@@ -58,6 +61,8 @@ export function ServiceDetail() {
     ? publishedFor(connections.data, connections.data.subject)
     : undefined;
   const share = useServiceShare(service, connections);
+  const deliveryQuery = deliveryOfKind(ResourceType.Service, service);
+  const intercept = useDeliveryIntercept(deliveryQuery);
 
   if (!service && !isLoading && !error) {
     return null;
@@ -114,8 +119,6 @@ export function ServiceDetail() {
       value: service?.sessionAffinity || "None",
     },
   ];
-
-  const deliveryQuery = deliveryOfKind(ResourceType.Service, service);
 
   const tabs = [
     {
@@ -263,6 +266,16 @@ export function ServiceDetail() {
         )
       }
       onBack={goBack}
+      actions={
+        <DeleteAction
+          kind={ResourceType.Service}
+          name={service?.name || name || ""}
+          namespace={service?.namespace || namespace}
+          detail={service}
+          intercept={intercept("Delete")}
+          mutation={deleteMutation}
+        />
+      }
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
