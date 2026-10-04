@@ -22,7 +22,8 @@
         "center": true,
         "decorations": true,
         "transparent": false,
-        "titleBarStyle": "Visible"
+        "titleBarStyle": "Visible",
+        "backgroundColor": "#1e2024"
       }
     ],
     "security": {

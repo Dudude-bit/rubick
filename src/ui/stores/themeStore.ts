@@ -9,9 +9,9 @@
 
 import { create } from "zustand";
 import { commands } from "@/lib/commands";
+import { cachedTheme, type Theme } from "@/lib/theme";
 
-/** Available theme options */
-export type Theme = "light" | "dark" | "system";
+export type { Theme };
 
 /** Theme store state and actions */
 interface ThemeState {
@@ -35,7 +35,7 @@ interface ThemeState {
  * ```
  */
 export const useThemeStore = create<ThemeState>((set) => ({
-  theme: "dark",
+  theme: cachedTheme(),
   loading: false,
 
   setTheme: async (theme) => {

@@ -16,6 +16,7 @@ import { useAutoUpdater } from "@/hooks/useAutoUpdater";
 import { useDeepLinks } from "@/hooks/useDeepLinks";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useThemeStore } from "@/stores/themeStore";
+import { applyTheme } from "@/lib/theme";
 import { useClusterStore } from "@/stores/clusterStore";
 import { setupFrontendLogger } from "@/lib/frontend-logger";
 import { startWindowActivity } from "@/lib/window-activity";
@@ -88,20 +89,7 @@ export default function App() {
     });
   }, [refreshPortForwardConfigs, refreshPortForwardSessions]);
 
-  useEffect(() => {
-    const root = window.document.documentElement;
-    root.classList.remove("light", "dark");
-
-    if (theme === "system") {
-      const systemTheme = window.matchMedia("(prefers-color-scheme: dark)")
-        .matches
-        ? "dark"
-        : "light";
-      root.classList.add(systemTheme);
-    } else {
-      root.classList.add(theme);
-    }
-  }, [theme]);
+  useEffect(() => applyTheme(theme), [theme]);
 
   return (
     <ErrorProvider>

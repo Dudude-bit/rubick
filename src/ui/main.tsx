@@ -23,7 +23,8 @@ import { isWorthRetrying } from "@/lib/error-utils";
 import { hostOsFromUserAgent, setHostOs } from "@/lib/platform";
 import { markStartup } from "@/lib/startup";
 import { loadLocale } from "@/i18n";
-import { currentLocale } from "@/stores/localeStore";
+import { currentLocale, useLocaleStore } from "@/stores/localeStore";
+import { applyTheme, cachedTheme } from "@/lib/theme";
 
 // After every eagerly imported module has loaded.
 markStartup("main");
@@ -117,4 +118,14 @@ function render() {
 
 // The reader's language before anything is drawn in it; English, which is
 // built in, if its catalogue cannot be loaded.
+// Before the first render, so the window is never painted in the other
+// theme while the backend's setting is read.
+applyTheme(cachedTheme());
+
+const speak = () => {
+  document.documentElement.lang = currentLocale();
+};
+speak();
+useLocaleStore.subscribe(speak);
+
 loadLocale(currentLocale()).then(render, render);
