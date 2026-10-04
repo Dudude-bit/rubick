@@ -889,6 +889,75 @@ export interface BinaryLocation {
   path: string | null;
 }
 
+export interface Lineage {
+  uid: string | null;
+  ancestors: Ancestor[];
+  others: OtherOwner[];
+  stop: LineageStop | null;
+}
+
+export interface OtherOwner {
+  kind: string;
+  group: string;
+  name: string;
+}
+
+export interface Ancestor {
+  uid: string;
+  kind: string;
+  group: string;
+  plural: string;
+  name: string;
+  namespace: string | null;
+}
+
+export interface Cascade {
+  takes: KindCount[];
+  notRead: NotRead;
+}
+
+export interface NotRead {
+  kinds: KindReading[];
+  groups: UnreadGroup[];
+}
+
+export interface UnreadGroup {
+  group: string;
+  code: string;
+  message: string;
+}
+
+export interface KindReading {
+  kind: string;
+  group: string;
+  plural: string;
+  reading: Reading;
+}
+
+export interface KindCount {
+  kind: string;
+  group: string;
+  plural: string;
+  count: number;
+}
+
+export interface Dependents {
+  dependents: Dependent[];
+  notRead: NotRead;
+}
+
+export interface Dependent {
+  uid: string;
+  kind: string;
+  group: string;
+  version: string;
+  plural: string;
+  name: string;
+  namespace: string | null;
+  controlled: boolean;
+  dependents: number;
+}
+
 export interface CronJobDetailInfo {
   name: string;
   namespace: string;
@@ -1202,12 +1271,6 @@ export interface TableColumn {
 export interface ApiCatalog {
   entries: CatalogEntry[];
   unread: UnreadGroup[];
-}
-
-export interface UnreadGroup {
-  group: string;
-  code: string;
-  message: string;
 }
 
 export interface CatalogEntry {
@@ -2156,6 +2219,28 @@ export type DebugStatus =
   | { type: "ready"; result: DebugResult }
   | { type: "failed"; error: string }
   | { type: "timeout" };
+
+export type LineageStop =
+  | { says: "ownerGone"; kind: string; name: string }
+  | {
+      says: "ownerUnread";
+      kind: string;
+      name: string;
+      code: string;
+      message: string;
+    }
+  | { says: "kindNotServed"; kind: string; group: string }
+  | { says: "several" }
+  | { says: "tooDeep" };
+
+export type Reading =
+  | { says: "syncing" }
+  | { says: "stale"; since: string }
+  | { says: "refused"; message: string }
+  | { says: "partial"; namespaces: string[] }
+  | { says: "failed"; message: string }
+  | { says: "unlistable" }
+  | { says: "skipped" };
 
 export type EnvVarSourceType =
   | "configMapKeyRef"

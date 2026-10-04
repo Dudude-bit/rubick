@@ -43,6 +43,7 @@ pub mod integrations;
 pub mod logs;
 pub mod metrics;
 pub mod overview;
+pub mod ownership;
 pub mod resources;
 pub mod search;
 pub mod shell;

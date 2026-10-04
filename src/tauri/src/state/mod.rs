@@ -104,6 +104,7 @@ pub struct AppState {
 
     /// The overview's inputs, watched rather than listed per round.
     pub overview_cache: Arc<crate::overview::OverviewCache>,
+    pub ownership: Arc<crate::ownership::OwnershipIndexes>,
 }
 
 impl AppState {
@@ -146,6 +147,7 @@ impl AppState {
             debug_operations: DashMap::new(),
             perf: Arc::new(perf::PerfCounters::default()),
             overview_cache: Arc::new(crate::overview::OverviewCache::default()),
+            ownership: Arc::new(crate::ownership::OwnershipIndexes::default()),
         })
     }
 
@@ -270,6 +272,23 @@ impl AppState {
         self.client_manager
             .served()
             .kind(&context, &client, group, plural)
+            .await
+    }
+
+    /// Every kind `group` serves on the current cluster, with each version
+    /// that serves it; `None` where the group is not served.
+    ///
+    /// # Errors
+    ///
+    /// No cluster, or discovery could not be read.
+    pub async fn served_kinds(
+        &self,
+        group: &str,
+    ) -> Result<Option<Vec<crate::client::served::ServedKind>>> {
+        let (context, client) = self.current()?;
+        self.client_manager
+            .served()
+            .kinds(&context, &client, group)
             .await
     }
 

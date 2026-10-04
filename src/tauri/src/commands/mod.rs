@@ -42,6 +42,7 @@ pub mod namespace;
 pub mod network;
 pub mod nodes;
 pub mod overview;
+pub mod ownership;
 pub mod perf;
 pub mod pods;
 pub mod port_forward;

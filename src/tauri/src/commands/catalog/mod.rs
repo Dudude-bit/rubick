@@ -55,7 +55,7 @@ pub async fn list_api_catalog(state: State<'_, AppState>) -> Result<ApiCatalog> 
     catalog(&state).await
 }
 
-async fn catalog(state: &AppState) -> Result<ApiCatalog> {
+pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
     let client = ResourceContext::for_list(state, None)?.client;
     let groups = client.list_api_groups().await?;
     let names: Vec<String> = std::iter::once(String::new())

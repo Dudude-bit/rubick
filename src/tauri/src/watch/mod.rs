@@ -34,10 +34,10 @@ use tokio::sync::broadcast;
 use tokio::time::{interval, MissedTickBehavior};
 
 use event::{emit_failure, WatchBatch, FLUSH_INTERVAL};
-use failure::{backoff_for, paced, FailureLatch};
+use failure::{paced, FailureLatch};
 use scope::{Out, ScopeSync};
 
-pub(crate) use failure::answered;
+pub(crate) use failure::{answered, backoff_for};
 
 /// Manages all active resource watches.
 pub struct WatchManager {

@@ -14,6 +14,7 @@ import type {
   BackendTlsPolicyInfo,
   BatchLogResult,
   BinaryLocation,
+  Cascade,
   Check,
   CheckOutcome,
   CliAvailability,
@@ -40,6 +41,7 @@ import type {
   DebugConfig,
   DebugOperation,
   DebugStatus,
+  Dependents,
   DeploymentInfo,
   DetectedExtension,
   Diagnostics,
@@ -68,6 +70,7 @@ import type {
   JobDetailInfo,
   JobInfo,
   KubeconfigSource,
+  Lineage,
   ListAccess,
   ListQuery,
   LogLine,
@@ -1069,6 +1072,29 @@ export async function deleteCronjob(
   namespace: string | null
 ): Promise<void> {
   return invoke<void>("delete_cronjob", { name, namespace });
+}
+
+export async function listDependents(
+  uid: string,
+  scope: string[] | null
+): Promise<Dependents> {
+  return invoke<Dependents>("list_dependents", { uid, scope });
+}
+
+export async function previewCascade(
+  uid: string,
+  scope: string[] | null
+): Promise<Cascade> {
+  return invoke<Cascade>("preview_cascade", { uid, scope });
+}
+
+export async function objectLineage(
+  group: string,
+  plural: string,
+  name: string,
+  namespace: string | null
+): Promise<Lineage> {
+  return invoke<Lineage>("object_lineage", { group, plural, name, namespace });
 }
 
 export async function locateBinaries(
