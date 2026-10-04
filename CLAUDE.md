@@ -332,7 +332,9 @@ the recorder; the rules that fail silently are these.
 - A duplicated npm package is fixed by `rm -rf node_modules bun.lock &&
 bun install` — never `bun add pkg@ver`, never an `overrides` entry. Two copies
   of one package do not error; they make one copy's objects silently invisible
-  to the other.
+  to the other. The one `overrides` entry is Vite+'s own: it points every
+  `vite` in the tree at `@voidzero-dev/vite-plus-core`, so a plugin that ships
+  a `vite` of its own cannot bring a second copy. Bump it with `vite-plus`.
 
 ## Adding a resource kind
 
