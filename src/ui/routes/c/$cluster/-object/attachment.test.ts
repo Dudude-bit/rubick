@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { decide, type Exists, type Reader, type Target } from "./attached";
+import { decide, type Exists, type Reader, type Target } from "./attachment";
 
 /** A cluster where each named object answers as `exists` says. */
 function reader(

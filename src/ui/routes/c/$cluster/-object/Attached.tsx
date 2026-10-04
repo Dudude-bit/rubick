@@ -1,7 +1,7 @@
 import { Navigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-import { useAttachment, type Stay } from "./attached";
+import { useAttachment, type Stay } from "./attachment";
 import { Alert } from "@/components/ui/alert";
 import { RouteLink } from "@/components/ui/route-link";
 import { useAppSearch } from "@/hooks/useSearchParam";
