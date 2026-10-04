@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { configMapColumns } from "./ConfigMapList";
+import { configMapColumns } from "@/routes/c/$cluster/(config)/configmaps/-components/ConfigMapList";
 import { columns as cronJobs } from "@/routes/c/$cluster/(workloads)/cronjobs/-components/CronJobList";
 import { columns as daemonSets } from "@/routes/c/$cluster/(workloads)/daemonsets/-components/DaemonSetList";
 import { columns as deployments } from "@/routes/c/$cluster/(workloads)/deployments/-components/DeploymentList";
@@ -13,7 +13,7 @@ import { columns as nodes } from "./NodeList";
 import { columns as persistentVolumeClaims } from "@/routes/c/$cluster/(storage)/persistentvolumeclaims/-components/PersistentVolumeClaimList";
 import { columns as persistentVolumes } from "@/routes/c/$cluster/(storage)/persistentvolumes/-components/PersistentVolumeList";
 import { columns as pods } from "@/routes/c/$cluster/(workloads)/pods/-components/PodList";
-import { columns as secrets } from "./SecretList";
+import { columns as secrets } from "@/routes/c/$cluster/(config)/secrets/-components/SecretList";
 import { columns as services } from "@/routes/c/$cluster/(network)/services/-components/ServiceList";
 import { columns as statefulSets } from "@/routes/c/$cluster/(workloads)/statefulsets/-components/StatefulSetList";
 import { columns as storageClasses } from "@/routes/c/$cluster/(storage)/storageclasses/-components/StorageClassList";

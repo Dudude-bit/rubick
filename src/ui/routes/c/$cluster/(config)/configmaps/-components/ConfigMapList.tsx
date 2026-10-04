@@ -8,8 +8,8 @@ import {
   createNamespaceColumn,
   createAgeColumn,
   createDataKeysColumn,
-} from "./columns";
-import { createResourceListPage } from "./createResourceListPage";
+} from "@/components/resources/columns";
+import { createResourceListPage } from "@/components/resources/createResourceListPage";
 
 /**
  * Exported so `column-widths.test.ts` can hold this table to the same rule as
