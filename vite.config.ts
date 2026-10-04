@@ -187,6 +187,16 @@ export default defineConfig({
         plugins: ["react"],
       },
       {
+        files: ["src/ui/routes/**/-*/**/*.tsx"],
+        rules: {
+          "react/only-export-components": [
+            "warn",
+            { allowConstantExport: true },
+          ],
+        },
+        plugins: ["react"],
+      },
+      {
         // A probe component hands what it read back to the test; a test
         // never hot-reloads.
         files: ["src/ui/**/*.test.{ts,tsx}", "src/ui/test/**"],
