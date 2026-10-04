@@ -52,7 +52,12 @@ export type CrdLookup = (
   kind: string
 ) => string | null;
 
-export function useCrdIndex(): { crdFor: CrdLookup; isLoading: boolean } {
+export function useCrdIndex(): {
+  crdFor: CrdLookup;
+  /** Whether `<plural>.<group>` names a CRD, as opposed to a built-in group. */
+  isCrd: (name: string) => boolean;
+  isLoading: boolean;
+} {
   const isConnected = useClusterStore((state) => state.isConnected);
 
   const { data, isLoading } = useQuery({
@@ -82,5 +87,12 @@ export function useCrdIndex(): { crdFor: CrdLookup; isLoading: boolean } {
     [byGroupAndKind]
   );
 
-  return { crdFor, isLoading };
+  const isCrd = useMemo(() => {
+    const names = new Set(
+      (data ?? []).flatMap((group) => group.crds.map((crd) => crd.name))
+    );
+    return (name: string) => names.has(name);
+  }, [data]);
+
+  return { crdFor, isCrd, isLoading };
 }

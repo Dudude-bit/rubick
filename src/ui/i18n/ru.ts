@@ -4724,13 +4724,20 @@ export const ru: Catalogue = {
     kubeconfigUnread: "Не удалось прочитать kubeconfig",
     kubeconfigUnreadBody:
       "Поэтому неизвестно, есть ли в нём {cluster}. {error}",
-    resourceNotOpened: "Rubick пока не открывает {resource}",
-    resourceNotOpenedBody:
-      "Это не kind, который знает Rubick, и не имя CustomResourceDefinition.",
-    listNotShown: "Rubick пока не показывает список {resource}",
-    listNotShownBody:
-      "Каждый объект этого kind открывается из любого места, которое на него ссылается.",
+    notServed: "Этот кластер не обслуживает {resource}",
+    notServedBody:
+      "В его API discovery нет kind с таким именем. Возможно, в адресе опечатка, или то, что ставит этот kind, в кластере не установлено.",
+    discoveryUnread: "Не удалось понять, обслуживает ли кластер {resource}",
+    discoveryUnreadBody: "Discovery его API-группы не ответил. {error}",
+    notListable: "{resource} нельзя получить списком",
+    notListableBody:
+      "Кластер обслуживает этот kind, но без глагола list. Каждый объект открывается из любого места, которое на него ссылается.",
     objectUnread: "Не удалось прочитать этот объект",
+    objectMissing: "{kind} с именем {name} нет",
+    objectMissingBody:
+      "Кластер обслуживает этот kind и ответил, что такого объекта нет.",
+    printedMore: "Показаны первые {count}. В кластере есть ещё.",
+    showMore: "Показать ещё",
     saysNothing: "ничего не говорит",
     deniesAll: "запрещает всё",
     allowsAll: "разрешает всё",

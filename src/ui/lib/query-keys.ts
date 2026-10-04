@@ -246,6 +246,33 @@ export const queryKeys = {
     home(namespace),
     name,
   ],
+  /** Every kind the cluster serves. One answer for the whole app. */
+  apiCatalog: (): string[] => ["api-catalog"],
+  /** The first `pages` pages of a kind's printed list, in one scope. */
+  printedList: (
+    group: string,
+    plural: string,
+    namespace: string | null,
+    pages: number
+  ): (string | number)[] => [
+    "printed-list",
+    group,
+    plural,
+    scope(namespace),
+    pages,
+  ],
+  servedObjectYaml: (
+    group: string,
+    plural: string,
+    namespace: string | null | undefined,
+    name: string
+  ): (string | null)[] => [
+    "served-object-yaml",
+    group,
+    plural,
+    home(namespace),
+    name,
+  ],
   customResourceYaml: (
     crdName: string,
     namespace: string | null | undefined,

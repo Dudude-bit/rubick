@@ -1,13 +1,11 @@
-import { EmptyPage } from "../../../-components/NotFound";
 import { CustomResourceDetail } from "./-components/CustomResourceDetail";
-import { useT } from "@/i18n/useT";
-import { isResourceType, toKind } from "@/lib/resource-registry";
 import { GenericObjectPage } from "./GenericObjectPage";
+import { useCrdIndex } from "@/hooks/useCrdIndex";
 
 /**
- * Any object the address names whose kind has no page of its own: a custom
- * resource by its CRD's name, or a kind the registry knows and the app has
- * not drawn a screen for. Anything else is said to be unknown, not missing.
+ * Any object the address names whose kind has no page of its own. A custom
+ * resource opens on its CRD's page, which knows its printer columns and its
+ * vendor; every other served kind opens on the generic one.
  */
 export function AnyObject({
   resource,
@@ -18,22 +16,19 @@ export function AnyObject({
   namespace?: string;
   name: string;
 }) {
-  const t = useT();
-  if (resource.includes("."))
-    return (
-      <CustomResourceDetail
-        crdName={resource}
-        namespace={namespace}
-        name={name}
-      />
-    );
-  const kind = isResourceType(resource) ? toKind(resource) : null;
-  if (kind)
-    return <GenericObjectPage kind={kind} namespace={namespace} name={name} />;
+  const crds = useCrdIndex();
+  if (resource.includes(".")) {
+    if (crds.isLoading) return null;
+    if (crds.isCrd(resource))
+      return (
+        <CustomResourceDetail
+          crdName={resource}
+          namespace={namespace}
+          name={name}
+        />
+      );
+  }
   return (
-    <EmptyPage
-      title={t("empty", "resourceNotOpened", { resource })}
-      body={t("empty", "resourceNotOpenedBody")}
-    />
+    <GenericObjectPage resource={resource} namespace={namespace} name={name} />
   );
 }

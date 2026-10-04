@@ -94,6 +94,14 @@ export function listLink(
   } as AppLink;
 }
 
+/** The list of any served kind, by the segment its address carries. */
+export function resourceListLink(resource: string): AppLink {
+  return {
+    to: "/c/$cluster/$resource",
+    params: inCluster({ resource }),
+  } as AppLink;
+}
+
 /** The objects one CRD defines: its own page, on the instances tab. */
 export function crdInstancesLink(crd: string): AppLink {
   return objectLink(

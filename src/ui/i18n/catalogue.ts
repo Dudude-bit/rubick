@@ -4284,13 +4284,20 @@ export const en = {
       "The link names a cluster this kubeconfig does not list. Open one it does.",
     kubeconfigUnread: "Could not read the kubeconfig",
     kubeconfigUnreadBody: "So whether {cluster} is in it is not known. {error}",
-    resourceNotOpened: "Rubick does not open {resource} yet",
-    resourceNotOpenedBody:
-      "It is neither a kind Rubick knows nor the name of a custom resource definition.",
-    listNotShown: "Rubick does not list {resource} yet",
-    listNotShownBody:
-      "Each object of this kind opens from anything that refers to it.",
+    notServed: "This cluster serves no {resource}",
+    notServedBody:
+      "Its API discovery lists no kind by that name. The address may be mistyped, or what installs the kind is not on this cluster.",
+    discoveryUnread: "Could not tell whether this cluster serves {resource}",
+    discoveryUnreadBody: "Discovery for its API group did not answer. {error}",
+    notListable: "{resource} cannot be listed",
+    notListableBody:
+      "The cluster serves this kind but not the list verb on it. Each object opens from anything that refers to it.",
     objectUnread: "Could not read this object",
+    objectMissing: "There is no {kind} named {name}",
+    objectMissingBody:
+      "The cluster serves this kind and answered that no such object exists.",
+    printedMore: "Showing the first {count}. The cluster has more.",
+    showMore: "Show more",
     // A NetworkPolicy's four readings of one direction, and its three of a
     // `podSelector`. Each one is a state the others would be mistaken for.
     saysNothing: "says nothing",
