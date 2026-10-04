@@ -14,8 +14,8 @@ import {
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
-import { yamlTab } from "@/components/resources/yaml-tab";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { yamlTab } from "../../../-object/yaml-tab";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
   countMark,
   kindGlyph,
@@ -27,15 +27,15 @@ import {
   KeyValueList,
   KeyValueSection,
   type KeyValue,
-} from "@/components/resources/detail-kv";
+} from "../../../-object/detail-kv";
 import {
   recordToKeyValues,
   TONE_CLASS,
 } from "@/components/resources/key-values";
-import { CertificateLine } from "@/components/resources/CertificateFacts";
+import { CertificateLine } from "../../../-object/CertificateFacts";
 import { IssuanceSection } from "@/components/resources/IssuanceChain";
-import { TrafficChain } from "@/components/resources/TrafficChain";
-import { connectionsTab } from "@/components/resources/connections-tab";
+import { TrafficChain } from "../../../-object/TrafficChain";
+import { connectionsTab } from "../../../-object/connections-tab";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useResourceDetail } from "@/hooks";
 import { Link } from "@tanstack/react-router";

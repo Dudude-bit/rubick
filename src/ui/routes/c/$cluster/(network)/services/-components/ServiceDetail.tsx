@@ -11,19 +11,16 @@ import {
   CopyableAddress,
   CopyableAddresses,
 } from "@/components/ui/copyable-value";
-import { yamlTab } from "@/components/resources/yaml-tab";
+import { yamlTab } from "../../../-object/yaml-tab";
 import { ExternalLink, Filter, Info, Plug, Tag, Waypoints } from "lucide-react";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { ServiceAccessInfo } from "../../-components";
-import { TrafficChain } from "@/components/resources/TrafficChain";
+import { TrafficChain } from "../../../-object/TrafficChain";
 import { PublishedEndpoints } from "./PublishedEndpoints";
-import { connectionsTab } from "@/components/resources/connections-tab";
+import { connectionsTab } from "../../../-object/connections-tab";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { useServiceShare } from "./useServiceShare";

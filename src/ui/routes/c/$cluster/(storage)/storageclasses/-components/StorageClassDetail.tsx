@@ -3,19 +3,16 @@ import { Info, SlidersHorizontal, Trash2 } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
 import { storageClassFactsSection } from "@/lib/share/storage-class-share";
-import { yamlTab } from "@/components/resources/yaml-tab";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { yamlTab } from "../../../-object/yaml-tab";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "@/components/resources/delivery-intercept";
-import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { InterceptedAction } from "../../../-delivery/delivery-intercept";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { StorageClassInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";

@@ -29,17 +29,17 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { LogViewer } from "@/components/logs/LogViewer";
-import { useAsk } from "@/hooks/useAsk";
+import { LogViewer } from "../../../-logs/LogViewer";
+import { useAsk } from "../../../-object/useAsk";
 import type { After } from "@/lib/tell-me-when";
-import { lanePodOf } from "@/components/logs/lanes";
-import { MetricsStatusBanner } from "@/components/metrics";
-import { yamlTab } from "@/components/resources/yaml-tab";
+import { lanePodOf } from "../../../-logs/lanes";
+import { MetricsStatusBanner } from "../../../-metrics";
+import { yamlTab } from "../../../-object/yaml-tab";
 import { RelatedResources } from "../../-components/RelatedResources";
-import { TrafficChain } from "@/components/resources/TrafficChain";
-import { connectionsTab } from "@/components/resources/connections-tab";
-import { PodListCard } from "@/components/resources/PodListCard";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { TrafficChain } from "../../../-object/TrafficChain";
+import { connectionsTab } from "../../../-object/connections-tab";
+import { PodListCard } from "../../../-object/PodListCard";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
   conditionsMark,
   countMark,
@@ -48,11 +48,11 @@ import {
   viewGlyph,
   type DetailTab,
 } from "@/components/resources/detail-tab";
-import { RevisionRows } from "@/components/resources/child-rows";
+import { RevisionRows } from "../../../-object/child-rows";
 import { ChangesTab } from "../../-components/ChangesTab";
 import { ResourceMessage } from "@/components/resources/ResourceMessage";
-import { ScaleDialog } from "@/components/resources/ScaleDialog";
-import { ContainerRows } from "@/components/resources/container-rows";
+import { ScaleDialog } from "../../../-object/ScaleDialog";
+import { ContainerRows } from "../../../-object/container-rows";
 import { deliveryOfKind } from "@/lib/delivery";
 import { scaleWarnings } from "@/lib/governance";
 import {
@@ -60,10 +60,10 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "../../-components/workload-overview";
-import { AlertsAbout } from "@/components/resources/AlertsAbout";
-import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { AlertsAbout } from "../../../-object/AlertsAbout";
+import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
-import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
   Composition,
   ConditionRows,
@@ -71,10 +71,7 @@ import {
 } from "@/components/resources/detail-blocks";
 import { WorkloadUsage } from "../../-components/workload-usage";
 import { serviceAccountRow } from "../../-components/identity-rows";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { PinAction } from "../../-components/PinAction";
 import { useResourceMutation, useResourceDetail } from "@/hooks";

@@ -9,13 +9,13 @@ import {
   DirectionCell,
   ReachCell,
   SelectsCell,
-} from "@/components/resources/network-policy-cells";
+} from "../../../-object/network-policy-cells";
 import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
-} from "@/components/resources/columns";
-import { createResourceListPage } from "@/components/resources/createResourceListPage";
+} from "../../../-list/columns";
+import { createResourceListPage } from "../../../-list/createResourceListPage";
 
 // Exported for `column-widths.test.ts`: a column with no declared width gets
 // an equal share of a `table-fixed` table.

@@ -12,7 +12,7 @@ import {
   createAgeColumn,
   createCpuColumn,
   createMemoryColumn,
-} from "@/components/resources/columns";
+} from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
 
 type DaemonSetInfoWithMetrics = DaemonSetInfo & ResourceMetrics;

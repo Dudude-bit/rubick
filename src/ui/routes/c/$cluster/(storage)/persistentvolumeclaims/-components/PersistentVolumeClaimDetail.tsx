@@ -7,8 +7,8 @@ import { pvcFactsSection, pvcStatusOf } from "@/lib/share/pvc-share";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PhaseBadge } from "@/components/ui/status-badge";
-import { yamlTab } from "@/components/resources/yaml-tab";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { yamlTab } from "../../../-object/yaml-tab";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
   countMark,
   kindGlyph,
@@ -16,17 +16,14 @@ import {
 } from "@/components/resources/detail-tab";
 import { DetailAction, EventRows } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
-import { connectionsTab } from "@/components/resources/connections-tab";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
+import { connectionsTab } from "../../../-object/connections-tab";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "@/components/resources/delivery-intercept";
-import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { InterceptedAction } from "../../../-delivery/delivery-intercept";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type {
   EventFilters,

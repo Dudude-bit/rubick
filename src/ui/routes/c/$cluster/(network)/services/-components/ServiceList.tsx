@@ -10,8 +10,8 @@ import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
-} from "@/components/resources/columns";
-import { createResourceListPage } from "@/components/resources/createResourceListPage";
+} from "../../../-list/columns";
+import { createResourceListPage } from "../../../-list/createResourceListPage";
 
 /**
  * A service type is a configuration fact, so it is printed rather than badged.

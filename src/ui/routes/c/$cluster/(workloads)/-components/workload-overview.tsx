@@ -26,7 +26,7 @@ import { useT, type T } from "@/i18n/useT";
 import type { ReactNode } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { KeyValueList } from "@/components/resources/detail-kv";
+import { KeyValueList } from "../../-object/detail-kv";
 import { governanceRows } from "./governance";
 import { cn } from "@/lib/utils";
 import type { Finding } from "@/lib/governance";

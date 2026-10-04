@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { Layout } from "@/components/layout/Layout";
+import { Layout } from "./-shell/Layout";
 import { NotFoundPage } from "@/components/layout/NotFound";
 import { appSearch } from "@/lib/app-search";
 import { useClusterStore } from "@/stores/clusterStore";

@@ -15,9 +15,9 @@ import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
-import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
+import { ResourceListHeader } from "../../../-list/ResourceListHeader";
 import { ShareScreenAction } from "@/components/share/ShareAction";
-import { createAgeColumn } from "@/components/resources/columns";
+import { createAgeColumn } from "../../../-list/columns";
 import { isRefusal, normalizeTauriError } from "@/lib/error-utils";
 import { ObjectLink } from "@/components/resources/ResourceRef";
 import { ResourceType } from "@/lib/resource-registry";

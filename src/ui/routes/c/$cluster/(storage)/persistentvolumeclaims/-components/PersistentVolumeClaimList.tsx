@@ -6,15 +6,15 @@ import { scopeCacheKey } from "@/lib/namespace-scope";
 import { PhaseBadge } from "@/components/ui/status-badge";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye, Trash2 } from "lucide-react";
-import { ResourceList } from "@/components/resources/ResourceList";
-import { StorageClassRef } from "@/components/resources/storage-refs";
+import { ResourceList } from "../../../-list/ResourceList";
+import { StorageClassRef } from "../../../-object/storage-refs";
 import {
   createAccessModesColumn,
   createCapacityColumn,
   createAgeColumn,
   createNameColumn,
   createNamespaceColumn,
-} from "@/components/resources/columns";
+} from "../../../-list/columns";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { commands } from "@/lib/commands";

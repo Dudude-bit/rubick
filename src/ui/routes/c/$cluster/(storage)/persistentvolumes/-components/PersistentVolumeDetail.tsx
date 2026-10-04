@@ -4,22 +4,19 @@ import { Info, Trash2 } from "lucide-react";
 import type { ShareContribution } from "@/components/share/contribution";
 import { pvFactsSection, pvStatusOf } from "@/lib/share/pv-share";
 import { PhaseBadge } from "@/components/ui/status-badge";
-import { yamlTab } from "@/components/resources/yaml-tab";
-import { connectionsTab } from "@/components/resources/connections-tab";
+import { yamlTab } from "../../../-object/yaml-tab";
+import { connectionsTab } from "../../../-object/connections-tab";
 import { viewGlyph } from "@/components/resources/detail-tab";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { ResourceRef } from "@/components/resources/ResourceRef";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
-import { ClaimRef } from "@/components/resources/storage-refs";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
+import { ClaimRef } from "../../../-object/storage-refs";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "@/components/resources/delivery-intercept";
-import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { InterceptedAction } from "../../../-delivery/delivery-intercept";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { PersistentVolumeInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";

@@ -9,15 +9,12 @@ import {
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CopyableAddress } from "@/components/ui/copyable-value";
-import { yamlTab } from "@/components/resources/yaml-tab";
+import { yamlTab } from "../../../-object/yaml-tab";
 import { Info, Plug, Waypoints } from "lucide-react";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
 import { ResourceRef } from "@/components/resources/ResourceRef";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { useResourceDetail } from "@/hooks";
 import { useEndpointsShare } from "./useEndpointsShare";
 import { useQuery } from "@tanstack/react-query";

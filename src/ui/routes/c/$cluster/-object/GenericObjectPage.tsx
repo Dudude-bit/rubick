@@ -1,8 +1,8 @@
 import { useRouter } from "@tanstack/react-router";
 
 import { EmptyPage } from "@/components/layout/NotFound";
-import { ResourceDetailHeader } from "@/components/resources/ResourceDetailHeader";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { ResourceDetailHeader } from "./ResourceDetailHeader";
+import { YamlTabContent } from "./YamlTabContent";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useResourceYaml } from "@/hooks/useResourceYaml";
 import { useT } from "@/i18n/useT";

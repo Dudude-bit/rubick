@@ -8,10 +8,7 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { scopeCacheKey } from "@/lib/namespace-scope";
-import {
-  createAgeColumn,
-  createNamespaceColumn,
-} from "@/components/resources/columns";
+import { createAgeColumn, createNamespaceColumn } from "../../../-list/columns";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { hrefOf, objectLink } from "@/lib/links";
 import { statusRole } from "@/lib/status-role";
@@ -19,7 +16,7 @@ import { useCrdView } from "@/integrations";
 import { drawnSeparately } from "./printer-columns";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { ResourceList } from "@/components/resources/ResourceList";
+import { ResourceList } from "../../../-list/ResourceList";
 import type { CustomResourceInfo, PrinterColumn } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { crdWidthsKey } from "@/lib/resource-identity";

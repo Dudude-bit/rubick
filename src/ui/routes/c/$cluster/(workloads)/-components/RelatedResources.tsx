@@ -21,7 +21,7 @@ import { commands } from "@/lib/commands";
 import { REPLICAS_SET_HERE } from "@/lib/connections";
 import { isScalable, toKind, isResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/resources/ResourceRef";
-import { KeyValueRow } from "@/components/resources/detail-kv";
+import { KeyValueRow } from "../../-object/detail-kv";
 import type { OwnerReference } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 

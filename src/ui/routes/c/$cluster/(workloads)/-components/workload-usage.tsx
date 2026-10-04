@@ -11,11 +11,11 @@
  * Node and a Deployment must not disagree about what a chart of CPU looks
  * like. What is here is only the summing and the honesty about zero.
  */
-import type { EmptyKey } from "@/components/resources/usage-chart";
+import type { EmptyKey } from "../../-usage/usage-chart";
 import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { UsageBlock } from "@/components/resources/usage-block";
+import { UsageBlock } from "../../-usage/usage-block";
 import { useCapabilityState } from "@/integrations";
 import { useMetrics } from "@/hooks/useMetrics";
 import { aggregatePodMetrics, mergePodsWithMetrics } from "@/lib/metrics";

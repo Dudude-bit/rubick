@@ -18,12 +18,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CopyableAddress } from "@/components/ui/copyable-value";
-import { ResourceList } from "@/components/resources/ResourceList";
+import { ResourceList } from "../../../-list/ResourceList";
 import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
-} from "@/components/resources/columns";
+} from "../../../-list/columns";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import {
   TlsBadge,

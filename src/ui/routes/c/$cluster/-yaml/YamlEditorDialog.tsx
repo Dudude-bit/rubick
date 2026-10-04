@@ -1,0 +1,625 @@
+/**
+ * The editor, and the one interception the app was still missing.
+ *
+ * Applying an edited manifest is the most powerful write here — it replaces
+ * the whole object, not one field — and it was the last control that stayed
+ * silent when a delivery controller was going to undo it. That silence stopped
+ * being neutral the moment Scale, Restart and Delete started speaking: a
+ * reader who has been told twice that the app warns about this reasonably
+ * reads the third dialog's quiet as "and this one is safe".
+ *
+ * Three rules, taken from the controls that already do it:
+ *
+ * - **It does not block, it tells.** Applying over a delivered object during
+ *   an incident is legitimate; doing it believing it will stick is not.
+ * - **The ordinary case is untouched.** An object nothing delivers gets the
+ *   confirmation it has always had, with the same word on the button.
+ * - **No new dialog.** The warning lands inside the confirmation that was
+ *   already there, in the same component every other warning is drawn with.
+ */
+
+import { useCallback, useMemo, useState, useDeferredValue } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { isReadDeadline } from "@/lib/read-deadline";
+import { commands } from "@/lib/commands";
+import type { DryRunDocument } from "@/generated/types";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { TextSkeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/components/ui/use-toast";
+import { Spinner } from "@/components/ui/spinner";
+import { ActionWarnings } from "../-object/action-warnings";
+import { DeliveryMarks } from "../-delivery/delivery";
+import { useConnections } from "@/hooks/useConnections";
+import { useDelivery } from "../-delivery/useDelivery";
+import { deliveryApplyIntercept } from "@/lib/delivery";
+import { applyWarnings } from "@/lib/governance";
+import { changesReplicaCount, deliveryOfManifest } from "./manifest-reads";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useYamlEditorStore } from "@/stores/yamlEditorStore";
+import { useAsk } from "../-object/useAsk";
+import { askableKind } from "@/lib/tell-me-when";
+import { AlertTriangle, Play, FileCheck } from "lucide-react";
+import { errorToShow } from "@/lib/error-utils";
+
+import { YamlEditor } from "./YamlEditor";
+import { YamlEditorToolbar } from "./YamlEditorToolbar";
+import { YamlDiffViewer } from "./YamlDiffViewer";
+import { YamlResultDisplay } from "./YamlResultDisplay";
+import { useCriticalGate } from "@/hooks/useCriticalGate";
+import { useT } from "@/i18n/useT";
+
+export function YamlEditorDialog() {
+  const asking = useAsk();
+  const t = useT();
+  const queryClient = useQueryClient();
+  // Applying an edited manifest replaces the whole object — the most powerful
+  // write here — so on a critical cluster it takes the same typed-name gate,
+  // and the field is bound to the notice so neither can appear without the other.
+  const gate = useCriticalGate();
+  // Stable (memoised in the hook), so the apply callback can depend on it
+  // without being rebuilt every render.
+  const gateReset = gate.reset;
+  const { toast } = useToast();
+  const currentNamespace = useClusterStore((state) => state.currentNamespace);
+
+  const {
+    open,
+    title,
+    resourceKey,
+    originalContent,
+    editedContent,
+    isLoading,
+    isValidating,
+    isApplying,
+    showDiff,
+    readOnly,
+    validationResult,
+    applyResult,
+    closeEditor,
+    setEditedContent,
+    setShowDiff,
+    setValidationResult,
+    setApplyResult,
+    setIsValidating,
+    setIsApplying,
+    addHistoryEntry,
+    restoreFromHistory,
+    getResourceHistory,
+    resetToOriginal,
+    formatYaml,
+  } = useYamlEditorStore();
+
+  const [showApplyConfirm, setShowApplyConfirm] = useState(false);
+
+  const history = getResourceHistory();
+  const hasChanges = originalContent !== editedContent;
+
+  // Asked of the document the server gave, not of the buffer: who owns this
+  // object is not something the reader can change by deleting a label from
+  // the text. Nothing is fetched at all until a manifest is loaded, and
+  // nothing on a cluster with no delivery controller ever.
+  const delivery = useMemo(
+    () => deliveryOfManifest(originalContent),
+    [originalContent]
+  );
+  const { deliveries } = useDelivery(delivery);
+  const intercept = deliveryApplyIntercept(deliveries, t);
+
+  // The autoscaler owns `spec.replicas` and nothing else, so it is asked
+  // about only when that field is what moved — see `applyWarnings`. Asked
+  // while the editor is open rather than when the confirmation appears, so
+  // the sentence is already there when the reader gets to it; the query key
+  // is the detail page's, so a page that has read its connections pays
+  // nothing.
+  // Two whole-document parses per keystroke on a long manifest, and the
+  // answer is only needed by the time the confirmation opens: deferred, so
+  // typing is never behind them, and memoised on what was actually parsed.
+  const settledContent = useDeferredValue(editedContent);
+  const replicasMoved = useMemo(
+    () =>
+      !readOnly &&
+      originalContent !== settledContent &&
+      changesReplicaCount(originalContent, settledContent),
+    [readOnly, originalContent, settledContent]
+  );
+  const governance = useConnections(
+    resourceKey?.kind ?? "",
+    resourceKey?.name,
+    resourceKey?.namespace ?? null,
+    open && replicasMoved
+  );
+
+  const warnings = applyWarnings(governance.data, intercept, replicasMoved, t);
+
+  // What the server would store against what it holds now. Asked only once
+  // the confirmation is open, of the buffer as it is at that moment; the
+  // editor's own diff stands in while the answer is on its way, and says so.
+  const dryRun = useQuery({
+    queryKey: [
+      "dry-run",
+      resourceKey?.kind ?? "",
+      resourceKey?.namespace ?? "",
+      resourceKey?.name ?? "",
+      editedContent,
+    ],
+    queryFn: () =>
+      commands.dryRunManifest(
+        editedContent,
+        resourceKey?.namespace || currentNamespace || null
+      ),
+    enabled: showApplyConfirm && hasChanges,
+    retry: false,
+    staleTime: Infinity,
+    gcTime: 0,
+  });
+  const refused =
+    dryRun.data?.documents.find((doc) => doc.outcome.says === "refused") ??
+    null;
+
+  const handleCopy = useCallback(async () => {
+    await navigator.clipboard.writeText(editedContent);
+    toast({
+      title: t("action", "copied"),
+      description: t("action", "yamlCopiedToClipboard"),
+    });
+  }, [editedContent, toast, t]);
+
+  const handleValidate = useCallback(async () => {
+    setIsValidating(true);
+    setValidationResult(null);
+
+    try {
+      const result = await commands.validateManifest(
+        editedContent,
+        resourceKey?.namespace || currentNamespace || null
+      );
+      setValidationResult(result);
+
+      if (result.success) {
+        toast({
+          title: t("action", "validationPassed"),
+          description: t("action", "manifestIsValid"),
+        });
+      }
+    } catch (error) {
+      setValidationResult({
+        success: false,
+        stdout: "",
+        stderr: errorToShow(error),
+        exit_code: 1,
+      });
+    } finally {
+      setIsValidating(false);
+    }
+  }, [
+    editedContent,
+    resourceKey,
+    currentNamespace,
+    setIsValidating,
+    setValidationResult,
+    toast,
+    t,
+  ]);
+
+  const handleApply = useCallback(async () => {
+    setShowApplyConfirm(false);
+    gateReset();
+    setIsApplying(true);
+    setApplyResult(null);
+
+    try {
+      const result = await commands.applyManifest(
+        editedContent,
+        resourceKey?.namespace || currentNamespace || null
+      );
+      setApplyResult(result);
+
+      if (result.success) {
+        addHistoryEntry(editedContent, "Applied");
+        // The preview describes the cluster as it was before this apply,
+        // and its key changes only with the buffer — so opening the
+        // confirmation again for a second apply showed the first apply's
+        // answer: "would be created" about an object that now exists.
+        void queryClient.invalidateQueries({
+          queryKey: ["dry-run", resourceKey?.kind ?? ""],
+        });
+        const askable = resourceKey ? askableKind(resourceKey.kind) : null;
+        if (askable && resourceKey && askable !== "Pod" && askable !== "Job") {
+          asking.ask(
+            {
+              kind: askable,
+              namespace: resourceKey.namespace ?? currentNamespace ?? null,
+              name: resourceKey.name,
+            },
+            { action: "apply", replicas: null, generationBefore: null }
+          );
+        }
+
+        toast({
+          title: t("action", "applySucceeded"),
+          description: result.stdout || t("action", "manifestApplied"),
+        });
+      } else {
+        toast({
+          title: t("action", "applyFailed"),
+          description: result.stderr || t("action", "failedToApplyManifest"),
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      const errorMessage = errorToShow(error);
+      // A deadline is not a refusal. The layer that fires it drops our
+      // request; it does not undo what the apiserver may already have
+      // committed — a chain of admission webhooks can outlast the wait.
+      // "Apply failed" there is a verdict about something nobody looked at,
+      // and it invites a second apply on top of a first that may have run.
+      const ranOut = isReadDeadline(error);
+      const errorResult = {
+        success: false,
+        stdout: "",
+        stderr: ranOut ? t("action", "applyUnansweredHint") : errorMessage,
+        exit_code: 1,
+      };
+      setApplyResult(errorResult);
+      toast({
+        title: ranOut
+          ? t("action", "applyUnanswered")
+          : t("action", "applyFailed"),
+        description: ranOut ? t("action", "applyUnansweredHint") : errorMessage,
+        variant: ranOut ? "default" : "destructive",
+      });
+    } finally {
+      setIsApplying(false);
+    }
+  }, [
+    asking,
+    queryClient,
+    editedContent,
+    resourceKey,
+    currentNamespace,
+    setIsApplying,
+    setApplyResult,
+    addHistoryEntry,
+    gateReset,
+    toast,
+    t,
+  ]);
+
+  const handleFormat = useCallback(() => {
+    void formatYaml().then((formatted) => {
+      if (!formatted) return;
+      toast({
+        title: t("action", "formatted"),
+        description: t("action", "yamlFormatted"),
+      });
+    });
+  }, [formatYaml, toast, t]);
+
+  const handleRestoreHistory = useCallback(
+    (timestamp: number) => {
+      restoreFromHistory(timestamp);
+      toast({
+        title: t("action", "restored"),
+        description: t("action", "contentRestoredFromHistory"),
+      });
+    },
+    [restoreFromHistory, toast, t]
+  );
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={(next) => !next && closeEditor()}>
+        <DialogContent className="max-w-5xl h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {title}
+              {hasChanges && !readOnly && (
+                <Badge variant="outline" className="ml-2">
+                  <AlertTriangle className="mr-1 h-3 w-3" />
+                  {t("action", "unsavedChanges")}
+                </Badge>
+              )}
+            </DialogTitle>
+            <DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span>
+                {readOnly
+                  ? t("action", "viewYamlManifest")
+                  : t("action", "editYamlManifestHint")}
+              </span>
+              {/* The same quiet mark the page header carries, because the
+                  editor is a modal that covers that header: "where does this
+                  come from" is asked while editing, and answering it here is
+                  what lets the confirmation say only what happens next. */}
+              <DeliveryMarks deliveries={deliveries} />
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Toolbar */}
+          <div className="flex items-center justify-between gap-2 py-2 border-b">
+            <YamlEditorToolbar
+              showFormat={!readOnly}
+              showCopy={true}
+              showReset={!readOnly}
+              showDiff={true}
+              showHistory={!readOnly}
+              disabled={isLoading}
+              hasChanges={hasChanges}
+              isDiffMode={showDiff}
+              history={history}
+              onFormat={handleFormat}
+              onCopy={handleCopy}
+              onReset={resetToOriginal}
+              onToggleDiff={() => setShowDiff(!showDiff)}
+              onRestoreHistory={handleRestoreHistory}
+            />
+
+            {!readOnly && (
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleValidate}
+                  disabled={isLoading || isValidating || isApplying}
+                >
+                  {isValidating ? (
+                    <Spinner size="sm" className="mr-2" />
+                  ) : (
+                    <FileCheck className="mr-2 h-4 w-4" />
+                  )}
+                  {t("action", "validate")}
+                </Button>
+
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => setShowApplyConfirm(true)}
+                  disabled={isLoading || isValidating || isApplying}
+                >
+                  {isApplying ? (
+                    <Spinner size="sm" className="mr-2" />
+                  ) : (
+                    <Play className="mr-2 h-4 w-4" />
+                  )}
+                  {t("action", "apply")}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1 min-h-0 overflow-hidden">
+            {isLoading ? (
+              <div className="h-full rounded-md border p-4">
+                <TextSkeleton lines={18} />
+              </div>
+            ) : showDiff ? (
+              <YamlDiffViewer
+                original={originalContent}
+                modified={editedContent}
+                height="100%"
+              />
+            ) : (
+              <div className="h-full rounded-md border overflow-hidden">
+                <YamlEditor
+                  value={editedContent}
+                  onChange={readOnly ? undefined : setEditedContent}
+                  readOnly={readOnly}
+                  height="100%"
+                  className="h-full"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* Results */}
+          {(validationResult || applyResult) && (
+            <div className="mt-2">
+              <YamlResultDisplay result={applyResult || validationResult!} />
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={closeEditor}>
+              {t("action", "close")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Apply Confirmation Dialog */}
+      <Dialog
+        open={showApplyConfirm}
+        onOpenChange={(next) => {
+          if (!next) gate.reset();
+          setShowApplyConfirm(next);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {intercept?.title ?? t("action", "applyChangesQuestion")}
+            </DialogTitle>
+            {gate.notice}
+            <DialogDescription>
+              {t("action", "applyManifestConfirm")}
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* The consequence, in full, and never the provenance again. The
+              mark beside the editor's title already said who applies this,
+              and this dialog is a modal over that modal — so at the instant
+              of the decision the mark is behind a scrim and unreadable, and
+              the only thing safe to leave out is the second naming of the
+              owner, which the lead sentence carries anyway. */}
+          <ActionWarnings warnings={warnings} headingFor="warnUndoApply" />
+
+          {hasChanges && dryRun.data ? (
+            <div className="min-w-0 py-4" data-testid="dry-run">
+              <p className="mb-2 text-xs text-fg-mut">
+                {t("action", "dryRunFromServer")}
+              </p>
+              <div className="flex flex-col gap-3">
+                {dryRun.data.documents.map((doc) => (
+                  <DryRunSection
+                    key={doc.id}
+                    doc={doc}
+                    edited={editedContent}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : hasChanges ? (
+            // The diff is arbitrarily wide and this dialog is a grid, whose
+            // items default to `min-width: auto` — without this the longest
+            // line of the manifest sets the column width and everything above
+            // it, warning included, is dragged off the right of the screen.
+            <div className="min-w-0 py-4">
+              <p className="mb-2 text-xs text-fg-mut">
+                {t("action", "changesToBeApplied")}
+              </p>
+              <ScrollArea className="h-[200px] w-full overflow-hidden rounded-md border">
+                <YamlDiffViewer
+                  original={originalContent}
+                  modified={editedContent}
+                  height="200px"
+                />
+              </ScrollArea>
+              <p
+                className="mt-2 text-[11px] text-fg-fnt"
+                role="status"
+                data-testid="dry-run-standing"
+              >
+                {dryRun.isError
+                  ? t("action", "dryRunFailed", {
+                      error: errorToShow(dryRun.error),
+                    })
+                  : t("action", "dryRunAsking")}
+              </p>
+            </div>
+          ) : null}
+
+          {gate.input}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                gate.reset();
+                setShowApplyConfirm(false);
+              }}
+            >
+              {t("action", "cancel")}
+            </Button>
+            <Button
+              onClick={handleApply}
+              disabled={gate.blocked || refused !== null}
+            >
+              <Play className="mr-2 h-4 w-4" />
+              {/* The intercept decides its own word where it has one — a
+                  disowned label confirms with a plain "Apply", because there
+                  is no consequence to override. Otherwise the rule is the
+                  Scale dialog's: a warning changes the word, not the outcome. */}
+              {intercept?.confirmLabel ??
+                (warnings.length > 0
+                  ? t("action", "applyAnyway")
+                  : t("action", "apply"))}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {asking.dialog}
+    </>
+  );
+}
+
+/**
+ * One document of the dry run: what the server said it would do, and the
+ * object it would store against the one it holds.
+ *
+ * "Would be created" and "could not read what is there" both arrive with no
+ * current object, and each gets its own sentence; a refusal shows the
+ * server's own words and nothing to diff, because there is nothing to diff.
+ */
+function DryRunSection({
+  doc,
+  edited,
+}: {
+  doc: DryRunDocument;
+  /** The buffer, for the one case where the server said nothing. */
+  edited: string;
+}) {
+  const t = useT();
+  const outcome = doc.outcome;
+  const tone =
+    outcome.says === "refused"
+      ? "text-err"
+      : outcome.says === "liveUnread" || outcome.says === "unanswered"
+        ? "text-warn"
+        : outcome.says === "unchanged"
+          ? "text-fg-fnt"
+          : "text-fg";
+  return (
+    <section className="min-w-0" data-testid="dry-run-document">
+      <p className={`text-xs ${tone}`}>
+        <span className="font-mono">{doc.id}</span>{" "}
+        {outcome.says === "created"
+          ? t("action", "dryRunCreated")
+          : outcome.says === "configured"
+            ? t("action", "dryRunConfigured")
+            : outcome.says === "unchanged"
+              ? t("action", "dryRunUnchanged")
+              : outcome.says === "liveUnread"
+                ? t("action", "dryRunLiveUnread")
+                : outcome.says === "unanswered"
+                  ? t("action", "dryRunUnanswered")
+                  : t("action", "dryRunRefused")}
+      </p>
+      {outcome.says === "refused" ||
+      outcome.says === "liveUnread" ||
+      outcome.says === "unanswered" ? (
+        <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+          {outcome.said}
+        </p>
+      ) : null}
+      {/* The sentence for an unanswered document promises the editor's own
+          diff, and `would` is null there, so the block below drew nothing
+          at all and the promise was empty. This is that diff. */}
+      {outcome.says === "unanswered" && doc.live !== null ? (
+        <ScrollArea className="mt-2 h-[200px] w-full overflow-hidden rounded-md border">
+          <YamlDiffViewer
+            original={doc.live}
+            modified={edited}
+            height="200px"
+          />
+        </ScrollArea>
+      ) : null}
+      {/* No diff where there is nothing honest to diff against. `live` is
+          null both for an object that is not there and for one the read
+          failed on, and against "" the whole document draws green — "this
+          would all be created" — about an object that may well exist and
+          be about to be overwritten. The sentence above says which case it
+          is; a diff cannot. */}
+      {doc.would !== null &&
+      outcome.says !== "unchanged" &&
+      outcome.says !== "liveUnread" ? (
+        <ScrollArea className="mt-2 h-[200px] w-full overflow-hidden rounded-md border">
+          <YamlDiffViewer
+            original={doc.live ?? ""}
+            modified={doc.would}
+            height="200px"
+          />
+        </ScrollArea>
+      ) : null}
+    </section>
+  );
+}

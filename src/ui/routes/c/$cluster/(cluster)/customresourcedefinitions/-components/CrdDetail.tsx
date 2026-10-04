@@ -28,10 +28,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
-import { yamlTab } from "@/components/resources/yaml-tab";
+import { yamlTab } from "../../../-object/yaml-tab";
 import { SchemaViewer } from "./SchemaViewer";
 import { CustomResourceList } from "./CustomResourceList";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
   conditionsMark,
   countMark,
@@ -40,17 +40,14 @@ import {
   type DetailTab,
 } from "@/components/resources/detail-tab";
 import { ConditionRows } from "@/components/resources/detail-blocks";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "@/components/resources/delivery-intercept";
-import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { InterceptedAction } from "../../../-delivery/delivery-intercept";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { listLink } from "@/lib/links";

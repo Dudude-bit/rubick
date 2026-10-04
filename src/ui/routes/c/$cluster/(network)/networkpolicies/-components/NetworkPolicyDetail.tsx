@@ -1,16 +1,13 @@
 import { ArrowDownToLine, Info, Trash2 } from "lucide-react";
 
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
-import { Peer, ReachCell } from "@/components/resources/network-policy-cells";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
+import { Peer, ReachCell } from "../../../-object/network-policy-cells";
 import { countMark, viewGlyph } from "@/components/resources/detail-tab";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
-import { yamlTab } from "@/components/resources/yaml-tab";
-import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
+import { yamlTab } from "../../../-object/yaml-tab";
+import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { Section, SectionHeader } from "@/components/ui/section";
-import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { useNetworkPolicyShare } from "./useNetworkPolicyShare";
 import { useResourceDetail } from "@/hooks";
 import { T } from "@/i18n/T";

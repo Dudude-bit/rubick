@@ -14,20 +14,20 @@ import {
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CopyableAddress } from "@/components/ui/copyable-value";
-import { MetricsStatusBanner } from "@/components/metrics";
-import { DebugNodeDialog } from "@/components/debug";
-import { yamlTab } from "@/components/resources/yaml-tab";
-import { connectionsTab } from "@/components/resources/connections-tab";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { MetricsStatusBanner } from "../../../-metrics";
+import { DebugNodeDialog } from "../../../-debug";
+import { yamlTab } from "../../../-object/yaml-tab";
+import { connectionsTab } from "../../../-object/connections-tab";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { conditionsMark, viewGlyph } from "@/components/resources/detail-tab";
 import {
   ConditionRows,
   DetailAction,
   UsageRow,
 } from "@/components/resources/detail-blocks";
-import { UsageBlock } from "@/components/resources/usage-block";
+import { UsageBlock } from "../../../-usage/usage-block";
 import { NodeResources } from "./NodeResources";
-import { PodListCard } from "@/components/resources/PodListCard";
+import { PodListCard } from "../../../-object/PodListCard";
 import {
   countMark,
   kindGlyph,
@@ -37,12 +37,9 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNodeActions } from "./useNodeActions";
 import { errorToShow } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
-import { SpotMark } from "@/components/resources/spot-mark";
+import { SpotMark } from "../../../-object/spot-mark";
 import { nodePlacement, statesPlacement } from "@/lib/node-pool";
 import type {
   ShareContribution,

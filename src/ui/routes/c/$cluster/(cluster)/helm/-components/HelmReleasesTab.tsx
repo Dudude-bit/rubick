@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import type { HelmRelease, UnreadNamespace } from "@/generated/types";
-import { UnreadNamespaces } from "@/components/resources/UnreadNamespaces";
+import { UnreadNamespaces } from "../../../-list/UnreadNamespaces";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { helmReleaseLink, hrefOf } from "@/lib/links";
 import { noneWhereAnswered } from "@/lib/namespace-scope";

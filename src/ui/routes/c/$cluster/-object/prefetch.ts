@@ -25,8 +25,7 @@ export async function prefetchObject(
 ): Promise<void> {
   const cluster = useClusterStore.getState();
   if (!cluster.isConnected || cluster.currentContext !== params.cluster) return;
-  const { peekQueryKey, resolveSource } =
-    await import("@/components/resources/peek-sources");
+  const { peekQueryKey, resolveSource } = await import("../-peek/peek-sources");
   const namespace = params.namespace ?? null;
   const target: PeekTarget = {
     kind: kind ?? params.resource ?? "",

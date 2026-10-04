@@ -11,27 +11,27 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { LogViewer } from "@/components/logs/LogViewer";
-import { lanePodOf } from "@/components/logs/lanes";
+import { LogViewer } from "../../../-logs/LogViewer";
+import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 // The one place that turns replica counts into a word. These pages kept
 // their own comparison with no zero case, so a workload scaled to nothing
 // wore a green "Ready" here and a grey "Idle" in the list and the peek.
 import { workloadStatus } from "@/lib/workload-status";
-import { yamlTab } from "@/components/resources/yaml-tab";
+import { yamlTab } from "../../../-object/yaml-tab";
 import { RelatedResources } from "../../-components/RelatedResources";
-import { TrafficChain } from "@/components/resources/TrafficChain";
-import { connectionsTab } from "@/components/resources/connections-tab";
-import { PodListCard } from "@/components/resources/PodListCard";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { TrafficChain } from "../../../-object/TrafficChain";
+import { connectionsTab } from "../../../-object/connections-tab";
+import { PodListCard } from "../../../-object/PodListCard";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
   conditionsMark,
   kindGlyph,
   podsMark,
   viewGlyph,
 } from "@/components/resources/detail-tab";
-import { ContainerRows } from "@/components/resources/container-rows";
+import { ContainerRows } from "../../../-object/container-rows";
 import { ChangesTab } from "../../-components/ChangesTab";
 import { deliveryOfKind } from "@/lib/delivery";
 import {
@@ -39,22 +39,19 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "../../-components/workload-overview";
-import { AlertsAbout } from "@/components/resources/AlertsAbout";
-import { InterceptedAction } from "@/components/resources/delivery-intercept";
-import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { AlertsAbout } from "../../../-object/AlertsAbout";
+import { InterceptedAction } from "../../../-delivery/delivery-intercept";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
   Composition,
   ConditionRows,
 } from "@/components/resources/detail-blocks";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { WorkloadUsage } from "../../-components/workload-usage";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { PinAction } from "../../-components/PinAction";
-import { useAsk } from "@/hooks/useAsk";
+import { useAsk } from "../../../-object/useAsk";
 import { useResourceDetail, useResourceMutation } from "@/hooks";
 import { useDaemonSetShare } from "./useDaemonSetShare";
 import { useConnections } from "@/hooks/useConnections";

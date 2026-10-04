@@ -18,15 +18,15 @@ import {
   createAgeColumn,
   createCpuColumn,
   createMemoryColumn,
-} from "@/components/resources/columns";
+} from "../../../-list/columns";
 import { podReadiness } from "@/lib/container-sequence";
 import { commands } from "@/lib/commands";
-import { ResourceList } from "@/components/resources/ResourceList";
+import { ResourceList } from "../../../-list/ResourceList";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
 import { hrefOf, objectLink } from "@/lib/links";
-import { MetricsStatusBanner } from "@/components/metrics";
+import { MetricsStatusBanner } from "../../../-metrics";
 import { getResourceRowId } from "@/lib/table-utils";
 import { formatAge } from "@/lib/utils";
 import { refOf } from "@/lib/report-parts";

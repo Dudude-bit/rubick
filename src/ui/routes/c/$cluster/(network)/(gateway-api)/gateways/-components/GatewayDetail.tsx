@@ -26,8 +26,8 @@ import {
   CopyableValue,
 } from "@/components/ui/copyable-value";
 import { Section, SectionHeader } from "@/components/ui/section";
-import { yamlTab } from "@/components/resources/yaml-tab";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { yamlTab } from "../../../../-object/yaml-tab";
+import { ResourceDetailLayout } from "../../../../-object/ResourceDetailLayout";
 import {
   countMark,
   kindGlyph,
@@ -35,25 +35,22 @@ import {
 } from "@/components/resources/detail-tab";
 import { EventRows } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
-import { CertificateLine } from "@/components/resources/CertificateFacts";
-import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { CertificateLine } from "../../../../-object/CertificateFacts";
+import { InterceptedAction } from "../../../../-delivery/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
 import { useT, type T } from "@/i18n/useT";
 import { verdictOf } from "@/lib/route-verdict";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useGatewayShare } from "./useGatewayShare";
-import { GATEWAY_ROUTE_KINDS } from "@/hooks/useGatewayRoutes";
+import { GATEWAY_ROUTE_KINDS } from "../../../../-object/useGatewayRoutes";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
-import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { useDeliveryIntercept } from "../../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import { cautioningCondition, failingCondition } from "@/lib/condition-health";
 import { gatewayProgrammed, parentIsGateway } from "@/lib/route-trace";

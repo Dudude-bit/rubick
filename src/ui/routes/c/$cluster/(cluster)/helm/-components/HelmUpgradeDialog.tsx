@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { KeyValueRow } from "@/components/resources/detail-kv";
+import { KeyValueRow } from "../../../-object/detail-kv";
 import type { HelmRelease } from "@/generated/types";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";

@@ -1,5 +1,5 @@
 import { EmptyPage } from "@/components/layout/NotFound";
-import { CustomResourceDetail } from "@/pages/CustomResourceDetail";
+import { CustomResourceDetail } from "./-components/CustomResourceDetail";
 import { useT } from "@/i18n/useT";
 import { isResourceType, toKind } from "@/lib/resource-registry";
 import { GenericObjectPage } from "./GenericObjectPage";

@@ -39,19 +39,16 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
   countMark,
   viewGlyph,
   type DetailTab,
 } from "@/components/resources/detail-tab";
-import { YamlTabContent } from "@/components/resources/YamlTabContent";
+import { YamlTabContent } from "../../../-object/YamlTabContent";
 import { DetailAction } from "@/components/resources/detail-blocks";
 import { ResourceRef } from "@/components/resources/ResourceRef";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { useCopyToClipboard } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";

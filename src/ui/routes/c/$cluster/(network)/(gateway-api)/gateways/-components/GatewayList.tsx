@@ -4,12 +4,12 @@
  * Programmed — with "nothing answered" kept apart from "broken".
  */
 
-import { createResourceListPage } from "@/components/resources/createResourceListPage";
+import { createResourceListPage } from "../../../../-list/createResourceListPage";
 import {
   createAgeColumn,
   createNameColumn,
   createNamespaceColumn,
-} from "@/components/resources/columns";
+} from "../../../../-list/columns";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { columnHeader } from "@/i18n/column-header";

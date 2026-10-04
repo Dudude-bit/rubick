@@ -7,27 +7,27 @@ import {
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { AlignLeft, Info, Layers2, Play, Trash2 } from "lucide-react";
 
-import { LogViewer } from "@/components/logs/LogViewer";
-import { lanePodOf } from "@/components/logs/lanes";
+import { LogViewer } from "../../../-logs/LogViewer";
+import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Unknown } from "@/components/ui/unknown";
 import { useToast } from "@/components/ui/use-toast";
-import { yamlTab } from "@/components/resources/yaml-tab";
+import { yamlTab } from "../../../-object/yaml-tab";
 import { RelatedResources } from "../../-components/RelatedResources";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
   countMark,
   kindGlyph,
   viewGlyph,
 } from "@/components/resources/detail-tab";
-import { ContainerRows } from "@/components/resources/container-rows";
+import { ContainerRows } from "../../../-object/container-rows";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "@/components/resources/delivery-intercept";
-import { useDeliveryIntercept } from "@/hooks/useDelivery";
-import { JobRows } from "@/components/resources/child-rows";
+import { InterceptedAction } from "../../../-delivery/delivery-intercept";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
+import { JobRows } from "../../../-object/child-rows";
 import { describeCron, nextCronRun } from "./cron-schedule";
 import { Composition, Headline } from "@/components/resources/detail-blocks";
 import {
@@ -35,13 +35,10 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "../../-components/workload-overview";
-import { AlertsAbout } from "@/components/resources/AlertsAbout";
+import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { WorkloadUsage } from "../../-components/workload-usage";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { PinAction } from "../../-components/PinAction";
 import { useResourceDetail } from "@/hooks";

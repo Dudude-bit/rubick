@@ -11,7 +11,7 @@ const SOURCES = import.meta.glob<string>(
 
 /** Modules that load after startup: the editor's chunk and a lazy route. */
 const MAY_IMPORT_YAML = new Set([
-  "/src/ui/components/yaml/manifest-reads.ts",
+  "/src/ui/routes/c/$cluster/-yaml/manifest-reads.ts",
   "/src/ui/lib/helm-manifest.ts",
   "/src/ui/routes/c/$cluster/(cluster)/helm/-components/HelmDetail.tsx",
 ]);

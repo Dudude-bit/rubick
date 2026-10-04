@@ -7,14 +7,14 @@ import { commands } from "@/lib/commands";
 import { whole } from "@/lib/namespace-scope";
 import { ResourceType } from "@/lib/resource-registry";
 import { PhaseBadge } from "@/components/ui/status-badge";
-import { ClaimRef, StorageClassRef } from "@/components/resources/storage-refs";
+import { ClaimRef, StorageClassRef } from "../../../-object/storage-refs";
 import {
   createAccessModesColumn,
   createCapacityColumn,
   createAgeColumn,
   createNameColumn,
-} from "@/components/resources/columns";
-import { createResourceListPage } from "@/components/resources/createResourceListPage";
+} from "../../../-list/columns";
+import { createResourceListPage } from "../../../-list/createResourceListPage";
 
 export const columns = (): ColumnDef<PersistentVolumeInfo>[] => [
   createNameColumn<PersistentVolumeInfo>(ResourceType.PersistentVolume),

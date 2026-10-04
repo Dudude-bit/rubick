@@ -12,7 +12,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 const CALLERS = [
   "src/ui/hooks/usePodsWithMetrics.ts",
-  "src/ui/hooks/usePrefetchCoreLists.ts",
+  "src/ui/routes/c/$cluster/-shell/usePrefetchCoreLists.ts",
 ];
 
 describe("who hands the pod stream a way to stop", () => {

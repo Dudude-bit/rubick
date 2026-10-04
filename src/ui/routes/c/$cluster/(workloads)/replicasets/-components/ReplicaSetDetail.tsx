@@ -2,20 +2,20 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { AlignLeft, BadgeCheck, Info, Layers2 } from "lucide-react";
 
-import { LogViewer } from "@/components/logs/LogViewer";
-import { lanePodOf } from "@/components/logs/lanes";
+import { LogViewer } from "../../../-logs/LogViewer";
+import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { yamlTab } from "@/components/resources/yaml-tab";
-import { PodListCard } from "@/components/resources/PodListCard";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { yamlTab } from "../../../-object/yaml-tab";
+import { PodListCard } from "../../../-object/PodListCard";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
   conditionsMark,
   kindGlyph,
   podsMark,
   viewGlyph,
 } from "@/components/resources/detail-tab";
-import { ContainerRows } from "@/components/resources/container-rows";
+import { ContainerRows } from "../../../-object/container-rows";
 import {
   Composition,
   ConditionRows,
@@ -25,13 +25,10 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "../../-components/workload-overview";
-import { AlertsAbout } from "@/components/resources/AlertsAbout";
+import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { ResourceRef } from "@/components/resources/ResourceRef";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useReplicaSetShare } from "./useReplicaSetShare";

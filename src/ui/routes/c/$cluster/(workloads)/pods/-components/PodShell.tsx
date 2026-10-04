@@ -1,6 +1,6 @@
 import { useMemo, type ReactNode } from "react";
 
-import { containerColors } from "@/components/logs/container-colors";
+import { containerColors } from "../../../-logs/container-colors";
 import {
   PHASE_LABEL,
   containerSucceeded,

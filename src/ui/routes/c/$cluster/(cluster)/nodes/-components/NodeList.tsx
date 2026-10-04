@@ -21,15 +21,12 @@ import { useMetrics } from "@/hooks/useMetrics";
 import { errorToShow } from "@/lib/error-utils";
 import { formatUsage } from "@/lib/metric-format";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
-import { MetricsStatusBanner } from "@/components/metrics";
-import { ResourceList } from "@/components/resources/ResourceList";
-import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
+import { MetricsStatusBanner } from "../../../-metrics";
+import { ResourceList } from "../../../-list/ResourceList";
+import { ResourceListHeader } from "../../../-list/ResourceListHeader";
 import { ShareScreenAction } from "@/components/share/ShareAction";
-import {
-  createAgeColumn,
-  createNameColumn,
-} from "@/components/resources/columns";
-import { SpotMark } from "@/components/resources/spot-mark";
+import { createAgeColumn, createNameColumn } from "../../../-list/columns";
+import { SpotMark } from "../../../-object/spot-mark";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 import { describePool, poolFacts, poolOf, spotMark } from "@/lib/node-pool";
 import type { NodeInfo, NodeMetrics } from "@/generated/types";

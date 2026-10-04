@@ -20,18 +20,18 @@ import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { CopyableAddress } from "@/components/ui/copyable-value";
-import { MetricsStatusBanner } from "@/components/metrics";
-import { DebugPodDialog } from "@/components/debug";
+import { MetricsStatusBanner } from "../../../-metrics";
+import { DebugPodDialog } from "../../../-debug";
 import { FilesTab } from "./FilesTab";
 import { ChecksTab } from "./ChecksTab";
 import type { Via } from "@/generated/types";
-import { LogViewer } from "@/components/logs/LogViewer";
+import { LogViewer } from "../../../-logs/LogViewer";
 import { PodShell } from "./PodShell";
-import { yamlTab } from "@/components/resources/yaml-tab";
+import { yamlTab } from "../../../-object/yaml-tab";
 import { RelatedResources } from "../../-components/RelatedResources";
-import { TrafficChain } from "@/components/resources/TrafficChain";
-import { connectionsTab } from "@/components/resources/connections-tab";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { TrafficChain } from "../../../-object/TrafficChain";
+import { connectionsTab } from "../../../-object/connections-tab";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
   conditionsMark,
   countMark,
@@ -40,28 +40,25 @@ import {
   severityMark,
   viewGlyph,
 } from "@/components/resources/detail-tab";
-import { ContainerRows } from "@/components/resources/container-rows";
+import { ContainerRows } from "../../../-object/container-rows";
 import {
   FactBlock,
   WorkloadOverview,
 } from "../../-components/workload-overview";
-import { AlertsAbout } from "@/components/resources/AlertsAbout";
+import { AlertsAbout } from "../../../-object/AlertsAbout";
 import {
   ConditionRows,
   DetailAction,
   ProblemSummary,
 } from "@/components/resources/detail-blocks";
-import { UsageBlock } from "@/components/resources/usage-block";
+import { UsageBlock } from "../../../-usage/usage-block";
 import { ImageRef } from "@/components/resources/ImageRef";
 import { ResourceMessage } from "@/components/resources/ResourceMessage";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { MostLikelyPanel } from "./MostLikelyPanel";
 import { usePodShare } from "./usePodShare";
 import { VolumeRows } from "./volume-rows";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { PodPortForwardDialog } from "./PodPortForwardDialog";
 import { usePodPortForward } from "./usePodPortForward";
@@ -72,11 +69,11 @@ import { silenceNote, silenceOf } from "@/lib/node-reporting";
 import { useConnections } from "@/hooks/useConnections";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNodePlacement } from "./useNodePlacement";
-import { SpotMark } from "@/components/resources/spot-mark";
+import { SpotMark } from "../../../-object/spot-mark";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "@/components/resources/delivery-intercept";
-import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { InterceptedAction } from "../../../-delivery/delivery-intercept";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";

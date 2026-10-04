@@ -33,7 +33,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-vi.mock("@/components/debug", () => ({
+vi.mock("../../../-debug", () => ({
   DebugNodeDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="debug-dialog" /> : null,
 }));

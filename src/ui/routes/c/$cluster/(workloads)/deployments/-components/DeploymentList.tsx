@@ -14,7 +14,7 @@ import {
   createCpuColumn,
   createMemoryColumn,
   createReplicasColumn,
-} from "@/components/resources/columns";
+} from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
 
 type DeploymentInfoWithMetrics = DeploymentInfo & ResourceMetrics;

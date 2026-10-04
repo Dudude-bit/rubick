@@ -231,17 +231,19 @@ export const SECTIONS: readonly ShortcutSection[] = [
  * update it.
  */
 export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
-  "src/ui/hooks/useShortcuts.ts": "the central handler: ?, g-chords, page keys",
-  "src/ui/components/layout/CommandPalette.tsx": "mod+k",
+  "src/ui/routes/c/$cluster/-shell/useShortcuts.ts":
+    "the central handler: ?, g-chords, page keys",
+  "src/ui/routes/c/$cluster/-shell/CommandPalette.tsx": "mod+k",
   "src/ui/components/settings/SettingsOverlay.tsx": "mod+,",
-  "src/ui/hooks/useCopyLink.ts": "mod+shift+c",
-  "src/ui/hooks/useScopeTabs.ts": "ctrl+tab, mod+t, mod+w, mod+1..9",
-  "src/ui/components/logs/LogViewer.tsx": "0..9 solo a container",
+  "src/ui/routes/c/$cluster/-shell/useCopyLink.ts": "mod+shift+c",
+  "src/ui/routes/c/$cluster/-shell/useScopeTabs.ts":
+    "ctrl+tab, mod+t, mod+w, mod+1..9",
+  "src/ui/routes/c/$cluster/-logs/LogViewer.tsx": "0..9 solo a container",
   "src/ui/components/cluster/ClusterList.tsx":
     "mod+f focuses the cluster filter, on the front door only",
-  "src/ui/components/layout/ScopeTabs.tsx":
+  "src/ui/routes/c/$cluster/-shell/ScopeTabs.tsx":
     "mod+click and mod+Enter add a namespace instead of replacing it",
-  "src/ui/components/logs/LogList.tsx":
+  "src/ui/routes/c/$cluster/-logs/LogList.tsx":
     "mod+a selects the rendered window, not the whole buffer",
   "src/ui/routes/c/$cluster/(workloads)/pods/-components/FilesTab.tsx":
     "mod+s downloads, Backspace goes up",

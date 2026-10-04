@@ -17,7 +17,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
 
-import { ResourceList } from "@/components/resources/ResourceList";
+import { ResourceList } from "../../-list/ResourceList";
 import { deliveryScopeOf } from "@/lib/delivery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { keepWatched, scopeCacheKey } from "@/lib/namespace-scope";
@@ -29,7 +29,7 @@ import {
   type PodMatcher,
   type ResourceMetrics,
 } from "@/lib/metrics";
-import { MetricsStatusBanner } from "@/components/metrics";
+import { MetricsStatusBanner } from "../../-metrics";
 import { queryKeys } from "@/lib/query-keys";
 import { hrefOf, objectLink } from "@/lib/links";
 import { getResourceRowId } from "@/lib/table-utils";

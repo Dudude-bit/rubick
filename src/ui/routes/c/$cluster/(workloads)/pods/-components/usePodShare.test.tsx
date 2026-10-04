@@ -22,8 +22,8 @@ vi.mock("@/lib/commands", () => ({
 import type { PodInfo } from "@/generated/types";
 import { translate } from "@/i18n";
 import { useHintSettingsStore } from "@/stores/hintSettingsStore";
-import { logViewKey, offerLogView } from "@/components/logs/shared-view";
-import type { StreamedLogLine } from "@/components/logs/types";
+import { logViewKey, offerLogView } from "../../../-logs/shared-view";
+import type { StreamedLogLine } from "../../../-logs/types";
 import type { NodeSilence } from "@/lib/node-reporting";
 import { usePodShare } from "./usePodShare";
 

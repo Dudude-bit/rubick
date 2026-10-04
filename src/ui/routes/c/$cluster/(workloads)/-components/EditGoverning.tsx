@@ -1,4 +1,4 @@
-import { YamlEditorAction } from "@/components/yaml";
+import { YamlEditorAction } from "../../-yaml";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { useT } from "@/i18n/useT";
 

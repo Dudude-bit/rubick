@@ -23,8 +23,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ResourceRef } from "@/components/resources/ResourceRef";
-import { ResourceListHeader } from "@/components/resources/ResourceListHeader";
-import { UnreadNamespaces } from "@/components/resources/UnreadNamespaces";
+import { ResourceListHeader } from "../../../../-list/ResourceListHeader";
+import { UnreadNamespaces } from "../../../../-list/UnreadNamespaces";
 import { Unknown } from "@/components/ui/unknown";
 import { noneWhereAnswered } from "@/lib/namespace-scope";
 import { RealtimeAge } from "@/components/ui/realtime";
@@ -40,7 +40,7 @@ import { gatewayTopology } from "./gateway-topology";
 import {
   GATEWAY_ROUTE_KINDS as ROUTE_KINDS,
   useGatewayRoutes,
-} from "@/hooks/useGatewayRoutes";
+} from "../../../../-object/useGatewayRoutes";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";

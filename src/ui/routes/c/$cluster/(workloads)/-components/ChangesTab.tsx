@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { ChangesTimeline } from "@/components/changes/ChangesTimeline";
+import { ChangesTimeline } from "../../-changes/ChangesTimeline";
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
@@ -14,7 +14,7 @@ import {
   CHANGES_KINDS,
 } from "@/lib/changes";
 import { deliveryOfKind } from "@/lib/delivery";
-import { useDeliveries } from "@/hooks/useDelivery";
+import { useDeliveries } from "../../-delivery/useDelivery";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
 import { useAppSearch } from "@/hooks/useSearchParam";

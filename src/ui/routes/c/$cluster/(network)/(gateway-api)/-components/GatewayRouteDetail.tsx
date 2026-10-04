@@ -21,8 +21,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Section, SectionHeader } from "@/components/ui/section";
-import { yamlTab } from "@/components/resources/yaml-tab";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { yamlTab } from "../../../-object/yaml-tab";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
   countMark,
   kindGlyph,
@@ -33,15 +33,12 @@ import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { RouteTraceSection } from "./RouteTrace";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
-import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
 import { useT } from "@/i18n/useT";
-import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { useGatewayRouteShare } from "./useGatewayRouteShare";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { backingFrom, backingOf, useBackingLists } from "@/integrations";

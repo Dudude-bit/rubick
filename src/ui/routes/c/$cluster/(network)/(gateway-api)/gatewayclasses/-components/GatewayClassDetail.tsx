@@ -9,21 +9,18 @@
 import { Info, Tag, Trash2 } from "lucide-react";
 import { errorToShow } from "@/lib/error-utils";
 
-import { yamlTab } from "@/components/resources/yaml-tab";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { yamlTab } from "../../../../-object/yaml-tab";
+import { ResourceDetailLayout } from "../../../../-object/ResourceDetailLayout";
 import { viewGlyph } from "@/components/resources/detail-tab";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { ResourceRef } from "@/components/resources/ResourceRef";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
-import { InterceptedAction } from "@/components/resources/delivery-intercept";
+import { InterceptedAction } from "../../../../-delivery/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
 import { useT } from "@/i18n/useT";
-import { useDeliveryIntercept } from "@/hooks/useDelivery";
+import { useDeliveryIntercept } from "../../../../-delivery/useDelivery";
 import { useGatewayClassShare } from "./useGatewayClassShare";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { commands } from "@/lib/commands";

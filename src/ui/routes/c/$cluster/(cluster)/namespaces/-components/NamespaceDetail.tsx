@@ -14,13 +14,10 @@ import {
   namespaceLabelsSection,
   namespaceStatusOf,
 } from "@/lib/share/namespace-share";
-import { yamlTab } from "@/components/resources/yaml-tab";
-import { ResourceDetailLayout } from "@/components/resources/ResourceDetailLayout";
+import { yamlTab } from "../../../-object/yaml-tab";
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { viewGlyph } from "@/components/resources/detail-tab";
-import {
-  KeyValueSection,
-  type KeyValue,
-} from "@/components/resources/detail-kv";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/resources/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useT } from "@/i18n/useT";

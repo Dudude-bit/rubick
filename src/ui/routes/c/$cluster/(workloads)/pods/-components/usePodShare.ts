@@ -5,8 +5,8 @@ import type {
   ShareContribution,
   ShareFrame,
 } from "@/components/share/contribution";
-import { readLogView, logViewKey } from "@/components/logs/shared-view";
-import { logsToText } from "@/components/logs/types";
+import { readLogView, logViewKey } from "../../../-logs/shared-view";
+import { logsToText } from "../../../-logs/types";
 import { useHintChain } from "./useHintChain";
 import { hintFor, sayingWords, troubleOf } from "@/lib/hints";
 import { iconSvg } from "@/lib/icon-svg";

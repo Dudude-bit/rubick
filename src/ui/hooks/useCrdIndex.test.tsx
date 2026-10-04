@@ -20,7 +20,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-import { peekMutationKeys } from "@/components/resources/peek-actions";
+import { peekMutationKeys } from "@/routes/c/$cluster/-peek/peek-actions";
 import { commands } from "@/lib/commands";
 import { Crds } from "@/routes/c/$cluster/(cluster)/customresourcedefinitions/-components/Crds";
 import { useClusterStore } from "@/stores/clusterStore";

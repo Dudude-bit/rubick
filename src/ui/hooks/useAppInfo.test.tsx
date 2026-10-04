@@ -12,7 +12,7 @@ vi.mock("@/lib/commands", () => ({
   commands: { getAppInfo: () => getAppInfo() },
 }));
 
-import { WhatsNew } from "@/components/layout/WhatsNew";
+import { WhatsNew } from "@/routes/c/$cluster/-shell/WhatsNew";
 import { AboutSettings } from "@/components/settings/AboutSettings";
 import { useWhatsNewStore } from "@/stores/whatsNewStore";
 

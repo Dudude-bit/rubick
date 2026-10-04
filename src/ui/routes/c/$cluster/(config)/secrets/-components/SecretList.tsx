@@ -8,8 +8,8 @@ import {
   createNamespaceColumn,
   createAgeColumn,
   createDataKeysColumn,
-} from "@/components/resources/columns";
-import { createResourceListPage } from "@/components/resources/createResourceListPage";
+} from "../../../-list/columns";
+import { createResourceListPage } from "../../../-list/createResourceListPage";
 
 export const columns = (): ColumnDef<SecretInfo>[] => [
   createNameColumn<SecretInfo>(ResourceType.Secret),
