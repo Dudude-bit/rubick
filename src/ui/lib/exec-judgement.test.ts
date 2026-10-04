@@ -13,8 +13,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 
 const READERS = [
-  "src/ui/components/terminal/PodShell.tsx",
-  "src/ui/components/checks/ChecksTab.tsx",
+  "src/ui/routes/c/$cluster/(workloads)/pods/-components/PodShell.tsx",
+  "src/ui/routes/c/$cluster/(workloads)/pods/-components/ChecksTab.tsx",
 ];
 
 describe("who decides whether a container can take an exec", () => {

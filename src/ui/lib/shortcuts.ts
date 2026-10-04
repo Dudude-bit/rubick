@@ -243,7 +243,8 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "mod+click and mod+Enter add a namespace instead of replacing it",
   "src/ui/components/logs/LogList.tsx":
     "mod+a selects the rendered window, not the whole buffer",
-  "src/ui/components/files/FilesTab.tsx": "mod+s downloads, Backspace goes up",
+  "src/ui/routes/c/$cluster/(workloads)/pods/-components/FilesTab.tsx":
+    "mod+s downloads, Backspace goes up",
   "src/ui/lib/window-activity.ts":
     "not a shortcut: notices that the reader is here",
 };

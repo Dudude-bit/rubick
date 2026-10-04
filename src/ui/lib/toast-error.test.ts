@@ -23,7 +23,7 @@ const SOURCES = import.meta.glob<string>(
 const KEEPS_THE_PREFIX = new Set([
   "/src/ui/lib/error-utils.ts",
   "/src/ui/lib/commands.ts",
-  "/src/ui/components/terminal/PodTerminal.tsx",
+  "/src/ui/routes/c/$cluster/(workloads)/pods/-components/PodTerminal.tsx",
 ]);
 
 /**

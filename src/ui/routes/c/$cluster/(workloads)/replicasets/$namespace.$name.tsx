@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { prefetchObject } from "../../-object/prefetch";
-import { ReplicaSetDetail } from "@/pages/ReplicaSetDetail";
+import { ReplicaSetDetail } from "./-components/ReplicaSetDetail";
 
 export const Route = createFileRoute(
   "/c/$cluster/(workloads)/replicasets/$namespace/$name"

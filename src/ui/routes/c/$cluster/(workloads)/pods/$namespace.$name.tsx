@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { prefetchObject } from "../../-object/prefetch";
-import { PodDetail } from "@/pages/PodDetail";
+import { PodDetail } from "./-components/PodDetail";
 
 export const Route = createFileRoute(
   "/c/$cluster/(workloads)/pods/$namespace/$name"

@@ -4,7 +4,7 @@ import { translate } from "@/i18n";
 import { columnHeader } from "@/i18n/column-header";
 import type { T } from "@/i18n/useT";
 import { columns as nodeColumns } from "@/components/resources/NodeList";
-import { columns as podColumns } from "@/components/resources/PodList";
+import { columns as podColumns } from "@/routes/c/$cluster/(workloads)/pods/-components/PodList";
 import { tableSection } from "./table-share";
 
 const t: T = (section, key, values) => translate("en", section, key, values);

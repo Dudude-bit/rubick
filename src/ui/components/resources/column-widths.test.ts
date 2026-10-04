@@ -1,21 +1,21 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { configMapColumns } from "./ConfigMapList";
-import { columns as cronJobs } from "./CronJobList";
-import { columns as daemonSets } from "./DaemonSetList";
-import { columns as deployments } from "./DeploymentList";
+import { columns as cronJobs } from "@/routes/c/$cluster/(workloads)/cronjobs/-components/CronJobList";
+import { columns as daemonSets } from "@/routes/c/$cluster/(workloads)/daemonsets/-components/DaemonSetList";
+import { columns as deployments } from "@/routes/c/$cluster/(workloads)/deployments/-components/DeploymentList";
 import { columns as endpoints } from "./EndpointsList";
 import { baseColumns as ingresses } from "./IngressList";
-import { columns as jobs } from "./JobList";
+import { columns as jobs } from "@/routes/c/$cluster/(workloads)/jobs/-components/JobList";
 import { columns as namespaces } from "./NamespaceList";
 import { networkPolicyColumns } from "./NetworkPolicyList";
 import { columns as nodes } from "./NodeList";
 import { columns as persistentVolumeClaims } from "./PersistentVolumeClaimList";
 import { columns as persistentVolumes } from "./PersistentVolumeList";
-import { columns as pods } from "./PodList";
+import { columns as pods } from "@/routes/c/$cluster/(workloads)/pods/-components/PodList";
 import { columns as secrets } from "./SecretList";
 import { columns as services } from "./ServiceList";
-import { columns as statefulSets } from "./StatefulSetList";
+import { columns as statefulSets } from "@/routes/c/$cluster/(workloads)/statefulsets/-components/StatefulSetList";
 import { columns as storageClasses } from "./StorageClassList";
 
 /** The fields the questions below need, so one array can hold them all. */

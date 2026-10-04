@@ -17,7 +17,7 @@ import {
   scaleWarnings,
 } from "./governance";
 import { connectionGroups } from "./connections";
-import { governanceRows } from "@/components/resources/governance";
+import { governanceRows } from "@/routes/c/$cluster/(workloads)/-components/governance";
 import type { DeliveryIntercept } from "./delivery";
 import type {
   ConditionInfo,

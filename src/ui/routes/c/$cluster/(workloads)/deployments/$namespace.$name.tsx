@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { prefetchObject } from "../../-object/prefetch";
-import { DeploymentDetail } from "@/pages/DeploymentDetail";
+import { DeploymentDetail } from "./-components/DeploymentDetail";
 
 export const Route = createFileRoute(
   "/c/$cluster/(workloads)/deployments/$namespace/$name"
