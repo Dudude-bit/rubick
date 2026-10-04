@@ -90,6 +90,13 @@ Claims here are settled by running things, not by reasoning about them.
 
 ## Frontend
 
+- **Code lives under the route that uses it.** A screen's own code sits in a
+  `-components/` folder beside its route files; code several routes share
+  sits in a `-` folder at their lowest common route (`c/$cluster/-peek`,
+  `(workloads)/-components`). Only what vendor pages, hooks or the shell
+  outside the tree also need stays in `components/`. A `-` folder is imported
+  only from inside its route, which `test/colocation.test.ts` holds; a test
+  may reach across.
 - **Every in-app address is built in `@/lib/links`** (`objectLink`,
   `listLink`, `pageLink`, ...). A link is the router's own options object, so
   `to` is checked against the route tree when it compiles; a path string
@@ -334,8 +341,8 @@ Half-done is invisible: each of these fails by the kind simply not appearing.
 `RESOURCE_REGISTRY` entry · its group, version, plural and scope in
 `src/contracts/kinds.json`, which the registry reads them from and a Rust test holds
 to `k8s-openapi` · a folder `src/ui/routes/c/$cluster/(<section>)/<plural>/`
-with `index.tsx` and `$namespace.$name.tsx` (or `$name.tsx`), then
-`bun run routes` · the item in the Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
+with `index.tsx` and `$namespace.$name.tsx` (or `$name.tsx`) and the
+screens in its `-components/`, then `bun run routes` · the item in the Sidebar `GROUPS` · a `nav` key in **both** `catalogue.ts` and `ru.ts` ·
 optionally a `subscribe_*_watch` command, which must also be registered in
 `generate_handler!`.
 
