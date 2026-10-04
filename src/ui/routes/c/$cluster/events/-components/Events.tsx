@@ -16,7 +16,7 @@ import { AlertCircle, Search } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW, EventRows } from "@/components/resources/detail-blocks";
-import { StoryCard } from "@/components/events/StoryCard";
+import { StoryCard } from "./StoryCard";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { eventsFiltersSection } from "./events-share";

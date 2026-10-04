@@ -6,7 +6,7 @@
  * under the cluster's routes beside its workloads and not in Settings.
  */
 
-import { IntegrationsCatalog } from "@/components/cluster/IntegrationsCatalog";
+import { IntegrationsCatalog } from "./IntegrationsCatalog";
 import { SectionHeader } from "@/components/ui/section";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
