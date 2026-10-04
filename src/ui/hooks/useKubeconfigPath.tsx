@@ -11,7 +11,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { open } from "@tauri-apps/plugin-dialog";
+import { pickPath } from "@/lib/host";
 
 import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
@@ -148,7 +148,7 @@ export function useKubeconfigPath() {
 
   /** Pick a file and pin the app to it. A cancelled dialog changes nothing. */
   const choose = async () => {
-    const selected = await open({
+    const selected = await pickPath({
       multiple: false,
       directory: false,
       title: t("settings", "selectKubeconfigFile"),
@@ -166,7 +166,7 @@ export function useKubeconfigPath() {
    * anyway, and a list with the same path on it twice reads as a mistake.
    */
   const add = async () => {
-    const selected = await open({
+    const selected = await pickPath({
       multiple: true,
       directory: false,
       title: t("settings", "selectKubeconfigFile"),

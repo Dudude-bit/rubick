@@ -12,7 +12,7 @@
  */
 
 import { create } from "zustand";
-import { listen } from "@tauri-apps/api/event";
+import { onWindowFocus } from "@/lib/host";
 
 interface WindowActivity {
   /** The window is on screen at all — not minimised, not fully occluded. */
@@ -91,8 +91,8 @@ export function startWindowActivity(): () => void {
   });
 
   const unlisten: Array<() => void> = [];
-  void listen("tauri://focus", onFocus).then((off) => unlisten.push(off));
-  void listen("tauri://blur", onBlur).then((off) => unlisten.push(off));
+  void onWindowFocus(true, onFocus).then((off) => unlisten.push(off));
+  void onWindowFocus(false, onBlur).then((off) => unlisten.push(off));
 
   return () => {
     document.removeEventListener("visibilitychange", onVisibility);

@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { open } from "@tauri-apps/plugin-shell";
+import { HostWindow, openOutside } from "@/lib/host";
 import { useToast } from "@/components/ui/use-toast";
 import { useT, type T } from "@/i18n/useT";
 import { ToastAction } from "@/components/ui/toast";
@@ -53,7 +52,7 @@ const REPLAY_MAX = 64 * 1024;
 export function useAuthFlowEvents() {
   const { toast, dismiss } = useToast();
   const t = useT();
-  const windowsRef = useRef<Record<string, WebviewWindow>>({});
+  const windowsRef = useRef<Record<string, HostWindow>>({});
   const activeSessionsRef = useRef<Set<string>>(new Set());
   const toastIdsRef = useRef<Record<string, string>>({});
   // Use refs for toast functions to avoid re-running effect when they change
@@ -128,7 +127,7 @@ export function useAuthFlowEvents() {
 
         const label = `${AUTH_WINDOW_PREFIX}${sessionId}`;
         try {
-          const found = await WebviewWindow.getByLabel(label);
+          const found = await HostWindow.getByLabel(label);
           if (found) {
             try {
               await found.destroy();
@@ -196,7 +195,7 @@ export function useAuthFlowEvents() {
               console.log("Opening auth URL in system browser:", payload.url);
               if (!mounted) return;
               try {
-                await open(payload.url);
+                await openOutside(payload.url);
                 console.log("Successfully opened URL in browser");
               } catch (openError) {
                 console.error("Failed to open URL with shell.open:", openError);
@@ -242,9 +241,9 @@ export function useAuthFlowEvents() {
               });
               toastIdsRef.current[sessionId] = toastId;
             } else {
-              // For local callback URLs, use WebviewWindow
+              // For local callback URLs, use HostWindow
               const label = `${AUTH_WINDOW_PREFIX}${sessionId}`;
-              const window = new WebviewWindow(label, {
+              const window = new HostWindow(label, {
                 url: payload.url,
                 title: tRef.current("auth", "windowTitle", {
                   context: payload.context,

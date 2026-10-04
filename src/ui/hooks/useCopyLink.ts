@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { copyText } from "@/lib/host";
 
 import { toast } from "@/components/ui/use-toast";
 import { useLocationHref } from "@/hooks/useLocationHref";
@@ -67,7 +67,7 @@ export function useCopyLink(): void {
       if (clusterOf(href) === null) return;
       event.preventDefault();
       const link = buildDeepLink(href);
-      void writeText(link).then(() =>
+      void copyText(link).then(() =>
         toast({
           title: t("cluster", "linkCopied"),
           description: link,

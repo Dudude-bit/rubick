@@ -1,4 +1,4 @@
-import type { UnlistenFn } from "@tauri-apps/api/event";
+import type { Unlisten as UnlistenFn } from "@/lib/transport";
 import type { StreamFailureKind } from "@/generated/types";
 import { listenEvent } from "@/lib/events";
 

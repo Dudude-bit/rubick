@@ -6,26 +6,25 @@
  * on one side no longer compiles on the other.
  */
 
+import type { WatchOp } from "@/generated/types";
 import {
-  listen,
-  type EventCallback,
-  type UnlistenFn,
-} from "@tauri-apps/api/event";
-import type { AppEvent, WatchOp } from "@/generated/types";
+  transport,
+  type EventChannel,
+  type EventPayload,
+  type Unlisten,
+} from "@/lib/transport";
 
-export type EventChannel = AppEvent["channel"];
+export type { EventChannel, EventPayload };
 
-export type EventPayload<C extends EventChannel> = Extract<
-  AppEvent,
-  { channel: C }
->;
+/** What a listener is handed: the payload, under the name every listener here reads. */
+export type AppEventHandler<P> = (event: { payload: P }) => void;
 
 /** `listen` on one of the backend's channels, with its payload's type. */
 export function listenEvent<C extends EventChannel>(
   channel: C,
-  handler: EventCallback<EventPayload<C>>
-): Promise<UnlistenFn> {
-  return listen<EventPayload<C>>(channel, handler);
+  handler: AppEventHandler<EventPayload<C>>
+): Promise<Unlisten> {
+  return transport().listen(channel, (payload) => handler({ payload }));
 }
 
 /**
@@ -46,7 +45,9 @@ export interface ResourceChange<T> {
 }
 
 export function listenResourceEvents<T>(
-  handler: EventCallback<ResourceEvent<T>>
-): Promise<UnlistenFn> {
-  return listen<ResourceEvent<T>>("resource-event", handler);
+  handler: AppEventHandler<ResourceEvent<T>>
+): Promise<Unlisten> {
+  return transport().listen("resource-event", (payload) =>
+    handler({ payload: payload as unknown as ResourceEvent<T> })
+  );
 }

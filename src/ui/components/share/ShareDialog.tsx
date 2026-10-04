@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { save } from "@tauri-apps/plugin-dialog";
+import { pickSavePath } from "@/lib/host";
 import { Download, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -252,7 +252,9 @@ export function ShareDialog({
     if (!report) return;
     setSaving(true);
     try {
-      const destination = await save({ defaultPath: reportFileName(report) });
+      const destination = await pickSavePath({
+        defaultPath: reportFileName(report),
+      });
       if (!destination) return;
       await commands.writeTextFile(destination, html);
       onOpenChange(false);

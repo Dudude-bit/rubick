@@ -98,6 +98,11 @@ Claims here are settled by running things, not by reasoning about them.
 - A query key a screen reads is declared in `AppSearch` (`@/lib/app-search`).
   The router drops every other key on arrival, so a new one that is not
   there reads as absent with nothing failing.
+- Only two files import `@tauri-apps/*`: the IPC adapter in
+  `@/lib/transport` and the host facade in `@/lib/host` (dialogs,
+  clipboard, links, notifications, updater, window). Everything else goes
+  through them, so the same screens can run over another transport;
+  `transport/boundary.test.ts` holds the line.
 - Call the backend through `commands` from `@/lib/commands` — never
   `@/generated/commands`, never `invoke`. The wrapper is the only place that
   normalises errors and notices an expired session.
@@ -294,6 +299,10 @@ the recorder; the rules that fail silently are these.
   `bun run routes` (and by Vite on every start). Commit it: `tsc` runs
   before Vite in `bun run build`, and type-checks against the committed copy.
 - `src/ui/generated/{commands,types}.ts` are generated. Never hand-edit them.
+  The generator writes Tauri's own `invoke` into every binding and has no
+  option to change it; `make gen-entities-tauri` points that import at
+  `@/lib/transport` afterwards (`scripts/retarget-invoke.mjs`), which is what
+  puts every command behind the transport.
   Regenerate with `make gen-entities-tauri` — which needs `cargo-expand`,
   without which it silently drops every macro-generated `subscribe_*_watch`
   binding. If it refuses because the command count dropped, that is the guard

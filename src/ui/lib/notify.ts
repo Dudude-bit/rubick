@@ -2,7 +2,7 @@ import {
   isPermissionGranted,
   requestPermission,
   sendNotification,
-} from "@tauri-apps/plugin-notification";
+} from "@/lib/host";
 
 export interface Notice {
   title: string;

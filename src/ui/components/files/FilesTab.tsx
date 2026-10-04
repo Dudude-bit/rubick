@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { save } from "@tauri-apps/plugin-dialog";
+import { pickSavePath } from "@/lib/host";
 import {
   ArrowUpDown,
   Download,
@@ -207,7 +207,9 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
         setBigDownload(true);
         return;
       }
-      const destination = await save({ defaultPath: selectedEntry.name });
+      const destination = await pickSavePath({
+        defaultPath: selectedEntry.name,
+      });
       if (!destination) return;
       try {
         const result = await commands.downloadContainerFile(

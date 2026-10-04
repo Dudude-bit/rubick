@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { open } from "@tauri-apps/plugin-dialog";
+import { pickPath } from "@/lib/host";
 import { FolderOpen, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -92,7 +92,7 @@ export function ToolPathsPanel() {
   });
 
   const browseFor = async (title: string, setter: (value: string) => void) => {
-    const selected = await open({
+    const selected = await pickPath({
       multiple: false,
       directory: false,
       title,

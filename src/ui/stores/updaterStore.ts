@@ -10,8 +10,7 @@
 import { translate } from "@/i18n";
 import { currentLocale } from "./localeStore";
 import { create } from "zustand";
-import { check, Update } from "@tauri-apps/plugin-updater";
-import { relaunch } from "@tauri-apps/plugin-process";
+import { checkForUpdate, relaunch, type Update } from "@/lib/host";
 import { commands } from "@/lib/commands";
 
 /** Updater store state and actions */
@@ -102,7 +101,7 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
   checkForUpdates: async () => {
     set({ checking: true, error: undefined });
     try {
-      const updateResult = await check();
+      const updateResult = await checkForUpdate();
       if (updateResult) {
         set({
           update: updateResult,
@@ -130,7 +129,7 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
     let currentUpdate = state.update;
 
     if (!currentUpdate) {
-      currentUpdate = await check();
+      currentUpdate = await checkForUpdate();
       if (!currentUpdate) return;
       set({ update: currentUpdate });
     }

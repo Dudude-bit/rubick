@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { getCurrent, onOpenUrl } from "@tauri-apps/plugin-deep-link";
+import { launchLinks, onOpenLinks } from "@/lib/host";
 
 import { parseDeepLink } from "@/lib/deep-link";
 import { logInfo } from "@/lib/logger";
@@ -45,7 +45,7 @@ export function useDeepLinks(): void {
     };
 
     if (!launchRead) {
-      void getCurrent()
+      void launchLinks()
         .then((urls) => {
           if (cancelled || launchRead) return;
           launchRead = true;
@@ -56,7 +56,7 @@ export function useDeepLinks(): void {
         });
     }
 
-    const stop = onOpenUrl((urls) => {
+    const stop = onOpenLinks((urls) => {
       for (const url of urls) open(url);
     });
 

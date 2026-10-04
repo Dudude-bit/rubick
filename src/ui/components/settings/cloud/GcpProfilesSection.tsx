@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { open } from "@tauri-apps/plugin-dialog";
+import { pickPath } from "@/lib/host";
 import { FolderOpen, Loader2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -110,7 +110,7 @@ export function GcpProfilesSection() {
   const handleFilePicker = async (
     field: "serviceAccountKeyPath" | "gcloudPath"
   ) => {
-    const selected = await open({
+    const selected = await pickPath({
       multiple: false,
       filters:
         field === "serviceAccountKeyPath"

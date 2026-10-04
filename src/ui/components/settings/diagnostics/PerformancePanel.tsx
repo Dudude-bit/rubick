@@ -1,5 +1,5 @@
 import * as React from "react";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { copyText } from "@/lib/host";
 import { ClipboardCopy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -214,7 +214,7 @@ export function PerformancePanel() {
               variant="outline"
               size="sm"
               onClick={async () => {
-                await writeText(JSON.stringify(report, null, 2));
+                await copyText(JSON.stringify(report, null, 2));
                 toast({ title: t("settings", "perfCopied") });
               }}
             >

@@ -43,6 +43,7 @@ gen-entities-tauri:
 		exit 1; \
 	fi; \
 	echo "generated $$after commands"
+	@bun scripts/retarget-invoke.mjs
 	@# The generator writes one long line per import list and per signature;
 	@# the committed files are formatted. Without this every regeneration
 	@# reads as ~900 changed lines and the one real change hides in them.

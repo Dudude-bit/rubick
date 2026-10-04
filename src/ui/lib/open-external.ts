@@ -1,4 +1,4 @@
-import { open } from "@tauri-apps/plugin-shell";
+import { openOutside } from "@/lib/host";
 
 import { toast } from "@/components/ui/use-toast";
 
@@ -22,7 +22,7 @@ export async function openExternal(
   t: T
 ): Promise<void> {
   try {
-    await open(url);
+    await openOutside(url);
   } catch {
     const copied = await navigator.clipboard
       .writeText(url)

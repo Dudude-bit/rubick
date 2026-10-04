@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+import { copyText } from "@/lib/host";
 import { ClipboardCopy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -45,7 +45,7 @@ export function DiagnosticsSettings() {
           disabled={!data}
           onClick={async () => {
             if (!data) return;
-            await writeText(asMarkdown(data));
+            await copyText(asMarkdown(data));
             toast({ title: t("settings", "diagnosticsCopied") });
           }}
         >
