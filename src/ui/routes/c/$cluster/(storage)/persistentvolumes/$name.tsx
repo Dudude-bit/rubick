@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { prefetchObject } from "../../-object/prefetch";
-import { PersistentVolumeDetail } from "@/pages/PersistentVolumeDetail";
+import { PersistentVolumeDetail } from "./-components/PersistentVolumeDetail";
 
 export const Route = createFileRoute(
   "/c/$cluster/(storage)/persistentvolumes/$name"

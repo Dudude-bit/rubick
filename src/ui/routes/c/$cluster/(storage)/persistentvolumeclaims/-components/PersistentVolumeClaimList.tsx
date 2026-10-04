@@ -7,15 +7,15 @@ import { PhaseBadge } from "@/components/ui/status-badge";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye, Trash2 } from "lucide-react";
 import { ResourceList } from "@/components/resources/ResourceList";
-import { StorageClassRef } from "./storage-refs";
+import { StorageClassRef } from "@/components/resources/storage-refs";
 import {
   createAccessModesColumn,
   createCapacityColumn,
   createAgeColumn,
   createNameColumn,
   createNamespaceColumn,
-} from "./columns";
-import { ResourceRef } from "./ResourceRef";
+} from "@/components/resources/columns";
+import { ResourceRef } from "@/components/resources/ResourceRef";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { commands } from "@/lib/commands";
 import type { PersistentVolumeClaimInfo } from "@/generated/types";

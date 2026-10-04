@@ -10,13 +10,13 @@ import { columns as jobs } from "@/routes/c/$cluster/(workloads)/jobs/-component
 import { columns as namespaces } from "./NamespaceList";
 import { networkPolicyColumns } from "@/routes/c/$cluster/(network)/networkpolicies/-components/NetworkPolicyList";
 import { columns as nodes } from "./NodeList";
-import { columns as persistentVolumeClaims } from "./PersistentVolumeClaimList";
-import { columns as persistentVolumes } from "./PersistentVolumeList";
+import { columns as persistentVolumeClaims } from "@/routes/c/$cluster/(storage)/persistentvolumeclaims/-components/PersistentVolumeClaimList";
+import { columns as persistentVolumes } from "@/routes/c/$cluster/(storage)/persistentvolumes/-components/PersistentVolumeList";
 import { columns as pods } from "@/routes/c/$cluster/(workloads)/pods/-components/PodList";
 import { columns as secrets } from "./SecretList";
 import { columns as services } from "@/routes/c/$cluster/(network)/services/-components/ServiceList";
 import { columns as statefulSets } from "@/routes/c/$cluster/(workloads)/statefulsets/-components/StatefulSetList";
-import { columns as storageClasses } from "./StorageClassList";
+import { columns as storageClasses } from "@/routes/c/$cluster/(storage)/storageclasses/-components/StorageClassList";
 
 /** The fields the questions below need, so one array can hold them all. */
 interface Column {

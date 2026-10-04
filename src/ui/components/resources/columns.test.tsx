@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 
-import { columns as persistentVolumeColumns } from "./PersistentVolumeList";
-import { columns as persistentVolumeClaimColumns } from "./PersistentVolumeClaimList";
-import { columns as storageClassColumns } from "./StorageClassList";
+import { columns as persistentVolumeColumns } from "@/routes/c/$cluster/(storage)/persistentvolumes/-components/PersistentVolumeList";
+import { columns as persistentVolumeClaimColumns } from "@/routes/c/$cluster/(storage)/persistentvolumeclaims/-components/PersistentVolumeClaimList";
+import { columns as storageClassColumns } from "@/routes/c/$cluster/(storage)/storageclasses/-components/StorageClassList";
 import { columns as namespaceColumns } from "./NamespaceList";
 import { columns as nodeColumns } from "./NodeList";
 import { createDataKeysColumn } from "./columns";

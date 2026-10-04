@@ -4,15 +4,15 @@ import { columnHeader } from "@/i18n/column-header";
 import type { StorageClassInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { whole } from "@/lib/namespace-scope";
-import { createAgeColumn } from "./columns";
+import { createAgeColumn } from "@/components/resources/columns";
 import { ResourceType } from "@/lib/resource-registry";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ResourceRef } from "./ResourceRef";
-import { createResourceListPage } from "./createResourceListPage";
+import { ResourceRef } from "@/components/resources/ResourceRef";
+import { createResourceListPage } from "@/components/resources/createResourceListPage";
 
 export const columns = (): ColumnDef<StorageClassInfo>[] => [
   {
