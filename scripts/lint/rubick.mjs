@@ -3,7 +3,7 @@ const COLOUR =
 const THEME_BRANCH = /(^|[^a-z0-9-])dark:/;
 const LEGACY_TOKEN =
   /(^|[^a-z0-9-])(bg|text|border|ring|fill|stroke|from|via|to)-(background|foreground|card|popover|primary|secondary|muted|accent|destructive|input|border|ring)(-foreground)?(?![a-z0-9-])/;
-const VENDOR_PATH = /(^|\/)integrations\/./;
+const VENDOR_PATH = /(^|\/)integrations\/[^-]/;
 const INTERVAL_KEY = /^refetchInterval(InBackground)?$/;
 
 /** A rule that reports `message` on every node `test` accepts, for each node type listed. */

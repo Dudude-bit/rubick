@@ -16,6 +16,7 @@ const VIOLATIONS: Record<string, string> = {
 
 const CLEAN = `
 import { useCapability } from "@/integrations";
+import { IntegrationPage } from "./integrations/-components/IntegrationPage";
 export const c = "bg-canvas text-fg-mut border-hair";
 export const b = <Badge status={code}>{t("ready")}</Badge>;
 export const s = <Select />;
