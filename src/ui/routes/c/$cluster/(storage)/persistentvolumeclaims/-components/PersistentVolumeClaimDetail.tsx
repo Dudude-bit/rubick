@@ -13,9 +13,9 @@ import {
   countMark,
   kindGlyph,
   viewGlyph,
-} from "@/components/resources/detail-tab";
-import { DetailAction, EventRows } from "@/components/resources/detail-blocks";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+} from "@/components/object/detail-tab";
+import { DetailAction, EventRows } from "@/components/object/detail-blocks";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { useResourceDetail } from "@/hooks";

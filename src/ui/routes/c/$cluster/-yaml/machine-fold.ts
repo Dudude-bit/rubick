@@ -2,7 +2,7 @@ import { foldEffect, foldService, foldedRanges } from "@codemirror/language";
 import type { EditorState, Extension } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 
-import { isMachineDocument } from "@/components/resources/key-values";
+import { isMachineDocument } from "@/components/object/key-values";
 
 /**
  * Folding the annotations a controller wrote, inside the document itself.

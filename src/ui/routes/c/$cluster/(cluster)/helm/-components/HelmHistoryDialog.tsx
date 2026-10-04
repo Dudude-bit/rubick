@@ -14,7 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { DetailAction } from "@/components/resources/detail-blocks";
+import { DetailAction } from "@/components/object/detail-blocks";
 import type { HelmRelease, HelmRevision } from "@/generated/types";
 import { statusRole } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";

@@ -1,6 +1,6 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 
-import { EmptyPage } from "@/components/layout/NotFound";
+import { EmptyPage } from "../../../-components/NotFound";
 import { useT } from "@/i18n/useT";
 import { crdInstancesLink } from "@/lib/links";
 import { isResourceType } from "@/lib/resource-registry";

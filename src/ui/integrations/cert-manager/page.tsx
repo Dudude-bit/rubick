@@ -27,15 +27,15 @@ import { ShieldCheck, Stamp } from "lucide-react";
 
 import { expiryText, overdueBy } from "@/lib/certificates";
 import { SectionHeader } from "@/components/ui/section";
-import { DetailTabs } from "@/components/resources/DetailTabs";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { DetailTabs } from "@/components/object/DetailTabs";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   countMark,
   severityMark,
   viewGlyph,
   type DetailTab,
   type DetailTabMark,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 
 import { cn } from "@/lib/utils";
 import { ResourceType } from "@/lib/resource-registry";

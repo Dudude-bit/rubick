@@ -18,7 +18,7 @@ import type { PeekTarget } from "@/hooks/usePeek";
 import { podContainers } from "@/lib/container-sequence";
 import { ContainerRows } from "../-object/container-rows";
 import { DataSection } from "../-object/data-rows";
-import { DetailAction } from "@/components/resources/detail-blocks";
+import { DetailAction } from "@/components/object/detail-blocks";
 import { JobRows } from "../-object/child-rows";
 import { PodListCard } from "../-object/PodListCard";
 import type { PeekTabId } from "./peek-tabs";

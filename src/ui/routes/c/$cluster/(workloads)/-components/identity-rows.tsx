@@ -1,6 +1,6 @@
 import type { T } from "@/i18n/useT";
-import { ResourceRef } from "@/components/resources/ResourceRef";
-import type { KeyValue } from "@/components/resources/key-values";
+import { ResourceRef } from "@/components/object/ResourceRef";
+import type { KeyValue } from "@/components/object/key-values";
 
 /**
  * The identity a pod, or every replica a template will make, holds against

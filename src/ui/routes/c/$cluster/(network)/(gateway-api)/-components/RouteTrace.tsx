@@ -14,7 +14,7 @@ import {
   CopyableAddresses,
   CopyableValue,
 } from "@/components/ui/copyable-value";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";

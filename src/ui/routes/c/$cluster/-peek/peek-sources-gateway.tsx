@@ -13,7 +13,7 @@ import {
   selfAnswered,
   gatewayProgrammed,
 } from "@/lib/route-trace";
-import type { KeyValue } from "@/components/resources/key-values";
+import type { KeyValue } from "@/components/object/key-values";
 import type { RouteInfo } from "@/generated/types";
 import {
   conditionItem,

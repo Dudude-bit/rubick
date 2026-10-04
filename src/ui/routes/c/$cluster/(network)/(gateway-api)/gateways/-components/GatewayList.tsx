@@ -11,7 +11,7 @@ import {
   createNamespaceColumn,
 } from "../../../../-list/columns";
 import { CopyableAddress } from "@/components/ui/copyable-value";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { columnHeader } from "@/i18n/column-header";
 import { useT, type T } from "@/i18n/useT";
 import { commands } from "@/lib/commands";

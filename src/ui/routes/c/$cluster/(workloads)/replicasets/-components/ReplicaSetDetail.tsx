@@ -14,12 +14,9 @@ import {
   kindGlyph,
   podsMark,
   viewGlyph,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import { ContainerRows } from "../../../-object/container-rows";
-import {
-  Composition,
-  ConditionRows,
-} from "@/components/resources/detail-blocks";
+import { Composition, ConditionRows } from "@/components/object/detail-blocks";
 import {
   CountBlock,
   FactBlock,
@@ -27,9 +24,9 @@ import {
 } from "../../-components/workload-overview";
 import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { serviceAccountRow } from "../../-components/identity-rows";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
+import { recordToKeyValues } from "@/components/object/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useReplicaSetShare } from "./useReplicaSetShare";
 import { commands } from "@/lib/commands";

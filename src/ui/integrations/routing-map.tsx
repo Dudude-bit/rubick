@@ -30,7 +30,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useT } from "@/i18n/useT";
-import { ObjectLink } from "@/components/resources/ResourceRef";
+import { ObjectLink } from "@/components/object/ResourceRef";
 import { objectLink, type AppLink } from "@/lib/links";
 import { cn } from "@/lib/utils";
 

@@ -1,6 +1,6 @@
 import { Braces } from "lucide-react";
 
-import { viewGlyph, type DetailTab } from "@/components/resources/detail-tab";
+import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { YamlTabContent, type YamlTabContentProps } from "./YamlTabContent";
 
 /**

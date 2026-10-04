@@ -27,14 +27,14 @@ import {
   countMark,
   kindGlyph,
   viewGlyph,
-} from "@/components/resources/detail-tab";
-import { EventRows } from "@/components/resources/detail-blocks";
+} from "@/components/object/detail-tab";
+import { EventRows } from "@/components/object/detail-blocks";
 import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { RouteTraceSection } from "./RouteTrace";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
+import { recordToKeyValues } from "@/components/object/key-values";
 import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { useResourceDetail } from "@/hooks";
 import { useT } from "@/i18n/useT";

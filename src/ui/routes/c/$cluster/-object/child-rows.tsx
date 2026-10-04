@@ -6,7 +6,7 @@ import { objectLink } from "@/lib/links";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import type { JobInfo, ReplicaSetInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";

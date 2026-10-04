@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { objectLink } from "@/lib/links";
 import { ResourceType } from "@/lib/resource-registry";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { ACTIVITY_ROW, ActivityEmpty, ActivityGroup } from "./primitives";
 import { useT } from "@/i18n/useT";
 

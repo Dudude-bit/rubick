@@ -19,26 +19,22 @@ import { DebugNodeDialog } from "../../../-debug";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
-import { conditionsMark, viewGlyph } from "@/components/resources/detail-tab";
+import { conditionsMark, viewGlyph } from "@/components/object/detail-tab";
 import {
   ConditionRows,
   DetailAction,
   UsageRow,
-} from "@/components/resources/detail-blocks";
+} from "@/components/object/detail-blocks";
 import { UsageBlock } from "../../../-usage/usage-block";
 import { NodeResources } from "./NodeResources";
 import { PodListCard } from "../../../-object/PodListCard";
-import {
-  countMark,
-  kindGlyph,
-  podsMark,
-} from "@/components/resources/detail-tab";
+import { countMark, kindGlyph, podsMark } from "@/components/object/detail-tab";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNodeActions } from "./useNodeActions";
 import { errorToShow } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
+import { recordToKeyValues } from "@/components/object/key-values";
 import { SpotMark } from "../../../-object/spot-mark";
 import { nodePlacement, statesPlacement } from "@/lib/node-pool";
 import type {

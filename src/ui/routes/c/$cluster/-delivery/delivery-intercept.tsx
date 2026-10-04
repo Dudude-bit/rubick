@@ -32,7 +32,7 @@ import { ActionWarnings } from "../-object/action-warnings";
 import {
   DetailAction,
   type DetailActionProps,
-} from "@/components/resources/detail-blocks";
+} from "@/components/object/detail-blocks";
 import { useT } from "@/i18n/useT";
 
 /**

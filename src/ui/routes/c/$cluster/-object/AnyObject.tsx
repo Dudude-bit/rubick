@@ -1,4 +1,4 @@
-import { EmptyPage } from "@/components/layout/NotFound";
+import { EmptyPage } from "../../../-components/NotFound";
 import { CustomResourceDetail } from "./-components/CustomResourceDetail";
 import { useT } from "@/i18n/useT";
 import { isResourceType, toKind } from "@/lib/resource-registry";

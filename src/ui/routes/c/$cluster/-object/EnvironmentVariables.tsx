@@ -33,7 +33,7 @@ import type {
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { MaskedValue } from "@/components/ui/masked-value";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";

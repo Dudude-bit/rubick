@@ -11,11 +11,11 @@ import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { trafficDoors } from "@/lib/traffic-doors";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   ResourceName,
   RESOURCE_NAME_SHELL,
-} from "@/components/resources/ResourceName";
+} from "@/components/object/ResourceName";
 import { PeekHeading } from "./peek-heading";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";

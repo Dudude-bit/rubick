@@ -18,7 +18,7 @@ import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { formatUsage } from "@/lib/metric-format";
 import { cn } from "@/lib/utils";
 import type { ResourceKind } from "@/lib/resource-registry";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { CopyName } from "../-object/CopyName";
 
 interface WithCreatedAt {

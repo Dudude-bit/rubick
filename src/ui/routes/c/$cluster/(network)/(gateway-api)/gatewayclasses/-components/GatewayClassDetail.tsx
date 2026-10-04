@@ -11,10 +11,10 @@ import { errorToShow } from "@/lib/error-utils";
 
 import { yamlTab } from "../../../../-object/yaml-tab";
 import { ResourceDetailLayout } from "../../../../-object/ResourceDetailLayout";
-import { viewGlyph } from "@/components/resources/detail-tab";
+import { viewGlyph } from "@/components/object/detail-tab";
 import { KeyValueSection, type KeyValue } from "../../../../-object/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { recordToKeyValues } from "@/components/object/key-values";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { InterceptedAction } from "../../../../-delivery/delivery-intercept";

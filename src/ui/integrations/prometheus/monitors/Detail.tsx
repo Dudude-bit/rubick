@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 
-import { ObjectLink } from "@/components/resources/ResourceRef";
+import { ObjectLink } from "@/components/object/ResourceRef";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useT, type T } from "@/i18n/useT";
 import { objectLink } from "@/lib/links";

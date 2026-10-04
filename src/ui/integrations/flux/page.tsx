@@ -16,13 +16,13 @@
 import { AlertTriangle, Box, GitBranch, Layers } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { DetailTabs } from "@/components/resources/DetailTabs";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { DetailTabs } from "@/components/object/DetailTabs";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   countMark,
   viewGlyph,
   type DetailTab,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import { formatAge } from "@/lib/utils";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import type { ReportFinding } from "@/lib/report";

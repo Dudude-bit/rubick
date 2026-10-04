@@ -1,6 +1,6 @@
 import { Section, SectionHeader } from "@/components/ui/section";
 import { groupMounts, mountedBy } from "@/lib/mounts";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import type { PodVolumeInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";

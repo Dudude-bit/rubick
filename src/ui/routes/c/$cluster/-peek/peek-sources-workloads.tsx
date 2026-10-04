@@ -12,7 +12,7 @@ import { parseCPU, parseMemory, parseQuantity } from "@/lib/k8s-quantity";
 import { formatQuantity } from "@/lib/metric-format";
 import { describeRestarts } from "@/lib/pod-status";
 import { formatDate } from "@/lib/utils";
-import { ImageRef } from "@/components/resources/ImageRef";
+import { ImageRef } from "@/components/object/ImageRef";
 import type { T as Translate } from "@/i18n/useT";
 import type { ContainerPhase } from "@/generated/types";
 import {

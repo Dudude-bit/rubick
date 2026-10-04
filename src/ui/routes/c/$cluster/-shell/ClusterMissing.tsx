@@ -1,5 +1,5 @@
 import { ClusterList } from "@/components/cluster/ClusterList";
-import { EmptyPage } from "@/components/layout/NotFound";
+import { EmptyPage } from "../../../-components/NotFound";
 import { useClusterFilter } from "@/hooks/useClusterFilter";
 import { useOpenCluster } from "@/hooks/useOpenCluster";
 import { useT } from "@/i18n/useT";

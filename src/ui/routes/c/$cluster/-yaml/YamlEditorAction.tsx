@@ -7,7 +7,7 @@
 import { FileJson } from "lucide-react";
 
 import { useToast } from "@/components/ui/use-toast";
-import { DetailAction } from "@/components/resources/detail-blocks";
+import { DetailAction } from "@/components/object/detail-blocks";
 import { errorToShow } from "@/lib/error-utils";
 import { useYamlEditorStore, type ResourceKey } from "@/stores/yamlEditorStore";
 import { useT } from "@/i18n/useT";

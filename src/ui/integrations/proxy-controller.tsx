@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Box } from "lucide-react";
 
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { Section, SectionHeader } from "@/components/ui/section";
 import type { IngressClassSummary } from "@/generated/types";
 import { sayWords, type Saying } from "@/i18n/say";

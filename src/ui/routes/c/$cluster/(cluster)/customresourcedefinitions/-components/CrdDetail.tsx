@@ -38,10 +38,10 @@ import {
   kindGlyph,
   viewGlyph,
   type DetailTab,
-} from "@/components/resources/detail-tab";
-import { ConditionRows } from "@/components/resources/detail-blocks";
+} from "@/components/object/detail-tab";
+import { ConditionRows } from "@/components/object/detail-blocks";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
+import { recordToKeyValues } from "@/components/object/key-values";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";

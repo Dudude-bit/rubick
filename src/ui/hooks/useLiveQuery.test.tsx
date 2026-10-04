@@ -22,8 +22,8 @@ vi.mock("@/lib/commands", () => ({ commands: {} }));
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DataFreshness } from "@/components/ui/realtime";
-import { DetailTabs } from "@/components/resources/DetailTabs";
-import { viewGlyph, type DetailTab } from "@/components/resources/detail-tab";
+import { DetailTabs } from "@/components/object/DetailTabs";
+import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { FileText, LayoutGrid } from "lucide-react";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
 import { BACKOFF, REFRESH_INTERVALS, type RefreshRate } from "@/lib/refresh";

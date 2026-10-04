@@ -1,4 +1,4 @@
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   journalWords,
   type ChangeItem,

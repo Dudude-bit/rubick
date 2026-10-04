@@ -15,7 +15,7 @@ import {
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { cn } from "@/lib/utils";
 import type { PeekTarget } from "@/hooks/usePeek";
-import { DetailAction } from "@/components/resources/detail-blocks";
+import { DetailAction } from "@/components/object/detail-blocks";
 import type { PeekAction, PeekActionId } from "./peek-actions";
 import { useObjectActions } from "../-object/useObjectActions";
 import { useT } from "@/i18n/useT";

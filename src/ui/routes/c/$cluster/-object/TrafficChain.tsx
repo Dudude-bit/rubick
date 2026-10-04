@@ -40,12 +40,12 @@ import {
 } from "@/hooks/useServiceRoutes";
 import type { ServiceRoute } from "@/integrations";
 import { CertificateLine } from "./CertificateFacts";
-import { RenewalNote } from "@/components/resources/IssuanceChain";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { RenewalNote } from "@/components/object/IssuanceChain";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   ResourceName,
   RESOURCE_NAME_SHELL,
-} from "@/components/resources/ResourceName";
+} from "@/components/object/ResourceName";
 import type {
   IngressClassBinding,
   ObjectRef,

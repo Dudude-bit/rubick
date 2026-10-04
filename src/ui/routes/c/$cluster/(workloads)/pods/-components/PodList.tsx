@@ -22,7 +22,7 @@ import {
 import { podReadiness } from "@/lib/container-sequence";
 import { commands } from "@/lib/commands";
 import { ResourceList } from "../../../-list/ResourceList";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
 import { hrefOf, objectLink } from "@/lib/links";

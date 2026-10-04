@@ -16,9 +16,9 @@ import {
 } from "@/lib/share/namespace-share";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
-import { viewGlyph } from "@/components/resources/detail-tab";
+import { viewGlyph } from "@/components/object/detail-tab";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
+import { recordToKeyValues } from "@/components/object/key-values";
 import { useResourceDetail } from "@/hooks";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";

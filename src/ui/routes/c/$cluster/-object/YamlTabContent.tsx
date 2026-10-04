@@ -4,7 +4,7 @@ import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { Copy } from "lucide-react";
 import { useCallback } from "react";
 
-import { DetailAction } from "@/components/resources/detail-blocks";
+import { DetailAction } from "@/components/object/detail-blocks";
 import { useT } from "@/i18n/useT";
 
 export interface YamlTabContentProps {

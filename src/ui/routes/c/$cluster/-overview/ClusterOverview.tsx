@@ -5,7 +5,7 @@ import { scopeLabel } from "@/lib/namespace-scope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
-import { ClusterFrontDoor } from "@/components/cluster/ClusterFrontDoor";
+import { ClusterFrontDoor } from "../../../-components/ClusterFrontDoor";
 import { MyServices } from "./MyServices";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { Section, SectionHeader } from "@/components/ui/section";

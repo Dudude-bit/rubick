@@ -19,7 +19,7 @@ import { ResourceListHeader } from "../../../-list/ResourceListHeader";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { createAgeColumn } from "../../../-list/columns";
 import { isRefusal, normalizeTauriError } from "@/lib/error-utils";
-import { ObjectLink } from "@/components/resources/ResourceRef";
+import { ObjectLink } from "@/components/object/ResourceRef";
 import { ResourceType } from "@/lib/resource-registry";
 import { crdInstancesLink, hrefOf, objectLink } from "@/lib/links";
 import { commands } from "@/lib/commands";

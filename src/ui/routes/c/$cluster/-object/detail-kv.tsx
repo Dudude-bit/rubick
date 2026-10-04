@@ -4,14 +4,14 @@ import { ChevronDown, ChevronRight, Copy } from "lucide-react";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { useCopyToClipboard } from "@/hooks";
 import { cn } from "@/lib/utils";
-import { DetailAction } from "@/components/resources/detail-blocks";
+import { DetailAction } from "@/components/object/detail-blocks";
 import {
   TONE_CLASS,
   describeDocument,
   expandDocument,
   type KeyValue,
   type KeyValueTone,
-} from "@/components/resources/key-values";
+} from "@/components/object/key-values";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 

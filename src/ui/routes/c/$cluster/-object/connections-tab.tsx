@@ -8,7 +8,7 @@ import {
   countMark,
   viewGlyph,
   type DetailTab,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import { ConnectionsPanel } from "./ConnectionsPanel";
 
 /**

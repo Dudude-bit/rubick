@@ -11,8 +11,8 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ClickablePorts } from "@/components/ui/clickable-port";
 import { EnvironmentVariables } from "./EnvironmentVariables";
-import { DetailAction } from "@/components/resources/detail-blocks";
-import { ImageRef } from "@/components/resources/ImageRef";
+import { DetailAction } from "@/components/object/detail-blocks";
+import { ImageRef } from "@/components/object/ImageRef";
 import { KeyValueList, type KeyValue } from "./detail-kv";
 import {
   containerSequence,

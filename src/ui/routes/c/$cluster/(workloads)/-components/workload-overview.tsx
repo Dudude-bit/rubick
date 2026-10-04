@@ -30,7 +30,7 @@ import { KeyValueList } from "../../-object/detail-kv";
 import { governanceRows } from "./governance";
 import { cn } from "@/lib/utils";
 import type { Finding } from "@/lib/governance";
-import type { KeyValue } from "@/components/resources/key-values";
+import type { KeyValue } from "@/components/object/key-values";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 
 const FINDING_TONE: Record<Finding["tone"], string> = {

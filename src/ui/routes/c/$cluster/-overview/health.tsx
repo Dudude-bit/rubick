@@ -1,9 +1,9 @@
 import { useNavigate } from "@tanstack/react-router";
 
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
-import { Composition } from "@/components/resources/detail-blocks";
-import { ResourceMessage } from "@/components/resources/ResourceMessage";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { Composition } from "@/components/object/detail-blocks";
+import { ResourceMessage } from "@/components/object/ResourceMessage";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { useShareSection } from "@/components/share/screen-share";
 import {
   composedDetail,

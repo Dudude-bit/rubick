@@ -47,10 +47,10 @@ import {
   podsMark,
   viewGlyph,
   type DetailTab,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import { RevisionRows } from "../../../-object/child-rows";
 import { ChangesTab } from "../../-components/ChangesTab";
-import { ResourceMessage } from "@/components/resources/ResourceMessage";
+import { ResourceMessage } from "@/components/object/ResourceMessage";
 import { ScaleDialog } from "../../../-object/ScaleDialog";
 import { ContainerRows } from "../../../-object/container-rows";
 import { deliveryOfKind } from "@/lib/delivery";
@@ -68,11 +68,11 @@ import {
   Composition,
   ConditionRows,
   DetailAction,
-} from "@/components/resources/detail-blocks";
+} from "@/components/object/detail-blocks";
 import { WorkloadUsage } from "../../-components/workload-usage";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
+import { recordToKeyValues } from "@/components/object/key-values";
 import { PinAction } from "../../-components/PinAction";
 import { useResourceMutation, useResourceDetail } from "@/hooks";
 import { useDeploymentShare } from "./useDeploymentShare";

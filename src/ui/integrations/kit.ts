@@ -18,7 +18,7 @@ import {
   countMark,
   severityMark,
   type DetailTabMark,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import type { CrdView } from "./registry";
 
 /**

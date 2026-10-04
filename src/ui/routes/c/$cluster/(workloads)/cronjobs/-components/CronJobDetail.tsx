@@ -22,14 +22,14 @@ import {
   countMark,
   kindGlyph,
   viewGlyph,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import { ContainerRows } from "../../../-object/container-rows";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { JobRows } from "../../../-object/child-rows";
 import { describeCron, nextCronRun } from "./cron-schedule";
-import { Composition, Headline } from "@/components/resources/detail-blocks";
+import { Composition, Headline } from "@/components/object/detail-blocks";
 import {
   CountBlock,
   FactBlock,
@@ -39,7 +39,7 @@ import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { WorkloadUsage } from "../../-components/workload-usage";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
+import { recordToKeyValues } from "@/components/object/key-values";
 import { PinAction } from "../../-components/PinAction";
 import { useResourceDetail } from "@/hooks";
 import { useCronJobShare } from "./useCronJobShare";

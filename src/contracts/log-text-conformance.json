@@ -1,5 +1,5 @@
 {
-  "about": "A log line as text — in a downloaded file and on the clipboard — as both halves write it: src/tauri/src/logs/text.rs (Download) and logsToText in src/ui/components/logs/types.ts (Copy). `raw` is the line as the terminal shows it; an empty one falls back to the timestamp and the message. Lines are joined with a newline and nothing after the last.",
+  "about": "A log line as text — in a downloaded file and on the clipboard — as both halves write it: src/tauri/src/logs/text.rs (Download) and logsToText in src/ui/routes/c/$cluster/-logs/types.ts (Copy). `raw` is the line as the terminal shows it; an empty one falls back to the timestamp and the message. Lines are joined with a newline and nothing after the last.",
   "cases": [
     {
       "line": {

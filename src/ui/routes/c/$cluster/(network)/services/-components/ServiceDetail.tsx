@@ -14,9 +14,9 @@ import {
 import { yamlTab } from "../../../-object/yaml-tab";
 import { ExternalLink, Filter, Info, Plug, Tag, Waypoints } from "lucide-react";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
-import { countMark, viewGlyph } from "@/components/resources/detail-tab";
+import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
+import { recordToKeyValues } from "@/components/object/key-values";
 import { ServiceAccessInfo } from "../../-components";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { PublishedEndpoints } from "./PublishedEndpoints";

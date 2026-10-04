@@ -2,7 +2,7 @@ import { Suspense, useEffect, useState } from "react";
 
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { PeekContent, preloadPeekContent } from "./peek-loader";
 import { PeekSkeleton } from "./peek-skeleton";
 import type { PeekTabId } from "./peek-tabs";

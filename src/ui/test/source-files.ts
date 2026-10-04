@@ -31,6 +31,6 @@ export const CODE_FILES: readonly string[] = SOURCE_FILES.filter(
   (path) => /\.tsx?$/.test(path) && !isTest(path)
 );
 
-/** The files under one directory, `src/ui/components/logs` for instance. */
+/** The files under one directory, `src/ui/lib` for instance. */
 export const filesUnder = (dir: string): string[] =>
   SOURCE_FILES.filter((path) => path.startsWith(`${dir}/`));

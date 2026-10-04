@@ -5,7 +5,7 @@ import type { CellContext, ColumnDef } from "@/components/ui/table-features";
 import { Crosshair } from "lucide-react";
 
 import { ResourceList } from "../../../-list/ResourceList";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { createAgeColumn } from "../../../-list/columns";
 import { useClusterSummary } from "@/hooks/useClusterSummary";

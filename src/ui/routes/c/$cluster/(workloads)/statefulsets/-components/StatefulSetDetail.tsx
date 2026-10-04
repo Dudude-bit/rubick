@@ -32,7 +32,7 @@ import {
   kindGlyph,
   podsMark,
   viewGlyph,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import { ContainerRows } from "../../../-object/container-rows";
 import { ChangesTab } from "../../-components/ChangesTab";
 import { deliveryOfKind } from "@/lib/delivery";
@@ -42,14 +42,14 @@ import {
   Composition,
   ConditionRows,
   DetailAction,
-} from "@/components/resources/detail-blocks";
+} from "@/components/object/detail-blocks";
 import { ScaleDialog } from "../../../-object/ScaleDialog";
 import { scaleWarnings } from "@/lib/governance";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { WorkloadUsage } from "../../-components/workload-usage";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
+import { recordToKeyValues } from "@/components/object/key-values";
 import { useResourceDetail, useResourceMutation } from "@/hooks";
 import { useStatefulSetShare } from "./useStatefulSetShare";
 import { useConnections } from "@/hooks/useConnections";

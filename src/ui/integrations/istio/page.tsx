@@ -22,15 +22,15 @@ import { backingFrom, hostRole, hostSeverity, STOP_UNDER } from "../ingress";
 import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { DetailTabs } from "@/components/resources/DetailTabs";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { DetailTabs } from "@/components/object/DetailTabs";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   countMark,
   severityMark,
   viewGlyph,
   type DetailTab,
   type DetailTabMark,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import { describeStop } from "@/lib/connections";
 import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";

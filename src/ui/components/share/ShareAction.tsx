@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Share2, type LucideIcon } from "lucide-react";
 
-import { DetailAction } from "@/components/resources/detail-blocks";
+import { DetailAction } from "@/components/object/detail-blocks";
 import { Button } from "@/components/ui/button";
 import { useAppInfo } from "@/hooks/useAppInfo";
 import { useLocationHref } from "@/hooks/useLocationHref";

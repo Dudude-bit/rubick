@@ -1,6 +1,6 @@
 import { Bell, Boxes, Gauge, Server, TriangleAlert } from "lucide-react";
 
-import type { CompositionSegment } from "@/components/resources/detail-blocks";
+import type { CompositionSegment } from "@/components/object/detail-blocks";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";

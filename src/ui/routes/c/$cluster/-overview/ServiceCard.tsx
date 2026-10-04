@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { ExternalLink, PinOff } from "lucide-react";
 
-import { ObjectLink } from "@/components/resources/ResourceRef";
+import { ObjectLink } from "@/components/object/ResourceRef";
 import { Journal } from "../-changes/ChangesTimeline";
 import { useShareSection } from "@/components/share/screen-share";
 import { pinShare } from "./service-card-share";

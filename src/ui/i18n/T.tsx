@@ -4,7 +4,7 @@
  * Most of the interface calls `useT()` and is done. Column definitions cannot:
  * they are module-level arrays, evaluated once at import, and turning them into
  * functions of `t` would change the signature that
- * `src/ui/components/resources/column-widths.test.ts` reads across seventeen
+ * `src/ui/routes/c/$cluster/-list/column-widths.test.ts` reads across seventeen
  * files. TanStack renders a column's `header` through `flexRender`, inside the
  * React tree — so a component put there can use the hook the array cannot.
  *

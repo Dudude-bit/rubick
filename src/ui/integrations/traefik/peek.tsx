@@ -10,8 +10,8 @@
 
 import { sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
-import { ResourceRef } from "@/components/resources/ResourceRef";
-import type { KeyValue } from "@/components/resources/key-values";
+import { ResourceRef } from "@/components/object/ResourceRef";
+import type { KeyValue } from "@/components/object/key-values";
 import type { CustomResourceDetailInfo } from "@/generated/types";
 import { servedGroupName } from "./data";
 import { readRule } from "./rule";

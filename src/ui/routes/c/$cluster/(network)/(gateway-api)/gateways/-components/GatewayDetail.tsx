@@ -32,11 +32,11 @@ import {
   countMark,
   kindGlyph,
   viewGlyph,
-} from "@/components/resources/detail-tab";
-import { EventRows } from "@/components/resources/detail-blocks";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+} from "@/components/object/detail-tab";
+import { EventRows } from "@/components/object/detail-blocks";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../../-object/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
+import { recordToKeyValues } from "@/components/object/key-values";
 import { CertificateLine } from "../../../../-object/CertificateFacts";
 import { InterceptedAction } from "../../../../-delivery/delivery-intercept";
 import { useResourceDetail } from "@/hooks";

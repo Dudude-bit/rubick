@@ -38,16 +38,16 @@ import {
 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { DetailTabs } from "@/components/resources/DetailTabs";
-import { ResourceRef } from "@/components/resources/ResourceRef";
-import { RenewalNote } from "@/components/resources/IssuanceChain";
+import { DetailTabs } from "@/components/object/DetailTabs";
+import { ResourceRef } from "@/components/object/ResourceRef";
+import { RenewalNote } from "@/components/object/IssuanceChain";
 import {
   countMark,
   severityMark,
   viewGlyph,
   type DetailTab,
   type DetailTabMark,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { describeStop } from "@/lib/connections";
 import { RoutingMap } from "../routing-map";

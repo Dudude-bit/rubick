@@ -6,7 +6,7 @@
     "chip promoted from query to intake moves from the browser's evaluator",
     "to the streamer's, and if those disagree the chip silently changes",
     "meaning as it crosses. So both sides are held to this file:",
-    "src/tauri/src/logs/filter.rs and src/ui/components/logs/types.ts each",
+    "src/tauri/src/logs/filter.rs and src/ui/routes/c/$cluster/-logs/types.ts each",
     "assert every case, and neither can be relaxed alone.",
     "",
     "A case's line is a partial log line. Both readers fill the same gaps:",

@@ -22,7 +22,7 @@ import { joinSayings } from "@/i18n/say";
 import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { ObjectLink, ResourceRef } from "@/components/resources/ResourceRef";
+import { ObjectLink, ResourceRef } from "@/components/object/ResourceRef";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { ResourceType } from "@/lib/resource-registry";
 import { refOf } from "@/lib/report-parts";

@@ -20,7 +20,7 @@
  */
 
 import type { T } from "@/i18n/useT";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { EditGoverning } from "./EditGoverning";
 import {
   autoscalerFinding,
@@ -37,7 +37,7 @@ import {
   type Finding,
 } from "@/lib/governance";
 import { unreadWhy } from "@/lib/connections";
-import type { KeyValue } from "@/components/resources/key-values";
+import type { KeyValue } from "@/components/object/key-values";
 import type { ResourceConnections } from "@/generated/types";
 
 /**

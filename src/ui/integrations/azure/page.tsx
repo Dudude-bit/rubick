@@ -19,7 +19,7 @@ import { useMemo } from "react";
 import { KeyRound } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { ResourceType } from "@/lib/resource-registry";

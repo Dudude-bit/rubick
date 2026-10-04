@@ -6,12 +6,12 @@ import { Archive, Box, Database, Network } from "lucide-react";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { SectionHeader } from "@/components/ui/section";
 import { useToast } from "@/components/ui/use-toast";
-import { DetailTabs } from "@/components/resources/DetailTabs";
+import { DetailTabs } from "@/components/object/DetailTabs";
 import {
   countMark,
   viewGlyph,
   type DetailTab,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import { crdInstancesLink, objectLink } from "@/lib/links";
 import { errorToShow } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";

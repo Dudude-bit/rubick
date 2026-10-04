@@ -22,7 +22,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { ResourceListHeader } from "../../../../-list/ResourceListHeader";
 import { UnreadNamespaces } from "../../../../-list/UnreadNamespaces";
 import { Unknown } from "@/components/ui/unknown";

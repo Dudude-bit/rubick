@@ -20,20 +20,17 @@ import {
   countMark,
   kindGlyph,
   viewGlyph,
-} from "@/components/resources/detail-tab";
-import { DetailAction, EventRows } from "@/components/resources/detail-blocks";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+} from "@/components/object/detail-tab";
+import { DetailAction, EventRows } from "@/components/object/detail-blocks";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   KeyValueList,
   KeyValueSection,
   type KeyValue,
 } from "../../../-object/detail-kv";
-import {
-  recordToKeyValues,
-  TONE_CLASS,
-} from "@/components/resources/key-values";
+import { recordToKeyValues, TONE_CLASS } from "@/components/object/key-values";
 import { CertificateLine } from "../../../-object/CertificateFacts";
-import { IssuanceSection } from "@/components/resources/IssuanceChain";
+import { IssuanceSection } from "@/components/object/IssuanceChain";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";

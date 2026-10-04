@@ -21,7 +21,7 @@ import { looksLikeAlert, parseAlert, type AlertReading } from "@/lib/alerts";
 import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
 import { Kbd } from "@/components/ui/kbd";
 import { ProviderMark } from "@/components/ui/provider-mark";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   useResourceSearch,
   type ClusterSearchState,

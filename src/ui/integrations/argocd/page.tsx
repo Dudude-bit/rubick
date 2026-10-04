@@ -24,8 +24,8 @@ import { useCallback, useMemo } from "react";
 import { Box, GitBranch, Layers, Shield } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { DetailTabs } from "@/components/resources/DetailTabs";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { DetailTabs } from "@/components/object/DetailTabs";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { refOf } from "@/lib/report-parts";
@@ -35,7 +35,7 @@ import {
   countMark,
   viewGlyph,
   type DetailTab,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import type { CustomResourceInfo } from "@/generated/types";
 import { crdInstancesLink } from "@/lib/links";
 import { toPlural } from "@/lib/resource-registry";

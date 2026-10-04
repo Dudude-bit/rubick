@@ -2,7 +2,7 @@ import { ArrowDownToLine, Info, Trash2 } from "lucide-react";
 
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { Peer, ReachCell } from "../../../-object/network-policy-cells";
-import { countMark, viewGlyph } from "@/components/resources/detail-tab";
+import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { InterceptedAction } from "../../../-delivery/delivery-intercept";

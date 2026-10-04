@@ -2,7 +2,7 @@ import { afterEach, describe, it, expect } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import { CountBlock } from "./workload-overview";
-import { Composition } from "@/components/resources/detail-blocks";
+import { Composition } from "@/components/object/detail-blocks";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ObjectFacts, ResourceConnections } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";

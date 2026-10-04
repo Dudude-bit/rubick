@@ -1,7 +1,7 @@
 import { Activity, Bell, Plug } from "lucide-react";
 
-import { DetailTabs } from "@/components/resources/DetailTabs";
-import { viewGlyph, type DetailTab } from "@/components/resources/detail-tab";
+import { DetailTabs } from "@/components/object/DetailTabs";
+import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";

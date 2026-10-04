@@ -27,7 +27,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { DetailAction } from "@/components/resources/detail-blocks";
+import { DetailAction } from "@/components/object/detail-blocks";
 import type { HelmRelease, UnreadNamespace } from "@/generated/types";
 import { UnreadNamespaces } from "../../../-list/UnreadNamespaces";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";

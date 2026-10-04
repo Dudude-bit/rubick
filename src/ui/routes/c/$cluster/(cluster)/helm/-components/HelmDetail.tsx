@@ -44,10 +44,10 @@ import {
   countMark,
   viewGlyph,
   type DetailTab,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import { YamlTabContent } from "../../../-object/YamlTabContent";
-import { DetailAction } from "@/components/resources/detail-blocks";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { DetailAction } from "@/components/object/detail-blocks";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { useCopyToClipboard } from "@/hooks";
 import { commands } from "@/lib/commands";

@@ -1,5 +1,5 @@
 import { ResourceType } from "@/lib/resource-registry";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 
 /**
  * The objects a volume and a claim name each other and their class by.

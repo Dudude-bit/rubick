@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import type { T as Translate } from "@/i18n/useT";
 import { conditionRole } from "@/lib/condition-health";
 import type { StatusRole } from "@/lib/status-role";
 import type { PeekTarget } from "@/hooks/usePeek";
-import type { KeyValue, KeyValueTone } from "@/components/resources/key-values";
+import type { KeyValue, KeyValueTone } from "@/components/object/key-values";
 import type { ConditionInfo } from "@/generated/types";
 import type { ResourceKind } from "@/lib/resource-registry";
 

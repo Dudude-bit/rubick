@@ -30,11 +30,11 @@ import type { ConnectionsQuery } from "@/hooks/useConnections";
 import { useDelivery } from "../-delivery/useDelivery";
 import { openExternal } from "@/lib/open-external";
 import type { DeliveryQuery } from "@/integrations";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   ResourceName,
   RESOURCE_NAME_SHELL,
-} from "@/components/resources/ResourceName";
+} from "@/components/object/ResourceName";
 import type { ObjectRef, ResourceConnections } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 

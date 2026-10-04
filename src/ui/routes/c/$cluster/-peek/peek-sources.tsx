@@ -6,7 +6,7 @@ import { getApiVersion, toKind } from "@/lib/resource-registry";
 import { vendorPeek } from "@/integrations";
 import type { T as Translate } from "@/i18n/useT";
 import type { PeekTarget } from "@/hooks/usePeek";
-import type { KeyValue } from "@/components/resources/key-values";
+import type { KeyValue } from "@/components/object/key-values";
 import type {
   ConditionInfo,
   CustomResourceDetailInfo,

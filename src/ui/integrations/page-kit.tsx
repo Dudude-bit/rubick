@@ -37,7 +37,7 @@ import { Unknown } from "@/components/ui/unknown";
 import { openExternal } from "@/lib/open-external";
 import { cn } from "@/lib/utils";
 import { CopyableValue } from "@/components/ui/copyable-value";
-import { ObjectLink } from "@/components/resources/ResourceRef";
+import { ObjectLink } from "@/components/object/ResourceRef";
 import { useShareSection } from "@/components/share/screen-share";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT, type T as Translator } from "@/i18n/useT";

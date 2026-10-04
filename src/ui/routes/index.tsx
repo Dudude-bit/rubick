@@ -1,6 +1,6 @@
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 
-import { ClusterFrontDoor } from "@/components/cluster/ClusterFrontDoor";
+import { ClusterFrontDoor } from "./-components/ClusterFrontDoor";
 import { clusterLink } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
 

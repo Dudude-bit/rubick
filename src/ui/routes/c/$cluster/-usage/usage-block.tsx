@@ -9,7 +9,7 @@ import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { UsageRow } from "@/components/resources/detail-blocks";
+import { UsageRow } from "@/components/object/detail-blocks";
 import type { TrafficChartProps } from "./traffic-chart";
 import { BAND_H } from "./band-frame";
 import { NO_LIMIT_NOTE, UsageChart, WATCHING_NOTE } from "./usage-chart";

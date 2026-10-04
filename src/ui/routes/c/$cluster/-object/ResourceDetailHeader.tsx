@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 
 import { DataFreshness, RealtimeAge } from "@/components/ui/realtime";
-import { ResourceName } from "@/components/resources/ResourceName";
+import { ResourceName } from "@/components/object/ResourceName";
 import { CopyName } from "./CopyName";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { clusterLink, hrefOf, listLink, type AppLink } from "@/lib/links";

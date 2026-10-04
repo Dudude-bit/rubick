@@ -1,6 +1,6 @@
 import { Pin, PinOff } from "lucide-react";
 
-import { DetailAction } from "@/components/resources/detail-blocks";
+import { DetailAction } from "@/components/object/detail-blocks";
 import { useToast } from "@/components/ui/use-toast";
 import {
   isPinned,

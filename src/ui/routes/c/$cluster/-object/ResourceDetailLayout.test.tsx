@@ -19,7 +19,7 @@ import {
   severityMark,
   viewGlyph,
   type DetailTab,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 
 const wrap = (ui: ReactNode, at = "/c/prod/persistentvolumes/pv-demo") =>
   renderWithRouter(<>{ui}</>, { at, route: "/c/$cluster/$" });

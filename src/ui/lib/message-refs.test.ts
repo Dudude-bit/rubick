@@ -218,7 +218,7 @@ describe("linkifyMessage", () => {
  * and this is the check rather than a review comment.
  */
 describe("surfaces that must stay text", () => {
-  it.each(["src/ui/components/logs", "src/ui/components/yaml"])(
+  it.each(["src/ui/routes/c/$cluster/-logs", "src/ui/routes/c/$cluster/-yaml"])(
     "%s never imports the segmenter",
     (dir) => {
       const files = filesUnder(dir);

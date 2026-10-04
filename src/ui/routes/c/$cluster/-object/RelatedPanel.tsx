@@ -22,7 +22,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { errorToShow } from "@/lib/error-utils";
 import type { RelatedObjects, RelatedRef } from "./useRelatedObjects";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 
 const GROUP_HEADING =
   "text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt";

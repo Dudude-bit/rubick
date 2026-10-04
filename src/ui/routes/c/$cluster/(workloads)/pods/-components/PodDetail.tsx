@@ -39,7 +39,7 @@ import {
   liveMark,
   severityMark,
   viewGlyph,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import { ContainerRows } from "../../../-object/container-rows";
 import {
   FactBlock,
@@ -50,16 +50,16 @@ import {
   ConditionRows,
   DetailAction,
   ProblemSummary,
-} from "@/components/resources/detail-blocks";
+} from "@/components/object/detail-blocks";
 import { UsageBlock } from "../../../-usage/usage-block";
-import { ImageRef } from "@/components/resources/ImageRef";
-import { ResourceMessage } from "@/components/resources/ResourceMessage";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ImageRef } from "@/components/object/ImageRef";
+import { ResourceMessage } from "@/components/object/ResourceMessage";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { MostLikelyPanel } from "./MostLikelyPanel";
 import { usePodShare } from "./usePodShare";
 import { VolumeRows } from "./volume-rows";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
-import { recordToKeyValues } from "@/components/resources/key-values";
+import { recordToKeyValues } from "@/components/object/key-values";
 import { PodPortForwardDialog } from "./PodPortForwardDialog";
 import { usePodPortForward } from "./usePodPortForward";
 import { usePodReplacementSearch } from "./usePodReplacementSearch";

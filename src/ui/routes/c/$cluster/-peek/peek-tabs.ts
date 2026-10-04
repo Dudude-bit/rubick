@@ -9,7 +9,7 @@ import {
   viewGlyph,
   type DetailTabGlyph,
   type DetailTabMark,
-} from "@/components/resources/detail-tab";
+} from "@/components/object/detail-tab";
 import type { ConfigMapInfo, PodInfo, SecretInfo } from "@/generated/types";
 
 /**

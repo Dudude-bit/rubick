@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCopyToClipboard } from "@/hooks";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
-import { DetailAction } from "@/components/resources/detail-blocks";
+import { DetailAction } from "@/components/object/detail-blocks";
 import type { BinaryValue } from "@/generated/types";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";

@@ -27,13 +27,10 @@ import { AlertBanner } from "../-alerts/AlertBanner";
 import { errorToShow } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
-import { DetailTabs } from "@/components/resources/DetailTabs";
-import { DetailAction } from "@/components/resources/detail-blocks";
+import { DetailTabs } from "@/components/object/DetailTabs";
+import { DetailAction } from "@/components/object/detail-blocks";
 import { DeliveryBanner, DeliveryMarks, HelmMark } from "../-delivery/delivery";
-import {
-  surfaceIsOpen,
-  type DetailTab,
-} from "@/components/resources/detail-tab";
+import { surfaceIsOpen, type DetailTab } from "@/components/object/detail-tab";
 import { useDelivery } from "../-delivery/useDelivery";
 import type { Freshness } from "@/hooks/useLiveQuery";
 import type { DeliveryQuery } from "@/integrations";
@@ -45,7 +42,7 @@ import type {
 } from "@/components/share/contribution";
 
 /** Kept reachable from here: the pages that hold a `DetailTab[]` import both. */
-export type { DetailTab } from "@/components/resources/detail-tab";
+export type { DetailTab } from "@/components/object/detail-tab";
 
 interface DetailErrorProps {
   error: Error | string | null;

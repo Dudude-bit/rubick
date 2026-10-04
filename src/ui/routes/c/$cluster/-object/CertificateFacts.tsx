@@ -18,7 +18,7 @@ import {
   problemWords,
   uncoveredHosts,
 } from "@/lib/certificates";
-import { TONE_CLASS } from "@/components/resources/key-values";
+import { TONE_CLASS } from "@/components/object/key-values";
 import { KeyValueList } from "./detail-kv";
 import type { CertificateFacts, TlsCertificate } from "@/generated/types";
 import { useT } from "@/i18n/useT";

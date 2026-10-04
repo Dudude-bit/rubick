@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { Layout } from "./-shell/Layout";
-import { NotFoundPage } from "@/components/layout/NotFound";
+import { NotFoundPage } from "../../-components/NotFound";
 import { appSearch } from "@/lib/app-search";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ClusterMissing, KubeconfigUnread } from "./-shell/ClusterMissing";

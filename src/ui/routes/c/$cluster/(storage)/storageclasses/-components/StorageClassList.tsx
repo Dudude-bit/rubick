@@ -11,7 +11,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ResourceRef } from "@/components/resources/ResourceRef";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { createResourceListPage } from "../../../-list/createResourceListPage";
 
 export const columns = (): ColumnDef<StorageClassInfo>[] => [

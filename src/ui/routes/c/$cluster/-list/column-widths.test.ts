@@ -1,22 +1,22 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { configMapColumns } from "@/routes/c/$cluster/(config)/configmaps/-components/ConfigMapList";
-import { columns as cronJobs } from "@/routes/c/$cluster/(workloads)/cronjobs/-components/CronJobList";
-import { columns as daemonSets } from "@/routes/c/$cluster/(workloads)/daemonsets/-components/DaemonSetList";
-import { columns as deployments } from "@/routes/c/$cluster/(workloads)/deployments/-components/DeploymentList";
-import { columns as endpoints } from "@/routes/c/$cluster/(network)/endpoints/-components/EndpointsList";
-import { baseColumns as ingresses } from "@/routes/c/$cluster/(network)/ingresses/-components/IngressList";
-import { columns as jobs } from "@/routes/c/$cluster/(workloads)/jobs/-components/JobList";
-import { columns as namespaces } from "@/routes/c/$cluster/(cluster)/namespaces/-components/NamespaceList";
-import { networkPolicyColumns } from "@/routes/c/$cluster/(network)/networkpolicies/-components/NetworkPolicyList";
-import { columns as nodes } from "@/routes/c/$cluster/(cluster)/nodes/-components/NodeList";
-import { columns as persistentVolumeClaims } from "@/routes/c/$cluster/(storage)/persistentvolumeclaims/-components/PersistentVolumeClaimList";
-import { columns as persistentVolumes } from "@/routes/c/$cluster/(storage)/persistentvolumes/-components/PersistentVolumeList";
-import { columns as pods } from "@/routes/c/$cluster/(workloads)/pods/-components/PodList";
-import { columns as secrets } from "@/routes/c/$cluster/(config)/secrets/-components/SecretList";
-import { columns as services } from "@/routes/c/$cluster/(network)/services/-components/ServiceList";
-import { columns as statefulSets } from "@/routes/c/$cluster/(workloads)/statefulsets/-components/StatefulSetList";
-import { columns as storageClasses } from "@/routes/c/$cluster/(storage)/storageclasses/-components/StorageClassList";
+import { configMapColumns } from "../(config)/configmaps/-components/ConfigMapList";
+import { columns as cronJobs } from "../(workloads)/cronjobs/-components/CronJobList";
+import { columns as daemonSets } from "../(workloads)/daemonsets/-components/DaemonSetList";
+import { columns as deployments } from "../(workloads)/deployments/-components/DeploymentList";
+import { columns as endpoints } from "../(network)/endpoints/-components/EndpointsList";
+import { baseColumns as ingresses } from "../(network)/ingresses/-components/IngressList";
+import { columns as jobs } from "../(workloads)/jobs/-components/JobList";
+import { columns as namespaces } from "../(cluster)/namespaces/-components/NamespaceList";
+import { networkPolicyColumns } from "../(network)/networkpolicies/-components/NetworkPolicyList";
+import { columns as nodes } from "../(cluster)/nodes/-components/NodeList";
+import { columns as persistentVolumeClaims } from "../(storage)/persistentvolumeclaims/-components/PersistentVolumeClaimList";
+import { columns as persistentVolumes } from "../(storage)/persistentvolumes/-components/PersistentVolumeList";
+import { columns as pods } from "../(workloads)/pods/-components/PodList";
+import { columns as secrets } from "../(config)/secrets/-components/SecretList";
+import { columns as services } from "../(network)/services/-components/ServiceList";
+import { columns as statefulSets } from "../(workloads)/statefulsets/-components/StatefulSetList";
+import { columns as storageClasses } from "../(storage)/storageclasses/-components/StorageClassList";
 
 /** The fields the questions below need, so one array can hold them all. */
 interface Column {
