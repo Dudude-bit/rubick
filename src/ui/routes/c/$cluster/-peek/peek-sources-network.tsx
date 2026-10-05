@@ -6,8 +6,8 @@ import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { commands } from "@/lib/commands";
 import { BalancerAddress } from "../-object/BalancerAddress";
 import { IngressHealthView, ServiceHealthView } from "../-object/health-views";
-import { Peer, ReachCell } from "../-object/network-policy-cells";
-import { directionFact, portText, reachOf } from "@/lib/network-policy";
+import { ReachCell, ResolvedPeers } from "../-object/network-policy-cells";
+import { notGovernedSentence, portText, reachOf } from "@/lib/network-policy";
 import type { PolicyDirection } from "@/generated/types";
 import {
   list,
@@ -195,7 +195,7 @@ export const NETWORK_SOURCES: PeekSources = {
     (name, namespace) => commands.getNetworkPolicy(name, namespace),
     (policy, _target, t) => {
       const reach = reachOf(policy.selected);
-      const directions: [string, PolicyDirection, boolean][] = [
+      const directions: ["Ingress" | "Egress", PolicyDirection, boolean][] = [
         ["Ingress", policy.ingress, false],
         ["Egress", policy.egress, true],
       ];
@@ -247,15 +247,16 @@ export const NETWORK_SOURCES: PeekSources = {
                         {t("empty", outbound ? "toAnywhere" : "fromAnywhere")}
                       </span>
                     ) : (
-                      <span className="flex flex-col gap-0.5">
-                        {rule.peers.map((peer, j) => (
-                          <Peer key={j} peer={peer} />
-                        ))}
-                      </span>
+                      <ResolvedPeers
+                        peers={rule.peers}
+                        home={policy.namespace}
+                      />
                     ),
                 }))
               : [],
-            emptyMessage: directionFact(direction, t).value,
+            emptyMessage: direction.governed
+              ? t("empty", "deniesAll")
+              : notGovernedSentence(policy, title, t),
           })),
         ],
       };

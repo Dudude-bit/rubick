@@ -130,6 +130,21 @@ export function servedListLink(kind: {
   );
 }
 
+/**
+ * The Pods list narrowed to a label selector, read in these namespaces
+ * (`null` for every one): the pods a NetworkPolicy, or one of its peers,
+ * is about.
+ */
+export function selectedPodsLink(
+  selector: string,
+  namespaces: readonly string[] | null
+): AppLink {
+  const search: Record<string, string> = {};
+  if (selector !== "") search.selector = selector;
+  if (namespaces) search.in = [...namespaces].sort().join(",");
+  return listLink("Pod", search);
+}
+
 /** The list of any served kind, by the segment its address carries. */
 export function resourceListLink(resource: string): AppLink {
   return {

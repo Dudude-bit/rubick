@@ -13,6 +13,7 @@ import {
   Info,
   Network,
   RefreshCw,
+  Shield,
   SquareTerminal,
 } from "lucide-react";
 
@@ -63,6 +64,7 @@ import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
 import { podForwardPorts } from "@/lib/port-forward";
+import { PodNetworkPolicies } from "./PodNetworkPolicies";
 import { usePodReplacementSearch } from "./usePodReplacementSearch";
 import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
@@ -833,6 +835,13 @@ export function PodDetail() {
             ),
           },
           connectionsTab(connections, t, deliveryQuery),
+          {
+            id: "network-policies",
+            // The kind's own name, which is never translated.
+            label: "NetworkPolicies",
+            glyph: viewGlyph(Shield),
+            content: pod ? <PodNetworkPolicies pod={pod} /> : null,
+          },
           {
             id: "containers",
             label: t("columns", "containers"),

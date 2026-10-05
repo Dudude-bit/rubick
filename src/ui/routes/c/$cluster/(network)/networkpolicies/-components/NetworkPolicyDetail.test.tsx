@@ -78,3 +78,61 @@ describe("the pods a NetworkPolicy's page says it selects", () => {
     expect(refused).not.toBe(await reachColour(0, "no pods"));
   });
 });
+
+async function renderPolicy(info: NetworkPolicyInfo, tab: string) {
+  cleanup();
+  vi.mocked(useResourceDetail).mockReturnValue({
+    name: info.name,
+    namespace: info.namespace,
+    resource: info,
+    isLoading: false,
+    error: null,
+    yaml: "",
+    copyYaml: vi.fn(),
+    activeTab: tab,
+    setActiveTab: vi.fn(),
+    goBack: vi.fn(),
+    refetch: vi.fn(),
+    deleteMutation: { mutate: vi.fn(), isPending: false },
+  } as unknown as ReturnType<typeof useResourceDetail>);
+  await renderWithRouter(<NetworkPolicyDetail />, {
+    at: `/c/prod/networkpolicies/${info.namespace}/${info.name}`,
+    route: "/c/$cluster/networkpolicies/$namespace/$name",
+  });
+}
+
+describe("what a NetworkPolicy's page resolves", () => {
+  /**
+   * "Pods 2 pods" was plain text, and the reader matched app=api to pods by
+   * hand. Fails if the count stops opening the Pods list narrowed to them.
+   */
+  it("links the pods it selects to the Pods list narrowed to its selector", async () => {
+    await renderPolicy(
+      {
+        ...policy(2),
+        name: "api-from-frontend",
+        namespace: "net",
+        selects: { kind: "written", query: "app=api" },
+      },
+      "overview"
+    );
+    const link = screen.getByRole("link", { name: "2 pods" });
+    const href = decodeURIComponent(link.getAttribute("href") ?? "");
+    expect(href).toContain("/c/prod/pods");
+    expect(href).toContain("selector=app=api");
+    expect(href).toContain("in=net");
+  });
+
+  /**
+   * "Egress: says nothing" read as unknown. A direction policyTypes leaves
+   * out is one this policy does not restrict, and the page says so.
+   */
+  it("says which direction it does not restrict and why", async () => {
+    await renderPolicy(policy(2), "rules");
+    expect(
+      screen.getByText(
+        "Does not restrict Egress: policyTypes names Ingress only."
+      )
+    ).toBeInTheDocument();
+  });
+});

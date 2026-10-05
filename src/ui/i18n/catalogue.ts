@@ -3836,6 +3836,29 @@ export const en = {
       "A controller serves its class and has not published an address for it yet.",
     healthServed: "served",
     sliceNoPorts: "none, so nothing is routed to these addresses",
+    podFilterMatching: "Pods matching {selector} in {namespaces}",
+    podFilterEvery: "Every pod in {namespaces}",
+    podFilterEveryNamespace: "every namespace",
+    podFilterClear: "Show every pod",
+    podFilterUnreadable:
+      "This selector cannot be read, so no pod is shown as matching it: {selector}",
+    podFilterOutside:
+      "{namespaces} is outside the namespaces this window looks at, so its pods were not read here.",
+    podFilterOutsideAll:
+      "This selector reaches every namespace, and this window looks at some of them only.",
+    podFilterLookThere: "Look there",
+    podIngressIsolated: "isolated: only what these policies allow comes in",
+    podIngressOpen: "not isolated: any pod may connect",
+    podEgressIsolated: "isolated: only what these policies allow goes out",
+    podEgressOpen: "not isolated: it may connect anywhere",
+    podPoliciesCannotSay: "cannot say",
+    podPoliciesOpenWhy:
+      "No NetworkPolicy in this namespace selects this pod and names {direction} in its policyTypes. A network plugin's own policy kinds are not read here and may still restrict it.",
+    podPoliciesDeniesAll:
+      "Lets nothing through: it names {direction} and lists no rule.",
+    podPoliciesReading: "Reading the NetworkPolicies of this namespace…",
+    podPoliciesUndecided:
+      "Whether these policies select this pod cannot be evaluated: {names}",
   },
   cluster: {
     integrationsHint:
@@ -4543,7 +4566,21 @@ export const en = {
     showMore: "Show more",
     // A NetworkPolicy's four readings of one direction, and its three of a
     // `podSelector`. Each one is a state the others would be mistaken for.
-    saysNothing: "says nothing",
+    saysNothing: "not restricted by this policy",
+    // `policyTypes` and its two values are the API's words, kept as written.
+    doesNotRestrict:
+      "Does not restrict {direction}: policyTypes names {types} only.",
+    podsMatching: {
+      one: "{n} pod",
+      other: "{n} pods",
+    },
+    noPodMatches: "no pod matches",
+    inNamespacesCount: {
+      one: "in {n} namespace",
+      other: "in {n} namespaces",
+    },
+    peerPodsNotRead: "pods not read",
+    peerCannotEvaluate: "cannot be evaluated",
     deniesAll: "denies all",
     allowsAll: "allows all",
     podsNotRead: "pods not read",

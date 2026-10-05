@@ -7,12 +7,17 @@
  * something else loses fast refresh for the whole page.
  */
 
+import { Link } from "@tanstack/react-router";
+import type { MouseEvent } from "react";
+
 import type {
   NetworkPolicyInfo,
   PolicyDirection,
   PolicyPeer,
   PolicySelects,
 } from "@/generated/types";
+import { ResourceRef } from "@/components/object/ResourceRef";
+import { usePolicyPeerData, type PeerData } from "@/hooks/usePolicyPeers";
 import { T } from "@/i18n/T";
 import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
@@ -27,6 +32,8 @@ import {
   type DirectionVerdict,
   type Reach,
 } from "@/lib/network-policy";
+import { selectedPodsLink } from "@/lib/links";
+import { leavesNamespace, peerMatch } from "@/lib/policy-peers";
 
 /**
  * What each of the four answers looks like. A total map, so a fifth verdict
@@ -68,11 +75,137 @@ const REACH_TONE: Record<Reach["kind"], string> = {
 
 export function ReachCell({ policy }: { policy: NetworkPolicyInfo }) {
   const t = useT();
+  const reach = reachOf(policy.selected);
+  const text = reachWords(policy.selected, t).text;
+  const query =
+    policy.selects.kind === "written"
+      ? policy.selects.query
+      : policy.selects.kind === "everything"
+        ? ""
+        : null;
+  if (reach.kind === "pods" && query !== null) {
+    return (
+      <PodsLink selector={query} namespaces={[policy.namespace]}>
+        {text}
+      </PodsLink>
+    );
+  }
+  return <span className={REACH_TONE[reach.kind]}>{text}</span>;
+}
+
+/** Inside a table row, a link opens its own address and not the row's peek. */
+const keepToItself = (event: MouseEvent) => event.stopPropagation();
+
+/** The Pods list narrowed to these pods. */
+export function PodsLink({
+  selector,
+  namespaces,
+  children,
+}: {
+  selector: string;
+  namespaces: string[] | null;
+  children: string;
+}) {
   return (
-    <span className={REACH_TONE[reachOf(policy.selected).kind]}>
-      {reachWords(policy.selected, t).text}
-    </span>
+    <Link
+      {...selectedPodsLink(selector, namespaces)}
+      onClick={keepToItself}
+      className="text-info underline-offset-2 hover:underline"
+    >
+      {children}
+    </Link>
   );
+}
+
+/** How many namespace names are drawn before the rest become a count. */
+const NAMESPACES_SHOWN = 3;
+
+/**
+ * What one peer reaches, resolved: the pods it names, with a link to them,
+ * and the namespaces when it leaves the policy's own. An IP block names no
+ * pod and stays the CIDR the line above already prints.
+ */
+export function PeerReach({
+  peer,
+  home,
+  data,
+}: {
+  peer: PolicyPeer;
+  home: string;
+  data: PeerData;
+}) {
+  const t = useT();
+  const match = peerMatch(
+    peer,
+    home,
+    leavesNamespace(peer) ? data.cluster : data.home,
+    data.namespaces
+  );
+  switch (match.kind) {
+    case "ipBlock":
+      return null;
+    case "unevaluable":
+      return (
+        <span className="text-[11px] text-warn">
+          {t("empty", "peerCannotEvaluate")}
+        </span>
+      );
+    case "cannotSay":
+      return (
+        <span
+          className="text-[11px] text-fg-fnt"
+          title={match.why ?? undefined}
+        >
+          {match.why === null
+            ? t("readings", "healthStillReading")
+            : t("empty", "peerPodsNotRead")}
+        </span>
+      );
+    case "matched": {
+      const others =
+        match.namespaces &&
+        !(match.namespaces.length === 1 && match.namespaces[0] === home)
+          ? match.namespaces
+          : null;
+      return (
+        <span className="inline-flex flex-wrap items-baseline gap-x-1.5 text-[11px]">
+          <span aria-hidden className="text-fg-fnt">
+            →
+          </span>
+          {match.pods.length === 0 ? (
+            <span className="text-warn">{t("empty", "noPodMatches")}</span>
+          ) : (
+            <PodsLink
+              selector={match.selector ?? ""}
+              namespaces={match.namespaces}
+            >
+              {t("empty", "podsMatching", { n: match.pods.length })}
+            </PodsLink>
+          )}
+          {others && (
+            <span className="inline-flex flex-wrap items-baseline gap-x-1 text-fg-mut">
+              {t("empty", "inNamespacesCount", { n: others.length })}
+              {others.slice(0, NAMESPACES_SHOWN).map((name) => (
+                <ResourceRef
+                  key={name}
+                  kind="Namespace"
+                  name={name}
+                  showKind={false}
+                />
+              ))}
+              {others.length > NAMESPACES_SHOWN && (
+                <span className="text-fg-fnt">
+                  {t("count", "plusMore", {
+                    n: others.length - NAMESPACES_SHOWN,
+                  })}
+                </span>
+              )}
+            </span>
+          )}
+        </span>
+      );
+    }
+  }
 }
 
 /**
@@ -142,6 +275,34 @@ export function Peer({ peer }: { peer: PolicyPeer }) {
         pods: podNode,
         namespaces: namespaceNode,
       })}
+    </span>
+  );
+}
+
+/**
+ * A rule's peers, each with what it resolves to, for a surface that holds
+ * one rule at a time. The reads come from the shared caches, so a peek of
+ * ten rules is still one read of each list.
+ */
+export function ResolvedPeers({
+  peers,
+  home,
+}: {
+  peers: PolicyPeer[];
+  home: string;
+}) {
+  const data = usePolicyPeerData(home, {
+    cluster: peers.some(leavesNamespace),
+    namespaces: peers.some((peer) => peer.namespaces.kind === "written"),
+  });
+  return (
+    <span className="flex flex-col gap-0.5">
+      {peers.map((peer, i) => (
+        <span key={i} className="flex flex-wrap items-baseline gap-x-2">
+          <Peer peer={peer} />
+          <PeerReach peer={peer} home={home} data={data} />
+        </span>
+      ))}
     </span>
   );
 }

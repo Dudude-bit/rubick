@@ -35,6 +35,9 @@ import { podStatusValue } from "@/lib/share/pod-status";
 import { podStatusMeaning } from "@/lib/status-meaning";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT } from "@/i18n/useT";
+import { narrowPods } from "@/lib/pod-filter";
+import { usePodFilter } from "@/hooks/usePodFilter";
+import { PodSelectorBanner } from "./PodSelectorBanner";
 
 /** A pod row that also knows whether its node is still reporting. */
 type PodRow = WithNodeSilence<PodWithMetrics>;
@@ -248,6 +251,11 @@ export function PodList() {
     waitingSince,
     refetch,
   } = usePodsWithMetrics();
+  const filter = usePodFilter();
+  const rows = useMemo(
+    () => narrowPods(podsWithMetrics, filter),
+    [podsWithMetrics, filter]
+  );
 
   const quickActions = useMemo<
     (
@@ -290,7 +298,7 @@ export function PodList() {
   const list = (
     <ResourceList<PodWithMetrics>
       title="Pods"
-      data={podsWithMetrics}
+      data={rows}
       unread={unread}
       placeholder={isPlaceholderData}
       isLoading={isLoading}
@@ -308,11 +316,14 @@ export function PodList() {
       // list owns the window's height now, and a banner outside it is one more
       // box the height has to be threaded through.
       headerContent={
-        <MetricsStatusBanner
-          status={podStatus}
-          unread={podUnread}
-          onRetry={() => void refetchPodMetrics()}
-        />
+        <>
+          {filter && <PodSelectorBanner filter={filter} />}
+          <MetricsStatusBanner
+            status={podStatus}
+            unread={podUnread}
+            onRetry={() => void refetchPodMetrics()}
+          />
+        </>
       }
       getRowHref={(row) =>
         hrefOf(objectLink({ kind: ResourceType.Pod, ...row })!)

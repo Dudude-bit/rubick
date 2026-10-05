@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { render } from "@testing-library/react";
+import { renderWithRouter } from "@/test/render";
 
 import type { NetworkPolicyInfo, PolicyDirection } from "@/generated/types";
 import { resolveSource } from "./peek-sources";
@@ -84,7 +84,7 @@ describe("the NetworkPolicy the peek panel draws", () => {
     const ingress = groups.find((g) => g.title === "Ingress")!;
     expect(ingress.items).toEqual([]);
     expect(ingress.count).toBeUndefined();
-    expect(ingress.emptyMessage).toBe("saysNothing");
+    expect(ingress.emptyMessage).toBe("doesNotRestrict");
   });
 
   /**
@@ -93,21 +93,21 @@ describe("the NetworkPolicy the peek panel draws", () => {
    * The words differed and the colour did not, so "pods not read" was
    * painted as a count the peek had.
    */
-  it("keeps a pod list nobody could read apart from an empty one", () => {
-    const drawn = (selected: number | null) => {
-      const { container, unmount } = render(
+  it("keeps a pod list nobody could read apart from an empty one", async () => {
+    const drawn = async (selected: number | null) => {
+      const { container, unmount } = await renderWithRouter(
         <>{summarise(policy({ selected }))[0].items[1].value}</>
       );
       const out = {
         text: container.textContent,
-        colour: container.querySelector("span")?.className ?? "",
+        colour: container.querySelector("span, a")?.className ?? "",
       };
       unmount();
       return out;
     };
-    const refused = drawn(null);
-    const empty = drawn(0);
-    const some = drawn(3);
+    const refused = await drawn(null);
+    const empty = await drawn(0);
+    const some = await drawn(3);
 
     expect(refused.colour).not.toBe(some.colour);
     expect(refused.colour).not.toBe(empty.colour);

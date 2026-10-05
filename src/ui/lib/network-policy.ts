@@ -167,6 +167,27 @@ export function podsOf(selects: PolicySelects): PeerPods {
   }
 }
 
+/**
+ * A direction `policyTypes` leaves out, in one sentence: the policy makes no
+ * claim about it, which is not the same as "unknown", and not "denied".
+ */
+export function notGovernedSentence(
+  policy: Pick<NetworkPolicyInfo, "ingress" | "egress">,
+  which: "Ingress" | "Egress",
+  t: Translator
+): string {
+  const types = (
+    [
+      ["Ingress", policy.ingress],
+      ["Egress", policy.egress],
+    ] as const
+  )
+    .filter(([, direction]) => direction.governed)
+    .map(([name]) => name)
+    .join(", ");
+  return t("empty", "doesNotRestrict", { direction: which, types });
+}
+
 /** One direction's verdict, in the words and the tone the row deserves. */
 export function directionFact(
   direction: PolicyDirection,

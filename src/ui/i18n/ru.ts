@@ -4248,6 +4248,31 @@ export const ru: Catalogue = {
       "Контроллер его класса есть, но адрес для этого Ingress он ещё не опубликовал.",
     healthServed: "обслуживается",
     sliceNoPorts: "нет, поэтому на эти адреса ничего не направляется",
+    podFilterMatching: "Поды, подходящие под {selector}, в {namespaces}",
+    podFilterEvery: "Все поды в {namespaces}",
+    podFilterEveryNamespace: "любом пространстве имён",
+    podFilterClear: "Показать все поды",
+    podFilterUnreadable:
+      "Этот селектор прочитать не удалось, поэтому ни один под не показан как подходящий: {selector}",
+    podFilterOutside:
+      "{namespaces} не входит в пространства имён, на которые смотрит это окно, поэтому его поды здесь не читались.",
+    podFilterOutsideAll:
+      "Этот селектор охватывает все пространства имён, а окно смотрит только на часть из них.",
+    podFilterLookThere: "Посмотреть там",
+    podIngressIsolated:
+      "изолирован: входит только то, что разрешают эти политики",
+    podIngressOpen: "не изолирован: подключиться может любой под",
+    podEgressIsolated:
+      "изолирован: выходит только то, что разрешают эти политики",
+    podEgressOpen: "не изолирован: может подключаться куда угодно",
+    podPoliciesCannotSay: "нельзя сказать",
+    podPoliciesOpenWhy:
+      "Ни одна NetworkPolicy в этом пространстве имён не выбирает этот под с {direction} в policyTypes. Собственные виды политик сетевого плагина здесь не читаются и всё же могут его ограничивать.",
+    podPoliciesDeniesAll:
+      "Ничего не пропускает: указывает {direction} и не перечисляет ни одного правила.",
+    podPoliciesReading: "Читаются NetworkPolicy этого пространства имён…",
+    podPoliciesUndecided:
+      "Выбирают ли этот под эти политики, вычислить нельзя: {names}",
   },
   cluster: {
     integrationsHint:
@@ -4987,7 +5012,24 @@ export const ru: Catalogue = {
       "Кластер обслуживает этот kind и ответил, что такого объекта нет.",
     printedMore: "Показаны первые {count}. В кластере есть ещё.",
     showMore: "Показать ещё",
-    saysNothing: "ничего не говорит",
+    saysNothing: "эта политика не ограничивает",
+    doesNotRestrict:
+      "Не ограничивает {direction}: в policyTypes указан только {types}.",
+    podsMatching: {
+      one: "{n} под",
+      few: "{n} пода",
+      many: "{n} подов",
+      other: "{n} пода",
+    },
+    noPodMatches: "ни один под не подходит",
+    inNamespacesCount: {
+      one: "в {n} пространстве имён",
+      few: "в {n} пространствах имён",
+      many: "в {n} пространствах имён",
+      other: "в {n} пространствах имён",
+    },
+    peerPodsNotRead: "поды не прочитаны",
+    peerCannotEvaluate: "вычислить нельзя",
     deniesAll: "запрещает всё",
     allowsAll: "разрешает всё",
     podsNotRead: "поды не прочитаны",

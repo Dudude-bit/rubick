@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import type { PolicyDirection, PolicyPeer } from "@/generated/types";
 import {
   directionFact,
+  notGovernedSentence,
   namespacesOf,
   podsOf,
   portText,
@@ -219,6 +220,34 @@ describe("how a port is written", () => {
   it("says every port of a protocol rather than printing the missing field", () => {
     expect(portText({ protocol: "UDP", port: null, endPort: null }, say)).toBe(
       "everyPortOf"
+    );
+  });
+});
+
+describe("a direction policyTypes leaves out", () => {
+  /**
+   * "says nothing" on an Ingress-only policy read as "unknown", and so as
+   * unrestricted traffic nobody had looked at. The sentence names why.
+   */
+  it("says the policy does not restrict it, naming the types it does", () => {
+    const words = ((_section: string, key: string, values?: object) =>
+      `${key}:${JSON.stringify(values)}`) as never;
+    const ingressOnly = {
+      ingress: {
+        governed: true,
+        rules: [],
+        opensToEverything: false,
+        deniesEverything: true,
+      },
+      egress: {
+        governed: false,
+        rules: [],
+        opensToEverything: false,
+        deniesEverything: false,
+      },
+    };
+    expect(notGovernedSentence(ingressOnly, "Egress", words)).toBe(
+      'doesNotRestrict:{"direction":"Egress","types":"Ingress"}'
     );
   });
 });

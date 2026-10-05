@@ -2,7 +2,11 @@ import { ArrowDownToLine, Info } from "lucide-react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
-import { Peer, ReachCell } from "../../../-object/network-policy-cells";
+import {
+  Peer,
+  PeerReach,
+  ReachCell,
+} from "../../../-object/network-policy-cells";
 import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { yamlTab } from "../../../-object/yaml-tab";
@@ -10,11 +14,18 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { useNetworkPolicyShare } from "./useNetworkPolicyShare";
 import { useResourceDetail } from "@/hooks";
+import { usePolicyPeerData, type PeerData } from "@/hooks/usePolicyPeers";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
-import { directionFact, portText, reachOf } from "@/lib/network-policy";
+import {
+  directionFact,
+  notGovernedSentence,
+  portText,
+  reachOf,
+} from "@/lib/network-policy";
+import { leavesNamespace } from "@/lib/policy-peers";
 import { ResourceType } from "@/lib/resource-registry";
 import type {
   NetworkPolicyInfo,
@@ -22,7 +33,20 @@ import type {
   PolicyRule,
 } from "@/generated/types";
 
-function Rule({ rule, outbound }: { rule: PolicyRule; outbound: boolean }) {
+interface Resolving {
+  home: string;
+  data: PeerData;
+}
+
+function Rule({
+  rule,
+  outbound,
+  resolving,
+}: {
+  rule: PolicyRule;
+  outbound: boolean;
+  resolving: Resolving;
+}) {
   const t = useT();
   return (
     <div className="flex flex-col gap-1 border-b border-hair py-2 last:border-b-0">
@@ -36,7 +60,16 @@ function Rule({ rule, outbound }: { rule: PolicyRule; outbound: boolean }) {
             {t("empty", outbound ? "toAnywhere" : "fromAnywhere")}
           </span>
         ) : (
-          rule.peers.map((peer, i) => <Peer key={i} peer={peer} />)
+          rule.peers.map((peer, i) => (
+            <div key={i} className="flex flex-wrap items-baseline gap-x-2">
+              <Peer peer={peer} />
+              <PeerReach
+                peer={peer}
+                home={resolving.home}
+                data={resolving.data}
+              />
+            </div>
+          ))
         )}
       </div>
       <div className="text-[11px] text-fg-fnt">
@@ -52,10 +85,12 @@ function Direction({
   title,
   direction,
   outbound,
+  resolving,
 }: {
   title: string;
   direction: PolicyDirection;
   outbound: boolean;
+  resolving: Resolving;
 }) {
   const t = useT();
   const fact = directionFact(direction, t);
@@ -70,7 +105,7 @@ function Direction({
         </p>
       ) : (
         direction.rules.map((rule, i) => (
-          <Rule key={i} rule={rule} outbound={outbound} />
+          <Rule key={i} rule={rule} outbound={outbound} resolving={resolving} />
         ))
       )}
     </Section>
@@ -103,6 +138,14 @@ export function NetworkPolicyDetail() {
   });
 
   const reach = policy ? reachOf(policy.selected) : null;
+  const peers = [policy?.ingress, policy?.egress].flatMap((direction) =>
+    direction?.governed ? direction.rules.flatMap((rule) => rule.peers) : []
+  );
+  const data = usePolicyPeerData(policy?.namespace, {
+    cluster: peers.some(leavesNamespace),
+    namespaces: peers.some((peer) => peer.namespaces.kind === "written"),
+  });
+  const resolving = { home: policy?.namespace ?? "", data };
   const facts: KeyValue[] = policy
     ? [
         {
@@ -169,15 +212,29 @@ export function NetworkPolicyDetail() {
             </p>
           ) : (
             <>
-              {policy.ingress.governed && (
+              {policy.ingress.governed ? (
                 <Direction
                   title="Ingress"
                   direction={policy.ingress}
                   outbound={false}
+                  resolving={resolving}
                 />
+              ) : (
+                <p className="text-[12px] text-fg-mut">
+                  {notGovernedSentence(policy, "Ingress", t)}
+                </p>
               )}
-              {policy.egress.governed && (
-                <Direction title="Egress" direction={policy.egress} outbound />
+              {policy.egress.governed ? (
+                <Direction
+                  title="Egress"
+                  direction={policy.egress}
+                  outbound
+                  resolving={resolving}
+                />
+              ) : (
+                <p className="text-[12px] text-fg-mut">
+                  {notGovernedSentence(policy, "Egress", t)}
+                </p>
               )}
             </>
           )}

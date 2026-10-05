@@ -12,6 +12,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 const CALLERS = [
   "src/ui/hooks/usePodsWithMetrics.ts",
+  "src/ui/hooks/usePolicyPeers.ts",
   "src/ui/routes/c/$cluster/-shell/usePrefetchCoreLists.ts",
 ];
 

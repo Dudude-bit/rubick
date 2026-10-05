@@ -17,6 +17,10 @@ export interface AppSearch {
   kind?: string;
   /** The attached object a redirect came from, as `<resource>/[<namespace>/]<name>`. */
   via?: string;
+  /** A label selector, as the API writes one, that narrows the Pods list. */
+  selector?: string;
+  /** The namespaces, comma-separated, that selector is read in. */
+  in?: string;
 }
 
 const KEYS: ReadonlyArray<keyof AppSearch> = [
@@ -32,6 +36,8 @@ const KEYS: ReadonlyArray<keyof AppSearch> = [
   "monitor",
   "via",
   "kind",
+  "selector",
+  "in",
 ];
 
 export function appSearch(raw: Record<string, unknown>): AppSearch {
