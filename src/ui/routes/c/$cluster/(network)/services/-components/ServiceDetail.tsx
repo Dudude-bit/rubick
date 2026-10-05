@@ -32,6 +32,7 @@ import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { ServiceAccessInfo } from "../../-components";
 import { TrafficChain } from "../../../-object/TrafficChain";
+import { BalancerAddress } from "../../../-object/BalancerAddress";
 import { PublishedEndpoints } from "./PublishedEndpoints";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { useResourceDetail } from "@/hooks";
@@ -82,7 +83,6 @@ export function ServiceDetail() {
 
   const ports = service?.ports ?? [];
   const externalIps = service?.externalIps ?? [];
-  const loadBalancerIps = service?.loadBalancerIps ?? [];
 
   const facts: KeyValue[] = [
     { label: t("columns", "type"), value: service?.type },
@@ -111,18 +111,7 @@ export function ServiceDetail() {
       ? [
           {
             label: t("columns", "loadBalancer"),
-            // The empty state keeps its own tone, so it stays plain text
-            // rather than the component's faint fallback.
-            value:
-              loadBalancerIps.length > 0 ? (
-                <CopyableAddresses
-                  values={loadBalancerIps}
-                  label={t("columns", "loadBalancerAddress")}
-                />
-              ) : (
-                t("empty", "pendingInline")
-              ),
-            tone: loadBalancerIps.length > 0 ? undefined : ("warn" as const),
+            value: <BalancerAddress service={service} />,
           },
         ]
       : []),

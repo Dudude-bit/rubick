@@ -3805,6 +3805,17 @@ export const en = {
     ciliumEgressRules: { one: "{n} out", other: "{n} out" },
     ciliumDenies: { one: "{n} deny", other: "{n} deny" },
     ciliumLeavesCluster: "outside the cluster",
+    lbWaiting: "pending",
+    lbNeverAssigned: "nothing assigns it",
+    lbWaitingWhy:
+      "Kubernetes does not assign this address itself; a load balancer implementation in the cluster does. Other LoadBalancer Services here have addresses, so one exists, and this Service is waiting for it.",
+    lbNeverAssignedWhy:
+      "Kubernetes does not assign this address itself; a load balancer implementation in the cluster does. No LoadBalancer Service in this cluster has an address, so nothing here has ever assigned one, and this one may never arrive.",
+    lbCannotTellWhy:
+      "Kubernetes does not assign this address itself; a load balancer implementation in the cluster does. Whether this cluster has one could not be told: {why}.",
+    lbNotReadYet: "the other Services are still being read",
+    lbNodePortFallback:
+      "Meanwhile its NodePort answers on every node: {ports}.",
   },
   cluster: {
     integrationsHint:

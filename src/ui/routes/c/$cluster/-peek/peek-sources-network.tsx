@@ -4,23 +4,11 @@ import {
 } from "@/components/ui/copyable-value";
 import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { commands } from "@/lib/commands";
+import { BalancerAddress } from "../-object/BalancerAddress";
 import { Peer, ReachCell } from "../-object/network-policy-cells";
 import { directionFact, portText, reachOf } from "@/lib/network-policy";
 import type { PolicyDirection } from "@/generated/types";
 import { list, ref, source, type PeekSources } from "./peek-sources-kit";
-
-/** A LoadBalancer the cloud has not answered for yet. */
-function pendingBalancer(service: {
-  type: string;
-  externalIps: string[];
-  loadBalancerIps: string[];
-}): boolean {
-  return (
-    service.type === "LoadBalancer" &&
-    service.loadBalancerIps.length === 0 &&
-    service.externalIps.length === 0
-  );
-}
 
 export const NETWORK_SOURCES: PeekSources = {
   Service: source(commands.getService, (service, _target, t) => ({
@@ -65,19 +53,18 @@ export const NETWORK_SOURCES: PeekSources = {
           },
           {
             label: t("columns", "external"),
-            // A LoadBalancer with no address yet is the single most common
-            // reason a Service does not work, and folding it in here made it
-            // look like a ClusterIP's ordinary blank — same em dash, same
-            // grey. The page has always named the state; so does this.
-            value: pendingBalancer(service) ? (
-              t("empty", "pendingInline")
-            ) : (
-              <CopyableAddresses
-                values={[...service.externalIps, ...service.loadBalancerIps]}
-                label={t("columns", "externalAddress")}
-              />
+            value: (
+              <span className="flex flex-col items-start gap-0.5">
+                {(service.externalIps.length > 0 ||
+                  service.type !== "LoadBalancer") && (
+                  <CopyableAddresses
+                    values={service.externalIps}
+                    label={t("columns", "externalAddress")}
+                  />
+                )}
+                <BalancerAddress service={service} />
+              </span>
             ),
-            tone: pendingBalancer(service) ? ("warn" as const) : undefined,
           },
           {
             label: t("nav", "selector"),

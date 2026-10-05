@@ -6,6 +6,7 @@ import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { PortsDisplay } from "../../-components";
 import { AddressCell } from "@/components/ui/copyable-value";
+import { BalancerAddress } from "../../../-object/BalancerAddress";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -55,17 +56,18 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     accessorKey: "externalIps",
     header: columnHeader("columns", "externalIps"),
     cell: ({ row }) => {
-      const ips = row.original.externalIps;
-      if (!ips || ips.length === 0)
+      const service = row.original;
+      if (service.externalIps.length === 0 && service.type !== "LoadBalancer")
         return <span className="text-fg-fnt">—</span>;
       return (
         <div className="flex flex-col gap-1">
-          {ips.map((ip, i) => (
-            <div key={i} className="flex items-center gap-1 text-xs">
+          {service.externalIps.map((ip) => (
+            <div key={ip} className="flex items-center gap-1 text-xs">
               <ExternalLink className="h-3 w-3 flex-none" aria-hidden="true" />
               <AddressCell value={ip} labelKey="externalIp" />
             </div>
           ))}
+          <BalancerAddress service={service} compact />
         </div>
       );
     },

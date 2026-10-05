@@ -4217,6 +4217,17 @@ export const ru: Catalogue = {
       other: "{n} запрещающих",
     },
     ciliumLeavesCluster: "за пределы кластера",
+    lbWaiting: "ожидает адрес",
+    lbNeverAssigned: "адрес назначать некому",
+    lbWaitingWhy:
+      "Kubernetes сам этот адрес не назначает, это делает реализация балансировщика в кластере. У других Service типа LoadBalancer здесь адреса есть, значит, она существует, и этот Service ждёт своего адреса.",
+    lbNeverAssignedWhy:
+      "Kubernetes сам этот адрес не назначает, это делает реализация балансировщика в кластере. Ни у одного Service типа LoadBalancer в этом кластере адреса нет: здесь его никто никогда не назначал, и этот адрес может не появиться вовсе.",
+    lbCannotTellWhy:
+      "Kubernetes сам этот адрес не назначает, это делает реализация балансировщика в кластере. Есть ли она в этом кластере, выяснить не удалось: {why}.",
+    lbNotReadYet: "остальные Service ещё читаются",
+    lbNodePortFallback:
+      "Пока что он отвечает на NodePort каждого узла: {ports}.",
   },
   cluster: {
     integrationsHint:
