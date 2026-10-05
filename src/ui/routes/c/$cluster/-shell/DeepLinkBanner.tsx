@@ -8,6 +8,7 @@ import { useDeepLinkStore } from "@/stores/deepLinkStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useT } from "@/i18n/useT";
 import { formatWhen } from "@/lib/utils";
+import { useArrivalScope } from "./useArrivalScope";
 
 /** One spelling of a path, whichever of its characters arrived encoded. */
 const plain = (path: string) => {
@@ -46,6 +47,10 @@ export function DeepLinkBanner() {
       dismiss();
     }
   }, [arrival, arrivedAt, pathname, dismiss]);
+  useArrivalScope(
+    arrival,
+    live && arrivedAt !== null && plain(pathname) === plain(arrivedAt)
+  );
 
   if (!arrival) return null;
 
