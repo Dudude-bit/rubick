@@ -14,6 +14,7 @@
 use crate::commands::helpers::{api_in, reaches, scope_of};
 use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
+use crate::resources::Rollout;
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
 use crate::utils::Moment;
@@ -516,36 +517,36 @@ fn deployment_problems<'a>(
     deployments
         .into_iter()
         .filter_map(|d| {
+            let rollout = crate::resources::deployment_rollout(d);
+            if !rollout.is_problem() {
+                return None;
+            }
+            let status = d.status.as_ref();
             let desired = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1);
-            // A deliberately scaled-to-zero deployment is not degraded.
-            if desired == 0 {
-                return None;
-            }
-            let ready = d
-                .status
-                .as_ref()
-                .and_then(|s| s.ready_replicas)
-                .unwrap_or(0);
-            if ready >= desired {
-                return None;
-            }
-            let condition = d.status.as_ref().and_then(|s| {
+            let ready = status.and_then(|s| s.ready_replicas).unwrap_or(0);
+            // The condition that decided it, for its words and its date.
+            let decided_by = if matches!(rollout, Rollout::Stalled { .. }) {
+                "Progressing"
+            } else {
+                "Available"
+            };
+            let condition = status.and_then(|s| {
                 s.conditions
                     .as_ref()?
                     .iter()
-                    .find(|c| c.type_ == "Available" && c.status != "True")
+                    .find(|c| c.type_ == decided_by && c.status != "True")
                     .cloned()
             });
             Some(ClusterProblem {
-                severity: if ready == 0 {
-                    ProblemSeverity::Critical
-                } else {
+                severity: if matches!(rollout, Rollout::Short { .. }) {
                     ProblemSeverity::Warning
+                } else {
+                    ProblemSeverity::Critical
                 },
                 kind: "Deployment".to_string(),
                 name: d.metadata.name.clone().unwrap_or_default(),
                 namespace: d.metadata.namespace.clone(),
-                reason: "NotAvailable".to_string(),
+                reason: rollout.code().to_string(),
                 detail: ProblemDetail::said(condition.as_ref().and_then(|c| c.message.clone()))
                     .or(Some(ProblemDetail::ReplicasReady { ready, desired })),
                 since: condition
@@ -2341,6 +2342,47 @@ mod tests {
         }
     }
 
+    /// Counts alone left a rollout past its deadline off the list while its
+    /// old pods still served, and listed every ordinary rollout as short.
+    #[test]
+    fn a_stalled_rollout_needs_attention_and_a_moving_one_does_not() {
+        use k8s_openapi::api::apps::v1::{DeploymentCondition, DeploymentSpec, DeploymentStatus};
+        let deployment = |updated: i32, progressing: (&str, &str)| Deployment {
+            metadata: ObjectMeta {
+                name: Some("search".to_string()),
+                namespace: Some("shop".to_string()),
+                generation: Some(2),
+                ..Default::default()
+            },
+            spec: Some(DeploymentSpec {
+                replicas: Some(2),
+                ..Default::default()
+            }),
+            status: Some(DeploymentStatus {
+                observed_generation: Some(2),
+                replicas: Some(3),
+                updated_replicas: Some(updated),
+                ready_replicas: Some(2),
+                available_replicas: Some(2),
+                conditions: Some(vec![DeploymentCondition {
+                    type_: "Progressing".to_string(),
+                    status: progressing.0.to_string(),
+                    reason: Some(progressing.1.to_string()),
+                    message: Some(
+                        "ReplicaSet \"search-6df9f694b5\" has timed out progressing.".to_string(),
+                    ),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            }),
+        };
+        let stalled = deployment_problems([&deployment(1, ("False", "ProgressDeadlineExceeded"))]);
+        assert_eq!(stalled.len(), 1);
+        assert_eq!(stalled[0].reason, "Stalled");
+        assert_eq!(stalled[0].severity, ProblemSeverity::Critical);
+        assert!(deployment_problems([&deployment(1, ("True", "ReplicaSetUpdated"))]).is_empty());
+    }
+
     /// The other four strips had no test at all: emptying `strip_node`,
     /// `strip_job` and `strip_event`, or adding `status = None` to
     /// `strip_deployment`, each left the whole suite green. The deployment
@@ -2365,12 +2407,19 @@ mod tests {
                 ..Default::default()
             }),
             status: Some(k8s_openapi::api::apps::v1::DeploymentStatus {
+                observed_generation: Some(1),
                 ready_replicas: Some(1),
+                conditions: Some(vec![k8s_openapi::api::apps::v1::DeploymentCondition {
+                    type_: "Available".to_string(),
+                    status: "False".to_string(),
+                    ..Default::default()
+                }]),
                 ..Default::default()
             }),
         };
         let before = deployment.clone();
         crate::overview::strip_deployment(&mut deployment);
+        assert_eq!(deployment_problems([&before]).len(), 1);
         assert_eq!(
             deployment_problems([&deployment]),
             deployment_problems([&before]),
@@ -2689,9 +2738,13 @@ mod across_namespaces {
         json!({
             "apiVersion": "apps/v1",
             "kind": "Deployment",
-            "metadata": { "name": name, "namespace": namespace },
+            "metadata": { "name": name, "namespace": namespace, "generation": 1 },
             "spec": { "replicas": 2, "selector": {}, "template": {} },
-            "status": { "readyReplicas": 0 },
+            "status": {
+                "observedGeneration": 1,
+                "readyReplicas": 0,
+                "conditions": [{ "type": "Available", "status": "False" }],
+            },
         })
     }
 

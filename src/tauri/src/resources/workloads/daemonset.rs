@@ -9,8 +9,9 @@ use std::collections::BTreeMap;
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{
-    template_container_images, ConditionInfo, ContainerImage, DeploymentContainerInfo,
-    DeploymentContainerResources, OptionTimeExt, ReplicaReservation, TemplateContainers,
+    daemonset_rollout, template_container_images, ConditionInfo, ContainerImage,
+    DeploymentContainerInfo, DeploymentContainerResources, OptionTimeExt, ReplicaReservation,
+    Rollout, TemplateContainers,
 };
 use crate::utils::Moment;
 
@@ -26,6 +27,7 @@ pub struct DaemonSetInfo {
     /// Nodes already on the current template. See `StatefulSetReplicaInfo`:
     /// without it a restart looks finished the instant it is requested.
     pub updated: i32,
+    pub rollout: Rollout,
     /// What the template runs, so a watch on the list can see a rollout.
     pub container_images: Vec<ContainerImage>,
     pub template_annotations: BTreeMap<String, String>,
@@ -47,6 +49,7 @@ impl From<&DaemonSet> for DaemonSetInfo {
             current: status.map_or(0, |s| s.current_number_scheduled),
             ready: status.map_or(0, |s| s.number_ready),
             updated: status.and_then(|s| s.updated_number_scheduled).unwrap_or(0),
+            rollout: daemonset_rollout(ds),
             container_images: template_container_images(spec.map(|s| &s.template)),
             template_annotations: spec
                 .and_then(|s| s.template.metadata.as_ref())
@@ -71,6 +74,7 @@ pub struct DaemonSetDetailInfo {
     pub ready: i32,
     pub up_to_date: i32,
     pub available: i32,
+    pub rollout: Rollout,
     pub update_strategy: Option<String>,
     pub containers: Vec<DeploymentContainerInfo>,
     /// The template's `initContainers`, in the order the kubelet would run
@@ -120,6 +124,7 @@ impl From<&DaemonSet> for DaemonSetDetailInfo {
             ready: status.map_or(0, |s| s.number_ready),
             up_to_date: status.and_then(|s| s.updated_number_scheduled).unwrap_or(0),
             available: status.and_then(|s| s.number_available).unwrap_or(0),
+            rollout: daemonset_rollout(ds),
             update_strategy: spec
                 .and_then(|s| s.update_strategy.as_ref())
                 .and_then(|s| s.type_.clone()),

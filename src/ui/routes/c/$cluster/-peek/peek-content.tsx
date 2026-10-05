@@ -63,6 +63,7 @@ import { usePeekWidth } from "./peek-width";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { errorToShow } from "@/lib/error-utils";
+import { NEEDS_ATTENTION } from "@/lib/workload-status";
 
 export function PeekContent({
   target,
@@ -622,8 +623,8 @@ function NamespaceContents({ namespace }: { namespace: string }) {
   });
 
   const notReady = pods.data?.filter((pod) => !pod.status.ready).length ?? 0;
-  const starving = deployments.data?.filter(
-    (deployment) => deployment.replicas.ready < deployment.replicas.desired
+  const starving = deployments.data?.filter((deployment) =>
+    NEEDS_ATTENTION.has(deployment.rollout.state)
   );
 
   const count = (
@@ -664,7 +665,7 @@ function NamespaceContents({ namespace }: { namespace: string }) {
             deployments,
             "Deployment",
             starving && starving.length > 0
-              ? t("count", "shortOfDesired", { n: starving.length })
+              ? t("count", "needAttention", { n: starving.length })
               : undefined
           ),
           count(services, "Service"),

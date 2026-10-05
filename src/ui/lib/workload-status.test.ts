@@ -1,55 +1,90 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
+import type { Rollout } from "@/generated/types";
+import type { T } from "@/i18n/useT";
 import { statusRole } from "./status-role";
-import { workloadStatus } from "./workload-status";
+import {
+  NEEDS_ATTENTION,
+  ROLLOUT_CODES,
+  rolloutLine,
+  rolloutStatusOf,
+  workloadStatus,
+} from "./workload-status";
 
-/**
- * This existed twice and the copies disagreed. The list read
- * `available === desired`, which calls a Deployment scaled to zero
- * **Available**; the peek read `desired > 0 && ready >= desired`, which calls
- * the same object **Progressing**. Green tick and blue clock, one object, one
- * second apart.
- */
-describe("the word a workload's counts add up to", () => {
-  it("calls a scale-down what it is, rather than health or motion", () => {
-    expect(workloadStatus({ ready: 0, desired: 0 })).toBe("Idle");
-    // And the colour follows the word, so this has to be neutral: a
-    // deliberate scale-down is neither a fault nor a state to celebrate.
-    expect(statusRole("Idle")).toBe("neutral");
-  });
+const t = ((section: string, key: string) => `${section}.${key}`) as T;
 
-  it("is ready only when every replica asked for has arrived", () => {
-    expect(workloadStatus({ ready: 3, desired: 3 })).toBe("Ready");
-    expect(workloadStatus({ ready: 4, desired: 3 })).toBe("Ready");
-    expect(workloadStatus({ ready: 2, desired: 3 })).toBe("Progressing");
-    expect(workloadStatus({ ready: 0, desired: 3 })).toBe("Progressing");
+const EVERY: Rollout[] = [
+  { state: "idle" },
+  { state: "stalled", message: "timed out", serving: 2 },
+  { state: "unavailable", reason: "MinimumReplicasUnavailable", message: null },
+  { state: "paused" },
+  { state: "unobserved" },
+  { state: "rollingOut", updated: 1, desired: 3 },
+  { state: "short", available: 2, desired: 3 },
+  { state: "ready" },
+];
+
+describe("the word a workload's rollout comes to", () => {
+  const shared = JSON.parse(
+    readFileSync(
+      resolve(process.cwd(), "src/contracts/rollout-codes.json"),
+      "utf8"
+    )
+  ) as { codes: Record<string, string>; needsAttention: string[] };
+
+  /** The overview prints the backend's word for the same Deployment the list draws with this one. */
+  it("prints the word the shared file states for every state", () => {
+    expect(ROLLOUT_CODES).toEqual(shared.codes);
+    expect([...NEEDS_ATTENTION].sort()).toEqual(
+      [...shared.needsAttention].sort()
+    );
   });
 
   /**
-   * `ready` and `available` are different numbers, and `minReadySeconds`
-   * is the gap: a pod counts as ready before the Deployment controller will
-   * count it as available. The callers used to choose — the list passed
-   * `available`, the peek passed `ready` — so one Deployment mid-rollout read
-   * Progressing in the list and Ready in the panel opened from it. The choice
-   * belongs here, and it is the stricter number.
+   * The `search` and `payments` cases: a rollout past its deadline, and one
+   * with no pod available, both read as calm blue Progressing or green Ready
+   * when the word came from replica counts.
    */
-  it("believes availability over readiness where a workload reports both", () => {
-    expect(workloadStatus({ ready: 3, desired: 3, available: 1 })).toBe(
-      "Progressing"
-    );
-    // And a workload that reports no availability at all is judged on what it
-    // does report, rather than on a zero it never claimed.
-    expect(workloadStatus({ ready: 3, desired: 3 })).toBe("Ready");
+  it("colours a stalled rollout and an unavailable one as faults", () => {
+    expect(statusRole(workloadStatus(EVERY[1]))).toBe("err");
+    expect(statusRole(workloadStatus(EVERY[2]))).toBe("err");
   });
 
-  /** Every word it can produce has to be one the colour table knows. */
-  it("only ever says something statusRole can colour", () => {
-    expect(statusRole(workloadStatus({ ready: 3, desired: 3 }))).toBe("ok");
-    expect(statusRole(workloadStatus({ ready: 1, desired: 3 }))).toBe(
-      "pending"
-    );
-    expect(statusRole(workloadStatus({ ready: 0, desired: 0 }))).toBe(
-      "neutral"
-    );
+  /** A word statusRole does not know turns the badge grey with nothing failing. */
+  it("only ever says something statusRole has a colour for", () => {
+    const roles = EVERY.map((rollout) => statusRole(workloadStatus(rollout)));
+    expect(roles).toEqual([
+      "neutral",
+      "err",
+      "err",
+      "warn",
+      "pending",
+      "pending",
+      "warn",
+      "ok",
+    ]);
+  });
+
+  /** Ready and Idle are the whole story; every other state owes a sentence. */
+  it("has a sentence for every state but the settled two", () => {
+    for (const rollout of EVERY) {
+      const settled = rollout.state === "ready" || rollout.state === "idle";
+      expect(rolloutLine(rollout, t) === null).toBe(settled);
+    }
+    expect(rolloutLine(EVERY[1], t)?.said).toBe("timed out");
+  });
+
+  /** The shared report says the badge's word beside the count, and only when it is not ready. */
+  it("puts the word beside the count only when the rollout is not settled", () => {
+    expect(rolloutStatusOf(2, 2, { state: "ready" }, t)).toEqual({
+      text: "count.slashReady",
+      role: "ok",
+    });
+    expect(rolloutStatusOf(2, 2, EVERY[1], t)).toEqual({
+      text: "Stalled · count.slashReady",
+      role: "err",
+    });
   });
 });

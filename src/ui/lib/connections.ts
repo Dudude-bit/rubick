@@ -17,6 +17,7 @@ import { covers, expiryOf } from "./certificates";
 import { formatKubernetesBytes } from "./k8s-quantity";
 import { isScalable } from "./resource-registry";
 import { groupMounts } from "./mounts";
+import { rolloutLine, workloadStatus } from "./workload-status";
 import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
 import {
@@ -193,10 +194,13 @@ function describeFacts(facts: ObjectFacts | null, t: T): string | null {
       return facts.display;
     case "workload": {
       if (facts.revision === null) {
-        return t("count", "readyOfTotal", {
+        const counted = t("count", "readyOfTotal", {
           ready: facts.readyReplicas,
           total: facts.replicas,
         });
+        return facts.rollout && rolloutLine(facts.rollout, t)
+          ? join(workloadStatus(facts.rollout), counted)
+          : counted;
       }
       const revision = t("columns", "revisionInline", { n: facts.revision });
       return join(

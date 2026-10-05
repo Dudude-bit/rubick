@@ -22,6 +22,7 @@ import type { JournalEntry } from "@/lib/changes";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { endpointCount, servingCount } from "@/lib/published";
 import { isOpen, type Watch } from "@/lib/tell-me-when";
+import { workloadStatus, type WorkloadStatus } from "@/lib/workload-status";
 import type { RefreshRate } from "@/lib/refresh";
 
 /**
@@ -110,7 +111,13 @@ export function isPinned(
  */
 export type ServiceState =
   | { state: "ready"; ready: number; total: number }
-  | { state: "short"; ready: number; total: number }
+  | {
+      state: "short";
+      ready: number;
+      total: number;
+      /** The rollout's word, where the workload is a kind that rolls out. */
+      status: WorkloadStatus | null;
+    }
   | { state: "gone" }
   /** Still being read. Not an answer, and not a refusal either. */
   | { state: "reading" }
@@ -158,9 +165,19 @@ export function stateOf(
   // read as "all ready" and drew green about a schedule nobody has checked.
   if (pin?.kind === "CronJob" || connections.subject.kind === "CronJob")
     return { state: "unread", why: "" };
-  return facts.readyReplicas >= facts.replicas
+  // The rollout's verdict where there is one: a Deployment past its progress
+  // deadline counts every old replica ready and is still not fine.
+  const settled = facts.rollout
+    ? facts.rollout.state === "ready" || facts.rollout.state === "idle"
+    : facts.readyReplicas >= facts.replicas;
+  return settled
     ? { state: "ready", ready: facts.readyReplicas, total: facts.replicas }
-    : { state: "short", ready: facts.readyReplicas, total: facts.replicas };
+    : {
+        state: "short",
+        ready: facts.readyReplicas,
+        total: facts.replicas,
+        status: facts.rollout ? workloadStatus(facts.rollout) : null,
+      };
 }
 
 /** One way in, as a person would paste it or name it. */

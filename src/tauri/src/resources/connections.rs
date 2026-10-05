@@ -119,6 +119,8 @@ pub enum ObjectFacts {
         replicas: i32,
         #[serde(rename = "readyReplicas")]
         ready_replicas: i32,
+        /// Where its rollout stands, on the three kinds that roll out.
+        rollout: Option<crate::resources::Rollout>,
         /// `deployment.kubernetes.io/revision`, on the kinds that carry it.
         revision: Option<String>,
         /// Whether this is the highest revision among the siblings this call

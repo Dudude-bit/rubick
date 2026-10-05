@@ -14,6 +14,7 @@ import {
   createMemoryColumn,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
+import { createRolloutColumn } from "../../-components/rollout-column";
 
 type DaemonSetInfoWithMetrics = DaemonSetInfo & ResourceMetrics;
 
@@ -64,6 +65,7 @@ export const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
       );
     },
   },
+  createRolloutColumn<DaemonSetInfoWithMetrics>(),
   createAgeColumn<DaemonSetInfoWithMetrics>(),
 ];
 

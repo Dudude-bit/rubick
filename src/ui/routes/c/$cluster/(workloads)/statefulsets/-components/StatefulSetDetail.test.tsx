@@ -37,6 +37,7 @@ function buildSet(
     namespace: "k8s-gui-test",
     uid: "sts-uid",
     replicas: { desired: 1, ready: 1, current: 1, updated: 1 },
+    rollout: { state: "ready" },
     serviceName: "stateful-demo",
     podManagementPolicy: "OrderedReady",
     updateStrategy: "RollingUpdate",

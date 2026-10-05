@@ -8,6 +8,7 @@ import { pinShare } from "./service-card-share";
 import { useConnections } from "@/hooks/useConnections";
 import { trafficChains, unreadWhy } from "@/lib/connections";
 import { cn, formatAge } from "@/lib/utils";
+import { StatusBadge } from "@/components/ui/status-badge";
 import {
   CARD_REFRESH,
   changesFor,
@@ -233,7 +234,7 @@ function StateWords({ state, t }: { state: ServiceState; t: T }) {
       </span>
     );
   }
-  return (
+  const count = (
     <span
       className={cn(
         "flex-none font-mono text-[11px] tabular-nums",
@@ -243,4 +244,13 @@ function StateWords({ state, t }: { state: ServiceState; t: T }) {
       {t("services", "readyOf", { ready: state.ready, total: state.total })}
     </span>
   );
+  if (state.state === "short" && state.status) {
+    return (
+      <span className="flex flex-none items-baseline gap-1.5">
+        <StatusBadge status={state.status} />
+        {count}
+      </span>
+    );
+  }
+  return count;
 }

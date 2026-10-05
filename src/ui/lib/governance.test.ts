@@ -43,6 +43,7 @@ const workload = ref("Deployment", "log-demo", {
   kind: "workload",
   replicas: 2,
   readyReplicas: 2,
+  rollout: null,
   revision: null,
   current: null,
 });

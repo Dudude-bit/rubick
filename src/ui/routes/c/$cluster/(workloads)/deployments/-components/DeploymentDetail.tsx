@@ -13,12 +13,7 @@ import {
 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { StatusBadge } from "@/components/ui/status-badge";
-// The one place that turns replica counts into a word. This page kept a
-// fourth, hand-rolled comparison with no zero case, so a Deployment
-// scaled to nothing wore a green "Available" here and a grey "Idle" in
-// the list and the peek beside it.
-import { workloadStatus } from "@/lib/workload-status";
+import { RolloutBadge, RolloutSummary } from "../../../-object/RolloutSummary";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,7 +45,6 @@ import {
 } from "@/components/object/detail-tab";
 import { RevisionRows } from "../../../-object/child-rows";
 import { ChangesTab } from "../../-components/ChangesTab";
-import { ResourceMessage } from "@/components/object/ResourceMessage";
 import { ScaleDialog } from "../../../-object/ScaleDialog";
 import { ContainerRows } from "../../../-object/container-rows";
 import { deliveryOfKind } from "@/lib/delivery";
@@ -153,20 +147,6 @@ export function DeploymentDetail() {
     namespace: namespace || null,
     includeNodes: false,
     enabled: !!deployment,
-  });
-
-  const { data: rolloutStatus } = useLiveQuery({
-    queryKey: ["rollout-status", namespace, name],
-    queryFn: async () => {
-      try {
-        if (!name) return null;
-        return await commands.getRolloutStatus(name, namespace || null);
-      } catch (err) {
-        throw new Error(normalizeTauriError(err), { cause: err });
-      }
-    },
-    enabled: !!namespace && !!name,
-    refresh: "fast",
   });
 
   // Every action here is followed for two minutes and answered: rolled
@@ -291,51 +271,11 @@ export function DeploymentDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.Deployment, deployment);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
-  const rolloutDesired =
-    rolloutStatus?.replicas ?? deployment?.replicas.desired ?? 0;
-  const rolloutReady =
-    rolloutStatus?.readyReplicas ?? deployment?.replicas.ready ?? 0;
-  const rolloutUpdated =
-    rolloutStatus?.updatedReplicas ?? deployment?.replicas.updated ?? 0;
-  const rolloutAvailable =
-    rolloutStatus?.availableReplicas ?? deployment?.replicas.available ?? 0;
-  const isRolloutInProgress =
-    rolloutStatus !== undefined &&
-    !(
-      rolloutUpdated >= rolloutDesired &&
-      rolloutAvailable >= rolloutDesired &&
-      rolloutReady >= rolloutDesired
-    );
-
-  const share = useDeploymentShare(
-    deployment,
-    revisions,
-    pods,
-    podsError,
-    isRolloutInProgress
-  );
+  const share = useDeploymentShare(deployment, revisions, pods, podsError);
 
   if (!deployment && !isLoading && !error) {
     return null;
   }
-
-  const rolloutMessage = (() => {
-    if (!rolloutStatus) return null;
-    const progressing = rolloutStatus.conditions.find(
-      (c) => c.conditionType === "Progressing"
-    );
-    const available = rolloutStatus.conditions.find(
-      (c) => c.conditionType === "Available"
-    );
-    if (isRolloutInProgress) {
-      return (
-        progressing?.message ||
-        progressing?.reason ||
-        t("action", "rollingOutNewReplicaSet")
-      );
-    }
-    return available?.message || t("action", "deploymentAvailable");
-  })();
 
   const replicas = deployment?.replicas;
   const desired = replicas?.desired ?? 0;
@@ -554,19 +494,15 @@ export function DeploymentDetail() {
         namespace={deployment?.namespace}
         createdAt={deployment?.createdAt}
         statusBadge={
+          deployment && <RolloutBadge rollout={deployment.rollout} />
+        }
+        badges={
           replicas && (
-            <StatusBadge status={workloadStatus(replicas)}>
+            <span className="text-[11px] text-fg-mut">
               {t("count", "slashReady", {
                 n: replicas.ready,
                 total: replicas.desired,
               })}
-            </StatusBadge>
-          )
-        }
-        badges={
-          isRolloutInProgress && (
-            <span className="text-[11px] text-info">
-              {t("action", "rollingOut")}
             </span>
           )
         }
@@ -597,22 +533,11 @@ export function DeploymentDetail() {
           </>
         }
         summary={
-          isRolloutInProgress &&
-          rolloutStatus && (
-            <p className="text-[11px] text-info">
-              <ResourceMessage
-                message={rolloutMessage ?? ""}
-                subject={{ kind: ResourceType.Deployment, name, namespace }}
-              />
-              <span className="text-fg-fnt">
-                {" "}
-                ·{" "}
-                {t("count", "podsReadySlash", {
-                  ready: rolloutReady,
-                  n: rolloutDesired,
-                })}
-              </span>
-            </p>
+          deployment && (
+            <RolloutSummary
+              rollout={deployment.rollout}
+              subject={{ kind: ResourceType.Deployment, name, namespace }}
+            />
           )
         }
         tabs={tabs}

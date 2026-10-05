@@ -4,11 +4,7 @@ import { renderHook } from "@testing-library/react";
 
 import type { T } from "@/i18n/useT";
 import type { PodInfo, StatefulSetDetailInfo } from "@/generated/types";
-import {
-  statefulSetStatsOf,
-  statefulSetStatusOf,
-  useStatefulSetShare,
-} from "./useStatefulSetShare";
+import { statefulSetStatsOf, useStatefulSetShare } from "./useStatefulSetShare";
 
 const t = ((section: string, key: string, values?: Record<string, unknown>) =>
   values
@@ -21,6 +17,7 @@ const statefulSet = {
   name: "postgres",
   namespace: "data",
   replicas: { desired: 3, current: 2, ready: 2, updated: 2 },
+  rollout: { state: "rollingOut", updated: 2, desired: 3 },
   serviceName: "postgres-headless",
   containers: [
     {
@@ -51,11 +48,6 @@ describe("what the StatefulSet page adds to Share", () => {
       (stat) => stat.label === "columns.governingService"
     );
     expect(service?.role).toBe("warn");
-  });
-
-  it("takes its status role from the same ready/desired comparison as the badge", () => {
-    const status = statefulSetStatusOf(2, 3, t);
-    expect(status.role).toBe("pending");
   });
 
   /** The wiring itself: dropping the pods table from the hook's return must fail this. */

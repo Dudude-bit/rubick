@@ -166,7 +166,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   }),
 
   Deployment: source(commands.getDeployment, (deployment, _target, t) => ({
-    status: workloadStatus(deployment.replicas),
+    status: workloadStatus(deployment.rollout),
     createdAt: deployment.createdAt,
     groups: [
       {
@@ -205,7 +205,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   })),
 
   StatefulSet: source(commands.getStatefulset, (set, _target, t) => ({
-    status: workloadStatus(set.replicas),
+    status: workloadStatus(set.rollout),
     createdAt: set.createdAt,
     groups: [
       {
@@ -242,7 +242,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   })),
 
   DaemonSet: source(commands.getDaemonset, (set, _target, t) => ({
-    status: workloadStatus(set),
+    status: workloadStatus(set.rollout),
     createdAt: set.createdAt,
     groups: [
       {

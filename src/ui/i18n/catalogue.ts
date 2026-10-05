@@ -1139,9 +1139,6 @@ export const en = {
     imageUpdated: "Image updated",
     imageUpdatedDetail: "Container {container} image updated to {image}.",
     updateImageFailed: "Failed to update image",
-    rollingOutNewReplicaSet: "Rolling out new replica set",
-    deploymentAvailable: "Deployment is available",
-    rollingOut: "rolling out",
     selectPod: "Select pod",
     updateContainerImage: "Update Container Image",
     newImage: "New Image",
@@ -3531,6 +3528,27 @@ export const en = {
       "Apply — this object's delivery label is not honoured",
     delApplyLabelDetail:
       "Nothing is applying this object, whatever its label says.",
+    rolloutStalled:
+      "Rollout stalled: the controller stopped waiting for the new pods",
+    rolloutStalledServing: {
+      one: "Rollout stalled: the new pods never came up, and {n} old pod still serves",
+      other:
+        "Rollout stalled: the new pods never came up, and {n} old pods still serve",
+    },
+    rolloutUnavailable: "Not available: too few pods are up to serve",
+    rolloutUnavailableReason: "Not available ({reason})",
+    rolloutPaused:
+      "Rollout paused: changes to the template wait until it is resumed",
+    rolloutUnobserved:
+      "The controller has not read the latest change yet, so these counts are from before it",
+    rolloutMoving: {
+      one: "Rolling out: {updated} of {n} pod on the new template",
+      other: "Rolling out: {updated} of {n} pods on the new template",
+    },
+    rolloutShort: {
+      one: "Rolled out, and only {available} of {n} pod is available",
+      other: "Rolled out, and only {available} of {n} pods are available",
+    },
     hpaPinnedAt: "pinned at {n}",
     hpaRange: { one: "{min} to {n} replica", other: "{min} to {n} replicas" },
     hpaCannotReach: "{name} cannot reach what it scales",
@@ -7022,9 +7040,9 @@ export const en = {
       other: "(+{n} from sets)",
     },
     gwBackendsAllExist: "All {n} backend Services exist, ports match",
-    shortOfDesired: {
-      one: "{n} short of desired",
-      other: "{n} short of desired",
+    needAttention: {
+      one: "{n} needs attention",
+      other: "{n} need attention",
     },
     gwParentUnresolved: {
       one: "names a gateway parent this app could not resolve to a Gateway.",

@@ -37,6 +37,7 @@ function conns(over: Partial<ResourceConnections> = {}): ResourceConnections {
         kind: "workload",
         replicas: 3,
         readyReplicas: 3,
+        rollout: null,
         revision: null,
         current: null,
       },
@@ -117,6 +118,7 @@ describe("stateOf", () => {
           kind: "workload",
           replicas: 3,
           readyReplicas: 1,
+          rollout: null,
           revision: null,
           current: null,
         },
@@ -126,6 +128,33 @@ describe("stateOf", () => {
       state: "short",
       ready: 1,
       total: 3,
+      status: null,
+    });
+  });
+
+  /**
+   * Counting ready replicas called the stuck `search` rollout fine: its old
+   * pods were all ready while the new ReplicaSet never came up.
+   */
+  it("believes the rollout verdict over the ready count where the backend sent one", () => {
+    const stalled = conns({
+      subject: {
+        ...conns().subject,
+        facts: {
+          kind: "workload",
+          replicas: 3,
+          readyReplicas: 3,
+          rollout: { state: "stalled", message: null, serving: 2 },
+          revision: null,
+          current: null,
+        },
+      },
+    });
+    expect(stateOf(stalled, null)).toEqual({
+      state: "short",
+      ready: 3,
+      total: 3,
+      status: "Stalled",
     });
   });
 
@@ -231,6 +260,7 @@ describe("stateOf", () => {
           kind: "workload",
           replicas: 0,
           readyReplicas: 0,
+          rollout: null,
           revision: null,
           current: null,
         },
@@ -323,6 +353,7 @@ describe("stateOf", () => {
       kind: "workload",
       replicas: 0,
       readyReplicas: 0,
+      rollout: null,
       revision: null,
       current: null,
     };

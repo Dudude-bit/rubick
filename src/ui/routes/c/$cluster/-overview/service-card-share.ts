@@ -2,6 +2,7 @@ import { Pin } from "lucide-react";
 
 import { journalWords, type JournalEntry } from "@/lib/changes";
 import { iconSvg } from "@/lib/icon-svg";
+import { statusRole } from "@/lib/status-role";
 import type { ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import {
@@ -24,14 +25,15 @@ function stateValue(state: ServiceState, t: T): ReportValue {
         }),
         role: "ok",
       };
-    case "short":
-      return {
-        text: t("services", "readyOf", {
-          ready: state.ready,
-          total: state.total,
-        }),
-        role: "warn",
-      };
+    case "short": {
+      const count = t("services", "readyOf", {
+        ready: state.ready,
+        total: state.total,
+      });
+      return state.status
+        ? { text: `${state.status} · ${count}`, role: statusRole(state.status) }
+        : { text: count, role: "warn" };
+    }
     case "gone":
       return { text: t("services", "gone"), role: "err" };
     case "reading":

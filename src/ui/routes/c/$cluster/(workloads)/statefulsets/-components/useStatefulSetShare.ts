@@ -8,17 +8,9 @@ import { templateContainersSection } from "../../-components/containers-section"
 import { podsSection } from "../../-components/pods-section";
 import type { ReportStat } from "@/lib/report";
 import { refOf } from "@/lib/report-parts";
-import { statusRole } from "@/lib/status-role";
-import { workloadStatus } from "@/lib/workload-status";
+import { rolloutStatusOf } from "@/lib/workload-status";
 import type { PodInfo, StatefulSetDetailInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
-
-export function statefulSetStatusOf(ready: number, desired: number, t: T) {
-  return {
-    text: t("count", "slashReady", { n: ready, total: desired }),
-    role: statusRole(workloadStatus({ ready, desired })),
-  };
-}
 
 export function statefulSetStatsOf(
   statefulSet: StatefulSetDetailInfo,
@@ -79,7 +71,7 @@ export function useStatefulSetShare(
         t
       );
       return {
-        status: statefulSetStatusOf(ready, desired, t),
+        status: rolloutStatusOf(ready, desired, statefulSet.rollout, t),
         stats: statefulSetStatsOf(statefulSet, t),
         sections: [templateContainersSection(statefulSet, t), pods_],
       };

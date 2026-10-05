@@ -652,6 +652,7 @@ describe("PeekPanel reads what the detail pages read", () => {
       namespace: "shop",
       uid: "deploy-uid",
       replicas: { desired: 1, ready: 1, current: 1, updated: 1, available: 1 },
+      rollout: { state: "ready" },
       strategy: "RollingUpdate",
       containers: [],
       initContainers: [],

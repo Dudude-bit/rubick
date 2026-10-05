@@ -13,6 +13,7 @@ import {
   createReplicasColumn,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
+import { createRolloutColumn } from "../../-components/rollout-column";
 
 type StatefulSetInfoWithMetrics = StatefulSetInfo & ResourceMetrics;
 
@@ -22,6 +23,7 @@ export const columns = (): ColumnDef<StatefulSetInfoWithMetrics>[] => [
   createCpuColumn<StatefulSetInfoWithMetrics>(),
   createMemoryColumn<StatefulSetInfoWithMetrics>(),
   createReplicasColumn<StatefulSetInfoWithMetrics>(),
+  createRolloutColumn<StatefulSetInfoWithMetrics>(),
   createAgeColumn<StatefulSetInfoWithMetrics>(),
 ];
 

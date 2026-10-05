@@ -10,31 +10,14 @@ import { parseImageRef } from "@/lib/image-ref";
 import type { ReportStat, ReportValue } from "@/lib/report";
 import { ORDER, kindIcon, refOf, type PlacedSection } from "@/lib/report-parts";
 import { iconSvg } from "@/lib/icon-svg";
-import { statusRole } from "@/lib/status-role";
 import { formatSince } from "@/lib/utils";
-import { workloadStatus } from "@/lib/workload-status";
+import { rolloutStatusOf } from "@/lib/workload-status";
 import type {
   DeploymentInfo,
   PodInfo,
-  ReplicaInfo,
   ReplicaSetInfo,
 } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
-
-export function deploymentStatusOf(
-  replicas: ReplicaInfo,
-  rollingOut: boolean,
-  t: T
-) {
-  const ready = t("count", "slashReady", {
-    n: replicas.ready,
-    total: replicas.desired,
-  });
-  return {
-    text: rollingOut ? `${t("action", "rollingOut")} · ${ready}` : ready,
-    role: statusRole(workloadStatus(replicas)),
-  };
-}
 
 export function deploymentStatsOf(
   deployment: DeploymentInfo,
@@ -133,8 +116,7 @@ export function useDeploymentShare(
   deployment: DeploymentInfo | undefined,
   revisions: readonly ReplicaSetInfo[],
   pods: readonly PodInfo[],
-  podsError: unknown,
-  isRolloutInProgress: boolean
+  podsError: unknown
 ): (frame: ShareFrame) => ShareContribution {
   const t = useT();
   return useCallback(
@@ -150,7 +132,12 @@ export function useDeploymentShare(
         t
       );
       return {
-        status: deploymentStatusOf(deployment.replicas, isRolloutInProgress, t),
+        status: rolloutStatusOf(
+          deployment.replicas.ready,
+          deployment.replicas.desired,
+          deployment.rollout,
+          t
+        ),
         stats: deploymentStatsOf(deployment, revisions, t),
         sections: [
           templateContainersSection(deployment, t),
@@ -159,6 +146,6 @@ export function useDeploymentShare(
         ],
       };
     },
-    [deployment, revisions, pods, podsError, isRolloutInProgress, t]
+    [deployment, revisions, pods, podsError, t]
   );
 }

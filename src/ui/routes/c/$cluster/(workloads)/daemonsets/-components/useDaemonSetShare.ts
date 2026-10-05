@@ -7,23 +7,9 @@ import type {
 import { templateContainersSection } from "../../-components/containers-section";
 import { podsSection } from "../../-components/pods-section";
 import type { ReportStat } from "@/lib/report";
-import { statusRole } from "@/lib/status-role";
-import { workloadStatus } from "@/lib/workload-status";
+import { rolloutStatusOf } from "@/lib/workload-status";
 import type { DaemonSetDetailInfo, PodInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
-
-export function daemonSetStatusOf(
-  ready: number,
-  desired: number,
-  rollingOut: boolean,
-  t: T
-) {
-  const text = t("count", "slashReady", { n: ready, total: desired });
-  return {
-    text: rollingOut ? `${t("action", "rollingOut")} · ${text}` : text,
-    role: statusRole(workloadStatus({ ready, desired })),
-  };
-}
 
 export function daemonSetStatsOf(
   daemonSet: DaemonSetDetailInfo,
@@ -64,7 +50,6 @@ export function useDaemonSetShare(
   return useCallback(
     (frame: ShareFrame): ShareContribution => {
       if (!daemonSet) return {};
-      const rollingOut = daemonSet.upToDate < daemonSet.desired;
       const pods_ = podsSection(
         {
           pods,
@@ -75,10 +60,10 @@ export function useDaemonSetShare(
         t
       );
       return {
-        status: daemonSetStatusOf(
+        status: rolloutStatusOf(
           daemonSet.ready,
           daemonSet.desired,
-          rollingOut,
+          daemonSet.rollout,
           t
         ),
         stats: daemonSetStatsOf(daemonSet, t),

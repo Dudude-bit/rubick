@@ -70,6 +70,7 @@ pub(super) struct Template {
     pub(super) owners: Vec<OwnerReference>,
     pub(super) replicas: i32,
     pub(super) ready_replicas: i32,
+    pub(super) rollout: Option<crate::resources::Rollout>,
 }
 
 pub(super) async fn fetch_template(
@@ -79,7 +80,7 @@ pub(super) async fn fetch_template(
     name: &str,
 ) -> Result<(Template, Option<String>)> {
     macro_rules! from_workload {
-        ($ty:ty, $obj:ident, $labels:expr, $selector:expr, $spec:expr, $replicas:expr, $ready:expr) => {{
+        ($ty:ty, $obj:ident, $labels:expr, $selector:expr, $spec:expr, $replicas:expr, $ready:expr, $rollout:expr) => {{
             let $obj: $ty = got(ctx.namespaced_api().get(name).await, kind, ns, name)?;
             let uid = $obj.uid();
             (
@@ -90,6 +91,7 @@ pub(super) async fn fetch_template(
                     owners: $obj.owner_references().to_vec(),
                     replicas: $replicas,
                     ready_replicas: $ready,
+                    rollout: $rollout,
                 },
                 uid,
             )
@@ -111,7 +113,8 @@ pub(super) async fn fetch_template(
             obj.status
                 .as_ref()
                 .and_then(|s| s.ready_replicas)
-                .unwrap_or(0)
+                .unwrap_or(0),
+            Some(crate::resources::deployment_rollout(&obj))
         ),
         "StatefulSet" => from_workload!(
             StatefulSet,
@@ -127,7 +130,8 @@ pub(super) async fn fetch_template(
             obj.status
                 .as_ref()
                 .and_then(|s| s.ready_replicas)
-                .unwrap_or(0)
+                .unwrap_or(0),
+            Some(crate::resources::statefulset_rollout(&obj))
         ),
         "DaemonSet" => from_workload!(
             DaemonSet,
@@ -142,7 +146,8 @@ pub(super) async fn fetch_template(
             obj.status
                 .as_ref()
                 .map_or(0, |s| s.desired_number_scheduled),
-            obj.status.as_ref().map_or(0, |s| s.number_ready)
+            obj.status.as_ref().map_or(0, |s| s.number_ready),
+            Some(crate::resources::daemonset_rollout(&obj))
         ),
         "ReplicaSet" => from_workload!(
             ReplicaSet,
@@ -162,7 +167,8 @@ pub(super) async fn fetch_template(
             obj.status
                 .as_ref()
                 .and_then(|s| s.ready_replicas)
-                .unwrap_or(0)
+                .unwrap_or(0),
+            None
         ),
         "Job" => from_workload!(
             Job,
@@ -175,7 +181,8 @@ pub(super) async fn fetch_template(
             obj.spec.as_ref().and_then(|s| s.selector.clone()),
             obj.spec.as_ref().and_then(|s| s.template.spec.clone()),
             obj.status.as_ref().and_then(|s| s.active).unwrap_or(0),
-            obj.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0)
+            obj.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0),
+            None
         ),
         "CronJob" => from_workload!(
             CronJob,
@@ -192,7 +199,8 @@ pub(super) async fn fetch_template(
                 .and_then(|s| s.job_template.spec.as_ref())
                 .and_then(|s| s.template.spec.clone()),
             0,
-            0
+            0,
+            None
         ),
         _ => unreachable!("fetch_template is only called for workload kinds"),
     })
@@ -217,6 +225,7 @@ pub(super) async fn workload_connections(
         ObjectFacts::Workload {
             replicas: template.replicas,
             ready_replicas: template.ready_replicas,
+            rollout: template.rollout.clone(),
             revision: None,
             current: None,
         },
@@ -366,6 +375,7 @@ pub(super) async fn revisions_of(
                     .as_ref()
                     .and_then(|s| s.ready_replicas)
                     .unwrap_or(0),
+                rollout: None,
                 revision: this.clone(),
                 current: Some(
                     this.and_then(|r| r.parse::<u64>().ok())

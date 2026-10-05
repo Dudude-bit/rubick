@@ -16,11 +16,7 @@ import { LogViewer } from "../../../-logs/LogViewer";
 import { useAsk } from "../../../-object/useAsk";
 import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
-import { StatusBadge } from "@/components/ui/status-badge";
-// The one place that turns replica counts into a word. These pages kept
-// their own comparison with no zero case, so a workload scaled to nothing
-// wore a green "Ready" here and a grey "Idle" in the list and the peek.
-import { workloadStatus } from "@/lib/workload-status";
+import { RolloutBadge, RolloutSummary } from "../../../-object/RolloutSummary";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { TrafficChain } from "../../../-object/TrafficChain";
@@ -440,10 +436,21 @@ export function StatefulSetDetail() {
         namespace={statefulSet?.namespace || namespace}
         createdAt={statefulSet?.createdAt}
         statusBadge={
+          statefulSet && <RolloutBadge rollout={statefulSet.rollout} />
+        }
+        badges={
           statefulSet && (
-            <StatusBadge status={workloadStatus({ ready, desired })}>
+            <span className="text-[11px] text-fg-mut">
               {t("count", "slashReady", { n: ready, total: desired })}
-            </StatusBadge>
+            </span>
+          )
+        }
+        summary={
+          statefulSet && (
+            <RolloutSummary
+              rollout={statefulSet.rollout}
+              subject={{ kind: ResourceType.StatefulSet, name, namespace }}
+            />
           )
         }
         onBack={goBack}

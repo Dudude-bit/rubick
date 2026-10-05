@@ -6,7 +6,6 @@ import type { T } from "@/i18n/useT";
 import type { DeploymentInfo, ReplicaSetInfo } from "@/generated/types";
 import {
   deploymentStatsOf,
-  deploymentStatusOf,
   revisionsSection,
   useDeploymentShare,
 } from "./useDeploymentShare";
@@ -22,6 +21,7 @@ const deployment = {
   name: "payments",
   namespace: "shop",
   replicas: { desired: 3, ready: 2, updated: 3, available: 2 },
+  rollout: { state: "short", available: 2, desired: 3 },
   strategy: "RollingUpdate",
   containers: [
     {
@@ -100,13 +100,6 @@ describe("what the Deployment page adds to Share", () => {
     });
   });
 
-  /** A rollout in flight says so beside the ready count, as the badge does. */
-  it("says rolling out when the page's own rollout check is true", () => {
-    const status = deploymentStatusOf(deployment.replicas, true, t);
-    expect(status.text).toContain("action.rollingOut");
-    expect(status.role).toBe("pending");
-  });
-
   /**
    * The wiring itself: removing the pods table or the ready stat from what
    * the hook returns must fail this, not just the pure builders above.
@@ -123,7 +116,7 @@ describe("what the Deployment page adds to Share", () => {
       },
     ] as unknown as import("@/generated/types").PodInfo[];
     const { result } = renderHook(() =>
-      useDeploymentShare(deployment, revisions, pods, null, false)
+      useDeploymentShare(deployment, revisions, pods, null)
     );
     const contribution = result.current({
       silent: new Map(),
@@ -153,7 +146,7 @@ describe("what the Deployment page adds to Share", () => {
       },
     ] as unknown as import("@/generated/types").PodInfo[];
     const { result } = renderHook(() =>
-      useDeploymentShare(deployment, revisions, pods, null, false)
+      useDeploymentShare(deployment, revisions, pods, null)
     );
     const contribution = result.current({
       silent: new Map([["n2", { node: "n2", since: null, reason: null }]]),

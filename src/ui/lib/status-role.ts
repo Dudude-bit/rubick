@@ -100,6 +100,8 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     // volume waiting on a person — amber, and certainly not the grey dash an
     // unlisted status gets.
     "released",
+    // `kubectl rollout pause`: somebody's decision, like a cordon.
+    "paused",
   ],
   err: [
     "error",
@@ -112,6 +114,8 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "createcontainerconfigerror",
     "schedulererror",
     "unavailable",
+    // A rollout past its progress deadline, whatever is still serving.
+    "stalled",
     "false",
     // Gateway API: a controller looked and said no.
     "refused",

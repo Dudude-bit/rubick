@@ -4,11 +4,7 @@ import { renderHook } from "@testing-library/react";
 
 import type { T } from "@/i18n/useT";
 import type { DaemonSetDetailInfo, PodInfo } from "@/generated/types";
-import {
-  daemonSetStatsOf,
-  daemonSetStatusOf,
-  useDaemonSetShare,
-} from "./useDaemonSetShare";
+import { daemonSetStatsOf, useDaemonSetShare } from "./useDaemonSetShare";
 
 const t = ((section: string, key: string, values?: Record<string, unknown>) =>
   values
@@ -25,6 +21,7 @@ const daemonSet = {
   ready: 3,
   upToDate: 2,
   available: 3,
+  rollout: { state: "rollingOut", updated: 2, desired: 4 },
   updateStrategy: "RollingUpdate",
   containers: [
     {
@@ -51,12 +48,6 @@ describe("what the DaemonSet page adds to Share", () => {
     expect(stats).toContainEqual(
       expect.objectContaining({ label: "share.wlUpToDate", value: "2/4" })
     );
-  });
-
-  /** A rollout in flight says so beside the ready count, matching the page's badge. */
-  it("says rolling out when fewer nodes are updated than desired", () => {
-    const status = daemonSetStatusOf(3, 4, true, t);
-    expect(status.text).toContain("action.rollingOut");
   });
 
   /** The wiring itself: dropping the pods table from the hook's return must fail this. */

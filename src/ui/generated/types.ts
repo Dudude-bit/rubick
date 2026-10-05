@@ -1088,6 +1088,7 @@ export interface DaemonSetDetailInfo {
   ready: number;
   upToDate: number;
   available: number;
+  rollout: Rollout;
   updateStrategy: string | null;
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
@@ -1111,6 +1112,7 @@ export interface DaemonSetInfo {
   current: number;
   ready: number;
   updated: number;
+  rollout: Rollout;
   containerImages: ContainerImage[];
   templateAnnotations: Record<string, string>;
   generation: number | null;
@@ -1128,6 +1130,7 @@ export interface StatefulSetDetailInfo {
   namespace: string;
   uid: string;
   replicas: StatefulSetReplicaInfo;
+  rollout: Rollout;
   serviceName: string | null;
   podManagementPolicy: string | null;
   updateStrategy: string | null;
@@ -1158,6 +1161,7 @@ export interface StatefulSetInfo {
   name: string;
   namespace: string;
   replicas: StatefulSetReplicaInfo;
+  rollout: Rollout;
   containerImages: ContainerImage[];
   templateAnnotations: Record<string, string>;
   generation: number | null;
@@ -2009,6 +2013,7 @@ export interface DeploymentInfo {
   namespace: string;
   uid: string;
   replicas: ReplicaInfo;
+  rollout: Rollout;
   strategy: string | null;
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
@@ -2181,6 +2186,7 @@ export type ObjectFacts =
       kind: "workload";
       replicas: number;
       readyReplicas: number;
+      rollout: Rollout | null;
       revision: string | null;
       current: boolean | null;
     }
@@ -2217,6 +2223,16 @@ export type ObjectFacts =
       expectedPods: number;
       conditions: ConditionInfo[];
     };
+
+export type Rollout =
+  | { state: "idle" }
+  | { state: "stalled"; message: string | null; serving: number }
+  | { state: "unavailable"; reason: string | null; message: string | null }
+  | { state: "paused" }
+  | { state: "unobserved" }
+  | { state: "rollingOut"; updated: number; desired: number }
+  | { state: "short"; available: number; desired: number }
+  | { state: "ready" };
 
 export type Existence = "present" | "missing" | "notChecked";
 
