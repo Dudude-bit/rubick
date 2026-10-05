@@ -26,6 +26,11 @@ import { podTotal } from "./health-share";
 import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
 import type { ReportStat } from "@/lib/report";
 import { useT, type T } from "@/i18n/useT";
+import { useListableIn } from "../-shell/useListAccess";
+import type { ListQuery } from "@/generated/types";
+
+/** What reading a namespace's overview needs first: its pods. */
+const PODS: ListQuery = { group: "", resource: "pods", namespaced: true };
 
 /** The headline numbers for Share: what is broken, and what is serving. */
 function overviewStats(
@@ -68,6 +73,11 @@ export function ClusterOverview() {
 
   const { data: overview, isLoading, error, refetch } = useScopedOverview();
   const attention = useAttention({ refresh: "slow" });
+  // The list pages name where a refused list can be read; the page that
+  // tells a reader to open a namespace names the same ones.
+  const { readableIn } = useListableIn(
+    namespaceScope.length === 0 && error && isRefusal(error) ? PODS : null
+  );
 
   // Not an empty overview but a different screen: with no cluster there
   // is no scope to be empty of anything, and the one thing the reader
@@ -123,7 +133,12 @@ export function ClusterOverview() {
               {!refused
                 ? t("empty", "couldNotReadClusterState")
                 : namespaceScope.length === 0
-                  ? t("empty", "noClusterOverviewAccess")
+                  ? readableIn.length > 0
+                    ? t("empty", "noClusterOverviewAccessIn", {
+                        n: readableIn.length,
+                        namespaces: readableIn.join(", "),
+                      })
+                    : t("empty", "noClusterOverviewAccess")
                   : t("empty", "noScopeOverviewAccess", {
                       scope: scopeIn(namespaceScope, t),
                     })}

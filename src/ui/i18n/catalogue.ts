@@ -5374,6 +5374,11 @@ export const en = {
     couldNotReadClusterState: "Could not read cluster state",
     noClusterOverviewAccess:
       "You do not have permission to read the whole cluster. Open a namespace you have access to: type its name in the namespace picker above.",
+    noClusterOverviewAccessIn: {
+      one: "You do not have permission to read the whole cluster. You can read {namespaces}: choose it in the namespace picker above.",
+      other:
+        "You do not have permission to read the whole cluster. You can read {namespaces}: choose one in the namespace picker above.",
+    },
     noScopeOverviewAccess:
       "You do not have permission to read {scope}. Type another namespace in the picker above.",
     refusedClusterWide:

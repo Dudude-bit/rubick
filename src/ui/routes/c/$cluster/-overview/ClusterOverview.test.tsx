@@ -14,6 +14,7 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     getClusterOverview: vi.fn(),
     getClusterInfo: vi.fn(async () => null),
+    checkListAccess: vi.fn(async () => []),
   },
 }));
 
@@ -86,6 +87,40 @@ describe("what the overview does when the read is refused", () => {
 
     window.removeEventListener(SCOPE_PICKER_OPEN, opened);
     expect(opened).toHaveBeenCalledOnce();
+  });
+
+  /**
+   * Marco under All namespaces: the list pages named team-checkout as where
+   * he could list them, and the Overview only said to type a namespace he
+   * has. Fails if the Overview stops naming the namespace it can read.
+   */
+  it("names the namespace the reader can open, as the list pages do", async () => {
+    useClusterStore.setState({
+      currentContext: "prod",
+      contexts: [{ name: "prod", namespace: "team-checkout" } as never],
+    });
+    vi.mocked(commands.checkListAccess).mockImplementation(
+      async (queries, namespaces) =>
+        queries.map((query) => ({
+          resource: query.resource,
+          allowed: namespaces?.[0] === "team-checkout",
+        }))
+    );
+    getClusterOverview.mockRejectedValue(
+      "pods is forbidden: Forbidden (code: 403)"
+    );
+
+    await mount();
+
+    expect(
+      await screen.findByText(
+        "You do not have permission to read the whole cluster. You can read team-checkout: choose it in the namespace picker above."
+      )
+    ).toBeInTheDocument();
+    expect(commands.checkListAccess).toHaveBeenCalledWith(
+      [{ group: "", resource: "pods", namespaced: true }],
+      ["team-checkout"]
+    );
   });
 
   it("keeps the fault headline and a retry when the read fails for any other reason", async () => {
