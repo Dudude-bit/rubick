@@ -62,7 +62,7 @@ export function PortsDisplay({ ports, maxDisplay = 2 }: PortsDisplayProps) {
       {shown.map((port, idx) => (
         <Tooltip key={idx}>
           <TooltipTrigger asChild>
-            <span>
+            <span className="max-w-full truncate">
               <PortText port={port} />
             </span>
           </TooltipTrigger>

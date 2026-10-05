@@ -60,7 +60,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
   },
   {
     // An address per line, each behind an icon.
-    size: 160,
+    size: 140,
     accessorKey: "externalIps",
     header: columnHeader("columns", "externalIps"),
     cell: ({ row }) => {
@@ -81,8 +81,9 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     },
   },
   {
-    // Two `80:30080/TCP` mappings and a "+3" after them.
-    size: 180,
+    // Two `80:30080/TCP` mappings and a "+3" after them; a named port that
+    // still does not fit ends in an ellipsis, whole in its tooltip.
+    size: 200,
     id: "ports",
     accessorFn: (row) =>
       row.ports
