@@ -14,14 +14,14 @@
 use crate::commands::helpers::{api_in, reaches, scope_of};
 use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
-use crate::resources::Rollout;
+use crate::resources::{job_state, JobState, Rollout};
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
 use crate::utils::Moment;
 use chrono::{DateTime, Utc};
 use futures::future::join_all;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
-use k8s_openapi::api::batch::v1::{CronJob, Job, JobCondition};
+use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{ConfigMap, Event, Namespace, Node, Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use kube::api::ListParams;
@@ -644,36 +644,30 @@ fn daemon_set_problems<'a>(sets: impl IntoIterator<Item = &'a DaemonSet>) -> Vec
         .collect()
 }
 
-/// The condition a Job's controller writes when it gives up. A pod that died
-/// while the Job still has retries left is a retry, not this.
-fn job_failure(job: &Job) -> Option<&JobCondition> {
+fn failed_since(job: &Job) -> Option<String> {
     job.status
         .as_ref()?
         .conditions
         .as_ref()?
         .iter()
-        .find(|c| c.type_ == "Failed" && c.status == "True")
+        .find(|c| c.type_ == "Failed" && c.status == "True")?
+        .last_transition_time
+        .as_ref()
+        .map(|t| t.moment().to_rfc3339())
 }
 
 fn job_problems<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> Vec<ClusterProblem> {
     jobs.into_iter()
         .filter_map(|job| {
-            let failed = job_failure(job)?;
+            let failure = job_state(job).failure()?;
             Some(ClusterProblem {
                 severity: ProblemSeverity::Critical,
                 kind: "Job".to_string(),
                 name: job.metadata.name.clone().unwrap_or_default(),
                 namespace: job.metadata.namespace.clone(),
-                reason: failed
-                    .reason
-                    .clone()
-                    .filter(|reason| !reason.is_empty())
-                    .unwrap_or_else(|| "Failed".to_string()),
-                detail: ProblemDetail::said(failed.message.clone().filter(|m| !m.is_empty())),
-                since: failed
-                    .last_transition_time
-                    .as_ref()
-                    .map(|t| t.moment().to_rfc3339()),
+                reason: failure.reason.unwrap_or_else(|| "Failed".to_string()),
+                detail: ProblemDetail::said(failure.message),
+                since: failed_since(job),
                 restarts: None,
             })
         })
@@ -951,25 +945,13 @@ fn pod_composition<'a>(pods: impl IntoIterator<Item = &'a Pod>) -> PodCompositio
     composition
 }
 
-/// A Job is only failed once its controller gave up: a pod that died while the
-/// Job still has retries left is a retry, and calling that a failed Job paints
-/// every backoff-and-recover as an incident.
 fn job_composition<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> JobComposition {
     let mut composition = JobComposition::default();
     for job in jobs {
-        let condition = |wanted: &str| {
-            job.status.as_ref().is_some_and(|s| {
-                s.conditions
-                    .as_ref()
-                    .is_some_and(|cs| cs.iter().any(|c| c.type_ == wanted && c.status == "True"))
-            })
-        };
-        if condition("Complete") {
-            composition.completed += 1;
-        } else if job_failure(job).is_some() {
-            composition.failed += 1;
-        } else {
-            composition.active += 1;
+        match job_state(job) {
+            JobState::Complete => composition.completed += 1,
+            JobState::Failed(_) => composition.failed += 1,
+            _ => composition.active += 1,
         }
     }
     composition
