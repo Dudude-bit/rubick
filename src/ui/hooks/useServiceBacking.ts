@@ -1,19 +1,16 @@
 import { useMemo } from "react";
 
 import { commands } from "@/lib/commands";
-import { errorCode, errorToShow } from "@/lib/error-utils";
-import type { NamespaceBacking } from "@/lib/ingress-health";
-import type { Known } from "@/lib/known";
+import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import type { ServiceInfo, ServicePublished } from "@/generated/types";
+import type { ServiceBacking, ServicePublished } from "@/generated/types";
 
 interface Answer {
   /** `null` for the one cluster-wide read. */
   namespace: string | null;
-  lists: NamespaceBacking | null;
+  lists: ServiceBacking | null;
   why: string | null;
-  code: string | null;
 }
 
 async function readBacking(namespaces: string[] | null): Promise<Answer[]> {
@@ -25,34 +22,22 @@ async function readBacking(namespaces: string[] | null): Promise<Answer[]> {
     namespace: reaches[index],
     lists: answer.status === "fulfilled" ? answer.value : null,
     why: answer.status === "rejected" ? errorToShow(answer.reason) : null,
-    code: answer.status === "rejected" ? errorCode(answer.reason) : null,
   }));
 }
 
 export interface ServiceBackingRead {
-  /** One namespace's Services and what each publishes, or why not. */
-  in: (namespace: string) => Known<NamespaceBacking>;
-  service: (namespace: string, name: string) => ServiceInfo | undefined;
+  /** What one Service publishes, whole, once its namespace has answered. */
   published: (namespace: string, name: string) => ServicePublished | undefined;
-  /** Every Service the scope answered with; empty until it has. */
-  every: ServiceInfo[];
-  /** The reaches that did not answer, or the whole read while it has not. */
-  unread: ReachUnread[] | "reading";
-}
-
-/** A reach of the scope whose read failed: `null` is the whole cluster. */
-export interface ReachUnread {
-  namespace: string | null;
-  code: string;
-  message: string;
+  /** Why one namespace was not read: `null` once it was, or while it is. */
+  why: (namespace: string) => string | null;
 }
 
 const key = (namespace: string, name: string) => `${namespace}/${name}`;
 
 /**
- * What the Services in these namespaces publish, read once for the whole
- * scope (`null` is the cluster) and indexed, so a list draws every row's
- * verdict from one answer instead of one read per row.
+ * What the Services in these namespaces publish, whole, read once for the
+ * whole scope (`null` is the cluster) and indexed, so a list draws every
+ * row's verdict from one answer instead of one read per row.
  */
 export function useServiceBacking(
   namespaces: string[] | null,
@@ -67,66 +52,25 @@ export function useServiceBacking(
   const { data, error } = read;
 
   return useMemo(() => {
-    const services = new Map<string, ServiceInfo>();
     const published = new Map<string, ServicePublished>();
-    const byNamespace = new Map<string, NamespaceBacking>();
-    const homeOf = (namespace: string) => {
-      let home = byNamespace.get(namespace);
-      if (!home) {
-        home = { services: [], published: [] };
-        byNamespace.set(namespace, home);
-      }
-      return home;
-    };
     for (const answer of data ?? []) {
-      for (const service of answer.lists?.services ?? []) {
-        services.set(key(service.namespace, service.name), service);
-        homeOf(service.namespace).services.push(service);
-      }
       for (const entry of answer.lists?.published ?? []) {
-        const namespace = entry.service.namespace ?? "";
-        published.set(key(namespace, entry.service.name), entry);
-        homeOf(namespace).published.push(entry);
+        published.set(
+          key(entry.service.namespace ?? "", entry.service.name),
+          entry
+        );
       }
     }
     const answerFor = (namespace: string) =>
       data?.find((answer) => answer.namespace === namespace) ??
       data?.find((answer) => answer.namespace === null);
-    const none: NamespaceBacking = { services: [], published: [] };
-    const unread: ServiceBackingRead["unread"] = data
-      ? data.flatMap((answer) =>
-          answer.lists
-            ? []
-            : [
-                {
-                  namespace: answer.namespace,
-                  code: answer.code ?? "",
-                  message: answer.why ?? "",
-                },
-              ]
-        )
-      : error
-        ? [
-            {
-              namespace: null,
-              code: errorCode(error),
-              message: errorToShow(error),
-            },
-          ]
-        : "reading";
     return {
-      every: [...services.values()],
-      unread,
-      in: (namespace) => {
-        const answer = answerFor(namespace);
-        if (!answer) {
-          return { known: false, why: error ? errorToShow(error) : null };
-        }
-        if (!answer.lists) return { known: false, why: answer.why };
-        return { known: true, value: byNamespace.get(namespace) ?? none };
-      },
-      service: (namespace, name) => services.get(key(namespace, name)),
       published: (namespace, name) => published.get(key(namespace, name)),
+      why: (namespace) => {
+        const answer = answerFor(namespace);
+        if (!answer) return error ? errorToShow(error) : null;
+        return answer.why;
+      },
     };
   }, [data, error]);
 }

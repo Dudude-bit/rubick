@@ -26,21 +26,27 @@ function wrapper() {
   );
 }
 
-const WEB = {
-  name: "web",
-  namespace: "net",
-  uid: "web",
-  type: "ClusterIP",
-  sessionAffinity: "None",
-  clusterIp: "10.0.0.1",
-  externalIps: [],
-  loadBalancerIps: [],
+const WEB_PUBLISHED = {
+  service: {
+    kind: "Service",
+    name: "web",
+    namespace: "net",
+    existence: "present",
+    facts: null,
+  },
+  source: "slices",
+  slices: 1,
+  ready: 2,
+  draining: 0,
+  notReady: 0,
+  unrouted: 0,
+  unroutedReady: 0,
   ports: [],
-  selector: { app: "web" },
-  labels: {},
-  annotations: {},
-  createdAt: null,
-};
+  endpoints: [],
+  whole: true,
+  unpublished: [],
+  stop: null,
+} satisfies ServiceBacking["published"][number];
 
 describe("what the Services of a scope publish", () => {
   /**
@@ -51,7 +57,10 @@ describe("what the Services of a scope publish", () => {
   it("keeps a refused namespace apart from one that has no Services", async () => {
     listServiceBacking.mockImplementation(async (namespace) => {
       if (namespace === "secret-ns") throw new Error("services is forbidden");
-      return { services: namespace === "net" ? [WEB] : [], published: [] };
+      return {
+        services: [],
+        published: namespace === "net" ? [WEB_PUBLISHED] : [],
+      };
     });
 
     const { result } = renderHook(
@@ -59,16 +68,12 @@ describe("what the Services of a scope publish", () => {
       { wrapper: wrapper() }
     );
 
-    await waitFor(() => expect(result.current.in("net").known).toBe(true));
-    expect(result.current.in("secret-ns")).toEqual({
-      known: false,
-      why: "services is forbidden",
-    });
-    expect(result.current.in("empty")).toEqual({
-      known: true,
-      value: { services: [], published: [] },
-    });
-    expect(result.current.service("net", "web")?.name).toBe("web");
+    await waitFor(() =>
+      expect(result.current.published("net", "web")?.ready).toBe(2)
+    );
+    expect(result.current.why("secret-ns")).toBe("services is forbidden");
+    expect(result.current.why("empty")).toBeNull();
+    expect(result.current.why("net")).toBeNull();
     expect(listServiceBacking).toHaveBeenCalledTimes(3);
   });
 });

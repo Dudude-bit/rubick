@@ -13,16 +13,16 @@ import type { Known } from "@/lib/known";
 import type {
   IngressClassBinding,
   IngressInfo,
-  ServiceInfo,
-  ServicePublished,
   TlsCertificate,
 } from "@/generated/types";
-import { serviceHealthOf, type Verdict } from "@/lib/service-health";
+import {
+  serviceHealthOf,
+  type ServiceHealthInput,
+  type Verdict,
+} from "@/lib/service-health";
 
-export interface NamespaceBacking {
-  services: ServiceInfo[];
-  published: ServicePublished[];
-}
+/** One namespace's Services by name, as the Service verdict reads them. */
+export type NamespaceBacking = ReadonlyMap<string, ServiceHealthInput>;
 
 export interface IngressInputs {
   ingress: Pick<
@@ -79,26 +79,12 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
   if (names.length > 0 && !backing.known) unread.push(backing.why);
   if (backing.known) {
     for (const name of names) {
-      const service = backing.value.services.find(
-        (entry) => entry.name === name && entry.namespace === ingress.namespace
-      );
+      const service = backing.value.get(name);
       if (!service) {
         problems.push({ kind: "backendMissing", service: name });
         continue;
       }
-      const published = backing.value.published.find(
-        (entry) =>
-          entry.service.name === name &&
-          entry.service.namespace === ingress.namespace
-      );
-      const health = serviceHealthOf(
-        {
-          type: service.type,
-          selectorless: Object.keys(service.selector).length === 0,
-        },
-        published,
-        null
-      );
+      const health = serviceHealthOf(service, service, null);
       if (health.state === "noEndpoints" || health.state === "noneReady") {
         problems.push({ kind: "backendDown", service: name });
       }

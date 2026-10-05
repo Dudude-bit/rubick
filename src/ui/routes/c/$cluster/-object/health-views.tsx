@@ -8,7 +8,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useConnections } from "@/hooks/useConnections";
-import { useServiceBacking } from "@/hooks/useServiceBacking";
+import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
@@ -90,7 +90,7 @@ export function IngressHealthView({
     queryKey: queryKeys.ingressClass(ingress.className),
     queryFn: () => commands.resolveIngressClass(ingress.className ?? null),
   });
-  const backing = useServiceBacking([ingress.namespace]);
+  const backing = useServiceHealthInputs([ingress.namespace]);
   const certificates = useTlsCertificates(
     ingress.namespace,
     secretNamesOf(ingress)

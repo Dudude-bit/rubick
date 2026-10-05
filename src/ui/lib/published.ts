@@ -17,13 +17,15 @@ import type {
 } from "@/generated/types";
 
 /** Everything in the answer, published or merely present in it. */
-export const endpointCount = (published: ServicePublished): number =>
-  published.ready + published.draining + published.notReady;
+export const endpointCount = (
+  published: Pick<ServicePublished, "ready" | "draining" | "notReady">
+): number => published.ready + published.draining + published.notReady;
 
 /** Addresses taking traffic: a draining one counts, as kube-proxy falls back
  *  to it when nothing ready is left. Rust's `ServicePublished::serving`. */
-export const servingCount = (published: ServicePublished): number =>
-  published.ready + published.draining;
+export const servingCount = (
+  published: Pick<ServicePublished, "ready" | "draining">
+): number => published.ready + published.draining;
 
 export function publishedFor(
   conns: ResourceConnections,

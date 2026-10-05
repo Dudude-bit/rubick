@@ -8,8 +8,7 @@ import type {
   ClusterProblem,
   IngressInfo,
   PersistentVolumeClaimInfo,
-  ServiceInfo,
-  ServicePublished,
+  ServiceHealthGroup,
 } from "@/generated/types";
 import { attentionOf, type AttentionInputs } from "./attention";
 import { ingressHealthOf, type NamespaceBacking } from "./ingress-health";
@@ -27,49 +26,34 @@ function overview(over: Partial<ClusterOverview> = {}): ClusterOverview {
   } as ClusterOverview;
 }
 
-function service(name: string, type = "ClusterIP"): ServiceInfo {
+function services(
+  ...groups: Array<
+    [names: string[], ready: number, notReady?: number, type?: string]
+  >
+): AttentionInputs["services"] {
   return {
-    name,
-    namespace: "net",
-    uid: name,
-    type,
-    sessionAffinity: "None",
-    clusterIp: "10.0.0.1",
-    externalIps: [],
-    loadBalancerIps: [],
-    ports: [],
-    selector: { app: name },
-    labels: {},
-    annotations: {},
-    createdAt: null,
-  };
-}
-
-function publishing(
-  name: string,
-  ready: number,
-  notReady = 0
-): ServicePublished {
-  return {
-    service: {
-      kind: "Service",
-      name,
-      namespace: "net",
-      existence: "present",
-      facts: null,
-    },
-    source: "slices",
-    slices: 1,
-    ready,
-    draining: 0,
-    notReady,
-    unrouted: 0,
-    unroutedReady: 0,
-    ports: [],
-    endpoints: [],
-    whole: true,
-    unpublished: [],
-    stop: null,
+    answered: [
+      {
+        namespace: "net",
+        groups: groups.map(
+          ([
+            names,
+            ready,
+            notReady = 0,
+            type = "ClusterIP",
+          ]): ServiceHealthGroup => ({
+            names,
+            type,
+            selectorless: false,
+            ready,
+            draining: 0,
+            notReady,
+            unrouted: 0,
+          })
+        ),
+      },
+    ],
+    unread: [],
   };
 }
 
@@ -165,7 +149,7 @@ function attention(inputs: Partial<AttentionInputs> = {}) {
   return attentionOf(
     {
       overview: overview(),
-      services: { every: [], published: () => undefined, unread: [] },
+      services: { answered: [], unread: [] },
       ingresses: NONE,
       ingressHealth: () => {
         throw new Error("no Ingress here");
@@ -186,37 +170,30 @@ describe("what Needs attention lists beyond pods", () => {
    * `serviceHealthOf`, or a Service with some addresses serving is listed.
    */
   it("lists a Service with nothing serving and leaves one partly serving to its workload", () => {
-    const backing = [
-      publishing("web", 0),
-      publishing("api", 2),
-      publishing("half", 1, 1),
-    ];
     const listed = attention({
-      services: {
-        every: [
-          service("web"),
-          service("api"),
-          service("half"),
-          service("dns", "ExternalName"),
-        ],
-        published: (_, name) =>
-          backing.find((entry) => entry.service.name === name),
-        unread: [],
-      },
+      services: services(
+        [["web", "web-canary"], 0],
+        [["api"], 2],
+        [["half"], 1, 1],
+        [["dns"], 0, 0, "ExternalName"]
+      ),
     });
 
     expect(
       listed.items.map((item) => [item.kind, item.name, item.tone])
-    ).toEqual([["Service", "web", "err"]]);
+    ).toEqual([
+      ["Service", "web", "err"],
+      ["Service", "web-canary", "err"],
+    ]);
     expect(listed.items[0].reason).toBe("No endpoints");
+    expect(listed.items[1].namespace).toBe("net");
   });
 
   /** An Ingress whose class nothing serves, read by the Ingresses list's own reader. */
   it("lists an Ingress no controller serves", () => {
-    const backing: NamespaceBacking = {
-      services: [service("api")],
-      published: [publishing("api", 2)],
-    };
+    const backing: NamespaceBacking = new Map([
+      ["api", services([["api"], 2]).answered[0].groups[0]],
+    ]);
     const listed = attention({
       ingresses: {
         data: { rows: [ingress("storefront", "api")], unread: [] },
@@ -323,11 +300,7 @@ describe("what Needs attention lists beyond pods", () => {
     };
     const listed = attention({
       overview: overview({ problems: [warning], problemsTruncated: 3 }),
-      services: {
-        every: [service("web")],
-        published: () => publishing("web", 0),
-        unread: [],
-      },
+      services: services([["web"], 0]),
     });
 
     expect(listed.items.map((item) => item.name)).toEqual(["web", "flappy"]);
@@ -354,7 +327,7 @@ describe("what Needs attention could not look at", () => {
           },
         ],
       }),
-      services: { every: [], published: () => undefined, unread: "reading" },
+      services: { answered: [], unread: "reading" },
       autoscalers: { data: undefined, error: new Error("connection refused") },
       claims: {
         data: {

@@ -272,6 +272,22 @@ export interface ServiceBacking {
   published: ServicePublished[];
 }
 
+export interface ServiceHealthInputs {
+  namespace: string;
+  groups: ServiceHealthGroup[];
+}
+
+export interface ServiceHealthGroup {
+  names: string[];
+  type: string;
+  selectorless: boolean;
+  ready: number;
+  draining: number;
+  notReady: number;
+  unrouted: number;
+  stop?: ChainStop;
+}
+
 export interface ServicePublished {
   service: ObjectRef;
   source: EndpointSource;

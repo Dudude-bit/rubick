@@ -6,7 +6,7 @@ import type {
   IngressInfo,
   TlsCertificate,
 } from "@/generated/types";
-import { useServiceBacking } from "@/hooks/useServiceBacking";
+import type { ServiceHealthRead } from "@/hooks/useServiceHealthInputs";
 import { certificatesOf } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
 import {
@@ -25,11 +25,12 @@ const answers = <V>(results: UseQueryResult<V>[]): Answer<V>[] =>
 /**
  * Each Ingress's verdict, from reads made once for every row: the class
  * bindings, the scope's Services, each namespace's TLS Secrets. The Ingresses
- * list and the Overview both read it, so the two cannot disagree.
+ * list and the Overview both read it, so the two cannot disagree. The
+ * Services come from the caller, who already reads them for the same scope.
  */
 export function useIngressHealth(
   rows: readonly IngressInfo[] | undefined,
-  scope: string[] | null,
+  backing: ServiceHealthRead,
   enabled = true
 ): (ingress: IngressInfo) => IngressHealth {
   const classes = useMemo(
@@ -44,7 +45,6 @@ export function useIngressHealth(
     })),
     combine: answers<IngressClassBinding>,
   });
-  const backing = useServiceBacking(scope, enabled);
   const secrets = useMemo(() => {
     const byNamespace = new Map<string, Set<string>>();
     for (const ingress of rows ?? []) {

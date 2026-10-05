@@ -372,6 +372,11 @@ export const queryKeys = {
     "service-backing",
     (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
   ],
+  /** A scope's Services as their verdict reads them, `listServiceHealthInputs`. */
+  serviceHealthInputs: (namespaces: readonly string[] | null): string[] => [
+    "service-health-inputs",
+    (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
+  ],
   ingressClass: (className: string | null | undefined): (string | null)[] => [
     "ingress-class",
     className ?? null,

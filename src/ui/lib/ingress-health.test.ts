@@ -2,12 +2,8 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import type {
-  IngressClassBinding,
-  ServiceInfo,
-  ServicePublished,
-  TlsCertificate,
-} from "@/generated/types";
+import type { IngressClassBinding, TlsCertificate } from "@/generated/types";
+import type { ServiceHealthInput } from "./service-health";
 import {
   ingressHealthOf,
   ingressHealthWords,
@@ -30,52 +26,21 @@ const UNSERVED: IngressClassBinding = {
   controller: null,
 };
 
-function service(name: string): ServiceInfo {
+function serving(ready: number): ServiceHealthInput {
   return {
-    name,
-    namespace: "net",
-    uid: name,
     type: "ClusterIP",
-    sessionAffinity: "None",
-    clusterIp: "10.0.0.1",
-    externalIps: [],
-    loadBalancerIps: [],
-    ports: [],
-    selector: { app: name },
-    labels: {},
-    annotations: {},
-    createdAt: null,
-  };
-}
-
-function publishing(name: string, ready: number): ServicePublished {
-  return {
-    service: {
-      kind: "Service",
-      name,
-      namespace: "net",
-      existence: "present",
-      facts: null,
-    },
-    source: "slices",
-    slices: 1,
+    selectorless: false,
     ready,
     draining: 0,
     notReady: 0,
     unrouted: 0,
-    unroutedReady: 0,
-    ports: [],
-    endpoints: [],
-    whole: true,
-    unpublished: [],
-    stop: null,
   };
 }
 
-const BACKING: NamespaceBacking = {
-  services: [service("web"), service("api")],
-  published: [publishing("web", 0), publishing("api", 2)],
-};
+const BACKING: NamespaceBacking = new Map([
+  ["web", serving(0)],
+  ["api", serving(2)],
+]);
 
 function ingress(
   backends: string[],

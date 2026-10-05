@@ -120,6 +120,7 @@ import type {
   ServedObjects,
   ServiceBacking,
   ServiceFilters,
+  ServiceHealthInputs,
   ServiceInfo,
   ServicePublished,
   ShareIdentity,
@@ -1548,6 +1549,14 @@ export async function listServiceBacking(
   namespace: string | null
 ): Promise<ServiceBacking> {
   return invoke<ServiceBacking>("list_service_backing", { namespace });
+}
+
+export async function listServiceHealthInputs(
+  scope: string[] | null
+): Promise<Scoped<ServiceHealthInputs>> {
+  return invoke<Scoped<ServiceHealthInputs>>("list_service_health_inputs", {
+    scope,
+  });
 }
 
 export async function getIngress(

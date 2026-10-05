@@ -56,7 +56,7 @@ function attentionFrom(
         problemsTruncated: 0,
         unread: [],
       } as unknown as ClusterOverview,
-      services: { every: [], published: () => undefined, unread: [] },
+      services: { answered: [], unread: [] },
       ingresses: { data: { rows: [], unread: [] }, error: null },
       ingressHealth: () => {
         throw new Error("no Ingress here");
@@ -382,8 +382,7 @@ describe("what Needs attention says it checked", () => {
   it("never says nothing needs attention beside a kind it was refused", async () => {
     const refused = attentionFrom([], {
       services: {
-        every: [],
-        published: () => undefined,
+        answered: [],
         unread: [
           {
             namespace: "net",

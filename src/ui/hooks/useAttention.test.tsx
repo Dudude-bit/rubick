@@ -7,7 +7,7 @@ import type { ClusterOverview } from "@/generated/types";
 
 const commands = vi.hoisted(() => ({
   getClusterOverview: vi.fn(),
-  listServiceBacking: vi.fn(),
+  listServiceHealthInputs: vi.fn(),
   listIngressesIn: vi.fn(),
   listAutoscalersIn: vi.fn(),
   listPersistentVolumeClaimsIn: vi.fn(),
@@ -40,10 +40,7 @@ function wrapper() {
 beforeEach(() => {
   for (const command of Object.values(commands)) command.mockReset();
   commands.getClusterOverview.mockResolvedValue(OVERVIEW);
-  commands.listServiceBacking.mockResolvedValue({
-    services: [],
-    published: [],
-  });
+  commands.listServiceHealthInputs.mockResolvedValue(EMPTY);
   commands.listIngressesIn.mockResolvedValue(EMPTY);
   commands.listAutoscalersIn.mockResolvedValue(EMPTY);
   commands.listPersistentVolumeClaimsIn.mockResolvedValue(EMPTY);

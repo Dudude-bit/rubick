@@ -4,7 +4,7 @@ import { useClusterOverview } from "@/hooks/useClusterOverview";
 import { useIngressHealth } from "@/hooks/useIngressHealth";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
-import { useServiceBacking } from "@/hooks/useServiceBacking";
+import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
 import { useT } from "@/i18n/useT";
 import { attentionOf, type Attention } from "@/lib/attention";
 import { commands } from "@/lib/commands";
@@ -32,7 +32,7 @@ export function useAttention(scope?: readonly string[]): Attention | null {
   const cacheKey = scopeCacheKey(asked);
 
   const overview = useClusterOverview(asked);
-  const services = useServiceBacking(wire, isConnected);
+  const services = useServiceHealthInputs(wire, { enabled: isConnected });
   const ingresses = useLiveQuery({
     queryKey: queryKeys.resources(ResourceType.Ingress, cacheKey),
     queryFn: () => commands.listIngressesIn(wire),
@@ -41,7 +41,7 @@ export function useAttention(scope?: readonly string[]): Attention | null {
   });
   const ingressHealth = useIngressHealth(
     ingresses.data?.rows,
-    wire,
+    services,
     isConnected
   );
   const autoscalers = useLiveQuery({

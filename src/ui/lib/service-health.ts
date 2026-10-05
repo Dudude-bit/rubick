@@ -9,7 +9,11 @@
  */
 
 import type { T } from "@/i18n/useT";
-import type { ResourceConnections, ServicePublished } from "@/generated/types";
+import type {
+  ChainStop,
+  ResourceConnections,
+  ServicePublished,
+} from "@/generated/types";
 import { describeStop, stopUnder } from "@/lib/connections";
 import { errorToShow } from "@/lib/error-utils";
 import { endpointCount, publishedFor, servingCount } from "@/lib/published";
@@ -18,8 +22,8 @@ import type { StatusRole } from "@/lib/status-role";
 export type ServiceHealth =
   | { state: "ready"; serving: number }
   | { state: "partly"; serving: number; total: number }
-  | { state: "noneReady"; published: ServicePublished }
-  | { state: "noEndpoints"; published: ServicePublished }
+  | { state: "noneReady"; published: PublishedCounts }
+  | { state: "noEndpoints"; published: PublishedCounts }
   /** A DNS alias: no endpoints, by design. */
   | { state: "externalName" }
   /** No selector, and nobody wrote an endpoint by hand. */
@@ -32,9 +36,18 @@ export interface ServiceShape {
   selectorless: boolean;
 }
 
+/** What the verdict reads of what a Service publishes: the full answer and the compact one both carry it. */
+export type PublishedCounts = Pick<
+  ServicePublished,
+  "ready" | "draining" | "notReady" | "unrouted"
+> & { stop?: ChainStop | null };
+
+/** One Service as its verdict reads it, the shape `listServiceHealthInputs` answers in. */
+export type ServiceHealthInput = ServiceShape & PublishedCounts;
+
 export function serviceHealthOf(
   service: ServiceShape,
-  published: ServicePublished | undefined,
+  published: PublishedCounts | undefined,
   failure: string | null
 ): ServiceHealth {
   if (service.type === "ExternalName") return { state: "externalName" };
@@ -61,7 +74,7 @@ export interface Verdict {
   reason: string | null;
 }
 
-function stopReason(published: ServicePublished, t: T): string | null {
+function stopReason(published: PublishedCounts, t: T): string | null {
   const stop = published.stop;
   if (!stop || !("service" in stop)) return null;
   const title = describeStop(stop, t).title;

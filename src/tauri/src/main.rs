@@ -456,6 +456,7 @@ fn main() {
             commands::network::list_endpoints_in,
             commands::network::list_service_endpoints,
             commands::network::list_service_backing,
+            commands::network::list_service_health_inputs,
             commands::network::get_endpoints,
             commands::network::delete_endpoints,
             // Gateway API commands

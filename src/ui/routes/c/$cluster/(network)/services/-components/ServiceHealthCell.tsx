@@ -27,14 +27,13 @@ export function HealthCell({ service }: { service: ServiceInfo }) {
   const t = useT();
   const read = useContext(Backing);
   if (!read) return null;
-  const home = read.in(service.namespace);
   const health = serviceHealthOf(
     {
       type: service.type,
       selectorless: Object.keys(service.selector).length === 0,
     },
     read.published(service.namespace, service.name),
-    home.known ? null : home.why
+    read.why(service.namespace)
   );
   return <VerdictBadge verdict={serviceHealthWords(health, t)} compact />;
 }

@@ -16,8 +16,7 @@ import type {
   PersistentVolumeClaimInfo,
   ProblemDetail,
   Scoped,
-  ServiceInfo,
-  ServicePublished,
+  ServiceHealthInputs,
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { errorCode, errorToShow } from "@/lib/error-utils";
@@ -135,47 +134,31 @@ function toneOf(role: string): AttentionTone | null {
 }
 
 const serviceItems = remember(
-  (
-    services: ServiceInfo[],
-    published: (
-      namespace: string,
-      name: string
-    ) => ServicePublished | undefined,
-    t: T
-  ): AttentionItem[] =>
-    services.flatMap((service) => {
-      const health = serviceHealthOf(
-        {
-          type: service.type,
-          selectorless: Object.keys(service.selector).length === 0,
-        },
-        published(service.namespace, service.name),
-        null
-      );
-      // Some addresses not ready is the workload's verdict to give; a Service
-      // with none serving is a fact no other reader reports.
-      if (health.state !== "noEndpoints" && health.state !== "noneReady")
-        return [];
-      const words = serviceHealthWords(health, t);
-      const tone = toneOf(words.role);
-      if (!tone) return [];
-      const subject = {
-        kind: "Service",
-        name: service.name,
-        namespace: service.namespace,
-      };
-      return [
-        withKey({
-          ...subject,
-          tone,
-          reason: words.label,
-          detail: words.reason ? { says: "ours", text: words.reason } : null,
-          since: null,
-          restarts: null,
-          opens: subject,
-        }),
-      ];
-    })
+  (answered: ServiceHealthInputs[], t: T): AttentionItem[] =>
+    answered.flatMap(({ namespace, groups }) =>
+      groups.flatMap((group) => {
+        const health = serviceHealthOf(group, group, null);
+        // Some addresses not ready is the workload's verdict to give; a
+        // Service with none serving is a fact no other reader reports.
+        if (health.state !== "noEndpoints" && health.state !== "noneReady")
+          return [];
+        const words = serviceHealthWords(health, t);
+        const tone = toneOf(words.role);
+        if (!tone) return [];
+        return group.names.map((name) => {
+          const subject = { kind: "Service", name, namespace };
+          return withKey({
+            ...subject,
+            tone,
+            reason: words.label,
+            detail: words.reason ? { says: "ours", text: words.reason } : null,
+            since: null,
+            restarts: null,
+            opens: subject,
+          });
+        });
+      })
+    )
 );
 
 interface Judged {
@@ -316,11 +299,7 @@ function checkOf<V>(
 export interface AttentionInputs {
   overview: ClusterOverview;
   services: {
-    every: ServiceInfo[];
-    published: (
-      namespace: string,
-      name: string
-    ) => ServicePublished | undefined;
+    answered: ServiceHealthInputs[];
     unread: Unread[] | "reading";
   };
   ingresses: Answer<Scoped<IngressInfo>>;
@@ -351,7 +330,7 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
   );
   const items = ranked([
     ...problemItems(overview.problems),
-    ...serviceItems(services.every, services.published, t),
+    ...serviceItems(services.answered, t),
     ...ingress.items,
     ...autoscalerItems(input.autoscalers.data?.rows ?? []),
     ...claimItems(input.claims.data?.rows ?? [], input.now, t),

@@ -31,7 +31,7 @@ vi.mock("@/lib/commands", () => ({
         viaDefault: false,
         available: [],
       }),
-    listServiceBacking: () => Promise.resolve({ services: [], published: [] }),
+    listServiceHealthInputs: () => Promise.resolve({ rows: [], unread: [] }),
     getTlsCertificates: () => Promise.resolve([]),
   },
 }));

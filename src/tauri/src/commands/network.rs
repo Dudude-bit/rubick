@@ -2,12 +2,12 @@
 //!
 //! Commands for managing Ingresses and Endpoints.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use crate::error::Result;
 use crate::resources::{
-    published, selected_count, EndpointsInfo, Existence, IngressInfo, NetworkPolicyInfo, ObjectRef,
-    ServiceInfo, ServicePublished,
+    published, selected_count, ChainStop, EndpointsInfo, Existence, IngressInfo, NetworkPolicyInfo,
+    ObjectRef, ServiceInfo, ServicePublished,
 };
 use crate::state::AppState;
 use k8s_openapi::api::core::v1::{Endpoints, Pod, Service};
@@ -155,6 +155,101 @@ pub async fn list_service_backing(
     })
 }
 
+/// One namespace's Services as their health verdict reads them.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceHealthInputs {
+    pub namespace: String,
+    pub groups: Vec<ServiceHealthGroup>,
+}
+
+/// What `serviceHealthOf` reads of a Service and of what it publishes, and
+/// nothing else, once for every Service in the namespace that reads the same.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServiceHealthGroup {
+    pub names: Vec<String>,
+    pub type_: String,
+    pub selectorless: bool,
+    pub ready: i32,
+    pub draining: i32,
+    pub not_ready: i32,
+    pub unrouted: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop: Option<ChainStop>,
+}
+
+impl ServiceHealthGroup {
+    /// A stop names its Service, so a Service with one stands alone.
+    fn reads_like(&self, other: &Self) -> bool {
+        self.stop.is_none()
+            && other.stop.is_none()
+            && self.type_ == other.type_
+            && self.selectorless == other.selectorless
+            && (self.ready, self.draining, self.not_ready, self.unrouted)
+                == (other.ready, other.draining, other.not_ready, other.unrouted)
+    }
+}
+
+/// The Services of a scope as their health verdict reads them, for the count
+/// the shell keeps on every screen. `list_service_backing` carries each
+/// Service whole, about 1.3 KiB apiece, past the IPC target at two hundred.
+#[tauri::command]
+pub async fn list_service_health_inputs(
+    scope: Option<Vec<String>>,
+    state: State<'_, AppState>,
+) -> Result<Scoped<ServiceHealthInputs>> {
+    let client = (*state.current_client()?).clone();
+    across(scope, |reach| health_inputs_in(client.clone(), reach)).await
+}
+
+async fn health_inputs_in(
+    client: kube::Client,
+    reach: Option<String>,
+) -> Result<Vec<ServiceHealthInputs>> {
+    let ctx = ResourceContext {
+        client,
+        namespace: reach,
+    };
+    let (services, published) = published_in(&ctx).await?;
+    Ok(health_inputs_of(&services, published))
+}
+
+fn health_inputs_of(
+    services: &[Service],
+    published: Vec<ServicePublished>,
+) -> Vec<ServiceHealthInputs> {
+    let mut by_namespace: BTreeMap<String, Vec<ServiceHealthGroup>> = BTreeMap::new();
+    for (service, published) in services.iter().zip(published) {
+        let spec = service.spec.as_ref();
+        let read = ServiceHealthGroup {
+            names: vec![service.name_any()],
+            type_: spec
+                .and_then(|s| s.type_.clone())
+                .unwrap_or_else(|| "ClusterIP".to_string()),
+            selectorless: spec
+                .and_then(|s| s.selector.as_ref())
+                .is_none_or(BTreeMap::is_empty),
+            ready: published.ready,
+            draining: published.draining,
+            not_ready: published.not_ready,
+            unrouted: published.unrouted,
+            stop: published.stop,
+        };
+        let groups = by_namespace
+            .entry(service.namespace().unwrap_or_default())
+            .or_default();
+        match groups.iter_mut().find(|group| group.reads_like(&read)) {
+            Some(group) => group.names.extend(read.names),
+            None => groups.push(read),
+        }
+    }
+    by_namespace
+        .into_iter()
+        .map(|(namespace, groups)| ServiceHealthInputs { namespace, groups })
+        .collect()
+}
+
 async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<ServicePublished>)> {
     let params = ListParams::default();
     let services_api = ctx.namespaced_or_cluster_api::<Service>();
@@ -187,8 +282,13 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
         return Ok((services, published));
     };
 
+    let published = published_from_slices(&services, &slices.items);
+    Ok((services, published))
+}
+
+fn published_from_slices(services: &[Service], slices: &[EndpointSlice]) -> Vec<ServicePublished> {
     let mut by_service: HashMap<(String, String), Vec<&EndpointSlice>> = HashMap::new();
-    for slice in &slices.items {
+    for slice in slices {
         let Some(name) = slice.labels().get(published::SERVICE_NAME_LABEL) else {
             continue;
         };
@@ -198,7 +298,7 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
             .push(slice);
     }
 
-    let published = services
+    services
         .iter()
         .map(|svc| {
             let key = (svc.namespace().unwrap_or_default(), svc.name_any());
@@ -211,8 +311,7 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
             .with_stop(svc, None)
             .summary()
         })
-        .collect();
-    Ok((services, published))
+        .collect()
 }
 
 fn service_ref(svc: &Service) -> ObjectRef {
@@ -380,6 +479,195 @@ pub async fn delete_endpoints(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::state::perf::{wire_len, IPC_LIMIT_BYTES, IPC_TARGET_BYTES};
+    use k8s_openapi::api::core::v1::{ObjectReference, ServicePort, ServiceSpec};
+    use k8s_openapi::api::discovery::v1::{Endpoint, EndpointConditions, EndpointPort};
+    use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
+    use kube::core::ObjectMeta;
+
+    const APPS: [&str; 8] = [
+        "checkout-api",
+        "payments-gateway",
+        "inventory-worker",
+        "orders-db-proxy",
+        "notifications",
+        "search-indexer",
+        "storefront-web",
+        "auth-session-cache",
+    ];
+
+    fn map(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect()
+    }
+
+    /// Helm-shaped Services in fifty namespaces with one to four addresses,
+    /// none of them ready where `down` says so.
+    fn synthetic(n: usize, down: impl Fn(usize) -> bool) -> (Vec<Service>, Vec<EndpointSlice>) {
+        (0..n)
+            .map(|i| {
+                let app = APPS[i % APPS.len()];
+                let name = format!("{app}-{i:04}");
+                let namespace = format!("team-{:02}", i % 50);
+                let service = Service {
+                    metadata: ObjectMeta {
+                        name: Some(name.clone()),
+                        namespace: Some(namespace.clone()),
+                        uid: Some(format!("7d0f3c2a-{i:04}-4b1e-9a6f-2c8d5e7b1a90")),
+                        labels: Some(map(&[
+                            ("app.kubernetes.io/name", app),
+                            ("app.kubernetes.io/instance", &name),
+                            ("app.kubernetes.io/managed-by", "Helm"),
+                            ("helm.sh/chart", "service-1.4.2"),
+                        ])),
+                        annotations: Some(map(&[
+                            ("meta.helm.sh/release-name", &name),
+                            ("meta.helm.sh/release-namespace", &namespace),
+                        ])),
+                        ..Default::default()
+                    },
+                    spec: Some(ServiceSpec {
+                        type_: Some("ClusterIP".to_string()),
+                        cluster_ip: Some(format!("10.96.{}.{}", i / 250, i % 250)),
+                        selector: Some(map(&[
+                            ("app.kubernetes.io/name", app),
+                            ("app.kubernetes.io/instance", &name),
+                        ])),
+                        ports: Some(vec![ServicePort {
+                            name: Some("http".to_string()),
+                            port: 80,
+                            target_port: Some(IntOrString::String("http".to_string())),
+                            protocol: Some("TCP".to_string()),
+                            ..Default::default()
+                        }]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                };
+                let up = !down(i);
+                let endpoints = (0..=i % 4)
+                    .map(|e| Endpoint {
+                        addresses: vec![format!("10.244.{}.{}", i / 120, (i * 2 + e) % 250)],
+                        conditions: Some(EndpointConditions {
+                            ready: Some(up),
+                            serving: Some(up),
+                            terminating: Some(false),
+                        }),
+                        node_name: Some(format!("worker-{}", e + 1)),
+                        target_ref: Some(ObjectReference {
+                            kind: Some("Pod".to_string()),
+                            name: Some(format!("{name}-6d8f9c7b5-{e}x2kq")),
+                            namespace: Some(namespace.clone()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    })
+                    .collect();
+                let slice = EndpointSlice {
+                    metadata: ObjectMeta {
+                        name: Some(format!("{name}-h7x2p")),
+                        namespace: Some(namespace),
+                        labels: Some(map(&[(published::SERVICE_NAME_LABEL, &name)])),
+                        ..Default::default()
+                    },
+                    address_type: "IPv4".to_string(),
+                    endpoints,
+                    ports: Some(vec![EndpointPort {
+                        name: Some("http".to_string()),
+                        port: Some(8080),
+                        protocol: Some("TCP".to_string()),
+                        ..Default::default()
+                    }]),
+                };
+                (service, slice)
+            })
+            .unzip()
+    }
+
+    /// The shell asks this on every screen. Fails when 2000 Services no
+    /// longer fit half the IPC target, the other half being room for names
+    /// longer than these twenty characters; the whole `ServiceInfo` passed
+    /// the full target at about two hundred.
+    #[test]
+    fn two_thousand_services_fit_half_the_ipc_target() {
+        let (services, slices) = synthetic(2000, |i| i % 50 == 7);
+        let published = published_from_slices(&services, &slices);
+        let whole = wire_len(&ServiceBacking {
+            services: services.iter().map(ServiceInfo::from).collect(),
+            published: published.clone(),
+        });
+        let compact = wire_len(&Scoped::whole(health_inputs_of(&services, published)));
+        eprintln!(
+            "2000 Services: {} B per Service whole, {} B compact, {compact} B in one message",
+            whole / 2000,
+            compact / 2000
+        );
+        assert!(
+            compact <= IPC_TARGET_BYTES / 2,
+            "{compact} bytes for 2000 Services"
+        );
+    }
+
+    /// A Service with a stop stands alone, so a scope where nothing is ready
+    /// is the most this answer weighs. Fails if that outgrows one message.
+    #[test]
+    fn two_thousand_services_with_nothing_ready_stay_under_the_ipc_limit() {
+        let (services, slices) = synthetic(2000, |_| true);
+        let published = published_from_slices(&services, &slices);
+        let compact = wire_len(&Scoped::whole(health_inputs_of(&services, published)));
+        eprintln!("2000 Services, none ready: {compact} B in one message");
+        assert!(compact < IPC_LIMIT_BYTES, "{compact} bytes");
+    }
+
+    /// The compact answer is the full one cut down and grouped, not a second
+    /// reading of the cluster. Fails if a count or the stop is read afresh,
+    /// if a Service is dropped or doubled, if two Services that read
+    /// differently share a group, or if one with no selector or no type is
+    /// described differently.
+    #[test]
+    fn the_compact_answer_is_the_full_one_cut_down() {
+        let (mut services, slices) = synthetic(200, |i| i % 50 == 7);
+        services[1].spec.as_mut().expect("a spec").selector = None;
+        services[2].spec.as_mut().expect("a spec").type_ = None;
+        let published = published_from_slices(&services, &slices);
+        let inputs = health_inputs_of(&services, published.clone());
+
+        assert_eq!(inputs.len(), 50);
+        let named: usize = inputs
+            .iter()
+            .flat_map(|ns| &ns.groups)
+            .map(|group| group.names.len())
+            .sum();
+        assert_eq!(named, services.len());
+        let group = |service: &Service| {
+            let name = service.name_any();
+            inputs
+                .iter()
+                .find(|ns| Some(&ns.namespace) == service.namespace().as_ref())
+                .and_then(|ns| ns.groups.iter().find(|group| group.names.contains(&name)))
+                .cloned()
+                .expect("a group for every Service")
+        };
+        for (service, full) in services.iter().zip(&published) {
+            let group = group(service);
+            assert_eq!(
+                (group.ready, group.draining, group.not_ready, group.unrouted),
+                (full.ready, full.draining, full.not_ready, full.unrouted)
+            );
+            assert_eq!(
+                serde_json::to_value(&group.stop).expect("json"),
+                serde_json::to_value(&full.stop).expect("json")
+            );
+        }
+        assert!(group(&services[7]).stop.is_some());
+        assert_eq!(group(&services[7]).names.len(), 1);
+        assert!(group(&services[1]).selectorless);
+        assert!(!group(&services[0]).selectorless);
+        assert_eq!(group(&services[2]).type_, "ClusterIP");
+        assert!(group(&services[0]).names.len() > 1);
+    }
 
     /// The ALB page joins a class to its `IngressClassParams` through this
     /// reference, and the summary is now the only way it arrives: dropped

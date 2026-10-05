@@ -12,6 +12,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { useResourceList } from "@/hooks/useResource";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { useIngressHealth } from "@/hooks/useIngressHealth";
+import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
 import { ingressHealthWords } from "@/lib/ingress-health";
 import type { Verdict } from "@/lib/service-health";
 import { VerdictBadge } from "../../../-object/health-views";
@@ -268,7 +269,8 @@ export function IngressList() {
   );
   const vendorTls = useIngressTls(asked);
 
-  const healthOfRow = useIngressHealth(listed.data?.rows, scope.wire);
+  const backing = useServiceHealthInputs(scope.wire);
+  const healthOfRow = useIngressHealth(listed.data?.rows, backing);
   const healthOf = (ingress: IngressInfo): Verdict =>
     ingressHealthWords(healthOfRow(ingress), t);
   const vendorFor = useCallback(
