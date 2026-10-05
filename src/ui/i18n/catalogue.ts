@@ -7161,6 +7161,7 @@ export const en = {
       other: "{n} lines here are shown as written.",
     },
     restartNoun: { one: "restart", other: "restarts" },
+    failedPodsFolded: { one: "{n} failed pod", other: "{n} failed pods" },
     podNoun: { one: "pod", other: "pods" },
     worstFirst: "{n} · worst first",
     moreMostSevere: "+{n} more; showing the {shown} most severe",

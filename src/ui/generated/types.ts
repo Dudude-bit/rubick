@@ -1918,6 +1918,7 @@ export interface ClusterProblem {
   detail: ProblemDetail | null;
   since: string | null;
   restarts: number | null;
+  foldedPods: number | null;
 }
 
 export interface TlsCertificate {

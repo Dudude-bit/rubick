@@ -39,6 +39,8 @@ export interface AttentionItem {
   detail: AttentionDetail | null;
   since: string | null;
   restarts: number | null;
+  /** The failed pods a failed Job's row stands for instead of listing them. */
+  foldedPods: number | null;
   /** Where the row opens: the object itself, or what an autoscaler scales. */
   opens: { kind: string; name: string; namespace: string | null };
 }
@@ -123,6 +125,7 @@ const problemItems = remember(
         detail: problem.detail,
         since: problem.since,
         restarts: problem.restarts,
+        foldedPods: problem.foldedPods,
         opens: {
           kind: problem.kind,
           name: problem.name,
@@ -157,6 +160,7 @@ const serviceItems = remember(
             detail: words.reason ? { says: "ours", text: words.reason } : null,
             since: null,
             restarts: null,
+            foldedPods: null,
             opens: subject,
           });
         });
@@ -207,6 +211,7 @@ const ingressItems = remember(
           detail: words.reason ? { says: "ours", text: words.reason } : null,
           since: null,
           restarts: null,
+          foldedPods: null,
           opens: subject,
         })
       );
@@ -236,6 +241,7 @@ const autoscalerItems = remember((rows: AutoscalerInfo[]): AttentionItem[] =>
           : null,
         since: decided?.lastTransitionTime ?? null,
         restarts: null,
+        foldedPods: null,
         opens: {
           kind: target.kind,
           name: target.name,
@@ -266,6 +272,7 @@ const claimItems = remember(
           detail: { says: "ours", text: t("cluster", "claimPendingDetail") },
           since: claim.createdAt,
           restarts: null,
+          foldedPods: null,
           opens: subject,
         }),
       ];
@@ -327,6 +334,12 @@ function ranked(items: AttentionItem[]): AttentionItem[] {
       SEVERITY[a.tone] - SEVERITY[b.tone] || dated(a.since) - dated(b.since)
   );
 }
+
+/** "2 failed pods", where a row stands for runs it folded. */
+export const foldedWords = (item: AttentionItem, t: T): string | null =>
+  item.foldedPods
+    ? t("count", "failedPodsFolded", { n: item.foldedPods })
+    : null;
 
 export function attentionOf(input: AttentionInputs, t: T): Attention {
   const { overview, services } = input;

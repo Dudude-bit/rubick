@@ -89,6 +89,7 @@ const problem: ClusterProblem = {
   detail: { says: "said", text: MESSAGE },
   since: new Date().toISOString(),
   restarts: null,
+  foldedPods: null,
 };
 
 describe("the overview's two event panels", () => {
@@ -185,6 +186,7 @@ describe("the detail line on a problem row", () => {
       detail: { says: "unschedulable" },
       since: null,
       restarts: null,
+      foldedPods: null,
     };
 
     useLocaleStore.setState({ choice: "en" });
@@ -535,6 +537,33 @@ describe("what Needs attention says it checked", () => {
       hpa.querySelector("svg.lucide-triangle-alert.text-warn")
     ).not.toBeNull();
     expect(hpa.querySelector(".text-err")).toBeNull();
+  });
+
+  /**
+   * Dana: one failed CronJob run was three rows. The backend folds the
+   * Job's failed pods into its row; the row and Share both say how many.
+   * Fails if the count is dropped on either reader.
+   */
+  it("says how many failed pods a failed Job's row stands for", async () => {
+    const attention = attentionFrom([
+      {
+        ...problem,
+        kind: "Job",
+        name: "reports-29853686",
+        reason: "BackoffLimitExceeded",
+        severity: "critical",
+        foldedPods: 2,
+      },
+    ]);
+    await panel(attention);
+
+    expect(
+      screen.getByText("BackoffLimitExceeded").closest('[role="link"]')
+    ).toHaveTextContent("2 failed pods");
+    const share = attentionShare(attention, t);
+    expect(
+      share.body.type === "findings" && share.body.items[0].detail
+    ).toContain("2 failed pods");
   });
 
   /** Fifty rows push the rest of the page off screen; the tail is a count and a way into each list. */

@@ -5,7 +5,7 @@ import { iconSvg } from "@/lib/icon-svg";
 import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import type { StatusRole } from "@/lib/status-role";
-import type { Attention } from "@/lib/attention";
+import { foldedWords, type Attention } from "@/lib/attention";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
   ClusterOverview,
@@ -90,11 +90,16 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
   const items: ReportFinding[] = attention.items.map((item) => ({
     title: item.reason,
     detail:
-      item.detail === null
-        ? null
-        : item.detail.says === "said" || item.detail.says === "ours"
-          ? item.detail.text
-          : composedDetail(item.detail, t),
+      [
+        foldedWords(item, t),
+        item.detail === null
+          ? null
+          : item.detail.says === "said" || item.detail.says === "ours"
+            ? item.detail.text
+            : composedDetail(item.detail, t),
+      ]
+        .filter((part) => part !== null)
+        .join(" · ") || null,
     role: item.tone,
     ref: refOf({ kind: item.kind, name: item.name, namespace: item.namespace }),
   }));

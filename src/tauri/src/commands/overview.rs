@@ -28,7 +28,7 @@ use kube::api::ListParams;
 use kube::{Api, Client};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Debug;
 use std::sync::Arc;
 use tauri::State;
@@ -149,6 +149,8 @@ pub struct ClusterProblem {
     /// RFC3339 timestamp the condition started, for "N minutes ago".
     pub since: Option<String>,
     pub restarts: Option<i32>,
+    /// The failed pods a failed Job's row stands for instead of listing them.
+    pub folded_pods: Option<i32>,
 }
 
 /// Requested vs allocatable for one resource dimension, plus live usage.
@@ -458,6 +460,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             detail: ProblemDetail::said(message),
             since: created,
             restarts: Some(restarts),
+            folded_pods: None,
         });
     }
 
@@ -477,6 +480,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             detail: ProblemDetail::said(status.message.clone()),
             since: created,
             restarts: (restarts > 0).then_some(restarts),
+            folded_pods: None,
         });
     }
 
@@ -511,6 +515,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             ),
             since: pending_since.map(|t| t.to_rfc3339()),
             restarts: None,
+            folded_pods: None,
         });
     }
 
@@ -531,6 +536,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             // twelve-day-old date on something that happened minutes ago.
             since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
             restarts: Some(restarts),
+            folded_pods: None,
         });
     }
 
@@ -576,6 +582,7 @@ fn deployment_problems<'a>(
                     .and_then(|c| c.last_transition_time.as_ref())
                     .map(|t| t.moment().to_rfc3339()),
                 restarts: None,
+                folded_pods: None,
             })
         })
         .collect()
@@ -607,6 +614,7 @@ fn set_problem(
         detail: Some(ProblemDetail::ReplicasReady { ready, desired }),
         since: None,
         restarts: None,
+        folded_pods: None,
     })
 }
 
@@ -669,6 +677,7 @@ fn job_problems<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> Vec<ClusterProbl
                 detail: ProblemDetail::said(failure.message),
                 since: failed_since(job),
                 restarts: None,
+                folded_pods: None,
             })
         })
         .collect()
@@ -699,6 +708,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                         .and_then(|c| c.last_transition_time.as_ref())
                         .map(|t| t.moment().to_rfc3339()),
                     restarts: None,
+                    folded_pods: None,
                 });
             }
             // Cordoned nodes are usually intentional, but a node left
@@ -717,6 +727,7 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                     detail: Some(ProblemDetail::Unschedulable),
                     since: None,
                     restarts: None,
+                    folded_pods: None,
                 });
             }
             None
@@ -1030,6 +1041,56 @@ fn namespace_loads<'a>(
     loads
 }
 
+/// A failed Job's failed pods are its runs, not news of their own: they fold
+/// into the Job's row as a count, so one `CronJob` failure is one row and not
+/// three.
+fn fold_job_runs<'a>(
+    problems: Vec<ClusterProblem>,
+    pods: impl IntoIterator<Item = &'a Pod>,
+) -> Vec<ClusterProblem> {
+    type Key = (Option<String>, String);
+    let failed_jobs: HashSet<Key> = problems
+        .iter()
+        .filter(|p| p.kind == "Job")
+        .map(|p| (p.namespace.clone(), p.name.clone()))
+        .collect();
+    let runs: HashMap<Key, String> = pods
+        .into_iter()
+        .filter(|pod| pod.status.as_ref().and_then(|s| s.phase.as_deref()) == Some("Failed"))
+        .filter_map(|pod| {
+            let job = pod
+                .metadata
+                .owner_references
+                .as_ref()?
+                .iter()
+                .find(|owner| owner.kind == "Job" && owner.controller == Some(true))?;
+            Some((
+                (pod.metadata.namespace.clone(), pod.metadata.name.clone()?),
+                job.name.clone(),
+            ))
+        })
+        .collect();
+
+    let mut folded: HashMap<Key, i32> = HashMap::new();
+    let mut kept: Vec<ClusterProblem> = problems
+        .into_iter()
+        .filter(|p| {
+            let job = (p.kind == "Pod")
+                .then(|| runs.get(&(p.namespace.clone(), p.name.clone())))
+                .flatten()
+                .map(|job| (p.namespace.clone(), job.clone()))
+                .filter(|job| failed_jobs.contains(job));
+            let Some(job) = job else { return true };
+            *folded.entry(job).or_default() += 1;
+            false
+        })
+        .collect();
+    for p in kept.iter_mut().filter(|p| p.kind == "Job") {
+        p.folded_pods = folded.get(&(p.namespace.clone(), p.name.clone())).copied();
+    }
+    kept
+}
+
 /// Worst first, then oldest first — the top row is both the most severe and
 /// the one that has been broken longest — then cut to `MAX_PROBLEMS`.
 /// Returns the list and how many rows the cut dropped.
@@ -1130,6 +1191,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     problems.extend(daemon_set_problems(refs(input.daemon_sets)));
     problems.extend(job_problems(input.jobs.into_iter().flat_map(refs)));
     problems.extend(node_problems(refs(nodes)));
+    let problems = fold_job_runs(problems, refs(input.scoped_pods));
     // Scoped, the breakdown restates the selection, under a heading that
     // counts namespaces in the cluster. Drop it instead.
     let namespaces = match input.scope {
@@ -1704,6 +1766,7 @@ mod tests {
             detail: None,
             since: since.map(str::to_string),
             restarts: None,
+            folded_pods: None,
         }
     }
 
@@ -2941,6 +3004,68 @@ mod tests {
         );
     }
 
+    /// Dana: each failed `CronJob` run was three rows, two Failed pods and the
+    /// Job. The pods a failed Job owns fold into its row as a count; a failed
+    /// pod of a Job still retrying, and any other pod, keep their own rows.
+    /// Fails if the fold drops a pod it should keep or keeps one it folded.
+    #[test]
+    fn a_failed_jobs_failed_pods_fold_into_its_row() {
+        let job = |name: &str, failed: bool| -> Job {
+            serde_json::from_value(serde_json::json!({
+                "metadata": { "name": name, "namespace": "shop" },
+                "status": { "conditions": if failed { serde_json::json!([{
+                    "type": "Failed", "status": "True", "reason": "BackoffLimitExceeded"
+                }]) } else { serde_json::json!([]) } },
+            }))
+            .expect("a Job")
+        };
+        let pod = |name: &str, owner: &str, phase: &str| -> Pod {
+            serde_json::from_value(serde_json::json!({
+                "metadata": {
+                    "name": name,
+                    "namespace": "shop",
+                    "ownerReferences": [{
+                        "apiVersion": "batch/v1", "kind": "Job", "name": owner,
+                        "uid": owner, "controller": true
+                    }]
+                },
+                "status": { "phase": phase },
+            }))
+            .expect("a Pod")
+        };
+        let pods = arcs(vec![
+            pod("reports-1-a", "reports-1", "Failed"),
+            pod("reports-1-b", "reports-1", "Failed"),
+            pod("reports-2-a", "reports-2", "Failed"),
+        ]);
+
+        let problems = build_overview(&OverviewInputs {
+            scoped_pods: &pods,
+            accounting_pods: &[],
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: Some(&arcs(vec![job("reports-1", true), job("reports-2", false)])),
+            events: &[],
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            now: Utc::now(),
+        })
+        .problems;
+
+        let names: Vec<_> = problems.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names.len(), 2, "{names:?}");
+        assert!(names.contains(&"reports-1") && names.contains(&"reports-2-a"));
+        let failed = problems.iter().find(|p| p.kind == "Job").expect("the Job");
+        assert_eq!(failed.folded_pods, Some(2));
+    }
+
     /// The stores drop the pod template; the rollout verdict has to read the
     /// same from what is kept, or the watched answer differs from the listed one.
     #[test]
@@ -3720,6 +3845,7 @@ mod across_namespaces {
             detail: None,
             since: since.map(str::to_string),
             restarts: None,
+            folded_pods: None,
         }
     }
 

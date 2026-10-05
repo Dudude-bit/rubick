@@ -292,6 +292,7 @@ describe("what Needs attention lists beyond pods", () => {
       detail: null,
       since: "2026-10-05T10:00:00Z",
       restarts: 7,
+      foldedPods: null,
     };
     const listed = attention({
       overview: overview({ problems: [warning], problemsTruncated: 3 }),

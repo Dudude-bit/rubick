@@ -25,7 +25,12 @@ import {
   type Ratio,
 } from "./health-share";
 import { eventReasonMark } from "@/lib/event-reason";
-import type { Attention, AttentionCheck, AttentionItem } from "@/lib/attention";
+import {
+  foldedWords,
+  type Attention,
+  type AttentionCheck,
+  type AttentionItem,
+} from "@/lib/attention";
 import { ERROR_CODES } from "@/lib/error-utils";
 import { listLink, objectLink } from "@/lib/links";
 import {
@@ -167,6 +172,9 @@ function AttentionRow({ item }: { item: AttentionItem }) {
         )}
         {item.namespace && (
           <span className="text-fg-fnt"> · {item.namespace}</span>
+        )}
+        {item.foldedPods !== null && (
+          <span className="text-fg-mut"> · {foldedWords(item, t)}</span>
         )}
         {item.detail && (
           <span className="text-fg-fnt">
