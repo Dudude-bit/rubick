@@ -52,6 +52,11 @@ const WORKLOAD: Record<WorkloadStatus, Meaning> = {
   Ready: "workloadReady",
   Progressing: "workloadProgressing",
   Idle: "workloadIdle",
+  Stalled: "workloadStalled",
+  Unavailable: "workloadUnavailable",
+  Paused: "workloadPaused",
+  Waiting: "workloadWaiting",
+  Degraded: "workloadDegraded",
 };
 
 const WORKLOAD_KINDS = new Set(["Deployment", "StatefulSet", "DaemonSet"]);
