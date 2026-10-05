@@ -501,6 +501,38 @@ describe("what Needs attention says it checked", () => {
   });
 
   /**
+   * Marco: under the Not checked heading sat a red dot with no word beside
+   * it and his pod count, read as one more kind that was not checked. Fails
+   * if the summary goes back under that heading or loses its label.
+   */
+  it("keeps the summary above the kinds not checked, with a label", async () => {
+    await panel(
+      attentionFrom([{ ...problem, severity: "critical" }], {
+        services: {
+          answered: [],
+          unread: [
+            {
+              namespace: "team-checkout",
+              code: "PERMISSION_DENIED",
+              message: "services is forbidden",
+            },
+          ],
+        },
+      })
+    );
+
+    const summary = screen.getByTestId("attention-summary");
+    const unchecked = screen.getByTestId("attention-unchecked");
+    expect(unchecked).not.toContainElement(summary);
+    expect(
+      summary.compareDocumentPosition(unchecked) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(summary).toHaveTextContent(/^overall/);
+    expect(summary.querySelector(".bg-err")).not.toBeNull();
+  });
+
+  /**
    * Dana: a CrashLoopBackOff and an autoscaler blind to its metrics wore the
    * same red cross. Each row takes its reader's tone, and the icon changes
    * with it. Fails if the rows are drawn in one tone again.

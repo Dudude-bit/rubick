@@ -4717,6 +4717,7 @@ export const ru: Catalogue = {
       other: "в {n} пространства имён",
     },
     attentionMore: "и ещё {n}",
+    attentionOverall: "в целом",
     attentionPartly: "проверено не всё",
     claimPendingDetail:
       "К нему ещё не привязан том, поэтому под, который его монтирует, не запустится.",

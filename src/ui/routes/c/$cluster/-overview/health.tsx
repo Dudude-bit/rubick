@@ -338,15 +338,17 @@ function CheckRow({ check }: { check: AttentionCheck }) {
   );
 }
 
-/** The word beside the summary dot: none while rows above it carry the verdict. */
-const SUMMARY_LABEL: Record<StatusRole, "healthy" | "attentionPartly" | null> =
-  {
-    ok: "healthy",
-    neutral: "attentionPartly",
-    pending: null,
-    warn: null,
-    err: null,
-  };
+/** The word beside the summary dot: no verdict of its own while rows above it carry one. */
+const SUMMARY_LABEL: Record<
+  StatusRole,
+  "healthy" | "attentionPartly" | "attentionOverall"
+> = {
+  ok: "healthy",
+  neutral: "attentionPartly",
+  pending: "attentionOverall",
+  warn: "attentionOverall",
+  err: "attentionOverall",
+};
 
 /** Not-running pods by phase, in the words the composition bar uses. */
 function notRunning(pods: PodComposition): string {
@@ -405,24 +407,9 @@ export function AttentionPanel({
             onExpand={() => setExpanded(true)}
           />
         )}
-        {unchecked.length > 0 && (
-          <div
-            className="mt-1 border-t border-hair pt-1.5"
-            data-testid="attention-unchecked"
-          >
-            <p className="px-1.5 pb-0.5 text-[11px] text-fg-fnt">
-              {t("cluster", "attentionNotChecked")}
-            </p>
-            <ul>
-              {unchecked.map((check) => (
-                <CheckRow key={check.kind} check={check} />
-              ))}
-            </ul>
-          </div>
-        )}
-        {/* What is fine gets one muted line at the end, never a panel of
-         *  green checkmarks competing with the rows above it. Its dot is the
-         *  list's verdict: green only when everything named was read clean. */}
+        {/* What is fine gets one muted line after the rows, never a panel of
+         *  green checkmarks competing with them. Its dot is the list's
+         *  verdict: green only when everything named was read clean. */}
         <div className={ROW} data-testid="attention-summary">
           <span
             className={cn(
@@ -432,8 +419,7 @@ export function AttentionPanel({
             aria-hidden="true"
           />
           <span className="truncate font-mono font-medium text-fg-mut">
-            {SUMMARY_LABEL[summaryRole] &&
-              t("cluster", SUMMARY_LABEL[summaryRole])}
+            {t("cluster", SUMMARY_LABEL[summaryRole])}
           </span>
           <span className="truncate text-fg-fnt">
             {t("count", "podsRunning", {
@@ -455,6 +441,21 @@ export function AttentionPanel({
           <span />
           <span />
         </div>
+        {unchecked.length > 0 && (
+          <div
+            className="mt-1 border-t border-hair pt-1.5"
+            data-testid="attention-unchecked"
+          >
+            <p className="px-1.5 pb-0.5 text-[11px] text-fg-fnt">
+              {t("cluster", "attentionNotChecked")}
+            </p>
+            <ul>
+              {unchecked.map((check) => (
+                <CheckRow key={check.kind} check={check} />
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </Section>
   );
