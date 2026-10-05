@@ -134,7 +134,7 @@ export interface MetricReading {
   key: string;
   /** "cpu", or "cpu in web" for a per-container target. */
   label: string;
-  /** Where the number comes from, named only where it is not the obvious one. */
+  /** The metric's source type, named only where it is not the obvious one. */
   from: string | null;
   target: string;
   /** `null` where the autoscaler published no reading at all. */
@@ -148,7 +148,7 @@ export function metricReadings(facts: AutoscalerFacts): MetricReading[] {
     from:
       metric.source === "resource" || metric.source === "containerResource"
         ? null
-        : `${metric.source} metric`,
+        : metric.source,
     target: metric.target,
     current: metric.current,
   }));

@@ -73,7 +73,9 @@ function nowValue(facts: AutoscalerFacts, t: T) {
           )}
           <span className="text-[11px] text-fg-fnt">
             {t("readings", "govAgainstTarget", { target: metric.target })}
-            {metric.from ? ` · ${metric.from}` : ""}
+            {metric.from
+              ? ` · ${t("readings", "govMetricFrom", { source: metric.from })}`
+              : ""}
           </span>
         </span>
       ))}

@@ -3102,6 +3102,8 @@ export const ru: Catalogue = {
     govBothClauses: "{first} и {second}",
     govNoReading: "нет показаний",
     govAgainstTarget: "при цели {target}",
+    caBundleNamed: "набор {name}",
+    govMetricFrom: "метрика {source}",
     govBudgetKeeps: "держит {rule} — {room}",
     storyRollout:
       "Развёрнуто за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",

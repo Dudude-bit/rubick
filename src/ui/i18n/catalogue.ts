@@ -2913,6 +2913,8 @@ export const en = {
     govBothClauses: "{first}, and {second}",
     govNoReading: "no reading",
     govAgainstTarget: "against {target}",
+    caBundleNamed: "{name} bundle",
+    govMetricFrom: "{source} metric",
     govBudgetKeeps: "keeps {rule} — {room}",
     storyRollout:
       "Rolled out within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",

@@ -78,12 +78,13 @@ const backendTlsPolicyColumns: CrdColumn[] = [
   {
     id: "trust",
     header: "trusts",
-    accessor: (resource) => {
+    accessor: (resource, t) => {
       const wellKnown = getValueByPath(
         resource,
         "spec.validation.wellKnownCACertificates"
       );
-      if (wellKnown) return `${wellKnown} bundle`;
+      if (wellKnown)
+        return t("readings", "caBundleNamed", { name: String(wellKnown) });
       const refs = getValueByPath(
         resource,
         "spec.validation.caCertificateRefs"

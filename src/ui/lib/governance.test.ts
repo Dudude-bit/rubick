@@ -217,6 +217,20 @@ describe("what an autoscaler is worth saying", () => {
     expect(autoscalerReplicas(auto.facts, t)).toContain("nothing computed");
   });
 
+  /** "external metric" was English composed in code beside a Russian target. */
+  it("names a metric's source for the sentence to word", () => {
+    const facts = hpa("queue", {
+      metrics: [
+        { name: "depth", source: "external", target: "30", current: "12" },
+      ],
+    }).facts as Extract<ObjectFacts, { kind: "autoscaler" }>;
+    const [reading] = metricReadings(facts);
+    expect(reading.from).toBe("external");
+    expect(
+      translate("ru", "readings", "govMetricFrom", { source: reading.from! })
+    ).toBe("метрика external");
+  });
+
   it("calls a ceiling a ceiling and a floor a floor", () => {
     const ceiling = autoscalers(
       conns([
