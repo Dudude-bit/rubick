@@ -11,14 +11,17 @@ import {
   type PlacedSection,
 } from "@/lib/report-parts";
 import type { T } from "@/i18n/useT";
+import { dateFormat } from "@/lib/utils";
+import { currentLocale } from "@/stores/localeStore";
 
 /** In UTC, like every other time in the file: the reader is not in the sender's zone. */
 const clock = (ms: number) =>
-  `${new Date(ms).toLocaleTimeString([], {
+  `${dateFormat(currentLocale(), {
     hour: "2-digit",
     minute: "2-digit",
+    hourCycle: "h23",
     timeZone: "UTC",
-  })} UTC`;
+  }).format(ms)} UTC`;
 
 /**
  * The cluster-wide timeline as one row per object, since `report-parts`'

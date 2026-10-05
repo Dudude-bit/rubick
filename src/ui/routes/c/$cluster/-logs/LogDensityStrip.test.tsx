@@ -92,8 +92,8 @@ describe("what the density strip says when the lines are too close to map", () =
     render(
       <LogDensityStrip {...common} mode="full" logs={logs} retained={4} />
     );
-    expect(document.body.textContent).toContain(
-      "Все 4 строки пришли в пределах 150ms"
+    expect(document.body.textContent).toMatch(
+      /Все 4 строки пришли в пределах 150\sмс/
     );
   });
 

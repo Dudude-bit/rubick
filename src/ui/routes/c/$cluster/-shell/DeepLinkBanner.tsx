@@ -7,6 +7,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useDeepLinkStore } from "@/stores/deepLinkStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useT } from "@/i18n/useT";
+import { formatWhen } from "@/lib/utils";
 
 /** One spelling of a path, whichever of its characters arrived encoded. */
 const plain = (path: string) => {
@@ -49,7 +50,7 @@ export function DeepLinkBanner() {
   if (!arrival) return null;
 
   const when = arrival.link.capturedAt
-    ? arrival.link.capturedAt.toLocaleString()
+    ? formatWhen(arrival.link.capturedAt)
     : null;
 
   if (arrival.status === "live") {

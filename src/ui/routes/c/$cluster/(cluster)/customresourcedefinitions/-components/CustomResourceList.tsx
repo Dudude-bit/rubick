@@ -311,11 +311,7 @@ function formatColumnValue(
 
     case "integer":
     case "number":
-      return (
-        <span className="font-mono">
-          {typeof value === "number" ? value.toLocaleString() : String(value)}
-        </span>
-      );
+      return <span className="font-mono">{String(value)}</span>;
 
     case "boolean":
       // A CRD's booleans are settings, not lifecycle — `true` gets no pill.

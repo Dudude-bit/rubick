@@ -38,7 +38,7 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDuration } from "@/lib/utils";
 import type { JobDetailInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 
@@ -49,12 +49,7 @@ function duration(start: string | null, end: string | null): string | null {
   const to = end ? new Date(end).getTime() : Date.now();
   if (Number.isNaN(from) || Number.isNaN(to)) return null;
 
-  const seconds = Math.max(0, Math.round((to - from) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
+  return formatDuration((to - from) / 1000);
 }
 
 export function JobDetail() {

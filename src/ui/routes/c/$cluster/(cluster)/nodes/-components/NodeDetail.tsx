@@ -33,6 +33,7 @@ import { countMark, kindGlyph, podsMark } from "@/components/object/detail-tab";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNodeActions } from "./useNodeActions";
 import { errorToShow } from "@/lib/error-utils";
+import { formatWhen } from "@/lib/utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
@@ -233,7 +234,7 @@ export function NodeDetail() {
     { label: t("columns", "architecture"), value: node?.arch },
     {
       label: t("columns", "created"),
-      value: node?.createdAt ? new Date(node.createdAt).toLocaleString() : "-",
+      value: node?.createdAt ? formatWhen(node.createdAt) : "-",
     },
   ];
 

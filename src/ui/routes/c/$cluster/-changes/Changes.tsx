@@ -7,7 +7,7 @@ import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { changesScreenSection, watchedSection } from "./changes-share";
 import { timelineOf } from "@/lib/changes";
-import { cn } from "@/lib/utils";
+import { cn, formatWhen } from "@/lib/utils";
 import { useNow } from "@/hooks/useNow";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
@@ -75,7 +75,7 @@ export function Changes() {
         count={
           watching
             ? t("changes", "watchingNow", {
-                since: new Date(watching.from).toLocaleTimeString(),
+                since: formatWhen(watching.from, "clock"),
               })
             : t("changes", "notWatchingNow")
         }

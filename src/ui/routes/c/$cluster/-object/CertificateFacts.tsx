@@ -10,7 +10,7 @@
  */
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { cn } from "@/lib/utils";
+import { cn, formatWhen } from "@/lib/utils";
 import {
   expiryOf,
   expiryText,
@@ -117,9 +117,10 @@ export function CertificateSection({
   const cert = read.certificate;
   const expiry = expiryOf(cert);
   const uncovered = uncoveredHosts(cert, hosts);
-  const dates = `${new Date(cert.notBefore).toLocaleDateString()} — ${new Date(
-    cert.notAfter
-  ).toLocaleDateString()}`;
+  const dates = t("empty", "certValidFromTo", {
+    from: formatWhen(cert.notBefore, "day"),
+    to: formatWhen(cert.notAfter, "day"),
+  });
 
   return (
     <Section>

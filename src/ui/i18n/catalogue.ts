@@ -5890,6 +5890,7 @@ export const en = {
     readingCertificate: "reading the certificate…",
     doesNotCover: "does not cover {names}",
     certNoNames: "no names — it serves nothing",
+    certValidFromTo: "{from} to {to}",
     certNotCoveredNote:
       "{names} — browsers refuse a name the certificate does not carry",
     notProvisionedYet: "not provisioned yet",

@@ -49,7 +49,7 @@ import { commands } from "@/lib/commands";
 import { matchCronJobPods } from "@/lib/metrics";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatTimeUnit } from "@/lib/utils";
 import type { CronJobDetailInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
@@ -540,7 +540,7 @@ function policy(
     {
       label: t("action", "startingDeadline"),
       value: cronJob?.startingDeadlineSeconds
-        ? `${cronJob.startingDeadlineSeconds}s`
+        ? formatTimeUnit(cronJob.startingDeadlineSeconds, "second")
         : // Without a deadline a run missed during controller downtime is
           // skipped silently rather than started late.
           t("action", "noStartingDeadline"),

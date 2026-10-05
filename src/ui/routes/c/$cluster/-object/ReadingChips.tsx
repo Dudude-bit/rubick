@@ -13,7 +13,7 @@ import {
 import type { KindReading, NotRead, Reading } from "@/generated/types";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useT } from "@/i18n/useT";
-import { cn } from "@/lib/utils";
+import { cn, formatWhen } from "@/lib/utils";
 import { listing } from "./ownership";
 
 type Says = Reading["says"];
@@ -49,7 +49,7 @@ function why(reading: Reading, t: ReturnType<typeof useT>): string {
   if (reading.says === "partial")
     values = { namespaces: reading.namespaces.join(", ") };
   if (reading.says === "stale")
-    values = { since: new Date(reading.since).toLocaleTimeString() };
+    values = { since: formatWhen(reading.since, "clock") };
   return t("owns", LOOK[reading.says].key, values);
 }
 

@@ -9,6 +9,7 @@
 
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
+import { formatWhen } from "@/lib/utils";
 import type {
   ConditionInfo,
   CustomResourceInfo,
@@ -249,5 +250,4 @@ export const dash = (value: unknown) =>
   value === null || value === undefined || value === "" ? "—" : String(value);
 
 /** `14:22` in the reader's own zone. */
-export const hourMinute = (at: number | string) =>
-  new Date(at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+export const hourMinute = (at: number | string) => formatWhen(at, "hourMinute");

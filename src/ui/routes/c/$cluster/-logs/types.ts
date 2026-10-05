@@ -4,6 +4,7 @@ import type {
   LogLine,
   QueryTerm,
 } from "@/generated/types";
+import { formatDuration, formatTimeUnit } from "@/lib/utils";
 
 export type ViewMode = "compact" | "table" | "raw";
 
@@ -170,11 +171,10 @@ export function formatTimestampPrecise(timestamp: string | null, t: T): string {
  * "0ms", so a caller that can see one says so in its own sentence.
  */
 export function formatSpan(ms: number): string {
-  if (ms < 1000) return `${Math.max(0, Math.round(ms))}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  const minutes = Math.floor(ms / 60000);
-  const seconds = Math.round((ms % 60000) / 1000);
-  return seconds === 0 ? `${minutes}m` : `${minutes}m ${seconds}s`;
+  if (ms < 1000)
+    return formatTimeUnit(Math.max(0, Math.round(ms)), "millisecond");
+  if (ms < 60000) return formatTimeUnit(ms / 1000, "second", undefined, 1);
+  return formatDuration(ms / 1000);
 }
 
 /**

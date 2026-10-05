@@ -10,6 +10,7 @@ import {
   terminationWhen,
   type ContainerStatus,
 } from "@/lib/pod-status";
+import { formatDuration } from "@/lib/utils";
 
 /**
  * A pod's containers as the sequence they actually are.
@@ -330,11 +331,7 @@ export function runDuration(
   const from = Date.parse(started);
   const to = Date.parse(finished);
   if (Number.isNaN(from) || Number.isNaN(to) || to < from) return null;
-  const seconds = Math.round((to - from) / 1000);
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
-  return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+  return formatDuration((to - from) / 1000);
 }
 
 function noteFor(

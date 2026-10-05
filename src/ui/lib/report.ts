@@ -16,6 +16,7 @@
 import type { LogLevel } from "@/generated/types";
 import type { StatusRole } from "./status-role";
 import { redact } from "./hints";
+import { dateFormat } from "./utils";
 
 export type ReportTone = "ok" | "warn" | "err";
 
@@ -418,18 +419,10 @@ function none(text: string): string {
   return `<p class="none">${e(text)}</p>`;
 }
 
-const formats = new Map<string, Intl.DateTimeFormat>();
-
 function stamp(iso: string, lang: string, parts: Intl.DateTimeFormatOptions) {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
-  const key = `${lang}|${JSON.stringify(parts)}`;
-  let format = formats.get(key);
-  if (!format) {
-    format = new Intl.DateTimeFormat(lang, { ...parts, timeZone: "UTC" });
-    formats.set(key, format);
-  }
-  return format.format(date);
+  return dateFormat(lang, { ...parts, timeZone: "UTC" }).format(date);
 }
 
 function when(iso: string, lang: string): string {

@@ -65,10 +65,10 @@ describe("chooseStep", () => {
   });
 
   it("names a slice in the unit a person would say it in", () => {
-    expect(stepLabel(chooseStep(8_000, 96))).toBe("100 ms");
-    expect(stepLabel(chooseStep(6 * 60_000, 96))).toBe("5 s");
-    expect(stepLabel(chooseStep(4 * 3_600_000, 96))).toBe("5 min");
-    expect(stepLabel(chooseStep(40 * 3_600_000, 96))).toBe("30 min");
+    expect(stepLabel(chooseStep(8_000, 96))).toBe("100ms");
+    expect(stepLabel(chooseStep(6 * 60_000, 96))).toBe("5s");
+    expect(stepLabel(chooseStep(4 * 3_600_000, 96))).toBe("5m");
+    expect(stepLabel(chooseStep(40 * 3_600_000, 96))).toBe("30m");
   });
 });
 

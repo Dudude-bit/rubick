@@ -6441,7 +6441,8 @@ export const ru: Catalogue = {
       "В этих строках нет структурированных полей — только уровень и контейнер.",
     readingCertificate: "читаем сертификат…",
     doesNotCover: "не покрывает {names}",
-    certNoNames: "имён нет — он ничего не обслуживает",
+    certNoNames: "имён нет, он ничего не обслуживает",
+    certValidFromTo: "с {from} по {to}",
     certNotCoveredNote:
       "{names} — браузер откажет в имени, которого нет в сертификате",
     notProvisionedYet: "ещё не выделен",

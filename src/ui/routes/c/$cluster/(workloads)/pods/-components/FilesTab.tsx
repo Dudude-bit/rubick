@@ -41,7 +41,7 @@ import {
 import { errorToShow } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { formatShortcut } from "@/lib/platform";
-import { cn, formatSince } from "@/lib/utils";
+import { cn, formatSince, formatWhen } from "@/lib/utils";
 import type { PodInfo, Via } from "@/generated/types";
 import { offeredContainers } from "@/lib/container-sequence";
 import { useT } from "@/i18n/useT";
@@ -798,9 +798,7 @@ function Rows({
               <span
                 className="text-right tabular-nums text-fg-fnt"
                 title={
-                  entry.modified
-                    ? new Date(entry.modified * 1000).toLocaleString()
-                    : undefined
+                  entry.modified ? formatWhen(entry.modified * 1000) : undefined
                 }
               >
                 {entry.modified ? formatSince(entry.modified * 1000, now) : ""}

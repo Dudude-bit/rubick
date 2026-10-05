@@ -23,3 +23,31 @@ describe("how an age is put into words", () => {
     expect(composed).toEqual([]);
   });
 });
+
+describe("how a moment is put into words", () => {
+  /**
+   * `toLocaleString()` speaks the webview's language, not the one the
+   * reader chose: a Russian window printed "Oct 4, 08:27 AM" and
+   * "10/3/2026, 8:08:19 PM". Every moment goes through `formatWhen`.
+   */
+  it("never formats a date or number in the webview's language", () => {
+    const offenders = Object.entries(SOURCES).flatMap(([path, source]) =>
+      /\.toLocale(?:Date|Time)?String\(/.test(source) ? [path] : []
+    );
+    expect(offenders).toEqual([]);
+  });
+
+  /** A second formatter is a second set of rules for the same moment. */
+  it("builds Intl date and unit formats in one module", () => {
+    const offenders = Object.entries(SOURCES).flatMap(([path, source]) =>
+      /new Intl\.(?:DateTimeFormat|NumberFormat|RelativeTimeFormat)\(/.test(
+        source
+      ) &&
+      !path.endsWith("/lib/utils.ts") &&
+      !path.endsWith("/cron-schedule.ts")
+        ? [path]
+        : []
+    );
+    expect(offenders).toEqual([]);
+  });
+});

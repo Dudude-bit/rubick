@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from "clsx";
 import type { T } from "@/i18n/useT";
+import { currentLocale } from "@/stores/localeStore";
 import { twMerge } from "tailwind-merge";
 
 /**
@@ -15,60 +16,160 @@ export function cn(...inputs: ClassValue[]) {
 /**
  * How long ago, in the compact notation the cluster's own tooling uses.
  *
- * The units stay `d`/`h`/`m`/`s` in every language: that is `kubectl`'s
- * notation and the reader matches it against a terminal. Only the absence is
- * a word, so the translator comes in as an argument — this is called from
+ * In English that is `kubectl`'s `5d` / `2h` / `30m` / `10s`; another
+ * language gets its own short units, «5 д.», «30 мин». Only the absence is
+ * a word, so the translator comes in as an argument: this is called from
  * modules where a hook is not legal.
- *
- * @param createdAt - ISO timestamp string or null
- * @returns "5d", "2h", "30m", "10s", or what the reader calls unknown
  */
-export function formatAge(createdAt: string | null, t: T): string {
+export function formatAge(
+  createdAt: string | null,
+  t: T,
+  locale: string = currentLocale()
+): string {
   if (!createdAt) return t("cluster", "unknownAge");
 
   const created = new Date(createdAt);
   if (Number.isNaN(created.getTime())) return t("cluster", "unknownAge");
-  return formatSince(created.getTime(), Date.now());
+  return formatSince(created.getTime(), Date.now(), locale);
+}
+
+type TimeUnit = "day" | "hour" | "minute" | "second" | "millisecond";
+
+const unitFormats = new Map<string, Intl.NumberFormat>();
+
+/**
+ * One number of one unit, in CLDR's narrow form for the reader's language.
+ * English narrow units are `kubectl`'s, so `4m` stays `4m` there.
+ */
+export function formatTimeUnit(
+  value: number,
+  unit: TimeUnit,
+  locale: string = currentLocale(),
+  fractionDigits = 0
+): string {
+  const key = `${locale}|${unit}|${fractionDigits}`;
+  let format = unitFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat(locale, {
+      style: "unit",
+      unit,
+      unitDisplay: "narrow",
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+    });
+    unitFormats.set(key, format);
+  }
+  return format.format(value);
 }
 
 /**
- * The same `5d` / `3h` / `12m` / `40s` as {@link formatAge}, from a
- * timestamp and a clock the caller owns.
- *
- * The suffixes are kubectl's and are deliberately not translated; what
- * matters is that every age in this window reads the same way. Split out
- * because a second age format had appeared — "Nh ago", in English, and
- * with nothing above hours, so a file last written a week ago said
- * "168h ago".
+ * The same age as {@link formatAge}, from a timestamp and a clock the caller
+ * owns: the largest whole unit only.
  */
-export function formatSince(at: number, now: number): string {
+export function formatSince(
+  at: number,
+  now: number,
+  locale: string = currentLocale()
+): string {
   const seconds = Math.max(0, Math.floor((now - at) / 1000));
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
   const days = Math.floor(hours / 24);
-  if (days > 0) return `${days}d`;
-  if (hours > 0) return `${hours}h`;
-  if (minutes > 0) return `${minutes}m`;
-  return `${seconds}s`;
+  if (days > 0) return formatTimeUnit(days, "day", locale);
+  if (hours > 0) return formatTimeUnit(hours, "hour", locale);
+  if (minutes > 0) return formatTimeUnit(minutes, "minute", locale);
+  return formatTimeUnit(seconds, "second", locale);
+}
+
+/** A run's length in its two largest units: `2m 5s`, `1d 3h`, «2 мин 5 с». */
+export function formatDuration(
+  totalSeconds: number,
+  locale: string = currentLocale()
+): string {
+  const s = Math.max(0, Math.round(totalSeconds));
+  const parts: [number, TimeUnit][] = [
+    [Math.floor(s / 86400), "day"],
+    [Math.floor(s / 3600) % 24, "hour"],
+    [Math.floor(s / 60) % 60, "minute"],
+    [s % 60, "second"],
+  ];
+  const first = parts.findIndex(([n]) => n > 0);
+  if (first === -1) return formatTimeUnit(0, "second", locale);
+  return parts
+    .slice(first, first + 2)
+    .filter(([n]) => n > 0)
+    .map(([n, unit]) => formatTimeUnit(n, unit, locale))
+    .join(" ");
 }
 
 /**
- * Format a date value for display
- *
- * @param value - Date string or unknown value
- * @returns Formatted date string or null
+ * How a moment is drawn. `moment` is the compact one a row has room for and
+ * adds the year only when it is not this one; clocks are 24-hour, like the
+ * log viewer's, so a column never grows an AM/PM it has no room for.
  */
-export function formatDate(value: unknown): string | null {
-  if (!value) return null;
-  if (typeof value !== "string") return null;
+export type WhenShape = "moment" | "full" | "day" | "clock" | "hourMinute";
 
-  try {
-    const date = new Date(value);
-    if (isNaN(date.getTime())) return null;
-    return date.toLocaleString();
-  } catch {
-    return null;
+const WHEN_SHAPES: Record<WhenShape, Intl.DateTimeFormatOptions> = {
+  moment: {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  },
+  full: { dateStyle: "medium", timeStyle: "medium" },
+  day: { dateStyle: "medium" },
+  clock: {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  },
+  hourMinute: { hour: "2-digit", minute: "2-digit", hourCycle: "h23" },
+};
+
+const dateFormats = new Map<string, Intl.DateTimeFormat>();
+
+/** An `Intl.DateTimeFormat`, built once per language and shape. */
+export function dateFormat(
+  locale: string,
+  options: Intl.DateTimeFormatOptions
+): Intl.DateTimeFormat {
+  const key = `${locale}|${JSON.stringify(options)}`;
+  let format = dateFormats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale, options);
+    dateFormats.set(key, format);
   }
+  return format;
+}
+
+/**
+ * A moment in the reader's language and zone: «4 окт., 08:27» where English
+ * reads "Oct 4, 08:27 AM". Something that is not a date is shown as written.
+ */
+export function formatWhen(
+  at: number | string | Date,
+  shape: WhenShape = "full",
+  locale: string = currentLocale()
+): string {
+  const date = at instanceof Date ? at : new Date(at);
+  if (Number.isNaN(date.getTime())) return String(at);
+  const options =
+    shape === "moment" && date.getFullYear() !== new Date().getFullYear()
+      ? { ...WHEN_SHAPES.moment, year: "numeric" as const }
+      : WHEN_SHAPES[shape];
+  return dateFormat(locale, options).format(date);
+}
+
+/** {@link formatWhen} for a field that may hold anything, or nothing. */
+export function formatDate(
+  value: unknown,
+  locale: string = currentLocale()
+): string | null {
+  if (!value || typeof value !== "string") return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return formatWhen(date, "full", locale);
 }
 
 /**

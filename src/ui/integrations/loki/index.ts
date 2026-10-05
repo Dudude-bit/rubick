@@ -180,7 +180,7 @@ export default defineVendor({
         {
           say: {
             key: "lokiPageLimit" as const,
-            values: { n: PAGE_LINES.toLocaleString() },
+            values: { n: PAGE_LINES },
           },
         },
       ];

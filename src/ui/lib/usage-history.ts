@@ -18,6 +18,8 @@
  *    is the entire thing worth seeing.
  */
 
+import { formatDuration, formatWhen } from "./utils";
+
 /** One poll. `null` means metrics-server reported nothing for this object. */
 export interface UsageSample {
   /** Wall clock of the poll that produced it, in epoch ms. */
@@ -193,20 +195,16 @@ export function latestValue(points: readonly UsagePoint[]): number | null {
  * not drift upward while the metrics query is paused or failing.
  */
 export function watchedFor(samples: readonly UsageSample[]): string {
-  if (samples.length === 0) return "0s";
-  const seconds = Math.max(
-    0,
-    Math.round((samples[samples.length - 1].t - samples[0].t) / 1000)
+  if (samples.length === 0) return formatDuration(0);
+  const seconds = (samples[samples.length - 1].t - samples[0].t) / 1000;
+  return formatDuration(
+    seconds >= 60 ? Math.floor(seconds / 60) * 60 : seconds
   );
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m`;
-  return `${Math.floor(minutes / 60)}h${minutes % 60 === 0 ? "" : `${minutes % 60}m`}`;
 }
 
-/** `14:22:30` — the wall clock a tooltip names, in the reader's own zone. */
+/** `14:22:30`, the wall clock a tooltip names, in the reader's own zone. */
 export function clockOf(t: number): string {
-  return new Date(t).toLocaleTimeString(undefined, { hour12: false });
+  return formatWhen(t, "clock");
 }
 
 /**

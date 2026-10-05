@@ -27,7 +27,7 @@ import type {
 } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { useToast } from "@/components/ui/use-toast";
-import { cn, isK8sVersionAtLeast } from "@/lib/utils";
+import { cn, isK8sVersionAtLeast, formatTimeUnit } from "@/lib/utils";
 import { DEBUG_IMAGES } from "./constants";
 import { useDebugOperation } from "@/hooks";
 import { useT } from "@/i18n/useT";
@@ -292,8 +292,9 @@ export function DebugPodDialog({
             <div className="flex items-center justify-between">
               <span className="text-fg-mut">{t("action", "elapsed")}</span>
               <span className="font-mono text-fg">
-                {elapsedSeconds}s <span className="text-fg-fnt">/</span>{" "}
-                {timeoutSeconds}s
+                {formatTimeUnit(elapsedSeconds, "second")}{" "}
+                <span className="text-fg-fnt">/</span>{" "}
+                {formatTimeUnit(timeoutSeconds, "second")}
               </span>
             </div>
             <div className="h-[3px] overflow-hidden rounded-sm bg-sel">

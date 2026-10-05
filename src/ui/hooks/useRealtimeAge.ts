@@ -8,7 +8,7 @@
  */
 
 import { useNowEvery, type Every } from "@/hooks/useNow";
-import { formatAge } from "@/lib/utils";
+import { formatAge, formatDuration } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 
 function everyForAge(ageSeconds: number): Every {
@@ -52,19 +52,7 @@ function formatCountdown(seconds: number): string {
   // «через expired». The sentence for a passed moment is the caller's, off
   // `isExpired`.
   if (seconds <= 0) return "";
-
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-
-  const parts: string[] = [];
-  if (days > 0) parts.push(`${days}d`);
-  if (hours > 0) parts.push(`${hours}h`);
-  if (minutes > 0 && days === 0) parts.push(`${minutes}m`);
-  if (secs > 0 && days === 0 && hours === 0) parts.push(`${secs}s`);
-
-  return parts.join(" ") || "0s";
+  return formatDuration(seconds);
 }
 
 function getRemainingSeconds(targetDate: string | Date | null): number {
@@ -82,7 +70,7 @@ function everyForCountdown(remainingSeconds: number): Every {
 }
 
 export interface CountdownResult {
-  /** Formatted countdown string (e.g., "2d 5h 30m") */
+  /** Formatted countdown string (e.g., "2d 5h") */
   display: string;
   /** Whether the countdown has expired */
   isExpired: boolean;

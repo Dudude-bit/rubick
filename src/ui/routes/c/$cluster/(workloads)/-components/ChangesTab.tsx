@@ -5,6 +5,7 @@ import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
+import { formatWhen } from "@/lib/utils";
 import {
   helmReleaseOf,
   revisionOfController,
@@ -249,7 +250,7 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
             {items.some((i) => i.at !== null && i.at >= sinceMs)
               ? t("changes", "sinceMarker")
               : t("changes", "sinceNothing", {
-                  when: new Date(sinceMs).toLocaleString(),
+                  when: formatWhen(sinceMs, "moment"),
                 })}
           </p>
         ) : null}

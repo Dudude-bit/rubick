@@ -8,6 +8,7 @@
 import type { CrdColumn } from "../kit";
 import { getValueByPath, matchMultiple } from "../kit";
 import type { CrdView } from "../registry";
+import { formatDate } from "@/lib/utils";
 
 /**
  * Status configuration for Flux resources (uses standard conditions)
@@ -158,10 +159,7 @@ const helmRepositoryColumns: CrdColumn[] = [
     accessor: (resource) =>
       getValueByPath(resource, "status.artifact.lastUpdateTime"),
     cell: (value) => {
-      if (!value) return "-";
-      const date = new Date(String(value));
-      if (isNaN(date.getTime())) return "-";
-      return date.toLocaleString();
+      return formatDate(value) ?? "-";
     },
   },
 ];

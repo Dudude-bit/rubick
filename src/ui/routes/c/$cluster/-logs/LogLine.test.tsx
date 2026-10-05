@@ -55,11 +55,12 @@ describe("how a collapsed run of repeats says how long it took", () => {
     expect(row.textContent).not.toMatch(/over|instant/);
   });
 
-  /** Would break if the span stopped being carried inside the sentence. */
+  /** Would break if the span stopped being carried inside the sentence, or
+   *  went back to English units inside it. */
   it("names the span of a run that took time", () => {
     useLocaleStore.setState({ choice: "ru" });
     draw(1_200);
-    expect(screen.getByTestId("log-run")).toHaveTextContent("× 3 за 1.2s");
+    expect(screen.getByTestId("log-run")).toHaveTextContent("× 3 за 1,2 с");
   });
 
   /** Both sentences have their own English, which the Russian cases above do not hold. */

@@ -3,7 +3,7 @@ import { AlertTriangle } from "lucide-react";
 
 import { severityTone } from "@/lib/alerts";
 import { SEVERITY_BANNER, SEVERITY_QUOTE } from "./severity-tone";
-import { cn, formatAge } from "@/lib/utils";
+import { cn, formatAge, formatWhen } from "@/lib/utils";
 import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
 import { useT } from "@/i18n/useT";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -81,7 +81,7 @@ export function AlertBanner({
           <span>
             {t("alerts", "saidAt", {
               name: "",
-              when: new Date(when.value).toLocaleTimeString(),
+              when: formatWhen(when.value, "clock"),
               ago: formatAge(new Date(when.value).toISOString(), t),
             }).trim()}
           </span>

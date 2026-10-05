@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import { ExternalLink } from "lucide-react";
 
 import { hrefOf, isClusterScoped, objectLink, type AppLink } from "@/lib/links";
-import { formatAge, cn } from "@/lib/utils";
+import { formatAge, cn, formatWhen } from "@/lib/utils";
 import {
   clusterChoices,
   type AlertReading,
@@ -267,7 +267,7 @@ export function AlertReadingPanel({
           ) : (
             <span className="flex items-baseline gap-2">
               <span className="font-mono text-fg">
-                {new Date(reading.firedAt.value).toLocaleString()}
+                {formatWhen(reading.firedAt.value)}
               </span>
               <From from={reading.firedAt.from} t={t} />
               <span className="text-fg-fnt">

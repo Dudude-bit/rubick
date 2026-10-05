@@ -1,5 +1,6 @@
 import type { LogLevel } from "@/generated/types";
 import type { StreamedLogLine } from "./types";
+import { formatDuration, formatTimeUnit } from "@/lib/utils";
 
 /**
  * The buffer's shape over time, sliced.
@@ -11,7 +12,7 @@ import type { StreamedLogLine } from "./types";
  */
 
 /**
- * Slice durations the strip is allowed to use, with what to call them.
+ * Slice durations the strip is allowed to use.
  *
  * A ladder rather than a constant, because neither constant works: a
  * fixed slice count makes every slice a meaningless fraction (1/84th of
@@ -25,30 +26,13 @@ import type { StreamedLogLine } from "./types";
  * 5-minute slice starts at :00 and :05, so the axis labels are times that
  * exist.
  */
-const STEPS: ReadonlyArray<readonly [ms: number, label: string]> = [
-  [100, "100 ms"],
-  [250, "250 ms"],
-  [500, "500 ms"],
-  [1_000, "1 s"],
-  [2_000, "2 s"],
-  [5_000, "5 s"],
-  [10_000, "10 s"],
-  [15_000, "15 s"],
-  [30_000, "30 s"],
-  [60_000, "1 min"],
-  [120_000, "2 min"],
-  [300_000, "5 min"],
-  [600_000, "10 min"],
-  [900_000, "15 min"],
-  [1_800_000, "30 min"],
-  [3_600_000, "1 h"],
-  [7_200_000, "2 h"],
-  [21_600_000, "6 h"],
-  [43_200_000, "12 h"],
-  [86_400_000, "1 day"],
+const STEPS: readonly number[] = [
+  100, 250, 500, 1_000, 2_000, 5_000, 10_000, 15_000, 30_000, 60_000, 120_000,
+  300_000, 600_000, 900_000, 1_800_000, 3_600_000, 7_200_000, 21_600_000,
+  43_200_000, 86_400_000,
 ];
 
-export const FINEST_STEP_MS = STEPS[0][0];
+export const FINEST_STEP_MS = STEPS[0];
 
 /**
  * Fewer than this and it is not a map: one bar spanning the whole buffer
@@ -67,15 +51,17 @@ export const MIN_USEFUL_SLICES = 3;
  * the strip is never a handful of fat bars either.
  */
 export function chooseStep(spanMs: number, maxSlices: number): number {
-  for (const [step] of STEPS) {
+  for (const step of STEPS) {
     if (spanMs / step <= maxSlices) return step;
   }
-  return STEPS[STEPS.length - 1][0];
+  return STEPS[STEPS.length - 1];
 }
 
 /** What to call a slice of this length, in units a person uses. */
 export function stepLabel(step: number): string {
-  return STEPS.find(([ms]) => ms === step)?.[1] ?? `${step} ms`;
+  return step < 1000
+    ? formatTimeUnit(step, "millisecond")
+    : formatDuration(step / 1000);
 }
 
 export interface DensityBucket {

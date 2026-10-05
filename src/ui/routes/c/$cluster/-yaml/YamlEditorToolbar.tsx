@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { formatWhen } from "@/lib/utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -145,7 +146,7 @@ export function YamlEditorToolbar({
               >
                 <div className="flex flex-col">
                   <span className="text-xs text-fg-mut">
-                    {new Date(entry.timestamp).toLocaleString()}
+                    {formatWhen(entry.timestamp)}
                   </span>
                   {entry.label && (
                     <span className="text-sm">{entry.label}</span>

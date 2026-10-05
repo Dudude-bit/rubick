@@ -8,6 +8,7 @@ import { templateContainersSection } from "../../-components/containers-section"
 import { podsSection } from "../../-components/pods-section";
 import type { ReportStat } from "@/lib/report";
 import { statusRole } from "@/lib/status-role";
+import { formatDuration } from "@/lib/utils";
 import type { JobDetailInfo, PodInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
 
@@ -21,12 +22,7 @@ function duration(
   const from = new Date(start).getTime();
   const to = new Date(end ?? capturedAt).getTime();
   if (Number.isNaN(from) || Number.isNaN(to)) return null;
-  const seconds = Math.max(0, Math.round((to - from) / 1000));
-  if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ${seconds % 60}s`;
-  const hours = Math.floor(minutes / 60);
-  return `${hours}h ${minutes % 60}m`;
+  return formatDuration((to - from) / 1000);
 }
 
 export function jobStatusOf(job: JobDetailInfo) {

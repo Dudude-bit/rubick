@@ -25,6 +25,7 @@ import type {
   DebugResult,
 } from "@/generated/types";
 import { commands } from "@/lib/commands";
+import { formatTimeUnit } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 import { DEBUG_IMAGES } from "./constants";
 import { useDebugOperation } from "@/hooks";
@@ -256,7 +257,8 @@ export function DebugNodeDialog({
               <div className="flex items-center justify-between text-sm">
                 <span className="text-fg-mut">{t("action", "elapsed")}</span>
                 <span className="font-medium">
-                  {elapsedSeconds}s / {timeoutSeconds}s
+                  {formatTimeUnit(elapsedSeconds, "second")} /{" "}
+                  {formatTimeUnit(timeoutSeconds, "second")}
                 </span>
               </div>
               <Progress value={progressPercent} className="h-2" />

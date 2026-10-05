@@ -11,19 +11,13 @@ import {
   type JournalEntry,
   type Revision,
 } from "@/lib/changes";
-import { cn } from "@/lib/utils";
+import { cn, formatWhen } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 
 /** A busy cluster's week runs to thousands of rows; the tail is said in words. */
 const MAX_ROWS = 300;
 
-const clock = (ms: number) =>
-  new Date(ms).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+const clock = (ms: number) => formatWhen(ms, "moment");
 
 export function ChangesTimeline({
   items,

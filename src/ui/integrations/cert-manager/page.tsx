@@ -37,7 +37,7 @@ import {
   type DetailTabMark,
 } from "@/components/object/detail-tab";
 
-import { cn } from "@/lib/utils";
+import { cn, formatWhen } from "@/lib/utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
@@ -525,7 +525,7 @@ function Facts({ row }: { row: CertRow }) {
           <span className="text-fg-fnt">{t("empty", "renewsLabel")}</span>
           <span className="min-w-0">
             <span className="font-mono text-fg-mid">
-              {new Date(row.renewalTime).toLocaleString()}
+              {formatWhen(row.renewalTime)}
             </span>
             {row.expiry?.renewalOverdue && (
               <span className="ml-2 text-warn">
