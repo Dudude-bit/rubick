@@ -1711,7 +1711,7 @@ export const en = {
     guessPendingVaried:
       "Most likely: no node fits it, and the scheduler's answer has changed over {attempts}, so the nodes are probably changing under it.",
     guessUnknownUnread:
-      "The pod's events could not be read, so what is probably wrong cannot be said from here — the container states below are all this app could look at.",
+      "The pod's events could not be read, so what is probably wrong cannot be said from here. The container states below are all this app could look at.",
     guessProbeUnnamed:
       "Most likely: a probe fails and the kubelet acts on it, {times} so far — the event does not say which. The app probably starts slower than the probe allows, or listens on another port or path.",
     guessProbe:
@@ -1753,7 +1753,7 @@ export const en = {
     checkImageRef:
       "Check the image reference {image}: tag, registry, pull secret",
     checkMountedSecret:
-      "Secret {name}: one the pod mounts — the pull secret is a different field, which this app does not read",
+      "Secret {name}: one the pod mounts. The pull secret is a different field, which this app does not read",
     checkPullSecret: "Secret {name}: a pull secret the pod mounts",
     checkVolumeRef: "{kind} {name}: does it exist, is it bound",
     checkRequests: "Compare the requests with what the nodes have free",
@@ -3091,7 +3091,7 @@ export const en = {
     traefikNoArgs:
       "It was started with no arguments, so its entry points come from a configuration file this app cannot read.",
     reachClusterDns:
-      "{host} is a name only the cluster can resolve — this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or forward the port and use that: kubectl port-forward -n <namespace> svc/<service> 9090:9090, then http://localhost:9090.",
+      "{host} is a name only the cluster can resolve, and this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or forward the port and use that: kubectl port-forward -n <namespace> svc/<service> 9090:9090, then http://localhost:9090.",
     reachNoScheme:
       "{host} has no scheme — write http:// or https:// in front of it.",
     connReasonAndShape: "{said} — {shape}",
