@@ -12,6 +12,7 @@ const store = vi.hoisted(() => ({
     currentNamespace: "default",
     namespaceScope: ["default"],
     isConnected: true,
+    contexts: [],
   },
 }));
 

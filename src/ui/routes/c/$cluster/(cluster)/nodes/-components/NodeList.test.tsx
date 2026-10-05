@@ -7,7 +7,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 
 const store = vi.hoisted(() => ({
-  state: { isConnected: true, namespaceScope: [] as string[] },
+  state: { isConnected: true, namespaceScope: [] as string[], contexts: [] },
 }));
 vi.mock("@/stores/clusterStore", () => ({
   useClusterStore: vi.fn(<T,>(selector?: (s: typeof store.state) => T) =>
