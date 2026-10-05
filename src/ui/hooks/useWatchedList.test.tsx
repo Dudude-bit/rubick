@@ -44,8 +44,8 @@ describe("a list kept current by a watch", () => {
   it("polls and says so once when the watch fails", () => {
     const { result } = watched();
     act(() => {
-      callbacks.onError?.("watch is forbidden");
-      callbacks.onError?.("watch is forbidden");
+      callbacks.onError?.("watch stream failed: connection reset");
+      callbacks.onError?.("watch stream failed: connection reset");
     });
     expect(result.current).toMatchObject({
       live: false,
@@ -53,7 +53,37 @@ describe("a list kept current by a watch", () => {
       watchFailed: true,
     });
     expect(toast).toHaveBeenCalledTimes(1);
-    expect(toast.mock.calls[0][0].description).toContain("watch is forbidden");
+  });
+
+  /**
+   * Every list refused under All namespaces also popped a toast carrying the
+   * raw ApiError, beside a page that already said it was refused. Fails if a
+   * refused watch is toasted.
+   */
+  it("polls without a toast when the watch is refused", () => {
+    const { result } = watched();
+    act(() =>
+      callbacks.onError?.(
+        'failed to perform initial object list: ApiError: pods is forbidden: User "marco" cannot list resource "pods"'
+      )
+    );
+    expect(result.current).toMatchObject({
+      live: false,
+      refresh: "resourceList",
+    });
+    expect(toast).not.toHaveBeenCalled();
+  });
+
+  /** Fails if the cluster's own words reach the toast again. */
+  it("says the fallback in the app's words, not the cluster's", () => {
+    watched();
+    act(() =>
+      callbacks.onError?.(
+        "watch stream failed: ApiError: too old resource version: Expired"
+      )
+    );
+    const { description } = toast.mock.calls[0][0];
+    expect(description).toBe("Pods: falling back to periodic refresh.");
   });
 
   it("stops polling when the watch recovers, and speaks up at the next failure", () => {
@@ -90,11 +120,11 @@ describe("a list kept current by a watch", () => {
         }),
       { initialProps: { queryKey: ["pods", "a,b"] } }
     );
-    act(() => callbacks.onError?.("default: forbidden"));
+    act(() => callbacks.onError?.("default: connection reset"));
     expect(result.current.live).toBe(false);
     rerender({ queryKey: ["pods", "c"] });
     expect(result.current).toMatchObject({ live: true, refresh: false });
-    act(() => callbacks.onError?.("c: forbidden"));
+    act(() => callbacks.onError?.("c: connection reset"));
     expect(toast).toHaveBeenCalledTimes(2);
   });
 

@@ -117,11 +117,31 @@ describe("every route in scope, one query per served kind", () => {
     });
     await waitFor(() => expect(watches.has("tcproutes")).toBe(true));
 
-    act(() => watches.get("httproutes")?.onError?.("watch is forbidden"));
-    act(() => watches.get("tcproutes")?.onError?.("watch is forbidden"));
+    act(() => watches.get("httproutes")?.onError?.("watch stream failed"));
+    act(() => watches.get("tcproutes")?.onError?.("watch stream failed"));
 
     const shown = toast.mock.calls.at(-1)?.[0].description as string;
     expect(shown).toContain("httproutes");
     expect(shown).toContain("tcproutes");
+  });
+
+  /** Fails if a refused route watch is toasted beside the page's own refusal. */
+  it("leaves a refused route watch to the page", async () => {
+    toast.mockClear();
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    renderHook(() => useGatewayRoutes(["team-a"]), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    await waitFor(() => expect(watches.has("tcproutes")).toBe(true));
+
+    act(() =>
+      watches.get("tcproutes")?.onError?.("ApiError: tcproutes is forbidden")
+    );
+
+    expect(toast).not.toHaveBeenCalled();
   });
 });

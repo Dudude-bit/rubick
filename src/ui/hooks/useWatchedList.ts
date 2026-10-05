@@ -4,6 +4,7 @@ import type { QueryKey } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/use-toast";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useT } from "@/i18n/useT";
+import { isRefusal } from "@/lib/error-utils";
 
 export interface WatchedList {
   /** The watch is running and feeding the cache. */
@@ -17,8 +18,8 @@ export interface WatchedList {
 /**
  * A list kept current by a watch, and polled whenever it is not.
  *
- * A refused or broken watch falls back to polling and says so once; a
- * recovered one stops the polling again. `enabled` is whether a watch can
+ * A refused or broken watch falls back to polling; a broken one says so
+ * once, in the app's words. A recovered one stops the polling again. `enabled` is whether a watch can
  * run at all. Several namespaces are one stream, which fails when any of
  * them does.
  *
@@ -57,11 +58,12 @@ export function useWatchedList<
         reportFailure(message);
         return;
       }
+      // A refused watch is the list's own refusal, which the page states.
+      if (isRefusal(message)) return;
       toast({
         title: t("action", "realtimeUnavailable"),
         description: t("action", "fallingBackToPolling", {
           title: reportFailure,
-          error: message,
         }),
       });
     },

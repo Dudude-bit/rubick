@@ -833,8 +833,7 @@ export const ru: Catalogue = {
     rangeNeedsPrometheus:
       "Нужен Prometheus — metrics-server не хранит историю, по которой можно выбрать интервал",
     realtimeUnavailable: "Обновления в реальном времени недоступны",
-    fallingBackToPolling:
-      "{title}: переходим на периодическое обновление. {error}",
+    fallingBackToPolling: "{title}: переходим на периодическое обновление.",
     dismissJob: "Убрать {job} {name}",
     closeTerminal: "Закрыть терминал",
     base64Copied: "Base64 ключа {key} скопирован — {size} двоичных данных.",

@@ -17,6 +17,7 @@ import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { commands } from "@/lib/commands";
+import { isRefusal } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import {
   joinScoped,
@@ -157,13 +158,12 @@ export function useGatewayRoutes(scope: string[]) {
     const before = told.current.split(",");
     told.current = fellBack;
     if (!now.some((kind) => !before.includes(kind))) return;
+    const broken = now.filter((kind) => !isRefusal(reasons.current.get(kind)));
+    if (broken.length === 0) return;
     toast({
       title: t("action", "realtimeUnavailable"),
       description: t("action", "fallingBackToPolling", {
-        title: now.map((kind) => toPlural(kind)).join(", "),
-        error: [...new Set(now.map((kind) => reasons.current.get(kind)))]
-          .filter(Boolean)
-          .join(" "),
+        title: broken.map((kind) => toPlural(kind)).join(", "),
       }),
     });
   }, [fellBack, t]);

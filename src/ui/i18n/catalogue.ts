@@ -848,7 +848,7 @@ export const en = {
     rangeNeedsPrometheus:
       "Needs a Prometheus — metrics-server keeps no history to range over",
     realtimeUnavailable: "Real-time updates unavailable",
-    fallingBackToPolling: "{title}: falling back to periodic refresh. {error}",
+    fallingBackToPolling: "{title}: falling back to periodic refresh.",
     dismissJob: "Dismiss {job} {name}",
     closeTerminal: "Close terminal",
     base64Copied: "Base64 of {key} copied — {size} of binary.",
