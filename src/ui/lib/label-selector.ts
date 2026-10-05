@@ -124,3 +124,66 @@ export function labelSelectorMatches(
   if (requirements === null) return null;
   return requirements.every((requirement) => holds(requirement, labels));
 }
+
+const KEY = String.raw`[^\s=!(),]+`;
+const SET = new RegExp(String.raw`^(${KEY})\s+(in|notin)\s*\(([^()]*)\)$`);
+const EQUALITY = new RegExp(String.raw`^(${KEY})\s*(==|=|!=)\s*([^\s=!(),]*)$`);
+const ABSENT = new RegExp(String.raw`^!\s*(${KEY})$`);
+const PRESENT = new RegExp(String.raw`^(${KEY})$`);
+
+function requirementOf(text: string): LabelSelectorRequirement | null {
+  let match = SET.exec(text);
+  if (match) {
+    const inner = match[3].trim();
+    return {
+      key: match[1],
+      operator: match[2] === "in" ? "In" : "NotIn",
+      values: inner === "" ? [] : inner.split(",").map((value) => value.trim()),
+    };
+  }
+  match = EQUALITY.exec(text);
+  if (match) {
+    return {
+      key: match[1],
+      operator: match[2] === "!=" ? "NotIn" : "In",
+      values: [match[3]],
+    };
+  }
+  match = ABSENT.exec(text);
+  if (match) return { key: match[1], operator: "DoesNotExist" };
+  match = PRESENT.exec(text);
+  if (match) return { key: match[1], operator: "Exists" };
+  return null;
+}
+
+/**
+ * The selector a query string spells, in the form the backend writes one
+ * (`Selector::query_text`); `null` for text that is not that form. The
+ * conformance corpus holds the two to each other.
+ */
+export function selectorFromQuery(text: string): LabelSelector | null {
+  if (text.trim() === "") return {};
+  const parts: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let at = 0; at < text.length; at += 1) {
+    const char = text[at];
+    if (char === "(") depth += 1;
+    else if (char === ")") depth -= 1;
+    else if (char === "," && depth === 0) {
+      parts.push(text.slice(start, at));
+      start = at + 1;
+    }
+    if (depth < 0 || depth > 1) return null;
+  }
+  if (depth !== 0) return null;
+  parts.push(text.slice(start));
+
+  const matchExpressions: LabelSelectorRequirement[] = [];
+  for (const part of parts) {
+    const requirement = requirementOf(part.trim());
+    if (!requirement) return null;
+    matchExpressions.push(requirement);
+  }
+  return { matchExpressions };
+}

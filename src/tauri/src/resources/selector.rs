@@ -215,10 +215,17 @@ mod tests {
             let want = case["matches"].as_bool();
             // A shape the typed reader cannot take is a selector nothing here
             // can evaluate; the object carrying it would not have been read.
-            let got = serde_json::from_value::<LabelSelector>(case["selector"].clone())
-                .ok()
-                .and_then(|selector| Selector::Query(Some(&selector)).matches(&labels));
+            let typed = serde_json::from_value::<LabelSelector>(case["selector"].clone()).ok();
+            let got = typed
+                .as_ref()
+                .and_then(|selector| Selector::Query(Some(selector)).matches(&labels));
             assert_eq!(got, want, "{name}");
+            if let Some(query) = case["query"].as_str() {
+                let written = typed
+                    .as_ref()
+                    .and_then(|s| Selector::Query(Some(s)).query_text());
+                assert_eq!(written.as_deref(), Some(query), "{name}");
+            }
         }
     }
 

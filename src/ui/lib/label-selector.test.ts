@@ -2,13 +2,18 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
-import { labelSelectorMatches, type LabelSelector } from "./label-selector";
+import {
+  labelSelectorMatches,
+  selectorFromQuery,
+  type LabelSelector,
+} from "./label-selector";
 
 interface Case {
   name: string;
   selector: LabelSelector;
   labels: Record<string, string>;
   matches: boolean | null;
+  query?: string;
 }
 
 const corpus = JSON.parse(
@@ -72,5 +77,40 @@ describe("one label selector on both sides of the IPC boundary", () => {
   it("matches nothing with a selector that is not there", () => {
     expect(labelSelectorMatches(null, { app: "shop" })).toBe(false);
     expect(labelSelectorMatches(undefined, {})).toBe(false);
+  });
+});
+
+describe("a selector read back from the text the backend writes", () => {
+  /**
+   * NetworkPolicy selectors cross the boundary as query text. A parser that
+   * drifted from `Selector::query_text` would match pods the policy never
+   * names, and nothing else compares the two.
+   */
+  it("answers every corpus case from its query text as from the selector", () => {
+    const written = corpus.cases.filter((c) => c.query !== undefined);
+    expect(written.length).toBeGreaterThan(20);
+    for (const { name, query, labels, matches } of written) {
+      const selector = selectorFromQuery(query!);
+      expect(selector, name).not.toBeNull();
+      expect(labelSelectorMatches(selector, labels), name).toBe(matches);
+    }
+  });
+
+  /** Text that is not the backend's form is not guessed at. */
+  it("refuses text it cannot read as a selector", () => {
+    expect(selectorFromQuery("app in (a")).toBeNull();
+    expect(selectorFromQuery("app=a,,tier=b")).toBeNull();
+    expect(selectorFromQuery("app >= 2")).toBeNull();
+    expect(
+      labelSelectorMatches(selectorFromQuery("app in ()")!, { app: "x" })
+    ).toBeNull();
+  });
+
+  /** `key!=value` is kubectl's spelling of NotIn, absent key included. */
+  it("reads inequality as NotIn", () => {
+    const selector = selectorFromQuery("tier!=web")!;
+    expect(labelSelectorMatches(selector, { tier: "api" })).toBe(true);
+    expect(labelSelectorMatches(selector, {})).toBe(true);
+    expect(labelSelectorMatches(selector, { tier: "web" })).toBe(false);
   });
 });

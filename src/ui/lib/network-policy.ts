@@ -11,10 +11,43 @@
 
 import type { T as Translator } from "@/i18n/useT";
 import type {
+  NetworkPolicyInfo,
   PolicyDirection,
   PolicyPort,
   PolicySelects,
 } from "@/generated/types";
+import {
+  labelSelectorMatches,
+  selectorFromQuery,
+  type LabelSelector,
+  type Labels,
+} from "@/lib/label-selector";
+
+/**
+ * A `podSelector` or `namespaceSelector` as a selector that can be evaluated.
+ * `null` where it cannot: text this app cannot read, or a `spec.podSelector`
+ * that is not there, which the API server would have refused.
+ */
+export function selectorOf(selects: PolicySelects): LabelSelector | null {
+  switch (selects.kind) {
+    case "everything":
+      return {};
+    case "written":
+      return selectorFromQuery(selects.query);
+    case "notSaid":
+      return null;
+  }
+}
+
+/** Whether a policy picks this pod; `null` where that cannot be evaluated. */
+export function selectsPod(
+  policy: Pick<NetworkPolicyInfo, "namespace" | "selects">,
+  pod: { namespace: string | null; labels: Labels }
+): boolean | null {
+  if (pod.namespace !== policy.namespace) return false;
+  const selector = selectorOf(policy.selects);
+  return selector === null ? null : labelSelectorMatches(selector, pod.labels);
+}
 
 /** What a policy does in one direction, as one of four answers. */
 export type DirectionVerdict =

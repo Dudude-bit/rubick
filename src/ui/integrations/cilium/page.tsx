@@ -15,27 +15,40 @@
  */
 
 import { useMemo } from "react";
-import { ShieldAlert } from "lucide-react";
+import {
+  ShieldAlert,
+  ShieldCheck,
+  ShieldOff,
+  ShieldQuestionMark,
+  ShieldX,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { useT } from "@/i18n/useT";
+import { TONE_TEXT } from "@/lib/tone";
+import { cn } from "@/lib/utils";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, refOf } from "@/lib/report-parts";
 import type { StatusRole } from "@/lib/status-role";
 import {
-  Cell,
-  Chain,
-  Column,
   Finding,
   TroubleList,
   TroubleRow,
   VendorReadFailure,
 } from "../page-kit";
 import type { RowTone } from "../page-kit";
-import { coverageOf, type Coverage } from "./coverage";
-import { KINDS, usePicture } from "./data";
+import {
+  DIRECTIONS,
+  type Coverage,
+  type Direction,
+  type DirectionState,
+  type Selecting,
+} from "./coverage";
+import { KINDS, pictureCoverage, usePicture } from "./data";
 import { enforcementOf } from "./model";
 
 const VERDICT_TONE: Record<Coverage["verdict"], RowTone> = {
@@ -76,16 +89,10 @@ export default function CiliumPage() {
   const picture = usePicture();
 
   const coverage = useMemo(
-    () =>
-      picture.data
-        ? coverageOf(
-            picture.data.endpoints,
-            picture.data.policies,
-            picture.data.clusterwide
-          )
-        : [],
+    () => (picture.data ? pictureCoverage(picture.data) : []),
     [picture.data]
   );
+  const kubernetes = picture.data?.kubernetes;
 
   const onlyRejected = coverage.filter((one) => one.verdict === "onlyRejected");
   const unrestricted = coverage.filter((one) => one.verdict === "unrestricted");
@@ -141,6 +148,13 @@ export default function CiliumPage() {
           actions={<ShareScreenAction screen={{ title: "Cilium" }} />}
         />
         <div className="flex flex-col gap-2">
+          {kubernetes && !kubernetes.read && (
+            <Finding
+              tone="warn"
+              title={t("readings", "ciliumFindingKubernetesUnread")}
+              verbatim={kubernetes.why}
+            />
+          )}
           {rejected.length > 0 && (
             <Finding
               tone="err"
@@ -218,7 +232,7 @@ export default function CiliumPage() {
   );
 }
 
-/** One endpoint and the policies that select it. */
+/** One endpoint, and what each direction is under. */
 function CoverageRow({ one, last }: { one: Coverage; last: boolean }) {
   const t = useT();
   return (
@@ -238,43 +252,114 @@ function CoverageRow({ one, last }: { one: Coverage; last: boolean }) {
       }}
       last={last}
     >
-      {one.selecting.length === 0 ? (
-        <p className="text-[11.5px] text-fg-mut">
-          {t("readings", "ciliumNothingSelects")}
-        </p>
-      ) : (
-        <Chain>
-          {one.selecting.map((selecting) => (
-            <Column
-              key={`${selecting.policy.namespace ?? "*"}/${selecting.policy.name}`}
-              label={
-                selecting.clusterwide
-                  ? t("columns", "ciliumClusterwide")
-                  : t("columns", "ciliumNamespaced")
-              }
-            >
-              <Cell
-                bad={!selecting.enforcing}
-                under={
-                  selecting.enforcing
-                    ? undefined
-                    : t("readings", "ciliumEnforcesNothing")
-                }
-              >
-                {selecting.policy.name}
-              </Cell>
-            </Column>
-          ))}
-        </Chain>
-      )}
+      <div className="flex flex-col gap-1.5">
+        {DIRECTIONS.map((direction) => (
+          <DirectionLine key={direction} one={one} direction={direction} />
+        ))}
+      </div>
       {one.unreadable > 0 && (
-        <p className="mt-1 text-[11.5px] text-warn">
+        <p className="text-[11.5px] text-warn">
           {t("readings", "ciliumUnreadablePolicies", {
             n: one.unreadable,
           })}
         </p>
       )}
     </TroubleRow>
+  );
+}
+
+const DIRECTION_LOOK: Record<
+  DirectionState,
+  { icon: LucideIcon; tone: RowTone }
+> = {
+  restricted: { icon: ShieldCheck, tone: "ok" },
+  onlyRejected: { icon: ShieldX, tone: "err" },
+  unrestricted: { icon: ShieldOff, tone: "warn" },
+  cannotSay: { icon: ShieldQuestionMark, tone: "unknown" },
+};
+
+const DIRECTION_WORD: Record<
+  DirectionState,
+  | "ciliumDirectionRestricted"
+  | "ciliumDirectionOnlyRejected"
+  | "ciliumDirectionOpen"
+  | "ciliumDirectionCannotSay"
+> = {
+  restricted: "ciliumDirectionRestricted",
+  onlyRejected: "ciliumDirectionOnlyRejected",
+  unrestricted: "ciliumDirectionOpen",
+  cannotSay: "ciliumDirectionCannotSay",
+};
+
+/** `policyTypes` spells the two directions, and so does this line. */
+const DIRECTION_NAME: Record<Direction, string> = {
+  ingress: "Ingress",
+  egress: "Egress",
+};
+
+function DirectionLine({
+  one,
+  direction,
+}: {
+  one: Coverage;
+  direction: Direction;
+}) {
+  const t = useT();
+  const state = one.directions[direction];
+  const look = DIRECTION_LOOK[state];
+  const Icon = look.icon;
+  const governing = one.selecting.filter(
+    (selecting) => selecting.restricts[direction]
+  );
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11.5px]">
+      <Icon
+        aria-hidden
+        className={cn("size-3 flex-none self-center", TONE_TEXT[look.tone])}
+      />
+      <span className="w-12 flex-none font-mono text-fg-mid">
+        {DIRECTION_NAME[direction]}
+      </span>
+      <span className={TONE_TEXT[look.tone]}>
+        {t("readings", DIRECTION_WORD[state])}
+      </span>
+      {governing.map((selecting) => (
+        <PolicyRef key={refKey(selecting)} selecting={selecting} />
+      ))}
+      {state === "cannotSay" && one.kubernetesUnread && (
+        <span className="text-fg-fnt" title={one.kubernetesUnread}>
+          {t("readings", "ciliumNetworkPoliciesUnread")}
+        </span>
+      )}
+    </div>
+  );
+}
+
+const refKey = (selecting: Selecting) =>
+  `${selecting.kind}/${selecting.namespace ?? "*"}/${selecting.name}`;
+
+function PolicyRef({ selecting }: { selecting: Selecting }) {
+  const t = useT();
+  return (
+    <span className="inline-flex items-baseline gap-1">
+      <ResourceRef
+        kind={selecting.kind}
+        name={selecting.name}
+        namespace={selecting.namespace}
+        crd={
+          selecting.kind === "NetworkPolicy"
+            ? undefined
+            : selecting.clusterwide
+              ? KINDS.clusterwide
+              : KINDS.policies
+        }
+      />
+      {!selecting.enforcing && (
+        <span className="text-[10.5px] text-err">
+          {t("readings", "ciliumEnforcesNothing")}
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -286,5 +371,5 @@ const severityOfCoverage = (one: Coverage) => {
 const searchableCoverage = (one: Coverage) => [
   one.endpoint.name,
   one.endpoint.namespace,
-  ...one.selecting.map((selecting) => selecting.policy.name),
+  ...one.selecting.map((selecting) => selecting.name),
 ];

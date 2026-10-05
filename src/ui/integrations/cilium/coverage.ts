@@ -7,18 +7,23 @@
  * to turn "there are four policies" into "this pod is covered by two of
  * them, and that one by none". A vanilla list of either side cannot say it.
  *
- * **Three verdicts, and the third is the reason for the page.** An endpoint
- * no policy selects is unrestricted, which is a fact. An endpoint selected
- * only by policies the operator threw away *looks* covered — the policies
- * exist, they name it, and they enforce nothing. And an endpoint this app
- * could not decide about, because a policy's rules are not on the wire,
- * says so rather than being counted as either.
+ * Cilium enforces the standard `networking.k8s.io` NetworkPolicy as well,
+ * so those are joined too, and a cluster whose NetworkPolicies could not be
+ * read has no endpoint here that is unrestricted, only ones it cannot say.
+ *
+ * The answer is per direction: a default-deny on ingress says nothing about
+ * where the pod may connect to.
  */
 
-import type { CustomResourceInfo } from "@/generated/types";
+import type {
+  CustomResourceInfo,
+  NetworkPolicyInfo,
+  UnreadNamespace,
+} from "@/generated/types";
 import { labelSelectorMatches, type LabelSelector } from "@/lib/label-selector";
+import { selectsPod } from "@/lib/network-policy";
 import { getValueByPath } from "../kit";
-import { enforcementOf, selectsNodes } from "./model";
+import { directionsOf, enforcementOf, selectsNodes } from "./model";
 
 /** The prefix Cilium puts on a label it took from Kubernetes. */
 const FROM_K8S = "k8s:";
@@ -50,13 +55,34 @@ export function selects(
   return labelSelectorMatches(selector as LabelSelector, labels);
 }
 
-/** What a policy does for one endpoint. */
+export type Direction = "ingress" | "egress";
+export const DIRECTIONS: readonly Direction[] = ["ingress", "egress"];
+
+/** The standard NetworkPolicies as read, or why they could not be. */
+export type KubernetesPolicies =
+  | { read: true; policies: NetworkPolicyInfo[]; unread: UnreadNamespace[] }
+  | { read: false; why: string };
+
+/** One policy that selects an endpoint, and what it does to it. */
 export interface Selecting {
-  policy: CustomResourceInfo;
-  /** Cluster-wide policies select across namespaces; namespaced ones do not. */
+  kind: string;
+  name: string;
+  namespace: string | null;
   clusterwide: boolean;
   enforcing: boolean;
+  /** The directions this policy puts the endpoint under policy for. */
+  restricts: Record<Direction, boolean>;
 }
+
+/**
+ * One direction, in four answers. `cannotSay` is a policy that might select
+ * the endpoint and could not be read, and it never reads as `unrestricted`.
+ */
+export type DirectionState =
+  | "restricted"
+  | "onlyRejected"
+  | "unrestricted"
+  | "cannotSay";
 
 export interface Coverage {
   endpoint: CustomResourceInfo;
@@ -67,13 +93,59 @@ export interface Coverage {
    * every "no policy selects it" below a guess.
    */
   unreadable: number;
+  /** Why this namespace's NetworkPolicies are unknown; `null` once read. */
+  kubernetesUnread: string | null;
+  directions: Record<Direction, DirectionState>;
   verdict: "covered" | "onlyRejected" | "unrestricted" | "cannotSay";
+}
+
+/**
+ * A Cilium policy restricts a direction it has rules for, unless it opts
+ * out of the default deny for that direction.
+ */
+function ciliumRestricts(
+  policy: CustomResourceInfo
+): Record<Direction, boolean> {
+  const rules = directionsOf(policy);
+  const optOut = getValueByPath(policy, "spec.enableDefaultDeny") as
+    | Partial<Record<Direction, unknown>>
+    | undefined;
+  return {
+    ingress: (rules?.ingress ?? 0) > 0 && optOut?.ingress !== false,
+    egress: (rules?.egress ?? 0) > 0 && optOut?.egress !== false,
+  };
+}
+
+function kubernetesUnreadFor(
+  kubernetes: KubernetesPolicies,
+  namespace: string | null
+): string | null {
+  if (!kubernetes.read) return kubernetes.why;
+  return (
+    kubernetes.unread.find((entry) => entry.namespace === namespace)?.message ??
+    null
+  );
+}
+
+function stateOf(
+  direction: Direction,
+  selecting: Selecting[],
+  undecided: boolean
+): DirectionState {
+  const governing = selecting.filter((one) => one.restricts[direction]);
+  if (governing.some((one) => one.enforcing)) return "restricted";
+  // Only after the enforcing ones: a policy that works beside one that could
+  // not be read still restricts the endpoint.
+  if (undecided) return "cannotSay";
+  if (governing.length > 0) return "onlyRejected";
+  return "unrestricted";
 }
 
 export function coverageOf(
   endpoints: CustomResourceInfo[],
   policies: CustomResourceInfo[],
-  clusterwide: CustomResourceInfo[]
+  clusterwide: CustomResourceInfo[],
+  kubernetes: KubernetesPolicies
 ): Coverage[] {
   return endpoints.map((endpoint) => {
     const labels = labelsOf(endpoint);
@@ -99,27 +171,69 @@ export function coverageOf(
       }
       if (!answer) return;
       selecting.push({
-        policy,
+        kind: policy.kind,
+        name: policy.name,
+        namespace: policy.namespace,
         clusterwide: isClusterwide,
         enforcing: enforcementOf(policy).state === "accepted",
+        restricts: ciliumRestricts(policy),
       });
     };
 
     for (const policy of policies) consider(policy, false);
     for (const policy of clusterwide) consider(policy, true);
 
-    const enforcing = selecting.filter((one) => one.enforcing);
-    const verdict: Coverage["verdict"] =
-      enforcing.length > 0
-        ? "covered"
-        : // Only after the enforcing ones: a policy that works beside one
-          // that was rejected still covers the endpoint.
-          unreadable > 0
-          ? "cannotSay"
-          : selecting.length > 0
-            ? "onlyRejected"
-            : "unrestricted";
+    const kubernetesUnread = kubernetesUnreadFor(
+      kubernetes,
+      endpoint.namespace
+    );
+    if (kubernetes.read) {
+      for (const policy of kubernetes.policies) {
+        const answer = selectsPod(policy, {
+          namespace: endpoint.namespace,
+          labels,
+        });
+        if (answer === null) {
+          unreadable += 1;
+          continue;
+        }
+        if (!answer) continue;
+        selecting.push({
+          kind: "NetworkPolicy",
+          name: policy.name,
+          namespace: policy.namespace,
+          clusterwide: false,
+          // Nothing reports a NetworkPolicy as rejected: Cilium enforces it.
+          enforcing: true,
+          restricts: {
+            ingress: policy.ingress.governed,
+            egress: policy.egress.governed,
+          },
+        });
+      }
+    }
 
-    return { endpoint, selecting, unreadable, verdict };
+    const undecided = unreadable > 0 || kubernetesUnread !== null;
+    const directions = {
+      ingress: stateOf("ingress", selecting, undecided),
+      egress: stateOf("egress", selecting, undecided),
+    };
+    const states = DIRECTIONS.map((direction) => directions[direction]);
+    const verdict: Coverage["verdict"] = states.includes("restricted")
+      ? "covered"
+      : states.includes("cannotSay")
+        ? "cannotSay"
+        : states.includes("onlyRejected")
+          ? "onlyRejected"
+          : "unrestricted";
+
+    return {
+      endpoint,
+      selecting,
+      unreadable,
+      kubernetesUnread,
+      directions,
+      verdict,
+    };
   });
 }

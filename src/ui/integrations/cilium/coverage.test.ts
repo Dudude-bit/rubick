@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { CustomResourceInfo } from "@/generated/types";
-import { coverageOf, labelsOf, selects } from "./coverage";
+import type { CustomResourceInfo, NetworkPolicyInfo } from "@/generated/types";
+import {
+  coverageOf,
+  labelsOf,
+  selects,
+  type KubernetesPolicies,
+} from "./coverage";
 
 /** Shapes recorded from Cilium 1.20.1 on a kind cluster. */
 function endpoint(namespace: string, labels: string[]): CustomResourceInfo {
@@ -28,6 +33,35 @@ function policy(
       conditions: [{ type: "Valid", status: valid ? "True" : "False" }],
     },
   } as CustomResourceInfo;
+}
+
+/** A rule in each direction: a policy with none restricts nothing. */
+const RULES = { ingress: [{ fromEndpoints: [{}] }], egress: [{}] };
+
+/** Read, and none there. */
+const NONE: KubernetesPolicies = { read: true, policies: [], unread: [] };
+
+function networkPolicy(
+  query: string | null,
+  types: Array<"Ingress" | "Egress">
+): NetworkPolicyInfo {
+  const direction = (governed: boolean) => ({
+    governed,
+    rules: [],
+    opensToEverything: false,
+    deniesEverything: governed,
+  });
+  return {
+    name: "default-deny",
+    namespace: "shop",
+    selects:
+      query === null ? { kind: "everything" } : { kind: "written", query },
+    selected: 1,
+    ingress: direction(types.includes("Ingress")),
+    egress: direction(types.includes("Egress")),
+    labels: {},
+    createdAt: null,
+  };
 }
 
 const API = endpoint("shop", [
@@ -123,10 +157,17 @@ describe("what covers an endpoint", () => {
     const [shop] = coverageOf(
       [API],
       [
-        policy("shop", { endpointSelector: { matchLabels: { app: "api" } } }),
-        policy("other", { endpointSelector: { matchLabels: { app: "api" } } }),
+        policy("shop", {
+          endpointSelector: { matchLabels: { app: "api" } },
+          ...RULES,
+        }),
+        policy("other", {
+          endpointSelector: { matchLabels: { app: "api" } },
+          ...RULES,
+        }),
       ],
-      [policy(null, { endpointSelector: {} })]
+      [policy(null, { endpointSelector: {}, ...RULES })],
+      NONE
     );
 
     expect(shop.selecting).toHaveLength(2);
@@ -140,34 +181,26 @@ describe("what covers an endpoint", () => {
    * covered to a person and is not covered at all.
    */
   it("tells an endpoint covered only by rejected policies from a covered one", () => {
-    const [only] = coverageOf(
-      [API],
-      [
-        policy(
-          "shop",
-          { endpointSelector: { matchLabels: { app: "api" } } },
-          false
-        ),
-      ],
-      []
+    const rejected = policy(
+      "shop",
+      { endpointSelector: { matchLabels: { app: "api" } }, ...RULES },
+      false
     );
+    const [only] = coverageOf([API], [rejected], [], NONE);
     expect(only.verdict).toBe("onlyRejected");
 
     const [both] = coverageOf(
       [API],
       [
+        rejected,
         policy(
           "shop",
-          { endpointSelector: { matchLabels: { app: "api" } } },
-          false
-        ),
-        policy(
-          "shop",
-          { endpointSelector: { matchLabels: { app: "api" } } },
+          { endpointSelector: { matchLabels: { app: "api" } }, ...RULES },
           true
         ),
       ],
-      []
+      [],
+      NONE
     );
     expect(both.verdict).toBe("covered");
   });
@@ -176,8 +209,14 @@ describe("what covers an endpoint", () => {
   it("says an endpoint nothing selects is unrestricted", () => {
     const [alone] = coverageOf(
       [API],
-      [policy("shop", { endpointSelector: { matchLabels: { app: "db" } } })],
-      []
+      [
+        policy("shop", {
+          endpointSelector: { matchLabels: { app: "db" } },
+          ...RULES,
+        }),
+      ],
+      [],
+      NONE
     );
     expect(alone.verdict).toBe("unrestricted");
     expect(alone.selecting).toEqual([]);
@@ -189,7 +228,7 @@ describe("what covers an endpoint", () => {
    * guess. Fails if an unreadable policy is counted as not selecting.
    */
   it("will not call an endpoint unrestricted while a policy is unreadable", () => {
-    const [unknown] = coverageOf([API], [policy("shop", null)], []);
+    const [unknown] = coverageOf([API], [policy("shop", null)], [], NONE);
     expect(unknown.verdict).toBe("cannotSay");
     expect(unknown.unreadable).toBe(1);
 
@@ -199,9 +238,13 @@ describe("what covers an endpoint", () => {
       [API],
       [
         policy("shop", null),
-        policy("shop", { endpointSelector: { matchLabels: { app: "api" } } }),
+        policy("shop", {
+          endpointSelector: { matchLabels: { app: "api" } },
+          ...RULES,
+        }),
       ],
-      []
+      [],
+      NONE
     );
     expect(settled.verdict).toBe("covered");
   });
@@ -215,9 +258,114 @@ describe("what covers an endpoint", () => {
     const [alone] = coverageOf(
       [API],
       [],
-      [policy(null, { nodeSelector: { matchLabels: { role: "edge" } } })]
+      [policy(null, { nodeSelector: { matchLabels: { role: "edge" } } })],
+      NONE
     );
     expect(alone.unreadable).toBe(0);
     expect(alone.verdict).toBe("unrestricted");
+  });
+
+  /**
+   * Restriction is per direction: a policy with only egress rules leaves
+   * ingress open, and saying "covered" for both would hide that.
+   */
+  it("restricts only the directions a Cilium policy has rules for", () => {
+    const [egressOnly] = coverageOf(
+      [API],
+      [
+        policy("shop", {
+          endpointSelector: { matchLabels: { app: "api" } },
+          egress: [{}],
+        }),
+      ],
+      [],
+      NONE
+    );
+    expect(egressOnly.directions).toEqual({
+      ingress: "unrestricted",
+      egress: "restricted",
+    });
+  });
+});
+
+describe("the standard NetworkPolicies Cilium also enforces", () => {
+  /**
+   * Cilium enforces `networking.k8s.io` NetworkPolicy. Read only through its
+   * own kinds, a pod under default-deny was "unrestricted" while a pod beside
+   * it timed out reaching it. Fails if NetworkPolicies are left out again.
+   */
+  it("restricts a pod selected only by a NetworkPolicy in that direction", () => {
+    const kubernetes: KubernetesPolicies = {
+      read: true,
+      policies: [networkPolicy(null, ["Ingress"])],
+      unread: [],
+    };
+    const [api] = coverageOf([API], [], [], kubernetes);
+    expect(api.directions).toEqual({
+      ingress: "restricted",
+      egress: "unrestricted",
+    });
+    expect(api.verdict).toBe("covered");
+    expect(api.selecting.map((one) => one.kind)).toEqual(["NetworkPolicy"]);
+  });
+
+  /** A NetworkPolicy reaches only its own namespace and its own selector. */
+  it("leaves a pod its NetworkPolicy does not select unrestricted", () => {
+    const elsewhere: KubernetesPolicies = {
+      read: true,
+      policies: [
+        { ...networkPolicy(null, ["Ingress"]), namespace: "other" },
+        networkPolicy("app=db", ["Ingress", "Egress"]),
+      ],
+      unread: [],
+    };
+    const [api] = coverageOf([API], [], [], elsewhere);
+    expect(api.verdict).toBe("unrestricted");
+  });
+
+  /**
+   * The thesis, on this page: NetworkPolicies nobody could read are not "no
+   * NetworkPolicies". Fails if the refused read stops making the endpoint
+   * undecided.
+   */
+  it("cannot say rather than call a pod unrestricted when the read was refused", () => {
+    const refused: KubernetesPolicies = {
+      read: false,
+      why: "networkpolicies is forbidden",
+    };
+    const [api] = coverageOf([API], [], [], refused);
+    expect(api.verdict).toBe("cannotSay");
+    expect(api.directions).toEqual({
+      ingress: "cannotSay",
+      egress: "cannotSay",
+    });
+    expect(api.kubernetesUnread).toBe("networkpolicies is forbidden");
+
+    // A namespace left unread counts the same as the whole read refused.
+    const [partly] = coverageOf([API], [], [], {
+      read: true,
+      policies: [],
+      unread: [{ namespace: "shop", code: "FORBIDDEN", message: "denied" }],
+    });
+    expect(partly.verdict).toBe("cannotSay");
+  });
+
+  /** A Cilium policy that restricts still settles its own direction. */
+  it("keeps a direction a Cilium policy restricts while NetworkPolicies are unread", () => {
+    const [api] = coverageOf(
+      [API],
+      [
+        policy("shop", {
+          endpointSelector: { matchLabels: { app: "api" } },
+          ingress: [{}],
+        }),
+      ],
+      [],
+      { read: false, why: "forbidden" }
+    );
+    expect(api.directions).toEqual({
+      ingress: "restricted",
+      egress: "cannotSay",
+    });
   });
 });

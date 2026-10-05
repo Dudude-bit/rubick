@@ -547,8 +547,6 @@ export const en = {
     parents: "Parents",
     verdicts: "Verdicts",
     ciliumSelects: "Selects",
-    ciliumClusterwide: "Cluster-wide",
-    ciliumNamespaced: "In this namespace",
     ciliumInForce: "In force",
     ciliumRules: "Rules",
     ciliumReach: "Reach",
@@ -3749,12 +3747,17 @@ export const en = {
     ciliumSelectsAll: "every endpoint in scope",
     ciliumSelectsNodes: "nodes, by nodeSelector — no endpoint",
     ciliumCovered: "covered",
-    ciliumUnrestricted: "nothing selects it",
+    ciliumUnrestricted: "nothing restricts it",
     ciliumOnlyRejected: "only rejected policies",
     ciliumCannotSay: "cannot say",
-    ciliumNothingSelects:
-      "No policy in this cluster selects this endpoint. Whatever it may reach, it may reach.",
-    ciliumEnforcesNothing: "rejected — enforces nothing",
+    ciliumEnforcesNothing: "rejected, enforces nothing",
+    ciliumDirectionRestricted: "restricted by",
+    ciliumDirectionOnlyRejected: "only rejected policies name it",
+    ciliumDirectionOpen: "no policy restricts it",
+    ciliumDirectionCannotSay: "cannot say",
+    ciliumNetworkPoliciesUnread: "NetworkPolicies could not be read",
+    ciliumFindingKubernetesUnread:
+      "NetworkPolicies could not be read. Cilium enforces them too, so no endpoint here is called unrestricted: a direction no Cilium policy restricts reads as cannot say.",
     ciliumUnreadablePolicies: {
       one: "{n} more policy names endpoints somewhere this window cannot read",
       other:
@@ -3770,8 +3773,8 @@ export const en = {
         "{n} endpoints are selected only by policies that were rejected — they read as covered and are not",
     },
     ciliumFindingUnrestricted: {
-      one: "{n} endpoint no policy selects",
-      other: "{n} endpoints no policy selects",
+      one: "{n} endpoint no policy restricts in either direction",
+      other: "{n} endpoints no policy restricts in either direction",
     },
     ciliumNotOnTheWire: "written where this window cannot read it",
     ciliumAndExpressions: {
@@ -5429,7 +5432,7 @@ export const en = {
     albPageDescription:
       "One row per ALB rather than per Ingress — because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer.",
     ciliumPageDescription:
-      "Every endpoint with the policies that select it, and the ones nothing selects at all",
+      "Every endpoint with what restricts its ingress and its egress, Cilium policies and NetworkPolicies alike, and the ones nothing restricts at all",
     couldNotReadCilium: "Could not read Cilium's endpoints and policies",
     couldNotReadCiliumBody:
       "Coverage is the two lists joined, and one of them did not come back — so nothing here can say which pods a policy reaches.",

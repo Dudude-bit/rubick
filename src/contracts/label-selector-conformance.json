@@ -1,58 +1,67 @@
 {
-  "about": "A metav1.LabelSelector as both halves read it: `Selector::matches` in src/tauri/src/resources/selector.rs and `labelSelectorMatches` in src/ui/lib/label-selector.ts. `matches` is null where the selector cannot be evaluated, and that line is Kubernetes' own: `metav1.LabelSelectorAsSelector` refuses to build a selector from an operator outside In, NotIn, Exists and DoesNotExist, from In or NotIn with no values, or from Exists or DoesNotExist with values, and the API server rejects all of them on every built-in kind. `NotIn` with empty values is where the three old evaluators split: Rust said it matches nothing, the Prometheus and Cilium pages said it matches everything. The second is what `labels.Requirement.Matches` would answer, but no requirement like that can be built, so no Kubernetes component ever gives that answer. A custom resource's schema rarely checks, which leaves each controller to guess, and this app does not guess for them: both sides answer null. The conversion fails as a whole, so one requirement that cannot be built makes the whole selector null, even where another requirement has already failed. An empty key, or a shape that is not a key, an operator and a list of strings, is null for the same reason. Key and value syntax beyond that is not checked.",
+  "about": "A metav1.LabelSelector as both halves read it, and as the text the backend writes it in where it can be built (`query`, read back by `selectorFromQuery`): `Selector::matches` in src/tauri/src/resources/selector.rs and `labelSelectorMatches` in src/ui/lib/label-selector.ts. `matches` is null where the selector cannot be evaluated, and that line is Kubernetes' own: `metav1.LabelSelectorAsSelector` refuses to build a selector from an operator outside In, NotIn, Exists and DoesNotExist, from In or NotIn with no values, or from Exists or DoesNotExist with values, and the API server rejects all of them on every built-in kind. `NotIn` with empty values is where the three old evaluators split: Rust said it matches nothing, the Prometheus and Cilium pages said it matches everything. The second is what `labels.Requirement.Matches` would answer, but no requirement like that can be built, so no Kubernetes component ever gives that answer. A custom resource's schema rarely checks, which leaves each controller to guess, and this app does not guess for them: both sides answer null. The conversion fails as a whole, so one requirement that cannot be built makes the whole selector null, even where another requirement has already failed. An empty key, or a shape that is not a key, an operator and a list of strings, is null for the same reason. Key and value syntax beyond that is not checked.",
   "cases": [
     {
       "name": "an empty selector matches everything",
       "selector": {},
       "labels": { "app": "shop" },
+      "query": "",
       "matches": true
     },
     {
       "name": "an empty selector matches an object with no labels",
       "selector": {},
       "labels": {},
+      "query": "",
       "matches": true
     },
     {
       "name": "empty lists are an empty selector",
       "selector": { "matchLabels": {}, "matchExpressions": [] },
       "labels": { "app": "shop" },
+      "query": "",
       "matches": true
     },
     {
       "name": "null lists are an empty selector",
       "selector": { "matchLabels": null, "matchExpressions": null },
       "labels": { "app": "shop" },
+      "query": "",
       "matches": true
     },
     {
       "name": "matchLabels matches the same value",
       "selector": { "matchLabels": { "app": "shop" } },
       "labels": { "app": "shop", "tier": "web" },
+      "query": "app=shop",
       "matches": true
     },
     {
       "name": "matchLabels does not match another value",
       "selector": { "matchLabels": { "app": "shop" } },
       "labels": { "app": "cart" },
+      "query": "app=shop",
       "matches": false
     },
     {
       "name": "matchLabels does not match a missing key",
       "selector": { "matchLabels": { "app": "shop" } },
       "labels": { "tier": "web" },
+      "query": "app=shop",
       "matches": false
     },
     {
       "name": "an empty value matches a label whose value is empty",
       "selector": { "matchLabels": { "blank": "" } },
       "labels": { "blank": "" },
+      "query": "blank=",
       "matches": true
     },
     {
       "name": "an empty value does not match a missing key",
       "selector": { "matchLabels": { "blank": "" } },
       "labels": {},
+      "query": "blank=",
       "matches": false
     },
     {
@@ -63,6 +72,7 @@
         ]
       },
       "labels": { "tier": "web" },
+      "query": "tier in (api,web)",
       "matches": true
     },
     {
@@ -73,6 +83,7 @@
         ]
       },
       "labels": { "tier": "web" },
+      "query": "tier in (api)",
       "matches": false
     },
     {
@@ -83,6 +94,7 @@
         ]
       },
       "labels": { "app": "shop" },
+      "query": "tier in (web)",
       "matches": false
     },
     {
@@ -109,6 +121,7 @@
         ]
       },
       "labels": { "tier": "web" },
+      "query": "tier notin (api,worker)",
       "matches": true
     },
     {
@@ -119,6 +132,7 @@
         ]
       },
       "labels": { "tier": "web" },
+      "query": "tier notin (web)",
       "matches": false
     },
     {
@@ -129,6 +143,7 @@
         ]
       },
       "labels": { "app": "shop" },
+      "query": "tier notin (web)",
       "matches": true
     },
     {
@@ -167,6 +182,7 @@
         "matchExpressions": [{ "key": "app", "operator": "Exists" }]
       },
       "labels": { "app": "shop" },
+      "query": "app",
       "matches": true
     },
     {
@@ -175,6 +191,7 @@
         "matchExpressions": [{ "key": "blank", "operator": "Exists" }]
       },
       "labels": { "blank": "" },
+      "query": "blank",
       "matches": true
     },
     {
@@ -183,6 +200,7 @@
         "matchExpressions": [{ "key": "app", "operator": "Exists" }]
       },
       "labels": { "tier": "web" },
+      "query": "app",
       "matches": false
     },
     {
@@ -193,6 +211,7 @@
         ]
       },
       "labels": { "app": "shop" },
+      "query": "app",
       "matches": true
     },
     {
@@ -211,6 +230,7 @@
         "matchExpressions": [{ "key": "legacy", "operator": "DoesNotExist" }]
       },
       "labels": { "app": "shop" },
+      "query": "!legacy",
       "matches": true
     },
     {
@@ -219,6 +239,7 @@
         "matchExpressions": [{ "key": "app", "operator": "DoesNotExist" }]
       },
       "labels": { "app": "shop" },
+      "query": "!app",
       "matches": false
     },
     {
@@ -229,6 +250,7 @@
         ]
       },
       "labels": { "app": "shop" },
+      "query": "!legacy",
       "matches": true
     },
     {
@@ -280,6 +302,7 @@
         ]
       },
       "labels": { "app": "shop", "tier": "web" },
+      "query": "app=shop,tier in (api,web)",
       "matches": true
     },
     {
@@ -291,6 +314,7 @@
         ]
       },
       "labels": { "app": "shop", "tier": "web" },
+      "query": "app=cart,tier in (web)",
       "matches": false
     },
     {
@@ -302,6 +326,7 @@
         ]
       },
       "labels": { "app": "shop", "tier": "web" },
+      "query": "app,tier notin (web)",
       "matches": false
     },
     {

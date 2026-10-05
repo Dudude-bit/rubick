@@ -45,9 +45,32 @@ describe("the sidebar's number for Cilium", () => {
       endpoints: [endpoint],
       policies: [unreadable],
       clusterwide: [],
+      kubernetes: { read: true as const, policies: [], unread: [] },
     };
     expect(countUnrestricted(picture)).toBe(0);
     expect(coverageTone(picture)).toBe("unchecked");
     expect(coverageTone({ ...picture, policies: [] })).toBeNull();
+  });
+
+  /**
+   * A refused NetworkPolicy read is not "no NetworkPolicies": the count must
+   * not take the endpoint as unrestricted, and the dot says it left it out.
+   */
+  it("leaves out an endpoint whose NetworkPolicies were refused", () => {
+    const endpoint = {
+      name: "api",
+      namespace: "shop",
+      kind: "CiliumEndpoint",
+      spec: null,
+      status: { identity: { id: 1, labels: ["k8s:app=api"] } },
+    } as CustomResourceInfo;
+    const picture = {
+      endpoints: [endpoint],
+      policies: [],
+      clusterwide: [],
+      kubernetes: { read: false as const, why: "forbidden" },
+    };
+    expect(countUnrestricted(picture)).toBe(0);
+    expect(coverageTone(picture)).toBe("unchecked");
   });
 });

@@ -3,12 +3,17 @@ import { screen, waitFor } from "@testing-library/react";
 
 import { renderWithRouter } from "@/test/render";
 
-const answers = vi.hoisted(() => new Map<string, () => Promise<unknown[]>>());
+const answers = vi.hoisted(() => new Map<string, () => Promise<unknown>>());
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     listCustomResources: (crd: string) =>
       (answers.get(crd) ?? (() => Promise.resolve([])))(),
+    listNetworkPoliciesIn: () =>
+      (
+        answers.get("networkpolicies") ??
+        (() => Promise.resolve({ rows: [], unread: [] }))
+      )(),
   },
 }));
 
@@ -27,6 +32,35 @@ function renderPage() {
 }
 
 beforeEach(() => answers.clear());
+
+const API_ENDPOINT = {
+  name: "api-585bf77d99-xtwfs",
+  namespace: "net",
+  kind: "CiliumEndpoint",
+  spec: null,
+  status: { identity: { id: 1, labels: ["k8s:app=api"] } },
+};
+
+const DEFAULT_DENY = {
+  name: "default-deny-ingress",
+  namespace: "net",
+  selects: { kind: "everything" },
+  selected: 4,
+  ingress: {
+    governed: true,
+    rules: [],
+    opensToEverything: false,
+    deniesEverything: true,
+  },
+  egress: {
+    governed: false,
+    rules: [],
+    opensToEverything: false,
+    deniesEverything: false,
+  },
+  labels: {},
+  createdAt: null,
+};
 
 describe("the Cilium page", () => {
   /**
@@ -100,5 +134,45 @@ describe("the Cilium page", () => {
       ).toBeInTheDocument()
     );
     expect(screen.queryByText(/Nothing matches/)).not.toBeInTheDocument();
+  });
+
+  /**
+   * The persona review's blocker: a pod under a default-deny NetworkPolicy
+   * was "nothing selects it" here. The row names the NetworkPolicy and says
+   * ingress is restricted; egress, which it does not govern, stays open.
+   */
+  it("names the NetworkPolicy that restricts an endpoint's ingress", async () => {
+    answers.set(KINDS.endpoints, () => Promise.resolve([API_ENDPOINT]));
+    answers.set("networkpolicies", () =>
+      Promise.resolve({ rows: [DEFAULT_DENY], unread: [] })
+    );
+
+    await renderPage();
+
+    const state = await screen.findByText(en.readings.ciliumCovered);
+    expect(state).toHaveClass(TONE_TEXT.ok);
+    expect(
+      screen.queryByText(en.readings.ciliumUnrestricted)
+    ).not.toBeInTheDocument();
+  });
+
+  /** A refused NetworkPolicy read is said, and no endpoint reads as open. */
+  it("says the NetworkPolicies were refused rather than call endpoints open", async () => {
+    answers.set(KINDS.endpoints, () => Promise.resolve([API_ENDPOINT]));
+    answers.set("networkpolicies", () =>
+      Promise.reject(new Error("networkpolicies is forbidden"))
+    );
+
+    await renderPage();
+
+    expect(
+      await screen.findByText(en.readings.ciliumFindingKubernetesUnread)
+    ).toBeInTheDocument();
+    expect(screen.getByText(en.readings.ciliumCannotSay)).toHaveClass(
+      TONE_TEXT.unknown
+    );
+    expect(
+      screen.queryByText(en.readings.ciliumUnrestricted)
+    ).not.toBeInTheDocument();
   });
 });
