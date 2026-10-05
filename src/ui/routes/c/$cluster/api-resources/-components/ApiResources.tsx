@@ -35,7 +35,7 @@ export function ApiResources() {
   );
 
   return (
-    <div className="flex max-w-4xl flex-col gap-[18px]">
+    <div className="flex max-w-6xl flex-col gap-[18px]">
       <SectionHeader
         title={t("nav", "apiResources")}
         count={
@@ -139,7 +139,9 @@ function KindRow({ entry }: { entry: CatalogEntry }) {
   const name = (
     <>
       <KindIcon kind={entry.kind} className="h-3.5 w-3.5" />
-      <span className="truncate font-mono text-xs text-fg">{entry.kind}</span>
+      <span className="truncate font-mono text-xs text-fg" title={entry.kind}>
+        {entry.kind}
+      </span>
     </>
   );
   return (
@@ -155,7 +157,8 @@ function KindRow({ entry }: { entry: CatalogEntry }) {
         <span className="flex min-w-0 items-center gap-2">{name}</span>
       )}
       <span
-        className="min-w-0 truncate font-mono text-[11px] text-fg-fnt"
+        // Gives way first: the kind is what the row is read by.
+        className="min-w-0 shrink-[100] truncate font-mono text-[11px] text-fg-fnt"
         title={version}
       >
         {version}

@@ -145,3 +145,15 @@ describe("the API resources page", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("a kind name longer than its row", () => {
+  /** Fails if a cut kind name can no longer be read whole on hover. */
+  it("keeps the whole name on hover", async () => {
+    catalog.answer = () => Promise.resolve(SERVED);
+    await draw();
+    expect(await screen.findByText("PriorityClass")).toHaveAttribute(
+      "title",
+      "PriorityClass"
+    );
+  });
+});
