@@ -45,8 +45,8 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     ),
   },
   {
-    // "3 of 4 ready", and its longer Russian, are the widest verdicts here.
-    size: 130,
+    // "ни один не готов" is the widest verdict here, whole at 160.
+    size: 160,
     id: "health",
     header: columnHeader("columns", "endpoints"),
     cell: ({ row }) => <HealthCell service={row.original} />,

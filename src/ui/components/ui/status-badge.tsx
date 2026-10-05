@@ -44,6 +44,8 @@ export interface StatusBadgeProps extends React.HTMLAttributes<HTMLSpanElement> 
    * `React.HTMLAttributes`, which is a type error, not a style choice.
    */
   roleOverride?: StatusRole;
+  /** Off where the caller's own tooltip already carries the word, so two never open at once. */
+  wordOnHover?: boolean;
 }
 
 export function StatusBadge({
@@ -51,6 +53,7 @@ export function StatusBadge({
   showDot = false,
   showIcon = true,
   roleOverride,
+  wordOnHover = true,
   className,
   children,
   title,
@@ -62,7 +65,7 @@ export function StatusBadge({
   // A narrow column cuts the word, so hovering always has it whole.
   const word = typeof label === "string" && label !== "" ? label : null;
   const hover =
-    word && !title?.includes(word)
+    wordOnHover && word && !title?.includes(word)
       ? [word, title].filter(Boolean).join("\n")
       : title;
   return (

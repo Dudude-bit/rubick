@@ -34,17 +34,25 @@ export function VerdictBadge({
   verdict: Verdict;
   compact?: boolean;
 }) {
+  const tipped = compact && Boolean(verdict.reason);
   const badge = (
-    <StatusBadge status={verdict.code} roleOverride={verdict.role}>
+    <StatusBadge
+      status={verdict.code}
+      roleOverride={verdict.role}
+      wordOnHover={!tipped}
+    >
       {verdict.label}
     </StatusBadge>
   );
   if (!verdict.reason) return badge;
-  if (compact) {
+  if (tipped) {
     return (
       <Tooltip>
-        <TooltipTrigger>{badge}</TooltipTrigger>
+        <TooltipTrigger className="max-w-full text-left align-middle">
+          {badge}
+        </TooltipTrigger>
         <TooltipContent className="max-w-[44ch] text-xs">
+          <span className="block font-mono">{verdict.label}</span>
           {verdict.reason}
         </TooltipContent>
       </Tooltip>
