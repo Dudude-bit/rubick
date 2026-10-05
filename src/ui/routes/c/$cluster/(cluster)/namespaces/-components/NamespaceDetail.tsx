@@ -24,6 +24,7 @@ import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { NamespaceInfo } from "@/generated/types";
+import { None } from "@/components/ui/none";
 
 export function NamespaceDetail() {
   const t = useT();
@@ -48,7 +49,7 @@ export function NamespaceDetail() {
   const facts: KeyValue[] = [
     {
       label: t("columns", "status"),
-      value: ns?.status ?? "—",
+      value: ns?.status ?? <None />,
       // Terminating is the state people come to diagnose — a namespace
       // wedged on a finalizer looks exactly like this, for days.
       tone: ns && ns.status !== "Active" ? ("warn" as const) : undefined,

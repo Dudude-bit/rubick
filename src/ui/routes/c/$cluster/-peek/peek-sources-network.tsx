@@ -16,6 +16,7 @@ import {
   type PeekSource,
   type PeekSources,
 } from "./peek-sources-kit";
+import { None } from "@/components/ui/none";
 
 interface SliceShape {
   metadata?: { labels?: Record<string, string> | null };
@@ -406,7 +407,7 @@ export const NETWORK_SOURCES: PeekSources = {
                   address.targetRef.name,
                   target.namespace
                 )
-              : (address.hostname ?? "—"),
+              : (address.hostname ?? <None />),
           })),
           emptyMessage: t("empty", "nothingBackingService"),
         },

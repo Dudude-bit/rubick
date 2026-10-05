@@ -9,6 +9,7 @@ import type { KeyValue, KeyValueTone } from "@/components/object/key-values";
 import type { ConditionInfo } from "@/generated/types";
 import type { ResourceKind } from "@/lib/resource-registry";
 import { OwnerRef, type Owner } from "./OwnerRef";
+import { None } from "@/components/ui/none";
 
 /** A cell is a list of words; `none` is said, faint, when there are none. */
 export interface WordCell {
@@ -148,5 +149,5 @@ export function controlledBy(
   ];
 }
 
-export const list = (values: string[], empty = "—") =>
+export const list = (values: string[], empty: ReactNode = <None />) =>
   values.length ? values.join(" · ") : empty;

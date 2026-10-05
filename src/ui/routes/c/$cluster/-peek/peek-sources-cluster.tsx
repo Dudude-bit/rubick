@@ -11,6 +11,7 @@ import {
   type PeekGroup,
   type PeekSources,
 } from "./peek-sources-kit";
+import { None } from "@/components/ui/none";
 
 /**
  * What a managed cluster already says about the machine under a node: which
@@ -144,13 +145,21 @@ export const CLUSTER_SOURCES: PeekSources = {
         {
           title: t("columns", "capacity"),
           items: [
-            { label: "CPU", value: node.allocatable.cpu ?? "—", mono: true },
             {
-              label: t("columns", "memory"),
-              value: node.allocatable.memory ?? "—",
+              label: "CPU",
+              value: node.allocatable.cpu ?? <None />,
               mono: true,
             },
-            { label: "Pods", value: node.allocatable.pods ?? "—", mono: true },
+            {
+              label: t("columns", "memory"),
+              value: node.allocatable.memory ?? <None />,
+              mono: true,
+            },
+            {
+              label: "Pods",
+              value: node.allocatable.pods ?? <None />,
+              mono: true,
+            },
             {
               label: t("columns", "taints"),
               value: node.taints.length

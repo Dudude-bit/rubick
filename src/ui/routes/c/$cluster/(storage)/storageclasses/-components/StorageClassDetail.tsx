@@ -16,6 +16,7 @@ import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { StorageClassInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 export function StorageClassDetail() {
   const t = useT();
@@ -42,7 +43,7 @@ export function StorageClassDetail() {
   const parameters = sc?.parameters ?? {};
 
   const facts: KeyValue[] = [
-    { label: "Provisioner", value: sc?.provisioner ?? "—", mono: true },
+    { label: "Provisioner", value: sc?.provisioner ?? <None />, mono: true },
     {
       label: t("columns", "defaultClass"),
       // The one question people open this page to answer: does a claim that
@@ -53,12 +54,12 @@ export function StorageClassDetail() {
     },
     {
       label: t("columns", "reclaimPolicy"),
-      value: sc?.reclaimPolicy ?? "—",
+      value: sc?.reclaimPolicy ?? <None />,
       mono: true,
     },
     {
       label: t("columns", "bindingMode"),
-      value: sc?.volumeBindingMode ?? "—",
+      value: sc?.volumeBindingMode ?? <None />,
       mono: true,
     },
     {

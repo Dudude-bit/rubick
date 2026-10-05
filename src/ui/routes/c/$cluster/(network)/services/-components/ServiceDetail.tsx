@@ -45,6 +45,7 @@ import { publishedFor } from "@/lib/published";
 import { commands } from "@/lib/commands";
 import type { ServiceInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 export function ServiceDetail() {
   const t = useT();
@@ -186,7 +187,7 @@ export function ServiceDetail() {
                 {ports.map((port) => (
                   <TableRow key={`${port.protocol}/${port.port}`} data-quiet>
                     <TableCell className="text-fg-mut">
-                      {port.name || "—"}
+                      {port.name || <None />}
                     </TableCell>
                     <TableCell className="font-mono text-fg">
                       {port.port}
@@ -195,7 +196,7 @@ export function ServiceDetail() {
                       {port.targetPort}
                     </TableCell>
                     <TableCell className="font-mono text-fg-mut">
-                      {port.nodePort ?? "—"}
+                      {port.nodePort ?? <None />}
                     </TableCell>
                     <TableCell className="text-fg-fnt">
                       {port.protocol}

@@ -48,6 +48,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 import { scopeKey } from "./crd-scope";
 import { toastError } from "@/lib/toast-error";
+import { None } from "@/components/ui/none";
 
 export function CrdDetail() {
   const t = useT();
@@ -147,7 +148,7 @@ export function CrdDetail() {
 
   const facts: KeyValue[] = [
     { label: t("columns", "group"), value: crd?.group || "core", mono: true },
-    { label: t("columns", "kind"), value: crd?.kind ?? "—", mono: true },
+    { label: t("columns", "kind"), value: crd?.kind ?? <None />, mono: true },
     {
       label: t("columns", "scope"),
       value: crd && t("apiResources", scopeKey(crd.scope)),
@@ -158,10 +159,14 @@ export function CrdDetail() {
       mono: !!storageVersion,
       tone: storageVersion ? undefined : "warn",
     },
-    { label: t("columns", "plural"), value: crd?.plural ?? "—", mono: true },
+    {
+      label: t("columns", "plural"),
+      value: crd?.plural ?? <None />,
+      mono: true,
+    },
     {
       label: t("columns", "singular"),
-      value: crd?.singular || "—",
+      value: crd?.singular || <None />,
       mono: true,
     },
     {
@@ -258,7 +263,7 @@ export function CrdDetail() {
                     {version.deprecated
                       ? version.deprecationWarning ||
                         t("empty", "deprecatedInline")
-                      : "—"}
+                      : t("action", "no")}
                   </TableCell>
                 </TableRow>
               ))}

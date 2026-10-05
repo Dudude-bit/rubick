@@ -273,8 +273,8 @@ export function createDataKeysColumn<
     id: "dataKeys",
     header: columnHeader("columns", "keys"),
     meta: {
-      share: (row: Row) => ({
-        text: (row.dataKeys ?? []).join(", ") || "—",
+      share: (row: Row, t) => ({
+        text: (row.dataKeys ?? []).join(", ") || t("empty", "noneLower"),
         mono: true,
       }),
     },

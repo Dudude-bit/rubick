@@ -19,6 +19,7 @@ import type { HelmRelease, HelmRevision } from "@/generated/types";
 import { statusRole } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 interface HelmHistoryDialogProps {
   release: HelmRelease;
@@ -101,10 +102,10 @@ export function HelmHistoryDialog({
                         {rev.chart}
                       </TableCell>
                       <TableCell className="text-fg-fnt">
-                        {formatDate(rev.updated) ?? "—"}
+                        {formatDate(rev.updated) ?? <None />}
                       </TableCell>
                       <TableCell className="max-w-[200px] truncate text-fg-fnt">
-                        {rev.description || "—"}
+                        {rev.description || <None />}
                       </TableCell>
                       <TableCell>
                         <span className="flex justify-end">

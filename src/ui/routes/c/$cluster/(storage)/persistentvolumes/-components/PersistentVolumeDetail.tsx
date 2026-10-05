@@ -20,6 +20,7 @@ import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { PersistentVolumeInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 export function PersistentVolumeDetail() {
   const t = useT();
@@ -44,7 +45,11 @@ export function PersistentVolumeDetail() {
   });
 
   const facts: KeyValue[] = [
-    { label: t("columns", "capacity"), value: pv?.capacity ?? "—", mono: true },
+    {
+      label: t("columns", "capacity"),
+      value: pv?.capacity ?? <None />,
+      mono: true,
+    },
     {
       label: t("columns", "accessModes"),
       value: pv?.accessModes.length
@@ -77,7 +82,7 @@ export function PersistentVolumeDetail() {
     },
     {
       label: t("columns", "reclaimPolicy"),
-      value: pv?.reclaimPolicy ?? "—",
+      value: pv?.reclaimPolicy ?? <None />,
       mono: true,
     },
     ...(pv?.reason

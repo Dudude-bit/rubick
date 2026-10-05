@@ -38,6 +38,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import type { CustomResourceDetailInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
+import { None } from "@/components/ui/none";
 
 /**
  * A custom resource is whatever its author decided it is, so nothing on this
@@ -261,11 +262,19 @@ export function CustomResourceDetail({
   const facts: KeyValue[] = [
     {
       label: t("columns", "apiVersion"),
-      value: resource?.apiVersion ?? "—",
+      value: resource?.apiVersion ?? <None />,
       mono: true,
     },
-    { label: t("columns", "kind"), value: resource?.kind ?? "—", mono: true },
-    { label: t("columns", "uid"), value: resource?.uid ?? "—", mono: true },
+    {
+      label: t("columns", "kind"),
+      value: resource?.kind ?? <None />,
+      mono: true,
+    },
+    {
+      label: t("columns", "uid"),
+      value: resource?.uid ?? <None />,
+      mono: true,
+    },
     ...(resource?.resourceVersion
       ? [
           {

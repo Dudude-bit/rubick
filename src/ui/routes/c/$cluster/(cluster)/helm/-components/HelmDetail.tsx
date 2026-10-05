@@ -60,6 +60,7 @@ import { installedObjects } from "@/lib/helm-manifest";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
+import { None } from "@/components/ui/none";
 
 const INSTALLED_ROW =
   "grid grid-cols-[minmax(0,120px)_minmax(0,1fr)_minmax(0,150px)] items-baseline gap-2.5 border-b border-hair py-1 last:border-b-0 text-xs";
@@ -238,26 +239,26 @@ export function HelmDetail() {
   const facts: KeyValue[] = [
     {
       label: t("columns", "chart"),
-      value: `${release?.chart ?? "—"}:${release?.chartVersion ?? "—"}`,
+      value: release ? `${release.chart}:${release.chartVersion}` : <None />,
       mono: true,
     },
     {
       label: t("columns", "appVersion"),
-      value: release?.appVersion || "—",
+      value: release?.appVersion || <None />,
       mono: true,
     },
     {
       label: t("columns", "revision"),
-      value: release?.revision ?? "—",
+      value: release?.revision ?? <None />,
       mono: true,
     },
     {
       label: t("columns", "lastDeployed"),
-      value: formatDate(release?.lastDeployed) ?? "—",
+      value: formatDate(release?.lastDeployed) ?? <None />,
     },
     {
       label: t("columns", "firstDeployed"),
-      value: formatDate(release?.firstDeployed) ?? "—",
+      value: formatDate(release?.firstDeployed) ?? <None />,
     },
     ...(release?.description
       ? [
@@ -353,13 +354,13 @@ export function HelmDetail() {
                         {rev.chart}
                       </TableCell>
                       <TableCell className="font-mono text-fg-fnt">
-                        {rev.appVersion || "—"}
+                        {rev.appVersion || <None />}
                       </TableCell>
                       <TableCell className="text-fg-fnt">
-                        {formatDate(rev.updated) ?? "—"}
+                        {formatDate(rev.updated) ?? <None />}
                       </TableCell>
                       <TableCell className="max-w-[240px] truncate text-fg-fnt">
-                        {rev.description || "—"}
+                        {rev.description || <None />}
                       </TableCell>
                       <TableCell>
                         <span className="flex justify-end">

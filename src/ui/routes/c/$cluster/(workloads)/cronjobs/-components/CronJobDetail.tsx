@@ -53,6 +53,7 @@ import { formatDate, formatTimeUnit } from "@/lib/utils";
 import type { CronJobDetailInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
+import { None } from "@/components/ui/none";
 
 /**
  * The three facts a CronJob page exists to answer, at a glance.
@@ -80,7 +81,7 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
     <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-3">
       <Headline
         label={t("columns", "schedule")}
-        value={cronJob.schedule || "—"}
+        value={cronJob.schedule || <None />}
         mono
         note={
           <>

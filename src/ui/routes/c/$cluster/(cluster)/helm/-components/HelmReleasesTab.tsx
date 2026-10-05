@@ -39,6 +39,7 @@ import { SourceIcon } from "./SourceIcon";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
+import { None } from "@/components/ui/none";
 
 const getHelmReleaseRowId = (row: HelmRelease) =>
   `${row.source}-${row.namespace}-${row.name}`;
@@ -141,7 +142,7 @@ export function HelmReleasesTab({
         accessorKey: "appVersion",
         header: t("columns", "appVersion"),
         size: 150,
-        cell: ({ row }) => row.original.appVersion || "—",
+        cell: ({ row }) => row.original.appVersion || <None />,
       },
       {
         accessorKey: "updated",
@@ -150,7 +151,7 @@ export function HelmReleasesTab({
         cell: ({ row }) => {
           const { updated } = row.original;
           const full = formatDate(updated);
-          if (!updated || !full) return updated ?? "—";
+          if (!updated || !full) return updated || <None />;
           return <span title={full}>{formatWhen(updated, "moment")}</span>;
         },
       },

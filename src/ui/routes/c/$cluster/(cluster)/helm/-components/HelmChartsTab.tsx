@@ -13,6 +13,7 @@ import {
 import { DetailAction } from "@/components/object/detail-blocks";
 import type { HelmChartSearchResult } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 export interface HelmChartsTabProps {
   searchKeyword: string;
@@ -85,10 +86,10 @@ export function HelmChartsTab({
                   {chart.version}
                 </TableCell>
                 <TableCell className="font-mono text-fg-fnt">
-                  {chart.appVersion || "—"}
+                  {chart.appVersion || <None />}
                 </TableCell>
                 <TableCell className="max-w-[320px] truncate text-fg-fnt">
-                  {chart.description || "—"}
+                  {chart.description || <None />}
                 </TableCell>
                 <TableCell>
                   <span className="flex justify-end">

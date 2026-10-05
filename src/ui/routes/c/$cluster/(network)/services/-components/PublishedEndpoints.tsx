@@ -179,7 +179,7 @@ function Lists({ published }: { published: ServicePublished }) {
                     </TableCell>
                     {zoned && (
                       <TableCell className="font-mono text-fg-mut">
-                        {endpoint.zone ?? "—"}
+                        {endpoint.zone ?? <None />}
                       </TableCell>
                     )}
                   </TableRow>

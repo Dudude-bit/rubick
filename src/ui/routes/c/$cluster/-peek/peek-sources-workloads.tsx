@@ -24,6 +24,7 @@ import {
   type PeekGroup,
   type PeekSources,
 } from "./peek-sources-kit";
+import { None } from "@/components/ui/none";
 
 /**
  * Every image the thing runs, in run order, each row saying which kind of
@@ -153,12 +154,12 @@ export const WORKLOAD_SOURCES: PeekSources = {
           items: [
             {
               label: "CPU",
-              value: `${prettyQuantity(pod.cpuRequests, "cpu") ?? "—"} → ${prettyQuantity(pod.cpuLimits, "cpu") ?? t("empty", "unlimited")}`,
+              value: `${prettyQuantity(pod.cpuRequests, "cpu") ?? t("empty", "noneLower")} → ${prettyQuantity(pod.cpuLimits, "cpu") ?? t("empty", "unlimited")}`,
               mono: true,
             },
             {
               label: t("columns", "memory"),
-              value: `${prettyQuantity(pod.memoryRequests, "memory") ?? "—"} → ${prettyQuantity(pod.memoryLimits, "memory") ?? t("empty", "unlimited")}`,
+              value: `${prettyQuantity(pod.memoryRequests, "memory") ?? t("empty", "noneLower")} → ${prettyQuantity(pod.memoryLimits, "memory") ?? t("empty", "unlimited")}`,
               mono: true,
             },
           ],
@@ -205,7 +206,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
           },
           {
             label: t("columns", "strategy"),
-            value: deployment.strategy || "—",
+            value: deployment.strategy || <None />,
           },
         ],
       },
@@ -245,13 +246,15 @@ export const WORKLOAD_SOURCES: PeekSources = {
           },
           {
             label: t("settings", "serviceLabel"),
-            value: set.serviceName
-              ? ref("Service", set.serviceName, set.namespace)
-              : "—",
+            value: set.serviceName ? (
+              ref("Service", set.serviceName, set.namespace)
+            ) : (
+              <None />
+            ),
           },
           {
             label: t("columns", "updateStrategy"),
-            value: set.updateStrategy || "—",
+            value: set.updateStrategy || <None />,
           },
         ],
       },
@@ -295,7 +298,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
           },
           {
             label: t("columns", "updateStrategy"),
-            value: set.updateStrategy || "—",
+            value: set.updateStrategy || <None />,
           },
         ],
       },
@@ -345,7 +348,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
           { label: t("columns", "active"), value: job.active, mono: true },
           {
             label: t("columns", "backoffLimit"),
-            value: job.backoffLimit ?? "—",
+            value: job.backoffLimit ?? <None />,
             mono: true,
           },
           {

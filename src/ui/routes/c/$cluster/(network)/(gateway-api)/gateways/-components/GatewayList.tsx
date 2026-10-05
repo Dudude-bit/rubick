@@ -122,8 +122,8 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
       id: "addresses",
       header: columnHeader("columns", "addresses"),
       meta: {
-        share: (row: GatewayInfo) => ({
-          text: row.addresses.join(", ") || "—",
+        share: (row: GatewayInfo, t) => ({
+          text: row.addresses.join(", ") || t("empty", "noneLower"),
           mono: true,
         }),
       },

@@ -184,7 +184,9 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     meta: {
       share: (row: IngressInfo, t) => {
         const paths = row.rules.flatMap((rule) => rule.paths).length;
-        return paths === 0 ? "—" : t("count", "paths", { n: paths });
+        return paths === 0
+          ? t("empty", "noneLower")
+          : t("count", "paths", { n: paths });
       },
     },
     cell: ({ row }) => {

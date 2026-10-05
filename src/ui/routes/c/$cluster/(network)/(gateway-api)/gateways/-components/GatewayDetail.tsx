@@ -247,7 +247,11 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                   {listener.allowedNamespaces ?? t("empty", "sameDefault")}
                 </TableCell>
                 <TableCell className="font-mono text-fg-mut">
-                  {listener.attachedRoutes ?? "—"}
+                  {listener.attachedRoutes ?? (
+                    <span className="text-fg-fnt">
+                      {t("empty", "unknownLower")}
+                    </span>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -360,7 +364,10 @@ export function GatewayDetail() {
       </span>
     );
     if (!classes.data || !gateway) {
-      return { label: t("columns", "class"), value: gateway?.className || "—" };
+      return {
+        label: t("columns", "class"),
+        value: gateway?.className || <None />,
+      };
     }
     if (!gatewayClass) {
       return {
@@ -511,7 +518,10 @@ export function GatewayDetail() {
                 {attached.map((route) => {
                   const verdict = gateway
                     ? acceptedBy(route, gateway, t)
-                    : ({ text: "—", tone: "mute" } as const);
+                    : ({
+                        text: t("empty", "unknownLower"),
+                        tone: "mute",
+                      } as const);
                   return (
                     <TableRow
                       key={`${route.kind}/${route.namespace}/${route.name}`}
@@ -531,7 +541,7 @@ export function GatewayDetail() {
                       <TableCell className="font-mono text-fg-mut">
                         {route.hostnames.length > 0
                           ? route.hostnames.join(", ")
-                          : "—"}
+                          : t("empty", "gwAllHostsListenerServes")}
                       </TableCell>
                       <TableCell>
                         <span className={TONE_CLASS[verdict.tone]}>

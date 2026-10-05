@@ -129,7 +129,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
     id: "ports",
     header: columnHeader("columns", "ports"),
     meta: {
-      share: (row: EndpointsInfo) => ({
+      share: (row: EndpointsInfo, t) => ({
         text:
           row.subsets
             .flatMap((s) => s.ports)
@@ -137,7 +137,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
               (port) =>
                 `${port.name ? `${port.name}:` : ""}${port.port}/${port.protocol}`
             )
-            .join(" ") || "—",
+            .join(" ") || t("empty", "noneLower"),
         mono: true,
       }),
     },
@@ -168,11 +168,11 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
     id: "addresses",
     header: columnHeader("columns", "ips"),
     meta: {
-      share: (row: EndpointsInfo) => ({
+      share: (row: EndpointsInfo, t) => ({
         text:
           row.subsets
             .flatMap((s) => s.addresses.map((address) => address.ip))
-            .join(", ") || "—",
+            .join(", ") || t("empty", "noneLower"),
         mono: true,
       }),
     },

@@ -14,6 +14,7 @@ import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
+import { None } from "@/components/ui/none";
 
 /**
  * The objects a workload owns, listed on its detail page.
@@ -167,7 +168,7 @@ function ChildRowItem({ row }: { row: ChildRow }) {
         className="text-right text-[11px] text-fg-fnt"
         title={formatDate(row.timestamp ?? null) ?? undefined}
       >
-        {row.timestamp ? age : "—"}
+        {row.timestamp ? age : <None />}
       </span>
     </div>
   );

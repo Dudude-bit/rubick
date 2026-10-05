@@ -121,10 +121,10 @@ export const columns = (
     id: "internal_ip",
     header: columnHeader("columns", "internalIp"),
     meta: {
-      share: (row: NodeInfo) => ({
+      share: (row: NodeInfo, t) => ({
         text:
           row.status.addresses.find((a) => a.type === "InternalIP")?.address ??
-          "—",
+          t("empty", "noneLower"),
         mono: true,
       }),
     },

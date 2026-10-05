@@ -29,6 +29,7 @@ import { deliveryOfKind } from "@/lib/delivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { GatewayClassInfo } from "@/generated/types";
 import { ROUTING_STALE } from "@/integrations";
+import { None } from "@/components/ui/none";
 
 function GatewayRows({ className }: { className: string }) {
   const t = useT();
@@ -135,7 +136,7 @@ export function GatewayClassDetail() {
   const facts: KeyValue[] = [
     {
       label: t("columns", "controller"),
-      value: cls?.controllerName ?? "—",
+      value: cls?.controllerName ?? <None />,
       mono: true,
     },
     claim,

@@ -273,7 +273,7 @@ export function EndpointsDetail() {
                     data-quiet
                   >
                     <TableCell className="text-fg-mut">
-                      {port.name || "—"}
+                      {port.name || <None />}
                     </TableCell>
                     <TableCell className="font-mono text-fg">
                       {port.port}
