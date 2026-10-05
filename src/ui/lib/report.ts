@@ -280,7 +280,7 @@ const STYLE = `
   --sel:hsl(0 0% 100% / .06); --fg:hsl(220 6% 93%); --mid:hsl(212 7% 79%);
   --mut:hsl(213 6% 65%); --fnt:hsl(213 6% 51%); --ok:hsl(152 44% 49%); --warn:hsl(44 82% 48%);
   --err:hsl(358 81% 68%); --info:hsl(212 66% 58%); --kind-s:38%; --kind-l:70%;
-  --ident-s:52%; --ident-l:66%; --code:hsl(220 9% 10%); } }
+  --ident-s:52%; --ident-l:78%; --code:hsl(220 9% 10%); } }
 * { box-sizing:border-box; }
 body { margin:0; background:var(--canvas); color:var(--fg);
   font:14px/1.55 Inter,"Inter Variable",ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;

@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vite-plus/test";
+import { contrast, type Rgb } from "./color";
 import {
   splitName,
   identHue,
   kindHue,
   crdWidthsKey,
+  IDENT_HUES,
 } from "./resource-identity";
 
 describe("splitName", () => {
@@ -200,5 +203,81 @@ describe("where a CRD list files its column widths", () => {
     expect(crdWidthsKey("certificates", "cert-manager.io")).toBe(
       crdWidthsKey("certificates", "cert-manager.io")
     );
+  });
+});
+
+const css = readFileSync("src/ui/index.css", "utf8");
+const THEMES = [
+  ["light", css.slice(css.indexOf(":root {"), css.indexOf(".dark {"))],
+  ["dark", css.slice(css.indexOf(".dark {"))],
+] as const;
+
+function token(block: string, role: string): number[] {
+  const match = new RegExp(
+    `${role}:\\s*([\\d.]+) ([\\d.]+)% ([\\d.]+)%(?:\\s*/\\s*([\\d.]+))?`
+  ).exec(block);
+  if (!match) throw new Error(`${role} is not an hsl triple`);
+  return match.slice(1).filter(Boolean).map(Number);
+}
+
+function percent(block: string, role: string): number {
+  const match = new RegExp(`${role}:\\s*([\\d.]+)%`).exec(block);
+  if (!match) throw new Error(`${role} is not a percentage`);
+  return Number(match[1]);
+}
+
+function rgb(h: number, s: number, l: number): Rgb {
+  const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
+  const channel = (n: number) => {
+    const k = (n + h / 30) % 12;
+    return 255 * (l / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)));
+  };
+  return [channel(0), channel(8), channel(4)];
+}
+
+const over = (wash: number[], under: Rgb): Rgb => {
+  const top = rgb(wash[0], wash[1], wash[2]);
+  return under.map((v, i) => top[i] * wash[3] + v * (1 - wash[3])) as Rgb;
+};
+
+const apart = (a: number, b: number) => {
+  const d = Math.abs(a - b) % 360;
+  return Math.min(d, 360 - d);
+};
+
+describe("the identity palette beside the status colours", () => {
+  /**
+   * `web` hashed onto a pink-red and was read as broken beside real red
+   * verdicts. Fails if any identity hue sits within 35 degrees of the hue
+   * `--err`, `--warn` or `--ok` wears in either theme.
+   */
+  it.each(THEMES)("stays out of every status hue band in %s", (_n, block) => {
+    for (const role of ["--err", "--warn", "--ok"]) {
+      const status = token(block, role)[0];
+      for (const hue of IDENT_HUES)
+        expect(apart(hue, status), `${hue} vs ${role}`).toBeGreaterThan(35);
+    }
+  });
+
+  /**
+   * A name is drawn on the canvas, on an overlay, and on either one hovered
+   * or selected. Fails if any identity colour drops below 4.5:1 on any of
+   * them, which is how the blues and violets read on dark before.
+   */
+  it.each(THEMES)("reads at 4.5:1 on every surface in %s", (_n, block) => {
+    const s = percent(block, "--ident-s");
+    const l = percent(block, "--ident-l");
+    const surfaces = ["--canvas", "--raise"].flatMap((role) => {
+      const [h, sat, light] = token(block, role);
+      const base = rgb(h, sat, light);
+      return [
+        base,
+        over(token(block, "--hover"), base),
+        over(token(block, "--sel"), base),
+      ];
+    });
+    for (const hue of IDENT_HUES)
+      for (const surface of surfaces)
+        expect(contrast(rgb(hue, s, l), surface)).toBeGreaterThanOrEqual(4.5);
   });
 });
