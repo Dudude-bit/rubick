@@ -442,7 +442,7 @@ describe("renderReport", () => {
       report({ sections: [logs("connecting with password=hunter2")] })
     );
     expect(html).not.toContain("hunter2");
-    expect(html).toContain("that cannot be complete");
+    expect(html).toContain("that cleaning cannot be complete");
     expect(html).not.toContain("No Secret value is ever written");
     expect(renderReport(report({ sections: [] }))).toContain(
       "No Secret value is ever written into this file."
