@@ -25,6 +25,14 @@ export interface ObjectRef {
   crd?: string;
 }
 
+export interface ObjectLinkOptions {
+  tab?: string;
+  cluster?: string;
+  via?: string;
+  /** `own` opens an attached object itself rather than its parent. */
+  view?: string;
+}
+
 type ClusterParams = { cluster?: string };
 
 const inCluster =
@@ -58,7 +66,7 @@ export function resourceSegment(ref: Pick<ObjectRef, "kind" | "crd">) {
  */
 export function objectLink(
   ref: ObjectRef,
-  options: { tab?: string; cluster?: string; via?: string; view?: string } = {}
+  options: ObjectLinkOptions = {}
 ): AppLink | null {
   const resource = resourceSegment(ref);
   if (!resource) return null;

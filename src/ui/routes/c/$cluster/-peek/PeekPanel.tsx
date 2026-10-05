@@ -7,6 +7,7 @@ import { PeekContent, preloadPeekContent } from "./peek-loader";
 import { PeekSkeleton } from "./peek-skeleton";
 import type { PeekTabId } from "./peek-tabs";
 import { usePeekWidth } from "./peek-width";
+import { ownView } from "../-object/attachment";
 
 /**
  * The right-hand drawer a reference opens.
@@ -85,6 +86,7 @@ function PeekLoading({ target }: { target: PeekTarget }) {
             showKind={false}
             size="title"
             className="font-semibold"
+            linkOptions={{ view: ownView(target) }}
           />
         </SheetTitle>
       </header>

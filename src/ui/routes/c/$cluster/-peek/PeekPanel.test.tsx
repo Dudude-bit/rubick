@@ -1690,3 +1690,47 @@ describe("a peek block whose read was refused", () => {
     ).toBeInTheDocument();
   });
 });
+
+/**
+ * Open full page on an EndpointSlice, Endpoints or Lease peek landed on the
+ * Service or Node it belongs to. The reader asked for the object itself.
+ */
+describe("PeekPanel on an object that belongs to a parent", () => {
+  beforeEach(mockCluster);
+
+  const openFullPage = async () =>
+    userEvent.click(
+      await screen.findByRole("button", { name: /Open full page/ })
+    );
+
+  it("opens an EndpointSlice on its own page, not its Service's", async () => {
+    await wrap(
+      "/c/prod/events?peek=endpointslices.discovery.k8s.io/EndpointSlice/kube-system/kube-dns-f2mvh"
+    );
+    await openFullPage();
+    await waitFor(() =>
+      expect(location()).toBe(
+        "/c/prod/endpointslices.discovery.k8s.io/kube-system/kube-dns-f2mvh?view=own"
+      )
+    );
+  });
+
+  it("opens Endpoints on their own page", async () => {
+    await wrap("/c/prod/events?peek=endpoints/kube-system/kube-dns");
+    await openFullPage();
+    await waitFor(() =>
+      expect(location()).toBe("/c/prod/endpoints/kube-system/kube-dns?view=own")
+    );
+  });
+
+  /** Its title is the same object, so a new tab from it is the same page. */
+  it("points its title at the object's own page", async () => {
+    await wrap("/c/prod/events?peek=endpoints/kube-system/kube-dns");
+    expect(
+      await screen.findByRole("link", { name: "Endpoints kube-dns" })
+    ).toHaveAttribute(
+      "href",
+      "/c/prod/endpoints/kube-system/kube-dns?view=own"
+    );
+  });
+});

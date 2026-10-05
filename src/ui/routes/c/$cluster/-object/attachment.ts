@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ApiCatalog } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { errorCode, errorToShow } from "@/lib/error-utils";
-import type { ObjectRef } from "@/lib/links";
+import { resourceSegment, type ObjectRef } from "@/lib/links";
 import { isResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import { catalogQuery, servedOf } from "./served";
@@ -230,6 +230,21 @@ const ATTACHED: Record<
   "coordination.k8s.io/leases": lease,
 };
 
+/** Whether objects of this kind may open on a parent instead of themselves. */
+export function isAttached(resource: string): boolean {
+  const { group, plural } = servedOf(resource);
+  return `${group}/${plural}` in ATTACHED;
+}
+
+/**
+ * The view a reference to this very object opens with: its own page for an
+ * attached kind, since whoever asked for it asked for it and not its parent.
+ */
+export function ownView(ref: Pick<ObjectRef, "kind" | "crd">) {
+  const segment = resourceSegment(ref);
+  return segment && isAttached(segment) ? "own" : undefined;
+}
+
 /** Where `object`, named by `resource`, belongs; `free` for unattached kinds. */
 export function decide(
   resource: string,
@@ -314,7 +329,7 @@ export function useAttachment(
   const client = useQueryClient();
   const isConnected = useClusterStore((state) => state.isConnected);
   const { group, plural } = servedOf(resource);
-  const attached = `${group}/${plural}` in ATTACHED;
+  const attached = isAttached(resource);
   const query = useQuery({
     queryKey: ["attachment", resource, namespace ?? null, name],
     queryFn: async () => {

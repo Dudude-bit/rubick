@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { hrefOf, objectLink } from "@/lib/links";
+import { hrefOf, objectLink, type ObjectLinkOptions } from "@/lib/links";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import { usePeek } from "@/hooks/usePeek";
 import { useObjectMenuStore } from "@/stores/objectMenuStore";
@@ -42,6 +42,8 @@ export interface ResourceRefProps {
   onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
   className?: string;
   size?: ResourceNameSize;
+  /** Where the anchor goes, for a reference to the object being looked at. */
+  linkOptions?: ObjectLinkOptions;
 }
 
 /**
@@ -70,6 +72,7 @@ export function ObjectLink({
   className,
   style,
   title,
+  linkOptions,
   children,
 }: Omit<ResourceRefProps, "showKind" | "size"> & {
   children: ReactNode;
@@ -80,7 +83,7 @@ export function ObjectLink({
   const gesture = useLinkGesture();
   const { open } = usePeek();
 
-  const link = objectLink({ kind, name, namespace, crd });
+  const link = objectLink({ kind, name, namespace, crd }, linkOptions);
   if (link === null) return null;
 
   // The gesture rules live in `useLinkGesture` for every surface; a local
@@ -133,6 +136,7 @@ export function ResourceRef({
   onClick,
   className,
   size,
+  linkOptions,
 }: ResourceRefProps) {
   const body = (
     <ResourceName
@@ -175,6 +179,7 @@ export function ResourceRef({
       namespace={namespace}
       crd={crd}
       onClick={onClick}
+      linkOptions={linkOptions}
       className={cn(shell, "hover:bg-hover", className)}
     >
       {body}
