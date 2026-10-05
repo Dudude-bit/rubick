@@ -5330,6 +5330,12 @@ export const ru: Catalogue = {
     kindCouldNotRead: "Не удалось прочитать этот объект ({kind})",
     whatIsThisKind: "Что это за объект ({kind})?",
     kindNotFound: "{kind} не найден",
+    goneMark: "удалён",
+    goneTitle: "Объекта {kind} больше нет.",
+    goneReplacedBy:
+      "Им владел {kind} {owner}, он и создаёт замену: откройте его, чтобы найти то, что работает сейчас.",
+    goneOwnedBy: "Им владел {kind} {owner}.",
+    goneUnowned: "Владельца у него не было, поэтому замены не будет.",
     expandRepeats: "Развернуть повторы: {count}",
     anEmptySpec: "Пустой spec",
     nothingConfigured: "Ничего не настроено",

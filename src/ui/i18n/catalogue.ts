@@ -4834,6 +4834,12 @@ export const en = {
     kindCouldNotRead: "Could not read this {kind}",
     whatIsThisKind: "What is this {kind}?",
     kindNotFound: "{kind} not found",
+    goneMark: "gone",
+    goneTitle: "This {kind} no longer exists.",
+    goneReplacedBy:
+      "{kind} {owner} owned it and replaces what it loses: open it to find what runs now.",
+    goneOwnedBy: "{kind} {owner} owned it.",
+    goneUnowned: "Nothing owned it, so nothing replaces it.",
     expandRepeats: "Expand {count} repeats",
     anEmptySpec: "An empty spec",
     nothingConfigured: "Nothing configured",

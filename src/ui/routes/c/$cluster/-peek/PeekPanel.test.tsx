@@ -9,7 +9,7 @@ import {
   it,
   vi,
 } from "vite-plus/test";
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useLocation } from "@tanstack/react-router";
 import { QueryClient } from "@tanstack/react-query";
@@ -526,9 +526,11 @@ describe("PeekPanel", () => {
   });
 
   it("says what failed and keeps offering the full page", async () => {
-    vi.mocked(commands.getPod).mockRejectedValue(new Error("pods not found"));
+    vi.mocked(commands.getPod).mockRejectedValue(
+      new Error("connection refused")
+    );
     await wrap(POD_PEEK);
-    expect(await screen.findByText(/pods not found/)).toBeInTheDocument();
+    expect(await screen.findByText(/connection refused/)).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Open full page/ })
@@ -933,6 +935,73 @@ describe("PeekPanel on a custom resource", () => {
         "argocd"
       )
     );
+  });
+});
+
+describe("PeekPanel on an object that is gone", () => {
+  beforeEach(mockCluster);
+
+  const notFound = () =>
+    Object.assign(
+      new Error(
+        'Kubernetes API error: ApiError: pods "crash-demo-56588f6b8c-8bj9v" not found: NotFound'
+      ),
+      { code: "NOT_FOUND" }
+    );
+
+  /** Read once, then replaced by a restart: the next read is a 404. */
+  async function replacedAfterRead(pod: PodInfo) {
+    vi.mocked(commands.getPod).mockResolvedValueOnce(pod);
+    await wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    vi.mocked(commands.getPod).mockRejectedValue(notFound());
+    await act(() => wrap.client.refetchQueries());
+    return screen.findByText("This Pod no longer exists.");
+  }
+
+  /**
+   * The peek of a pod a restart replaced printed the raw ApiError under a
+   * green Running badge it no longer had any right to.
+   */
+  it("says a replaced pod is gone and names the owner that replaces it", async () => {
+    await replacedAfterRead(buildPod());
+    const panel = screen.getByRole("dialog");
+    expect(within(panel).queryByText("CrashLoopBackOff")).toBeNull();
+    expect(within(panel).getByText("gone")).toBeInTheDocument();
+    expect(
+      within(panel).getByText(/replaces what it loses/)
+    ).toBeInTheDocument();
+    expect(
+      within(panel).getByRole("link", { name: /crash-demo-56588f6b8c$/ })
+    ).toHaveAttribute(
+      "href",
+      "/c/prod/replicasets/k8s-gui-test/crash-demo-56588f6b8c"
+    );
+    expect(
+      within(panel)
+        .getByText(/ApiError/)
+        .closest("details")
+    ).not.toHaveAttribute("open");
+    expect(within(panel).queryByRole("button", { name: /^Shell/ })).toBeNull();
+  });
+
+  /** A bare pod has no controller to bring it back, and saying so is the answer. */
+  it("says nothing replaces a gone pod that nothing owned", async () => {
+    await replacedAfterRead(buildPod({ ownerReferences: [] }));
+    expect(
+      screen.getByText("Nothing owned it, so nothing replaces it.")
+    ).toBeInTheDocument();
+  });
+
+  /** Never read, its owners are unknown, and an unknown is not "nothing owned it". */
+  it("names no owner, and claims none, for a pod gone before the first read", async () => {
+    vi.mocked(commands.getPod).mockRejectedValue(notFound());
+    await wrap(POD_PEEK);
+    expect(
+      await screen.findByText("This Pod no longer exists.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing owned it/)).toBeNull();
+    expect(screen.queryByText(/owned it/)).toBeNull();
   });
 });
 

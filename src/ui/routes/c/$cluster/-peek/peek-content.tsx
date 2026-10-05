@@ -64,7 +64,11 @@ import { TabGlyph, TabMark } from "@/components/object/tab-marks";
 import { usePeekWidth } from "./peek-width";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
-import { errorToShow } from "@/lib/error-utils";
+import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ErrorDetails } from "@/components/ui/error-details";
+import { Ghost } from "lucide-react";
+import { OwnerRef, type Owner as OwnerShape } from "./OwnerRef";
 import { NEEDS_ATTENTION } from "@/lib/workload-status";
 
 export function PeekContent({
@@ -106,6 +110,7 @@ export function PeekContent({
     () => (data === undefined ? null : source.summarise(data, target, t)),
     [data, source, target, t]
   );
+  const gone = error !== null && errorCode(error) === ERROR_CODES.NOT_FOUND;
 
   const age = useRealtimeAge(summary?.createdAt ?? null);
   // The badge says what the kubelet last wrote. When that kubelet stopped
@@ -220,7 +225,12 @@ export function PeekContent({
               whose cluster wrote none, which the list and the detail page
               both say out loud — this is the third path that draws the same
               object, and it used to be silent where they spoke. */}
-          {summary?.status ? (
+          {gone ? (
+            <span className="inline-flex items-center gap-1 text-fg-mut">
+              <Ghost className="h-3 w-3" aria-hidden="true" />
+              {t("empty", "goneMark")}
+            </span>
+          ) : summary?.status ? (
             <StatusBadge
               status={summary.status}
               roleOverride={silence ? "neutral" : undefined}
@@ -240,7 +250,7 @@ export function PeekContent({
               <span>{namespace}</span>
             </>
           )}
-          {summary?.createdAt && (
+          {!gone && summary?.createdAt && (
             <>
               <span className="text-fg-fnt">·</span>
               <span>{t("empty", "ageOld", { age })}</span>
@@ -252,6 +262,7 @@ export function PeekContent({
         <PeekActions
           target={target}
           detail={data}
+          gone={gone}
           onOpenFullPage={routable ? openFullPage : undefined}
           onClose={close}
         />
@@ -297,6 +308,7 @@ export function PeekContent({
                 target={target}
                 summary={summary}
                 error={error}
+                gone={gone ? ownersOf(data) : false}
                 isLoading={isLoading}
               />
             ) : (
@@ -392,17 +404,27 @@ function PeekOverview({
   target,
   summary,
   error,
+  gone,
   isLoading,
 }: {
   target: PeekTarget;
   summary: PeekSummary | null;
   error: Error | null;
+  /** The owners its last read named, `undefined` when it was never read; `false` while it exists. */
+  gone: Owner[] | undefined | false;
   isLoading: boolean;
 }) {
   const t = useT();
   return (
     <div className="h-full overflow-y-auto scrollbar-thin px-3.5 pb-5">
-      {error ? (
+      {error && gone !== false ? (
+        <GoneNotice
+          kind={target.kind}
+          namespace={target.namespace ?? null}
+          owners={gone}
+          error={error}
+        />
+      ) : error ? (
         <p className="pt-4 text-xs text-warn">
           {t("empty", "couldNotReadKind", {
             kind: target.kind.toLowerCase(),
@@ -444,6 +466,16 @@ function PeekOverview({
         name={target.name}
         namespace={target.namespace ?? null}
       />
+      {gone === false && <LiveReads target={target} />}
+      <PeekEvents target={target} />
+    </div>
+  );
+}
+
+/** What is read about the object as it is now, which a gone one has no answer to. */
+function LiveReads({ target }: { target: PeekTarget }) {
+  return (
+    <>
       {TRAFFIC_KINDS.has(target.kind) && <PeekTraffic target={target} />}
       {target.kind === "Service" && target.namespace && (
         <BackendPolicies
@@ -464,9 +496,75 @@ function PeekOverview({
             )}
           />
         )}
-      <PeekEvents target={target} />
-    </div>
+    </>
   );
+}
+
+/**
+ * A replaced pod's read is a 404, and the raw ApiError said only that. The
+ * last read still names who owned it, and so who made what runs now.
+ */
+function GoneNotice({
+  kind,
+  namespace,
+  owners,
+  error,
+}: {
+  kind: string;
+  namespace: string | null;
+  owners: Owner[] | undefined;
+  error: Error;
+}) {
+  const t = useT();
+  const owner = owners?.find((o) => o.controller) ?? owners?.[0];
+  const ref = owner && <OwnerRef owner={owner} namespace={namespace} />;
+  return (
+    <Alert className="mt-4">
+      <Ghost aria-hidden="true" />
+      <AlertTitle className="text-fg">
+        {t("empty", "goneTitle", { kind })}
+      </AlertTitle>
+      <AlertDescription className="space-y-1.5">
+        {owner ? (
+          <p>
+            {parts(
+              t(
+                "empty",
+                REPLACES.has(owner.kind) ? "goneReplacedBy" : "goneOwnedBy",
+                { kind: owner.kind }
+              ),
+              { owner: ref }
+            )}
+          </p>
+        ) : (
+          owners && <p>{t("empty", "goneUnowned")}</p>
+        )}
+        <ErrorDetails text={errorToShow(error)} />
+      </AlertDescription>
+    </Alert>
+  );
+}
+
+/** Controllers that make a new object when one of theirs disappears. */
+const REPLACES = new Set([
+  "ReplicaSet",
+  "StatefulSet",
+  "DaemonSet",
+  "ReplicationController",
+  "Job",
+  "Deployment",
+]);
+
+type Owner = OwnerShape & { controller?: boolean | null };
+
+/** Where the last read keeps its owners: a typed read at the top, a manifest under metadata. */
+function ownersOf(data: unknown): Owner[] | undefined {
+  if (data === undefined) return undefined;
+  const object = data as {
+    ownerReferences?: Owner[];
+    metadata?: { ownerReferences?: Owner[] };
+  };
+  return object.ownerReferences ?? object.metadata?.ownerReferences ?? [];
 }
 
 /**

@@ -36,6 +36,8 @@ export interface PeekActionsProps {
   target: PeekTarget;
   /** The object the panel's own query fetched; undefined until it lands. */
   detail: unknown;
+  /** The object is no longer there, so there is nothing to act on. */
+  gone?: boolean;
   /** Absent for a kind with no page of its own. */
   onOpenFullPage?: () => void;
   /** Closes the panel. A peek onto a deleted object is a ghost. */
@@ -45,6 +47,7 @@ export interface PeekActionsProps {
 export function PeekActions({
   target,
   detail,
+  gone = false,
   onOpenFullPage,
   onClose,
 }: PeekActionsProps) {
@@ -78,15 +81,16 @@ export function PeekActions({
             copy(target.name, t("action", "nameCopied", { name: target.name }))
           }
         />
-        {plan.inline.map((action) => (
-          <PeekActionButton
-            key={action.id}
-            action={action}
-            busy={busy[action.id]}
-            onRun={() => run(action.id)}
-          />
-        ))}
-        {plan.menu.length > 0 && (
+        {!gone &&
+          plan.inline.map((action) => (
+            <PeekActionButton
+              key={action.id}
+              action={action}
+              busy={busy[action.id]}
+              onRun={() => run(action.id)}
+            />
+          ))}
+        {!gone && plan.menu.length > 0 && (
           <PeekActionMenu actions={plan.menu} busy={busy} onRun={run} />
         )}
       </div>
