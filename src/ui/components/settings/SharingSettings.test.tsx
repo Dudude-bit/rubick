@@ -85,3 +85,16 @@ describe("giving a publishing target its key", () => {
     );
   });
 });
+
+describe("the row under the Sharing heading", () => {
+  /** The row repeated the section's own title and sentence word for word, right under them. */
+  it("says something the heading above it does not", async () => {
+    wrap();
+    expect(await screen.findByText("Targets")).toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        "Where a report may be published, and the key that lets it."
+      )
+    ).toBeNull();
+  });
+});

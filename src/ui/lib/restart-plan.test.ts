@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { restartWords } from "./restart-plan";
 
@@ -113,5 +114,29 @@ describe("what a restart says it will do", () => {
   /** A workload not read yet gets the general sentence, not a count of zero. */
   it("says the general case before the workload is read", () => {
     expect(restartWords(undefined, "cart", t).text).toBe("restartPlanUnknown");
+  });
+
+  /** The Russian read "Заменит 1 под; за раз недоступных нет, сверх нормы не больше 1.", every count but none of the nouns. */
+  it("reads as a Russian sentence with the noun after each count", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    expect(
+      restartWords(
+        { strategy: "rolling", replicas: 1, surge: 1, unavailable: 0 },
+        "hello-web",
+        ru
+      ).text
+    ).toBe(
+      "Заменит 1 под постепенно: все поды остаются доступными, сверх заданного числа реплик запускается не больше 1 пода."
+    );
+    expect(
+      restartWords(
+        { strategy: "rolling", replicas: 3, surge: 0, unavailable: 2 },
+        "hello-web",
+        ru
+      ).text
+    ).toBe(
+      "Заменит 3 пода постепенно: одновременно недоступно не больше 2 подов, лишних подов не запускается."
+    );
   });
 });

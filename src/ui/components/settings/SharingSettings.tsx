@@ -137,8 +137,8 @@ export function SharingSettings() {
   return (
     <SettingsGroup>
       <SettingRow
-        label={t("settings", "sectionSharing")}
-        hint={t("settings", "sectionSharingHint")}
+        label={t("settings", "sharingTargets")}
+        hint={t("settings", "sharingTargetsHint")}
         keywords={t("settings", "searchSharingWords")}
       >
         <div className="flex flex-col gap-2">
