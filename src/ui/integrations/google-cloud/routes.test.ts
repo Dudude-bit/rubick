@@ -16,6 +16,7 @@ import type {
   ServicePublished,
 } from "@/generated/types";
 import { translate } from "@/i18n";
+import { sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 import { backingFrom } from "../ingress";
 import {
@@ -317,6 +318,15 @@ describe("what a host is joined to", () => {
         what: "FrontendConfig",
       })
     );
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const missing = host.findings.find(
+      (finding) => finding.kind === "missing-object"
+    );
+    // The reason was an English sentence composed here, under a Russian title.
+    expect(
+      missing?.kind === "missing-object" ? sayWords(missing.why, ru) : ""
+    ).toMatch(/ссылается на него, но в .* его нет/);
   });
 
   /**

@@ -20,7 +20,7 @@
  * verdict's clothes.
  */
 
-import { joinSayings } from "@/i18n/say";
+import { joinSayings, sayWords } from "@/i18n/say";
 import { useMemo } from "react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -582,7 +582,7 @@ function FindingLine({ finding }: { finding: GkeFinding }) {
             </>
           }
         >
-          {finding.why}.
+          {sayWords(finding.why, t)}.
         </Finding>
       );
     case "certificate":

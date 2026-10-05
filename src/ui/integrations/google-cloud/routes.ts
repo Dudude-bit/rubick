@@ -29,6 +29,7 @@ import type {
 } from "@/generated/types";
 import { covers } from "@/lib/certificates";
 import type { T } from "@/i18n/useT";
+import type { Saying } from "@/i18n/say";
 import {
   backingOf,
   worstOf,
@@ -138,7 +139,7 @@ export type GkeFinding =
       severity: "err";
       what: string;
       name: string;
-      why: string;
+      why: Saying;
     }
   | {
       kind: "certificate";
@@ -351,7 +352,13 @@ function findingsFor(
         severity: "err",
         what: "FrontendConfig",
         name: front.frontendConfig.name,
-        why: `${front.ingress.name} names it and there is none in ${front.ingress.namespace} — no redirect and no SSL policy are applied`,
+        why: {
+          key: "gkeFrontendConfigMissingWhy",
+          values: {
+            ingress: front.ingress.name,
+            namespace: front.ingress.namespace,
+          },
+        },
       });
     }
     for (const certificate of front.certificates) {
@@ -362,7 +369,13 @@ function findingsFor(
           severity: "err",
           what: "ManagedCertificate",
           name: certificate.name,
-          why: `${front.ingress.name} names it and there is none in ${front.ingress.namespace} — nothing terminates TLS for it`,
+          why: {
+            key: "gkeCertificateMissingWhy",
+            values: {
+              ingress: front.ingress.name,
+              namespace: front.ingress.namespace,
+            },
+          },
         });
         continue;
       }
@@ -432,7 +445,18 @@ function findingsFor(
         severity: "err",
         what: "BackendConfig",
         name: config.name,
-        why: `${route.backend?.name ?? "a Service"} names it and there is none in ${route.ingress.namespace} — the backend keeps its defaults`,
+        why: route.backend
+          ? {
+              key: "gkeBackendConfigMissingWhy",
+              values: {
+                backend: route.backend.name,
+                namespace: route.ingress.namespace,
+              },
+            }
+          : {
+              key: "gkeBackendConfigMissingWhyUnnamed",
+              values: { namespace: route.ingress.namespace },
+            },
       });
     }
     const backing = backingOf(

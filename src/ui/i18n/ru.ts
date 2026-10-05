@@ -3490,6 +3490,14 @@ export const ru: Catalogue = {
     gcpSslPolicy: "SSL-политика {name}",
     gcpHealthCheck: "проверка здоровья {what}",
     gcpCdnWith: "CDN {what}",
+    gkeFrontendConfigMissingWhy:
+      "{ingress} ссылается на него, но в {namespace} его нет, поэтому ни перенаправление, ни SSL-политика не применяются",
+    gkeCertificateMissingWhy:
+      "{ingress} ссылается на него, но в {namespace} его нет, поэтому TLS для него никто не завершает",
+    gkeBackendConfigMissingWhy:
+      "{backend} ссылается на него, но в {namespace} его нет, поэтому бэкенд работает с настройками по умолчанию",
+    gkeBackendConfigMissingWhyUnnamed:
+      "Service ссылается на него, но в {namespace} его нет, поэтому бэкенд работает с настройками по умолчанию",
     gcpCdnOn: "CDN включён",
     gcpIapOn: "IAP включён",
     gcpCloudArmor: "Cloud Armor {name}",

@@ -3225,6 +3225,14 @@ export const en = {
     gcpSslPolicy: "SSL policy {name}",
     gcpHealthCheck: "health check {what}",
     gcpCdnWith: "CDN {what}",
+    gkeFrontendConfigMissingWhy:
+      "{ingress} names it and there is none in {namespace}, so no redirect and no SSL policy are applied",
+    gkeCertificateMissingWhy:
+      "{ingress} names it and there is none in {namespace}, so nothing terminates TLS for it",
+    gkeBackendConfigMissingWhy:
+      "{backend} names it and there is none in {namespace}, so the backend keeps its defaults",
+    gkeBackendConfigMissingWhyUnnamed:
+      "A Service names it and there is none in {namespace}, so the backend keeps its defaults",
     gcpCdnOn: "CDN on",
     gcpIapOn: "IAP on",
     gcpCloudArmor: "Cloud Armor {name}",
