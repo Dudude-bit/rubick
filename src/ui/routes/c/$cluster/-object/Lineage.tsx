@@ -13,7 +13,8 @@ import type { LineageStop } from "@/generated/types";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { useT, type T } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
-import { crdOf, useLineage } from "./ownership";
+import { segmentOf } from "@/lib/access-kinds";
+import { useLineage } from "./ownership";
 import type { ServedResource } from "./served";
 
 /** Why the chain stops, drawn. Every stop has its own glyph and tone. */
@@ -91,7 +92,7 @@ export function LineageTrail({
             kind={ancestor.kind}
             name={ancestor.name}
             namespace={ancestor.namespace}
-            crd={crdOf(ancestor)}
+            crd={segmentOf(ancestor)}
           />
         </Fragment>
       ))}

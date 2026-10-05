@@ -8,6 +8,7 @@ import type { PeekTarget } from "@/hooks/usePeek";
 import type { KeyValue, KeyValueTone } from "@/components/object/key-values";
 import type { ConditionInfo } from "@/generated/types";
 import type { ResourceKind } from "@/lib/resource-registry";
+import { OwnerRef, type Owner } from "./OwnerRef";
 
 /** A cell is a list of words; `none` is said, faint, when there are none. */
 export interface WordCell {
@@ -104,7 +105,7 @@ export const ref = (
   kind: string,
   name: string,
   namespace?: string | null,
-  options: { crd?: string; showNamespace?: boolean } = {}
+  options: { crd?: string | null; showNamespace?: boolean } = {}
 ) => (
   <ResourceRef
     kind={kind}
@@ -115,14 +116,8 @@ export const ref = (
   />
 );
 
-/**
- * Typed by what it reads rather than by either owner-reference shape: the
- * generated `OwnerReference` spells its fields with underscores and
- * `OwnerReferenceInfo` spells them in camel case, and this needs neither of
- * the two fields they disagree about.
- */
 export function controlledBy(
-  owners: ReadonlyArray<{ kind: string; name: string }> | undefined,
+  owners: ReadonlyArray<Owner> | undefined,
   namespace: string | null,
   t: Translate
 ): PeekGroup[] {
@@ -132,7 +127,7 @@ export function controlledBy(
       title: t("columns", "controlledBy"),
       items: owners.map((owner) => ({
         label: owner.kind,
-        value: ref(owner.kind, owner.name, namespace),
+        value: <OwnerRef owner={owner} namespace={namespace} />,
       })),
     },
   ];

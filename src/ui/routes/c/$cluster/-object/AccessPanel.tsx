@@ -15,8 +15,8 @@ import { Unknown } from "@/components/ui/unknown";
 import type { BindingInfo } from "@/generated/types";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useT, type T } from "@/i18n/useT";
-import { accessKind } from "@/lib/access-kinds";
-import { crdOf } from "./ownership";
+import { accessKind, segmentOf } from "@/lib/access-kinds";
+
 import {
   bindingsOf,
   escalatingVerbs,
@@ -172,7 +172,7 @@ function GrantRow({
             kind={target.kind}
             name={target.name}
             namespace={target.namespace}
-            crd={crdOf(target)}
+            crd={segmentOf(target)}
           />
         ) : (
           <span className="font-mono text-fg-mut">

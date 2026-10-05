@@ -3,8 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ApiCatalog } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { errorCode, errorToShow } from "@/lib/error-utils";
+import { segmentOf } from "@/lib/access-kinds";
 import { resourceSegment, type ObjectRef } from "@/lib/links";
-import { isResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import { catalogQuery, servedOf } from "./served";
 
@@ -154,16 +154,16 @@ async function revision(object: Json, read: Reader): Promise<Attachment> {
   return { state: "parent", parent: read.refOf(target), tab: "changes" };
 }
 
-/** The kinds whose page has an events tab an event can open on. */
+/** By `<group>/<kind>`: the kinds whose page has an events tab an event can open on. */
 const EVENTS_TAB = new Set([
-  "Ingress",
-  "Gateway",
-  "HTTPRoute",
-  "GRPCRoute",
-  "TCPRoute",
-  "TLSRoute",
-  "UDPRoute",
-  "PersistentVolumeClaim",
+  "networking.k8s.io/Ingress",
+  "gateway.networking.k8s.io/Gateway",
+  "gateway.networking.k8s.io/HTTPRoute",
+  "gateway.networking.k8s.io/GRPCRoute",
+  "gateway.networking.k8s.io/TCPRoute",
+  "gateway.networking.k8s.io/TLSRoute",
+  "gateway.networking.k8s.io/UDPRoute",
+  "/PersistentVolumeClaim",
 ]);
 
 const event =
@@ -172,9 +172,11 @@ const event =
     const ref = field(object, refPath) as Json | undefined;
     const kind = text(ref?.kind);
     const name = text(ref?.name);
-    if (!kind || !name || !EVENTS_TAB.has(kind)) return FREE;
+    const apiVersion = text(ref?.apiVersion);
+    if (!kind || !name || !EVENTS_TAB.has(`${groupOf(apiVersion)}/${kind}`))
+      return FREE;
     const target: Target = {
-      apiVersion: text(ref?.apiVersion),
+      apiVersion,
       kind,
       name,
       namespace: text(ref?.namespace),
@@ -256,7 +258,7 @@ export function decide(
   return decideFor ? decideFor(object, read) : Promise.resolve(FREE);
 }
 
-function readerOver(
+export function readerOver(
   catalog: ApiCatalog,
   resource: string,
   namespace: string | undefined
@@ -299,17 +301,11 @@ function readerOver(
     },
     refOf(target) {
       const entry = entryOf(target);
-      const segment =
-        entry && !isResourceType(target.kind)
-          ? entry.group
-            ? `${entry.plural}.${entry.group}`
-            : entry.plural
-          : undefined;
       return {
         kind: target.kind,
         name: target.name,
         namespace: entry?.namespaced ? target.namespace : null,
-        crd: segment,
+        crd: entry && segmentOf(entry),
       };
     },
   };

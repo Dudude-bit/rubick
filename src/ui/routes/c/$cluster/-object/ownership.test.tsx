@@ -152,6 +152,34 @@ describe("what an object owns", () => {
   });
 
   /**
+   * Linked by kind name alone, an Istio Gateway a controller made opened the
+   * Gateway API page of a Gateway that does not exist.
+   */
+  it("opens a dependent by its group, the Gateway API page only for a Gateway API Gateway", async () => {
+    const gateway = (group: string, name: string): Dependent => ({
+      ...dependent("Gateway", name),
+      group,
+      plural: "gateways",
+    });
+    answers.dependents = () =>
+      Promise.resolve({
+        dependents: [
+          gateway("networking.istio.io", "mesh"),
+          gateway("gateway.networking.k8s.io", "edge"),
+        ],
+        notRead: NOTHING_UNREAD,
+      });
+    await renderWithRouter(<OwnsPanel uid="d" />);
+    expect(
+      await screen.findByRole("link", { name: "Gateway mesh" })
+    ).toHaveAttribute("href", "/c/test/gateways.networking.istio.io/shop/mesh");
+    expect(screen.getByRole("link", { name: "Gateway edge" })).toHaveAttribute(
+      "href",
+      "/c/test/gateways/shop/edge"
+    );
+  });
+
+  /**
    * While a kind is still listing, "owns nothing" would be premature: the
    * panel says it is still reading and names the kind, never folds it in.
    */

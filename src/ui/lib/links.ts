@@ -22,8 +22,11 @@ export interface ObjectRef {
   kind: string;
   name: string;
   namespace?: string | null;
-  /** `<plural>.<group>` for a custom resource, which the registry cannot spell. */
-  crd?: string;
+  /**
+   * `<plural>.<group>` for a custom resource, which the registry cannot
+   * spell; `null` for a namesake of a built-in kind nothing here addresses.
+   */
+  crd?: string | null;
 }
 
 export interface ObjectLinkOptions {
@@ -69,10 +72,33 @@ function accessOf(ref: ObjectRef): AccessKind | undefined {
     : undefined;
 }
 
+/** A segment that names the registry's own kind is that kind, page and peek. */
+function ownCrd(ref: ObjectRef): string | undefined {
+  const known = ref.crd && isResourceType(ref.kind) ? toKind(ref.kind) : null;
+  return known && segmentOf(getResourceDefinition(known)) === ref.crd
+    ? undefined
+    : (ref.crd ?? undefined);
+}
+
 /** The segment a reference is read through: its CRD's, or an access kind's. */
 export function crdFor(ref: ObjectRef): string | undefined {
   const access = accessOf(ref);
-  return ref.crd ?? (access && segmentOf(access));
+  return ownCrd(ref) ?? (access && segmentOf(access));
+}
+
+/**
+ * The segment of a reference that knows its group but not its plural: none
+ * for the built-in kind of that very group, the cluster's CRD for any other,
+ * and `null` while no CRD names it, so a namesake never opens the built-in.
+ */
+export function crdInGroup(
+  ref: { kind: string; group: string | null },
+  crdOf: (group: string, kind: string) => string | null
+): string | null | undefined {
+  const group = ref.group ?? "";
+  const known = isResourceType(ref.kind) ? toKind(ref.kind) : null;
+  const builtIn = known ? getResourceDefinition(known) : accessKind(ref.kind);
+  return builtIn?.group === group ? undefined : crdOf(group, ref.kind);
 }
 
 /**
@@ -83,6 +109,7 @@ export function objectLink(
   ref: ObjectRef,
   options: ObjectLinkOptions = {}
 ): AppLink | null {
+  if (ref.crd === null) return null;
   const access = accessOf(ref);
   const crd = crdFor(ref);
   const resource = resourceSegment({ kind: ref.kind, crd });
@@ -133,7 +160,7 @@ export function listLink(
  */
 export function servedListLink(kind: ServedKindRef): AppLink {
   const known = registryKindOf(kind);
-  return known ? listLink(known) : resourceListLink(servedSegment(kind));
+  return known ? listLink(known) : resourceListLink(segmentOf(kind));
 }
 
 /** Where one object of a served kind opens, by the same rule as its list. */
@@ -141,16 +168,13 @@ export function servedObjectLink(
   ref: ServedKindRef & { name: string; namespace?: string | null },
   options?: ObjectLinkOptions
 ): AppLink | null {
-  const known = registryKindOf(ref);
   return objectLink(
-    known
-      ? { kind: known, name: ref.name, namespace: ref.namespace }
-      : {
-          kind: ref.kind,
-          name: ref.name,
-          namespace: ref.namespace,
-          crd: servedSegment(ref),
-        },
+    {
+      kind: ref.kind,
+      name: ref.name,
+      namespace: ref.namespace,
+      crd: segmentOf(ref),
+    },
     options
   );
 }
@@ -170,10 +194,6 @@ function registryKindOf(kind: ServedKindRef): ResourceKind | null {
     definition.plural === kind.plural
     ? known
     : null;
-}
-
-function servedSegment(kind: ServedKindRef): string {
-  return kind.group ? `${kind.plural}.${kind.group}` : kind.plural;
 }
 
 /**

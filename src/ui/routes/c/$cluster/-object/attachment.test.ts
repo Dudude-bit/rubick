@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { decide, type Exists, type Reader, type Target } from "./attachment";
+import type { ApiCatalog, CatalogEntry } from "@/generated/types";
+import { crdFor, resourceSegment } from "@/lib/links";
+import {
+  decide,
+  readerOver,
+  type Exists,
+  type Reader,
+  type Target,
+} from "./attachment";
 
 /** A cluster where each named object answers as `exists` says. */
 function reader(
@@ -162,19 +170,38 @@ describe("the other attached kinds", () => {
 
   /** A Pod's page has no events tab to open on, so its event is not moved. */
   it("open an event only on a page that has an events tab", async () => {
-    const about = (kind: string) => ({
+    const about = (kind: string, apiVersion: string) => ({
       metadata: { name: "e", namespace: "shop" },
-      involvedObject: { kind, name: "x", namespace: "shop" },
+      involvedObject: { apiVersion, kind, name: "x", namespace: "shop" },
     });
     expect(
       await decide(
         "events",
-        about("Ingress"),
+        about("Ingress", "networking.k8s.io/v1"),
         reader({ "Ingress/x": "present" })
       )
     ).toMatchObject({ state: "parent", tab: "events" });
     expect(
-      await decide("events", about("Pod"), reader({ "Pod/x": "present" }))
+      await decide("events", about("Pod", "v1"), reader({ "Pod/x": "present" }))
+    ).toEqual({ state: "free" });
+  });
+
+  /**
+   * Keyed by kind alone, an event about an Istio Gateway moved to the events
+   * tab of a Gateway API page, which its CRD's page does not have.
+   */
+  it("leave an event about a namesake of a kind with an events tab where it is", async () => {
+    const event = {
+      metadata: { name: "e", namespace: "shop" },
+      involvedObject: {
+        apiVersion: "networking.istio.io/v1",
+        kind: "Gateway",
+        name: "edge",
+        namespace: "shop",
+      },
+    };
+    expect(
+      await decide("events", event, reader({ "Gateway/edge": "present" }))
     ).toEqual({ state: "free" });
   });
 
@@ -196,5 +223,44 @@ describe("the other attached kinds", () => {
         reader({})
       )
     ).toEqual({ state: "free" });
+  });
+});
+
+describe("the parent an attached object opens on", () => {
+  const gateway = (group: string): CatalogEntry => ({
+    group,
+    version: "v1",
+    kind: "Gateway",
+    plural: "gateways",
+    namespaced: true,
+    verbs: ["get", "list"],
+    shortNames: [],
+  });
+  const catalog: ApiCatalog = {
+    entries: [
+      gateway("gateway.networking.k8s.io"),
+      gateway("networking.istio.io"),
+    ],
+    unread: [],
+  };
+  const segmentOfParent = (apiVersion: string) => {
+    const parent = readerOver(catalog, "events", "shop").refOf({
+      apiVersion,
+      kind: "Gateway",
+      name: "edge",
+      namespace: "shop",
+    });
+    return resourceSegment({ kind: parent.kind, crd: crdFor(parent) });
+  };
+
+  /**
+   * Resolved by kind name alone, an Istio Gateway's parent link opened the
+   * Gateway API page of a Gateway that does not exist.
+   */
+  it("is the kind of that very group, never a namesake's page", () => {
+    expect(segmentOfParent("networking.istio.io/v1")).toBe(
+      "gateways.networking.istio.io"
+    );
+    expect(segmentOfParent("gateway.networking.k8s.io/v1")).toBe("gateways");
   });
 });

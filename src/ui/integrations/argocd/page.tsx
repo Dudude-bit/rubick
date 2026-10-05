@@ -37,7 +37,7 @@ import {
   type DetailTab,
 } from "@/components/object/detail-tab";
 import type { CustomResourceInfo } from "@/generated/types";
-import { crdInstancesLink } from "@/lib/links";
+import { crdInGroup, crdInstancesLink } from "@/lib/links";
 import { toPlural } from "@/lib/resource-registry";
 import { formatAge } from "@/lib/utils";
 import { getValueByPath, troubleMark } from "../kit";
@@ -633,7 +633,7 @@ function ResourceLine({
           kind={resource.kind}
           name={resource.name}
           namespace={resource.namespace}
-          crd={crdFor(resource.group, resource.kind) ?? undefined}
+          crd={crdInGroup(resource, crdFor)}
           showKind={false}
         />
       </span>

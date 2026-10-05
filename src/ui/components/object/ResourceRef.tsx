@@ -29,8 +29,9 @@ export interface ResourceRefProps {
    * so there is no address to link to and nothing to peek at. Pass it
    * wherever the call site knows it rather than writing a `<Link>` of your
    * own — that navigates away from the page instead of opening a peek.
+   * `null` draws a namesake of a built-in kind as text until its CRD is known.
    */
-  crd?: string;
+  crd?: string | null;
   /** Off where the surrounding column already says the kind. */
   showKind?: boolean;
   /**

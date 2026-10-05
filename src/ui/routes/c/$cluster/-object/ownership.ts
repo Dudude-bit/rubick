@@ -4,7 +4,6 @@ import type { KindReading, NotRead } from "@/generated/types";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { commands } from "@/lib/commands";
-import { objectLink } from "@/lib/links";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
 import { isResourceType, listQueryFor, toKind } from "@/lib/resource-registry";
@@ -17,32 +16,6 @@ export function servedOfKind(kind: string): ServedResource | null {
   if (!known) return null;
   const { group, resource } = listQueryFor(known);
   return { group, plural: resource };
-}
-
-/** The address segment a kind the registry does not hold is reached by. */
-export function crdOf(ref: {
-  kind: string;
-  group: string;
-  plural: string;
-}): string | undefined {
-  if (isResourceType(ref.kind)) return undefined;
-  return ref.group ? `${ref.plural}.${ref.group}` : ref.plural;
-}
-
-/** Where an ancestor or a dependent opens. */
-export function refLink(ref: {
-  kind: string;
-  group: string;
-  plural: string;
-  name: string;
-  namespace?: string | null;
-}) {
-  return objectLink({
-    kind: ref.kind,
-    name: ref.name,
-    namespace: ref.namespace,
-    crd: crdOf(ref),
-  });
 }
 
 /** The controllers above one object, and its uid. A rollout is what moves it. */

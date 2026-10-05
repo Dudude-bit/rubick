@@ -4,6 +4,7 @@ import {
 } from "@/components/object/key-values";
 import type { ConditionInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
+import { segmentOf } from "@/lib/access-kinds";
 import { formatDate } from "@/lib/utils";
 import {
   conditionItem,
@@ -11,7 +12,7 @@ import {
   type PeekGroup,
   type PeekSummary,
 } from "../-peek/peek-sources-kit";
-import { crdOf } from "./ownership";
+
 import {
   rbacKindOf,
   roleRefOf,
@@ -145,7 +146,7 @@ const isWords = (value: unknown): boolean =>
 
 const linked = (target: RbacTarget, namespace: string | null) =>
   ref(target.kind, target.name, target.namespace, {
-    crd: crdOf(target),
+    crd: segmentOf(target),
     showNamespace: !!target.namespace && target.namespace !== namespace,
   });
 

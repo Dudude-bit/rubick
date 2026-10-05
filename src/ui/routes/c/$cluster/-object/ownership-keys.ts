@@ -5,9 +5,10 @@ import { useEffect } from "react";
 import { claimedByLayer, claimedByTarget } from "../-shell/useCopyLink";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { commands } from "@/lib/commands";
+import { servedObjectLink } from "@/lib/links";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
-import { refLink, useLineage } from "./ownership";
+import { useLineage } from "./ownership";
 import type { ServedResource } from "./served";
 
 /**
@@ -39,16 +40,16 @@ export function useOwnershipKeys(
       if (!event.altKey || event.metaKey || event.ctrlKey || event.shiftKey)
         return;
       if (claimedByTarget(event.target) || claimedByLayer(event.target)) return;
-      const go = (link: ReturnType<typeof refLink>) => {
+      const go = (link: ReturnType<typeof servedObjectLink>) => {
         if (link) void navigate(link);
       };
       if (event.key === "ArrowUp" && owner) {
         event.preventDefault();
-        go(refLink(owner));
+        go(servedObjectLink(owner));
       } else if (event.key === "ArrowDown" && lineage.uid) {
         event.preventDefault();
         const first = (await dependentsOf(lineage.uid)).dependents[0];
-        if (first) go(refLink(first));
+        if (first) go(servedObjectLink(first));
       } else if (
         (event.key === "ArrowLeft" || event.key === "ArrowRight") &&
         owner &&
@@ -60,7 +61,7 @@ export function useOwnershipKeys(
         const same = siblings.filter((entry) => entry.kind === self?.kind);
         const at = same.findIndex((entry) => entry.uid === lineage.uid);
         const next = same[at + (event.key === "ArrowRight" ? 1 : -1)];
-        if (at !== -1 && next) go(refLink(next));
+        if (at !== -1 && next) go(servedObjectLink(next));
       }
     };
     window.addEventListener("keydown", onKey);

@@ -10,7 +10,8 @@ import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { cn } from "@/lib/utils";
-import { crdOf, listing, useDependents } from "./ownership";
+import { segmentOf } from "@/lib/access-kinds";
+import { listing, useDependents } from "./ownership";
 import { ReadingChips, ReadingProgress } from "./ReadingChips";
 
 /**
@@ -107,7 +108,7 @@ function DependentRow({
           kind={dependent.kind}
           name={dependent.name}
           namespace={dependent.namespace}
-          crd={crdOf(dependent)}
+          crd={segmentOf(dependent)}
           showNamespace={
             !!dependent.namespace && dependent.namespace !== parentNamespace
           }

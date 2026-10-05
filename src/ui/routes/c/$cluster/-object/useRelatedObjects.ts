@@ -20,12 +20,13 @@ import { useQuery } from "@tanstack/react-query";
 
 import { useCapabilities, type RelatedObject } from "@/integrations";
 import { groupOf, useCrdIndex } from "@/hooks/useCrdIndex";
+import { crdInGroup } from "@/lib/links";
 import type { CustomResourceDetailInfo } from "@/generated/types";
 
 /** A related object with its address worked out, which is what a row needs. */
 export interface RelatedRef extends RelatedObject {
   /** The CRD defining the far end, where it is a custom resource. */
-  crd?: string;
+  crd?: string | null;
 }
 
 export interface RelatedObjects {
@@ -115,7 +116,7 @@ export function useRelatedObjects(
       [...owners(resource), ...(query.data?.stated ?? NONE)].map(
         (entry): RelatedRef => ({
           ...entry,
-          crd: crdFor(entry.group, entry.kind) ?? undefined,
+          crd: crdInGroup(entry, crdFor),
         })
       ),
     [resource, query.data, crdFor]

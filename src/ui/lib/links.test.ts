@@ -6,6 +6,8 @@ import { QueryClient } from "@tanstack/react-query";
 import { routeTree } from "@/generated/routeTree.gen";
 import {
   clusterOf,
+  crdFor,
+  crdInGroup,
   crdInstancesLink,
   hrefOf,
   listLink,
@@ -73,6 +75,30 @@ describe("an object's address", () => {
     expect(hrefOf(crdInstancesLink("certificates.cert-manager.io"))).toBe(
       "/c/prod/customresourcedefinitions/certificates.cert-manager.io?tab=instances"
     );
+  });
+
+  /**
+   * A reference resolved through its group carries a segment even for a
+   * built-in kind. Read as a custom resource, a Gateway API Gateway opened
+   * the generic page and peeked as a manifest instead of as a Gateway.
+   */
+  it("opens a built-in kind's own page for its own segment, and a namesake's CRD otherwise", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const own = {
+      kind: "Gateway",
+      name: "edge",
+      namespace: "web",
+      crd: "gateways.gateway.networking.k8s.io",
+    };
+    expect(hrefOf(objectLink(own)!)).toBe("/c/prod/gateways/web/edge");
+    expect(routeOf(router, hrefOf(objectLink(own)!))).not.toMatch(GENERIC);
+    expect(crdFor(own)).toBeUndefined();
+    const istio = { ...own, crd: "gateways.networking.istio.io" };
+    expect(hrefOf(objectLink(istio)!)).toBe(
+      "/c/prod/gateways.networking.istio.io/web/edge"
+    );
+    expect(crdFor(istio)).toBe("gateways.networking.istio.io");
   });
 
   /** A context name from EKS is an ARN, with slashes and colons in it. */
@@ -197,6 +223,47 @@ describe("an object of a served kind", () => {
         namespace: "istio-system",
       })
     ).toBe("/c/prod/gateways.networking.istio.io/istio-system/edge");
+  });
+});
+
+describe("a reference that knows its group but not its plural", () => {
+  const crds = (group: string, kind: string) =>
+    group === "networking.istio.io" && kind === "Gateway"
+      ? "gateways.networking.istio.io"
+      : null;
+
+  /**
+   * An owner reference or a vendor's inventory names a group and a kind.
+   * Linked by the kind alone, an Istio Gateway opened the Gateway API page,
+   * and so did one whose CRD was still being read.
+   */
+  it("opens the built-in only in its own group, a namesake's CRD, and nothing while no CRD names it", () => {
+    at("/c/prod");
+    expect(
+      crdInGroup({ kind: "Gateway", group: "gateway.networking.k8s.io" }, crds)
+    ).toBeUndefined();
+    expect(
+      crdInGroup({ kind: "Gateway", group: "networking.istio.io" }, crds)
+    ).toBe("gateways.networking.istio.io");
+    expect(
+      crdInGroup(
+        { kind: "ClusterRole", group: "rbac.authorization.k8s.io" },
+        crds
+      )
+    ).toBeUndefined();
+    const unknown = crdInGroup(
+      { kind: "StatefulSet", group: "apps.kruise.io" },
+      crds
+    );
+    expect(unknown).toBeNull();
+    expect(
+      objectLink({
+        kind: "StatefulSet",
+        name: "db",
+        namespace: "web",
+        crd: unknown,
+      })
+    ).toBeNull();
   });
 });
 
