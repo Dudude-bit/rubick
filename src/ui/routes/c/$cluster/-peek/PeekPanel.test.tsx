@@ -27,6 +27,7 @@ import type {
   EventInfo,
   ObjectRef,
   PodInfo,
+  ReplicaSetInfo,
   ResourceConnections,
   ServiceInfo,
 } from "@/generated/types";
@@ -76,6 +77,8 @@ vi.mock("@/lib/commands", () => ({
     getConfigmapData: vi.fn(),
     getDeployment: vi.fn(),
     getDeploymentPods: vi.fn(),
+    getReplicaset: vi.fn(),
+    getDeploymentReplicasets: vi.fn(),
     streamPodLogs: vi.fn(),
     stopLogStream: vi.fn(),
     logStreamSubscribed: vi.fn(),
@@ -179,6 +182,21 @@ function buildPod(overrides: Partial<PodInfo> = {}): PodInfo {
     ],
     ...overrides,
   } as PodInfo;
+}
+
+function buildReplicaSet(
+  overrides: Partial<ReplicaSetInfo> = {}
+): ReplicaSetInfo {
+  return {
+    name: "crash-demo-56588f6b8c",
+    namespace: "k8s-gui-test",
+    uid: "rs-uid",
+    replicas: { desired: 1, current: 1, ready: 0, available: 0 },
+    revision: null,
+    currentRevision: null,
+    ownerReferences: [],
+    ...overrides,
+  } as ReplicaSetInfo;
 }
 
 function buildEvent(): EventInfo {
@@ -345,6 +363,12 @@ const POD_PEEK =
 
 function mockCluster() {
   vi.mocked(commands.getPod).mockReset().mockResolvedValue(buildPod());
+  vi.mocked(commands.getReplicaset)
+    .mockReset()
+    .mockResolvedValue(buildReplicaSet());
+  vi.mocked(commands.getDeploymentReplicasets)
+    .mockReset()
+    .mockResolvedValue([]);
   vi.mocked(commands.getManifest)
     .mockReset()
     .mockResolvedValue(REPLICASET_MANIFEST);
@@ -993,6 +1017,79 @@ describe("PeekPanel on an object that is gone", () => {
         .closest("details")
     ).not.toHaveAttribute("open");
     expect(within(panel).queryByRole("button", { name: /^Shell/ })).toBeNull();
+  });
+
+  const underDeployment = (desired: number) =>
+    buildReplicaSet({
+      replicas: { desired, current: desired, ready: desired, available: 0 },
+      revision: "1",
+      currentRevision: desired > 0 ? "1" : "2",
+      ownerReferences: [
+        {
+          api_version: "apps/v1",
+          kind: "Deployment",
+          name: "crash-demo",
+          uid: "deploy-uid",
+          controller: true,
+        },
+      ],
+    });
+
+  /**
+   * Dana restarted cart, then peeked an old pod: it named the old
+   * ReplicaSet, scaled to 0, as what "replaces what it loses". After a
+   * rollout the Deployment replaces it, through its current ReplicaSet.
+   */
+  it("names the Deployment and its current ReplicaSet for a pod a rollout replaced", async () => {
+    vi.mocked(commands.getReplicaset).mockResolvedValue(underDeployment(0));
+    vi.mocked(commands.getDeploymentReplicasets).mockResolvedValue([
+      underDeployment(0),
+      buildReplicaSet({
+        name: "crash-demo-7f9c",
+        revision: "2",
+        currentRevision: "2",
+      }),
+    ]);
+    await replacedAfterRead(buildPod());
+    const notice = await screen.findByText(/What runs now comes from/);
+    // Each link also carries its kind in a hidden span, hence the repeats.
+    expect(notice).toHaveTextContent(
+      /^Deployment (Deployment )?crash-demo owned it through ReplicaSet (ReplicaSet )?crash-demo-56588f6b8c, now scaled to 0\. What runs now comes from ReplicaSet (ReplicaSet )?crash-demo-7f9c\.$/
+    );
+    expect(notice).not.toHaveTextContent(/replaces what it loses/);
+    expect(
+      within(notice).getByRole("link", { name: /crash-demo-7f9c$/ })
+    ).toHaveAttribute(
+      "href",
+      "/c/prod/replicasets/k8s-gui-test/crash-demo-7f9c"
+    );
+    expect(
+      within(notice).getByRole("link", { name: /crash-demo$/ })
+    ).toHaveAttribute("href", "/c/prod/deployments/k8s-gui-test/crash-demo");
+  });
+
+  /** A pod deleted inside the live ReplicaSet: that ReplicaSet does replace it. */
+  it("names the live ReplicaSet as the replacement, under its Deployment", async () => {
+    vi.mocked(commands.getReplicaset).mockResolvedValue(underDeployment(2));
+    await replacedAfterRead(buildPod());
+    expect(
+      await screen.findByText(/which replaces what it loses/)
+    ).toHaveTextContent(
+      /^Deployment (Deployment )?crash-demo owned it through ReplicaSet (ReplicaSet )?crash-demo-56588f6b8c, which replaces what it loses/
+    );
+    expect(commands.getDeploymentReplicasets).not.toHaveBeenCalled();
+  });
+
+  /** Not read is not "it replaces it": a refused ReplicaSet claims nothing. */
+  it("claims no replacement from a ReplicaSet it could not read", async () => {
+    vi.mocked(commands.getReplicaset).mockRejectedValue(
+      Object.assign(new Error("forbidden"), { code: "PERMISSION_DENIED" })
+    );
+    await replacedAfterRead(buildPod());
+    expect(await screen.findByText(/owned it\.$/)).toHaveTextContent(
+      /^ReplicaSet (ReplicaSet )?crash-demo-56588f6b8c owned it\.$/
+    );
+    expect(screen.queryByText(/replaces/)).toBeNull();
   });
 
   /** A bare pod has no controller to bring it back, and saying so is the answer. */

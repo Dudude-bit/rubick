@@ -4856,6 +4856,14 @@ export const en = {
     goneReplacedBy:
       "{kind} {owner} owned it and replaces what it loses: open it to find what runs now.",
     goneOwnedBy: "{kind} {owner} owned it.",
+    goneThroughReplicaSet:
+      "Deployment {deployment} owned it through ReplicaSet {replicaSet}, which replaces what it loses: open it to find what runs now.",
+    goneRolledTo:
+      "Deployment {deployment} owned it through ReplicaSet {replicaSet}, now scaled to 0. What runs now comes from ReplicaSet {current}.",
+    goneRolledOn:
+      "Deployment {deployment} owned it through ReplicaSet {replicaSet}, now scaled to 0: open the Deployment to find what runs now.",
+    goneScaledDown:
+      "{kind} {owner} owned it and is scaled to 0, so nothing replaces it.",
     goneUnowned: "Nothing owned it, so nothing replaces it.",
     expandRepeats: "Expand {count} repeats",
     anEmptySpec: "An empty spec",

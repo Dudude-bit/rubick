@@ -5356,6 +5356,14 @@ export const ru: Catalogue = {
     goneReplacedBy:
       "Им владел {kind} {owner}, он и создаёт замену: откройте его, чтобы найти то, что работает сейчас.",
     goneOwnedBy: "Им владел {kind} {owner}.",
+    goneThroughReplicaSet:
+      "Им владел Deployment {deployment} через ReplicaSet {replicaSet}, который и создаёт замену: откройте его, чтобы найти то, что работает сейчас.",
+    goneRolledTo:
+      "Им владел Deployment {deployment} через ReplicaSet {replicaSet}, теперь масштабированный до 0. Сейчас работает то, что создал ReplicaSet {current}.",
+    goneRolledOn:
+      "Им владел Deployment {deployment} через ReplicaSet {replicaSet}, теперь масштабированный до 0: откройте Deployment, чтобы найти то, что работает сейчас.",
+    goneScaledDown:
+      "Им владел {kind} {owner}, но он масштабирован до 0, поэтому замены не будет.",
     goneUnowned: "Владельца у него не было, поэтому замены не будет.",
     expandRepeats: "Развернуть повторы: {count}",
     anEmptySpec: "Пустой spec",

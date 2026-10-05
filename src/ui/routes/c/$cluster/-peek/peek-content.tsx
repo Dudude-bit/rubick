@@ -11,6 +11,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -536,13 +537,17 @@ function GoneNotice({
       <AlertDescription className="space-y-1.5">
         {owner ? (
           <p>
-            {parts(
-              t(
-                "empty",
-                REPLACES.has(owner.kind) ? "goneReplacedBy" : "goneOwnedBy",
-                { kind: owner.kind }
-              ),
-              { owner: ref }
+            {owner.kind === "ReplicaSet" && namespace ? (
+              <ReplicaSetSuccession owner={owner} namespace={namespace} />
+            ) : (
+              parts(
+                t(
+                  "empty",
+                  REPLACES.has(owner.kind) ? "goneReplacedBy" : "goneOwnedBy",
+                  { kind: owner.kind }
+                ),
+                { owner: ref }
+              )
             )}
           </p>
         ) : (
@@ -552,6 +557,77 @@ function GoneNotice({
       </AlertDescription>
     </Alert>
   );
+}
+
+/**
+ * What replaces a pod a ReplicaSet owned. After a rollout that ReplicaSet is
+ * scaled to 0 and replaces nothing: the Deployment above it does, through its
+ * current one. Until the ReplicaSet is read, only the ownership is said.
+ */
+function ReplicaSetSuccession({
+  owner,
+  namespace,
+}: {
+  owner: Owner;
+  namespace: string;
+}) {
+  const t = useT();
+  const replicaSet = useQuery({
+    queryKey: queryKeys.detail("ReplicaSet", namespace, owner.name),
+    queryFn: () => commands.getReplicaset(owner.name, namespace),
+    staleTime: STALE_TIMES.resourceDetail,
+    retry: false,
+  }).data;
+  const deployment = replicaSet?.ownerReferences.find(
+    (ref) => ref.controller && ref.kind === "Deployment"
+  );
+  const wants = (replicaSet?.replicas.desired ?? 0) > 0;
+  const siblings = useQuery({
+    queryKey: queryKeys.deploymentReplicaSets(namespace, deployment?.name),
+    queryFn: () =>
+      commands.getDeploymentReplicasets(deployment!.name, namespace),
+    enabled: !!deployment && !wants,
+    staleTime: STALE_TIMES.resourceList,
+    retry: false,
+  }).data;
+  const current = siblings?.find(
+    (rs) =>
+      rs.revision !== null &&
+      rs.revision === rs.currentRevision &&
+      rs.name !== owner.name
+  );
+  const nodes = {
+    owner: <OwnerRef owner={owner} namespace={namespace} />,
+    replicaSet: <OwnerRef owner={owner} namespace={namespace} />,
+    deployment: deployment && (
+      <ResourceRef
+        kind="Deployment"
+        name={deployment.name}
+        namespace={namespace}
+        showKind={false}
+      />
+    ),
+    current: current && (
+      <ResourceRef
+        kind="ReplicaSet"
+        name={current.name}
+        namespace={namespace}
+        showKind={false}
+      />
+    ),
+  };
+  const key = !replicaSet
+    ? "goneOwnedBy"
+    : !deployment
+      ? wants
+        ? "goneReplacedBy"
+        : "goneScaledDown"
+      : wants
+        ? "goneThroughReplicaSet"
+        : current
+          ? "goneRolledTo"
+          : "goneRolledOn";
+  return parts(t("empty", key, { kind: owner.kind }), nodes);
 }
 
 /** Controllers that make a new object when one of theirs disappears. */
