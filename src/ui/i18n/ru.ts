@@ -1269,13 +1269,23 @@ export const ru: Catalogue = {
     effectPodOwned: "удалит его сейчас. Его {kind} {name} создаст замену.",
     effectPodBare:
       "удалит его сейчас. Под никому не принадлежит, поэтому вернуть его будет некому.",
-    effectWorkloadPods: "удалит его и все поды, которые он держит.",
-    effectStatefulSet:
-      "удалит его и его поды. Созданные им PersistentVolumeClaim останутся и продолжат тратить место.",
+    effectPodUncontrolled:
+      "удалит его сейчас. {kind} {name} владеет им, но не управляет, поэтому вернуть его будет некому.",
+    effectPodFinished:
+      "удалит его сейчас вместе с логами. Его Job {name} не заменяет завершившийся под.",
+    effectDeployment:
+      "удалит его, его ReplicaSet и все поды, которые они держат.",
+    effectStatefulSet: "удалит его и его поды.",
+    effectStatefulSetUnread:
+      "удалит его и его поды. Останутся ли PersistentVolumeClaim, зависит от его volumeClaimTemplates, а они ещё не прочитаны.",
+    effectStatefulSetClaimsStay:
+      "удалит его и его поды. PersistentVolumeClaim, созданные по его volumeClaimTemplates ({templates}), останутся вместе с данными и продолжат стоить денег: при удалении его политика хранения claim'ов указывает Retain.",
+    effectStatefulSetClaimsGo:
+      "удалит его, его поды и PersistentVolumeClaim, созданные по его volumeClaimTemplates ({templates}): при удалении его политика хранения claim'ов указывает Delete.",
     effectDaemonSet: "удалит его и его под на каждом узле, где он работает.",
     effectJob: "удалит его и созданные им поды вместе с их логами.",
     effectCronJob:
-      "остановит расписание и удалит его. Уже созданные Job останутся.",
+      "остановит расписание и удалит его вместе с созданными им Job и их подами.",
     effectService:
       "удалит его адрес. Всё, что разрешает это имя, перестанет доходить до этих подов.",
     effectConfigLike:
@@ -6831,11 +6841,6 @@ export const ru: Catalogue = {
       one: "{n} под несёт {selector}, и он не готов",
       few: "{n} пода несут {selector}, и ни один не готов",
       other: "{n} подов несут {selector}, и ни один не готов",
-    },
-    effectDeploymentPods: {
-      one: "удалит его и {n} под, который он держит.",
-      few: "удалит его и {n} пода, которые он держит.",
-      other: "удалит его и {n} подов, которые он держит.",
     },
     reconcilersFromSources: {
       one: "{n} реконсилятор из {sources}",

@@ -402,17 +402,101 @@ describe("describeDeletion", () => {
     expect(copy.description).toContain("nothing will bring it back");
   });
 
-  it("counts the pods a Deployment takes with it", () => {
+  /**
+   * The desired count sat beside a preview counting the pods that exist,
+   * and the two disagreed mid-rollout. The preview does the counting.
+   */
+  it("leaves counting a Deployment's pods to the preview", () => {
     const copy = describeDeletion(
       "Deployment",
       "web",
       "k8s-gui-test",
-      {
-        replicas: { desired: 3, ready: 3, updated: 3, available: 3 },
-      },
+      { replicas: { desired: 3, ready: 3, updated: 3, available: 3 } },
       t
     );
-    expect(copy.description).toContain("3 pods");
+    expect(copy.description).not.toContain("3 pods");
+    expect(copy.description).toContain("every pod they run");
+  });
+
+  /** CronJob's Jobs are owned and collected; kubectl showed them gone. */
+  it("says a CronJob's Jobs go with it", () => {
+    const copy = describeDeletion("CronJob", "nightly", "platform", {}, t);
+    expect(copy.description).not.toContain("stay behind");
+    expect(copy.description).toContain("Jobs it created");
+  });
+
+  const statefulSet = (
+    claimTemplates: string[] | undefined,
+    claimsWhenDeleted: string | null = null
+  ) =>
+    describeDeletion(
+      "StatefulSet",
+      "cache",
+      "platform",
+      { claimTemplates, claimsWhenDeleted },
+      t
+    ).description;
+
+  /** The reported case: a PVC warning on a StatefulSet with no claim templates. */
+  it("says nothing of claims a StatefulSet never makes", () => {
+    expect(statefulSet([])).not.toContain("PersistentVolumeClaim");
+  });
+
+  it("names the claims a StatefulSet keeps under Retain", () => {
+    expect(statefulSet(["data", "logs"])).toContain("(data, logs) stay");
+    expect(statefulSet(["data"], "Retain")).toContain("Retain");
+  });
+
+  it("says the claims go where the policy says Delete", () => {
+    const said = statefulSet(["data"], "Delete");
+    expect(said).toContain(
+      "removes it, its pods and the PersistentVolumeClaims"
+    );
+    expect(said).not.toContain("stay");
+  });
+
+  /** Not read is not "none": the dialog does not guess either way. */
+  it("says the claims are not read yet before the StatefulSet is", () => {
+    expect(statefulSet(undefined)).toContain("not been read yet");
+  });
+
+  const owned = (
+    owner: PodInfo["ownerReferences"][number],
+    phase = "Running"
+  ) =>
+    describeDeletion(
+      "Pod",
+      "p",
+      "ns",
+      pod({
+        ownerReferences: [owner],
+        status: { ...pod().status, phase },
+      }),
+      t
+    ).description;
+
+  /** A Job does not replace a pod that already finished. */
+  it("promises no replacement for a finished Job pod", () => {
+    const job = {
+      api_version: "batch/v1",
+      kind: "Job",
+      name: "nightly-1",
+      uid: "j",
+      controller: true,
+    };
+    expect(owned(job, "Succeeded")).toContain("does not replace");
+    expect(owned(job)).toContain("will start a replacement");
+  });
+
+  /** Owning is not controlling: only a controller recreates a pod. */
+  it("promises no replacement from an owner that is not its controller", () => {
+    const said = owned({
+      api_version: "v1",
+      kind: "ConfigMap",
+      name: "holder",
+      uid: "c",
+    });
+    expect(said).toContain("does not control it");
   });
 
   it("drops the namespace for a cluster-scoped object", () => {

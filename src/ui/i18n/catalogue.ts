@@ -1269,13 +1269,22 @@ export const en = {
       "removes it now. Its {kind} {name} will start a replacement.",
     effectPodBare:
       "removes it now. Nothing owns this pod, so nothing will bring it back.",
-    effectWorkloadPods: "removes it and every pod it runs.",
-    effectStatefulSet:
-      "removes it and its pods. The PersistentVolumeClaims it created stay behind and keep costing.",
+    effectPodUncontrolled:
+      "removes it now. {kind} {name} owns it but does not control it, so nothing will bring it back.",
+    effectPodFinished:
+      "removes it now, with its logs. Its Job {name} does not replace a pod that has finished.",
+    effectDeployment: "removes it, its ReplicaSets and every pod they run.",
+    effectStatefulSet: "removes it and its pods.",
+    effectStatefulSetUnread:
+      "removes it and its pods. Whether PersistentVolumeClaims stay depends on its volumeClaimTemplates, which have not been read yet.",
+    effectStatefulSetClaimsStay:
+      "removes it and its pods. The PersistentVolumeClaims made from its volumeClaimTemplates ({templates}) stay, with their data and their cost: its claim retention policy on delete is Retain.",
+    effectStatefulSetClaimsGo:
+      "removes it, its pods and the PersistentVolumeClaims made from its volumeClaimTemplates ({templates}): its claim retention policy on delete is Delete.",
     effectDaemonSet: "removes it and its pod on every node it runs on.",
     effectJob: "removes it and the pods it created, including their logs.",
     effectCronJob:
-      "stops the schedule and removes it. Jobs it has already created stay behind.",
+      "stops the schedule and removes it, along with the Jobs it created and their pods.",
     effectService:
       "removes its address. Anything resolving this name stops reaching these pods.",
     effectConfigLike:
@@ -6253,10 +6262,6 @@ export const en = {
     podsCarryNotReady: {
       one: "{n} pod carries {selector}, and it is not ready",
       other: "{n} pods carry {selector}, and none of them is ready",
-    },
-    effectDeploymentPods: {
-      one: "removes it and the {n} pod it runs.",
-      other: "removes it and the {n} pods it runs.",
     },
     reconcilersFromSources: {
       one: "{n} reconciler from {sources}",

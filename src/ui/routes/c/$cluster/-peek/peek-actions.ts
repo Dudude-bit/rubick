@@ -25,7 +25,11 @@ import {
   type ScalableKind,
 } from "@/lib/resource-registry";
 import { askableKind } from "@/lib/tell-me-when";
-import type { DeploymentInfo, PodInfo, ServiceInfo } from "@/generated/types";
+import type {
+  PodInfo,
+  ServiceInfo,
+  StatefulSetDetailInfo,
+} from "@/generated/types";
 import type { T } from "@/i18n/useT";
 
 /**
@@ -477,25 +481,26 @@ export function describeDeletion(
   };
 }
 
+/**
+ * What a delete does beyond what the cascade preview counts, read from the
+ * object: never a sentence the preview beside it can contradict.
+ */
 function deletionEffect(kind: string, detail: unknown, t: T): string {
   switch (kind) {
-    case "Pod": {
-      const owner = (detail as PodInfo | undefined)?.ownerReferences?.[0];
-      return owner
-        ? t("action", "effectPodOwned", {
-            kind: owner.kind,
-            name: owner.name,
-          })
-        : t("action", "effectPodBare");
+    case "Pod":
+      return podDeletionEffect(detail as PodInfo | undefined, t);
+    case "Deployment":
+      return t("action", "effectDeployment");
+    case "StatefulSet": {
+      const set = detail as StatefulSetDetailInfo | undefined;
+      if (!set?.claimTemplates) return t("action", "effectStatefulSetUnread");
+      if (set.claimTemplates.length === 0)
+        return t("action", "effectStatefulSet");
+      const templates = set.claimTemplates.join(", ");
+      return set.claimsWhenDeleted === "Delete"
+        ? t("action", "effectStatefulSetClaimsGo", { templates })
+        : t("action", "effectStatefulSetClaimsStay", { templates });
     }
-    case "Deployment": {
-      const desired = (detail as DeploymentInfo | undefined)?.replicas.desired;
-      return desired
-        ? t("count", "effectDeploymentPods", { n: desired })
-        : t("action", "effectWorkloadPods");
-    }
-    case "StatefulSet":
-      return t("action", "effectStatefulSet");
     case "DaemonSet":
       return t("action", "effectDaemonSet");
     case "Job":
@@ -514,6 +519,30 @@ function deletionEffect(kind: string, detail: unknown, t: T): string {
     default:
       return t("action", "effectPermanent");
   }
+}
+
+function podDeletionEffect(pod: PodInfo | undefined, t: T): string {
+  const owners = pod?.ownerReferences ?? [];
+  const controller = owners.find((owner) => owner.controller);
+  if (!controller) {
+    const [owner] = owners;
+    return owner
+      ? t("action", "effectPodUncontrolled", {
+          kind: owner.kind,
+          name: owner.name,
+        })
+      : t("action", "effectPodBare");
+  }
+  const phase = pod?.status.phase.toLowerCase() ?? "";
+  if (
+    controller.kind === "Job" &&
+    (FINISHED_PHASES.has(phase) || phase === "failed")
+  )
+    return t("action", "effectPodFinished", { name: controller.name });
+  return t("action", "effectPodOwned", {
+    kind: controller.kind,
+    name: controller.name,
+  });
 }
 
 /**

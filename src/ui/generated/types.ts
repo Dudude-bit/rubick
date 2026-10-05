@@ -1140,6 +1140,8 @@ export interface StatefulSetDetailInfo {
   generation: number | null;
   observedGeneration: number | null;
   createdAt: string | null;
+  claimTemplates: string[];
+  claimsWhenDeleted: string | null;
 }
 
 export interface StatefulSetReplicaInfo {

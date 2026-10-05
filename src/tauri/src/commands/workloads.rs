@@ -131,7 +131,14 @@ pub async fn delete_job(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::commands::helpers::delete_resource::<Job>(name, namespace, state, None).await
+    crate::commands::helpers::delete_resource::<Job>(name, namespace, state, Some(job_deletion()))
+        .await
+}
+
+/// batch/v1 orphans a Job's pods unless told otherwise; kubectl and the
+/// cascade preview both take them with it.
+fn job_deletion() -> kube::api::DeleteParams {
+    kube::api::DeleteParams::background()
 }
 
 // ============= CronJob =============
@@ -240,6 +247,16 @@ pub async fn delete_cronjob(
 mod tests {
     use super::*;
     use k8s_openapi::api::batch::v1::{CronJobSpec, JobSpec, JobTemplateSpec};
+
+    /// Without a policy the API server keeps a deleted Job's pods, while the
+    /// dialog said they go with it.
+    #[test]
+    fn deleting_a_job_takes_its_pods() {
+        assert_eq!(
+            job_deletion().propagation_policy,
+            Some(kube::api::PropagationPolicy::Background)
+        );
+    }
     use kube::api::ObjectMeta;
     use std::collections::BTreeMap;
 

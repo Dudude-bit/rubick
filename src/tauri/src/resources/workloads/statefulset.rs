@@ -98,6 +98,10 @@ pub struct StatefulSetDetailInfo {
     pub generation: Option<i64>,
     pub observed_generation: Option<i64>,
     pub created_at: Option<String>,
+    /// The names of `volumeClaimTemplates`, which every replica gets a claim from.
+    pub claim_templates: Vec<String>,
+    /// `persistentVolumeClaimRetentionPolicy.whenDeleted`, as written.
+    pub claims_when_deleted: Option<String>,
 }
 
 impl From<&StatefulSet> for StatefulSetDetailInfo {
@@ -141,6 +145,15 @@ impl From<&StatefulSet> for StatefulSetDetailInfo {
             generation: ss.metadata.generation,
             observed_generation: status.and_then(|s| s.observed_generation),
             created_at: ss.creation_timestamp().to_rfc3339_opt(),
+            claim_templates: spec
+                .and_then(|s| s.volume_claim_templates.as_ref())
+                .into_iter()
+                .flatten()
+                .filter_map(|claim| claim.metadata.name.clone())
+                .collect(),
+            claims_when_deleted: spec
+                .and_then(|s| s.persistent_volume_claim_retention_policy.as_ref())
+                .and_then(|policy| policy.when_deleted.clone()),
         }
     }
 }
@@ -155,5 +168,58 @@ impl From<&StatefulSetCondition> for ConditionInfo {
             last_transition_time: cond.last_transition_time.as_ref().map(Moment::moment),
             observed_generation: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use k8s_openapi::api::apps::v1::{
+        StatefulSetPersistentVolumeClaimRetentionPolicy, StatefulSetSpec,
+    };
+    use k8s_openapi::api::core::v1::PersistentVolumeClaim;
+    use kube::api::ObjectMeta;
+
+    fn set(spec: StatefulSetSpec) -> StatefulSetDetailInfo {
+        StatefulSetDetailInfo::from(&StatefulSet {
+            metadata: ObjectMeta {
+                name: Some("cache".to_string()),
+                ..Default::default()
+            },
+            spec: Some(spec),
+            status: None,
+        })
+    }
+
+    /// The delete dialog warned about claims left behind by a `StatefulSet`
+    /// that never had any.
+    #[test]
+    fn a_statefulset_without_claim_templates_names_none() {
+        let info = set(StatefulSetSpec::default());
+        assert!(info.claim_templates.is_empty());
+        assert_eq!(info.claims_when_deleted, None);
+    }
+
+    /// Whether its claims outlive it is the retention policy's call.
+    #[test]
+    fn claim_templates_come_with_what_happens_to_their_claims() {
+        let info = set(StatefulSetSpec {
+            volume_claim_templates: Some(vec![PersistentVolumeClaim {
+                metadata: ObjectMeta {
+                    name: Some("data".to_string()),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }]),
+            persistent_volume_claim_retention_policy: Some(
+                StatefulSetPersistentVolumeClaimRetentionPolicy {
+                    when_deleted: Some("Delete".to_string()),
+                    when_scaled: None,
+                },
+            ),
+            ..Default::default()
+        });
+        assert_eq!(info.claim_templates, ["data"]);
+        assert_eq!(info.claims_when_deleted.as_deref(), Some("Delete"));
     }
 }
