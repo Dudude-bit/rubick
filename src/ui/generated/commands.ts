@@ -9,6 +9,7 @@ import type {
   ApiCatalog,
   AppEvent,
   AppInfo,
+  AutoscalerInfo,
   AzureProfile,
   AzureProfileInfo,
   BackendTlsPolicyInfo,
@@ -1866,6 +1867,12 @@ export async function lokiQueryRange(
     limit,
     before,
   });
+}
+
+export async function listAutoscalersIn(
+  scope: string[] | null
+): Promise<Scoped<AutoscalerInfo>> {
+  return invoke<Scoped<AutoscalerInfo>>("list_autoscalers_in", { scope });
 }
 
 export async function listConfigmapsIn(

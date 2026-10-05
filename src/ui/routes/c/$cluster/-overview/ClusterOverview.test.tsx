@@ -193,6 +193,7 @@ const FULL_OVERVIEW: ClusterOverviewData = {
   },
   jobs: null,
   metricsAvailable: false,
+  unread: [],
 };
 
 describe("what the overview offers Share", () => {

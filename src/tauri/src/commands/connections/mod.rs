@@ -52,6 +52,7 @@ mod snapshot;
 mod traffic;
 mod uses;
 
+pub(crate) use governance::autoscaler_ref;
 use governance::*;
 use kinds::*;
 use owners::*;

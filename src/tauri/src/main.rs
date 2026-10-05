@@ -487,6 +487,7 @@ fn main() {
             commands::workloads::get_statefulset,
             commands::workloads::scale_statefulset,
             commands::autoscalers::set_autoscaler_bounds,
+            commands::autoscalers::list_autoscalers_in,
             commands::workloads::delete_statefulset,
             commands::workloads::list_daemonsets,
             commands::workloads::list_daemonsets_in,

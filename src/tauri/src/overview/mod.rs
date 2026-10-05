@@ -19,7 +19,7 @@ use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
 use futures::StreamExt;
-use k8s_openapi::api::apps::v1::Deployment;
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::{Container, Event, Node, Pod};
 use kube::runtime::reflector::{self, Store};
@@ -60,6 +60,8 @@ pub struct Snapshot {
     pub pods: Vec<Arc<Pod>>,
     pub nodes: Vec<Arc<Node>>,
     pub deployments: Vec<Arc<Deployment>>,
+    pub stateful_sets: Vec<Arc<StatefulSet>>,
+    pub daemon_sets: Vec<Arc<DaemonSet>>,
     pub jobs: Vec<Arc<Job>>,
     /// Warning events only; the watch is field-selected to them.
     pub events: Vec<Arc<Event>>,
@@ -69,6 +71,8 @@ struct ClusterWatch {
     pods: Store<Pod>,
     nodes: Store<Node>,
     deployments: Store<Deployment>,
+    stateful_sets: Store<StatefulSet>,
+    daemon_sets: Store<DaemonSet>,
     jobs: Store<Job>,
     events: Store<Event>,
     health: Arc<Mutex<Health>>,
@@ -78,12 +82,22 @@ struct ClusterWatch {
 /// Which watches are failing, and when the cache was last asked.
 #[derive(Debug)]
 pub struct Health {
-    streaks: [(&'static str, u32); 5],
+    streaks: [(&'static str, u32); KINDS.len()],
     last_used: Instant,
 }
 
+const KINDS: [&str; 7] = [
+    "Pod",
+    "Node",
+    "Deployment",
+    "StatefulSet",
+    "DaemonSet",
+    "Job",
+    "Event",
+];
+
 impl Health {
-    fn new(kinds: [&'static str; 5]) -> Self {
+    fn new(kinds: [&'static str; KINDS.len()]) -> Self {
         Self {
             streaks: kinds.map(|kind| (kind, 0)),
             last_used: Instant::now(),
@@ -201,6 +215,8 @@ impl OverviewCache {
             pods: by_name(watch.pods.state()),
             nodes: by_name(watch.nodes.state()),
             deployments: by_name(watch.deployments.state()),
+            stateful_sets: by_name(watch.stateful_sets.state()),
+            daemon_sets: by_name(watch.daemon_sets.state()),
             jobs: by_name(watch.jobs.state()),
             events: by_name(watch.events.state()),
         })
@@ -248,13 +264,7 @@ impl OverviewCache {
     }
 
     fn start(&self, context: &str, client: Client) -> ClusterWatch {
-        let health = Arc::new(Mutex::new(Health::new([
-            "Pod",
-            "Node",
-            "Deployment",
-            "Job",
-            "Event",
-        ])));
+        let health = Arc::new(Mutex::new(Health::new(KINDS)));
         let stop = CancellationToken::new();
         let cluster = WatchConfigs {
             context: context.to_string(),
@@ -282,6 +292,18 @@ impl OverviewCache {
             watcher_config(),
             strip_deployment,
         );
+        let stateful_sets = cluster.spawn(
+            "StatefulSet",
+            Api::all(client.clone()),
+            watcher_config(),
+            strip_stateful_set,
+        );
+        let daemon_sets = cluster.spawn(
+            "DaemonSet",
+            Api::all(client.clone()),
+            watcher_config(),
+            strip_daemon_set,
+        );
         let jobs = cluster.spawn("Job", Api::all(client.clone()), watcher_config(), strip_job);
         let events = cluster.spawn(
             "Event",
@@ -296,6 +318,8 @@ impl OverviewCache {
             pods,
             nodes,
             deployments,
+            stateful_sets,
+            daemon_sets,
             jobs,
             events,
             health,
@@ -326,10 +350,18 @@ impl ClusterWatch {
             self.pods.wait_until_ready(),
             self.nodes.wait_until_ready(),
             self.deployments.wait_until_ready(),
+            self.stateful_sets.wait_until_ready(),
+            self.daemon_sets.wait_until_ready(),
             self.jobs.wait_until_ready(),
             self.events.wait_until_ready(),
         );
-        all.0.is_ok() && all.1.is_ok() && all.2.is_ok() && all.3.is_ok() && all.4.is_ok()
+        all.0.is_ok()
+            && all.1.is_ok()
+            && all.2.is_ok()
+            && all.3.is_ok()
+            && all.4.is_ok()
+            && all.5.is_ok()
+            && all.6.is_ok()
     }
 }
 
@@ -482,6 +514,25 @@ pub fn strip_deployment(deployment: &mut Deployment) {
     }
 }
 
+pub fn strip_stateful_set(set: &mut StatefulSet) {
+    set.metadata.managed_fields = None;
+    set.metadata.annotations = None;
+    if let Some(spec) = set.spec.as_mut() {
+        spec.template.spec = None;
+        spec.template.metadata = None;
+        spec.volume_claim_templates = None;
+    }
+}
+
+pub fn strip_daemon_set(set: &mut DaemonSet) {
+    set.metadata.managed_fields = None;
+    set.metadata.annotations = None;
+    if let Some(spec) = set.spec.as_mut() {
+        spec.template.spec = None;
+        spec.template.metadata = None;
+    }
+}
+
 pub fn strip_job(job: &mut Job) {
     job.metadata.managed_fields = None;
     job.metadata.annotations = None;
@@ -503,7 +554,7 @@ mod tests {
     /// One broken watch is enough: an overview built from four fresh stores and one stale one is one stale overview.
     #[test]
     fn one_broken_kind_stops_the_cache_from_serving() {
-        let mut health = Health::new(["Pod", "Node", "Deployment", "Job", "Event"]);
+        let mut health = Health::new(KINDS);
         assert!(health.serves());
         for _ in 0..BROKEN_STREAK - 1 {
             health.failed("Node");
@@ -525,7 +576,7 @@ mod tests {
         use k8s_openapi::api::core::v1::Pod;
         use kube::runtime::watcher::Event;
 
-        let mut health = Health::new(["Pod", "Node", "Deployment", "Job", "Event"]);
+        let mut health = Health::new(KINDS);
         for _ in 0..BROKEN_STREAK {
             // What a refused stream actually sends: the marker, then the
             // error, over and over.

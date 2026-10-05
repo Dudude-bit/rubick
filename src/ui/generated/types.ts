@@ -1714,6 +1714,11 @@ export interface HelmReleaseDetail {
   notes: string | null;
 }
 
+export interface AutoscalerInfo {
+  autoscaler: ObjectRef;
+  target: ObjectRef;
+}
+
 export interface Scoped<T> {
   rows: T[];
   unread: UnreadNamespace[];
@@ -1791,6 +1796,14 @@ export interface ClusterOverview {
   jobs: JobComposition | null;
   metricsAvailable: boolean;
   servedFrom: OverviewSource;
+  unread: UnreadKind[];
+}
+
+export interface UnreadKind {
+  kind: string;
+  namespace: string | null;
+  code: string;
+  message: string;
 }
 
 export interface JobComposition {

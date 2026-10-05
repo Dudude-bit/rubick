@@ -4,7 +4,7 @@
 use super::*;
 
 /// The autoscaler as the workload it scales needs to read it.
-pub(super) fn autoscaler_ref(hpa: &HorizontalPodAutoscaler, ns: &str) -> ObjectRef {
+pub(crate) fn autoscaler_ref(hpa: &HorizontalPodAutoscaler, ns: &str) -> ObjectRef {
     let spec = hpa.spec.as_ref();
     let status = hpa.status.as_ref();
     let readings: Vec<&MetricStatus> = status

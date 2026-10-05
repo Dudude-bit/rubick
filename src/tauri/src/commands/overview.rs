@@ -21,7 +21,7 @@ use crate::utils::Moment;
 use chrono::{DateTime, Utc};
 use futures::future::join_all;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
-use k8s_openapi::api::batch::v1::{CronJob, Job};
+use k8s_openapi::api::batch::v1::{CronJob, Job, JobCondition};
 use k8s_openapi::api::core::v1::{ConfigMap, Event, Namespace, Node, Pod, Secret, Service};
 use k8s_openapi::api::networking::v1::Ingress;
 use kube::api::ListParams;
@@ -320,6 +320,32 @@ pub struct ClusterOverview {
     pub metrics_available: bool,
     /// Whether this answer came from the watch-fed stores or from listing.
     pub served_from: OverviewSource,
+    /// The kinds whose problems this answer could not look for, and why.
+    pub unread: Vec<UnreadKind>,
+}
+
+/// A kind the overview asked for in one reach and got no list of: its
+/// problems there are unknown, not absent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnreadKind {
+    pub kind: String,
+    /// `None` for a read of the whole cluster.
+    pub namespace: Option<String>,
+    /// One of `src/contracts/error-codes.json`.
+    pub code: String,
+    pub message: String,
+}
+
+impl UnreadKind {
+    fn of(kind: &str, namespace: Option<&str>, error: &Error) -> Self {
+        Self {
+            kind: kind.to_string(),
+            namespace: namespace.map(str::to_string),
+            code: error.code().to_string(),
+            message: error.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -538,11 +564,7 @@ fn deployment_problems<'a>(
                     .cloned()
             });
             Some(ClusterProblem {
-                severity: if matches!(rollout, Rollout::Short { .. }) {
-                    ProblemSeverity::Warning
-                } else {
-                    ProblemSeverity::Critical
-                },
+                severity: rollout_severity(&rollout),
                 kind: "Deployment".to_string(),
                 name: d.metadata.name.clone().unwrap_or_default(),
                 namespace: d.metadata.namespace.clone(),
@@ -552,6 +574,105 @@ fn deployment_problems<'a>(
                 since: condition
                     .as_ref()
                     .and_then(|c| c.last_transition_time.as_ref())
+                    .map(|t| t.moment().to_rfc3339()),
+                restarts: None,
+            })
+        })
+        .collect()
+}
+
+fn rollout_severity(rollout: &Rollout) -> ProblemSeverity {
+    if matches!(rollout, Rollout::Short { .. }) {
+        ProblemSeverity::Warning
+    } else {
+        ProblemSeverity::Critical
+    }
+}
+
+/// A `StatefulSet` or `DaemonSet` the rollout reader flags. Neither kind
+/// writes conditions, so the counts are the detail and nothing dates it.
+fn set_problem(
+    kind: &str,
+    meta: &kube::core::ObjectMeta,
+    rollout: &Rollout,
+    ready: i32,
+    desired: i32,
+) -> Option<ClusterProblem> {
+    rollout.is_problem().then(|| ClusterProblem {
+        severity: rollout_severity(rollout),
+        kind: kind.to_string(),
+        name: meta.name.clone().unwrap_or_default(),
+        namespace: meta.namespace.clone(),
+        reason: rollout.code().to_string(),
+        detail: Some(ProblemDetail::ReplicasReady { ready, desired }),
+        since: None,
+        restarts: None,
+    })
+}
+
+fn stateful_set_problems<'a>(
+    sets: impl IntoIterator<Item = &'a StatefulSet>,
+) -> Vec<ClusterProblem> {
+    sets.into_iter()
+        .filter_map(|set| {
+            set_problem(
+                "StatefulSet",
+                &set.metadata,
+                &crate::resources::statefulset_rollout(set),
+                set.status
+                    .as_ref()
+                    .and_then(|s| s.ready_replicas)
+                    .unwrap_or(0),
+                set.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
+            )
+        })
+        .collect()
+}
+
+fn daemon_set_problems<'a>(sets: impl IntoIterator<Item = &'a DaemonSet>) -> Vec<ClusterProblem> {
+    sets.into_iter()
+        .filter_map(|set| {
+            let status = set.status.as_ref();
+            set_problem(
+                "DaemonSet",
+                &set.metadata,
+                &crate::resources::daemonset_rollout(set),
+                status.map_or(0, |s| s.number_ready),
+                status.map_or(0, |s| s.desired_number_scheduled),
+            )
+        })
+        .collect()
+}
+
+/// The condition a Job's controller writes when it gives up. A pod that died
+/// while the Job still has retries left is a retry, not this.
+fn job_failure(job: &Job) -> Option<&JobCondition> {
+    job.status
+        .as_ref()?
+        .conditions
+        .as_ref()?
+        .iter()
+        .find(|c| c.type_ == "Failed" && c.status == "True")
+}
+
+fn job_problems<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> Vec<ClusterProblem> {
+    jobs.into_iter()
+        .filter_map(|job| {
+            let failed = job_failure(job)?;
+            Some(ClusterProblem {
+                severity: ProblemSeverity::Critical,
+                kind: "Job".to_string(),
+                name: job.metadata.name.clone().unwrap_or_default(),
+                namespace: job.metadata.namespace.clone(),
+                reason: failed
+                    .reason
+                    .clone()
+                    .filter(|reason| !reason.is_empty())
+                    .unwrap_or_else(|| "Failed".to_string()),
+                detail: ProblemDetail::said(failed.message.clone().filter(|m| !m.is_empty())),
+                since: failed
+                    .last_transition_time
+                    .as_ref()
                     .map(|t| t.moment().to_rfc3339()),
                 restarts: None,
             })
@@ -845,7 +966,7 @@ fn job_composition<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> JobCompositio
         };
         if condition("Complete") {
             composition.completed += 1;
-        } else if condition("Failed") {
+        } else if job_failure(job).is_some() {
             composition.failed += 1;
         } else {
             composition.active += 1;
@@ -982,13 +1103,15 @@ struct OverviewInputs<'a> {
     /// False when the node list (or the cluster-wide accounting pods) was
     /// refused: the capacity view is unknown, not empty.
     nodes_known: bool,
-    /// Every Deployment the scope handed over. Their problems stand whether
-    /// or not another namespace refused its list; the count does not.
+    /// Every workload the scope handed over. Their problems stand whether or
+    /// not another namespace refused its list; the counts do not.
     deployments: &'a [Arc<Deployment>],
-    /// False when a namespace in scope refused its Deployment list.
-    deployments_known: bool,
+    stateful_sets: &'a [Arc<StatefulSet>],
+    daemon_sets: &'a [Arc<DaemonSet>],
     /// `None` when a namespace in scope refused its Job list.
     jobs: Option<&'a [Arc<Job>]>,
+    /// The workload, Job and Node lists that were not read, and where.
+    unread: &'a [UnreadKind],
     events: &'a [Arc<Event>],
     /// False when an events list failed.
     events_known: bool,
@@ -1021,6 +1144,9 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
 
     let mut problems = pod_problems(refs(input.scoped_pods), input.now);
     problems.extend(deployment_problems(refs(input.deployments)));
+    problems.extend(stateful_set_problems(refs(input.stateful_sets)));
+    problems.extend(daemon_set_problems(refs(input.daemon_sets)));
+    problems.extend(job_problems(input.jobs.into_iter().flat_map(refs)));
     problems.extend(node_problems(refs(nodes)));
     // Scoped, the breakdown restates the selection, under a heading that
     // counts namespaces in the cluster. Drop it instead.
@@ -1033,9 +1159,12 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     // The lists this query already had to read answer their own counts, so
     // those four kinds cost no extra request. A refused node read is `None`,
     // not `Some(0)` — the same distinction the other counts make.
+    let read = |kind: &str| !input.unread.iter().any(|unread| unread.kind == kind);
     let counts = ResourceCounts {
         pods: Some(input.scoped_pods.len()),
-        deployments: input.deployments_known.then_some(input.deployments.len()),
+        deployments: read("Deployment").then_some(input.deployments.len()),
+        stateful_sets: read("StatefulSet").then_some(input.stateful_sets.len()),
+        daemon_sets: read("DaemonSet").then_some(input.daemon_sets.len()),
         jobs: input.jobs.map(<[Arc<Job>]>::len),
         nodes: input.nodes_known.then_some(input.nodes.len()),
         ..input.counts.clone()
@@ -1055,6 +1184,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         namespaces,
         metrics_available,
         served_from: input.served_from,
+        unread: input.unread.to_vec(),
     }
 }
 
@@ -1078,19 +1208,15 @@ struct Sides {
     usage_by_node: Option<BTreeMap<String, (f64, u64)>>,
 }
 
-/// Eight bounded metadata pages, for one namespace or the whole cluster.
+/// Six bounded metadata pages, for one namespace or the whole cluster.
 async fn namespaced_counts(client: &Client, reach: Option<&str>) -> ResourceCounts {
-    let stateful_sets_api: Api<StatefulSet> = api_in(client, reach);
-    let daemon_sets_api: Api<DaemonSet> = api_in(client, reach);
     let cron_jobs_api: Api<CronJob> = api_in(client, reach);
     let services_api: Api<Service> = api_in(client, reach);
     let ingresses_api: Api<Ingress> = api_in(client, reach);
     let config_maps_api: Api<ConfigMap> = api_in(client, reach);
     let secrets_api: Api<Secret> = api_in(client, reach);
     let events_api: Api<Event> = api_in(client, reach);
-    let (stateful_sets, daemon_sets, cron_jobs, services, ingresses, config_maps, secrets, events) = tokio::join!(
-        count_of(&stateful_sets_api),
-        count_of(&daemon_sets_api),
+    let (cron_jobs, services, ingresses, config_maps, secrets, events) = tokio::join!(
         count_of(&cron_jobs_api),
         count_of(&services_api),
         count_of(&ingresses_api),
@@ -1099,8 +1225,6 @@ async fn namespaced_counts(client: &Client, reach: Option<&str>) -> ResourceCoun
         count_of(&events_api),
     );
     ResourceCounts {
-        stateful_sets,
-        daemon_sets,
         cron_jobs,
         services,
         ingresses,
@@ -1121,8 +1245,6 @@ fn add_counts(parts: &[ResourceCounts]) -> ResourceCounts {
             .try_fold(0, |total, part| Some(total + count(part)?))
     };
     ResourceCounts {
-        stateful_sets: sum(|c| c.stateful_sets),
-        daemon_sets: sum(|c| c.daemon_sets),
         cron_jobs: sum(|c| c.cron_jobs),
         services: sum(|c| c.services),
         ingresses: sum(|c| c.ingresses),
@@ -1182,6 +1304,8 @@ pub async fn cluster_overview(
 struct Projected {
     scoped_pods: Vec<Arc<Pod>>,
     deployments: Vec<Arc<Deployment>>,
+    stateful_sets: Vec<Arc<StatefulSet>>,
+    daemon_sets: Vec<Arc<DaemonSet>>,
     jobs: Vec<Arc<Job>>,
     events: Vec<Arc<Event>>,
 }
@@ -1207,6 +1331,12 @@ fn project(snapshot: &Snapshot, scope: Option<&[String]>) -> Projected {
         deployments: keep(&snapshot.deployments, scope, |d| {
             d.metadata.namespace.as_deref()
         }),
+        stateful_sets: keep(&snapshot.stateful_sets, scope, |s| {
+            s.metadata.namespace.as_deref()
+        }),
+        daemon_sets: keep(&snapshot.daemon_sets, scope, |d| {
+            d.metadata.namespace.as_deref()
+        }),
         jobs: keep(&snapshot.jobs, scope, |j| j.metadata.namespace.as_deref()),
         events: keep(&snapshot.events, scope, |e| e.metadata.namespace.as_deref()),
     }
@@ -1222,8 +1352,10 @@ fn from_snapshot(snapshot: &Snapshot, scope: Option<&[String]>, sides: Sides) ->
         // healthy, so the capacity view is known here by construction.
         nodes_known: true,
         deployments: &scoped.deployments,
-        deployments_known: true,
+        stateful_sets: &scoped.stateful_sets,
+        daemon_sets: &scoped.daemon_sets,
         jobs: Some(&scoped.jobs),
+        unread: &[],
         events: &scoped.events,
         events_known: true,
         usage_by_node: sides.usage_by_node,
@@ -1240,9 +1372,12 @@ fn arcs<T>(items: impl IntoIterator<Item = T>) -> Vec<Arc<T>> {
 
 /// One reach's lists: a namespace's, or the whole cluster's.
 struct Listed {
+    reach: Option<String>,
     pods: Result<Vec<Pod>>,
-    deployments: Option<Vec<Deployment>>,
-    jobs: Option<Vec<Job>>,
+    deployments: Result<Vec<Deployment>>,
+    stateful_sets: Result<Vec<StatefulSet>>,
+    daemon_sets: Result<Vec<DaemonSet>>,
+    jobs: Result<Vec<Job>>,
     events: Vec<Event>,
     events_known: bool,
 }
@@ -1251,19 +1386,26 @@ async fn list_in(client: &Client, reach: Option<&str>) -> Listed {
     let params = ListParams::default();
     let pods_api: Api<Pod> = api_in(client, reach);
     let deployments_api: Api<Deployment> = api_in(client, reach);
+    let stateful_sets_api: Api<StatefulSet> = api_in(client, reach);
+    let daemon_sets_api: Api<DaemonSet> = api_in(client, reach);
     let jobs_api: Api<Job> = api_in(client, reach);
     let events_api: Api<Event> = api_in(client, reach);
-    let (pods, deployments, jobs, events) = tokio::join!(
+    let (pods, deployments, stateful_sets, daemon_sets, jobs, events) = tokio::join!(
         pods_api.list(&params),
         deployments_api.list(&params),
+        stateful_sets_api.list(&params),
+        daemon_sets_api.list(&params),
         jobs_api.list(&params),
         list_warning_events(&events_api),
     );
     let (events, events_known) = events;
     Listed {
+        reach: reach.map(str::to_string),
         pods: pods.map(|list| list.items).map_err(Error::from),
-        deployments: deployments.ok().map(|list| list.items),
-        jobs: jobs.ok().map(|list| list.items),
+        deployments: deployments.map(|list| list.items).map_err(Error::from),
+        stateful_sets: stateful_sets.map(|list| list.items).map_err(Error::from),
+        daemon_sets: daemon_sets.map(|list| list.items).map_err(Error::from),
+        jobs: jobs.map(|list| list.items).map_err(Error::from),
         events,
         events_known,
     }
@@ -1273,41 +1415,79 @@ async fn list_in(client: &Client, reach: Option<&str>) -> Listed {
 struct Gathered {
     pods: Vec<Arc<Pod>>,
     deployments: Vec<Arc<Deployment>>,
-    deployments_known: bool,
+    stateful_sets: Vec<Arc<StatefulSet>>,
+    daemon_sets: Vec<Arc<DaemonSet>>,
     jobs: Option<Vec<Arc<Job>>>,
     events: Vec<Arc<Event>>,
     events_known: bool,
+    unread: Vec<UnreadKind>,
+}
+
+/// What one reach answered for one kind, kept; or why not, written down.
+fn take<K>(
+    kind: &str,
+    reach: Option<&str>,
+    answer: Result<Vec<K>>,
+    into: &mut Vec<Arc<K>>,
+    unread: &mut Vec<UnreadKind>,
+) {
+    match answer {
+        Ok(items) => into.extend(arcs(items)),
+        Err(error) => unread.push(UnreadKind::of(kind, reach, &error)),
+    }
 }
 
 /// Joins the reaches by the rule the counts follow: what one namespace
 /// refused is never filled in by the ones that answered.
 ///
 /// Pods are the load-bearing read, so a namespace that refuses them fails the
-/// whole overview. Deployments feed problems as well as a count: the problems
-/// of the namespaces that answered stand, and the count goes unknown. Jobs are
-/// a count and a composition, both unknown when any namespace refused. Events
-/// are the same as Deployments: what answered is shown, and said to be part.
+/// whole overview. The workloads feed problems as well as counts: the problems
+/// of the namespaces that answered stand, the count goes unknown, and the
+/// refusal is carried by kind and namespace. Jobs are a count and a
+/// composition, both unknown when any namespace refused. Events are what
+/// answered, said to be part.
 fn gather(parts: Vec<Listed>) -> Result<Gathered> {
-    let deployments_known = parts.iter().all(|part| part.deployments.is_some());
-    let jobs_known = parts.iter().all(|part| part.jobs.is_some());
+    let jobs_known = parts.iter().all(|part| part.jobs.is_ok());
     let mut gathered = Gathered {
         pods: Vec::new(),
         deployments: Vec::new(),
-        deployments_known,
-        jobs: jobs_known.then(Vec::new),
+        stateful_sets: Vec::new(),
+        daemon_sets: Vec::new(),
+        jobs: None,
         events: Vec::new(),
         events_known: parts.iter().all(|part| part.events_known),
+        unread: Vec::new(),
     };
+    let mut jobs = Vec::new();
     for part in parts {
+        let reach = part.reach.as_deref();
         gathered.pods.extend(arcs(part.pods?));
-        gathered
-            .deployments
-            .extend(arcs(part.deployments.into_iter().flatten()));
-        if let Some(jobs) = gathered.jobs.as_mut() {
-            jobs.extend(arcs(part.jobs.into_iter().flatten()));
-        }
+        let unread = &mut gathered.unread;
+        take(
+            "Deployment",
+            reach,
+            part.deployments,
+            &mut gathered.deployments,
+            unread,
+        );
+        take(
+            "StatefulSet",
+            reach,
+            part.stateful_sets,
+            &mut gathered.stateful_sets,
+            unread,
+        );
+        take(
+            "DaemonSet",
+            reach,
+            part.daemon_sets,
+            &mut gathered.daemon_sets,
+            unread,
+        );
+        take("Job", reach, part.jobs, &mut jobs, unread);
         gathered.events.extend(arcs(part.events));
     }
+    gathered.jobs = jobs_known.then_some(jobs);
     Ok(gathered)
 }
 
@@ -1351,12 +1531,22 @@ async fn by_listing(
     // reads a namespace-restricted token is refused. They degrade to "unknown"
     // rather than failing the whole overview, so a scoped user still sees the
     // workloads they CAN read with the capacity view marked no-access.
-    let cluster_pods = cluster_pods_result
-        .transpose()
-        .ok()
-        .flatten()
-        .map(|list| arcs(list.items));
-    let nodes = nodes_result.ok().map(|list| arcs(list.items));
+    let mut unread = listed.unread;
+    let cluster_pods = match cluster_pods_result.transpose() {
+        Ok(listed) => listed.map(|list| arcs(list.items)),
+        Err(error) => {
+            unread.push(UnreadKind::of("Node", None, &Error::from(error)));
+            None
+        }
+    };
+    let nodes = match nodes_result {
+        Ok(list) => Some(arcs(list.items)),
+        Err(error) => {
+            unread.retain(|kind| kind.kind != "Node");
+            unread.push(UnreadKind::of("Node", None, &Error::from(error)));
+            None
+        }
+    };
     let accounting_known = scope.is_none() || cluster_pods.is_some();
     let nodes_known = nodes.is_some() && accounting_known;
 
@@ -1366,7 +1556,9 @@ async fn by_listing(
         nodes: nodes.as_deref().unwrap_or_default(),
         nodes_known,
         deployments: &listed.deployments,
-        deployments_known: listed.deployments_known,
+        stateful_sets: &listed.stateful_sets,
+        daemon_sets: &listed.daemon_sets,
+        unread: &unread,
         jobs: listed.jobs.as_deref(),
         events: &listed.events,
         events_known: listed.events_known,
@@ -1493,7 +1685,9 @@ mod tests {
             nodes: &arcs(vec![node("n1", "4", "8Gi"), node("n2", "4", "8Gi")]),
             nodes_known: true,
             deployments: &[],
-            deployments_known: true,
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
             jobs: Some(&[]),
             events: &[],
             events_known: true,
@@ -1561,7 +1755,9 @@ mod tests {
             nodes: &arcs(vec![node("n1", "4", "8Gi")]),
             nodes_known: false,
             deployments: &[],
-            deployments_known: true,
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
             jobs: Some(&[]),
             events: &[],
             events_known: true,
@@ -1635,7 +1831,9 @@ mod tests {
             nodes: &arcs(vec![node("n1", "4", "8Gi")]),
             nodes_known: true,
             deployments: &[],
-            deployments_known: true,
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
             jobs: Some(&[]),
             events: &[],
             events_known: true,
@@ -1743,7 +1941,9 @@ mod tests {
             nodes: &[],
             nodes_known: true,
             deployments: &[],
-            deployments_known: true,
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
             jobs: Some(&[]),
             events: &[],
             events_known: true,
@@ -2165,6 +2365,8 @@ mod tests {
             nodes: arcs([Node::default(), Node::default()]),
             deployments: arcs([in_namespace::<Deployment>("app"), in_namespace("data")]),
             jobs: arcs([in_namespace::<Job>("data")]),
+            stateful_sets: Vec::new(),
+            daemon_sets: Vec::new(),
             events: arcs([in_namespace::<Event>("app"), in_namespace("data")]),
         };
         let app = project(&snapshot, Some(&names(&["app"])));
@@ -2197,6 +2399,8 @@ mod tests {
                 in_namespace("kube-system"),
             ]),
             jobs: arcs([in_namespace::<Job>("app")]),
+            stateful_sets: Vec::new(),
+            daemon_sets: Vec::new(),
             events: arcs([in_namespace::<Event>("kube-system")]),
         };
         let both = project(&snapshot, Some(&names(&["app", "data"])));
@@ -2225,6 +2429,8 @@ mod tests {
             nodes: arcs([Node::default(), Node::default()]),
             deployments: arcs([]),
             jobs: arcs([]),
+            stateful_sets: Vec::new(),
+            daemon_sets: Vec::new(),
             events: arcs([]),
         };
         let sides = || Sides {
@@ -2326,6 +2532,8 @@ mod tests {
             nodes: arcs([Node::default()]),
             deployments: arcs([]),
             jobs: arcs([]),
+            stateful_sets: Vec::new(),
+            daemon_sets: Vec::new(),
             events: arcs([]),
         };
         for scope in [None, Some(names(&["app", "data"]))] {
@@ -2489,7 +2697,16 @@ mod tests {
             nodes: &arcs(vec![node("n1", "4", "8Gi")]),
             nodes_known: true,
             deployments: &[],
-            deployments_known: false,
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[
+                UnreadKind::of(
+                    "Deployment",
+                    None,
+                    &Error::PermissionDenied("deployments".into()),
+                ),
+                UnreadKind::of("Job", None, &Error::PermissionDenied("jobs".into())),
+            ],
             jobs: None,
             events: &[],
             events_known: true,
@@ -2533,7 +2750,9 @@ mod tests {
             nodes: &arcs(vec![node("n1", "4", "8Gi"), node("n2", "4", "8Gi")]),
             nodes_known: true,
             deployments: &arcs(deployments),
-            deployments_known: true,
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
             jobs: Some(&arcs(jobs)),
             events: &[],
             events_known: true,
@@ -2611,6 +2830,193 @@ mod tests {
         let composition = pod_composition(&[pod("mystery", PodStatus::default())]);
         assert_eq!(composition.unknown, 1);
         assert_eq!(composition.running, 0);
+    }
+
+    fn problems_of(
+        stateful_sets: &[StatefulSet],
+        daemon_sets: &[DaemonSet],
+        jobs: &[Job],
+    ) -> Vec<ClusterProblem> {
+        build_overview(&OverviewInputs {
+            scoped_pods: &[],
+            accounting_pods: &[],
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &arcs(stateful_sets.to_vec()),
+            daemon_sets: &arcs(daemon_sets.to_vec()),
+            unread: &[],
+            jobs: Some(&arcs(jobs.to_vec())),
+            events: &[],
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            now: Utc::now(),
+        })
+        .problems
+    }
+
+    /// The overview read Deployments only, so a `StatefulSet` with nothing
+    /// available and a `DaemonSet` short of a node were red on their own pages
+    /// and absent from the first screen.
+    #[test]
+    fn a_stateful_set_or_daemon_set_the_rollout_reader_flags_is_a_problem() {
+        let down: StatefulSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "orders-db", "namespace": "shop", "generation": 1 },
+            "spec": { "replicas": 1, "selector": {}, "serviceName": "orders-db", "template": {} },
+            "status": { "observedGeneration": 1, "replicas": 1, "readyReplicas": 0, "availableReplicas": 0 },
+        }))
+        .expect("a StatefulSet");
+        let mut healthy = down.clone();
+        healthy.metadata.name = Some("cache".to_string());
+        let status = healthy.status.as_mut().expect("a status");
+        status.ready_replicas = Some(1);
+        status.available_replicas = Some(1);
+        let short: DaemonSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "agent", "namespace": "kube-system", "generation": 1 },
+            "spec": { "selector": {}, "template": {} },
+            "status": {
+                "observedGeneration": 1,
+                "desiredNumberScheduled": 2,
+                "currentNumberScheduled": 2,
+                "updatedNumberScheduled": 2,
+                "numberMisscheduled": 0,
+                "numberReady": 1,
+                "numberAvailable": 1,
+            },
+        }))
+        .expect("a DaemonSet");
+
+        let problems = problems_of(&[down, healthy], &[short], &[]);
+
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        let set = problems
+            .iter()
+            .find(|p| p.kind == "StatefulSet")
+            .expect("the StatefulSet with nothing available");
+        assert_eq!(set.name, "orders-db");
+        assert_eq!(set.reason, "Unavailable");
+        assert_eq!(set.severity, ProblemSeverity::Critical);
+        assert_eq!(
+            set.detail,
+            Some(ProblemDetail::ReplicasReady {
+                ready: 0,
+                desired: 1
+            })
+        );
+        let agent = problems
+            .iter()
+            .find(|p| p.kind == "DaemonSet")
+            .expect("the DaemonSet short of a node");
+        assert_eq!(agent.reason, "Degraded");
+        assert_eq!(agent.severity, ProblemSeverity::Warning);
+    }
+
+    /// A Job whose controller gave up was a red segment in the Jobs bar and
+    /// nothing in the list above it. One still retrying is not a failure.
+    #[test]
+    fn a_job_its_controller_gave_up_on_is_a_problem_and_a_retry_is_not() {
+        let job = |name: &str, conditions: Vec<JobCondition>, failed: i32| Job {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                namespace: Some("shop".to_string()),
+                ..Default::default()
+            },
+            status: Some(JobStatus {
+                conditions: Some(conditions),
+                failed: Some(failed),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let gave_up = job(
+            "reports-1",
+            vec![JobCondition {
+                type_: "Failed".to_string(),
+                status: "True".to_string(),
+                reason: Some("BackoffLimitExceeded".to_string()),
+                message: Some("Job has reached the specified backoff limit".to_string()),
+                ..Default::default()
+            }],
+            2,
+        );
+        let retrying = job("reports-2", Vec::new(), 1);
+
+        let problems = problems_of(&[], &[], &[gave_up, retrying]);
+
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert_eq!(problems[0].kind, "Job");
+        assert_eq!(problems[0].name, "reports-1");
+        assert_eq!(problems[0].reason, "BackoffLimitExceeded");
+        assert_eq!(problems[0].severity, ProblemSeverity::Critical);
+        assert_eq!(
+            problems[0].detail,
+            Some(ProblemDetail::Said {
+                text: "Job has reached the specified backoff limit".to_string()
+            })
+        );
+    }
+
+    /// The stores drop the pod template; the rollout verdict has to read the
+    /// same from what is kept, or the watched answer differs from the listed one.
+    #[test]
+    fn a_workload_reads_the_same_rollout_after_the_store_strip() {
+        let set: StatefulSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "db", "namespace": "shop", "generation": 2 },
+            "spec": {
+                "replicas": 3,
+                "selector": {},
+                "serviceName": "db",
+                "template": { "spec": { "containers": [{ "name": "db", "image": "db" }] } },
+                "updateStrategy": { "type": "RollingUpdate", "rollingUpdate": { "partition": 1 } },
+                "volumeClaimTemplates": [{ "metadata": { "name": "data" } }],
+            },
+            "status": {
+                "observedGeneration": 2,
+                "replicas": 3,
+                "readyReplicas": 3,
+                "availableReplicas": 3,
+                "updatedReplicas": 1,
+            },
+        }))
+        .expect("a StatefulSet");
+        let mut stripped = set.clone();
+        crate::overview::strip_stateful_set(&mut stripped);
+        assert!(stripped
+            .spec
+            .as_ref()
+            .is_some_and(|s| s.template.spec.is_none()));
+        assert_eq!(
+            crate::resources::statefulset_rollout(&stripped),
+            crate::resources::statefulset_rollout(&set)
+        );
+
+        let daemon: DaemonSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "agent", "namespace": "kube-system", "generation": 1 },
+            "spec": {
+                "selector": {},
+                "template": { "spec": { "containers": [{ "name": "a", "image": "a" }] } },
+                "updateStrategy": { "type": "OnDelete" },
+            },
+            "status": {
+                "observedGeneration": 1,
+                "desiredNumberScheduled": 2,
+                "currentNumberScheduled": 2,
+                "updatedNumberScheduled": 1,
+                "numberMisscheduled": 0,
+                "numberReady": 2,
+                "numberAvailable": 2,
+            },
+        }))
+        .expect("a DaemonSet");
+        let mut stripped = daemon.clone();
+        crate::overview::strip_daemon_set(&mut stripped);
+        assert_eq!(
+            crate::resources::daemonset_rollout(&stripped),
+            crate::resources::daemonset_rollout(&daemon)
+        );
     }
 
     /// A pod failure inside a Job that still has retries left is a retry.
@@ -3063,6 +3469,72 @@ mod across_namespaces {
         assert_eq!(overview.counts.deployments, None);
     }
 
+    fn stateful_set_down(name: &str, namespace: &str) -> Value {
+        json!({
+            "apiVersion": "apps/v1",
+            "kind": "StatefulSet",
+            "metadata": { "name": name, "namespace": namespace, "generation": 1 },
+            "spec": { "replicas": 1, "selector": {}, "serviceName": name, "template": {} },
+            "status": { "observedGeneration": 1, "replicas": 1, "availableReplicas": 0 },
+        })
+    }
+
+    /// A refused `StatefulSet` list in one namespace was nothing at all: no
+    /// problem, no count, no word that it was not looked at. The namespace
+    /// that answered keeps its row; the one that refused is named, with the
+    /// code that tells a refusal from a fault.
+    #[tokio::test]
+    async fn a_workload_list_one_namespace_refused_is_named_beside_the_others_problems() {
+        let overview = Cluster::new()
+            .items(
+                "/apis/apps/v1/namespaces/prod/statefulsets",
+                vec![stateful_set_down("db", PROD)],
+            )
+            .refuse("/apis/apps/v1/namespaces/staging/statefulsets")
+            .listed()
+            .await;
+
+        assert!(overview
+            .problems
+            .iter()
+            .any(|p| p.kind == "StatefulSet" && p.name == "db" && p.reason == "Unavailable"));
+        assert_eq!(overview.counts.stateful_sets, None);
+        assert_eq!(overview.unread.len(), 1, "{:?}", overview.unread);
+        let unread = &overview.unread[0];
+        assert_eq!(unread.kind, "StatefulSet");
+        assert_eq!(unread.namespace.as_deref(), Some(STAGING));
+        assert_eq!(unread.code, "PERMISSION_DENIED");
+    }
+
+    /// Every list answered is the one case with nothing to name.
+    #[tokio::test]
+    async fn an_overview_every_list_answered_names_nothing_unread() {
+        let overview = Cluster::new().listed().await;
+        assert!(overview.unread.is_empty(), "{:?}", overview.unread);
+        assert_eq!(overview.counts.stateful_sets, Some(0));
+        assert_eq!(overview.counts.daemon_sets, Some(0));
+    }
+
+    /// A namespace-scoped token is refused the nodes: a `NotReady` node is then
+    /// unknown, and the answer has to say so rather than list no node problem.
+    #[tokio::test]
+    async fn a_refused_node_list_is_named_as_unread_once() {
+        let overview = Cluster::new()
+            .refuse("/api/v1/nodes")
+            .refuse("/api/v1/pods")
+            .listed()
+            .await;
+
+        let nodes: Vec<_> = overview
+            .unread
+            .iter()
+            .filter(|unread| unread.kind == "Node")
+            .collect();
+        assert_eq!(nodes.len(), 1, "{:?}", overview.unread);
+        assert_eq!(nodes[0].namespace, None);
+        assert_eq!(nodes[0].code, "PERMISSION_DENIED");
+    }
+
     /// Would drop a namespace's rows from the join: both namespaces' problems
     /// are on the panel.
     #[tokio::test]
@@ -3346,6 +3818,8 @@ mod across_namespaces {
             nodes: arcs([serde_json::from_value::<Node>(node("n1", true)).expect("a node")]),
             deployments: Vec::new(),
             jobs: Vec::new(),
+            stateful_sets: Vec::new(),
+            daemon_sets: Vec::new(),
             events: Vec::new(),
         };
         let scope = vec![PROD.to_string(), STAGING.to_string()];
