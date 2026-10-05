@@ -33,7 +33,7 @@ import { UnreadNamespaces } from "../../../-list/UnreadNamespaces";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { helmReleaseLink, hrefOf } from "@/lib/links";
 import { noneWhereAnswered } from "@/lib/namespace-scope";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatWhen } from "@/lib/utils";
 
 import { SourceIcon } from "./SourceIcon";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
@@ -83,7 +83,7 @@ export function HelmReleasesTab({
         accessorKey: "source",
         header: t("columns", "source"),
         cell: ({ row }) => <SourceIcon source={row.original.source} />,
-        size: 70,
+        size: 90,
       },
       {
         accessorKey: "name",
@@ -140,7 +140,7 @@ export function HelmReleasesTab({
       {
         accessorKey: "appVersion",
         header: t("columns", "appVersion"),
-        size: 120,
+        size: 150,
         cell: ({ row }) => row.original.appVersion || "—",
       },
       {
@@ -148,9 +148,10 @@ export function HelmReleasesTab({
         header: t("columns", "updated"),
         size: 150,
         cell: ({ row }) => {
-          return (
-            formatDate(row.original.updated) ?? row.original.updated ?? "—"
-          );
+          const { updated } = row.original;
+          const full = formatDate(updated);
+          if (!updated || !full) return updated ?? "—";
+          return <span title={full}>{formatWhen(updated, "moment")}</span>;
         },
       },
       {

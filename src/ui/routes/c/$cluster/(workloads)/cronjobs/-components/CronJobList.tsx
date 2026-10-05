@@ -57,7 +57,7 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
       ),
   },
   {
-    size: 70,
+    size: 84,
     id: "active",
     header: columnHeader("columns", "active"),
     meta: { share: (row: CronJobInfoWithMetrics) => String(row.active) },

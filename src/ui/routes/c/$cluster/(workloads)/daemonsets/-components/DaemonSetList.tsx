@@ -39,7 +39,7 @@ export const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
     cell: ({ row }) => row.original.current,
   },
   {
-    size: 80,
+    size: 100,
     id: "ready",
     header: columnHeader("columns", "ready"),
     meta: {

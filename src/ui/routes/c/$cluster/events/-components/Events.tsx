@@ -289,7 +289,7 @@ export function Events() {
                     })
                   }
                   className={cn(
-                    "h-6 rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
+                    "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
                     view === candidate ? "bg-sel text-fg" : "text-fg-mut"
                   )}
                 >
@@ -334,7 +334,7 @@ export function Events() {
                       aria-pressed={order === candidate.value}
                       onClick={() => setOrder(candidate.value)}
                       className={cn(
-                        "h-6 rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
+                        "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
                         order === candidate.value
                           ? "bg-sel text-fg"
                           : "text-fg-mut"
@@ -375,7 +375,7 @@ export function Events() {
                   aria-pressed={eventType === filter.value}
                   onClick={() => setEventType(filter.value)}
                   className={cn(
-                    "h-6 rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
+                    "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
                     eventType === filter.value
                       ? "bg-sel text-fg"
                       : "text-fg-mut"
@@ -388,7 +388,7 @@ export function Events() {
             <Select value={eventLimit} onValueChange={setEventLimit}>
               <SelectTrigger
                 aria-label={t("action", "eventsFetched")}
-                className="h-6 w-auto gap-1 border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
+                className="h-6 w-auto shrink-0 gap-1 whitespace-nowrap border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
               >
                 <SelectValue />
               </SelectTrigger>

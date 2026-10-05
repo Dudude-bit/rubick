@@ -118,7 +118,7 @@ export function SectionHeader({
     if (caption == null && !description && !actions) return null;
     return (
       <div className={cn("flex flex-col gap-0.5", className)} {...props}>
-        <div className="flex items-baseline gap-2 text-[11px] text-fg-fnt">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[11px] text-fg-fnt">
           {caption}
           {actions && (
             <div className="ml-auto flex items-center gap-1">{actions}</div>
@@ -131,7 +131,7 @@ export function SectionHeader({
 
   return (
     <div className={cn("flex flex-col gap-0.5", className)} {...props}>
-      <div className="flex items-baseline gap-2">
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
         <h2 className="text-[13px] font-semibold tracking-tight text-fg">
           {title}
         </h2>
