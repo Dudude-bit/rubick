@@ -13,7 +13,7 @@
  * `CrashLoopBackOff` can search for it, a reader who sees a translation of it
  * cannot, and the diagnostics report they paste into an issue would stop
  * being readable by the maintainer. See `src/ui/lib/status-role.ts` for the
- * mechanical half of that rule — the colour lookup reads those strings.
+ * mechanical half of that rule: the colour lookup reads those strings.
  *
  * A count is not `${n} ${noun}${n === 1 ? "" : "s"}`. Russian has three forms
  * and Polish four, and the form depends on the number in a way English cannot
@@ -34,7 +34,7 @@ export interface Plural {
 export const en = {
   // The rail's own words. Resource rows are absent on purpose: their labels
   // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
-  // noun that reads the same in every language — "Pods", not "Поды".
+  // noun that reads the same in every language: "Pods", not "Поды".
   nav: {
     changes: "Changes",
     apiResources: "API resources",
@@ -221,8 +221,8 @@ export const en = {
   /**
    * Table column headers.
    *
-   * Only the ones that are UI words. A header naming a kind — Claim, Storage
-   * Class, Volume — stays as the API spells it: the cell under it is a
+   * Only the ones that are UI words. A header naming a kind (Claim, Storage
+   * Class, Volume) stays as the API spells it: the cell under it is a
    * reference to an object of that kind, and kubectl prints the same word.
    */
   columns: {
@@ -2410,7 +2410,7 @@ export const en = {
     startedIn:
       "Finish signing in to {context} in your browser. Cancel if you closed the tab.",
     // A provider only accepts a redirect address its client has registered,
-    // and nobody but the reader can add one — so it goes on screen while they
+    // and nobody but the reader can add one, so it goes on screen while they
     // wait, next to the browser that may already be refusing it.
     waitingOn:
       "Waiting on {uri}. Your provider must allow that address for this client.",
@@ -2908,7 +2908,7 @@ export const en = {
    * What an integration says about a vendor's own setting.
    *
    * Its own section because `vendor` is one blurb per extension and a test
-   * holds it to exactly that — a key there with no vendor behind it reads as
+   * holds it to exactly that: a key there with no vendor behind it reads as
    * copy for something the app no longer offers.
    */
   readings: {
@@ -5965,7 +5965,7 @@ export const en = {
     looking: "looking…",
     detected: "detected",
     // Said of an extension the cluster would not answer about. Neither
-    // "detected" nor "not installed" — both of those are claims, and a
+    // "detected" nor "not installed": both of those are claims, and a
     // refusal to look establishes neither of them.
     couldNotTell: "could not tell",
     notInstalled: "not installed",
@@ -6240,7 +6240,7 @@ export const en = {
       "Nothing in this namespace manages this Secret, so it will not renew on its own; whoever put this certificate here replaces it.",
     // The route trace (Gateway API), step by step: what each link says in
     // each of its states. {said} carries the controller's own reason and
-    // message — the cluster's words, quoted rather than translated.
+    // message, the cluster's words quoted rather than translated.
     gwClassBlind: "GatewayClass: cannot be read from here",
     gwClassNoGateway: "GatewayClass: unknown, the Gateway itself is missing",
     gwClassMissingSay: "Class {name} does not exist",
@@ -7124,7 +7124,7 @@ export const en = {
       other:
         "{keys} tell this route's own controller what to answer. By the spec a rule with no backendRefs gets a 500; here it gets whatever those say, and this app does not read them.",
     },
-    // Tab and group marks, which were built by concatenation — no whole
+    // Tab and group marks, which were built by concatenation: no whole
     // string for a scanner to find, which is how they stayed English.
     podsFailing: {
       one: "{n} of {total} failing · {name} is {status}",
@@ -7358,7 +7358,7 @@ export const en = {
  * The shape a translation must fill.
  *
  * Derived from `en` rather than declared beside it, so adding a key to English
- * is what makes every other language fail to compile — which is the only
+ * is what makes every other language fail to compile, which is the only
  * moment anybody will remember to translate it.
  */
 export type Catalogue = {

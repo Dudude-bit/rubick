@@ -7,7 +7,7 @@ import type { Catalogue } from "./catalogue";
  * build error rather than an English word appearing mid-sentence on someone's
  * screen.
  *
- * Kubernetes vocabulary is left alone on purpose — «под», not «pod», is a word
+ * Kubernetes vocabulary is left alone on purpose. «под», not «pod», is a word
  * Russian-speaking operators do use in speech, but the interface has to agree
  * with `kubectl get pods` and with what they will search for. Counted nouns
  * therefore carry the Russian forms of the *word* while the kind names stay as
@@ -3099,7 +3099,7 @@ export const ru: Catalogue = {
    * What an integration says about a vendor's own setting.
    *
    * Its own section because `vendor` is one blurb per extension and a test
-   * holds it to exactly that — a key there with no vendor behind it reads as
+   * holds it to exactly that: a key there with no vendor behind it reads as
    * copy for something the app no longer offers.
    */
   readings: {
