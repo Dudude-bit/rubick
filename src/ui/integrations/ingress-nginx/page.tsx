@@ -27,7 +27,6 @@ import {
   hostRole,
   hostSeverity,
   useRouteCertificates,
-  stopUnder,
 } from "../ingress";
 import {
   Box,
@@ -49,7 +48,7 @@ import {
   type DetailTabMark,
 } from "@/components/object/detail-tab";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
-import { describeStop } from "@/lib/connections";
+import { describeStop, stopUnder } from "@/lib/connections";
 import { RoutingMap } from "../routing-map";
 import { useFrontingTls } from "../fronting-tls";
 import { ProxyControllerTab } from "../proxy-controller";

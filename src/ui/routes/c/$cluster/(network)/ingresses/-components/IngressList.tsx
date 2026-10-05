@@ -5,12 +5,23 @@ import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { createContext, useCallback, useContext, useMemo } from "react";
+import { useQueries } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Eye, Trash2, ExternalLink } from "lucide-react";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
 import { useResourceList } from "@/hooks/useResource";
 import { useIngressTls } from "@/hooks/useIngressTls";
+import { useServiceBacking } from "@/hooks/useServiceBacking";
+import { certificatesOf } from "@/hooks/useTlsCertificates";
+import {
+  ingressHealthOf,
+  ingressHealthWords,
+  secretNamesOf,
+} from "@/lib/ingress-health";
+import { knownOf } from "@/lib/known";
+import type { Verdict } from "@/lib/service-health";
+import { VerdictBadge } from "../../../-object/health-views";
 import { hrefOf, objectLink } from "@/lib/links";
 import {
   Tooltip,
@@ -63,14 +74,23 @@ function VendorTlsCell({ ingress }: { ingress: IngressInfo }) {
   );
 }
 
+/**
+ * Each row's verdict, from the reads the page makes once for every row: the
+ * class bindings, the scope's Services, each namespace's TLS Secrets.
+ */
+const Health = createContext<((ingress: IngressInfo) => Verdict) | null>(null);
+
+function HealthCell({ ingress }: { ingress: IngressInfo }) {
+  const of = useContext(Health);
+  return of ? <VerdictBadge verdict={of(ingress)} compact /> : null;
+}
+
 /** The copy label is a word, so the cell needs the hook the array cannot use. */
 function IngressAddressCell({ ingress }: { ingress: IngressInfo }) {
   const t = useT();
   const ips = ingress.loadBalancerIps;
-  // No address is the state worth naming: the ingress exists but is not
-  // reachable yet.
-  if (ips.length === 0)
-    return <span className="text-fg-fnt">{t("empty", "pendingInline")}</span>;
+  // Whether one is coming is the status column's to say, from the class.
+  if (ips.length === 0) return <span className="text-fg-fnt">—</span>;
   return (
     <span className="flex items-baseline gap-2">
       <CopyableAddress
@@ -93,6 +113,13 @@ function IngressAddressCell({ ingress }: { ingress: IngressInfo }) {
 export const baseColumns: ColumnDef<IngressInfo>[] = [
   createNameColumn<IngressInfo>(ResourceType.Ingress),
   createNamespaceColumn<IngressInfo>(),
+  {
+    // "missing TLS Secret" is the widest verdict this column holds.
+    size: 130,
+    id: "health",
+    header: columnHeader("columns", "status"),
+    cell: ({ row }) => <HealthCell ingress={row.original} />,
+  },
   {
     // An ingress class name: "nginx", "traefik", "alb".
     size: 110,
@@ -247,6 +274,61 @@ export function IngressList() {
     [listed.data]
   );
   const vendorTls = useIngressTls(asked);
+
+  const rows = listed.data?.rows;
+  const classes = useMemo(
+    () => [...new Set((rows ?? []).map((ingress) => ingress.className))],
+    [rows]
+  );
+  const bindings = useQueries({
+    queries: classes.map((className) => ({
+      queryKey: queryKeys.ingressClass(className),
+      queryFn: () => commands.resolveIngressClass(className ?? null),
+    })),
+  });
+  const backing = useServiceBacking(scope.wire);
+  const secrets = useMemo(() => {
+    const byNamespace = new Map<string, Set<string>>();
+    for (const ingress of rows ?? []) {
+      for (const name of secretNamesOf(ingress)) {
+        const names = byNamespace.get(ingress.namespace) ?? new Set();
+        byNamespace.set(ingress.namespace, names.add(name));
+      }
+    }
+    return [...byNamespace].map(([namespace, names]) => ({
+      namespace,
+      names: [...names].sort(),
+    }));
+  }, [rows]);
+  const certificateReads = useQueries({
+    queries: secrets.map(({ namespace, names }) => ({
+      queryKey: queryKeys.tlsCertificates(namespace, names),
+      queryFn: async () =>
+        new Map(
+          (await commands.getTlsCertificates(namespace, names)).map(
+            (entry) => [entry.secretName, entry] as const
+          )
+        ),
+    })),
+  });
+  const healthOf = (ingress: IngressInfo): Verdict => {
+    const binding = bindings[classes.indexOf(ingress.className)];
+    const at = secrets.findIndex(
+      (entry) => entry.namespace === ingress.namespace
+    );
+    const read = certificateReads[at];
+    return ingressHealthWords(
+      ingressHealthOf({
+        ingress,
+        binding: binding ? knownOf(binding) : { known: false, why: null },
+        backing: backing.in(ingress.namespace),
+        certificates: read
+          ? certificatesOf(read.data, read.error, secrets[at].names)
+          : undefined,
+      }),
+      t
+    );
+  };
   const vendorFor = useCallback(
     (ingress: IngressInfo) => vendorTlsAnswer(ingress, vendorTls, t),
     [t, vendorTls]
@@ -281,27 +363,29 @@ export function IngressList() {
   );
 
   return (
-    <VendorTls.Provider value={vendorFor}>
-      <ResourceList<IngressInfo>
-        title="Ingresses"
-        queryKey={queryKey}
-        getRowId={getResourceRowId}
-        queryFn={listIngresses}
-        columns={baseColumns}
-        quickActions={quickActions}
-        emptyStateLabel={toPlural(ResourceType.Ingress)}
-        deleteConfig={{
-          mutationFn: (item) =>
-            commands.deleteIngress(item.name, item.namespace ?? null),
-          invalidateQueryKeys: [queryKey],
-          resourceType: ResourceType.Ingress,
-        }}
-        staleTime={STALE_TIMES.resourceList}
-        refresh={refresh}
-        live={live}
-        resyncing={resyncing}
-        getRowHref={(row) => hrefOf(linkOf(row))}
-      />
-    </VendorTls.Provider>
+    <Health.Provider value={healthOf}>
+      <VendorTls.Provider value={vendorFor}>
+        <ResourceList<IngressInfo>
+          title="Ingresses"
+          queryKey={queryKey}
+          getRowId={getResourceRowId}
+          queryFn={listIngresses}
+          columns={baseColumns}
+          quickActions={quickActions}
+          emptyStateLabel={toPlural(ResourceType.Ingress)}
+          deleteConfig={{
+            mutationFn: (item) =>
+              commands.deleteIngress(item.name, item.namespace ?? null),
+            invalidateQueryKeys: [queryKey],
+            resourceType: ResourceType.Ingress,
+          }}
+          staleTime={STALE_TIMES.resourceList}
+          refresh={refresh}
+          live={live}
+          resyncing={resyncing}
+          getRowHref={(row) => hrefOf(linkOf(row))}
+        />
+      </VendorTls.Provider>
+    </Health.Provider>
   );
 }

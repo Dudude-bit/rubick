@@ -16,6 +16,7 @@ import { DeleteAction } from "../../../-object/DeleteAction";
 import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
+import { ServiceHealthView } from "../../../-object/health-views";
 import { useResourceDetail } from "@/hooks";
 import { useEndpointsShare } from "./useEndpointsShare";
 import { useQuery } from "@tanstack/react-query";
@@ -96,6 +97,15 @@ export function EndpointsDetail() {
           name={endpoints?.name || name || ""}
           namespace={endpoints?.namespace || namespace}
           showKind={false}
+        />
+      ),
+    },
+    {
+      label: t("columns", "status"),
+      value: (
+        <ServiceHealthView
+          name={endpoints?.name || name || ""}
+          namespace={endpoints?.namespace || namespace || null}
         />
       ),
     },

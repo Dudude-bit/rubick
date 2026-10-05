@@ -8,7 +8,13 @@
  * `ConfigMapList.tsx` is a typical use.
  */
 
-import { useCallback, useMemo } from "react";
+import {
+  Fragment,
+  useCallback,
+  useMemo,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -68,6 +74,11 @@ export interface ResourceListPageConfig<T extends ListableResource> {
    * from the matching `subscribe_*_watch` Tauri command.
    */
   watch?: (params: { scope: string[] | null }) => Promise<string>;
+  /**
+   * Rendered around the list, for a page whose cells read one answer for
+   * every row through a context rather than one read per row.
+   */
+  around?: ComponentType<{ children: ReactNode }>;
 }
 
 export function createResourceListPage<T extends ListableResource>(
@@ -139,34 +150,37 @@ export function createResourceListPage<T extends ListableResource>(
     });
 
     const deleter = config.deleter;
+    const Around = config.around ?? Fragment;
     return (
-      <ResourceList<T>
-        title={config.title}
-        queryKey={queryKey}
-        getRowId={getResourceRowId}
-        queryFn={queryFn}
-        columns={columns}
-        quickActions={quickActions}
-        emptyStateLabel={config.emptyStateLabel ?? config.title}
-        narrowingHelps={narrowingHelps(config.resourceType)}
-        getRowHref={(row) => hrefOf(linkOf(row))}
-        deleteConfig={
-          deleter
-            ? {
-                mutationFn: async (item) => {
-                  await deleter(item);
-                },
-                invalidateQueryKeys: [queryKey],
-                resourceType: config.resourceType,
-              }
-            : undefined
-        }
-        delivery={deliveryScopeOf(config.resourceType)}
-        staleTime={STALE_TIMES.resourceList}
-        refresh={refresh}
-        live={live}
-        resyncing={resyncing}
-      />
+      <Around>
+        <ResourceList<T>
+          title={config.title}
+          queryKey={queryKey}
+          getRowId={getResourceRowId}
+          queryFn={queryFn}
+          columns={columns}
+          quickActions={quickActions}
+          emptyStateLabel={config.emptyStateLabel ?? config.title}
+          narrowingHelps={narrowingHelps(config.resourceType)}
+          getRowHref={(row) => hrefOf(linkOf(row))}
+          deleteConfig={
+            deleter
+              ? {
+                  mutationFn: async (item) => {
+                    await deleter(item);
+                  },
+                  invalidateQueryKeys: [queryKey],
+                  resourceType: config.resourceType,
+                }
+              : undefined
+          }
+          delivery={deliveryScopeOf(config.resourceType)}
+          staleTime={STALE_TIMES.resourceList}
+          refresh={refresh}
+          live={live}
+          resyncing={resyncing}
+        />
+      </Around>
     );
   };
   ListPage.displayName = `${config.resourceType}List`;

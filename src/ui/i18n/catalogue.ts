@@ -3816,6 +3816,25 @@ export const en = {
     lbNotReadYet: "the other Services are still being read",
     lbNodePortFallback:
       "Meanwhile its NodePort answers on every node: {ports}.",
+    healthDnsAlias: "DNS alias",
+    healthDnsAliasWhy:
+      "An ExternalName Service answers with another DNS name and has no endpoints.",
+    healthByHand: "by hand",
+    healthStillReading: "still reading",
+    healthNothingServesClass:
+      "Nothing in this cluster serves IngressClass {name}, so nothing picks this Ingress up",
+    healthNoClassNoDefault:
+      "It names no IngressClass and the cluster has no default, so nothing picks it up",
+    healthNoTlsSecret: "No Secret named {name} for its TLS",
+    healthBackendDown: "{name} takes no traffic",
+    healthNoController: "no controller",
+    healthMissingBackend: "missing backend",
+    healthMissingTlsSecret: "missing TLS Secret",
+    healthBackendDownShort: "backend down",
+    healthNoAddressYet: "no address yet",
+    healthNoAddressYetWhy:
+      "A controller serves its class and has not published an address for it yet.",
+    healthServed: "served",
   },
   cluster: {
     integrationsHint:
@@ -6485,6 +6504,10 @@ export const en = {
       other: "One client address may hold {n} connections at a time.",
     },
     readyOfTotal: "{ready} of {total} ready",
+    addressesTakeNoTraffic: {
+      one: "{n} of its addresses takes no traffic",
+      other: "{n} of its addresses take no traffic",
+    },
     readyFraction: "{ready}/{total} ready",
     completedFraction: "{done}/{total} completed",
     restartsWithLast: {

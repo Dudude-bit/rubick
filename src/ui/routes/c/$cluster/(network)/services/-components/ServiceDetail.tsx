@@ -33,6 +33,7 @@ import { recordToKeyValues } from "@/components/object/key-values";
 import { ServiceAccessInfo } from "../../-components";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { BalancerAddress } from "../../../-object/BalancerAddress";
+import { ServiceHealthView } from "../../../-object/health-views";
 import { PublishedEndpoints } from "./PublishedEndpoints";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { useResourceDetail } from "@/hooks";
@@ -85,6 +86,12 @@ export function ServiceDetail() {
   const externalIps = service?.externalIps ?? [];
 
   const facts: KeyValue[] = [
+    {
+      label: t("columns", "status"),
+      value: name ? (
+        <ServiceHealthView name={name} namespace={namespace ?? null} />
+      ) : null,
+    },
     { label: t("columns", "type"), value: service?.type },
     // A headless service has no cluster IP at all; "None" is the API's own
     // word for it and means something different from "not assigned yet".

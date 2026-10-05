@@ -313,6 +313,36 @@ export function hopTone(hop: ChainHop): HopTone {
 
 // --- where the path stops ----------------------------------------------
 
+const NONE_READY_UNDER: Record<NotServing, keyof typeof en.empty> = {
+  unscheduled: "stopNotScheduled",
+  starting: "stopNotStarted",
+  crashLooping: "stopCrashLooping",
+  terminating: "stopTerminating",
+  failingReadiness: "stopRunningNoneReady",
+  finished: "stopFinished",
+  mixed: "stopNoneReady",
+  other: "stopNoneReady",
+  inSlices: "stopNoneReady",
+};
+
+/** What a stopped path says in the column, in four words or fewer. */
+export function stopUnder(
+  stop: Extract<ChainStop, { service: ObjectRef }>
+): keyof typeof en.empty {
+  switch (stop.reason) {
+    case "backendMissing":
+      return "stopNoServiceToSendTo";
+    case "selectsNothing":
+      return "stopSelectorMatchesNothing";
+    case "publishesNothingYet":
+      return "stopNothingPublishedYet";
+    case "noneReady":
+      return NONE_READY_UNDER[stop.why];
+    case "publishesNothing":
+      return "stopNoPortToSendTo";
+  }
+}
+
 /** Why none is ready, each sentence sending the reader somewhere else. */
 const NONE_READY_NOTE: Record<NotServing, keyof typeof en.nav> = {
   unscheduled: "stopNotScheduledNote",

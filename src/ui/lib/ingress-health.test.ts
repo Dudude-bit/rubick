@@ -1,0 +1,205 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import type {
+  IngressClassBinding,
+  ServiceInfo,
+  ServicePublished,
+  TlsCertificate,
+} from "@/generated/types";
+import {
+  ingressHealthOf,
+  ingressHealthWords,
+  type IngressInputs,
+  type NamespaceBacking,
+} from "./ingress-health";
+
+const t: T = (section, key, values) => translate("en", section, key, values);
+
+const SERVED: IngressClassBinding = {
+  requested: "nginx",
+  resolved: "nginx",
+  controller: "k8s.io/ingress-nginx",
+  viaDefault: false,
+  available: [],
+};
+const UNSERVED: IngressClassBinding = {
+  ...SERVED,
+  resolved: null,
+  controller: null,
+};
+
+function service(name: string): ServiceInfo {
+  return {
+    name,
+    namespace: "net",
+    uid: name,
+    type: "ClusterIP",
+    sessionAffinity: "None",
+    clusterIp: "10.0.0.1",
+    externalIps: [],
+    loadBalancerIps: [],
+    ports: [],
+    selector: { app: name },
+    labels: {},
+    annotations: {},
+    createdAt: null,
+  };
+}
+
+function publishing(name: string, ready: number): ServicePublished {
+  return {
+    service: {
+      kind: "Service",
+      name,
+      namespace: "net",
+      existence: "present",
+      facts: null,
+    },
+    source: "slices",
+    slices: 1,
+    ready,
+    draining: 0,
+    notReady: 0,
+    unrouted: 0,
+    unroutedReady: 0,
+    ports: [],
+    endpoints: [],
+    whole: true,
+    unpublished: [],
+    stop: null,
+  };
+}
+
+const BACKING: NamespaceBacking = {
+  services: [service("web"), service("api")],
+  published: [publishing("web", 0), publishing("api", 2)],
+};
+
+function ingress(
+  backends: string[],
+  secretName: string | null = null
+): IngressInputs["ingress"] {
+  return {
+    namespace: "net",
+    className: "nginx",
+    rules: [
+      {
+        host: "shop.example.test",
+        paths: backends.map((name) => ({
+          path: `/${name}`,
+          pathType: "Prefix",
+          backendService: name,
+          backendPort: "80",
+          resourceBackend: null,
+        })),
+      },
+    ],
+    defaultBackend: null,
+    tlsConfigs: secretName
+      ? [{ hosts: ["shop.example.test"], secretName, isCatchAll: false }]
+      : [],
+    loadBalancerIps: [],
+  };
+}
+
+const verdict = (inputs: IngressInputs) =>
+  ingressHealthWords(ingressHealthOf(inputs), t);
+
+describe("one verdict for an Ingress on its page, its peek and the list", () => {
+  /**
+   * storefront, admin and api-public all looked healthy in the list while
+   * their pages said no controller serves the class. Fails if the list's
+   * verdict stops reading the class binding.
+   */
+  it("says no controller when nothing serves the class", () => {
+    const said = verdict({
+      ingress: ingress(["api"]),
+      binding: { known: true, value: UNSERVED },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("noController");
+    expect(said.role).toBe("err");
+    expect(said.reason).toContain("IngressClass nginx");
+  });
+
+  it("names a backend Service that does not exist", () => {
+    const said = verdict({
+      ingress: ingress(["admin-ui"]),
+      binding: { known: true, value: SERVED },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("backendMissing");
+    expect(said.reason).toContain("No Service named admin-ui");
+  });
+
+  it("names a TLS Secret that does not exist", () => {
+    const certificates = new Map<string, TlsCertificate>([
+      [
+        "api-tls",
+        {
+          secretName: "api-tls",
+          certificate: null,
+          problem: { says: "noSecret" },
+        },
+      ],
+    ]);
+    const said = verdict({
+      ingress: ingress(["api"], "api-tls"),
+      binding: { known: true, value: SERVED },
+      backing: { known: true, value: BACKING },
+      certificates,
+    });
+    expect(said.code).toBe("tlsSecretMissing");
+    expect(said.reason).toContain("api-tls");
+  });
+
+  /** One dead path out of two degrades the Ingress; it does not kill it. */
+  it("warns when one backend of several publishes nothing", () => {
+    const said = verdict({
+      ingress: ingress(["web", "api"]),
+      binding: { known: true, value: SERVED },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("backendDown");
+    expect(said.role).toBe("warn");
+  });
+
+  /**
+   * The class binding or the Services were refused: "not checked", never
+   * "served". Fails if an unread input is skipped instead of carried.
+   */
+  it("says not checked when an input could not be read", () => {
+    const said = verdict({
+      ingress: { ...ingress(["api"]), loadBalancerIps: ["203.0.113.7"] },
+      binding: { known: false, why: "ingressclasses is forbidden" },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(said.code).toBe("unknown");
+    expect(said.role).toBe("neutral");
+    expect(said.reason).toContain("ingressclasses is forbidden");
+
+    const backingRefused = verdict({
+      ingress: { ...ingress(["api"]), loadBalancerIps: ["203.0.113.7"] },
+      binding: { known: true, value: SERVED },
+      backing: { known: false, why: "services is forbidden" },
+      certificates: undefined,
+    });
+    expect(backingRefused.code).toBe("unknown");
+  });
+
+  it("calls an addressed Ingress with live backends served", () => {
+    const said = verdict({
+      ingress: { ...ingress(["api"]), loadBalancerIps: ["203.0.113.7"] },
+      binding: { known: true, value: SERVED },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(said).toMatchObject({ code: "serving", role: "ok" });
+  });
+});

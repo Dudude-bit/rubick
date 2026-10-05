@@ -7,6 +7,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { PortsDisplay } from "../../-components";
 import { AddressCell } from "@/components/ui/copyable-value";
 import { BalancerAddress } from "../../../-object/BalancerAddress";
+import { BackingAround, HealthCell } from "./ServiceHealthCell";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -41,6 +42,13 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
         {row.original.type}
       </span>
     ),
+  },
+  {
+    // "3 of 4 ready" is the widest verdict this column holds.
+    size: 120,
+    id: "health",
+    header: columnHeader("columns", "endpoints"),
+    cell: ({ row }) => <HealthCell service={row.original} />,
   },
   {
     size: 130,
@@ -97,4 +105,5 @@ export const ServiceList = createResourceListPage<ServiceInfo>({
   watch: ({ scope }) => commands.subscribeServiceWatch(scope),
   deleter: (item) => commands.deleteService(item.name, item.namespace),
   columns,
+  around: BackingAround,
 });

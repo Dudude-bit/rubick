@@ -111,6 +111,8 @@ describe("what a list page declares about its columns", () => {
   const CANNOT_SAY: Record<string, string> = {
     // Namespaces: counted from the pod list by the page, not the row.
     pods: "a count the page keeps beside the list",
+    // Services and Ingresses: a verdict read once for the page, not the row.
+    health: "a verdict the page reads beside the list",
   };
   const OWN = new Set(["name", "namespace", "age"]);
 

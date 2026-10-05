@@ -18,7 +18,7 @@
 import { useMemo } from "react";
 import { hostsNeedAttention } from "@/lib/two-counts";
 
-import { backingFrom, hostRole, hostSeverity, stopUnder } from "../ingress";
+import { backingFrom, hostRole, hostSeverity } from "../ingress";
 import { DoorOpen, Network, Split, Waypoints } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
@@ -31,7 +31,7 @@ import {
   type DetailTab,
   type DetailTabMark,
 } from "@/components/object/detail-tab";
-import { describeStop } from "@/lib/connections";
+import { describeStop, stopUnder } from "@/lib/connections";
 import { RoutingMap } from "../routing-map";
 import { routingMap } from "./map";
 import type { CustomResourceInfo } from "@/generated/types";

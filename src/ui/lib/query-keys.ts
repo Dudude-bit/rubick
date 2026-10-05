@@ -348,6 +348,11 @@ export const queryKeys = {
     "backend-tls-policies",
     namespace,
   ],
+  /** What the Services of a scope publish, one `listServiceBacking` each. */
+  serviceBacking: (namespaces: readonly string[] | null): string[] => [
+    "service-backing",
+    (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
+  ],
   ingressClass: (className: string | null | undefined): (string | null)[] => [
     "ingress-class",
     className ?? null,

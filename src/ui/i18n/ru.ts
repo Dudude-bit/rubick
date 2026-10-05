@@ -4228,6 +4228,25 @@ export const ru: Catalogue = {
     lbNotReadYet: "остальные Service ещё читаются",
     lbNodePortFallback:
       "Пока что он отвечает на NodePort каждого узла: {ports}.",
+    healthDnsAlias: "DNS-псевдоним",
+    healthDnsAliasWhy:
+      "Service типа ExternalName отвечает другим DNS-именем, эндпоинтов у него нет.",
+    healthByHand: "вручную",
+    healthStillReading: "ещё читается",
+    healthNothingServesClass:
+      "IngressClass {name} в этом кластере никто не обслуживает, поэтому этот Ingress никто не подхватывает",
+    healthNoClassNoDefault:
+      "Он не называет IngressClass, а класса по умолчанию в кластере нет, поэтому его никто не подхватывает",
+    healthNoTlsSecret: "Нет Secret с именем {name} для его TLS",
+    healthBackendDown: "{name} не принимает трафик",
+    healthNoController: "нет контроллера",
+    healthMissingBackend: "нет бэкенда",
+    healthMissingTlsSecret: "нет Secret для TLS",
+    healthBackendDownShort: "бэкенд недоступен",
+    healthNoAddressYet: "адреса пока нет",
+    healthNoAddressYetWhy:
+      "Контроллер его класса есть, но адрес для этого Ingress он ещё не опубликовал.",
+    healthServed: "обслуживается",
   },
   cluster: {
     integrationsHint:
@@ -7076,6 +7095,12 @@ export const ru: Catalogue = {
       other: "Один адрес клиента может держать {n} соединений одновременно.",
     },
     readyOfTotal: "готовы {ready} из {total}",
+    addressesTakeNoTraffic: {
+      one: "{n} из его адресов не принимает трафик",
+      few: "{n} из его адресов не принимают трафик",
+      many: "{n} из его адресов не принимают трафик",
+      other: "{n} из его адресов не принимают трафик",
+    },
     readyFraction: "готово {ready}/{total}",
     completedFraction: "завершено {done}/{total}",
     restartsWithLast: {

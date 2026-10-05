@@ -33,9 +33,9 @@ import {
   hostRole,
   hostSeverity,
   useRouteCertificates,
-  stopUnder,
 } from "../ingress";
 import { Link } from "@tanstack/react-router";
+import { stopUnder } from "@/lib/connections";
 import { Box, Filter, Globe, Network, Plug } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";

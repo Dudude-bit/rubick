@@ -20,7 +20,6 @@ import {
 } from "@tanstack/react-query";
 import { useCallback, useMemo } from "react";
 
-import type { en } from "@/i18n/catalogue";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
@@ -36,7 +35,6 @@ import type {
   DeploymentContainerInfo,
   IngressClassSummary,
   IngressInfo,
-  NotServing,
   ObjectRef,
   ServiceInfo,
   ServicePublished,
@@ -400,34 +398,6 @@ export function certificateProblems(
       },
     ];
   });
-}
-
-const NONE_READY_UNDER: Record<NotServing, keyof typeof en.empty> = {
-  unscheduled: "stopNotScheduled",
-  starting: "stopNotStarted",
-  crashLooping: "stopCrashLooping",
-  terminating: "stopTerminating",
-  failingReadiness: "stopRunningNoneReady",
-  finished: "stopFinished",
-  mixed: "stopNoneReady",
-  other: "stopNoneReady",
-  inSlices: "stopNoneReady",
-};
-
-/** What a stopped path says in the column, in four words or fewer. */
-export function stopUnder(stop: ServiceStop): keyof typeof en.empty {
-  switch (stop.reason) {
-    case "backendMissing":
-      return "stopNoServiceToSendTo";
-    case "selectsNothing":
-      return "stopSelectorMatchesNothing";
-    case "publishesNothingYet":
-      return "stopNothingPublishedYet";
-    case "noneReady":
-      return NONE_READY_UNDER[stop.why];
-    case "publishesNothing":
-      return "stopNoPortToSendTo";
-  }
 }
 
 // --- what stands in front of the proxy ----------------------------------

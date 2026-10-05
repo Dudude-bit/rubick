@@ -34,6 +34,7 @@ import { recordToKeyValues, TONE_CLASS } from "@/components/object/key-values";
 import { CertificateLine } from "../../../-object/CertificateFacts";
 import { IssuanceSection } from "@/components/object/IssuanceChain";
 import { TrafficChain } from "../../../-object/TrafficChain";
+import { IngressHealthView } from "../../../-object/health-views";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useResourceDetail } from "@/hooks";
@@ -315,6 +316,10 @@ export function IngressDetail() {
   });
 
   const facts: KeyValue[] = [
+    {
+      label: t("columns", "status"),
+      value: ingress ? <IngressHealthView ingress={ingress} /> : null,
+    },
     {
       // The class is a request; the controller is who answers it. Naming
       // only the request is how an Ingress nothing serves reads as fine.
