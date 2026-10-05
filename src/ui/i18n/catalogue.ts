@@ -2488,20 +2488,22 @@ export const en = {
   slow: {
     panel: "Why slow",
     title: "Why slow",
-    hint: "What the app measured in the last minute, without the recorder.",
+    hint: "What the app measured about its own window in the last minute. This is about Rubick, not about the cluster.",
+    tooltip:
+      "Rubick's own window stalled in the last minute: it answered late. This is about the app, not the cluster. Click for why.",
     stalls: {
-      one: "{n} stall",
-      other: "{n} stalls",
+      one: "{n} UI stall",
+      other: "{n} UI stalls",
     },
-    stallsLabel: "Stalls",
+    stallsLabel: "UI stalls",
     stallsValue: {
       one: "{n} stall, the longest {longest} ms",
       other: "{n} stalls, the longest {longest} ms",
     },
     sourceLongTask:
-      "A stall is the main thread blocked for 50 ms or more, from the webview's own long-task observer.",
+      "A stall is a moment the window could not respond for 50 ms or more.",
     sourceFrameGap:
-      "A stall is a frame that came 50 ms or more late; this webview has no long-task observer, so late frames stand in.",
+      "A stall is a moment the window drew a frame 50 ms or more late.",
     listsLabel: "Big lists on screen",
     listRows: {
       one: "{n} row of {label}",

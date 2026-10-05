@@ -9,7 +9,12 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { useStalls } from "./useStalls";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { STALL_WARN, useStalls } from "./useStalls";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -18,6 +23,9 @@ import { useSettingsStore } from "@/stores/settingsStore";
  * "Why is this slow", answered from what the app can measure for free.
  * Drawn only while there is something to say: a stall in the last minute.
  * A row that said "no stalls" all day would be the app praising itself.
+ *
+ * It is about the app, not the cluster, so it never wears the red the
+ * problem count beside it does: grey, and amber only past `STALL_WARN`.
  */
 export function StallIndicator() {
   const t = useT();
@@ -26,24 +34,32 @@ export function StallIndicator() {
   const openSettings = useSettingsStore((state) => state.openSettings);
   if (report.stalls.length === 0) return null;
   const longest = report.longest?.ms ?? 0;
-  const severe = longest >= 250 || report.stalls.length >= 5;
+  const heavy =
+    longest >= STALL_WARN.longestMs || report.stalls.length >= STALL_WARN.count;
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <button
-          type="button"
-          aria-label={t("slow", "panel")}
-          className={cn(
-            "flex items-center gap-1.5 rounded px-1.5 py-1 text-[11px] transition-colors hover:underline hover:decoration-dotted hover:underline-offset-2",
-            severe ? "text-err" : "text-warn"
-          )}
-        >
-          <Turtle className="h-3 w-3" aria-hidden />
-          <span className="tabular-nums">
-            {t("slow", "stalls", { n: report.stalls.length })}
-          </span>
-        </button>
-      </SheetTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <SheetTrigger asChild>
+            <button
+              type="button"
+              aria-label={t("slow", "panel")}
+              className={cn(
+                "flex items-center gap-1.5 rounded px-1.5 py-1 text-[11px] transition-colors hover:bg-hover",
+                heavy ? "text-warn" : "text-fg-fnt hover:text-fg-mut"
+              )}
+            >
+              <Turtle className="h-3 w-3" aria-hidden />
+              <span className="tabular-nums">
+                {t("slow", "stalls", { n: report.stalls.length })}
+              </span>
+            </button>
+          </SheetTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="end" className="max-w-[300px]">
+          {t("slow", "tooltip")}
+        </TooltipContent>
+      </Tooltip>
       <SheetContent className="flex w-[400px] flex-col gap-0 p-0 sm:w-[460px]">
         <SheetHeader className="flex-none px-3 py-2">
           <SheetTitle>{t("slow", "title")}</SheetTitle>

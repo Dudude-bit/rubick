@@ -97,6 +97,8 @@ export function StatusBar() {
       <StallIndicator />
       <ActivityPanel />
       <ThemeControl />
+      {/* The app's own chrome to the left, the cluster's health to the right. */}
+      <span aria-hidden="true" className="h-3 w-px flex-none bg-hair" />
 
       {connecting ? (
         // The one place a name still belongs: mid-connect the sidebar and

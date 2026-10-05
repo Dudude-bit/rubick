@@ -18,3 +18,6 @@ export function useStalls(): StallReport {
   }, []);
   return report;
 }
+
+/** Past either, the window has been hard to use, not merely uneven. */
+export const STALL_WARN = { longestMs: 500, count: 10 } as const;
