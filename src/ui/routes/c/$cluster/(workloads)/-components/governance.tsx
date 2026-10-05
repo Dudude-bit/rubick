@@ -23,11 +23,8 @@ import type { T } from "@/i18n/useT";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { EditGoverning } from "./EditGoverning";
 import {
-  autoscalerFinding,
   autoscalerRange,
-  autoscalerScaleWarnings,
   autoscalers,
-  budgetFinding,
   budgetRoom,
   budgetRule,
   budgets,
@@ -36,7 +33,7 @@ import {
   type AutoscalerFacts,
   type Finding,
 } from "@/lib/governance";
-import { unreadWhy } from "@/lib/connections";
+import { governanceFindings } from "@/lib/governance-findings";
 import type { KeyValue } from "@/components/object/key-values";
 import type { ResourceConnections } from "@/generated/types";
 
@@ -85,9 +82,6 @@ function nowValue(facts: AutoscalerFacts, t: T) {
   );
 }
 
-/** The two kinds this block speaks for. */
-const GOVERNING = ["HorizontalPodAutoscaler", "PodDisruptionBudget"];
-
 export interface Governance {
   /** `Set by`, `Now`, `A drain waits` — only the ones with a subject. */
   rows: KeyValue[];
@@ -113,46 +107,10 @@ export function governanceRows(
   t: T
 ): Governance {
   const rows: KeyValue[] = [];
-  const findings: Finding[] = [];
-  if (!conns) return { rows, findings, sets: false, guards: false };
+  if (!conns) return { rows, findings: [], sets: false, guards: false };
 
   const scaling = autoscalers(conns);
   const protecting = budgets(conns);
-
-  // A kind the app asked for and did not get is not a kind with nothing in
-  // it. The backend records the failure here for exactly this reason — its
-  // own comment says an unread autoscaler list "must not come back as
-  // 'nothing scales this'" — and this block was drawing the absence as an
-  // answer: no "Set by" row, no caption, nothing to tell the reader that a
-  // Scale dialog was about to ignore an autoscaler nobody could see.
-  const unread = conns.notLookedAt.filter((entry) =>
-    GOVERNING.includes(entry.kind)
-  );
-  for (const entry of unread) {
-    findings.push({
-      tone: "neutral",
-      title: t("readings", "govNotRead", { kind: entry.kind }),
-      detail: unreadWhy(entry.why, t),
-    });
-  }
-
-  // Two autoscalers on one workload used to be said in the block's caption,
-  // and the caption is now the composition's fixed subject line. It is not a
-  // qualifier anyway: neither range on the page is the range while it is true.
-  if (scaling.length > 1) {
-    const several = autoscalerScaleWarnings(conns, t).find(
-      (warning) => warning.key === "hpa:several"
-    );
-    if (several) {
-      findings.push({
-        tone: "warn",
-        title: t("readings", "govSeveralAutoscalers", {
-          n: scaling.length,
-        }),
-        detail: several.description,
-      });
-    }
-  }
 
   for (const auto of scaling) {
     rows.push({
@@ -176,9 +134,6 @@ export function governanceRows(
 
     const now = nowValue(auto.facts, t);
     if (now) rows.push({ label: t("columns", "govNow"), value: now });
-
-    const finding = autoscalerFinding(auto, t);
-    if (finding) findings.push(finding);
   }
 
   for (const budget of protecting) {
@@ -203,14 +158,11 @@ export function governanceRows(
         </>
       ),
     });
-
-    const finding = budgetFinding(budget, t);
-    if (finding && finding.tone !== "neutral") findings.push(finding);
   }
 
   return {
     rows,
-    findings,
+    findings: governanceFindings(conns, t),
     sets: scaling.length > 0,
     guards: protecting.length > 0,
   };

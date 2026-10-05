@@ -410,22 +410,25 @@ function PeekOverview({
       ) : isLoading || !summary ? (
         <PeekSkeleton />
       ) : (
-        summary.groups.map((group) => (
-          <div key={group.title}>
-            <PeekHeading title={group.title} count={group.count} />
-            {group.table ? (
-              <WordTable
-                table={group.table}
-                emptyMessage={group.emptyMessage ?? t("empty", "none")}
-              />
-            ) : (
-              <KeyValueList
-                items={group.items}
-                emptyMessage={group.emptyMessage ?? t("empty", "none")}
-              />
-            )}
-          </div>
-        ))
+        <>
+          {summary.lead}
+          {summary.groups.map((group) => (
+            <div key={group.title}>
+              <PeekHeading title={group.title} count={group.count} />
+              {group.table ? (
+                <WordTable
+                  table={group.table}
+                  emptyMessage={group.emptyMessage ?? t("empty", "none")}
+                />
+              ) : (
+                <KeyValueList
+                  items={group.items}
+                  emptyMessage={group.emptyMessage ?? t("empty", "none")}
+                />
+              )}
+            </div>
+          ))}
+        </>
       )}
       {/*
        * The same objects as the detail pages, and the same question: the

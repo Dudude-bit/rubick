@@ -46,6 +46,8 @@ export interface PeekSummary {
   createdAt?: string | null;
   /** For the kinds whose API hands back a rendered age instead of a stamp. */
   groups: PeekGroup[];
+  /** The diagnosis the page heads its Overview with, above the groups. */
+  lead?: ReactNode;
 }
 
 export interface PeekSource {

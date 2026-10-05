@@ -1,4 +1,5 @@
 import { workloadStatus } from "@/lib/workload-status";
+import { WorkloadDiagnosis } from "./peek-workload-diagnosis";
 
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { commands } from "@/lib/commands";
@@ -168,6 +169,14 @@ export const WORKLOAD_SOURCES: PeekSources = {
   Deployment: source(commands.getDeployment, (deployment, _target, t) => ({
     status: workloadStatus(deployment.rollout),
     createdAt: deployment.createdAt,
+    lead: (
+      <WorkloadDiagnosis
+        kind="Deployment"
+        name={deployment.name}
+        namespace={deployment.namespace}
+        rollout={deployment.rollout}
+      />
+    ),
     groups: [
       {
         title: t("columns", "rollout"),
@@ -207,6 +216,14 @@ export const WORKLOAD_SOURCES: PeekSources = {
   StatefulSet: source(commands.getStatefulset, (set, _target, t) => ({
     status: workloadStatus(set.rollout),
     createdAt: set.createdAt,
+    lead: (
+      <WorkloadDiagnosis
+        kind="StatefulSet"
+        name={set.name}
+        namespace={set.namespace}
+        rollout={set.rollout}
+      />
+    ),
     groups: [
       {
         title: t("columns", "replicas"),
@@ -244,6 +261,14 @@ export const WORKLOAD_SOURCES: PeekSources = {
   DaemonSet: source(commands.getDaemonset, (set, _target, t) => ({
     status: workloadStatus(set.rollout),
     createdAt: set.createdAt,
+    lead: (
+      <WorkloadDiagnosis
+        kind="DaemonSet"
+        name={set.name}
+        namespace={set.namespace}
+        rollout={set.rollout}
+      />
+    ),
     groups: [
       {
         title: t("columns", "scheduling"),

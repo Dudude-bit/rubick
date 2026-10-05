@@ -678,6 +678,24 @@ describe("PeekPanel reads what the detail pages read", () => {
       ).toEqual([buildPod()])
     );
   });
+
+  /** The diagnosis a workload's page leads with; a source's `lead` the panel drops says nothing. */
+  it("draws a workload's diagnosis above its rows", async () => {
+    vi.mocked(commands.getDeployment).mockResolvedValue({
+      name: "search",
+      namespace: "shop",
+      replicas: { desired: 2, ready: 2, updated: 1, available: 2 },
+      rollout: { state: "stalled", message: null, serving: 2 },
+      containers: [],
+      initContainers: [],
+      ownerReferences: [],
+      createdAt: null,
+    } as never);
+    await wrap("/c/prod/events?peek=deployments/shop/search");
+    expect(await screen.findByTestId("rollout-summary")).toHaveTextContent(
+      "Rollout stalled"
+    );
+  });
 });
 
 describe("PeekPanel tab strip", () => {
