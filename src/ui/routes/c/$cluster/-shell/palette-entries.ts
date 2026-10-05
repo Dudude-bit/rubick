@@ -113,7 +113,12 @@ const quickActions: Array<{
     words: "apiResources",
     path: pageLink("api-resources"),
   },
-  { icon: ShieldUser, label: "goToMyAccess", path: pageLink("my-access") },
+  {
+    icon: ShieldUser,
+    label: "goToMyAccess",
+    words: "myAccess",
+    path: pageLink("my-access"),
+  },
 ];
 
 export const english: T = (section, key, values) =>

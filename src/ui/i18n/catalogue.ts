@@ -6636,6 +6636,7 @@ export const en = {
     events: "",
     helm: "releases, charts",
     apiResources: "api-resources, kinds",
+    myAccess: "my access, can i, permissions, rbac, auth can-i",
     settings: "preferences, options",
     ports: "port-forward, tunnel",
     terminals: "shell, console",

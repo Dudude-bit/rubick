@@ -1175,6 +1175,16 @@ describe("the words pages and kinds answer to", () => {
     expect(kindsOf(offered(text, { t: ru }))[0]).toBe(kind);
   });
 
+  /** Marco asked "what can I do here" and the page that answers it had no words to be found by. */
+  it.each([
+    ["can i", undefined],
+    ["permissions", undefined],
+    ["права", ru],
+    ["что я могу", ru],
+  ])("finds Your access by %s", (text, t) => {
+    expect(navOf(offered(text, t ? { t } : {}))).toContain("nav:goToMyAccess");
+  });
+
   /** A title is found by its English words too, whatever language it is drawn in. */
   it("finds a page by its English title in another language", () => {
     expect(navOf(offered("settings", { t: ru }))).toContain("settings");
