@@ -285,7 +285,7 @@ fn prepared_failure(error: Error) -> Error {
 /// Whether a failure of the app's own path is one kubectl might get past.
 ///
 /// kubectl dials the same address with the same CA and environment, so a dial
-/// refused, unresolved or untrusted fails there too, twenty seconds later. A
+/// refused, unresolved, unanswered or untrusted fails there too, later. A
 /// proxy kubectl would use is one the app reads and cannot speak: it fails
 /// building its client, before any lookup. A cancelled login asked for no
 /// second one; a flow waiting two minutes would wait at kubectl's too.
@@ -294,7 +294,7 @@ pub(crate) fn proxy_could_help(direct: &Error, dialled: bool) -> bool {
         ConnectFailure::Refused | ConnectFailure::Dns if dialled => false,
         // rustls refuses a CA:TRUE serving certificate that Go, kubectl's TLS, accepts.
         ConnectFailure::Tls if dialled => direct.to_string().contains("CaUsedAsEndEntity"),
-        ConnectFailure::Timeout => !matches!(direct, Error::Timeout(_)),
+        ConnectFailure::Timeout => false,
         ConnectFailure::SignIn => !direct.to_string().to_lowercase().contains("cancel"),
         ConnectFailure::Refused
         | ConnectFailure::Dns
@@ -582,11 +582,11 @@ mod proxy_tests {
         ))
     }
 
-    /// Dana's refused and unresolvable contexts waited twenty seconds for a
-    /// kubectl proxy that dials the same address. Fails if a dial that was
-    /// refused, did not resolve or met a certificate the kubeconfig does not
-    /// vouch for is handed to kubectl again, or if a failure the proxy exists
-    /// for stops being.
+    /// Dana's refused, unresolvable and unanswering contexts waited twenty
+    /// seconds more for a kubectl proxy that dials the same address. Fails if
+    /// a dial that was refused, did not resolve, timed out or met a
+    /// certificate the kubeconfig does not vouch for is handed to kubectl
+    /// again, or if a failure the proxy exists for stops being tried.
     #[test]
     fn kubectl_is_tried_only_for_a_dial_failure_it_could_get_past() {
         let cases = [
@@ -600,6 +600,16 @@ mod proxy_tests {
                     "dns error: failed to lookup address information: Name or service not known",
                 ),
                 ConnectFailure::Dns,
+                false,
+            ),
+            (
+                dialled("deadline has elapsed"),
+                ConnectFailure::Timeout,
+                false,
+            ),
+            (
+                dialled("tcp connect error: Connection timed out (os error 110)"),
+                ConnectFailure::Timeout,
                 false,
             ),
             (
