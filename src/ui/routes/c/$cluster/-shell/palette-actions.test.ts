@@ -151,6 +151,7 @@ describe("the object the page on screen is about", () => {
             plural: "leases",
             namespaced: true,
             verbs: ["list"],
+            shortNames: [],
           },
         ]
       )

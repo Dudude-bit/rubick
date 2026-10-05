@@ -38,8 +38,10 @@ import { isResourceType, ResourceType, toKind } from "@/lib/resource-registry";
 import { aliasOf, type ClusterMark } from "@/stores/clusterIdentityStore";
 import type { CatalogEntry, RecentItem } from "@/generated/types";
 import type { T } from "@/i18n/useT";
-import type { en } from "@/i18n/catalogue";
+import { en } from "@/i18n/catalogue";
 import { highlight } from "./palette-highlight";
+import { translate } from "@/i18n";
+import { shortNamesOf } from "@/lib/kind-aliases";
 import {
   actionMatches,
   paletteActionsOf,
@@ -48,60 +50,120 @@ import {
   type PaletteAction,
 } from "./palette-actions";
 
+type Words = keyof typeof en.paletteWords;
+
 const quickActions: Array<{
   icon: IconType;
   label: keyof typeof en.action;
+  words: Words;
   path: AppLink;
 }> = [
-  { icon: LayoutDashboard, label: "goToOverview", path: clusterLink() },
-  { icon: Box, label: "goToPods", path: listLink(ResourceType.Pod) },
+  {
+    icon: LayoutDashboard,
+    label: "goToOverview",
+    words: "overview",
+    path: clusterLink(),
+  },
+  {
+    icon: Box,
+    label: "goToPods",
+    words: "Pod",
+    path: listLink(ResourceType.Pod),
+  },
   {
     icon: Box,
     label: "goToDeployments",
+    words: "Deployment",
     path: listLink(ResourceType.Deployment),
   },
   {
     icon: Network,
     label: "goToServices",
+    words: "Service",
     path: listLink(ResourceType.Service),
   },
-  { icon: Server, label: "goToNodes", path: listLink(ResourceType.Node) },
+  {
+    icon: Server,
+    label: "goToNodes",
+    words: "Node",
+    path: listLink(ResourceType.Node),
+  },
   {
     icon: FileText,
     label: "goToConfigMaps",
+    words: "ConfigMap",
     path: listLink(ResourceType.ConfigMap),
   },
   {
     icon: FileText,
     label: "goToSecrets",
+    words: "Secret",
     path: listLink(ResourceType.Secret),
   },
-  { icon: Activity, label: "goToEvents", path: pageLink("events") },
-  { icon: Package, label: "goToHelm", path: pageLink("helm") },
+  {
+    icon: Activity,
+    label: "goToEvents",
+    words: "events",
+    path: pageLink("events"),
+  },
+  { icon: Package, label: "goToHelm", words: "helm", path: pageLink("helm") },
   {
     icon: Library,
     label: "goToApiResources",
+    words: "apiResources",
     path: pageLink("api-resources"),
   },
   { icon: ShieldUser, label: "goToMyAccess", path: pageLink("my-access") },
 ];
 
+const english: T = (section, key, values) =>
+  translate("en", section, key, values);
+
+/** The words a page or kind is found by besides its title, in both languages. */
+export function wordsOf(key: string, t: T): string[] {
+  if (!(key in en.paletteWords)) return [];
+  const words = key as Words;
+  return [t("paletteWords", words), english("paletteWords", words)]
+    .flatMap((list) => list.split(","))
+    .map((word) => word.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/** A page row's title in the reader's language or in English, or one of its words. */
+function titleMatches(
+  titles: readonly string[],
+  words: readonly string[],
+  needle: string
+): boolean {
+  return [...titles, ...words].some((title) =>
+    title.toLowerCase().includes(needle)
+  );
+}
+
 /** Kinds a query offers to open the list of, before any object it finds. */
 export const KINDS_SHOWN = 6;
 
-/** Kinds whose name or plural holds the query: whole names, then prefixes. */
+/**
+ * Kinds the query names: by kind, plural, kubectl short name, or a word the
+ * reader's language or English calls it. Whole names first, then prefixes.
+ */
 export function matchingKinds(
   kinds: readonly CatalogEntry[],
-  query: string
+  query: string,
+  wordsFor: (kind: string) => readonly string[] = () => []
 ): CatalogEntry[] {
   const needle = query.trim().toLowerCase();
   if (!needle) return [];
   const rank = (entry: CatalogEntry) => {
-    const kind = entry.kind.toLowerCase();
-    const plural = entry.plural.toLowerCase();
-    if (kind === needle || plural === needle) return 0;
-    if (kind.startsWith(needle) || plural.startsWith(needle)) return 1;
-    if (kind.includes(needle) || plural.includes(needle)) return 2;
+    const names = [entry.kind.toLowerCase(), entry.plural.toLowerCase()];
+    const words = wordsFor(entry.kind);
+    if (
+      [...names, ...words].includes(needle) ||
+      shortNamesOf(entry).includes(needle)
+    )
+      return 0;
+    if ([...names, ...words].some((name) => name.startsWith(needle))) return 1;
+    if ([...names, ...words].some((name) => name.includes(needle))) return 2;
     return null;
   };
   return kinds
@@ -567,12 +629,25 @@ export function buildPaletteEntries({
         ...action,
         key: action.label,
         label: t("action", action.label),
+        english: english("action", action.label),
       }))
       .filter(
-        (action) => !hasQuery || action.label.toLowerCase().includes(needle)
+        (action) =>
+          !hasQuery ||
+          titleMatches(
+            [action.label, action.english],
+            wordsOf(action.words, t),
+            needle
+          )
       );
     const settingsLabel = t("action", "goToSettings");
-    const settings = !hasQuery || settingsLabel.toLowerCase().includes(needle);
+    const settings =
+      !hasQuery ||
+      titleMatches(
+        [settingsLabel, english("action", "goToSettings")],
+        wordsOf("settings", t),
+        needle
+      );
     if (links.length > 0 || settings) {
       out.push({
         id: "cap:nav",
@@ -598,7 +673,9 @@ export function buildPaletteEntries({
       }
     }
 
-    const served = isConnected ? matchingKinds(kinds, query) : [];
+    const served = isConnected
+      ? matchingKinds(kinds, query, (kind) => wordsOf(kind, t))
+      : [];
     if (served.length > 0) {
       out.push({
         id: "cap:kinds",
@@ -620,8 +697,15 @@ export function buildPaletteEntries({
     const panels = PANELS.map((panel) => ({
       ...panel,
       label: t("activity", panel.label),
+      english: english("activity", panel.label),
     })).filter(
-      (panel) => !hasQuery || panel.label.toLowerCase().includes(needle)
+      (panel) =>
+        !hasQuery ||
+        titleMatches(
+          [panel.label, panel.english],
+          wordsOf(panel.tab, t),
+          needle
+        )
     );
     if (panels.length > 0) {
       out.push({

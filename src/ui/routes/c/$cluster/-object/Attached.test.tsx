@@ -12,6 +12,7 @@ const entry = (group: string, plural: string, kind: string): CatalogEntry => ({
   plural,
   namespaced: true,
   verbs: ["get", "list"],
+  shortNames: [],
 });
 
 const HPA = {

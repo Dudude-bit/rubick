@@ -21,7 +21,15 @@ const entry = (
   plural: string,
   namespaced = true,
   verbs = ["get", "list", "watch"]
-) => ({ group, version: "v1", kind, plural, namespaced, verbs });
+) => ({
+  group,
+  version: "v1",
+  kind,
+  plural,
+  namespaced,
+  verbs,
+  shortNames: [],
+});
 
 const SERVED: ApiCatalog = {
   entries: [

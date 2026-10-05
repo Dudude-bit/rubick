@@ -6,6 +6,8 @@
 
 mod table;
 
+use std::collections::HashMap;
+
 use futures::future::join_all;
 use kube::api::{Api, DynamicObject};
 use kube::core::params::ListParams;
@@ -29,6 +31,8 @@ pub struct CatalogEntry {
     pub plural: String,
     pub namespaced: bool,
     pub verbs: Vec<String>,
+    /// kubectl's short names for it, where aggregated discovery says them.
+    pub short_names: Vec<String>,
 }
 
 /// An API group whose discovery did not answer. Its kinds are absent from
@@ -57,7 +61,8 @@ pub async fn list_api_catalog(state: State<'_, AppState>) -> Result<ApiCatalog> 
 
 pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
     let client = ResourceContext::for_list(state, None)?.client;
-    let groups = client.list_api_groups().await?;
+    let (groups, short) = futures::join!(client.list_api_groups(), short_names(&client));
+    let groups = groups?;
     let names: Vec<String> = std::iter::once(String::new())
         .chain(groups.groups.into_iter().map(|group| group.name))
         .collect();
@@ -76,6 +81,10 @@ pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
                         .unwrap_or_default()
                         .into_iter()
                         .map(|(resource, caps)| CatalogEntry {
+                            short_names: short
+                                .get(&(resource.group.clone(), resource.plural.clone()))
+                                .cloned()
+                                .unwrap_or_default(),
                             group: resource.group,
                             version: resource.version,
                             kind: resource.kind,
@@ -92,6 +101,38 @@ pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
         }
     }
     Ok(catalog)
+}
+
+/// kubectl's short names by group and plural. Only aggregated discovery says
+/// them in a form kube keeps; a cluster that does not serve it, or refuses
+/// it, leaves every kind without, and the frontend's table stands in.
+async fn short_names(client: &kube::Client) -> HashMap<(String, String), Vec<String>> {
+    let (core, groups) = futures::join!(
+        client.list_core_api_versions_aggregated(),
+        client.list_api_groups_aggregated()
+    );
+    let mut names = HashMap::new();
+    for list in [core, groups].into_iter().flatten() {
+        for group in list.items {
+            let group_name = group
+                .metadata
+                .and_then(|meta| meta.name)
+                .unwrap_or_default();
+            for version in group.versions {
+                for resource in version.resources {
+                    let Some(plural) = resource.resource else {
+                        continue;
+                    };
+                    if !resource.short_names.is_empty() {
+                        names
+                            .entry((group_name.clone(), plural))
+                            .or_insert(resource.short_names);
+                    }
+                }
+            }
+        }
+    }
+    names
 }
 
 /// One page of a kind's list, as the API server prints it for kubectl.
@@ -283,5 +324,56 @@ mod tests {
         assert!(plurals.contains(&("ok.example.com", "widgets")));
         assert_eq!(found.unread.len(), 1);
         assert_eq!(found.unread[0].group, "broken.example.com");
+        assert!(
+            found.entries.iter().all(|e| e.short_names.is_empty()),
+            "no aggregated discovery, no short names: the frontend's table stands in"
+        );
+    }
+
+    /// `po`, `deploy` and `sts` found nothing in the palette: kube's discovery
+    /// drops the short names the API server lists. Aggregated discovery keeps
+    /// them, so the catalogue carries each kind's own, a custom one's too.
+    #[tokio::test]
+    async fn the_catalogue_carries_the_short_names_aggregated_discovery_lists() {
+        let short = |plural: &str, short: &[&str]| json!({ "resource": plural, "shortNames": short, "verbs": ["list"] });
+        let aggregated = |name: &str, resources: Vec<serde_json::Value>| json!({ "metadata": { "name": name }, "versions": [{ "version": "v1", "resources": resources }] });
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/api" => (
+                200,
+                json!({
+                    "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [],
+                    "items": [aggregated("", vec![short("configmaps", &["cm"])])],
+                })
+                .to_string(),
+            ),
+            "/api/v1" => (200, resources("v1", &[("configmaps", "ConfigMap")])),
+            "/apis" => (
+                200,
+                json!({
+                    "kind": "APIGroupList", "groups": [group("ok.example.com")],
+                    "items": [aggregated("ok.example.com", vec![short("widgets", &["wd", "wds"])])],
+                })
+                .to_string(),
+            ),
+            "/apis/ok.example.com/v1" => (
+                200,
+                resources("ok.example.com/v1", &[("widgets", "Widget")]),
+            ),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let found = catalog(&state).await.expect("catalog");
+        let short_of = |plural: &str| {
+            found
+                .entries
+                .iter()
+                .find(|e| e.plural == plural)
+                .map(|e| e.short_names.clone())
+        };
+        assert_eq!(short_of("configmaps"), Some(vec!["cm".to_string()]));
+        assert_eq!(
+            short_of("widgets"),
+            Some(vec!["wd".to_string(), "wds".to_string()])
+        );
     }
 }

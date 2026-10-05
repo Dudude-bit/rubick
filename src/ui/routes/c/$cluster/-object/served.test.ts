@@ -10,6 +10,7 @@ const LEASES: CatalogEntry = {
   plural: "leases",
   namespaced: true,
   verbs: ["get", "list", "watch"],
+  shortNames: [],
 };
 
 const catalog = (unread: string[] = []): ApiCatalog => ({

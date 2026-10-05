@@ -1,4 +1,5 @@
 import type { ApiCatalog, CatalogEntry, UnreadGroup } from "@/generated/types";
+import { shortNamesOf } from "@/lib/kind-aliases";
 
 export interface CatalogGroup {
   group: string;
@@ -16,7 +17,7 @@ const matches = (entry: CatalogEntry, needle: string) =>
   [entry.kind, entry.plural, entry.group, `${entry.plural}.${entry.group}`]
     .join(" ")
     .toLowerCase()
-    .includes(needle);
+    .includes(needle) || shortNamesOf(entry).includes(needle);
 
 /** The catalogue grouped by API group, core first, narrowed by a filter. */
 export function catalogGroups(

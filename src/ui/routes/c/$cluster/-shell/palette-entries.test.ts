@@ -514,12 +514,19 @@ describe("the palette's resource rows", () => {
         text: "api",
         shownClusters: [{ ...cluster("k3d-dev"), searched: [read("Pod")] }],
         kinds: [
-          { ...read("Pod"), version: "v1", namespaced: true, verbs: ["list"] },
+          {
+            ...read("Pod"),
+            version: "v1",
+            namespaced: true,
+            verbs: ["list"],
+            shortNames: [],
+          },
           {
             ...read("Widget", "demo.example.com"),
             version: "v1",
             namespaced: true,
             verbs: ["list"],
+            shortNames: [],
           },
         ],
       })
@@ -580,6 +587,7 @@ describe("the palette's resource rows", () => {
             version: "v1",
             namespaced: true,
             verbs: ["list"],
+            shortNames: [],
           },
         ],
       })
@@ -736,6 +744,7 @@ describe("kinds the cluster serves", () => {
       plural: "leases",
       namespaced: true,
       verbs: ["list"],
+      shortNames: [],
     },
     {
       group: "",
@@ -744,6 +753,7 @@ describe("kinds the cluster serves", () => {
       plural: "pods",
       namespaced: true,
       verbs: ["list"],
+      shortNames: [],
     },
     {
       group: "scheduling.k8s.io",
@@ -752,6 +762,7 @@ describe("kinds the cluster serves", () => {
       plural: "priorityclasses",
       namespaced: false,
       verbs: ["list"],
+      shortNames: [],
     },
   ];
   const offered = (text: string, overrides: Partial<PaletteState> = {}) =>
@@ -805,6 +816,7 @@ describe("what a name search covered", () => {
     plural,
     namespaced: true,
     verbs,
+    shortNames: [],
   });
   const catalogue = [
     served("Pod", "", "pods"),
@@ -1082,5 +1094,129 @@ describe("an object's actions", () => {
     });
     const shell = entries.find((entry) => entry.id === "act:shell")!;
     expect(isSelectable(shell)).toBe(false);
+  });
+});
+
+describe("the words pages and kinds answer to", () => {
+  const ru: T = (section, key, values) => translate("ru", section, key, values);
+  const served = (
+    kind: string,
+    group: string,
+    plural: string,
+    shortNames: string[] = []
+  ) => ({
+    group,
+    version: "v1",
+    kind,
+    plural,
+    namespaced: true,
+    verbs: ["list"],
+    shortNames,
+  });
+  const catalogue = [
+    served("Pod", "", "pods"),
+    served("Deployment", "apps", "deployments"),
+    served("StatefulSet", "apps", "statefulsets"),
+    served("DaemonSet", "apps", "daemonsets"),
+    served("ReplicaSet", "apps", "replicasets"),
+    served("Service", "", "services"),
+    served("Ingress", "networking.k8s.io", "ingresses"),
+    served("ConfigMap", "", "configmaps"),
+    served("ServiceAccount", "", "serviceaccounts"),
+    served("PersistentVolumeClaim", "", "persistentvolumeclaims"),
+    served("PersistentVolume", "", "persistentvolumes"),
+    served("Namespace", "", "namespaces"),
+    served("Node", "", "nodes"),
+    served(
+      "HorizontalPodAutoscaler",
+      "autoscaling",
+      "horizontalpodautoscalers"
+    ),
+    served("CronJob", "batch", "cronjobs"),
+    served("Endpoints", "", "endpoints"),
+    served("NetworkPolicy", "networking.k8s.io", "networkpolicies"),
+    served("StorageClass", "storage.k8s.io", "storageclasses"),
+    served("Widget", "demo.example.com", "widgets", ["wd"]),
+  ];
+  const offered = (text: string, overrides: Partial<PaletteState> = {}) =>
+    buildPaletteEntries(state({ text, kinds: catalogue, ...overrides }));
+  const kindsOf = (entries: Entry[]) =>
+    entries.flatMap((entry) =>
+      entry.kind === "kind" ? [entry.entry.kind] : []
+    );
+  const navOf = (entries: Entry[]) =>
+    entries.flatMap((entry) =>
+      entry.kind === "link" || entry.kind === "settings" ? [entry.id] : []
+    );
+
+  /**
+   * Lena typed "настройки" and "конфиг" and got nothing: the titles she
+   * reads are Russian, and so are the words she reaches for.
+   */
+  it.each([
+    ["поды", "nav:goToPods"],
+    ["деплойменты", "nav:goToDeployments"],
+    ["сервисы", "nav:goToServices"],
+    ["секреты", "nav:goToSecrets"],
+    ["узлы", "nav:goToNodes"],
+    ["конфиг", "nav:goToConfigMaps"],
+    ["настройки", "settings"],
+  ])("finds the page a Russian reader calls %s", (text, id) => {
+    expect(navOf(offered(text, { t: ru }))).toContain(id);
+  });
+
+  it.each([
+    ["ингрессы", "Ingress"],
+    ["неймспейсы", "Namespace"],
+    ["пространства имён", "Namespace"],
+    ["тома", "PersistentVolume"],
+    ["поды", "Pod"],
+  ])("finds the kind a Russian reader calls %s", (text, kind) => {
+    expect(kindsOf(offered(text, { t: ru }))[0]).toBe(kind);
+  });
+
+  /** A title is found by its English words too, whatever language it is drawn in. */
+  it("finds a page by its English title in another language", () => {
+    expect(navOf(offered("settings", { t: ru }))).toContain("settings");
+    expect(navOf(offered("overview", { t: ru }))).toContain("nav:goToOverview");
+  });
+
+  /** kubectl's short names name their kinds, whole and first. */
+  it.each([
+    ["po", "Pod"],
+    ["deploy", "Deployment"],
+    ["sts", "StatefulSet"],
+    ["ds", "DaemonSet"],
+    ["rs", "ReplicaSet"],
+    ["svc", "Service"],
+    ["ing", "Ingress"],
+    ["cm", "ConfigMap"],
+    ["sa", "ServiceAccount"],
+    ["pvc", "PersistentVolumeClaim"],
+    ["pv", "PersistentVolume"],
+    ["ns", "Namespace"],
+    ["no", "Node"],
+    ["hpa", "HorizontalPodAutoscaler"],
+    ["cj", "CronJob"],
+    ["ep", "Endpoints"],
+    ["netpol", "NetworkPolicy"],
+    ["sc", "StorageClass"],
+  ])("finds the kind kubectl calls %s", (text, kind) => {
+    expect(kindsOf(offered(text))[0]).toBe(kind);
+  });
+
+  /**
+   * The cluster's own short names come first: a custom kind's are known only
+   * to it, and one it renamed answers to its new name, not the table's.
+   */
+  it("takes a kind's short names from discovery before the table", () => {
+    expect(kindsOf(offered("wd"))).toEqual(["Widget"]);
+    const renamed = catalogue.map((entry) =>
+      entry.kind === "ConfigMap" ? { ...entry, shortNames: ["cfg"] } : entry
+    );
+    expect(kindsOf(offered("cfg", { kinds: renamed }))).toEqual(["ConfigMap"]);
+    expect(kindsOf(offered("cm", { kinds: renamed }))).not.toContain(
+      "ConfigMap"
+    );
   });
 });

@@ -1344,6 +1344,7 @@ export interface CatalogEntry {
   plural: string;
   namespaced: boolean;
   verbs: string[];
+  shortNames: string[];
 }
 
 export interface ResourceConnections {

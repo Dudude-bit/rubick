@@ -9,6 +9,7 @@ const entry = (group: string, kind: string, plural: string) => ({
   plural,
   namespaced: true,
   verbs: ["list"],
+  shortNames: [],
 });
 
 const catalog = {
@@ -37,6 +38,15 @@ describe("the catalogue by group", () => {
     expect(catalogGroups(catalog, "LEASE").kinds).toBe(1);
     expect(catalogGroups(catalog, "deployments").kinds).toBe(1);
     expect(catalogGroups(catalog, "coordination").kinds).toBe(1);
+  });
+
+  /** `deploy` is what a kubectl hand types; the page answered nothing to it. */
+  it("matches a kubectl short name whole, not as a fragment", () => {
+    const named = catalogGroups(catalog, "deploy").groups.flatMap((group) =>
+      group.entries.map((e) => e.kind)
+    );
+    expect(named).toEqual(["Deployment"]);
+    expect(catalogGroups(catalog, "cm").kinds).toBe(1);
   });
 
   /** A group nobody could read could hold the kind being looked for. */

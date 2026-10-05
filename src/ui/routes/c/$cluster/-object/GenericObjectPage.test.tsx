@@ -31,6 +31,7 @@ const LEASES: CatalogEntry = {
   plural: "leases",
   namespaced: true,
   verbs: ["get", "list"],
+  shortNames: [],
 };
 
 beforeEach(() => {
