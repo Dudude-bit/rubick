@@ -4,12 +4,14 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const whole = vi.hoisted(() => ({
   podCount: 3 as number | null,
+  refused: false,
 }));
 
 vi.mock("@/hooks/useClusterSummary", () => ({
   useClusterSummary: () => ({
     namespaces: [],
     podCount: whole.podCount,
+    refused: whole.refused,
     namespaceList: "listed",
     isLoading: false,
   }),
@@ -19,11 +21,14 @@ vi.mock("@/hooks/useClusterSummary", () => ({
 const attentions = vi.hoisted(() => ({
   here: null as unknown,
   cluster: null as unknown,
+  askedCluster: 0,
 }));
 
 vi.mock("@/hooks/useAttention", () => ({
-  useAttention: ({ scope }: { scope?: readonly string[] } = {}) =>
-    scope ? attentions.cluster : attentions.here,
+  useAttention: ({ scope }: { scope?: readonly string[] } = {}) => {
+    if (scope) attentions.askedCluster += 1;
+    return scope ? attentions.cluster : attentions.here;
+  },
 }));
 
 const attentionOf = (total: number, complete = true) => ({
@@ -63,6 +68,8 @@ import { StatusBar } from "./StatusBar";
 beforeEach(() => {
   renewal = "scheduled";
   whole.podCount = 3;
+  whole.refused = false;
+  attentions.askedCluster = 0;
   attentions.here = attentionOf(0);
   attentions.cluster = attentionOf(0);
   scoped.data = overviewOf(3, 0);
@@ -188,6 +195,26 @@ describe("what the problem count counts", () => {
         screen.getAllByText(/Across the whole cluster: 72 pods · 18 problems/)
       ).not.toHaveLength(0)
     );
+  });
+
+  /**
+   * Hovering asked a one-namespace token for every Service, Ingress,
+   * autoscaler and claim in the cluster, refused each time. Fails if the
+   * whole cluster is asked once it refused this connection.
+   */
+  it("asks the whole cluster nothing on hover once it refused", async () => {
+    whole.podCount = null;
+    whole.refused = true;
+    useClusterStore.setState({ namespaceScope: ["team-checkout"] });
+    bar();
+
+    await userEvent.hover(screen.getByTestId("scope-counts"));
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(/whole cluster could not be read/i)
+      ).not.toHaveLength(0)
+    );
+    expect(attentions.askedCluster).toBe(0);
   });
 
   /**

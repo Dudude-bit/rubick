@@ -1,7 +1,10 @@
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
-import { useClusterOverview } from "@/hooks/useClusterOverview";
+import {
+  useClusterOverview,
+  useWholeClusterRefused,
+} from "@/hooks/useClusterOverview";
 import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
@@ -29,6 +32,8 @@ export interface ClusterSummary {
   namespaces: NamespaceScope[];
   /** A refused list is not an empty cluster: the picker then takes a name. */
   namespaceList: NamespaceListState;
+  /** The whole cluster's counts were refused on this connection, and are not asked again. */
+  refused: boolean;
   isLoading: boolean;
 }
 
@@ -63,20 +68,32 @@ export function useNamespaceList() {
  * `enabled` is whether anyone is reading the counts: the picker is mounted
  * on every screen, and while it was shut it asked a namespace-only token
  * for the whole cluster every ten seconds, and was refused every time.
+ * Nor is the whole cluster asked once it refused this connection, or once
+ * the namespace list did; the window's own namespace is counted from its
+ * own overview instead.
  */
 const WHOLE_CLUSTER: readonly string[] = [];
 
 export function useClusterSummary(enabled = true): ClusterSummary {
-  const { data: overview, isLoading: overviewLoading } = useClusterOverview(
-    WHOLE_CLUSTER,
-    enabled
-  );
-
   const {
     data: namespaceInfos,
     state: namespaceList,
     isLoading: namespacesLoading,
   } = useNamespaceList();
+  const refused = useWholeClusterRefused() || namespaceList === "refused";
+
+  const { data: whole, isLoading: overviewLoading } = useClusterOverview(
+    WHOLE_CLUSTER,
+    enabled && namespaceList !== "pending" && !refused
+  );
+  const overview = refused ? undefined : whole;
+
+  const windowScope = useClusterStore((s) => s.namespaceScope);
+  const alone = refused && windowScope.length === 1 ? windowScope : null;
+  const { data: own } = useClusterOverview(
+    alone ?? WHOLE_CLUSTER,
+    enabled && alone !== null
+  );
 
   return useMemo(() => {
     // The overview carries the counts; when it was refused or failed there is
@@ -88,6 +105,13 @@ export function useClusterSummary(enabled = true): ClusterSummary {
     const loads = new Map(
       (overview?.namespaces ?? []).map((ns) => [ns.name, ns])
     );
+    const counted = new Map(loads);
+    if (!known && alone && own?.counts.pods != null)
+      counted.set(alone[0], {
+        name: alone[0],
+        podCount: own.counts.pods,
+        problemCount: own.problems.length + own.problemsTruncated,
+      });
 
     // listNamespaces is the authority on what exists — the overview only
     // reports namespaces that hold pods. It can still fail on a token
@@ -98,8 +122,8 @@ export function useClusterSummary(enabled = true): ClusterSummary {
     const namespaces = names
       .map((name) => ({
         name,
-        podCount: known ? (loads.get(name)?.podCount ?? 0) : null,
-        problemCount: known ? (loads.get(name)?.problemCount ?? 0) : null,
+        podCount: counted.get(name)?.podCount ?? (known ? 0 : null),
+        problemCount: counted.get(name)?.problemCount ?? (known ? 0 : null),
       }))
       .sort(
         (a, b) =>
@@ -112,12 +136,16 @@ export function useClusterSummary(enabled = true): ClusterSummary {
       podCount: overview ? overview.counts.pods : null,
       namespaces,
       namespaceList,
+      refused,
       isLoading: overviewLoading || namespacesLoading,
     };
   }, [
     overview,
+    alone,
+    own,
     namespaceInfos,
     namespaceList,
+    refused,
     overviewLoading,
     namespacesLoading,
   ]);

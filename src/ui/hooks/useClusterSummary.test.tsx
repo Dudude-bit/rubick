@@ -37,7 +37,13 @@ beforeEach(() => {
   });
   getClusterOverview.mockReset();
   listNamespaces.mockReset();
-  useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+  // Each test is a connection of its own: a refusal is remembered per one.
+  useClusterStore.setState((s) => ({
+    isConnected: true,
+    currentContext: "prod",
+    namespaceScope: [],
+    connectionAttemptId: s.connectionAttemptId + 1,
+  }));
 });
 
 /**
@@ -160,5 +166,42 @@ describe("who asks for the whole cluster", () => {
     rerender({ open: true });
     await waitFor(() => expect(result.current.podCount).toBe(3));
     expect(getClusterOverview).toHaveBeenCalledWith(null);
+  });
+});
+
+describe("counts once the whole cluster refused", () => {
+  /**
+   * A reader who may list namespaces but read pods only in their own: the
+   * window's overview already counts that one. Fails if its row loses the
+   * count, or if another namespace's row claims one.
+   */
+  it("counts the window's own namespace from its own overview, and no other", async () => {
+    useClusterStore.setState({ namespaceScope: ["team-checkout"] });
+    getClusterOverview.mockImplementation(async (scope) => {
+      if (scope === null) throw "pods is forbidden (code: 403)";
+      return {
+        namespaces: [],
+        problems: [{ namespace: "team-checkout" }],
+        problemsTruncated: 0,
+        counts: { pods: 4 },
+      } as never;
+    });
+    listNamespaces.mockResolvedValue([
+      { name: "team-checkout" },
+      { name: "shop" },
+    ] as never);
+
+    const { result } = renderHook(() => useClusterSummary(), { wrapper });
+
+    await waitFor(() =>
+      expect(
+        result.current.namespaces.find((ns) => ns.name === "team-checkout")
+      ).toMatchObject({ podCount: 4, problemCount: 1 })
+    );
+    expect(result.current.refused).toBe(true);
+    expect(result.current.podCount).toBeNull();
+    expect(
+      result.current.namespaces.find((ns) => ns.name === "shop")
+    ).toMatchObject({ podCount: null, problemCount: null });
   });
 });

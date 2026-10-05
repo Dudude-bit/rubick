@@ -249,12 +249,19 @@ const WHOLE_CLUSTER: readonly string[] = [];
 /**
  * The cluster-wide figure, read only while the tooltip is open: the same
  * attention the Overview counts, for every namespace instead of the scope.
+ * Not asked at all once the whole cluster refused this connection.
  */
 function ClusterWide() {
   const t = useT();
-  const { podCount } = useClusterSummary();
+  const { podCount, refused } = useClusterSummary();
+  if (refused || podCount === null)
+    return <>{t("cluster", "clusterWideUnread")}</>;
+  return <ClusterWideCounts podCount={podCount} />;
+}
+
+function ClusterWideCounts({ podCount }: { podCount: number }) {
+  const t = useT();
   const attention = useAttention({ scope: WHOLE_CLUSTER });
-  if (podCount === null) return <>{t("cluster", "clusterWideUnread")}</>;
   return (
     <>
       {t("cluster", "clusterWideCounts", {
