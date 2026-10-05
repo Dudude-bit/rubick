@@ -206,7 +206,7 @@ describe("why a pod action cannot run", () => {
   it("will not offer a shell into a pod that has not started", () => {
     const actions = all("Pod", pending);
     expect(find(actions, "shell")?.reason).toMatch(
-      /No container is running yet — this pod is Pending · app ContainerCreating/
+      /No container is running yet: this pod is Pending · app ContainerCreating/
     );
   });
 
@@ -241,7 +241,7 @@ describe("why a pod action cannot run", () => {
       ],
     } as Partial<PodInfo>);
     expect(find(all("Pod", done), "shell")?.reason).toMatch(
-      /has finished — Completed/
+      /has finished: Completed/
     );
   });
 

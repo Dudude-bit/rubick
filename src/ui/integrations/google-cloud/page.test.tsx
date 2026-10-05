@@ -82,7 +82,7 @@ async function openShop() {
     route: "/c/$cluster/integrations/$vendor",
   });
   const row = await screen.findByRole("button", {
-    name: "shop.example.com — expand",
+    name: "Expand shop.example.com",
   });
   // A broken row opens itself; a click would close it again.
   if (row.getAttribute("aria-expanded") === "false") fireEvent.click(row);

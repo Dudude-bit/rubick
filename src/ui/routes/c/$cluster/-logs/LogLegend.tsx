@@ -89,7 +89,7 @@ export function LogLegend({
                 off
                   ? t("action", "legendShow", { name: label })
                   : t("action", "legendHide", { name: label })
-              } ${t("action", "legendSoloHint", { name: label })}${
+              }. ${t("action", "legendSoloHint", { name: label })}${
                 index < 9
                   ? t("action", "legendOrPress", { key: index + 1 })
                   : ""

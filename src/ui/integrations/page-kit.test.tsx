@@ -87,7 +87,7 @@ describe("a row whose title can be copied", () => {
     await row("shop.example.com");
     expect(screen.queryByText("the detail")).not.toBeInTheDocument();
     fireEvent.click(
-      screen.getByRole("button", { name: /shop\.example\.com — expand/ })
+      screen.getByRole("button", { name: /Expand shop\.example\.com/ })
     );
     expect(screen.getByText("the detail")).toBeInTheDocument();
   });
@@ -148,7 +148,7 @@ describe("a row whose title is an object", () => {
   it("still toggles from the chevron", async () => {
     await objectRow("applications.argoproj.io");
     expect(screen.queryByText("the detail")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /shop — expand/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Expand shop$/ }));
     expect(screen.getByText("the detail")).toBeInTheDocument();
   });
 

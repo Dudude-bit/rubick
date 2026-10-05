@@ -45,7 +45,7 @@ export const en = {
     protectsVerb: "protects",
     scalesVerb: "scales",
     actsOn: "acts on",
-    nothingIsTheTop: "nothing — a {kind} is the top",
+    nothingIsTheTop: "nothing: a {kind} sits at the top of the chain",
     replicaCountSetHere: "the replica count is set here",
     noServiceSelectsThese:
       "No Service in this namespace selects these pods, so nothing in the cluster routes traffic to this {kind}.",
@@ -70,22 +70,22 @@ export const en = {
     runsOn: "Runs on",
     whatRunsHere: "What runs here",
     needsToRun: "Needs to run",
-    needsToRunNote: "— if one of these is missing the pod does not start",
+    needsToRunNote: "if one of these is missing, the pod does not start",
     usedBy: "Used by",
-    usedByNote: "— what names this in its pod spec",
+    usedByNote: "what names this in its pod spec",
     whatAnswersHere: "What answers here",
-    whatAnswersHereNote: "— what made the pods behind this address",
+    whatAnswersHereNote: "what made the pods behind this address",
     boundTo: "Bound to",
     governedBy: "Governed by",
     governedByNote:
-      "— acts on this on its own schedule, and nothing here asked for it",
+      "acts on this on its own schedule, and nothing here asked for it",
     madeByAndMakes: "Made by, and makes",
     theServices: "the Services here",
     theIngresses: "the Ingresses here",
     thePods: "the pods here",
     notLookedAt: "Not looked at",
     notLookedAtNote:
-      "— named, so a group that is absent is never read as a group that is empty",
+      "named, so a group that is absent is never read as a group that is empty",
     deliveredBy: "Delivered by",
     disruptionBudget: "Disruption budget",
     autoscaling: "Autoscaling",
@@ -101,13 +101,13 @@ export const en = {
     nobodyDoes: "nobody does",
     overHttps: "over HTTPS",
     overHttpPlain: "over plain HTTP",
-    resourceBackend: "a resource backend — the app does not follow these",
+    resourceBackend: "a resource backend, which the app does not follow",
     ownerNotController: "an owner, not the controller",
     replicasSetHere: "the replica count is set here",
     noNamespaceValue: "no namespace",
     servicePublishesNoEndpoint: "This Service publishes no endpoint",
     stopNoSliceNote:
-      "{matched}, and not one of them is in anything this Service publishes. Why is not something these objects state — a pod is written into a slice a moment after it turns Ready, and never at all while the endpoint controller is not running.",
+      "{matched}, and not one of them is in anything this Service publishes. These objects do not say why: a pod is written into a slice a moment after it turns Ready, and never at all while the endpoint controller is not running.",
     stopUnnamedPortNote:
       "{matched}, but it asks for {asked} and no container declares a port by that name, so the endpoint controller skips every one of them. Nothing reaches them. Name the port in the container, or give the Service the number.",
     stopNoServiceNamed: "No Service named {name} in this namespace",
@@ -133,15 +133,15 @@ export const en = {
       "Every address behind this Service is in its slices and not one is serving. The pods were not read here, so which state they are in is not said.",
     stopRouteNotAcceptedTitle: "{gateway} does not accept this route",
     stopRouteNotAcceptedNote:
-      "The controller answered Accepted: False{said}. The route's YAML is valid and nothing serves it — an unaccepted route is simply never programmed.",
+      "The controller answered Accepted: False{said}. The route's YAML is valid and nothing serves it: an unaccepted route is simply never programmed.",
     stopRefNotPermittedTitle:
-      "A reference this route makes is not permitted — no ReferenceGrant allows it",
+      "A reference this route makes is not permitted: no ReferenceGrant allows it",
     stopRefUnresolvedTitle: "A reference this route makes did not resolve",
     stopRefsUnresolvedNote:
       "The controller answered ResolvedRefs: False{said}. The spec obliges the implementation to fail the affected traffic rather than route around it.",
     stopGatewayMissingTitle: "Names a Gateway that does not exist",
     stopGatewayMissingNote:
-      "{route} attaches to {gateway}, which the API server does not have. No controller will ever write status for that parent — this is the one refusal the cluster cannot say itself.",
+      "{route} attaches to {gateway}, which the API server does not have. No controller will ever write status for that parent, so this is the one refusal the cluster cannot state itself.",
     targetPortNamed: "targetPort: {name}",
     listAndLast: "{list}, and {last}",
     twoAnd: "{a} and {b}",
@@ -215,7 +215,7 @@ export const en = {
     fromThisMachine: "From this machine",
     policies: "Policies",
     contents: "Contents",
-    gwWeightZero: "weight 0 — deliberately receives no traffic",
+    gwWeightZero: "weight 0: deliberately gets no traffic",
     gwSectionNamed: "section {name}",
   },
   /**
@@ -689,7 +689,7 @@ export const en = {
     yamlCopied: "YAML copied to clipboard.",
     viewKindDetails: "View {kind} details",
     invalidPort: "Invalid port",
-    invalidPortHint: "Please enter valid port numbers (1-65535)",
+    invalidPortHint: "Please enter port numbers from 1 to 65535",
     updating: "updating…",
     manifestCopiedNamed: "{name} manifest copied",
     kindManifest: "{kind} manifest",
@@ -721,7 +721,7 @@ export const en = {
     stopDraining: "Stop draining",
     drainEnded: "The drain of {name} ended",
     reopenTheNodeToRead: "Open the node again to read what stayed.",
-    drainingAttempt: "Asking again — try {n}",
+    drainingAttempt: "Asking again, try {n}",
     nodeIsDrained: "The node is drained.",
     drainStopped: "The drain stopped.",
     drainCancelled: "You stopped the drain.",
@@ -788,7 +788,7 @@ export const en = {
     keptHistoryLimits: "{n} kept · history limits decide how many",
     concurrency: "Concurrency",
     startingDeadline: "Starting deadline",
-    noStartingDeadline: "none — missed runs are skipped",
+    noStartingDeadline: "none: missed runs are skipped",
     emptyList: "empty list",
     emptyObject: "empty object",
     nameDeleted: "{name} has been deleted.",
@@ -847,12 +847,12 @@ export const en = {
     readingEllipsis: "Reading…",
     askForLastRange: "Ask for the last {range}",
     rangeNeedsPrometheus:
-      "Needs a Prometheus — metrics-server keeps no history to range over",
+      "Needs a Prometheus: metrics-server keeps no history to range over",
     realtimeUnavailable: "Real-time updates unavailable",
     fallingBackToPolling: "{title}: falling back to periodic refresh.",
     dismissJob: "Dismiss {job} {name}",
     closeTerminal: "Close terminal",
-    base64Copied: "Base64 of {key} copied — {size} of binary.",
+    base64Copied: "Base64 of {key} copied: {size} of binary.",
     deletePod: "Delete Pod",
     creatingDebugContainer: "Creating debug container...",
     waitingForContainer: "Waiting for container...",
@@ -887,10 +887,10 @@ export const en = {
     mixedFormat: "mixed",
     showInNamespace: "Show {label} in {namespace}",
     showInNamespaceNarrows:
-      "Show {label} in {namespace} — narrows this tab to that namespace",
+      "Show {label} in {namespace}: narrows this tab to that namespace",
     scopeTabTo: "Scope this tab to {namespace}",
     ageOldSuffix: "old",
-    searchChartsPlaceholder: "Search charts — nginx, redis, postgresql…",
+    searchChartsPlaceholder: "Search charts: nginx, redis, postgresql…",
     editResourceTitle: "Edit {kind}: {name}",
     logDensityOverTime: "Log density over time",
     mapsKeptLinesOnly: "maps kept lines only",
@@ -915,7 +915,7 @@ export const en = {
     legendShow: "Show {name} in the view",
     legendHide: "Hide {name} from the view",
     legendSoloHint:
-      "— its stream keeps running either way. Double-click or alt-click to read {name} alone",
+      "Its stream keeps running either way. Double-click or alt-click to read {name} alone",
     legendOrPress: ", or press {key}",
     copyValue: "Copy {value}",
     nameCopied: "{name} copied",
@@ -946,7 +946,7 @@ export const en = {
     manifestNote: "what the chart actually applied",
     releaseValuesCopied: "Release values copied.",
     renderedManifestCopied: "Rendered manifest copied.",
-    thisKindHere: "— this {kind}",
+    thisKindHere: "this {kind}",
     atInline: "at",
     servingClass: "serving class {name}",
     andClusterDefault: ", this cluster's default",
@@ -978,7 +978,7 @@ export const en = {
     commandLabel: "Command:",
     unexpectedError: "Unexpected error",
     renderFailed: "Something went wrong while rendering.",
-    expandRow: "{name} — expand",
+    expandRow: "Expand {name}",
     openOnSite: "Open {name} on {site}",
     panelWidth: "Panel width",
     openWhatDeliversIt: "Open what delivers it",
@@ -1012,24 +1012,24 @@ export const en = {
     valuesOfKey: "Values of {key}",
     fieldsInBufferedLog: "Fields in the buffered log",
     chipIntakeTitle:
-      "{label} — intake: lines that do not match are discarded as they arrive",
-    chipQueryTitle: "{label} — a query over the buffered lines",
+      "{label}, as intake: lines that do not match are discarded as they arrive",
+    chipQueryTitle: "{label}, as a query over the buffered lines",
     chipQueryTimeTitle:
-      "{label} — a query over the buffered lines. A time range cannot be intake: it ends in the past, so it would discard every line still to come.",
+      "{label}, as a query over the buffered lines. A time range cannot be intake: it ends in the past, so it would discard every line still to come.",
     chipFrozenTitle:
-      "{label} — frozen: these lines stay in the buffer while the stream goes on, and do not count against Keep",
+      "{label}, frozen: these lines stay in the buffer while the stream goes on, and do not count against Keep",
     startFreezeLabel:
-      "Freeze {label} — keep these lines while the stream goes on; they are not counted against Keep",
-    stopFreezeLabel: "Thaw {label} — these lines can be evicted again",
+      "Freeze {label}: keep these lines while the stream goes on; they are not counted against Keep",
+    stopFreezeLabel: "Thaw {label}: these lines can be evicted again",
     startFreezeTitle: "Freeze this interval",
     stopFreezeTitle: "Thaw this interval",
     thawFrozen: "thaw",
     frozenNote:
       "Lines from {range} stay in the buffer while the stream goes on and do not count against Keep. Click to thaw.",
     stopIntakeLabel:
-      "Stop discarding lines that do not match {label} — new lines are kept from now on, the ones already discarded do not come back",
+      "Stop discarding lines that do not match {label}. New lines are kept from now on; the ones already discarded do not come back",
     startIntakeLabel:
-      "Keep only lines matching {label} — the rest are discarded as they arrive",
+      "Keep only lines matching {label}; the rest are discarded as they arrive",
     stopIntakeTitle:
       "Back to a query. New lines are kept from now on; the ones already discarded do not come back.",
     startIntakeTitle:
@@ -1133,7 +1133,7 @@ export const en = {
     hintTypeAllPrefix: "type",
     hintTypeAllSuffix: "for all",
     dropScope: "Drop {label}",
-    dropScopeAria: "Search every cluster's own scope again — drop {label}",
+    dropScopeAria: "Drop {label} and search every cluster's own scope again",
     alreadyConnectedSearched: "already-connected ones are searched",
     reading: "Reading…",
     rollbackInitiated: "Rollback initiated",
@@ -1207,7 +1207,7 @@ export const en = {
     applyFailed: "Apply failed",
     applyUnanswered: "The cluster did not answer",
     applyUnansweredHint:
-      "We stopped waiting. Whether the change was applied is unknown — admission can outlast the wait — so check the object before applying again.",
+      "We stopped waiting. Admission can outlast the wait, so whether the change was applied is unknown: check the object before applying again.",
 
     custom: "Custom",
     stripFull: "Full",
@@ -1217,7 +1217,7 @@ export const en = {
       "A few pixels: where the errors are, still clickable, still marking the viewport",
     stripHidden: "Hidden",
     stripHiddenHint:
-      "No map at all — clicking to jump and dragging a time range go with it",
+      "No map at all: clicking to jump and dragging a time range go with it",
     viewCompact: "Compact",
     viewCompactHint: "One line per entry, fields inline",
     viewTable: "Table",
@@ -1229,11 +1229,11 @@ export const en = {
       "Collapse consecutive repeats into one row with a count and a time span",
     previousRun: "Previous run",
     previousRunOnHint:
-      "Reading the run before the current one — click for the current run",
+      "Reading the run before the current one. Click for the current run",
     previousRunOffHint:
       "Read the run before the current one, which for a crash loop is the run that printed the reason",
     follow: "Follow",
-    followOnHint: "Following the tail — click to stop and read",
+    followOnHint: "Following the tail. Click to stop and read",
     followOffHint: "Jump to the newest line and follow it",
     keepLines: "Keep {n}",
     keepLinesHint: "How many lines to backfill and then keep",
@@ -1285,21 +1285,21 @@ export const en = {
     portForward: "Port forward",
     restartDeletesIt: "Restart (deletes it)",
     podFinishedNoShell:
-      "This pod has finished — {phase}. There is no process left to attach a shell to.",
+      "This pod has finished: {phase}. There is no process left to attach a shell to.",
     podStoppedNoShell:
       "This pod has stopped. Its containers are gone, so there is nothing to attach to.",
     noContainerRunningYet:
-      "No container is running yet — this pod is {phase}{note}.",
+      "No container is running yet: this pod is {phase}{note}.",
     waitingNote: " · {container} {reason}",
     podDeclaresNoPort:
       "No container in this pod declares a port, so there is nothing to forward to.",
     nothingListeningYet:
-      "Nothing is listening yet — no container is running, this pod is {phase}{note}.",
+      "Nothing is listening yet: no container is running, this pod is {phase}{note}.",
     serviceDeclaresNoPorts:
       "This Service declares no ports, so there is nothing to forward.",
     endpointsUnreadable: "Could not read this Service's endpoints: {error}",
     noReadyEndpoints:
-      "No ready endpoints — nothing is behind this Service to forward to.",
+      "No ready endpoints: nothing is behind this Service to forward to.",
     deleteSubjectTitle: "Delete {subject}?",
     deleteSubjectBody: "Deleting {subject} {effect}",
     restartSubjectTitle: "Restart {subject}?",
@@ -1334,7 +1334,7 @@ export const en = {
         "Replaces the pod on each of {nodes}, starting the new pod before stopping the old one on {n} nodes at a time.",
     },
     restartBareBody:
-      "Restarting a pod means deleting it. Nothing owns {subject}, so nothing will recreate it — this removes the pod for good.",
+      "Restarting a pod means deleting it. Nothing owns {subject}, so nothing will recreate it: this removes the pod for good.",
     effectPodOwned:
       "removes it now. Its {kind} {name} will start a replacement.",
     effectPodBare:

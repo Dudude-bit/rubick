@@ -686,7 +686,7 @@ describe("the breadcrumb's namespace segment", () => {
       <ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />
     );
     expect(segment()).toHaveAccessibleName(
-      "Show pods in k8s-gui-test — narrows this tab to that namespace"
+      "Show pods in k8s-gui-test: narrows this tab to that namespace"
     );
     unmount();
 

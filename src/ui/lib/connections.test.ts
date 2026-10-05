@@ -384,9 +384,7 @@ describe("the traffic chain", () => {
     const routeHopDrawn = path.hops[0];
     if (routeHopDrawn.at !== "object")
       throw new Error("expected the route hop");
-    expect(routeHopDrawn.via).toBe(
-      "weight 0 — deliberately receives no traffic"
-    );
+    expect(routeHopDrawn.via).toBe("weight 0: deliberately gets no traffic");
     expect(path.broken).toBe(false);
   });
 

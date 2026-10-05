@@ -24,7 +24,7 @@ export const ru: Catalogue = {
     protectsVerb: "защищает",
     scalesVerb: "масштабирует",
     actsOn: "действует на",
-    nothingIsTheTop: "ничего — {kind} и есть вершина",
+    nothingIsTheTop: "никем: {kind} стоит в самом начале цепочки",
     replicaCountSetHere: "число реплик задаётся здесь",
     noServiceSelectsThese:
       "Ни один Service в этом пространстве имён не выбирает эти поды, поэтому внутри кластера трафик до этого объекта ({kind}) не доходит.",
@@ -47,22 +47,22 @@ export const ru: Catalogue = {
     runsOn: "Работает на",
     whatRunsHere: "Что здесь работает",
     needsToRun: "Нужно для запуска",
-    needsToRunNote: "— если чего-то из этого нет, под не стартует",
+    needsToRunNote: "если чего-то из этого нет, под не запустится",
     usedBy: "Используется",
-    usedByNote: "— кто называет это в своей спецификации пода",
+    usedByNote: "кто ссылается на это в спецификации своего пода",
     whatAnswersHere: "Кто здесь отвечает",
-    whatAnswersHereNote: "— кто создал поды за этим адресом",
+    whatAnswersHereNote: "кто создал поды за этим адресом",
     boundTo: "Привязано к",
     governedBy: "Под управлением",
     governedByNote:
-      "— действует по своему расписанию, и никто отсюда об этом не просил",
+      "действует по своему расписанию, и никто отсюда его об этом не просил",
     madeByAndMakes: "Кем создано и что создаёт",
     theServices: "Service в этом пространстве имён",
     theIngresses: "Ingress в этом пространстве имён",
     thePods: "поды в этом пространстве имён",
     notLookedAt: "Не проверялось",
     notLookedAtNote:
-      "— названо, чтобы отсутствующая группа не читалась как пустая",
+      "перечислены по имени, чтобы отсутствующая группа не читалась как пустая",
     deliveredBy: "Доставлено",
     disruptionBudget: "Бюджет простоя",
     autoscaling: "Автомасштабирование",
@@ -78,15 +78,15 @@ export const ru: Catalogue = {
     nobodyDoes: "никто",
     overHttps: "по HTTPS",
     overHttpPlain: "по обычному HTTP",
-    resourceBackend: "ресурсный бэкенд — приложение по таким не ходит",
+    resourceBackend: "ресурсный бэкенд, по таким приложение не ходит",
     ownerNotController: "владелец, но не контроллер",
     replicasSetHere: "число реплик задаётся здесь",
     noNamespaceValue: "без пространства имён",
     servicePublishesNoEndpoint: "Этот Service не публикует ни одного эндпоинта",
     stopNoSliceNote:
-      "{matched}, и ни один из них не попал ни в один эндпоинт этого Service. Почему — эти объекты не сообщают: под попадает в срез через мгновение после того, как становится Ready, и не попадает вовсе, пока не работает контроллер эндпоинтов.",
+      "{matched}, и ни один из них не попал ни в один эндпоинт этого Service. Причину эти объекты не сообщают: под попадает в срез через мгновение после того, как становится Ready, и не попадает вовсе, пока не работает контроллер эндпоинтов.",
     stopUnnamedPortNote:
-      "{matched}, но он просит {asked}, а порта с таким именем не объявляет ни один контейнер — контроллер эндпоинтов пропускает их все. До них ничего не доходит. Назовите порт в контейнере или укажите Service номер.",
+      "{matched}, но он просит {asked}, а порта с таким именем не объявляет ни один контейнер, поэтому контроллер эндпоинтов пропускает их все. До них ничего не доходит. Назовите порт в контейнере или укажите в Service номер порта.",
     stopNoServiceNamed: "В этом пространстве имён нет Service с именем {name}",
     stopPublishesNothingYet: "За {selector} пока ничего не опубликовано",
     stopNoPodCarries: "Ни один под не несёт {selector}",
@@ -110,22 +110,22 @@ export const ru: Catalogue = {
       "Все адреса за этим Service есть в его срезах, и ни один не обслуживает. Поды здесь не читались, поэтому в каком они состоянии, не сказано.",
     stopRouteNotAcceptedTitle: "{gateway} не принимает этот маршрут",
     stopRouteNotAcceptedNote:
-      "Контроллер ответил Accepted: False{said}. YAML маршрута корректен, но его никто не обслуживает — непринятый маршрут просто не программируется.",
+      "Контроллер ответил Accepted: False{said}. YAML маршрута корректен, но его никто не обслуживает: непринятый маршрут просто не программируется.",
     stopRefNotPermittedTitle:
-      "Ссылка из этого маршрута не разрешена — ни один ReferenceGrant её не допускает",
+      "Ссылка из этого маршрута не разрешена: ни один ReferenceGrant её не допускает",
     stopRefUnresolvedTitle: "Ссылка из этого маршрута не разрешилась",
     stopRefsUnresolvedNote:
       "Контроллер ответил ResolvedRefs: False{said}. Спецификация требует от реализации отказать затронутому трафику, а не пустить его в обход.",
     stopGatewayMissingTitle: "Ссылается на Gateway, которого нет",
     stopGatewayMissingNote:
-      "{route} привязан к {gateway}, которого нет в API-сервере. Статус для такого родителя не напишет ни один контроллер — это единственный отказ, о котором кластер сам сказать не может.",
+      "{route} привязан к {gateway}, которого нет в API-сервере. Статус для такого родителя не напишет ни один контроллер, поэтому об этом отказе кластер сам сказать не может.",
     targetPortNamed: "targetPort: {name}",
     listAndLast: "{list} и {last}",
     twoAnd: "{a} и {b}",
     backendNeverCreated:
-      "{kind} направляет этот путь на бэкенд, которого никогда не создавали, — контроллеру просто некуда отправить запрос.",
+      "{kind} направляет этот путь на бэкенд, которого никогда не создавали, поэтому контроллеру просто некуда отправить запрос.",
     connectionRefusedNothingBehind:
-      "Всё, что доходит до этого адреса, получает отказ в соединении. Service есть и подключён — за ним просто никого нет.",
+      "Всё, что доходит до этого адреса, получает отказ в соединении. Service есть и подключён, но за ним просто никого нет.",
     endpointsByHandNoneWritten:
       "У этого Service нет селектора и он ничего не публикует: его эндпоинты пишут вручную, и никто их не написал.",
     ingressStatesNoBackend:
@@ -192,7 +192,7 @@ export const ru: Catalogue = {
     fromThisMachine: "С этой машины",
     policies: "Политики",
     contents: "Содержимое",
-    gwWeightZero: "вес 0 — намеренно не получает трафик",
+    gwWeightZero: "вес 0: намеренно не получает трафик",
     gwSectionNamed: "секция {name}",
   },
   columns: {
@@ -563,7 +563,7 @@ export const ru: Catalogue = {
     storyWindow: "Окно",
     showInaccessibleNamespaces: "Показать",
     connectToForward: "Подключитесь к кластеру, чтобы начать проброс портов.",
-    siteHasItAt: "{site} — по адресу {url}",
+    siteHasItAt: "Есть на {site}: {url}",
     addressOnClipboard: "Адрес {site} скопирован в буфер обмена: {url}",
     couldNotOpenBrowser: "Не удалось открыть браузер",
     kindYaml: "{kind} YAML",
@@ -658,7 +658,7 @@ export const ru: Catalogue = {
     yamlCopied: "YAML скопирован в буфер обмена.",
     viewKindDetails: "Подробнее о {kind}",
     invalidPort: "Неверный порт",
-    invalidPortHint: "Введите номера портов в диапазоне 1–65535",
+    invalidPortHint: "Введите номера портов от 1 до 65535",
     updating: "обновляется…",
     manifestCopiedNamed: "Манифест {name} скопирован",
     kindManifest: "манифест {kind}",
@@ -692,7 +692,7 @@ export const ru: Catalogue = {
     stopDraining: "Остановить",
     drainEnded: "Освобождение {name} закончилось",
     reopenTheNodeToRead: "Откройте узел снова, чтобы прочитать, что осталось.",
-    drainingAttempt: "Спрашиваем снова — попытка {n}",
+    drainingAttempt: "Спрашиваем снова, попытка {n}",
     nodeIsDrained: "Узел освобождён.",
     drainStopped: "Освобождение остановилось.",
     drainCancelled: "Вы остановили освобождение.",
@@ -767,10 +767,10 @@ export const ru: Catalogue = {
     },
     activePerController: "активных по данным контроллера: {n}",
     howDeclared: "Как это объявлено",
-    keptHistoryLimits: "хранится {n} · сколько именно — решают лимиты истории",
+    keptHistoryLimits: "хранится {n} · сколько именно, задают лимиты истории",
     concurrency: "Параллельные запуски",
     startingDeadline: "Срок запуска",
-    noStartingDeadline: "нет — пропущенные запуски не выполняются",
+    noStartingDeadline: "нет: пропущенные запуски не выполняются",
     emptyList: "пустой список",
     emptyObject: "пустой объект",
     nameDeleted: "{name} удалён.",
@@ -832,12 +832,12 @@ export const ru: Catalogue = {
     readingEllipsis: "Чтение…",
     askForLastRange: "Запросить последние {range}",
     rangeNeedsPrometheus:
-      "Нужен Prometheus — metrics-server не хранит историю, по которой можно выбрать интервал",
+      "Нужен Prometheus: metrics-server не хранит историю, по которой можно выбрать интервал",
     realtimeUnavailable: "Обновления в реальном времени недоступны",
     fallingBackToPolling: "{title}: переходим на периодическое обновление.",
     dismissJob: "Убрать {job} {name}",
     closeTerminal: "Закрыть терминал",
-    base64Copied: "Base64 ключа {key} скопирован — {size} двоичных данных.",
+    base64Copied: "Base64 ключа {key} скопирован: {size} двоичных данных.",
     deletePod: "Удалить под",
     creatingDebugContainer: "Создаём контейнер для отладки…",
     waitingForContainer: "Ждём контейнер…",
@@ -875,7 +875,7 @@ export const ru: Catalogue = {
       "Показать {label} в {namespace}: вкладка сузится до этого пространства имён",
     scopeTabTo: "Сузить вкладку до {namespace}",
     ageOldSuffix: "назад",
-    searchChartsPlaceholder: "Поиск чартов — nginx, redis, postgresql…",
+    searchChartsPlaceholder: "Поиск чартов: nginx, redis, postgresql…",
     editResourceTitle: "Изменить {kind}: {name}",
     logDensityOverTime: "Плотность лога во времени",
     mapsKeptLinesOnly: "на карте только оставленные строки",
@@ -901,7 +901,7 @@ export const ru: Catalogue = {
     legendShow: "Показать {name} в панели",
     legendHide: "Скрыть {name} с панели",
     legendSoloHint:
-      "(его поток читается в любом случае). Двойной щелчок или Alt+щелчок оставит только {name}",
+      "Его поток читается в любом случае. Двойной щелчок или Alt+щелчок оставит только {name}",
     legendOrPress: ", либо нажмите {key}",
     copyValue: "Копировать {value}",
     nameCopied: "Скопировано: {name}",
@@ -931,7 +931,7 @@ export const ru: Catalogue = {
     manifestNote: "что чарт на самом деле применил",
     releaseValuesCopied: "Значения релиза скопированы.",
     renderedManifestCopied: "Отрисованный манифест скопирован.",
-    thisKindHere: "— это {kind}",
+    thisKindHere: "этот {kind}",
     atInline: "по адресу",
     servingClass: "обслуживает класс {name}",
     andClusterDefault: ", класс по умолчанию в этом кластере",
@@ -963,7 +963,7 @@ export const ru: Catalogue = {
     commandLabel: "Команда:",
     unexpectedError: "Непредвиденная ошибка",
     renderFailed: "Что-то пошло не так при отрисовке.",
-    expandRow: "{name} — развернуть",
+    expandRow: "Развернуть {name}",
     openOnSite: "Открыть {name} в {site}",
     panelWidth: "Ширина панели",
     openWhatDeliversIt: "Открыть то, что его доставляет",
@@ -1003,12 +1003,12 @@ export const ru: Catalogue = {
     valuesOfKey: "Значения {key}",
     fieldsInBufferedLog: "Поля в буфере лога",
     chipIntakeTitle:
-      "{label} — приём: строки, которые не подходят, отбрасываются на входе",
-    chipQueryTitle: "{label} — запрос по строкам в буфере",
+      "{label}, приём: неподходящие строки отбрасываются на входе",
+    chipQueryTitle: "{label}, запрос по строкам в буфере",
     chipQueryTimeTitle:
-      "{label} — запрос по строкам в буфере. Диапазон времени не может быть приёмом: он заканчивается в прошлом, поэтому отбросил бы все строки, которые ещё придут.",
+      "{label}, запрос по строкам в буфере. Диапазон времени не может быть приёмом: он заканчивается в прошлом, поэтому отбросил бы все строки, которые ещё придут.",
     chipFrozenTitle:
-      "{label}: заморожено, эти строки остаются в буфере, пока поток идёт, и не считаются в «Держать»",
+      "{label}, заморожено: эти строки остаются в буфере, пока поток идёт, и не считаются в «Держать»",
     startFreezeLabel:
       "Заморозить {label}: держать эти строки, пока поток идёт; в «Держать» они не считаются",
     stopFreezeLabel: "Разморозить {label}: эти строки снова могут вытесняться",
@@ -1018,9 +1018,9 @@ export const ru: Catalogue = {
     frozenNote:
       "Строки с {range} остаются в буфере, пока поток идёт, и не считаются в «Держать». Нажмите, чтобы разморозить.",
     stopIntakeLabel:
-      "Перестать отбрасывать строки, не подходящие под {label} — новые строки будут сохраняться, а уже отброшенные не вернутся",
+      "Перестать отбрасывать строки, не подходящие под {label}. Новые строки будут сохраняться, а уже отброшенные не вернутся",
     startIntakeLabel:
-      "Оставлять только строки, подходящие под {label} — остальные отбрасываются на входе",
+      "Оставлять только строки, подходящие под {label}; остальные отбрасываются на входе",
     stopIntakeTitle:
       "Обратно к запросу. Новые строки будут сохраняться, уже отброшенные не вернутся.",
     startIntakeTitle:
@@ -1112,7 +1112,7 @@ export const ru: Catalogue = {
     commandPalette: "Палитра команд",
     searchResourcesActionsPages: "Поиск ресурсов, действий и страниц",
     searchThisCluster: "Поиск в этом кластере…",
-    searchOrBang: "Поиск ресурсов, ! — выбрать кластер…",
+    searchOrBang: "Поиск ресурсов или ! для выбора кластера…",
     results: "Результаты",
     hintScopeToIt: "искать в нём",
     hintUseAsScope: "выбрать областью",
@@ -1127,7 +1127,7 @@ export const ru: Catalogue = {
     hintTypeAllSuffix: "для всех",
     dropScope: "Убрать {label}",
     dropScopeAria:
-      "Снова искать в собственной области каждого кластера — убрать {label}",
+      "Убрать {label} и снова искать в собственной области каждого кластера",
     alreadyConnectedSearched: "ищем только в уже подключённых",
     reading: "Чтение…",
     rollbackInitiated: "Откат запущен",
@@ -1203,7 +1203,7 @@ export const ru: Catalogue = {
     applyFailed: "Не удалось применить",
     applyUnanswered: "Кластер не ответил",
     applyUnansweredHint:
-      "Мы перестали ждать. Применилось или нет — неизвестно: допуск может длиться дольше ожидания. Посмотрите объект, прежде чем применять снова.",
+      "Мы перестали ждать. Неизвестно, применилось ли изменение: допуск может длиться дольше ожидания. Посмотрите объект, прежде чем применять снова.",
     custom: "Указать вручную",
     stripFull: "Полная",
     stripFullHint: "Объём во времени, с часами и счётчиками ошибок",
@@ -1224,11 +1224,11 @@ export const ru: Catalogue = {
       "Сворачивать идущие подряд повторы в одну строку со счётчиком и интервалом",
     previousRun: "Предыдущий запуск",
     previousRunOnHint:
-      "Читается запуск до текущего — нажмите, чтобы вернуться к текущему",
+      "Читается запуск до текущего. Нажмите, чтобы вернуться к текущему",
     previousRunOffHint:
-      "Читать запуск до текущего — при crash loop именно он напечатал причину",
+      "Читать запуск до текущего: при crash loop именно он напечатал причину",
     follow: "Следовать",
-    followOnHint: "Следим за концом — нажмите, чтобы остановиться и почитать",
+    followOnHint: "Следим за концом. Нажмите, чтобы остановиться и почитать",
     followOffHint: "Перейти к последней строке и следовать за ней",
     keepLines: "Хранить {n}",
     keepLinesHint: "Сколько строк подгрузить и затем хранить",
@@ -1288,22 +1288,22 @@ export const ru: Catalogue = {
     portForward: "Проброс порта",
     restartDeletesIt: "Перезапустить (удалит его)",
     podFinishedNoShell:
-      "Под завершился — {phase}. Подключать оболочку уже не к чему.",
+      "Под завершился: {phase}. Подключать оболочку уже не к чему.",
     podStoppedNoShell:
       "Под остановлен. Его контейнеров больше нет, подключаться не к чему.",
     noContainerRunningYet:
-      "Ни один контейнер ещё не запущен — под в состоянии {phase}{note}.",
+      "Ни один контейнер ещё не запущен: под в состоянии {phase}{note}.",
     waitingNote: " · {container} {reason}",
     podDeclaresNoPort:
       "Ни один контейнер этого пода не объявляет порт, пробрасывать нечего.",
     nothingListeningYet:
-      "Пока никто не слушает — ни один контейнер не запущен, под в состоянии {phase}{note}.",
+      "Пока никто не слушает: ни один контейнер не запущен, под в состоянии {phase}{note}.",
     serviceDeclaresNoPorts:
       "Этот Service не объявляет портов, пробрасывать нечего.",
     endpointsUnreadable:
       "Не удалось прочитать эндпоинты этого Service: {error}",
     noReadyEndpoints:
-      "Готовых эндпоинтов нет — за этим Service никого нет, пробрасывать не к чему.",
+      "Готовых эндпоинтов нет: за этим Service никого нет, пробрасывать не к чему.",
     deleteSubjectTitle: "Удалить {subject}?",
     deleteSubjectBody: "Удаление {subject} {effect}",
     restartSubjectTitle: "Перезапустить {subject}?",
@@ -1344,7 +1344,7 @@ export const ru: Catalogue = {
         "Заменит под на каждом из {nodes}: на {n} узла за раз новый под запускается до остановки старого.",
     },
     restartBareBody:
-      "Перезапуск пода — это его удаление. {subject} никому не принадлежит, поэтому пересоздавать его некому — под исчезнет насовсем.",
+      "Перезапустить под значит удалить его. {subject} никому не принадлежит, поэтому пересоздавать его некому, и под исчезнет насовсем.",
     effectPodOwned: "удалит его сейчас. Его {kind} {name} создаст замену.",
     effectPodBare:
       "удалит его сейчас. Под никому не принадлежит, поэтому вернуть его будет некому.",
@@ -1472,7 +1472,7 @@ export const ru: Catalogue = {
     runNow: "Запустить сейчас",
     runNowTitle: "Запустить этот CronJob сейчас",
     runNowBody:
-      "Создаст Job из шаблона {name} — так же, как это сделало бы расписание. Дальше им займётся контроллер.",
+      "Создаст Job из шаблона {name}, так же как это сделало бы расписание. Дальше им займётся контроллер.",
     runNowName: "Имя запуска",
     cronRunStarted: "Запуск создан",
     cronRunStartedName: "Job {name} создан",
