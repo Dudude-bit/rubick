@@ -349,7 +349,7 @@ export function FocusNotice({
       {reason.kind === "failing-init" && (
         <p>
           {t("empty", "openedOn")}{" "}
-          <span className="font-mono">{reason.container}</span>{" "}
+          <span className="font-mono">{reason.container}</span>
           {t("empty", "openedOnAloneInit")}
           {reason.previous && <span> {t("empty", "linesOfFailedRun")}</span>}
         </p>
@@ -357,7 +357,7 @@ export function FocusNotice({
       {reason.kind === "previous-run" && (
         <p>
           {t("empty", "showingRunOf")}{" "}
-          <span className="font-mono">{reason.container}</span>{" "}
+          <span className="font-mono">{reason.container}</span>
           {t("empty", "thatFailedNotCurrent")}
         </p>
       )}
@@ -443,7 +443,7 @@ export function NoEarlierRunNotice({
     >
       <p>
         {t("empty", "noEarlierRunOf")}{" "}
-        <span className="font-mono">{containers.join(", ")}</span>{" "}
+        <span className="font-mono">{containers.join(", ")}</span>
         {t("empty", "noneHasRestarted")}
       </p>
       <div className="ml-auto">

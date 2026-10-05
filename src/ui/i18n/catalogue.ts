@@ -5539,26 +5539,26 @@ export const en = {
       "are in the cluster and not in Prometheus, so a pod that happens to be scheduled on one of them draws an empty history, which looks exactly like a pod that used nothing.",
     promWhatAppAsks: "What the app asks it for",
     promFamiliesWhy:
-      "The exact metric names the queries use. A family that is absent answers every query with an empty series, and an empty series is drawn as a flat chart rather than as a gap — so the absence is named here instead.",
+      "The exact metric names the queries use. A family that is absent answers every query with an empty series, and an empty series is drawn as a flat chart rather than as a gap, so the absence is named here instead.",
     noSeriesAtAll: "no series at all",
     promNothingCarries: "Nothing in this Prometheus carries",
     promMissingFamiliesTail:
       ". Charts that would have used it fall back to the window this app watched itself, and dim the ranges that reach further back. They report no error, because an empty answer is a valid one.",
     lokiCouldNotAsk: "Could not ask this Loki anything",
     lokiPageDescription:
-      "Whether the Loki this cluster is pointed at holds this cluster's logs — which a connection test cannot tell you, because an address that answers LogQL says nothing about whose lines are behind it.",
+      "Whether the Loki this cluster is pointed at holds this cluster's logs, which a connection test cannot tell you: an address that answers LogQL says nothing about whose lines are behind it.",
     lokiNoNamespaces:
       "This cluster’s namespaces could not be read, so there is nothing to compare against what Loki holds.",
     lokiAsking: "Asking it for a line…",
     lokiNamespacesTitle: "Namespaces it has lines for",
     lokiOneLineProof:
-      "One line is proof, so one line is all that is asked for. A namespace that wrote nothing in the window is not evidence either way — which is why an empty answer is drawn as a question and not as a verdict.",
+      "One line is proof, so one line is all that is asked for. A namespace that wrote nothing in the window is not evidence either way, which is why an empty answer is drawn as a question and not as a verdict.",
     lokiQueryFailed: "query failed",
     lokiHasLines: "has lines",
     lokiNothingInWindow: "nothing in the window",
     lokiHoldsNone: "This Loki holds none of this cluster's namespaces",
     lokiHoldsNoneBody:
-      "Not one of the namespaces asked about has a line in the last hour. The address answers LogQL — which is all the connection test proved — so what is behind it is most likely another cluster’s logs, and the history offer in the log viewer will keep answering with nothing.",
+      "Not one of the namespaces asked about has a line in the last hour. The address answers LogQL, which is all the connection test proved, so what is behind it is most likely another cluster’s logs, and the history offer in the log viewer will keep answering with nothing.",
     lokiFailureNotAbsence:
       "A failed query is not an absence. Nothing is claimed about these namespaces either way.",
     integrationsNoCluster:
@@ -5575,27 +5575,27 @@ export const en = {
     noDataFound: "(no data found)",
     notFoundRef: "(not found: {name}:{key})",
     allKeysFrom: "all keys from",
-    nothingToMapYet: "Nothing to map yet — the strip fills in as lines arrive.",
+    nothingToMapYet: "Nothing to map yet. The strip fills in as lines arrive.",
     noLineMatchesInBuffer:
       "No line in the buffer matches the query, so there is no shape to show.",
     oneLineSoFar:
-      "One line so far, at {clock} — nothing to map until there is a stretch of time to map.",
+      "One line so far, at {clock}. Nothing to map until there is a stretch of time to map.",
     allLinesWithinSpan: {
-      one: "All {count} line landed within {span} of each other — too short a stretch to slice.",
+      one: "All {count} line landed within {span} of each other, too short a stretch to slice.",
       other:
-        "All {count} lines landed within {span} of each other — too short a stretch to slice.",
+        "All {count} lines landed within {span} of each other, too short a stretch to slice.",
     },
     allLinesAtOnce: {
-      one: "All {count} line landed at the same moment — there is no stretch of time to slice.",
+      one: "All {count} line landed at the same moment; there is no stretch of time to slice.",
       other:
-        "All {count} lines landed at the same moment — there is no stretch of time to slice.",
+        "All {count} lines landed at the same moment; there is no stretch of time to slice.",
     },
     intakeNotOnBand:
       "Intake discarded the rest before they reached the buffer, so they are not on this band.",
     intakeNotOnMap:
       "Intake discarded the rest before they reached the buffer, so they are not on this map.",
     olderLinesDroppedAxis:
-      "Older lines have been dropped — the log starts before this.",
+      "Older lines have been dropped; the log starts before this.",
     olderLinesDroppedSummary:
       "Older lines have been dropped, so the strip begins later than the log does.",
     intakeCoversKeptOnly:
@@ -5605,13 +5605,13 @@ export const en = {
     intakeDiscardNote:
       "Lines that do not match are discarded before they reach the viewer, so they cannot be counted here",
     intakeArrivingRate:
-      " — {rate} a second is what the lines still held from before intake were arriving at",
+      "; the lines still held from before intake were arriving at {rate} a second",
     couldNotReadIdentities: "Could not read this cluster’s identities",
     aksAddonsHint:
-      "Which pods can become which Azure identity — and, where a cluster is still on it, what the retired pod-identity add-on was told.",
+      "Which pods can become which Azure identity, and, where a cluster is still on it, what the retired pod-identity add-on was told.",
     podAsksForIdentity: "asks for an identity its ServiceAccount does not name",
     azureIdentityFinding1: "It carries",
-    azureIdentityFinding2: ", so the webhook projects a token for it — but",
+    azureIdentityFinding2: ", so the webhook projects a token for it, but",
     azureIdentityFinding3: "in",
     azureIdentityFinding4: "has no",
     azureIdentityFinding5:
@@ -5629,7 +5629,7 @@ export const en = {
     legacyAddonInstalled:
       " The retired pod-identity add-on is still installed, and what it holds is below.",
     legacyAddonNotInstalled:
-      " The retired pod-identity add-on is not installed either — neither of its kinds, AzureIdentity and AzureIdentityBinding, is served by this API server.",
+      " The retired pod-identity add-on is not installed either: neither of its kinds, AzureIdentity and AzureIdentityBinding, is served by this API server.",
     podIdentityRetired: "Pod identity, which is retired",
     podIdentityRetiredHint:
       "aad-pod-identity was deprecated in October 2022, archived in September 2023, and its AKS add-on left support in September 2025. What is here still works until it does not; Workload ID above is where it goes.",
@@ -5642,19 +5642,19 @@ export const en = {
     tenantMeta: " · tenant {id}",
     noPodCarriesLabel: "no pod carries the label",
     gkeIngressHint:
-      "Every hostname this cluster's Google load balancers serve — what terminates it, and what answers behind it.",
+      "Every hostname this cluster's Google load balancers serve: what terminates it, and what answers behind it.",
     unresolvedNotMissing:
-      "Anything below that names one is shown as unresolved rather than as missing — the two are not the same and only one of them is a fault in the cluster.",
+      "Anything below that names one is shown as unresolved rather than as missing. The two are not the same, and only one of them is a fault in the cluster.",
     ingressesWrongClassField:
       "Ingresses asking for GKE the way GKE does not read",
     gkeReads: "GKE reads",
     gkeIgnores: "and ignores",
     gkeClassFieldNote:
-      ". These name a GKE class in the field Kubernetes documents, carry no annotation, and are served by nothing at all — correct YAML, no events, no error:",
+      ". These name a GKE class in the field Kubernetes documents, carry no annotation, and are served by nothing at all. The YAML is correct, with no events and no error:",
     noIngressCarries: "No Ingress in this cluster carries",
     orInline: "or",
     gkeControllerServesNothing:
-      ", so GKE’s controller is serving nothing here. The CRDs it owns may still be installed — that is what put this page in the sidebar.",
+      ", so GKE’s controller is serving nothing here. The CRDs it owns may still be installed, which is what put this page in the sidebar.",
     nothingBehindIt: "nothing behind it",
     certificateFailed: "certificate failed",
     namesSomethingAbsent: "names something absent",
@@ -5666,8 +5666,8 @@ export const en = {
     staticIp: "static IP {ip}",
     httpAndHttps: "HTTP and HTTPS",
     httpsOnly: "HTTPS only",
-    nameAbsent: "{name} — absent",
-    nameUnread: "{name} — not read",
+    nameAbsent: "{name}: absent",
+    nameUnread: "{name}: not read",
     noFrontendConfig: "no FrontendConfig",
     nothingTerminatesTls: "nothing terminates TLS",
     uploadedToGoogle: "uploaded to Google, not in this cluster",
@@ -5679,18 +5679,18 @@ export const en = {
     namedWord: "named",
     certificateIs: "is",
     certFailedNotVisible:
-      "Google could not reach {domain} at this load balancer, which is almost always DNS that does not point here yet. It stays this way until something changes — {certificate} will not retry its way out of it.",
+      "Google could not reach {domain} at this load balancer, which is almost always DNS that does not point here yet. It stays this way until something changes: {certificate} will not retry its way out of it.",
     certProvisioningNote:
       "From {certificate}. Provisioning is a wait rather than a fault; anything beginning Failed is a stop.",
     asksForWildcard: "asks for a wildcard, which Google will not issue",
     wildcardNotePrefix:
-      "Google-managed certificates do not support wildcard domains at all — up to a hundred names, every one of them literal. The API server accepted",
+      "Google-managed certificates do not support wildcard domains at all: up to a hundred names, every one of them literal. The API server accepted",
     wildcardNoteSuffix:
       ", Google never issues it, and the object reports it as ordinary provisioning for ever. A wildcard needs a self-managed certificate here, or the Gateway API with Certificate Manager.",
     coversUnservedDomain: "covers a domain this Ingress does not serve",
     domainUnservedMid: "is in the certificate’s",
     domainUnservedSuffix:
-      "and in none of this Ingress’s rules. Google provisions a domain by reaching this load balancer at that name, and nothing here answers to it — so the whole certificate sits unissued for a domain nobody meant to serve.",
+      "and in none of this Ingress’s rules. Google provisions a domain by reaching this load balancer at that name, and nothing here answers to it, so the whole certificate sits unissued for a domain nobody meant to serve.",
     answersOnNothing: "answers on nothing",
     httpListenerOffPrefix: "Its HTTP listener is switched off with",
     httpListenerOffSuffix:
@@ -5708,7 +5708,7 @@ export const en = {
     clusterHasClasses: "This cluster has {list}.",
     clusterHasNoIngressClass: "This cluster has no IngressClass at all.",
     noAddressYet:
-      "No address yet — the controller has published none, so nothing reaches this Ingress however its rules read.",
+      "No address yet: the controller has published none, so nothing reaches this Ingress however its rules read.",
     followingPathIn: "Following the path in…",
     couldNotReadConnections: "Could not read what connects to this: {reason}",
     couldNotReadIngress:
@@ -5721,25 +5721,25 @@ export const en = {
     historyOlderThanPods: "Older than the pods on screen:",
     historyVendorMayHave: "{vendor} may still have those lines.",
     historyVendorUnreachable:
-      "{vendor} did not answer — {reason}. The live stream above is untouched; what it kept from before this pod is out of reach until it is back.",
+      "{vendor} did not answer: {reason}. The live stream above is untouched; what it kept from before this pod is out of reach until it is back.",
     historyVendorFailed:
-      "{vendor} did not answer — {reason}. The live stream above is untouched.",
+      "{vendor} did not answer: {reason}. The live stream above is untouched.",
     historyReadingVendor: "Reading what {vendor} kept…",
     historyUnmatchedPod:
-      "{vendor} answered with nothing for this pod — its labels may not match this app's query (tried {labels}). Nothing was found in the last {range}.",
+      "{vendor} answered with nothing for this pod; its labels may not match this app's query (tried {labels}). Nothing was found in the last {range}.",
     historyUnmatchedWorkload:
-      "{vendor} answered with nothing for this workload — its labels may not match this app's query (tried {labels}). Nothing was found in the last {range}.",
+      "{vendor} answered with nothing for this workload; its labels may not match this app's query (tried {labels}). Nothing was found in the last {range}.",
     historyLoadedSummary:
-      "from {from}, the last {range}. Not live — these lines do not grow and {follow} does not reach them.",
+      "from {from}, the last {range}. Not live: these lines do not grow and {follow} does not reach them.",
     notReadableWithAccess: "not readable with this access",
     couldNotReadIngresses: "Could not read this cluster's Ingresses",
     albPageDescription:
-      "One row per ALB rather than per Ingress — because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer.",
+      "One row per ALB rather than per Ingress, because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer.",
     ciliumPageDescription:
       "Every endpoint with what restricts its ingress and its egress, Cilium policies and NetworkPolicies alike, and the ones nothing restricts at all",
     couldNotReadCilium: "Could not read Cilium's endpoints and policies",
     couldNotReadCiliumBody:
-      "Coverage is the two lists joined, and one of them did not come back — so nothing here can say which pods a policy reaches.",
+      "Coverage is the two lists joined, and one of them did not come back, so nothing here can say which pods a policy reaches.",
     readingCilium: "Reading endpoints and policies…",
     ciliumNoEndpoints:
       "No CiliumEndpoint in this cluster. Cilium writes one per pod it manages, so it is managing none here.",
@@ -5748,22 +5748,22 @@ export const en = {
       "Groups are still drawn from the Ingresses themselves; what is missing is what the class configured for them.",
     readingIngresses: "Reading the Ingresses…",
     albNoIngressAsksForClass:
-      "No Ingress in this cluster asks for the alb class, so this controller is running no load balancer here. Its CRDs may still be installed — that is what put this page in the sidebar.",
+      "No Ingress in this cluster asks for the alb class, so this controller is running no load balancer here. Its CRDs may still be installed, which is what put this page in the sidebar.",
     albSharedBody:
-      "{namespaces} all put Ingresses on this ALB. Their rules are concatenated into one listener, so a path added in one namespace can shadow a path in another, and the certificate, scheme and WAF are shared — none of which is visible from any of the Ingresses' own pages.",
+      "{namespaces} all put Ingresses on this ALB. Their rules are concatenated into one listener, so a path added in one namespace can shadow a path in another, and the certificate, scheme and WAF are shared. None of that is visible from any of the Ingresses' own pages.",
     albOrderClashBody:
       "{members} ask for the same position in the listener's rule list. The controller will pick one; nothing in these objects says which, and the one that loses has its rules evaluated after the other's.",
     albAsksFor: "{by} asks for {value}",
     albDisagreeNote:
       "A load balancer has one of these. One of the two is being discarded, and the controller decides which.",
     albNoParamsBody:
-      "The {className} class points its spec.parameters at it and there is none in the cluster, so every default it was meant to set — scheme, certificate, subnets, WAF — is unset instead.",
+      "The {className} class points its spec.parameters at it and there is none in the cluster, so every default it was meant to set is unset instead: scheme, certificate, subnets, WAF.",
     noBackend: "no backend",
     noTargetGroupBinding: "no TargetGroupBinding",
     noLimitsDeclared:
-      "No limits declared on this template — the scale is what these pods have used, and nothing caps what they can take.",
+      "No limits declared on this template: the scale is what these pods have used, and nothing caps what they can take.",
     limitsNotKnown:
-      "This template's limits could not be read — the scale is what these pods have used, and whether anything caps them is not known.",
+      "This template's limits could not be read: the scale is what these pods have used, and whether anything caps them is not known.",
     noStructuralSchema:
       "This version publishes no structural schema, so the API server validates nothing beyond the object's metadata.",
     readyLower: "ready",
@@ -5801,7 +5801,7 @@ export const en = {
     metricNoLimit: "{used} · no limit",
     couldNotReadCertificates: "Could not read this cluster’s certificates",
     couldNotReadCertificatesBody:
-      "Every row on this page comes from the cert-manager objects in this API server, and that request failed — so the list would be a guess rather than an answer.",
+      "Every row on this page comes from the cert-manager objects in this API server, and that request failed, so the list would be a guess rather than an answer.",
     certManagerPageHint:
       "What has a certificate, what is running out, and what has stopped renewing.",
     readingCertificates: "Reading the certificates…",
@@ -5820,14 +5820,15 @@ export const en = {
     nothingServingCertificate:
       " Nothing is serving this certificate, and it is renewed on schedule regardless.",
     routingCrdMayMount:
-      " A routing CRD may still be mounting it — this app reads Ingresses, and a Traefik IngressRoute or an Istio Gateway is not one — so this is what was checked rather than a verdict.",
+      " A routing CRD may still be mounting it: this app reads Ingresses, and a Traefik IngressRoute or an Istio Gateway is not one. So this is what was checked rather than a verdict.",
     servingLabel: "Serving",
     namesLabel: "Names",
     renewsLabel: "Renews",
     attemptsLabel: "Attempts",
     noneInTheSpec: "none in the spec",
     noneNamed: "none named",
-    secretDoesNotExistYet: "does not exist yet — nothing can serve TLS from it",
+    secretDoesNotExistYet:
+      "does not exist yet, so nothing can serve TLS from it",
     whatItIsWaitingOn: "What it is waiting on",
     certNeverIssued: "This certificate has never been issued",
     certNotRenewing: "This certificate is not renewing",
@@ -5840,16 +5841,16 @@ export const en = {
     noLower: "no",
     couldNotReadRouting: "Could not read this cluster’s routing",
     routingRequestFailed:
-      "Every route this page draws is an Ingress in this API server, and that request failed — so the table would be a guess rather than an answer.",
+      "Every route this page draws is an Ingress in this API server, and that request failed, so the table would be a guess rather than an answer.",
     nginxPageDescription:
       "What this controller serves, where each hostname goes, and what its annotations actually do.",
     readingRoutingTable: "Reading the routing table…",
     restOnNodeHint:
-      "Rest on a node to light up everything one edge away. A host goes to its own routes; a Service goes to its page — every line is one object naming another.",
+      "Rest on a node to light up everything one edge away. A host goes to its own routes; a Service goes to its page. Every line is one object naming another.",
     nginxRunningNothingRoutes:
       "ingress-nginx is running here and nothing routes to it.",
     nginxNoIngressClaimsClass:
-      "No Ingress in this cluster names an IngressClass this controller claims. An Ingress naming a class nothing serves is correct YAML with no events and no error, and is simply never served — which is the usual outcome of installing a second controller beside the one the cluster shipped with.",
+      "No Ingress in this cluster names an IngressClass this controller claims. An Ingress naming a class nothing serves is correct YAML with no events and no error, and is simply never served. That is the usual outcome of installing a second controller beside the one the cluster shipped with.",
     checkingWhatIsBehind: "checking what is behind them…",
     noHostServiceObjectMatches: "No host, service or object here matches that.",
     anyHost: "any host",
@@ -5869,11 +5870,11 @@ export const en = {
     apiObjectNotService: "an API object, not a Service",
     readingEndpoints: "reading endpoints",
     endpointsUnread: "endpoints not read",
-    behindUnread: "what is behind them could not be read — {why}",
+    behindUnread: "what is behind them could not be read: {why}",
     servedUnder: "served under",
     rawNginxConfig: "Raw nginx configuration, injected verbatim",
     shownAsWritten: "Shown as written",
-    andMoreOpenRow: "and {n} more — open the row",
+    andMoreOpenRow: "and {n} more: open the row",
     noNginxAnnotations:
       "No Ingress this controller serves carries an nginx annotation. Every route is being served with the controller’s own defaults, which the Global settings tab lists.",
     annotationsDescription:
@@ -5887,7 +5888,7 @@ export const en = {
     settingsEveryRouteTitle: "Settings that apply to every route",
     settingsEveryRouteDescription:
       "The ConfigMap the controller was started with. A key set here changes the behaviour of every host on the Routes tab at once, unless an Ingress overrides it with the annotation of the same name.",
-    namedInConfigmapFlagPre: "— named in the controller’s own ",
+    namedInConfigmapFlagPre: "is named in the controller’s own ",
     namedInConfigmapFlagPost:
       " flag, which is the only place in this cluster that says which ConfigMap is the global one.",
     configMapEmptyDefaults:
@@ -5909,7 +5910,7 @@ export const en = {
     staticConfigurationDescription:
       "The flags the process was started with. Nothing in the API server carries these, which is why they are read from the workload itself.",
     fieldTooManyValues:
-      "carries over {n} distinct values — too many to list. Type the one you are after and press enter.",
+      "carries over {n} distinct values, too many to list. Type the one you are after and press enter.",
     noValueMatches: "No value of {key} matches “{query}”.",
     nothingBufferedYet:
       "Nothing buffered yet. The fields appear as lines arrive.",
@@ -5917,23 +5918,23 @@ export const en = {
       "No field matches “{query}”. Enter searches the text instead.",
     showingMostCommon: "Showing the {n} most common. Type to narrow.",
     noStructuredFields:
-      "These lines carry no structured fields — only level and container.",
+      "These lines carry no structured fields, only level and container.",
     readingCertificate: "reading the certificate…",
     doesNotCover: "does not cover {names}",
-    certNoNames: "no names — it serves nothing",
+    certNoNames: "no names, so it serves nothing",
     certValidFromTo: "{from} to {to}",
     certNotCoveredNote:
-      "{names} — browsers refuse a name the certificate does not carry",
+      "{names}: browsers refuse a name the certificate does not carry",
     notProvisionedYet: "not provisioned yet",
-    notBoundNothingSatisfied: "not bound — nothing has satisfied this claim",
+    notBoundNothingSatisfied: "not bound: nothing has satisfied this claim",
     clusterDefault: "cluster default",
     couldNotReadClaimEvents: "Could not read events for this claim.",
     noAccessModes: "no access modes",
     noVolumeBound: "no volume bound",
     defaultClassBadge: "default class",
-    claimsUseThisClass: "yes — claims that name no class use this one",
+    claimsUseThisClass: "yes: claims that name no class use this one",
     expansionAllowed: "allowed",
-    expansionNotAllowed: "not allowed — claims cannot grow",
+    expansionNotAllowed: "not allowed: claims cannot grow",
     mountFrom: "from",
     readOnly: "read-only",
     seeWhereReadFrom: "See where it was read from",
@@ -5944,17 +5945,17 @@ export const en = {
     sessionAttachedTo: "session attached to {container}",
     startedInParallel: "Started in parallel",
     startedInOrder: "Started in order, one at a time",
-    noGoverningService: "none — pods have no stable DNS",
+    noGoverningService: "none: pods have no stable DNS",
     noMatchingRunningPods: "No other running pods with matching labels",
     couldNotReadCrds: "Could not read this cluster’s CRDs",
     crdDetectionFailed:
-      "Every extension here is detected by asking the API server for the custom resource definitions it installs, and that request failed — so this list would be a guess rather than an answer.",
+      "Every extension here is detected by asking the API server for the custom resource definitions it installs, and that request failed, so this list would be a guess rather than an answer.",
     couldNotLookForExtensions: "The cluster would not say what is installed",
     couldNotLookWhy:
-      "Detection asks the API server for each extension's CustomResourceDefinitions, and this account may not list those. Something may well be installed — this screen cannot tell.",
+      "Detection asks the API server for each extension's CustomResourceDefinitions, and this account may not list those. Something may well be installed; this screen cannot tell.",
     nothingInstalledKnown: "Nothing installed that this app knows how to use",
     everyExtensionOptional:
-      "The cluster works exactly as it does now — every extension here is optional, and none of them is needed to read a pod.",
+      "The cluster works exactly as it does now: every extension here is optional, and none of them is needed to read a pod.",
     lookedForExtensions:
       "Looked for {list} by asking the API server for their CRDs. None of them are in this cluster.",
     listAnd: "and",
@@ -5971,13 +5972,13 @@ export const en = {
     notConfigured: "not configured",
     connected: "connected",
     installedButUnreadable:
-      "It is installed, but its objects could not be read — {reason}",
+      "It is installed, but its objects could not be read: {reason}",
     readingWhatVendorKept:
       "Reading what {vendor} kept from while it was running.",
     noLiveLineVendorKept:
-      "There is no live line to draw — this is what {vendor} kept from while it was running.",
+      "There is no live line to draw. This is what {vendor} kept from while it was running.",
     vendorNothingInWindow:
-      "{vendor} has nothing for it in this window either — try a longer one, or it ran before this one was watching.",
+      "{vendor} has nothing for it in this window either. Try a longer one, or it ran before this one was watching.",
     noContextsInKubeconfig: "No contexts in the kubeconfig.",
     noNamespacesVisible: "No namespaces visible on this cluster.",
     namespacesListing: "Listing namespaces…",
@@ -5987,23 +5988,23 @@ export const en = {
     notANamespaceName:
       "“{query}” cannot be a namespace: lowercase letters, digits and hyphens only, up to 63 characters.",
     serving: "serving",
-    noValuesSet: "# No values set — the chart's defaults apply.",
+    noValuesSet: "# No values set: the chart's defaults apply.",
     noStoredManifest: "# The release stored no manifest.",
     fluxManagedRelease:
       "This release is a Flux CD HelmRelease. Its spec, status and reconciliation history live on the custom resource.",
     helmCliMissing:
-      "Helm CLI not found — rollback and uninstall are unavailable.",
+      "Helm CLI not found, so rollback and uninstall are unavailable.",
     readingHistory: "Reading history…",
     typeToSearchAll: "Type to search every cluster you are connected to.",
     typeToSearchContext: "Type to search {context}.",
     connectOrBang: "Connect to a cluster, or type ! to search another one.",
     noMatchesInline: "no matches",
     selectPodForLogs: "Select a pod to view logs",
-    noBackends: "No backends — nothing is behind this service right now.",
+    noBackends: "No backends: nothing is behind this service right now.",
     noPortsInSubsets:
-      "No ports across any subset — the backends above, if there are any, are reachable on nothing.",
+      "No ports across any subset, so the backends above, if there are any, are reachable on nothing.",
     noPortsDeclared:
-      "No ports declared, so this Service accepts no traffic — nothing reaches the pods its selector matches.",
+      "No ports declared, so this Service accepts no traffic: nothing reaches the pods its selector matches.",
     readyOne: "Ready",
     notReadyOne: "Not ready",
     noneDeclared: "none declared",
@@ -6042,16 +6043,16 @@ export const en = {
     noLongerAvailable: "{target} is no longer available.",
     nothingLeftToAttachTo: "Nothing left to attach to",
     logNotKept:
-      "The node no longer has that log of {container} — the runtime dropped it. Nothing here can fetch it back: the same node would answer again.",
-    noPreviousRunOf: "No previous run of {container} — it has not restarted.",
+      "The node no longer has that log of {container}: the runtime dropped it. Nothing here can fetch it back, since the same node would answer again.",
+    noPreviousRunOf: "No previous run of {container}: it has not restarted.",
     containerNotStarted:
       "{container} has not started, so it has nothing to say yet.",
-    streamEndedGone: "Stream ended — {pod}/{container} is gone.",
+    streamEndedGone: "Stream ended: {pod}/{container} is gone.",
     streamLost: "Lost the log stream from {pod}/{container}.",
     kubeletHoldingAt: "The kubelet is holding it at",
     itExited: "It exited",
     intakeStillSet:
-      "Intake is still set — reconnecting resumes from now, and what the stream missed is not fetched back.",
+      "Intake is still set: reconnecting resumes from now, and what the stream missed is not fetched back.",
     nothingToReconnectTo: "Nothing left to reconnect to",
     // Beside the status on every page and peek: what the object's own Helm
     // annotation says, which is a claim and not a read.
@@ -6061,7 +6062,7 @@ export const en = {
     releaseNotRead: "could not be read",
     gwRowControllerConfigured: "answered by its controller's own settings",
     gwControllerConfiguredSay:
-      "No backendRefs — this route's own controller answers",
+      "No backendRefs: this route's own controller answers",
     gwControllerConfiguredTitle: "Configuration this app does not read",
     bufferHoldsNewest:
       "The buffer holds the newest {count}; what came before is no longer here.",
@@ -6072,24 +6073,24 @@ export const en = {
     bufferHoldsKeptAndNewest:
       "The buffer holds the frozen interval and the newest {count} around it; the rest is no longer here.",
     linesDroppedAroundKeptAxis:
-      "Lines have been dropped around the frozen interval — the log is not continuous from here.",
+      "Lines have been dropped around the frozen interval; the log is not continuous from here.",
     linesDroppedAroundKeptSummary:
       "Lines have been dropped around the frozen interval, so the strip has a gap beside it.",
     repeatsOnNote:
       "Repeats is on, so a line that says what the one above it said is folded into it.",
     nothingMatchedFor: "Nothing has matched {terms} for {span}.",
     intakeNarrowNote:
-      "The stream is attached and reading — this is intake being narrow, not the log stopping.",
+      "The stream is attached and reading. This is intake being narrow, not the log stopping.",
     openedOn: "Opened on",
     openedOnAloneInit:
-      "alone — the pod is stuck in init, so nothing after it has written a line.",
+      " alone: the pod is stuck in init, so nothing after it has written a line.",
     linesOfFailedRun:
       "These are the lines of the run that failed, not of the current one.",
     showingRunOf: "Showing the run of",
     thatFailedNotCurrent:
-      "that failed, not the current one — it has restarted since, and the current run has printed nothing yet.",
+      " that failed, not the current one. It has restarted since, and the current run has printed nothing yet.",
     ranBeforePodStarted:
-      "ran before the pod started, minutes older than everything else here — held out rather than interleaved at the top of the buffer.",
+      "ran before the pod started and are minutes older than everything else here, so they are held out rather than interleaved at the top of the buffer.",
     reading: "Reading",
     aSidecar: "a sidecar",
     anInitContainer: "an init container",
@@ -6102,7 +6103,7 @@ export const en = {
     chipNotStarted: "not started",
     chipLost: "lost",
     noneHasRestarted:
-      "— none of them has restarted, so there is nothing before the run they are on.",
+      ": none of them has restarted, so there is nothing before the run they are on.",
     everyContainerHidden: "Every container is hidden.",
     noLineMatchesQuery: "No line matches the query.",
     filteringLines: {
@@ -6121,7 +6122,7 @@ export const en = {
     noLabels: "No labels",
     noKeys: "No keys",
     clusterLocal: "cluster local",
-    endpointsByHand: "none — endpoints are managed by hand",
+    endpointsByHand: "none: endpoints are managed by hand",
     anythingUnmatched: "anything unmatched",
     noRulesNoBackend: "No rules and no default backend",
     nothingBackingService: "Nothing is backing this service",
@@ -6132,11 +6133,11 @@ export const en = {
     unlimited: "unlimited",
     noAnnotations: "No annotations",
     noFinalizers: "No finalizers",
-    noOwner: "Nothing owns this object — it was created directly.",
+    noOwner: "Nothing owns this object; it was created directly.",
     noConditions: "No conditions reported",
     noEventsForObject: "No events for this object",
     noEventsUnprovisioned:
-      "No events yet — no provisioner has picked this claim up.",
+      "No events yet: no provisioner has picked this claim up.",
     nothingScheduled: "nothing scheduled",
     scaledToZero: "scaled to zero",
     noResourcesInScope: "No resources of this type in the current scope.",
@@ -6149,20 +6150,20 @@ export const en = {
     kindHoldsNoKeys: "This {kind} holds no keys",
     kindHasNoPods: "This {kind} has no pods right now",
     revisionHasNoPods: "This revision has no pods right now",
-    noPodsSuperseded: "No pods — revision {revision} took over from this one.",
-    noPodsScaledToZero: "No pods — the Deployment is scaled to zero.",
+    noPodsSuperseded: "No pods: revision {revision} took over from this one.",
+    noPodsScaledToZero: "No pods: the Deployment is scaled to zero.",
     noConditionsReplicaSet:
-      "This ReplicaSet has raised nothing — it only reports a condition when it cannot create a pod.",
-    noSelectorDaemonSet: "No selector — this DaemonSet matches nothing",
-    noSelectorService: "No selector — this service does not pick pods by label",
-    noParameters: "No parameters — the provisioner uses its own defaults.",
+      "This ReplicaSet has raised nothing. It only reports a condition when it cannot create a pod.",
+    noSelectorDaemonSet: "No selector, so this DaemonSet matches nothing",
+    noSelectorService: "No selector: this service does not pick pods by label",
+    noParameters: "No parameters: the provisioner uses its own defaults.",
     noLabelsOnNode:
-      "No labels on this node — not even the kubernetes.io/* set kubelet registers, which usually means the object was not read.",
+      "No labels on this node, not even the kubernetes.io/* set kubelet registers, which usually means the object was not read.",
     noneInScope: "none in scope",
     nothingBroken: "nothing broken",
     nothingRunning: "nothing running",
     usageIdleNote:
-      "Usage is summed from running pods, and metrics-server keeps nothing about a pod that has exited — so there is no line rather than a line at zero.",
+      "Usage is summed from running pods, and metrics-server keeps nothing about a pod that has exited, so there is no line rather than a line at zero.",
     kindScaledToZero: "This {kind} is scaled to zero.",
     kindNoPodsRunning: "None of this {kind}'s pods is running.",
     daemonSetNoNodeMatches:
@@ -6176,20 +6177,20 @@ export const en = {
     noPodsToReadLogs: "This deployment has no pods to read logs from.",
     podMountsNothing: "This pod mounts nothing of its own.",
     noContainersInSpec:
-      "No containers in this spec — nothing to inspect, and nothing an image or a probe could be read from.",
+      "No containers in this spec: nothing to inspect, and nothing an image or a probe could be read from.",
     noEnvVarsMatchFilter: "No environment variables match the selected filter",
     nothingReadForService: "Nothing was read for this Service.",
     servicePublishesNothing:
-      "This Service publishes no address at all — nothing reaches it.",
+      "This Service publishes no address at all, so nothing reaches it.",
     noSchemaInfo: "No schema information available.",
     noContextNeedsPlugin: "No context needs one.",
     noneRead: "None read.",
     fileNamesNoContexts: "This file names no contexts",
     fileNamesNoContextsBody:
-      "The file above parsed, and it has nothing to connect to. Either it is not the kubeconfig you meant or its contexts were never written — point the app at another file to check.",
+      "The file above parsed, and it has nothing to connect to. Either it is not the kubeconfig you meant or its contexts were never written. Point the app at another file to check.",
     configWillNotParse: "The config file could not be read",
     configWillNotParseSub:
-      "It is on disk, but it is not valid YAML — the error below names where reading stopped. Nothing can connect until it parses.",
+      "It is on disk, but it is not valid YAML; the error below names where reading stopped. Nothing can connect until it parses.",
     configHasNoClusters: "The config file has no clusters in it",
     configHasNoClustersSub:
       "It was read, but it lists no context to connect with.",
@@ -6215,7 +6216,7 @@ export const en = {
     nothingMatchesQuery: "Nothing matches “{query}”.",
     nothingMatchesInReadable:
       "No object matches “{query}” in the kinds that could be read. Not read: {kinds}.",
-    noHelmHistory: "No history — Helm keeps none for this release.",
+    noHelmHistory: "No history: Helm keeps none for this release.",
     nothingRoutesThroughController:
       "Nothing routes through this controller, so there is no shape to draw.",
     noIntegrationByName: "No integration by that name",
@@ -6224,41 +6225,42 @@ export const en = {
     integrationCannotTell: "Cannot tell whether {name} is installed",
     integrationNotInstalled: "{name} is not installed in this cluster",
     integrationNotInstalledBody:
-      "Its custom resource definitions are not in this API server, so there is nothing for this page to read. Every extension is optional — the cluster works exactly as it does now.",
+      "Its custom resource definitions are not in this API server, so there is nothing for this page to read. Every extension is optional; the cluster works exactly as it does now.",
     integrationNotConnected: "{name} is not connected",
     integrationNotConnectedBody:
       "It works from an address you give this app, kept per cluster. Give it one and this page comes alive.",
-    noProfilesGcp: "No profiles — using Application Default Credentials.",
-    noProfilesAzure: "No profiles — using the default az login credentials.",
+    noProfilesGcp: "No profiles, so Application Default Credentials are used.",
+    noProfilesAzure:
+      "No profiles, so the default az login credentials are used.",
     noCrdsInCluster: "This cluster has no custom resource definitions.",
     crdNoInstances: "The CRD is installed, but no {kind} has been created yet.",
     crdNoInstancesInNamespace:
       "The CRD is installed, but no {kind} has been created in {namespace} yet.",
     nothingManagesSecret:
-      "Nothing in this namespace manages this Secret, so it will not renew on its own — whoever put this certificate here replaces it.",
+      "Nothing in this namespace manages this Secret, so it will not renew on its own; whoever put this certificate here replaces it.",
     // The route trace (Gateway API), step by step: what each link says in
     // each of its states. {said} carries the controller's own reason and
     // message — the cluster's words, quoted rather than translated.
-    gwClassBlind: "GatewayClass — cannot be read from here",
-    gwClassNoGateway: "GatewayClass — unknown, the Gateway itself is missing",
+    gwClassBlind: "GatewayClass: cannot be read from here",
+    gwClassNoGateway: "GatewayClass: unknown, the Gateway itself is missing",
     gwClassMissingSay: "Class {name} does not exist",
     gwClassMissingShort: "class {name} does not exist",
     gwClassMissingTitle: "No GatewayClass named {name}",
     gwClassMissingBody:
-      "The Gateway names a class that is not installed. No controller will ever program it — everything through this gateway is dead until the class exists or the Gateway names one that does.",
+      "The Gateway names a class that is not installed. No controller will ever program it, so everything through this gateway is dead until the class exists or the Gateway names one that does.",
     gwClassUnclaimedSay: "Nothing claims class {name}",
     gwClassUnclaimedShort: "nothing claims class {name}",
     gwClassUnclaimedTitle: "No controller has accepted {name}",
     gwClassRefusedBody:
       "{said}. Everything through this gateway is dead until a controller claims the class.",
     gwClassSilentBody:
-      "The class names controller {controller}, and nothing has answered for it. Usually the controller is not installed or not running — everything through this gateway is dead until it does.",
+      "The class names controller {controller}, and nothing has answered for it. Usually the controller is not installed or not running. Everything through this gateway is dead until it answers.",
     gwClassClaimedSay: "Class {name} is claimed by {controller}",
-    gwGatewayBlind: "Gateway {name} — cannot be read from here",
+    gwGatewayBlind: "Gateway {name}: cannot be read from here",
     gwSetsUnreadSay: "Cannot tell which Gateway carries {name}",
     gwSetsUnreadTitle: "The ListenerSets could not be read",
     gwSetsUnreadBody:
-      "This route attaches to a ListenerSet, and which Gateway that set belongs to is written on the set itself. Listing them was refused or the kind is not installed, so the Gateway cannot be named from here — which is not the same as there being none.",
+      "This route attaches to a ListenerSet, and which Gateway that set belongs to is written on the set itself. Listing them was refused or the kind is not installed, so the Gateway cannot be named from here, which is not the same as there being none.",
     gwGatewayMissingSay: "Gateway {name} does not exist in {namespace}",
     gwGatewayMissingShort: "{name} does not exist",
     gwGatewayMissingTitle: "The parentRef names a Gateway that is not there",
@@ -6268,33 +6270,33 @@ export const en = {
     gwNotProgrammedShort: "{name} is not programmed",
     gwNotProgrammedTitle: "The controller refuses this Gateway",
     gwNotProgrammedBody:
-      "{said}. Nothing behind it serves until the Gateway itself is fixed — this is upstream of every route attached to it.",
+      "{said}. Nothing behind it serves until the Gateway itself is fixed; this is upstream of every route attached to it.",
     gwNoAddressPublishedSay: "Gateway {name} publishes no address",
     gwNoAddressPublishedShort: "{name} publishes no address",
     gwNoAddressPublishedTitle: "No address to read",
     gwNoAddressPublishedBody:
-      "The controller reports this Gateway as Programmed, and status.addresses is optional — an implementation on a private or overlay network has nothing to publish there. So this app cannot say where traffic arrives, which is not the same as saying it does not.",
+      "The controller reports this Gateway as Programmed, and status.addresses is optional: an implementation on a private or overlay network has nothing to publish there. So this app cannot say where traffic arrives, which is not the same as saying it does not.",
     gwNoAddressSay: "Gateway {name} has no address yet",
     gwNoAddressShort: "{name} has no address yet",
     gwNoAddressTitle: "No address to send traffic to",
     gwNoAddressBody:
-      "The controller accepted the Gateway but no address has been assigned — on cloud LoadBalancers this is provisioning still running, a quota hit, or the implementation failing to allocate. Until an address exists, traffic has nowhere to arrive.",
+      "The controller accepted the Gateway but no address has been assigned. On cloud LoadBalancers this is provisioning still running, a quota hit, or the implementation failing to allocate. Until an address exists, traffic has nowhere to arrive.",
     gwProgrammedQuietSay:
-      "Gateway {name} — the controller has not reported Programmed",
+      "Gateway {name}: the controller has not reported Programmed",
     gwProgrammedPendingSay:
-      "Gateway {name} — waiting for a controller to program it",
+      "Gateway {name}: waiting for a controller to program it",
     gwProgrammedSay: "Gateway {name} is programmed",
     gwListenerNamed: "Listener :{name}",
     gwListenerAny: "A listener",
-    gwListenerNotFound: "unknown — the listener was not found",
+    gwListenerNotFound: "unknown: the listener was not found",
     gwAllHosts: "all hosts",
     gwNoControllerShort: "no controller answered",
     gwNoRouteStatusSay: "The controller wrote no verdict for this route",
     gwNoRouteStatusShort: "no route status",
     gwNoRouteStatusTitle: "Nothing written about this route",
     gwNoRouteStatusBody:
-      "A controller claims this Gateway's class and has not refused the Gateway itself, so one is running — it simply wrote no status for this route. Several implementations still write none for the alpha route kinds. Whether the route is carrying traffic cannot be read from here, which is not the same as saying it is not.",
-    gwNoStatusPeek: "No controller wrote status — nothing serves this route.",
+      "A controller claims this Gateway's class and has not refused the Gateway itself, so one is running; it simply wrote no status for this route. Several implementations still write none for the alpha route kinds. Whether the route is carrying traffic cannot be read from here, which is not the same as saying it is not.",
+    gwNoStatusPeek: "No controller wrote status, so nothing serves this route.",
     gwAcceptedPending:
       "The controller has taken this parent and not decided yet",
     gwNoAcceptedYet: "The controller wrote status but no Accepted verdict yet",
@@ -6303,18 +6305,18 @@ export const en = {
     gwNsNotAllowedShort: "namespace {namespace} not allowed",
     gwNsNotAllowedTitle: "The namespace is outside what the listener allows",
     gwNsNotAllowedBody:
-      "{said}. The listener's allowedRoutes decide which namespaces may attach — widen them on the Gateway, or move the route.",
+      "{said}. The listener's allowedRoutes decide which namespaces may attach: widen them on the Gateway, or move the route.",
     gwListenerRefusesSay: "{label} does not accept this route",
     gwHostnamesShort: "hostnames don't intersect",
     gwHostnamesTitle: "Hostnames don't intersect",
     gwRefusedWord: "refused",
     gwRouteRefusedTitle: "The gateway does not accept this route",
     gwRouteRefusedBody:
-      "{said}. An unaccepted route is never programmed — the YAML is valid, and nothing serves it.",
+      "{said}. An unaccepted route is never programmed: the YAML is valid, and nothing serves it.",
     gwListenerAccepts: "{label} accepts this route",
     gwStaleTitle: "This verdict is about the previous version of the route",
     gwStaleBody:
-      "The controller last looked at generation {observed}; you are on {current}. Everything below may change when it catches up — usually seconds. Nothing here is wrong yet; it is old.",
+      "The controller last looked at generation {observed}; you are on {current}. Everything below may change when it catches up, usually within seconds. Nothing here is wrong yet; it is old.",
     gwNsAllowedListSay:
       "Namespace {namespace} is allowed by the listener ({list})",
     gwNsAllowedSay: "Namespace {namespace} is allowed by the listener",
@@ -6332,52 +6334,50 @@ export const en = {
     gwRefsResolve: "References resolve",
     gwRefsPending:
       "The controller has not decided whether the references resolve",
-    gwRedirectsOnly: "This route redirects — no backends, and none needed",
+    gwRedirectsOnly: "This route redirects: no backends, and none needed",
     gwFilterNamed:
-      "An extension filter is named and no backend is — what the filter does, this app does not read",
-    gwNoBackendRefsSay: "No backendRefs — a matched request has nowhere to go",
-    gwNoBackendRefsShort:
-      "no backendRefs — matched requests have nowhere to go",
+      "An extension filter is named and no backend is; what the filter does, this app does not read",
+    gwNoBackendRefsSay: "No backendRefs: a matched request has nowhere to go",
+    gwNoBackendRefsShort: "no backendRefs: matched requests have nowhere to go",
     gwNoBackendRefsTitle: "The route matches traffic and drops it",
     gwNoBackendRefsBody:
       "Every rule is missing backendRefs (and neither redirects nor hands off to an extension filter). A matched request gets an immediate error from the gateway.",
-    gwBackendsReading: "Backend Services — still being read",
-    gwEndpointsReading: "Endpoints — still being read",
-    gwBackendsUnread: "Backend Services — could not be read",
-    gwEndpointsUnread: "Endpoints — could not be read",
+    gwBackendsReading: "Backend Services: still being read",
+    gwEndpointsReading: "Endpoints: still being read",
+    gwBackendsUnread: "Backend Services: could not be read",
+    gwEndpointsUnread: "Endpoints: could not be read",
     gwBackendMissingSay: "Backend Service {name} does not exist in {namespace}",
     gwBackendMissingShort: "Service {name} does not exist",
     gwWrongPortSay: "Service {name} does not serve port {port}",
     gwWrongPortTitle: "The Service exists, the port does not",
     gwWrongPortBody:
-      "The backendRef's port must be one of the Service's own ports — traffic to any other number is refused before it reaches a pod.",
+      "The backendRef's port must be one of the Service's own ports; traffic to any other number is refused before it reaches a pod.",
     gwNoPortsAtAll: "no ports at all",
     gwBackendServes: "Backend Service {name} serves",
     gwBackendExists: "Backend Service {name} exists",
     gwEndpointsQuiet: "Endpoints published and ready",
     gwExternalName:
-      "Resolves elsewhere (ExternalName) — no endpoints by design",
-    gwReachableNothing: "Reachable from outside — nothing to probe",
-    gwReachableProbing: "Reachable from outside — checking from this machine",
-    gwReachableAnswered: "Reachable from outside — answered from this machine",
+      "Resolves elsewhere (ExternalName), so no endpoints by design",
+    gwReachableNothing: "Reachable from outside: nothing to probe",
+    gwReachableProbing: "Reachable from outside: checking from this machine",
+    gwReachableAnswered: "Reachable from outside: answered from this machine",
     gwReachableSilent:
-      "Reachable from outside — nothing answered from this machine",
-    gwReachableUnchecked:
-      "Reachable from outside — DNS · TCP · not checked yet",
+      "Reachable from outside: nothing answered from this machine",
+    gwReachableUnchecked: "Reachable from outside: DNS · TCP · not checked yet",
     // The trace drawn: the chips, the probe, the policies at the backend hop.
     gwNotReached: "not reached",
-    gwAboutGeneration: "about generation {observed} — you are on {current}",
+    gwAboutGeneration: "about generation {observed}; you are on {current}",
     gwTlsToBackend: "TLS to this backend:",
     gwTrustsBundle: "trusts the {ca} bundle",
     gwCaFrom: "CA from {refs}",
     gwPolicyUnknown: "unknown",
-    gwPolicyTruncated: "accepted — the ancestor list may be truncated",
+    gwPolicyTruncated: "accepted; the ancestor list may be truncated",
     gwPolicyAccepted: "accepted",
     gwProbeDisclaimer:
-      "checked from your laptop, not from inside the cluster — a VPN or split DNS can disagree",
+      "checked from your laptop, not from inside the cluster; a VPN or split DNS can disagree",
     gwNothingToConnect: "nothing to connect to",
     gwNoHostnameDialDirect:
-      "no hostname on this route — DNS has nothing to check; the gateway's address is dialled directly",
+      "no hostname on this route, so DNS has nothing to check; the gateway's address is dialled directly",
     gwDnsIdle: "DNS, not checked yet",
     gwResolving: "resolving…",
     gwNoResolveFromHere: "does not resolve from here",
@@ -6397,16 +6397,16 @@ export const en = {
     gwAllHostsListenerServes: "all hosts the listener serves",
     gwStopsAtStep: "stops at step {n} of {total}",
     gwNoParentRefsPage:
-      "No parentRefs — this route attaches to nothing and serves no traffic.",
+      "No parentRefs: this route attaches to nothing and serves no traffic.",
     gwRowClassMissing:
-      "names class {name}, which does not exist — anything attached to it is dead",
+      "names class {name}, which does not exist, so anything attached to it is dead",
     gwRowClassUnclaimed:
-      "nothing claims class {name} — anything attached to it is dead",
+      "nothing claims class {name}, so anything attached to it is dead",
     gwRowNotProgrammed: "is not programmed by its controller",
-    gwRowNoAddress: "has no address yet — traffic has nowhere to arrive",
-    gwRowNoParents: "no parentRefs — attaches to nothing and serves no traffic",
-    gwRowMesh: "attaches to {parent} — GAMMA, not judged here",
-    gwRowRedirects: "redirects — no backends, none needed",
+    gwRowNoAddress: "has no address yet, so traffic has nowhere to arrive",
+    gwRowNoParents: "no parentRefs: attaches to nothing and serves no traffic",
+    gwRowMesh: "attaches to {parent}: GAMMA, not judged here",
+    gwRowRedirects: "redirects: no backends, none needed",
     gwRowFilterNamed: "an extension filter, and no backend",
     gwBrokenRefs: "broken refs",
     gwGatewayMissingWord: "gateway missing",
@@ -6415,30 +6415,30 @@ export const en = {
     kindDoesNotExist: "{kind} {name} does not exist",
     metaMissing: "{meta} that does not exist",
     noneCount: "none",
-    gwStopsAtPhrase: "stops at {at} — {short}",
+    gwStopsAtPhrase: "stops at {at}: {short}",
     gwStaleChipRow: "verdict about gen {observed}, you are on {current}",
-    gwContestedBy: "host also claimed by {by} — the older route wins",
+    gwContestedBy: "host also claimed by {by}; the older route wins",
     gwGhostTooltip:
-      "{kind} {name} does not exist in {namespace} — this route names an object that is not there, so nothing can accept it. Usually a typo, or it was deleted after the route was written.",
+      "{kind} {name} does not exist in {namespace}: this route names an object that is not there, so nothing can accept it. Usually a typo, or it was deleted after the route was written.",
     gwNoCrdsPage:
       "This cluster does not serve the Gateway API route kinds. Install the CRDs (the standard channel is enough) and this page fills in on its own.",
     gwAllServing: "all serving",
     gwPulseLine: "Gateway {name} {say}.",
-    gwNothingToDraw: "Nothing to draw for this filter — no route matches it.",
+    gwNothingToDraw: "Nothing to draw for this filter: no route matches it.",
     gwCouldNotReadRoutes: "Could not read routes in this scope.",
     readingRoutes: "Reading routes…",
     gwNoRoutesInScope: "No routes in the current scope.",
     nothingMatchesFilter: "Nothing matches the filter.",
     gwReadingVerdicts:
-      "Reading verdicts — gateways, classes and endpoints are still on their way…",
+      "Reading verdicts: gateways, classes and endpoints are still on their way…",
     gwMeshGroup: "Mesh",
     resolvesElsewhere: "resolves elsewhere",
     gwProgrammedWord: "programmed",
     gwNotProgrammedWord: "not programmed",
     gwNoReadyPodBehind: "No ready pod stands behind {name} right now.",
-    gwForwardThrough: "Forward this port — through a pod behind {name}",
+    gwForwardThrough: "Forward this port through a pod behind {name}",
     gwNoListeners:
-      "No listeners — this Gateway accepts no traffic, and no route can attach to it.",
+      "No listeners: this Gateway accepts no traffic, and no route can attach to it.",
     fromListenerSet: "from {name}",
     brokenWord: "broken",
     sameDefault: "Same (default)",
@@ -6454,37 +6454,37 @@ export const en = {
       "Could not ask the integrations which of their routes reach these Services, so a way in may be missing below.",
     nonePublished: "none published",
     mixedCrdBundle:
-      "mixed versions — a partial upgrade left Gateway API CRDs from different releases",
+      "mixed versions: a partial upgrade left Gateway API CRDs from different releases",
     gwNoRouteKinds:
       "The cluster serves no route kinds, so nothing can attach here.",
     gwRoutesUnreadable:
-      'The routes could not be read — whether anything attaches here is not known, which is not the same as "nothing does".',
+      'The routes could not be read, so whether anything attaches here is not known, which is not the same as "nothing does".',
     gwNoRouteNames:
       "No route names this Gateway. Its listeners answer, and every request meets whatever the controller serves for an unmatched host.",
     gwAcceptedWord: "accepted",
     couldNotReadGateways: "Could not read the gateways: {message}",
     readingGateways: "Reading gateways…",
     gwClassUnused:
-      "No Gateway names this class — deleting it breaks nothing today.",
+      "No Gateway names this class, so deleting it breaks nothing today.",
     noAddressShort: "no address",
     gwClassNoAnswer:
-      "no controller has answered — everything through this class is dead",
+      "no controller has answered, so everything through this class is dead",
     nsNoLabelsSelector:
-      "No labels — no namespaceSelector anywhere matches this namespace.",
+      "No labels, so no namespaceSelector anywhere matches this namespace.",
     matchesEverythingWord: "everything",
     matchesEverything: "matches everything",
-    gwNoRules: "No rules — nothing is matched.",
+    gwNoRules: "No rules: nothing is matched.",
     gwUninterpretedFilters: "filters this app does not interpret:",
-    gwRedirectsNoBackends: "Redirects — no backends, and none needed.",
+    gwRedirectsNoBackends: "Redirects: no backends, and none needed.",
     gwFilterNoBackends:
-      "No backend on this rule. Whether the filter above answers by itself is the filter's business — this app does not read it, so it does not say.",
+      "No backend on this rule. Whether the filter above answers by itself is the filter's business: this app does not read it, so it does not say.",
     needsReferenceGrant: "needs a ReferenceGrant",
-    zeroWeight: "0 — receives no traffic",
+    zeroWeight: "0: receives no traffic",
     resolvesElsewhereExternal: "resolves elsewhere (ExternalName)",
     gwMeshNotInterpreted:
-      "{list} — mesh routing (GAMMA), not interpreted by this app.",
-    gwServingUnknown: "Can't tell — something here could not be read",
-    gwServingUndecided: "Can't tell yet — a controller has not decided",
+      "{list}: mesh routing (GAMMA), not interpreted by this app.",
+    gwServingUnknown: "Can't tell: something here could not be read",
+    gwServingUndecided: "Can't tell yet: a controller has not decided",
     gwCheckingInstall: "Checking whether Gateway API is installed…",
     gwCouldNotCheckInstall:
       "Could not check whether Gateway API is installed, so this page cannot say what is here.",
@@ -6494,9 +6494,9 @@ export const en = {
       "The Services behind these routes could not be read, so no verdict below is a verdict.",
     gwNoConditionsYet: "No controller has written conditions yet.",
     gwProbeRefused:
-      "refused — the address answers, but nothing listens on this port",
+      "refused: the address answers, but nothing listens on this port",
     gwProbeTimedOut:
-      "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
+      "timed out after 3s: packets go unanswered; a firewall, or the wrong address",
   },
   statusMeaning: {
     phasePending:

@@ -106,11 +106,11 @@ describe("the GKE custom resources a reader may not list", () => {
 
     await openShop();
 
-    expect(await screen.findByText("shop-cert — not read")).toBeTruthy();
-    expect(screen.getByText("shop-fc — not read")).toBeTruthy();
-    expect(screen.getByText("shop-bc — not read")).toBeTruthy();
+    expect(await screen.findByText("shop-cert: not read")).toBeTruthy();
+    expect(screen.getByText("shop-fc: not read")).toBeTruthy();
+    expect(screen.getByText("shop-bc: not read")).toBeTruthy();
     expect(screen.getByText("names something not read")).toBeTruthy();
-    expect(screen.queryByText(/— absent/)).toBeNull();
+    expect(screen.queryByText(/: absent/)).toBeNull();
     expect(screen.queryByText("names something absent")).toBeNull();
   });
 
@@ -123,9 +123,9 @@ describe("the GKE custom resources a reader may not list", () => {
 
     await openShop();
 
-    expect(await screen.findByText("shop-cert — absent")).toBeTruthy();
+    expect(await screen.findByText("shop-cert: absent")).toBeTruthy();
     expect(screen.getByText("names something absent")).toBeTruthy();
     expect(screen.queryByText(/could not be listed/)).toBeNull();
-    expect(screen.queryByText(/— not read/)).toBeNull();
+    expect(screen.queryByText(/: not read/)).toBeNull();
   });
 });

@@ -165,7 +165,7 @@ describe("LogViewer when a live stream dies", () => {
       expect(screen.getByTestId("log-stream-failure")).toBeInTheDocument();
     });
     expect(
-      screen.getByText(/Stream ended — log-demo-7f9\/app is gone/)
+      screen.getByText(/Stream ended: log-demo-7f9\/app is gone/)
     ).toBeInTheDocument();
     expect(
       screen.getByText(/container app is no longer running/)
