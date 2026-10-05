@@ -134,6 +134,26 @@ describe("spans", () => {
     expect(spans.map((s) => s.to)).toEqual([T0 + MINUTE, null]);
   });
 
+  /** A span that lost its refused kinds on a late tick or a fold would claim to have watched them. */
+  it("keeps the kinds a span was refused through a late tick and a fold", () => {
+    const store = useChangeJournalStore.getState();
+    store.beginSpan("dev", T0, ["DaemonSet"]);
+    store.heartbeat("dev", T0 + 8 * 60 * MINUTE);
+    expect(
+      useChangeJournalStore.getState().spans.dev.map((s) => s.unwatched)
+    ).toEqual([["DaemonSet"], ["DaemonSet"]]);
+
+    store.endSpan("dev", T0 + 9 * 60 * MINUTE);
+    store.beginSpan("dev", T0 + 9 * 60 * MINUTE);
+    store.endSpan("dev", T0 + 10 * 60 * MINUTE);
+    store.beginSpan("dev", T0 + 11 * 60 * MINUTE);
+    const folded = useChangeJournalStore.getState().spans.dev;
+    expect(folded[1]).toMatchObject({
+      from: T0 + 8 * 60 * MINUTE,
+      unwatched: ["DaemonSet"],
+    });
+  });
+
   it("keeps clusters apart", () => {
     const store = useChangeJournalStore.getState();
     store.beginSpan("dev", T0);

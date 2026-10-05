@@ -1,7 +1,7 @@
 import { Eye, History } from "lucide-react";
 
 import type { ChangeItem, ObservedSpan } from "@/lib/changes";
-import { journalWords } from "@/lib/changes";
+import { journalWords, unwatchedWords } from "@/lib/changes";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportChange } from "@/lib/report";
 import {
@@ -87,10 +87,12 @@ export function watchedSection(
   gaps: number,
   t: T
 ): PlacedSection {
-  const base = watching
+  const refused = watching && unwatchedWords(watching, t);
+  const since = watching
     ? t("changes", "watchingNow", { since: clock(watching.from) })
     : t("changes", "notWatchingNow");
-  const warn = !watching || gaps > 0;
+  const base = refused ? `${since} · ${refused}` : since;
+  const warn = !watching || gaps > 0 || Boolean(refused);
   return {
     id: "changes-watched",
     order: ORDER.summary,

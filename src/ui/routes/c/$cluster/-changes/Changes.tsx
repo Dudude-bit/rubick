@@ -6,7 +6,8 @@ import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { changesScreenSection, watchedSection } from "./changes-share";
-import { timelineOf } from "@/lib/changes";
+import { timelineOf, unwatchedWords } from "@/lib/changes";
+import { Lock } from "lucide-react";
 import { cn, formatWhen } from "@/lib/utils";
 import { useNow } from "@/hooks/useNow";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -54,6 +55,7 @@ export function Changes() {
   const watching = currentContext
     ? (spans[currentContext] ?? []).find((span) => span.to === null)
     : undefined;
+  const refused = watching && unwatchedWords(watching, t);
 
   useShareSection("changes", () => [
     changesScreenSection(items, t),
@@ -73,11 +75,21 @@ export function Changes() {
       <SectionHeader
         title={t("changes", "title")}
         count={
-          watching
-            ? t("changes", "watchingNow", {
+          watching ? (
+            <>
+              {t("changes", "watchingNow", {
                 since: formatWhen(watching.from, "clock"),
-              })
-            : t("changes", "notWatchingNow")
+              })}
+              {refused && (
+                <span className="ml-2 inline-flex items-center gap-1 text-warn">
+                  <Lock className="h-3 w-3" aria-hidden="true" />
+                  {refused}
+                </span>
+              )}
+            </>
+          ) : (
+            t("changes", "notWatchingNow")
+          )
         }
         actions={
           <>

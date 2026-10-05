@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 
 import {
   ScreenShareProvider,
@@ -99,6 +99,43 @@ describe("what the Changes page offers Share", () => {
         (section) => section.id === "changes-watched"
       );
       expect(watched?.body).toMatchObject({ type: "text", role: "warn" });
+    });
+  });
+
+  /**
+   * A kind the cluster refused is named beside "watching": without it the
+   * header claims every workload kind is on the clock.
+   */
+  it("names the kinds the cluster refused to let it watch", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["team-checkout"],
+    });
+    useChangeJournalStore.setState({
+      entries: [],
+      spans: {
+        prod: [
+          {
+            from: NOW - 60_000,
+            seenAt: NOW,
+            to: null,
+            unwatched: ["DaemonSet"],
+          },
+        ],
+      },
+    });
+
+    const collect = await mount();
+    expect(
+      screen.getByText("DaemonSet not watched: the cluster refused")
+    ).toBeInTheDocument();
+    const watched = collect().find(
+      (section) => section.id === "changes-watched"
+    );
+    expect(watched?.body).toMatchObject({
+      text: expect.stringContaining("DaemonSet not watched"),
+      role: "warn",
     });
   });
 });

@@ -512,6 +512,25 @@ export interface ObservedSpan {
   /** The last moment the watch was known alive; a crash leaves this as the end. */
   seenAt: number;
   to: number | null;
+  /** Kinds the cluster refused to let it watch, so this span says nothing about them. */
+  unwatched?: string[];
+}
+
+/** The kinds a span was refused, in words, or `null` when it watched them all. */
+export function unwatchedWords(span: ObservedSpan, t: T): string | null {
+  return span.unwatched?.length
+    ? t("changes", "unwatchedRefused", { kinds: span.unwatched.join(", ") })
+    : null;
+}
+
+/** The spans that watched every one of `kinds`. */
+export function spansWatching(
+  spans: readonly ObservedSpan[],
+  kinds: readonly string[]
+): ObservedSpan[] {
+  return spans.filter(
+    (span) => !kinds.some((kind) => span.unwatched?.includes(kind))
+  );
 }
 
 export interface Gap {

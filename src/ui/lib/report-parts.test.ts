@@ -412,6 +412,21 @@ describe("changesSection", () => {
     });
   });
 
+  /** A span the cluster refused DaemonSets in watched no DaemonSet; drawn quiet, it hid that. */
+  it("says it was not watching a kind the span was refused", () => {
+    const section = changesSection(
+      { entries: [], spans: [{ ...WATCHED[0], unwatched: ["DaemonSet"] }] },
+      "prod-eu",
+      { kind: "DaemonSet", name: "agent", namespace: "shop", owners: [] },
+      AT,
+      t
+    );
+    expect(section?.body).toMatchObject({
+      type: "changes",
+      changes: [{ at: null, parts: [{ text: "share.journalEmpty" }] }],
+    });
+  });
+
   /**
    * One rollout wrote two journal rows with one stamp, and the file printed
    * both with the full image reference twice: the tag that changed was the

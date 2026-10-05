@@ -63,10 +63,14 @@ function pruned(spans: ObservedSpan[], now: number): ObservedSpan[] {
   for (const span of live) {
     const last = out[out.length - 1];
     if (last && last.to !== null && span.from <= last.to) {
+      const unwatched = [
+        ...new Set([...(last.unwatched ?? []), ...(span.unwatched ?? [])]),
+      ];
       out[out.length - 1] = {
         from: last.from,
         seenAt: Math.max(last.seenAt, span.seenAt),
         to: span.to === null ? null : Math.max(last.to, span.to),
+        ...(unwatched.length > 0 && { unwatched }),
       };
       continue;
     }
@@ -93,8 +97,8 @@ interface ChangeJournalState {
    */
   seenCluster: (context: string, identity: string | null) => void;
   record: (entries: JournalEntry[]) => void;
-  /** The watch is up and has its baseline. */
-  beginSpan: (context: string, now: number) => void;
+  /** The watch is up and has its baseline, for every kind but `unwatched`. */
+  beginSpan: (context: string, now: number, unwatched?: string[]) => void;
   /** Still alive; a crash after this leaves the span ending here. */
   heartbeat: (context: string, now: number) => void;
   endSpan: (context: string, now: number) => void;
@@ -161,7 +165,7 @@ export const useChangeJournalStore = create<ChangeJournalState>()(
           entries: trimmed([...state.entries, ...entries], now),
         }));
       },
-      beginSpan: (context, now) =>
+      beginSpan: (context, now, unwatched = []) =>
         set((state) => ({
           spans: {
             ...state.spans,
@@ -172,7 +176,12 @@ export const useChangeJournalStore = create<ChangeJournalState>()(
                 ),
                 now
               ),
-              { from: now, seenAt: now, to: null },
+              {
+                from: now,
+                seenAt: now,
+                to: null,
+                ...(unwatched.length > 0 && { unwatched }),
+              },
             ],
           },
         })),
@@ -192,7 +201,7 @@ export const useChangeJournalStore = create<ChangeJournalState>()(
               if (!missed) return [{ ...span, seenAt: now }];
               return [
                 { ...span, to: span.seenAt },
-                { from: now, seenAt: now, to: null },
+                { ...span, from: now, seenAt: now, to: null },
               ];
             }),
           },

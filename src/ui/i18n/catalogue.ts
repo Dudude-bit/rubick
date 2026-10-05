@@ -1648,6 +1648,7 @@ export const en = {
     nothingInWindow: "Nothing on this clock in the window.",
     notWatchingNow: "Not watching this cluster's workloads right now.",
     watchingNow: "Watching since {since}",
+    unwatchedRefused: "{kinds} not watched: the cluster refused",
     window24h: "24h",
     window7d: "7d",
     deliveriesUnread: "What delivers this could not be read: {reason}",

@@ -10,6 +10,7 @@ import {
   helmReleaseOf,
   revisionOfController,
   revisionOfReplicaSet,
+  spansWatching,
   timelineOf,
   type Revision,
   CHANGES_KINDS,
@@ -181,7 +182,9 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
             entry.namespace === subject.namespace &&
             entry.name === subject.name
         ),
-        spans: context ? (spans[context] ?? []) : [],
+        spans: spansWatching(context ? (spans[context] ?? []) : [], [
+          subject.kind,
+        ]),
         window: { from: now - WINDOW_MS, to: now },
         createdAt: subject.createdAt,
       }),

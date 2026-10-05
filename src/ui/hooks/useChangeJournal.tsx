@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { listenEvent, listenResourceEvents } from "@/lib/events";
 
 import { commands } from "@/lib/commands";
+import { isRefusal } from "@/lib/error-utils";
 import {
   diffSnapshots,
   snapshotOf,
@@ -75,17 +76,25 @@ export function useChangeJournal() {
         if (active) seenCluster(cluster, null);
       });
     const streams: Array<{ id: string | null; off: (() => void) | null }> = [];
-    // A span opens once every watch has its baseline; one that never syncs
-    // keeps the span shut, and the page says so by drawing a gap.
+    // A span opens once every watch has its baseline or was refused; one
+    // that never syncs keeps the span shut, and the page draws a gap. A
+    // refused kind is named on the span instead of holding the rest shut.
     const synced = new Set<string>();
+    const refused = new Set<string>();
     const blind = new Set<() => void>();
     let open = false;
     let ticker: ReturnType<typeof setInterval> | null = null;
 
     const openSpan = () => {
-      if (open || synced.size < watches.length) return;
+      if (open || synced.size === 0) return;
+      if (synced.size + refused.size < watches.length) return;
       open = true;
-      beginSpan(cluster, Date.now());
+      const unwatched = new Set(
+        watches
+          .filter((w) => refused.has(`${w.kind}/${w.namespace ?? "*"}`))
+          .map((w) => w.kind)
+      );
+      beginSpan(cluster, Date.now(), [...unwatched]);
       ticker = setInterval(() => heartbeat(cluster, Date.now()), HEARTBEAT_MS);
     };
     const closeSpan = () => {
@@ -112,6 +121,12 @@ export function useChangeJournal() {
         closeSpan();
       };
       blind.add(goBlind);
+      const refuse = () => {
+        if (refused.has(watch)) return;
+        goBlind();
+        refused.add(watch);
+        openSpan();
+      };
 
       void (async () => {
         try {
@@ -144,7 +159,8 @@ export function useChangeJournal() {
             });
             for (const change of payload.changes) {
               if (change.op === "failed") {
-                goBlind();
+                if (isRefusal(payload.error)) refuse();
+                else goBlind();
                 continue;
               }
               if (change.op === "restarted") {
@@ -202,6 +218,7 @@ export function useChangeJournal() {
                 rows.clear();
                 for (const [key, value] of fresh) rows.set(key, value);
                 established.current.add(held);
+                if (refused.delete(watch)) closeSpan();
                 synced.add(watch);
                 openSpan();
                 continue;
@@ -252,9 +269,8 @@ export function useChangeJournal() {
           }
           stream.off = off;
           await commands.resourceWatchSubscribed(id);
-        } catch {
-          // A kind this cluster refuses to watch keeps the span shut; the
-          // page draws the gap rather than a journal that quietly misses it.
+        } catch (error) {
+          if (active && isRefusal(error)) refuse();
         }
       })();
     }

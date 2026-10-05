@@ -1687,6 +1687,7 @@ export const ru: Catalogue = {
     nothingInWindow: "На этой шкале в окне ничего нет.",
     notWatchingNow: "Сейчас за нагрузками этого кластера не следим.",
     watchingNow: "Наблюдаем с {since}",
+    unwatchedRefused: "{kinds} не отслеживаются: кластер отказал",
     window24h: "24ч",
     window7d: "7д",
     deliveriesUnread: "Не удалось прочитать, кто это доставляет: {reason}",

@@ -15,6 +15,7 @@ import type { ConditionInfo, EventInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import {
   gapsOf,
+  spansWatching,
   hasChangesTab,
   journalWords,
   type Gap,
@@ -327,6 +328,10 @@ export function changesSection(
 ): PlacedSection | null {
   const targets = watchedAs(subject, subject.owners);
   if (!targets) return null;
+  const spans = spansWatching(
+    journal.spans,
+    targets.map((target) => target.kind)
+  );
   const mine = journal.entries
     .filter(
       (entry) =>
@@ -338,7 +343,7 @@ export function changesSection(
     )
     .slice(-MAX_CHANGES);
   const watched =
-    journal.spans.length > 0 ||
+    spans.length > 0 ||
     journal.entries.some((entry) => entry.context === context);
   const out: (ReportChange & { key: string; ms: number })[] = [];
   for (const entry of [...mine].reverse()) {
@@ -360,7 +365,7 @@ export function changesSection(
   const now = Date.parse(capturedAt);
   // As far back as the journal keeps, or as the oldest row shown.
   const from = Math.min(now - JOURNAL_WINDOW_MS, ...out.map((row) => row.ms));
-  const gaps = watched ? gapsOf([...journal.spans], from, now) : [];
+  const gaps = watched ? gapsOf(spans, from, now) : [];
   const rows: (ReportChange & { ms: number })[] = [
     ...out.map(({ ms, at, ref, parts }) => ({
       ms,
