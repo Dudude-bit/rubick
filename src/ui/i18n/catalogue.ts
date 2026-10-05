@@ -804,6 +804,8 @@ export const en = {
     timing: "Timing",
     finished: "Finished",
     stillRunning: "still running",
+    failedAt: "Failed",
+    endNotRecorded: "the cluster did not record when",
     ranFor: "Ran for",
     deadline: "Deadline",
     afterStart: "{n}s after start",

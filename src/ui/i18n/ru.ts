@@ -787,6 +787,8 @@ export const ru: Catalogue = {
     timing: "Время выполнения",
     finished: "Завершён",
     stillRunning: "ещё выполняется",
+    failedAt: "Завершён с ошибкой",
+    endNotRecorded: "кластер не записал, когда",
     ranFor: "Длительность",
     deadline: "Крайний срок",
     afterStart: "{n} с после старта",

@@ -8,22 +8,9 @@ import { templateContainersSection } from "../../-components/containers-section"
 import { podsSection } from "../../-components/pods-section";
 import type { ReportStat } from "@/lib/report";
 import { statusRole } from "@/lib/status-role";
-import { formatDuration } from "@/lib/utils";
+import { jobRanFor } from "../../../-object/job-end";
 import type { JobDetailInfo, PodInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
-
-/** Wall-clock time the job has been running, or ran for, the same reading `JobDetail` shows. */
-function duration(
-  start: string | null,
-  end: string | null,
-  capturedAt: string
-): string | null {
-  if (!start) return null;
-  const from = new Date(start).getTime();
-  const to = new Date(end ?? capturedAt).getTime();
-  if (Number.isNaN(from) || Number.isNaN(to)) return null;
-  return formatDuration((to - from) / 1000);
-}
 
 export function jobStatusOf(job: JobDetailInfo) {
   return { text: job.status, role: statusRole(job.status) };
@@ -38,7 +25,7 @@ export function jobStatsOf(
   const succeeded = job.succeeded ?? 0;
   const failed = job.failed ?? 0;
   const active = job.active ?? 0;
-  const ran = duration(job.startTime, job.completionTime, capturedAt);
+  const ran = jobRanFor(job, Date.parse(capturedAt));
   const stats: ReportStat[] = [
     {
       label: t("columns", "completions"),

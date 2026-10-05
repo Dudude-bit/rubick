@@ -38,19 +38,10 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { formatDate, formatDuration } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
+import { jobEndRow, jobRanFor } from "../../../-object/job-end";
 import type { JobDetailInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
-
-/** Wall-clock time the job has been running, or ran for. */
-function duration(start: string | null, end: string | null): string | null {
-  if (!start) return null;
-  const from = new Date(start).getTime();
-  const to = end ? new Date(end).getTime() : Date.now();
-  if (Number.isNaN(from) || Number.isNaN(to)) return null;
-
-  return formatDuration((to - from) / 1000);
-}
 
 export function JobDetail() {
   const t = useT();
@@ -357,7 +348,8 @@ function timing(
   job: JobDetailInfo | undefined,
   t: ReturnType<typeof useT>
 ): KeyValue[] {
-  const ran = duration(job?.startTime ?? null, job?.completionTime ?? null);
+  const ran = job ? jobRanFor(job, Date.now()) : null;
+  const end = job ? jobEndRow(job, t) : null;
 
   return [
     {
@@ -367,12 +359,7 @@ function timing(
         : t("action", "notStarted"),
       tone: job?.startTime ? undefined : "warn",
     },
-    {
-      label: t("action", "finished"),
-      value: job?.completionTime
-        ? formatDate(job.completionTime)
-        : t("action", "stillRunning"),
-    },
+    ...(end ? [end] : []),
     ...(ran ? [{ label: t("action", "ranFor"), value: ran, mono: true }] : []),
     ...(job?.activeDeadlineSeconds
       ? [

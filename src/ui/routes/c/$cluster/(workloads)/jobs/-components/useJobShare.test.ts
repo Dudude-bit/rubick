@@ -4,6 +4,7 @@ import { renderHook } from "@testing-library/react";
 
 import type { T } from "@/i18n/useT";
 import type { JobDetailInfo, PodInfo } from "@/generated/types";
+import { formatDuration } from "@/lib/utils";
 import { jobStatsOf, jobStatusOf, useJobShare } from "./useJobShare";
 
 const t = ((section: string, key: string, values?: Record<string, unknown>) =>
@@ -49,6 +50,27 @@ describe("what the Job page adds to Share", () => {
     const stats = jobStatsOf(job, "2026-09-25T12:00:00Z", t);
     const failedStat = stats.find((stat) => stat.label === "share.wlFailed");
     expect(failedStat).toMatchObject({ value: "1", role: "warn" });
+  });
+
+  /** A failed Job has no completionTime; the report timed it to the capture instead. */
+  it("times a failed Job to its Failed condition, not to the capture", () => {
+    const failed = {
+      ...job,
+      status: "Failed",
+      conditions: [
+        {
+          type: "Failed",
+          status: "True",
+          reason: "BackoffLimitExceeded",
+          message: null,
+          lastTransitionTime: "2026-09-25T10:00:21Z",
+        },
+      ],
+    } as JobDetailInfo;
+    const stats = jobStatsOf(failed, "2026-09-25T12:00:00Z", t);
+    expect(stats.find((stat) => stat.label === "action.ranFor")?.value).toBe(
+      formatDuration(21)
+    );
   });
 
   /** The raw status word is what the badge shows; the file must not translate it into something new. */

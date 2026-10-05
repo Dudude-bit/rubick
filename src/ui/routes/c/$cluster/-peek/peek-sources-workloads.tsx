@@ -13,6 +13,7 @@ import { parseCPU, parseMemory, parseQuantity } from "@/lib/k8s-quantity";
 import { formatQuantity } from "@/lib/metric-format";
 import { describeRestarts } from "@/lib/pod-status";
 import { formatDate } from "@/lib/utils";
+import { jobEndRow } from "../-object/job-end";
 import { ImageRef } from "@/components/object/ImageRef";
 import type { T as Translate } from "@/i18n/useT";
 import type { ContainerPhase } from "@/generated/types";
@@ -349,12 +350,9 @@ export const WORKLOAD_SOURCES: PeekSources = {
           },
           {
             label: t("action", "started"),
-            value: formatDate(job.startTime) ?? "—",
+            value: formatDate(job.startTime) ?? t("action", "notStarted"),
           },
-          {
-            label: t("columns", "completed"),
-            value: formatDate(job.completionTime) ?? "—",
-          },
+          ...[jobEndRow(job, t)].filter((row) => row !== null),
         ],
       },
       ...controlledBy(job.ownerReferences, job.namespace, t),
