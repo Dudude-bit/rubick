@@ -22,7 +22,7 @@ const attentions = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useAttention", () => ({
-  useAttention: (scope?: readonly string[]) =>
+  useAttention: ({ scope }: { scope?: readonly string[] } = {}) =>
     scope ? attentions.cluster : attentions.here,
 }));
 

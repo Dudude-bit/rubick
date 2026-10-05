@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import type { ServiceHealthInputs } from "@/generated/types";
-import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useLiveQuery, type Freshness } from "@/hooks/useLiveQuery";
 import type { Unread } from "@/lib/attention";
 import { commands } from "@/lib/commands";
 import { errorCode, errorToShow } from "@/lib/error-utils";
@@ -15,8 +15,9 @@ export interface ServiceHealthRead {
   in: (namespace: string) => Known<NamespaceBacking>;
   /** Every namespace of the scope that has Services, as it answered. */
   answered: ServiceHealthInputs[];
-  /** The namespaces that did not answer, or the whole read while it has not. */
+  /** The namespaces that did not answer, the whole read if its latest look failed, or "reading". */
   unread: Unread[] | "reading";
+  freshness: Pick<Freshness, "dataUpdatedAt" | "everyMs">;
 }
 
 const NONE: NamespaceBacking = new Map();
@@ -33,13 +34,14 @@ export function useServiceHealthInputs(
     refresh = "slow",
   }: { enabled?: boolean; refresh?: RefreshRate } = {}
 ): ServiceHealthRead {
-  const { data, error } = useLiveQuery({
+  const { data, error, freshness } = useLiveQuery({
     queryKey: queryKeys.serviceHealthInputs(scope),
     queryFn: () => commands.listServiceHealthInputs(scope),
     enabled,
     refresh,
   });
 
+  const { dataUpdatedAt, everyMs } = freshness;
   return useMemo(() => {
     const byNamespace = new Map<string, NamespaceBacking>(
       (data?.rows ?? []).map(({ namespace, groups }) => [
@@ -55,17 +57,16 @@ export function useServiceHealthInputs(
       scope === null || scope.includes(namespace);
     return {
       answered: data?.rows ?? [],
-      unread: data
-        ? data.unread
-        : error
-          ? [
-              {
-                namespace: null,
-                code: errorCode(error),
-                message: errorToShow(error),
-              },
-            ]
-          : "reading",
+      unread: error
+        ? [
+            {
+              namespace: null,
+              code: errorCode(error),
+              message: errorToShow(error),
+            },
+          ]
+        : (data?.unread ?? "reading"),
+      freshness: { dataUpdatedAt, everyMs },
       in: (namespace) => {
         if (!data || !covers(namespace)) {
           return { known: false, why: error ? errorToShow(error) : null };
@@ -75,5 +76,5 @@ export function useServiceHealthInputs(
         return { known: true, value: byNamespace.get(namespace) ?? NONE };
       },
     };
-  }, [data, error, scope]);
+  }, [data, error, scope, dataUpdatedAt, everyMs]);
 }

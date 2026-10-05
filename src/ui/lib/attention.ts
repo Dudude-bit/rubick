@@ -70,7 +70,10 @@ export interface Attention {
 /** A query's answer as these readers take it. */
 export interface Answer<V> {
   data: V | undefined;
+  /** The latest look failed, whatever the answer before it said. */
   error: unknown;
+  /** Older than the rate it is read at allows: a re-read is due or under way. */
+  overdue?: boolean;
 }
 
 /** Longest a claim may sit Pending before it counts: provisioning takes seconds. */
@@ -276,24 +279,27 @@ function checkOf<V>(
   extra: Unread[] = [],
   reading = false
 ): AttentionCheck {
-  if (read.data === undefined) {
-    return read.error
-      ? {
-          kind,
-          state: "unread",
-          unread: [
-            {
-              namespace: null,
-              code: errorCode(read.error),
-              message: errorToShow(read.error),
-            },
-          ],
-        }
-      : { kind, state: "reading", unread: [] };
+  if (read.error) {
+    return {
+      kind,
+      state: "unread",
+      unread: [
+        {
+          namespace: null,
+          code: errorCode(read.error),
+          message: errorToShow(read.error),
+        },
+      ],
+    };
   }
+  if (read.data === undefined) return { kind, state: "reading", unread: [] };
   const unread = [...read.data.unread, ...extra];
   if (unread.length > 0) return { kind, state: "unread", unread };
-  return { kind, state: reading ? "reading" : "read", unread: [] };
+  return {
+    kind,
+    state: reading || read.overdue ? "reading" : "read",
+    unread: [],
+  };
 }
 
 export interface AttentionInputs {
@@ -301,6 +307,7 @@ export interface AttentionInputs {
   services: {
     answered: ServiceHealthInputs[];
     unread: Unread[] | "reading";
+    overdue?: boolean;
   };
   ingresses: Answer<Scoped<IngressHealthInput>>;
   ingressHealth: (ingress: IngressHealthInput) => IngressHealth;
@@ -345,7 +352,12 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
       ? { kind: "Service", state: "reading", unread: [] }
       : {
           kind: "Service",
-          state: services.unread.length > 0 ? "unread" : "read",
+          state:
+            services.unread.length > 0
+              ? "unread"
+              : services.overdue
+                ? "reading"
+                : "read",
           unread: services.unread,
         },
     checkOf("Ingress", input.ingresses, ingress.unknown, ingress.reading),

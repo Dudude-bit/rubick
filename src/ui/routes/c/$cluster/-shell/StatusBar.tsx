@@ -253,7 +253,7 @@ const WHOLE_CLUSTER: readonly string[] = [];
 function ClusterWide() {
   const t = useT();
   const { podCount } = useClusterSummary();
-  const attention = useAttention(WHOLE_CLUSTER);
+  const attention = useAttention({ scope: WHOLE_CLUSTER });
   if (podCount === null) return <>{t("cluster", "clusterWideUnread")}</>;
   return (
     <>

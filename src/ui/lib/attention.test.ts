@@ -370,6 +370,45 @@ describe("what Needs attention could not look at", () => {
     expect(listed.complete).toBe(false);
   });
 
+  /**
+   * A list whose latest look failed is not checked, though the answer before
+   * the failure is still held. Fails if the old answer is taken for a
+   * current one, which kept a lost cluster's count "all checked".
+   */
+  it("reads a list whose latest look failed as not checked", () => {
+    const listed = attention({
+      claims: {
+        data: { rows: [], unread: [] },
+        error: new Error("connection refused"),
+      },
+    });
+    const claims = listed.checks.find(
+      (check) => check.kind === "PersistentVolumeClaim"
+    );
+    expect(claims?.state).toBe("unread");
+    expect(claims?.unread[0].message).toContain("connection refused");
+    expect(listed.complete).toBe(false);
+  });
+
+  /**
+   * The shell reads these once a minute. An answer older than that is not
+   * a reading of now, and the count must not say every kind was checked.
+   * Fails if the overdue branch of either the lists or the Services is
+   * dropped.
+   */
+  it("reads an answer older than its rate as still reading", () => {
+    const listed = attention({
+      autoscalers: { ...NONE, overdue: true },
+      services: { answered: [], unread: [], overdue: true },
+    });
+    const state = Object.fromEntries(
+      listed.checks.map((check) => [check.kind, check.state])
+    );
+    expect(state.HorizontalPodAutoscaler).toBe("reading");
+    expect(state.Service).toBe("reading");
+    expect(listed.complete).toBe(false);
+  });
+
   /** Every kind read and nothing flagged is the one complete, empty answer. */
   it("is complete only when every kind answered", () => {
     const listed = attention();

@@ -67,7 +67,7 @@ export function ClusterOverview() {
   const { data: clusterInfo } = useClusterInfo();
 
   const { data: overview, isLoading, error, refetch } = useScopedOverview();
-  const attention = useAttention();
+  const attention = useAttention({ refresh: "slow" });
 
   // Not an empty overview but a different screen: with no cluster there
   // is no scope to be empty of anything, and the one thing the reader

@@ -17,10 +17,9 @@ vi.mock("@/lib/commands", () => ({
 
 const { useServiceHealthInputs } = await import("./useServiceHealthInputs");
 
-function wrapper() {
-  const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
-  });
+function wrapper(
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+) {
   return ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
@@ -99,5 +98,36 @@ describe("the Services of a scope as their verdict reads them", () => {
 
     await waitFor(() => expect(result.current.in("net").known).toBe(true));
     expect(result.current.in("shop")).toEqual({ known: false, why: null });
+  });
+
+  /**
+   * The answer before a failure is still held, and the count built on it
+   * must not read as current. Fails if a failed re-read hides behind the
+   * last good answer, which kept a lost cluster's count "all checked".
+   */
+  it("names a failed re-read while the last answer is still held", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    listServiceHealthInputs.mockResolvedValueOnce({ rows: [], unread: [] });
+    listServiceHealthInputs.mockRejectedValueOnce(
+      new Error("connection refused")
+    );
+
+    const { result } = renderHook(() => useServiceHealthInputs(null), {
+      wrapper: wrapper(client),
+    });
+    await waitFor(() => expect(result.current.unread).toEqual([]));
+
+    await client.refetchQueries();
+
+    await waitFor(() =>
+      expect(result.current.unread).toEqual([
+        expect.objectContaining({
+          namespace: null,
+          message: expect.stringContaining("connection refused"),
+        }),
+      ])
+    );
   });
 });

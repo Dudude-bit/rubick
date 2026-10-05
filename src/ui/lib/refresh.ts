@@ -21,6 +21,8 @@
  * @module lib/refresh
  */
 
+import { SLOW_READ_MS } from "@/lib/read-deadline";
+
 /**
  * The rate a screen re-reads at while it is being watched *and* still moving:
  * what "as it happens" costs on a screen that has no watch behind it. The
@@ -56,6 +58,13 @@ export const REFRESH_INTERVALS = {
    * grows: it is as slow as this app is willing to call "polling".
    */
   steady: 30_000,
+  /**
+   * A count the shell keeps beside a page about something else: the sidebar
+   * badge and the status bar's "Needs attention" on every screen. The page
+   * that is about it asks at its own rate and the shell shares that answer,
+   * so this is only what the count costs when nobody is reading it closely.
+   */
+  shell: 60_000,
   /**
    * An answer that only an admin can change: metrics-server not installed,
    * or the metrics API refused. Asked again every five minutes, or at once
@@ -125,6 +134,25 @@ export interface RefreshState {
   steadyRuns: number;
   /** This rate is a recording's cadence — see {@link RECORDED}. */
   recording?: boolean;
+}
+
+/**
+ * Whether an answer is older than the interval it is re-read at, plus a slow
+ * read's grace for that re-read to land. Past that it is not a reading of
+ * now, and a count built on it must not say everything was checked. A query
+ * not on a timer is never overdue: hidden, nobody sees it, and coming back
+ * refetches; fed by a watch, it is live.
+ */
+export function overdue(
+  answeredAt: number,
+  everyMs: number | false,
+  now: number
+): boolean {
+  return (
+    answeredAt > 0 &&
+    everyMs !== false &&
+    now - answeredAt > everyMs + SLOW_READ_MS
+  );
 }
 
 /**

@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { BACKOFF, REFRESH_INTERVALS, effectiveInterval } from "./refresh";
+import { SLOW_READ_MS } from "./read-deadline";
+import {
+  BACKOFF,
+  REFRESH_INTERVALS,
+  effectiveInterval,
+  overdue,
+} from "./refresh";
 
 const on = { visible: true, focused: true, steadyRuns: 0 };
 const base = REFRESH_INTERVALS.resourceList;
@@ -83,5 +89,42 @@ describe("a rate that is a recording's cadence", () => {
         visible: false,
       })
     ).toBe(false);
+  });
+});
+
+describe("the count the shell keeps on every screen", () => {
+  /**
+   * The sidebar badge and the status bar read Needs attention on every
+   * screen. Fails if their rate drops under a minute, is pulled up to the
+   * backoff cap or the unfocused floor, or keeps running in a hidden window.
+   */
+  it("is asked once a minute at most, and not at all while hidden", () => {
+    const shell = REFRESH_INTERVALS.shell;
+    expect(shell).toBeGreaterThanOrEqual(60_000);
+    expect(shell).toBeGreaterThan(REFRESH_INTERVALS.slow);
+    expect(effectiveInterval(shell, on)).toBe(shell);
+    expect(effectiveInterval(shell, { ...on, focused: false })).toBe(shell);
+    expect(effectiveInterval(shell, { ...on, steadyRuns: 40 })).toBe(shell);
+    expect(effectiveInterval(shell, { ...on, visible: false })).toBe(false);
+  });
+});
+
+describe("an answer older than its rate", () => {
+  const at = 1_000_000;
+
+  /**
+   * Fails if an answer within its interval and a slow read's grace is
+   * called overdue, which would flicker every count built on it, or if one
+   * past that is still taken for a reading of now.
+   */
+  it("is overdue only past its interval and a slow read's grace", () => {
+    expect(overdue(at, 60_000, at + 60_000 + SLOW_READ_MS)).toBe(false);
+    expect(overdue(at, 60_000, at + 60_000 + SLOW_READ_MS + 1)).toBe(true);
+  });
+
+  /** Hidden or watch-fed, nothing is due; never answered is "reading", not late. */
+  it("is never overdue off a timer or before a first answer", () => {
+    expect(overdue(at, false, at + 3_600_000)).toBe(false);
+    expect(overdue(0, 60_000, at)).toBe(false);
   });
 });
