@@ -154,9 +154,9 @@ impl ServedIndex {
             .map(|api_group| kinds_of(&api_group)))
     }
 
-    /// Every kind `group` serves, each at the version kubectl would use and
-    /// with the verbs it allows; `None` where the cluster serves no such
-    /// group.
+    /// Every kind `group` serves, each at the version kubectl would use, or
+    /// the one that serves it where the preferred does not, with the verbs it
+    /// allows; `None` where the cluster serves no such group.
     ///
     /// # Errors
     ///
@@ -170,7 +170,7 @@ impl ServedIndex {
         Ok(self
             .group(context, client, group, |_| true)
             .await?
-            .map(|api_group| api_group.recommended_resources()))
+            .map(|api_group| recommended_of(&api_group)))
     }
 
     /// The group as discovered, read again where the answer held is too old
@@ -336,24 +336,31 @@ impl std::error::Error for Shared {
     }
 }
 
-/// The preferred version first — kubectl's choice — then the rest, most
-/// stable first: a kind may be missing from the preferred version, which
-/// is the common pitfall `ApiGroup` warns about.
-fn find(api_group: &ApiGroup, plural: &str) -> Option<Served> {
+/// Every kind once: at the preferred version — kubectl's choice — where it
+/// serves the kind, otherwise at the most stable version that does. A kind
+/// may be missing from the preferred version, which is the common pitfall
+/// `ApiGroup` warns about.
+fn recommended_of(api_group: &ApiGroup) -> Vec<(ApiResource, ApiCapabilities)> {
     let preferred = api_group.preferred_version();
-    preferred
+    let mut out: Vec<(ApiResource, ApiCapabilities)> = Vec::new();
+    for version in preferred.into_iter().chain(
+        api_group
+            .versions()
+            .filter(|version| Some(*version) != preferred),
+    ) {
+        for (resource, caps) in api_group.versioned_resources(version) {
+            if !out.iter().any(|(known, _)| known.plural == resource.plural) {
+                out.push((resource, caps));
+            }
+        }
+    }
+    out
+}
+
+fn find(api_group: &ApiGroup, plural: &str) -> Option<Served> {
+    recommended_of(api_group)
         .into_iter()
-        .chain(
-            api_group
-                .versions()
-                .filter(|version| Some(*version) != preferred),
-        )
-        .find_map(|version| {
-            api_group
-                .versioned_resources(version)
-                .into_iter()
-                .find(|(resource, _)| resource.plural == plural)
-        })
+        .find(|(resource, _)| resource.plural == plural)
         .map(|(resource, caps)| Served {
             resource,
             namespaced: caps.scope == Scope::Namespaced,
@@ -614,6 +621,42 @@ mod tests {
             .await
             .expect("read")
             .is_none());
+    }
+
+    /// CiliumL2AnnouncementPolicy is served at `v2alpha1` only, and the API
+    /// resources page left it out because it read the preferred `v2` alone.
+    #[tokio::test]
+    async fn the_catalogue_holds_a_kind_the_preferred_version_lacks() {
+        let (client, _) = server(vec![
+            ("/apis", 200, groups("v1", &["v1", "v1alpha2"])),
+            (
+                "/apis/gateway.networking.k8s.io/v1",
+                200,
+                resources("v1", &[("httproutes", "HTTPRoute", true)]),
+            ),
+            (
+                "/apis/gateway.networking.k8s.io/v1alpha2",
+                200,
+                resources(
+                    "v1alpha2",
+                    &[
+                        ("httproutes", "HTTPRoute", true),
+                        ("tcproutes", "TCPRoute", true),
+                    ],
+                ),
+            ),
+        ])
+        .await;
+        let served = ServedIndex::default()
+            .recommended("kind", &client, GROUP)
+            .await
+            .expect("read")
+            .expect("served");
+        let at: Vec<_> = served
+            .iter()
+            .map(|(resource, _)| (resource.plural.as_str(), resource.version.as_str()))
+            .collect();
+        assert_eq!(at, vec![("httproutes", "v1"), ("tcproutes", "v1alpha2")]);
     }
 
     /// Each kind with the versions that serve it, most stable first — what
