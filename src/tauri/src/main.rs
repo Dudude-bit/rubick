@@ -272,6 +272,8 @@ fn main() {
             commands::services::delete_service,
             // Port-forward commands
             commands::port_forward::port_forward_pod,
+            commands::port_forward::port_forward_service,
+            commands::port_forward::port_forward_subscribed,
             commands::port_forward::stop_port_forward,
             commands::port_forward::list_port_forwards,
             commands::port_forward::list_port_forward_configs,

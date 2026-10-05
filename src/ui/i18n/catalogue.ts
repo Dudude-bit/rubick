@@ -1400,6 +1400,11 @@ export const en = {
     viaGateway: "via Gateway",
   },
   activity: {
+    forwardMovedTitle: "Port forward moved",
+    forwardFailedTitle: "Port forward ended",
+    failedForwards: "Ended",
+    dismissForward: "Dismiss {pod}",
+    viaInline: "via {kind} {name}",
     forwardStarted: "Port forward started",
     forwardingDetail: "Forwarding localhost:{local} → {pod}:{remote}",
     forwardStopped: "Port forward stopped",
@@ -2915,6 +2920,22 @@ export const en = {
       "no access to {object}, so whether {key} is there is unknown",
     envObjectRefusedAll: "no access to {object}, so its keys are unknown",
     envObjectUnread: "could not read {object}: {error}",
+    forwardRetrying: "{text}; trying again in {n} s",
+    forwardGaveUp: {
+      one: "Gave up after {n} attempt: {text}",
+      other: "Gave up after {n} attempts: {text}",
+    },
+    forwardPodGone: "pod {pod} was deleted",
+    forwardWaiting:
+      "pod {pod} was deleted; waiting for a ready pod of {kind} {name}",
+    forwardNoReplacement:
+      "pod {pod} was deleted and {kind} {name} has no ready pod to move to",
+    forwardSearchFailed:
+      "pod {pod} was deleted and looking for another failed: {text}",
+    forwardMoved: "moved here from {from}",
+    forwardNoStream:
+      "the pod took the connection but opened no stream for this port",
+    forwardListenerFailed: "the local port stopped taking connections: {text}",
     readyOfNodes: "{ready} {of}",
     helmRelease: "Helm release",
     crdEstablished: "Established",

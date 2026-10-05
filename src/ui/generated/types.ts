@@ -768,6 +768,7 @@ export interface PortForwardSessionInfo {
   remotePort: number;
   autoReconnect: boolean;
   createdAt: string;
+  via: ForwardVia;
 }
 
 export interface PortForwardRequest {
@@ -2217,6 +2218,11 @@ export type MetricsStatusKind =
 
 export type TcpProbeReason = "refused" | "timedOut";
 
+export type ForwardVia =
+  | { kind: "pod" }
+  | { kind: "owner"; ownerKind: string; name: string }
+  | { kind: "service"; name: string; port: number };
+
 export type DebugOperationType = "ephemeral" | "copyPod" | "nodeDebug";
 
 export type DebugStatus =
@@ -2480,7 +2486,7 @@ export type AppEvent =
       local_port: number;
       remote_port: number;
       status: string;
-      message: string | null;
+      note: ForwardNote | null;
       attempt: number | null;
     }
   | {
@@ -2590,6 +2596,18 @@ export type AuthOutcome =
   | { says: "stateMismatch" }
   | { says: "superseded" }
   | { says: "switchedAway" };
+
+export type ForwardNote =
+  | { says: "said"; text: string }
+  | { says: "retrying"; text: string; after_secs: number }
+  | { says: "gaveUp"; text: string; attempts: number }
+  | { says: "podGone"; pod: string }
+  | { says: "waiting"; pod: string; kind: string; name: string }
+  | { says: "noReplacement"; pod: string; kind: string; name: string }
+  | { says: "searchFailed"; pod: string; text: string }
+  | { says: "moved"; from: string }
+  | { says: "noStream" }
+  | { says: "listenerFailed"; text: string };
 
 export type StreamFailureKind =
   | "gone"

@@ -28,6 +28,69 @@ pub struct PortForwardSessionInfo {
     pub remote_port: u16,
     pub auto_reconnect: bool,
     pub created_at: String,
+    pub via: ForwardVia,
+}
+
+/// What a forward follows when its pod goes away.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum ForwardVia {
+    /// Nothing puts this pod back: no controller owns it, or none could be read.
+    Pod,
+    /// The controller at the top of the pod's owner chain.
+    Owner {
+        #[serde(rename = "ownerKind")]
+        owner_kind: String,
+        name: String,
+    },
+    /// A Service, and the port on it that was asked for.
+    Service { name: String, port: u16 },
+}
+
+impl ForwardVia {
+    /// The kind and name a reader would look for a replacement under.
+    #[must_use]
+    pub fn names(&self) -> Option<(&str, &str)> {
+        match self {
+            Self::Pod => None,
+            Self::Owner { owner_kind, name } => Some((owner_kind, name)),
+            Self::Service { name, .. } => Some(("Service", name)),
+        }
+    }
+}
+
+/// Why a forward's status changed, worded by the frontend.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum ForwardNote {
+    /// The cluster's or the network's own words.
+    Said { text: String },
+    /// An attempt failed; the next is `after_secs` away.
+    Retrying { text: String, after_secs: u64 },
+    /// `attempts` failures in a row, and this connection stopped trying.
+    GaveUp { text: String, attempts: u32 },
+    /// The pod was deleted and nothing names another to move to.
+    PodGone { pod: String },
+    /// The pod was deleted and `kind`/`name` has no ready pod yet.
+    Waiting {
+        pod: String,
+        kind: String,
+        name: String,
+    },
+    /// The wait ran out with no ready pod behind `kind`/`name`.
+    NoReplacement {
+        pod: String,
+        kind: String,
+        name: String,
+    },
+    /// The pod was deleted and looking for another failed.
+    SearchFailed { pod: String, text: String },
+    /// The forward left `from` for the pod the event names.
+    Moved { from: String },
+    /// The pod answered and opened no stream for the port.
+    NoStream,
+    /// The local port stopped accepting connections.
+    ListenerFailed { text: String },
 }
 
 /// Saved port-forward config payload
@@ -126,27 +189,33 @@ pub(super) fn config_key(config: &StoredPortForwardConfig) -> String {
     )
 }
 
-/// Helper for emitting port-forward status events
-#[allow(clippy::too_many_arguments)]
-pub(super) fn emit_port_forward_status(
-    event_tx: &tokio::sync::broadcast::Sender<AppEvent>,
-    session_id: &str,
-    pod: &str,
-    namespace: &str,
-    local_port: u16,
-    remote_port: u16,
-    status: &str,
-    message: Option<String>,
-    attempt: Option<u32>,
-) {
-    let _ = event_tx.send(AppEvent::PortForwardStatus {
-        id: session_id.to_string(),
-        pod: pod.to_string(),
-        namespace: namespace.to_string(),
-        local_port,
-        remote_port,
-        status: status.to_string(),
-        message,
-        attempt,
-    });
+/// Says what happened to one forward, against the pod it now points at.
+#[derive(Clone)]
+pub(super) struct Reporter {
+    pub event_tx: tokio::sync::broadcast::Sender<AppEvent>,
+    pub id: String,
+    pub namespace: String,
+    pub local_port: u16,
+}
+
+impl Reporter {
+    pub fn say(
+        &self,
+        pod: &str,
+        remote_port: u16,
+        status: &str,
+        note: Option<ForwardNote>,
+        attempt: Option<u32>,
+    ) {
+        let _ = self.event_tx.send(AppEvent::PortForwardStatus {
+            id: self.id.clone(),
+            pod: pod.to_string(),
+            namespace: self.namespace.clone(),
+            local_port: self.local_port,
+            remote_port,
+            status: status.to_string(),
+            note,
+            attempt,
+        });
+    }
 }

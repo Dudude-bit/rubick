@@ -38,6 +38,7 @@ const session = {
   remotePort: 80,
   autoReconnect: false,
   createdAt: "2026-09-23T10:00:00Z",
+  via: { kind: "pod" as const },
 };
 
 beforeEach(() => {
@@ -60,6 +61,55 @@ describe("the forwards list when the event bridge falls behind", () => {
 
     expect(commands.listPortForwards).toHaveBeenCalled();
     expect(usePortForwardStore.getState().sessions).toEqual([]);
+    hook.unmount();
+  });
+});
+
+const emit = (payload: Record<string, unknown>) =>
+  act(async () => {
+    for (const handler of listeners["port-forward-status"] ?? []) {
+      handler({
+        payload: {
+          channel: "port-forward-status",
+          id: "pf-9",
+          namespace: "shop",
+          local_port: 8080,
+          remote_port: 80,
+          attempt: null,
+          note: null,
+          ...payload,
+        },
+      });
+    }
+  });
+
+describe("a forward the backend moved or ended", () => {
+  /** After a restart the Activity row kept naming a pod that was gone. */
+  it("follows the forward to the pod it moved to", async () => {
+    const hook = renderHook(() => usePortForwardEvents());
+    await act(async () => {});
+    await emit({
+      pod: "payments-55f",
+      status: "moved",
+      note: { says: "moved", from: "payments" },
+    });
+    expect(usePortForwardStore.getState().sessions[0].pod).toBe("payments-55f");
+    hook.unmount();
+  });
+
+  /** An ended forward keeps its reason on screen rather than vanishing. */
+  it("keeps an ended forward with its reason", async () => {
+    usePortForwardStore.setState({ failed: [] });
+    const hook = renderHook(() => usePortForwardEvents());
+    await act(async () => {});
+    await emit({
+      pod: "payments",
+      status: "failed",
+      note: { says: "podGone", pod: "payments" },
+    });
+    expect(usePortForwardStore.getState().failed).toEqual([
+      { session, note: { says: "podGone", pod: "payments" } },
+    ]);
     hook.unmount();
   });
 });

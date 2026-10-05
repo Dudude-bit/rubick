@@ -191,11 +191,7 @@ export async function forward(
   }
 
   const open = async (localPort: number) => {
-    await commands.portForwardPod(pod, service.namespace, {
-      localPort,
-      remotePort,
-      autoReconnect: true,
-    });
+    await openForward(pod, service.namespace, localPort, remotePort);
     return localPort;
   };
 
@@ -252,13 +248,24 @@ export async function reestablish(
     );
   }
 
-  await commands.portForwardPod(pod, found.namespace, {
-    localPort: found.localPort,
-    remotePort: found.remotePort,
-    autoReconnect: true,
-  });
+  await openForward(pod, found.namespace, found.localPort, found.remotePort);
 
   return { ...found, pod };
+}
+
+/** A forward says nothing, and takes no connection, until it is subscribed to. */
+async function openForward(
+  pod: string,
+  namespace: string,
+  localPort: number,
+  remotePort: number
+): Promise<void> {
+  const session = await commands.portForwardPod(pod, namespace, {
+    localPort,
+    remotePort,
+    autoReconnect: true,
+  });
+  await commands.portForwardSubscribed(session.id);
 }
 
 /** What a vendor knows about how its own Service is usually labelled. */

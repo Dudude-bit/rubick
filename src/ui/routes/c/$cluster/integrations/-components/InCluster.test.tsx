@@ -31,6 +31,7 @@ vi.mock("@/lib/commands", () => ({
     listPods: (filters: unknown) => listPods(filters),
     portForwardPod: (pod: unknown, namespace: unknown, config: unknown) =>
       portForwardPod(pod, namespace, config),
+    portForwardSubscribed: vi.fn(async () => undefined),
     listPortForwards: vi.fn(async () => []),
     listPortForwardConfigs: vi.fn(async () => []),
     stopPortForward: vi.fn(async () => undefined),

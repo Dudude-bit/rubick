@@ -16,7 +16,8 @@ vi.mock("@/lib/commands", () => ({
     listPods: vi.fn(),
     listPortForwards: vi.fn(async () => []),
     listPortForwardConfigs: vi.fn(async () => []),
-    portForwardPod: vi.fn(async () => ({})),
+    portForwardPod: vi.fn(async () => ({ id: "pf-1" })),
+    portForwardSubscribed: vi.fn(async () => undefined),
     stopPortForward: vi.fn(async () => undefined),
   },
 }));

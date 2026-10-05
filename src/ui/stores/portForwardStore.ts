@@ -11,6 +11,8 @@
 import { create } from "zustand";
 import { commands } from "@/lib/commands";
 import type {
+  ForwardNote,
+  ForwardVia,
   PortForwardConfigInfo,
   PortForwardConfigPayload,
   PortForwardRequest,
@@ -68,6 +70,14 @@ export interface PortForwardSession {
   autoReconnect: boolean;
   /** ISO timestamp when started */
   createdAt: string;
+  /** What the forward follows when its pod goes. */
+  via: ForwardVia;
+}
+
+/** A forward that ended on its own, kept on screen with the reason until dismissed. */
+export interface FailedForward {
+  session: PortForwardSession;
+  note: ForwardNote | null;
 }
 
 /**
@@ -84,10 +94,10 @@ export interface PortForwardStatus {
   localPort: number;
   /** Remote port */
   remotePort: number;
-  /** Current status (e.g., "active", "connecting", "failed") */
+  /** Current status (e.g., "listening", "reconnecting", "moved", "failed") */
   status: string;
-  /** Optional status message */
-  message?: string | null;
+  /** Why, worded at render. */
+  note?: ForwardNote | null;
   /** Reconnection attempt number */
   attempt?: number | null;
 }
@@ -96,6 +106,7 @@ interface PortForwardState {
   configs: PortForwardConfig[];
   sessions: PortForwardSession[];
   statusBySession: Record<string, PortForwardStatus>;
+  failed: FailedForward[];
   configsLoaded: boolean;
   refreshConfigs: () => Promise<void>;
   addConfig: (
@@ -122,6 +133,12 @@ interface PortForwardState {
     namespace: string,
     request: PortForwardRequest
   ) => Promise<PortForwardSession>;
+  /** `request.remotePort` is the Service port; the backend picks the pod. */
+  startService: (
+    service: string,
+    namespace: string,
+    request: PortForwardRequest
+  ) => Promise<PortForwardSession>;
   startConfig: (configId: string) => Promise<PortForwardSession>;
   stopSession: (sessionId: string) => Promise<void>;
   startAllForContext: (
@@ -131,6 +148,11 @@ interface PortForwardState {
     context: string
   ) => Promise<{ started: number; skipped: number; failed: number }>;
   setStatus: (status: PortForwardStatus) => void;
+  /** The backend moved a forward to another pod. */
+  moved: (id: string, pod: string, remotePort: number) => void;
+  /** The backend ended a forward on its own. */
+  fail: (id: string, note: ForwardNote | null) => void;
+  dismiss: (id: string) => void;
 }
 
 function mapSession(payload: PortForwardSessionInfo): PortForwardSession {
@@ -143,6 +165,7 @@ function mapSession(payload: PortForwardSessionInfo): PortForwardSession {
     remotePort: payload.remotePort,
     autoReconnect: payload.autoReconnect,
     createdAt: payload.createdAt,
+    via: payload.via,
   };
 }
 
@@ -220,6 +243,7 @@ export const usePortForwardStore = create<PortForwardState>((set, get) => ({
   configs: [],
   sessions: [],
   statusBySession: {},
+  failed: [],
   configsLoaded: false,
 
   refreshConfigs: async () => {
@@ -266,14 +290,11 @@ export const usePortForwardStore = create<PortForwardState>((set, get) => ({
     set({ sessions: sessions.map(mapSession) });
   },
 
-  startPod: async (pod, namespace, request) => {
-    const session = await commands.portForwardPod(pod, namespace, request);
-    const mapped = mapSession(session);
-    set((state) => ({
-      sessions: [...state.sessions.filter((s) => s.id !== mapped.id), mapped],
-    }));
-    return mapped;
-  },
+  startPod: async (pod, namespace, request) =>
+    recorded(await commands.portForwardPod(pod, namespace, request)),
+
+  startService: async (service, namespace, request) =>
+    recorded(await commands.portForwardService(service, namespace, request)),
 
   startConfig: async (configId) => {
     const config = get().configs.find((item) => item.id === configId);
@@ -323,4 +344,50 @@ export const usePortForwardStore = create<PortForwardState>((set, get) => ({
       },
     }));
   },
+
+  moved: (id, pod, remotePort) => {
+    set((state) => ({
+      sessions: state.sessions.map((session) =>
+        session.id === id ? { ...session, pod, remotePort } : session
+      ),
+    }));
+  },
+
+  fail: (id, note) => {
+    set((state) => {
+      const session = state.sessions.find((item) => item.id === id);
+      if (!session) return state;
+      return {
+        sessions: state.sessions.filter((item) => item.id !== id),
+        failed: [
+          ...state.failed.filter((item) => item.session.id !== id),
+          { session, note },
+        ],
+      };
+    });
+  },
+
+  dismiss: (id) => {
+    set((state) => ({
+      failed: state.failed.filter((item) => item.session.id !== id),
+    }));
+  },
 }));
+
+/**
+ * Record a session the backend just started, then release its gate.
+ *
+ * The forward says nothing until it hears the app is listening, because an
+ * event emitted before that is lost. The listener is mounted with the shell,
+ * so it is up by the time any start returns.
+ */
+async function recorded(
+  payload: PortForwardSessionInfo
+): Promise<PortForwardSession> {
+  const mapped = mapSession(payload);
+  usePortForwardStore.setState((state) => ({
+    sessions: [...state.sessions.filter((s) => s.id !== mapped.id), mapped],
+  }));
+  await commands.portForwardSubscribed(mapped.id);
+  return mapped;
+}

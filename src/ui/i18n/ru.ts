@@ -1401,6 +1401,11 @@ export const ru: Catalogue = {
     viaGateway: "через Gateway",
   },
   activity: {
+    forwardMovedTitle: "Проброс порта переключён",
+    forwardFailedTitle: "Проброс порта остановлен",
+    failedForwards: "Завершились",
+    dismissForward: "Убрать {pod}",
+    viaInline: "через {kind} {name}",
     forwardStarted: "Проброс порта запущен",
     forwardingDetail: "Проброс localhost:{local} → {pod}:{remote}",
     forwardStopped: "Проброс порта остановлен",
@@ -3122,6 +3127,23 @@ export const ru: Catalogue = {
       "нет доступа к {object}, поэтому неизвестно, есть ли там {key}",
     envObjectRefusedAll: "нет доступа к {object}, поэтому ключи неизвестны",
     envObjectUnread: "не удалось прочитать {object}: {error}",
+    forwardRetrying: "{text}; новая попытка через {n} с",
+    forwardGaveUp: {
+      one: "Попытки прекращены после {n} попытки: {text}",
+      few: "Попытки прекращены после {n} попыток: {text}",
+      many: "Попытки прекращены после {n} попыток: {text}",
+      other: "Попытки прекращены после {n} попытки: {text}",
+    },
+    forwardPodGone: "под {pod} удалён",
+    forwardWaiting: "под {pod} удалён; ожидается готовый под от {kind} {name}",
+    forwardNoReplacement:
+      "под {pod} удалён, а у {kind} {name} нет готового пода, на который можно переключиться",
+    forwardSearchFailed: "под {pod} удалён, а найти другой не удалось: {text}",
+    forwardMoved: "переключён сюда с {from}",
+    forwardNoStream:
+      "под принял соединение, но не открыл поток для этого порта",
+    forwardListenerFailed:
+      "локальный порт перестал принимать соединения: {text}",
     readyOfNodes: "{ready} {of}",
     helmRelease: "релиз Helm",
     crdEstablished: "Установлено",

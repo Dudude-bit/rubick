@@ -636,8 +636,9 @@ describe("questions the cluster does not answer through a watch", () => {
         namespace: "shop",
         local_port: 8080,
         remote_port: 80,
-        status: "error",
-        message: "connection refused",
+        status: "failed",
+        note: { says: "podGone", pod: "payments-7f9" },
+        attempt: null,
       })
     );
     await act(async () => {
@@ -645,7 +646,7 @@ describe("questions the cluster does not answer through a watch", () => {
     });
     expect(notifyMock).toHaveBeenCalledWith({
       title: "Forward to payments died",
-      body: "connection refused",
+      body: "pod payments-7f9 was deleted",
     });
     hook.unmount();
   });

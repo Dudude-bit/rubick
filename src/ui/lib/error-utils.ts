@@ -43,6 +43,7 @@ export const ERROR_CODES = {
   LOG_NOT_KEPT: "LOG_NOT_KEPT",
   READ_DEADLINE: "READ_DEADLINE",
   NOT_CONNECTED: "NOT_CONNECTED",
+  NO_READY_POD: "NO_READY_POD",
 } as const;
 
 type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];

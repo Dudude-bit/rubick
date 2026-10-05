@@ -21,6 +21,7 @@ pub struct PortForwardSession {
     pub remote_port: u16,
     pub auto_reconnect: bool,
     pub created_at: chrono::DateTime<chrono::Utc>,
+    pub via: crate::commands::port_forward::ForwardVia,
 }
 
 /// Auth session control for interactive flows

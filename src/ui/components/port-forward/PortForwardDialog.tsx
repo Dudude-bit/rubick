@@ -16,6 +16,7 @@ import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
+import { forwardNoteWords } from "@/lib/port-forward";
 
 interface PortForwardFormState {
   localPort: string;
@@ -313,7 +314,7 @@ export function PortForwardDialog({
                       {session.localPort} → {session.pod}:{session.remotePort}
                     </div>
                     <div className="text-xs text-fg-mut">
-                      {statusBySession[session.id]?.message ||
+                      {forwardNoteWords(statusBySession[session.id]?.note, t) ||
                         statusBySession[session.id]?.status ||
                         t("activity", "activeFallback")}
                     </div>

@@ -141,6 +141,10 @@ pub enum Error {
     #[error("Not connected to {0}")]
     NotConnected(String),
 
+    /// A Service with no ready pod behind it has nothing to forward to.
+    #[error("No ready pod is behind Service {service}")]
+    NoReadyPod { service: String },
+
     /// Internal errors
     #[error("Internal error: {0}")]
     Internal(String),
@@ -231,6 +235,7 @@ impl Error {
             Error::Timeout(_) => "TIMEOUT_ERROR",
             Error::ReadDeadline { .. } => "READ_DEADLINE",
             Error::NotConnected(_) => "NOT_CONNECTED",
+            Error::NoReadyPod { .. } => "NO_READY_POD",
         }
     }
 
@@ -487,6 +492,7 @@ mod tests {
                 Error::ReadDeadline { .. } => 17,
                 Error::NotConnected(_) => 18,
                 Error::Internal(_) => 19,
+                Error::NoReadyPod { .. } => 20,
             }
         }
         const LIST: &str = include_str!("../../contracts/error-codes.json");
@@ -529,11 +535,14 @@ mod tests {
             Error::ReadDeadline { after_secs: 1 },
             Error::NotConnected(String::new()),
             Error::Internal(String::new()),
+            Error::NoReadyPod {
+                service: String::new(),
+            },
         ];
         let covered: std::collections::BTreeSet<usize> = samples.iter().map(variant).collect();
         assert_eq!(
             covered,
-            (0..=19).collect(),
+            (0..=20).collect(),
             "a variant has no sample, so its code is never checked"
         );
 

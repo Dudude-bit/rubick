@@ -1227,6 +1227,22 @@ export async function portForwardPod(
   });
 }
 
+export async function portForwardService(
+  service: string,
+  namespace: string | null,
+  config: PortForwardRequest
+): Promise<PortForwardSessionInfo> {
+  return invoke<PortForwardSessionInfo>("port_forward_service", {
+    service,
+    namespace,
+    config,
+  });
+}
+
+export async function portForwardSubscribed(forwardId: string): Promise<void> {
+  return invoke<void>("port_forward_subscribed", { forwardId });
+}
+
 export async function stopPortForward(forwardId: string): Promise<void> {
   return invoke<void>("stop_port_forward", { forwardId });
 }

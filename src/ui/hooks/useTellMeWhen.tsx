@@ -9,6 +9,7 @@ import {
   type ResourceEvent,
 } from "@/lib/events";
 import { notify } from "@/lib/notify";
+import { forwardNoteSaying } from "@/lib/port-forward";
 import {
   Coalescer,
   isOpen,
@@ -475,20 +476,23 @@ export function useTellMeWhen() {
       offDrain = off;
     });
     void listenEvent("port-forward-status", (event) => {
-      const { id, status, message } = event.payload;
+      const { id, status, note } = event.payload;
       const watch = useTellMeWhenStore
         .getState()
         .watches.find(
           (w) => w.kind === "PortForward" && w.sessionId === id && isOpen(w)
         );
       if (!watch) return;
-      if (status !== "stopped" && status !== "error") {
+      if (status !== "stopped" && status !== "failed") {
         regainSight(watch.id, aside.current.get(watch.id));
         return;
       }
       settle(
         watch.id,
-        { says: "forwardDied", detail: message ?? null },
+        {
+          says: "forwardDied",
+          detail: note ? forwardNoteSaying(note) : null,
+        },
         coalescer.current
       );
     }).then((off) => {

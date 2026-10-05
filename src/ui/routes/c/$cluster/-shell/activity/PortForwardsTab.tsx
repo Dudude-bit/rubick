@@ -11,6 +11,8 @@ import {
   Plus,
   Square,
   Trash2,
+  Unlink,
+  X,
 } from "lucide-react";
 
 import {
@@ -26,10 +28,13 @@ import { ResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   usePortForwardStore,
+  type FailedForward,
   type PortForwardConfig,
   type PortForwardSession,
   type PortForwardStatus,
 } from "@/stores/portForwardStore";
+import { forwardNoteWords } from "@/lib/port-forward";
+import type { ForwardVia } from "@/generated/types";
 import { cn } from "@/lib/utils";
 import {
   ACTIVITY_ROW,
@@ -38,7 +43,7 @@ import {
   ActivityGroup,
 } from "./primitives";
 import { useAsk } from "../../-object/useAsk";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 
 /** Same shape the store keys sessions by; do not reorder the parts. */
@@ -83,9 +88,13 @@ function SessionRow({
   onWatch?: () => void;
 }) {
   const t = useT();
-  const isError = status?.status === "error";
-  const isReconnecting =
-    status?.status === "reconnecting" || status?.status === "reconnected";
+  // A connection that gave up; the forward itself is still listening.
+  const isTroubled =
+    status?.status === "error" || status?.status === "reconnecting";
+  const note =
+    isTroubled || status?.status === "moved"
+      ? forwardNoteWords(status?.note, t)
+      : null;
 
   return (
     <div className={ACTIVITY_ROW}>
@@ -93,7 +102,7 @@ function SessionRow({
         aria-hidden="true"
         className={cn(
           "h-1.5 w-1.5 flex-none rounded-full",
-          isError ? "bg-err" : isReconnecting ? "bg-warn" : "bg-ok"
+          isTroubled ? "bg-warn" : "bg-ok"
         )}
       />
       <span className="min-w-0 flex-1">
@@ -114,9 +123,20 @@ function SessionRow({
         <span className="block truncate font-mono text-[11px] text-fg-fnt">
           {namesCluster && `${session.context} · `}
           {session.namespace} · :{session.localPort} → :{session.remotePort}
-          {isError && ` · ${t("cluster", "failedInline")}`}
-          {isReconnecting && ` · ${t("activity", "reconnectingInline")}`}
+          {viaWords(session.via, t)}
+          {status?.status === "reconnecting" &&
+            ` · ${t("activity", "reconnectingInline")}`}
         </span>
+        {note && (
+          <span
+            className={cn(
+              "block truncate text-[11px]",
+              isTroubled ? "text-warn" : "text-fg-mut"
+            )}
+          >
+            {note}
+          </span>
+        )}
       </span>
       {onWatch && (
         <ActivityAction
@@ -149,6 +169,53 @@ function SessionRow({
   );
 }
 
+/** " · via Deployment api", where the forward follows something past its pod. */
+function viaWords(via: ForwardVia, t: T): string {
+  if (via.kind === "pod") return "";
+  const kind = via.kind === "service" ? "Service" : via.ownerKind;
+  return ` · ${t("activity", "viaInline", { kind, name: via.name })}`;
+}
+
+/**
+ * A forward that ended on its own: its port is closed, and the row stays,
+ * in the error tone with the reason, until it is dismissed. Disappearing
+ * would read the same as a forward somebody stopped.
+ */
+function FailedRow({
+  failed,
+  onDismiss,
+}: {
+  failed: FailedForward;
+  onDismiss: () => void;
+}) {
+  const t = useT();
+  const { session } = failed;
+  return (
+    <div className={ACTIVITY_ROW}>
+      <Unlink
+        aria-hidden="true"
+        className="h-3 w-3 flex-none self-start text-err"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-fg-mid">{session.pod}</span>
+        <span className="block truncate font-mono text-[11px] text-fg-fnt">
+          {session.namespace} · :{session.localPort} → :{session.remotePort}
+          {viaWords(session.via, t)}
+        </span>
+        <span className="block text-[11px] text-err">
+          {forwardNoteWords(failed.note, t) ?? t("cluster", "failedInline")}
+        </span>
+      </span>
+      <ActivityAction
+        aria-label={t("activity", "dismissForward", { pod: session.pod })}
+        onClick={onDismiss}
+      >
+        <X className="h-3.5 w-3.5" />
+      </ActivityAction>
+    </div>
+  );
+}
+
 /**
  * Everything about a port forward, in the panel that owns running things.
  *
@@ -164,6 +231,8 @@ export function PortForwardsTab() {
   const configs = usePortForwardStore((state) => state.configs);
   const sessions = usePortForwardStore((state) => state.sessions);
   const statusBySession = usePortForwardStore((state) => state.statusBySession);
+  const failed = usePortForwardStore((state) => state.failed);
+  const dismiss = usePortForwardStore((state) => state.dismiss);
   const configsLoaded = usePortForwardStore((state) => state.configsLoaded);
   const refreshConfigs = usePortForwardStore((state) => state.refreshConfigs);
   const startConfig = usePortForwardStore((state) => state.startConfig);
@@ -322,6 +391,21 @@ export function PortForwardsTab() {
               />
             );
           })}
+        </ActivityGroup>
+      )}
+
+      {failed.length > 0 && (
+        <ActivityGroup
+          title={t("activity", "failedForwards")}
+          count={failed.length}
+        >
+          {failed.map((item) => (
+            <FailedRow
+              key={item.session.id}
+              failed={item}
+              onDismiss={() => dismiss(item.session.id)}
+            />
+          ))}
         </ActivityGroup>
       )}
 

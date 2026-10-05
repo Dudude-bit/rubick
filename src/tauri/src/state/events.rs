@@ -319,7 +319,9 @@ pub enum AppEvent {
         session_id: String,
         status: Option<String>,
     },
-    /// Port-forward status update
+    /// Port-forward status update. `pod` and `remote_port` are where the
+    /// forward points now, which a `moved` changes. `stopped` and `failed`
+    /// are terminal, and every forward ends on exactly one of them.
     PortForwardStatus {
         id: String,
         pod: String,
@@ -327,7 +329,7 @@ pub enum AppEvent {
         local_port: u16,
         remote_port: u16,
         status: String,
-        message: Option<String>,
+        note: Option<crate::commands::port_forward::ForwardNote>,
         attempt: Option<u32>,
     },
     /// Auth URL requested for interactive login
@@ -572,7 +574,7 @@ mod tests {
                 local_port: 8080,
                 remote_port: 80,
                 status: "connected".into(),
-                message: None,
+                note: None,
                 attempt: Some(1),
             },
             AppEvent::AuthUrlRequested {

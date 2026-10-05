@@ -1,146 +1,113 @@
-//! Live port-forward sessions: bind a local TCP port, accept
-//! connections, copy bytes through `kube::Api::portforward`. Owns
-//! the `PortForwardCleanup` Drop guard that ensures the session and
-//! control map entries are removed on every exit including
-//! panic-unwind.
+//! Live port-forward sessions: bind a local TCP port, accept connections,
+//! copy bytes through `kube::Api::portforward` to the pod `follow` says the
+//! forward points at now.
 
-use crate::commands::helpers::ResourceContext;
-use crate::error::{Error, Result};
-use crate::state::{AppEvent, AppState, PortForwardSession};
-use crate::utils::require_namespace;
+use std::sync::Arc;
+
 use dashmap::DashMap;
 use kube::Api;
-use std::sync::Arc;
 use tauri::State;
 use tokio::net::TcpListener;
+use tokio::sync::{watch, Notify};
 use tokio::time::{sleep, Duration};
 use tokio_util::sync::CancellationToken;
 
-use super::types::{emit_port_forward_status, PortForwardRequest, PortForwardSessionInfo};
+use crate::error::{Error, Result};
+use crate::state::streams::{Opened, SUBSCRIBE_TIMEOUT};
+use crate::state::{AppState, PortForwardSession};
+use crate::utils::require_namespace;
 
-/// RAII guard that removes a port-forward's entries from both the
-/// session and control maps when dropped — including on panic-unwind
-/// inside the spawned listener task. Without this, a panic in
-/// `listener.accept()` (or anywhere else in the outer loop) leaves
-/// orphaned entries in `state.port_forward_sessions` /
-/// `state.port_forward_controls` forever. Mirrors the `LogStreamCleanup`
-/// pattern in commands/logs.rs.
-struct PortForwardCleanup {
-    sessions: Arc<DashMap<String, PortForwardSession>>,
-    controls: Arc<DashMap<String, CancellationToken>>,
-    key: String,
-    /// Cancelled here, not only by the Stop button.
-    ///
-    /// The connections are detached tasks, so the session ending is the only
-    /// thing that can reach them — and the session can end without anybody
-    /// pressing Stop: the listener errors, or this task panics. Firing on
-    /// drop means every exit path takes the connections with it, which is
-    /// what "the session is over" has to mean if the maps are empty.
-    cancel: CancellationToken,
-}
+use super::follow::{current_client, follow, owner_of, replacement, Follow, Target};
+use super::types::{ForwardNote, ForwardVia, PortForwardRequest, PortForwardSessionInfo, Reporter};
 
-impl Drop for PortForwardCleanup {
-    fn drop(&mut self) {
-        self.sessions.remove(&self.key);
-        self.controls.remove(&self.key);
-        self.cancel.cancel();
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-/// How many failures in a row before a forward stops claiming it is coming back.
+/// How many failures in a row before a connection stops claiming it is coming back.
 ///
 /// Twelve at the capped ten seconds is about two minutes of trying, which
-/// outlasts a rollout and a node reboot but not a lunch break. A forward that
-/// has failed for two minutes is not reconnecting, and saying so is worth more
-/// than a banner that never resolves.
+/// outlasts a node reboot but not a lunch break.
 const MAX_ATTEMPTS: u32 = 12;
+
+/// How often a forward looks at its pod when no connection prompts it to.
+const LOOK_EVERY: Duration = Duration::from_secs(3);
+
+/// How long a gone pod's owner has to put a ready one up before the forward
+/// ends. Covers a `Recreate` rollout and a one-replica `StatefulSet` restart.
+const PATIENCE: Duration = Duration::from_secs(60);
 
 /// What to do after a failed attempt, and what to say about it.
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum AfterFailure {
     /// Wait, then try again. The reason rides along: a banner that says only
-    /// "Retry in 10s" cannot be acted on, and this one repeated for a user
-    /// whose credentials had simply expired.
-    Retry { after: Duration, note: String },
-    /// Stop, and say why. Nothing about trying again would change the answer.
-    GiveUp { note: String },
+    /// "Retry in 10s" cannot be acted on.
+    Retry { after: Duration, note: ForwardNote },
+    /// Stop, and say why.
+    GiveUp { note: ForwardNote },
 }
 
-/// Whether the API server's answer can change by asking again.
+/// Whether a failed attempt says the pod itself is gone.
 ///
-/// 401 and 403 can — a background renewal only covers a context whose plugin
-/// named a deadline and answered without a person, so the recovery is
-/// the user reconnecting, and `current_client` picks that up on the next
-/// attempt. What cannot change on its own is a 404: the pod named at session
-/// start is gone, and a Deployment's replacement has a different name.
-fn permanent(err: &kube::Error) -> Option<&'static str> {
+/// A deleted pod's upgrade is refused with a bare 404 rather than an API
+/// `Status`, so `kube` reports it as a failed protocol switch. Read as a
+/// transient error, it was retried for two minutes per connection while the
+/// forward stayed green.
+pub(super) fn pod_is_gone(err: &kube::Error) -> bool {
     match err {
-        kube::Error::Api(response) if response.code == 404 => Some(
-            "The pod is gone. A rollout replaced it under a new name — forward to the new pod.",
-        ),
-        _ => None,
+        kube::Error::Api(response) => response.code == 404,
+        kube::Error::UpgradeConnection(kube::client::UpgradeConnectionError::ProtocolSwitch(
+            status,
+        )) => status.as_u16() == 404,
+        _ => false,
     }
 }
 
-pub(super) fn after_failure(err: &kube::Error, attempt: u32, auto_reconnect: bool) -> AfterFailure {
-    let reason = err.to_string();
-
+pub(super) fn after_failure(err: &Error, attempt: u32, auto_reconnect: bool) -> AfterFailure {
+    let text = err.to_string();
     if !auto_reconnect {
         return AfterFailure::GiveUp {
-            note: format!("Port-forward failed: {reason}"),
-        };
-    }
-    if let Some(why) = permanent(err) {
-        return AfterFailure::GiveUp {
-            note: format!("{why} ({reason})"),
+            note: ForwardNote::Said { text },
         };
     }
     if attempt >= MAX_ATTEMPTS {
         return AfterFailure::GiveUp {
-            note: format!("Gave up after {attempt} attempts: {reason}"),
+            note: ForwardNote::GaveUp {
+                text,
+                attempts: attempt,
+            },
         };
     }
-
     let after = Duration::from_secs(u64::from(attempt).min(10));
     AfterFailure::Retry {
         after,
-        note: format!("{reason} — retry in {}s", after.as_secs()),
+        note: ForwardNote::Retrying {
+            text,
+            after_secs: after.as_secs(),
+        },
     }
 }
 
-/// The client to forward through, looked up fresh.
-///
-/// Not the client the session started with. A `kube::Client` carries the
-/// credentials it was built with — a GKE token lasts about an hour. Held
-/// across a session, it goes on failing every call after that hour and keeps
-/// failing after the client is replaced, by a reconnect or by `auth::renew`,
-/// because this task still holds its own copy. Asked for per attempt, either
-/// one heals the forward instead of leaving it to retry a dead credential.
-fn current_client(
-    manager: &crate::client::K8sClientManager,
-    context: &str,
-) -> std::result::Result<kube::Client, String> {
-    match manager.get_client(context) {
-        Some(client) => Ok((*client).clone()),
-        None => Err(format!("Not connected to {context}")),
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-async fn forward_connection(
-    pod: String,
-    namespace: String,
-    remote_port: u16,
-    local_port: u16,
-    auto_reconnect: bool,
+/// What every connection of one forward shares.
+#[derive(Clone)]
+struct Shared {
     clients: Arc<crate::client::K8sClientManager>,
     context: String,
-    mut local_stream: tokio::net::TcpStream,
-    event_tx: tokio::sync::broadcast::Sender<AppEvent>,
-    session_id: String,
+    namespace: String,
+    auto_reconnect: bool,
+    report: Reporter,
+    target: watch::Receiver<Target>,
+    suspect: Arc<Notify>,
     cancel: CancellationToken,
-) {
+}
+
+async fn forward_connection(shared: Shared, mut local_stream: tokio::net::TcpStream) {
+    let Shared {
+        clients,
+        context,
+        namespace,
+        auto_reconnect,
+        report,
+        mut target,
+        suspect,
+        cancel,
+    } = shared;
     let mut attempt: u32 = 0;
 
     loop {
@@ -150,99 +117,63 @@ async fn forward_connection(
         if cancel.is_cancelled() {
             return;
         }
+        let Target { pod, remote_port } = target.borrow_and_update().clone();
         let attempt_result = match current_client(&clients, &context) {
             Ok(client) => {
-                let ctx = ResourceContext::from_client(client, namespace.clone());
-                let pod_api: Api<k8s_openapi::api::core::v1::Pod> = ctx.namespaced_api();
-                pod_api.portforward(&pod, &[remote_port]).await
+                let pod_api: Api<k8s_openapi::api::core::v1::Pod> =
+                    Api::namespaced(client, &namespace);
+                pod_api
+                    .portforward(&pod, &[remote_port])
+                    .await
+                    .map_err(|err| (pod_is_gone(&err), Error::from(err)))
             }
-            // Disconnected right now. Treated as a failed attempt rather than
-            // a fatal one: the user reconnecting is exactly the recovery this
-            // loop is waiting for.
-            Err(why) => Err(kube::Error::Service(why.into())),
+            // Disconnected right now: the user reconnecting is exactly the
+            // recovery this loop is waiting for.
+            Err(why) => Err((false, why)),
         };
 
         match attempt_result {
             Ok(mut portforwarder) => {
                 if attempt > 0 {
-                    emit_port_forward_status(
-                        &event_tx,
-                        &session_id,
-                        &pod,
-                        &namespace,
-                        local_port,
-                        remote_port,
-                        "reconnected",
-                        None,
-                        Some(attempt),
-                    );
+                    report.say(&pod, remote_port, "reconnected", None, Some(attempt));
                 }
-
                 if let Some(mut remote_stream) = portforwarder.take_stream(remote_port) {
-                    // Stop has to reach the bytes in flight, not just the
-                    // door. `copy_bidirectional` runs until one side closes,
-                    // so a stopped forward with `psql` on it kept serving
-                    // that session for as long as the client cared to hold
-                    // it — the list said the forward was gone and the socket
-                    // disagreed. Losing the select drops both halves, which
-                    // closes the local socket and is what the client should
-                    // see: the forward went away.
+                    // Stop has to reach the bytes in flight, not just the door:
+                    // losing the select drops both halves and closes the socket.
                     tokio::select! {
-                        _ = tokio::io::copy_bidirectional(
-                            &mut local_stream,
-                            &mut remote_stream,
-                        ) => {}
+                        _ = tokio::io::copy_bidirectional(&mut local_stream, &mut remote_stream) => {}
                         () = cancel.cancelled() => {}
                     }
                 } else {
-                    emit_port_forward_status(
-                        &event_tx,
-                        &session_id,
+                    report.say(
                         &pod,
-                        &namespace,
-                        local_port,
                         remote_port,
                         "error",
-                        Some("Failed to open port forward stream".to_string()),
+                        Some(ForwardNote::NoStream),
                         None,
                     );
                 }
-
                 break;
             }
-            Err(err) => {
+            // The pod is gone: the follower moves the forward or ends it, and
+            // this connection goes wherever that lands instead of retrying a
+            // name that will not come back.
+            Err((true, _)) => {
+                suspect.notify_one();
+                tokio::select! {
+                    changed = target.changed() => if changed.is_err() { return },
+                    () = cancel.cancelled() => return,
+                }
+            }
+            Err((false, err)) => {
                 attempt += 1;
                 match after_failure(&err, attempt, auto_reconnect) {
                     AfterFailure::GiveUp { note } => {
-                        emit_port_forward_status(
-                            &event_tx,
-                            &session_id,
-                            &pod,
-                            &namespace,
-                            local_port,
-                            remote_port,
-                            "error",
-                            Some(note),
-                            Some(attempt),
-                        );
+                        report.say(&pod, remote_port, "error", Some(note), Some(attempt));
                         break;
                     }
                     AfterFailure::Retry { after, note } => {
-                        emit_port_forward_status(
-                            &event_tx,
-                            &session_id,
-                            &pod,
-                            &namespace,
-                            local_port,
-                            remote_port,
-                            "reconnecting",
-                            Some(note),
-                            Some(attempt),
-                        );
-                        // The backoff is up to ten seconds, and a stopped
-                        // forward spent every one of them still saying
-                        // "reconnecting" about itself. Waking early on
-                        // cancellation ends the retry rather than the wait.
+                        report.say(&pod, remote_port, "reconnecting", Some(note), Some(attempt));
                         tokio::select! {
                             () = sleep(after) => {}
                             () = cancel.cancelled() => return,
@@ -252,6 +183,163 @@ async fn forward_connection(
             }
         }
     }
+}
+
+/// Removes the session's row on every exit, a panic's included.
+struct Leave {
+    sessions: Arc<DashMap<String, PortForwardSession>>,
+    key: String,
+}
+
+impl Drop for Leave {
+    fn drop(&mut self) {
+        self.sessions.remove(&self.key);
+    }
+}
+
+/// One forward, from the subscribe gate to its terminal event.
+///
+/// Ends on exactly one of `stopped` (asked to) and `failed` (with the reason),
+/// and closes the local port before saying either: a listener left open after
+/// the forward is over is the silent hang this replaced.
+async fn run(
+    mut opened: Opened,
+    listener: TcpListener,
+    spec: Follow,
+    report: Reporter,
+    start: Target,
+    sessions: Arc<DashMap<String, PortForwardSession>>,
+) {
+    let _leave = Leave {
+        sessions: sessions.clone(),
+        key: report.id.clone(),
+    };
+    if !opened.wait_for_subscriber(SUBSCRIBE_TIMEOUT).await {
+        sessions.remove(&report.id);
+        report.say(&start.pod, start.remote_port, "stopped", None, None);
+        return;
+    }
+    let (cancel, held) = opened.split();
+    let (target_tx, target_rx) = watch::channel(start.clone());
+    let suspect = Arc::new(Notify::new());
+    let shared = Shared {
+        clients: spec.clients.clone(),
+        context: spec.context.clone(),
+        namespace: spec.namespace.clone(),
+        auto_reconnect: spec.auto_reconnect,
+        report: report.clone(),
+        target: target_rx,
+        suspect: suspect.clone(),
+        cancel: cancel.clone(),
+    };
+
+    report.say(&start.pod, start.remote_port, "listening", None, None);
+    let followed = follow(&spec, &report, &sessions, &target_tx, &suspect);
+    tokio::pin!(followed);
+
+    let ending = loop {
+        tokio::select! {
+            () = cancel.cancelled() => break None,
+            note = &mut followed => break Some(note),
+            accepted = listener.accept() => match accepted {
+                Ok((stream, _)) => {
+                    tokio::spawn(forward_connection(shared.clone(), stream));
+                }
+                Err(err) => break Some(ForwardNote::ListenerFailed { text: err.to_string() }),
+            },
+        }
+    };
+
+    drop(listener);
+    drop(held);
+    cancel.cancel();
+    sessions.remove(&report.id);
+    let last = target_tx.borrow().clone();
+    match ending {
+        None => report.say(&last.pod, last.remote_port, "stopped", None, None),
+        Some(note) => report.say(&last.pod, last.remote_port, "failed", Some(note), None),
+    }
+}
+
+pub(super) async fn bind(port: u16) -> Result<TcpListener> {
+    TcpListener::bind(("127.0.0.1", port))
+        .await
+        .map_err(|err| Error::Connection(format!("Failed to bind port {port}: {err}")))
+}
+
+fn info_of(session: &PortForwardSession) -> PortForwardSessionInfo {
+    PortForwardSessionInfo {
+        id: session.id.clone(),
+        context: session.context.clone(),
+        pod: session.pod.clone(),
+        namespace: session.namespace.clone(),
+        local_port: session.local_port,
+        remote_port: session.remote_port,
+        auto_reconnect: session.auto_reconnect,
+        created_at: session.created_at.to_rfc3339(),
+        via: session.via.clone(),
+    }
+}
+
+/// Everything a start needs once the target and the local port are settled.
+struct Start {
+    context: String,
+    namespace: String,
+    target: Target,
+    via: ForwardVia,
+    auto_reconnect: bool,
+}
+
+fn start(state: &AppState, listener: TcpListener, plan: Start) -> Result<PortForwardSessionInfo> {
+    let local_port = listener.local_addr().map_err(Error::Io)?.port();
+    let id = crate::utils::generate_id("pf");
+    let session = PortForwardSession {
+        id: id.clone(),
+        context: plan.context.clone(),
+        pod: plan.target.pod.clone(),
+        namespace: plan.namespace.clone(),
+        local_port,
+        remote_port: plan.target.remote_port,
+        auto_reconnect: plan.auto_reconnect,
+        created_at: chrono::Utc::now(),
+        via: plan.via.clone(),
+    };
+    state
+        .port_forward_sessions
+        .insert(id.clone(), session.clone());
+    let opened = state.port_forwards.open(id.clone());
+    let report = Reporter {
+        event_tx: state.event_tx.clone(),
+        id,
+        namespace: plan.namespace.clone(),
+        local_port,
+    };
+    let spec = Follow {
+        clients: state.client_manager.clone(),
+        context: plan.context,
+        namespace: plan.namespace,
+        via: plan.via,
+        auto_reconnect: plan.auto_reconnect,
+        every: LOOK_EVERY,
+        patience: PATIENCE,
+    };
+    tokio::spawn(run(
+        opened,
+        listener,
+        spec,
+        report,
+        plan.target,
+        state.port_forward_sessions.clone(),
+    ));
+    Ok(info_of(&session))
+}
+
+fn connected_context(state: &AppState) -> Result<(String, kube::Client)> {
+    let context = state
+        .get_current_context()
+        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
+    let client = current_client(&state.client_manager, &context)?;
+    Ok((context, client))
 }
 
 /// Start port forwarding to a pod
@@ -267,211 +355,100 @@ pub async fn port_forward_pod(
             "Ports must be greater than 0".to_string(),
         ));
     }
-
-    let context = state
-        .get_current_context()
-        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
-
-    // Refuse a forward to a cluster we are not connected to, before binding a
-    // local port that would then answer nothing. The client itself is not kept
-    // — each attempt asks the manager again, see `current_client`.
-    if state.client_manager.get_client(&context).is_none() {
-        return Err(Error::NotConnected(context));
-    }
-
+    crate::validation::validate_dns_subdomain(&pod)?;
+    let (context, client) = connected_context(&state)?;
     let namespace = require_namespace(namespace, String::new())?;
+    let listener = bind(config.local_port).await?;
+    let via = owner_of(&client, &namespace, &pod).await;
+    start(
+        &state,
+        listener,
+        Start {
+            context,
+            namespace,
+            target: Target {
+                pod,
+                remote_port: config.remote_port,
+            },
+            via,
+            auto_reconnect: config.auto_reconnect,
+        },
+    )
+}
 
-    let listener = TcpListener::bind(("127.0.0.1", config.local_port))
-        .await
-        .map_err(|e| {
-            Error::Connection(format!("Failed to bind port {}: {e}", config.local_port))
-        })?;
-
-    let session_id = crate::utils::generate_id("pf");
-    let created_at = chrono::Utc::now();
-
-    let session = PortForwardSession {
-        id: session_id.clone(),
-        context: context.clone(),
-        pod: pod.clone(),
-        namespace: namespace.clone(),
-        local_port: config.local_port,
-        remote_port: config.remote_port,
-        auto_reconnect: config.auto_reconnect,
-        created_at,
+/// Start port forwarding to a Service, through a ready pod behind it, the way
+/// `kubectl port-forward svc/...` does. `config.remote_port` is the Service
+/// port; the pod-side port is resolved from its `targetPort`.
+#[tauri::command]
+pub async fn port_forward_service(
+    service: String,
+    namespace: Option<String>,
+    config: PortForwardRequest,
+    state: State<'_, AppState>,
+) -> Result<PortForwardSessionInfo> {
+    if config.local_port == 0 || config.remote_port == 0 {
+        return Err(Error::InvalidInput(
+            "Ports must be greater than 0".to_string(),
+        ));
+    }
+    crate::validation::validate_dns_label(&service)?;
+    let (context, client) = connected_context(&state)?;
+    let namespace = require_namespace(namespace, String::new())?;
+    let via = ForwardVia::Service {
+        name: service.clone(),
+        port: config.remote_port,
     };
+    let target = replacement(&client, &namespace, &via, "", config.remote_port)
+        .await?
+        .ok_or(Error::NoReadyPod { service })?;
+    let listener = bind(config.local_port).await?;
+    start(
+        &state,
+        listener,
+        Start {
+            context,
+            namespace,
+            target,
+            via,
+            auto_reconnect: config.auto_reconnect,
+        },
+    )
+}
 
-    state
-        .port_forward_sessions
-        .insert(session_id.clone(), session.clone());
-
-    let cancel = CancellationToken::new();
-    state
-        .port_forward_controls
-        .insert(session_id.clone(), cancel.clone());
-
-    let event_tx = state.event_tx.clone();
-    let session_id_for_task = session_id.clone();
-    let namespace_for_task = namespace.clone();
-    let pod_for_task = pod.clone();
-    let clients_for_task = state.client_manager.clone();
-    let context_for_task = context.clone();
-    let auto_reconnect = config.auto_reconnect;
-    let remote_port = config.remote_port;
-    let local_port = config.local_port;
-    let sessions = state.port_forward_sessions.clone();
-    let controls = state.port_forward_controls.clone();
-
-    tokio::spawn(async move {
-        // Drop guard ensures map entries are removed on every exit
-        // path — including a panic in listener.accept() or anywhere
-        // else inside the loop. The explicit removes that used to live
-        // at the bottom of this task have moved into the guard.
-        let _cleanup = PortForwardCleanup {
-            sessions: sessions.clone(),
-            controls: controls.clone(),
-            key: session_id_for_task.clone(),
-            cancel: cancel.clone(),
-        };
-
-        emit_port_forward_status(
-            &event_tx,
-            &session_id_for_task,
-            &pod_for_task,
-            &namespace_for_task,
-            local_port,
-            remote_port,
-            "listening",
-            Some(format!(
-                "127.0.0.1:{local_port} -> {pod_for_task}:{remote_port}"
-            )),
-            None,
-        );
-
-        loop {
-            tokio::select! {
-                () = cancel.cancelled() => {
-                    break;
-                }
-                accept_result = listener.accept() => {
-                    match accept_result {
-                        Ok((stream, _)) => {
-                            let event_tx = event_tx.clone();
-                            let session_id = session_id_for_task.clone();
-                            let pod = pod_for_task.clone();
-                            let namespace = namespace_for_task.clone();
-                            let clients = clients_for_task.clone();
-                            let context = context_for_task.clone();
-                            let cancel = cancel.clone();
-
-                            tokio::spawn(async move {
-                                forward_connection(
-                                    pod,
-                                    namespace,
-                                    remote_port,
-                                    local_port,
-                                    auto_reconnect,
-                                    clients,
-                                    context,
-                                    stream,
-                                    event_tx,
-                                    session_id,
-                                    cancel,
-                                ).await;
-                            });
-                        }
-                        Err(err) => {
-                            emit_port_forward_status(
-                                &event_tx, &session_id_for_task, &pod_for_task, &namespace_for_task,
-                                local_port, remote_port, "error",
-                                Some(format!("Listener error: {err}")), None,
-                            );
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        emit_port_forward_status(
-            &event_tx,
-            &session_id_for_task,
-            &pod_for_task,
-            &namespace_for_task,
-            local_port,
-            remote_port,
-            "stopped",
-            None,
-            None,
-        );
-        // _cleanup drops here, removing both map entries.
-    });
-
-    Ok(PortForwardSessionInfo {
-        id: session.id,
-        context: session.context,
-        pod: session.pod,
-        namespace: session.namespace,
-        local_port: session.local_port,
-        remote_port: session.remote_port,
-        auto_reconnect: session.auto_reconnect,
-        created_at: session.created_at.to_rfc3339(),
-    })
+/// The frontend's listener is up: the forward may start saying things.
+/// A no-op for a forward that has already ended.
+#[tauri::command]
+pub fn port_forward_subscribed(forward_id: String, state: State<'_, AppState>) -> Result<()> {
+    if !state.port_forwards.subscribed(&forward_id) {
+        tracing::debug!("Port-forward {forward_id} subscribed after it ended");
+    }
+    Ok(())
 }
 
 /// Stop a running port-forward session
 #[tauri::command]
 pub fn stop_port_forward(forward_id: String, state: State<'_, AppState>) -> Result<()> {
-    // Remove from both maps atomically to avoid race conditions
-    // The background task will also try to remove, but that's fine (no-op if already removed)
     state.port_forward_sessions.remove(&forward_id);
-    if let Some((_, cancel)) = state.port_forward_controls.remove(&forward_id) {
-        cancel.cancel();
-    }
-
+    let _ = state.port_forwards.stop(&forward_id);
     Ok(())
 }
 
 /// List active port-forward sessions
 #[tauri::command]
 pub fn list_port_forwards(state: State<'_, AppState>) -> Result<Vec<PortForwardSessionInfo>> {
-    let sessions = state
+    Ok(state
         .port_forward_sessions
         .iter()
-        .map(|entry| {
-            let session = entry.value();
-            PortForwardSessionInfo {
-                id: session.id.clone(),
-                context: session.context.clone(),
-                pod: session.pod.clone(),
-                namespace: session.namespace.clone(),
-                local_port: session.local_port,
-                remote_port: session.remote_port,
-                auto_reconnect: session.auto_reconnect,
-                created_at: session.created_at.to_rfc3339(),
-            }
-        })
-        .collect();
-
-    Ok(sessions)
+        .map(|entry| info_of(entry.value()))
+        .collect())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn make_test_session(id: &str) -> PortForwardSession {
-        PortForwardSession {
-            id: id.to_string(),
-            context: "ctx".to_string(),
-            pod: "p".to_string(),
-            namespace: "n".to_string(),
-            local_port: 8080,
-            remote_port: 80,
-            auto_reconnect: false,
-            created_at: chrono::Utc::now(),
-        }
-    }
+    use crate::client::served::test_server::{connected, failure};
+    use crate::client::served::ServedIndex;
+    use crate::state::AppEvent;
 
     fn api_error(code: u16) -> kube::Error {
         kube::Error::Api(Box::new(kube::core::Status {
@@ -484,67 +461,69 @@ mod tests {
         }))
     }
 
-    /// The reported bug. A user watched "Port-forward reconnecting / Retry in
-    /// 10s" repeat and had no way to learn why — the reason was thrown away
-    /// and only the delay survived.
+    fn upgrade_refused(code: u16) -> kube::Error {
+        kube::Error::UpgradeConnection(kube::client::UpgradeConnectionError::ProtocolSwitch(
+            http::StatusCode::from_u16(code).unwrap(),
+        ))
+    }
+
+    /// A user watched "Retry in 10s" repeat with no way to learn why: the
+    /// reason was thrown away and only the delay survived.
     #[test]
     fn a_retry_says_why_it_is_retrying() {
-        let AfterFailure::Retry { note, .. } = after_failure(&api_error(401), 3, true) else {
-            panic!("a 401 is recoverable by reconnecting, so it should retry");
+        let AfterFailure::Retry { note, .. } = after_failure(&Error::from(api_error(500)), 3, true)
+        else {
+            panic!("a 500 may pass, so it should retry");
         };
-        assert!(
-            note.contains("401"),
-            "the reason has to reach the banner, got {note:?}"
-        );
-        assert!(
-            note.contains("retry in 3s"),
-            "and so does the delay: {note:?}"
-        );
+        let ForwardNote::Retrying { text, after_secs } = note else {
+            panic!("a retry carries its reason and its delay");
+        };
+        assert!(text.contains("500"), "{text:?}");
+        assert_eq!(after_secs, 3);
     }
 
-    /// Credentials are the case that made this loop forever, and they are the
-    /// case that CAN heal: `current_client` picks up the reconnect.
+    /// Credentials are the case that CAN heal: `current_client` picks up the reconnect.
     #[test]
     fn an_expired_credential_keeps_trying() {
-        assert!(matches!(
-            after_failure(&api_error(401), 1, true),
-            AfterFailure::Retry { .. }
-        ));
-        assert!(matches!(
-            after_failure(&api_error(403), 1, true),
-            AfterFailure::Retry { .. }
-        ));
+        for code in [401, 403] {
+            assert!(matches!(
+                after_failure(&Error::from(api_error(code)), 1, true),
+                AfterFailure::Retry { .. }
+            ));
+        }
     }
 
-    /// A pod that a rollout replaced is never coming back under that name, so
-    /// retrying it is a banner that will never resolve.
+    /// A deleted pod's upgrade comes back as a bare 404 protocol switch, not
+    /// an API status, and was retried for two minutes per connection.
     #[test]
-    fn a_pod_that_is_gone_stops_immediately() {
-        let AfterFailure::GiveUp { note } = after_failure(&api_error(404), 1, true) else {
-            panic!("404 means the name is gone; asking again cannot change it");
-        };
-        assert!(note.contains("rollout"), "and says what to do: {note:?}");
+    fn a_deleted_pod_is_recognised_in_both_shapes() {
+        assert!(pod_is_gone(&api_error(404)));
+        assert!(pod_is_gone(&upgrade_refused(404)));
+        assert!(!pod_is_gone(&upgrade_refused(403)));
+        assert!(!pod_is_gone(&api_error(500)));
     }
 
     /// Two minutes of failing is not "reconnecting".
     #[test]
     fn it_stops_claiming_it_will_come_back() {
+        let err = Error::from(api_error(500));
         assert!(matches!(
-            after_failure(&api_error(500), MAX_ATTEMPTS - 1, true),
+            after_failure(&err, MAX_ATTEMPTS - 1, true),
             AfterFailure::Retry { .. }
         ));
-        let AfterFailure::GiveUp { note } = after_failure(&api_error(500), MAX_ATTEMPTS, true)
-        else {
-            panic!("should give up at the cap");
-        };
-        assert!(note.contains("Gave up"), "{note:?}");
+        assert!(matches!(
+            after_failure(&err, MAX_ATTEMPTS, true),
+            AfterFailure::GiveUp {
+                note: ForwardNote::GaveUp { .. }
+            }
+        ));
     }
 
-    /// The backoff climbs a second per attempt and stops at ten, which is what
-    /// the reported screenshot was showing.
+    /// The backoff climbs a second per attempt and stops at ten.
     #[test]
     fn the_wait_grows_and_then_stops_growing() {
-        let wait = |n| match after_failure(&api_error(500), n, true) {
+        let err = Error::from(api_error(500));
+        let wait = |n| match after_failure(&err, n, true) {
             AfterFailure::Retry { after, .. } => after,
             AfterFailure::GiveUp { .. } => panic!("unexpected give-up at {n}"),
         };
@@ -556,117 +535,165 @@ mod tests {
     /// Without auto-reconnect there is no second attempt to explain.
     #[test]
     fn a_forward_that_was_told_not_to_reconnect_does_not() {
-        let AfterFailure::GiveUp { note } = after_failure(&api_error(500), 1, false) else {
-            panic!("auto_reconnect off means one attempt");
-        };
-        assert!(note.starts_with("Port-forward failed"), "{note:?}");
+        assert!(matches!(
+            after_failure(&Error::from(api_error(500)), 1, false),
+            AfterFailure::GiveUp {
+                note: ForwardNote::Said { .. }
+            }
+        ));
     }
 
+    /// The row has to leave with the task on every exit, a panic's included.
     #[test]
-    fn cleanup_guard_removes_from_both_maps_on_drop() {
+    fn the_session_row_leaves_with_its_task() {
         let sessions: Arc<DashMap<String, PortForwardSession>> = Arc::new(DashMap::new());
-        let controls: Arc<DashMap<String, CancellationToken>> = Arc::new(DashMap::new());
-
-        sessions.insert("k".to_string(), make_test_session("k"));
-        controls.insert("k".to_string(), CancellationToken::new());
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(controls.len(), 1);
-
-        {
-            let _guard = PortForwardCleanup {
-                sessions: sessions.clone(),
-                controls: controls.clone(),
-                key: "k".to_string(),
-                cancel: CancellationToken::new(),
-            };
-        }
-
-        assert_eq!(
-            sessions.len(),
-            0,
-            "guard's Drop must remove the session entry — same path runs on panic-unwind"
-        );
-        assert_eq!(
-            controls.len(),
-            0,
-            "guard's Drop must remove the control entry"
-        );
-    }
-
-    #[test]
-    fn cleanup_guard_drop_is_safe_when_entries_already_removed() {
-        // Race: stop_port_forward removes both entries while the
-        // listener task is still running. The guard's Drop must not
-        // panic when the keys are no longer in either map.
-        let sessions: Arc<DashMap<String, PortForwardSession>> = Arc::new(DashMap::new());
-        let controls: Arc<DashMap<String, CancellationToken>> = Arc::new(DashMap::new());
-
-        let guard = PortForwardCleanup {
+        sessions.insert("k".into(), session("k", "api-0"));
+        drop(Leave {
             sessions: sessions.clone(),
-            controls: controls.clone(),
-            key: "missing".to_string(),
-            cancel: CancellationToken::new(),
+            key: "k".into(),
+        });
+        assert!(sessions.is_empty());
+    }
+
+    fn session(id: &str, pod: &str) -> PortForwardSession {
+        PortForwardSession {
+            id: id.into(),
+            context: "fake".into(),
+            pod: pod.into(),
+            namespace: "shop".into(),
+            local_port: 0,
+            remote_port: 8080,
+            auto_reconnect: true,
+            created_at: chrono::Utc::now(),
+            via: ForwardVia::Pod,
+        }
+    }
+
+    struct Running {
+        state: AppState,
+        events: tokio::sync::broadcast::Receiver<AppEvent>,
+        port: u16,
+    }
+
+    /// A forward to `api-0` against a cluster that answers `answer`, looked
+    /// at every few milliseconds.
+    async fn running(
+        via: ForwardVia,
+        auto_reconnect: bool,
+        answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
+    ) -> Running {
+        let (state, _) = connected(ServedIndex::default(), answer).await;
+        let events = state.event_tx.subscribe();
+        let listener = bind(0).await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        state
+            .port_forward_sessions
+            .insert("pf-1".into(), session("pf-1", "api-0"));
+        let opened = state.port_forwards.open("pf-1".into());
+        let report = Reporter {
+            event_tx: state.event_tx.clone(),
+            id: "pf-1".into(),
+            namespace: "shop".into(),
+            local_port: port,
         };
-        drop(guard); // must not panic
-
-        assert_eq!(sessions.len(), 0);
-        assert_eq!(controls.len(), 0);
+        let spec = Follow {
+            clients: state.client_manager.clone(),
+            context: "fake".into(),
+            namespace: "shop".into(),
+            via,
+            auto_reconnect,
+            every: Duration::from_millis(20),
+            patience: Duration::from_millis(200),
+        };
+        tokio::spawn(run(
+            opened,
+            listener,
+            spec,
+            report,
+            Target {
+                pod: "api-0".into(),
+                remote_port: 8080,
+            },
+            state.port_forward_sessions.clone(),
+        ));
+        Running {
+            state,
+            events,
+            port,
+        }
     }
 
-    /// The session ending has to reach the connections, and the maps going
-    /// empty is not what reaches them — they are detached tasks holding a
-    /// clone of the token and nothing else. This is the listener-error and
-    /// panic path: nobody pressed Stop, and the forwards still have to stop.
-    #[test]
-    fn the_session_ending_cancels_the_connections_it_spawned() {
-        let cancel = CancellationToken::new();
-        let held_by_a_connection = cancel.clone();
-        assert!(!held_by_a_connection.is_cancelled());
-
-        drop(PortForwardCleanup {
-            sessions: Arc::new(DashMap::new()),
-            controls: Arc::new(DashMap::new()),
-            key: "k".to_string(),
-            cancel,
-        });
-
-        assert!(
-            held_by_a_connection.is_cancelled(),
-            "a connection outliving its session keeps proxying bytes for a \
-             forward the list says is gone"
-        );
-    }
-
-    /// Stop is the ordinary path, and it has to reach the same clones.
-    #[tokio::test]
-    async fn stop_reaches_a_connection_already_in_flight() {
-        let cancel = CancellationToken::new();
-        let in_flight = cancel.clone();
-
-        // What `forward_connection` waits on while bytes are moving.
-        let connection = tokio::spawn(async move {
-            in_flight.cancelled().await;
-            "stopped"
-        });
-
-        cancel.cancel();
-
-        assert_eq!(
-            tokio::time::timeout(Duration::from_secs(1), connection)
+    async fn next_status(
+        events: &mut tokio::sync::broadcast::Receiver<AppEvent>,
+    ) -> (String, Option<ForwardNote>) {
+        loop {
+            let event = tokio::time::timeout(Duration::from_secs(5), events.recv())
                 .await
-                .expect("a stopped forward must not outlive its Stop")
-                .expect("connection task panicked"),
-            "stopped"
-        );
+                .expect("an event within five seconds")
+                .expect("the channel is open");
+            if let AppEvent::PortForwardStatus { status, note, .. } = event {
+                return (status, note);
+            }
+        }
     }
 
-    /// A connection accepted in the same breath as Stop must not go on to
-    /// open a stream: the token was already cancelled when it started, and
-    /// nothing it is about to await would tell it so.
-    #[test]
-    fn a_connection_accepted_after_stop_does_not_start() {
-        let cancel = CancellationToken::new();
-        cancel.cancel();
-        assert!(cancel.is_cancelled());
+    /// The reported bug: after a restart the forward stayed green against a
+    /// pod that no longer existed, and its port took connections and hung.
+    #[tokio::test]
+    async fn a_forward_whose_pod_is_deleted_fails_and_closes_its_port() {
+        let mut forward = running(ForwardVia::Pod, true, |_, _| failure(404, "NotFound")).await;
+        assert!(forward.state.port_forwards.subscribed("pf-1"));
+
+        assert_eq!(next_status(&mut forward.events).await.0, "listening");
+        let (status, note) = next_status(&mut forward.events).await;
+        assert_eq!(status, "failed");
+        assert_eq!(
+            note,
+            Some(ForwardNote::PodGone {
+                pod: "api-0".into()
+            })
+        );
+        assert!(
+            tokio::net::TcpStream::connect(("127.0.0.1", forward.port))
+                .await
+                .is_err(),
+            "the local port must close with the forward, not hang"
+        );
+        assert!(forward.state.port_forward_sessions.is_empty());
+    }
+
+    /// Tauri events have no replay, so nothing is said before the frontend
+    /// says it is listening.
+    #[tokio::test]
+    async fn a_forward_says_nothing_until_it_is_subscribed_to() {
+        let mut forward = running(ForwardVia::Pod, true, |_, _| failure(404, "NotFound")).await;
+        sleep(Duration::from_millis(150)).await;
+        assert!(matches!(
+            forward.events.try_recv(),
+            Err(tokio::sync::broadcast::error::TryRecvError::Empty)
+        ));
+        assert!(forward.state.port_forwards.subscribed("pf-1"));
+        assert_eq!(next_status(&mut forward.events).await.0, "listening");
+    }
+
+    /// Stop ends on `stopped`, once, and never on `failed`.
+    #[tokio::test]
+    async fn a_stopped_forward_says_stopped_and_nothing_after() {
+        let pod = serde_json::json!({ "metadata": { "name": "api-0", "namespace": "shop" } });
+        let mut forward = running(ForwardVia::Pod, true, move |path, _| match path {
+            "/api/v1/namespaces/shop/pods/api-0" => (200, pod.to_string()),
+            _ => failure(404, "NotFound"),
+        })
+        .await;
+        assert!(forward.state.port_forwards.subscribed("pf-1"));
+        assert_eq!(next_status(&mut forward.events).await.0, "listening");
+
+        assert!(forward.state.port_forwards.stop("pf-1"));
+        assert_eq!(next_status(&mut forward.events).await.0, "stopped");
+        sleep(Duration::from_millis(100)).await;
+        assert!(
+            forward.events.try_recv().is_err(),
+            "one terminal event only"
+        );
     }
 }

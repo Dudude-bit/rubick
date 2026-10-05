@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // ----- Mocks -----
@@ -61,6 +61,7 @@ const SESSION = {
   remotePort: 80,
   autoReconnect: true,
   createdAt: "now",
+  via: { kind: "pod" as const },
 };
 
 function mount() {
@@ -78,6 +79,7 @@ describe("PortForwardsTab", () => {
       configs: [CONFIG],
       sessions: [SESSION],
       statusBySession: {},
+      failed: [],
       configsLoaded: true,
     });
   });
@@ -150,6 +152,68 @@ describe("PortForwardsTab", () => {
     expect(await screen.findByRole("dialog")).toHaveTextContent(
       "New port forward"
     );
+  });
+
+  describe("a forward whose pod was replaced", () => {
+    /**
+     * The reported bug: after a restart the row stayed green against a pod
+     * that no longer existed. Fails if a move does not rename the row.
+     */
+    it("names the pod it moved to, and what it follows", async () => {
+      usePortForwardStore.setState({
+        sessions: [
+          {
+            ...SESSION,
+            via: { kind: "owner", ownerKind: "Deployment", name: "api" },
+          },
+        ],
+      });
+      await mount();
+
+      act(() => {
+        usePortForwardStore.getState().moved("sess-1", "api-55f", 80);
+        usePortForwardStore.getState().setStatus({
+          id: "sess-1",
+          pod: "api-55f",
+          namespace: "default",
+          localPort: 8080,
+          remotePort: 80,
+          status: "moved",
+          note: { says: "moved", from: "api-7f9" },
+        });
+      });
+
+      const running = screen.getByText("Running").closest("section");
+      expect(running).toHaveTextContent("api-55f");
+      expect(running).not.toHaveTextContent(/^api-7f9/);
+      expect(running).toHaveTextContent("via Deployment api");
+      expect(screen.getByText("moved here from api-7f9")).toBeInTheDocument();
+    });
+
+    /**
+     * With nothing to move to, the forward ends: it leaves Running, and the
+     * reason stays on screen in the error tone instead of the row vanishing
+     * like one somebody stopped.
+     */
+    it("leaves Running and says why it ended when there is nothing to move to", async () => {
+      await mount();
+
+      act(() => {
+        usePortForwardStore
+          .getState()
+          .fail("sess-1", { says: "podGone", pod: "api-7f9" });
+      });
+
+      expect(screen.queryByText("Running")).not.toBeInTheDocument();
+      const reason = screen.getByText("pod api-7f9 was deleted");
+      expect(reason).toHaveClass("text-err");
+      expect(screen.getByText("Ended")).toBeInTheDocument();
+
+      await userEvent
+        .setup()
+        .click(screen.getByRole("button", { name: "Dismiss api-7f9" }));
+      expect(screen.queryByText("pod api-7f9 was deleted")).toBeNull();
+    });
   });
 
   describe("a forward belonging to another cluster", () => {
