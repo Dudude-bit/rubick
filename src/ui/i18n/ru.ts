@@ -1032,6 +1032,8 @@ export const ru: Catalogue = {
     filterNamespaces: "Фильтр пространств имён",
     filterNamespacesPlaceholder: "Фильтр пространств имён…",
     typeNamespacePlaceholder: "Введите пространство имён…",
+    details: "Подробности",
+    copyDetails: "Скопировать подробности",
     chooseNamespace: "Выбрать пространство имён",
     filterClusters: "Фильтр кластеров",
     filterClustersPlaceholder: "Фильтр кластеров…",
@@ -4186,6 +4188,7 @@ export const ru: Catalogue = {
     proxyNoKubectl:
       "kubectl нет в пути поиска. С ним Rubick попробовал бы kubectl proxy как второй путь.",
     proxyFailed: "kubectl proxy тоже не смог подключиться ({kubectl}):",
+    proxyFailedToo: "kubectl proxy тоже не смог подключиться.",
     tunnelWaking: "подключение…",
     linkCopied: "Скопировано, где вы сейчас",
     objectLinkCopied: "Скопирована ссылка на {name}",
@@ -4290,7 +4293,21 @@ export const ru: Catalogue = {
     reaching: "Соединение с",
     didNotAnswer: "Кластер не ответил",
     notReachable:
-      "{context} недоступен с этой машины — возможно, он выключен или за VPN.",
+      "{context} недоступен с этой машины. Возможно, он выключен или доступен только через VPN.",
+    couldNotConnect: "Не удалось подключиться к {context}",
+    failDns:
+      "Имя {host} не разрешается с этой машины. Возможно, оно указано с ошибкой или разрешается только через VPN.",
+    failRefused:
+      "{host} отклонил соединение: на этом порту никто не слушает, или его не пропустил файрвол.",
+    failTimeout:
+      "{host} не ответил вовремя. Возможно, он выключен или доступен только через VPN.",
+    failTls:
+      "TLS-рукопожатие с {host} не удалось: его сертификату этот kubeconfig не доверяет.",
+    failCredentials:
+      "Кластер ответил и отклонил эти учётные данные. Войдите заново или обновите токен.",
+    failSignIn: "Вход не удался ещё до обращения к кластеру.",
+    failPlugin:
+      "Плагин учётных данных {plugin} завершился с ошибкой, поэтому войти было нечем.",
     orPickAnother: "или выберите другой ниже",
     server: "Сервер",
     allClusters: "все кластеры",

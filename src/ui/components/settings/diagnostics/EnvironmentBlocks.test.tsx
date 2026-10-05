@@ -49,7 +49,11 @@ const sample: Diagnostics = {
     {
       context: "context-1",
       at: "2026-09-07T07:00:00Z",
-      direct: { state: "failed", error: "Unauthorized" },
+      direct: {
+        state: "failed",
+        error: "Unauthorized",
+        failure: "credentials",
+      },
       proxy: {
         state: "failed",
         error: "kubectl proxy exited: exit status 1",

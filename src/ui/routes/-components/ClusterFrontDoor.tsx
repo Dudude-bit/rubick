@@ -1,6 +1,17 @@
 import { ClusterList } from "@/components/cluster/ClusterList";
+import { ErrorDetails } from "@/components/ui/error-details";
 import { Spinner } from "@/components/ui/spinner";
 import { useQuery } from "@tanstack/react-query";
+import {
+  Ban,
+  KeyRound,
+  SearchX,
+  ShieldX,
+  SquareTerminal,
+  TimerOff,
+  WifiOff,
+  type LucideIcon,
+} from "lucide-react";
 
 import { useClusterFilter, type ClusterFilter } from "@/hooks/useClusterFilter";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
@@ -10,8 +21,12 @@ import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { useClusterStore } from "@/stores/clusterStore";
 import { verbatim } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
-import type { KubeconfigSource } from "@/generated/types";
-import { useT } from "@/i18n/useT";
+import type {
+  ConnectAttempt,
+  ConnectFailure,
+  KubeconfigSource,
+} from "@/generated/types";
+import { useT, type T } from "@/i18n/useT";
 
 /**
  * The first screen anyone sees.
@@ -456,6 +471,91 @@ function Connecting({
   );
 }
 
+/** What the screen leads with for each kind of failure, as a total map. */
+const FAILURE: Record<
+  ConnectFailure,
+  {
+    icon: LucideIcon;
+    title: "didNotAnswer" | "couldNotConnect";
+    line:
+      | "failDns"
+      | "failRefused"
+      | "failTimeout"
+      | "failTls"
+      | "failCredentials"
+      | "failSignIn"
+      | "notReachable";
+  }
+> = {
+  dns: { icon: SearchX, title: "didNotAnswer", line: "failDns" },
+  refused: { icon: Ban, title: "didNotAnswer", line: "failRefused" },
+  timeout: { icon: TimerOff, title: "didNotAnswer", line: "failTimeout" },
+  tls: { icon: ShieldX, title: "couldNotConnect", line: "failTls" },
+  credentials: {
+    icon: KeyRound,
+    title: "couldNotConnect",
+    line: "failCredentials",
+  },
+  signIn: {
+    icon: SquareTerminal,
+    title: "couldNotConnect",
+    line: "failSignIn",
+  },
+  unknown: { icon: WifiOff, title: "didNotAnswer", line: "notReachable" },
+};
+
+/** The server's host and port, which name the machine without a path. */
+function hostOf(server: string | null | undefined): string | null {
+  if (!server) return null;
+  try {
+    return new URL(server).host || null;
+  } catch {
+    return null;
+  }
+}
+
+/** The program a credential plugin runs, without the directory it lives in. */
+function pluginOf(command: string | null | undefined): string | null {
+  const program = command?.trim().split(/\s+/)[0];
+  return program ? (program.split(/[\\/]/).pop() ?? null) : null;
+}
+
+function failureLine(
+  t: T,
+  failure: ConnectFailure,
+  context: string,
+  server: string | null | undefined,
+  exec: string | null | undefined
+): string {
+  const host = hostOf(server) ?? context;
+  if (failure === "signIn") {
+    const plugin = pluginOf(exec);
+    return plugin
+      ? t("cluster", "failPlugin", { plugin })
+      : t("cluster", "failSignIn");
+  }
+  return t("cluster", FAILURE[failure].line, { host, context });
+}
+
+/** Everything behind the human line, in the order it happened. */
+function detailsOf(
+  t: T,
+  message: string,
+  attempt: ConnectAttempt | undefined,
+  server: string | null | undefined
+): string {
+  const proxy = attempt?.proxy;
+  return [
+    verbatim(message),
+    proxy?.state === "failed"
+      ? `${t("cluster", "proxyFailed", { kubectl: proxy.kubectl })}\n${verbatim(proxy.stderr.trim() || proxy.error)}`
+      : null,
+    server ? `${t("cluster", "server")} ${server}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 function Failed({
   context,
   message,
@@ -466,62 +566,67 @@ function Failed({
   onRetry: () => void;
 }) {
   const t = useT();
-  const server = useClusterStore(
-    (s) => s.contexts.find((ctx) => ctx.name === context)?.server
+  const info = useClusterStore((s) =>
+    s.contexts.find((ctx) => ctx.name === context)
   );
+  // Keyed on the message too: the same context failing again is a new
+  // attempt, and the record behind it has moved on.
+  const { data } = useQuery({
+    queryKey: ["connection-attempt", context, message],
+    queryFn: () => commands.connectionAttempt(context),
+    staleTime: Infinity,
+  });
+  const attempt = data ?? undefined;
+  const failure: ConnectFailure =
+    attempt?.direct.state === "failed" ? attempt.direct.failure : "unknown";
+  const { icon: Icon, title } = FAILURE[failure];
 
   return (
     <>
-      <Heading
-        title={t("cluster", "didNotAnswer")}
-        sub={t("cluster", "notReachable", { context })}
-      />
+      <div className="flex items-start gap-2.5">
+        <Icon
+          aria-hidden="true"
+          className="mt-0.5 h-4 w-4 flex-none text-err"
+        />
+        <Heading
+          title={t("cluster", title, { context })}
+          sub={failureLine(
+            t,
+            failure,
+            context,
+            info?.server,
+            info?.exec_command
+          )}
+        />
+      </div>
       <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px] text-fg-fnt">
         <Act onClick={onRetry}>{t("action", "retry")}</Act>
         <span>{t("cluster", "orPickAnother")}</span>
       </div>
-      <Machine tone="error">
-        <Mono>{verbatim(message)}</Mono>
-      </Machine>
-      <SecondWay context={context} message={message} />
-      {server && (
-        <Machine>
-          <span>{t("cluster", "server")}</span>
-          <Mono>{server}</Mono>
-        </Machine>
-      )}
+      <SecondWay attempt={attempt} />
+      <ErrorDetails
+        className="mt-2"
+        text={detailsOf(t, message, attempt, info?.server)}
+      />
     </>
   );
 }
 
 /**
- * What became of the second way in. The error above is the app's own path;
- * whether kubectl was asked, and what it said, is the thing a reader who
- * "can connect with kubectl" needs next.
+ * Whether the second way in was tried, in one line. What kubectl printed,
+ * and where kubectl lives, are details.
  */
-function SecondWay({ context, message }: { context: string; message: string }) {
+function SecondWay({ attempt }: { attempt: ConnectAttempt | undefined }) {
   const t = useT();
-  // Keyed on the message too: the same context failing again is a new
-  // attempt, and the record behind it has moved on.
-  const attempt = useQuery({
-    queryKey: ["connection-attempt", context, message],
-    queryFn: () => commands.connectionAttempt(context),
-    staleTime: Infinity,
-  });
-  const proxy = attempt.data?.proxy;
+  const proxy = attempt?.proxy;
   if (!proxy || proxy.state === "notTried" || proxy.state === "ok") return null;
-
-  if (proxy.state === "noKubectl") {
-    return (
-      <Machine>
-        <span>{t("cluster", "proxyNoKubectl")}</span>
-      </Machine>
-    );
-  }
   return (
-    <Machine tone="error">
-      <span>{t("cluster", "proxyFailed", { kubectl: proxy.kubectl })}</span>
-      <Mono>{verbatim(proxy.stderr.trim() || proxy.error)}</Mono>
+    <Machine>
+      <span>
+        {proxy.state === "noKubectl"
+          ? t("cluster", "proxyNoKubectl")
+          : t("cluster", "proxyFailedToo")}
+      </span>
     </Machine>
   );
 }

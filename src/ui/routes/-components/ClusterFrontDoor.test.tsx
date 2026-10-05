@@ -43,6 +43,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const { ClusterFrontDoor } = await import("./ClusterFrontDoor");
+const { commands } = await import("@/lib/commands");
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -248,5 +249,85 @@ describe("the heading and the rows, mid-transition", () => {
     root.unmount();
     host.remove();
     (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = previous;
+  });
+});
+
+describe("a cluster that could not be reached", () => {
+  const attempt = vi.mocked(commands.connectionAttempt);
+
+  const fail = (message: string, over: Partial<ContextInfo> = {}) =>
+    useClusterStore.setState({
+      contexts: [{ ...context("acme-prod-eu"), ...over }],
+      error: message,
+      errorContext: "acme-prod-eu",
+    });
+
+  /**
+   * Dana read "Connection error: Connection error: ..." and seven lines of
+   * kubectl stderr naming a shim in her home directory. Fails if the class of
+   * failure stops leading, or if stderr and the home path reach the visible
+   * screen instead of the folded details.
+   */
+  it("leads with the kind of failure and folds the raw error away", async () => {
+    attempt.mockResolvedValueOnce({
+      context: "acme-prod-eu",
+      at: "2026-10-04T08:28:40Z",
+      direct: {
+        state: "failed",
+        error: "Connection error: refused",
+        failure: "refused",
+      },
+      proxy: {
+        state: "failed",
+        error: "kubectl proxy exited",
+        stdout: "",
+        stderr: "E1004 proxy_server.go:147] Error while proxying request",
+        kubectl: "/home/dana/.local/share/mise/shims/kubectl",
+      },
+    });
+    fail(
+      "Connection error: Failed to get server version: tcp connect error: Connection refused (os error 111)"
+    );
+
+    await mount();
+
+    expect(
+      await screen.findByText(
+        t("cluster", "failRefused", {
+          host: "acme-prod-eu.example:6443",
+          context: "acme-prod-eu",
+        })
+      )
+    ).toBeVisible();
+    expect(screen.getByText(t("cluster", "proxyFailedToo"))).toBeVisible();
+    const raw = screen.getByText(/Connection refused \(os error 111\)/);
+    expect(raw).not.toBeVisible();
+    expect(raw.textContent).toContain("/home/dana/");
+    expect(screen.getByText(t("action", "details"))).toBeVisible();
+  });
+
+  /** Fails if a plugin's path in the home directory is printed in the line. */
+  it("names a failed credential plugin by its program alone", async () => {
+    attempt.mockResolvedValueOnce({
+      context: "acme-prod-eu",
+      at: "2026-10-04T08:28:40Z",
+      direct: {
+        state: "failed",
+        error: "Authentication error: exited 1",
+        failure: "signIn",
+      },
+      proxy: { state: "notTried" },
+    });
+    fail("Authentication error: exited 1", {
+      exec_command: "/home/dana/bin/kubelogin get-token --oidc-issuer-url x",
+    });
+
+    await mount();
+
+    expect(
+      await screen.findByText(
+        t("cluster", "failPlugin", { plugin: "kubelogin" })
+      )
+    ).toBeVisible();
   });
 });

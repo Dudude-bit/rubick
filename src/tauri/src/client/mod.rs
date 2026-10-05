@@ -35,7 +35,94 @@ pub enum ConnectionPath {
 #[serde(tag = "state", rename_all = "camelCase")]
 pub enum PathOutcome {
     Ok,
-    Failed { error: String },
+    Failed {
+        error: String,
+        failure: ConnectFailure,
+    },
+}
+
+/// Which kind of failure ended a connect: the front door leads with one
+/// human line per kind and keeps the error itself behind a disclosure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ConnectFailure {
+    Dns,
+    Refused,
+    Timeout,
+    Tls,
+    /// The cluster answered and turned the credentials down.
+    Credentials,
+    /// Getting credentials failed before the cluster was asked: an exec
+    /// plugin, an OIDC login, a cloud SDK.
+    SignIn,
+    Unknown,
+}
+
+impl ConnectFailure {
+    /// The variant first; the connect path flattens transport errors into
+    /// `Error::Connection` text, so those are read from the cause chain that
+    /// `test_connection` keeps in it.
+    #[must_use]
+    pub fn of(error: &Error) -> Self {
+        match error {
+            Error::Timeout(_) | Error::ReadDeadline { .. } => Self::Timeout,
+            Error::CredentialsExpired(_) => Self::Credentials,
+            Error::Auth(_) => Self::SignIn,
+            _ => Self::from_text(&error.to_string()),
+        }
+    }
+
+    fn from_text(text: &str) -> Self {
+        let lower = text.to_lowercase();
+        let says = |words: &[&str]| words.iter().any(|word| lower.contains(word));
+        if says(&[
+            "dns error",
+            "failed to lookup address",
+            "name or service not known",
+            "nodename nor servname",
+            "no such host",
+            "temporary failure in name resolution",
+        ]) {
+            Self::Dns
+        } else if says(&[
+            "connection refused",
+            "os error 111",
+            "os error 61)",
+            "os error 10061",
+        ]) {
+            Self::Refused
+        } else if says(&[
+            "timed out",
+            "deadline has elapsed",
+            "os error 110",
+            "os error 60)",
+            "os error 10060",
+        ]) {
+            Self::Timeout
+        } else if says(&["certificate", "tls", "handshake", "x509"]) {
+            Self::Tls
+        } else if says(&["unauthorized", "401"]) {
+            Self::Credentials
+        } else {
+            Self::Unknown
+        }
+    }
+}
+
+/// An error and every cause under it, each said once: hyper's own `Display`
+/// stops at "client error (Connect)", and the reason is two sources down.
+pub(crate) fn with_causes(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut text = error.to_string();
+    let mut cursor = error.source();
+    while let Some(cause) = cursor {
+        let said = cause.to_string();
+        if !text.contains(&said) {
+            text.push_str(": ");
+            text.push_str(&said);
+        }
+        cursor = cause.source();
+    }
+    text
 }
 
 /// How the fallback ended, or why it never began.
@@ -668,10 +755,9 @@ impl K8sClientManager {
         let client = self.connect(context).await?;
 
         // Try to get server version
-        let version = client
-            .apiserver_version()
-            .await
-            .map_err(|e| Error::Connection(format!("Failed to get server version: {e}")))?;
+        let version = client.apiserver_version().await.map_err(|e| {
+            Error::Connection(format!("Failed to get server version: {}", with_causes(&e)))
+        })?;
 
         Ok(ClusterInfo {
             context: context.to_string(),

@@ -2273,7 +2273,18 @@ export type ProxyOutcome =
     }
   | { state: "ok"; port: number; kubectl: string };
 
-export type PathOutcome = { state: "ok" } | { state: "failed"; error: string };
+export type PathOutcome =
+  | { state: "ok" }
+  | { state: "failed"; error: string; failure: ConnectFailure };
+
+export type ConnectFailure =
+  | "dns"
+  | "refused"
+  | "timeout"
+  | "tls"
+  | "credentials"
+  | "signIn"
+  | "unknown";
 
 export type ConnectionPath = "direct" | "kubectl_proxy";
 

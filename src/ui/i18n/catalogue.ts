@@ -1040,6 +1040,8 @@ export const en = {
     filterNamespaces: "Filter namespaces",
     filterNamespacesPlaceholder: "Filter namespaces…",
     typeNamespacePlaceholder: "Type a namespace…",
+    details: "Details",
+    copyDetails: "Copy details",
     chooseNamespace: "Choose a namespace",
     filterClusters: "Filter clusters",
     filterClustersPlaceholder: "Filter clusters…",
@@ -3779,6 +3781,7 @@ export const en = {
     proxyNoKubectl:
       "kubectl is not on the search path. With it, Rubick would have tried kubectl proxy as a second way in.",
     proxyFailed: "kubectl proxy could not take over either ({kubectl}):",
+    proxyFailedToo: "kubectl proxy could not get through either.",
     tunnelWaking: "connecting…",
     linkCopied: "Copied where you are",
     // The object menu copies a link to the row that was right-clicked,
@@ -3884,7 +3887,21 @@ export const en = {
     reaching: "Reaching",
     didNotAnswer: "The cluster did not answer",
     notReachable:
-      "{context} is not reachable from this machine — it may be off, or behind a VPN.",
+      "{context} is not reachable from this machine. It may be off, or behind a VPN.",
+    couldNotConnect: "Could not connect to {context}",
+    failDns:
+      "{host} does not resolve from this machine. The name may be wrong, or resolve only on a VPN.",
+    failRefused:
+      "{host} turned the connection away: nothing listens on that port, or a firewall refused it.",
+    failTimeout:
+      "{host} did not answer in time. It may be off, or reachable only through a VPN.",
+    failTls:
+      "The TLS handshake with {host} failed: its certificate is not one this kubeconfig trusts.",
+    failCredentials:
+      "The cluster answered and turned these credentials down. Sign in again, or refresh the token.",
+    failSignIn: "Signing in failed before the cluster was asked.",
+    failPlugin:
+      "The credential plugin {plugin} failed, so there was nothing to sign in with.",
     orPickAnother: "or pick another below",
     server: "Server",
     allClusters: "all clusters",

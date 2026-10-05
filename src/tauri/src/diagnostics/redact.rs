@@ -72,7 +72,7 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
     // sometimes the issuer; the same scrub the rest of the report gets.
     for attempt in &mut d.connections {
         attempt.context = scrub(&attempt.context);
-        if let crate::client::PathOutcome::Failed { error } = &mut attempt.direct {
+        if let crate::client::PathOutcome::Failed { error, .. } = &mut attempt.direct {
             *error = scrub(error);
         }
         match &mut attempt.proxy {
@@ -169,6 +169,7 @@ mod tests {
                 at: "2026-09-07T07:00:00Z".into(),
                 direct: crate::client::PathOutcome::Failed {
                     error: "orders-prod: Unauthorized".into(),
+                    failure: crate::client::ConnectFailure::Credentials,
                 },
                 proxy: crate::client::ProxyOutcome::Failed {
                     error: "kubectl proxy exited".into(),

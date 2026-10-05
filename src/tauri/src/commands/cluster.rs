@@ -5,7 +5,8 @@ use tokio::time::{timeout, Duration};
 
 use crate::auth::{prepare_kubeconfig_for_context, AuthMode};
 use crate::client::{
-    ClusterInfo, ConnectAttempt, ContextInfo, KubectlProxy, PathOutcome, ProxyOutcome,
+    ClusterInfo, ConnectAttempt, ConnectFailure, ContextInfo, KubectlProxy, PathOutcome,
+    ProxyOutcome,
 };
 use crate::error::{Error, Result};
 use crate::state::AppState;
@@ -129,6 +130,7 @@ pub async fn connect_cluster(
                 at: chrono::Utc::now().to_rfc3339(),
                 direct: PathOutcome::Failed {
                     error: direct.to_string(),
+                    failure: ConnectFailure::of(&direct),
                 },
                 proxy: ProxyOutcome::NotTried,
             };
@@ -198,8 +200,7 @@ async fn connect_direct(state: &AppState, context: &str) -> Result<ClusterInfo> 
     state
         .client_manager
         .connect_with_kubeconfig(context, prepared.kubeconfig)
-        .await
-        .map_err(|e| Error::Connection(e.to_string()))?;
+        .await?;
     probe(state, context).await
 }
 
@@ -251,8 +252,7 @@ async fn probe(state: &AppState, context: &str) -> Result<ClusterInfo> {
     )
     .await
     {
-        Ok(Ok(info)) => Ok(info),
-        Ok(Err(e)) => Err(Error::Connection(e.to_string())),
+        Ok(result) => result,
         Err(_) => Err(Error::Timeout(
             "Connection timed out. Please retry the authentication flow.".to_string(),
         )),
@@ -352,11 +352,7 @@ pub fn credential_renewal(
 /// Get cluster information
 #[tauri::command]
 pub async fn get_cluster_info(context: String, state: State<'_, AppState>) -> Result<ClusterInfo> {
-    state
-        .client_manager
-        .test_connection(&context)
-        .await
-        .map_err(|e| crate::error::Error::Connection(e.to_string()))
+    state.client_manager.test_connection(&context).await
 }
 
 // ============================================================================
@@ -559,6 +555,80 @@ mod proxy_tests {
             "exec plugin kubectl-oidc_login not found".into()
         ))));
         assert!(!proxy_could_help(&Error::Timeout("2 minutes".into())));
+    }
+}
+
+#[cfg(test)]
+mod failure_tests {
+    use super::probe;
+    use crate::client::ConnectFailure;
+    use crate::error::{AuthError, Error};
+
+    /// Dana's dead cluster read "Connection error: Connection error: ...":
+    /// `probe` wrapped an `Error::Connection` in another. Fails if the
+    /// prefix comes back twice, or if the refusal loses the cause that names it.
+    #[tokio::test]
+    async fn a_refused_connection_is_said_once_and_named() {
+        let state = crate::state::AppState::new().expect("state");
+        let kubeconfig = kube::config::Kubeconfig::from_yaml(
+            "apiVersion: v1\nkind: Config\ncurrent-context: dead\n\
+             clusters: [{name: dead, cluster: {server: 'http://127.0.0.1:1'}}]\n\
+             users: [{name: dead, user: {}}]\n\
+             contexts: [{name: dead, context: {cluster: dead, user: dead}}]\n",
+        )
+        .expect("kubeconfig");
+        state
+            .client_manager
+            .connect_with_kubeconfig("dead", kubeconfig)
+            .await
+            .expect("client");
+
+        let error = probe(&state, "dead").await.expect_err("nothing listens");
+        let said = error.to_string();
+
+        assert_eq!(said.matches("Connection error:").count(), 1, "{said}");
+        assert_eq!(
+            ConnectFailure::of(&error),
+            ConnectFailure::Refused,
+            "{said}"
+        );
+    }
+
+    /// Each kind the front door has a line for, from what the client says.
+    /// Fails if a kind starts reading as another, or as unknown.
+    #[test]
+    fn a_failure_is_filed_under_the_kind_a_reader_can_act_on() {
+        let connection = |said: &str| ConnectFailure::of(&Error::Connection(said.into()));
+        assert_eq!(
+            connection("Failed to get server version: ServiceError: client error (Connect): dns error: failed to lookup address information: Name or service not known"),
+            ConnectFailure::Dns
+        );
+        assert_eq!(
+            connection("Failed to get server version: ServiceError: client error (Connect): tcp connect error: Connection timed out (os error 110)"),
+            ConnectFailure::Timeout
+        );
+        assert_eq!(
+            connection("Failed to get server version: ServiceError: client error (Connect): invalid peer certificate: UnknownIssuer"),
+            ConnectFailure::Tls
+        );
+        assert_eq!(
+            connection("Failed to get server version: ApiError: Unauthorized (code: 401)"),
+            ConnectFailure::Credentials
+        );
+        assert_eq!(
+            ConnectFailure::of(&Error::Auth(AuthError::Kubeconfig(
+                "exec plugin gke-gcloud-auth-plugin exited with 1".into()
+            ))),
+            ConnectFailure::SignIn
+        );
+        assert_eq!(
+            ConnectFailure::of(&Error::Timeout("2 minutes".into())),
+            ConnectFailure::Timeout
+        );
+        assert_eq!(
+            connection("Failed to get server version: ServiceError: client error (Connect)"),
+            ConnectFailure::Unknown
+        );
     }
 }
 
