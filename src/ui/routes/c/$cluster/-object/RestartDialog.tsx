@@ -20,6 +20,7 @@ import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import type { RolloutPlan } from "@/generated/types";
 import { DeliveryInterceptBody } from "../-delivery/delivery-intercept";
+import { qualified } from "../-peek/peek-actions";
 
 export interface RestartDialogProps {
   open: boolean;
@@ -54,7 +55,7 @@ export function RestartDialog({
   const gate = useCriticalGate();
   const confirm = useRef<HTMLButtonElement>(null);
   const words = restartWords(plan, name, t);
-  const subject = `${kind.toLowerCase()} ${namespace ? `${namespace}/${name}` : name}`;
+  const subject = `${kind} ${qualified(name, namespace)}`;
 
   const close = (next: boolean) => {
     if (!next) gate.reset();

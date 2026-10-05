@@ -949,7 +949,7 @@ export const en = {
     atInline: "at",
     servingClass: "serving class {name}",
     andClusterDefault: ", this cluster's default",
-    scaleKind: "Scale {kind}",
+    scaleKind: "Scale {kind} {name}",
     replicasLabel: "Number of replicas",
     scopeWindowToIt: "Scope this window to it",
     itsOwnAlb: "its own ALB",

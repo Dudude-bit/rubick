@@ -31,6 +31,8 @@ const open = () =>
     <ScaleDialog
       open
       kind="Deployment"
+      name="web"
+      namespace="shop"
       current={2}
       busy={false}
       warnings={[stuck]}

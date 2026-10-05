@@ -497,6 +497,8 @@ export function StatefulSetDetail() {
         open={scaleOpen}
         onOpenChange={setScaleOpen}
         kind={ResourceType.StatefulSet}
+        name={name ?? ""}
+        namespace={namespace || null}
         current={desired}
         busy={scaleMutation.isPending}
         onSubmit={(replicas) => scaleMutation.mutate(replicas)}

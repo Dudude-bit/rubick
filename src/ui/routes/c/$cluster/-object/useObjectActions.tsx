@@ -61,6 +61,7 @@ import {
   describeDeletion,
   peekMutationKeys,
   planPeekActions,
+  qualified,
   reachableContainer,
   restartCommandFor,
   restartNeedsAsking,
@@ -406,6 +407,8 @@ export function useObjectActions({
           open={dialog === "scale"}
           onOpenChange={(open) => setDialog(open ? "scale" : null)}
           kind={kind}
+          name={name}
+          namespace={namespace}
           current={(detail as ScalableInfo | undefined)?.replicas.desired ?? 0}
           busy={scale.isPending}
           warnings={scaleWarnings(governance.data, intercept("Scale"), t)}
@@ -464,7 +467,7 @@ export function useObjectActions({
         open={confirming === "managedRestart"}
         onOpenChange={(open) => setConfirming(open ? "managedRestart" : null)}
         title={t("action", "restartSubjectTitle", {
-          subject: `${kind.toLowerCase()} ${namespace ? `${namespace}/${name}` : name}`,
+          subject: `${kind} ${qualified(name, namespace)}`,
         })}
         description={warned("", intercept("Restart")).trim() || undefined}
         confirmLabel={t("action", "restart")}

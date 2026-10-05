@@ -571,6 +571,8 @@ export function DeploymentDetail() {
         open={scaleDialogOpen}
         onOpenChange={setScaleDialogOpen}
         kind={ResourceType.Deployment}
+        name={name ?? ""}
+        namespace={namespace || null}
         current={deployment?.replicas.desired ?? 0}
         busy={scaleMutation.isPending}
         onSubmit={(replicas) => scaleMutation.mutate(replicas)}

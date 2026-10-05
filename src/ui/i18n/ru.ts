@@ -934,7 +934,7 @@ export const ru: Catalogue = {
     atInline: "по адресу",
     servingClass: "обслуживает класс {name}",
     andClusterDefault: ", класс по умолчанию в этом кластере",
-    scaleKind: "Масштабировать {kind}",
+    scaleKind: "Масштабировать {kind} {name}",
     replicasLabel: "Количество реплик",
     scopeWindowToIt: "Переключить окно на него",
     itsOwnAlb: "собственный ALB",

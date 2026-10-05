@@ -21,6 +21,8 @@ const scale = (over: Partial<Parameters<typeof ScaleDialog>[0]> = {}) => (
   <ScaleDialog
     open
     kind="Deployment"
+    name="web"
+    namespace="shop"
     current={3}
     busy={false}
     onOpenChange={() => {}}
@@ -90,5 +92,15 @@ describe("scaling on critical infrastructure", () => {
     render(scale());
     expect(screen.queryByRole("alert")).toBeNull();
     expect(scaleButton()).toBeEnabled();
+  });
+});
+
+describe("what the dialog is about", () => {
+  /** Restart named its object and Scale said only "Scale Deployment", so the number had no owner on screen. */
+  it("names the object whose replicas it sets", () => {
+    render(scale());
+    expect(screen.getByRole("heading")).toHaveTextContent(
+      "Scale Deployment shop/web"
+    );
   });
 });

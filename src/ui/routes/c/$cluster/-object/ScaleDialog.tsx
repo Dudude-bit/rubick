@@ -15,12 +15,15 @@ import { ActionWarnings } from "./action-warnings";
 import { AutoscalerBounds } from "./AutoscalerBounds";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
+import { qualified } from "../-peek/peek-actions";
 
 export interface ScaleDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Named in the title, so the reader knows what the number applies to. */
   kind: string;
+  name: string;
+  namespace: string | null;
   /** Where the field starts: the replica count the object has right now. */
   current: number;
   busy: boolean;
@@ -37,6 +40,8 @@ export function ScaleDialog({
   open,
   onOpenChange,
   kind,
+  name,
+  namespace,
   current,
   busy,
   onSubmit,
@@ -61,7 +66,12 @@ export function ScaleDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{t("action", "scaleKind", { kind })}</DialogTitle>
+          <DialogTitle>
+            {t("action", "scaleKind", {
+              kind,
+              name: qualified(name, namespace),
+            })}
+          </DialogTitle>
           {gate.notice}
         </DialogHeader>
         {/* Radix drops the content when closed, so the field seeds itself from

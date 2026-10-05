@@ -468,7 +468,7 @@ export interface PeekConfirmCopy {
   description: string;
 }
 
-const qualified = (name: string, namespace: string | null) =>
+export const qualified = (name: string, namespace: string | null) =>
   namespace ? `${namespace}/${name}` : name;
 
 /**

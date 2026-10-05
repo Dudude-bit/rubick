@@ -5,6 +5,7 @@ import { parts } from "@/i18n/parts";
 import { ROLE_ICON } from "@/lib/status-role";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
+import { workloadStatusMeaning } from "@/lib/status-meaning";
 import {
   rolloutLine,
   workloadStatus,
@@ -65,9 +66,10 @@ export function RolloutSummary({
 export function RolloutBadge({ rollout }: { rollout: Rollout }) {
   const t = useT();
   const line = rolloutLine(rollout, t);
+  const status = workloadStatus(rollout);
   return (
     <StatusBadge
-      status={workloadStatus(rollout)}
+      status={status}
       title={
         line
           ? [
@@ -76,7 +78,7 @@ export function RolloutBadge({ rollout }: { rollout: Rollout }) {
             ]
               .filter(Boolean)
               .join(". ")
-          : undefined
+          : workloadStatusMeaning(status, t)
       }
     />
   );
