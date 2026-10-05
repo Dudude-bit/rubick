@@ -13,6 +13,8 @@ import type { ResourceKind } from "@/lib/resource-registry";
 export interface WordCell {
   words: string[];
   none?: string;
+  /** Words that grant more than they say, drawn as a warning. */
+  escalating?: string[];
 }
 
 export interface WordTable {

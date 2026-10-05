@@ -759,6 +759,25 @@ export interface GatewayClassInfo {
   createdAt: string | null;
 }
 
+export interface BindingInfo {
+  kind: string;
+  name: string;
+  namespace: string | null;
+  roleRef: RoleRefInfo;
+  subjects: SubjectInfo[];
+}
+
+export interface SubjectInfo {
+  kind: string;
+  name: string;
+  namespace: string | null;
+}
+
+export interface RoleRefInfo {
+  kind: string;
+  name: string;
+}
+
 export interface PortForwardSessionInfo {
   id: string;
   context: string;

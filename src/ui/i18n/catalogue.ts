@@ -4629,6 +4629,38 @@ export const en = {
     anyName: "any",
     noRules: "Grants nothing: no rules.",
     noSubjects: "Binds nobody: no subjects.",
+    wildcard: "* matches every value",
+    escalates: "grants more than it names",
+    escalationNote:
+      "Marked verbs reach past the rule: bind and escalate grant roles beyond your own, impersonate acts as someone else, and * on secrets reads every token.",
+    mayDo: "What it may do",
+    boundTo: "Bound to",
+    inNamespace: "in {namespace}",
+    clusterWide: "cluster-wide",
+    throughGroup: "through {group}",
+    broadGrants: {
+      one: "{n} more binding grants this to every ServiceAccount or to everyone signed in",
+      other:
+        "{n} more bindings grant this to every ServiceAccount or to everyone signed in",
+    },
+    roleMissing:
+      "{kind} {name} does not exist, so this binding grants nothing.",
+    couldNotReadRole:
+      "Could not read {kind} {name}, so what this binding grants is not known.",
+    couldNotReadClusterWide: "Could not read {label} across the cluster.",
+    noGrants:
+      "No ClusterRoleBinding, and no RoleBinding in {namespace}, grants it anything.",
+    noneFoundUnread: "None found, but not every binding could be read.",
+    notEverythingRead:
+      "Not every binding could be read, so there may be more than this.",
+    otherNamespaces:
+      "RoleBindings in other namespaces were not read. One there can grant it rights in that namespace.",
+    notBoundRole: "No RoleBinding in {namespace} grants it.",
+    notBoundClusterRole: "No ClusterRoleBinding or RoleBinding grants it.",
+    notBoundClusterRoleIn:
+      "No ClusterRoleBinding, and no RoleBinding in {namespaces}, grants it.",
+    readOnlyIn:
+      "RoleBindings were read only in {namespaces}. The other namespaces were not looked at.",
   },
   empty: {
     addressMissing: "Nothing lives at this address",

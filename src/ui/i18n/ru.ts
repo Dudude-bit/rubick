@@ -5096,6 +5096,40 @@ export const ru: Catalogue = {
     anyName: "любые",
     noRules: "Ничего не разрешает: правил нет.",
     noSubjects: "Никого не связывает: субъектов нет.",
+    wildcard: "* подходит под любое значение",
+    escalates: "даёт больше, чем названо",
+    escalationNote:
+      "Отмеченные глаголы выходят за пределы правила: bind и escalate выдают роли сверх ваших, impersonate действует от чужого имени, а * на secrets читает все токены.",
+    mayDo: "Что ему разрешено",
+    boundTo: "Кому выдана",
+    inNamespace: "в {namespace}",
+    clusterWide: "во всём кластере",
+    throughGroup: "через {group}",
+    broadGrants: {
+      one: "Ещё {n} привязка выдаёт это каждому ServiceAccount или всем вошедшим",
+      few: "Ещё {n} привязки выдают это каждому ServiceAccount или всем вошедшим",
+      other:
+        "Ещё {n} привязок выдают это каждому ServiceAccount или всем вошедшим",
+    },
+    roleMissing:
+      "{kind} {name} не существует, поэтому эта привязка ничего не выдаёт.",
+    couldNotReadRole:
+      "Не удалось прочитать {kind} {name}, поэтому неизвестно, что выдаёт эта привязка.",
+    couldNotReadClusterWide: "Не удалось прочитать {label} по всему кластеру.",
+    noGrants:
+      "Ни один ClusterRoleBinding и ни один RoleBinding в {namespace} ничего ему не выдают.",
+    noneFoundUnread: "Ничего не найдено, но прочитать удалось не все привязки.",
+    notEverythingRead:
+      "Прочитать удалось не все привязки, так что их может быть больше.",
+    otherNamespaces:
+      "RoleBinding в других пространствах имён не читались. Такой может выдать ему права в своём пространстве имён.",
+    notBoundRole: "Ни один RoleBinding в {namespace} её не выдаёт.",
+    notBoundClusterRole:
+      "Ни один ClusterRoleBinding и ни один RoleBinding её не выдают.",
+    notBoundClusterRoleIn:
+      "Ни один ClusterRoleBinding и ни один RoleBinding в {namespaces} её не выдают.",
+    readOnlyIn:
+      "RoleBinding прочитаны только в {namespaces}. Остальные пространства имён не просматривались.",
   },
   empty: {
     addressMissing: "По этому адресу ничего нет",

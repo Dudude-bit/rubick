@@ -344,6 +344,18 @@ export const queryKeys = {
   ],
   gatewayClasses: (): string[] =>
     queryKeys.resources(ResourceType.GatewayClass, null),
+  /** RoleBindings across a scope of namespaces, `null` for the whole cluster. */
+  roleBindings: (namespaces: readonly string[] | null): string[] => [
+    "role-bindings",
+    (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
+  ],
+  clusterRoleBindings: (): string[] => ["cluster-role-bindings"],
+  /** One role's rules, or why they are not known. */
+  roleReading: (
+    kind: string,
+    namespace: string | null,
+    name: string
+  ): (string | null)[] => ["role-reading", kind, home(namespace), name],
   backendTlsPolicies: (namespace: string): string[] => [
     "backend-tls-policies",
     namespace,

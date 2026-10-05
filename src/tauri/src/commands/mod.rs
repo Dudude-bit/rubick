@@ -47,6 +47,7 @@ pub mod ownership;
 pub mod perf;
 pub mod pods;
 pub mod port_forward;
+pub mod rbac;
 pub mod replicasets;
 pub mod revisions;
 pub mod search;

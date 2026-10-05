@@ -37,6 +37,8 @@ import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { EventRows } from "@/components/object/detail-blocks";
 import { KeyValueList } from "../-object/detail-kv";
 import { WordTable } from "../-object/WordTable";
+import { AccessPanel } from "../-object/AccessPanel";
+import { accessSegment } from "@/lib/access-kinds";
 import type { KeyValue } from "@/components/object/key-values";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { RESOURCE_NAME_SHELL } from "@/components/object/ResourceName";
@@ -451,6 +453,17 @@ function PeekOverview({
       {target.kind === "Namespace" && (
         <NamespaceContents namespace={target.name} />
       )}
+      {target.crd !== undefined &&
+        target.crd === accessSegment(target.kind) && (
+          <AccessPanel
+            kind={target.kind}
+            name={target.name}
+            namespace={target.namespace ?? null}
+            heading={(title, count) => (
+              <PeekHeading title={title} count={count} />
+            )}
+          />
+        )}
       <PeekEvents target={target} />
     </div>
   );

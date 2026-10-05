@@ -11,6 +11,8 @@ import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { yamlTab } from "./yaml-tab";
 import { servedOf, useServed, type Served } from "./served";
 import { WordTable } from "./WordTable";
+import { AccessPanel } from "./AccessPanel";
+import { accessSegment } from "@/lib/access-kinds";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -125,6 +127,18 @@ export function GenericObjectPage({
               emptyMessage={group.emptyMessage ?? t("empty", "none")}
             />
           )
+        )}
+        {accessSegment(kind) === resource && (
+          <Section>
+            <AccessPanel
+              kind={kind}
+              name={name}
+              namespace={namespace ?? null}
+              heading={(title, count) => (
+                <SectionHeader title={title} count={count} />
+              )}
+            />
+          </Section>
         )}
       </div>
     ) : (

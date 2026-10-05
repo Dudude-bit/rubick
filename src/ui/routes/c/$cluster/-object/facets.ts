@@ -10,18 +10,17 @@ import {
   ref,
   type PeekGroup,
   type PeekSummary,
-  type WordTable,
 } from "../-peek/peek-sources-kit";
 import { crdOf } from "./ownership";
 import {
   rbacKindOf,
   roleRefOf,
   rulesOf,
+  rulesTable,
   subjectsOf,
   subjectTarget,
   type RbacKind,
   type RbacTarget,
-  type Rule,
 } from "./rbac";
 
 /** Rows per group: a glance, not the YAML tab in a narrower column. */
@@ -149,29 +148,6 @@ const linked = (target: RbacTarget, namespace: string | null) =>
     crd: crdOf(target),
     showNamespace: !!target.namespace && target.namespace !== namespace,
   });
-
-function rulesTable(rules: Rule[], t: T): WordTable {
-  const urls = rules.some((rule) => rule.nonResourceURLs.length > 0);
-  return {
-    columns: [
-      "apiGroups",
-      "resources",
-      "resourceNames",
-      "verbs",
-      ...(urls ? ["nonResourceURLs"] : []),
-    ],
-    rows: rules.map((rule) => [
-      { words: rule.apiGroups.map((group) => group || '""') },
-      { words: rule.resources },
-      {
-        words: rule.resourceNames,
-        none: rule.resources.length ? t("rbac", "anyName") : undefined,
-      },
-      { words: rule.verbs },
-      ...(urls ? [{ words: rule.nonResourceURLs }] : []),
-    ]),
-  };
-}
 
 /** Roles and bindings read as what they grant and to whom, not as dotted paths. */
 function rbacGroup(

@@ -14,6 +14,7 @@ import type {
   BackendTlsPolicyInfo,
   BatchLogResult,
   BinaryLocation,
+  BindingInfo,
   Cascade,
   Check,
   CheckOutcome,
@@ -1280,6 +1281,10 @@ export async function listPortForwards(): Promise<PortForwardSessionInfo[]> {
   return invoke<PortForwardSessionInfo[]>("list_port_forwards");
 }
 
+export async function listClusterRoleBindings(): Promise<BindingInfo[]> {
+  return invoke<BindingInfo[]>("list_cluster_role_bindings");
+}
+
 export async function detectGatewayApi(): Promise<GatewayApiDetection> {
   return invoke<GatewayApiDetection>("detect_gateway_api");
 }
@@ -1886,6 +1891,12 @@ export async function listEndpointsIn(
   scope: string[] | null
 ): Promise<Scoped<EndpointsInfo>> {
   return invoke<Scoped<EndpointsInfo>>("list_endpoints_in", { scope });
+}
+
+export async function listRoleBindingsIn(
+  scope: string[] | null
+): Promise<Scoped<BindingInfo>> {
+  return invoke<Scoped<BindingInfo>>("list_role_bindings_in", { scope });
 }
 
 export async function listServicesIn(
