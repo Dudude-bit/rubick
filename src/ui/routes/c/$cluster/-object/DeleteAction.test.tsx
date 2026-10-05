@@ -12,7 +12,7 @@ vi.mock("@/lib/commands", () => ({
     previewCascade: () =>
       Promise.resolve({
         takes: [{ kind: "Pod", group: "", plural: "pods", count: 3 }],
-        notRead: { kinds: [], groups: [] },
+        notRead: { kinds: [], groups: [], watched: 40 },
         holds: null,
       }),
   },
@@ -50,6 +50,17 @@ describe("Delete on a detail page", () => {
     expect(await screen.findByRole("alertdialog")).toBeInTheDocument();
     expect(await screen.findByText("Also deletes:")).toBeInTheDocument();
     expect(mutate).not.toHaveBeenCalled();
+  });
+
+  /** However long the preview grows, the field to type the name stays on screen. */
+  it("keeps the confirmation field outside the preview's own scroller", async () => {
+    await renderDelete();
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    await screen.findByText("Also deletes:");
+    const scroller = screen.getByTestId("confirm-details");
+    expect(scroller).toHaveClass("overflow-y-auto");
+    expect(scroller).toContainElement(screen.getByText("Also deletes:"));
+    expect(scroller).not.toContainElement(screen.getByRole("textbox"));
   });
 
   /** The confirmation is the name typed, not a second click in the same place. */

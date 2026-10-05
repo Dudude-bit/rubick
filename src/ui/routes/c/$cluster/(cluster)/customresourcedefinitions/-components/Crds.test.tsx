@@ -19,7 +19,7 @@ vi.mock("@/lib/commands", () => ({
     previewCascade: () =>
       Promise.resolve({
         takes: [],
-        notRead: { kinds: [], groups: [] },
+        notRead: { kinds: [], groups: [], watched: 40 },
         holds: {
           says: "objects",
           kind: "Certificate",

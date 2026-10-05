@@ -1,6 +1,7 @@
 import {
   AlertTriangle,
   Ban,
+  ChevronRight,
   Clock,
   Filter,
   Loader2,
@@ -13,6 +14,7 @@ import type { KindReading, NotRead, Reading } from "@/generated/types";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useT } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
+import { listing } from "./ownership";
 
 type Says = Reading["says"];
 
@@ -108,5 +110,34 @@ export function ReadingChips({
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * While the index is still listing: one line with how far it got, folded
+ * over the per-kind chips, so a dialog does not open as a wall of spinners.
+ */
+export function ReadingProgress({ notRead }: { notRead: NotRead }) {
+  const t = useT();
+  const total = Math.max(notRead.watched, listing(notRead));
+  return (
+    <details className="group text-xs">
+      <summary className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-md px-1 py-0.5 text-info hover:bg-hover">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        <span className="tabular-nums">
+          {t("count", "kindsReadOf", {
+            n: total - listing(notRead),
+            total,
+          })}
+        </span>
+        <ChevronRight
+          className="h-3 w-3 text-fg-mut transition-transform duration-200 group-open:rotate-90 motion-reduce:transition-none"
+          aria-hidden="true"
+        />
+      </summary>
+      <div className="mt-2 pl-1">
+        <ReadingChips kinds={notRead.kinds} groups={notRead.groups} />
+      </div>
+    </details>
   );
 }

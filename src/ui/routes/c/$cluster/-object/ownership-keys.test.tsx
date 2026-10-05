@@ -44,7 +44,7 @@ vi.mock("@/lib/commands", () => ({
           pod("api-config", "ConfigMap"),
           pod("api-c"),
         ],
-        notRead: { kinds: [], groups: [] },
+        notRead: { kinds: [], groups: [], watched: 40 },
       }),
   },
 }));

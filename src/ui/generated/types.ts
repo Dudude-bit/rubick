@@ -920,6 +920,7 @@ export interface Cascade {
 export interface NotRead {
   kinds: KindReading[];
   groups: UnreadGroup[];
+  watched: number;
 }
 
 export interface UnreadGroup {

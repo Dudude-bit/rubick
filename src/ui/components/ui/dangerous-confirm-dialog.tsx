@@ -81,7 +81,14 @@ export function DangerousConfirmDialog({
           <AlertDialogDescription className={description ? "" : "sr-only"}>
             {description || t("action", "confirmByTyping")}
           </AlertDialogDescription>
-          {details}
+          {details && (
+            <div
+              data-testid="confirm-details"
+              className="max-h-[40vh] min-h-0 overflow-y-auto scrollbar-thin"
+            >
+              {details}
+            </div>
+          )}
         </AlertDialogHeader>
 
         <div className="py-4 space-y-2">

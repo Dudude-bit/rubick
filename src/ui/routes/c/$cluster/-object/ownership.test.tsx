@@ -34,7 +34,7 @@ const { LineageTrail } = await import("./Lineage");
 const { OwnsPanel } = await import("./Owns");
 const { CascadePreview } = await import("./CascadePreview");
 
-const NOTHING_UNREAD: NotRead = { kinds: [], groups: [] };
+const NOTHING_UNREAD: NotRead = { kinds: [], groups: [], watched: 40 };
 
 const SECRETS_REFUSED = {
   kind: "Secret",
@@ -169,12 +169,14 @@ describe("what an object owns", () => {
             },
           ],
           groups: [],
+          watched: 40,
         },
       });
     await renderWithRouter(<OwnsPanel uid="d" />);
-    expect(await screen.findByText("Still reading 1 kind")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Reading kinds: 39 of 40 read")
+    ).toBeInTheDocument();
     expect(screen.queryByText("Owns nothing among the kinds read.")).toBeNull();
-    expect(screen.getByText("1 kind not read")).toBeInTheDocument();
     expect(chipOf("Pod")).toHaveTextContent("still listing");
   });
 
@@ -193,6 +195,7 @@ describe("what an object owns", () => {
             },
           ],
           groups: [],
+          watched: 40,
         },
       });
     await renderWithRouter(<OwnsPanel uid="d" />);
@@ -243,6 +246,7 @@ describe("what deleting an object takes with it", () => {
             },
           ],
           groups: [],
+          watched: 40,
         },
         holds: null,
       });
@@ -273,12 +277,65 @@ describe("what deleting an object takes with it", () => {
     );
     expect(line).toHaveClass("text-ok");
     view.unmount();
-    await nothing({ kinds: [SECRETS_REFUSED], groups: [] });
+    await nothing({ kinds: [SECRETS_REFUSED], groups: [], watched: 40 });
     expect(
       await screen.findByText(
         "Nothing else goes with it, among the kinds read."
       )
     ).not.toHaveClass("text-ok");
+  });
+
+  const syncing = (n: number) =>
+    Array.from({ length: n }, (_, index) => ({
+      kind: `Kind${index}`,
+      group: `g${index}.example.com`,
+      plural: `kinds${index}`,
+      reading: { says: "syncing" as const },
+    }));
+
+  /**
+   * Dana and Lena opened Delete onto fifty "still listing" chips and the
+   * confirm field off screen. While the index lists, one line says how far
+   * it got, folded over the chips, and no answer is given yet.
+   */
+  it("says how far the index got in one folded line while it lists", async () => {
+    answers.cascade = () =>
+      Promise.resolve({
+        takes: [{ kind: "Pod", group: "", plural: "pods", count: 2 }],
+        notRead: {
+          kinds: [...syncing(48), SECRETS_REFUSED],
+          groups: [],
+          watched: 50,
+        },
+        holds: null,
+      });
+    await renderWithRouter(
+      <CascadePreview kind="Deployment" name="api" namespace="shop" />
+    );
+    const line = await screen.findByText("Reading kinds: 2 of 50 read");
+    expect(line.closest("details")).not.toHaveAttribute("open");
+    expect(screen.queryByText("Also deletes:")).toBeNull();
+    expect(screen.queryByText(/Nothing else goes with it/)).toBeNull();
+  });
+
+  /** Once listed, what failed stays named: reading ending is not reading all. */
+  it("still names the kinds it could not read once listing ends", async () => {
+    answers.cascade = () =>
+      Promise.resolve({
+        takes: [],
+        notRead: { kinds: [SECRETS_REFUSED], groups: [], watched: 50 },
+        holds: null,
+      });
+    await renderWithRouter(
+      <CascadePreview kind="Deployment" name="api" namespace="shop" />
+    );
+    expect(
+      await screen.findByText(
+        "And possibly objects of the kinds it could not read:"
+      )
+    ).toBeInTheDocument();
+    expect(chipOf("Secret")).toHaveTextContent("refused");
+    expect(screen.queryByText(/Reading kinds/)).toBeNull();
   });
 
   /** Before a delete, a count it could not work out is said, never skipped. */
@@ -361,10 +418,11 @@ describe("what deleting a CRD or a namespace takes with it", () => {
     expect(screen.queryByText(/No Widget exists/)).toBeNull();
   });
 
-  it("says it is still counting while the kind is listed", async () => {
+  /** A kind still listing has counted nothing yet; zero is not the answer. */
+  it("names a kind still listing instead of saying none exists", async () => {
     answers.cascade = () => Promise.resolve(widgets(0, { says: "syncing" }));
     await crd();
-    expect(await screen.findByText("Counting them…")).toBeInTheDocument();
+    expect(await screen.findByText("still listing")).toBeInTheDocument();
     expect(screen.queryByText(/No Widget exists/)).toBeNull();
   });
 
@@ -391,6 +449,7 @@ describe("what deleting a CRD or a namespace takes with it", () => {
             },
           ],
           groups: [],
+          watched: 40,
         },
         holds: null,
       });
@@ -409,7 +468,7 @@ describe("what deleting a CRD or a namespace takes with it", () => {
           { kind: "Pod", group: "", plural: "pods", count: 3 },
           { kind: "ConfigMap", group: "", plural: "configmaps", count: 2 },
         ],
-        notRead: { kinds: [SECRETS_REFUSED], groups: [] },
+        notRead: { kinds: [SECRETS_REFUSED], groups: [], watched: 40 },
         holds: { says: "namespace" },
       });
     await renderWithRouter(<CascadePreview kind="Namespace" name="shop" />);

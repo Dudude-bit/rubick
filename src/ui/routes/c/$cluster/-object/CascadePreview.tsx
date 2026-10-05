@@ -16,13 +16,14 @@ import { errorToShow } from "@/lib/error-utils";
 import { crdInstancesLink } from "@/lib/links";
 import {
   holdsContents,
+  listing,
   mightHold,
   readAll,
   servedOfKind,
   useCascade,
   useLineage,
 } from "./ownership";
-import { ReadingChips } from "./ReadingChips";
+import { ReadingChips, ReadingProgress } from "./ReadingChips";
 import type { ServedResource } from "./served";
 
 type Defined = Extract<Holds, { says: "objects" }>;
@@ -68,6 +69,8 @@ export function CascadePreview({
         </p>
       ) : !cascade.data ? (
         <Working />
+      ) : listing(cascade.data.notRead) > 0 ? (
+        <ReadingProgress notRead={cascade.data.notRead} />
       ) : (
         <Answer
           cascade={cascade.data}
@@ -107,19 +110,15 @@ function Answer({
 
   return (
     <>
-      {holder && !holds ? (
-        holderReading?.reading.says === "syncing" ? (
-          <Working />
-        ) : (
-          <div className="flex flex-col gap-2">
-            <p className="flex items-center gap-2 text-warn">
-              <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-              {t("cascade", "holdsUnread")}
-            </p>
-            {holderReading && <ReadingChips kinds={[holderReading]} />}
-          </div>
-        )
-      ) : null}
+      {holder && !holds && (
+        <div className="flex flex-col gap-2">
+          <p className="flex items-center gap-2 text-warn">
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("cascade", "holdsUnread")}
+          </p>
+          {holderReading && <ReadingChips kinds={[holderReading]} />}
+        </div>
+      )}
       {defined && <DefinedObjects holds={defined} />}
       {rest.length > 0 ? (
         <Counts
@@ -219,11 +218,6 @@ function DefinedObjects({ holds }: { holds: Defined }) {
             <span className="font-semibold tabular-nums text-err">
               {holds.count}
             </span>
-          </span>
-        ) : holds.reading.says === "syncing" ? (
-          <span className="inline-flex items-center gap-1.5 text-info">
-            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-            {t("cascade", "counting")}
           </span>
         ) : (
           <>

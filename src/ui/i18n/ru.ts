@@ -4803,7 +4803,6 @@ export const ru: Catalogue = {
     objectsGo: "Вместе с ним удалятся все {kind} в кластере:",
     objectsNone:
       "{kind} в кластере нет ни одного, так что ни один не удалится вместе с ним.",
-    counting: "Считаю их…",
     openList: "Открыть их список",
     inside: "Вместе с ним удалится всё, что внутри:",
     insideNothing: "Среди прочитанных kind'ов внутри ничего нет.",
@@ -6683,11 +6682,11 @@ export const ru: Catalogue = {
       many: "владеет {n}",
       other: "владеет {n}",
     },
-    kindsReading: {
-      one: "Ещё читаю {n} kind",
-      few: "Ещё читаю {n} kind'а",
-      many: "Ещё читаю {n} kind'ов",
-      other: "Ещё читаю {n} kind'а",
+    kindsReadOf: {
+      one: "Читаю kind'ы: прочитан {n} из {total}",
+      few: "Читаю kind'ы: прочитано {n} из {total}",
+      many: "Читаю kind'ы: прочитано {n} из {total}",
+      other: "Читаю kind'ы: прочитано {n} из {total}",
     },
     readSoFar: {
       one: "Пока прочитан {n}",

@@ -1,4 +1,4 @@
-import { ChevronRight, EyeOff, Inbox, Link2Off, Loader2 } from "lucide-react";
+import { ChevronRight, EyeOff, Inbox, Link2Off } from "lucide-react";
 import { useState } from "react";
 
 import type { Dependent, NotRead } from "@/generated/types";
@@ -10,8 +10,8 @@ import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { cn } from "@/lib/utils";
-import { crdOf, useDependents } from "./ownership";
-import { ReadingChips } from "./ReadingChips";
+import { crdOf, listing, useDependents } from "./ownership";
+import { ReadingChips, ReadingProgress } from "./ReadingChips";
 
 /**
  * What this object owns, as a tree that opens a level at a time. Read only
@@ -41,9 +41,7 @@ export function OwnsPanel({
   if (!owned.data) return <TextSkeleton lines={3} />;
 
   const { dependents, notRead } = owned.data;
-  const listing = notRead.kinds.filter(
-    (reading) => reading.reading.says === "syncing"
-  ).length;
+  const reading = listing(notRead) > 0;
   return (
     <div className="flex flex-col gap-4">
       {dependents.length > 0 ? (
@@ -56,18 +54,17 @@ export function OwnsPanel({
             />
           ))}
         </ul>
-      ) : listing > 0 ? (
-        <p className="flex items-center gap-2 text-sm text-info">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
-          {t("count", "kindsReading", { n: listing })}
-        </p>
-      ) : (
+      ) : reading ? null : (
         <p className="flex items-center gap-2 text-sm text-fg-mut">
           <Inbox className="h-4 w-4 text-fg-fnt" aria-hidden="true" />
           {t("owns", "none")}
         </p>
       )}
-      <NotReadSummary notRead={notRead} />
+      {reading ? (
+        <ReadingProgress notRead={notRead} />
+      ) : (
+        <NotReadSummary notRead={notRead} />
+      )}
     </div>
   );
 }

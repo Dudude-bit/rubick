@@ -4359,7 +4359,6 @@ export const en = {
     failed: "Could not work out what goes with it. {error}",
     objectsGo: "Every {kind} in the cluster goes with it:",
     objectsNone: "No {kind} exists, so none goes with it.",
-    counting: "Counting them…",
     openList: "Open their list",
     inside: "Everything inside goes with it:",
     insideNothing: "Nothing is inside it, among the kinds read.",
@@ -6170,9 +6169,9 @@ export const en = {
     dependents: { one: "owns {n}", other: "owns {n}" },
     kindsNotRead: { one: "{n} kind not read", other: "{n} kinds not read" },
     readSoFar: { one: "{n} read so far", other: "{n} read so far" },
-    kindsReading: {
-      one: "Still reading {n} kind",
-      other: "Still reading {n} kinds",
+    kindsReadOf: {
+      one: "Reading kinds: {n} of {total} read",
+      other: "Reading kinds: {n} of {total} read",
     },
     notReadList: "Not read: {list}",
     podsStreaming: {

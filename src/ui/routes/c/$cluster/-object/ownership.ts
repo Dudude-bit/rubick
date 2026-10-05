@@ -115,6 +115,10 @@ const HOLDERS = new Set([
 export const holdsContents = (served: ServedResource | null): boolean =>
   !!served && HOLDERS.has(`${served.group}/${served.plural}`);
 
+/** Kinds the index is still listing; none once it has read every one once. */
+export const listing = (notRead: NotRead): number =>
+  notRead.kinds.filter((reading) => reading.reading.says === "syncing").length;
+
 /** Whether nothing could still be hiding: every listable kind read live. */
 export function readAll(notRead: NotRead): boolean {
   return notRead.groups.length === 0 && !notRead.kinds.some(mightHold);

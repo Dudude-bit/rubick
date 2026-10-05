@@ -124,6 +124,8 @@ fn defined_by(name: &str) -> Option<KindKey> {
 pub struct NotRead {
     pub kinds: Vec<KindReading>,
     pub groups: Vec<UnreadGroup>,
+    /// How many kinds the index watches, so a reader can say how far it got.
+    pub watched: usize,
 }
 
 struct Watched {
@@ -384,6 +386,7 @@ impl ClusterIndex {
         NotRead {
             kinds,
             groups: self.unread_groups.lock().clone(),
+            watched: watched.len(),
         }
     }
 
@@ -673,6 +676,7 @@ mod tests {
                 reading: refused.clone(),
             }],
             groups: Vec::new(),
+            watched: 1,
         };
         let (_, holds) = cascade_in(&widgets(), "crd", &not_read, |_| None, None);
         assert_eq!(objects(holds).2, Some(refused));
