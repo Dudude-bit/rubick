@@ -11,6 +11,7 @@ import {
   helmReleaseOf,
   otherDifferences,
   timelineOf,
+  type JournalEntry,
   type ObservedSpan,
   type Revision,
 } from "./changes";
@@ -412,6 +413,69 @@ describe("a revision that changed only what the named fields do not cover", () =
     expect(
       otherDifferences(revision(1, []), search(2, "/", []), [])
     ).toBeNull();
+  });
+});
+
+describe("a timeline that starts where its object does", () => {
+  const NOW = T0 + 7 * 24 * HOUR;
+  const week = { from: NOW - 7 * 24 * HOUR, to: NOW };
+  const born = new Date(NOW - 16 * 60_000).toISOString();
+  const timeline = (createdAt: string | null, journal: JournalEntry[] = []) =>
+    timelineOf({
+      revisions: [],
+      deliveries: [],
+      helm: [],
+      journal,
+      spans: [],
+      window: week,
+      createdAt,
+    });
+
+  /**
+   * A StatefulSet 16 minutes old showed a dashed "Not observed" gap starting
+   * a week earlier: the honest gap marker turned to noise over a stretch
+   * when there was nothing to observe.
+   */
+  it("draws no gap before the object existed, and marks where it began", () => {
+    const items = timeline(born);
+    expect(items).toEqual([
+      { kind: "gap", at: NOW, gap: { from: Date.parse(born), to: NOW } },
+      { kind: "created", at: Date.parse(born) },
+    ]);
+  });
+
+  /** Without a creation time the app cannot say the object is young, so the whole window stays a gap. */
+  it("keeps the whole window when the creation time is not known", () => {
+    expect(timeline(null)).toEqual([
+      { kind: "gap", at: NOW, gap: { from: week.from, to: NOW } },
+    ]);
+  });
+
+  /** A creation the journal watched happen is already on the timeline in its own words. */
+  it("does not mark the creation twice when the journal saw it", () => {
+    const seen: JournalEntry = {
+      id: "c",
+      context: "dev",
+      kind: "StatefulSet",
+      namespace: "shop",
+      name: "orders-db",
+      at: Date.parse(born) + 1000,
+      field: "created",
+      key: null,
+      from: null,
+      to: null,
+    };
+    expect(timeline(born, [seen]).some((item) => item.kind === "created")).toBe(
+      false
+    );
+  });
+
+  /** An object older than the window keeps the window's own start. */
+  it("leaves the window alone for an object older than it", () => {
+    const old = new Date(week.from - HOUR).toISOString();
+    expect(timeline(old)).toEqual([
+      { kind: "gap", at: NOW, gap: { from: week.from, to: NOW } },
+    ]);
   });
 });
 

@@ -249,4 +249,12 @@ describe("ChangesTimeline", () => {
     buttons[0].click();
     expect(offered).toEqual([1]);
   });
+
+  /** Where the object began is a row of its own, so the timeline does not read as starting from nothing. */
+  it("marks the object's creation", async () => {
+    await mount([{ kind: "created", at: T0 }]);
+    expect(document.body.textContent).toContain(
+      "created; nothing before this belongs to it"
+    );
+  });
 });

@@ -579,7 +579,9 @@ export type ChangeItem =
   | { kind: "delivery"; at: number | null; revision: DeliveryRevision }
   | { kind: "helm"; at: number | null; revision: HelmRevision }
   | { kind: "journal"; at: number; entry: JournalEntry }
-  | { kind: "gap"; at: number; gap: Gap };
+  | { kind: "gap"; at: number; gap: Gap }
+  /** The object's `creationTimestamp`: nothing before it is this object's history. */
+  | { kind: "created"; at: number };
 
 function ms(value: string | null): number | null {
   if (!value) return null;
@@ -594,6 +596,8 @@ export interface TimelineInput {
   journal: JournalEntry[];
   spans: ObservedSpan[];
   window: { from: number; to: number };
+  /** The object's `creationTimestamp`, where the timeline is one object's. */
+  createdAt?: string | null;
 }
 
 export function comparisonOf(
@@ -640,7 +644,18 @@ export function timelineOf(input: TimelineInput): ChangeItem[] {
     items.push({ kind: "helm", at: ms(revision.updated), revision });
   for (const entry of input.journal)
     items.push({ kind: "journal", at: entry.at, entry });
-  for (const gap of gapsOf(input.spans, input.window.from, input.window.to))
+  // An object sixteen minutes old was not unobserved a week ago: it did not
+  // exist. Its timeline starts where it does.
+  const born = ms(input.createdAt ?? null);
+  const from =
+    born === null ? input.window.from : Math.max(input.window.from, born);
+  if (born !== null && born >= input.window.from) {
+    const watchedBirth = input.journal.some(
+      (entry) => entry.field === "created" && entry.at >= born
+    );
+    if (!watchedBirth) items.push({ kind: "created", at: born });
+  }
+  for (const gap of gapsOf(input.spans, from, input.window.to))
     items.push({ kind: "gap", at: gap.to, gap });
   return items.sort((a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity));
 }

@@ -39,6 +39,7 @@ export interface ChangesSubject {
   namespace: string;
   labels: Record<string, string>;
   annotations: Record<string, string>;
+  createdAt: string | null;
 }
 
 /**
@@ -181,6 +182,7 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
         ),
         spans: context ? (spans[context] ?? []) : [],
         window: { from: now - WINDOW_MS, to: now },
+        createdAt: subject.createdAt,
       }),
     [
       revisions.data,
@@ -232,7 +234,9 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
     <Section>
       <SectionHeader
         title={t("changes", "title")}
-        count={items.filter((i) => i.kind !== "gap").length}
+        count={
+          items.filter((i) => i.kind !== "gap" && i.kind !== "created").length
+        }
       />
       <SectionBody>
         {unread.map((line) => (

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, Undo2 } from "lucide-react";
+import { ChevronDown, ChevronRight, CirclePlus, Undo2 } from "lucide-react";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
 import {
@@ -103,6 +103,13 @@ function Row({
             to: clock(item.gap.to),
           })}
         </div>
+      );
+    case "created":
+      return (
+        <p className="inline-flex items-center gap-1.5 text-[11px] text-fg-mut">
+          <CirclePlus className="h-3 w-3 text-fg-fnt" aria-hidden="true" />
+          {t("changes", "objectCreated")}
+        </p>
       );
     case "revision": {
       const { revision, against } = item;

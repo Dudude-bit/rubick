@@ -1655,6 +1655,7 @@ export const ru: Catalogue = {
     deliveredFrom: "из {from}",
     helmRevision: "Ревизия Helm {n}: {chart}",
     journalCreated: "{kind} появился",
+    objectCreated: "создан; всё, что было раньше, к нему не относится",
     journalDeleted: "{kind} исчез",
     journalGeneration: "generation spec {from} → {to}",
     journalImage: "{container}: образ {from} → {to}",

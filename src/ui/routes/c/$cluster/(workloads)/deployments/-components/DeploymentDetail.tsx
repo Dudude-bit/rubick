@@ -444,6 +444,7 @@ export function DeploymentDetail() {
             namespace: deployment.namespace,
             labels: deployment.labels,
             annotations: deployment.annotations,
+            createdAt: deployment.createdAt,
           }}
         />
       ) : null,

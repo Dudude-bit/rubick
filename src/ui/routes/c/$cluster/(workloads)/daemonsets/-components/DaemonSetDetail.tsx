@@ -313,6 +313,7 @@ export function DaemonSetDetail() {
               namespace: daemonSet.namespace,
               labels: daemonSet.labels,
               annotations: daemonSet.annotations,
+              createdAt: daemonSet.createdAt,
             }}
           />
         ) : null,

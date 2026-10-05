@@ -340,6 +340,7 @@ export function StatefulSetDetail() {
               namespace: statefulSet.namespace,
               labels: statefulSet.labels,
               annotations: statefulSet.annotations,
+              createdAt: statefulSet.createdAt,
             }}
           />
         ) : null,

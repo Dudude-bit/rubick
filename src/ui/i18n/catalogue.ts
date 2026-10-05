@@ -1618,6 +1618,7 @@ export const en = {
     deliveredFrom: "from {from}",
     helmRevision: "Helm revision {n}: {chart}",
     journalCreated: "{kind} appeared",
+    objectCreated: "created; nothing before this belongs to it",
     journalDeleted: "{kind} gone",
     journalGeneration: "spec generation {from} → {to}",
     journalImage: "{container} image {from} → {to}",
