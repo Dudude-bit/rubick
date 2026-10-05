@@ -15,6 +15,11 @@ pub use types::{
     PodMetricsResponse,
 };
 
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
+
+use parking_lot::Mutex;
+
 use crate::commands::helpers::UnreadNamespace;
 use crate::error::{Error, Result};
 use crate::state::AppState;
@@ -95,15 +100,112 @@ fn combined(
     }
 }
 
-/// Get node metrics from Metrics API
+/// Get node metrics from Metrics API, remembering an unserved answer for
+/// [`overview_node_metrics`].
 pub async fn get_node_metrics(state: &AppState) -> Result<NodeMetricsResponse> {
     let (status, data) = fetch_metrics(state, None, "NodeMetrics", parse_node_metric).await?;
+    if let Some(context) = state.get_current_context() {
+        state
+            .metrics_unserved
+            .record(&context, &status, Instant::now());
+    }
     Ok(NodeMetricsResponse { status, data })
+}
+
+/// How long "not installed" or "refused" stands before it is asked again,
+/// as `src/contracts/unserved-retry.json` states it for both halves.
+pub const UNSERVED_RETRY: Duration = Duration::from_secs(300);
+
+/// Each context's last unserved node-metrics answer and when it came.
+#[derive(Default)]
+pub struct Unserved(Mutex<HashMap<String, (Instant, MetricsStatus)>>);
+
+impl Unserved {
+    /// The remembered answer, while it still stands.
+    #[must_use]
+    pub fn standing(&self, context: &str, now: Instant) -> Option<MetricsStatus> {
+        let remembered = self.0.lock();
+        let (at, status) = remembered.get(context)?;
+        (now.saturating_duration_since(*at) < UNSERVED_RETRY).then(|| status.clone())
+    }
+
+    /// Only an admin changes these two answers; anything else is asked again.
+    pub fn record(&self, context: &str, status: &MetricsStatus, now: Instant) {
+        let mut remembered = self.0.lock();
+        match status.status {
+            MetricsStatusKind::NotInstalled | MetricsStatusKind::Forbidden => {
+                remembered.insert(context.to_string(), (now, status.clone()));
+            }
+            MetricsStatusKind::Available | MetricsStatusKind::Error => {
+                remembered.remove(context);
+            }
+        }
+    }
+}
+
+/// Node metrics for the overview, which refreshes every ten seconds: an
+/// unserved answer is reused until it has stood its time, rather than asking
+/// a cluster with no metrics-server twice a refresh for the same 404.
+pub async fn overview_node_metrics(state: &AppState) -> Result<NodeMetricsResponse> {
+    let standing = state
+        .get_current_context()
+        .and_then(|context| state.metrics_unserved.standing(&context, Instant::now()));
+    match standing {
+        Some(status) => Ok(NodeMetricsResponse {
+            status,
+            data: Vec::new(),
+        }),
+        None => get_node_metrics(state).await,
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn status(status: MetricsStatusKind) -> MetricsStatus {
+        MetricsStatus {
+            status,
+            message: None,
+        }
+    }
+
+    /// The frontend slows its metrics reads to the same file's number; a
+    /// constant edited on one side only is the drift this catches.
+    #[test]
+    fn the_unserved_retry_matches_the_shared_file() {
+        const FILE: &str = include_str!("../../../contracts/unserved-retry.json");
+        let file: serde_json::Value = serde_json::from_str(FILE).expect("json");
+        assert_eq!(
+            file["unservedRetrySeconds"],
+            UNSERVED_RETRY.as_secs(),
+            "src/contracts/unserved-retry.json"
+        );
+    }
+
+    /// Lena's log: two 404s a refresh from a cluster with no metrics-server.
+    /// "Not installed" and "refused" stand for the retry time, per context,
+    /// and an answer that could change by itself is never held. Fails if the
+    /// overview would ask again inside the window, or never ask again.
+    #[test]
+    fn an_unserved_answer_stands_for_the_retry_time_and_no_longer() {
+        let unserved = Unserved::default();
+        let at = Instant::now();
+        unserved.record("lab", &status(MetricsStatusKind::NotInstalled), at);
+        unserved.record("prod", &status(MetricsStatusKind::Error), at);
+
+        let held = unserved.standing("lab", at + Duration::from_secs(299));
+        assert!(matches!(
+            held.map(|s| s.status),
+            Some(MetricsStatusKind::NotInstalled)
+        ));
+        assert!(unserved.standing("lab", at + UNSERVED_RETRY).is_none());
+        assert!(unserved.standing("prod", at).is_none());
+
+        unserved.record("lab", &status(MetricsStatusKind::Forbidden), at);
+        unserved.record("lab", &status(MetricsStatusKind::Available), at);
+        assert!(unserved.standing("lab", at).is_none());
+    }
 
     fn sample(name: &str) -> PodMetrics {
         PodMetrics {

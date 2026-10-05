@@ -101,6 +101,8 @@ pub struct AppState {
 
     /// The overview's inputs, watched rather than listed per round.
     pub overview_cache: Arc<crate::overview::OverviewCache>,
+    /// Which contexts' metrics API was not installed or refused, and when.
+    pub metrics_unserved: crate::metrics::Unserved,
     pub ownership: Arc<crate::ownership::OwnershipIndexes>,
 }
 
@@ -144,6 +146,7 @@ impl AppState {
             debug_operations: DashMap::new(),
             perf: Arc::new(perf::PerfCounters::default()),
             overview_cache: Arc::new(crate::overview::OverviewCache::default()),
+            metrics_unserved: crate::metrics::Unserved::default(),
             ownership: Arc::new(crate::ownership::OwnershipIndexes::default()),
         })
     }

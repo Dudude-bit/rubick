@@ -1328,7 +1328,7 @@ pub async fn cluster_overview(
         .get_current_context()
         .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
     let (metrics, counts, snapshot) = tokio::join!(
-        crate::metrics::get_node_metrics(state),
+        crate::metrics::overview_node_metrics(state),
         side_counts(&client, scope.as_deref()),
         state.overview_cache.snapshot(&context, || client.clone()),
     );

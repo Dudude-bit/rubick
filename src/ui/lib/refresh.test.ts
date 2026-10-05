@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { SLOW_READ_MS } from "./read-deadline";
 import {
   BACKOFF,
@@ -126,5 +129,21 @@ describe("an answer older than its rate", () => {
   it("is never overdue off a timer or before a first answer", () => {
     expect(overdue(at, false, at + 3_600_000)).toBe(false);
     expect(overdue(0, 60_000, at)).toBe(false);
+  });
+});
+
+describe("an answer only an admin can change", () => {
+  /**
+   * The backend holds "metrics not installed" for the overview as long as
+   * this rate waits to ask again. Fails if one side's number moves alone.
+   */
+  it("matches src/contracts/unserved-retry.json", () => {
+    const shared = JSON.parse(
+      readFileSync(
+        resolve(process.cwd(), "src/contracts/unserved-retry.json"),
+        "utf8"
+      )
+    ) as { unservedRetrySeconds: number };
+    expect(REFRESH_INTERVALS.unserved).toBe(shared.unservedRetrySeconds * 1000);
   });
 });
