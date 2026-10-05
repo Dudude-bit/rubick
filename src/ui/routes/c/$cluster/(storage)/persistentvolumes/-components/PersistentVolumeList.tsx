@@ -61,7 +61,6 @@ export const PersistentVolumeList =
   createResourceListPage<PersistentVolumeInfo>({
     resourceType: ResourceType.PersistentVolume,
     title: "Persistent Volumes",
-    description: ({ t }) => t("empty", "persistentVolumesAre"),
     scope: "cluster",
     fetcher: () => commands.listPersistentVolumes(null).then(whole),
     watch: () => commands.subscribePersistentvolumeWatch(),

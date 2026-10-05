@@ -18,6 +18,7 @@ import { describeDeletion } from "../../../-peek/peek-actions";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ResourceListHeader } from "../../../-list/ResourceListHeader";
+import { KindAbout } from "@/components/object/KindAbout";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { createAgeColumn } from "../../../-list/columns";
 import { isRefusal, normalizeTauriError } from "@/lib/error-utils";
@@ -214,6 +215,7 @@ export function Crds() {
     <div className="flex h-full min-h-0 flex-col gap-2 animate-in fade-in duration-200">
       <ResourceListHeader
         title="Custom Resource Definitions"
+        description={<KindAbout kind={ResourceType.CustomResourceDefinition} />}
         count={
           crds.length === 0
             ? t("empty", "noneInline")

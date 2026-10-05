@@ -12,7 +12,7 @@ import { routeListKey } from "@/lib/list-keys";
 import { useShortcutsOverlayStore } from "@/stores/shortcutsOverlayStore";
 
 /**
- * The keys that are the same on every screen: `?` for the list of them,
+ * The keys that are the same on every screen: `?` or F1 for the list of them,
  * `g` then a letter to go somewhere, a letter to open a tab of the page the
  * reader is on, and whatever is left to the list on screen.
  *
@@ -27,6 +27,12 @@ export function useShortcuts(): void {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
+      // Help is asked for from anywhere, a field and the help itself included.
+      if (event.key === "F1") {
+        event.preventDefault();
+        useShortcutsOverlayStore.getState().toggle();
+        return;
+      }
       if (claimedByTarget(event.target)) return;
       // Lowercased, as every neighbouring handler in this app does it. With
       // Caps Lock on the browser reports "G" and "P", nothing matched the

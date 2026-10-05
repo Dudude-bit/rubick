@@ -49,6 +49,7 @@ import {
 } from "@/lib/namespace-scope";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { UnreadNamespaces } from "./UnreadNamespaces";
+import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
 
 const NOTHING_UNREAD: UnreadNamespace[] = [];
@@ -84,8 +85,8 @@ export interface ResourceListProps<
 > {
   /** Display title for the resource list */
   title: string;
-  /** Optional description below the title */
-  description?: string;
+  /** Below the title; a typed kind says what it is without being asked. */
+  description?: ReactNode;
   /** Query key for React Query */
   queryKey?: string[];
   /** Function to fetch resources */
@@ -490,7 +491,9 @@ export function ResourceList<
           // is a number about nothing, printed directly above the sentence
           // admitting as much. A namespace unread leaves it no total either.
           count={partial ? undefined : resources.length}
-          description={description}
+          description={
+            description ?? (listKind && <KindAbout kind={listKind} />)
+          }
           actions={
             <>
               {headerActions}

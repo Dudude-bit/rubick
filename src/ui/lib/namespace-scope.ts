@@ -223,9 +223,9 @@ export function scopeLabel(scope: readonly string[], t: T): string {
 
 /** The same thing inside a sentence: "no events in …". */
 export function scopeIn(scope: readonly string[], t: T): string {
-  if (scope.length === 0) return t("empty", "anyNamespace");
+  if (scope.length === 0) return t("empty", "scopeAnyNamespace");
   if (scope.length === 1) return scope[0];
-  return t("readings", "argoNamespaceCount", { n: scope.length });
+  return t("empty", "scopeNamespaceCount", { n: scope.length });
 }
 
 /**

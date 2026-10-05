@@ -13,6 +13,9 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@/components/ui/table-features";
 
+const openExternal = vi.hoisted(() => vi.fn(async () => undefined));
+vi.mock("@/lib/open-external", () => ({ openExternal }));
+
 const store = vi.hoisted(() => ({
   state: {
     currentNamespace: "default",
@@ -483,5 +486,46 @@ describe("what a list hands to Share", () => {
     });
     expect(section.partial ?? null).toBeNull();
     expect(section.count).toBe(1);
+  });
+});
+
+describe("what a list is of", () => {
+  /**
+   * Lena had nowhere to learn what a Pod was. Every typed list now says, and
+   * links the page Kubernetes keeps about it; fails if the sentence or the
+   * link goes, or the link stops leaving the app through the host.
+   */
+  it("says what the kind is and links its Kubernetes page", async () => {
+    const user = userEvent.setup();
+    await list({ data: [] });
+    expect(
+      screen.getByText(/A Pod is one running copy of an app/)
+    ).toBeVisible();
+    const more = screen.getByRole("link", { name: /Learn more/ });
+    expect(more).toHaveAttribute(
+      "href",
+      "https://kubernetes.io/docs/concepts/workloads/pods/"
+    );
+    await user.click(more);
+    expect(openExternal).toHaveBeenCalledWith(
+      "https://kubernetes.io/docs/concepts/workloads/pods/",
+      "kubernetes.io",
+      expect.any(Function)
+    );
+  });
+
+  /** A list of something the registry cannot name keeps the caller's own line. */
+  it("keeps a caller's description over the kind's", async () => {
+    await draw(
+      <ResourceList<Item>
+        title="Applications"
+        description="applications.argoproj.io"
+        columns={columns}
+        emptyStateLabel="Applications"
+        data={[]}
+      />
+    );
+    expect(screen.getByText("applications.argoproj.io")).toBeVisible();
+    expect(screen.queryByRole("link", { name: /Learn more/ })).toBeNull();
   });
 });

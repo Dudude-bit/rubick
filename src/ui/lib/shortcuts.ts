@@ -49,7 +49,7 @@ export const SHORTCUTS: readonly Shortcut[] = [
     keys: ["mod+shift+c"],
     labelKey: "copyLink",
   },
-  { id: "help", section: "global", keys: ["?"], labelKey: "help" },
+  { id: "help", section: "global", keys: ["?", "F1"], labelKey: "help" },
   { id: "escape", section: "global", keys: ["esc"], labelKey: "escape" },
   // Claimed only on the screen that *is* the cluster list, which is why the
   // table names the file rather than the hook: the same component renders a

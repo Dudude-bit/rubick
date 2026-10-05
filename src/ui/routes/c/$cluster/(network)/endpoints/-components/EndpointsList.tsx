@@ -206,8 +206,6 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
 export const EndpointsList = createResourceListPage<EndpointsInfo>({
   resourceType: ResourceType.Endpoints,
   title: "Endpoints",
-  description: ({ scope, t }) =>
-    t("empty", "endpointsFor", { scope: scope.inWords }),
   fetcher: ({ scope }) => commands.listEndpointsIn(scope),
   watch: ({ scope }) => commands.subscribeEndpointsWatch(scope),
   // No deleter — read-only resource

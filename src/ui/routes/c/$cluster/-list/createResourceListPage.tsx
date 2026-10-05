@@ -14,10 +14,7 @@ import { Trash2, Eye } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
 
 import { ResourceList } from "./ResourceList";
-import {
-  useNamespaceScope,
-  type NamespaceScope,
-} from "@/hooks/useNamespaceScope";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import type { Scoped } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
@@ -29,7 +26,7 @@ import { narrowingHelps } from "@/lib/resource-registry";
 import type { ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useWatchedList } from "@/hooks/useWatchedList";
-import { useT, type T as Translator } from "@/i18n/useT";
+import { useT } from "@/i18n/useT";
 
 /** A resource that can show up in a list page. */
 type ListableResource = { name: string; namespace?: string | null };
@@ -63,17 +60,6 @@ export interface ResourceListPageConfig<T extends ListableResource> {
   scope?: "namespaced" | "cluster";
   /** Override the empty-state label (defaults to `title`). */
   emptyStateLabel?: string;
-  /**
-   * Optional description rendered under the title. The function form gets the
-   * namespace selection — a set, not a name: "in prod, staging" and "in 4
-   * namespaces" are both scopes a reader can be in, and a line built from one
-   * namespace calls all of them "all namespaces". The translator comes with
-   * it because this config is a module-level table, where no hook can be
-   * called.
-   */
-  description?:
-    | string
-    | ((deps: { scope: NamespaceScope; t: Translator }) => string);
   /**
    * Optional watch subscription factory. When supplied, the page subscribes to
    * backend `resource-event` updates and the polling `refresh` rate is
@@ -156,11 +142,6 @@ export function createResourceListPage<T extends ListableResource>(
     return (
       <ResourceList<T>
         title={config.title}
-        description={
-          typeof config.description === "function"
-            ? config.description({ scope, t })
-            : config.description
-        }
         queryKey={queryKey}
         getRowId={getResourceRowId}
         queryFn={queryFn}

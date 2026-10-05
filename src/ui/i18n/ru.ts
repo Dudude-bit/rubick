@@ -891,6 +891,7 @@ export const ru: Catalogue = {
     openInPanel: "Открыть в боковой панели",
     copyQualifiedName: "Копировать имя с пространством имён",
     copyKubectlGet: "Копировать команду kubectl get",
+    learnMore: "Подробнее",
     recentChanges: "Недавние изменения",
     nativeHelmRelease: "Собственный релиз Helm",
     searchKindPlaceholder: "Поиск {kind}…",
@@ -4413,6 +4414,11 @@ export const ru: Catalogue = {
       other: "назван в $KUBECONFIG, объединён ещё с {n} файлами",
     },
     searchVersionWords: "build release сборка релиз версия",
+    documentation: "Документация",
+    documentationHint: "Как устроен Rubick и что показывает каждый экран.",
+    openReadme: "README на GitHub",
+    searchDocsWords:
+      "docs help manual readme github документация справка помощь руководство",
     searchRuntimeWords: "runtime webview среда выполнения",
     searchFrameworkWords: "react typescript фреймворк",
     searchUpdateWords:
@@ -4925,7 +4931,6 @@ export const ru: Catalogue = {
     kindCouldNotRead: "Не удалось прочитать этот объект ({kind})",
     whatIsThisKind: "Что это за объект ({kind})?",
     kindNotFound: "{kind} не найден",
-    pvcListDescription: "Запросы на хранилище от подов в {scope}",
     expandRepeats: "Развернуть повторы: {count}",
     anEmptySpec: "Пустой spec",
     nothingConfigured: "Ничего не настроено",
@@ -4943,10 +4948,6 @@ export const ru: Catalogue = {
     notBoundYet: "не привязан",
     spotReclaim:
       "Облако может забрать этот узел в любой момент. Уходящие отсюда поды — это устройство сервиса, а не сбой.",
-    endpointsFor: "Сетевые адреса служб в {scope}",
-    persistentVolumesAre:
-      "Хранилище уровня кластера, выделенное администратором",
-    storageClassesAre: "Описывает классы хранилищ, доступные в кластере",
     emptySpec: "Пустая спецификация",
     hideLineDetail: "Скрыть подробности строки",
     showLineDetail: "Показать подробности строки",
@@ -5573,6 +5574,14 @@ export const ru: Catalogue = {
     anyRepositoryExcept: "любой репозиторий, кроме {repos}",
     noDestinationAllowed: "назначения не разрешены",
     anyNamespace: "любое пространство имён",
+    // After "в": every sentence that takes a scope says where.
+    scopeAnyNamespace: "любом пространстве имён",
+    scopeNamespaceCount: {
+      one: "{n} пространстве имён",
+      few: "{n} пространствах имён",
+      many: "{n} пространствах имён",
+      other: "{n} пространствах имён",
+    },
     anyCluster: "любой кластер",
     namespaceOnCluster: "{namespace} в {cluster}",
     readingArgoWorkloads: "Читаем собственные нагрузки Argo…",
@@ -6644,6 +6653,63 @@ export const ru: Catalogue = {
     gwProbeTimedOut:
       "истекло 3 с — пакеты остаются без ответа: файрвол или неверный адрес",
   },
+  kindAbout: {
+    Pod: "В Pod работает одна копия приложения: один или несколько контейнеров с общим сетевым адресом; здесь видно, какие копии работают, перезапускаются или зависли.",
+    Deployment:
+      "Deployment держит заданное число одинаковых Pod и постепенно заменяет их при выходе новой версии; здесь видно, закончилось ли развёртывание.",
+    ReplicaSet:
+      "ReplicaSet держит фиксированное число одинаковых Pod, а Deployment создаёт новый ReplicaSet для каждой выкатываемой версии, поэтому каждый из них соответствует одной ревизии.",
+    StatefulSet:
+      "StatefulSet запускает Pod, которые сохраняют имя и диск между перезапусками, как нужно базам данных и очередям; здесь видно, все ли реплики готовы.",
+    DaemonSet:
+      "DaemonSet запускает по одной копии Pod на каждом узле или на каждом подходящем узле, так обычно работают агенты логов, метрик и сети.",
+    Job: "Job запускает Pod, пока задача не завершится, и затем останавливается; здесь видно, выполнилась ли разовая задача, упала или ещё идёт.",
+    CronJob:
+      "CronJob запускает Job по расписанию, как cron; здесь видно, когда был последний запуск и прошёл ли он успешно.",
+    ConfigMap:
+      "ConfigMap хранит настройки в виде ключей и значений, которые Pod читают как переменные окружения или файлы, и его изменение не перезапускает Pod, которые его используют.",
+    Secret:
+      "Secret хранит пароли, токены и ключи, которые Pod читают как переменные окружения или файлы; значения закодированы в base64, а это не шифрование.",
+    Service:
+      "Service даёт группе Pod одно постоянное имя и адрес внутри кластера, чтобы другие приложения находили их, пока сами Pod появляются и исчезают.",
+    Ingress:
+      "Ingress направляет HTTP- и HTTPS-трафик извне кластера в Service по имени хоста и пути и ничего не делает, пока не установлен ingress-контроллер.",
+    NetworkPolicy:
+      "NetworkPolicy определяет, каким Pod можно обмениваться трафиком, и как только Pod попадает под политику, всё, что она не разрешает, отбрасывается.",
+    Gateway:
+      "Gateway служит точкой входа: принимает трафик на выбранных портах и именах хостов, а обслуживает его контроллер, установленный в кластере.",
+    GatewayClass:
+      "GatewayClass называет контроллер, который умеет запускать Gateway, примерно так же, как StorageClass называет вид диска.",
+    HTTPRoute:
+      "HTTPRoute направляет HTTP-запросы, пришедшие на Gateway, в Service по имени хоста, пути и заголовкам.",
+    GRPCRoute:
+      "GRPCRoute направляет gRPC-вызовы, пришедшие на Gateway, в Service по имени сервиса и метода.",
+    TLSRoute:
+      "TLSRoute направляет зашифрованные соединения, пришедшие на Gateway, в Service по имени хоста, которое запросил клиент, не расшифровывая их.",
+    TCPRoute:
+      "TCPRoute направляет TCP-соединения, пришедшие на порт Gateway, в Service.",
+    UDPRoute:
+      "UDPRoute направляет UDP-трафик, пришедший на порт Gateway, в Service.",
+    PersistentVolumeClaim:
+      "PersistentVolumeClaim запрашивает для Pod диск заданного размера и остаётся в Pending, пока к нему не привязан PersistentVolume.",
+    PersistentVolume:
+      "PersistentVolume описывает часть хранилища в кластере, созданную администратором или по требованию через StorageClass, к которой может привязаться один запрос.",
+    StorageClass:
+      "StorageClass описывает вид хранилища, который кластер умеет создавать по требованию, например быстрый SSD или сетевой диск.",
+    Endpoints:
+      "Endpoints перечисляют адреса Pod за каждым Service, то есть то, куда на самом деле уходит его трафик; пустой список значит, что Service никуда не ведёт.",
+    Node: "На Node, физической или виртуальной машине, работают Pod; здесь видно, готов ли каждый узел и насколько он загружен.",
+    Event:
+      "Кластер записывает Event, когда с объектом что-то происходит, например Pod назначен на узел или проверка не прошла, и такие записи исчезают примерно через час.",
+    Namespace:
+      "Namespace объединяет объекты внутри одного кластера в именованную группу, чтобы разделять команды и приложения; большинство имён должны быть уникальны только внутри одного пространства имён.",
+    HorizontalPodAutoscaler:
+      "HorizontalPodAutoscaler меняет число реплик нагрузки по CPU, памяти или другим метрикам.",
+    PodDisruptionBudget:
+      "PodDisruptionBudget ограничивает, сколько Pod приложения можно остановить одновременно во время плановых работ, например при освобождении узла.",
+    CustomResourceDefinition:
+      "CustomResourceDefinition добавляет в API кластера новый вид объектов; так операторы и дополнения приносят свои ресурсы.",
+  },
   shortcuts: {
     title: "Клавиатура",
     lede: "Все клавиши, на которые отвечает приложение. Клавиши без модификаторов молчат в поле ввода и в терминале.",
@@ -6692,6 +6758,8 @@ export const ru: Catalogue = {
     rowOpen: "Открыть строку",
     rowClear: "Снять выделение",
     rowFilter: "Перейти к фильтру списка",
+    docs: "Документация Rubick",
+    kindDocs: "{kind} в документации Kubernetes",
     soloContainer: "Только этот контейнер, по позиции в легенде",
     allContainers: "Все контейнеры",
   },

@@ -152,6 +152,15 @@ describe("the keys that are the same on every screen", () => {
     await landedOn(router, "/c/prod/pods");
   });
 
+  /** F1 is where a newcomer looks for help; it did nothing. */
+  it("opens and closes the help on F1, from a field and from the help itself", async () => {
+    await mountWithOverlay();
+    press("F1", screen.getByLabelText("search"));
+    expect(useShortcutsOverlayStore.getState().open).toBe(true);
+    press("F1", screen.getByRole("dialog"));
+    expect(useShortcutsOverlayStore.getState().open).toBe(false);
+  });
+
   /** A `g` typed into a search box is a letter. */
   it("stays quiet inside a field", async () => {
     const router = await mount();

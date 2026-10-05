@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
+import { OutLink } from "@/components/ui/out-link";
 import { useAppInfo } from "@/hooks/useAppInfo";
+import { RUBICK_DOCS } from "@/lib/docs";
 import { useUpdaterStore } from "@/stores/updaterStore";
 import { useWhatsNewStore } from "@/stores/whatsNewStore";
 import { SettingRow, SettingsGroup } from "./settings-row";
@@ -65,6 +67,16 @@ export function AboutSettings() {
             >
               {t("settings", "showWhatsNew")}
             </Button>
+          }
+        />
+        <SettingRow
+          label={t("settings", "documentation")}
+          hint={t("settings", "documentationHint")}
+          keywords={t("settings", "searchDocsWords")}
+          control={
+            <OutLink href={RUBICK_DOCS} site="GitHub" className="text-xs">
+              {t("settings", "openReadme")}
+            </OutLink>
           }
         />
         <SettingRow

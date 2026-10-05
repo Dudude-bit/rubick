@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW, EventRows } from "@/components/object/detail-blocks";
 import { StoryCard } from "./StoryCard";
+import { KindAbout } from "@/components/object/KindAbout";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { eventsFiltersSection } from "./events-share";
@@ -261,6 +262,7 @@ export function Events() {
     <div className="flex flex-col gap-2 animate-in fade-in duration-200">
       <SectionHeader
         title="Events"
+        description={<KindAbout kind={ResourceType.Event} />}
         count={summarise(
           t,
           warningCount,

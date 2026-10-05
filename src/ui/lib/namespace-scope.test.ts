@@ -20,7 +20,7 @@ import {
   wireScope,
 } from "./namespace-scope";
 
-import { translate } from "@/i18n";
+import { loadLocale, translate } from "@/i18n";
 import { ResourceType } from "@/lib/resource-registry";
 import type { T } from "@/i18n/useT";
 
@@ -125,6 +125,22 @@ describe("what the scope is called", () => {
     expect(scopeLabel(["a", "b", "c"], t)).toBe("3 namespaces");
     expect(scopeIn([], t)).toBe("any namespace");
     expect(scopeIn(["prod", "staging"], t)).toBe("2 namespaces");
+  });
+
+  /**
+   * Every Russian sentence that takes a scope puts it after "в". Fed the
+   * nominative, the Endpoints page read "в любое пространство имён".
+   */
+  it("fits the sentence it goes into in Russian", async () => {
+    await loadLocale("ru");
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const frame = (scope: string[]) =>
+      ru("empty", "stillReading", { label: "pods", scope: scopeIn(scope, ru) });
+    expect(frame([])).toBe("Всё ещё читаю pods в любом пространстве имён");
+    expect(frame(["a", "b", "c"])).toBe(
+      "Всё ещё читаю pods в 3 пространствах имён"
+    );
   });
 });
 

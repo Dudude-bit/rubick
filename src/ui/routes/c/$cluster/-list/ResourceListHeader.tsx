@@ -6,7 +6,7 @@ interface ResourceListHeaderProps {
   title: string;
   /** Row count, shown muted beside the heading. */
   count?: ReactNode;
-  description?: string;
+  description?: ReactNode;
   actions?: ReactNode;
   /** Timestamp when data was last fetched (from React Query's dataUpdatedAt) */
   dataUpdatedAt?: number;

@@ -125,9 +125,6 @@ export function PersistentVolumeClaimList() {
   return (
     <ResourceList<PersistentVolumeClaimInfo>
       title="Persistent Volume Claims"
-      description={t("empty", "pvcListDescription", {
-        scope: scope.inWords,
-      })}
       queryKey={queryKey}
       getRowId={getResourceRowId}
       queryFn={() => commands.listPersistentVolumeClaimsIn(scope.wire)}

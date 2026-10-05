@@ -904,6 +904,7 @@ export const en = {
     openInPanel: "Open in side panel",
     copyQualifiedName: "Copy name with namespace",
     copyKubectlGet: "Copy kubectl get command",
+    learnMore: "Learn more",
     recentChanges: "Recent Changes",
     nativeHelmRelease: "Native Helm release",
     searchKindPlaceholder: "Search {kind}...",
@@ -3986,6 +3987,10 @@ export const en = {
       other: "named by $KUBECONFIG, merged with {n} more files",
     },
     searchVersionWords: "build release",
+    documentation: "Documentation",
+    documentationHint: "How Rubick works and what each screen shows.",
+    openReadme: "README on GitHub",
+    searchDocsWords: "docs help manual readme github",
     searchRuntimeWords: "runtime webview",
     searchFrameworkWords: "react typescript",
     searchUpdateWords: "update upgrade install download",
@@ -4489,7 +4494,6 @@ export const en = {
     kindCouldNotRead: "Could not read this {kind}",
     whatIsThisKind: "What is this {kind}?",
     kindNotFound: "{kind} not found",
-    pvcListDescription: "Requests for storage by pods in {scope}",
     expandRepeats: "Expand {count} repeats",
     anEmptySpec: "An empty spec",
     nothingConfigured: "Nothing configured",
@@ -4507,11 +4511,6 @@ export const en = {
     notBoundYet: "not bound",
     spotReclaim:
       "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
-    endpointsFor: "Network endpoints for services in {scope}",
-    persistentVolumesAre:
-      "Cluster-wide storage resources provisioned by an administrator",
-    storageClassesAre:
-      "Describes the classes of storage available in the cluster",
     emptySpec: "An empty spec",
     hideLineDetail: "Hide line detail",
     showLineDetail: "Show line detail",
@@ -5082,6 +5081,8 @@ export const en = {
     anyRepositoryExcept: "any repository except {repos}",
     noDestinationAllowed: "no destination allowed",
     anyNamespace: "any namespace",
+    scopeAnyNamespace: "any namespace",
+    scopeNamespaceCount: { one: "{n} namespace", other: "{n} namespaces" },
     anyCluster: "any cluster",
     namespaceOnCluster: "{namespace} on {cluster}",
     readingArgoWorkloads: "Reading Argo’s own workloads…",
@@ -6141,6 +6142,63 @@ export const en = {
     gwProbeTimedOut:
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
   },
+  kindAbout: {
+    Pod: "A Pod is one running copy of an app, one or more containers sharing a network address; look here to see which copies are up, restarting or stuck.",
+    Deployment:
+      "A Deployment keeps a chosen number of identical Pods running and replaces them gradually when a new version ships; look here to see whether a rollout finished.",
+    ReplicaSet:
+      "A ReplicaSet keeps a fixed number of identical Pods running, and a Deployment makes a new one for every version it rolls out, so each one is a revision.",
+    StatefulSet:
+      "A StatefulSet runs Pods that keep their name and their disk across restarts, as databases and queues need; look here to see whether every replica is ready.",
+    DaemonSet:
+      "A DaemonSet runs one copy of a Pod on every node, or on every node that matches, which is how agents for logs, metrics and networking usually run.",
+    Job: "A Job runs Pods until a task completes and then stops; look here to see whether a one-off task succeeded, failed or is still running.",
+    CronJob:
+      "A CronJob starts a Job on a schedule, like cron; look here to see when it last ran and whether that run succeeded.",
+    ConfigMap:
+      "A ConfigMap holds settings as keys and values that Pods read as environment variables or files, and changing one does not restart the Pods that use it.",
+    Secret:
+      "A Secret holds passwords, tokens and keys that Pods read as environment variables or files; its values are base64-encoded, which is not encryption.",
+    Service:
+      "A Service gives a set of Pods one stable name and address inside the cluster, so other apps can reach them while the Pods come and go.",
+    Ingress:
+      "An Ingress routes HTTP and HTTPS traffic from outside the cluster to Services by host name and path, and does nothing until an ingress controller is installed.",
+    NetworkPolicy:
+      "A NetworkPolicy says which Pods may talk to which, and once a Pod is selected by one, any traffic it does not allow is dropped.",
+    Gateway:
+      "A Gateway is an entry point that accepts traffic on chosen ports and host names, served by a controller installed in the cluster.",
+    GatewayClass:
+      "A GatewayClass names a controller that can run Gateways, much as a StorageClass names a kind of disk.",
+    HTTPRoute:
+      "An HTTPRoute sends HTTP requests arriving at a Gateway to Services, by host name, path and headers.",
+    GRPCRoute:
+      "A GRPCRoute sends gRPC calls arriving at a Gateway to Services, by service and method name.",
+    TLSRoute:
+      "A TLSRoute sends encrypted connections arriving at a Gateway to Services by the host name the client asked for, without decrypting them.",
+    TCPRoute:
+      "A TCPRoute sends TCP connections arriving at a Gateway port to Services.",
+    UDPRoute:
+      "A UDPRoute sends UDP traffic arriving at a Gateway port to Services.",
+    PersistentVolumeClaim:
+      "A PersistentVolumeClaim asks for a disk of a given size for Pods to use, and stays Pending until a PersistentVolume is bound to it.",
+    PersistentVolume:
+      "A PersistentVolume is a piece of storage in the cluster, made by an administrator or on demand by a StorageClass, that one claim can bind to.",
+    StorageClass:
+      "A StorageClass describes a kind of storage the cluster can create on demand, such as a fast SSD or a network disk.",
+    Endpoints:
+      "Endpoints list the addresses of the Pods behind each Service, which is where its traffic actually goes; an empty list means the Service reaches nothing.",
+    Node: "A Node is a machine, physical or virtual, that runs Pods; look here to see whether each one is ready and how full it is.",
+    Event:
+      "Events are short notes the cluster writes when something happens to an object, such as a Pod being scheduled or a probe failing, and they expire after about an hour.",
+    Namespace:
+      "A Namespace is a named group of objects inside one cluster, used to keep teams and apps apart; most names only have to be unique within one.",
+    HorizontalPodAutoscaler:
+      "A HorizontalPodAutoscaler changes how many replicas a workload runs, following CPU, memory or other metrics.",
+    PodDisruptionBudget:
+      "A PodDisruptionBudget limits how many Pods of an app may be taken down at once during planned work such as draining a node.",
+    CustomResourceDefinition:
+      "A CustomResourceDefinition adds a new kind of object to the cluster's API, which is how operators and add-ons bring their own resources.",
+  },
   shortcuts: {
     title: "Keyboard",
     lede: "Every key the app answers to. Unmodified keys stay quiet inside a field or a terminal.",
@@ -6188,6 +6246,8 @@ export const en = {
     rowOpen: "Open the row",
     rowClear: "Clear the selection",
     rowFilter: "Filter the list",
+    docs: "Rubick documentation",
+    kindDocs: "{kind} in the Kubernetes docs",
     soloContainer: "Only this container, by legend position",
     allContainers: "Every container",
   },
