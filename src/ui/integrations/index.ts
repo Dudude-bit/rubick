@@ -1244,7 +1244,6 @@ export { helmReleaseObjectLink as fluxHelmReleaseLink };
 export {
   candidates,
   forward,
-  reestablish,
   type Candidate,
   type Forwarded,
   type InClusterHint,

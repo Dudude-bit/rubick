@@ -3497,8 +3497,7 @@ export const ru: Catalogue = {
     forwardNoFreePort:
       "Все локальные порты с {from} по {to} уже заняты пробросом.",
     forwardNoPod:
-      "За {where} нет ни одного работающего пода, поэтому пробрасывать не к чему.",
-    forwardNoPodAnyMore: "За {where} больше нет ни одного работающего пода.",
+      "За {where} нет ни одного готового пода, поэтому пробрасывать не к чему.",
     forwardServiceGone:
       "{where} больше нет в этом кластере, поэтому пробрасывать не к чему.",
     forwardNoKnownPort: {

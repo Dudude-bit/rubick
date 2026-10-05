@@ -1,11 +1,6 @@
 /**
  * Forwarding to an in-cluster server instead of asking for an address that
  * only the cluster can resolve.
- *
- * The pinned thing here is the failure the naive version has: `port_forward_pod`
- * forwards to a pod *by name* and `autoReconnect` retries that same pod, so a
- * rollout leaves the forward chasing something that no longer exists behind a
- * `localhost` URL that used to work.
  */
 
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
@@ -16,9 +11,9 @@ vi.mock("@/lib/commands", () => ({
     listPods: vi.fn(),
     listPortForwards: vi.fn(async () => []),
     listPortForwardConfigs: vi.fn(async () => []),
-    portForwardPod: vi.fn(async () => ({ id: "pf-1" })),
+    portForwardPod: vi.fn(),
+    portForwardService: vi.fn(),
     portForwardSubscribed: vi.fn(async () => undefined),
-    stopPortForward: vi.fn(async () => undefined),
   },
 }));
 
@@ -27,15 +22,13 @@ import {
   candidates,
   forward,
   freePort,
-  podFor,
   portOf,
-  reestablish,
   normalisedSubpath,
 } from "./forwarded";
 import type { ServiceInfo } from "@/generated/types";
 
 import { translate } from "@/i18n";
-import { sayWords } from "@/i18n/say";
+import { SaidError, sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 
 /** The English catalogue — what these expectations are written in. */
@@ -69,44 +62,22 @@ const service = (
     createdAt: null,
   }) as ServiceInfo;
 
-type FakeContainer = {
-  phase?: "app" | "init" | "sidecar";
-  state: { type: string; reason?: string };
-};
-
-/**
- * A pod is somewhere to forward to when one of its own containers is up.
- * `display` is what kubectl prints for it: the first container that is not
- * running names the whole pod, which is exactly why it cannot be the test.
- */
-const pod = (
-  name: string,
-  ready: boolean,
-  containers: FakeContainer[] = [{ state: { type: "running" } }]
-) => {
-  const stuck = containers.find((c) => c.state.type !== "running");
-  const display = stuck ? (stuck.state.reason ?? "Error") : "Running";
-  // Split the way the backend splits it: `containers` holds app containers
-  // and `initContainers` everything else. A fixture that files an init
-  // container under `containers` describes a pod the backend cannot
-  // produce, and a test written against it passes for the wrong reason.
-  const stamped = containers.map((container) => ({
-    phase: "app" as const,
-    ...container,
-  }));
-  return {
-    name,
-    status: { phase: "Running", display, ready },
-    containers: stamped.filter((c) => c.phase === "app"),
-    initContainers: stamped.filter((c) => c.phase !== "app"),
-  } as never;
-};
+/** A session as the backend answers it: on the local port it was asked for. */
+const session = (
+  _service: string,
+  _namespace: string | null,
+  config: { localPort: number }
+) =>
+  Promise.resolve({
+    id: `pf-${config.localPort}`,
+    localPort: config.localPort,
+  } as never);
 
 beforeEach(() => {
   vi.mocked(commands.listServices).mockReset();
-  vi.mocked(commands.listPods).mockReset();
-  vi.mocked(commands.portForwardPod).mockClear();
-  vi.mocked(commands.stopPortForward).mockClear();
+  vi.mocked(commands.portForwardService).mockReset();
+  vi.mocked(commands.portForwardService).mockImplementation(session);
+  vi.mocked(commands.portForwardSubscribed).mockClear();
   vi.mocked(commands.listPortForwards).mockResolvedValue([]);
   vi.mocked(commands.listPortForwardConfigs).mockResolvedValue([]);
 });
@@ -154,70 +125,6 @@ describe("finding the vendor in the cluster", () => {
   });
 });
 
-describe("which pod to forward to", () => {
-  it("prefers a ready pod and settles for a running one", async () => {
-    vi.mocked(commands.listPods).mockResolvedValue([
-      pod("starting", false),
-      pod("serving", true),
-    ]);
-    expect(await podFor(service("prom", "mon", [9090]))).toBe("serving");
-
-    vi.mocked(commands.listPods).mockResolvedValue([pod("starting", false)]);
-    expect(await podFor(service("prom", "mon", [9090]))).toBe("starting");
-  });
-
-  it("ignores a pod that is not running at all", async () => {
-    vi.mocked(commands.listPods).mockResolvedValue([
-      pod("gone", false, [{ state: { type: "terminated" } }]),
-    ]);
-    expect(await podFor(service("prom", "mon", [9090]))).toBeNull();
-  });
-
-  /**
-   * A crash-looping pod is in phase Running, and this used to read the
-   * phase: with no ready pod behind the Service it forwarded onto the one
-   * container that was not there, and the metrics tab showed a connection
-   * refused instead of saying nothing was up.
-   */
-  it("does not settle for a pod that is crash-looping", async () => {
-    vi.mocked(commands.listPods).mockResolvedValue([
-      pod("looping", false, [
-        { state: { type: "waiting", reason: "CrashLoopBackOff" } },
-      ]),
-    ]);
-    expect(await podFor(service("prom", "mon", [9090]))).toBeNull();
-  });
-
-  /**
-   * The crash-loop fix first read kubectl's whole-pod status, and that
-   * refused a prometheus whose config-reloader sidecar sat in
-   * ImagePullBackOff while 9090 answered. The verdict is the container's.
-   */
-  it("forwards to a pod whose sidecar is broken while its own container is up", async () => {
-    vi.mocked(commands.listPods).mockResolvedValue([
-      pod("serving", false, [
-        { state: { type: "running" } },
-        {
-          phase: "sidecar",
-          state: { type: "waiting", reason: "ImagePullBackOff" },
-        },
-      ]),
-    ]);
-    expect(await podFor(service("prom", "mon", [9090]))).toBe("serving");
-  });
-
-  /** An init container that is still running is setting the pod up, not serving. */
-  it("does not count a running init container", async () => {
-    vi.mocked(commands.listPods).mockResolvedValue([
-      pod("initialising", false, [
-        { phase: "init", state: { type: "running" } },
-        { state: { type: "waiting", reason: "PodInitializing" } },
-      ]),
-    ]);
-    expect(await podFor(service("prom", "mon", [9090]))).toBeNull();
-  });
-});
-
 describe("a local port", () => {
   /** Above the ephemeral range, or the kernel hands it out later as a source port. */
   it("is taken from a range the kernel will not reuse", () => {
@@ -229,48 +136,57 @@ describe("a local port", () => {
   });
 });
 
-describe("keeping the forward alive across a rollout", () => {
-  /**
-   * The reason `reestablish` exists. `autoReconnect` retries the pod it was
-   * given; when that pod is gone for good the forward is chasing nothing, and
-   * the saved `localhost` URL keeps looking fine.
-   */
-  it("moves to a new pod without changing the local port", async () => {
-    vi.mocked(commands.listPods).mockResolvedValue([pod("prom-old", true)]);
-    const svc = service("prom", "mon", [9090]);
-    const first = await forward(svc, [9090]);
-    expect(first.url).toBe(`http://localhost:${first.localPort}`);
-    expect(first.pod).toBe("prom-old");
-
-    vi.mocked(commands.listPortForwards).mockResolvedValue([
-      { id: "s1", localPort: first.localPort } as never,
-    ]);
-    vi.mocked(commands.listPods).mockResolvedValue([pod("prom-new", true)]);
-
-    const again = await reestablish(first, svc);
-    expect(again.pod).toBe("prom-new");
-    // The address the connection is saved under must not move under it.
-    expect(again.localPort).toBe(first.localPort);
-    expect(again.url).toBe(first.url);
-    expect(commands.stopPortForward).toHaveBeenCalledWith("s1");
+describe("where a forward lands", () => {
+  const withTarget = (targetPort: string): ServiceInfo => ({
+    ...service("prom", "mon", [80]),
+    ports: [
+      { name: "web", port: 80, targetPort, nodePort: null, protocol: "TCP" },
+    ],
   });
 
-  it("says so when nothing is behind the Service any more", async () => {
-    vi.mocked(commands.listPods).mockResolvedValue([]);
-    await expect(
-      reestablish(
-        {
-          namespace: "mon",
-          service: "prom",
-          remotePort: 9090,
-          localPort: 20000,
-          pod: "prom-old",
-          subpath: "",
-          url: "http://localhost:20000",
-        },
-        service("prom", "mon", [9090])
-      )
-    ).rejects.toThrow(/No running pod/);
+  /**
+   * A forward made here picked a pod itself and used the Service's port as
+   * the pod's, so a Service on 80 in front of a container on 9090, or one
+   * whose targetPort is a name, connected to nothing. The Service and its
+   * port go to the backend, which resolves the pod and its targetPort.
+   */
+  it("hands the Service and its own port to the backend, whatever its targetPort", async () => {
+    for (const targetPort of ["http-web", "9090"]) {
+      vi.mocked(commands.portForwardService).mockClear();
+      const found = await forward(withTarget(targetPort), [80]);
+      expect(commands.portForwardService).toHaveBeenCalledWith(
+        "prom",
+        "mon",
+        expect.objectContaining({ remotePort: 80, autoReconnect: true })
+      );
+      expect(found.remotePort).toBe(80);
+    }
+    expect(commands.portForwardPod).not.toHaveBeenCalled();
+    expect(commands.listPods).not.toHaveBeenCalled();
+  });
+
+  /** Tauri events have no replay: an unsubscribed forward never starts. */
+  it("releases the session's subscribe gate once it is up", async () => {
+    const found = await forward(service("prom", "mon", [9090]), [9090]);
+    expect(commands.portForwardSubscribed).toHaveBeenCalledWith(
+      `pf-${found.localPort}`
+    );
+  });
+
+  /** The backend's sentence is English; the reader's language says it instead. */
+  it("says no ready pod is behind the Service in the reader's words", async () => {
+    vi.mocked(commands.portForwardService).mockRejectedValue({
+      code: "NO_READY_POD",
+      message: "No ready pod is behind Service prom",
+    });
+    const failure = await forward(service("prom", "mon", [9090]), [9090], 20500)
+      .then(() => null)
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(SaidError);
+    expect(sayWords((failure as SaidError).saying, t)).toBe(
+      "No ready pod is behind mon/prom, so there is nothing to forward to."
+    );
+    expect(commands.portForwardService).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -394,16 +310,12 @@ describe("choosing between the Services one chart installs", () => {
 describe("keeping the address a connection was saved under", () => {
   const svc = () => service("prom", "mon", [9090]);
 
-  beforeEach(() => {
-    vi.mocked(commands.listPods).mockResolvedValue([pod("prom-1", true)]);
-  });
-
   /** The saved address is `http://localhost:<port>`, so the port is tried first. */
   it("keeps the wanted port when the machine will give it", async () => {
     const found = await forward(svc(), [9090], 20500);
     expect(found.localPort).toBe(20500);
-    expect(commands.portForwardPod).toHaveBeenCalledWith(
-      "prom-1",
+    expect(commands.portForwardService).toHaveBeenCalledWith(
+      "prom",
       "mon",
       expect.objectContaining({ localPort: 20500 })
     );
@@ -415,7 +327,7 @@ describe("keeping the address a connection was saved under", () => {
    * after it actually refuses to bind.
    */
   it("moves to a free port when the machine refuses the wanted one", async () => {
-    vi.mocked(commands.portForwardPod).mockRejectedValueOnce(
+    vi.mocked(commands.portForwardService).mockRejectedValueOnce(
       new Error("address already in use")
     );
 
@@ -427,7 +339,7 @@ describe("keeping the address a connection was saved under", () => {
 
   /** The port it just failed on is not offered again as the fallback. */
   it("does not fall back onto the port that just refused", async () => {
-    vi.mocked(commands.portForwardPod).mockRejectedValueOnce(
+    vi.mocked(commands.portForwardService).mockRejectedValueOnce(
       new Error("address already in use")
     );
     const found = await forward(svc(), [9090], 20000);
@@ -472,11 +384,6 @@ describe("an API that does not sit at the root", () => {
 });
 
 describe("forwarding to something that only speaks the API", () => {
-  beforeEach(() => {
-    vi.mocked(commands.listPods).mockResolvedValue([pod("vmsingle-0", true)]);
-    vi.mocked(commands.listPortForwards).mockResolvedValue([]);
-  });
-
   /**
    * The whole of #71 in one assertion. A VictoriaMetrics is not called
    * prometheus, wears no prometheus label and does not listen on 9090 — the

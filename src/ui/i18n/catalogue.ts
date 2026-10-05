@@ -3239,8 +3239,7 @@ export const en = {
     forwardNoFreePort:
       "Every local port between {from} and {to} is already forwarding something.",
     forwardNoPod:
-      "No running pod is behind {where}, so there is nothing to forward to.",
-    forwardNoPodAnyMore: "No running pod is behind {where} any more.",
+      "No ready pod is behind {where}, so there is nothing to forward to.",
     forwardServiceGone:
       "{where} is not in this cluster any more, so there is nothing to forward to.",
     forwardNoKnownPort: {

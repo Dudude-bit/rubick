@@ -22,19 +22,28 @@ import {
 import type { ServiceInfo } from "@/generated/types";
 
 const listServices = vi.fn();
-const listPods = vi.fn();
-const portForwardPod = vi.fn(async (..._args: unknown[]) => ({}));
+const portForwardService = vi.fn(
+  async (
+    _service: unknown,
+    _namespace: unknown,
+    config: { localPort: number }
+  ) => ({
+    id: "pf-1",
+    localPort: config.localPort,
+  })
+);
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     listServices: (filters: unknown) => listServices(filters),
-    listPods: (filters: unknown) => listPods(filters),
-    portForwardPod: (pod: unknown, namespace: unknown, config: unknown) =>
-      portForwardPod(pod, namespace, config),
+    portForwardService: (
+      service: unknown,
+      namespace: unknown,
+      config: { localPort: number }
+    ) => portForwardService(service, namespace, config),
     portForwardSubscribed: vi.fn(async () => undefined),
     listPortForwards: vi.fn(async () => []),
     listPortForwardConfigs: vi.fn(async () => []),
-    stopPortForward: vi.fn(async () => undefined),
   },
 }));
 
@@ -68,13 +77,6 @@ const vmsingle = {
 beforeEach(() => {
   vi.clearAllMocks();
   listServices.mockResolvedValue([vmsingle]);
-  listPods.mockResolvedValue([
-    {
-      name: "vmsingle-0",
-      status: { phase: "Running", display: "Running", ready: true },
-      containers: [{ phase: "app", state: { type: "running" } }],
-    },
-  ]);
 });
 
 const hint = { names: ["prometheus"], ports: [9090] };

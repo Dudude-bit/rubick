@@ -20,7 +20,7 @@ import {
   normalisedSubpath,
   type Forwarded,
 } from "@/integrations";
-import type { ServiceInfo } from "@/generated/types";
+import type { PortForwardSessionInfo, ServiceInfo } from "@/generated/types";
 import {
   forwardsFor,
   useClusterForwardStore,
@@ -54,25 +54,38 @@ async function serviceOf(
 }
 
 /**
- * Sessions this app has open onto the same Service, whatever port they are on.
+ * Sessions this app has open onto the same Service port, whatever local port
+ * they are on.
  *
  * Reconnecting an integration picks a fresh local port and leaves the previous
  * tunnel up behind it: a socket nobody listens to and a cluster connection
  * nobody uses, both alive until the app restarts. They are stopped, not left.
+ * Matched by the Service the session forwards through, never by its pod-side
+ * port, which is the `targetPort` and not the port the reader chose.
  */
+export function orphansIn(
+  sessions: readonly PortForwardSessionInfo[],
+  preference: ForwardPreference,
+  keep: number | null
+): string[] {
+  return sessions
+    .filter(
+      ({ via, namespace, localPort }) =>
+        via.kind === "service" &&
+        via.name === preference.service &&
+        via.port === preference.remotePort &&
+        namespace === preference.namespace &&
+        localPort !== keep
+    )
+    .map((session) => session.id);
+}
+
 async function orphansOf(
   preference: ForwardPreference,
   keep: number | null
 ): Promise<string[]> {
   const sessions = await commands.listPortForwards().catch(() => []);
-  return sessions
-    .filter(
-      (session) =>
-        session.namespace === preference.namespace &&
-        session.remotePort === preference.remotePort &&
-        session.localPort !== keep
-    )
-    .map((session) => session.id);
+  return orphansIn(sessions, preference, keep);
 }
 
 /**
@@ -96,7 +109,6 @@ export async function wake(
     const subpath = normalisedSubpath(preference.subpath);
     return {
       ...preference,
-      pod: "",
       subpath,
       url: `http://localhost:${preference.localPort}${subpath}`,
     };

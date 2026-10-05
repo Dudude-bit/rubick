@@ -4,22 +4,18 @@
  * know **which** server, and a Service names one better than a URL does: the
  * app can already reach it, while the address the placeholder suggests
  * resolves only from inside the cluster. So the address is produced rather
- * than typed — pick the Service, the app forwards a local port to it and the
+ * than typed: pick the Service, the app forwards a local port to it and the
  * connection points at `localhost`.
  *
- * `port_forward_pod` forwards to a **pod**, by name, and `autoReconnect`
- * retries *that pod* with a backoff rather than finding another. Left alone,
- * the first rollout, node drain or OOM kill would leave the forward retrying
- * a pod that no longer exists, for ever, behind a `localhost` URL that used
- * to work — and every chart in the app would go quietly empty. So the pod is
- * resolved from the Service **every time the forward is established**, and
- * re-resolved when the connection stops answering: the Service is the durable
- * thing, the pod a detail looked up again.
+ * The forward goes through `port_forward_service`, which picks a ready pod,
+ * lands on its `targetPort` (a number or a container port's name) the way
+ * kube-proxy does, and moves to the next pod when a rollout replaces it.
  */
 
 import { SaidError, type Saying } from "@/i18n/say";
 import { commands } from "@/lib/commands";
-import type { ServiceInfo } from "@/generated/types";
+import { ERROR_CODES, errorCode } from "@/lib/error-utils";
+import type { PortForwardSessionInfo, ServiceInfo } from "@/generated/types";
 
 /** Where a forwarded connection actually points. */
 export interface Forwarded {
@@ -28,8 +24,6 @@ export interface Forwarded {
   /** The Service port being forwarded, which is what the reader chose. */
   remotePort: number;
   localPort: number;
-  /** The pod it resolved to this time. Never durable — see the module note. */
-  pod: string;
   /** Empty for an API at the root — see {@link normalisedSubpath}. */
   subpath: string;
   url: string;
@@ -93,49 +87,6 @@ export function portOf(
 }
 
 /**
- * A pod currently behind this Service.
- *
- * Read through the Service's own selector rather than through its
- * EndpointSlices, because the answer wanted here is "somewhere to forward to"
- * and a pod that is Running but not yet Ready still answers a query — while
- * an endpoint list that has not caught up yet would say there is nowhere to
- * go on a cluster that is merely mid-rollout.
- */
-export async function podFor(service: ServiceInfo): Promise<string | null> {
-  const selector = Object.entries(service.selector)
-    .map(([key, value]) => `${key}=${value}`)
-    .join(",");
-  // A Service with no selector has hand-managed endpoints and names no pods.
-  if (selector === "") return null;
-
-  const pods = await commands.listPods({
-    namespace: service.namespace,
-    labelSelector: selector,
-    fieldSelector: null,
-    limit: null,
-    statusFilter: null,
-    selector: null,
-    nodeName: null,
-  });
-
-  // A container that is up, whatever the pod's headline says: kubectl's
-  // status is a whole-pod verdict, and a pod whose sidecar is in
-  // ImagePullBackOff still serves from the container that is running. A
-  // pod in a crash loop has its container waiting, not running, and a
-  // forward onto it connects to nothing. Ready first, then merely up: a
-  // rollout should move the forward onto the new pod rather than refusing
-  // to make one.
-  // No phase test is needed: `pod.containers` holds the app containers and
-  // only those — init containers and native sidecars go to `initContainers`,
-  // stamped `Init` and `Sidecar` (src/tauri/src/resources/types/pod.rs).
-  const up = pods.filter((pod) =>
-    pod.containers.some((container) => container.state.type === "running")
-  );
-  const ready = up.find((pod) => pod.status.ready);
-  return (ready ?? up[0])?.name ?? null;
-}
-
-/**
  * The part of the address after the port, when the API does not sit at the root.
  *
  * Prometheus answers `/api/v1/query` straight off the host; VictoriaMetrics
@@ -150,18 +101,12 @@ export function normalisedSubpath(subpath: string | undefined): string {
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
 }
 
-/**
- * Point a local port at this Service, and say where.
- *
- * `autoReconnect` is on because it costs nothing and covers the blips; it is
- * explicitly *not* the answer to a pod that has gone for good, which is what
- * {@link reestablish} is for.
- */
+/** Point a local port at this Service, and say where. */
 export async function forward(
   service: ServiceInfo,
   preferredPorts: number[],
   /**
-   * A local port to keep if it can be kept — the one a saved connection's
+   * A local port to keep if it can be kept, the one a saved connection's
    * address is already made of. Taken, a free one is chosen instead and the
    * caller is expected to move the address with it.
    */
@@ -175,97 +120,56 @@ export async function forward(
         key: "forwardNoKnownPort",
         values: { name: service.name, n: service.ports.length },
       },
-      `${service.name} exposes ${service.ports.length} ports and none of them is one this app recognises — forward it by hand and give the address instead.`
+      `${service.name} exposes ${service.ports.length} ports and none of them is one this app recognises. Forward it by hand and give the address instead.`
     );
   }
 
-  const pod = await podFor(service);
-  if (pod === null) {
-    throw new SaidError(
-      {
-        key: "forwardNoPod",
-        values: { where: `${service.namespace}/${service.name}` },
-      },
-      `No running pod is behind ${service.namespace}/${service.name}, so there is nothing to forward to.`
-    );
-  }
-
-  const open = async (localPort: number) => {
-    await openForward(pod, service.namespace, localPort, remotePort);
-    return localPort;
-  };
+  const open = (localPort: number) =>
+    openForward(service, localPort, remotePort);
 
   // The kernel is the authority on whether a port is free: `portsInUse` knows
   // what *this app* is forwarding and nothing about the rest of the machine,
   // so the wanted port is tried and the fallback is chosen only if it fails.
-  let localPort: number;
-  if (keepLocal !== undefined) {
-    localPort = await open(keepLocal).catch(async () =>
-      open(freePort(new Set([...(await portsInUse()), keepLocal])))
-    );
-  } else {
-    localPort = await open(freePort(await portsInUse()));
-  }
+  const session =
+    keepLocal === undefined
+      ? await open(freePort(await portsInUse()))
+      : await open(keepLocal).catch(async (failure) => {
+          if (failure instanceof SaidError) throw failure;
+          return open(freePort(new Set([...(await portsInUse()), keepLocal])));
+        });
 
   return {
     namespace: service.namespace,
     service: service.name,
     remotePort,
-    localPort,
-    pod,
+    localPort: session.localPort,
     subpath: normalisedSubpath(subpath),
-    url: `http://localhost:${localPort}${normalisedSubpath(subpath)}`,
+    url: `http://localhost:${session.localPort}${normalisedSubpath(subpath)}`,
   };
-}
-
-/**
- * Put the forward back on a pod that exists, keeping the local port.
- *
- * The local port is what the saved connection's URL is made of, so it must
- * survive: the reader's address stays true and only the far end moves. Called
- * when the connection stops answering, which on a forwarded one nearly always
- * means the pod it was pinned to is gone.
- */
-export async function reestablish(
-  found: Forwarded,
-  service: ServiceInfo
-): Promise<Forwarded> {
-  const sessions = await commands.listPortForwards().catch(() => []);
-  for (const session of sessions) {
-    if (session.localPort === found.localPort) {
-      await commands.stopPortForward(session.id).catch(() => undefined);
-    }
-  }
-
-  const pod = await podFor(service);
-  if (pod === null) {
-    throw new SaidError(
-      {
-        key: "forwardNoPodAnyMore",
-        values: { where: `${found.namespace}/${found.service}` },
-      },
-      `No running pod is behind ${found.namespace}/${found.service} any more.`
-    );
-  }
-
-  await openForward(pod, found.namespace, found.localPort, found.remotePort);
-
-  return { ...found, pod };
 }
 
 /** A forward says nothing, and takes no connection, until it is subscribed to. */
 async function openForward(
-  pod: string,
-  namespace: string,
+  service: ServiceInfo,
   localPort: number,
   remotePort: number
-): Promise<void> {
-  const session = await commands.portForwardPod(pod, namespace, {
-    localPort,
-    remotePort,
-    autoReconnect: true,
-  });
+): Promise<PortForwardSessionInfo> {
+  const session = await commands
+    .portForwardService(service.name, service.namespace, {
+      localPort,
+      remotePort,
+      autoReconnect: true,
+    })
+    .catch((failure: unknown) => {
+      if (errorCode(failure) !== ERROR_CODES.NO_READY_POD) throw failure;
+      const where = `${service.namespace}/${service.name}`;
+      throw new SaidError(
+        { key: "forwardNoPod", values: { where } },
+        `No ready pod is behind ${where}, so there is nothing to forward to.`
+      );
+    });
   await commands.portForwardSubscribed(session.id);
+  return session;
 }
 
 /** What a vendor knows about how its own Service is usually labelled. */
