@@ -34,6 +34,7 @@ import { useCrdIndex } from "@/hooks/useCrdIndex";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { EventRows } from "@/components/object/detail-blocks";
 import { KeyValueList } from "../-object/detail-kv";
+import { WordTable } from "../-object/WordTable";
 import type { KeyValue } from "@/components/object/key-values";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { RESOURCE_NAME_SHELL } from "@/components/object/ResourceName";
@@ -403,10 +404,17 @@ function PeekOverview({
         summary.groups.map((group) => (
           <div key={group.title}>
             <PeekHeading title={group.title} count={group.count} />
-            <KeyValueList
-              items={group.items}
-              emptyMessage={group.emptyMessage ?? t("empty", "none")}
-            />
+            {group.table ? (
+              <WordTable
+                table={group.table}
+                emptyMessage={group.emptyMessage ?? t("empty", "none")}
+              />
+            ) : (
+              <KeyValueList
+                items={group.items}
+                emptyMessage={group.emptyMessage ?? t("empty", "none")}
+              />
+            )}
           </div>
         ))
       )}

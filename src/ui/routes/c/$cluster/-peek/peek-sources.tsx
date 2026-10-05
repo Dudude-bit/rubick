@@ -12,12 +12,7 @@ import {
   type PeekSource,
   type PeekSources,
 } from "./peek-sources-kit";
-import {
-  FACET_ROW_LIMIT,
-  flatten,
-  objectFacets,
-  stateOf,
-} from "../-object/facets";
+import { flatten, objectFacets, stateOf } from "../-object/facets";
 import { servedOfKind } from "../-object/ownership";
 import { CLUSTER_SOURCES } from "./peek-sources-cluster";
 import { GATEWAY_SOURCES } from "./peek-sources-gateway";
@@ -79,11 +74,11 @@ export function resolveSource(target: PeekTarget): PeekSource {
  * cluster. The backend already resolves a CRD's real group and version from
  * its name, which is what the detail page uses.
  *
- * `spec` and `status` are drawn the same way an unrecognised manifest's are:
- * scalars, dotted, capped. Nothing here reads a field by name, because the
- * whole population of this source is kinds this app has no schema for — and a
- * peek that understood Argo's `status.health` would be vendor knowledge in
- * the core, which is what the integrations seam exists to prevent.
+ * Without a vendor it reads as the object page reads any object, through
+ * `objectFacets`: a peek that understood Argo's `status.health` would be
+ * vendor knowledge in the core, which is what the integrations seam exists
+ * to prevent. Built-in kinds no screen draws (a Role, an EndpointSlice) are
+ * addressed this way too.
  */
 function customResourceSource(crdName: string): PeekSource {
   // A kind the vendor tree owns gets the vendor's own reading — the same
@@ -93,25 +88,24 @@ function customResourceSource(crdName: string): PeekSource {
   return source(
     (name, namespace) => commands.getCustomResource(crdName, name, namespace),
     (resource: CustomResourceDetailInfo, _target, t) => {
-      const status = resource.status as Record<string, unknown> | null;
+      const owners = controlledBy(
+        resource.ownerReferences,
+        resource.namespace,
+        t
+      );
       const body = vendor?.(resource, t);
+      if (!body) {
+        const facets = objectFacets(asObject(resource), t);
+        return { ...facets, groups: [...owners, ...facets.groups] };
+      }
       return {
-        status: body?.status ?? stateOf(status),
+        status:
+          body.status ??
+          stateOf(resource.status as Record<string, unknown> | null),
         createdAt: resource.createdAt,
         groups: [
-          ...controlledBy(resource.ownerReferences, resource.namespace, t),
-          ...(body?.groups ?? [
-            {
-              title: t("columns", "status"),
-              items: flatten(status, FACET_ROW_LIMIT),
-              emptyMessage: t("empty", "nothingReportedYet"),
-            },
-            {
-              title: t("columns", "spec"),
-              items: flatten(resource.spec, FACET_ROW_LIMIT),
-              emptyMessage: t("empty", "noSpec"),
-            },
-          ]),
+          ...owners,
+          ...body.groups,
           {
             title: t("columns", "labels"),
             count: Object.keys(resource.labels).length || undefined,
@@ -124,6 +118,25 @@ function customResourceSource(crdName: string): PeekSource {
       };
     }
   );
+}
+
+/** The object a custom-resource read describes, whole again for `objectFacets`. */
+function asObject(resource: CustomResourceDetailInfo): Record<string, unknown> {
+  return {
+    ...resource.fields,
+    apiVersion: resource.apiVersion,
+    kind: resource.kind,
+    metadata: {
+      name: resource.name,
+      namespace: resource.namespace,
+      labels: resource.labels,
+      annotations: resource.annotations,
+      finalizers: resource.finalizers,
+      creationTimestamp: resource.createdAt,
+    },
+    spec: resource.spec,
+    status: resource.status,
+  };
 }
 
 /**

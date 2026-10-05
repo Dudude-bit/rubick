@@ -435,6 +435,7 @@ export const en = {
     zone: "Zone",
     labels: "Labels",
     writtenBy: "Written by",
+    fields: "Fields",
     selectors: "Selectors",
     data: "Data",
     serviceType: "Service Type",
@@ -4365,6 +4366,12 @@ export const en = {
       "There is no Service named {name} here, so nothing keeps these endpoints but whoever wrote them.",
     noOwner: "No controller owns this revision.",
     involvedGone: "{kind} {name}, which this event is about, no longer exists.",
+  },
+  // Roles and bindings, read as what they grant and to whom.
+  rbac: {
+    anyName: "any",
+    noRules: "Grants nothing: no rules.",
+    noSubjects: "Binds nobody: no subjects.",
   },
   empty: {
     addressMissing: "Nothing lives at this address",

@@ -9,10 +9,23 @@ import type { KeyValue, KeyValueTone } from "@/components/object/key-values";
 import type { ConditionInfo } from "@/generated/types";
 import type { ResourceKind } from "@/lib/resource-registry";
 
+/** A cell is a list of words; `none` is said, faint, when there are none. */
+export interface WordCell {
+  words: string[];
+  none?: string;
+}
+
+export interface WordTable {
+  columns: string[];
+  rows: WordCell[][];
+}
+
 export interface PeekGroup {
   title: string;
   count?: ReactNode;
   items: KeyValue[];
+  /** Drawn in place of `items` where the rows are records, not pairs. */
+  table?: WordTable;
   emptyMessage?: string;
 }
 
@@ -83,8 +96,19 @@ const ROLE_TONE: Partial<Record<StatusRole, KeyValueTone>> = {
   pending: "info",
 };
 
-export const ref = (kind: string, name: string, namespace?: string | null) => (
-  <ResourceRef kind={kind} name={name} namespace={namespace} showKind={false} />
+export const ref = (
+  kind: string,
+  name: string,
+  namespace?: string | null,
+  options: { crd?: string; showNamespace?: boolean } = {}
+) => (
+  <ResourceRef
+    kind={kind}
+    name={name}
+    namespace={namespace}
+    showKind={false}
+    {...options}
+  />
 );
 
 /**

@@ -42,7 +42,7 @@ where
         name: crd_name.to_string(),
         namespace: String::new(),
     };
-    let (plural, group) = crd_name.split_once('.').ok_or_else(not_served)?;
+    let (plural, group) = plural_and_group(crd_name);
     let served = state.served(group, plural).await?.ok_or_else(not_served)?;
 
     let ctx = if !served.namespaced {
@@ -55,6 +55,11 @@ where
 
     let answer = request(ctx.dynamic_api_for_resource(&served.resource, !served.namespaced)).await;
     state.served_answer(group, answer).map_err(Error::from)
+}
+
+/// `<plural>.<group>`, or a bare plural in the core group, as kubectl reads it.
+fn plural_and_group(name: &str) -> (&str, &str) {
+    name.split_once('.').unwrap_or((name, ""))
 }
 
 /// List custom resource instances for a specific CRD
@@ -80,7 +85,7 @@ pub async fn list_custom_resources_in(
     state: State<'_, AppState>,
 ) -> Result<Scoped<CustomResourceInfo>> {
     crate::validation::validate_dns_subdomain(&crd_name)?;
-    let (plural, group) = crd_name.split_once('.').unwrap_or_default();
+    let (plural, group) = plural_and_group(&crd_name);
     let namespaced = state
         .served(group, plural)
         .await?
@@ -289,6 +294,20 @@ mod tests {
                 "a writing command took an unchecked namespace"
             );
         }
+    }
+
+    /// A `ServiceAccount` is addressed as `serviceaccounts`, with no group to
+    /// split off; it used to be refused as a CRD that does not exist.
+    #[test]
+    fn a_bare_plural_is_read_in_the_core_group() {
+        assert_eq!(
+            super::plural_and_group("serviceaccounts"),
+            ("serviceaccounts", "")
+        );
+        assert_eq!(
+            super::plural_and_group("roles.rbac.authorization.k8s.io"),
+            ("roles", "rbac.authorization.k8s.io")
+        );
     }
 
     /// What every command here does with a kind: a get, for one of them.

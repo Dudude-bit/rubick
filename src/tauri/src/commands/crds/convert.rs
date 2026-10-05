@@ -246,5 +246,40 @@ pub(super) fn dynamic_object_to_detail_info(obj: &DynamicObject) -> CustomResour
         owner_references: f.owner_references,
         finalizers: obj.metadata.finalizers.clone().unwrap_or_default(),
         resource_version: obj.metadata.resource_version.clone(),
+        fields: obj
+            .data
+            .as_object()
+            .into_iter()
+            .flatten()
+            .filter(|(key, _)| key.as_str() != "spec" && key.as_str() != "status")
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    /// An `EndpointSlice` keeps its endpoints at the top level; without them
+    /// its peek read "No spec" about an object full of addresses.
+    #[test]
+    fn a_payload_kept_at_the_top_level_is_carried_beside_spec_and_status() {
+        let obj: DynamicObject = serde_json::from_value(json!({
+            "apiVersion": "discovery.k8s.io/v1",
+            "kind": "EndpointSlice",
+            "metadata": { "name": "kube-dns-f2mvh", "namespace": "kube-system" },
+            "addressType": "IPv4",
+            "endpoints": [{ "addresses": ["10.0.0.5"] }],
+        }))
+        .expect("object");
+        let detail = dynamic_object_to_detail_info(&obj);
+        assert_eq!(
+            detail.fields.keys().map(String::as_str).collect::<Vec<_>>(),
+            ["addressType", "endpoints"]
+        );
+        assert_eq!(detail.fields["addressType"], json!("IPv4"));
+        assert_eq!(detail.spec, serde_json::Value::Null);
     }
 }

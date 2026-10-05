@@ -1596,6 +1596,7 @@ export interface CustomResourceDetailInfo {
   finalizers: string[];
   resourceVersion: string | null;
   generation: number | null;
+  fields: Record<string, unknown>;
 }
 
 export interface OwnerReferenceInfo {

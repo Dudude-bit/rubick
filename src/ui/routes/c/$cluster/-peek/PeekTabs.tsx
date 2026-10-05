@@ -24,6 +24,7 @@ import { PodListCard } from "../-object/PodListCard";
 import type { PeekTabId } from "./peek-tabs";
 import { RelatedPanel } from "../-object/RelatedPanel";
 import { useRelatedObjects } from "../-object/useRelatedObjects";
+import { servedOf } from "../-object/served";
 import type {
   ConfigMapInfo,
   CustomResourceDetailInfo,
@@ -554,8 +555,7 @@ function PeekRelatedTab({
   const related = useRelatedObjects(
     target.crd
       ? {
-          // `<plural>.<group>` — everything after the first dot.
-          group: target.crd.slice(target.crd.indexOf(".") + 1),
+          group: servedOf(target.crd).group,
           kind: target.kind,
           namespace: target.namespace ?? null,
           name: target.name,

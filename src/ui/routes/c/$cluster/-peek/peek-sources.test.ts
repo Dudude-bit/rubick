@@ -439,3 +439,50 @@ describe("the families the peek's sources are spread from", () => {
     expect(kinds.filter((kind) => !registered.includes(kind))).toEqual([]);
   });
 });
+
+describe("a peek at a kind addressed by its plural and group", () => {
+  const t = ((_section: string, key: string) => key) as never;
+  const target = {
+    kind: "EndpointSlice",
+    name: "kube-dns-f2mvh",
+    namespace: "kube-system",
+    crd: "endpointslices.discovery.k8s.io",
+  };
+  const slice = {
+    name: "kube-dns-f2mvh",
+    namespace: "kube-system",
+    uid: "slice-uid",
+    apiVersion: "discovery.k8s.io/v1",
+    kind: "EndpointSlice",
+    spec: null,
+    status: null,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+    ownerReferences: [
+      {
+        apiVersion: "v1",
+        kind: "Service",
+        name: "kube-dns",
+        uid: "svc-uid",
+        controller: true,
+      },
+    ],
+    finalizers: [],
+    resourceVersion: null,
+    generation: null,
+    fields: { addressType: "IPv4", endpoints: [{ addresses: ["10.0.0.5"] }] },
+  };
+
+  /**
+   * The peek opened from Owns read "No spec" about an EndpointSlice full of
+   * addresses; it now reads what its own page reads.
+   */
+  it("draws what the object keeps at the top level", () => {
+    const summary = resolveSource(target).summarise(slice, target, t);
+    const titles = summary.groups.map((group) => group.title);
+    expect(titles).toContain("endpoints");
+    expect(titles).not.toContain("spec");
+    expect(titles[0]).toBe("controlledBy");
+  });
+});

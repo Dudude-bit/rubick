@@ -144,4 +144,6 @@ pub struct CustomResourceDetailInfo {
     pub resource_version: Option<String>,
     /// `metadata.generation`, as on the list shape.
     pub generation: Option<i64>,
+    /// Every other top-level field: where kinds without a spec keep what they say.
+    pub fields: BTreeMap<String, serde_json::Value>,
 }

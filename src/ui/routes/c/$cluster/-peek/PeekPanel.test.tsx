@@ -211,6 +211,7 @@ function buildApplication(): CustomResourceDetailInfo {
     createdAt: "2026-08-01T09:00:00Z",
     ownerReferences: [],
     generation: null,
+    fields: {},
     finalizers: [],
     resourceVersion: "41",
   };

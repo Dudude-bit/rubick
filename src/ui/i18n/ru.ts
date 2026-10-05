@@ -405,6 +405,7 @@ export const ru: Catalogue = {
     zone: "Зона",
     labels: "Метки",
     writtenBy: "Пишут",
+    fields: "Поля",
     selectors: "Селекторы",
     data: "Данные",
     serviceType: "Тип Service",
@@ -4806,6 +4807,11 @@ export const ru: Catalogue = {
       "Service с именем {name} здесь нет, так что эти endpoints держит только тот, кто их записал.",
     noOwner: "Эту ревизию не держит ни один контроллер.",
     involvedGone: "{kind} {name}, о котором это событие, больше не существует.",
+  },
+  rbac: {
+    anyName: "любые",
+    noRules: "Ничего не разрешает: правил нет.",
+    noSubjects: "Никого не связывает: субъектов нет.",
   },
   empty: {
     addressMissing: "По этому адресу ничего нет",

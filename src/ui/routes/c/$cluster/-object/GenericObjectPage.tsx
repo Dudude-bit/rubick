@@ -10,6 +10,8 @@ import { useOwnershipKeys } from "./ownership-keys";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { yamlTab } from "./yaml-tab";
 import { servedOf, useServed, type Served } from "./served";
+import { WordTable } from "./WordTable";
+import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { DetailSkeleton } from "@/components/ui/skeleton";
@@ -105,15 +107,25 @@ export function GenericObjectPage({
     glyph: viewGlyph(Info),
     content: facets ? (
       <div className="flex flex-col gap-[22px]">
-        {facets.groups.map((group) => (
-          <KeyValueSection
-            key={group.title}
-            title={group.title}
-            count={group.count}
-            items={group.items}
-            emptyMessage={group.emptyMessage ?? t("empty", "none")}
-          />
-        ))}
+        {facets.groups.map((group) =>
+          group.table ? (
+            <Section key={group.title}>
+              <SectionHeader title={group.title} count={group.count} />
+              <WordTable
+                table={group.table}
+                emptyMessage={group.emptyMessage ?? t("empty", "none")}
+              />
+            </Section>
+          ) : (
+            <KeyValueSection
+              key={group.title}
+              title={group.title}
+              count={group.count}
+              items={group.items}
+              emptyMessage={group.emptyMessage ?? t("empty", "none")}
+            />
+          )
+        )}
       </div>
     ) : (
       <DetailSkeleton />
