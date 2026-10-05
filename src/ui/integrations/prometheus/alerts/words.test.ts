@@ -64,7 +64,10 @@ describe("the monitors verdict", () => {
   it("declines the target total by its own number", () => {
     expect(
       verdictOfMonitor(down(1, 1), 1, null, null, inLanguage("ru")).head
-    ).toBe("1 из 1 target'а down.");
+    ).toBe("1 из 1 цели down.");
+    expect(
+      verdictOfMonitor(down(1, 3), 1, null, null, inLanguage("ru")).head
+    ).toBe("1 из 3 целей down.");
     expect(
       verdictOfMonitor(down(1, 1), 1, null, null, inLanguage("en")).head
     ).toBe("1 of 1 target down.");

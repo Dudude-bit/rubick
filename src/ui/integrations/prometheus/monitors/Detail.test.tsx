@@ -70,7 +70,7 @@ describe("what the Monitors page says a Prometheus picks up", () => {
       serviceMonitorNamespaceSelector: {},
     });
     expect(
-      screen.getByText("мониторы по release=kps, во всех namespace")
+      screen.getByText("мониторы по release=kps, во всех пространствах имён")
     ).toBeInTheDocument();
     expect(screen.queryByText(/\{\}/)).toBeNull();
   });
@@ -83,7 +83,7 @@ describe("what the Monitors page says a Prometheus picks up", () => {
     useLocaleStore.setState({ choice: "ru" });
     await draw({ serviceMonitorSelector: { matchLabels: { release: "kps" } } });
     expect(
-      screen.getByText("мониторы по release=kps, в своём namespace")
+      screen.getByText("мониторы по release=kps, в своём пространстве имён")
     ).toBeInTheDocument();
   });
 
@@ -101,8 +101,8 @@ describe("what the Monitors page says a Prometheus picks up", () => {
 
   /** `{}` is every monitor; where from is the namespace selector's to say. */
   it.each([
-    [{}, "все мониторы во всех namespace"],
-    [null, "все мониторы в своём namespace"],
+    [{}, "все мониторы во всех пространствах имён"],
+    [null, "все мониторы в своём пространстве имён"],
   ])(
     "reads an empty monitor selector with namespaces %j",
     async (scope, words) => {

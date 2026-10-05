@@ -288,7 +288,7 @@ export const ru: Catalogue = {
     allocatable: "Доступно к выделению",
     lastRun: "Последний запуск",
     nextRun: "Следующий запуск",
-    rollout: "Раскатка",
+    rollout: "Развёртывание",
     ingressAddress: "Адрес Ingress",
     podIp: "IP пода",
     hostIp: "IP узла",
@@ -319,7 +319,7 @@ export const ru: Catalogue = {
     says: "Указывает",
     assumedBy: "Кто принимает",
     listeners: "Слушатели",
-    backendConfig: "Конфиг бэкенда",
+    backendConfig: "Конфигурация бэкенда",
     edgeCache: "Edge-кэш",
     takenOutAfter: "Выводится через",
     revisionInline: "ревизия {n}",
@@ -1389,11 +1389,11 @@ export const ru: Catalogue = {
     rollBackToThis: "Откатить к этой ревизии",
     rollbackTitle: "Откатить {subject} к ревизии {n}?",
     rollbackBody:
-      "Шаблон подов станет тем, что записан в ревизии {n}, и контроллер раскатает его, как любое другое изменение.",
+      "Шаблон подов станет таким, каким он записан в ревизии {n}, и контроллер развернёт его, как любое другое изменение.",
     rollbackWhatChanges: "Что изменится",
     rollbackCurrentUnknown:
       "Текущую ревизию прочитать не удалось, поэтому неизвестно, что изменится.",
-    rollbackStarted: "{kind} {name} раскатывает шаблон ревизии {n}.",
+    rollbackStarted: "{kind} {name} разворачивает шаблон ревизии {n}.",
     rollbackAlreadyThere:
       "{kind} {name} уже работает на шаблоне ревизии {n}; ничего не изменено.",
     uninstall: "Удалить",
@@ -1588,18 +1588,18 @@ export const ru: Catalogue = {
     active: "активных: {n}",
   },
   checks: {
-    tab: "Проверки",
+    tab: "Проверка сети",
     title: "Проверить гипотезу из пода",
-    lede: "Спрашивается из сети самого пода, а не с этой машины: резолвится ли имя, отвечает ли порт.",
+    lede: "Проверка идёт из сети самого пода, а не с этой машины: разрешается ли имя, отвечает ли порт.",
     fromContainer: "Из контейнера",
-    dns: "Резолв",
+    dns: "Разрешить имя",
     tcp: "Подключиться к",
     run: "Запустить",
     running: "Спрашиваю под…",
     failed: "Проверка не запустилась: {error}",
     answers: "Ответы",
-    resolved: "{name} резолвится в {addresses}",
-    notResolved: "{name} отсюда не резолвится",
+    resolved: "{name} разрешается в {addresses}",
+    notResolved: "{name} отсюда не разрешается",
     connected: "{address} принимает соединение отсюда",
     refused: "{address} отсюда не отвечает",
     noTool: "В образе нечем спросить (пробовали {tried})",
@@ -1607,13 +1607,14 @@ export const ru: Catalogue = {
     ranInCopy: "в копии пода на {image}, {deleted} ({pod})",
     copyDeleted: "после удалена",
     copyNotDeleted: "удаление не подтверждено",
-    unanswered: "Проверка закончилась, не сказав чем",
-    unansweredBy: "{tool} закончил, не сказав чем, — это не ответ про кластер",
+    unanswered: "Проверка завершилась, не сообщив результат",
+    unansweredBy:
+      "{tool} завершился, не сообщив результат, поэтому это не ответ о кластере",
     answeredWith: "ответил {tool}",
     runFromCopy: "Запустить из копии",
     copyImage: "Образ для копии",
     copyNote:
-      "Копия разделяет namespace, лейблы, DNS-политику и service account. Это не сам под, и она удаляется, как только ответ получен.",
+      "Копия получает то же пространство имён, метки, DNS-политику и ServiceAccount. Это не сам под, и она удаляется, как только ответ получен.",
     whatItSaid: "Что напечатало",
     containerCannotAnswer:
       "{container} не может принять exec: {why}. Проверка пойдёт из копии пода.",
@@ -1709,7 +1710,7 @@ export const ru: Catalogue = {
     guessCrashLoop:
       "Скорее всего: {container} сам завершается сразу после старта, уже {restarts}. Причина, скорее всего, в его последних строках перед выходом.",
     guessCrashRefusedSidecar:
-      "Скорее всего: на {host}:{port} внутри этого пода никто не отвечает. Этот адрес у сайдкара {sidecar}, который сейчас {state}; само приложение, скорее всего, в порядке и ждёт его.",
+      "Скорее всего: на {host}:{port} внутри этого пода никто не отвечает. Этот адрес принадлежит sidecar-контейнеру {sidecar}, который сейчас {state}; само приложение, скорее всего, в порядке и ждёт его.",
     guessCrashRefusedServiceEmpty:
       "Скорее всего: {host}:{port} отказал в соединении. Этот адрес у Service {service}, за которым сейчас нет ни одного готового эндпоинта; сам под, скорее всего, в порядке.",
     guessCrashRefusedServiceReady:
@@ -1727,7 +1728,7 @@ export const ru: Catalogue = {
     guessCrashInClusterUnread:
       "Скорее всего: приложение не может достучаться до {host}:{port}, адреса внутри кластера. Services этого namespace прочитать не удалось, так что кто на него отвечает, скорее всего, стоит посмотреть руками — отсюда не видно.",
     guessCrashLoopback:
-      "Скорее всего: {host}:{port} отказал в соединении, и этот адрес — сам этот под: обычно это не поднявшийся сайдкар или тот, который на этом порту не слушает. Ни один контейнер этого пода его не объявляет.",
+      "Скорее всего: {host}:{port} отказал в соединении, а этот адрес принадлежит самому поду. Обычно это sidecar-контейнер, который не поднялся или не слушает этот порт. Ни один контейнер этого пода его не объявляет.",
     guessCrashUnreachableOutside:
       "Скорее всего: до {host}:{port} не достучаться, и строка не говорит, ответил ли кто-нибудь — обычно это маршрут или имя, которое из этого кластера ведёт в никуда. Приложение видит дорогу, не то, что в её конце.",
     guessCrashInClusterUnknown:
@@ -2382,7 +2383,7 @@ export const ru: Catalogue = {
     scyllaOperatorExplained:
       "Оператор Scylla запускает один Deployment, scylla-operator, и согласует каждый ScyllaCluster. Ремонты и бэкапы выполняет ScyllaDB Manager, отдельный Deployment; без него они объявлены и никогда не выполняются.",
     couldNotReadScyllaClusters: "Не удалось прочитать объекты ScyllaCluster",
-    nodeConfigsTab: "Конфиги узлов",
+    nodeConfigsTab: "Конфигурации узлов",
     noScyllaClusters:
       "Объектов ScyllaCluster нет ни в одном namespace. CRD есть; кластер ещё никто не попросил.",
     deploymentsUnreadable:
@@ -2397,7 +2398,7 @@ export const ru: Catalogue = {
     upgradingWord: "апгрейд",
     conditionsNotWritten: "условия не записаны",
     conditionsUnsure: "оператор не уверен",
-    rolledOut: "раскатан",
+    rolledOut: "развёрнут",
     conditionsFact: "Условия",
     membersFact: "Члены",
     notWritten: "оператором не записано",
@@ -2460,20 +2461,20 @@ export const ru: Catalogue = {
     nodesSetUp: "{tuned} {of} подготовлено",
   },
   tell: {
-    askRollout: "Скажи мне, когда раскатка закончится",
-    askPod: "Скажи мне, когда он будет готов или упадёт",
-    askJob: "Скажи мне, чем кончится",
-    askDrain: "Скажи мне, когда узел опустеет",
+    askRollout: "Сообщить, когда развёртывание завершится",
+    askPod: "Сообщить, когда он будет готов или упадёт",
+    askJob: "Сообщить, чем закончится",
+    askDrain: "Сообщить, когда узел будет освобождён",
     askDrainExplained:
-      "Уведомление на рабочем столе, когда узел пуст или drain сдался.",
-    askForward: "Скажи мне, если оборвётся",
+      "Уведомление на рабочем столе, когда узел опустеет или освобождение прекратится.",
+    askForward: "Сообщить, если проброс оборвётся",
     stopAsking: "Перестать наблюдать",
     watchingSince: "наблюдаю уже {ago}",
     lostSince: "потерян из виду {ago} назад",
     expired: "Истекло: сутки без ответа",
     empty: "Ничего не наблюдается",
     emptyHint:
-      "Спросите про раскатку, под, задание, drain или проброс, и ответ придёт уведомлением.",
+      "Попросите сообщить о развёртывании, поде, задании, освобождении узла или пробросе порта, и ответ придёт уведомлением.",
     dismiss: "Убрать",
     openWatching: "Открыть наблюдение",
     severalAnswered: {
@@ -2487,32 +2488,33 @@ export const ru: Catalogue = {
       "Двенадцать на кластер, больше нельзя. Выберите, какое снять, или оставьте все и пропустите это.",
     keepAll: "Оставить все",
     swap: "Снять то, наблюдать это",
-    saysRolledOut: "{name} раскатился",
-    saysRolloutFailed: "{name}: раскатка не удалась",
-    saysRolloutPaused: "{name} на паузе и не раскатится, пока паузу не снимут",
+    saysRolledOut: "{name} развёрнут",
+    saysRolloutFailed: "{name}: развёртывание не удалось",
+    saysRolloutPaused:
+      "{name} на паузе: развёртывание продолжится, когда паузу снимут",
     saysReady: "{name} готов",
     saysCrashedAgain: "{name} снова упал",
     saysSucceeded: "{name} завершился успешно",
     saysFailed: "{name} завершился с ошибкой",
-    saysDrained: "{name} опустел",
-    saysDrainStopped: "{name}: drain остановлен",
-    saysDrainCancelled: "{name}: drain отменён",
-    saysDrainFailed: "{name}: drain сломался",
+    saysDrained: "{name} освобождён",
+    saysDrainStopped: "{name}: освобождение остановлено",
+    saysDrainCancelled: "{name}: освобождение отменено",
+    saysDrainFailed: "{name}: освобождение не удалось",
     saysRenewed: "{name}: сертификат обновлён",
     saysIssuanceFailed: "{name}: выпуск сертификата не удался",
     saysForwardDied: "Проброс к {name} оборвался",
     saysGone: "{name} исчез",
     saysLostSight: "{name} потерян из виду",
     saysTimedOut: "{name}: нет ответа за две минуты",
-    afterRestart: "после рестарта",
+    afterRestart: "после перезапуска",
     afterScale: "после масштабирования до {n}",
-    afterApply: "после apply",
+    afterApply: "после применения",
     afterImage: "после смены образа",
     withinDeadline: "ответ за две минуты, иначе ответ это его отсутствие",
-    askRolloutShort: "раскатка",
+    askRolloutShort: "развёртывание",
     askPodShort: "готов или упадёт",
     askJobShort: "чем кончится",
-    askDrainShort: "drain",
+    askDrainShort: "освобождение",
     askRenewedShort: "обновление",
     askForwardShort: "не оборвётся",
   },
@@ -2539,7 +2541,7 @@ export const ru: Catalogue = {
     tabConnection: "Подключение",
     notConnectedShort: "не подключён",
     pageHint:
-      "Каждый ServiceMonitor и PodMonitor: кого выбирает, какой Prometheus его подхватывает и скрейпит ли его подключённый Prometheus на самом деле.",
+      "Каждый ServiceMonitor и PodMonitor: что он выбирает, какой Prometheus его подхватывает и действительно ли подключённый Prometheus собирает по нему метрики.",
     couldNotReadMonitors: "Не удалось прочитать мониторы",
     kindAbsent: "{kind} здесь быть не может: его CRD не установлен.",
     kindUnread: "Объекты {kind} не удалось прочитать: {reason}",
@@ -2548,20 +2550,20 @@ export const ru: Catalogue = {
     noInstances:
       "В кластере нет объекта Prometheus: мониторы некому подхватывать. Оператор удалили, а CRD остались?",
     instancesUnread:
-      "Объекты Prometheus не удалось прочитать, поэтому неизвестно, какой инстанс подхватывает монитор.",
+      "Объекты Prometheus не удалось прочитать, поэтому неизвестно, какой экземпляр подхватывает монитор.",
     readyOf: "{ready} из {wanted} готово",
     readyUnknown: "готовность не записана",
     retention: "хранение {value}",
     notConnected:
-      "К этому кластеру не подключён Prometheus. Выбор и подхват прочитаны из объектов; скрейпится ли что-то на самом деле, не проверено.",
+      "К этому кластеру не подключён Prometheus. Выбор и подхват прочитаны из объектов; собираются ли метрики на самом деле, не проверено.",
     connectPrometheus: "Подключить в настройках",
     unanswered:
-      "Подключённый Prometheus не ответил про свои targets: {reason}. Скрейп неизвестен, а не пуст.",
+      "Подключённый Prometheus не ответил о своих целях: {reason}. Это не значит, что метрики не собираются: это неизвестно.",
     targetsRead: {
-      one: "Правда о скрейпе от подключённого Prometheus · {n} target",
-      few: "Правда о скрейпе от подключённого Prometheus · {n} target'а",
-      many: "Правда о скрейпе от подключённого Prometheus · {n} target'ов",
-      other: "Правда о скрейпе от подключённого Prometheus · {n} target'ов",
+      one: "Сбор метрик по данным подключённого Prometheus · {n} цель",
+      few: "Сбор метрик по данным подключённого Prometheus · {n} цели",
+      many: "Сбор метрик по данным подключённого Prometheus · {n} целей",
+      other: "Сбор метрик по данным подключённого Prometheus · {n} цели",
     },
     ofTotal: "из {total}",
     needAttention: "{n} из {total} требуют внимания",
@@ -2569,75 +2571,78 @@ export const ru: Catalogue = {
       "{n} требуют внимания, а скольких всего — этой учётной записи не сосчитать",
     someUnread: "Часть мониторов прочитать не удалось — это не вся картина",
     allScraped: {
-      one: "{n} монитор, скрейпится",
-      few: "{n} монитора, все скрейпятся",
-      many: "{n} мониторов, все скрейпятся",
-      other: "{n} мониторов, все скрейпятся",
+      one: "{n} монитор, метрики собираются",
+      few: "{n} монитора, метрики собираются по всем",
+      many: "{n} мониторов, метрики собираются по всем",
+      other: "{n} монитора, метрики собираются по всем",
     },
     scrapeUnchecked: {
-      one: "{n} монитор, скрейпится ли — не проверено",
-      few: "{n} монитора, скрейпятся ли — не проверено",
-      many: "{n} мониторов, скрейпятся ли — не проверено",
-      other: "{n} мониторов, скрейпятся ли — не проверено",
+      one: "{n} монитор, собираются ли метрики, не проверено",
+      few: "{n} монитора, собираются ли метрики, не проверено",
+      many: "{n} мониторов, собираются ли метрики, не проверено",
+      other: "{n} монитора, собираются ли метрики, не проверено",
     },
-    filterMonitors: "Фильтр по имени или namespace",
-    filterMonitorsLabel: "Фильтровать мониторы по имени или namespace",
+    filterMonitors: "Фильтр по имени или пространству имён",
+    filterMonitorsLabel: "Фильтровать мониторы по имени или пространству имён",
     none: "В кластере нет ни одного ServiceMonitor или PodMonitor.",
     pickOne: "Выберите монитор слева.",
     noneMatch: "Ни один монитор не подходит под фильтр.",
     chipAll: "все",
     chipBroken: "сломано",
     chipWaiting: "ждёт",
-    chipScraped: "скрейпится",
+    chipScraped: "собираются",
     chipUnchecked: "не проверено",
     groupBroken: "Сломано",
     groupWaiting: "Ждёт",
-    groupScraped: "Скрейпится",
+    groupScraped: "Собираются",
     groupUnchecked: "Не проверено",
     keysMove: "↑↓ выбор",
     keysOpen: "↵ открыть объект",
     rowSelectsNothing: "ничего не выбирает",
     rowNotPickedUp: "не подхвачен",
     rowDownOf: "{down} из {total} down",
-    rowUnscraped: "{n} из {total} обнаружено, ещё не опрошены",
-    rowNoTargets: "target'а ещё нет",
+    rowUnscraped: "{n} из {total} обнаружено, метрики ещё не собраны",
+    rowNoTargets: "целей ещё нет",
     rowUnknown: "неизвестно",
     rowNotChecked: "не проверено",
     rowUp: "{n} up",
     scrapedAgo: "{ago} назад",
     openObject: "Открыть",
-    targetsInPrometheus: "Targets в Prometheus",
-    verdictSelectsNothing: "Не выбирает ни одного Service, скрейпить нечего.",
+    targetsInPrometheus: "Цели в Prometheus",
+    verdictSelectsNothing:
+      "Не выбирает ни одного Service, собирать метрики не с чего.",
     verdictSelectsNothingBody:
       "{selector} ничему не соответствует в {namespace}.",
     verdictSelectionUnread: "Что он выбирает, посчитать не удалось.",
     verdictSelectorUnevaluable: "Его селектор не вычисляется.",
     verdictNotPickedUp:
-      "Ни один Prometheus его не подхватывает, поэтому его никто не скрейпит.",
+      "Ни один Prometheus его не подхватывает, поэтому метрики по нему никто не собирает.",
     verdictNoInstances:
       "В кластере нет объекта Prometheus, поэтому его некому подхватить.",
     verdictPickedUpUnknown: "Подхватывает ли его Prometheus, неизвестно.",
     verdictDown: "{down} {of} down.",
     verdictDownSince: "{down} {of} down с {since}.",
     ofTargets: {
-      one: "из {n} target'а",
-      few: "из {n} target'ов",
-      many: "из {n} target'ов",
-      other: "из {n} target'ов",
+      one: "из {n} цели",
+      few: "из {n} целей",
+      many: "из {n} целей",
+      other: "из {n} цели",
     },
     prometheusSays: "Prometheus говорит",
-    verdictNoTargets: "Подхвачен, но у Prometheus для него ещё нет target'а.",
+    verdictNoTargets: "Подхвачен, но у Prometheus для него ещё нет целей.",
     verdictUp: {
-      one: "{n} target up, скрейп {ago} назад.",
-      few: "{n} target'а up, скрейп {ago} назад.",
-      many: "{n} target'ов up, скрейп {ago} назад.",
-      other: "{n} target'ов up, скрейп {ago} назад.",
+      one: "{n} цель в состоянии up, метрики собраны {ago} назад.",
+      few: "{n} цели в состоянии up, метрики собраны {ago} назад.",
+      many: "{n} целей в состоянии up, метрики собраны {ago} назад.",
+      other: "{n} цели в состоянии up, метрики собраны {ago} назад.",
     },
     nothingToDo: "Делать здесь нечего.",
-    verdictUnscraped: "Подхвачен. {n} из {total} обнаружено, ещё не опрошены.",
+    verdictUnscraped:
+      "Подхвачен. {n} из {total} обнаружено, метрики ещё не собраны.",
     unscrapedSettles:
-      "Prometheus видит target'ы и ещё не закончил по ним круг. Только что появившийся пул выправляется сам.",
-    verdictNotChecked: "Выбран и подхвачен. Скрейпится ли, не проверено.",
+      "Prometheus видит цели, но ещё не прошёл по ним полный круг. Только что появившийся пул приходит в норму сам.",
+    verdictNotChecked:
+      "Выбран и подхвачен. Собираются ли метрики, не проверено.",
     verdictNoKind:
       "Выбран. Подхватить его здесь некому: CRD Prometheus оператора не установлен.",
     lastHour: "Последний час",
@@ -2649,20 +2654,20 @@ export const ru: Catalogue = {
     moreLanes: "ещё {n}",
     selects: "Выбирает",
     selectsServices: {
-      one: "{n} Service",
-      few: "{n} Service'а",
-      many: "{n} Service'ов",
-      other: "{n} Service'ов",
+      one: "{n} объект Service",
+      few: "{n} объекта Service",
+      many: "{n} объектов Service",
+      other: "{n} объекта Service",
     },
-    noServicesIn: "0 Service'ов в {namespace}",
+    noServicesIn: "ни одного Service в {namespace}",
     notCounted: "поды, здесь не считаются",
     selectionUnread:
-      "Service'ы не удалось перечислить, поэтому что он выбирает, неизвестно: {reason}",
+      "Список Service получить не удалось, поэтому неизвестно, что он выбирает: {reason}",
     selectorUnevaluable:
       "Такой селектор Kubernetes не соберёт (ключ отсутствует или пуст, оператор не из In, NotIn, Exists и DoesNotExist, In или NotIn без значений, Exists или DoesNotExist со значениями или поле не того типа), поэтому что он выбирает, сказать нельзя: {selector}",
     endpoints: "Эндпоинты",
     everyInterval: "каждые {interval}",
-    chipLabel: "лейбл",
+    chipLabel: "метка",
     chipPort: "порт",
     chipPath: "путь",
     chipEvery: "каждые",
@@ -2674,70 +2679,70 @@ export const ru: Catalogue = {
       other: "{n} Prometheus",
     },
     notPickedUp:
-      "ни один serviceMonitorSelector или podMonitorSelector не совпадает с ним в namespace, за которым тому Prometheus разрешено следить",
+      "ни один serviceMonitorSelector или podMonitorSelector не совпадает с ним в пространстве имён, за которым этому Prometheus разрешено следить",
     pickedUpUnknown:
-      "подхватывает ли его Prometheus, зависит от лейблов namespace, которые не удалось прочитать: {reason}",
+      "подхватывает ли его Prometheus, зависит от меток пространств имён, которые не удалось прочитать: {reason}",
     pickedUpUnevaluable:
       "у {prometheus} селектор, который Kubernetes не соберёт, поэтому подхватывает ли он его, сказать нельзя",
     notJudged: "не оценивается",
     picksUp: "подхватывает",
-    picksUpAll: "все мониторы во всех namespace",
-    picksUpOwn: "все мониторы в своём namespace",
+    picksUpAll: "все мониторы во всех пространствах имён",
+    picksUpOwn: "все мониторы в своём пространстве имён",
     picksUpMatching: "мониторы по {selector}",
     picksUpEvery: "все мониторы",
     picksUpNone: "никакие мониторы: селектор для них не задан",
     picksUpUnevaluable: "мониторы по селектору, который Kubernetes не соберёт",
-    inNamespacesMatching: "в namespace по {selector}",
-    inEveryNamespace: "во всех namespace",
-    inItsOwnNamespace: "в своём namespace",
-    targets: "Targets",
+    inNamespacesMatching: "в пространствах имён по {selector}",
+    inEveryNamespace: "во всех пространствах имён",
+    inItsOwnNamespace: "в своём пространстве имён",
+    targets: "Цели",
     health: "Состояние",
-    scrapeUrl: "Адрес скрейпа",
-    lastScrape: "Последний скрейп",
+    scrapeUrl: "Адрес сбора метрик",
+    lastScrape: "Последний сбор",
     lastError: "Последняя ошибка",
     noTargetYet: "пока нет",
     noTargets:
-      "Оператор не записал для него ни одного target'а: за именованным портом нет эндпоинта, или записал для другого Prometheus, не того, что подключён.",
+      "Оператор не записал для него ни одной цели: за именованным портом нет эндпоинта, или цели записаны для другого Prometheus, а не для подключённого.",
     moreTargets: {
-      one: "ещё {n} target",
-      few: "ещё {n} target'а",
-      many: "ещё {n} target'ов",
-      other: "ещё {n} target'ов",
+      one: "ещё {n} цель",
+      few: "ещё {n} цели",
+      many: "ещё {n} целей",
+      other: "ещё {n} цели",
     },
     notChecked: "не проверено",
     mostLikely: "Скорее всего",
     hintLoopbackWhy:
-      "kubeadm привязывает {component} к 127.0.0.1, поэтому снаружи ноды до :{port} никто не достаёт.",
+      "kubeadm привязывает {component} к 127.0.0.1, поэтому снаружи узла до :{port} не достучаться.",
     hintLoopbackHow:
-      "Поставь {flag} в манифесте статического пода в /etc/kubernetes/manifests или выключи этот монитор в чарте.",
+      "Задайте {flag} в манифесте статического пода в /etc/kubernetes/manifests или выключите этот монитор в чарте.",
     hintRefusedWhy: "На :{port} по этому адресу никто не слушает.",
     hintRefusedHow:
-      "Проверь, на каком порту процесс на самом деле отдаёт метрики, и что имя порта Service в мониторе указывает на него.",
+      "Проверьте, на каком порту процесс на самом деле отдаёт метрики и указывает ли на него имя порта Service в мониторе.",
     hintNotFoundWhy:
       "Service отвечает, путь нет: на порту {port} никто не отдаёт {path}.",
     hintNotFoundHow:
-      "Проверь, что приложение отдаёт: другой порт, другой путь или метрик нет вовсе. Монитор на Service, который никогда не собирались скрейпить, это шум в каждом списке алертов.",
+      "Проверьте, что отдаёт приложение: другой порт, другой путь или метрик нет вовсе. Монитор на Service, который не предназначен для сбора метрик, только засоряет каждый список алертов.",
     hintUnauthorizedWhy:
-      "Эндпоинт хочет учётные данные, которые скрейп не шлёт.",
+      "Эндпоинт требует учётные данные, которых Prometheus при сборе метрик не передаёт.",
     hintUnauthorizedHow:
-      "Дай эндпоинту bearerTokenFile или basicAuth в мониторе, или открой путь метрик сервис-аккаунту Prometheus.",
+      "Задайте эндпоинту bearerTokenFile или basicAuth в мониторе или откройте путь метрик для ServiceAccount, под которым работает Prometheus.",
     hintTlsWhy:
-      "TLS-рукопожатие не прошло: сертификату Prometheus не доверяет.",
+      "TLS-рукопожатие не прошло: Prometheus не доверяет сертификату.",
     hintTlsHow:
-      "Укажи в tlsConfig.ca правильный CA или поставь insecureSkipVerify на эндпоинте, если сертификат самоподписанный намеренно.",
-    hintTimeoutWhy: "Target не ответил за время scrape timeout.",
+      "Укажите правильный CA в tlsConfig.ca или задайте insecureSkipVerify на эндпоинте, если сертификат самоподписан намеренно.",
+    hintTimeoutWhy: "Цель не ответила за время scrapeTimeout.",
     hintTimeoutHow:
-      "NetworkPolicy между Prometheus и подом, или эндпоинт, который отдаёт метрики дольше scrapeTimeout.",
-    hintDnsWhy: "Адрес скрейпа не резолвится.",
+      "NetworkPolicy между Prometheus и подом или эндпоинт, который отдаёт метрики дольше scrapeTimeout.",
+    hintDnsWhy: "Имя в адресе сбора метрик не разрешается.",
     hintDnsHow:
       "Service или под за монитором исчез, или эндпоинт называет хост, который Prometheus не может найти.",
     hintSelectsNothingWhy: "Ни один Service в {namespace} не несёт {selector}.",
     hintSelectsNothingHow:
-      "Сравни селектор с лейблами Service, для которого монитор писали. Лейбл, который ставит приложение, обычно тот, что выбрал Helm-чарт, а не тот, что помнишь ты.",
+      "Сравните селектор с метками Service, для которого писали монитор. Метка, которую ставит приложение, обычно та, что выбрал Helm-чарт, а не та, что вы помните.",
     hintPodPortWhy:
       "Поды подходят, но ни у одного нет порта контейнера с именем {port}.",
     hintPodPortHow:
-      "Назови порт в спеке пода или направь PodMonitor на порт, который контейнер объявляет на самом деле.",
+      "Назовите порт в спецификации пода или направьте PodMonitor на порт, который контейнер действительно объявляет.",
     hintNoEndpointsWhy:
       "Service есть, но за портом {port} нет ни одного эндпоинта.",
     hintNoEndpointsHow:
@@ -2805,7 +2810,7 @@ export const ru: Catalogue = {
     whatToDo:
       "Сузьте область пространств имён или поиск: список и его ответы уменьшаются вместе с ними. Чтобы увидеть время по командам и отрисовкам, включите запись в диагностике.",
     notCounted:
-      "Строки логов и пачки watch выше не учитываются, поэтому при подвисании на вкладке логов или во время ресинка обе строки останутся пустыми.",
+      "Строки логов и пачки watch выше не учитываются, поэтому при подвисании на вкладке логов или во время повторной синхронизации обе строки останутся пустыми.",
     openRecorder: "Открыть Настройки › Диагностика",
   },
 
@@ -3093,7 +3098,7 @@ export const ru: Catalogue = {
     govAgainstTarget: "при цели {target}",
     govBudgetKeeps: "держит {rule} — {room}",
     storyRollout:
-      "Раскатано за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
+      "Развёрнуто за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
     storyJob: "Отработало за {span}: {created}, завершено {completed}.",
     storyQuiet: "{reasons} за {span}. Больше сказать нечего.",
     storyCrash:
@@ -3111,7 +3116,7 @@ export const ru: Catalogue = {
     storyJobTrouble: "Проблема с job, {times} за {span}: {detail}",
     storyScaling: "Проблема автоскейлера, {times} за {span}: {detail}",
     storyNode: "Проблема ноды, {times} за {span}: {detail}",
-    storyRolloutTrouble: "Проблема раскатки, {times} за {span}: {detail}",
+    storyRolloutTrouble: "Проблема развёртывания, {times} за {span}: {detail}",
     storyTrouble: "{reason} ×{n} за {span}: {detail}",
     storyStillHappening: "продолжается",
     storySettled: "утихло",
@@ -3323,7 +3328,7 @@ export const ru: Catalogue = {
       other: "до {n} строк на страницу",
     },
     promResolutionOf: "{range}: {resolution}",
-    promBucketsAtScrape: "шаг {step}, с разрешением скрейпа",
+    promBucketsAtScrape: "шаг {step}, как у сбора метрик",
     promBucketsMaxOver: "шаг {step}, максимум при разрешении {inner}",
     argoMissing: "отсутствует",
     argoFailedToApply: "применить не удалось",
@@ -3982,31 +3987,33 @@ export const ru: Catalogue = {
       "Применить — метка доставки этого объекта не действует",
     delApplyLabelDetail:
       "Этот объект никто не применяет, что бы ни говорила его метка.",
-    rolloutStalled: "Раскатка застряла: контроллер перестал ждать новые поды",
+    rolloutStalled:
+      "Развёртывание застряло: контроллер перестал ждать новые поды",
     rolloutStalledServing: {
-      one: "Раскатка застряла: новые поды не поднялись, обслуживает {n} старый под",
-      few: "Раскатка застряла: новые поды не поднялись, обслуживают {n} старых пода",
-      many: "Раскатка застряла: новые поды не поднялись, обслуживают {n} старых подов",
+      one: "Развёртывание застряло: новые поды не поднялись, обслуживает {n} старый под",
+      few: "Развёртывание застряло: новые поды не поднялись, обслуживают {n} старых пода",
+      many: "Развёртывание застряло: новые поды не поднялись, обслуживают {n} старых подов",
       other:
-        "Раскатка застряла: новые поды не поднялись, обслуживают {n} старых пода",
+        "Развёртывание застряло: новые поды не поднялись, обслуживают {n} старого пода",
     },
     rolloutUnavailable: "Недоступно: поднято слишком мало подов",
     rolloutUnavailableReason: "Недоступно ({reason})",
     rolloutPaused:
-      "Раскатка приостановлена: изменения шаблона ждут, пока её не возобновят",
+      "Развёртывание приостановлено: изменения шаблона ждут, пока его не возобновят",
     rolloutUnobserved:
       "Контроллер ещё не прочитал последнее изменение, поэтому счётчики относятся к предыдущему",
     rolloutMoving: {
-      one: "Идёт раскатка: {updated} из {n} пода на новом шаблоне",
-      few: "Идёт раскатка: {updated} из {n} подов на новом шаблоне",
-      many: "Идёт раскатка: {updated} из {n} подов на новом шаблоне",
-      other: "Идёт раскатка: {updated} из {n} пода на новом шаблоне",
+      one: "Идёт развёртывание: {updated} из {n} пода на новом шаблоне",
+      few: "Идёт развёртывание: {updated} из {n} подов на новом шаблоне",
+      many: "Идёт развёртывание: {updated} из {n} подов на новом шаблоне",
+      other: "Идёт развёртывание: {updated} из {n} пода на новом шаблоне",
     },
     rolloutShort: {
-      one: "Раскатка завершена, но из {n} пода доступно только {available}",
-      few: "Раскатка завершена, но из {n} подов доступно только {available}",
-      many: "Раскатка завершена, но из {n} подов доступно только {available}",
-      other: "Раскатка завершена, но из {n} пода доступно только {available}",
+      one: "Развёртывание завершено, но из {n} пода доступно только {available}",
+      few: "Развёртывание завершено, но из {n} подов доступно только {available}",
+      many: "Развёртывание завершено, но из {n} подов доступно только {available}",
+      other:
+        "Развёртывание завершено, но из {n} пода доступно только {available}",
     },
     hpaPinnedAt: "закреплено на {n}",
     hpaRange: {
@@ -4245,9 +4252,9 @@ export const ru: Catalogue = {
     nginxStickyCookie:
       "Один клиент попадает в один и тот же под бэкенда — по куке, которую ставит nginx.",
     nginxStickyRebalance:
-      "При смене набора подов привязка сбрасывается, поэтому выкатка перераспределяет нагрузку.",
+      "При смене набора подов привязка сбрасывается, поэтому развёртывание перераспределяет нагрузку.",
     nginxStickyPersist:
-      "Клиент остаётся привязан к своему поду и после выкаток, поэтому расширение не забирает долю текущего трафика.",
+      "Клиент остаётся привязан к своему поду и после развёртываний, поэтому расширение не забирает долю текущего трафика.",
     nginxRoundRobin: "Запросы уходят в поды бэкенда по очереди.",
     nginxLeastTime:
       "Каждый запрос уходит в под, который отвечает быстрее всех.",
@@ -6563,7 +6570,7 @@ export const ru: Catalogue = {
     noLongerAvailable: "{target} больше недоступен.",
     nothingLeftToAttachTo: "Подключаться уже не к чему",
     logNotKept:
-      "На ноде больше нет этого лога {container} — рантайм его выбросил. Достать неоткуда: ответит та же нода.",
+      "На узле этого лога {container} больше нет: среда выполнения его удалила. Получить его неоткуда, ответит тот же узел.",
     noPreviousRunOf:
       "Предыдущего запуска {container} нет — он не перезапускался.",
     containerNotStarted:
@@ -6894,9 +6901,9 @@ export const ru: Catalogue = {
     gwNoHostnameDialDirect:
       "на маршруте нет хоста — DNS проверять нечего; адрес шлюза набирается напрямую",
     gwDnsIdle: "DNS, ещё не проверено",
-    gwResolving: "резолвится…",
-    gwNoResolveFromHere: "отсюда не резолвится",
-    gwResolvesTo: "резолвится в",
+    gwResolving: "разрешается…",
+    gwNoResolveFromHere: "отсюда не разрешается",
+    gwResolvesTo: "разрешается в",
     gwNotTheGateways:
       "не адрес шлюза {address}. DNS всё ещё указывает в другое место; трафик в этот кластер так и не приходит.",
     gwGatewaysAddress: "адрес шлюза",
@@ -6949,7 +6956,7 @@ export const ru: Catalogue = {
     gwReadingVerdicts:
       "Читаем вердикты — шлюзы, классы и эндпоинты ещё в пути…",
     gwMeshGroup: "Mesh",
-    resolvesElsewhere: "резолвится в другое место",
+    resolvesElsewhere: "разрешается в другой адрес",
     gwProgrammedWord: "запрограммирован",
     gwNotProgrammedWord: "не запрограммирован",
     gwNoReadyPodBehind: "За {name} сейчас не стоит ни одного готового пода.",
@@ -6997,7 +7004,7 @@ export const ru: Catalogue = {
       "У этого правила нет бэкенда. Отвечает ли фильтр выше сам — дело фильтра: приложение его не читает и поэтому не берётся судить.",
     needsReferenceGrant: "нужен ReferenceGrant",
     zeroWeight: "0 — трафик не получает",
-    resolvesElsewhereExternal: "резолвится в другое место (ExternalName)",
+    resolvesElsewhereExternal: "разрешается в другой адрес (ExternalName)",
     gwMeshNotInterpreted:
       "{list} — mesh-маршрутизация (GAMMA), это приложение её не трактует.",
     gwServingUnknown: "Непонятно — что-то не удалось прочитать",
@@ -7072,7 +7079,7 @@ export const ru: Catalogue = {
       "развёртывание не продвинулось за отведённое время; старые Pod могут продолжать обслуживать трафик.",
     workloadUnavailable: "готовых реплик меньше, чем нужно для работы.",
     workloadPaused:
-      "развёртывание приостановлено: изменения шаблона не выкатываются, пока его не возобновят.",
+      "развёртывание приостановлено: изменения шаблона не применяются, пока его не возобновят.",
     workloadWaiting: "контроллер ещё не обработал последнее изменение.",
     workloadDegraded:
       "развёртывание завершилось, но доступных реплик меньше, чем нужно.",
@@ -7092,7 +7099,7 @@ export const ru: Catalogue = {
     Deployment:
       "Deployment держит заданное число одинаковых Pod и постепенно заменяет их при выходе новой версии; здесь видно, закончилось ли развёртывание.",
     ReplicaSet:
-      "ReplicaSet держит фиксированное число одинаковых Pod, а Deployment создаёт новый ReplicaSet для каждой выкатываемой версии, поэтому каждый из них соответствует одной ревизии.",
+      "ReplicaSet держит фиксированное число одинаковых подов, а Deployment создаёт новый ReplicaSet для каждой новой версии, поэтому каждый ReplicaSet соответствует одной ревизии.",
     StatefulSet:
       "StatefulSet запускает Pod, которые сохраняют имя и диск между перезапусками, как нужно базам данных и очередям; здесь видно, все ли реплики готовы.",
     DaemonSet:
@@ -7561,10 +7568,10 @@ export const ru: Catalogue = {
       other: "{n} двоичных",
     },
     snippetsOfRawNginx: {
-      one: "{n} вставка сырого конфига nginx",
-      few: "{n} вставки сырого конфига nginx",
-      many: "{n} вставок сырого конфига nginx",
-      other: "{n} вставки сырого конфига nginx",
+      one: "{n} вставка сырой конфигурации nginx",
+      few: "{n} вставки сырой конфигурации nginx",
+      many: "{n} вставок сырой конфигурации nginx",
+      other: "{n} вставки сырой конфигурации nginx",
     },
     middlewaresUnused: {
       one: "{n} middleware не используется",
