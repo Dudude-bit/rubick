@@ -7,7 +7,6 @@ import {
   BadgeCheck,
   Info,
   Layers2,
-  RefreshCw,
   Scale,
   History,
 } from "lucide-react";
@@ -55,7 +54,7 @@ import {
   WorkloadOverview,
 } from "../../-components/workload-overview";
 import { AlertsAbout } from "../../../-object/AlertsAbout";
-import { InterceptedAction } from "../../../-delivery/delivery-intercept";
+import { RestartAction } from "../../../-object/RestartDialog";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
@@ -515,12 +514,13 @@ export function DeploymentDetail() {
               icon={Scale}
               onClick={openScaleDialog}
             />
-            <InterceptedAction
+            <RestartAction
+              kind={ResourceType.Deployment}
+              name={name ?? ""}
+              namespace={namespace || null}
+              plan={deployment?.rolloutPlan}
               intercept={intercept("Restart")}
-              label={t("action", "restart")}
-              icon={RefreshCw}
-              onClick={() => restartMutation.mutate()}
-              busy={restartMutation.isPending}
+              mutation={restartMutation}
             />
             <DeleteAction
               kind={ResourceType.Deployment}

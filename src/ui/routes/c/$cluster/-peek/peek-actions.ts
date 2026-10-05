@@ -430,6 +430,20 @@ export function restartNeedsAsking(
   return intercepted || criticalActive;
 }
 
+/**
+ * The kinds whose restart is a rolling one, asked every time with what it
+ * will do. Dana restarted `cart` from the peek by accident: Scale opened a
+ * dialog and Delete asked for the name, and Restart fired on one click.
+ */
+export function restartRollsOut(kind: string): boolean {
+  const resolved = toKind(kind);
+  return (
+    resolved === "Deployment" ||
+    resolved === "StatefulSet" ||
+    resolved === "DaemonSet"
+  );
+}
+
 export function restartCommandFor(kind: string): RestartCommand | null {
   const resolved = toKind(kind);
   return (resolved && RESTART_COMMANDS[resolved]) ?? null;

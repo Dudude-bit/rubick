@@ -77,6 +77,7 @@ vi.mock("@/lib/commands", () => ({
     getEndpoints: vi.fn(),
     deletePod: vi.fn(),
     restartPod: vi.fn(),
+    restartDeployment: vi.fn(),
     getCustomResource: vi.fn(),
     getCustomResourceYaml: vi.fn(),
     getService: vi.fn(),
@@ -1188,6 +1189,39 @@ describe("PeekPanel actions", () => {
       await screen.findByText(/nothing will recreate it/)
     ).toBeInTheDocument();
     expect(commands.restartPod).not.toHaveBeenCalled();
+  });
+
+  /** Dana restarted `cart` from the peek by accident: one click must restart nothing. */
+  it("asks before a Deployment's rolling restart, with what it will do", async () => {
+    vi.mocked(commands.getDeployment).mockResolvedValue({
+      name: "cart",
+      namespace: "shop",
+      replicas: { desired: 3, ready: 3, updated: 3, available: 3 },
+      rollout: { state: "ready" },
+      rolloutPlan: {
+        strategy: "rolling",
+        replicas: 3,
+        surge: 1,
+        unavailable: 1,
+      },
+      containers: [],
+      initContainers: [],
+      ownerReferences: [],
+      createdAt: null,
+    } as never);
+    vi.mocked(commands.restartDeployment).mockReset().mockResolvedValue();
+    await wrap("/c/prod/events?peek=deployments/shop/cart");
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Restart/ })
+    );
+    expect(await screen.findByTestId("restart-plan")).toHaveTextContent(
+      "Replaces 3 pods: at most 1 unavailable and 1 extra at a time."
+    );
+    expect(commands.restartDeployment).not.toHaveBeenCalled();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(commands.restartDeployment).toHaveBeenCalledWith("cart", "shop")
+    );
   });
 
   it("gives a ConfigMap the one action it has", async () => {

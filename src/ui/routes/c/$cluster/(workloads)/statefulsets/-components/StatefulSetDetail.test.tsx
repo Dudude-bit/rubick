@@ -38,6 +38,13 @@ function buildSet(
     uid: "sts-uid",
     replicas: { desired: 1, ready: 1, current: 1, updated: 1 },
     rollout: { state: "ready" },
+    rolloutPlan: {
+      strategy: "ordered",
+      replicas: 1,
+      start: 0,
+      partition: 0,
+      unavailable: 1,
+    },
     serviceName: "stateful-demo",
     podManagementPolicy: "OrderedReady",
     updateStrategy: "RollingUpdate",

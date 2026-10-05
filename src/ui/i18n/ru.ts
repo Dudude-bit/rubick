@@ -1283,6 +1283,41 @@ export const ru: Catalogue = {
     deleteSubjectTitle: "Удалить {subject}?",
     deleteSubjectBody: "Удаление {subject} {effect}",
     restartSubjectTitle: "Перезапустить {subject}?",
+    restartPlanUnknown: "Заменит каждый под по стратегии обновления.",
+    restartNothingRuns: "Подов нет, заменять нечего.",
+    restartPlanRolling: "Заменит {replaces}; за раз {unavailable}, {extra}.",
+    restartNoneUnavailable: "недоступных нет",
+    restartNoExtra: "сверх нормы ни одного",
+    restartPlanOrdered:
+      "Заменит {replaces} по одному, от {last} до {first}, каждый после того, как предыдущий станет Ready.",
+    restartPlanOrderedBatch: {
+      one: "Заменит {replaces} от {last} до {first}, до {n} пода за раз, если в кластере включён maxUnavailable для StatefulSet, иначе по одному.",
+      few: "Заменит {replaces} от {last} до {first}, до {n} подов за раз, если в кластере включён maxUnavailable для StatefulSet, иначе по одному.",
+      many: "Заменит {replaces} от {last} до {first}, до {n} подов за раз, если в кластере включён maxUnavailable для StatefulSet, иначе по одному.",
+      other:
+        "Заменит {replaces} от {last} до {first}, до {n} пода за раз, если в кластере включён maxUnavailable для StatefulSet, иначе по одному.",
+    },
+    restartPartitionHolds:
+      "Поды с порядковым номером ниже {partition} останутся на текущем шаблоне (partition {partition}).",
+    restartPartitionHoldsAll:
+      "Ничего не перезапустится: partition {partition} держит все поды на текущем шаблоне.",
+    restartPlanOnDelete:
+      "Пока ничего не перезапустится: при OnDelete под получает изменение, только когда его удаляют. Удалите поды сами, чтобы перезапустить их.",
+    restartNoNodes:
+      "Ни на одном узле нет пода этого DaemonSet, заменять нечего.",
+    restartPlanNodes: {
+      one: "Заменит под на каждом из {nodes}, по {n} узлу за раз.",
+      few: "Заменит под на каждом из {nodes}, по {n} узла за раз.",
+      many: "Заменит под на каждом из {nodes}, по {n} узлов за раз.",
+      other: "Заменит под на каждом из {nodes}, по {n} узла за раз.",
+    },
+    restartPlanNodesSurge: {
+      one: "Заменит под на каждом из {nodes}: на {n} узле за раз новый под запускается до остановки старого.",
+      few: "Заменит под на каждом из {nodes}: на {n} узлах за раз новый под запускается до остановки старого.",
+      many: "Заменит под на каждом из {nodes}: на {n} узлах за раз новый под запускается до остановки старого.",
+      other:
+        "Заменит под на каждом из {nodes}: на {n} узла за раз новый под запускается до остановки старого.",
+    },
     restartBareBody:
       "Перезапуск пода — это его удаление. {subject} никому не принадлежит, поэтому пересоздавать его некому — под исчезнет насовсем.",
     effectPodOwned: "удалит его сейчас. Его {kind} {name} создаст замену.",
@@ -8131,6 +8166,37 @@ export const ru: Catalogue = {
       other: "(+{n} из наборов)",
     },
     gwBackendsAllExist: "Все {n} бэкенд-Service существуют, порты совпадают",
+    restartPods: {
+      one: "{n} под",
+      few: "{n} пода",
+      many: "{n} подов",
+      other: "{n} пода",
+    },
+    restartUnavailable: {
+      one: "недоступно не больше {n}",
+      few: "недоступно не больше {n}",
+      many: "недоступно не больше {n}",
+      other: "недоступно не больше {n}",
+    },
+    restartExtra: {
+      one: "сверх нормы не больше {n}",
+      few: "сверх нормы не больше {n}",
+      many: "сверх нормы не больше {n}",
+      other: "сверх нормы не больше {n}",
+    },
+    restartPlanRecreate: {
+      one: "Сначала остановит {n} под, потом запустит замену: пока она не станет Ready, запросы обслуживать некому.",
+      few: "Сначала остановит все {n} пода, потом запустит замену: пока новые поды не станут Ready, запросы обслуживать некому.",
+      many: "Сначала остановит все {n} подов, потом запустит замену: пока новые поды не станут Ready, запросы обслуживать некому.",
+      other:
+        "Сначала остановит все {n} пода, потом запустит замену: пока новые поды не станут Ready, запросы обслуживать некому.",
+    },
+    restartOfNodes: {
+      one: "{n} узла",
+      few: "{n} узлов",
+      many: "{n} узлов",
+      other: "{n} узла",
+    },
     needAttention: {
       one: "{n} требует внимания",
       few: "{n} требуют внимания",

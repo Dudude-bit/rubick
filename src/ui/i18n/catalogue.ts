@@ -1282,6 +1282,36 @@ export const en = {
     deleteSubjectTitle: "Delete {subject}?",
     deleteSubjectBody: "Deleting {subject} {effect}",
     restartSubjectTitle: "Restart {subject}?",
+    restartPlanUnknown: "Replaces every pod, following the update strategy.",
+    restartNothingRuns: "No pods are running, so nothing is replaced.",
+    restartPlanRolling:
+      "Replaces {replaces}: {unavailable} and {extra} at a time.",
+    restartNoneUnavailable: "none unavailable",
+    restartNoExtra: "no extra",
+    restartPlanOrdered:
+      "Replaces {replaces} one at a time, from {last} down to {first}, each once the one before it is Ready.",
+    restartPlanOrderedBatch: {
+      one: "Replaces {replaces} from {last} down to {first}, up to {n} at a time where the cluster allows maxUnavailable on StatefulSets, otherwise one at a time.",
+      other:
+        "Replaces {replaces} from {last} down to {first}, up to {n} at a time where the cluster allows maxUnavailable on StatefulSets, otherwise one at a time.",
+    },
+    restartPartitionHolds:
+      "Pods below ordinal {partition} keep their current template (partition {partition}).",
+    restartPartitionHoldsAll:
+      "Nothing restarts: partition {partition} holds every pod at its current template.",
+    restartPlanOnDelete:
+      "Nothing restarts yet: with OnDelete, a pod picks up the change only when it is deleted. Delete the pods yourself to restart them.",
+    restartNoNodes:
+      "No node runs a pod of this DaemonSet, so nothing is replaced.",
+    restartPlanNodes: {
+      one: "Replaces the pod on each of {nodes}, {n} node at a time.",
+      other: "Replaces the pod on each of {nodes}, {n} nodes at a time.",
+    },
+    restartPlanNodesSurge: {
+      one: "Replaces the pod on each of {nodes}, starting the new pod before stopping the old one on {n} node at a time.",
+      other:
+        "Replaces the pod on each of {nodes}, starting the new pod before stopping the old one on {n} nodes at a time.",
+    },
     restartBareBody:
       "Restarting a pod means deleting it. Nothing owns {subject}, so nothing will recreate it — this removes the pod for good.",
     effectPodOwned:
@@ -7040,6 +7070,18 @@ export const en = {
       other: "(+{n} from sets)",
     },
     gwBackendsAllExist: "All {n} backend Services exist, ports match",
+    restartPods: { one: "{n} pod", other: "{n} pods" },
+    restartUnavailable: {
+      one: "at most {n} unavailable",
+      other: "at most {n} unavailable",
+    },
+    restartExtra: { one: "{n} extra", other: "{n} extra" },
+    restartPlanRecreate: {
+      one: "Stops the only pod before starting its replacement: nothing serves until the new pod is Ready.",
+      other:
+        "Stops all {n} pods before starting any replacement: nothing serves until the new pods are Ready.",
+    },
+    restartOfNodes: { one: "{n} node", other: "{n} nodes" },
     needAttention: {
       one: "{n} needs attention",
       other: "{n} need attention",

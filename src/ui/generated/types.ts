@@ -1089,6 +1089,7 @@ export interface DaemonSetDetailInfo {
   upToDate: number;
   available: number;
   rollout: Rollout;
+  rolloutPlan: RolloutPlan;
   updateStrategy: string | null;
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
@@ -1113,6 +1114,7 @@ export interface DaemonSetInfo {
   ready: number;
   updated: number;
   rollout: Rollout;
+  rolloutPlan: RolloutPlan;
   containerImages: ContainerImage[];
   templateAnnotations: Record<string, string>;
   generation: number | null;
@@ -1131,6 +1133,7 @@ export interface StatefulSetDetailInfo {
   uid: string;
   replicas: StatefulSetReplicaInfo;
   rollout: Rollout;
+  rolloutPlan: RolloutPlan;
   serviceName: string | null;
   podManagementPolicy: string | null;
   updateStrategy: string | null;
@@ -1162,6 +1165,7 @@ export interface StatefulSetInfo {
   namespace: string;
   replicas: StatefulSetReplicaInfo;
   rollout: Rollout;
+  rolloutPlan: RolloutPlan;
   containerImages: ContainerImage[];
   templateAnnotations: Record<string, string>;
   generation: number | null;
@@ -2014,6 +2018,7 @@ export interface DeploymentInfo {
   uid: string;
   replicas: ReplicaInfo;
   rollout: Rollout;
+  rolloutPlan: RolloutPlan;
   strategy: string | null;
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
@@ -2304,6 +2309,24 @@ export type EnvVarSourceType =
   | "resourceFieldRef";
 
 export type ContainerPhase = "app" | "init" | "sidecar";
+
+export type RolloutPlan =
+  | {
+      strategy: "rolling";
+      replicas: number;
+      surge: number;
+      unavailable: number;
+    }
+  | { strategy: "recreate"; replicas: number }
+  | {
+      strategy: "ordered";
+      replicas: number;
+      start: number;
+      partition: number;
+      unavailable: number;
+    }
+  | { strategy: "onDelete"; replicas: number }
+  | { strategy: "nodes"; nodes: number; surge: number; unavailable: number };
 
 export type Renewal =
   | "scheduled"

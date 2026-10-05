@@ -48,11 +48,13 @@ import type {
   DebugResult,
   DeploymentInfo,
   PodInfo,
+  RolloutPlan,
   ServiceInfo,
   StatefulSetDetailInfo,
 } from "@/generated/types";
 
 import { ScaleDialog } from "./ScaleDialog";
+import { RestartDialog } from "./RestartDialog";
 import {
   deleteCommandFor,
   describeBareRestart,
@@ -62,6 +64,7 @@ import {
   reachableContainer,
   restartCommandFor,
   restartNeedsAsking,
+  restartRollsOut,
   scaleCommandFor,
   type ForwardBackend,
   type PeekActionId,
@@ -150,7 +153,7 @@ export function useObjectActions({
     "debug" | "portForward" | "scale" | null
   >(null);
   const [confirming, setConfirming] = useState<
-    "delete" | "restart" | "managedRestart" | null
+    "delete" | "restart" | "rolling" | "managedRestart" | null
   >(null);
 
   // Asked for only once the dialog is open — a neighbourhood read on every row
@@ -322,6 +325,7 @@ export function useObjectActions({
         // one-way door and gets the same gate as a delete.
         if (kind === "Pod" && !pod?.ownerReferences?.length)
           return setConfirming("restart");
+        if (restartRollsOut(kind)) return setConfirming("rolling");
         // A managed restart is reversible, but it still asks when a delivery
         // controller would undo it or the cluster is marked critical — the
         // same rule the page applies, so the two surfaces cannot disagree
@@ -435,6 +439,22 @@ export function useObjectActions({
         isLoading={restart.isPending}
         onConfirm={() => restart.mutate()}
       />
+
+      {restartRollsOut(kind) && (
+        <RestartDialog
+          open={confirming === "rolling"}
+          onOpenChange={(open) => setConfirming(open ? "rolling" : null)}
+          kind={kind}
+          name={name}
+          namespace={namespace}
+          plan={
+            (detail as { rolloutPlan?: RolloutPlan } | undefined)?.rolloutPlan
+          }
+          intercept={intercept("Restart")}
+          busy={restart.isPending}
+          onConfirm={() => restart.mutate()}
+        />
+      )}
 
       {/* A reversible restart has no object-name gate of its own, so this only
           ever opens on a critical cluster, where the ConfirmDialog grows the

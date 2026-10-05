@@ -2,14 +2,7 @@ import { useMemo } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import {
-  AlignLeft,
-  BadgeCheck,
-  History,
-  Info,
-  Layers2,
-  RefreshCw,
-} from "lucide-react";
+import { AlignLeft, BadgeCheck, History, Info, Layers2 } from "lucide-react";
 
 import { LogViewer } from "../../../-logs/LogViewer";
 import { lanePodOf } from "../../../-logs/lanes";
@@ -36,7 +29,7 @@ import {
   WorkloadOverview,
 } from "../../-components/workload-overview";
 import { AlertsAbout } from "../../../-object/AlertsAbout";
-import { InterceptedAction } from "../../../-delivery/delivery-intercept";
+import { RestartAction } from "../../../-object/RestartDialog";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { Composition, ConditionRows } from "@/components/object/detail-blocks";
 import { serviceAccountRow } from "../../-components/identity-rows";
@@ -434,12 +427,13 @@ export function DaemonSetDetail() {
         actions={
           <>
             <PinAction kind="DaemonSet" namespace={namespace} name={name} />
-            <InterceptedAction
+            <RestartAction
+              kind={ResourceType.DaemonSet}
+              name={name ?? ""}
+              namespace={namespace || null}
+              plan={daemonSet?.rolloutPlan}
               intercept={intercept("Restart")}
-              label={t("action", "restart")}
-              icon={RefreshCw}
-              onClick={() => restartMutation.mutate(undefined)}
-              busy={restartMutation.isPending}
+              mutation={restartMutation}
             />
             <DeleteAction
               kind={ResourceType.DaemonSet}

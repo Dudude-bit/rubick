@@ -9,9 +9,9 @@ use std::collections::BTreeMap;
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{
-    daemonset_rollout, template_container_images, ConditionInfo, ContainerImage,
+    daemonset_plan, daemonset_rollout, template_container_images, ConditionInfo, ContainerImage,
     DeploymentContainerInfo, DeploymentContainerResources, OptionTimeExt, ReplicaReservation,
-    Rollout, TemplateContainers,
+    Rollout, RolloutPlan, TemplateContainers,
 };
 use crate::utils::Moment;
 
@@ -28,6 +28,7 @@ pub struct DaemonSetInfo {
     /// without it a restart looks finished the instant it is requested.
     pub updated: i32,
     pub rollout: Rollout,
+    pub rollout_plan: RolloutPlan,
     /// What the template runs, so a watch on the list can see a rollout.
     pub container_images: Vec<ContainerImage>,
     pub template_annotations: BTreeMap<String, String>,
@@ -50,6 +51,7 @@ impl From<&DaemonSet> for DaemonSetInfo {
             ready: status.map_or(0, |s| s.number_ready),
             updated: status.and_then(|s| s.updated_number_scheduled).unwrap_or(0),
             rollout: daemonset_rollout(ds),
+            rollout_plan: daemonset_plan(ds),
             container_images: template_container_images(spec.map(|s| &s.template)),
             template_annotations: spec
                 .and_then(|s| s.template.metadata.as_ref())
@@ -75,6 +77,7 @@ pub struct DaemonSetDetailInfo {
     pub up_to_date: i32,
     pub available: i32,
     pub rollout: Rollout,
+    pub rollout_plan: RolloutPlan,
     pub update_strategy: Option<String>,
     pub containers: Vec<DeploymentContainerInfo>,
     /// The template's `initContainers`, in the order the kubelet would run
@@ -125,6 +128,7 @@ impl From<&DaemonSet> for DaemonSetDetailInfo {
             up_to_date: status.and_then(|s| s.updated_number_scheduled).unwrap_or(0),
             available: status.and_then(|s| s.number_available).unwrap_or(0),
             rollout: daemonset_rollout(ds),
+            rollout_plan: daemonset_plan(ds),
             update_strategy: spec
                 .and_then(|s| s.update_strategy.as_ref())
                 .and_then(|s| s.type_.clone()),

@@ -27,6 +27,7 @@ pub struct DeploymentInfo {
     pub uid: String,
     pub replicas: ReplicaInfo,
     pub rollout: crate::resources::Rollout,
+    pub rollout_plan: crate::resources::RolloutPlan,
     pub strategy: Option<String>,
     pub containers: Vec<DeploymentContainerInfo>,
     /// The template's `initContainers`, in the order the kubelet would run
@@ -256,6 +257,7 @@ impl From<&Deployment> for DeploymentInfo {
             uid: deployment.uid().unwrap_or_default(),
             replicas,
             rollout: crate::resources::deployment_rollout(deployment),
+            rollout_plan: crate::resources::deployment_plan(deployment),
             strategy: spec
                 .and_then(|s| s.strategy.as_ref())
                 .and_then(|s| s.type_.clone()),

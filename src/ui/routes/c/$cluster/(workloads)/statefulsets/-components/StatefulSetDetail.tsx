@@ -8,7 +8,6 @@ import {
   History,
   Info,
   Layers2,
-  RefreshCw,
   Scale,
 } from "lucide-react";
 
@@ -32,7 +31,7 @@ import {
 import { ContainerRows } from "../../../-object/container-rows";
 import { ChangesTab } from "../../-components/ChangesTab";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "../../../-delivery/delivery-intercept";
+import { RestartAction } from "../../../-object/RestartDialog";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
   Composition,
@@ -465,12 +464,13 @@ export function StatefulSetDetail() {
               icon={Scale}
               onClick={() => statefulSet && setScaleOpen(true)}
             />
-            <InterceptedAction
+            <RestartAction
+              kind={ResourceType.StatefulSet}
+              name={name ?? ""}
+              namespace={namespace || null}
+              plan={statefulSet?.rolloutPlan}
               intercept={intercept("Restart")}
-              label={t("action", "restart")}
-              icon={RefreshCw}
-              onClick={() => restartMutation.mutate(undefined)}
-              busy={restartMutation.isPending}
+              mutation={restartMutation}
             />
             <DeleteAction
               kind={ResourceType.StatefulSet}

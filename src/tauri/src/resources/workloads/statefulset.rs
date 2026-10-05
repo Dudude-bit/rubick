@@ -10,9 +10,9 @@ use std::collections::BTreeMap;
 use crate::resources::serialization::OwnerReference;
 use crate::resources::types::extract_owner_references;
 use crate::resources::{
-    statefulset_rollout, template_container_images, ConditionInfo, ContainerImage,
-    DeploymentContainerInfo, DeploymentContainerResources, OptionTimeExt, ReplicaReservation,
-    Rollout, TemplateContainers,
+    statefulset_plan, statefulset_rollout, template_container_images, ConditionInfo,
+    ContainerImage, DeploymentContainerInfo, DeploymentContainerResources, OptionTimeExt,
+    ReplicaReservation, Rollout, RolloutPlan, TemplateContainers,
 };
 use crate::utils::Moment;
 
@@ -38,6 +38,7 @@ pub struct StatefulSetInfo {
     pub namespace: String,
     pub replicas: StatefulSetReplicaInfo,
     pub rollout: Rollout,
+    pub rollout_plan: RolloutPlan,
     /// What the template runs, so a watch on the list can see a rollout.
     pub container_images: Vec<ContainerImage>,
     pub template_annotations: BTreeMap<String, String>,
@@ -62,6 +63,7 @@ impl From<&StatefulSet> for StatefulSetInfo {
                 updated: status.and_then(|s| s.updated_replicas).unwrap_or(0),
             },
             rollout: statefulset_rollout(ss),
+            rollout_plan: statefulset_plan(ss),
             container_images: template_container_images(spec.map(|s| &s.template)),
             template_annotations: spec
                 .and_then(|s| s.template.metadata.as_ref())
@@ -83,6 +85,7 @@ pub struct StatefulSetDetailInfo {
     pub uid: String,
     pub replicas: StatefulSetReplicaInfo,
     pub rollout: Rollout,
+    pub rollout_plan: RolloutPlan,
     pub service_name: Option<String>,
     pub pod_management_policy: Option<String>,
     pub update_strategy: Option<String>,
@@ -131,6 +134,7 @@ impl From<&StatefulSet> for StatefulSetDetailInfo {
                 updated: status.and_then(|s| s.updated_replicas).unwrap_or(0),
             },
             rollout: statefulset_rollout(ss),
+            rollout_plan: statefulset_plan(ss),
             // `serviceName` became optional upstream: a StatefulSet may now
             // be created without a governing Service.
             service_name: spec.and_then(|s| s.service_name.clone()),
