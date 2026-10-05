@@ -1,6 +1,6 @@
 import * as React from "react";
 import { PerfProfiler } from "@/lib/perf-profiler";
-import { rowNouns } from "@/lib/resource-registry";
+import { rowNouns, type KindNoun } from "@/lib/resource-registry";
 import { useNavigate } from "@tanstack/react-router";
 import {
   flexRender,
@@ -116,7 +116,7 @@ interface DataTableProps<TData extends RowData> {
   /** Plural noun for the group caption count, e.g. "pods". */
   rowLabel?: string;
   /** The kind the footer counts, where the label is not a kind the registry knows. */
-  rowNoun?: { kind: string; plural: string };
+  rowNoun?: KindNoun;
   /** What dragged column widths are filed under; the row label otherwise. */
   widthsKey?: string;
   /** The rows are not the whole of what was asked for, so no total. */

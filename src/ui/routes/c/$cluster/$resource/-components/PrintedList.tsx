@@ -44,11 +44,16 @@ const NO_COLUMNS: TableColumn[] = [];
 /** The columns kubectl prints without `-o wide`. */
 const DEFAULT_PRIORITY = 0;
 /** The columns the API server prints for every kind, named in the reader's language. */
-const STANDARD_HEADERS: Partial<Record<string, "name" | "age" | "created">> = {
+const STANDARD_HEADERS: Partial<
+  Record<string, "name" | "age" | "created" | "role">
+> = {
   Name: "name",
   Age: "age",
   "Created At": "created",
+  Role: "role",
 };
+/** How the server describes a column that reads `metadata.creationTimestamp`. */
+const CREATION = /creationTimestamp/i;
 
 /**
  * Any kind the cluster serves, listed as the API server prints it for
@@ -271,19 +276,20 @@ function Cell({
         {text}
       </RouteLink>
     );
-  if (column.columnType === "date") {
-    // kubectl's Age cell is already a duration ("8m38s"), in English.
-    const at = Number.isNaN(Date.parse(text))
-      ? column.name === "Age"
-        ? createdAt
-        : null
-      : text;
+  // The server's own Age is an English duration ("8m38s"), typed "string".
+  const at = CREATION.test(column.description)
+    ? createdAt
+    : column.columnType === "date" && !Number.isNaN(Date.parse(text))
+      ? text
+      : null;
+  if (at)
     return (
       <span className="text-fg-fnt">
-        {at ? <RealtimeAge timestamp={at} /> : text}
+        <RealtimeAge timestamp={at} />
       </span>
     );
-  }
+  if (column.columnType === "date")
+    return <span className="text-fg-fnt">{text}</span>;
   if (column.columnType === "integer" || column.columnType === "number")
     return <span className="tabular-nums">{text}</span>;
   return <span>{text}</span>;

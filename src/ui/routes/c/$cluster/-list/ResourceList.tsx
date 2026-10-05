@@ -34,9 +34,11 @@ import { useShareSection } from "@/components/share/screen-share";
 import { NO_TABLE, tableSection } from "@/components/share/table-share";
 import {
   isResourceType,
+  kindNoun,
   listQueryFor,
   narrowingHelps as narrowsByKind,
   toKind,
+  type KindNoun,
 } from "@/lib/resource-registry";
 import {
   DeliveryColumnCell,
@@ -154,7 +156,7 @@ export interface ResourceListProps<
   /** Label for empty state (e.g., "pods", "services") */
   emptyStateLabel: string;
   /** The kind the footer counts, for a kind the registry does not hold. */
-  noun?: { kind: string; plural: string };
+  noun?: KindNoun;
   /**
    * What the dragged column widths are filed under, where the row label is
    * not specific enough. Two CRDs can share a plural — `certificates` is
@@ -268,6 +270,11 @@ export function ResourceList<
   }, [queryKey, emptyStateLabel, title]);
   const narrowingHelps =
     narrowingHelpsProp ?? (listKind ? narrowsByKind(listKind) : true);
+  const counted = useMemo(
+    () => noun ?? kindNoun(emptyStateLabel),
+    [noun, emptyStateLabel]
+  );
+  const namespaceGroups = useMemo(() => byNamespace<Row>(counted), [counted]);
   const screen = useMemo(
     () => ({
       title,
@@ -691,9 +698,9 @@ export function ResourceList<
           getRowHref={getRowHref}
           quickActions={resolvedQuickActions}
           getRowId={getRowId}
-          grouping={grouping ?? byNamespace(emptyStateLabel.toLowerCase())}
+          grouping={grouping ?? namespaceGroups}
           rowLabel={emptyStateLabel.toLowerCase()}
-          rowNoun={noun}
+          rowNoun={counted}
           partial={partial}
           widthsKey={widthsKey}
           share={embedded ? undefined : share}

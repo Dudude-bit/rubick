@@ -481,6 +481,7 @@ export const ru: Catalogue = {
     paths: "Пути",
     address: "Адрес",
     roles: "Роли",
+    role: "Роль",
     version: "Версия",
     internalIp: "Внутренний IP",
     cpuUsage: "Загрузка CPU",

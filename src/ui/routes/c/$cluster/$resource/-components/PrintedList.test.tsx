@@ -1,5 +1,12 @@
 import { fireEvent, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 
 import type {
   ApiCatalog,
@@ -182,61 +189,88 @@ describe("an access kind on the generic list", () => {
     kind: "ServiceAccount",
     plural: "serviceaccounts",
   };
-  const created = new Date(Date.now() - 2 * 3600_000).toISOString();
-  const accounts: ResourceTable = {
-    columns: [
-      {
-        name: "Name",
-        columnType: "string",
-        format: "name",
-        description: "",
-        priority: 0,
-      },
-      {
-        name: "Age",
-        columnType: "date",
-        format: "",
-        description: "",
-        priority: 0,
-      },
-    ],
-    rows: [
-      {
-        name: "default",
-        namespace: "lena-sandbox",
-        uid: "uid-default",
-        createdAt: created,
-        cells: ["default", "2h0m"],
-      },
-    ],
-    cursor: null,
-    unread: [],
+  const ROLE_BINDINGS: CatalogEntry = {
+    ...LEASES,
+    group: "rbac.authorization.k8s.io",
+    kind: "RoleBinding",
+    plural: "rolebindings",
   };
+  const created = new Date(Date.now() - 2 * 3600_000).toISOString();
+  const column = (name: string, description = "") => ({
+    name,
+    columnType: "string",
+    format: name === "Name" ? "name" : "",
+    description,
+    priority: 0,
+  });
+  // What kube-apiserver's printers declare: Age is a "string" holding kubectl's duration.
+  const AGE = column(
+    "Age",
+    "CreationTimestamp is a timestamp representing the server time when this object was created."
+  );
+  const row = (name: string, namespace: string, cells: string[]) => ({
+    name,
+    namespace,
+    uid: `uid-${namespace}-${name}`,
+    createdAt: created,
+    cells,
+  });
+  const printed = (
+    columns: ResourceTable["columns"],
+    rows: TableRow[]
+  ): ResourceTable => ({ columns, rows, cursor: null, unread: [] });
+
+  async function inRussian(entry: CatalogEntry, answer: ResourceTable) {
+    answers.catalog = () => Promise.resolve({ entries: [entry], unread: [] });
+    answers.table = () => Promise.resolve(answer);
+    useLocaleStore.setState({ choice: "ru" });
+    const resource = [entry.plural, entry.group].filter(Boolean).join(".");
+    await renderWithRouter(<PrintedList resource={resource} />);
+  }
+
+  afterEach(() => useLocaleStore.setState({ choice: null }));
 
   /**
-   * The page was headed by the raw plural, counted "1 объект serviceaccounts"
-   * under English headers, printed kubectl's "2h0m" and said nothing of what
-   * the kind is. Fails if any of those comes back.
+   * The page was headed by the raw plural, captioned each namespace "1 объект
+   * serviceaccounts" under English headers, printed kubectl's "2h0m" and said
+   * nothing of what the kind is. Fails if any of those comes back.
    */
   it("is named, counted and explained by its kind, in the reader's language", async () => {
-    answers.catalog = () =>
-      Promise.resolve({ entries: [SERVICE_ACCOUNTS], unread: [] });
-    answers.table = () => Promise.resolve(accounts);
-    useLocaleStore.setState({ choice: "ru" });
-    try {
-      await renderWithRouter(<PrintedList resource="serviceaccounts" />);
-      expect(await screen.findByText("1 объект ServiceAccount")).toBeVisible();
-      expect(
-        screen.getByRole("heading", { name: "ServiceAccounts" })
-      ).toBeVisible();
-      expect(screen.getByText(/учётную запись/)).toBeVisible();
-      expect(screen.getByText("Подробнее")).toBeVisible();
-      expect(screen.getByText("Имя")).toBeVisible();
-      expect(screen.getByText("Возраст")).toBeVisible();
-      expect(screen.queryByText("2h0m")).toBeNull();
-      expect(screen.queryByText("serviceaccounts")).toBeNull();
-    } finally {
-      useLocaleStore.setState({ choice: null });
-    }
+    await inRussian(
+      SERVICE_ACCOUNTS,
+      printed(
+        [column("Name"), AGE],
+        [
+          row("default", "lena-sandbox", ["default", "2h0m"]),
+          row("default", "team-checkout", ["default", "2h0m"]),
+        ]
+      )
+    );
+    expect(await screen.findByText("2 объекта ServiceAccount")).toBeVisible();
+    expect(screen.getAllByText("· 1 объект ServiceAccount")).toHaveLength(2);
+    expect(
+      screen.getByRole("heading", { name: "ServiceAccounts" })
+    ).toBeVisible();
+    expect(screen.getByText(/учётную запись/)).toBeVisible();
+    expect(screen.getByText("Подробнее")).toBeVisible();
+    expect(screen.getByText("Имя")).toBeVisible();
+    expect(screen.getByText("Возраст")).toBeVisible();
+    expect(screen.getAllByText("2 ч")).toHaveLength(2);
+    expect(screen.queryByText("2h0m")).toBeNull();
+    expect(screen.queryByText(/serviceaccounts/)).toBeNull();
+  });
+
+  /** RoleBindings printed "Role" in English above a Russian "Имя" and "Возраст". */
+  it("names the RoleBinding's Role column in the reader's language", async () => {
+    await inRussian(
+      ROLE_BINDINGS,
+      printed(
+        [column("Name"), column("Role"), AGE],
+        [row("demo", "lena-sandbox", ["demo", "Role/demo-reader", "2h0m"])]
+      )
+    );
+    expect(await screen.findByText("Role/demo-reader")).toBeVisible();
+    expect(screen.getByText("Роль")).toBeVisible();
+    expect(screen.getByText("2 ч")).toBeVisible();
   });
 });

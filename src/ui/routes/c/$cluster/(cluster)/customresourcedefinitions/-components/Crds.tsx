@@ -24,7 +24,7 @@ import { ShareScreenAction } from "@/components/share/ShareAction";
 import { createAgeColumn } from "../../../-list/columns";
 import { isRefusal, normalizeTauriError } from "@/lib/error-utils";
 import { ObjectLink } from "@/components/object/ResourceRef";
-import { ResourceType } from "@/lib/resource-registry";
+import { kindNoun, ResourceType } from "@/lib/resource-registry";
 import { crdInstancesLink, hrefOf, objectLink } from "@/lib/links";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
@@ -42,6 +42,7 @@ import { toastError } from "@/lib/toast-error";
 type CrdListItem = CrdInfo & { namespace: string };
 
 const getCrdRowId = (row: CrdListItem) => row.name;
+const BY_API_GROUP = byNamespace<CrdListItem>(kindNoun("CRDs"));
 
 const crdLink = (name: string) =>
   objectLink({ kind: ResourceType.CustomResourceDefinition, name })!;
@@ -264,7 +265,7 @@ export function Crds() {
           searchParam="q"
           getRowId={getCrdRowId}
           getRowHref={(row) => hrefOf(crdLink(row.name))}
-          grouping={byNamespace<CrdListItem>("CRDs")}
+          grouping={BY_API_GROUP}
           rowLabel="CRDs"
           share={{
             title: "Custom Resource Definitions",

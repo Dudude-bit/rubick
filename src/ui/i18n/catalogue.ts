@@ -511,6 +511,7 @@ export const en = {
     paths: "Paths",
     address: "Address",
     roles: "Roles",
+    role: "Role",
     version: "Version",
     internalIp: "Internal IP",
     cpuUsage: "CPU Usage",

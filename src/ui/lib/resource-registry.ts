@@ -337,15 +337,20 @@ export function toSingularNoun(plural: string): string {
  * "25 Deployments" and Russian «25 объектов Deployment».
  */
 export function rowNouns(label: string, n: number) {
+  return { n, ...kindNoun(label) };
+}
+
+export interface KindNoun {
+  kind: string;
+  plural: string;
+}
+
+export function kindNoun(label: string): KindNoun {
   const lower = label.toLowerCase();
   const def =
     RESOURCE_BY_PLURAL.get(lower) ??
     RESOURCE_REGISTRY.find((d) => d.displayPlural.toLowerCase() === lower);
-  return {
-    n,
-    kind: def?.kind ?? label,
-    plural: def?.displayPlural ?? label,
-  };
+  return { kind: def?.kind ?? label, plural: def?.displayPlural ?? label };
 }
 
 export function toKind(resourceType: string): ResourceKind | null {

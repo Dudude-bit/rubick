@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { T } from "@/i18n/T";
-import { rowNouns } from "@/lib/resource-registry";
+import type { KindNoun } from "@/lib/resource-registry";
 
 /**
  * What turns a flat list into captioned runs of it.
@@ -31,7 +31,7 @@ export interface RowGrouping<TData> {
 }
 
 /** Namespaces are the one grouping key every namespaced resource shares. */
-export function byNamespace<TData>(rowLabel: string): RowGrouping<TData> {
+export function byNamespace<TData>(noun: KindNoun): RowGrouping<TData> {
   return {
     keyOf: (row) => {
       const ns = (row as { namespace?: string | null } | null)?.namespace;
@@ -45,7 +45,7 @@ export function byNamespace<TData>(rowLabel: string): RowGrouping<TData> {
           <T
             section="readings"
             k="objectCount"
-            values={rowNouns(rowLabel, rows.length)}
+            values={{ n: rows.length, ...noun }}
           />
         </span>
       </>
