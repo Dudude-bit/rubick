@@ -398,7 +398,7 @@ describe("stories", () => {
       listEvents.mockResolvedValue([warning("prod", "api-7b6d9c5f4-x8k2p", 0)]);
       await mount("stories");
       const card = await screen.findByRole("article", { name: /api/ });
-      expect(card.textContent).toMatch(/Контейнер не держится/);
+      expect(card.textContent).toMatch(/Контейнер раз за разом падает/);
       expect(card.textContent).toContain("продолжается");
       const windows = screen.getByRole("group", { name: "Окно" });
       expect(windows).toHaveTextContent(/15\sмин/);

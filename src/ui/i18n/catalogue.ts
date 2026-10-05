@@ -1506,6 +1506,7 @@ export const en = {
     saveAsConfigHint:
       "It stays in the activity panel, ready to start again in one click",
     configName: "Port-forward name",
+    forwardNameExample: "Auth API",
     activeForwards: "Active port-forwards",
     activeFallback: "Active",
     reconnectingInline: "reconnecting",
@@ -2958,7 +2959,7 @@ export const en = {
         "{n} more pods' exits are not on this clock, because they were not asked.",
     },
     timesSeen: { one: "once", other: "{n} times" },
-    jobsCreated: { one: "1 job created", other: "{n} jobs created" },
+    jobsCreated: { one: "1 Job created", other: "{n} Jobs created" },
     storyDone: "done",
     podsOf: "pods of {name}",
     groupedByName:

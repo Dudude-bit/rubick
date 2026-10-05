@@ -142,12 +142,12 @@ export function PortForwardConfigDialog({
               id="pfc-name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Auth API"
+              placeholder={t("activity", "forwardNameExample")}
             />
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
-              <Label htmlFor="pfc-pod">Pod</Label>
+              <Label htmlFor="pfc-pod">{t("columns", "pod")}</Label>
               <Input
                 id="pfc-pod"
                 value={pod}
@@ -157,7 +157,7 @@ export function PortForwardConfigDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="pfc-namespace">Namespace</Label>
+              <Label htmlFor="pfc-namespace">{t("columns", "namespace")}</Label>
               <Input
                 id="pfc-namespace"
                 value={namespace}

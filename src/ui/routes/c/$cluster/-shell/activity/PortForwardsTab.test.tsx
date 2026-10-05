@@ -43,6 +43,7 @@ import { renderWithRouter } from "@/test/render";
 import { PortForwardsTab } from "./PortForwardsTab";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useLocaleStore } from "@/stores/localeStore";
 
 // ----- Fixtures -----
 
@@ -115,6 +116,28 @@ describe("PortForwardsTab", () => {
     expect(dialog).toHaveTextContent("Edit port forward");
     expect(screen.getByLabelText("Pod")).toHaveValue("api-7f9");
     expect(screen.getByLabelText("Local port")).toHaveValue(8080);
+  });
+
+  /** The editor's Pod and Namespace labels stayed English beside "Локальный порт". */
+  it("labels every field of the editor in the reader's language", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      const user = userEvent.setup();
+      await mount();
+      await user.click(
+        screen.getByRole("button", { name: /Другие действия для Auth API/ })
+      );
+      await user.click(
+        await screen.findByRole("menuitem", { name: /Изменить/ })
+      );
+      await screen.findByRole("dialog");
+      expect(screen.getByLabelText("Под")).toHaveValue("api-7f9");
+      expect(screen.getByLabelText("Пространство имён")).toBeInTheDocument();
+      expect(screen.queryByLabelText("Pod")).toBeNull();
+      expect(screen.queryByLabelText("Namespace")).toBeNull();
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 
   it("saves a repointed forward through the store", async () => {
