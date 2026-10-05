@@ -97,7 +97,7 @@ export function StoryCard({
   );
   const span =
     story.firstAt !== null && story.lastAt !== null
-      ? spanWords(story.lastAt - story.firstAt, t)
+      ? spanWords(story.lastAt - story.firstAt, t, "alone")
       : null;
   const { subject } = story;
 

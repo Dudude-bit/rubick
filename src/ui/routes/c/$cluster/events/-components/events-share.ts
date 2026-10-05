@@ -42,7 +42,7 @@ export function eventsFiltersSection(
   if (view === "stories")
     rows.push({
       label: t("action", "storyWindow"),
-      values: [{ text: spanWords(WINDOW_MS[window], t) }],
+      values: [{ text: spanWords(WINDOW_MS[window], t, "alone") }],
     });
   if (eventType !== "all")
     rows.push({

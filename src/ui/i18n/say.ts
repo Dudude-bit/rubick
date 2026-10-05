@@ -39,14 +39,22 @@ const DAY = 24 * HOUR;
  * One unit, never two. "1 day 3 hours" is a precision nobody acts on, and
  * the rounding is deliberate: a certificate with 23 hours left says hours,
  * because "0 days" is the answer that reads as fine.
+ *
+ * Russian says "1 минута" alone but "за 1 минуту" inside a sentence.
  */
-export function spanWords(ms: number, t: T): string {
+export function spanWords(
+  ms: number,
+  t: T,
+  use: "inSentence" | "alone" = "inSentence"
+): string {
   if (ms >= DAY) return t("readings", "spanDays", { n: Math.floor(ms / DAY) });
   if (ms >= HOUR)
     return t("readings", "spanHours", { n: Math.floor(ms / HOUR) });
-  return t("readings", "spanMinutes", {
-    n: Math.max(1, Math.floor(ms / MINUTE)),
-  });
+  return t(
+    "readings",
+    use === "alone" ? "spanMinutes" : "spanMinutesInSentence",
+    { n: Math.max(1, Math.floor(ms / MINUTE)) }
+  );
 }
 
 /**

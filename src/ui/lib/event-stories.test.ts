@@ -455,6 +455,36 @@ describe("counts a reader's language can say", () => {
       "11 раз"
     );
   });
+
+  /** The sentence asked for `{n}` while the story passed `times`, so "×{n}" reached the Events page. */
+  it("fills every slot of an unknown reason's sentence, with the minute in the case its preposition asks for", () => {
+    const [story] = storiesOf(
+      [
+        event({
+          reason: "FailedCreatePodSandBox",
+          type: "Warning",
+          message: "Failed to create pod sandbox",
+          count: 3,
+          kind: "Pod",
+          name: "web-0",
+          firstTimestamp: ago(90_000),
+          lastTimestamp: ago(1000),
+        }),
+      ],
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    const en: T = (section, key, values) =>
+      translate("en", section, key, values);
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    expect(story.says.key).toBe("storyTrouble");
+    expect(sayWords(story.says, en)).toBe(
+      "FailedCreatePodSandBox 3 times within 1 minute: Failed to create pod sandbox"
+    );
+    expect(sayWords(story.says, ru)).toBe(
+      "FailedCreatePodSandBox 3 раза за 1 минуту: Failed to create pod sandbox"
+    );
+  });
 });
 
 describe("which names are siblings", () => {

@@ -2936,7 +2936,7 @@ export const en = {
     storyScaling: "Autoscaler trouble, {times} within {span}: {detail}",
     storyNode: "Node trouble, {times} within {span}: {detail}",
     storyRolloutTrouble: "Rollout trouble, {times} within {span}: {detail}",
-    storyTrouble: "{reason} ×{n} within {span}: {detail}",
+    storyTrouble: "{reason} {times} within {span}: {detail}",
     storyStillHappening: "still happening",
     storySettled: "settled",
     storyStateUnknown: "cannot say",
@@ -3401,6 +3401,7 @@ export const en = {
     spanDays: { one: "{n} day", other: "{n} days" },
     spanHours: { one: "{n} hour", other: "{n} hours" },
     spanMinutes: { one: "{n} minute", other: "{n} minutes" },
+    spanMinutesInSentence: { one: "{n} minute", other: "{n} minutes" },
     factShowThem: "Show them",
     factUpgrading: {
       one: "{n} cluster upgrading",
