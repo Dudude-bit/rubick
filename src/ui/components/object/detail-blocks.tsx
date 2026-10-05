@@ -500,7 +500,7 @@ export const EVENT_ROW =
  *  14px the family glyph and its gap cost, so the reason truncates no
  *  earlier than it did before the glyph existed. */
 const EVENT_ROW_COMPACT =
-  "grid grid-cols-[10px_minmax(0,106px)_minmax(0,1fr)_38px_30px] items-baseline gap-2 py-[3px] text-xs";
+  "grid grid-cols-[10px_minmax(0,128px)_minmax(0,1fr)_32px_44px] items-baseline gap-2 py-[3px] text-xs";
 
 export interface EventRowsProps {
   events: EventInfo[];
@@ -591,6 +591,7 @@ function EventRow({
           isWarning ? "text-warn" : familyStyle ? undefined : "text-fg-mut"
         )}
         style={familyStyle}
+        title={event.reason ?? undefined}
       >
         <span className="sr-only">
           {event.type}
@@ -622,11 +623,11 @@ function EventRow({
           </span>
         )}
       </span>
-      <span className="text-right font-mono text-[11px] text-fg-fnt">
+      <span className="whitespace-nowrap text-right font-mono text-[11px] text-fg-fnt">
         {count > 1 ? `×${count}` : ""}
       </span>
       <span
-        className="text-right text-[11px] text-fg-fnt"
+        className="whitespace-nowrap text-right text-[11px] text-fg-fnt"
         title={formatDate(event.lastTimestamp) ?? undefined}
       >
         {event.lastTimestamp ? age : "—"}

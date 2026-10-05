@@ -322,7 +322,7 @@ export function Events() {
                         })
                       }
                       className={cn(
-                        "h-6 rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
+                        "h-6 whitespace-nowrap rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
                         window === candidate ? "bg-sel text-fg" : "text-fg-mut"
                       )}
                     >

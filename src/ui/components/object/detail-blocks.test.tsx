@@ -3,8 +3,8 @@ import { describe, expect, it } from "vite-plus/test";
 import { render, screen } from "@testing-library/react";
 
 import { renderWithRouter } from "@/test/render";
-import { ConditionRows, UsageRow } from "./detail-blocks";
-import type { ConditionInfo } from "@/generated/types";
+import { ConditionRows, EventRows, UsageRow } from "./detail-blocks";
+import type { ConditionInfo, EventInfo } from "@/generated/types";
 
 const wrap = (ui: ReactElement) =>
   renderWithRouter(ui, {
@@ -165,5 +165,31 @@ describe("UsageRow without a denominator", () => {
     const fill = container.querySelector('[style*="width"]') as HTMLElement;
     expect(fill).not.toBeNull();
     expect(fill.style.width).toBe("50%");
+  });
+});
+
+describe("an event row at drawer width", () => {
+  /** The peek cut "ScalingReplicaSet" to "ScalingRepli…" with nothing that showed the rest. */
+  it("keeps the whole reason reachable when the column cuts it", async () => {
+    await wrap(
+      <EventRows
+        compact
+        events={[
+          {
+            uid: "e1",
+            type: "Warning",
+            reason: "FailedCreatePodSandBox",
+            message: "Failed to create pod sandbox",
+            namespace: "shop",
+            involvedObject: { kind: "Pod", name: "web-0", namespace: "shop" },
+            count: 1,
+            lastTimestamp: null,
+          } as unknown as EventInfo,
+        ]}
+      />
+    );
+    expect(
+      screen.getByText("FailedCreatePodSandBox").parentElement
+    ).toHaveAttribute("title", "FailedCreatePodSandBox");
   });
 });

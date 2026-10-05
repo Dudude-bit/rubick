@@ -121,7 +121,9 @@ export function SectionHeader({
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-[11px] text-fg-fnt">
           {caption}
           {actions && (
-            <div className="ml-auto flex items-center gap-1">{actions}</div>
+            <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
+              {actions}
+            </div>
           )}
         </div>
         {description && <p className="text-xs text-fg-mut">{description}</p>}
@@ -141,7 +143,9 @@ export function SectionHeader({
           </span>
         )}
         {actions && (
-          <div className="ml-auto flex items-center gap-1">{actions}</div>
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
+            {actions}
+          </div>
         )}
       </div>
       {description && <p className="text-xs text-fg-mut">{description}</p>}
