@@ -11,6 +11,12 @@ import userEvent from "@testing-library/user-event";
 import { Eye, Trash2 } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
 
+const getStatefulset = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/commands", async (original) => {
+  const real = await original<typeof import("@/lib/commands")>();
+  return { commands: { ...real.commands, getStatefulset } };
+});
+
 import { ResourceList } from "./ResourceList";
 import { hrefOf, objectLink } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -171,5 +177,49 @@ describe("a list row's right-click menu", () => {
         "/c/prod/deployments/shop/web"
       )
     );
+  });
+});
+
+describe("a StatefulSet row's delete", () => {
+  /**
+   * The row is the list's summary, with no claim templates, and the dialog
+   * opened from it said they were not read yet while the page's dialog named
+   * them: one delete, two readings.
+   */
+  it("names the claims that stay, as the page's dialog does", async () => {
+    getStatefulset.mockResolvedValue({
+      name: "orders-db",
+      namespace: "shop",
+      claimTemplates: ["data"],
+      claimsWhenDeleted: "Retain",
+      replicas: { desired: 1, ready: 1, current: 1, updated: 1, available: 1 },
+    });
+    const user = userEvent.setup();
+    const row = { ...WEB, name: "orders-db" };
+    await renderWithRouter(
+      <ResourceList<typeof row>
+        title="StatefulSets"
+        emptyStateLabel="statefulsets"
+        data={[row]}
+        columns={[
+          {
+            accessorKey: "name",
+            header: "Name",
+            cell: ({ row: r }) => (
+              <span data-testid="cell">{r.original.name}</span>
+            ),
+          },
+        ]}
+        getRowHref={(r) => hrefOf(objectLink({ kind: "StatefulSet", ...r })!)}
+      />,
+      { at: "/c/prod/statefulsets", route: "/c/$cluster/$" }
+    );
+    openMenu();
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(
+      await within(dialog).findByText(/volumeClaimTemplates \(data\) stay/)
+    ).toBeInTheDocument();
+    expect(getStatefulset).toHaveBeenCalledWith("orders-db", "shop");
   });
 });
