@@ -186,6 +186,16 @@ describe("watching several namespaces at once", () => {
     await mount();
   };
 
+  /** Marco's "what can I do here", asked where the namespace is chosen. */
+  it("offers what the reader may do in the namespace they are on", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-0"]);
+    await openPicker(user);
+    expect(
+      screen.getByRole("link", { name: "What can I do in ns-0?" })
+    ).toHaveAttribute("href", "/c/k3d-dev/my-access");
+  });
+
   it("names the whole selection where a reader cannot see the strip", async () => {
     await draw(["ns-0", "ns-1"]);
     expect(tabs()[0]).toHaveAttribute(

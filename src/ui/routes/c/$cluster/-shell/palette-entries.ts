@@ -9,6 +9,7 @@ import {
   Package,
   Server,
   Settings,
+  ShieldUser,
   Terminal,
 } from "lucide-react";
 
@@ -74,6 +75,7 @@ const quickActions: Array<{
     label: "goToApiResources",
     path: pageLink("api-resources"),
   },
+  { icon: ShieldUser, label: "goToMyAccess", path: pageLink("my-access") },
 ];
 
 /** Kinds a query offers to open the list of, before any object it finds. */

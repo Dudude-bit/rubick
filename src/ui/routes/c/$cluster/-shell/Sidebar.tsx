@@ -10,6 +10,7 @@ import {
   Plug,
   Route,
   Settings,
+  ShieldUser,
   type LucideIcon,
   History,
 } from "lucide-react";
@@ -204,7 +205,13 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       resource(ResourceType.Secret, "secrets"),
     ],
   },
-  { caption: "access", items: ACCESS_KINDS.map(servedRow) },
+  {
+    caption: "access",
+    items: [
+      { labelKey: "myAccess", path: pageLink("my-access"), icon: ShieldUser },
+      ...ACCESS_KINDS.map(servedRow),
+    ],
+  },
 ];
 
 const pathnameOf = (state: { location: { pathname: string } }) =>

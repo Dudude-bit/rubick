@@ -350,6 +350,8 @@ export const queryKeys = {
     (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
   ],
   clusterRoleBindings: (): string[] => ["cluster-role-bindings"],
+  /** What the signed-in user may do in one namespace. */
+  ownRules: (namespace: string): string[] => ["own-rules", namespace],
   /** One role's rules, or why they are not known. */
   roleReading: (
     kind: string,

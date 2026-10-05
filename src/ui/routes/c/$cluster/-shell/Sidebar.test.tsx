@@ -271,6 +271,10 @@ describe("the Access group", () => {
         (await screen.findByRole("link", { name })).getAttribute("href")
       )
     );
+    expect(screen.getByRole("link", { name: "Your access" })).toHaveAttribute(
+      "href",
+      "/c/prod/my-access"
+    );
     expect(hrefs).toEqual([
       "/c/prod/serviceaccounts",
       "/c/prod/roles.rbac.authorization.k8s.io",

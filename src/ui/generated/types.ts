@@ -845,6 +845,21 @@ export interface DebugResult {
   isNewPod: boolean;
 }
 
+export interface OwnRules {
+  namespace: string;
+  rules: OwnRule[];
+  incomplete: boolean;
+  evaluationError: string | null;
+}
+
+export interface OwnRule {
+  apiGroups: string[];
+  resources: string[];
+  resourceNames: string[];
+  nonResourceUrls: string[];
+  verbs: string[];
+}
+
 export interface NamespaceAccess {
   namespace: string;
   allowed: boolean | null;

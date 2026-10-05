@@ -87,6 +87,7 @@ import type {
   NodeInfo,
   NodeMetricsResponse,
   ObjectMetadata,
+  OwnRules,
   PerfSnapshot,
   PersistentVolumeClaimInfo,
   PersistentVolumeInfo,
@@ -1156,6 +1157,10 @@ export async function checkNamespaceAccess(
   namespaces: string[]
 ): Promise<NamespaceAccess[]> {
   return invoke<NamespaceAccess[]>("check_namespace_access", { namespaces });
+}
+
+export async function reviewOwnRules(namespace: string): Promise<OwnRules> {
+  return invoke<OwnRules>("review_own_rules", { namespace });
 }
 
 export async function deleteDebugPod(

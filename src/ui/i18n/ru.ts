@@ -16,6 +16,7 @@ import type { Catalogue } from "./catalogue";
 export const ru: Catalogue = {
   nav: {
     apiResources: "API-ресурсы",
+    myAccess: "Ваш доступ",
     changes: "Изменения",
     selectsLabels: "выбирает {selector}",
     allNamespacesLower: "все неймспейсы",
@@ -1096,6 +1097,7 @@ export const ru: Catalogue = {
     goToEvents: "Перейти к Events",
     goToHelm: "Перейти к Helm",
     goToApiResources: "Перейти к API-ресурсам",
+    goToMyAccess: "Перейти к вашему доступу",
     goToSettings: "Перейти к настройкам",
     paletteRecent: "Недавнее",
     paletteNavigation: "Навигация",
@@ -4540,6 +4542,8 @@ export const ru: Catalogue = {
       "{n} из {limit} пространств имён — все списки сужены до них.",
     namespaceMultiHint:
       "{click}-клик, {enter} или флажок — следить сразу за {limit}.",
+    whatCanIDoIn: "Что мне можно в {namespace}?",
+    whatCanIDo: "Что мне здесь можно?",
     countsUnread: "не посчитано",
     countsIn: "в {scope}",
     countsInAll: "во всех пространствах имён",
@@ -5092,6 +5096,23 @@ export const ru: Catalogue = {
     notConnected: "Подключитесь к кластеру, чтобы увидеть, что он обслуживает.",
     retry: "Повторить",
   },
+  myAccess: {
+    title: "Что вам разрешено",
+    description:
+      "Правила, которые, по словам кластера, действуют для вас, включая ClusterRoleBinding, как их печатает kubectl auth can-i --list.",
+    perNamespace:
+      "Права выдаются по пространствам имён, поэтому одного ответа для всех нет. Выберите пространство имён, и страница ответит для него.",
+    couldNotAsk:
+      "Не удалось спросить у кластера, что вам разрешено в {namespace}.",
+    incomplete:
+      "Кластер сообщает, что список неполный: один из авторизаторов не умеет перечислять свои правила, так что вам может быть разрешено больше.",
+    evaluationError: "Кластер сообщил об ошибке при составлении этого списка:",
+    rulesIn: "В {namespace}",
+    none: "Кластер не перечисляет для вас здесь ни одного правила.",
+    noneListed: "Правил не перечислено, и список неполный.",
+    caveat:
+      "Запрос, разрешённый этими правилами, всё ещё может отклонить admission control.",
+  },
   rbac: {
     anyName: "любые",
     noRules: "Ничего не разрешает: правил нет.",
@@ -5108,6 +5129,7 @@ export const ru: Catalogue = {
     broadGrants: {
       one: "Ещё {n} привязка выдаёт это каждому ServiceAccount или всем вошедшим",
       few: "Ещё {n} привязки выдают это каждому ServiceAccount или всем вошедшим",
+      many: "Ещё {n} привязок выдают это каждому ServiceAccount или всем вошедшим",
       other:
         "Ещё {n} привязок выдают это каждому ServiceAccount или всем вошедшим",
     },

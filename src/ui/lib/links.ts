@@ -191,12 +191,14 @@ export function pageLink(
     | "integrations"
     | "routes"
     | "helm"
-    | "api-resources",
-  search?: Record<string, string>
+    | "api-resources"
+    | "my-access",
+  search?: Record<string, string>,
+  cluster?: string
 ): AppLink {
   return {
     to: "/c/$cluster/$resource",
-    params: inCluster({ resource: page }),
+    params: inCluster({ resource: page }, cluster),
     search,
   } as AppLink;
 }

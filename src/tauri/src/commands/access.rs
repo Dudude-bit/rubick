@@ -13,6 +13,7 @@
 use futures::future::join_all;
 use k8s_openapi::api::authorization::v1::{
     ResourceAttributes, SelfSubjectAccessReview, SelfSubjectAccessReviewSpec,
+    SelfSubjectRulesReview, SelfSubjectRulesReviewSpec, SubjectRulesReviewStatus,
 };
 use kube::api::{Api, PostParams};
 use serde::{Deserialize, Serialize};
@@ -264,9 +265,110 @@ async fn ask(api: &Api<SelfSubjectAccessReview>, attributes: ResourceAttributes)
         .map(|status| status.allowed)
 }
 
+/// One rule the authorizer says this user holds: a resource rule, or a
+/// non-resource one when `non_resource_urls` is set.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OwnRule {
+    pub api_groups: Vec<String>,
+    pub resources: Vec<String>,
+    pub resource_names: Vec<String>,
+    pub non_resource_urls: Vec<String>,
+    pub verbs: Vec<String>,
+}
+
+/// What this user may do in one namespace, as `SelfSubjectRulesReview` says.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OwnRules {
+    pub namespace: String,
+    pub rules: Vec<OwnRule>,
+    /// An authorizer could not list its rules; the user may hold more.
+    pub incomplete: bool,
+    pub evaluation_error: Option<String>,
+}
+
+/// The rules that apply to this user in `namespace`, cluster-wide ones included.
+#[tauri::command]
+pub async fn review_own_rules(namespace: String, state: State<'_, AppState>) -> Result<OwnRules> {
+    crate::validation::validate_dns_label(&namespace)?;
+    let ctx = ResourceContext::for_list(&state, None)?;
+    let api: Api<SelfSubjectRulesReview> = Api::all(ctx.client.clone());
+    let review = SelfSubjectRulesReview {
+        spec: SelfSubjectRulesReviewSpec {
+            namespace: Some(namespace.clone()),
+        },
+        ..SelfSubjectRulesReview::default()
+    };
+    let answered = api.create(&PostParams::default(), &review).await?;
+    Ok(own_rules(namespace, answered.status))
+}
+
+/// A review answered without a status said nothing, which is not "no rules".
+fn own_rules(namespace: String, status: Option<SubjectRulesReviewStatus>) -> OwnRules {
+    let Some(status) = status else {
+        return OwnRules {
+            namespace,
+            rules: Vec::new(),
+            incomplete: true,
+            evaluation_error: None,
+        };
+    };
+    let resource = status.resource_rules.into_iter().map(|rule| OwnRule {
+        api_groups: rule.api_groups.unwrap_or_default(),
+        resources: rule.resources.unwrap_or_default(),
+        resource_names: rule.resource_names.unwrap_or_default(),
+        non_resource_urls: Vec::new(),
+        verbs: rule.verbs,
+    });
+    let non_resource = status.non_resource_rules.into_iter().map(|rule| OwnRule {
+        api_groups: Vec::new(),
+        resources: Vec::new(),
+        resource_names: Vec::new(),
+        non_resource_urls: rule.non_resource_urls.unwrap_or_default(),
+        verbs: rule.verbs,
+    });
+    OwnRules {
+        namespace,
+        rules: resource.chain(non_resource).collect(),
+        incomplete: status.incomplete,
+        evaluation_error: status.evaluation_error.filter(|error| !error.is_empty()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A webhook authorizer that cannot list rules sets `incomplete`; dropping
+    /// it would present a partial list as everything the user may do.
+    #[test]
+    fn a_rules_review_keeps_its_incomplete_flag_and_evaluation_error() {
+        let status: SubjectRulesReviewStatus = serde_json::from_value(serde_json::json!({
+            "incomplete": true,
+            "evaluationError": "webhook authorizer does not list rules",
+            "resourceRules": [{ "apiGroups": [""], "resources": ["pods"], "verbs": ["get", "list"] }],
+            "nonResourceRules": [{ "nonResourceURLs": ["/healthz"], "verbs": ["get"] }],
+        }))
+        .expect("status");
+        let rules = own_rules("team-checkout".to_string(), Some(status));
+        assert!(rules.incomplete);
+        assert_eq!(
+            rules.evaluation_error.as_deref(),
+            Some("webhook authorizer does not list rules")
+        );
+        assert_eq!(rules.rules.len(), 2);
+        assert_eq!(rules.rules[0].resources, ["pods"]);
+        assert_eq!(rules.rules[1].non_resource_urls, ["/healthz"]);
+    }
+
+    /// No status at all is an answer nobody gave, and must not read as no rules.
+    #[test]
+    fn a_rules_review_without_a_status_is_incomplete() {
+        let rules = own_rules("team-checkout".to_string(), None);
+        assert!(rules.incomplete);
+        assert!(rules.rules.is_empty());
+    }
 
     fn query(group: &str, resource: &str, namespaced: bool) -> ListQuery {
         ListQuery {

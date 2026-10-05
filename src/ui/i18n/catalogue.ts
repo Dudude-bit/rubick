@@ -38,6 +38,7 @@ export const en = {
   nav: {
     changes: "Changes",
     apiResources: "API resources",
+    myAccess: "Your access",
     selectsLabels: "selects {selector}",
     allNamespacesLower: "all namespaces",
     dataTable: "Data table",
@@ -1102,6 +1103,7 @@ export const en = {
     goToEvents: "Go to Events",
     goToHelm: "Go to Helm",
     goToApiResources: "Go to API resources",
+    goToMyAccess: "Go to your access",
     goToSettings: "Go to Settings",
     paletteRecent: "Recent",
     paletteNavigation: "Navigation",
@@ -4106,6 +4108,8 @@ export const en = {
       "{n} of {limit} namespaces — every list is narrowed to them.",
     namespaceMultiHint:
       "{click}-click or {enter}, or the box, to watch up to {limit} at once.",
+    whatCanIDoIn: "What can I do in {namespace}?",
+    whatCanIDo: "What can I do here?",
     countsUnread: "not counted",
     countsIn: "in {scope}",
     countsInAll: "in all namespaces",
@@ -4623,6 +4627,24 @@ export const en = {
     unreadTitle: "Could not read what this cluster serves",
     notConnected: "Connect to a cluster to see what it serves.",
     retry: "Try again",
+  },
+  // "What can I do here", asked of the cluster for the signed-in user.
+  myAccess: {
+    title: "What you may do",
+    description:
+      "The rules the cluster says apply to you, ClusterRoleBindings included, as kubectl auth can-i --list prints them.",
+    perNamespace:
+      "Rules are granted per namespace, so there is no one answer for every namespace. Choose one, and this page answers for it.",
+    couldNotAsk: "Could not ask the cluster what you may do in {namespace}.",
+    incomplete:
+      "The cluster says this list is incomplete: an authorizer it asked cannot list its rules, so you may be able to do more than shown.",
+    evaluationError:
+      "The cluster reported an error while working out this list:",
+    rulesIn: "In {namespace}",
+    none: "The cluster lists no rules for you here.",
+    noneListed: "No rules listed, and the list is incomplete.",
+    caveat:
+      "A request these rules allow can still be refused by admission control.",
   },
   // Roles and bindings, read as what they grant and to whom.
   rbac: {

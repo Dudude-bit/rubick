@@ -197,6 +197,7 @@ fn main() {
             commands::access::check_list_access,
             commands::access::check_access,
             commands::access::check_namespace_access,
+            commands::access::review_own_rules,
             commands::rbac::list_role_bindings_in,
             commands::rbac::list_cluster_role_bindings,
             commands::binaries::locate_binaries,

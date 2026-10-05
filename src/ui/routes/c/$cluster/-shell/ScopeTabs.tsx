@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
-import { AlertCircle, Check, Lock, Search } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { AlertCircle, Check, Lock, Search, ShieldUser } from "lucide-react";
 
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ClusterRow } from "@/components/cluster/ClusterRow";
@@ -44,6 +45,7 @@ import {
   scopeLabel,
   seedScope,
 } from "@/lib/namespace-scope";
+import { pageLink } from "@/lib/links";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
@@ -1010,6 +1012,16 @@ function NamespacePopover({
         >
           {note}
         </p>
+        <Link
+          {...pageLink("my-access", undefined, context ?? undefined)}
+          onClick={() => onOpenChange(false)}
+          className="flex items-center gap-1.5 border-t border-hair px-2.5 py-1.5 text-[11px] text-info transition-colors hover:bg-hover"
+        >
+          <ShieldUser aria-hidden="true" className="h-3 w-3 flex-none" />
+          {scope.length === 1
+            ? t("cluster", "whatCanIDoIn", { namespace: scope[0] })
+            : t("cluster", "whatCanIDo")}
+        </Link>
       </PopoverContent>
     </Popover>
   );
