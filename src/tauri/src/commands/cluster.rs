@@ -122,7 +122,7 @@ pub async fn connect_cluster(
             arrange_renewal(&app, &state, &context);
             info
         }
-        Err(direct) => {
+        Err((direct, dialled)) => {
             state.client_manager.disconnect(&context);
             state.remove_session(&context);
             let mut attempt = ConnectAttempt {
@@ -134,7 +134,7 @@ pub async fn connect_cluster(
                 },
                 proxy: ProxyOutcome::NotTried,
             };
-            if !proxy_could_help(&direct) {
+            if !proxy_could_help(&direct, dialled) {
                 state.client_manager.record_attempt(attempt);
                 return Err(direct);
             }
@@ -184,24 +184,30 @@ pub async fn connect_cluster(
 }
 
 /// The app's own way in: prepare credentials, build a client, ask `/version`.
-async fn connect_direct(state: &AppState, context: &str) -> Result<ClusterInfo> {
+/// A failure says whether it came from asking, the one step that dials.
+async fn connect_direct(
+    state: &AppState,
+    context: &str,
+) -> std::result::Result<ClusterInfo, (Error, bool)> {
+    let before = |error: Error| (error, false);
     let kubeconfig = state
         .client_manager
         .kubeconfig_clone()
         .await
-        .map_err(|e| Error::Config(e.to_string()))?;
+        .map_err(|e| before(Error::Config(e.to_string())))?;
     let prepared =
         prepare_kubeconfig_for_context(state, kubeconfig, context, AuthMode::Interactive)
             .await
-            .map_err(prepared_failure)?;
+            .map_err(|e| before(prepared_failure(e)))?;
     state
         .client_manager
         .set_credential_deadline(context, prepared.expires_at);
     state
         .client_manager
         .connect_with_kubeconfig(context, prepared.kubeconfig)
-        .await?;
-    probe(state, context).await
+        .await
+        .map_err(before)?;
+    probe(state, context).await.map_err(|error| (error, true))
 }
 
 /// Arrange for the context to renew itself, after the connect succeeded: one
@@ -278,15 +284,23 @@ fn prepared_failure(error: Error) -> Error {
 
 /// Whether a failure of the app's own path is one kubectl might get past.
 ///
-/// A person who cancelled the login did not ask for a second one; a flow
-/// still waiting at the two-minute mark would wait at kubectl's too. Every
-/// other failure is worth the try: the proxy costs a second, and "could not
-/// tell" is the more expensive answer.
-pub(crate) fn proxy_could_help(direct: &Error) -> bool {
-    match direct {
-        Error::Timeout(_) => false,
-        Error::Auth(auth) => !auth.to_string().to_lowercase().contains("cancel"),
-        _ => true,
+/// kubectl dials the same address with the same CA and environment, so a dial
+/// refused, unresolved or untrusted fails there too, twenty seconds later. A
+/// proxy kubectl would use is one the app reads and cannot speak: it fails
+/// building its client, before any lookup. A cancelled login asked for no
+/// second one; a flow waiting two minutes would wait at kubectl's too.
+pub(crate) fn proxy_could_help(direct: &Error, dialled: bool) -> bool {
+    match ConnectFailure::of(direct) {
+        ConnectFailure::Refused | ConnectFailure::Dns if dialled => false,
+        // rustls refuses a CA:TRUE serving certificate that Go, kubectl's TLS, accepts.
+        ConnectFailure::Tls if dialled => direct.to_string().contains("CaUsedAsEndEntity"),
+        ConnectFailure::Timeout => !matches!(direct, Error::Timeout(_)),
+        ConnectFailure::SignIn => !direct.to_string().to_lowercase().contains("cancel"),
+        ConnectFailure::Refused
+        | ConnectFailure::Dns
+        | ConnectFailure::Tls
+        | ConnectFailure::Credentials
+        | ConnectFailure::Unknown => true,
     }
 }
 
@@ -506,6 +520,7 @@ pub async fn get_kubeconfig_source(state: State<'_, AppState>) -> Result<Kubecon
 #[cfg(test)]
 mod proxy_tests {
     use super::{prepared_failure, proxy_could_help};
+    use crate::client::ConnectFailure;
     use crate::error::{AuthError, Error};
 
     /// The regression: the connect flow used to flatten a timed-out login
@@ -517,7 +532,7 @@ mod proxy_tests {
     fn a_timed_out_login_keeps_its_variant_and_is_not_retried() {
         let filed = prepared_failure(Error::Timeout("Authentication timed out".into()));
         assert!(matches!(filed, Error::Timeout(_)));
-        assert!(!proxy_could_help(&filed));
+        assert!(!proxy_could_help(&filed, false));
     }
 
     /// Cancellation is filed as an auth error, but keeps its word — which is
@@ -528,14 +543,14 @@ mod proxy_tests {
             "Authentication cancelled".into(),
         )));
         assert!(matches!(filed, Error::Auth(_)));
-        assert!(!proxy_could_help(&filed));
+        assert!(!proxy_could_help(&filed, false));
     }
 
     /// A broken plugin is filed as auth and is worth kubectl's try.
     #[test]
     fn a_broken_plugin_files_as_auth_and_is_retried() {
         let filed = prepared_failure(Error::Connection("exec plugin not found".into()));
-        assert!(proxy_could_help(&filed));
+        assert!(proxy_could_help(&filed, false));
     }
 
     /// A cancelled login turning into a `kubectl proxy` login is the app
@@ -543,18 +558,115 @@ mod proxy_tests {
     #[test]
     fn a_cancelled_login_is_not_retried_through_kubectl() {
         let cancelled = Error::Auth(AuthError::Kubeconfig("Authentication cancelled".into()));
-        assert!(!proxy_could_help(&cancelled));
+        assert!(!proxy_could_help(&cancelled, false));
     }
 
     #[test]
     fn a_rejected_token_or_a_broken_plugin_is() {
-        assert!(proxy_could_help(&Error::Connection(
-            "Failed to get server version: Unauthorized".into()
-        )));
-        assert!(proxy_could_help(&Error::Auth(AuthError::Kubeconfig(
-            "exec plugin kubectl-oidc_login not found".into()
-        ))));
-        assert!(!proxy_could_help(&Error::Timeout("2 minutes".into())));
+        assert!(proxy_could_help(
+            &Error::Connection("Failed to get server version: Unauthorized".into()),
+            true
+        ));
+        assert!(proxy_could_help(
+            &Error::Auth(AuthError::Kubeconfig(
+                "exec plugin kubectl-oidc_login not found".into()
+            )),
+            false
+        ));
+        assert!(!proxy_could_help(&Error::Timeout("2 minutes".into()), true));
+    }
+
+    fn dialled(said: &str) -> Error {
+        Error::Connection(format!(
+            "Failed to get server version: ServiceError: client error (Connect): {said}"
+        ))
+    }
+
+    /// Dana's refused and unresolvable contexts waited twenty seconds for a
+    /// kubectl proxy that dials the same address. Fails if a dial that was
+    /// refused, did not resolve or met a certificate the kubeconfig does not
+    /// vouch for is handed to kubectl again, or if a failure the proxy exists
+    /// for stops being.
+    #[test]
+    fn kubectl_is_tried_only_for_a_dial_failure_it_could_get_past() {
+        let cases = [
+            (
+                dialled("tcp connect error: Connection refused (os error 111)"),
+                ConnectFailure::Refused,
+                false,
+            ),
+            (
+                dialled(
+                    "dns error: failed to lookup address information: Name or service not known",
+                ),
+                ConnectFailure::Dns,
+                false,
+            ),
+            (
+                dialled("invalid peer certificate: UnknownIssuer"),
+                ConnectFailure::Tls,
+                false,
+            ),
+            (
+                dialled("invalid peer certificate: Other(OtherError(CaUsedAsEndEntity))"),
+                ConnectFailure::Tls,
+                true,
+            ),
+            (
+                Error::Connection(
+                    "Failed to get server version: ApiError: Unauthorized (code: 401)".into(),
+                ),
+                ConnectFailure::Credentials,
+                true,
+            ),
+            (dialled(""), ConnectFailure::Unknown, true),
+        ];
+        for (error, kind, tried) in cases {
+            assert_eq!(ConnectFailure::of(&error), kind, "{error}");
+            assert_eq!(proxy_could_help(&error, true), tried, "{error}");
+        }
+    }
+
+    /// Before the dial, a "certificate" is a client key or a CA file, which
+    /// Go may read where rustls cannot, and a kubectl that cannot exits at
+    /// once. Fails if the skip stops asking whether the cluster was dialled.
+    #[test]
+    fn a_certificate_the_app_could_not_load_is_still_left_to_kubectl() {
+        let unloadable = Error::Connection(
+            "Failed to create client: rustls tls error: invalid private key: unsupported curve"
+                .into(),
+        );
+        assert_eq!(ConnectFailure::of(&unloadable), ConnectFailure::Tls);
+        assert!(proxy_could_help(&unloadable, false));
+    }
+
+    /// Why a name that does not resolve can skip kubectl: a proxy kubectl
+    /// would go through is one the app reads too and cannot speak, so its
+    /// connect stops building the client, before any lookup, and keeps the
+    /// fallback. Fails if a proxied context reaches the dial, where a lookup
+    /// failure would skip the one path that goes through the proxy.
+    #[tokio::test]
+    async fn a_context_behind_a_proxy_fails_before_the_lookup_and_is_left_to_kubectl() {
+        let kubeconfig = kube::config::Kubeconfig::from_yaml(
+            "apiVersion: v1\nkind: Config\ncurrent-context: corp\n\
+             clusters: [{name: corp, cluster: {server: 'https://api.corp.invalid:6443', \
+             proxy-url: 'http://127.0.0.1:1'}}]\n\
+             users: [{name: corp, user: {}}]\n\
+             contexts: [{name: corp, context: {cluster: corp, user: corp}}]\n",
+        )
+        .expect("kubeconfig");
+        let Err(error) = crate::client::K8sClientManager::new()
+            .connect_with_kubeconfig("corp", kubeconfig)
+            .await
+        else {
+            panic!("the app speaks no proxy");
+        };
+        assert_eq!(
+            ConnectFailure::of(&error),
+            ConnectFailure::Unknown,
+            "{error}"
+        );
+        assert!(proxy_could_help(&error, false), "{error}");
     }
 }
 
