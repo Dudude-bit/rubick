@@ -53,10 +53,18 @@ export function StatusBadge({
   roleOverride,
   className,
   children,
+  title,
   ...props
 }: StatusBadgeProps) {
   const resolved = roleOverride ?? statusRole(status);
   const Icon = ROLE_ICON[resolved];
+  const label = children ?? status;
+  // A narrow column cuts the word, so hovering always has it whole.
+  const word = typeof label === "string" && label !== "" ? label : null;
+  const hover =
+    word && !title?.includes(word)
+      ? [word, title].filter(Boolean).join("\n")
+      : title;
   return (
     <span
       className={cn(
@@ -65,29 +73,32 @@ export function StatusBadge({
         // width is what makes it scannable now the chip is gone. 16px line
         // box with no vertical padding: the status must never be what
         // decides how tall a table row is.
-        "inline-flex items-center gap-1 font-mono text-[11px] font-medium leading-4",
+        // A block of its own, not a flex row, so a cut word ends in an
+        // ellipsis instead of mid-letter.
+        "inline-block max-w-full truncate align-middle font-mono text-[11px] font-medium leading-4",
         ROLE_TEXT[resolved],
         className
       )}
+      title={hover}
       {...props}
     >
       {showDot ? (
         <span
           className={cn(
-            "h-1.5 w-1.5 flex-none rounded-full",
+            "mr-1 inline-block h-1.5 w-1.5 rounded-full align-middle",
             ROLE_DOT[resolved]
           )}
         />
       ) : (
         showIcon && (
           <Icon
-            className="h-2.5 w-2.5 flex-none"
+            className="mr-1 inline-block h-2.5 w-2.5 align-[-1px]"
             aria-hidden="true"
             data-testid="status-badge-icon"
           />
         )
       )}
-      {children ?? status}
+      {label}
     </span>
   );
 }

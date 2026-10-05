@@ -97,9 +97,9 @@ export const columns: ColumnDef<PodRow>[] = [
   createNameColumn<PodRow>(ResourceType.Pod),
   createNamespaceColumn<PodRow>(),
   {
-    // "CrashLoopBackOff" is the widest state this column ever shows, and it
-    // is the one nobody should have to guess at from a truncation.
-    size: 150,
+    // Wide enough for "Init:CrashLoopBackOff" at 1440 px; a longer reason
+    // ends in an ellipsis and keeps its whole word on hover.
+    size: 190,
     id: "status",
     // Sorted by the word the reader sees, not by the phase behind it: they
     // asked for this to group the crashing pods together, and `Running` is
@@ -200,7 +200,7 @@ export const columns: ColumnDef<PodRow>[] = [
   },
   {
     // A managed node's name is as long as a pod's: `gke-prod-pool-1-a3f9-x2kd`.
-    size: 220,
+    size: 180,
     id: "node",
     header: columnHeader("columns", "node"),
     meta: {

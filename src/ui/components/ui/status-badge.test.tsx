@@ -91,6 +91,38 @@ describe("no chip, colour only on anomalies", () => {
   });
 });
 
+// A status column cut "CreateContainerConfigError" to "CreateContaine", with
+// no ellipsis and nothing on hover to read the rest.
+describe("a word longer than its column", () => {
+  /** Fails if a cut word stops ending in an ellipsis. */
+  it("ends in an ellipsis rather than mid-letter", () => {
+    const { container } = render(
+      <StatusBadge status="CreateContainerConfigError" />
+    );
+    expect(container.firstElementChild!.className).toMatch(/\btruncate\b/);
+  });
+
+  /** Fails if hovering a badge no longer gives the whole word. */
+  it("gives the whole word on hover", () => {
+    render(<StatusBadge status="CreateContainerConfigError" />);
+    expect(screen.getByText("CreateContainerConfigError")).toHaveAttribute(
+      "title",
+      "CreateContainerConfigError"
+    );
+  });
+
+  /** Fails if a tooltip of its own hides the word it explains. */
+  it("puts the word ahead of a tooltip that does not say it", () => {
+    render(
+      <StatusBadge status="CrashLoopBackOff" title="node worker-3 is silent" />
+    );
+    expect(screen.getByText("CrashLoopBackOff")).toHaveAttribute(
+      "title",
+      "CrashLoopBackOff\nnode worker-3 is silent"
+    );
+  });
+});
+
 // Colour is the fastest channel, not the only one. Roughly one reader in
 // twelve cannot separate the red from the green, and a screenshot in
 // greyscale is how half of these end up in a bug report.

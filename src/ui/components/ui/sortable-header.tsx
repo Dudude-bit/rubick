@@ -45,14 +45,14 @@ export function SortableHeader({
       // The hit area is the whole cell, not the words: a 40px target is the
       // difference between sorting a column and selecting its label.
       className={cn(
-        "-mx-1 inline-flex min-h-[28px] items-center gap-1 rounded px-1",
+        "-mx-1 inline-flex min-h-[28px] max-w-full items-center gap-1 rounded px-1",
         "transition-colors hover:bg-hover focus-visible:bg-hover",
         "focus-visible:outline-none",
         sorted ? "text-fg" : "text-fg-mut"
       )}
       aria-label={t("action", "sortByColumn")}
     >
-      {children}
+      <span className="min-w-0 truncate">{children}</span>
       <Mark
         className={cn(
           "h-3 w-3 flex-none",
