@@ -26,6 +26,7 @@ import { DetailTabs } from "@/components/object/DetailTabs";
 import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { FileText, LayoutGrid } from "lucide-react";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
+import { SurfaceVisibility } from "@/lib/surface-visibility";
 import { BACKOFF, REFRESH_INTERVALS, type RefreshRate } from "@/lib/refresh";
 import { useWindowActivity } from "@/lib/window-activity";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -228,6 +229,52 @@ describe("a surface nobody is looking at", () => {
     });
     await settle();
     expect(reads).toBe(onArrival + 1);
+  });
+});
+
+describe("a surface off screen, whatever else happens", () => {
+  /**
+   * Dana's closed peek went on reading its pod: the window regaining focus,
+   * a click anywhere, the reconnect's invalidation and the cluster switch's
+   * eviction each read it, and none of them goes through the interval the
+   * last fix stopped. Every one of them is made here, then the panel shown.
+   */
+  it("reads nothing on focus, touch, reconnect or eviction, and once on return", async () => {
+    const shared = client();
+    const draw = (shown: boolean) => (
+      <QueryClientProvider client={shared}>
+        <TooltipProvider>
+          <SurfaceVisibility.Provider value={shown}>
+            <Probe />
+          </SurfaceVisibility.Provider>
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(draw(true));
+    await settle();
+    for (let round = 0; round <= BACKOFF.steadyAfter; round++) {
+      await advance(RATE * 2);
+    }
+
+    rerender(draw(false));
+    await settle();
+    const hidden = reads;
+
+    act(() => useWindowActivity.setState({ focused: false }));
+    act(() => useWindowActivity.setState({ focused: true }));
+    await advance(RATE * 3);
+    act(() => useWindowActivity.setState({ interactionAt: Date.now() }));
+    await settle();
+    act(() => void shared.invalidateQueries());
+    await settle();
+    act(() => shared.removeQueries());
+    rerender(draw(false));
+    await advance(60_000);
+    expect(reads).toBe(hidden);
+
+    rerender(draw(true));
+    await settle();
+    expect(reads).toBe(hidden + 1);
   });
 });
 

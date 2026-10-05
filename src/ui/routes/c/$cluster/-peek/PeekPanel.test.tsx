@@ -9,7 +9,14 @@ import {
   it,
   vi,
 } from "vite-plus/test";
-import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useLocation } from "@tanstack/react-router";
 import { QueryClient } from "@tanstack/react-query";
@@ -108,6 +115,8 @@ status:
 
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
+import { REFRESH_INTERVALS } from "@/lib/refresh";
+import { useWindowActivity } from "@/lib/window-activity";
 import { renderWithRouter } from "@/test/render";
 import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -572,31 +581,6 @@ describe("PeekPanel", () => {
     await waitFor(() => expect(location()).toBe("/c/prod/events"));
   });
 
-  /**
-   * The body stays mounted after a close so the slide-out stays whole, and
-   * its query kept polling a ReplicaSet nobody could see, every two seconds.
-   */
-  it("stops polling the object once it is closed", async () => {
-    await wrap(POD_PEEK);
-    await screen.findByText("CrashLoopBackOff");
-    const intervals = () =>
-      wrap.client
-        .getQueryCache()
-        .find({
-          queryKey: queryKeys.detail(
-            "Pod",
-            "k8s-gui-test",
-            "crash-demo-56588f6b8c-8bj9v"
-          ),
-        })
-        ?.observers.map((observer) => observer.options.refetchInterval);
-    expect(intervals()).not.toContain(false);
-
-    await userEvent.keyboard("{Escape}");
-    await waitFor(() => expect(location()).toBe("/c/prod/events"));
-    await waitFor(() => expect(intervals()).toEqual([false]));
-  });
-
   it("replaces its contents when a reference inside it is clicked", async () => {
     await wrap(POD_PEEK);
     await userEvent.click(
@@ -1028,6 +1012,85 @@ describe("PeekPanel on an object that is gone", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/Nothing owned it/)).toBeNull();
     expect(screen.queryByText(/owned it/)).toBeNull();
+  });
+});
+
+describe("PeekPanel on a pod deleted underneath it", () => {
+  const notFound = () =>
+    Object.assign(
+      new Error(
+        'Kubernetes API error: ApiError: pods "crash-demo-56588f6b8c-8bj9v" not found: NotFound'
+      ),
+      { code: "NOT_FOUND" }
+    );
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  const reads = () => vi.mocked(commands.getPod).mock.calls.length;
+  /** Every read the panel makes, of the pod and of everything around it. */
+  const asked = () =>
+    Object.values(commands).reduce(
+      (sum, command) =>
+        sum + (vi.isMockFunction(command) ? command.mock.calls.length : 0),
+      0
+    );
+
+  beforeEach(() => {
+    mockCluster();
+    vi.useFakeTimers();
+    useWindowActivity.setState({
+      visible: true,
+      focused: true,
+      interactionAt: 0,
+    });
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    useClusterStore.setState({ currentContext: null, isConnected: false });
+  });
+
+  /**
+   * The last check read `refetchInterval` off the observer and passed while
+   * the deleted pod was read every two seconds with the peek open, then on
+   * every focus, every click, the reconnect and the cluster switch after it
+   * closed. This counts the reads, in the order Dana caused them.
+   */
+  it("stops reading a pod at NotFound and reads nothing of it once closed", async () => {
+    await wrap(POD_PEEK);
+    await advance(0);
+    expect(screen.getByText("CrashLoopBackOff")).toBeInTheDocument();
+
+    vi.mocked(commands.getPod).mockRejectedValue(notFound());
+    await advance(REFRESH_INTERVALS.resourceDetail);
+    expect(screen.getByText("This Pod no longer exists.")).toBeInTheDocument();
+    const gone = reads();
+
+    await advance(60_000);
+    act(() => useWindowActivity.setState({ interactionAt: Date.now() }));
+    await advance(10_000);
+    expect(reads()).toBe(gone);
+
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await advance(1_000);
+    expect(location()).toBe("/c/prod/events");
+    const closed = asked();
+
+    act(() => useWindowActivity.setState({ focused: false }));
+    act(() => useWindowActivity.setState({ focused: true }));
+    act(() => useWindowActivity.setState({ interactionAt: Date.now() }));
+    await advance(10_000);
+    act(() => void wrap.client.invalidateQueries());
+    await advance(1_000);
+    act(() => {
+      useClusterStore.setState({ currentContext: "staging" });
+      wrap.client.removeQueries();
+    });
+    await advance(60_000);
+    expect(reads()).toBe(gone);
+    expect(asked()).toBe(closed);
   });
 });
 

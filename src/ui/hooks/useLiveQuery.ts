@@ -37,6 +37,7 @@ import {
   effectiveInterval,
   type RefreshRate,
 } from "@/lib/refresh";
+import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { useWindowActivity } from "@/lib/window-activity";
 
@@ -210,6 +211,7 @@ export function useLiveQueries<T>(options: {
   } = useQueries({
     queries: options.queries.map((query) => ({
       ...query,
+      enabled: surfaceVisible ? query.enabled : false,
       refetchInterval: everyMs,
     })),
     combine: joinParts,
@@ -257,7 +259,7 @@ export function useLiveQueries<T>(options: {
   const wasFocused = useRef(focused);
   useEffect(() => {
     const returned =
-      (visible && !wasVisible.current) || (focused && !wasFocused.current);
+      visible && (!wasVisible.current || (focused && !wasFocused.current));
     wasVisible.current = visible;
     wasFocused.current = focused;
     if (!returned) return;
@@ -284,8 +286,14 @@ export function useLiveQueries<T>(options: {
     refetchers: Array<(options?: RefetchOptions) => Promise<unknown>>;
   }>({ steadyRuns, base, enabled, oldest, refetchers });
   useEffect(() => {
-    group.current = { steadyRuns, base, enabled, oldest, refetchers };
-  }, [steadyRuns, base, enabled, oldest, refetchers]);
+    group.current = {
+      steadyRuns,
+      base,
+      enabled: enabled && surfaceVisible,
+      oldest,
+      refetchers,
+    };
+  }, [steadyRuns, base, enabled, surfaceVisible, oldest, refetchers]);
   useEffect(
     () =>
       useWindowActivity.subscribe((state, previous) => {
@@ -360,15 +368,22 @@ export function useLiveQuery<
 
   const recording = refresh !== false && RECORDED.has(refresh);
   const [steadyRuns, setSteadyRuns] = useState(0);
-  const everyMs = effectiveInterval(base, {
-    visible,
-    focused,
-    steadyRuns,
-    recording,
-  });
+  const [gone, setGone] = useState(false);
+  const everyMs = gone
+    ? false
+    : effectiveInterval(base, {
+        visible,
+        focused,
+        steadyRuns,
+        recording,
+      });
 
+  // Off screen is disabled, not only unpolled: an enabled observer is still
+  // "active", so a reconnect's invalidation, a cluster switch's eviction and
+  // React Query's own triggers read it for a surface nobody can see.
   const query = useQuery({
     ...queryOptions,
+    enabled: surfaceVisible ? queryOptions.enabled : false,
     refetchInterval: everyMs,
   });
 
@@ -376,6 +391,7 @@ export function useLiveQuery<
     dataUpdatedAt,
     errorUpdatedAt,
     data,
+    error,
     refetch,
     isLoading,
     fetchStatus,
@@ -395,6 +411,9 @@ export function useLiveQuery<
   // keeps the last data, so the outcome is compared too: an answer after a
   // refusal is a change even where it repeats the one before the refusal.
   const failed = status === "error";
+  // The object is gone, and asking again every few seconds only logs it
+  // again. A mount or an explicit refetch still asks.
+  const notFound = failed && errorCode(error) === ERROR_CODES.NOT_FOUND;
   const seenAt = useRef(0);
   const seenData = useRef<TData | undefined>(undefined);
   const seenFailed = useRef(false);
@@ -408,7 +427,8 @@ export function useLiveQuery<
     seenData.current = data;
     seenFailed.current = failed;
     setSteadyRuns((runs) => (identical ? runs + 1 : 0));
-  }, [settledAt, data, failed]);
+    setGone(notFound);
+  }, [settledAt, data, failed, notFound]);
 
   // Coming back. Both transitions refetch, and they are separate transitions:
   // a window can become visible without taking focus, and can take focus
@@ -417,7 +437,7 @@ export function useLiveQuery<
   const wasFocused = useRef(focused);
   useEffect(() => {
     const returned =
-      (visible && !wasVisible.current) || (focused && !wasFocused.current);
+      visible && (!wasVisible.current || (focused && !wasFocused.current));
     wasVisible.current = visible;
     wasFocused.current = focused;
     if (!returned) return;
@@ -426,9 +446,10 @@ export function useLiveQuery<
     // and the query's own mount fetch is already on its way. A query held back
     // by `enabled` has nothing to correct either, and `refetch` would go around
     // the gate that is holding it.
-    if (seenAt.current === 0 || !enabled) return;
-    void refetch();
-  }, [visible, focused, enabled, refetch]);
+    if (seenAt.current === 0 || !enabled || gone) return;
+    // Joins the read a re-enabled observer has already started.
+    void refetch({ cancelRefetch: false });
+  }, [visible, focused, enabled, gone, refetch]);
 
   // The reader touching the window retires whatever a still screen had
   // concluded. Subscribed imperatively rather than selected: an interaction
@@ -440,8 +461,8 @@ export function useLiveQuery<
   useEffect(() => {
     steadyRef.current = steadyRuns;
     baseRef.current = base;
-    enabledRef.current = enabled;
-  }, [steadyRuns, base, enabled]);
+    enabledRef.current = enabled && surfaceVisible && !gone;
+  }, [steadyRuns, base, enabled, surfaceVisible, gone]);
   useEffect(
     () =>
       useWindowActivity.subscribe((state, previous) => {

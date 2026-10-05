@@ -10,6 +10,9 @@ import { usePeekWidth } from "./peek-width";
 import { SurfaceVisibility, useSurfaceVisible } from "@/lib/surface-visibility";
 import { ownView } from "../-object/attachment";
 
+/** The sheet's `data-[state=closed]:duration-300`, with room to finish. */
+const SLIDE_OUT_MS = 500;
+
 /**
  * The right-hand drawer a reference opens.
  *
@@ -27,6 +30,13 @@ export function PeekPanel() {
   if (target && target !== previous) setPrevious(target);
   const shown = target ?? previous;
   const visible = useSurfaceVisible();
+  // Once the slide-out has played the body goes, and every read under it
+  // with it: a mounted body is still asked again on a reconnect or a switch.
+  useEffect(() => {
+    if (target || !previous) return;
+    const timer = window.setTimeout(() => setPrevious(null), SLIDE_OUT_MS);
+    return () => window.clearTimeout(timer);
+  }, [target, previous]);
   // The tab lives above the target, not inside it: clicking down a list of
   // pods with Logs open should stay on Logs rather than resetting each time.
   const [requestedTab, setRequestedTab] = useState<PeekTabId>("overview");
