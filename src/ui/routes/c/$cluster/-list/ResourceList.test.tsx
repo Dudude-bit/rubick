@@ -8,7 +8,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { type ReactElement } from "react";
-import { act, screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -58,6 +58,7 @@ const drawRerenderable = draw;
 const list = (props: {
   data?: Item[];
   error?: Error | null;
+  isLoading?: boolean;
   unread?: UnreadNamespace[];
   queryKey?: string[];
   queryFn?: () => Promise<Scoped<Item>>;
@@ -176,6 +177,45 @@ describe("a list whose rows come from outside", () => {
 
     expect(screen.getByText("api-7bcd")).toBeVisible();
     expect(screen.queryByText(/Could not read/)).not.toBeInTheDocument();
+  });
+});
+
+describe("the count beside the title", () => {
+  const counted = () =>
+    within(
+      screen.getByRole("heading", { name: "Pods" }).parentElement!
+    ).queryByTestId("section-count")?.textContent ?? null;
+
+  /**
+   * Under All namespaces a namespace-only reader saw "Pods 0" above the
+   * sentence saying the list was refused. Fails if a refused read is counted.
+   */
+  it("draws no number beside a list it was refused", async () => {
+    await list({ data: [], error: new Error("pods is forbidden: RBAC") });
+
+    expect(screen.getByText(/forbidden/)).toBeVisible();
+    expect(counted()).toBeNull();
+  });
+
+  /** Fails if a read that broke is counted as an empty one. */
+  it("draws no number beside a list that could not be read", async () => {
+    await list({ data: [], error: new Error("connection reset by peer") });
+
+    expect(counted()).toBeNull();
+  });
+
+  /** Fails if the first read, still running, is counted as nothing found. */
+  it("draws no number while the first read is still running", async () => {
+    await list({ data: [], isLoading: true });
+
+    expect(counted()).toBeNull();
+  });
+
+  /** Fails if the rule above swallowed a real zero too. */
+  it("counts a list that answered with nothing as 0", async () => {
+    await list({ data: [] });
+
+    expect(counted()).toBe("0");
   });
 });
 

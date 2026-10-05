@@ -263,13 +263,17 @@ export function Events() {
       <SectionHeader
         title="Events"
         description={<KindAbout kind={ResourceType.Event} />}
-        count={summarise(
-          t,
-          warningCount,
-          normalCount,
-          windowFull ? eventLimit : null,
-          view === "stories" ? stories.length : null
-        )}
+        count={
+          showSkeleton || (failed && pool.length === 0)
+            ? undefined
+            : summarise(
+                t,
+                warningCount,
+                normalCount,
+                windowFull ? eventLimit : null,
+                view === "stories" ? stories.length : null
+              )
+        }
         actions={
           <>
             <span

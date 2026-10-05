@@ -135,7 +135,11 @@ export function SectionHeader({
         <h2 className="text-[13px] font-semibold tracking-tight text-fg">
           {title}
         </h2>
-        {count != null && <span className="text-xs text-fg-fnt">{count}</span>}
+        {count != null && (
+          <span data-testid="section-count" className="text-xs text-fg-fnt">
+            {count}
+          </span>
+        )}
         {actions && (
           <div className="ml-auto flex items-center gap-1">{actions}</div>
         )}

@@ -7,6 +7,7 @@ const store = vi.hoisted(() => ({
 const page = vi.hoisted(() => ({
   routes: [] as unknown[],
   refused: true,
+  loading: false,
   backingError: null as Error | null,
 }));
 vi.mock("@/stores/clusterStore", () => ({
@@ -36,7 +37,7 @@ vi.mock("../../../../-object/useGatewayRoutes", () => ({
     routes: page.routes,
     unread: [],
     refusedKinds: page.refused ? [{ kind: "TCPRoute", error: refused }] : [],
-    isLoading: false,
+    isLoading: page.loading,
     error: null,
     dataUpdatedAt: 0,
     live: false,
@@ -133,5 +134,19 @@ describe("the routes page opened on one route kind", () => {
 
     expect(await screen.findAllByText("web")).not.toHaveLength(0);
     expect(screen.queryByText("Nothing matches the filter.")).toBeNull();
+  });
+});
+
+describe("the routes page before its first answer", () => {
+  /** Fails if a read still on its way is counted as no routes. */
+  it("draws no count while the routes are still being read", async () => {
+    page.refused = false;
+    page.backingError = null;
+    page.routes = [];
+    page.loading = true;
+    await renderRoutes();
+
+    expect(screen.queryByTestId("section-count")).toBeNull();
+    page.loading = false;
   });
 });

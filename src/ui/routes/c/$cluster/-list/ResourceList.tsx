@@ -28,7 +28,7 @@ import {
 } from "@/lib/read-deadline";
 import { useNowSeconds } from "@/hooks/useNow";
 import { Button } from "@/components/ui/button";
-import { FolderOpen, Lock, TriangleAlert } from "lucide-react";
+import { FolderOpen, TriangleAlert } from "lucide-react";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { NO_TABLE, tableSection } from "@/components/share/table-share";
@@ -50,6 +50,7 @@ import {
 import type { ListQuery, Scoped, UnreadNamespace } from "@/generated/types";
 import { useListableIn } from "../-shell/useListAccess";
 import { UnreadNamespaces } from "./UnreadNamespaces";
+import { UnreadList } from "./UnreadList";
 import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
 
@@ -432,6 +433,12 @@ export function ResourceList<
   // Rows that are not the scope's whole: a namespace unread, a read cut
   // short, or the last scope's answer still standing in.
   const partial = ranOutOfTime || unread.length > 0 || placeholder;
+  const nothingRead =
+    resources.length === 0 &&
+    (failed !== null ||
+      loading ||
+      !!resyncing ||
+      (shouldUseQuery ? queryResult.data === undefined : data === undefined));
 
   // Refused across the whole cluster is not refused everywhere: a namespace
   // the reader has may still list it, and saying "no permission" hides that.
@@ -509,7 +516,7 @@ export function ResourceList<
           // derived from a source the app has just said it could not read
           // is a number about nothing, printed directly above the sentence
           // admitting as much. A namespace unread leaves it no total either.
-          count={partial ? undefined : resources.length}
+          count={partial || nothingRead ? undefined : resources.length}
           description={
             description ?? (listKind && <KindAbout kind={listKind} />)
           }
@@ -629,20 +636,16 @@ export function ResourceList<
           </div>
         </div>
       ) : failed && resources.length === 0 ? (
-        <div className="max-w-[68ch] py-8">
-          <p className="flex items-center gap-1.5 text-xs text-err">
-            {isRefusal(failed) && (
-              <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
-            )}
-            {/* A refusal is not a failure, and saying "could not read" about
-                one invites a retry that will be refused the same way. */}
-            {isRefusal(failed)
+        <UnreadList
+          error={failed}
+          // A refusal is not a failure, and saying "could not read" about
+          // one invites a retry that will be refused the same way.
+          words={
+            isRefusal(failed)
               ? refusalWords
-              : t("empty", "couldNotReadInScope", { label: emptyStateLabel })}
-          </p>
-          <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-            {verbatim(failed.message)}
-          </p>
+              : t("empty", "couldNotReadInScope", { label: emptyStateLabel })
+          }
+        >
           {refusedAcrossCluster && (
             <div className="mt-3 flex flex-wrap items-center gap-3">
               {listableIn.length > 0 && (
@@ -662,7 +665,7 @@ export function ResourceList<
               </Button>
             </div>
           )}
-        </div>
+        </UnreadList>
       ) : (
         <DataTable
           columns={resolvedColumns}

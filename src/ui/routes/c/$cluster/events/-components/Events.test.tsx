@@ -381,6 +381,11 @@ describe("stories", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/Nothing happened in/)).not.toBeInTheDocument();
     expect(document.body.textContent).toContain("forbidden");
+    // "0 stories · none" beside the refusal said the opposite of it.
+    const heading = screen.getByRole("heading", { name: "Events" });
+    expect(
+      within(heading.parentElement!).queryByTestId("section-count")
+    ).toBeNull();
   });
 
   /**

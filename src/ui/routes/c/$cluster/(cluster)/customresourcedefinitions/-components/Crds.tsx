@@ -18,6 +18,7 @@ import { describeDeletion } from "../../../-peek/peek-actions";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ResourceListHeader } from "../../../-list/ResourceListHeader";
+import { UnreadList } from "../../../-list/UnreadList";
 import { KindAbout } from "@/components/object/KindAbout";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { createAgeColumn } from "../../../-list/columns";
@@ -217,9 +218,11 @@ export function Crds() {
         title="Custom Resource Definitions"
         description={<KindAbout kind={ResourceType.CustomResourceDefinition} />}
         count={
-          crds.length === 0
-            ? t("empty", "noneInline")
-            : `${crds.length} · ${t("count", "apiGroups", { n: crdGroups.length })}`
+          isLoading || crdsError
+            ? undefined
+            : crds.length === 0
+              ? t("empty", "noneInline")
+              : `${crds.length} · ${t("count", "apiGroups", { n: crdGroups.length })}`
         }
         actions={
           <ShareScreenAction
@@ -236,36 +239,37 @@ export function Crds() {
           DataTable — search, density toggle, pagination — inside every
           collapsible API group, so the same chrome appeared a dozen times
           over. The group is a caption row instead. */}
-      <DataTable
-        columns={columns}
-        data={crds}
-        fill
-        pageKeys
-        isLoading={isLoading}
-        searchPlaceholder={t("action", "searchKindPlaceholder", {
-          kind: "CRDs",
-        })}
-        searchParam="q"
-        getRowId={getCrdRowId}
-        getRowHref={(row) => hrefOf(crdLink(row.name))}
-        grouping={byNamespace<CrdListItem>("CRDs")}
-        rowLabel="CRDs"
-        share={{
-          title: "Custom Resource Definitions",
-          kind: ResourceType.CustomResourceDefinition,
-        }}
-        // A read that failed leaves `crdGroups` empty exactly as a cluster
-        // with no CRDs does, and the two mean opposite things: one is an
-        // answer, the other is that nobody could look. Since the deadline
-        // landed, the second is routine rather than theoretical.
-        emptyMessage={
-          crdsError
-            ? isRefusal(crdsError)
+      {crdsError && crds.length === 0 ? (
+        <UnreadList
+          error={crdsError}
+          words={
+            isRefusal(crdsError)
               ? t("nav", "noListAccess")
               : t("empty", "couldNotReadInScope", { label: "CRDs" })
-            : t("empty", "noCrdsInCluster")
-        }
-      />
+          }
+        />
+      ) : (
+        <DataTable
+          columns={columns}
+          data={crds}
+          fill
+          pageKeys
+          isLoading={isLoading}
+          searchPlaceholder={t("action", "searchKindPlaceholder", {
+            kind: "CRDs",
+          })}
+          searchParam="q"
+          getRowId={getCrdRowId}
+          getRowHref={(row) => hrefOf(crdLink(row.name))}
+          grouping={byNamespace<CrdListItem>("CRDs")}
+          rowLabel="CRDs"
+          share={{
+            title: "Custom Resource Definitions",
+            kind: ResourceType.CustomResourceDefinition,
+          }}
+          emptyMessage={t("empty", "noCrdsInCluster")}
+        />
+      )}
 
       <DangerousConfirmDialog
         open={!!deleteTarget}

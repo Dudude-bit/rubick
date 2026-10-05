@@ -8,7 +8,7 @@
 
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -82,6 +82,25 @@ describe("the CRD list when the read did not answer", () => {
     expect(
       screen.queryByText(/has no custom resource definitions/i)
     ).toBeNull();
+  });
+
+  /**
+   * The header said "none" and the footer "0 CRDs" around the refusal. Fails
+   * if either counts a read nobody could make.
+   */
+  it("counts nothing, above or below, for a refused read", async () => {
+    listCrds.mockRejectedValue(
+      new Error("customresourcedefinitions is forbidden (code: 403)")
+    );
+    await draw();
+    await screen.findByText(/do not have permission to list/i);
+    const heading = screen.getByRole("heading", {
+      name: "Custom Resource Definitions",
+    });
+    expect(
+      within(heading.parentElement!).queryByTestId("section-count")
+    ).toBeNull();
+    expect(screen.queryByText(/\b0 CRDs\b/)).toBeNull();
   });
 
   it("still says the cluster has none when that is the answer", async () => {

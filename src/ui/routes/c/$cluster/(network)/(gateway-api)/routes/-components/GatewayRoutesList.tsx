@@ -441,7 +441,8 @@ export function GatewayRoutesList() {
           // "could not read" there, and a "0" in the header would contradict
           // it. These are the same states the body special-cases below. Nor
           // beside an unread namespace: the rows are not the scope's total.
-          (error && routes.length === 0) ||
+          ((error || isLoading) && routes.length === 0) ||
+          detectionLoading ||
           detectionError ||
           unread.length > 0 ||
           refusedKinds.length > 0 ? undefined : (
