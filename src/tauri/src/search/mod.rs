@@ -25,13 +25,14 @@ pub use types::{
 
 use crate::client::K8sClientManager;
 use crate::error::{Error, Result};
-use crate::ownership::{ClusterIndex, KindKey};
+use crate::ownership::{ClusterIndex, KindKey, Reading};
 use crate::state::streams::Streams;
 use crate::state::AppEvent;
 use crate::utils::generate_id;
 use futures::future::{BoxFuture, Shared};
 use futures::{FutureExt, StreamExt};
 use kube::api::{Api, DynamicObject, ListParams};
+use kube::discovery::ApiResource;
 use kube::{Client, ResourceExt};
 use parking_lot::Mutex;
 use std::collections::{BTreeSet, HashMap};
@@ -53,8 +54,66 @@ const CONTEXT_BUDGET: Duration = Duration::from_secs(15);
 /// listener before starting anyway.
 const SUBSCRIBE_GATE_TIMEOUT: Duration = Duration::from_secs(5);
 
-/// One kind's names as read: `None` where the cluster does not serve it.
-type Read = std::result::Result<Option<Arc<Listed>>, Arc<Error>>;
+/// How long a search that reads every kind waits for the ownership index to
+/// finish listing the ones it is still listing.
+const INDEX_WAIT: Duration = Duration::from_secs(10);
+
+/// How often a kind still listing in the index is looked at again.
+const INDEX_POLL: Duration = Duration::from_millis(300);
+
+/// One kind's names as read, or why they could not be.
+type Read = std::result::Result<Found, Arc<Error>>;
+
+#[derive(Debug, Clone)]
+enum Found {
+    /// The cluster does not serve this kind: there is nothing of it to match.
+    NotServed,
+    /// The ownership index is still listing it.
+    Loading,
+    Listed(Arc<Listed>),
+}
+
+/// A kind to read: one of the table's, or one only the ownership index knows.
+#[derive(Clone)]
+enum Wanted {
+    Table(&'static SearchableKind),
+    Indexed {
+        resource: ApiResource,
+        namespaced: bool,
+    },
+}
+
+impl Wanted {
+    fn label(&self) -> String {
+        match self {
+            Self::Table(kind) => kind.label.to_string(),
+            Self::Indexed { resource, .. } => resource.kind.clone(),
+        }
+    }
+
+    fn key(&self) -> (String, String) {
+        match self {
+            Self::Table(kind) => kind.key(),
+            Self::Indexed { resource, .. } => (resource.group.clone(), resource.plural.clone()),
+        }
+    }
+
+    fn cluster_scoped(&self) -> bool {
+        match self {
+            Self::Table(kind) => kind.cluster_scoped,
+            Self::Indexed { namespaced, .. } => !namespaced,
+        }
+    }
+
+    fn named(&self) -> SearchedKind {
+        let (group, plural) = self.key();
+        SearchedKind {
+            kind: self.label(),
+            group,
+            plural,
+        }
+    }
+}
 
 #[derive(Debug)]
 struct Listed {
@@ -63,8 +122,8 @@ struct Listed {
     truncated: bool,
 }
 
-/// Which cluster, kind and namespace one list was of.
-type ListKey = (String, &'static str, Option<String>);
+/// Which cluster, group, plural and namespace one list was of.
+type ListKey = (String, String, String, Option<String>);
 
 /// The lists one palette session has read, each once. A read is its own task,
 /// so a keystroke that supersedes the search does not throw it away half done.
@@ -98,8 +157,12 @@ impl SessionLists {
 #[derive(Clone, Default)]
 struct Sources {
     lists: Option<Arc<SessionLists>>,
-    /// The ownership index of this context, where it is already running.
+    /// The ownership index of this context, where it is running.
     index: Option<(String, Arc<ClusterIndex>)>,
+    /// Read every kind the index watches, not only the table's.
+    everything: bool,
+    /// How long to wait for the index's kinds still listing.
+    index_wait: Duration,
 }
 
 /// Owns every in-flight search.
@@ -195,11 +258,25 @@ impl SearchManager {
         let limit = plan::clamp_limit(request.limit_per_context);
         let namespace = crate::utils::normalize_optional_namespace(request.namespace.clone());
 
+        let index = match current.as_deref() {
+            Some(context) if request.everything && names.iter().any(|name| name == context) => {
+                let scope = namespace.clone().map(|ns| vec![ns]);
+                Some((
+                    context.to_string(),
+                    state.ownership.ensure(state, scope).await?,
+                ))
+            }
+            Some(context) => state
+                .ownership
+                .running(context)
+                .map(|index| (context.to_string(), index)),
+            None => None,
+        };
         let sources = Sources {
             lists: state.search_manager.lists_for(request.session.as_deref()),
-            index: current
-                .as_deref()
-                .and_then(|context| Some((context.to_string(), state.ownership.running(context)?))),
+            index,
+            everything: request.everything,
+            index_wait: INDEX_WAIT,
         };
         let search_id = state
             .search_manager
@@ -316,12 +393,96 @@ impl SearchManager {
 }
 
 /// What one cluster said, besides whether it finished.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct Answer {
     matched: u32,
     truncated: bool,
     searched: Vec<SearchedKind>,
     unreadable: Vec<UnreadKind>,
+    loading: Vec<SearchedKind>,
+}
+
+impl Answer {
+    /// Files one kind's read; the hits it adds, once the cap allows them.
+    fn absorb(
+        &mut self,
+        kind: &Wanted,
+        read: Read,
+        query: &str,
+        context: &str,
+        limit: u32,
+    ) -> Vec<SearchHit> {
+        match read {
+            Ok(Found::NotServed) => Vec::new(),
+            Ok(Found::Loading) => {
+                self.loading.push(kind.named());
+                Vec::new()
+            }
+            Ok(Found::Listed(listed)) => {
+                self.truncated |= listed.truncated;
+                let named = kind.named();
+                let remaining = limit.saturating_sub(self.matched) as usize;
+                let mut hits: Vec<SearchHit> = listed
+                    .names
+                    .iter()
+                    .filter(|(name, namespace)| plan::matches(query, name, namespace.as_deref()))
+                    .map(|(name, namespace)| SearchHit {
+                        context: context.to_string(),
+                        kind: named.kind.clone(),
+                        group: named.group.clone(),
+                        plural: named.plural.clone(),
+                        name: name.clone(),
+                        namespace: namespace.clone(),
+                    })
+                    .collect();
+                self.searched.push(named);
+                if hits.len() > remaining {
+                    hits.truncate(remaining);
+                    self.truncated = true;
+                }
+                self.matched += hits.len() as u32;
+                hits
+            }
+            Err(error) => {
+                let (reason, message) = describe_failure(&error);
+                let named = kind.named();
+                self.unreadable.push(UnreadKind {
+                    kind: named.kind,
+                    group: named.group,
+                    plural: named.plural,
+                    reason,
+                    message,
+                });
+                Vec::new()
+            }
+        }
+    }
+}
+
+/// The kinds one cluster is asked about: the table's, and with `everything`
+/// each other kind its ownership index watches.
+fn wanted(
+    kinds: &[&'static SearchableKind],
+    index: Option<&ClusterIndex>,
+    everything: bool,
+) -> Vec<Wanted> {
+    let mut wanted: Vec<Wanted> = kinds.iter().copied().map(Wanted::Table).collect();
+    let Some(index) = index.filter(|_| everything) else {
+        return wanted;
+    };
+    let table: BTreeSet<(String, String)> =
+        SEARCHABLE_KINDS.iter().map(SearchableKind::key).collect();
+    wanted.extend(
+        index
+            .kinds()
+            .into_iter()
+            .filter(|(key, _, _)| !table.contains(&(key.group.clone(), key.plural.clone())))
+            .map(|(_, resource, namespaced)| Wanted::Indexed {
+                resource,
+                namespaced,
+            }),
+    );
+    wanted
 }
 
 /// One cluster's share of a search: get a client (connecting first if
@@ -342,6 +503,7 @@ async fn search_context(
     let event_tx = &event_tx;
     let search_id = search_id.as_str();
     let context = context.as_str();
+    let wait_until = tokio::time::Instant::now() + sources.index_wait;
 
     let Some(client) = resolve_client(event_tx, &client_manager, search_id, context).await else {
         return;
@@ -350,89 +512,88 @@ async fn search_context(
         .index
         .filter(|(indexed, _)| indexed == context)
         .map(|(_, index)| index);
+    let read = |kind: Wanted, index: Option<Arc<ClusterIndex>>| {
+        names_of(
+            client.clone(),
+            client_manager.clone(),
+            kind,
+            namespace.clone(),
+            context.to_string(),
+            index,
+            sources.lists.clone(),
+        )
+    };
+    let send = |hits: Vec<SearchHit>| {
+        if !hits.is_empty() {
+            let _ = event_tx.send(AppEvent::SearchHits {
+                search_id: search_id.to_string(),
+                context: context.to_string(),
+                hits,
+            });
+        }
+    };
 
     // Built as a plain Vec of futures rather than `iter().map(closure)`:
     // a closure that returns a future borrowing its argument needs an
     // HRTB rustc cannot infer here, and the error it produces
     // ("implementation of FnOnce is not general enough") points at the
     // spawn site instead of the closure.
-    let mut kind_futures = Vec::with_capacity(kinds.len());
-    for kind in kinds.iter().copied() {
-        let read = names_of(
-            client.clone(),
-            client_manager.clone(),
-            kind,
-            namespace.clone(),
-            context.to_string(),
-            index.clone(),
-            sources.lists.clone(),
-        );
-        kind_futures.push(async move { (kind, read.await) });
+    let mut kind_futures = Vec::new();
+    for kind in wanted(&kinds, index.as_deref(), sources.everything) {
+        let found = read(kind.clone(), index.clone());
+        kind_futures.push(async move { (kind, found.await) });
     }
     let mut stream =
         futures::stream::iter(kind_futures).buffer_unordered(plan::MAX_KIND_CONCURRENCY);
 
     let mut answer = Answer::default();
-    while let Some((kind, read)) = stream.next().await {
-        let (group, plural) = kind.key();
-        match read {
-            Ok(None) => {}
-            Ok(Some(listed)) => {
-                answer.truncated |= listed.truncated;
-                let remaining = limit.saturating_sub(answer.matched) as usize;
-                let mut hits: Vec<SearchHit> = listed
-                    .names
-                    .iter()
-                    .filter(|(name, namespace)| plan::matches(&query, name, namespace.as_deref()))
-                    .map(|(name, namespace)| SearchHit {
-                        context: context.to_string(),
-                        kind: kind.label.to_string(),
-                        group: group.clone(),
-                        plural: plural.clone(),
-                        name: name.clone(),
-                        namespace: namespace.clone(),
-                    })
-                    .collect();
-                answer.searched.push(SearchedKind {
-                    kind: kind.label.to_string(),
-                    group,
-                    plural,
-                });
-                if hits.len() > remaining {
-                    hits.truncate(remaining);
-                    answer.truncated = true;
-                }
-                if hits.is_empty() {
-                    continue;
-                }
-                answer.matched += hits.len() as u32;
-                let _ = event_tx.send(AppEvent::SearchHits {
-                    search_id: search_id.to_string(),
-                    context: context.to_string(),
-                    hits,
-                });
-            }
-            Err(error) => {
-                tracing::debug!(
-                    "Search {search_id}: {context}/{} failed: {error}",
-                    kind.label
-                );
-                let (reason, message) = describe_failure(&error);
-                answer.unreadable.push(UnreadKind {
-                    kind: kind.label.to_string(),
-                    group,
-                    plural,
-                    reason,
-                    message,
-                });
-            }
+    let mut waiting: Vec<Wanted> = Vec::new();
+    while let Some((kind, found)) = stream.next().await {
+        if matches!(found, Ok(Found::Loading)) {
+            waiting.push(kind);
+            continue;
         }
+        if let Err(error) = &found {
+            tracing::debug!(
+                "Search {search_id}: {context}/{} failed: {error}",
+                kind.label()
+            );
+        }
+        send(answer.absorb(&kind, found, &query, context, limit));
     }
     drop(stream);
 
+    // Kinds the index is still listing are waited for, and said so while
+    // they are: a list that has not finished has not said there is nothing.
+    if !waiting.is_empty() {
+        let mut progress = answer.clone();
+        progress.loading = waiting.iter().map(Wanted::named).collect();
+        emit_status(
+            event_tx,
+            search_id,
+            context,
+            SearchContextStatus::Searching,
+            None,
+            None,
+            progress,
+        );
+    }
+    while !waiting.is_empty() && tokio::time::Instant::now() < wait_until {
+        tokio::time::sleep(INDEX_POLL).await;
+        let mut still = Vec::new();
+        for kind in waiting {
+            match read(kind.clone(), index.clone()).await {
+                Ok(Found::Loading) => still.push(kind),
+                found => send(answer.absorb(&kind, found, &query, context, limit)),
+            }
+        }
+        waiting = still;
+    }
+    answer.loading = waiting.iter().map(Wanted::named).collect();
+
     // Every kind refused: this cluster produced no answer at all, so
     // it must not read as "found nothing".
-    if answer.searched.is_empty() {
+    if answer.searched.is_empty() && answer.loading.is_empty() {
         if let Some(first) = answer.unreadable.first() {
             let (reason, message) = (first.reason, first.message.clone());
             emit_status(
@@ -464,27 +625,42 @@ async fn search_context(
 
 /// One kind's names: from the ownership index where it already reads the
 /// kind, from this session's list where one was made, from the cluster else.
+/// A kind only the index knows and is still listing is `Loading`.
 fn names_of(
     client: Client,
     client_manager: Arc<K8sClientManager>,
-    kind: &'static SearchableKind,
+    kind: Wanted,
     namespace: Option<String>,
     context: String,
     index: Option<Arc<ClusterIndex>>,
     lists: Option<Arc<SessionLists>>,
 ) -> BoxFuture<'static, Read> {
-    let namespace = if kind.cluster_scoped { None } else { namespace };
+    let namespace = if kind.cluster_scoped() {
+        None
+    } else {
+        namespace
+    };
+    let (group, plural) = kind.key();
     if let Some(index) = index {
-        let (group, plural) = kind.key();
-        if let Ok(names) = index.names(&KindKey { group, plural }, namespace.as_deref()) {
-            return futures::future::ready(Ok(Some(Arc::new(Listed {
-                names,
-                truncated: false,
-            }))))
-            .boxed();
+        let key = KindKey {
+            group: group.clone(),
+            plural: plural.clone(),
+        };
+        match index.names(&key, namespace.as_deref()) {
+            Ok(names) => {
+                return futures::future::ready(Ok(Found::Listed(Arc::new(Listed {
+                    names,
+                    truncated: false,
+                }))))
+                .boxed();
+            }
+            Err(Reading::Syncing) if matches!(kind, Wanted::Indexed { .. }) => {
+                return futures::future::ready(Ok(Found::Loading)).boxed();
+            }
+            Err(_) => {}
         }
     }
-    let key: ListKey = (context.clone(), kind.label, namespace.clone());
+    let key: ListKey = (context.clone(), group, plural, namespace.clone());
     let fetch = move || list_kind(client, client_manager, kind, namespace, context);
     match lists {
         Some(lists) => lists.read(key, fetch).boxed(),
@@ -553,27 +729,30 @@ async fn resolve_client(
 async fn list_kind(
     client: Client,
     client_manager: Arc<K8sClientManager>,
-    kind: &'static SearchableKind,
+    kind: Wanted,
     namespace: Option<String>,
     context: String,
 ) -> Read {
-    let (api_resource, served_in) = match &kind.coordinates {
-        types::Coordinates::Typed(resource) => (resource(), None),
-        types::Coordinates::Served { group, plural } => {
-            // Not installed is an answer: there is nothing of it to match.
-            match client_manager
-                .served()
-                .resource(&context, &client, group, plural)
-                .await
-                .map_err(Arc::new)?
-            {
-                Some(served) => (served.resource, Some(*group)),
-                None => return Ok(None),
+    let (api_resource, served_in) = match &kind {
+        Wanted::Indexed { resource, .. } => (resource.clone(), None),
+        Wanted::Table(table) => match &table.coordinates {
+            types::Coordinates::Typed(resource) => (resource(), None),
+            types::Coordinates::Served { group, plural } => {
+                // Not installed is an answer: there is nothing of it to match.
+                match client_manager
+                    .served()
+                    .resource(&context, &client, group, plural)
+                    .await
+                    .map_err(Arc::new)?
+                {
+                    Some(served) => (served.resource, Some(*group)),
+                    None => return Ok(Found::NotServed),
+                }
             }
-        }
+        },
     };
     let api: Api<DynamicObject> = match namespace.as_deref() {
-        Some(ns) if !kind.cluster_scoped => Api::namespaced_with(client, ns, &api_resource),
+        Some(ns) if !kind.cluster_scoped() => Api::namespaced_with(client, ns, &api_resource),
         _ => Api::all_with(client, &api_resource),
     };
 
@@ -597,7 +776,7 @@ async fn list_kind(
         .as_deref()
         .is_some_and(|token| !token.is_empty());
 
-    Ok(Some(Arc::new(Listed {
+    Ok(Found::Listed(Arc::new(Listed {
         names: list
             .items
             .iter()
@@ -626,6 +805,7 @@ fn emit_status(
         truncated: answer.truncated,
         searched: answer.searched,
         unreadable: answer.unreadable,
+        loading: answer.loading,
     });
 }
 
@@ -744,13 +924,13 @@ mod tests {
         let answer = list_kind(
             client,
             Arc::new(K8sClientManager::new()),
-            gateway_kind("TCPRoute"),
+            Wanted::Table(gateway_kind("TCPRoute")),
             None,
             "kind".to_string(),
         )
         .await
         .expect("an answer");
-        assert!(answer.is_none());
+        assert!(matches!(answer, Found::NotServed));
         assert!(
             !hits
                 .lock()
@@ -764,7 +944,7 @@ mod tests {
         assert!(list_kind(
             refused,
             Arc::new(K8sClientManager::new()),
-            gateway_kind("TCPRoute"),
+            Wanted::Table(gateway_kind("TCPRoute")),
             None,
             "kind".to_string(),
         )
@@ -798,7 +978,7 @@ mod tests {
             list_kind(
                 client.clone(),
                 client_manager.clone(),
-                gateway_kind("HTTPRoute"),
+                Wanted::Table(gateway_kind("HTTPRoute")),
                 None,
                 "kind".to_string(),
             )
@@ -941,17 +1121,20 @@ mod tests {
             match event {
                 AppEvent::SearchHits { hits: more, .. } => hits.extend(more),
                 AppEvent::SearchStatus {
+                    status,
                     matched,
                     truncated,
                     searched,
                     unreadable,
+                    loading,
                     ..
-                } => {
+                } if status != SearchContextStatus::Searching => {
                     answer = Answer {
                         matched,
                         truncated,
                         searched,
                         unreadable,
+                        loading,
                     };
                 }
                 _ => {}
@@ -1004,7 +1187,7 @@ mod tests {
         let manager = &state.search_manager;
         let session = |id: &str| Sources {
             lists: manager.lists_for(Some(id)),
-            index: None,
+            ..Sources::default()
         };
 
         for query in ["ma", "mar", "marco"] {
@@ -1033,16 +1216,19 @@ mod tests {
         };
         let index = ClusterIndex::holding(
             (*client).clone(),
-            &[(key("serviceaccounts"), &[("marco", Some("team"))])],
-            &[key("pods")],
+            &[
+                ("ServiceAccount", key("serviceaccounts")),
+                ("Pod", key("pods")),
+            ],
         );
+        index.go_live(&key("serviceaccounts"), &[("marco", Some("team"))]);
         let (hits, answer) = statuses(
             &state,
             "marco",
             plan::resolve_kinds(Some(&["Pod".into(), "ServiceAccount".into()])).unwrap(),
             Sources {
-                lists: None,
                 index: Some(("fake".to_string(), index)),
+                ..Sources::default()
             },
         )
         .await;
@@ -1052,6 +1238,99 @@ mod tests {
         let asked = asked.lock().unwrap();
         assert!(!asked.contains_key("/api/v1/serviceaccounts"));
         assert_eq!(asked.get("/api/v1/pods"), Some(&1));
+    }
+
+    fn widgets() -> KindKey {
+        KindKey {
+            group: "demo.example.com".to_string(),
+            plural: "widgets".to_string(),
+        }
+    }
+
+    async fn everything(wait: Duration, live_after: Option<Duration>) -> (Vec<SearchHit>, Answer) {
+        use crate::client::served::{test_server::connected, ServedIndex};
+
+        let (state, _) = connected(ServedIndex::default(), pods_and_accounts).await;
+        let client = state.client_manager.get_client("fake").unwrap();
+        let index = ClusterIndex::holding((*client).clone(), &[("Widget", widgets())]);
+        if let Some(after) = live_after {
+            let index = index.clone();
+            tokio::spawn(async move {
+                tokio::time::sleep(after).await;
+                index.go_live(&widgets(), &[("marco-widget", Some("team"))]);
+            });
+        }
+        statuses(
+            &state,
+            "marco",
+            plan::resolve_kinds(Some(&["ServiceAccount".into()])).unwrap(),
+            Sources {
+                index: Some(("fake".to_string(), index)),
+                everything: true,
+                index_wait: wait,
+                ..Sources::default()
+            },
+        )
+        .await
+    }
+
+    /// Searching every kind reads the ones only the ownership index knows,
+    /// a custom resource among them, and waits for one still listing rather
+    /// than calling it empty.
+    #[tokio::test]
+    async fn searching_every_kind_waits_for_a_kind_the_index_is_still_listing() {
+        let (hits, answer) =
+            everything(Duration::from_secs(3), Some(Duration::from_millis(200))).await;
+        assert!(
+            hits.iter().any(|hit| hit.kind == "Widget"
+                && hit.group == "demo.example.com"
+                && hit.name == "marco-widget"),
+            "the widget the index finished listing: {hits:?}"
+        );
+        assert!(answer.loading.is_empty());
+        assert!(answer.searched.iter().any(|kind| kind.kind == "Widget"));
+    }
+
+    /// A kind still listing when the wait runs out is named as loading, and
+    /// the cluster still answers for what it read: neither "no widgets" nor
+    /// a failed cluster.
+    #[tokio::test]
+    async fn a_kind_still_listing_when_the_wait_ends_is_named_as_loading() {
+        let (hits, answer) = everything(Duration::ZERO, None).await;
+        assert_eq!(hits.len(), 1, "the service account is still found");
+        assert_eq!(
+            answer
+                .loading
+                .iter()
+                .map(|kind| kind.kind.as_str())
+                .collect::<Vec<_>>(),
+            ["Widget"]
+        );
+        assert!(!answer.searched.iter().any(|kind| kind.kind == "Widget"));
+    }
+
+    /// Without being asked for every kind, the index's other kinds are not
+    /// read, so the search costs what it cost before.
+    #[tokio::test]
+    async fn a_running_index_adds_no_kinds_unless_every_kind_was_asked_for() {
+        use crate::client::served::{test_server::connected, ServedIndex};
+
+        let (state, _) = connected(ServedIndex::default(), pods_and_accounts).await;
+        let client = state.client_manager.get_client("fake").unwrap();
+        let index = ClusterIndex::holding((*client).clone(), &[("Widget", widgets())]);
+        index.go_live(&widgets(), &[("marco-widget", Some("team"))]);
+        let (hits, answer) = statuses(
+            &state,
+            "marco",
+            plan::resolve_kinds(Some(&["ServiceAccount".into()])).unwrap(),
+            Sources {
+                index: Some(("fake".to_string(), index)),
+                ..Sources::default()
+            },
+        )
+        .await;
+        assert_eq!(hits.len(), 1);
+        assert_eq!(answer.searched.len(), 1);
     }
 
     /// A refused connection reaches us as `ServiceError: client error

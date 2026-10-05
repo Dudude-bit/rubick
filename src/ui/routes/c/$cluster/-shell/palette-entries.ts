@@ -176,6 +176,20 @@ export type Entry =
   | { id: string; kind: "link"; path: AppLink; label: string; icon: IconType }
   /** A kind the cluster serves; picking it opens its list. */
   | { id: string; kind: "kind"; entry: CatalogEntry; path: AppLink }
+  /** What one cluster's name search read, and what it did not. */
+  | {
+      id: string;
+      kind: "coverage";
+      cluster: ClusterSearchState;
+      /** The window's namespaces; null for a search of another cluster, which reads all of it. */
+      scope: string | null;
+      /** Served kinds left out; null where this cluster's catalogue was not read. */
+      notSearched: CatalogEntry[] | null;
+      /** API groups discovery did not answer, whose kinds nobody could name. */
+      unreadGroups: number;
+    }
+  /** Reads every other kind the current cluster serves too. */
+  | { id: string; kind: "search-more"; count: number }
   /** A row that does something instead of going somewhere. See `PANELS`. */
   | {
       id: string;
@@ -218,9 +232,40 @@ export function hitKey(hit: SearchHit): string {
 }
 
 export function isSelectable(entry: Entry): boolean {
-  if (entry.kind === "caption" || entry.kind === "hint") return false;
+  if (
+    entry.kind === "caption" ||
+    entry.kind === "hint" ||
+    entry.kind === "coverage"
+  )
+    return false;
   if (entry.kind === "group") return entry.action !== "none";
   return true;
+}
+
+/** A cluster that has read at least something it can account for. */
+function saidAnything(cluster: ClusterSearchState): boolean {
+  return (
+    cluster.status === "done" ||
+    (cluster.status === "searching" &&
+      cluster.searched.length + cluster.loading.length > 0)
+  );
+}
+
+/** Listable kinds the cluster serves that this search compared no name of. */
+export function notSearchedOf(
+  kinds: readonly CatalogEntry[],
+  cluster: ClusterSearchState
+): CatalogEntry[] {
+  const seen = new Set(
+    [...cluster.searched, ...cluster.loading, ...cluster.unreadable].map(
+      (kind) => `${kind.group}/${kind.plural}`
+    )
+  );
+  return kinds.filter(
+    (entry) =>
+      entry.verbs.includes("list") &&
+      !seen.has(`${entry.group}/${entry.plural}`)
+  );
 }
 
 export function isCold(cluster: ClusterSearchState): boolean {
@@ -247,6 +292,12 @@ export interface PaletteState {
   hitsByContext: Map<string, Map<string, SearchHit>>;
   /** What the current cluster serves, once read. */
   kinds?: readonly CatalogEntry[];
+  /** API groups the current cluster's discovery did not answer. */
+  unreadGroups?: number;
+  /** The name search reads every kind the current cluster serves. */
+  everything?: boolean;
+  /** The window's namespaces, as the scope picker names them. */
+  scopeLabel?: string;
   t: T;
 }
 
@@ -262,6 +313,9 @@ export function buildPaletteEntries({
   shownClusters,
   hitsByContext,
   kinds = [],
+  unreadGroups = 0,
+  everything = false,
+  scopeLabel = "",
   t,
 }: PaletteState): Entry[] {
   const bang = parseBang(text);
@@ -529,6 +583,23 @@ export function buildPaletteEntries({
         rest: found.length - cap,
       });
     }
+    if (!saidAnything(cluster)) continue;
+    // Only the window's own cluster has a catalogue here to count against.
+    const own = !scoped && cluster.context === currentContext;
+    const notSearched =
+      own && kinds.length > 0 ? notSearchedOf(kinds, cluster) : null;
+    out.push({
+      id: `cov:${cluster.context}`,
+      kind: "coverage",
+      cluster,
+      scope: scoped ? null : scopeLabel,
+      notSearched,
+      unreadGroups: own ? unreadGroups : 0,
+    });
+    const more = notSearched?.length ?? 0;
+    if (own && !everything && more > 0 && cluster.status === "done") {
+      out.push({ id: "search-more", kind: "search-more", count: more });
+    }
   }
 
   // Rows, not hits: a cluster whose every match was a kind with nowhere to
@@ -543,7 +614,8 @@ export function buildPaletteEntries({
     const done = shownClusters.filter((cluster) => cluster.status === "done");
     // A cluster that could not list some kinds has not searched them.
     const searched = done.filter(
-      (cluster) => cluster.unreadable.length === 0
+      (cluster) =>
+        cluster.unreadable.length === 0 && cluster.loading.length === 0
     ).length;
     out.push({
       id: "hint:empty",

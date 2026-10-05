@@ -273,6 +273,10 @@ pub struct SearchRequest {
     /// on the next keystroke rather than listed again.
     #[serde(default)]
     pub session: Option<String>,
+    /// Also read every other kind the current cluster serves, through its
+    /// ownership index, which is started for it.
+    #[serde(default)]
+    pub everything: bool,
     /// Allow connecting contexts that have no live client yet. False
     /// on keystroke-driven searches: connecting can run an exec
     /// credential plugin, and typing must never trigger an auth prompt.

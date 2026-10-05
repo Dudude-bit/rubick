@@ -371,6 +371,16 @@ impl ClusterIndex {
             .collect())
     }
 
+    /// Every kind the index watches, where it is served, and its scope.
+    #[must_use]
+    pub fn kinds(&self) -> Vec<(KindKey, ApiResource, bool)> {
+        self.watched
+            .lock()
+            .iter()
+            .map(|(key, watched)| (key.clone(), watched.resource.clone(), watched.namespaced))
+            .collect()
+    }
+
     fn knows(&self, kind: &KindKey) -> bool {
         self.watched.lock().contains_key(kind) || self.unwatched.lock().contains_key(kind)
     }
@@ -478,13 +488,9 @@ impl ClusterIndex {
 }
 
 #[cfg(test)]
-type Named<'a> = (KindKey, &'a [(&'a str, Option<&'a str>)]);
-
-#[cfg(test)]
 impl ClusterIndex {
-    /// An index that has read `live` kinds whole and is still listing the
-    /// `syncing` ones, with no watch behind either.
-    pub(crate) fn holding(client: Client, live: &[Named<'_>], syncing: &[KindKey]) -> Arc<Self> {
+    /// An index watching `kinds`, each still listing, with no watch behind it.
+    pub(crate) fn holding(client: Client, kinds: &[(&str, KindKey)]) -> Arc<Self> {
         let index = Self {
             graph: RwLock::new(Graph::default()),
             slots: Mutex::new(BTreeMap::new()),
@@ -496,28 +502,25 @@ impl ClusterIndex {
             client,
             stop: CancellationToken::new(),
         };
-        for (key, names) in live {
-            let slot = SlotKey {
-                kind: key.clone(),
-                namespace: None,
+        for (kind, key) in kinds {
+            let resource = ApiResource {
+                group: key.group.clone(),
+                version: "v1".to_string(),
+                api_version: if key.group.is_empty() {
+                    "v1".to_string()
+                } else {
+                    format!("{}/v1", key.group)
+                },
+                kind: (*kind).to_string(),
+                plural: key.plural.clone(),
             };
-            index.slots.lock().insert(slot.clone(), SlotState::Live);
-            for (at, (name, namespace)) in names.iter().enumerate() {
-                index.graph.write().apply(
-                    &slot,
-                    format!("{}/{at}", key.plural),
-                    graph::Node {
-                        key: key.clone(),
-                        kind: key.plural.clone(),
-                        version: "v1".to_string(),
-                        name: (*name).to_string(),
-                        namespace: namespace.map(str::to_string),
-                        owners: Vec::new(),
-                    },
-                );
-            }
-        }
-        for key in syncing {
+            index.watched.lock().insert(
+                key.clone(),
+                Watched {
+                    resource,
+                    namespaced: true,
+                },
+            );
             index.slots.lock().insert(
                 SlotKey {
                     kind: key.clone(),
@@ -527,6 +530,29 @@ impl ClusterIndex {
             );
         }
         Arc::new(index)
+    }
+
+    /// One watched kind done listing, holding `names`.
+    pub(crate) fn go_live(&self, key: &KindKey, names: &[(&str, Option<&str>)]) {
+        let slot = SlotKey {
+            kind: key.clone(),
+            namespace: None,
+        };
+        for (at, (name, namespace)) in names.iter().enumerate() {
+            self.graph.write().apply(
+                &slot,
+                format!("{}/{at}", key.plural),
+                graph::Node {
+                    key: key.clone(),
+                    kind: key.plural.clone(),
+                    version: "v1".to_string(),
+                    name: (*name).to_string(),
+                    namespace: namespace.map(str::to_string),
+                    owners: Vec::new(),
+                },
+            );
+        }
+        self.slots.lock().insert(slot, SlotState::Live);
     }
 }
 

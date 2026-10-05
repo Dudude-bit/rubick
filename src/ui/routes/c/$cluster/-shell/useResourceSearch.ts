@@ -44,6 +44,8 @@ export interface ClusterSearchState {
   searched: SearchedKind[];
   /** Kinds this cluster would not list, each with why; `matched` counts only the rest. */
   unreadable: UnreadKind[];
+  /** Kinds still being read when the cluster last said anything. */
+  loading: SearchedKind[];
 }
 
 export interface UseResourceSearchOptions {
@@ -64,6 +66,8 @@ export interface UseResourceSearchOptions {
   kinds?: string[];
   /** One opening of the palette: what it listed once is filtered after. */
   session?: string;
+  /** Read every kind the current cluster serves, not only the app's own. */
+  everything?: boolean;
   limitPerContext?: number;
   enabled?: boolean;
   debounceMs?: number;
@@ -102,6 +106,7 @@ function fromTarget(target: SearchTarget): ClusterSearchState {
     truncated: false,
     searched: [],
     unreadable: [],
+    loading: [],
   };
 }
 
@@ -132,6 +137,7 @@ export function useResourceSearch({
   connect = false,
   kinds,
   session,
+  everything = false,
   limitPerContext,
   enabled = true,
   debounceMs = DEFAULT_DEBOUNCE_MS,
@@ -167,6 +173,7 @@ export function useResourceSearch({
         String(connect),
         String(attempt),
         session ?? "",
+        String(everything),
       ].join(SEP)
     : "";
 
@@ -198,6 +205,7 @@ export function useResourceSearch({
           namespace: namespace ?? undefined,
           kinds: kindsKey ? kindsKey.split(SEP) : undefined,
           session,
+          everything,
           connect,
           limitPerContext: limitPerContext ?? undefined,
         });
@@ -240,6 +248,7 @@ export function useResourceSearch({
                       truncated: payload.truncated,
                       searched: payload.searched,
                       unreadable: payload.unreadable,
+                      loading: payload.loading,
                     }
                   : cluster
               );
@@ -291,6 +300,7 @@ export function useResourceSearch({
     debounceMs,
     attempt,
     session,
+    everything,
     scope,
   ]);
 
@@ -314,6 +324,7 @@ export function useResourceSearch({
                     truncated: false,
                     searched: [],
                     unreadable: [],
+                    loading: [],
                   }
             )
           : [];

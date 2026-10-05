@@ -60,6 +60,7 @@ async fn fan_out_reports_every_cluster() {
             namespace: None,
             kinds: None,
             session: None,
+            everything: false,
             connect,
             limit_per_context: Some(20),
         },

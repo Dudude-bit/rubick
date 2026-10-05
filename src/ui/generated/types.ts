@@ -1476,6 +1476,7 @@ export interface SearchRequest {
   namespace?: string;
   kinds?: string[];
   session?: string;
+  everything: boolean;
   connect: boolean;
   limitPerContext?: number;
 }
@@ -2618,6 +2619,7 @@ export type AppEvent =
       truncated: boolean;
       searched: SearchedKind[];
       unreadable: UnreadKind[];
+      loading: SearchedKind[];
     }
   | { channel: "terminal-output"; session_id: string; data: string }
   | { channel: "terminal-closed"; session_id: string; status: string | null }

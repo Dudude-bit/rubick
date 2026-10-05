@@ -174,6 +174,7 @@ mod tests {
             namespace: None,
             kinds: None,
             session: None,
+            everything: false,
             connect: false,
             limit_per_context: None,
         }

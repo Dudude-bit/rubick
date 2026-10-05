@@ -4,6 +4,27 @@ import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
+    listApiCatalog: vi.fn(async () => ({
+      entries: [
+        {
+          group: "",
+          version: "v1",
+          kind: "Pod",
+          plural: "pods",
+          namespaced: true,
+          verbs: ["list"],
+        },
+        {
+          group: "scheduling.k8s.io",
+          version: "v1",
+          kind: "PriorityClass",
+          plural: "priorityclasses",
+          namespaced: false,
+          verbs: ["list"],
+        },
+      ],
+      unread: [],
+    })),
     getRecentItems: vi.fn(async () => []),
     addRecentItem: vi.fn(async () => undefined),
     saveClusterPreferences: vi.fn(async () => undefined),
@@ -11,6 +32,9 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const search = vi.hoisted(() => ({
+  options: {} as { everything?: boolean },
+  searched: [] as { kind: string; group: string; plural: string }[],
+  loading: [] as { kind: string; group: string; plural: string }[],
   unreadable: [] as {
     kind: string;
     group: string;
@@ -30,23 +54,27 @@ const search = vi.hoisted(() => ({
 
 vi.mock("./useResourceSearch", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./useResourceSearch")>()),
-  useResourceSearch: () => ({
-    hits: search.hits,
-    clusters: [
-      {
-        context: "k3d-dev",
-        status: "done",
-        reason: null,
-        message: null,
-        matched: search.hits.length,
-        truncated: false,
-        searched: [],
-        unreadable: search.unreadable,
-      },
-    ],
-    isSearching: false,
-    error: null,
-  }),
+  useResourceSearch: (options: { everything?: boolean }) => {
+    search.options = options;
+    return {
+      hits: search.hits,
+      clusters: [
+        {
+          context: "k3d-dev",
+          status: "done",
+          reason: null,
+          message: null,
+          matched: search.hits.length,
+          truncated: false,
+          searched: search.searched,
+          unreadable: search.unreadable,
+          loading: search.loading,
+        },
+      ],
+      isSearching: false,
+      error: null,
+    };
+  },
 }));
 
 import { CommandPalette } from "./CommandPalette";
@@ -84,6 +112,8 @@ describe("the command palette's hits", () => {
   beforeEach(() => {
     search.hits = [];
     search.unreadable = [];
+    search.searched = [{ kind: "Pod", group: "", plural: "pods" }];
+    search.loading = [];
     useClusterStore.setState({
       currentContext: "k3d-dev",
       currentNamespace: "",
@@ -190,6 +220,48 @@ describe("the command palette's hits", () => {
     await open("marco");
     expect(await screen.findByText("marco")).toBeInTheDocument();
     expect(screen.queryByText(/Nothing matches/)).toBeNull();
+  });
+
+  /**
+   * The refused kinds and the ones still loading are the two parts of the
+   * answer a reader must not mistake for "none": each wears its own tone.
+   */
+  it("draws refused kinds in the warning tone and loading ones as loading", async () => {
+    search.unreadable = [
+      {
+        kind: "ServiceAccount",
+        group: "",
+        plural: "serviceaccounts",
+        reason: "forbidden",
+        message: "serviceaccounts is forbidden",
+      },
+    ];
+    search.loading = [
+      { kind: "Widget", group: "demo.example.com", plural: "widgets" },
+    ];
+    await open("marco");
+    const refused = await screen.findByText("1 kind refused");
+    expect(refused.closest("span")).toHaveClass("text-warn");
+    expect(refused.closest("span")).toHaveAttribute(
+      "title",
+      "ServiceAccount: serviceaccounts is forbidden"
+    );
+    expect(
+      screen.getByText("1 kind still loading").closest("span")
+    ).toHaveClass("text-info");
+    expect(screen.getByText("Names searched in 1 kind")).toBeInTheDocument();
+  });
+
+  /**
+   * The kinds left out are one Enter away: the row asks for every kind the
+   * cluster serves, and the request is what changes.
+   */
+  it("searches every served kind once the reader asks for the rest", async () => {
+    await open("marco");
+    expect(search.options.everything).toBe(false);
+    await userEvent.click(await screen.findByText("Search 1 more kind too"));
+    expect(search.options.everything).toBe(true);
+    expect(screen.queryByText(/Search 1 more kind/)).toBeNull();
   });
 
   it("still opens the kinds it does have a page for", async () => {

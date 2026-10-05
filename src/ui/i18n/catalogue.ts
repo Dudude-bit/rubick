@@ -4162,6 +4162,7 @@ export const en = {
     searchingInline: "searching…",
     failedInline: "failed",
     kindsUnreadInline: "could not read {kinds}",
+    otherKindsNotSearched: "kinds outside the app's own are not searched",
     lastUsedAgo: "last used {age} ago",
     retryInline: "retry",
     toSearchIt: "to search it",
@@ -7053,6 +7054,27 @@ export const en = {
       other: "{n}+ matches · capped",
     },
     moreOnThisCluster: "{n} more on this cluster",
+    kindsSearchedByName: {
+      one: "Names searched in {n} kind",
+      other: "Names searched in {n} kinds",
+    },
+    kindsRefused: { one: "{n} kind refused", other: "{n} kinds refused" },
+    kindsStillLoading: {
+      one: "{n} kind still loading",
+      other: "{n} kinds still loading",
+    },
+    kindsNotSearched: {
+      one: "{n} kind not searched",
+      other: "{n} kinds not searched",
+    },
+    apiGroupsNotDiscovered: {
+      one: "{n} API group did not answer discovery",
+      other: "{n} API groups did not answer discovery",
+    },
+    searchKindsToo: {
+      one: "Search {n} more kind too",
+      other: "Search the other {n} kinds too",
+    },
     withFailed: "{total} · {n} failed",
     conditions: { one: "{n} condition", other: "{n} conditions" },
     ports: { one: "{n} port", other: "{n} ports" },

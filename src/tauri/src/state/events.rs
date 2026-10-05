@@ -314,6 +314,8 @@ pub enum AppEvent {
         /// The kinds this cluster would not list, each with why. Empty when
         /// every kind was read; `matched` counts only the others.
         unreadable: Vec<crate::search::UnreadKind>,
+        /// The kinds the ownership index was still listing when this was said.
+        loading: Vec<crate::search::SearchedKind>,
     },
     /// Terminal output received
     TerminalOutput { session_id: String, data: String },
@@ -562,6 +564,7 @@ mod tests {
                 truncated: false,
                 searched: Vec::new(),
                 unreadable: Vec::new(),
+                loading: Vec::new(),
             },
             AppEvent::TerminalOutput {
                 session_id: "term-1".into(),
@@ -886,6 +889,7 @@ mod tests {
             truncated: false,
             searched: Vec::new(),
             unreadable: Vec::new(),
+            loading: Vec::new(),
         }
         .payload();
         assert_eq!(empty.get("status").and_then(|v| v.as_str()), Some("done"));
@@ -901,6 +905,7 @@ mod tests {
             truncated: false,
             searched: Vec::new(),
             unreadable: Vec::new(),
+            loading: Vec::new(),
         }
         .payload();
         assert_eq!(
@@ -927,6 +932,7 @@ mod tests {
             truncated: false,
             searched: Vec::new(),
             unreadable: Vec::new(),
+            loading: Vec::new(),
         }
         .payload();
         assert_eq!(
@@ -954,6 +960,7 @@ mod tests {
                 reason: SearchFailureKind::Forbidden,
                 message: "services is forbidden".into(),
             }],
+            loading: Vec::new(),
         }
         .payload();
         assert_eq!(

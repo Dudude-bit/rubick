@@ -10,7 +10,16 @@ import {
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X } from "lucide-react";
+import {
+  CircleDashed,
+  FolderOpen,
+  ListPlus,
+  Lock,
+  ScanSearch,
+  Search,
+  TriangleAlert,
+  X,
+} from "lucide-react";
 
 import { useActivityPanelStore } from "@/stores/activityPanelStore";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
@@ -80,6 +89,7 @@ export function CommandPalette() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [opening, setOpening] = useState("");
+  const [everything, setEverything] = useState(false);
 
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -125,6 +135,7 @@ export function CommandPalette() {
     attempt: wake?.attempt ?? 0,
     // A retry is a question asked again, so it lists again too.
     session: `${opening}:${wake?.attempt ?? 0}`,
+    everything: everything && !scoped,
     enabled: open && bang === null && (scoped || isConnected),
   });
 
@@ -151,6 +162,7 @@ export function CommandPalette() {
           truncated: false,
           searched: [],
           unreadable: [],
+          loading: [],
         }
     );
   }, [clusters, wake, scopeContexts]);
@@ -170,6 +182,7 @@ export function CommandPalette() {
   }, [hits, scoped, namespaceScope]);
 
   const answered = shownClusters.filter(hasAnswered).length;
+  const unreadGroups = catalog.data?.unread.length;
 
   // ----- what the list is made of -----
 
@@ -187,6 +200,9 @@ export function CommandPalette() {
         shownClusters,
         hitsByContext,
         kinds: catalog.data?.entries,
+        unreadGroups,
+        everything,
+        scopeLabel: namespaceScope.label,
         t,
       }),
     [
@@ -201,6 +217,9 @@ export function CommandPalette() {
       shownClusters,
       hitsByContext,
       catalog.data?.entries,
+      unreadGroups,
+      everything,
+      namespaceScope.label,
       t,
     ]
   );
@@ -403,6 +422,10 @@ export function CommandPalette() {
           }
           go(entry.path);
           return;
+        case "search-more":
+          setEverything(true);
+          inputRef.current?.focus();
+          return;
         case "panel":
           // Nothing to open in a tab: it is a panel over the current page,
           // not a page of its own.
@@ -519,6 +542,7 @@ export function CommandPalette() {
       setText("");
       setScope({ kind: "current" });
       setWake(null);
+      setEverything(false);
       setSelectedId(null);
       // The alert too: a reader who pasted one, closed the palette and
       // pressed ⌘K again got the same alert's panel back instead of the
@@ -792,6 +816,10 @@ function EntryRow({
     return <p className="px-2 py-1.5 text-xs text-fg-mut">{entry.text}</p>;
   }
 
+  if (entry.kind === "coverage") {
+    return <Coverage entry={entry} />;
+  }
+
   if (entry.kind === "group") {
     return (
       <ClusterGroup
@@ -950,6 +978,16 @@ function EntryRow({
           </span>
         </Row>
       );
+    case "search-more":
+      return (
+        <Row {...shared}>
+          <ListPlus className="h-3.5 w-3.5 flex-none text-info" />
+          <span className="min-w-0 truncate">
+            {t("count", "searchKindsToo", { n: entry.count })}
+          </span>
+          <Kbd shortcut="↵" className="ml-auto flex-none" />
+        </Row>
+      );
     case "settings":
       return (
         <Row {...shared}>
@@ -961,6 +999,97 @@ function EntryRow({
     default:
       return null;
   }
+}
+
+const kindNames = (kinds: readonly { kind: string }[]) =>
+  kinds.map((kind) => kind.kind).join(", ");
+
+/**
+ * What a name search read in one cluster, and what it did not: the kinds it
+ * compared, the namespaces it read them in, the ones refused or still
+ * loading, and the served kinds it never looked at. Each part carries its own
+ * icon and tone, and names its kinds on hover.
+ */
+function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
+  const t = useT();
+  const { cluster, scope, notSearched, unreadGroups } = entry;
+  const refused = cluster.unreadable.filter(
+    (unread) => unread.reason === "forbidden"
+  );
+  const failed = cluster.unreadable.filter(
+    (unread) => unread.reason !== "forbidden"
+  );
+  const reasons = (kinds: typeof cluster.unreadable) =>
+    kinds.map((unread) => `${unread.kind}: ${unread.message}`).join("\n");
+  return (
+    <div
+      role="presentation"
+      className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-2 pb-1 pt-0.5 text-[11px] text-fg-mut"
+    >
+      <span
+        className="flex items-center gap-1"
+        title={kindNames(cluster.searched)}
+      >
+        <ScanSearch className="h-3 w-3 flex-none" aria-hidden />
+        {t("count", "kindsSearchedByName", { n: cluster.searched.length })}
+      </span>
+      {scope !== null && (
+        <span className="flex items-center gap-1">
+          <FolderOpen className="h-3 w-3 flex-none" aria-hidden />
+          {scope}
+        </span>
+      )}
+      {refused.length > 0 && (
+        <span
+          className="flex items-center gap-1 text-warn"
+          title={reasons(refused)}
+        >
+          <Lock className="h-3 w-3 flex-none" aria-hidden />
+          {t("count", "kindsRefused", { n: refused.length })}
+        </span>
+      )}
+      {failed.length > 0 && (
+        <span
+          className="flex items-center gap-1 text-warn"
+          title={reasons(failed)}
+        >
+          <TriangleAlert className="h-3 w-3 flex-none" aria-hidden />
+          {t("count", "kindsNotRead", { n: failed.length })}
+        </span>
+      )}
+      {cluster.loading.length > 0 && (
+        <span
+          className="flex items-center gap-1 text-info"
+          title={kindNames(cluster.loading)}
+        >
+          <span className="h-1.5 w-1.5 flex-none animate-pulse-subtle rounded-full bg-info" />
+          {t("count", "kindsStillLoading", { n: cluster.loading.length })}
+        </span>
+      )}
+      {notSearched === null ? (
+        <span className="flex items-center gap-1 text-fg-fnt">
+          <CircleDashed className="h-3 w-3 flex-none" aria-hidden />
+          {t("cluster", "otherKindsNotSearched")}
+        </span>
+      ) : (
+        notSearched.length > 0 && (
+          <span
+            className="flex items-center gap-1 text-fg-fnt"
+            title={kindNames(notSearched)}
+          >
+            <CircleDashed className="h-3 w-3 flex-none" aria-hidden />
+            {t("count", "kindsNotSearched", { n: notSearched.length })}
+          </span>
+        )
+      )}
+      {unreadGroups > 0 && (
+        <span className="flex items-center gap-1 text-warn">
+          <TriangleAlert className="h-3 w-3 flex-none" aria-hidden />
+          {t("count", "apiGroupsNotDiscovered", { n: unreadGroups })}
+        </span>
+      )}
+    </div>
+  );
 }
 
 /**

@@ -62,6 +62,7 @@ function cluster(
     truncated: false,
     searched: [],
     unreadable: [],
+    loading: [],
   };
 }
 
@@ -259,8 +260,10 @@ describe("the palette's resource rows", () => {
     expect(ids(entries)).toEqual([
       "grp:k3d-dev",
       "hit:k3d-dev/Pod/default/api-0",
+      "cov:k3d-dev",
       "grp:prod-eu",
       "hit:prod-eu/Pod/default/api-0",
+      "cov:prod-eu",
     ]);
   });
 
@@ -660,5 +663,156 @@ describe("kinds the cluster serves", () => {
     expect(links.map((entry) => where(entry.path))).toContain(
       "/c/k3d-dev/api-resources"
     );
+  });
+});
+
+describe("what a name search covered", () => {
+  const served = (
+    kind: string,
+    group: string,
+    plural: string,
+    verbs = ["list"]
+  ) => ({
+    group,
+    version: "v1",
+    kind,
+    plural,
+    namespaced: true,
+    verbs,
+  });
+  const catalogue = [
+    served("Pod", "", "pods"),
+    served("ServiceAccount", "", "serviceaccounts"),
+    served("Lease", "coordination.k8s.io", "leases"),
+    served("Widget", "demo.example.com", "widgets"),
+    served("PriorityClass", "scheduling.k8s.io", "priorityclasses"),
+    served("TokenReview", "authentication.k8s.io", "tokenreviews", ["create"]),
+  ];
+  const read = (kind: string, group: string, plural: string) => ({
+    kind,
+    group,
+    plural,
+  });
+  const answered: ClusterSearchState = {
+    ...cluster("k3d-dev"),
+    searched: [
+      read("Pod", "", "pods"),
+      read("Lease", "coordination.k8s.io", "leases"),
+    ],
+    unreadable: [
+      {
+        ...read("ServiceAccount", "", "serviceaccounts"),
+        reason: "forbidden",
+        message: "serviceaccounts is forbidden",
+      },
+    ],
+  };
+  const coverage = (entries: Entry[]) =>
+    entries.flatMap((entry) => (entry.kind === "coverage" ? [entry] : []));
+
+  /**
+   * "Nothing matches marco" read as "marco does not exist" while it meant "I
+   * did not look at ServiceAccounts". The line under the results says which
+   * kinds were compared, in which namespaces, and which served kinds were
+   * not: listable ones only, a kind that cannot be listed has no names.
+   */
+  it("says which kinds were read, where, and which served kinds were not", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "marco",
+        shownClusters: [answered],
+        kinds: catalogue,
+        scopeLabel: "team-checkout",
+      })
+    );
+
+    const [line] = coverage(entries);
+    expect(line.scope).toBe("team-checkout");
+    expect(line.notSearched?.map((entry) => entry.kind)).toEqual([
+      "Widget",
+      "PriorityClass",
+    ]);
+    expect(entries).toContainEqual({
+      id: "search-more",
+      kind: "search-more",
+      count: 2,
+    });
+  });
+
+  /** Once every kind is being read, offering to read them is a button that does nothing. */
+  it("offers no second search once every kind is read, and still names what was left", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "marco",
+        shownClusters: [answered],
+        kinds: catalogue,
+        everything: true,
+      })
+    );
+    expect(coverage(entries)[0].notSearched).toHaveLength(2);
+    expect(entries.some((entry) => entry.kind === "search-more")).toBe(false);
+  });
+
+  /**
+   * Another cluster's catalogue is not read here: counting its kinds against
+   * this one's would name kinds it may not serve, so it says only that its
+   * other kinds were not searched, and offers nothing it cannot do.
+   */
+  it("does not count another cluster's kinds against this one's", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "marco",
+        scope: { kind: "context", context: "prod-eu" },
+        shownClusters: [{ ...answered, context: "prod-eu" }],
+        kinds: catalogue,
+        scopeLabel: "team-checkout",
+      })
+    );
+    const [line] = coverage(entries);
+    expect(line.notSearched).toBeNull();
+    expect(line.scope).toBeNull();
+    expect(entries.some((entry) => entry.kind === "search-more")).toBe(false);
+  });
+
+  /**
+   * A kind the index is still listing is neither read nor left out: it is on
+   * its way, and the line says so while the cluster is still answering.
+   */
+  it("accounts for kinds still loading while the cluster is still answering", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "marco",
+        shownClusters: [
+          {
+            ...answered,
+            status: "searching",
+            loading: [read("Widget", "demo.example.com", "widgets")],
+          },
+        ],
+        kinds: catalogue,
+        everything: true,
+      })
+    );
+    const [line] = coverage(entries);
+    expect(line.cluster.loading).toHaveLength(1);
+    expect(line.notSearched?.map((entry) => entry.kind)).toEqual([
+      "PriorityClass",
+    ]);
+  });
+
+  /** A cluster that failed or was never asked has said nothing to account for. */
+  it("draws no coverage for a cluster that failed or was skipped", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "marco",
+        scope: { kind: "all" },
+        shownClusters: [
+          cluster("k3d-dev", "failed", "unreachable"),
+          cluster("prod-eu", "skipped", "not-connected"),
+        ],
+        kinds: catalogue,
+      })
+    );
+    expect(coverage(entries)).toEqual([]);
   });
 });
