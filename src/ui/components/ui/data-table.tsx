@@ -1,6 +1,6 @@
 import * as React from "react";
 import { PerfProfiler } from "@/lib/perf-profiler";
-import { toSingularNoun } from "@/lib/resource-registry";
+import { rowNouns } from "@/lib/resource-registry";
 import { useNavigate } from "@tanstack/react-router";
 import {
   flexRender,
@@ -1248,19 +1248,16 @@ function DataTableInner<TData extends RowData>({
                 ? t("readings", "rowCountWhereAnswered", { n: filteredRows })
                 : t("readings", "rowCount", { n: filteredRows })
               : partial
-                ? t("readings", "rowsWhereAnswered", {
-                    n: filteredRows,
-                    label:
-                      filteredRows === 1 ? toSingularNoun(rowLabel) : rowLabel,
-                  })
+                ? t(
+                    "readings",
+                    "rowsWhereAnswered",
+                    rowNouns(rowLabel, filteredRows)
+                  )
                 : filteredRows === totalRows
-                  ? `${totalRows} ${
-                      totalRows === 1 ? toSingularNoun(rowLabel) : rowLabel
-                    }`
+                  ? t("readings", "objectCount", rowNouns(rowLabel, totalRows))
                   : t("readings", "rowsOfTotal", {
+                      ...rowNouns(rowLabel, totalRows),
                       shown: filteredRows,
-                      total: totalRows,
-                      label: rowLabel,
                     })}
           </div>
         </div>

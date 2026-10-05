@@ -1387,11 +1387,13 @@ function runsHere(
   const facts = conns.subject.facts;
   const capacity =
     facts?.kind === "node" && facts.podCapacity !== null
-      ? `, of the ${facts.podCapacity} this node will take`
+      ? `, ${t("count", "ofNodePodCapacity", { n: facts.podCapacity })}`
       : "";
-  const tally = `${pods.length === 1 ? "1 pod" : `${pods.length} pods`}${
-    namespaces > 1 ? ` across ${namespaces} namespaces` : ""
-  }${capacity}`;
+  const across =
+    namespaces > 1
+      ? ` ${t("count", "acrossNamespaces", { n: namespaces })}`
+      : "";
+  const tally = `${t("count", "pods", { n: pods.length })}${across}${capacity}`;
   return {
     key: "placed",
     title: t("nav", "whatRunsHere"),

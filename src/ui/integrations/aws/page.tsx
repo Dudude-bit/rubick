@@ -241,8 +241,7 @@ function GroupRow({
       copy={group.name ?? undefined}
       meta={
         <>
-          {group.members.length}{" "}
-          {group.members.length === 1 ? "Ingress" : "Ingresses"}
+          {t("count", "ingressObjects", { n: group.members.length })}
           {namespaces.length > 1 &&
             ` ${t("count", "acrossNamespaces", { n: namespaces.length })}`}
           {hosts.length > 0 && ` · ${t("count", "hosts", { n: hosts.length })}`}

@@ -9,6 +9,7 @@ import { pageLink } from "@/lib/links";
 import { formatCount } from "./types";
 import type { HistoryState } from "./hooks/useLogHistory";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 
 /**
  * The one row that says where a pane's oldest lines came from — and, on the
@@ -82,14 +83,16 @@ export function LogHistoryBar({
     return (
       <Bar tone="fnt" testId="log-history-absent">
         <p>
-          {t("empty", "historyApiExhausted", { target: stranded })}{" "}
-          <Link
-            {...pageLink("integrations")}
-            className="text-info hover:underline"
-          >
-            {t("action", "connectOne")}
-          </Link>
-          .
+          {parts(t("empty", "historyApiExhausted", { target: stranded }), {
+            link: (
+              <Link
+                {...pageLink("integrations")}
+                className="text-info hover:underline"
+              >
+                {t("action", "connectOne")}
+              </Link>
+            ),
+          })}
         </p>
       </Bar>
     );

@@ -34,7 +34,7 @@ export function deploymentStatsOf(
       value: `${ready}/${desired}`,
       role: ready >= desired ? "ok" : "warn",
     },
-    { label: t("columns", "updated"), value: String(updated) },
+    { label: t("columns", "upToDateCount"), value: String(updated) },
     { label: t("share", "wlAvailable"), value: String(available) },
     {
       label: t("columns", "strategy"),

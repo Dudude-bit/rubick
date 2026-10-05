@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { toSingularNoun } from "@/lib/resource-registry";
+import { T } from "@/i18n/T";
+import { rowNouns } from "@/lib/resource-registry";
 
 /**
  * What turns a flat list into captioned runs of it.
@@ -41,9 +42,11 @@ export function byNamespace<TData>(rowLabel: string): RowGrouping<TData> {
         {ns}{" "}
         <span className="font-mono text-fg-mut">
           ·{" "}
-          {`${rows.length} ${
-            rows.length === 1 ? toSingularNoun(rowLabel) : rowLabel
-          }`}
+          <T
+            section="readings"
+            k="objectCount"
+            values={rowNouns(rowLabel, rows.length)}
+          />
         </span>
       </>
     ),

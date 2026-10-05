@@ -69,7 +69,12 @@ export function nodeUtilisationSections(
         order: ORDER.own,
         title: t("columns", "utilisation"),
         icon: iconSvg(Gauge),
-        body: { type: "text", text: t("empty", "trendsNeedPrometheus") },
+        body: {
+          type: "text",
+          text: t("empty", "trendsNeedPrometheus", {
+            link: t("action", "connectOne"),
+          }),
+        },
       },
     ];
   const table: PlacedSection = {

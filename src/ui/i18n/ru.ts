@@ -402,6 +402,7 @@ export const ru: Catalogue = {
     tlsHosts: "Хосты TLS",
     storageClass: "Класс хранилища",
     upToDateCount: "Обновлено",
+    availableCount: "Доступно",
     externalIps: "Внешние IP",
     loadBalancer: "Балансировщик",
     group: "Группа",
@@ -895,7 +896,7 @@ export const ru: Catalogue = {
     askAgain: "Спросить снова",
     readTheLast: "Прочитать за последние {range}",
     readWhatVendorKept: "Прочитать, что сохранил {vendor}",
-    connectOne: "подключите её",
+    connectOne: "подключите его",
     legendShow: "Показать {name} в панели",
     legendHide: "Скрыть {name} из панели",
     legendSoloHint:
@@ -1510,7 +1511,7 @@ export const ru: Catalogue = {
     activeForwards: "Активные пробросы",
     activeFallback: "Активен",
     reconnectingInline: "переподключение",
-    runningElsewhere: "Выполняются в других кластерах",
+    runningElsewhere: "В работе в других кластерах",
     missingTarget: "Не указана цель",
     missingTargetDetail: "Нужно указать имя пода и пространство имён.",
     invalidPort: "Неверный порт",
@@ -1557,7 +1558,7 @@ export const ru: Catalogue = {
     moreActionsFor: "Другие действия для {name}",
     finished: "Завершены",
     sessions: "Сессии",
-    running: "Выполняются",
+    running: "В работе",
     panelPortForwards: "Пробросы портов",
     title: "Активность",
     idle: "активность",
@@ -3106,8 +3107,7 @@ export const ru: Catalogue = {
     storyQuiet: "{reasons} за {span}. Больше сказать нечего.",
     storyCrash:
       "Не держится: kubelet откладывает перезапуск контейнера, {times} за {span}: {detail}",
-    storyStartFailed:
-      "Контейнер не удалось запустить, {times} за {span}: {detail}",
+    storyStartFailed: "Контейнер не запустился {times} за {span}: {detail}",
     storyPull: "Не скачать образ, {times} за {span}: {detail}",
     storySchedulingSame:
       "Не планируется, один и тот же ответ {times} за {span}: {detail}",
@@ -3185,8 +3185,24 @@ export const ru: Catalogue = {
       many: "{count} вещей вернут это число обратно.",
       other: "{count} вещей вернут это число обратно.",
     },
-    rowsOfTotal: "{shown} из {total} — {label}",
-    rowsWhereAnswered: "{label}: {n}, из ответивших пространств имён",
+    rowsOfTotal: {
+      one: "{shown} из {n} объекта {kind}",
+      few: "{shown} из {n} объектов {kind}",
+      many: "{shown} из {n} объектов {kind}",
+      other: "{plural}: {shown} из {n}",
+    },
+    objectCount: {
+      one: "{n} объект {kind}",
+      few: "{n} объекта {kind}",
+      many: "{n} объектов {kind}",
+      other: "{plural}: {n}",
+    },
+    rowsWhereAnswered: {
+      one: "{n} объект {kind} из ответивших пространств имён",
+      few: "{n} объекта {kind} из ответивших пространств имён",
+      many: "{n} объектов {kind} из ответивших пространств имён",
+      other: "{plural}: {n}, из ответивших пространств имён",
+    },
     rowCount: {
       one: "{n} строка",
       few: "{n} строки",
@@ -5995,8 +6011,9 @@ export const ru: Catalogue = {
     pvUnbound: "не привязан — этот том никто не запрашивает",
     vendorDidNotAnswer:
       "{vendor} не ответил — {reason}. Это окно приложение наблюдало само; более длинные интервалы недоступны, пока он не вернётся.",
-    longerNeedsPrometheus: "Для более длинных интервалов нужен Prometheus —",
-    trendsNeedPrometheus: "Для загрузки за период нужен Prometheus —",
+    longerNeedsPrometheus:
+      "Для более длинных интервалов нужен Prometheus: {link}.",
+    trendsNeedPrometheus: "Для загрузки за период нужен Prometheus: {link}.",
     trendsSortNote:
       "сначала с наименьшим запасом, каждая точка это пик своего интервала",
     nodesFromPods:
@@ -6245,7 +6262,7 @@ export const ru: Catalogue = {
     couldNotReadIngressController:
       "Не удалось прочитать, какой контроллер обслуживает Ingress {name}",
     historyApiExhausted:
-      "У API-сервера больше ничего нет для {target}. Чтобы читать дальше жизни пода, нужна Loki —",
+      "У API-сервера больше ничего нет для {target}. Чтобы читать дальше жизни пода, нужен Loki: {link}.",
     historyApiExhaustedShort: "У API-сервера больше ничего нет для {target}.",
     historyOlderThanPods: "Старше подов на экране:",
     historyVendorMayHave: "Возможно, эти строки ещё есть в {vendor}.",
@@ -7877,6 +7894,18 @@ export const ru: Catalogue = {
       few: "в {n} пространствах имён",
       many: "в {n} пространствах имён",
       other: "в {n} пространствах имён",
+    },
+    ingressObjects: {
+      one: "{n} объект Ingress",
+      few: "{n} объекта Ingress",
+      many: "{n} объектов Ingress",
+      other: "{n} объекта Ingress",
+    },
+    ofNodePodCapacity: {
+      one: "из {n} возможного на этом узле",
+      few: "из {n} возможных на этом узле",
+      many: "из {n} возможных на этом узле",
+      other: "из {n} возможных на этом узле",
     },
     andMore: "и ещё {n}",
     hiddenShowAll: "скрыто: {n} · показать все",

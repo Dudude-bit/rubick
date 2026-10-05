@@ -242,9 +242,9 @@ describe("a scope some of whose namespaces did not answer", () => {
     });
 
     expect(
-      screen.getByText("1 pod, from the namespaces that answered")
+      screen.getByText("1 Pod, from the namespaces that answered")
     ).toBeInTheDocument();
-    expect(screen.queryByText("1 pod")).toBeNull();
+    expect(screen.queryByText("1 Pod")).toBeNull();
   });
 
   /**

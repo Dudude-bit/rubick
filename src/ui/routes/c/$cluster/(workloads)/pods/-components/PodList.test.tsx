@@ -67,9 +67,9 @@ describe("the pod list while a new scope is read", () => {
   it("does not total the last scope's pods", async () => {
     await renderWithRouter(<PodList />, { at: "/c/prod/pods" });
 
-    expect(screen.queryByText("1 pod")).toBeNull();
+    expect(screen.queryByText("1 Pod")).toBeNull();
     expect(
-      screen.getByText("1 pod, from the namespaces that answered")
+      screen.getByText("1 Pod, from the namespaces that answered")
     ).toBeVisible();
   });
 });

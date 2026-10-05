@@ -331,6 +331,23 @@ export function toSingularNoun(plural: string): string {
   return RESOURCE_BY_PLURAL.get(lower)?.kind.toLowerCase() ?? lower;
 }
 
+/**
+ * The kind a count of a list's rows names, found by the list's label (its
+ * API plural or the name the sidebar gives it), so English reads
+ * "25 Deployments" and Russian «25 объектов Deployment».
+ */
+export function rowNouns(label: string, n: number) {
+  const lower = label.toLowerCase();
+  const def =
+    RESOURCE_BY_PLURAL.get(lower) ??
+    RESOURCE_REGISTRY.find((d) => d.displayPlural.toLowerCase() === lower);
+  return {
+    n,
+    kind: def?.kind ?? label,
+    plural: def?.displayPlural ?? label,
+  };
+}
+
 export function toKind(resourceType: string): ResourceKind | null {
   if (RESOURCE_BY_KIND.has(resourceType as ResourceKind)) {
     return resourceType as ResourceKind;

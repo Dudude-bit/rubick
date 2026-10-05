@@ -146,9 +146,9 @@ describe("a workload list while a new scope is read", () => {
 
     expect(screen.getByText("api")).toBeVisible();
     expect(screen.queryByText(/in staging/)).toBeNull();
-    expect(screen.queryByText("1 deployment")).toBeNull();
+    expect(screen.queryByText("1 Deployment")).toBeNull();
     expect(
-      screen.getByText("1 deployment, from the namespaces that answered")
+      screen.getByText("1 Deployment, from the namespaces that answered")
     ).toBeVisible();
   });
 });

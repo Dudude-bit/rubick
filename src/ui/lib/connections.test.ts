@@ -1092,6 +1092,22 @@ describe("a node, which is the same edge read from the other end", () => {
     );
   });
 
+  /** The tally was an English template literal under a Russian title. */
+  it("counts the pods on it in the reader's language", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const groups = connectionGroups(
+      connections(node(), [
+        placed("log-demo-a", "k8s-gui-test"),
+        placed("coredns-x", "kube-system"),
+      ]),
+      ru
+    );
+    expect(groups.find((group) => group.key === "placed")?.caption).toMatch(
+      /^— 2 пода в 2 пространствах имён, из 110 возможных на этом узле/
+    );
+  });
+
   it("says cordoned rather than drawing the room as available", () => {
     const cordoned: ObjectRef = {
       ...node(),

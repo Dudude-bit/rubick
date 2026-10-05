@@ -432,6 +432,7 @@ export const en = {
     tlsHosts: "TLS hosts",
     storageClass: "Storage class",
     upToDateCount: "Up to date",
+    availableCount: "Available",
     externalIps: "External IPs",
     loadBalancer: "Load balancer",
     group: "Group",
@@ -2973,8 +2974,15 @@ export const en = {
       one: "{count} thing will put this number back.",
       other: "{count} things will put this number back.",
     },
-    rowsOfTotal: "{shown} of {total} {label}",
-    rowsWhereAnswered: "{n} {label}, from the namespaces that answered",
+    rowsOfTotal: {
+      one: "{shown} of {n} {kind}",
+      other: "{shown} of {n} {plural}",
+    },
+    objectCount: { one: "{n} {kind}", other: "{n} {plural}" },
+    rowsWhereAnswered: {
+      one: "{n} {kind}, from the namespaces that answered",
+      other: "{n} {plural}, from the namespaces that answered",
+    },
     rowCount: { one: "{n} row", other: "{n} rows" },
     rowCountWhereAnswered: {
       one: "{n} row, from the namespaces that answered",
@@ -5449,8 +5457,8 @@ export const en = {
     pvUnbound: "unbound — no claim is using this volume",
     vendorDidNotAnswer:
       "{vendor} did not answer — {reason}. This is the window the app watched itself; the longer ranges are gone until it is back.",
-    longerNeedsPrometheus: "Longer than this needs a Prometheus —",
-    trendsNeedPrometheus: "Utilisation over time needs a Prometheus —",
+    longerNeedsPrometheus: "Longer than this needs a Prometheus: {link}.",
+    trendsNeedPrometheus: "Utilisation over time needs a Prometheus: {link}.",
     trendsSortNote: "least headroom first, each point the peak of its bucket",
     nodesFromPods:
       "Summed from each node's pods: {vendor} keeps no whole-node series, so the kubelet, system daemons and the OS are left out and real usage is higher.",
@@ -5685,7 +5693,7 @@ export const en = {
     couldNotReadIngressController:
       "Could not read which controller serves Ingress {name}",
     historyApiExhausted:
-      "The API server has nothing more for {target}. Reading past a pod's own lifetime needs a Loki —",
+      "The API server has nothing more for {target}. Reading past a pod's own lifetime needs a Loki: {link}.",
     historyApiExhaustedShort: "The API server has nothing more for {target}.",
     historyOlderThanPods: "Older than the pods on screen:",
     historyVendorMayHave: "{vendor} may still have those lines.",
@@ -7019,6 +7027,11 @@ export const en = {
     acrossNamespaces: {
       one: "across {n} namespace",
       other: "across {n} namespaces",
+    },
+    ingressObjects: { one: "{n} Ingress", other: "{n} Ingresses" },
+    ofNodePodCapacity: {
+      one: "of the {n} this node will take",
+      other: "of the {n} this node will take",
     },
     andMore: "and {n} more",
     hiddenShowAll: "{n} hidden · show all",

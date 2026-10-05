@@ -1725,7 +1725,7 @@ describe("a table given the page's height", () => {
 
     const scrolled = port();
     expect(scrolled.contains(screen.getByLabelText("Search..."))).toBe(false);
-    expect(scrolled.contains(screen.getByText("500 pods"))).toBe(false);
+    expect(scrolled.contains(screen.getByText("500 Pods"))).toBe(false);
   });
 });
 

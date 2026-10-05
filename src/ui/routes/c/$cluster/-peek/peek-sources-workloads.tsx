@@ -193,12 +193,12 @@ export const WORKLOAD_SOURCES: PeekSources = {
                 : undefined,
           },
           {
-            label: t("columns", "updated"),
+            label: t("columns", "upToDateCount"),
             value: deployment.replicas.updated,
             mono: true,
           },
           {
-            label: t("settings", "available"),
+            label: t("columns", "availableCount"),
             value: deployment.replicas.available,
             mono: true,
           },
@@ -288,7 +288,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
             mono: true,
           },
           {
-            label: t("settings", "available"),
+            label: t("columns", "availableCount"),
             value: set.available,
             mono: true,
           },

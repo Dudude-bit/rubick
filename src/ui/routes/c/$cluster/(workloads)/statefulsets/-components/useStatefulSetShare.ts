@@ -24,7 +24,7 @@ export function statefulSetStatsOf(
       role: ready >= desired ? "ok" : "warn",
     },
     { label: t("columns", "current"), value: String(current) },
-    { label: t("columns", "updated"), value: String(updated) },
+    { label: t("columns", "upToDateCount"), value: String(updated) },
   ];
   stats.push(
     statefulSet.serviceName

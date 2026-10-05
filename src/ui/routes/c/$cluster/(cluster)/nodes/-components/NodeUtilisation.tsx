@@ -142,14 +142,16 @@ export function NodeUtilisation({
   if (power.state === "absent") {
     return (
       <p className="px-1 py-6 text-xs text-fg-mut">
-        {t("empty", "trendsNeedPrometheus")}{" "}
-        <Link
-          {...pageLink("integrations")}
-          className="text-info hover:underline"
-        >
-          {t("action", "connectOne")}
-        </Link>
-        .
+        {parts(t("empty", "trendsNeedPrometheus"), {
+          link: (
+            <Link
+              {...pageLink("integrations")}
+              className="text-info hover:underline"
+            >
+              {t("action", "connectOne")}
+            </Link>
+          ),
+        })}
       </p>
     );
   }

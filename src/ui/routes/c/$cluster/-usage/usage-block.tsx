@@ -34,6 +34,7 @@ import { watchedFor } from "@/lib/usage-history";
 import { storageSummary } from "@/lib/storage-summary";
 import type { MetricsStatus, ResourceConnections } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 import { sayWords, type Saying } from "@/i18n/say";
 import type { EmptyKey } from "./usage-chart";
 
@@ -389,14 +390,16 @@ function HistoryNote({ state }: { state: RangedHistory }) {
   if (state.status === "absent" && state.offerable) {
     return (
       <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
-        {t("empty", "longerNeedsPrometheus")}{" "}
-        <Link
-          {...pageLink("integrations")}
-          className="text-info hover:underline"
-        >
-          {t("action", "connectOne")}
-        </Link>
-        .
+        {parts(t("empty", "longerNeedsPrometheus"), {
+          link: (
+            <Link
+              {...pageLink("integrations")}
+              className="text-info hover:underline"
+            >
+              {t("action", "connectOne")}
+            </Link>
+          ),
+        })}
       </p>
     );
   }
