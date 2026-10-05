@@ -198,8 +198,15 @@ export const SHORTCUTS: readonly Shortcut[] = [
   { id: "closeTab", section: "tabs", keys: ["mod+w"], labelKey: "closeTab" },
   { id: "nthTab", section: "tabs", keys: ["mod+1…9"], labelKey: "nthTab" },
 
-  { id: "rowMove", section: "table", keys: ["↑", "↓"], labelKey: "rowMove" },
+  {
+    id: "rowMove",
+    section: "table",
+    keys: ["↑", "↓", "j", "k"],
+    labelKey: "rowMove",
+  },
   { id: "rowOpen", section: "table", keys: ["enter"], labelKey: "rowOpen" },
+  { id: "rowClear", section: "table", keys: ["esc"], labelKey: "rowClear" },
+  { id: "rowFilter", section: "table", keys: ["/"], labelKey: "rowFilter" },
 
   { id: "treeUp", section: "tree", keys: ["alt+↑"], labelKey: "treeUp" },
   { id: "treeDown", section: "tree", keys: ["alt+↓"], labelKey: "treeDown" },

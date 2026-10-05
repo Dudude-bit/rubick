@@ -238,6 +238,7 @@ export function Crds() {
         columns={columns}
         data={crds}
         fill
+        pageKeys
         isLoading={isLoading}
         searchPlaceholder={t("action", "searchKindPlaceholder", {
           kind: "CRDs",

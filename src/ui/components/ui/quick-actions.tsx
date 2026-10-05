@@ -41,7 +41,7 @@ interface QuickActionsProps<T> {
  * the pointer.
  */
 const ROW_ACTIONS_REVEAL =
-  "opacity-0 pointer-events-none transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-data-[focused=true]:pointer-events-auto group-data-[focused=true]:opacity-100";
+  "opacity-0 pointer-events-none transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 group-aria-selected:pointer-events-auto group-aria-selected:opacity-100";
 
 export function QuickActions<T>({
   item,

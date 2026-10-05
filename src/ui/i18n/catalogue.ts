@@ -6182,6 +6182,8 @@ export const en = {
     nthTab: "Tab by number, 9 is the last",
     rowMove: "Move between rows",
     rowOpen: "Open the row",
+    rowClear: "Clear the selection",
+    rowFilter: "Filter the list",
     soloContainer: "Only this container, by legend position",
     allContainers: "Every container",
   },

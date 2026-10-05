@@ -26,6 +26,7 @@ import { RouteLink } from "./route-link";
 import { TooltipProvider } from "./tooltip";
 import { helmReleaseLink, hrefOf, objectLink } from "@/lib/links";
 import { renderWithRouter } from "@/test/render";
+import { useShortcuts } from "@/routes/c/$cluster/-shell/useShortcuts";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
@@ -387,10 +388,11 @@ describe("DataTable rows", () => {
   });
 
   describe("keyboard", () => {
-    it("opens the focused row on Enter", async () => {
+    /** Enter is the click's gesture: it peeks, and the peek's own Enter opens the page. */
+    it("peeks at the focused row on Enter, as a click would", async () => {
       await renderTable();
       fireEvent.keyDown(row(), { key: "Enter" });
-      await goesTo("/c/prod/pods/ns/a-1");
+      await goesTo("/c/prod/pods?peek=pods%2Fns%2Fa-1");
     });
 
     // Enter is an activation like a click, so it carries the same modifiers.
@@ -406,7 +408,7 @@ describe("DataTable rows", () => {
       await renderTable();
       fireEvent.keyDown(row(), { key: "ArrowDown" });
       expect(screen.getByTestId("status-b-2").closest("tr")).toHaveAttribute(
-        "data-focused",
+        "aria-selected",
         "true"
       );
     });
@@ -431,6 +433,175 @@ describe("DataTable rows", () => {
       expect(tabs()).toHaveLength(2);
       expect(isActive(0)).toBe(true);
     });
+  });
+});
+
+describe("the list keys, from anywhere on a list page", () => {
+  function Shortcuts() {
+    useShortcuts();
+    return null;
+  }
+
+  const page = (data: Item[] = DATA) => (
+    <>
+      <Shortcuts />
+      <DataTable<Item>
+        columns={columns}
+        data={data}
+        getRowHref={href}
+        getRowId={(item) => item.name}
+        grouping={null}
+        pageKeys
+      />
+    </>
+  );
+
+  const press = (key: string, target: Element = document.body) =>
+    fireEvent.keyDown(target, { key });
+
+  const selected = () =>
+    [...document.querySelectorAll('tr[aria-selected="true"]')].map(
+      (row) => row.querySelector("a")?.textContent
+    );
+
+  const away = () => (document.activeElement as HTMLElement | null)?.blur();
+
+  /** The footer promised arrows that did nothing until a row had been clicked. */
+  it("selects the first row on the first arrow, with the focus on nothing", async () => {
+    await wrap(page());
+    expect(selected()).toEqual([]);
+    press("ArrowDown");
+    expect(selected()).toEqual(["a-1"]);
+    expect(document.activeElement).toBe(rowAt(0));
+  });
+
+  /** Would break if j and k were not routed to the list after the chords. */
+  it("walks with j and k as with the arrows", async () => {
+    await wrap(page());
+    press("j");
+    away();
+    press("j");
+    expect(selected()).toEqual(["b-2"]);
+    away();
+    press("k");
+    expect(selected()).toEqual(["a-1"]);
+  });
+
+  /** `g j` is the Jobs chord; its j must not also step the list. */
+  it("leaves a chord's second key to the chord", async () => {
+    await wrap(page());
+    press("g");
+    press("j");
+    await goesTo("/c/prod/jobs");
+  });
+
+  /** Enter from the page is the row's click: the peek where the kind has one. */
+  it("opens the selected row on Enter with the focus elsewhere", async () => {
+    await wrap(page());
+    press("ArrowDown");
+    away();
+    press("Enter");
+    await goesTo("/c/prod/pods?peek=pods%2Fns%2Fa-1");
+  });
+
+  /** Whatever holds the focus owns its Enter; the row must not open underneath it. */
+  it("leaves Enter to a focused control elsewhere on the page", async () => {
+    await wrap(
+      <>
+        {page()}
+        <div tabIndex={0} data-testid="elsewhere" />
+      </>
+    );
+    press("ArrowDown");
+    const elsewhere = screen.getByTestId("elsewhere");
+    elsewhere.focus();
+    press("Enter", elsewhere);
+    await staysAt();
+  });
+
+  it("clears the selection on Escape", async () => {
+    await wrap(page());
+    press("ArrowDown");
+    away();
+    press("Escape");
+    expect(selected()).toEqual([]);
+  });
+
+  /** Escape on the focused row clears it too, and lets go of the focus. */
+  it("clears the selection on Escape from the row itself", async () => {
+    await wrap(page());
+    press("ArrowDown");
+    press("Escape", rowAt(0)!);
+    expect(selected()).toEqual([]);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("puts the focus in the filter on /", async () => {
+    await wrap(page());
+    press("/");
+    expect(document.activeElement).toBe(search());
+  });
+
+  /** A j typed into the filter is a letter; it must not step the list under it. */
+  it("does not move the selection while the filter is being typed in", async () => {
+    await wrap(page());
+    press("ArrowDown");
+    press("/");
+    for (const key of ["j", "j"]) press(key, search());
+    fireEvent.change(search(), { target: { value: "-" } });
+    expect(selected()).toEqual(["a-1"]);
+    expect(document.activeElement).toBe(search());
+  });
+
+  /** Down from the filter goes back into the rows; Escape just leaves the box. */
+  it("leaves the filter for the rows on Down, and for the page on Escape", async () => {
+    await wrap(page());
+    press("/");
+    press("Escape", search());
+    expect(document.activeElement).toBe(document.body);
+    press("/");
+    press("ArrowDown", search());
+    expect(document.activeElement).toBe(rowAt(0));
+    expect(selected()).toEqual(["a-1"]);
+  });
+
+  /**
+   * A watch tick hands over new objects, and here a new pod sorts in above.
+   * Tracked by position, the mark would slide onto a-1.
+   */
+  it("keeps the selection on the same object across a watch tick", async () => {
+    const { rerender } = await wrapRerenderable(page());
+    press("ArrowDown");
+    press("ArrowDown", rowAt(0)!);
+    expect(selected()).toEqual(["b-2"]);
+    rerender(
+      page([
+        { name: "a-0", namespace: "ns" },
+        ...DATA.map((item) => ({ ...item })),
+      ])
+    );
+    expect(selected()).toEqual(["b-2"]);
+  });
+
+  /** A bare focus() scrolls every ancestor, the window included. */
+  it("focuses a row without letting the browser scroll for it", async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    await wrap(page());
+    press("ArrowDown");
+    expect(focus).toHaveBeenCalledWith({ preventScroll: true });
+    focus.mockRestore();
+  });
+
+  /** Only the page's own table answers from outside; an embedded one waits for focus. */
+  it("leaves a table that is not the page's list alone", async () => {
+    await wrap(
+      <>
+        <Shortcuts />
+        <DataTable<Item> columns={columns} data={DATA} getRowHref={href} />
+      </>
+    );
+    press("ArrowDown");
+    expect(selected()).toEqual([]);
   });
 });
 
@@ -1014,9 +1185,7 @@ describe("the row's quick actions", () => {
     expect(reveal?.className).toContain("group-focus-within:opacity-100");
     // Keyboard focus counts as hover here, or the actions would be reachable
     // by pointer only.
-    expect(reveal?.className).toContain(
-      "group-data-[focused=true]:opacity-100"
-    );
+    expect(reveal?.className).toContain("group-aria-selected:opacity-100");
   });
 
   /**
@@ -1312,7 +1481,7 @@ describe("a list past the virtualisation threshold", () => {
       expect(document.querySelectorAll("tr[data-row-index]")).toHaveLength(1)
     );
 
-    const focused = document.querySelector('tr[data-focused="true"]');
+    const focused = document.querySelector('tr[aria-selected="true"]');
     expect(focused).toHaveAttribute("data-row-index", "0");
     expect(focused).toHaveAttribute("tabindex", "0");
   });

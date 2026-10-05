@@ -630,6 +630,7 @@ export function ResourceList<
           // Embedded, the surrounding flow owns the scroll and there is no
           // height to take; on its own page the table is the page.
           fill={!embedded}
+          pageKeys={!embedded}
           isLoading={showSkeleton}
           searchParam={embedded ? undefined : "q"}
           searchPlaceholder={searchPlaceholder}

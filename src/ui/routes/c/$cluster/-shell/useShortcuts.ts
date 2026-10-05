@@ -8,12 +8,13 @@ import {
   DETAIL_TAB_OPEN,
   pageKeysOf,
 } from "@/lib/shortcuts";
+import { routeListKey } from "@/lib/list-keys";
 import { useShortcutsOverlayStore } from "@/stores/shortcutsOverlayStore";
 
 /**
  * The keys that are the same on every screen: `?` for the list of them,
- * `g` then a letter to go somewhere, and a letter to open a tab of the page
- * the reader is on.
+ * `g` then a letter to go somewhere, a letter to open a tab of the page the
+ * reader is on, and whatever is left to the list on screen.
  *
  * Unmodified keys only, and never from inside a field, a terminal or an
  * open layer: those own their keys, and a `g` typed into a search box is a
@@ -63,6 +64,8 @@ export function useShortcuts(): void {
         }
         return;
       }
+
+      if (routeListKey(event)) return;
 
       if (key === "g") {
         pending.current = { key, at: Date.now() };

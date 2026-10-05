@@ -27,13 +27,15 @@ import {
 import { Button } from "@/components/ui/button";
 import { TableSkeleton } from "@/components/ui/skeleton";
 import { QuickActions, type QuickAction } from "@/components/ui/quick-actions";
-import { useTableKeyboardNav } from "@/hooks/useTableKeyboardNav";
 import {
   useColumnWidthsStore,
   type ColumnWidths,
 } from "@/stores/columnWidthsStore";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import { stallWatch } from "@/lib/stall-watch";
+import { claimListKeys } from "@/lib/list-keys";
+import { revealInScroller } from "@/lib/reveal";
+import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { peekTargetOfHref, usePeek } from "@/hooks/usePeek";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import type { AppSearch } from "@/lib/app-search";
@@ -119,6 +121,8 @@ interface DataTableProps<TData extends RowData> {
   partial?: boolean;
   /** Offers the rows on screen to this screen's Share. */
   share?: TableShare;
+  /** The page's own list: it answers the list keys wherever the focus is. */
+  pageKeys?: boolean;
 }
 
 /**
@@ -245,10 +249,13 @@ function createActionsColumn<TData extends RowData>(
 
 /** Where a nav key wants to go, or null if it is not a nav key. */
 function navTarget(key: string, from: number, rowCount: number): number | null {
+  if (rowCount === 0) return null;
   switch (key) {
     case "ArrowDown":
+      if (from < 0) return 0;
       return from < rowCount - 1 ? from + 1 : null;
     case "ArrowUp":
+      if (from < 0) return 0;
       return from > 0 ? from - 1 : null;
     case "Home":
       return 0;
@@ -258,6 +265,12 @@ function navTarget(key: string, from: number, rowCount: number): number | null {
       return null;
   }
 }
+
+const VIM_KEYS: Record<string, string> = { j: "ArrowDown", k: "ArrowUp" };
+
+/** Widgets that walk with the arrows themselves; the list leaves those keys to them. */
+const OWN_ARROWS =
+  '[role="tablist"],[role="radiogroup"],[role="slider"],[role="tree"],[role="grid"],[role="menubar"]';
 
 export function DataTable<TData extends RowData>(props: DataTableProps<TData>) {
   return (
@@ -287,6 +300,7 @@ function DataTableInner<TData extends RowData>({
   widthsKey,
   partial = false,
   share,
+  pageKeys = false,
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
@@ -519,20 +533,8 @@ function DataTableInner<TData extends RowData>({
   const visibleColumnCount = table.getVisibleFlatColumns().length;
 
   const keyboardNavEnabled = enableKeyboardNav ?? !!(getRowHref || onRowClick);
-
-  // Counted over the rows the table draws, not over `data`. A search narrows
-  // the list without narrowing `data`, and a hook counting to five hundred in
-  // front of three rows leaves its focus — and the table's only tab stop — on
-  // a row that is not there. Home and End mean the ends of what is on screen
-  // for the same reason.
-  //
-  // Enter is left to the row itself: the hook is indexed by visual position
-  // and would have to be handed a row order that grouping only settles at
-  // render time, and it cannot see the modifiers on the key press anyway.
-  const { containerRef, focusedRowIndex, getRowProps } = useTableKeyboardNav({
-    rowCount: rows.length,
-    enabled: keyboardNavEnabled,
-  });
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const filterRef = React.useRef<HTMLInputElement>(null);
 
   // One road. The box used to be able to aim at a single column instead,
   // chosen by whether a caller passed a `searchKey`, and nothing said which
@@ -550,6 +552,26 @@ function DataTableInner<TData extends RowData>({
     () => buildTableRows(rows, groupingActive ? grouping : null),
     [rows, groupingActive, grouping]
   );
+  // In the order drawn, which grouping settles: the keys walk what is on
+  // screen, not the order the rows were sorted in.
+  const ordered = React.useMemo(
+    () => items.flatMap((item) => (item.row ? [item.row] : [])),
+    [items]
+  );
+
+  // By id, so a watch tick that replaces every row, or puts a new one above,
+  // leaves the mark on the same object. The index is the fallback once the
+  // object itself is gone: the mark stays where it was.
+  const [selection, setSelection] = React.useState<{
+    id: string;
+    index: number;
+  } | null>(null);
+  const selectedIndex = React.useMemo(() => {
+    if (!selection) return -1;
+    const at = ordered.findIndex((row) => row.id === selection.id);
+    if (at >= 0) return at;
+    return ordered.length ? Math.min(selection.index, ordered.length - 1) : -1;
+  }, [ordered, selection]);
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
@@ -598,6 +620,23 @@ function DataTableInner<TData extends RowData>({
   const pendingFocus = React.useRef<{ row: number; until: number } | null>(
     null
   );
+  const headerRef = React.useRef<HTMLTableSectionElement>(null);
+  const stickyHeader = fill || shouldVirtualScroll;
+
+  const rowElement = (index: number) =>
+    containerRef.current?.querySelector<HTMLElement>(
+      `[data-row-index="${index}"]`
+    ) ?? null;
+
+  // Never a bare `focus()`: it scrolls every ancestor that can, the window too.
+  const focusRow = (element: HTMLElement) => {
+    element.focus({ preventScroll: true });
+    revealInScroller(
+      element,
+      stickyHeader ? (headerRef.current?.offsetHeight ?? 0) : 0
+    );
+  };
+
   React.useEffect(() => {
     const pending = pendingFocus.current;
     if (!pending) return;
@@ -605,12 +644,10 @@ function DataTableInner<TData extends RowData>({
       pendingFocus.current = null;
       return;
     }
-    const row = containerRef.current?.querySelector(
-      `[data-row-index="${pending.row}"]`
-    );
-    if (row instanceof HTMLElement) {
+    const row = rowElement(pending.row);
+    if (row) {
       pendingFocus.current = null;
-      row.focus();
+      focusRow(row);
     }
   });
 
@@ -623,8 +660,8 @@ function DataTableInner<TData extends RowData>({
     );
   };
 
-  // A roving tab stop has to sit on a row that exists. The hook puts it on the
-  // focused row, and in a windowed table that row can be scrolled clean out of
+  // A roving tab stop has to sit on a row that exists. It follows the
+  // selection, and in a windowed table that row can be scrolled clean out of
   // the DOM — taking the whole table out of the tab order with it. When it is
   // gone, the first drawn row holds the stop instead.
   let firstDrawnRow = 0;
@@ -638,16 +675,36 @@ function DataTableInner<TData extends RowData>({
     }
   }
   const tabStopRow =
-    focusedRowIndex >= 0 && isDrawn(focusedRowIndex)
-      ? focusedRowIndex
+    selectedIndex >= 0 && isDrawn(selectedIndex)
+      ? selectedIndex
       : firstDrawnRow;
+
+  const select = (index: number) => {
+    const row = ordered[index];
+    if (!row) return;
+    setSelection({ id: row.id, index });
+    const element = isDrawn(index) ? rowElement(index) : null;
+    if (element) return focusRow(element);
+    pendingFocus.current = { row: index, until: Date.now() + PENDING_FOCUS_MS };
+    virtualizer.scrollToIndex(rowLine[index], { align: "center" });
+  };
+
+  const clearSelection = () => {
+    setSelection(null);
+    const focused = document.activeElement;
+    if (
+      focused instanceof HTMLElement &&
+      containerRef.current?.contains(focused)
+    )
+      focused.blur();
+  };
 
   // A row is not an anchor — the name cell inside it is — but the whitespace
   // beside the name still opens the row, and it reads the gesture through the
   // same code, so a modifier means the same thing wherever it lands.
   const handleRowGesture = (
     row: TData,
-    event: React.MouseEvent | React.KeyboardEvent
+    event: React.MouseEvent | React.KeyboardEvent | KeyboardEvent
   ) => {
     // Quick actions, menus and the row's own links are their own targets.
     const target = event.target as HTMLElement;
@@ -662,11 +719,11 @@ function DataTableInner<TData extends RowData>({
 
     const href = getRowHref?.(row);
     if (href) {
-      // A plain click on a row whose object has a peek opens the peek, the
-      // same as the click on the name inside it: one gesture, one answer,
-      // wherever on the row it lands. The page itself is a double click, or
-      // Enter, away. Modified clicks open tabs exactly as before.
-      const peek = "key" in event ? null : peekTargetOfHref(href);
+      // A plain click or Enter on a row whose object has a peek opens the
+      // peek, the same as the click on the name inside it: one gesture, one
+      // answer, wherever on the row it lands. The page is a double click
+      // away, or Enter again in the peek. Modified ones open tabs.
+      const peek = peekTargetOfHref(href);
       if (peek && readLinkIntent(event) === "activate") {
         event.preventDefault();
         openPeek(peek);
@@ -674,17 +731,86 @@ function DataTableInner<TData extends RowData>({
       }
       linkGesture(event, href, () => navigate({ href }));
     } else if (onRowClick && readLinkIntent(event) === "activate") {
-      // No destination, so nothing to open a tab on; only a plain click acts.
+      // No destination, so nothing to open a tab on; only a plain activation acts.
       onRowClick(row);
     }
   };
 
+  // Home and End reach past the drawn window, and so does an arrow at its
+  // edge; `select` scrolls the row into existence before handing it focus.
+  const onRowKey = (event: React.KeyboardEvent, index: number, row: TData) => {
+    switch (event.key) {
+      case "ArrowDown":
+      case "ArrowUp":
+      case "Home":
+      case "End": {
+        event.preventDefault();
+        const to = navTarget(event.key, index, ordered.length);
+        if (to !== null) select(to);
+        return;
+      }
+      case "Escape":
+        event.preventDefault();
+        clearSelection();
+        return;
+      case "Enter":
+        if (isClickable) handleRowGesture(row, event);
+    }
+  };
+
+  // The same keys from anywhere else on the page: the body after a click on
+  // nothing, the sidebar, a button. Not from a field, a terminal or an open
+  // layer; `useShortcuts` has already turned those away.
+  const pageKey = (event: KeyboardEvent): boolean => {
+    const target = event.target instanceof HTMLElement ? event.target : null;
+    const inside = !!target && !!containerRef.current?.contains(target);
+    if (event.key === "/") {
+      event.preventDefault();
+      filterRef.current?.focus();
+      return true;
+    }
+    if (!inside && target?.closest(OWN_ARROWS)) return false;
+    const key = VIM_KEYS[event.key] ?? event.key;
+    if (key === "ArrowDown" || key === "ArrowUp") {
+      if (ordered.length === 0) return false;
+      event.preventDefault();
+      const to = navTarget(key, selectedIndex, ordered.length);
+      if (to !== null) select(to);
+      return true;
+    }
+    const row = ordered[selectedIndex];
+    if (!row) return false;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      clearSelection();
+      return true;
+    }
+    // A focused button or link owns its own Enter.
+    if (event.key === "Enter" && isClickable) {
+      if (target && target !== document.body && !inside) return false;
+      handleRowGesture(row.original, event);
+      return true;
+    }
+    return false;
+  };
+
+  const surfaceVisible = useSurfaceVisible();
+  const pageKeyRef = React.useRef(pageKey);
+  React.useEffect(() => {
+    pageKeyRef.current = pageKey;
+  });
+  React.useEffect(
+    () =>
+      pageKeys && keyboardNavEnabled && surfaceVisible
+        ? claimListKeys((event) => pageKeyRef.current(event))
+        : undefined,
+    [pageKeys, keyboardNavEnabled, surfaceVisible]
+  );
+
   const renderRow = (row: Row<TData>, index: number, line: number) => {
-    const rowProps = keyboardNavEnabled ? getRowProps(index) : undefined;
-    const isFocused = focusedRowIndex === index;
+    const isSelected = selectedIndex === index;
     const act = isClickable
-      ? (event: React.MouseEvent | React.KeyboardEvent) =>
-          handleRowGesture(row.original, event)
+      ? (event: React.MouseEvent) => handleRowGesture(row.original, event)
       : undefined;
     const href = getRowHref?.(row.original);
     const openPage =
@@ -716,47 +842,38 @@ function DataTableInner<TData extends RowData>({
       <TableRow
         key={row.id}
         data-index={line}
+        data-row-index={index}
         ref={shouldVirtualScroll ? virtualizer.measureElement : undefined}
-        // No `data-state="selected"`: nothing in this app selects a row —
-        // no checkbox column, no selection state, no handler. `TableRow`
-        // keeps the style for whoever wires it up later.
-        // `rowProps` carries `data-focused`, which is what reveals the row's
-        // actions — read by CSS rather than by React, because hover state
-        // rebuilt every column definition and re-rendered every cell in the
-        // table under the pointer.
-        {...rowProps}
-        // After the spread on purpose: the hook's tab stop follows the focused
-        // row, and the one that ships has to follow a drawn one.
-        tabIndex={rowProps && (index === tabStopRow ? 0 : -1)}
+        // `aria-selected` is also what reveals the row's actions, read by CSS
+        // rather than by React: hover state rebuilt every column definition
+        // and re-rendered every cell in the table under the pointer.
+        aria-selected={keyboardNavEnabled ? isSelected : undefined}
+        tabIndex={
+          keyboardNavEnabled ? (index === tabStopRow ? 0 : -1) : undefined
+        }
         className={cn(
           isClickable && "cursor-pointer",
-          isFocused && "ring-1 ring-inset ring-info",
+          isSelected && "bg-hover ring-1 ring-inset ring-info",
           "relative group"
         )}
+        onFocus={
+          keyboardNavEnabled
+            ? () =>
+                setSelection((current) =>
+                  current?.id === row.id && current.index === index
+                    ? current
+                    : { id: row.id, index }
+                )
+            : undefined
+        }
         onClick={act}
         onDoubleClick={openPage}
         onAuxClick={act}
         onKeyDown={
-          rowProps &&
-          ((event: React.KeyboardEvent) => {
-            // Home and End reach past the drawn window, and so does an arrow
-            // at its edge. The hook focuses by querying the DOM, so the row
-            // has to be scrolled into existence before it can be handed over.
-            const target = navTarget(event.key, index, rows.length);
-            if (target !== null && !isDrawn(target)) {
-              event.preventDefault();
-              pendingFocus.current = {
-                row: target,
-                until: Date.now() + PENDING_FOCUS_MS,
-              };
-              virtualizer.scrollToIndex(rowLine[target], { align: "center" });
-              return;
-            }
-            rowProps.onKeyDown(event);
-            // The hook owns the arrows, Home/End and Escape. Enter is an
-            // activation, so it belongs to the click's gesture instead.
-            if (event.key === "Enter") act?.(event);
-          })
+          keyboardNavEnabled
+            ? (event: React.KeyboardEvent) =>
+                onRowKey(event, index, row.original)
+            : undefined
         }
       >
         {row.getVisibleCells().map((cell) => (
@@ -837,6 +954,7 @@ function DataTableInner<TData extends RowData>({
           <div className="flex h-7 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
             <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <input
+              ref={filterRef}
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
@@ -846,6 +964,16 @@ function DataTableInner<TData extends RowData>({
               placeholder={searchPlaceholder ?? t("action", "searchEllipsis")}
               value={searchValue}
               onChange={(event) => changeSearch(event.target.value)}
+              // Back out to the rows without reaching for the mouse.
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  event.currentTarget.blur();
+                } else if (event.key === "ArrowDown" && keyboardNavEnabled) {
+                  event.preventDefault();
+                  select(0);
+                }
+              }}
               className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
             />
           </div>
@@ -913,12 +1041,13 @@ function DataTableInner<TData extends RowData>({
             }
           >
             <TableHeader
+              ref={headerRef}
               className={cn(
                 // Wherever the port can scroll. A filled table's does whenever
                 // its rows outgrow the pane, which is not only past the
                 // windowing mark — a 40-row list in a short window used to
                 // scroll its own column labels away.
-                (fill || shouldVirtualScroll) && "sticky top-0 z-10 bg-canvas"
+                stickyHeader && "sticky top-0 z-10 bg-canvas"
               )}
             >
               {table.getHeaderGroups().map((headerGroup) => {
