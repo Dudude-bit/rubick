@@ -381,7 +381,7 @@ describe("a lock for a reader with rights in one namespace", () => {
     );
     await lockOn(
       "DaemonSets",
-      /across the whole cluster was refused\. Choose a namespace/
+      /^Listing these was refused across the whole cluster and in team-checkout too\.$/
     );
     await lockOn("Nodes", /^You do not have permission to list these$/);
     expect(checkListAccess).toHaveBeenCalledWith(

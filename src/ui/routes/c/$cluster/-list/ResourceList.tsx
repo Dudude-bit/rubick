@@ -55,7 +55,7 @@ import {
   whole,
 } from "@/lib/namespace-scope";
 import type { ListQuery, Scoped, UnreadNamespace } from "@/generated/types";
-import { useListableIn } from "../-shell/useListAccess";
+import { refusedEverywhereAsked, useListableIn } from "../-shell/useListAccess";
 import { UnreadNamespaces } from "./UnreadNamespaces";
 import { UnreadList } from "./UnreadList";
 import { KindAbout } from "@/components/object/KindAbout";
@@ -461,14 +461,23 @@ export function ResourceList<
   // the reader has may still list it, and saying "no permission" hides that.
   const refusedAcrossCluster =
     failed !== null && isRefusal(failed) && narrowingHelps && scope.isAll;
-  const listableIn = useListableIn(
+  const reach = useListableIn(
     refusedAcrossCluster
       ? (listQuery ?? (listKind ? listQueryFor(listKind) : null))
       : null
   );
-  const refusalWords = refusedAcrossCluster
-    ? t("empty", "refusedClusterWide")
-    : t("nav", "noListAccess");
+  const listableIn = reach.readableIn;
+  // Asked in every namespace the app knows the reader has, and refused there
+  // too: no namespace is left to send them to.
+  const nowhere = refusedAcrossCluster && refusedEverywhereAsked(reach);
+  const refusalWords = nowhere
+    ? t("empty", "refusedClusterWideAndIn", {
+        n: reach.refusedIn.length,
+        namespaces: reach.refusedIn.join(", "),
+      })
+    : refusedAcrossCluster
+      ? t("empty", "refusedClusterWide")
+      : t("nav", "noListAccess");
 
   // What the file says about the read, in the words the screen uses: a list
   // nobody could read, or read only part of, is not an empty or a whole one.
@@ -663,7 +672,7 @@ export function ResourceList<
               : t("empty", "couldNotReadInScope", { label: emptyStateLabel })
           }
         >
-          {refusedAcrossCluster && (
+          {refusedAcrossCluster && !nowhere && (
             <div className="mt-3 flex flex-wrap items-center gap-3">
               {listableIn.length > 0 && (
                 <p className="flex items-center gap-1.5 text-xs text-info">

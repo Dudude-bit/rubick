@@ -5388,6 +5388,11 @@ export const en = {
       one: "You can list them in {namespaces}.",
       other: "You can list them in {namespaces}.",
     },
+    refusedClusterWideAndIn: {
+      one: "Listing these was refused across the whole cluster and in {namespaces} too.",
+      other:
+        "Listing these was refused across the whole cluster and in {namespaces} too.",
+    },
     noNodeAccess:
       "You do not have permission to read the cluster's nodes, so capacity and scheduler headroom are not shown.",
     controllerLower: "controller",

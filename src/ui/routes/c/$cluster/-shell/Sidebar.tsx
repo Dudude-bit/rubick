@@ -23,6 +23,7 @@ import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useAttention } from "@/hooks/useAttention";
 import {
   oneLock,
+  refusedEverywhereAsked,
   useListLocks,
   useLocks,
   type Lock as ListLock,
@@ -828,7 +829,12 @@ function LockMark({ lock, reason }: { lock: ListLock; reason?: string }) {
             n: lock.readableIn.length,
             namespaces: lock.readableIn.join(", "),
           })
-        : t("empty", "refusedAcrossCluster");
+        : refusedEverywhereAsked(lock)
+          ? t("empty", "refusedClusterWideAndIn", {
+              n: lock.refusedIn.length,
+              namespaces: lock.refusedIn.join(", "),
+            })
+          : t("empty", "refusedAcrossCluster");
   const Icon = readableIn(lock) ? FolderOpen : Lock;
   return (
     <Icon

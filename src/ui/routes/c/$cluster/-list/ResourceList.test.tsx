@@ -8,7 +8,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { type ReactElement } from "react";
-import { act, screen, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -152,6 +152,60 @@ describe("a list whose rows come from outside", () => {
       [{ group: "", resource: "pods", namespaced: true }],
       ["team-checkout"]
     );
+    asked.mockRestore();
+    store.state.currentContext = null;
+    store.state.contexts = [];
+  });
+
+  /**
+   * Marco under All namespaces: DaemonSets are refused across the cluster
+   * and in team-checkout, the one namespace he has, yet the page said a
+   * namespace may still answer and offered the picker. Fails if the hedge or
+   * the button survives every namespace the app can name refusing too.
+   */
+  it("names the namespace that refused too, and offers no picker, when every one asked refused", async () => {
+    store.state.currentContext = "prod";
+    store.state.contexts = [{ name: "prod", namespace: "team-checkout" }];
+    const asked = vi
+      .spyOn(commands, "checkListAccess")
+      .mockImplementation(async (queries) =>
+        queries.map((query) => ({ resource: query.resource, allowed: false }))
+      );
+    await list({ data: [], error: new Error("daemonsets.apps is forbidden") });
+
+    expect(
+      await screen.findByText(
+        "Listing these was refused across the whole cluster and in team-checkout too."
+      )
+    ).toBeVisible();
+    expect(screen.queryByText(/may still answer/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Choose a namespace" })
+    ).toBeNull();
+    asked.mockRestore();
+    store.state.currentContext = null;
+    store.state.contexts = [];
+  });
+
+  /**
+   * The authorizer could not be asked about team-checkout, which is not a
+   * refusal there. Fails if an unanswered review drops the hedge.
+   */
+  it("keeps the hedge when a namespace it could name went unanswered", async () => {
+    store.state.currentContext = "prod";
+    store.state.contexts = [{ name: "prod", namespace: "team-checkout" }];
+    const asked = vi
+      .spyOn(commands, "checkListAccess")
+      .mockImplementation(async (queries) =>
+        queries.map((query) => ({ resource: query.resource, allowed: null }))
+      );
+    await list({ data: [], error: new Error("daemonsets.apps is forbidden") });
+
+    await waitFor(() => expect(asked).toHaveBeenCalled());
+    expect(screen.getByText(/may still answer/)).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Choose a namespace" })
+    ).toBeVisible();
     asked.mockRestore();
     store.state.currentContext = null;
     store.state.contexts = [];

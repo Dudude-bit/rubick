@@ -88,9 +88,19 @@ export function useResourceAccess(queries: ListQuery[]): Map<string, boolean> {
  * namespace: a reader with rights in their own still lists it once they
  * choose one.
  */
-export type Lock =
-  | { says: "refused" }
-  | { says: "clusterWide"; readableIn: readonly string[] };
+export type Lock = { says: "refused" } | ({ says: "clusterWide" } & Reach);
+
+/** What the namespaces the app can name answered about one kind. */
+export interface Reach {
+  /** Asked, and it may be listed there. */
+  readableIn: readonly string[];
+  /** Asked, and refused there too. */
+  refusedIn: readonly string[];
+  /** A namespace the reader may have went unasked or unanswered, so one may still list it. */
+  unasked: boolean;
+}
+
+const UNASKED: Reach = { readableIn: [], refusedIn: [], unasked: true };
 
 /** The namespaces the app can name without listing them: the kubeconfig's, then the recent ones. */
 const NAMEABLE = 3;
@@ -109,10 +119,10 @@ function useNameableNamespaces(): string[] {
 }
 
 /**
- * Of the namespaces the app can name, those in which each kind may be
- * listed. Keyed by plural; a kind nobody could ask about has no entry.
+ * What each kind's answer was in the namespaces the app can name. Keyed by
+ * plural; a kind nobody could ask about has no entry, which is unasked.
  */
-function useReadableIn(queries: ListQuery[]): Map<string, string[]> {
+function useReadableIn(queries: ListQuery[]): Map<string, Reach> {
   const currentContext = useClusterStore((s) => s.currentContext);
   const isConnected = useClusterStore((s) => s.isConnected);
   const namespaces = useNameableNamespaces();
@@ -129,17 +139,24 @@ function useReadableIn(queries: ListQuery[]): Map<string, string[]> {
             .catch(() => ({ namespace, each: [] }))
         )
       );
-      const readable = new Map<string, string[]>();
-      for (const { namespace, each } of answers) {
-        for (const answer of each) {
-          if (answer.allowed !== true) continue;
-          readable.set(answer.resource, [
-            ...(readable.get(answer.resource) ?? []),
+      return new Map(
+        queries.map(({ resource }) => {
+          const said = answers.map(({ namespace, each }) => ({
             namespace,
-          ]);
-        }
-      }
-      return readable;
+            allowed: each.find((a) => a.resource === resource)?.allowed ?? null,
+          }));
+          const where = (allowed: boolean) =>
+            said.filter((a) => a.allowed === allowed).map((a) => a.namespace);
+          return [
+            resource,
+            {
+              readableIn: where(true),
+              refusedIn: where(false),
+              unasked: said.some((a) => a.allowed === null),
+            },
+          ];
+        })
+      );
     },
     enabled:
       isConnected &&
@@ -152,7 +169,7 @@ function useReadableIn(queries: ListQuery[]): Map<string, string[]> {
   return data ?? NONE_READABLE;
 }
 
-const NONE_READABLE = new Map<string, string[]>();
+const NONE_READABLE = new Map<string, Reach>();
 
 /** The lock on each refused kind, keyed by plural; an allowed or unasked kind has none. */
 export function useLocks(queries: ListQuery[]): Map<string, Lock> {
@@ -170,10 +187,7 @@ export function useLocks(queries: ListQuery[]): Map<string, Lock> {
     locks.set(
       query.resource,
       acrossCluster.includes(query)
-        ? {
-            says: "clusterWide",
-            readableIn: readable.get(query.resource) ?? [],
-          }
+        ? { says: "clusterWide", ...(readable.get(query.resource) ?? UNASKED) }
         : { says: "refused" }
     );
   }
@@ -193,27 +207,32 @@ export function useListLocks(
   return byKind;
 }
 
-/** Where kinds refused across the cluster can be listed instead, for a list page. */
-export function useListableIn(query: ListQuery | null): readonly string[] {
+/** Where a kind refused across the cluster can be listed instead, and where it was refused too, for a list page. */
+export function useListableIn(query: ListQuery | null): Reach {
   return (
     useReadableIn(query?.namespaced ? [query] : []).get(
       query?.resource ?? ""
-    ) ?? NO_RECENT
+    ) ?? UNASKED
   );
 }
 
+/** Refused across the cluster and in every namespace asked: no namespace the app knows of may still answer. */
+export const refusedEverywhereAsked = (reach: Reach) =>
+  !reach.unasked && reach.readableIn.length === 0;
+
 /** One lock for a row that stands for several kinds, each of them locked. */
 export function oneLock(locks: readonly Lock[]): Lock {
-  if (!locks.every((lock) => lock.says === "clusterWide"))
-    return { says: "refused" };
+  const wide = locks.flatMap((lock) =>
+    lock.says === "clusterWide" ? [lock] : []
+  );
+  if (wide.length < locks.length) return { says: "refused" };
   return {
     says: "clusterWide",
-    readableIn: [
-      ...new Set(
-        locks.flatMap((lock) =>
-          lock.says === "clusterWide" ? lock.readableIn : []
-        )
-      ),
-    ],
+    readableIn: [...new Set(wide.flatMap((lock) => lock.readableIn))],
+    refusedIn:
+      wide[0]?.refusedIn.filter((namespace) =>
+        wide.every((lock) => lock.refusedIn.includes(namespace))
+      ) ?? [],
+    unasked: wide.some((lock) => lock.unasked),
   };
 }
