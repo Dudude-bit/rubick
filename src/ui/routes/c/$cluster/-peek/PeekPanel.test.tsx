@@ -472,6 +472,16 @@ describe("PeekPanel", () => {
     ).toBeVisible();
   });
 
+  /** The third surface that draws a pod's status, after the list and the page. */
+  it("explains the pod's status on its badge, as the list and the page do", async () => {
+    await wrap(POD_PEEK);
+    const badge = await screen.findByText("CrashLoopBackOff");
+    expect(badge.closest("[title]")).toHaveAttribute(
+      "title",
+      expect.stringMatching(/^CrashLoopBackOff: a container keeps exiting/)
+    );
+  });
+
   it("shows the summary and this object's events once they arrive", async () => {
     await wrap(POD_PEEK);
     expect(await screen.findByText("CrashLoopBackOff")).toBeInTheDocument();

@@ -2913,7 +2913,6 @@ export const en = {
       "Neither EndpointSlices nor the Endpoints object answered, so this is a deduction rather than the cluster's own word: the pods the selector matches, each read for its own Ready condition.",
     legacyEndpointsShort:
       "This is the object the control plane writes for compatibility. It cannot express serving or terminating, and it stops at 1000 addresses — but no EndpointSlice answered here, so it is also all there is to read.",
-    podPhase: "Phase {phase}",
     nodeStoppedReportingAgo:
       "Node {node} stopped reporting {age} ago. This status is the last one it sent, not the pod's state now.",
     nodeStoppedReporting:
@@ -6141,6 +6140,70 @@ export const en = {
       "refused — the address answers, but nothing listens on this port",
     gwProbeTimedOut:
       "timed out after 3s — packets go unanswered; a firewall, or the wrong address",
+  },
+  statusMeaning: {
+    phasePending:
+      "accepted by the cluster, but not every container is running yet; usually waiting for a node or an image.",
+    phaseRunning:
+      "placed on a node with every container created, and at least one of them running or restarting.",
+    phaseSucceeded:
+      "every container finished with exit code 0 and will not be restarted.",
+    phaseFailed:
+      "every container has stopped, and at least one of them failed.",
+    phaseUnknown:
+      "the node stopped telling the cluster about this pod, so its state is not known.",
+    containerCreating:
+      "the node is pulling images and setting up the containers.",
+    podInitializing:
+      "the init containers have finished and the app's own containers are starting.",
+    crashLoopBackOff:
+      "a container keeps exiting soon after it starts, and the kubelet waits longer before each restart; the logs of the previous run usually say why.",
+    imagePullBackOff:
+      "the node could not pull an image and is waiting before it tries again; check the image name, its tag and the pull secret.",
+    errImagePull:
+      "the last attempt to pull an image failed; check the image name, its tag and the pull secret.",
+    createContainerConfigError:
+      "a ConfigMap, Secret or key a container needs is missing, so the container cannot be created.",
+    createContainerError:
+      "the container runtime refused to create a container; the pod's events say why.",
+    invalidImageName: "the image reference is not a valid image name.",
+    runContainerError:
+      "the container was created but could not start, often because of a wrong command or a missing file.",
+    oomKilled: "a container used more memory than its limit and was killed.",
+    error: "a container exited with a non-zero code.",
+    completed: "every container finished successfully.",
+    terminating:
+      "the pod was told to stop and is shutting down; it goes away once its containers exit.",
+    evicted:
+      "the node removed this pod, usually because it ran short of memory or disk.",
+    nodeLost: "the node this pod runs on stopped answering.",
+    schedulingGated:
+      "the pod is held back from scheduling until its scheduling gates are removed.",
+    notReady:
+      "the containers run, but the pod fails its readiness check, so Services send it no traffic.",
+    containerStatusUnknown:
+      "the container's state was lost, usually after the node restarted.",
+    deadlineExceeded:
+      "the pod ran longer than its activeDeadlineSeconds allow and was stopped.",
+    initProgress:
+      "init containers run one at a time before the app's own; {done} of {total} have finished.",
+    initNote:
+      "It is an init container, which has to finish before the app's own containers start.",
+    exitCode: "a container exited with code {code} and gave no reason.",
+    signal: "a container was stopped by signal {signal}.",
+    workloadReady: "every desired replica is up and available.",
+    workloadProgressing:
+      "new Pods are coming up or old ones going away: a rollout or a scale is under way.",
+    workloadIdle: "scaled to zero replicas on purpose, so nothing runs.",
+    workloadStalled:
+      "the rollout stopped making progress within its deadline; old Pods may still be serving.",
+    workloadUnavailable:
+      "fewer replicas are ready than the workload needs to serve.",
+    workloadPaused:
+      "the rollout is paused, so changes to the template are not rolled out until it resumes.",
+    workloadWaiting: "the controller has not acted on the latest change yet.",
+    workloadDegraded:
+      "the rollout finished, but fewer replicas are available than desired.",
   },
   kindAbout: {
     Pod: "A Pod is one running copy of an app, one or more containers sharing a network address; look here to see which copies are up, restarting or stuck.",

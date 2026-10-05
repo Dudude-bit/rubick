@@ -76,12 +76,12 @@ describe("a pod whose node stopped reporting", () => {
 
 describe("a pod whose node is answering", () => {
   /** Would have fired the warning on every healthy cluster. */
-  it("is drawn exactly as before, with the phase in the tooltip", () => {
+  it("is drawn exactly as before, with its meaning in the tooltip", () => {
     render(<>{statusCell({ status: RUNNING })}</>);
 
     const badge = screen.getByText("Running");
     expect(badge.className).not.toContain("text-fg-mut");
-    expect(screen.getByTitle("Phase Running")).toBeInTheDocument();
+    expect(screen.getByTitle(/^Running: placed on a node/)).toBeInTheDocument();
   });
 
   /** The role still comes from the status, not from the node. */

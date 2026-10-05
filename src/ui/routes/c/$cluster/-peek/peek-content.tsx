@@ -17,6 +17,7 @@ import { SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PeekSkeleton } from "./peek-skeleton";
 import { PhaseBadge, StatusBadge } from "@/components/ui/status-badge";
+import { statusMeaning } from "@/lib/status-meaning";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { silenceNote, silenceOf } from "@/lib/node-reporting";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -220,7 +221,11 @@ export function PeekContent({
             <StatusBadge
               status={summary.status}
               roleOverride={silence ? "neutral" : undefined}
-              title={silence ? silenceNote(silence, t) : undefined}
+              title={
+                silence
+                  ? silenceNote(silence, t)
+                  : statusMeaning(target.kind, summary.status, t)
+              }
             />
           ) : (
             summary?.status === null && <PhaseBadge phase={null} />

@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
+import { podStatusMeaning } from "@/lib/status-meaning";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -648,7 +649,7 @@ export function PodDetail() {
               title={
                 silence
                   ? silenceNote(silence, t)
-                  : `${t("columns", "phase")} ${pod.status.phase}`
+                  : podStatusMeaning(pod.status.display, pod.status.phase, t)
               }
             />
           ) : null

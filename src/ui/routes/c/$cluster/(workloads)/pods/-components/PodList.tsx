@@ -32,6 +32,7 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { formatAge } from "@/lib/utils";
 import { refOf } from "@/lib/report-parts";
 import { podStatusValue } from "@/lib/share/pod-status";
+import { podStatusMeaning } from "@/lib/status-meaning";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT } from "@/i18n/useT";
 
@@ -67,7 +68,7 @@ function PodStatusCell({ pod }: { pod: PodRow }) {
       title={
         silence
           ? silenceNote(silence, t)
-          : t("readings", "podPhase", { phase: pod.status.phase })
+          : podStatusMeaning(pod.status.display, pod.status.phase, t)
       }
     />
   );
