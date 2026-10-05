@@ -2010,21 +2010,6 @@ export interface LogLineEvent {
   segments?: StyledSegment[];
 }
 
-export interface RolloutStatus {
-  replicas: number;
-  readyReplicas: number;
-  updatedReplicas: number;
-  availableReplicas: number;
-  conditions: DeploymentCondition[];
-}
-
-export interface DeploymentCondition {
-  conditionType: string;
-  status: string;
-  reason: string | null;
-  message: string | null;
-}
-
 export interface PodInfo {
   name: string;
   namespace: string;

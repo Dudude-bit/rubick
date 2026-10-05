@@ -5,7 +5,7 @@ use crate::commands::helpers::{
     get_resource_info, list_in_scope, list_resource_infos, ResourceContext,
 };
 use crate::error::Result;
-use crate::resources::{DeploymentCondition, DeploymentInfo, PodInfo, RolloutStatus};
+use crate::resources::{DeploymentInfo, PodInfo};
 use crate::state::AppState;
 use k8s_openapi::api::apps::v1::Deployment;
 use k8s_openapi::api::core::v1::Pod;
@@ -139,41 +139,4 @@ pub async fn get_deployment_pods(
     let pod_infos: Vec<PodInfo> = pods.items.iter().map(PodInfo::from).collect();
 
     Ok(pod_infos)
-}
-
-/// Get deployment rollout status
-#[tauri::command]
-pub async fn get_rollout_status(
-    name: String,
-    namespace: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<RolloutStatus> {
-    let ctx = ResourceContext::for_command(&state, namespace)?;
-
-    let api: kube::Api<Deployment> = ctx.namespaced_api();
-    let deployment = api.get(&name).await?;
-
-    let status = deployment
-        .status
-        .ok_or_else(|| crate::error::Error::InvalidInput("Deployment has no status".to_string()))?;
-
-    let conditions: Vec<DeploymentCondition> = status
-        .conditions
-        .unwrap_or_default()
-        .into_iter()
-        .map(|c| DeploymentCondition {
-            condition_type: c.type_,
-            status: c.status,
-            reason: c.reason,
-            message: c.message,
-        })
-        .collect();
-
-    Ok(RolloutStatus {
-        replicas: status.replicas.unwrap_or(0),
-        ready_replicas: status.ready_replicas.unwrap_or(0),
-        updated_replicas: status.updated_replicas.unwrap_or(0),
-        available_replicas: status.available_replicas.unwrap_or(0),
-        conditions,
-    })
 }

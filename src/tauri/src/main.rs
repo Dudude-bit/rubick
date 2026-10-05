@@ -261,7 +261,6 @@ fn main() {
             commands::workloads::restart_daemonset,
             commands::deployments::update_deployment_image,
             commands::deployments::get_deployment_pods,
-            commands::deployments::get_rollout_status,
             // ReplicaSet commands — a detail page and a Deployment's
             // revisions; deliberately no list, there is no list page.
             commands::replicasets::get_replicaset,

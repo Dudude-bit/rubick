@@ -111,7 +111,6 @@ import type {
   ResourceFilters,
   ResourceTable,
   RollbackOutcome,
-  RolloutStatus,
   RouteInfo,
   Scoped,
   ScrapeTarget,
@@ -324,13 +323,6 @@ export async function getDeploymentPods(
   namespace: string | null
 ): Promise<PodInfo[]> {
   return invoke<PodInfo[]>("get_deployment_pods", { name, namespace });
-}
-
-export async function getRolloutStatus(
-  name: string,
-  namespace: string | null
-): Promise<RolloutStatus> {
-  return invoke<RolloutStatus>("get_rollout_status", { name, namespace });
 }
 
 export async function appEventTypes(): Promise<AppEvent | null> {
