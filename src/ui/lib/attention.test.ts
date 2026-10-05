@@ -12,6 +12,7 @@ import type {
 } from "@/generated/types";
 import { attentionOf, type AttentionInputs } from "./attention";
 import { ingressHealthOf, type NamespaceBacking } from "./ingress-health";
+import { serviceHealthOf, serviceHealthWords } from "./service-health";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -182,6 +183,48 @@ describe("what Needs attention lists beyond pods", () => {
     ]);
     expect(listed.items[0].reason).toBe("no endpoints");
     expect(listed.items[1].namespace).toBe("net");
+  });
+
+  /**
+   * Sam's `web`: the Service page knows why nothing is published, a
+   * `targetPort` no container declares. The row says what the shared
+   * reader says, from the stop the compact read carries. Fails if the row
+   * composes its own words or drops the stop.
+   */
+  it("gives a Service the reason its own reader gives, cause included", () => {
+    const web: ServiceHealthGroup = {
+      names: ["web"],
+      type: "ClusterIP",
+      selectorless: false,
+      ready: 0,
+      draining: 0,
+      notReady: 0,
+      unrouted: 2,
+      stop: {
+        reason: "publishesNothing",
+        service: {
+          kind: "Service",
+          name: "web",
+          namespace: "net",
+          existence: "present",
+          facts: null,
+        },
+        selector: "app=web",
+        pods: 2,
+        readyPods: 2,
+        unnamedPorts: ["web"],
+      },
+    };
+    const listed = attention({
+      services: {
+        answered: [{ namespace: "net", groups: [web] }],
+        unread: [],
+      },
+    });
+
+    const said = serviceHealthWords(serviceHealthOf(web, web, null), t).reason;
+    expect(said).toBeTruthy();
+    expect(listed.items[0].detail).toEqual({ says: "ours", text: said });
   });
 
   /** An Ingress whose class nothing serves, read by the Ingresses list's own reader. */

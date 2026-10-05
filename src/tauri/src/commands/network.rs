@@ -701,6 +701,22 @@ mod tests {
         assert!(group(&services[0]).names.len() > 1);
     }
 
+    /// Sam's `web`: its slice carries no port because `targetPort` names a
+    /// port no container declares. The compact answer keeps the stop that
+    /// names it, so Needs attention can give the cause the Service page
+    /// gives. Fails if the stop or its port names are dropped on the way.
+    #[test]
+    fn the_compact_answer_keeps_the_port_no_container_declares() {
+        let (services, mut slices) = synthetic(1, |_| false);
+        slices[0].ports = None;
+        let published = published_from_slices(&services, &slices);
+        let inputs = health_inputs_of(&services, published);
+
+        let stop = serde_json::to_value(&inputs[0].groups[0].stop).expect("json");
+        assert_eq!(stop["reason"], "publishesNothing");
+        assert_eq!(stop["unnamedPorts"], serde_json::json!(["http"]));
+    }
+
     /// The Ingress the attention count reads is its row cut down, not a
     /// second reading. Fails if a field the verdict reads changes on the way,
     /// or if the labels and annotations come back.
