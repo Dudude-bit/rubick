@@ -74,6 +74,36 @@ where
     )
 }
 
+/// Passes a watcher's items through the first one that `last` says ends it.
+///
+/// A refused namespace of a scope stream ends here: kube retries a 403 for
+/// ever, every thirty seconds, and the answer never changes.
+pub(super) fn until<S, T, P>(stream: S, last: P) -> impl Stream<Item = T>
+where
+    S: Stream<Item = T> + Unpin,
+    P: Fn(&T) -> bool + Copy,
+{
+    futures::stream::unfold((stream, false), move |(mut stream, ended)| async move {
+        if ended {
+            return None;
+        }
+        let item = stream.next().await?;
+        let ended = last(&item);
+        Some((item, (stream, ended)))
+    })
+}
+
+/// What one error does to a watch.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Step {
+    /// Try again without a word: a blip, or a streak still short.
+    Retry,
+    /// Try again, and tell the page the watch is down.
+    Tell,
+    /// The cluster refused it, which no retry changes: tell, and end.
+    Stop,
+}
+
 /// State machine for the watcher's "should we emit Failed yet?" decision.
 pub(super) struct FailureLatch {
     consecutive_errors: u32,
@@ -117,6 +147,18 @@ impl FailureLatch {
             true
         } else {
             false
+        }
+    }
+
+    /// One error, `refused` when the cluster refused the watch.
+    pub fn failed(&mut self, refused: bool) -> Step {
+        if refused {
+            return Step::Stop;
+        }
+        if self.record_error() {
+            Step::Tell
+        } else {
+            Step::Retry
         }
     }
 
@@ -216,6 +258,26 @@ mod tests {
         });
         assert_eq!(paced.collect::<Vec<_>>().await.len(), 6);
         assert_eq!(*ASKED.lock().unwrap(), [1, 2, 1]);
+    }
+
+    /// Marco's `DaemonSet` watch retried its 403 every thirty seconds for as
+    /// long as the app ran. Fails if a refusal waits for a streak or retries.
+    #[test]
+    fn a_refusal_ends_the_watch_at_the_first_error() {
+        let mut latch = FailureLatch::new();
+        assert_eq!(latch.failed(true), Step::Stop);
+        assert_eq!(latch.failed(false), Step::Retry, "anything else retries");
+    }
+
+    /// A scope stream's refused namespace stops asking; the item that ended
+    /// it still reaches the stream, or the page is never told.
+    #[tokio::test]
+    async fn a_stream_ends_after_the_item_that_ends_it() {
+        let items: Vec<Result<u8, &str>> = vec![Ok(1), Err("refused"), Ok(2)];
+        let kept: Vec<_> = until(futures::stream::iter(items), Result::is_err)
+            .collect()
+            .await;
+        assert_eq!(kept, [Ok(1), Err("refused")]);
     }
 
     #[test]

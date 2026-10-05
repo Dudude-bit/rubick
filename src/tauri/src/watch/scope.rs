@@ -95,13 +95,8 @@ impl ScopeSync {
         let event = match event {
             Ok(event) => event,
             Err(error) => {
-                let member = &mut self.members[at];
-                if member.latch.record_error() {
-                    member.failing = true;
-                    if self.mode != Mode::Failed {
-                        self.mode = Mode::Failed;
-                        out.push(Out::Failed(format!("{}: {error}", member.namespace)));
-                    }
+                if self.members[at].latch.record_error() {
+                    self.fail(at, error, out);
                 }
                 return;
             }
@@ -161,6 +156,21 @@ impl ScopeSync {
         if self.mode == Mode::Syncing && self.members.iter().all(|m| m.listed && !m.relisting) {
             out.push(Out::Marker(WatchOp::Synced));
             self.mode = Mode::Steady;
+        }
+    }
+
+    /// The cluster refused one namespace. Its watcher has ended, so the
+    /// stream fails now rather than after a streak that will never come.
+    pub(super) fn refused(&mut self, at: usize, error: impl Display, out: &mut Vec<Out>) {
+        self.fail(at, error, out);
+    }
+
+    fn fail(&mut self, at: usize, error: impl Display, out: &mut Vec<Out>) {
+        let member = &mut self.members[at];
+        member.failing = true;
+        if self.mode != Mode::Failed {
+            self.mode = Mode::Failed;
+            out.push(Out::Failed(format!("{}: {error}", member.namespace)));
         }
     }
 
@@ -429,5 +439,16 @@ mod tests {
 
         stream.send(B, Event::InitDone);
         assert_eq!(stream.page.shows(), ["a", "b", "s"]);
+    }
+
+    /// A namespace the cluster refused has stopped retrying, so a streak
+    /// that waits for three errors would leave the page told nothing.
+    #[test]
+    fn a_refused_namespace_fails_the_stream_at_once() {
+        let mut stream = Stream::synced();
+        let mut out = Vec::new();
+        stream.sync.refused(B, "configmaps is forbidden", &mut out);
+        stream.page.read(out);
+        assert_eq!(stream.page.failures, ["staging: configmaps is forbidden"]);
     }
 }

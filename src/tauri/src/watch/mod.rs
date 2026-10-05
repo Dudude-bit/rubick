@@ -20,7 +20,7 @@ mod failure;
 mod scope;
 
 use crate::commands::helpers::{api_in, scope_of};
-use crate::error::{watch_failure, Error, Result};
+use crate::error::{watch_failure, watch_refused, Error, Result};
 use crate::state::{AppEvent, WatchOp};
 use crate::utils::generate_id;
 use futures::StreamExt;
@@ -34,7 +34,7 @@ use tokio::sync::broadcast;
 use tokio::time::{interval, MissedTickBehavior};
 
 use event::{emit_failure, WatchBatch, FLUSH_INTERVAL};
-use failure::{paced, FailureLatch};
+use failure::{paced, until, FailureLatch, Step};
 use scope::{Out, ScopeSync};
 
 pub(crate) use failure::{answered, backoff_for};
@@ -374,14 +374,21 @@ impl WatchManager {
                                 }
                             }
                             Some(Err(e)) => {
-                                let should_emit = latch.record_error();
+                                let step = latch.failed(watch_refused(&e));
+                                if step == Step::Stop {
+                                    let message = watch_failure(&e);
+                                    tracing::warn!("Resource watch {} refused, stopped: {}", label, message);
+                                    batch.flush(&event_tx);
+                                    emit_failure(&event_tx, &stream_id_clone, message);
+                                    break;
+                                }
                                 tracing::error!(
                                     "Resource watch {} error ({} in a row): {}",
                                     label,
                                     latch.consecutive_errors(),
                                     e
                                 );
-                                if should_emit {
+                                if step == Step::Tell {
                                     // Whatever is buffered was still true when
                                     // it arrived; it goes out before the
                                     // failure so the list the reader falls back
@@ -464,9 +471,12 @@ impl WatchManager {
             let (namespaces, apis): (Vec<_>, Vec<_>) = members.into_iter().unzip();
             let mut merged =
                 futures::stream::select_all(apis.into_iter().enumerate().map(|(at, api)| {
-                    paced(watcher(api, config.clone()).boxed(), backoff_for)
-                        .map(move |event| (at, event))
-                        .boxed()
+                    until(
+                        paced(watcher(api, config.clone()).boxed(), backoff_for).boxed(),
+                        |event| matches!(event, Err(e) if watch_refused(e)),
+                    )
+                    .map(move |event| (at, event))
+                    .boxed()
                 }));
             let mut sync = ScopeSync::new(namespaces);
             let mut out = Vec::new();
@@ -489,17 +499,29 @@ impl WatchManager {
                             tracing::debug!("Resource watch {} stream ended", label);
                             break;
                         };
+                        let refused = matches!(&event, Err(e) if watch_refused(e));
                         if let Err(e) = &event {
-                            tracing::error!(
-                                "Resource watch {} in {} error ({} in a row): {}",
-                                label,
-                                sync.namespace(at),
-                                sync.streak(at) + 1,
-                                e
-                            );
+                            if refused {
+                                tracing::warn!(
+                                    "Resource watch {} in {} refused, stopped: {}",
+                                    label,
+                                    sync.namespace(at),
+                                    watch_failure(e)
+                                );
+                            } else {
+                                tracing::error!(
+                                    "Resource watch {} in {} error ({} in a row): {}",
+                                    label,
+                                    sync.namespace(at),
+                                    sync.streak(at) + 1,
+                                    e
+                                );
+                            }
                         }
-                        let event = event.map_err(|e| watch_failure(&e));
-                        sync.on(at, event, &transform, &mut out);
+                        match event.map_err(|e| watch_failure(&e)) {
+                            Err(message) if refused => sync.refused(at, message, &mut out),
+                            event => sync.on(at, event, &transform, &mut out),
+                        }
                         for said in out.drain(..) {
                             match said {
                                 Out::Change(op, raw) => {

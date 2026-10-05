@@ -349,6 +349,18 @@ pub(crate) fn watch_failure(error: &kube::runtime::watcher::Error) -> String {
     }
 }
 
+/// Whether the cluster refused a watch, which no retry of it changes.
+pub(crate) fn watch_refused(error: &kube::runtime::watcher::Error) -> bool {
+    use kube::runtime::watcher::Error as Watch;
+    match error {
+        Watch::InitialListFailed(kube::Error::Api(status))
+        | Watch::WatchStartFailed(kube::Error::Api(status))
+        | Watch::WatchFailed(kube::Error::Api(status))
+        | Watch::WatchError(status) => status.code == 403 || status.reason == "Forbidden",
+        _ => false,
+    }
+}
+
 impl From<serde_json::Error> for Error {
     fn from(err: serde_json::Error) -> Self {
         Error::Serialization(err.to_string())
@@ -625,6 +637,22 @@ mod tests {
         assert!(shown.starts_with("failed to perform initial object list: "));
         assert!(shown.contains("Forbidden"), "the reason is lost: {shown}");
         assert!(!shown.contains("Status {"), "the dump leaked: {shown}");
+    }
+
+    /// A refused watch ends instead of retrying; a 500 read as a refusal
+    /// would end a watch the next attempt could have restored.
+    #[test]
+    fn a_watch_is_refused_by_a_403_and_not_by_a_server_error() {
+        use kube::runtime::watcher::Error as Watch;
+        assert!(watch_refused(&Watch::InitialListFailed(api_error(
+            403,
+            "Forbidden"
+        ))));
+        assert!(watch_refused(&Watch::WatchStartFailed(api_error(403, ""))));
+        assert!(!watch_refused(&Watch::InitialListFailed(api_error(
+            500,
+            "InternalError"
+        ))));
     }
 
     /// Would send the reader back to a screen that says the cluster is empty.
