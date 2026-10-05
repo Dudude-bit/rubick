@@ -3,7 +3,7 @@ import { useQueries, type UseQueryResult } from "@tanstack/react-query";
 
 import type {
   IngressClassBinding,
-  IngressInfo,
+  IngressHealthInput,
   TlsCertificate,
 } from "@/generated/types";
 import type { ServiceHealthRead } from "@/hooks/useServiceHealthInputs";
@@ -29,10 +29,10 @@ const answers = <V>(results: UseQueryResult<V>[]): Answer<V>[] =>
  * Services come from the caller, who already reads them for the same scope.
  */
 export function useIngressHealth(
-  rows: readonly IngressInfo[] | undefined,
+  rows: readonly IngressHealthInput[] | undefined,
   backing: ServiceHealthRead,
   enabled = true
-): (ingress: IngressInfo) => IngressHealth {
+): (ingress: IngressHealthInput) => IngressHealth {
   const classes = useMemo(
     () => [...new Set((rows ?? []).map((ingress) => ingress.className))],
     [rows]
@@ -73,7 +73,7 @@ export function useIngressHealth(
   });
 
   return useMemo(
-    () => (ingress: IngressInfo) => {
+    () => (ingress: IngressHealthInput) => {
       const binding = bindings[classes.indexOf(ingress.className)];
       const at = secrets.findIndex(
         (entry) => entry.namespace === ingress.namespace

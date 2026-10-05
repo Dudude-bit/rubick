@@ -67,6 +67,7 @@ import type {
   HelmRepository,
   HelmRevision,
   IngressClassBinding,
+  IngressHealthInput,
   IngressInfo,
   IssuanceStory,
   JobDetailInfo,
@@ -1898,6 +1899,14 @@ export async function listIngressesIn(
   scope: string[] | null
 ): Promise<Scoped<IngressInfo>> {
   return invoke<Scoped<IngressInfo>>("list_ingresses_in", { scope });
+}
+
+export async function listIngressHealthInputs(
+  scope: string[] | null
+): Promise<Scoped<IngressHealthInput>> {
+  return invoke<Scoped<IngressHealthInput>>("list_ingress_health_inputs", {
+    scope,
+  });
 }
 
 export async function listEndpointsIn(

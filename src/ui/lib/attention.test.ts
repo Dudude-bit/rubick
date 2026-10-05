@@ -6,7 +6,7 @@ import type {
   AutoscalerInfo,
   ClusterOverview,
   ClusterProblem,
-  IngressInfo,
+  IngressHealthInput,
   PersistentVolumeClaimInfo,
   ServiceHealthGroup,
 } from "@/generated/types";
@@ -57,7 +57,7 @@ function services(
   };
 }
 
-function ingress(name: string, backend: string): IngressInfo {
+function ingress(name: string, backend: string): IngressHealthInput {
   return {
     name,
     namespace: "net",
@@ -78,12 +78,7 @@ function ingress(name: string, backend: string): IngressInfo {
     ],
     defaultBackend: null,
     loadBalancerIps: [],
-    tlsHosts: [],
     tlsConfigs: [],
-    hasCatchAllTls: false,
-    labels: {},
-    annotations: {},
-    createdAt: null,
   };
 }
 

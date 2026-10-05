@@ -447,6 +447,7 @@ fn main() {
             // Network commands
             commands::network::list_ingresses,
             commands::network::list_ingresses_in,
+            commands::network::list_ingress_health_inputs,
             commands::network::list_network_policies_in,
             commands::network::get_network_policy,
             commands::network::delete_network_policy,

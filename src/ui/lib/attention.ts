@@ -12,7 +12,7 @@
 import type {
   AutoscalerInfo,
   ClusterOverview,
-  IngressInfo,
+  IngressHealthInput,
   PersistentVolumeClaimInfo,
   ProblemDetail,
   Scoped,
@@ -170,8 +170,8 @@ interface Judged {
 
 const ingressItems = remember(
   (
-    rows: IngressInfo[],
-    healthOf: (ingress: IngressInfo) => IngressHealth,
+    rows: IngressHealthInput[],
+    healthOf: (ingress: IngressHealthInput) => IngressHealth,
     t: T
   ): Judged => {
     const judged: Judged = { items: [], unknown: [], reading: false };
@@ -302,8 +302,8 @@ export interface AttentionInputs {
     answered: ServiceHealthInputs[];
     unread: Unread[] | "reading";
   };
-  ingresses: Answer<Scoped<IngressInfo>>;
-  ingressHealth: (ingress: IngressInfo) => IngressHealth;
+  ingresses: Answer<Scoped<IngressHealthInput>>;
+  ingressHealth: (ingress: IngressHealthInput) => IngressHealth;
   autoscalers: Answer<Scoped<AutoscalerInfo>>;
   claims: Answer<Scoped<PersistentVolumeClaimInfo>>;
   now: number;

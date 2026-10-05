@@ -372,6 +372,12 @@ export const queryKeys = {
     "service-backing",
     (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
   ],
+  /** A scope's Ingresses as their verdict reads them, under the kind's lists so a delete reaches it. */
+  ingressHealthInputs: (namespace?: string | null): string[] => [
+    toPlural(ResourceType.Ingress),
+    "health-inputs",
+    scope(namespace),
+  ],
   /** A scope's Services as their verdict reads them, `listServiceHealthInputs`. */
   serviceHealthInputs: (namespaces: readonly string[] | null): string[] => [
     "service-health-inputs",

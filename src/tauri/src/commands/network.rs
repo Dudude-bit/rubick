@@ -6,8 +6,9 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::error::Result;
 use crate::resources::{
-    published, selected_count, ChainStop, EndpointsInfo, Existence, IngressInfo, NetworkPolicyInfo,
-    ObjectRef, ServiceInfo, ServicePublished,
+    published, selected_count, ChainStop, EndpointsInfo, Existence, IngressDefaultBackend,
+    IngressInfo, IngressRule, IngressTlsConfig, NetworkPolicyInfo, ObjectRef, ServiceInfo,
+    ServicePublished,
 };
 use crate::state::AppState;
 use k8s_openapi::api::core::v1::{Endpoints, Pod, Service};
@@ -33,6 +34,37 @@ pub async fn list_ingresses(
 }
 
 list_in_scope!(list_ingresses_in, Ingress, IngressInfo);
+
+/// What `ingressHealthOf` reads of an Ingress: its row without the labels,
+/// the annotations and the TLS host summary, which are most of its weight.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IngressHealthInput {
+    pub name: String,
+    pub namespace: String,
+    pub class_name: Option<String>,
+    pub rules: Vec<IngressRule>,
+    pub default_backend: Option<IngressDefaultBackend>,
+    pub load_balancer_ips: Vec<String>,
+    pub tls_configs: Vec<IngressTlsConfig>,
+}
+
+impl From<&Ingress> for IngressHealthInput {
+    fn from(ingress: &Ingress) -> Self {
+        let info = IngressInfo::from(ingress);
+        Self {
+            name: info.name,
+            namespace: info.namespace,
+            class_name: info.class_name,
+            rules: info.rules,
+            default_backend: info.default_backend,
+            load_balancer_ips: info.load_balancer_ips,
+            tls_configs: info.tls_configs,
+        }
+    }
+}
+
+list_in_scope!(list_ingress_health_inputs, Ingress, IngressHealthInput);
 
 /// Every `NetworkPolicy` in scope, with how many pods each one actually picks.
 ///
@@ -667,6 +699,50 @@ mod tests {
         assert!(!group(&services[0]).selectorless);
         assert_eq!(group(&services[2]).type_, "ClusterIP");
         assert!(group(&services[0]).names.len() > 1);
+    }
+
+    /// The Ingress the attention count reads is its row cut down, not a
+    /// second reading. Fails if a field the verdict reads changes on the way,
+    /// or if the labels and annotations come back.
+    #[test]
+    fn an_ingress_health_input_is_its_row_without_the_metadata() {
+        let ingress: Ingress = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "storefront",
+                "namespace": "net",
+                "labels": { "app.kubernetes.io/name": "storefront" },
+                "annotations": {
+                    "kubectl.kubernetes.io/last-applied-configuration": "{\"apiVersion\":\"networking.k8s.io/v1\",\"kind\":\"Ingress\",\"metadata\":{\"name\":\"storefront\",\"namespace\":\"net\"},\"spec\":{\"ingressClassName\":\"nginx\",\"rules\":[{\"host\":\"shop.example.test\",\"http\":{\"paths\":[{\"backend\":{\"service\":{\"name\":\"web\",\"port\":{\"number\":80}}},\"path\":\"/\",\"pathType\":\"Prefix\"}]}}]}}",
+                    "nginx.ingress.kubernetes.io/proxy-body-size": "16m"
+                }
+            },
+            "spec": {
+                "ingressClassName": "nginx",
+                "tls": [{ "hosts": ["shop.example.test"], "secretName": "shop-tls" }],
+                "rules": [{
+                    "host": "shop.example.test",
+                    "http": { "paths": [{
+                        "path": "/",
+                        "pathType": "Prefix",
+                        "backend": { "service": { "name": "web", "port": { "number": 80 } } }
+                    }] }
+                }]
+            }
+        }))
+        .expect("an Ingress");
+        let whole = serde_json::to_value(IngressInfo::from(&ingress)).expect("json");
+        let input = serde_json::to_value(IngressHealthInput::from(&ingress)).expect("json");
+
+        let fields = input.as_object().expect("an object");
+        assert_eq!(fields.len(), 7);
+        for (field, value) in fields {
+            assert_eq!(&whole[field], value, "{field}");
+        }
+        eprintln!(
+            "one Ingress: {} B whole, {} B as its verdict reads it",
+            wire_len(&whole),
+            wire_len(&input)
+        );
     }
 
     /// The ALB page joins a class to its `IngressClassParams` through this

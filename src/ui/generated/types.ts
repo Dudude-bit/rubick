@@ -417,6 +417,16 @@ export interface IngressInfo {
   createdAt: string | null;
 }
 
+export interface IngressHealthInput {
+  name: string;
+  namespace: string;
+  className: string | null;
+  rules: IngressRule[];
+  defaultBackend: IngressDefaultBackend | null;
+  loadBalancerIps: string[];
+  tlsConfigs: IngressTlsConfig[];
+}
+
 export interface IngressTlsConfig {
   hosts: string[];
   secretName: string | null;

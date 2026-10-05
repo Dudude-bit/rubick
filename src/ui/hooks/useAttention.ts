@@ -18,10 +18,10 @@ import { useClusterStore } from "@/stores/clusterStore";
  * until the overview has answered for this very scope, so no reader counts
  * the last scope's problems under this one's label.
  *
- * Beside the overview, four lists at the slow rate, one per namespace of the
- * scope: what the Services publish, the Ingresses, the autoscalers, the
- * claims. They share their cache entries with the pages that list the same
- * kinds, and the shell and the Overview share one answer.
+ * Beside the overview, four lists at the slow rate across the scope: the
+ * Services and the Ingresses cut to what their verdicts read, the
+ * autoscalers and the claims shared with their own pages. The shell and the
+ * Overview share one answer.
  */
 export function useAttention(scope?: readonly string[]): Attention | null {
   const t = useT();
@@ -34,8 +34,8 @@ export function useAttention(scope?: readonly string[]): Attention | null {
   const overview = useClusterOverview(asked);
   const services = useServiceHealthInputs(wire, { enabled: isConnected });
   const ingresses = useLiveQuery({
-    queryKey: queryKeys.resources(ResourceType.Ingress, cacheKey),
-    queryFn: () => commands.listIngressesIn(wire),
+    queryKey: queryKeys.ingressHealthInputs(cacheKey),
+    queryFn: () => commands.listIngressHealthInputs(wire),
     enabled: isConnected,
     refresh: "slow",
   });
