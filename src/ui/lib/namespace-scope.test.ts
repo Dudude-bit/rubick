@@ -137,9 +137,9 @@ describe("what the scope is called", () => {
       translate("ru", section, key, values);
     const frame = (scope: string[]) =>
       ru("empty", "stillReading", { label: "pods", scope: scopeIn(scope, ru) });
-    expect(frame([])).toBe("Всё ещё читаю pods в любом пространстве имён");
+    expect(frame([])).toBe("Всё ещё читаем pods в любом пространстве имён");
     expect(frame(["a", "b", "c"])).toBe(
-      "Всё ещё читаю pods в 3 пространствах имён"
+      "Всё ещё читаем pods в 3 пространствах имён"
     );
   });
 });
