@@ -300,7 +300,12 @@ function writers(metadata: Json): KeyValue[] {
  * page draw the same groups from this, so the two never read one object two
  * ways. A kind that keeps its payload at the top level has no spec to miss.
  */
-export function objectFacets(object: unknown, t: T): PeekSummary {
+export function objectFacets(
+  object: unknown,
+  t: T,
+  /** From discovery; `false` is a kind with no status at all, `undefined` not known. */
+  hasStatus?: boolean
+): PeekSummary {
   const fields = record(object);
   const metadata = record(fields.metadata);
   const labels = record(metadata.labels) as Record<string, string>;
@@ -316,12 +321,13 @@ export function objectFacets(object: unknown, t: T): PeekSummary {
   const spec = capped(fields.spec, t);
   const payload = payloadGroups(fields, t);
   const enveloped = payload.length === 0 || spec.length > 0;
+  const statusDrawn = status.length > 0 || (enveloped && hasStatus !== false);
 
   return {
     status: stateOf(fields.status),
     createdAt: asText(metadata.creationTimestamp) ?? null,
     groups: [
-      ...(enveloped || status.length > 0
+      ...(statusDrawn
         ? [
             {
               title: t("columns", "status"),

@@ -29,7 +29,8 @@ import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
-import { listLink, objectLink } from "@/lib/links";
+import { listLink, objectLink, resourceSegment } from "@/lib/links";
+import { servedOf, useServed } from "../-object/served";
 import { STALE_TIMES } from "@/lib/refresh";
 import { policiesOnService, policyVerdict } from "@/lib/gateway-policies";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
@@ -106,9 +107,17 @@ export function PeekContent({
   );
   const activeTab = resolvePeekTab(requestedTab, tabs);
 
+  const served = useServed(
+    useMemo(() => servedOf(resourceSegment(target) ?? ""), [target])
+  );
+  const hasStatus =
+    served.state === "served" ? served.entry.hasStatus : undefined;
   const summary = useMemo(
-    () => (data === undefined ? null : source.summarise(data, target, t)),
-    [data, source, target, t]
+    () =>
+      data === undefined
+        ? null
+        : source.summarise(data, target, t, { hasStatus }),
+    [data, source, target, t, hasStatus]
   );
   const gone = error !== null && errorCode(error) === ERROR_CODES.NOT_FOUND;
 

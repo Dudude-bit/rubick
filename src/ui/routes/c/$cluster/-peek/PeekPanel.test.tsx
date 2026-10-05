@@ -90,6 +90,7 @@ vi.mock("@/lib/commands", () => ({
     listServices: vi.fn(),
     detectGatewayApi: vi.fn(),
     listBackendTlsPolicies: vi.fn(),
+    listApiCatalog: vi.fn(() => new Promise(() => {})),
     listRoleBindingsIn: vi.fn(() => new Promise(() => {})),
     listClusterRoleBindings: vi.fn(() => new Promise(() => {})),
   },
@@ -1032,6 +1033,43 @@ describe("PeekPanel on an object that is gone", () => {
 
 describe("PeekPanel on a core kind the registry does not hold", () => {
   beforeEach(mockCluster);
+
+  /** The peek reads the kind's status the way its page does: a Lease has none. */
+  it("draws no status for a kind discovery says serves none", async () => {
+    vi.mocked(commands.listApiCatalog).mockResolvedValue({
+      entries: [
+        {
+          group: "coordination.k8s.io",
+          version: "v1",
+          kind: "Lease",
+          plural: "leases",
+          namespaced: true,
+          verbs: ["get"],
+          shortNames: [],
+          hasStatus: false,
+        },
+      ],
+      unread: [],
+    });
+    vi.mocked(commands.getCustomResource).mockResolvedValue({
+      ...buildApplication(),
+      name: "node01",
+      namespace: "kube-node-lease",
+      apiVersion: "coordination.k8s.io/v1",
+      kind: "Lease",
+      spec: { holderIdentity: "node01" },
+      status: null,
+    });
+    useClusterStore.setState({ isConnected: true });
+    await wrap(
+      "/c/prod/events?peek=leases.coordination.k8s.io/Lease/kube-node-lease/node01"
+    );
+    expect(await screen.findByText("holderIdentity")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText("Nothing reported yet")).not.toBeInTheDocument()
+    );
+    useClusterStore.setState({ isConnected: false });
+  });
 
   /**
    * The Pod page's ServiceAccount link wrote `?peek=` and nothing opened: the

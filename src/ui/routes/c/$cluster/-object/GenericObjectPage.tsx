@@ -87,7 +87,13 @@ export function GenericObjectPage({
     refresh: "resourceDetail",
     staleTime: STALE_TIMES.resourceDetail,
   });
-  const facets = object.data ? objectFacets(object.data, t) : null;
+  const facets = object.data
+    ? objectFacets(
+        object.data,
+        t,
+        served.state === "served" ? served.entry.hasStatus : undefined
+      )
+    : null;
   const registryKind = isResourceType(resource) ? toKind(resource) : null;
   const kind =
     served.state === "served" ? served.entry.kind : (registryKind ?? resource);

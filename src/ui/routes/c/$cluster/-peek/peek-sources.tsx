@@ -99,7 +99,7 @@ function customResourceSource(crdName: string): PeekSource {
   const vendor = vendorPeek(crdName);
   return source(
     (name, namespace) => commands.getCustomResource(crdName, name, namespace),
-    (resource: CustomResourceDetailInfo, _target, t) => {
+    (resource: CustomResourceDetailInfo, _target, t, kind) => {
       const owners = controlledBy(
         resource.ownerReferences,
         resource.namespace,
@@ -107,7 +107,7 @@ function customResourceSource(crdName: string): PeekSource {
       );
       const body = vendor?.(resource, t);
       if (!body) {
-        const facets = objectFacets(asObject(resource), t);
+        const facets = objectFacets(asObject(resource), t, kind?.hasStatus);
         return { ...facets, groups: [...owners, ...facets.groups] };
       }
       return {
@@ -178,6 +178,6 @@ function manifestSource(kind: string): PeekSource {
       const { load } = await import("js-yaml");
       return load(text);
     },
-    (object, _target, t) => objectFacets(object, t)
+    (object, _target, t, kind) => objectFacets(object, t, kind?.hasStatus)
   );
 }

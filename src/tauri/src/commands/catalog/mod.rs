@@ -33,6 +33,10 @@ pub struct CatalogEntry {
     pub verbs: Vec<String>,
     /// kubectl's short names for it, where aggregated discovery says them.
     pub short_names: Vec<String>,
+    /// Whether it serves a `status` subresource: a `Lease` or a `ServiceAccount`
+    /// has none, so a missing status is not one still to be written.
+    #[serde(default)]
+    pub has_status: Option<bool>,
 }
 
 /// An API group whose discovery did not answer. Its kinds are absent from
@@ -90,6 +94,11 @@ pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
                             kind: resource.kind,
                             plural: resource.plural,
                             namespaced: caps.scope == kube::discovery::Scope::Namespaced,
+                            has_status: Some(
+                                caps.subresources
+                                    .iter()
+                                    .any(|(sub, _)| sub.plural == "status"),
+                            ),
                             verbs: caps.operations,
                         }),
                 ),
@@ -375,5 +384,41 @@ mod tests {
             short_of("widgets"),
             Some(vec!["wd".to_string(), "wds".to_string()])
         );
+    }
+
+    /// A Lease page said "Status: Nothing reported yet", which reads as
+    /// pending, for a kind that has no status at all. Discovery says which
+    /// kinds serve one.
+    #[tokio::test]
+    async fn the_catalogue_says_which_kinds_serve_a_status() {
+        let listed = |name: &str, kind: &str| json!({ "name": name, "singularName": "", "namespaced": true, "kind": kind, "verbs": ["get"] });
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/api" => (200, json!({ "kind": "APIVersions", "versions": ["v1"], "serverAddressByClientCIDRs": [] }).to_string()),
+            "/api/v1" => (
+                200,
+                json!({
+                    "kind": "APIResourceList", "groupVersion": "v1",
+                    "resources": [
+                        listed("pods", "Pod"),
+                        listed("pods/status", "Pod"),
+                        listed("serviceaccounts", "ServiceAccount"),
+                    ],
+                })
+                .to_string(),
+            ),
+            "/apis" => (200, json!({ "kind": "APIGroupList", "groups": [] }).to_string()),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let found = catalog(&state).await.expect("catalog");
+        let has = |plural: &str| {
+            found
+                .entries
+                .iter()
+                .find(|e| e.plural == plural)
+                .and_then(|e| e.has_status)
+        };
+        assert_eq!(has("pods"), Some(true));
+        assert_eq!(has("serviceaccounts"), Some(false));
     }
 }

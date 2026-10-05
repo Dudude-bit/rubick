@@ -1379,6 +1379,7 @@ export interface CatalogEntry {
   namespaced: boolean;
   verbs: string[];
   shortNames: string[];
+  hasStatus?: boolean;
 }
 
 export interface ResourceConnections {

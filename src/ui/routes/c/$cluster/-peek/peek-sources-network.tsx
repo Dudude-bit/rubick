@@ -39,8 +39,8 @@ export function endpointSliceSource(
 ): PeekSource {
   return {
     fetch: base.fetch,
-    summarise: (data, target, t) => {
-      const summary = base.summarise(data, target, t);
+    summarise: (data, target, t, kind) => {
+      const summary = base.summarise(data, target, t, kind);
       const slice = (whole(data) ?? {}) as SliceShape;
       const service = slice.metadata?.labels?.["kubernetes.io/service-name"];
       const endpoints = slice.endpoints ?? [];

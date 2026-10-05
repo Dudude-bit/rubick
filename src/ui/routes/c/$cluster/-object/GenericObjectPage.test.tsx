@@ -71,6 +71,26 @@ describe("an object of a kind no screen draws", () => {
     expect(screen.getByText("kubelet")).toBeInTheDocument();
     expect(screen.getByText("tier")).toBeInTheDocument();
   });
+
+  /**
+   * A Lease has no status, and "Status: Nothing reported yet" read as one
+   * still to come. Discovery says the kind serves none, so nothing is said.
+   */
+  it("draws no status for a kind that serves none", async () => {
+    answers.catalog = () =>
+      Promise.resolve({
+        entries: [{ ...LEASES, hasStatus: false }],
+        unread: [],
+      });
+    answers.object = () =>
+      Promise.resolve({
+        metadata: { name: "x" },
+        spec: { holderIdentity: "node-1" },
+      });
+    await open();
+    expect(await screen.findByText("holderIdentity")).toBeInTheDocument();
+    expect(screen.queryByText("Nothing reported yet")).not.toBeInTheDocument();
+  });
 });
 
 describe("an object of a kind no screen draws, when the read finds nothing", () => {

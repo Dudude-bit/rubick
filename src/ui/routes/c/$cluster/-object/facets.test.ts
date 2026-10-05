@@ -165,6 +165,25 @@ describe("a kind that keeps what it says at the top level", () => {
     expect(group({ metadata: {} }, "spec")?.items).toEqual([]);
   });
 
+  /** Unknown is not "none": a kind discovery has not answered for keeps its status line. */
+  it("drops the status only of a kind discovery says has none", () => {
+    const lease = {
+      kind: "Lease",
+      metadata: {},
+      spec: { holderIdentity: "a" },
+    };
+    const titlesFor = (hasStatus?: boolean) =>
+      objectFacets(lease, t, hasStatus).groups.map((g) => g.title);
+    expect(titlesFor(false)).not.toContain("status");
+    expect(titlesFor(undefined)).toContain("status");
+    expect(titlesFor(true)).toContain("status");
+    expect(
+      objectFacets({ ...lease, status: { phase: "x" } }, t, false).groups.map(
+        (g) => g.title
+      )
+    ).toContain("status");
+  });
+
   it("keeps an object's spec and status where it has them", () => {
     const lease = {
       kind: "Lease",

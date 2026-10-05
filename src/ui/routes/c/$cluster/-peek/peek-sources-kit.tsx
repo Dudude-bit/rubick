@@ -53,20 +53,35 @@ export interface PeekSummary {
   lead?: ReactNode;
 }
 
+/** What discovery says about the kind, where the catalogue has answered. */
+export interface KindFacts {
+  hasStatus?: boolean;
+}
+
 export interface PeekSource {
   fetch: (name: string, namespace: string | null) => Promise<unknown>;
-  summarise: (data: unknown, target: PeekTarget, t: Translate) => PeekSummary;
+  summarise: (
+    data: unknown,
+    target: PeekTarget,
+    t: Translate,
+    kind?: KindFacts
+  ) => PeekSummary;
 }
 
 export type PeekSources = Partial<Record<ResourceKind, PeekSource>>;
 
 export function source<T>(
   fetch: (name: string, namespace: string | null) => Promise<T>,
-  summarise: (data: T, target: PeekTarget, t: Translate) => PeekSummary
+  summarise: (
+    data: T,
+    target: PeekTarget,
+    t: Translate,
+    kind?: KindFacts
+  ) => PeekSummary
 ): PeekSource {
   return {
     fetch,
-    summarise: (data, target, t) => summarise(data as T, target, t),
+    summarise: (data, target, t, kind) => summarise(data as T, target, t, kind),
   };
 }
 
