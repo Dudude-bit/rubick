@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  FolderOpen,
   LayoutDashboard,
   Library,
   Lock,
@@ -20,7 +21,12 @@ import { ProviderMark } from "@/components/ui/provider-mark";
 import { Spinner } from "@/components/ui/spinner";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useAttention } from "@/hooks/useAttention";
-import { useListAccess, useResourceAccess } from "./useListAccess";
+import {
+  oneLock,
+  useListLocks,
+  useLocks,
+  type Lock as ListLock,
+} from "./useListAccess";
 import { useAppSearch } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
@@ -280,8 +286,8 @@ function SettingsRow() {
 export function Sidebar() {
   const isConnected = useClusterStore((s) => s.isConnected);
   const { data } = useScopedOverview();
-  const access = useListAccess(NAV_KINDS);
-  const servedAccess = useResourceAccess(NAV_QUERIES);
+  const locks = useListLocks(NAV_KINDS);
+  const servedLocks = useLocks(NAV_QUERIES);
 
   // The overview query keeps its last answer as placeholder data across the
   // key change a disconnect causes, which is right while switching clusters
@@ -302,12 +308,12 @@ export function Sidebar() {
                 key={item.labelKey ?? item.label}
                 item={item}
                 overview={overview}
-                denied={
+                lock={
                   item.kind
-                    ? access[item.kind] === false
+                    ? locks[item.kind]
                     : item.query
-                      ? servedAccess.get(item.query.resource) === false
-                      : false
+                      ? servedLocks.get(item.query.resource)
+                      : undefined
                 }
               />
             ))}
@@ -361,16 +367,22 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
     );
 
   // The authorizer's word on our rows, same as every row above them.
-  const access = useListAccess([
+  const locks = useListLocks([
     ...(served.has("Gateway") ? [ResourceType.Gateway] : []),
     ...(routeKinds as ResourceKind[]),
   ]);
   // These pages find each kind through discovery, which every signed-in
   // reader may read, so the list reviews are the whole question.
-  const gatewaysDenied = access[ResourceType.Gateway] === false;
-  const routesDenied =
-    routeKinds.length > 0 &&
-    routeKinds.every((kind) => access[kind as ResourceKind] === false);
+  const gatewaysLock = locks[ResourceType.Gateway];
+  const gatewaysDenied = gatewaysLock !== undefined;
+  const routeLocks = routeKinds.flatMap((kind) => {
+    const lock = locks[kind as ResourceKind];
+    return lock ? [lock] : [];
+  });
+  const routesLock =
+    routeKinds.length > 0 && routeLocks.length === routeKinds.length
+      ? oneLock(routeLocks)
+      : undefined;
 
   const cacheKey = scopeCacheKey(scope);
 
@@ -426,7 +438,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
     },
     staleTime: ROUTING_STALE,
     refresh: "overview",
-    enabled: installed && routeKinds.length > 0 && !routesDenied,
+    enabled: installed && routeKinds.length > 0 && !routesLock,
   });
   // Gateways for the COUNT, scoped like the routes. The cluster-wide read above
   // stays the verdict source; on a whole-cluster window it already is this
@@ -440,7 +452,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
       installed && served.has("Gateway") && !gatewaysDenied && scope.length > 0,
   });
   const backing = useBackingLists(
-    installed && routeKinds.length > 0 && !routesDenied
+    installed && routeKinds.length > 0 && !routesLock
   );
 
   const classesSettled =
@@ -514,7 +526,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
             scopedPulse,
             gatewaysAll.data !== undefined && classesSettled
           )}
-          denied={gatewaysDenied}
+          lock={gatewaysLock}
         />
       )}
       {routeKinds.length > 0 && (
@@ -527,7 +539,7 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
               : null
           }
           mark={boardMark(board)}
-          denied={routesDenied}
+          lock={routesLock}
         />
       )}
     </>
@@ -655,7 +667,7 @@ function IntegrationsGroup() {
       mark={page.tone ?? undefined}
       // Detected but refused: the row is drawn disabled with a vendor
       // reason instead of linking to a page that only errors.
-      denied={page.forbidden}
+      lock={page.forbidden ? REFUSED : undefined}
       deniedReason={
         page.forbidden
           ? t("nav", "noVendorAccess", { vendor: page.name })
@@ -796,13 +808,48 @@ function ClusterRow() {
   );
 }
 
+const REFUSED: ListLock = { says: "refused" };
+
+const readableIn = (lock: ListLock) =>
+  lock.says === "clusterWide" && lock.readableIn.length > 0;
+
+/**
+ * A word would not fit beside "Persistent Volumes" in a rail this narrow, so
+ * the glyph says which lock it is: a padlock for a refusal, a namespace for a
+ * list refused across the cluster that a namespace the reader has still lists.
+ */
+function LockMark({ lock, reason }: { lock: ListLock; reason?: string }) {
+  const t = useT();
+  const words =
+    lock.says === "refused"
+      ? (reason ?? t("nav", "noListAccess"))
+      : lock.readableIn.length > 0
+        ? t("empty", "listableIn", {
+            n: lock.readableIn.length,
+            namespaces: lock.readableIn.join(", "),
+          })
+        : t("empty", "refusedAcrossCluster");
+  const Icon = readableIn(lock) ? FolderOpen : Lock;
+  return (
+    <Icon
+      className={cn(
+        "ml-auto h-3 w-3 flex-none",
+        readableIn(lock) ? "text-info" : "text-fg-fnt"
+      )}
+      aria-label={words}
+    >
+      <title>{words}</title>
+    </Icon>
+  );
+}
+
 function NavRow({
   item,
   overview,
   value,
   mark,
   note,
-  denied,
+  lock,
   deniedReason,
   onPress,
   active,
@@ -818,13 +865,14 @@ function NavRow({
    */
   mark?: "warn" | "err" | "unchecked";
   /**
-   * The authorizer says this reader may not list what the row leads to.
+   * The authorizer says this reader may not list what the row leads to, in
+   * the scope asked.
    *
    * Drawn, never enforced: the row stays a link and the list call stays the
    * authority. A review that is wrong then costs a mark the next answer
    * clears, rather than a screen somebody cannot open.
    */
-  denied?: boolean;
+  lock?: ListLock;
   /**
    * Why the row is denied, when a kind-agnostic row (an integration) can say
    * something more specific than the generic "no permission to list". Falls
@@ -878,19 +926,10 @@ function NavRow({
               className={cn(ICON_CLASS, isOpen(isActive) && ICON_OPEN_CLASS)}
             />
           </div>
-          <span className={cn(denied && "text-fg-fnt")}>
+          <span className={cn(lock && !readableIn(lock) && "text-fg-fnt")}>
             {item.labelKey ? <T section="nav" k={item.labelKey} /> : item.label}
           </span>
-          {denied && (
-            // A word would not fit beside "Persistent Volumes" in a rail this
-            // narrow, and would need translating into a space it does not have.
-            <Lock
-              className="ml-auto h-3 w-3 flex-none text-fg-fnt"
-              aria-label={deniedReason ?? t("nav", "noListAccess")}
-            >
-              <title>{deniedReason ?? t("nav", "noListAccess")}</title>
-            </Lock>
-          )}
+          {lock && <LockMark lock={lock} reason={deniedReason} />}
           {note !== undefined ? (
             <span className="ml-auto text-[10px] text-fg-fnt">{note}</span>
           ) : value === undefined ? (

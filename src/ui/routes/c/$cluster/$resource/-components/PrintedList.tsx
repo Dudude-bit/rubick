@@ -162,6 +162,11 @@ function PrintedTable({
       emptyStateLabel={resource}
       widthsKey={`printed:${resource}`}
       narrowingHelps={entry.namespaced}
+      listQuery={{
+        group: entry.group,
+        resource: entry.plural,
+        namespaced: entry.namespaced,
+      }}
       getRowId={(row) => row.uid ?? `${row.namespace}/${row.name}`}
       getRowHref={(row) => {
         const link = linkOf(row);

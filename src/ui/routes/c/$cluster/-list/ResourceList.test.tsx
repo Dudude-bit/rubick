@@ -21,6 +21,8 @@ const store = vi.hoisted(() => ({
     currentNamespace: "default",
     namespaceScope: [] as string[],
     isConnected: true,
+    currentContext: null as string | null,
+    contexts: [] as Array<{ name: string; namespace: string | null }>,
   },
 }));
 
@@ -35,6 +37,7 @@ import {
   useScreenSections,
 } from "@/components/share/screen-share";
 import type { PlacedSection } from "@/lib/report-parts";
+import { commands } from "@/lib/commands";
 import { ResourceList } from "./ResourceList";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { SCOPE_PICKER_OPEN, SLOW_READ_MS } from "@/lib/read-deadline";
@@ -89,7 +92,9 @@ describe("a list whose rows come from outside", () => {
    * is how an ordinary RBAC boundary came to read as a fault in the app.
    */
   it("says a refusal is a refusal", async () => {
+    store.state.namespaceScope = ["shop"];
     await list({ data: [], error: new Error("pods is forbidden: RBAC") });
+    store.state.namespaceScope = [];
 
     expect(
       screen.getByText(/do not have permission to list these/)
@@ -115,6 +120,40 @@ describe("a list whose rows come from outside", () => {
     );
     window.removeEventListener(SCOPE_PICKER_OPEN, opened);
     expect(opened).toHaveBeenCalledOnce();
+  });
+
+  /**
+   * Under All namespaces a namespace-only reader is refused every list, and
+   * the page said "You do not have permission to list these" above pods
+   * they list every day in their own namespace.
+   */
+  it("says a list refused across the cluster is not refused everywhere, and where it can be listed", async () => {
+    store.state.currentContext = "prod";
+    store.state.contexts = [{ name: "prod", namespace: "team-checkout" }];
+    const asked = vi
+      .spyOn(commands, "checkListAccess")
+      .mockImplementation(async (queries, namespaces) =>
+        queries.map((query) => ({
+          resource: query.resource,
+          allowed: namespaces[0] === "team-checkout",
+        }))
+      );
+    await list({ data: [], error: new Error("pods is forbidden: RBAC") });
+
+    expect(
+      screen.getByText(/across the whole cluster was refused/)
+    ).toBeVisible();
+    expect(screen.queryByText(/do not have permission/)).toBeNull();
+    expect(
+      await screen.findByText("You can list them in team-checkout.")
+    ).toBeVisible();
+    expect(asked).toHaveBeenCalledWith(
+      [{ group: "", resource: "pods", namespaced: true }],
+      ["team-checkout"]
+    );
+    asked.mockRestore();
+    store.state.currentContext = null;
+    store.state.contexts = [];
   });
 
   /** No error, no rows: the scope really is empty, and says so. */

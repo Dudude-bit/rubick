@@ -125,9 +125,10 @@ describe("a kind listed as the API server prints it", () => {
 
   /**
    * The Access rows lead here, and a namespace-only reader is refused
-   * ServiceAccounts cluster-wide. Fails if the refusal draws as no rows.
+   * ServiceAccounts cluster-wide. Fails if the refusal draws as no rows, or
+   * as no permission at all when a namespace may still list them.
    */
-  it("says a list the reader may not read is refused, not empty", async () => {
+  it("says a list the reader may not read is refused across the cluster, not empty", async () => {
     answers.catalog = () =>
       Promise.resolve({
         entries: [
@@ -147,7 +148,10 @@ describe("a kind listed as the API server prints it", () => {
       });
     await renderWithRouter(<PrintedList resource="serviceaccounts" />);
     expect(
-      await screen.findByText("You do not have permission to list these")
+      await screen.findByText(/across the whole cluster was refused/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Choose a namespace" })
     ).toBeInTheDocument();
     expect(
       screen.getByText(/serviceaccounts is forbidden/)

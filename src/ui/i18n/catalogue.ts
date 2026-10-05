@@ -5321,6 +5321,17 @@ export const en = {
       "You do not have permission to read {scope}. Type another namespace in the picker above.",
     refusedClusterWide:
       "Listing these across the whole cluster was refused. A namespace you have access to may still answer.",
+    refusedAcrossCluster:
+      "Listing these across the whole cluster was refused. Choose a namespace you have access to in the picker above.",
+    listableIn: {
+      one: "Listing these across the whole cluster was refused. You can list them in {namespaces}: choose it in the namespace picker above.",
+      other:
+        "Listing these across the whole cluster was refused. You can list them in {namespaces}: choose one in the namespace picker above.",
+    },
+    listableInNamespaces: {
+      one: "You can list them in {namespaces}.",
+      other: "You can list them in {namespaces}.",
+    },
     noNodeAccess:
       "You do not have permission to read the cluster's nodes, so capacity and scheduler headroom are not shown.",
     controllerLower: "controller",

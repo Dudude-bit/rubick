@@ -28,11 +28,11 @@ import {
 } from "@/lib/read-deadline";
 import { useNowSeconds } from "@/hooks/useNow";
 import { Button } from "@/components/ui/button";
-import { TriangleAlert } from "lucide-react";
+import { FolderOpen, Lock, TriangleAlert } from "lucide-react";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { NO_TABLE, tableSection } from "@/components/share/table-share";
-import { isResourceType, toKind } from "@/lib/resource-registry";
+import { isResourceType, listQueryFor, toKind } from "@/lib/resource-registry";
 import {
   DeliveryColumnCell,
   DeliveryFilterControl,
@@ -47,7 +47,8 @@ import {
   noneWhereAnswered,
   whole,
 } from "@/lib/namespace-scope";
-import type { Scoped, UnreadNamespace } from "@/generated/types";
+import type { ListQuery, Scoped, UnreadNamespace } from "@/generated/types";
+import { useListableIn } from "../-shell/useListAccess";
 import { UnreadNamespaces } from "./UnreadNamespaces";
 import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
@@ -205,6 +206,8 @@ export interface ResourceListProps<
    * one is read: not this scope's total, and its unread are not this scope's.
    */
   placeholder?: boolean;
+  /** What the authorizer is asked about this list, for a kind the registry does not hold. */
+  listQuery?: ListQuery;
 }
 
 export function ResourceList<
@@ -242,6 +245,7 @@ export function ResourceList<
   grouping,
   delivery,
   placeholder: externalPlaceholder = false,
+  listQuery,
 }: ResourceListProps<Row>) {
   const t = useT();
   const { isConnected } = useClusterStore();
@@ -429,6 +433,19 @@ export function ResourceList<
   // short, or the last scope's answer still standing in.
   const partial = ranOutOfTime || unread.length > 0 || placeholder;
 
+  // Refused across the whole cluster is not refused everywhere: a namespace
+  // the reader has may still list it, and saying "no permission" hides that.
+  const refusedAcrossCluster =
+    failed !== null && isRefusal(failed) && narrowingHelps && scope.isAll;
+  const listableIn = useListableIn(
+    refusedAcrossCluster
+      ? (listQuery ?? (listKind ? listQueryFor(listKind) : null))
+      : null
+  );
+  const refusalWords = refusedAcrossCluster
+    ? t("empty", "refusedClusterWide")
+    : t("nav", "noListAccess");
+
   // What the file says about the read, in the words the screen uses: a list
   // nobody could read, or read only part of, is not an empty or a whole one.
   const label = emptyStateLabel.toLowerCase();
@@ -441,7 +458,7 @@ export function ResourceList<
         })
       : `${
           isRefusal(failed)
-            ? t("nav", "noListAccess")
+            ? refusalWords
             : t("empty", "couldNotReadInScope", { label: emptyStateLabel })
         } (${verbatim(failed.message)})`
     : null;
@@ -613,21 +630,33 @@ export function ResourceList<
         </div>
       ) : failed && resources.length === 0 ? (
         <div className="max-w-[68ch] py-8">
-          <p className="text-xs text-err">
+          <p className="flex items-center gap-1.5 text-xs text-err">
+            {isRefusal(failed) && (
+              <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+            )}
             {/* A refusal is not a failure, and saying "could not read" about
                 one invites a retry that will be refused the same way. */}
             {isRefusal(failed)
-              ? t("nav", "noListAccess")
+              ? refusalWords
               : t("empty", "couldNotReadInScope", { label: emptyStateLabel })}
           </p>
           <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
             {verbatim(failed.message)}
           </p>
-          {isRefusal(failed) && narrowingHelps && scope.isAll && (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <p className="text-xs text-fg-mut">
-                {t("empty", "refusedClusterWide")}
-              </p>
+          {refusedAcrossCluster && (
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              {listableIn.length > 0 && (
+                <p className="flex items-center gap-1.5 text-xs text-info">
+                  <FolderOpen
+                    className="h-3.5 w-3.5 flex-none"
+                    aria-hidden="true"
+                  />
+                  {t("empty", "listableInNamespaces", {
+                    n: listableIn.length,
+                    namespaces: listableIn.join(", "),
+                  })}
+                </p>
+              )}
               <Button size="sm" variant="outline" onClick={openNamespacePicker}>
                 {t("action", "chooseNamespace")}
               </Button>

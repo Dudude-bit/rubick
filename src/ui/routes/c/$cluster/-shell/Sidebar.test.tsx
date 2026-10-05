@@ -333,6 +333,74 @@ describe("the Access group", () => {
   });
 });
 
+describe("a lock for a reader with rights in one namespace", () => {
+  type Query = { resource: string; namespaced: boolean };
+  /** Marco: refused every list across the cluster, allowed most of them in team-checkout. */
+  const marco = (queries: Query[], namespaces: string[]) =>
+    Promise.resolve(
+      queries.map((query) => ({
+        resource: query.resource,
+        allowed:
+          namespaces[0] === "team-checkout" &&
+          query.namespaced &&
+          query.resource !== "daemonsets",
+      }))
+    );
+
+  beforeEach(() => {
+    checkListAccess.mockImplementation(marco);
+    useClusterStore.setState({
+      namespaceScope: [],
+      contexts: [{ name: "prod", namespace: "team-checkout" } as never],
+    });
+  });
+
+  const rowOf = (name: string) =>
+    screen.findByRole("link", { name: new RegExp(`^${name}`) });
+  const lockOn = async (name: string, words: RegExp) => {
+    const row = await rowOf(name);
+    await waitFor(() =>
+      expect(within(row).getByLabelText(words)).toBeVisible()
+    );
+  };
+
+  /**
+   * Under All namespaces every list is asked about the whole cluster, and a
+   * refusal there read "You do not have permission to list these" beside
+   * Pods, Services and Roles Marco lists every day in his namespace.
+   */
+  it("says a list refused across the cluster can be listed in the namespace the reader has", async () => {
+    await wrap(<Sidebar />);
+    await lockOn(
+      "Pods",
+      /across the whole cluster.*list them in team-checkout/
+    );
+    await lockOn(
+      "Roles",
+      /across the whole cluster.*list them in team-checkout/
+    );
+    await lockOn(
+      "DaemonSets",
+      /across the whole cluster was refused\. Choose a namespace/
+    );
+    await lockOn("Nodes", /^You do not have permission to list these$/);
+    expect(checkListAccess).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ resource: "pods" })]),
+      ["team-checkout"]
+    );
+  });
+
+  /** In a namespace the reader chose, a refusal is the whole answer. */
+  it("says no permission for a list refused in the namespace chosen", async () => {
+    useClusterStore.setState({ namespaceScope: ["team-checkout"] });
+    await wrap(<Sidebar />);
+    await lockOn("DaemonSets", /^You do not have permission to list these$/);
+    expect(
+      within(await rowOf("Pods")).queryByLabelText(/permission|refused/)
+    ).toBeNull();
+  });
+});
+
 describe("the Network group", () => {
   /**
    * Endpoints was collateral of a nav rebuild and spent months reachable
