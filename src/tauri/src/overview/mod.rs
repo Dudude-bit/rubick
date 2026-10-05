@@ -17,7 +17,7 @@ use std::hash::Hash;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use dashmap::DashMap;
+use dashmap::{DashMap, DashSet};
 use futures::StreamExt;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::Job;
@@ -52,6 +52,8 @@ const PAGE_SIZE: u32 = 500;
 pub struct OverviewCache {
     clusters: Arc<DashMap<String, Arc<ClusterWatch>>>,
     cooldown: Arc<DashMap<String, Instant>>,
+    /// Clusters that refused a watch: not started again until a reconnect.
+    refused: Arc<DashSet<String>>,
 }
 
 /// What the stores held at one moment. Arcs, not clones: ten thousand pods
@@ -233,6 +235,7 @@ impl OverviewCache {
             watch.stop.cancel();
         }
         self.cooldown.remove(context);
+        self.refused.remove(context);
     }
 
     pub fn forget_all(&self) {
@@ -241,6 +244,7 @@ impl OverviewCache {
         }
         self.clusters.clear();
         self.cooldown.clear();
+        self.refused.clear();
     }
 
     /// The watches this process holds, for diagnostics.
@@ -250,6 +254,9 @@ impl OverviewCache {
     }
 
     fn cooling_down(&self, context: &str) -> bool {
+        if self.refused.contains(context) {
+            return true;
+        }
         // The read guard is released before `remove` asks for the write
         // lock on the same shard; holding both is a deadlock, not a race.
         let until = self.cooldown.get(context).map(|until| *until);
@@ -272,6 +279,7 @@ impl OverviewCache {
             stop: stop.clone(),
             clusters: self.clusters.clone(),
             cooldown: self.cooldown.clone(),
+            refused: self.refused.clone(),
         };
         let watcher_config = || {
             WatcherConfig::default()
@@ -373,6 +381,7 @@ struct WatchConfigs {
     stop: CancellationToken,
     clusters: Arc<DashMap<String, Arc<ClusterWatch>>>,
     cooldown: Arc<DashMap<String, Instant>>,
+    refused: Arc<DashSet<String>>,
 }
 
 impl WatchConfigs {
@@ -393,6 +402,7 @@ impl WatchConfigs {
         let context = self.context.clone();
         let clusters = self.clusters.clone();
         let cooldown = self.cooldown.clone();
+        let refused = self.refused.clone();
         tokio::spawn(async move {
             let events = reflector::reflector(
                 writer,
@@ -409,6 +419,21 @@ impl WatchConfigs {
                 };
                 match next {
                     Some(Ok(event)) => health.lock().saw(kind, &event),
+                    Some(Err(error)) if crate::error::watch_refused(&error) => {
+                        // A one-namespace token was refused all seven kinds, ten times each, every five minutes.
+                        tracing::warn!(
+                            context,
+                            kind,
+                            error = %crate::error::watch_failure(&error),
+                            "overview watch refused; listing instead until a reconnect"
+                        );
+                        refused.insert(context.clone());
+                        if let Some((_, watch)) = clusters.remove(&context) {
+                            watch.stop.cancel();
+                        }
+                        stop.cancel();
+                        break;
+                    }
                     Some(Err(error)) => {
                         let streak = health.lock().failed(kind);
                         if streak == BROKEN_STREAK {
@@ -630,6 +655,21 @@ mod tests {
             !cache.cooling_down("prod"),
             "a reconnect has to be able to start the watches again"
         );
+    }
+
+    /// A refusal is the token's rights, which no retry or cooldown changes:
+    /// the seven cluster-wide watches came back every five minutes and were
+    /// refused ten times each. Fails if a refused cluster is started again
+    /// before the reconnect that could change its rights.
+    #[test]
+    fn a_refused_cluster_is_not_restarted_until_a_reconnect() {
+        let cache = OverviewCache::default();
+        cache.refused.insert("prod".to_string());
+        assert!(cache.cooling_down("prod"));
+        assert!(!cache.cooling_down("dev"), "only the cluster that refused");
+
+        cache.forget("prod");
+        assert!(!cache.cooling_down("prod"));
     }
 
     /// A reflector store hands its contents back in hash order. The listing
