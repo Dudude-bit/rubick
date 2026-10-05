@@ -1,5 +1,5 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import type {
@@ -11,11 +11,16 @@ import type {
 } from "@/generated/types";
 import type { KeyValue } from "@/components/object/key-values";
 
-const getResourceConnections = vi.fn<() => Promise<ResourceConnections>>();
+// A plain function, not a `vi.fn`: a spy's rejected promise is reported as
+// the test's own failure even after the query has handled it.
+const answer = vi.hoisted(() => ({
+  connections: (): Promise<ResourceConnections> =>
+    Promise.reject(new Error("not set")),
+}));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    getResourceConnections: () => getResourceConnections(),
+    getResourceConnections: () => answer.connections(),
     detectGatewayApi: () => Promise.resolve(null),
     listServicesIn: () => Promise.resolve({ rows: [], unread: [] }),
     resolveIngressClass: () =>
@@ -108,8 +113,6 @@ const connections = (published: ServicePublished[]): ResourceConnections => ({
   notLookedAt: [],
 });
 
-beforeEach(() => getResourceConnections.mockReset());
-
 describe("the peek draws a network object's verdict as its page does", () => {
   /**
    * The peek of `web` was a neutral path with no red, while its page said
@@ -157,9 +160,18 @@ describe("the peek draws a network object's verdict as its page does", () => {
   });
 
   it("paints a Service that publishes nothing red", async () => {
-    getResourceConnections.mockResolvedValue(connections([EMPTY_SLICE]));
+    answer.connections = () => Promise.resolve(connections([EMPTY_SLICE]));
     await renderWithRouter(<>{statusOf("Service", SERVICE)}</>);
     expect(await screen.findByText("No endpoints")).toHaveClass(ROLE_TEXT.err);
+  });
+
+  /** A refused neighbourhood is "not checked", never "no endpoints". */
+  it("says not checked when the neighbourhood was refused", async () => {
+    answer.connections = () => Promise.reject(new Error("forbidden"));
+    await renderWithRouter(<>{statusOf("Service", SERVICE)}</>);
+    expect(await screen.findByText("forbidden")).toBeInTheDocument();
+    expect(screen.getByText("not checked")).toHaveClass(ROLE_TEXT.neutral);
+    expect(screen.queryByText("No endpoints")).toBeNull();
   });
 
   /** An Ingress whose class nothing serves says so in its peek. */

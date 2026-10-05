@@ -120,12 +120,20 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
         reason: t("nav", "endpointsByHandNoneWritten"),
       };
     case "unknown":
-      return {
-        code: health.state,
-        label: t("nav", "notChecked"),
-        role: "neutral",
-        reason: health.why ?? t("readings", "healthStillReading"),
-      };
+      // Refused and not yet answered are two states, and only one is final.
+      return health.why === null
+        ? {
+            code: "reading",
+            label: t("readings", "healthStillReading"),
+            role: "neutral",
+            reason: null,
+          }
+        : {
+            code: health.state,
+            label: t("nav", "notChecked"),
+            role: "neutral",
+            reason: health.why,
+          };
   }
 }
 

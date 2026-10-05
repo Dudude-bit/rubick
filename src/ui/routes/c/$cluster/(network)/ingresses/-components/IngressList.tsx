@@ -114,8 +114,8 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
   createNameColumn<IngressInfo>(ResourceType.Ingress),
   createNamespaceColumn<IngressInfo>(),
   {
-    // "missing TLS Secret" is the widest verdict this column holds.
-    size: 130,
+    // "missing TLS Secret", and its longer Russian, are the widest verdicts.
+    size: 150,
     id: "health",
     header: columnHeader("columns", "status"),
     cell: ({ row }) => <HealthCell ingress={row.original} />,

@@ -182,13 +182,19 @@ export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
   }
   if (health.unread.length > 0) {
     const said = health.unread.filter((why): why is string => why !== null);
-    return {
-      code: "unknown",
-      label: t("nav", "notChecked"),
-      role: "neutral",
-      reason:
-        said.length > 0 ? said.join(". ") : t("readings", "healthStillReading"),
-    };
+    return said.length > 0
+      ? {
+          code: "unknown",
+          label: t("nav", "notChecked"),
+          role: "neutral",
+          reason: said.join(". "),
+        }
+      : {
+          code: "reading",
+          label: t("readings", "healthStillReading"),
+          role: "neutral",
+          reason: null,
+        };
   }
   if (!health.addressed) {
     return {

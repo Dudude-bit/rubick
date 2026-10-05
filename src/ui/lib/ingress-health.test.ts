@@ -184,6 +184,14 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     expect(said.role).toBe("neutral");
     expect(said.reason).toContain("ingressclasses is forbidden");
 
+    const stillReading = verdict({
+      ingress: ingress(["api"]),
+      binding: { known: false, why: null },
+      backing: { known: true, value: BACKING },
+      certificates: undefined,
+    });
+    expect(stillReading).toMatchObject({ code: "reading", role: "neutral" });
+
     const backingRefused = verdict({
       ingress: { ...ingress(["api"]), loadBalancerIps: ["203.0.113.7"] },
       binding: { known: true, value: SERVED },

@@ -122,6 +122,23 @@ describe("one verdict for a Service on every surface", () => {
     expect(words.reason).toBe("forbidden");
   });
 
+  /**
+   * Still being read is not "not checked": one settles in a second, the
+   * other is final. Fails if the two share a label again.
+   */
+  it("tells a read still on its way from a refused one", () => {
+    const reading = serviceHealthWords(
+      serviceHealthOf(SELECTING, undefined, null),
+      t
+    );
+    const refused = serviceHealthWords(
+      serviceHealthOf(SELECTING, undefined, "forbidden"),
+      t
+    );
+    expect(reading.label).toBe("still reading");
+    expect(refused.label).toBe("not checked");
+  });
+
   /** A DNS alias and a hand-written Service are not failures. */
   it("leaves an ExternalName and a selectorless Service neutral", () => {
     expect(
