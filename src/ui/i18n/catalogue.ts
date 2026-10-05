@@ -1687,13 +1687,13 @@ export const en = {
     guessCrashTimeoutServicePoliciesUnread:
       "Most likely: {host}:{port} never answered. That address is Service {service}, with {ready} of {total} endpoints ready, so the packets are probably dropped on the way. A NetworkPolicy is the usual reason, and the ones on this path could not be read, so this app cannot say.",
     guessCrashServiceUncounted:
-      "Most likely: the app cannot reach {host}:{port}. That address is Service {service}, and what is behind it could not be read — so whether anything is ready there is probably the first thing to look at, and this app cannot say.",
+      "Most likely: the app cannot reach {host}:{port}. That address is Service {service}, and what is behind it could not be read. Whether anything is ready there is probably the first thing to look at, and this app cannot say.",
     guessCrashInClusterUnread:
-      "Most likely: the app cannot reach {host}:{port}, an address inside the cluster. The Services of this namespace could not be read, so what answers to it is probably worth checking by hand — this app cannot say.",
+      "Most likely: the app cannot reach {host}:{port}, an address inside the cluster. The Services of this namespace could not be read, so what answers to it is probably worth checking by hand; this app cannot say.",
     guessCrashLoopback:
-      "Most likely: {host}:{port} refused the connection, and that address is this pod itself — usually a sidecar that is not up, or one that never listens on that port. No container in this pod declares it.",
+      "Most likely: {host}:{port} refused the connection, and that address is this pod itself. Usually that is a sidecar that is not up, or one that never listens on that port. No container in this pod declares it.",
     guessCrashUnreachableOutside:
-      "Most likely: {host}:{port} could not be reached, and the line does not say whether anything answered — usually a route or a name that resolves to nowhere from this cluster. The app sees the road, not the far end.",
+      "Most likely: {host}:{port} could not be reached, and the line does not say whether anything answered. Usually that is a route or a name that resolves to nowhere from this cluster. The app sees the road, not the far end.",
     guessCrashInClusterUnknown:
       "Most likely: the app cannot reach {host}:{port}, an address inside the cluster that no Service in this namespace answers to. Probably a wrong address or a Service in another namespace.",
     guessCrashTimeoutOutside:
@@ -1715,7 +1715,7 @@ export const en = {
     guessUnknownUnread:
       "The pod's events could not be read, so what is probably wrong cannot be said from here. The container states below are all this app could look at.",
     guessProbeUnnamed:
-      "Most likely: a probe fails and the kubelet acts on it, {times} so far — the event does not say which. The app probably starts slower than the probe allows, or listens on another port or path.",
+      "Most likely: a probe fails and the kubelet acts on it, {times} so far; the event does not say which. The app probably starts slower than the probe allows, or listens on another port or path.",
     guessProbe:
       "Most likely: the {probe} probe fails and the kubelet acts on it, {times} so far. The app probably starts slower than the probe allows, or listens on another port or path.",
     factLastLineSaid: "The last line before the exit said: {line}",
@@ -1738,7 +1738,7 @@ export const en = {
     factSchedulerSaid: "The scheduler said: {message}",
     checkLastLines: "Read the last lines of {container} before the exit",
     checkLastLinesUnnamed:
-      "Read the last lines before the exit — the event does not say which container",
+      "Read the last lines before the exit; the event does not say which container",
     stateWaiting: "waiting",
     stateWaitingReason: "{reason}",
     stateExited: "exited {code}",
@@ -1767,7 +1767,7 @@ export const en = {
     notReadLogs: "the last lines of {container} ({reason})",
     notReadEvents: "the events of this pod ({reason})",
     notReadOtherNamespace:
-      "the Services of {namespace}, where that address lives — this app only listed this pod's own namespace",
+      "the Services of {namespace}, where that address lives: this app only listed this pod's own namespace",
     notReadPolicies: "the NetworkPolicies of {namespace} ({reason})",
     notReadPods: "the pods of {namespace} ({reason})",
   },
@@ -1903,7 +1903,7 @@ export const en = {
     traefikRouters: "Every router",
     utilisationWindow: "Peak and average over the last {range}.",
     noSecretsLogs:
-      "No Secret is read into this file. The log lines are as the container wrote them, with recognisable passwords and tokens taken out — and that cannot be complete.",
+      "No Secret is read into this file. The log lines are as the container wrote them, with recognisable passwords and tokens taken out, and that cleaning cannot be complete.",
     saveHtml: "Save as HTML",
     saved: "Saved to {path}",
     saveFailed: "Could not write the file",
@@ -2067,7 +2067,7 @@ export const en = {
         "The tool listed {n} rows and none of them arrived, so what is in here is unknown.",
     },
     cannotSwitchViaDebug:
-      "While reading through a debug container the rows come from the container it targets — stop it to pick another.",
+      "While reading through a debug container the rows come from the container it targets. Stop it to pick another.",
     emptyDirectory: "{path} is empty: the tool ran and found nothing in it.",
     nothingReadable: {
       one: "The tool printed {n} line and it could not be read, so what is in here is unknown.",
@@ -2127,7 +2127,7 @@ export const en = {
     mountedFromSeveral: {
       one: "mounted from volume {name}, which projects {n} source",
       other:
-        "mounted from volume {name}, which projects {n} sources — the pod does not say which one this file came from",
+        "mounted from volume {name}, which projects {n} sources; the pod does not say which one this file came from",
     },
     pathCopied: "Path copied",
     copyPath: "Copy path",
@@ -2220,14 +2220,14 @@ export const en = {
     findingPhaseUnwritten:
       "The operator has written no status for this Cluster",
     phaseUnwrittenExplained:
-      "Nothing here has been reconciled — the object may be new, or the controller may not be running. It is not a healthy cluster; it is a cluster nobody has reported on.",
+      "Nothing here has been reconciled: the object may be new, or the controller may not be running. It is not a healthy cluster; it is a cluster nobody has reported on.",
     findingFenced: "Fenced by hand: {names}",
     backupNotCreated:
       "the cluster did not create the Backup, and said nothing about why",
     fencedAllOne:
-      "the whole cluster is fenced with `*`, which names every instance including ones CNPG has not listed — one cannot be taken out of it without unfencing the rest",
+      "the whole cluster is fenced with `*`, which names every instance including ones CNPG has not listed, so one cannot be taken out of it without unfencing the rest",
     fencingUnknown:
-      "the cnpg.io/fencedInstances annotation is set to something this version cannot read, so which instances are fenced is unknown — and fencing is written back as a whole list, so acting would overwrite it",
+      "the cnpg.io/fencedInstances annotation is set to something this version cannot read, so which instances are fenced is unknown. Fencing is written back as a whole list, so acting would overwrite it",
     fencedUnknownWord: "fencing unreadable",
     findingFencedUnknown:
       "The annotation naming the fenced instances could not be read, so whether any instance is stopped is unknown.",
@@ -2279,7 +2279,7 @@ export const en = {
     noScyllaClusters:
       "No ScyllaCluster objects in any namespace. The CRDs are here; nothing has asked for a cluster yet.",
     deploymentsUnreadable:
-      "the Deployments could not be read, so whether the operator is running is unknown — not that it is absent",
+      "the Deployments could not be read, so whether the operator is running is unknown, which is not the same as absent",
     scyllaOperatorNotFound:
       "no Deployment carries app.kubernetes.io/name=scylla-operator; the CRDs are here, the operator may not be, and every ScyllaCluster will sit without a status",
     managerPresent: "repairs and backups can run",
@@ -2413,7 +2413,7 @@ export const en = {
     // and nobody but the reader can add one — so it goes on screen while they
     // wait, next to the browser that may already be refusing it.
     waitingOn:
-      "Waiting on {uri} — your provider must allow that address for this client.",
+      "Waiting on {uri}. Your provider must allow that address for this client.",
     windowTitle: "Sign in to {context}",
     windowFailed: "Could not open the sign-in window",
     windowFailedBody: "Try again.",
@@ -2877,7 +2877,7 @@ export const en = {
 
   vendor: {
     ciliumGives:
-      "every Cilium network policy with whether the agent accepted it — a rejected policy enforces nothing and looks exactly like one that works",
+      "every Cilium network policy with whether the agent accepted it: a rejected policy enforces nothing and looks exactly like one that works",
     argocdGives:
       "every Application with what it is failing to apply, and which objects differ from git",
     scyllaGives:

@@ -27,7 +27,7 @@ const WORDS: ReportWords = {
   madeBy: "Made by Rubick",
   noSecrets: "No Secret value is ever written into this file.",
   noSecretsLogs:
-    "No Secret is read into this file. The log lines are as the container wrote them, with recognisable passwords and tokens taken out — and that cannot be complete.",
+    "No Secret is read into this file. The log lines are as the container wrote them, with recognisable passwords and tokens taken out, and that cleaning cannot be complete.",
 };
 
 const svg = (name: string) => `<svg data-icon="${name}"></svg>`;

@@ -1318,7 +1318,7 @@ describe("what the Service publishes", () => {
       t
     );
 
-    expect(said.note).toContain("not something these objects state");
+    expect(said.note).toContain("These objects do not say why");
     expect(said.note).not.toContain("targetPort");
   });
 
