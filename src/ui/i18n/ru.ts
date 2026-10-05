@@ -8233,12 +8233,6 @@ export const ru: Catalogue = {
     },
     versionsWithDeprecated: "{n} · {deprecated} устарели",
     slashReady: "{n}/{total} готовы",
-    podsReadySlash: {
-      one: "готово {ready} из {n} пода",
-      few: "готово {ready} из {n} подов",
-      many: "готово {ready} из {n} подов",
-      other: "готово {ready} из {n} пода",
-    },
     readySummary: "готовы: {n}",
     notReadySummary: "не готовы: {n}",
     readyNotReadySummary: "готовы: {n} · не готовы: {notReady}",

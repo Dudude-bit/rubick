@@ -7217,10 +7217,6 @@ export const en = {
     versions: { one: "{n} version", other: "{n} versions" },
     versionsWithDeprecated: "{n} · {deprecated} deprecated",
     slashReady: "{n}/{total} ready",
-    podsReadySlash: {
-      one: "{ready}/{n} pod ready",
-      other: "{ready}/{n} pods ready",
-    },
     readySummary: "{n} ready",
     notReadySummary: "{n} not ready",
     readyNotReadySummary: "{n} ready · {notReady} not ready",

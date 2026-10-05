@@ -66,9 +66,6 @@ describe("counts in the catalogue", () => {
     expect(ru("readings", "problemReplicasReady", { ready: 0, n: 3 })).toBe(
       "готово 0 из 3 реплик"
     );
-    expect(ru("count", "podsReadySlash", { ready: 1, n: 1 })).toBe(
-      "готово 1/1 пода"
-    );
     expect(ru("readings", "ngxHstsAge", { n: 31536000 })).toBe(
       "Браузеру велено помнить это 31536000 секунд."
     );
