@@ -39,7 +39,7 @@ import { useNow } from "@/hooks/useNow";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
-import { cn } from "@/lib/utils";
+import { cn, formatTimeUnit } from "@/lib/utils";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { EventFilters, EventInfo } from "@/generated/types";
@@ -322,7 +322,10 @@ export function Events() {
                         window === candidate ? "bg-sel text-fg" : "text-fg-mut"
                       )}
                     >
-                      {candidate}
+                      {formatTimeUnit(
+                        Number.parseInt(candidate, 10),
+                        candidate.endsWith("m") ? "minute" : "hour"
+                      )}
                     </button>
                   ))}
                 </div>

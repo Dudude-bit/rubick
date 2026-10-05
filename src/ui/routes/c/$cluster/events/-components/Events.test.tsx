@@ -22,6 +22,7 @@ import {
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useLocaleStore } from "@/stores/localeStore";
 import type { EventFilters, EventInfo } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
 import { Events } from "./Events";
@@ -380,6 +381,26 @@ describe("stories", () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(/Nothing happened in/)).not.toBeInTheDocument();
     expect(document.body.textContent).toContain("forbidden");
+  });
+
+  /**
+   * A Russian card read "Пробы упали", "Не скачать образ" and the window
+   * buttons "15m" and "1h" beside sentences that said «15 минут».
+   */
+  it("words a story and its window in Russian", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      listEvents.mockResolvedValue([warning("prod", "api-7b6d9c5f4-x8k2p", 0)]);
+      await mount("stories");
+      const card = await screen.findByRole("article", { name: /api/ });
+      expect(card.textContent).toMatch(/Контейнер не держится/);
+      expect(card.textContent).toContain("продолжается");
+      const windows = screen.getByRole("group", { name: "Окно" });
+      expect(windows).toHaveTextContent(/15\sмин/);
+      expect(windows.textContent).not.toMatch(/\d+[mh]\b/);
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 
   it("keeps the flat list one tab away", async () => {
