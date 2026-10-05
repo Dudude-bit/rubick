@@ -14,7 +14,7 @@ import type {
   ResourceConnections,
   ServicePublished,
 } from "@/generated/types";
-import { describeStop, stopUnder } from "@/lib/connections";
+import { askedPorts, describeStop, stopUnder } from "@/lib/connections";
 import { errorToShow } from "@/lib/error-utils";
 import { endpointCount, publishedFor, servingCount } from "@/lib/published";
 import type { StatusRole } from "@/lib/status-role";
@@ -77,6 +77,12 @@ export interface Verdict {
 function stopReason(published: PublishedCounts, t: T): string | null {
   const stop = published.stop;
   if (!stop || !("service" in stop)) return null;
+  // The cause, where the stop knows one: "publishes no endpoint" beside a
+  // badge reading No endpoints says nothing the badge did not.
+  if (stop.reason === "publishesNothing" && stop.unnamedPorts.length > 0)
+    return t("nav", "stopUnnamedPortCause", {
+      asked: askedPorts(stop.unnamedPorts, t),
+    });
   const title = describeStop(stop, t).title;
   return stop.reason === "noneReady"
     ? `${title}: ${t("empty", stopUnder(stop))}`

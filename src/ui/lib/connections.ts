@@ -360,6 +360,11 @@ const NONE_READY_NOTE: Record<NotServing, keyof typeof en.nav> = {
   inSlices: "stopInSlicesNote",
 };
 
+/** The named targetPorts no container declares, as the Service asks for them. */
+export function askedPorts(names: string[], t: T): string {
+  return names.map((name) => t("nav", "targetPortNamed", { name })).join(", ");
+}
+
 /**
  * The four ways a path stops, each a different repair.
  *
@@ -388,9 +393,7 @@ export function describeStop(
           note: t("nav", "stopNoSliceNote", { matched }),
         };
       }
-      const asked = stop.unnamedPorts
-        .map((name) => t("nav", "targetPortNamed", { name }))
-        .join(", ");
+      const asked = askedPorts(stop.unnamedPorts, t);
       return {
         title: t("nav", "servicePublishesNoEndpoint"),
         note: t("nav", "stopUnnamedPortNote", { matched, asked }),

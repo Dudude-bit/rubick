@@ -79,6 +79,34 @@ describe("one verdict for a Service on every surface", () => {
     expect(words.reason).toContain("not scheduled");
   });
 
+  /**
+   * Sam's `web`: the Status row said only "This Service publishes no
+   * endpoint" while the trace below it knew why. Fails if the reason drops
+   * back to the title.
+   */
+  it("gives the named port no container declares as the reason", () => {
+    const health = serviceHealthOf(
+      SELECTING,
+      published({
+        slices: 0,
+        stop: {
+          reason: "publishesNothing",
+          service: SERVICE,
+          selector: "app=web",
+          pods: 2,
+          readyPods: 2,
+          unnamedPorts: ["web"],
+        },
+      }),
+      null
+    );
+    expect(serviceHealthWords(health, t)).toMatchObject({
+      label: "No endpoints",
+      reason:
+        "No container declares the port it asks for (targetPort: web), so nothing is published",
+    });
+  });
+
   /** Addresses in the slices, none serving: the outage on running pods. */
   it("calls addresses that are listed and not ready none ready", () => {
     const health = serviceHealthOf(SELECTING, published({ notReady: 2 }), null);

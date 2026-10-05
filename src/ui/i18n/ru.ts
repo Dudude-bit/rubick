@@ -120,6 +120,8 @@ export const ru: Catalogue = {
     stopGatewayMissingNote:
       "{route} привязан к {gateway}, которого нет в API-сервере. Статус для такого родителя не напишет ни один контроллер, поэтому об этом отказе кластер сам сказать не может.",
     targetPortNamed: "targetPort: {name}",
+    stopUnnamedPortCause:
+      "Ни один контейнер не объявляет порт, который он запрашивает ({asked}), поэтому ничего не публикуется",
     listAndLast: "{list} и {last}",
     twoAnd: "{a} и {b}",
     backendNeverCreated:
