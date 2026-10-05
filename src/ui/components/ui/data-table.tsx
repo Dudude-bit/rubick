@@ -273,9 +273,12 @@ const VIM_KEYS: Record<string, string> = { j: "ArrowDown", k: "ArrowUp" };
 const isMenuKey = (event: { key: string; shiftKey: boolean }) =>
   event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey);
 
-/** Widgets that walk with the arrows themselves; the list leaves those keys to them. */
+/**
+ * Widgets that walk with Up and Down themselves; the list leaves those keys
+ * to them. A tab strip walks with Left and Right, and nothing here uses j/k.
+ */
 const OWN_ARROWS =
-  '[role="tablist"],[role="radiogroup"],[role="slider"],[role="tree"],[role="grid"],[role="menubar"]';
+  '[role="tablist"][aria-orientation="vertical"],[role="radiogroup"],[role="slider"],[role="tree"],[role="grid"],[role="menubar"]';
 
 export function DataTable<TData extends RowData>(props: DataTableProps<TData>) {
   return (
@@ -789,8 +792,9 @@ function DataTableInner<TData extends RowData>({
       filterRef.current?.focus();
       return true;
     }
-    if (!inside && target?.closest(OWN_ARROWS)) return false;
     const key = VIM_KEYS[event.key] ?? event.key;
+    if (!inside && key === event.key && target?.closest(OWN_ARROWS))
+      return false;
     if (key === "ArrowDown" || key === "ArrowUp") {
       if (ordered.length === 0) return false;
       event.preventDefault();
@@ -1010,7 +1014,8 @@ function DataTableInner<TData extends RowData>({
               onKeyDown={(event) => {
                 if (event.key === "Escape") {
                   event.preventDefault();
-                  event.currentTarget.blur();
+                  if (searchValue) changeSearch("");
+                  else event.currentTarget.blur();
                 } else if (event.key === "ArrowDown" && keyboardNavEnabled) {
                   event.preventDefault();
                   select(0);

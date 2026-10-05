@@ -566,6 +566,45 @@ describe("the list keys, from anywhere on a list page", () => {
     expect(selected()).toEqual(["a-1"]);
   });
 
+  /** Fails if Escape leaves the text in and the list narrowed. */
+  it("empties the filter on the first Escape and leaves it on the second", async () => {
+    await wrap(page());
+    press("/");
+    fireEvent.change(search(), { target: { value: "b-" } });
+    await waitFor(() => expect(rowAt(1)).toBeFalsy());
+
+    press("Escape", search());
+    expect(search()).toHaveValue("");
+    expect(document.activeElement).toBe(search());
+    await waitFor(() => expect(rowAt(1)).toBeTruthy());
+
+    press("Escape", search());
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  /**
+   * Picking a namespace hands the focus back to its chip in the tab strip,
+   * and j and Down did nothing there until a click. Fails if a horizontal
+   * tab strip keeps the list's keys.
+   */
+  it("walks the list from a control in the tab strip", async () => {
+    await wrap(
+      <>
+        <div role="tablist">
+          <button type="button">shop</button>
+        </div>
+        {page()}
+      </>
+    );
+    const chip = screen.getByRole("button", { name: "shop" });
+    chip.focus();
+    press("j", chip);
+    expect(selected()).toEqual(["a-1"]);
+    chip.focus();
+    press("ArrowDown", chip);
+    expect(selected()).toEqual(["b-2"]);
+  });
+
   /**
    * A watch tick hands over new objects, and here a new pod sorts in above.
    * Tracked by position, the mark would slide onto a-1.
