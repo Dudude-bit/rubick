@@ -18,7 +18,8 @@ import {
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { Spinner } from "@/components/ui/spinner";
-import { problemTotal, useScopedOverview } from "@/hooks/useClusterOverview";
+import { useScopedOverview } from "@/hooks/useClusterOverview";
+import { useAttention } from "@/hooks/useAttention";
 import { useListAccess, useResourceAccess } from "./useListAccess";
 import { useAppSearch } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -933,6 +934,26 @@ function NavRow({
 }
 
 /**
+ * The Overview row's number: the same total its panel heads, in the colour
+ * of the worst row in it. Uncapped: a headline that shrank when the
+ * backend's ranked list overflowed would be the one number nobody can use.
+ */
+function AttentionCount() {
+  const attention = useAttention();
+  if (!attention || attention.total === 0) return null;
+  return (
+    <span
+      className={cn(
+        "ml-auto text-[11px]",
+        attention.worst === "warn" ? "text-warn" : "text-err"
+      )}
+    >
+      {attention.total}
+    </span>
+  );
+}
+
+/**
  * The number at the end of a row.
  *
  * A count the cluster refused to hand over renders as nothing at all. `0`
@@ -948,13 +969,7 @@ function NavCount({
 }) {
   if (!overview) return null;
 
-  if (item.labelKey === "overview") {
-    // Uncapped: the backend truncates its ranked list, and a headline that
-    // shrank when things got worse would be the one number nobody can use.
-    const problems = problemTotal(overview);
-    if (problems === 0) return null;
-    return <span className="ml-auto text-[11px] text-err">{problems}</span>;
-  }
+  if (item.labelKey === "overview") return <AttentionCount />;
 
   const count = item.count && overview.counts[item.count];
   if (count == null) return null;

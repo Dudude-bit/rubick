@@ -79,7 +79,6 @@ describe("cluster summary counts when the overview is refused", () => {
     await waitFor(() => expect(result.current.isLoading).toBe(false));
 
     expect(result.current.podCount).toBeNull();
-    expect(result.current.problemCount).toBeNull();
     expect(result.current.namespaces.map((n) => n.name).sort()).toEqual([
       "team-a",
       "team-b",
@@ -130,7 +129,6 @@ describe("cluster summary counts when the overview is refused", () => {
     const { result } = renderHook(() => useClusterSummary(), { wrapper });
 
     await waitFor(() => expect(result.current.podCount).toBe(51));
-    expect(result.current.problemCount).toBe(51);
     const dev = result.current.namespaces.find((ns) => ns.name === "dev");
     expect(dev?.problemCount).toBe(1);
   });

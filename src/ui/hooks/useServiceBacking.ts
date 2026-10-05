@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 
 import { commands } from "@/lib/commands";
-import { errorToShow } from "@/lib/error-utils";
+import { errorCode, errorToShow } from "@/lib/error-utils";
 import type { NamespaceBacking } from "@/lib/ingress-health";
 import type { Known } from "@/lib/known";
 import { queryKeys } from "@/lib/query-keys";
@@ -13,6 +13,7 @@ interface Answer {
   namespace: string | null;
   lists: NamespaceBacking | null;
   why: string | null;
+  code: string | null;
 }
 
 async function readBacking(namespaces: string[] | null): Promise<Answer[]> {
@@ -24,6 +25,7 @@ async function readBacking(namespaces: string[] | null): Promise<Answer[]> {
     namespace: reaches[index],
     lists: answer.status === "fulfilled" ? answer.value : null,
     why: answer.status === "rejected" ? errorToShow(answer.reason) : null,
+    code: answer.status === "rejected" ? errorCode(answer.reason) : null,
   }));
 }
 
@@ -32,6 +34,17 @@ export interface ServiceBackingRead {
   in: (namespace: string) => Known<NamespaceBacking>;
   service: (namespace: string, name: string) => ServiceInfo | undefined;
   published: (namespace: string, name: string) => ServicePublished | undefined;
+  /** Every Service the scope answered with; empty until it has. */
+  every: ServiceInfo[];
+  /** The reaches that did not answer, or the whole read while it has not. */
+  unread: ReachUnread[] | "reading";
+}
+
+/** A reach of the scope whose read failed: `null` is the whole cluster. */
+export interface ReachUnread {
+  namespace: string | null;
+  code: string;
+  message: string;
 }
 
 const key = (namespace: string, name: string) => `${namespace}/${name}`;
@@ -80,7 +93,30 @@ export function useServiceBacking(
       data?.find((answer) => answer.namespace === namespace) ??
       data?.find((answer) => answer.namespace === null);
     const none: NamespaceBacking = { services: [], published: [] };
+    const unread: ServiceBackingRead["unread"] = data
+      ? data.flatMap((answer) =>
+          answer.lists
+            ? []
+            : [
+                {
+                  namespace: answer.namespace,
+                  code: answer.code ?? "",
+                  message: answer.why ?? "",
+                },
+              ]
+        )
+      : error
+        ? [
+            {
+              namespace: null,
+              code: errorCode(error),
+              message: errorToShow(error),
+            },
+          ]
+        : "reading";
     return {
+      every: [...services.values()],
+      unread,
       in: (namespace) => {
         const answer = answerFor(namespace);
         if (!answer) {

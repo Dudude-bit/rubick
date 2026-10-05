@@ -11,7 +11,9 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { problemTotal, useScopedOverview } from "@/hooks/useClusterOverview";
+import { useScopedOverview } from "@/hooks/useClusterOverview";
+import { useAttention } from "@/hooks/useAttention";
+import type { Attention } from "@/lib/attention";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useRenewal } from "@/hooks/useCredentialRenewal";
 import type { Renewal } from "@/generated/types";
@@ -73,14 +75,14 @@ export function StatusBar() {
   const errorContext = useClusterStore((s) => s.errorContext);
   const pendingContext = useClusterStore((s) => s.pendingContext);
   const connect = useClusterStore((s) => s.connect);
-  const { podCount, problemCount } = useClusterSummary();
   const scope = useClusterStore((s) => s.namespaceScope);
   const scoped = useScopedOverview();
+  const attention = useAttention();
   // A placeholder is the last scope's answer, and under this scope's label it
   // would count the wrong namespaces.
   const here =
-    scoped.data && !scoped.isPlaceholderData
-      ? { pods: scoped.data.counts.pods, problems: problemTotal(scoped.data) }
+    scoped.data && !scoped.isPlaceholderData && attention
+      ? { pods: scoped.data.counts.pods, attention }
       : null;
   // The two worth a line that is always up — both predict the sign-in screen,
   // and they differ in why. Everything else is quiet, and a chip that is
@@ -198,9 +200,7 @@ export function StatusBar() {
                         <span>·</span>
                       </>
                     )}
-                    <span className={cn(here.problems > 0 && "text-err")}>
-                      {t("cluster", "problemCount", { n: here.problems })}
-                    </span>
+                    <ProblemCount attention={here.attention} />
                   </>
                 )}
                 <span className="text-fg-fnt">
@@ -215,14 +215,7 @@ export function StatusBar() {
               </span>
             </TooltipTrigger>
             <TooltipContent side="top" align="end" className="max-w-[320px]">
-              {podCount === null
-                ? t("cluster", "clusterWideUnread")
-                : t("cluster", "clusterWideCounts", {
-                    pods: t("cluster", "podCount", { n: podCount }),
-                    problems: t("cluster", "problemCount", {
-                      n: problemCount ?? 0,
-                    }),
-                  })}
+              <ClusterWide />
             </TooltipContent>
           </Tooltip>
         </>
@@ -230,6 +223,51 @@ export function StatusBar() {
         <span>{t("cluster", "notConnectedLower")}</span>
       )}
     </footer>
+  );
+}
+
+/** The count the Overview's panel heads, in the colour of its worst row. */
+function ProblemCount({ attention }: { attention: Attention }) {
+  const t = useT();
+  const { total, complete, worst } = attention;
+  return (
+    <span
+      className={cn(
+        worst === "err" && "text-err",
+        worst === "warn" && "text-warn"
+      )}
+    >
+      {t("cluster", complete ? "problemCount" : "problemCountPartial", {
+        n: total,
+      })}
+    </span>
+  );
+}
+
+const WHOLE_CLUSTER: readonly string[] = [];
+
+/**
+ * The cluster-wide figure, read only while the tooltip is open: the same
+ * attention the Overview counts, for every namespace instead of the scope.
+ */
+function ClusterWide() {
+  const t = useT();
+  const { podCount } = useClusterSummary();
+  const attention = useAttention(WHOLE_CLUSTER);
+  if (podCount === null) return <>{t("cluster", "clusterWideUnread")}</>;
+  return (
+    <>
+      {t("cluster", "clusterWideCounts", {
+        pods: t("cluster", "podCount", { n: podCount }),
+        problems: attention
+          ? t(
+              "cluster",
+              attention.complete ? "problemCount" : "problemCountPartial",
+              { n: attention.total }
+            )
+          : t("cluster", "countsUnread"),
+      })}
+    </>
   );
 }
 

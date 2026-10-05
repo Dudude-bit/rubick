@@ -5,21 +5,14 @@ import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { createContext, useCallback, useContext, useMemo } from "react";
-import { useQueries } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { Eye, Trash2, ExternalLink } from "lucide-react";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { queryKeys } from "@/lib/query-keys";
 import { useResourceList } from "@/hooks/useResource";
 import { useIngressTls } from "@/hooks/useIngressTls";
-import { useServiceBacking } from "@/hooks/useServiceBacking";
-import { certificatesOf } from "@/hooks/useTlsCertificates";
-import {
-  ingressHealthOf,
-  ingressHealthWords,
-  secretNamesOf,
-} from "@/lib/ingress-health";
-import { knownOf } from "@/lib/known";
+import { useIngressHealth } from "@/hooks/useIngressHealth";
+import { ingressHealthWords } from "@/lib/ingress-health";
 import type { Verdict } from "@/lib/service-health";
 import { VerdictBadge } from "../../../-object/health-views";
 import { hrefOf, objectLink } from "@/lib/links";
@@ -275,60 +268,9 @@ export function IngressList() {
   );
   const vendorTls = useIngressTls(asked);
 
-  const rows = listed.data?.rows;
-  const classes = useMemo(
-    () => [...new Set((rows ?? []).map((ingress) => ingress.className))],
-    [rows]
-  );
-  const bindings = useQueries({
-    queries: classes.map((className) => ({
-      queryKey: queryKeys.ingressClass(className),
-      queryFn: () => commands.resolveIngressClass(className ?? null),
-    })),
-  });
-  const backing = useServiceBacking(scope.wire);
-  const secrets = useMemo(() => {
-    const byNamespace = new Map<string, Set<string>>();
-    for (const ingress of rows ?? []) {
-      for (const name of secretNamesOf(ingress)) {
-        const names = byNamespace.get(ingress.namespace) ?? new Set();
-        byNamespace.set(ingress.namespace, names.add(name));
-      }
-    }
-    return [...byNamespace].map(([namespace, names]) => ({
-      namespace,
-      names: [...names].sort(),
-    }));
-  }, [rows]);
-  const certificateReads = useQueries({
-    queries: secrets.map(({ namespace, names }) => ({
-      queryKey: queryKeys.tlsCertificates(namespace, names),
-      queryFn: async () =>
-        new Map(
-          (await commands.getTlsCertificates(namespace, names)).map(
-            (entry) => [entry.secretName, entry] as const
-          )
-        ),
-    })),
-  });
-  const healthOf = (ingress: IngressInfo): Verdict => {
-    const binding = bindings[classes.indexOf(ingress.className)];
-    const at = secrets.findIndex(
-      (entry) => entry.namespace === ingress.namespace
-    );
-    const read = certificateReads[at];
-    return ingressHealthWords(
-      ingressHealthOf({
-        ingress,
-        binding: binding ? knownOf(binding) : { known: false, why: null },
-        backing: backing.in(ingress.namespace),
-        certificates: read
-          ? certificatesOf(read.data, read.error, secrets[at].names)
-          : undefined,
-      }),
-      t
-    );
-  };
+  const healthOfRow = useIngressHealth(listed.data?.rows, scope.wire);
+  const healthOf = (ingress: IngressInfo): Verdict =>
+    ingressHealthWords(healthOfRow(ingress), t);
   const vendorFor = useCallback(
     (ingress: IngressInfo) => vendorTlsAnswer(ingress, vendorTls, t),
     [t, vendorTls]

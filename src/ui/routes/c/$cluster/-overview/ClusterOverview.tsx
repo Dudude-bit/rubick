@@ -5,7 +5,9 @@ import { scopeIn, scopeLabel } from "@/lib/namespace-scope";
 import { openNamespacePicker } from "@/lib/read-deadline";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
-import { problemTotal, useScopedOverview } from "@/hooks/useClusterOverview";
+import { useScopedOverview } from "@/hooks/useClusterOverview";
+import { useAttention } from "@/hooks/useAttention";
+import type { Attention } from "@/lib/attention";
 import { ClusterFrontDoor } from "../../../-components/ClusterFrontDoor";
 import { MyServices } from "./MyServices";
 import { ShareScreenAction } from "@/components/share/ShareAction";
@@ -13,8 +15,9 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
 import { HeaderSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
 import {
+  AttentionPanel,
+  AttentionPending,
   NodesPanel,
-  ProblemsPanel,
   SchedulerPanel,
   WarningsPanel,
   WorkloadsPanel,
@@ -25,16 +28,18 @@ import type { ReportStat } from "@/lib/report";
 import { useT, type T } from "@/i18n/useT";
 
 /** The headline numbers for Share: what is broken, and what is serving. */
-function overviewStats(overview: ClusterOverviewData, t: T): ReportStat[] {
-  const total = problemTotal(overview);
-  const critical = overview.problems.some((p) => p.severity === "critical");
+function overviewStats(
+  overview: ClusterOverviewData,
+  attention: Attention,
+  t: T
+): ReportStat[] {
   const pods = podTotal(overview.pods);
   const serving = overview.pods.running - overview.pods.crashLooping;
   const stats: ReportStat[] = [
     {
       label: t("action", "needsAttention"),
-      value: String(total),
-      role: total === 0 ? "ok" : critical ? "err" : "warn",
+      value: String(attention.total),
+      role: attention.worst ?? (attention.complete ? "ok" : "neutral"),
     },
     { label: "Pods", value: `${serving}/${pods}` },
   ];
@@ -62,6 +67,7 @@ export function ClusterOverview() {
   const { data: clusterInfo } = useClusterInfo();
 
   const { data: overview, isLoading, error, refetch } = useScopedOverview();
+  const attention = useAttention();
 
   // Not an empty overview but a different screen: with no cluster there
   // is no scope to be empty of anything, and the one thing the reader
@@ -148,7 +154,7 @@ export function ClusterOverview() {
   const screen = {
     title: t("nav", "overview"),
     icon: LayoutDashboard,
-    stats: () => overviewStats(overview, t),
+    stats: () => (attention ? overviewStats(overview, attention, t) : []),
   };
 
   return (
@@ -157,13 +163,16 @@ export function ClusterOverview() {
         <ShareScreenAction screen={screen} />
       </div>
       {pinned}
-      <ProblemsPanel
-        problems={overview.problems}
-        problemsTruncated={overview.problemsTruncated}
-        pods={overview.pods}
-        nodes={overview.nodes}
-        nodesKnown={overview.nodesKnown}
-      />
+      {attention ? (
+        <AttentionPanel
+          attention={attention}
+          pods={overview.pods}
+          nodes={overview.nodes}
+          nodesKnown={overview.nodesKnown}
+        />
+      ) : (
+        <AttentionPending />
+      )}
       <WorkloadsPanel overview={overview} scope={scope} />
       {overview.nodesKnown ? (
         <>

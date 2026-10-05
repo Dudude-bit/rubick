@@ -4182,6 +4182,24 @@ export const en = {
     signInAgain: "Sign in again",
     podCount: { one: "{n} pod", other: "{n} pods" },
     problemCount: { one: "{n} problem", other: "{n} problems" },
+    problemCountPartial: {
+      one: "{n} problem, not all checked",
+      other: "{n} problems, not all checked",
+    },
+    attentionNothing: "nothing needs attention",
+    attentionNoneFound: "nothing found in what could be checked",
+    attentionNotChecked: "Not checked",
+    attentionStillReading: "still reading",
+    attentionRefused: "refused",
+    attentionFailed: "could not be read",
+    attentionInNamespace: "in {namespace}",
+    attentionInNamespaces: {
+      one: "in {n} namespace",
+      other: "in {n} namespaces",
+    },
+    attentionMore: "and {n} more",
+    claimPendingDetail:
+      "No volume is bound to it yet, so a pod that mounts it cannot start.",
   },
   settings: {
     installationFailed: "Installation failed",

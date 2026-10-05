@@ -4630,6 +4630,28 @@ export const ru: Catalogue = {
       many: "{n} проблем",
       other: "{n} проблемы",
     },
+    problemCountPartial: {
+      one: "{n} проблема, проверено не всё",
+      few: "{n} проблемы, проверено не всё",
+      many: "{n} проблем, проверено не всё",
+      other: "{n} проблемы, проверено не всё",
+    },
+    attentionNothing: "ничего не требует внимания",
+    attentionNoneFound: "в проверенном ничего не найдено",
+    attentionNotChecked: "Не проверено",
+    attentionStillReading: "ещё читается",
+    attentionRefused: "доступ запрещён",
+    attentionFailed: "не удалось прочитать",
+    attentionInNamespace: "в пространстве имён {namespace}",
+    attentionInNamespaces: {
+      one: "в {n} пространстве имён",
+      few: "в {n} пространствах имён",
+      many: "в {n} пространствах имён",
+      other: "в {n} пространства имён",
+    },
+    attentionMore: "и ещё {n}",
+    claimPendingDetail:
+      "К нему ещё не привязан том, поэтому под, который его монтирует, не запустится.",
   },
   settings: {
     installationFailed: "Установка не удалась",

@@ -3,19 +3,25 @@ import { describe, expect, it } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import { renderWithRouter } from "@/test/render";
-import { ProblemsPanel, WarningsPanel } from "./health";
+import { AttentionPanel, WarningsPanel } from "./health";
 import {
+  attentionShare,
   nodesShare,
-  problemsShare,
   warningsShare,
   workloadsShare,
 } from "./health-share";
+import {
+  attentionOf,
+  type Attention,
+  type AttentionInputs,
+} from "@/lib/attention";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type {
   ClusterOverview,
   ClusterProblem,
   NodeSummary,
+  PodComposition,
   WarningGroup,
 } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
@@ -38,6 +44,41 @@ const warning: WarningGroup = {
   namespace: "k8s-gui-test",
 };
 
+/** The panel's list, from the reader every surface uses, with every kind read. */
+function attentionFrom(
+  problems: ClusterProblem[],
+  inputs: Partial<AttentionInputs> = {}
+): Attention {
+  return attentionOf(
+    {
+      overview: {
+        problems,
+        problemsTruncated: 0,
+        unread: [],
+      } as unknown as ClusterOverview,
+      services: { every: [], published: () => undefined, unread: [] },
+      ingresses: { data: { rows: [], unread: [] }, error: null },
+      ingressHealth: () => {
+        throw new Error("no Ingress here");
+      },
+      autoscalers: { data: { rows: [], unread: [] }, error: null },
+      claims: { data: { rows: [], unread: [] }, error: null },
+      now: Date.now(),
+      ...inputs,
+    },
+    t
+  );
+}
+
+const RUNNING: PodComposition = {
+  running: 1,
+  pending: 0,
+  succeeded: 0,
+  failed: 0,
+  unknown: 0,
+  crashLooping: 0,
+};
+
 const problem: ClusterProblem = {
   severity: "warning",
   kind: "Deployment",
@@ -58,17 +99,9 @@ describe("the overview's two event panels", () => {
      *  the segmenter had nothing to resolve the name against. */
     await wrap(
       <>
-        <ProblemsPanel
-          problems={[problem]}
-          problemsTruncated={0}
-          pods={{
-            running: 1,
-            pending: 0,
-            succeeded: 0,
-            failed: 0,
-            unknown: 0,
-            crashLooping: 0,
-          }}
+        <AttentionPanel
+          attention={attentionFrom([problem])}
+          pods={RUNNING}
           nodes={[]}
           nodesKnown={true}
         />
@@ -135,17 +168,9 @@ describe("the detail line on a problem row", () => {
    *  screen of a Russian interface. */
   it("follows the reader for our words and leaves the cluster's alone", async () => {
     const panel = (problem: ClusterProblem) => (
-      <ProblemsPanel
-        problems={[problem]}
-        problemsTruncated={0}
-        pods={{
-          running: 1,
-          pending: 0,
-          succeeded: 0,
-          failed: 0,
-          unknown: 0,
-          crashLooping: 0,
-        }}
+      <AttentionPanel
+        attention={attentionFrom([problem])}
+        pods={RUNNING}
         nodes={[]}
         nodesKnown={true}
       />
@@ -201,9 +226,8 @@ describe("the healthy line when the node read was refused", () => {
    */
   it("drops the nodes-ready clause when the nodes are unknown", async () => {
     const { queryByText, unmount } = await wrap(
-      <ProblemsPanel
-        problems={[]}
-        problemsTruncated={0}
+      <AttentionPanel
+        attention={attentionFrom([])}
         pods={pods}
         nodes={[]}
         nodesKnown={false}
@@ -213,9 +237,8 @@ describe("the healthy line when the node read was refused", () => {
     unmount();
 
     const known = await wrap(
-      <ProblemsPanel
-        problems={[]}
-        problemsTruncated={0}
+      <AttentionPanel
+        attention={attentionFrom([])}
         pods={pods}
         nodes={[]}
         nodesKnown={true}
@@ -230,21 +253,39 @@ describe("what the panels offer Share", () => {
   /** Deleting the severity mapping breaks this: a critical problem would
    *  read the same colour as a warning one in a shared report. */
   it("carries each problem as a finding with a ref and the truncated tail", () => {
-    const section = problemsShare(
-      [problem, { ...problem, severity: "critical", reason: "CrashLoop" }],
-      2,
-      t
-    );
+    const attention = attentionFrom([
+      problem,
+      { ...problem, severity: "critical", reason: "CrashLoop" },
+    ]);
+    const section = attentionShare({ ...attention, total: 4 }, t);
     expect(section.count).toBe(4);
     expect(section.body.type).toBe("findings");
     const items = section.body.type === "findings" ? section.body.items : [];
-    expect(items[0]).toMatchObject({
+    expect(items[0]).toMatchObject({ title: "CrashLoop", role: "err" });
+    expect(items[1]).toMatchObject({
       title: "ScalingReplicaSet",
       role: "warn",
       ref: { kind: "Deployment", stem: "meshed-demo" },
     });
-    expect(items[1]).toMatchObject({ title: "CrashLoop", role: "err" });
     expect(items[2]?.title).toContain("2");
+  });
+
+  /** A report that dropped what was not checked would read as a clean bill. */
+  it("names a kind the list could not read as a finding of its own", () => {
+    const section = attentionShare(
+      attentionFrom([], {
+        autoscalers: { data: undefined, error: new Error("forbidden") },
+      }),
+      t
+    );
+    const items = section.body.type === "findings" ? section.body.items : [];
+    expect(items).toEqual([
+      expect.objectContaining({
+        title: "HorizontalPodAutoscalers: could not be read",
+        detail: "forbidden",
+        role: "neutral",
+      }),
+    ]);
   });
 
   /** A refused node count must not be read as zero Nodes; deleting the null
@@ -317,6 +358,92 @@ describe("what the panels offer Share", () => {
     const section = warningsShare([], false, t);
     expect(section.unread).toBe(
       "Not every events list was read in full, so warnings may be missing here."
+    );
+  });
+});
+
+describe("what Needs attention says it checked", () => {
+  const panel = (attention: Attention, pods: PodComposition = RUNNING) =>
+    wrap(
+      <AttentionPanel
+        attention={attention}
+        pods={pods}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+
+  /**
+   * Sam's `net`: the Services could not be looked at and the panel said
+   * "nothing broken". A refused kind is named with the cluster's reason, and
+   * the empty list is "nothing found in what could be checked", never
+   * "nothing needs attention". Fails if the refused branch is folded into read.
+   */
+  it("never says nothing needs attention beside a kind it was refused", async () => {
+    const refused = attentionFrom([], {
+      services: {
+        every: [],
+        published: () => undefined,
+        unread: [
+          {
+            namespace: "net",
+            code: "PERMISSION_DENIED",
+            message: 'services is forbidden: User "sam" cannot list services',
+          },
+        ],
+      },
+    });
+    expect(refused.complete).toBe(false);
+
+    const { container } = await panel(refused);
+
+    expect(container).not.toHaveTextContent("nothing needs attention");
+    expect(container).toHaveTextContent(
+      "nothing found in what could be checked"
+    );
+    const unchecked = screen.getByTestId("attention-unchecked");
+    expect(unchecked).toHaveTextContent("Services");
+    expect(unchecked).toHaveTextContent("refused in net");
+    expect(unchecked).toHaveTextContent('User "sam" cannot list services');
+  });
+
+  /** Still reading is its own state: not refused, and not a clean answer either. */
+  it("says a kind is still being read rather than calling the scope clean", async () => {
+    const { container } = await panel(
+      attentionFrom([], {
+        claims: { data: undefined, error: null },
+      })
+    );
+
+    expect(container).not.toHaveTextContent("nothing needs attention");
+    const unchecked = screen.getByTestId("attention-unchecked");
+    expect(unchecked).toHaveTextContent("PVCs");
+    expect(unchecked).toHaveTextContent("still reading");
+  });
+
+  /** The one state that earns the words, and the only one with a green dot. */
+  it("says nothing needs attention only when every kind was read clean", async () => {
+    const { container } = await panel(attentionFrom([]));
+
+    expect(container).toHaveTextContent("nothing needs attention");
+    expect(screen.queryByTestId("attention-unchecked")).toBeNull();
+  });
+
+  /** Fifty rows push the rest of the page off screen; the tail is a count and a way into each list. */
+  it("caps the rows and links what it left out to each kind's list", async () => {
+    const pods = Array.from({ length: 14 }, (_, at) => ({
+      ...problem,
+      kind: "Pod",
+      name: `api-${at}`,
+      severity: "critical" as const,
+    }));
+    await panel(attentionFrom(pods));
+
+    expect(screen.getAllByRole("link", { name: /^Pod api-/ })).toHaveLength(12);
+    expect(screen.getByText("and 2 more")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "2 Pods" })).toHaveAttribute(
+      "href",
+      "/c/prod/pods"
     );
   });
 });

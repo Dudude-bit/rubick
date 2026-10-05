@@ -61,11 +61,6 @@ export function useClusterOverview(scope: readonly string[]) {
   });
 }
 
-/** Every problem, including the ones the backend's ranked list dropped. */
-export function problemTotal(overview: ClusterOverview): number {
-  return overview.problems.length + overview.problemsTruncated;
-}
-
 /**
  * The overview of what this window is looking at: one request whatever the
  * scope, answered from the backend's watch-fed stores when they are healthy

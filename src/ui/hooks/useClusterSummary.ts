@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
-import { problemTotal, useClusterOverview } from "@/hooks/useClusterOverview";
+import { useClusterOverview } from "@/hooks/useClusterOverview";
 import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
@@ -26,8 +26,6 @@ export interface ClusterSummary {
    *  shows "—", not "0", so a token without cluster read rights is never told
    *  its cluster is empty and healthy. */
   podCount: number | null;
-  /** Every problem, including the ones the backend's ranked list dropped. */
-  problemCount: number | null;
   namespaces: NamespaceScope[];
   /** A refused list is not an empty cluster: the picker then takes a name. */
   namespaceList: NamespaceListState;
@@ -107,7 +105,6 @@ export function useClusterSummary(): ClusterSummary {
 
     return {
       podCount: overview ? overview.counts.pods : null,
-      problemCount: overview ? problemTotal(overview) : null,
       namespaces,
       namespaceList,
       isLoading: overviewLoading || namespacesLoading,

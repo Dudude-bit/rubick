@@ -5,7 +5,8 @@ import { iconSvg } from "@/lib/icon-svg";
 import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import type { StatusRole } from "@/lib/status-role";
-import { ResourceType } from "@/lib/resource-registry";
+import type { Attention } from "@/lib/attention";
+import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
   ClusterOverview,
   ClusterProblem,
@@ -85,41 +86,42 @@ export function memoryRatio(pressure: ResourcePressure): Ratio {
 }
 
 /** What the "Needs attention" panel draws, as a Share finding per row. */
-export function problemsShare(
-  problems: ClusterProblem[],
-  problemsTruncated: number,
-  t: T
-): PlacedSection {
-  const items: ReportFinding[] = problems.map((problem) => ({
-    title: problem.reason,
+export function attentionShare(attention: Attention, t: T): PlacedSection {
+  const items: ReportFinding[] = attention.items.map((item) => ({
+    title: item.reason,
     detail:
-      problem.detail === null
+      item.detail === null
         ? null
-        : problem.detail.says === "said"
-          ? problem.detail.text
-          : composedDetail(problem.detail, t),
-    role: (problem.severity === "critical" ? "err" : "warn") as StatusRole,
-    ref: refOf({
-      kind: problem.kind,
-      name: problem.name,
-      namespace: problem.namespace,
-    }),
+        : item.detail.says === "said" || item.detail.says === "ours"
+          ? item.detail.text
+          : composedDetail(item.detail, t),
+    role: item.tone,
+    ref: refOf({ kind: item.kind, name: item.name, namespace: item.namespace }),
   }));
-  if (problemsTruncated > 0)
+  const cut = attention.total - attention.items.length;
+  if (cut > 0)
     items.push({
-      title: t("count", "moreMostSevere", {
-        n: problemsTruncated,
-        shown: problems.length,
-      }),
+      title: t("cluster", "attentionMore", { n: cut }),
       detail: null,
       role: "neutral",
     });
+  for (const check of attention.checks) {
+    if (check.state === "read") continue;
+    items.push({
+      title: `${getDisplayPlural(check.kind)}: ${t(
+        "cluster",
+        check.state === "reading" ? "attentionStillReading" : "attentionFailed"
+      )}`,
+      detail: check.unread.find((entry) => entry.message)?.message ?? null,
+      role: "neutral",
+    });
+  }
   return {
     id: "overview-problems",
     order: ORDER.summary,
     title: t("action", "needsAttention"),
     icon: iconSvg(TriangleAlert),
-    count: problems.length + problemsTruncated,
+    count: attention.total,
     body: { type: "findings", items },
   };
 }

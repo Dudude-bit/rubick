@@ -84,15 +84,17 @@ type OverviewStub = Pick<
   "counts" | "problems" | "problemsTruncated"
 >;
 let overview: OverviewStub | undefined;
-vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
-  problemTotal: (
-    await importOriginal<typeof import("@/hooks/useClusterOverview")>()
-  ).problemTotal,
+vi.mock("@/hooks/useClusterOverview", () => ({
   // Deliberately ignores `enabled`, the way React Query's own
   // `keepPreviousData` does: the hook goes on handing back the last cluster's
   // answer after a disconnect, which is the condition the rail must survive.
   useClusterOverview: () => ({ data: overview }),
   useScopedOverview: () => ({ data: overview }),
+}));
+
+let attention: { total: number; worst: "err" | "warn" | null } | null = null;
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () => attention,
 }));
 
 const { Sidebar } = await import("./Sidebar");
@@ -188,6 +190,21 @@ describe("the counts at the end of each row", () => {
 
     expect(await screen.findByText("Pods")).toBeInTheDocument();
     expect(screen.queryByText("41")).not.toBeInTheDocument();
+  });
+  /**
+   * The Overview row carries the panel's own total in its worst row's tone.
+   * Fails if the badge goes back to counting only the backend's problems, or
+   * paints a list of warnings red.
+   */
+  it("badges the Overview row with the attention total in its worst tone", async () => {
+    overview = overviewWithPods(41);
+    attention = { total: 3, worst: "warn" };
+
+    await wrap(<Sidebar />);
+
+    const badge = await screen.findByText("3");
+    expect(badge).toHaveClass("text-warn");
+    attention = null;
   });
 });
 

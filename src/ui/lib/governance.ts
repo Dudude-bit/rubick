@@ -154,92 +154,114 @@ export function metricReadings(facts: AutoscalerFacts): MetricReading[] {
   }));
 }
 
+/** Which of an autoscaler's own conditions is the finding, and how loud. */
+export interface AutoscalerVerdict {
+  says: "cannotReach" | "standingBy" | "noMetrics" | "atFloor" | "atCeiling";
+  tone: Finding["tone"];
+  /** The condition that decided it, for its reason and its words. */
+  condition: ConditionInfo | undefined;
+}
+
 /**
  * The one thing worth saying about an autoscaler, or nothing.
  *
  * Ordered by what stops the autoscaler working soonest. An HPA that cannot
  * reach the thing it scales has not got as far as reading a metric, and an
- * HPA that cannot read a metric never gets as far as being limited — so the
+ * HPA that cannot read a metric never gets as far as being limited, so the
  * first true one is the whole answer and the rest is detail.
  */
-export function autoscalerFinding(auto: Autoscaler, t: T): Finding | null {
-  const { conditions } = auto.facts;
+export function autoscalerVerdict(
+  facts: AutoscalerFacts
+): AutoscalerVerdict | null {
+  const { conditions } = facts;
   const able = condition(conditions, "AbleToScale");
   const active = condition(conditions, "ScalingActive");
   const limited = condition(conditions, "ScalingLimited");
-  const name = auto.object.name;
 
-  if (isFalse(able)) {
-    return {
-      tone: "err",
-      title: t("readings", "hpaCannotReach", { name }),
-      detail: able?.message
-        ? sentence(able.message)
-        : t("readings", "hpaCannotReachDetail", {
-            kind: auto.target.kind,
-            target: auto.target.name,
-          }),
-    };
-  }
-
+  if (isFalse(able))
+    return { says: "cannotReach", tone: "err", condition: able };
   if (isFalse(active)) {
     // Zero replicas is the one `ScalingActive=False` that is a setting rather
     // than a fault: an HPA deliberately stops at zero and waits to be scaled
     // up by hand, and colouring it red would fire on every idle workload.
-    if (active?.reason === "ScalingDisabled") {
-      return {
-        tone: "neutral",
-        title: t("readings", "hpaStandingBy", { name }),
-        detail: active.message
-          ? sentence(active.message)
-          : t("readings", "hpaStandingByDetail"),
-      };
-    }
-    return {
-      tone: "err",
-      title: t("readings", "hpaNoMetrics", { name }),
-      detail: t("readings", "hpaNoMetricsDetail", {
-        said: sentence(
-          active?.message ??
-            active?.reason ??
-            t("readings", "hpaNoMetricsDefault")
-        ),
-      }),
-    };
+    return active?.reason === "ScalingDisabled"
+      ? { says: "standingBy", tone: "neutral", condition: active }
+      : { says: "noMetrics", tone: "err", condition: active };
   }
-
   if (isTrue(limited)) {
     // `ScalingLimited` covers the floor, the ceiling and the stabilisation
     // window with one condition, and they are three different findings.
     // Reading the status word alone would call all three "limited".
-    if (limited?.reason === "TooFewReplicas") {
+    if (limited?.reason === "TooFewReplicas")
+      return { says: "atFloor", tone: "neutral", condition: limited };
+    if (limited?.reason === "ScaleDownStabilized") return null;
+    return { says: "atCeiling", tone: "warn", condition: limited };
+  }
+  return null;
+}
+
+/** {@link autoscalerVerdict} as the sentence the workload's page prints. */
+export function autoscalerFinding(auto: Autoscaler, t: T): Finding | null {
+  const verdict = autoscalerVerdict(auto.facts);
+  if (!verdict) return null;
+  const { tone, condition: decided } = verdict;
+  const name = auto.object.name;
+
+  switch (verdict.says) {
+    case "cannotReach":
       return {
-        tone: "neutral",
+        tone,
+        title: t("readings", "hpaCannotReach", { name }),
+        detail: decided?.message
+          ? sentence(decided.message)
+          : t("readings", "hpaCannotReachDetail", {
+              kind: auto.target.kind,
+              target: auto.target.name,
+            }),
+      };
+    case "standingBy":
+      return {
+        tone,
+        title: t("readings", "hpaStandingBy", { name }),
+        detail: decided?.message
+          ? sentence(decided.message)
+          : t("readings", "hpaStandingByDetail"),
+      };
+    case "noMetrics":
+      return {
+        tone,
+        title: t("readings", "hpaNoMetrics", { name }),
+        detail: t("readings", "hpaNoMetricsDetail", {
+          said: sentence(
+            decided?.message ??
+              decided?.reason ??
+              t("readings", "hpaNoMetricsDefault")
+          ),
+        }),
+      };
+    case "atFloor":
+      return {
+        tone,
         title: t("readings", "hpaAtFloor", {
           name,
           min: auto.facts.minReplicas,
         }),
         detail: t("readings", "hpaAtFloorDetail"),
       };
-    }
-    if (limited?.reason === "ScaleDownStabilized") {
-      return null;
-    }
-    return {
-      tone: "warn",
-      title: t("readings", "hpaAtCeiling", {
-        name,
-        max: auto.facts.maxReplicas,
-      }),
-      detail: t("readings", "hpaAtCeilingDetail", {
-        said: sentence(
-          limited?.message ?? t("readings", "hpaAtCeilingDefault")
-        ),
-      }),
-    };
+    case "atCeiling":
+      return {
+        tone,
+        title: t("readings", "hpaAtCeiling", {
+          name,
+          max: auto.facts.maxReplicas,
+        }),
+        detail: t("readings", "hpaAtCeilingDetail", {
+          said: sentence(
+            decided?.message ?? t("readings", "hpaAtCeilingDefault")
+          ),
+        }),
+      };
   }
-
-  return null;
 }
 
 /**

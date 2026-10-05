@@ -4,18 +4,35 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 const whole = vi.hoisted(() => ({
   podCount: 3 as number | null,
-  problemCount: 0 as number | null,
 }));
 
 vi.mock("@/hooks/useClusterSummary", () => ({
   useClusterSummary: () => ({
     namespaces: [],
     podCount: whole.podCount,
-    problemCount: whole.problemCount,
     namespaceList: "listed",
     isLoading: false,
   }),
 }));
+
+/** What needs attention on screen, and across the cluster when asked for it. */
+const attentions = vi.hoisted(() => ({
+  here: null as unknown,
+  cluster: null as unknown,
+}));
+
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: (scope?: readonly string[]) =>
+    scope ? attentions.cluster : attentions.here,
+}));
+
+const attentionOf = (total: number, complete = true) => ({
+  items: [],
+  total,
+  checks: [],
+  complete,
+  worst: total > 0 ? "err" : null,
+});
 
 /** The overview of whatever scope the window is on, per test. */
 const scoped = vi.hoisted(() => ({
@@ -46,7 +63,8 @@ import { StatusBar } from "./StatusBar";
 beforeEach(() => {
   renewal = "scheduled";
   whole.podCount = 3;
-  whole.problemCount = 0;
+  attentions.here = attentionOf(0);
+  attentions.cluster = attentionOf(0);
   scoped.data = overviewOf(3, 0);
   scoped.isPlaceholderData = false;
   useClusterStore.setState({
@@ -144,7 +162,7 @@ describe("what the problem count counts", () => {
    */
   it("counts the namespace the window is on and names it", () => {
     whole.podCount = 72;
-    whole.problemCount = 18;
+    attentions.cluster = attentionOf(18);
     scoped.data = overviewOf(2, 0);
     useClusterStore.setState({ namespaceScope: ["lena-sandbox"] });
     bar();
@@ -159,7 +177,7 @@ describe("what the problem count counts", () => {
   /** Fails if the cluster-wide figure is lost rather than moved behind a hover. */
   it("keeps the whole cluster's figure on hover", async () => {
     whole.podCount = 72;
-    whole.problemCount = 18;
+    attentions.cluster = attentionOf(18);
     scoped.data = overviewOf(2, 0);
     useClusterStore.setState({ namespaceScope: ["lena-sandbox"] });
     bar();
@@ -185,5 +203,30 @@ describe("what the problem count counts", () => {
     const counts = screen.getByTestId("scope-counts");
     expect(counts).not.toHaveTextContent("40 pods");
     expect(counts).toHaveTextContent("not counted");
+  });
+
+  /**
+   * The Overview's own total, not the backend's pod-and-workload one: the
+   * bar said 0 beside a namespace whose Services had no endpoints. Fails if
+   * the bar counts anything but what the panel heads.
+   */
+  it("counts what the Needs attention panel counts", () => {
+    scoped.data = overviewOf(4, 0);
+    attentions.here = attentionOf(4);
+    bar();
+
+    expect(screen.getByTestId("scope-counts")).toHaveTextContent("4 problems");
+  });
+
+  /**
+   * A kind the list could not read makes a zero a partial answer. Fails if
+   * the bar prints a bare "0 problems" over a scope it did not finish reading.
+   */
+  it("says when the count did not cover everything", () => {
+    attentions.here = attentionOf(0, false);
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveTextContent("0 problems, not all checked");
   });
 });

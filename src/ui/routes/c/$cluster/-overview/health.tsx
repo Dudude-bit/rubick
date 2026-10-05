@@ -1,9 +1,11 @@
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { Loader2, Lock, TriangleAlert } from "lucide-react";
 
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Composition } from "@/components/object/detail-blocks";
 import { ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
+import { KindIcon } from "@/components/object/KindIcon";
 import { useShareSection } from "@/components/share/screen-share";
 import {
   composedDetail,
@@ -15,26 +17,28 @@ import {
   podSegments,
   podTotal,
   PRESSURE_WARN,
-  problemsShare,
+  attentionShare,
   schedulerShare,
   warningsShare,
   workloadsShare,
   type Ratio,
 } from "./health-share";
 import { eventReasonMark } from "@/lib/event-reason";
-import { objectLink } from "@/lib/links";
+import type { Attention, AttentionCheck, AttentionItem } from "@/lib/attention";
+import { ERROR_CODES } from "@/lib/error-utils";
+import { listLink, objectLink } from "@/lib/links";
+import { ROLE_ICON, ROLE_TEXT } from "@/lib/status-role";
 import { cn, formatAge } from "@/lib/utils";
-import { ResourceType } from "@/lib/resource-registry";
+import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
   ClusterOverview,
-  ClusterProblem,
   NodeSummary,
   PodComposition,
   ResourcePressure,
   SchedulerPressure,
   WarningGroup,
 } from "@/generated/types";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 
 /**
  * The unit rides along dimmed and a size smaller, so the number keeps the
@@ -85,71 +89,88 @@ function Sparkline({
   );
 }
 
-function ProblemRow({ problem }: { problem: ClusterProblem }) {
+const VISIBLE = 12;
+
+function AttentionDetailText({ item }: { item: AttentionItem }) {
+  const t = useT();
+  const { detail } = item;
+  if (!detail) return null;
+  if (detail.says === "said")
+    return (
+      <ResourceMessage
+        message={detail.text}
+        subject={{
+          kind: item.kind,
+          name: item.name,
+          namespace: item.namespace,
+        }}
+      />
+    );
+  if (detail.says === "ours") return <>{detail.text}</>;
+  return <>{composedDetail(detail, t)}</>;
+}
+
+function AttentionRow({ item }: { item: AttentionItem }) {
   const t = useT();
   const navigate = useNavigate();
-  const isCritical = problem.severity === "critical";
-  const tone = isCritical ? "text-err" : "text-warn";
-  const link = objectLink({
-    kind: problem.kind,
-    name: problem.name,
-    namespace: problem.namespace,
-  });
-  const restarts = problem.restarts ?? 0;
-  const { Icon: ProblemIcon } = eventReasonMark(problem.reason);
+  const tone = ROLE_TEXT[item.tone];
+  const SeverityIcon = ROLE_ICON[item.tone];
+  const link = objectLink(item.opens);
+  const restarts = item.restarts ?? 0;
+  const { Icon: ReasonIcon } = eventReasonMark(item.reason);
+  const elsewhere =
+    item.opens.kind !== item.kind || item.opens.name !== item.name;
 
   const body = (
     <>
       {/* Shape carries the severity alongside the colour: a red/green
        *  deficiency must not flatten the only ranking on this screen. */}
-      <span className={cn("justify-self-center text-[9px]", tone)}>
-        {isCritical ? "●" : "▲"}
-      </span>
+      <SeverityIcon
+        className={cn("h-3 w-3 justify-self-center", tone)}
+        aria-hidden="true"
+      />
       <span
         className={cn(
           "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
           tone
         )}
       >
-        {/* The same family mark the event feed gives this reason. Severity
-         *  keeps the colour — nothing may compete with the ranking on this
-         *  screen — so the family contributes only its shape. */}
-        <ProblemIcon
+        <ReasonIcon
           className="h-2.5 w-2.5 flex-none self-center"
           aria-hidden="true"
         />
-        <span className="truncate">{problem.reason}</span>
+        <span className="truncate">{item.reason}</span>
       </span>
       <span className="truncate text-fg-mid">
         <ResourceRef
-          kind={problem.kind}
-          name={problem.name}
-          namespace={problem.namespace}
+          kind={item.kind}
+          name={item.name}
+          namespace={item.namespace}
           showKind={false}
         />
-        {problem.namespace && (
-          <span className="text-fg-fnt"> · {problem.namespace}</span>
+        {elsewhere && (
+          <>
+            <span className="text-fg-fnt">{" → "}</span>
+            <ResourceRef
+              kind={item.opens.kind}
+              name={item.opens.name}
+              namespace={item.opens.namespace}
+              showKind={false}
+            />
+          </>
         )}
-        {problem.detail && (
+        {item.namespace && (
+          <span className="text-fg-fnt"> · {item.namespace}</span>
+        )}
+        {item.detail && (
           <span className="text-fg-fnt">
-            {" — "}
-            {problem.detail.says === "said" ? (
-              <ResourceMessage
-                message={problem.detail.text}
-                subject={{
-                  kind: problem.kind,
-                  name: problem.name,
-                  namespace: problem.namespace,
-                }}
-              />
-            ) : (
-              composedDetail(problem.detail, t)
-            )}
+            {": "}
+            <AttentionDetailText item={item} />
           </span>
         )}
       </span>
       <Sparkline
-        rising={problem.kind === "Pod" && restarts > 0}
+        rising={item.kind === "Pod" && restarts > 0}
         className={tone}
       />
       <span className="text-right font-mono text-fg-mut">
@@ -159,11 +180,11 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
             <Unit> {t("count", "restartNoun", { n: restarts })}</Unit>
           </>
         ) : (
-          "—"
+          <span className="text-fg-fnt">·</span>
         )}
       </span>
       <span className="text-right text-[11px] text-fg-fnt">
-        {formatAge(problem.since, t)}
+        {formatAge(item.since, t)}
       </span>
     </>
   );
@@ -189,29 +210,115 @@ function ProblemRow({ problem }: { problem: ClusterProblem }) {
   );
 }
 
-export function ProblemsPanel({
-  problems,
-  problemsTruncated,
+/** The rows past the cap, by kind, each a way into its list. */
+function MoreRows({ hidden, cut }: { hidden: AttentionItem[]; cut: number }) {
+  const t = useT();
+  const byKind = new Map<string, number>();
+  for (const item of hidden)
+    byKind.set(item.kind, (byKind.get(item.kind) ?? 0) + 1);
+  return (
+    <p className="flex flex-wrap items-baseline gap-x-2 px-1.5 py-[5px] text-[11px] text-fg-fnt">
+      <span>{t("cluster", "attentionMore", { n: hidden.length + cut })}</span>
+      {[...byKind].map(([kind, n]) => (
+        <Link
+          key={kind}
+          {...listLink(kind)}
+          className="inline-flex items-center gap-1 text-fg-mut hover:text-fg"
+        >
+          <KindIcon kind={kind} className="h-2.5 w-2.5" />
+          <span className="font-mono">
+            {n} {n === 1 ? kind : getDisplayPlural(kind)}
+          </span>
+        </Link>
+      ))}
+    </p>
+  );
+}
+
+function scopeOf(unread: AttentionCheck["unread"], t: T): string | null {
+  const named = [
+    ...new Set(
+      unread.flatMap((entry) => (entry.namespace ? [entry.namespace] : []))
+    ),
+  ];
+  if (named.length === 0) return null;
+  return named.length === 1
+    ? t("cluster", "attentionInNamespace", { namespace: named[0] })
+    : t("cluster", "attentionInNamespaces", { n: named.length });
+}
+
+/** One kind the list could not look at: refused, failed, or not answered yet. */
+function CheckRow({ check }: { check: AttentionCheck }) {
+  const t = useT();
+  const reading = check.state === "reading";
+  const refused =
+    !reading &&
+    check.unread.length > 0 &&
+    check.unread.every((entry) => entry.code === ERROR_CODES.PERMISSION);
+  const Icon = reading ? Loader2 : refused ? Lock : TriangleAlert;
+  const said = check.unread.find((entry) => entry.message)?.message ?? null;
+  const where = scopeOf(check.unread, t);
+  return (
+    <li className="grid grid-cols-[10px_150px_minmax(0,1fr)] items-baseline gap-2.5 px-1.5 py-[3px] text-xs">
+      <Icon
+        className={cn(
+          "h-3 w-3 self-center justify-self-center",
+          reading
+            ? "animate-spin text-info"
+            : refused
+              ? "text-fg-mut"
+              : "text-warn"
+        )}
+        aria-hidden="true"
+      />
+      <span className="inline-flex min-w-0 items-baseline gap-1 font-mono text-fg-mid">
+        <KindIcon
+          kind={check.kind}
+          className="h-2.5 w-2.5 flex-none self-center"
+        />
+        <span className="truncate">{getDisplayPlural(check.kind)}</span>
+      </span>
+      <span className="min-w-0 truncate text-fg-mut" title={said ?? undefined}>
+        {t(
+          "cluster",
+          reading
+            ? "attentionStillReading"
+            : refused
+              ? "attentionRefused"
+              : "attentionFailed"
+        )}
+        {where && <span className="text-fg-fnt"> {where}</span>}
+        {said && (
+          <span className="font-mono text-[11px] text-fg-fnt">
+            {": "}
+            {said}
+          </span>
+        )}
+      </span>
+    </li>
+  );
+}
+
+export function AttentionPanel({
+  attention,
   pods,
   nodes,
   nodesKnown,
 }: {
-  problems: ClusterProblem[];
-  /** Rows the backend dropped from the end of the ranked list. */
-  problemsTruncated: number;
+  attention: Attention;
   pods: PodComposition;
   nodes: NodeSummary[];
   /** False when the node list was refused: the "N nodes ready" half of the
-   *  healthy line is unknown, not "0 of 0", so it is left off. */
+   *  summary is unknown, not "0 of 0", so it is left off. */
   nodesKnown: boolean;
 }) {
   const t = useT();
-  useShareSection("overview-problems", () =>
-    problemsShare(problems, problemsTruncated, t)
-  );
-  // The headline counts everything that is wrong, not everything that fits —
-  // an outage that overflows the cap must not read as smaller than it is.
-  const total = problems.length + problemsTruncated;
+  useShareSection("overview-problems", () => attentionShare(attention, t));
+  const { items, total, complete } = attention;
+  const shown = items.slice(0, VISIBLE);
+  const hidden = items.slice(VISIBLE);
+  const cut = total - items.length;
+  const unchecked = attention.checks.filter((check) => check.state !== "read");
   const serving = pods.running - pods.crashLooping;
   const readyNodes = nodes.filter((n) => n.ready).length;
 
@@ -222,27 +329,34 @@ export function ProblemsPanel({
         count={
           total > 0
             ? t("count", "worstFirst", { n: total })
-            : t("empty", "nothingBroken")
+            : complete
+              ? t("cluster", "attentionNothing")
+              : t("cluster", "attentionNoneFound")
         }
       />
       <div>
-        {problems.map((problem) => (
-          <ProblemRow
-            key={`${problem.kind}/${problem.namespace ?? "-"}/${problem.name}/${problem.reason}`}
-            problem={problem}
-          />
+        {shown.map((item) => (
+          <AttentionRow key={item.key} item={item} />
         ))}
-        {problemsTruncated > 0 && (
-          <p className="px-1.5 py-[5px] text-[11px] text-fg-fnt">
-            {t("count", "moreMostSevere", {
-              n: problemsTruncated,
-              shown: problems.length,
-            })}
-          </p>
+        {hidden.length + cut > 0 && <MoreRows hidden={hidden} cut={cut} />}
+        {unchecked.length > 0 && (
+          <div
+            className="mt-1 border-t border-hair pt-1.5"
+            data-testid="attention-unchecked"
+          >
+            <p className="px-1.5 pb-0.5 text-[11px] text-fg-fnt">
+              {t("cluster", "attentionNotChecked")}
+            </p>
+            <ul>
+              {unchecked.map((check) => (
+                <CheckRow key={check.kind} check={check} />
+              ))}
+            </ul>
+          </div>
         )}
         {/* What is fine gets one muted line at the end, never a panel of
          *  green checkmarks competing with the rows above it. */}
-        <div className={ROW}>
+        <div className={ROW} data-testid="attention-summary">
           <span className="justify-self-center text-[9px] text-ok">{"●"}</span>
           <span className="truncate font-mono font-medium text-fg-mut">
             {t("cluster", "healthy")}
@@ -267,6 +381,23 @@ export function ProblemsPanel({
           <span />
         </div>
       </div>
+    </Section>
+  );
+}
+
+/** The panel while this scope's own answer is on its way: the last scope's would be the wrong list. */
+export function AttentionPending() {
+  const t = useT();
+  return (
+    <Section>
+      <SectionHeader title={t("action", "needsAttention")} />
+      <p className="flex items-center gap-2 px-1.5 py-[5px] text-xs text-fg-mut">
+        <Loader2
+          className="h-3 w-3 animate-spin text-info"
+          aria-hidden="true"
+        />
+        {t("cluster", "attentionStillReading")}
+      </p>
     </Section>
   );
 }

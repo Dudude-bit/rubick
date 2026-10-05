@@ -363,6 +363,11 @@ export const queryKeys = {
     namespace,
   ],
   /** What the Services of a scope publish, one `listServiceBacking` each. */
+  /** A scope's autoscalers with the facts their findings read, `list_autoscalers_in`. */
+  autoscalers: (namespace?: string | null): string[] => [
+    "autoscalers",
+    scope(namespace),
+  ],
   serviceBacking: (namespaces: readonly string[] | null): string[] => [
     "service-backing",
     (namespaces && scopeCacheKey(namespaces)) || EVERY_NAMESPACE,
