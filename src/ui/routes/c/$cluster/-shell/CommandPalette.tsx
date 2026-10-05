@@ -1384,21 +1384,14 @@ const kindNames = (kinds: readonly { kind: string }[]) =>
 
 /**
  * What a name search read in one cluster, and what it did not: the kinds it
- * compared, the namespaces it read them in, the ones refused or still
- * loading, and the served kinds it never looked at. Each part carries its own
- * icon and tone, and names its kinds on hover.
+ * compared, the namespaces it read them in, the ones still loading, and the
+ * served kinds it never looked at. Each part carries its own icon and tone,
+ * and names its kinds on hover. The kinds it could not read are said once,
+ * on the cluster's own line.
  */
 function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
   const t = useT();
   const { cluster, scope, notSearched, unreadGroups } = entry;
-  const refused = cluster.unreadable.filter(
-    (unread) => unread.reason === "forbidden"
-  );
-  const failed = cluster.unreadable.filter(
-    (unread) => unread.reason !== "forbidden"
-  );
-  const reasons = (kinds: typeof cluster.unreadable) =>
-    kinds.map((unread) => `${unread.kind}: ${unread.message}`).join("\n");
   return (
     <div
       role="presentation"
@@ -1415,24 +1408,6 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
         <span className="flex items-center gap-1">
           <FolderOpen className="h-3 w-3 flex-none" aria-hidden />
           {scope}
-        </span>
-      )}
-      {refused.length > 0 && (
-        <span
-          className="flex items-center gap-1 text-warn"
-          title={reasons(refused)}
-        >
-          <Lock className="h-3 w-3 flex-none" aria-hidden />
-          {t("count", "kindsRefused", { n: refused.length })}
-        </span>
-      )}
-      {failed.length > 0 && (
-        <span
-          className="flex items-center gap-1 text-warn"
-          title={reasons(failed)}
-        >
-          <TriangleAlert className="h-3 w-3 flex-none" aria-hidden />
-          {t("count", "kindsNotRead", { n: failed.length })}
         </span>
       )}
       {cluster.loading.length > 0 && (
@@ -1530,13 +1505,21 @@ function ClusterGroup({
     if (cluster.truncated)
       state = t("count", "matchesCapped", { n: cluster.matched });
     if (cluster.unreadable.length > 0) {
+      const Mark = cluster.unreadable.every(
+        (unread) => unread.reason === "forbidden"
+      )
+        ? Lock
+        : TriangleAlert;
+      // The one place the palette names what it could not read: cut to the
+      // row, every kind and its reason on hover.
       state = (
         <span
+          className="min-w-0 truncate"
           title={cluster.unreadable
             .map((unread) => `${unread.kind}: ${unread.message}`)
             .join("\n")}
         >
-          {state} ·{" "}
+          {state} · <Mark className="inline h-3 w-3 align-[-2px]" aria-hidden />{" "}
           {t("cluster", "kindsUnreadInline", {
             kinds: cluster.unreadable.map((unread) => unread.kind).join(", "),
           })}
@@ -1576,7 +1559,14 @@ function ClusterGroup({
       <span className="min-w-0 truncate font-mono text-fg-mut">
         {cluster.context}
       </span>
-      <span className={cn("ml-auto flex flex-none items-center gap-1", tone)}>
+      <span
+        className={cn(
+          "ml-auto flex items-center gap-1",
+          // Takes what the cluster's name leaves, and cuts there.
+          partial ? "min-w-0 flex-1 justify-end" : "flex-none",
+          tone
+        )}
+      >
         {state}
       </span>
     </div>

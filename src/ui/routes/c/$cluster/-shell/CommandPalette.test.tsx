@@ -260,6 +260,44 @@ describe("the command palette's hits", () => {
   });
 
   /**
+   * Marco's Ctrl+K said the refused kinds three times: on the cluster's
+   * line, as "13 kinds refused" and again under "no object matches", and
+   * the first ran off the dialog mid-word. Fails if they are named twice or
+   * the line is not cut with its full list on hover.
+   */
+  it("names the kinds it could not read once, cut to the row, whole on hover", async () => {
+    const refused = [
+      "DaemonSet",
+      "PodDisruptionBudget",
+      "NetworkPolicy",
+      "Role",
+      "RoleBinding",
+      "ClusterRole",
+      "ClusterRoleBinding",
+    ];
+    search.unreadable = refused.map((kind) => ({
+      kind,
+      group: "",
+      plural: `${kind.toLowerCase()}s`,
+      reason: "forbidden",
+      message: `${kind.toLowerCase()}s is forbidden`,
+    }));
+    await open("access");
+    const line = await screen.findByText(/could not read DaemonSet/);
+    expect(line).toHaveClass("truncate");
+    expect(line).toHaveAttribute(
+      "title",
+      refused
+        .map((kind) => `${kind}: ${kind.toLowerCase()}s is forbidden`)
+        .join("\n")
+    );
+    expect(document.body.textContent?.split("PodDisruptionBudget").length).toBe(
+      2
+    );
+    expect(screen.queryByText(/kinds? refused/)).toBeNull();
+  });
+
+  /**
    * The refused kinds and the ones still loading are the two parts of the
    * answer a reader must not mistake for "none": each wears its own tone.
    */
@@ -277,9 +315,9 @@ describe("the command palette's hits", () => {
       { kind: "Widget", group: "demo.example.com", plural: "widgets" },
     ];
     await open("marco");
-    const refused = await screen.findByText("1 kind refused");
-    expect(refused.closest("span")).toHaveClass("text-warn");
-    expect(refused.closest("span")).toHaveAttribute(
+    const refused = await screen.findByText(/could not read ServiceAccount/);
+    expect(refused.parentElement).toHaveClass("text-warn");
+    expect(refused).toHaveAttribute(
       "title",
       "ServiceAccount: serviceaccounts is forbidden"
     );

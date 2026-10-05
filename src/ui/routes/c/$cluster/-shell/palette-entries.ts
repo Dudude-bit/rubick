@@ -404,18 +404,12 @@ function emptyHint({
       text: t("count", "noObjectWhileLoading", { query, n: loading.size }),
     };
   }
-  const unread = [
-    ...new Set(
-      done.flatMap((cluster) => cluster.unreadable.map((kind) => kind.kind))
-    ),
-  ];
-  if (unread.length > 0) {
+  // The kinds are named on the cluster's own line; here they are only why
+  // "no object" is not "none".
+  if (done.some((cluster) => cluster.unreadable.length > 0)) {
     return {
       tone: "unread",
-      text: t("empty", "nothingMatchesInReadable", {
-        query,
-        kinds: unread.join(", "),
-      }),
+      text: t("empty", "nothingMatchesInReadable", { query }),
     };
   }
   if (done.length < total) {

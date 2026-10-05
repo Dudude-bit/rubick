@@ -661,7 +661,7 @@ describe("the palette's resource rows", () => {
     );
 
     expect(hintText(entries)).toBe(
-      "No object matches “api” in the kinds that could be read. Not read: Service."
+      "No object matches “api” in the kinds that could be read."
     );
     expect(hintTone(entries)).toBe("unread");
   });

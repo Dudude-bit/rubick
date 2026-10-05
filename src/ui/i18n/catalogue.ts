@@ -6248,7 +6248,7 @@ export const en = {
       "No object matches “{query}” on the {answered} of {total} clusters that were searched.",
     nothingMatchesQuery: "Nothing matches “{query}”.",
     nothingMatchesInReadable:
-      "No object matches “{query}” in the kinds that could be read. Not read: {kinds}.",
+      "No object matches “{query}” in the kinds that could be read.",
     noHelmHistory: "No history: Helm keeps none for this release.",
     nothingRoutesThroughController:
       "Nothing routes through this controller, so there is no shape to draw.",
@@ -7227,7 +7227,6 @@ export const en = {
       one: "Names searched in {n} kind",
       other: "Names searched in {n} kinds",
     },
-    kindsRefused: { one: "{n} kind refused", other: "{n} kinds refused" },
     kindsStillLoading: {
       one: "{n} kind still loading",
       other: "{n} kinds still loading",
