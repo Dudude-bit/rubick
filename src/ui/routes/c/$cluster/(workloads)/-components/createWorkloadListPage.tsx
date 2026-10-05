@@ -12,6 +12,7 @@
  */
 
 import { useCallback, useMemo } from "react";
+import { MetricsAbsenceContext, absenceOf } from "@/lib/metrics-absence";
 import { useNavigate } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Trash2, Eye } from "lucide-react";
@@ -157,7 +158,7 @@ export function createWorkloadListPage<T extends Workload>(
       [navigate, t]
     );
 
-    return (
+    const list = (
       <ResourceList<T & ResourceMetrics>
         title={config.title}
         data={dataWithMetrics}
@@ -200,6 +201,11 @@ export function createWorkloadListPage<T extends Workload>(
           resourceType: config.resourceType,
         }}
       />
+    );
+    return (
+      <MetricsAbsenceContext.Provider value={absenceOf(podStatus)}>
+        {list}
+      </MetricsAbsenceContext.Provider>
     );
   };
   ListPage.displayName = `${config.resourceType}List`;

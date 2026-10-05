@@ -15,6 +15,8 @@ const alertVariants = cva(
       variant: {
         default: "border-hair text-fg-mid [&>svg]:text-fg-mut",
         destructive: "border-err text-err [&>svg]:text-err",
+        warn: "border-warn text-fg-mid [&>svg]:text-warn",
+        info: "border-info text-fg-mid [&>svg]:text-info",
       },
     },
     defaultVariants: {

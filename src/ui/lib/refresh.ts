@@ -56,6 +56,12 @@ export const REFRESH_INTERVALS = {
    * grows: it is as slow as this app is willing to call "polling".
    */
   steady: 30_000,
+  /**
+   * An answer that only an admin can change: metrics-server not installed,
+   * or the metrics API refused. Asked again every five minutes, or at once
+   * when somebody presses Check again.
+   */
+  unserved: 300_000,
 } as const;
 
 /** The name of a rate, which is what surfaces ask for. */
@@ -139,7 +145,11 @@ export function effectiveInterval(
   const steps = recording
     ? 0
     : Math.max(0, steadyRuns - BACKOFF.steadyAfter + 1);
-  const grown = Math.min(base * BACKOFF.factor ** steps, BACKOFF.cap);
+  // A rate slower than the cap is already quieter than backing off would be.
+  const grown = Math.min(
+    base * BACKOFF.factor ** steps,
+    Math.max(base, BACKOFF.cap)
+  );
   // `max`, not `=`: a rate slower than the floor stays at its own rate. The
   // floor is a ceiling on effort, not a promise to poll more often.
   return focused ? grown : Math.max(grown, BACKOFF.unfocusedFloor);

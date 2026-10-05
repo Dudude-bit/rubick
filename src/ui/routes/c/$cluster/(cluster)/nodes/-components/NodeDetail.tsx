@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
+import { MetricsAbsenceContext, absenceOf } from "@/lib/metrics-absence";
 import { nodeReadyWord, silentNodes } from "@/lib/node-reporting";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -297,7 +298,7 @@ export function NodeDetail() {
       label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
-        <>
+        <MetricsAbsenceContext.Provider value={absenceOf(nodeStatus)}>
           {nodeStatus?.status !== "available" && (
             <MetricsStatusBanner status={nodeStatus} />
           )}
@@ -360,7 +361,7 @@ export function NodeDetail() {
               items={taintKeyValues(node.taints)}
             />
           )}
-        </>
+        </MetricsAbsenceContext.Provider>
       ),
     },
     {

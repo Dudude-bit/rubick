@@ -114,6 +114,7 @@ export const queryKeys = {
 
   // Metrics
   metrics: {
+    all: (): string[] => ["metrics"],
     pods: (namespace?: string | null): string[] => [
       "metrics",
       "pods",

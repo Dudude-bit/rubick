@@ -15,6 +15,7 @@ import {
   type UsageRole,
 } from "@/lib/metric-format";
 import { useT } from "@/i18n/useT";
+import { ABSENCE_SHORT, useMetricsAbsence } from "@/lib/metrics-absence";
 
 const BAR_ROLE: Record<UsageRole, string> = {
   ok: "bg-ok",
@@ -88,8 +89,22 @@ export function MetricValue({
   className,
 }: MetricValueProps) {
   const t = useT();
+  const absence = useMetricsAbsence();
   const usedNum = typeof used === "number" ? used : null;
-  if (usedNum === null) return <span className="text-fg-fnt">-</span>;
+  if (usedNum === null) {
+    return absence === null ? (
+      <span className="text-fg-fnt" title={t("cluster", "metricNoSampleYet")}>
+        -
+      </span>
+    ) : (
+      <span
+        className="text-fg-fnt"
+        title={t("cluster", ABSENCE_SHORT[absence])}
+      >
+        {t("cluster", "metricNotAvailable")}
+      </span>
+    );
+  }
 
   const limitNum = typeof limit === "number" && limit > 0 ? limit : null;
   const requestNum =

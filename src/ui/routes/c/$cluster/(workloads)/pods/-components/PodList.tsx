@@ -1,4 +1,5 @@
 import type { ColumnDef } from "@/components/ui/table-features";
+import { MetricsAbsenceContext, absenceOf } from "@/lib/metrics-absence";
 import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
 import { SortableHeader } from "@/components/ui/sortable-header";
@@ -285,7 +286,7 @@ export function PodList() {
     [t, navigate]
   );
 
-  return (
+  const list = (
     <ResourceList<PodWithMetrics>
       title="Pods"
       data={podsWithMetrics}
@@ -322,5 +323,10 @@ export function PodList() {
         resourceType: ResourceType.Pod,
       }}
     />
+  );
+  return (
+    <MetricsAbsenceContext.Provider value={absenceOf(podStatus)}>
+      {list}
+    </MetricsAbsenceContext.Provider>
   );
 }

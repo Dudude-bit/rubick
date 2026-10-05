@@ -1,4 +1,5 @@
 import { columnHeader } from "@/i18n/column-header";
+import { MetricsAbsenceContext, absenceOf } from "@/lib/metrics-absence";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { nodeReadyWord } from "@/lib/node-reporting";
@@ -352,7 +353,7 @@ export function NodeList() {
   }
 
   return (
-    <>
+    <MetricsAbsenceContext.Provider value={absenceOf(nodeStatus)}>
       <ResourceList<NodeInfo>
         title={NODES_TITLE}
         queryKey={queryKeys.resources(ResourceType.Node, null)}
@@ -375,6 +376,6 @@ export function NodeList() {
         getRowHref={(row) => hrefOf(linkOf(row))}
       />
       {actions.dialogs}
-    </>
+    </MetricsAbsenceContext.Provider>
   );
 }

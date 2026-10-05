@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import type {
@@ -5,7 +6,8 @@ import type {
   NodeMetricsResponse,
   UnreadNamespace,
 } from "@/generated/types";
-import { STALE_TIMES } from "@/lib/refresh";
+import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
+import { isUnserved } from "@/lib/metrics-absence";
 import { queryKeys } from "@/lib/query-keys";
 import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
 import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
@@ -34,6 +36,8 @@ export function useMetrics(options?: UseMetricsOptions) {
   const includeNodes = options?.includeNodes ?? true;
 
   const scope = options?.scope;
+  const [podsUnserved, setPodsUnserved] = useState(false);
+  const [nodesUnserved, setNodesUnserved] = useState(false);
   const podMetricsQuery = useLiveQuery({
     queryKey: queryKeys.metrics.pods(
       scope ? scopeCacheKey(scope) : options?.namespace
@@ -44,8 +48,8 @@ export function useMetrics(options?: UseMetricsOptions) {
         : await commands.getPodsMetrics(options?.namespace ?? null),
     enabled: enabled && includePods,
     placeholderData: keepPreviousData,
-    staleTime: STALE_TIMES.metrics,
-    refresh: "metrics",
+    staleTime: podsUnserved ? REFRESH_INTERVALS.unserved : STALE_TIMES.metrics,
+    refresh: podsUnserved ? "unserved" : "metrics",
     ...options?.podQueryOptions,
   });
 
@@ -56,10 +60,17 @@ export function useMetrics(options?: UseMetricsOptions) {
     },
     enabled: enabled && includeNodes,
     placeholderData: keepPreviousData,
-    staleTime: STALE_TIMES.metrics,
-    refresh: "metrics",
+    staleTime: nodesUnserved ? REFRESH_INTERVALS.unserved : STALE_TIMES.metrics,
+    refresh: nodesUnserved ? "unserved" : "metrics",
     ...options?.nodeQueryOptions,
   });
+
+  // The rate is chosen before the answer it depends on is read, so a changed
+  // answer re-renders once with the rate that fits it.
+  const podsNow = isUnserved(podMetricsQuery.data?.status);
+  const nodesNow = isUnserved(nodeMetricsQuery.data?.status);
+  if (podsNow !== podsUnserved) setPodsUnserved(podsNow);
+  if (nodesNow !== nodesUnserved) setNodesUnserved(nodesNow);
 
   return {
     podMetrics: podMetricsQuery.data?.data ?? [],

@@ -1,4 +1,5 @@
 import { Section, SectionHeader } from "@/components/ui/section";
+import { ABSENCE_SHORT, useMetricsAbsence } from "@/lib/metrics-absence";
 import {
   Table,
   TableBody,
@@ -214,6 +215,7 @@ function Figure({
   noSource?: boolean;
 }) {
   const t = useT();
+  const absence = useMetricsAbsence();
   if (dash) {
     return <TableCell className="text-right text-fg-fnt">–</TableCell>;
   }
@@ -221,6 +223,13 @@ function Figure({
     return (
       <TableCell className="text-right text-warn">
         {t("empty", "unknownWord")}
+      </TableCell>
+    );
+  }
+  if (value === null && noSource && absence !== null) {
+    return (
+      <TableCell className="text-right text-fg-fnt">
+        {t("cluster", ABSENCE_SHORT[absence])}
       </TableCell>
     );
   }

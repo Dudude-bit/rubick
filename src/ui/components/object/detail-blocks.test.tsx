@@ -152,6 +152,12 @@ describe("UsageRow without a denominator", () => {
     expect(container.querySelectorAll('[style*="width"]')).toHaveLength(0);
   });
 
+  /** A pod tally that could not be read is not a metrics-server problem. */
+  it("says a count it could not take is not counted", () => {
+    render(<UsageRow label="Pods" used={null} total={110} type="count" />);
+    expect(screen.getByText("not counted")).toBeInTheDocument();
+  });
+
   it("still draws the fill when both numbers are real", () => {
     const { container } = render(
       <UsageRow label="CPU" used={100} total={200} type="cpu" />

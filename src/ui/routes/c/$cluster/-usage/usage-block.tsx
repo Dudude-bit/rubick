@@ -25,6 +25,11 @@ import type {
 import { errorToShow } from "@/lib/error-utils";
 import { pageLink } from "@/lib/links";
 import { formatQuantity } from "@/lib/metric-format";
+import {
+  ABSENCE_SHORT,
+  MetricsAbsenceContext,
+  absenceOf,
+} from "@/lib/metrics-absence";
 import { watchedFor } from "@/lib/usage-history";
 import { storageSummary } from "@/lib/storage-summary";
 import type { MetricsStatus, ResourceConnections } from "@/generated/types";
@@ -115,7 +120,8 @@ export function UsageBlock({
   idleNote,
 }: UsageBlockProps) {
   const t = useT();
-  const available = status === null || status.status === "available";
+  const absence = absenceOf(status);
+  const available = absence === null;
   /** Nothing declares a ceiling for either measure. */
   const neither =
     (cpuLimit === null || cpuLimit <= 0) &&
@@ -204,7 +210,7 @@ export function UsageBlock({
           .filter(Boolean)
           .join(" · ");
 
-  return (
+  const block = (
     <Section>
       <SectionHeader
         title={title ?? t("columns", "usage")}
@@ -266,10 +272,11 @@ export function UsageBlock({
                       }
               }
             />
-            {!available && (
+            {absence !== null && (
               <p className="pb-1 pl-[104px] pr-1.5 text-[11px] leading-snug text-fg-fnt">
                 {t("empty", "historyWithoutMetricsServer", {
                   vendor: past.vendor,
+                  reason: t("cluster", ABSENCE_SHORT[absence]),
                 })}
               </p>
             )}
@@ -351,6 +358,11 @@ export function UsageBlock({
       </div>
       {storage && <StorageRow summary={storage} />}
     </Section>
+  );
+  return (
+    <MetricsAbsenceContext.Provider value={absence}>
+      {block}
+    </MetricsAbsenceContext.Provider>
   );
 }
 

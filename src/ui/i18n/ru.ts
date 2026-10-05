@@ -4147,15 +4147,26 @@ export const ru: Catalogue = {
     criticalNoticeBody:
       "Это {context}. Что бы здесь ни делалось, делается там. Введите имя кластера, чтобы продолжить.",
     criticalStripe: "Критический: {context}",
-    metricsNotInstalled: "metrics-server не установлен",
+    metricsNotInstalled:
+      "metrics-server не установлен, поэтому CPU и память не показаны",
     metricsNotInstalledBody:
-      "Установите metrics-server, чтобы видеть загрузку CPU и памяти.",
-    metricsForbidden: "Нет прав читать метрики",
+      "Установить его может тот, кто отвечает за кластер. Приложение проверяет снова раз в несколько минут.",
+    metricsForbidden:
+      "Метрики недоступны с этими правами, поэтому CPU и память не показаны",
     metricsForbiddenBody:
-      "У этой учётной записи нет доступа к API метрик. Тому, кто выдаёт права, нужно разрешить metrics.k8s.io.",
-    metricsError: "Ошибка API метрик",
-    metricsErrorBody: "Не удалось получить метрики из кластера.",
-    metricsDetails: "Подробности: {details}",
+      "Для чтения metrics.k8s.io нужна роль, которая это разрешает. Приложение проверяет снова раз в несколько минут, а не при каждом обновлении.",
+    metricsError:
+      "API метрик отвечает ошибкой, поэтому CPU и памяти может не быть",
+    metricsErrorBody:
+      "Кластер ответил ошибкой. Запрос повторяется по обычному расписанию.",
+    metricsCheckAgain: "Проверить снова",
+    metricsChecking: "Проверяем…",
+    metricsHideForCluster: "Скрыть для этого кластера",
+    metricsShortNotInstalled: "metrics-server не установлен",
+    metricsShortForbidden: "метрики недоступны с этими правами",
+    metricsShortError: "API метрик отвечает ошибкой",
+    metricNotAvailable: "н/д",
+    metricNoSampleYet: "замера пока нет",
     podMetricsLabel: "метрики подов",
     markBroken: "сломано",
     markUnchecked: "не проверено",
@@ -4251,7 +4262,7 @@ export const ru: Catalogue = {
     schedulerHeadroom: "Запас планировщика",
     headroomLegend: "запросы к доступному · засечка — текущее потребление",
     headroomLegendNoMetrics:
-      "запросы к доступному · metrics-server нет, текущее потребление неизвестно",
+      "запросы к доступному · текущее потребление недоступно из API метрик",
     warningEvents: "События-предупреждения",
     warningEventsScope: "за последний час, по причинам",
     warningEventsUnread:
@@ -5580,7 +5591,7 @@ export const ru: Catalogue = {
       "в окне нет замеров: самому свежему {age}, окно просит {range}",
     noSeriesShort: "нет серий",
     historyWithoutMetricsServer:
-      "metrics-server не установлен: текущего замера нет. История здесь только из {vendor} и стоит сама по себе.",
+      "Текущего замера нет ({reason}). История здесь только из {vendor} и стоит сама по себе.",
     declaredNowOnly:
       "kube-state-metrics в этом Prometheus нет, поэтому что было объявлено раньше в окне, неизвестно; request и limit это сегодняшние цифры, нарисованы плоско.",
     declaredUnknown:
@@ -5822,9 +5833,6 @@ export const ru: Catalogue = {
       "{vendor} ничего не вернул для этой нагрузки — возможно, её метки не совпадают с запросом приложения (пробовали {labels}). За последние {range} ничего не найдено.",
     historyLoadedSummary:
       "из {from}, за последние {range}. Не в реальном времени — эти строки не растут, и «{follow}» до них не дотягивается.",
-    metricsServerNotReporting:
-      "metrics-server ничего не сообщает об этом объекте",
-    noMetricsServer: "нет metrics-server",
     notReadableWithAccess: "недоступно с этими правами",
     couldNotReadIngresses: "Не удалось прочитать Ingress этого кластера",
     albPageDescription:

@@ -47,6 +47,23 @@ describe("what a query is allowed to re-read at", () => {
   });
 });
 
+describe("a rate slower than the cap", () => {
+  /**
+   * The cap is a ceiling on backing off, not a speed limit: clamping a
+   * five-minute rate to it asked an unserved metrics API every thirty
+   * seconds. Fails if a slow rate is pulled up to the cap.
+   */
+  it("keeps its own spacing however long the screen stays still", () => {
+    expect(
+      effectiveInterval(300_000, {
+        visible: true,
+        focused: true,
+        steadyRuns: 12,
+      })
+    ).toBe(300_000);
+  });
+});
+
 describe("a rate that is a recording's cadence", () => {
   it("keeps its spacing however still the numbers are", () => {
     const metrics = REFRESH_INTERVALS.metrics;

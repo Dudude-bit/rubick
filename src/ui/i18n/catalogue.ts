@@ -3739,17 +3739,26 @@ export const en = {
     criticalNoticeBody:
       "This is {context}. Whatever this does, it does there. Type the cluster's name to go on.",
     criticalStripe: "Critical: {context}",
-    metricsNotInstalled: "Metrics server not installed",
+    metricsNotInstalled:
+      "metrics-server is not installed, so CPU and memory are not shown",
     metricsNotInstalledBody:
-      "Install metrics-server to see CPU and memory usage.",
-    metricsForbidden: "No permission to read metrics",
+      "Installing it is a job for whoever runs this cluster. The app checks again every few minutes.",
+    metricsForbidden:
+      "Metrics are not readable with this access, so CPU and memory are not shown",
     metricsForbiddenBody:
-      "This account may not read the metrics API. Whoever grants rights needs to allow metrics.k8s.io.",
-    metricsError: "Metrics API error",
-    metricsErrorBody: "Failed to load metrics from the cluster.",
-    // The cluster's own words, kept whole: they are what somebody takes to
-    // whoever can act on them.
-    metricsDetails: "Details: {details}",
+      "Reading metrics.k8s.io needs a role that allows it. The app checks again every few minutes rather than asking on every refresh.",
+    metricsError:
+      "The metrics API is failing, so CPU and memory may be missing",
+    metricsErrorBody:
+      "The cluster answered with an error. It is asked again on the usual schedule.",
+    metricsCheckAgain: "Check again",
+    metricsChecking: "Checking…",
+    metricsHideForCluster: "Hide for this cluster",
+    metricsShortNotInstalled: "metrics-server not installed",
+    metricsShortForbidden: "metrics not readable with this access",
+    metricsShortError: "metrics API failing",
+    metricNotAvailable: "n/a",
+    metricNoSampleYet: "no sample yet",
     podMetricsLabel: "pod metrics",
     markBroken: "broken",
     markUnchecked: "not checked",
@@ -3847,7 +3856,7 @@ export const en = {
     schedulerHeadroom: "Scheduler headroom",
     headroomLegend: "requests vs allocatable · tick marks live usage",
     headroomLegendNoMetrics:
-      "requests vs allocatable · no metrics-server, live usage unknown",
+      "requests vs allocatable · live usage not available from the metrics API",
     warningEvents: "Warning events",
     warningEventsScope: "last hour, by reason",
     warningEventsUnread:
@@ -5090,7 +5099,7 @@ export const en = {
       "no samples in the window: the newest is {age} old, the window asks for {range}",
     noSeriesShort: "no series",
     historyWithoutMetricsServer:
-      "metrics-server is not installed: there is no current sample. The history here is {vendor} alone and stands on its own.",
+      "There is no current sample ({reason}). The history here is {vendor} alone and stands on its own.",
     declaredNowOnly:
       "kube-state-metrics is not in this Prometheus, so what was declared earlier in the window is unknown; request and limit are today's figures, drawn flat.",
     declaredUnknown:
@@ -5319,9 +5328,6 @@ export const en = {
       "{vendor} answered with nothing for this workload — its labels may not match this app's query (tried {labels}). Nothing was found in the last {range}.",
     historyLoadedSummary:
       "from {from}, the last {range}. Not live — these lines do not grow and {follow} does not reach them.",
-    metricsServerNotReporting:
-      "metrics-server is not reporting for this object",
-    noMetricsServer: "no metrics-server",
     notReadableWithAccess: "not readable with this access",
     couldNotReadIngresses: "Could not read this cluster's Ingresses",
     albPageDescription:

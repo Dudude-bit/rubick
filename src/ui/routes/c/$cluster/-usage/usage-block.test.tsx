@@ -147,8 +147,32 @@ describe("UsageBlock when metrics-server is missing", () => {
         status={{ status: "notInstalled", message: null }}
       />
     );
-    expect(screen.getAllByText("no metrics-server")).toHaveLength(2);
+    expect(screen.getAllByText("metrics-server not installed")).toHaveLength(2);
     expect(document.querySelector("svg")).toBeNull();
+  });
+
+  /**
+   * A refused metrics read is not a missing metrics-server: the reader who
+   * was told to install it could not, and had nothing to install. Fails if
+   * every reason collapses into one sentence again.
+   */
+  it("names a refusal as a refusal, not as a missing install", async () => {
+    await wrap(
+      <UsageBlock
+        kind="Pod"
+        uid="uid-1"
+        cpu={null}
+        memory={null}
+        cpuLimit={200}
+        memoryLimit={null}
+        sampledAt={null}
+        status={{ status: "forbidden", message: null }}
+      />
+    );
+    expect(
+      screen.getAllByText("metrics not readable with this access")
+    ).toHaveLength(2);
+    expect(screen.queryByText(/metrics-server not installed/)).toBeNull();
   });
 
   it("offers no range picker when there is nothing to range over", async () => {
@@ -669,11 +693,11 @@ describe("UsageBlock without metrics-server but with a history supplier", () => 
 
     expect(
       await screen.findByText(
-        /metrics-server is not installed: there is no current sample/
+        /There is no current sample \(metrics-server not installed\)/
       )
     ).toBeInTheDocument();
     await waitFor(() => expect(document.querySelector("svg")).not.toBeNull());
-    expect(screen.queryByText("no metrics-server")).toBeNull();
+    expect(screen.queryByText("metrics-server not installed")).toBeNull();
     // kube-state-metrics answered nothing, so the declared lines are today's
     // figures and the chart says so rather than drawing history it lacks.
     expect(

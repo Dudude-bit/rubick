@@ -12,6 +12,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 import { commands } from "@/lib/commands";
+import { REFRESH_INTERVALS } from "@/lib/refresh";
 import { useMetrics } from "./useMetrics";
 
 const wrapper = ({ children }: { children: ReactNode }) => (
@@ -57,5 +58,44 @@ describe("pod metrics for a selection", () => {
       { wrapper }
     );
     await waitFor(() => expect(result.current.podUnread).toEqual([staging]));
+  });
+});
+
+describe("how often an unserved metrics API is asked", () => {
+  const answer = (status: "notInstalled" | "forbidden" | "error") => ({
+    status: { status, message: "404 page not found" },
+    data: [],
+    unread: [],
+  });
+
+  /**
+   * 460 WARN lines in fifteen minutes: the 404 was asked for every two
+   * seconds. Fails if a missing metrics-server stays on the two-second rate.
+   */
+  it.each(["notInstalled", "forbidden"] as const)(
+    "asks again only every few minutes once it is %s",
+    async (status) => {
+      vi.mocked(commands.getPodsMetrics).mockResolvedValue(answer(status));
+      const { result } = renderHook(() => useMetrics({ includeNodes: false }), {
+        wrapper,
+      });
+      await waitFor(() =>
+        expect(result.current.podMetricsQuery.freshness.everyMs).toBe(
+          REFRESH_INTERVALS.unserved
+        )
+      );
+    }
+  );
+
+  /** A failing API may come back on its own, so it keeps the usual rate. */
+  it("keeps asking a failing API at the usual rate", async () => {
+    vi.mocked(commands.getPodsMetrics).mockResolvedValue(answer("error"));
+    const { result } = renderHook(() => useMetrics({ includeNodes: false }), {
+      wrapper,
+    });
+    await waitFor(() => expect(result.current.podStatus?.status).toBe("error"));
+    expect(result.current.podMetricsQuery.freshness.everyMs).not.toBe(
+      REFRESH_INTERVALS.unserved
+    );
   });
 });
