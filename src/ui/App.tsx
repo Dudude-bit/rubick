@@ -20,6 +20,7 @@ import { applyTheme } from "@/lib/theme";
 import { useClusterStore } from "@/stores/clusterStore";
 import { setupFrontendLogger } from "@/lib/frontend-logger";
 import { startWindowActivity } from "@/lib/window-activity";
+import { keepNativeMenuForText } from "@/lib/native-menu";
 import { stallWatch } from "@/lib/stall-watch";
 import { logInfo, flushLogs } from "@/lib/logger";
 import { markStartup, reportStartup } from "@/lib/startup";
@@ -60,6 +61,7 @@ export default function App() {
   // the app polls against these three facts, and a second set of listeners
   // would double-count the reader's clicks.
   useEffect(() => startWindowActivity(), []);
+  useEffect(() => keepNativeMenuForText(), []);
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       markStartup("painted");

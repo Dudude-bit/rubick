@@ -49,6 +49,7 @@ import {
 } from "@/lib/namespace-scope";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { UnreadNamespaces } from "./UnreadNamespaces";
+import { useRowMenu } from "./useRowMenu";
 
 const NOTHING_UNREAD: UnreadNamespace[] = [];
 
@@ -400,6 +401,11 @@ export function ResourceList<
         : quickActions,
     [quickActions]
   );
+  const rowMenu = useRowMenu<Row>({
+    kind: listKind,
+    getRowHref,
+    quickActions: resolvedQuickActions,
+  });
 
   // A resync with nothing to show is still loading; a resync with rows keeps
   // them, and says so above rather than wearing "live" over them.
@@ -631,6 +637,7 @@ export function ResourceList<
           // height to take; on its own page the table is the page.
           fill={!embedded}
           pageKeys={!embedded}
+          onRowMenu={rowMenu.open}
           isLoading={showSkeleton}
           searchParam={embedded ? undefined : "q"}
           searchPlaceholder={searchPlaceholder}
@@ -656,6 +663,7 @@ export function ResourceList<
           }
         />
       )}
+      {rowMenu.element}
       {deleteConfig && (
         <ConfirmDialog
           open={deleteTarget !== null}

@@ -28,6 +28,7 @@ import { helmReleaseLink, hrefOf, objectLink } from "@/lib/links";
 import { renderWithRouter } from "@/test/render";
 import { useShortcuts } from "@/routes/c/$cluster/-shell/useShortcuts";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { useObjectMenuStore } from "@/stores/objectMenuStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import {
@@ -436,12 +437,12 @@ describe("DataTable rows", () => {
   });
 });
 
-describe("the list keys, from anywhere on a list page", () => {
-  function Shortcuts() {
-    useShortcuts();
-    return null;
-  }
+function Shortcuts() {
+  useShortcuts();
+  return null;
+}
 
+describe("the list keys, from anywhere on a list page", () => {
   const page = (data: Item[] = DATA) => (
     <>
       <Shortcuts />
@@ -602,6 +603,90 @@ describe("the list keys, from anywhere on a list page", () => {
     );
     press("ArrowDown");
     expect(selected()).toEqual([]);
+  });
+});
+
+describe("the row's menu", () => {
+  afterEach(() => useObjectMenuStore.getState().close());
+
+  const table = (
+    onRowMenu: (row: Item, at: { x: number; y: number }) => void
+  ) =>
+    wrap(
+      <>
+        <Shortcuts />
+        <DataTable<Item>
+          columns={[
+            ...columns,
+            {
+              id: "node",
+              header: "Node",
+              cell: () => (
+                <RouteLink {...objectLink({ kind: "Node", name: "worker-1" })!}>
+                  worker-1
+                </RouteLink>
+              ),
+            },
+          ]}
+          data={DATA}
+          getRowHref={href}
+          grouping={null}
+          pageKeys
+          onRowMenu={onRowMenu}
+        />
+      </>
+    );
+
+  /** The webview's Back and Reload used to answer a right click on a row. */
+  it("opens at the pointer on a right click anywhere in the row", async () => {
+    const onRowMenu = vi.fn();
+    await table(onRowMenu);
+    const claimed = fireEvent.contextMenu(whitespace(), {
+      clientX: 40,
+      clientY: 50,
+    });
+    expect(claimed).toBe(false);
+    expect(onRowMenu).toHaveBeenCalledWith(DATA[0], { x: 40, y: 50 });
+    expect(row()).toHaveAttribute("aria-selected", "true");
+  });
+
+  /** The row's own name is the row; it must not open the thinner link menu instead. */
+  it("opens the row's menu, not the link's, on the row's own name", async () => {
+    const onRowMenu = vi.fn();
+    await table(onRowMenu);
+    fireEvent.contextMenu(screen.getByText("a-1"), { clientX: 1, clientY: 2 });
+    expect(onRowMenu).toHaveBeenCalledTimes(1);
+    expect(useObjectMenuStore.getState().target).toBeNull();
+  });
+
+  /** A link to another object is aimed at that object. */
+  it("leaves a link to somewhere else its own menu", async () => {
+    const onRowMenu = vi.fn();
+    await table(onRowMenu);
+    fireEvent.contextMenu(screen.getAllByText("worker-1")[0], {
+      clientX: 1,
+      clientY: 2,
+    });
+    expect(onRowMenu).not.toHaveBeenCalled();
+    expect(useObjectMenuStore.getState().target?.name).toBe("worker-1");
+  });
+
+  /** The keyboard's way in: the Menu key on the focused row. */
+  it("opens on the Menu key on the focused row", async () => {
+    const onRowMenu = vi.fn();
+    await table(onRowMenu);
+    fireEvent.keyDown(rowAt(1)!, { key: "ContextMenu" });
+    expect(onRowMenu).toHaveBeenCalledWith(DATA[1], { x: 0, y: 0 });
+  });
+
+  /** Shift+F10 from anywhere on the page, for the selected row. */
+  it("opens on Shift+F10 for the selected row with the focus elsewhere", async () => {
+    const onRowMenu = vi.fn();
+    await table(onRowMenu);
+    fireEvent.keyDown(document.body, { key: "ArrowDown" });
+    (document.activeElement as HTMLElement).blur();
+    fireEvent.keyDown(document.body, { key: "F10", shiftKey: true });
+    expect(onRowMenu).toHaveBeenCalledWith(DATA[0], { x: 0, y: 0 });
   });
 });
 

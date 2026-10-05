@@ -123,6 +123,8 @@ interface DataTableProps<TData extends RowData> {
   share?: TableShare;
   /** The page's own list: it answers the list keys wherever the focus is. */
   pageKeys?: boolean;
+  /** A right click, the Menu key or Shift+F10 on a row, and where to draw the menu. */
+  onRowMenu?: (row: TData, at: { x: number; y: number }) => void;
 }
 
 /**
@@ -268,6 +270,9 @@ function navTarget(key: string, from: number, rowCount: number): number | null {
 
 const VIM_KEYS: Record<string, string> = { j: "ArrowDown", k: "ArrowUp" };
 
+const isMenuKey = (event: { key: string; shiftKey: boolean }) =>
+  event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey);
+
 /** Widgets that walk with the arrows themselves; the list leaves those keys to them. */
 const OWN_ARROWS =
   '[role="tablist"],[role="radiogroup"],[role="slider"],[role="tree"],[role="grid"],[role="menubar"]';
@@ -301,6 +306,7 @@ function DataTableInner<TData extends RowData>({
   partial = false,
   share,
   pageKeys = false,
+  onRowMenu,
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
@@ -689,6 +695,16 @@ function DataTableInner<TData extends RowData>({
     virtualizer.scrollToIndex(rowLine[index], { align: "center" });
   };
 
+  // Under the row when there is no pointer to open it at.
+  const openMenu = (index: number, at?: { x: number; y: number }) => {
+    const row = ordered[index];
+    if (!row || !onRowMenu) return false;
+    setSelection({ id: row.id, index });
+    const box = rowElement(index)?.getBoundingClientRect();
+    onRowMenu(row.original, at ?? { x: box?.left ?? 0, y: box?.bottom ?? 0 });
+    return true;
+  };
+
   const clearSelection = () => {
     setSelection(null);
     const focused = document.activeElement;
@@ -739,6 +755,10 @@ function DataTableInner<TData extends RowData>({
   // Home and End reach past the drawn window, and so does an arrow at its
   // edge; `select` scrolls the row into existence before handing it focus.
   const onRowKey = (event: React.KeyboardEvent, index: number, row: TData) => {
+    if (isMenuKey(event) && openMenu(index)) {
+      event.preventDefault();
+      return;
+    }
     switch (event.key) {
       case "ArrowDown":
       case "ArrowUp":
@@ -780,6 +800,11 @@ function DataTableInner<TData extends RowData>({
     }
     const row = ordered[selectedIndex];
     if (!row) return false;
+    if (isMenuKey(event)) {
+      if (!openMenu(selectedIndex)) return false;
+      event.preventDefault();
+      return true;
+    }
     if (event.key === "Escape") {
       event.preventDefault();
       clearSelection();
@@ -869,6 +894,23 @@ function DataTableInner<TData extends RowData>({
         onClick={act}
         onDoubleClick={openPage}
         onAuxClick={act}
+        // Capture, so the row's own name opens this rather than the bare link
+        // menu; a link to somewhere else keeps its own.
+        onContextMenuCapture={
+          onRowMenu
+            ? (event: React.MouseEvent) => {
+                const link = (event.target as HTMLElement).closest("a");
+                if (link && link.getAttribute("href") !== href) return;
+                event.preventDefault();
+                event.stopPropagation();
+                const keyboard = event.clientX === 0 && event.clientY === 0;
+                openMenu(
+                  index,
+                  keyboard ? undefined : { x: event.clientX, y: event.clientY }
+                );
+              }
+            : undefined
+        }
         onKeyDown={
           keyboardNavEnabled
             ? (event: React.KeyboardEvent) =>
