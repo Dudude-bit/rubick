@@ -31,6 +31,7 @@ import {
   sameScope,
   wireNamespace,
 } from "@/lib/namespace-scope";
+import { ACCESS_KINDS, segmentOf } from "@/lib/access-kinds";
 import { clusterOf, retargetHref } from "@/lib/links";
 import { getDisplayPlural, isResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "./clusterStore";
@@ -489,7 +490,7 @@ export function tabRouteLabel(href: string, t: T): string {
   const peeked = peek?.split("/").filter(Boolean).at(-1);
   if (peeked) return peeked;
 
-  const segments = path.split("/").filter(Boolean);
+  const segments = path.split("/").filter(Boolean).map(decoded);
   // The cluster is said by the tab's own name, not by its route.
   const route = segments[0] === "c" ? segments.slice(2) : segments;
   if (route.length === 0) return t("nav", "overview");
@@ -498,7 +499,19 @@ export function tabRouteLabel(href: string, t: T): string {
   if (route.length > 1) return route.at(-1) as string;
   const [page] = route;
   if (isResourceType(page)) return getDisplayPlural(page);
-  return PAGE_NAMES[page]?.(t) ?? page;
+  return (
+    PAGE_NAMES[page]?.(t) ??
+    ACCESS_KINDS.find((entry) => segmentOf(entry) === page)?.displayPlural ??
+    page
+  );
+}
+
+function decoded(segment: string): string {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
 }
 
 const PAGE_NAMES: Record<string, ((t: T) => string) | undefined> = {

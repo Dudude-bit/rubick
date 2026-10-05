@@ -391,6 +391,28 @@ describe("titles", () => {
     );
   });
 
+  /**
+   * A ClusterRole named `system:controller:...` reached the strip as
+   * `system%3Acontroller%3A...` while the page header read it decoded. Fails
+   * if the tab shows the address's escapes.
+   */
+  it("names an object by its name, not by its escaped address", () => {
+    expect(
+      tabRouteLabel(
+        "/c/prod/clusterroles.rbac.authorization.k8s.io/system%3Acontroller%3Aattachdetach-controller",
+        t
+      )
+    ).toBe("system:controller:attachdetach-controller");
+  });
+
+  /** Fails if a generic list's tab goes back to its raw plural. */
+  it("names an access kind's list the way the sidebar does", () => {
+    expect(tabRouteLabel("/c/prod/serviceaccounts", t)).toBe("ServiceAccounts");
+    expect(tabRouteLabel("/c/prod/roles.rbac.authorization.k8s.io", t)).toBe(
+      "Roles"
+    );
+  });
+
   it("never falls back to a raw pathname", () => {
     expect(tabRouteLabel("/c/prod/some/unknown/place", t)).toBe("place");
   });
