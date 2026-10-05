@@ -67,7 +67,7 @@ export function ActionWarnings({
           <>
             {" "}
             <Link {...only.to} className="text-info hover:underline">
-              {t("action", "openWhatDeliversIt")}
+              {only.linkLabel ?? t("action", "openWhatDeliversIt")}
             </Link>
             .
           </>
@@ -94,7 +94,7 @@ export function ActionWarnings({
             <>
               {" "}
               <Link {...warning.to} className="text-info hover:underline">
-                {t("action", "openIt")}
+                {warning.linkLabel ?? t("action", "openIt")}
               </Link>
               .
             </>

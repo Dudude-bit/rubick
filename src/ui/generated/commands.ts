@@ -1089,6 +1089,20 @@ export async function deleteCronjob(
   return invoke<void>("delete_cronjob", { name, namespace });
 }
 
+export async function setAutoscalerBounds(
+  name: string,
+  namespace: string | null,
+  minReplicas: number,
+  maxReplicas: number
+): Promise<void> {
+  return invoke<void>("set_autoscaler_bounds", {
+    name,
+    namespace,
+    minReplicas,
+    maxReplicas,
+  });
+}
+
 export async function listDependents(
   uid: string,
   scope: string[] | null

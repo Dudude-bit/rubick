@@ -27,7 +27,7 @@ import type {
   ResourceConnections,
 } from "@/generated/types";
 import type { DeliveryIntercept } from "./delivery";
-import type { AppLink } from "./links";
+import { objectLink, type AppLink } from "./links";
 import { formatAge } from "./utils";
 
 export type AutoscalerFacts = Extract<ObjectFacts, { kind: "autoscaler" }>;
@@ -401,6 +401,15 @@ export interface ActionWarning {
   description: string;
   /** Where the change would really have to be made, where there is a page. */
   to: AppLink | null;
+  /** The words on that link, where they are not delivery's. */
+  linkLabel?: string;
+  /** The one autoscaler that owns the count, whose bounds are the way out. */
+  autoscaler?: {
+    name: string;
+    namespace: string | null;
+    minReplicas: number;
+    maxReplicas: number;
+  };
 }
 
 /**
@@ -440,6 +449,16 @@ export function autoscalerScaleWarnings(
 
   const auto = found[0];
   const facts = auto.facts;
+  const owner = {
+    to: objectLink(auto.object),
+    linkLabel: t("action", "openAutoscaler"),
+    autoscaler: {
+      name: auto.object.name,
+      namespace: auto.object.namespace ?? null,
+      minReplicas: facts.minReplicas,
+      maxReplicas: facts.maxReplicas,
+    },
+  };
   const stalled =
     isFalse(condition(facts.conditions, "AbleToScale")) ||
     isFalse(condition(facts.conditions, "ScalingActive"));
@@ -461,7 +480,7 @@ export function autoscalerScaleWarnings(
           min: facts.minReplicas,
           max: facts.maxReplicas,
         }),
-        to: null,
+        ...owner,
       },
     ];
   }
@@ -475,9 +494,22 @@ export function autoscalerScaleWarnings(
         min: facts.minReplicas,
         max: facts.maxReplicas,
       }),
-      to: null,
+      ...owner,
     },
   ];
+}
+
+/**
+ * What is wrong with a pair of bounds, as the API server would judge them,
+ * or `null` when they would be accepted.
+ */
+export function boundsProblem(
+  min: number,
+  max: number
+): "hpaMinTooLow" | "hpaMinAboveMax" | null {
+  if (!Number.isInteger(min) || min < 1) return "hpaMinTooLow";
+  if (!Number.isInteger(max) || min > max) return "hpaMinAboveMax";
+  return null;
 }
 
 /**

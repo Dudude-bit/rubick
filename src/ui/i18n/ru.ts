@@ -964,6 +964,18 @@ export const ru: Catalogue = {
     openOnSite: "Открыть {name} в {site}",
     panelWidth: "Ширина панели",
     openWhatDeliversIt: "Открыть то, что его доставляет",
+    openAutoscaler: "Открыть автомасштабировщик",
+    hpaBoundsLead:
+      "Чтобы получить другое число, измените границы автомасштабировщика:",
+    hpaBoundsChange: "Изменить границы",
+    hpaBoundsConfirm:
+      "Задать для {name} minReplicas {min} и maxReplicas {max}?",
+    hpaMinTooLow: "minReplicas должно быть не меньше 1.",
+    hpaMinAboveMax: "minReplicas не может быть больше maxReplicas.",
+    hpaBoundsSaved: "Автомасштабировщик обновлён",
+    hpaBoundsSavedDetail:
+      "{name} теперь держит число реплик от {min} до {max}.",
+    hpaBoundsFailed: "Не удалось изменить автомасштабировщик",
     openIt: "Открыть",
     termsAreQueryAgain: {
       one: "{list} снова запрос",

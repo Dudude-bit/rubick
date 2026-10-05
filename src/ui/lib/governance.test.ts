@@ -10,6 +10,7 @@ import {
   autoscalerFinding,
   autoscalerReplicas,
   autoscalers,
+  boundsProblem,
   budgetFinding,
   budgets,
   drainBlockers,
@@ -425,6 +426,47 @@ describe("what the Scale dialog reads", () => {
 
   it("is silent on a workload nothing governs and nothing delivers", () => {
     expect(scaleWarnings(conns([]), null, t)).toEqual([]);
+  });
+
+  /**
+   * The owner's ask: the way out is offered where the warning is. One
+   * autoscaler, working or stuck, brings its bounds and a link to itself;
+   * two have no one set of bounds to offer.
+   */
+  it("carries the one autoscaler's bounds and a link to it", () => {
+    const [warning] = scaleWarnings(conns([governs(hpa("hpa-busy"))]), null, t);
+    expect(warning.autoscaler).toEqual({
+      name: "hpa-busy",
+      namespace: "k8s-gui-test",
+      minReplicas: 1,
+      maxReplicas: 2,
+    });
+    const params = warning.to?.params as (prev: object) => object;
+    expect(warning.to?.to).toBe("/c/$cluster/$resource/$namespace/$name");
+    expect(params({ cluster: "staging" })).toEqual({
+      cluster: "staging",
+      resource: "horizontalpodautoscalers",
+      name: "hpa-busy",
+      namespace: "k8s-gui-test",
+    });
+    const [several] = scaleWarnings(
+      conns([governs(hpa("hpa-a")), governs(hpa("hpa-b"))]),
+      null,
+      t
+    );
+    expect(several.autoscaler).toBeUndefined();
+  });
+});
+
+describe("the bounds an autoscaler will accept", () => {
+  /** The API server refuses these; asking it anyway only to show its refusal wastes the round trip. */
+  it("refuses a floor below one and a floor above the ceiling", () => {
+    expect(boundsProblem(0, 5)).toBe("hpaMinTooLow");
+    expect(boundsProblem(Number.NaN, 5)).toBe("hpaMinTooLow");
+    expect(boundsProblem(1.5, 5)).toBe("hpaMinTooLow");
+    expect(boundsProblem(6, 5)).toBe("hpaMinAboveMax");
+    expect(boundsProblem(3, 3)).toBeNull();
+    expect(boundsProblem(2, 5)).toBeNull();
   });
 });
 

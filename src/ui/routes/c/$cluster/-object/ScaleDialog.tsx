@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ActionWarning } from "@/lib/governance";
 import { ActionWarnings } from "./action-warnings";
+import { AutoscalerBounds } from "./AutoscalerBounds";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 
@@ -66,6 +67,16 @@ export function ScaleDialog({
         {/* Radix drops the content when closed, so the field seeds itself from
             the live count on every opening without an effect to sync it. */}
         <ActionWarnings warnings={warnings} headingFor="warnRevertCount" />
+        {warnings.map(
+          (warning) =>
+            warning.autoscaler && (
+              <AutoscalerBounds
+                key={warning.key}
+                autoscaler={warning.autoscaler}
+                blocked={gate.blocked}
+              />
+            )
+        )}
         <ScaleForm
           current={current}
           busy={busy}
