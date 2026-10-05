@@ -102,14 +102,15 @@ async function lead(info: DeploymentInfo) {
 describe("the peek says what the workload's page says first", () => {
   /**
    * Dana's `cart`: green Ready in the peek while the page said its HPA could
-   * not read metrics. The finding has to arrive through the page's reader.
+   * not read metrics. The finding has to arrive through the page's reader,
+   * in its amber: the workload still serves at its size.
    */
   it("names an autoscaler that cannot read its metrics over a Ready rollout", async () => {
     neighbourhood.current = blind;
     const summary = await lead(deployment({}));
     expect(summary.status).toBe("Ready");
     expect(await screen.findByText(/cart is not scaling this/)).toHaveClass(
-      "text-err"
+      "text-warn"
     );
     expect(screen.queryByTestId("rollout-summary")).toBeNull();
   });
