@@ -5250,6 +5250,7 @@ export const ru: Catalogue = {
     printedMore: "Показаны первые {count}. В кластере есть ещё.",
     showMore: "Показать ещё",
     saysNothing: "эта политика не ограничивает",
+    notRestricted: "не ограничивает",
     doesNotRestrict:
       "Не ограничивает {direction}: в policyTypes указан только {types}.",
     podsMatching: {

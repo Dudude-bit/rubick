@@ -54,9 +54,11 @@ const VERDICT_TONE: Record<DirectionVerdict, string> = {
 
 export function DirectionCell({ direction }: { direction: PolicyDirection }) {
   const t = useT();
+  const verdict = verdictOf(direction);
+  const words = directionWords(direction, t).text;
   return (
-    <span className={VERDICT_TONE[verdictOf(direction)]}>
-      {directionWords(direction, t).text}
+    <span className={VERDICT_TONE[verdict]} title={words}>
+      {verdict === "notGoverned" ? t("empty", "notRestricted") : words}
     </span>
   );
 }

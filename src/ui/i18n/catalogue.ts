@@ -4761,6 +4761,8 @@ export const en = {
     // A NetworkPolicy's four readings of one direction, and its three of a
     // `podSelector`. Each one is a state the others would be mistaken for.
     saysNothing: "not restricted by this policy",
+    // The same, in a policy's own row, where "this policy" is the row.
+    notRestricted: "not restricted",
     // `policyTypes` and its two values are the API's words, kept as written.
     doesNotRestrict:
       "Does not restrict {direction}: policyTypes names {types} only.",
