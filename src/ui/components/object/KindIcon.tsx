@@ -1,5 +1,6 @@
 import { CircleDashed } from "lucide-react";
 
+import { accessKind } from "@/lib/access-kinds";
 import {
   getResourceDefinition,
   isResourceType,
@@ -25,7 +26,9 @@ export function KindIcon({
 }) {
   const colouring = useDisplaySettingsStore((state) => state.resourceColouring);
   const resolved = isResourceType(kind) ? toKind(kind) : null;
-  const Icon = resolved ? getResourceDefinition(resolved).icon : CircleDashed;
+  const Icon = resolved
+    ? getResourceDefinition(resolved).icon
+    : (accessKind(kind)?.icon ?? CircleDashed);
   return (
     <Icon
       className={cn(

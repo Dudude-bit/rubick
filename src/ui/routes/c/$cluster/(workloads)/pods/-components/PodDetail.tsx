@@ -31,6 +31,7 @@ import { LogViewer } from "../../../-logs/LogViewer";
 import { PodShell } from "./PodShell";
 import { yamlTab } from "../../../-object/yaml-tab";
 import { RelatedResources } from "../../-components/RelatedResources";
+import { serviceAccountRow } from "../../-components/identity-rows";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
@@ -581,26 +582,7 @@ export function PodDetail() {
         : "—",
       tone: pod && !podReadiness(pod).allReady ? ("warn" as const) : undefined,
     },
-    {
-      // The identity every request this pod makes is authorised as. The
-      // reference has nowhere to go — `isRoutableKind` rejects ServiceAccount,
-      // so it renders as the glyph and the tinted name and no link — but it
-      // is the same object under the same mark wherever it is named, and the
-      // day the kind gets a page it lights up without a change here.
-      label: t("columns", "serviceAccount"),
-      value: pod?.serviceAccountName ? (
-        <ResourceRef
-          kind="ServiceAccount"
-          name={pod.serviceAccountName}
-          namespace={pod.namespace}
-          showKind={false}
-        />
-      ) : (
-        // The API server fills this in; a pod that states nothing still runs
-        // as something, and saying "none" would be wrong.
-        "default"
-      ),
-    },
+    serviceAccountRow(pod?.serviceAccountName, pod?.namespace, t),
   ];
 
   const problem = useMemo(() => podProblem(pod, t), [pod, t]);

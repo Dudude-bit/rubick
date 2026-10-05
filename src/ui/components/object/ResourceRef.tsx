@@ -1,7 +1,12 @@
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
-import { hrefOf, objectLink, type ObjectLinkOptions } from "@/lib/links";
+import {
+  crdFor,
+  hrefOf,
+  objectLink,
+  type ObjectLinkOptions,
+} from "@/lib/links";
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import { usePeek } from "@/hooks/usePeek";
 import { useObjectMenuStore } from "@/stores/objectMenuStore";
@@ -95,7 +100,9 @@ export function ObjectLink({
     if (readLinkIntent(event) === "none") return;
     onClick?.(event);
     if (event.defaultPrevented) return;
-    gesture(event, hrefOf(link), () => open({ kind, name, namespace, crd }));
+    gesture(event, hrefOf(link), () =>
+      open({ kind, name, namespace, crd: crdFor({ kind, name, crd }) })
+    );
   };
 
   return (

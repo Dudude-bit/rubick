@@ -193,7 +193,7 @@ Labels:
    */
   it("says why it cannot open a kind it has no page for", async () => {
     const reading = parseAlert(DEPLOYMENT)!;
-    const kept = { ...reading.objects[0], kind: "ServiceAccount" };
+    const kept = { ...reading.objects[0], kind: "Lease" };
     await renderWithRouter(
       <AlertReadingPanel
         reading={{ ...reading, objects: [kept] }}
@@ -201,7 +201,7 @@ Labels:
       />,
       { at: "/c/prod-eu-1" }
     );
-    expect(screen.getByText(/no page for a ServiceAccount/)).toBeVisible();
+    expect(screen.getByText(/no page for a Lease/)).toBeVisible();
   });
 
   /** And a namespaced kind whose alert named no namespace says that instead. */

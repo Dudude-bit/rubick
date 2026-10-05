@@ -218,6 +218,50 @@ describe("ResourceRef", () => {
       );
     });
 
+    /**
+     * The Pod page's "Service account" was drawn as a name that did nothing
+     * on click: the kind has no page of its own and nobody passed its plural.
+     */
+    it("links a ServiceAccount to the generic page and peeks it by its plural", async () => {
+      await wrap(
+        <ResourceRef kind="ServiceAccount" name="marco" namespace="checkout" />
+      );
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "href",
+        "/c/prod/serviceaccounts/checkout/marco"
+      );
+      await userEvent.click(screen.getByRole("link"));
+      await goesTo(
+        "/c/prod/events?peek=serviceaccounts%2FServiceAccount%2Fcheckout%2Fmarco"
+      );
+    });
+
+    /** A ClusterRole lives in no namespace, whatever the binding carried. */
+    it("links a ClusterRole cluster-wide and refuses a namespaceless Role", async () => {
+      await wrap(<ResourceRef kind="ClusterRole" name="view" namespace="ns" />);
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "href",
+        "/c/prod/clusterroles.rbac.authorization.k8s.io/view"
+      );
+      expect(objectLink({ kind: "Role", name: "developer" })).toBeNull();
+    });
+
+    /** A vendor's own kind called ClusterRole is its CRD's, not RBAC's. */
+    it("leaves a namesake kind to the CRD it was handed", async () => {
+      await wrap(
+        <ResourceRef
+          kind="ClusterRole"
+          name="admin"
+          namespace="ns"
+          crd="clusterroles.iam.example.com"
+        />
+      );
+      expect(screen.getByRole("link")).toHaveAttribute(
+        "href",
+        "/c/prod/clusterroles.iam.example.com/ns/admin"
+      );
+    });
+
     it("agrees with objectLink", () => {
       const links = (kind: string, namespace?: string) =>
         objectLink({ kind, name: "x", namespace }) !== null;

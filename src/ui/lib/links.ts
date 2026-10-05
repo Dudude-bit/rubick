@@ -8,6 +8,7 @@ import {
   toPlural,
   type ResourceKind,
 } from "./resource-registry";
+import { accessKind, segmentOf, type AccessKind } from "./access-kinds";
 
 /**
  * Every in-app address is built here. A link is the router's own options
@@ -60,6 +61,20 @@ export function resourceSegment(ref: Pick<ObjectRef, "kind" | "crd">) {
   return kind ? toPlural(kind) : null;
 }
 
+/** The built-in access kind a reference names, unless its CRD says otherwise. */
+function accessOf(ref: ObjectRef): AccessKind | undefined {
+  const access = accessKind(ref.kind);
+  return access && (!ref.crd || ref.crd === segmentOf(access))
+    ? access
+    : undefined;
+}
+
+/** The segment a reference is read through: its CRD's, or an access kind's. */
+export function crdFor(ref: ObjectRef): string | undefined {
+  const access = accessOf(ref);
+  return ref.crd ?? (access && segmentOf(access));
+}
+
 /**
  * Where one object opens, or `null` when it cannot be addressed: a kind
  * nothing knows the plural of, or a namespaced kind handed no namespace.
@@ -68,7 +83,9 @@ export function objectLink(
   ref: ObjectRef,
   options: ObjectLinkOptions = {}
 ): AppLink | null {
-  const resource = resourceSegment(ref);
+  const access = accessOf(ref);
+  const crd = crdFor(ref);
+  const resource = resourceSegment({ kind: ref.kind, crd });
   if (!resource) return null;
   const { tab, via, view } = options;
   const search =
@@ -77,7 +94,9 @@ export function objectLink(
           Object.entries({ tab, via, view }).filter(([, value]) => value)
         )
       : undefined;
-  const clusterScoped = !ref.crd && isClusterScoped(ref.kind);
+  const clusterScoped = access
+    ? !access.namespaced
+    : !crd && isClusterScoped(ref.kind);
   if (!clusterScoped && ref.namespace) {
     return {
       to: "/c/$cluster/$resource/$namespace/$name",
@@ -88,7 +107,7 @@ export function objectLink(
       search,
     } as AppLink;
   }
-  if (!clusterScoped && !ref.crd) return null;
+  if (!clusterScoped && (!crd || access)) return null;
   return {
     to: "/c/$cluster/$resource/$name",
     params: inCluster({ resource, name: ref.name }, options.cluster),

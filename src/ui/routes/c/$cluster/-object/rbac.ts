@@ -1,8 +1,7 @@
+import { RBAC_GROUP } from "@/lib/access-kinds";
 import type { ServedResource } from "./served";
 
 type Json = Record<string, unknown>;
-
-export const RBAC_GROUP = "rbac.authorization.k8s.io";
 
 export interface Rule {
   apiGroups: string[];

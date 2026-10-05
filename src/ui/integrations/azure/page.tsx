@@ -321,7 +321,12 @@ function AccountRow({
       <Chain>
         <Column label="ServiceAccount">
           <Cell under={account.namespace}>
-            <span className="font-mono">{account.name}</span>
+            <ResourceRef
+              kind="ServiceAccount"
+              name={account.name}
+              namespace={account.namespace}
+              showKind={false}
+            />
           </Cell>
         </Column>
         <Column label={t("columns", "clientId")}>
