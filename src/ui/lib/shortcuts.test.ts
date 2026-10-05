@@ -4,6 +4,7 @@ import { describe, expect, it } from "vite-plus/test";
 import { en } from "@/i18n/catalogue";
 import { ru } from "@/i18n/ru";
 import { CODE_FILES } from "@/test/source-files";
+import { getDisplayPlural, isResourceType } from "./resource-registry";
 import { KEYDOWN_SITES, SECTIONS, SHORTCUTS } from "./shortcuts";
 
 describe("the one table of shortcuts", () => {
@@ -90,5 +91,29 @@ describe("the one table of shortcuts", () => {
     );
     const missing = [...advertised].filter((key) => !listed.has(key));
     expect(missing).toEqual([]);
+  });
+
+  /**
+   * The sidebar names a list by its kind's plural, Pods and Nodes; the sheet
+   * said Поды and Ноды beside it, two names for one place.
+   */
+  it("names a list the way the sidebar does, in every language", () => {
+    const resourceOf = (entry: (typeof SHORTCUTS)[number]) => {
+      const params = entry.path?.params;
+      if (typeof params !== "function") return undefined;
+      const { resource } = (params as (p: object) => { resource?: string })({});
+      return resource !== undefined && isResourceType(resource)
+        ? resource
+        : undefined;
+    };
+    const lists = SHORTCUTS.flatMap((entry) => {
+      const resource = resourceOf(entry);
+      return resource ? [{ entry, resource }] : [];
+    });
+    expect(lists.length).toBeGreaterThan(5);
+    for (const { entry, resource } of lists) {
+      expect(ru.shortcuts[entry.labelKey]).toBe(getDisplayPlural(resource));
+      expect(en.shortcuts[entry.labelKey]).toBe(getDisplayPlural(resource));
+    }
   });
 });

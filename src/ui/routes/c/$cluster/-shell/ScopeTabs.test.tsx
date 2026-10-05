@@ -102,8 +102,8 @@ describe("what a tab says", () => {
     // The sidebar has just said it and the dot still guards the mistake,
     // so the name is not worth the width it would take from the route.
     expect(screen.queryByText("k3d-dev")).not.toBeInTheDocument();
-    expect(within(tabs()[0]).getByText("overview")).toBeInTheDocument();
-    expect(within(tabs()[1]).getByText("pods")).toBeInTheDocument();
+    expect(within(tabs()[0]).getByText("Overview")).toBeInTheDocument();
+    expect(within(tabs()[1]).getByText("Pods")).toBeInTheDocument();
   });
 
   it("names every cluster the moment a second one is open", async () => {
@@ -129,7 +129,7 @@ describe("what a tab says", () => {
     });
     await mount();
 
-    expect(within(tabs()[0]).getByText("pods")).toBeInTheDocument();
+    expect(within(tabs()[0]).getByText("Pods")).toBeInTheDocument();
     expect(within(tabs()[1]).getByText("coredns-abc")).toBeInTheDocument();
   });
 
@@ -149,7 +149,7 @@ describe("what a tab says", () => {
 
     expect(tabs()[0]).toHaveAttribute(
       "aria-label",
-      "k3d-dev · kube-system · nodes"
+      "k3d-dev · kube-system · Nodes"
     );
   });
 
@@ -200,7 +200,7 @@ describe("watching several namespaces at once", () => {
     await draw(["ns-0", "ns-1"]);
     expect(tabs()[0]).toHaveAttribute(
       "aria-label",
-      "k3d-dev · ns-0, ns-1 · overview"
+      "k3d-dev · ns-0, ns-1 · Overview"
     );
   });
 
@@ -425,7 +425,7 @@ describe("a cluster that has been renamed", () => {
     await mount();
     expect(tabs()[0]).toHaveAttribute(
       "aria-label",
-      "payments (k3d-dev) · all namespaces · overview"
+      "payments (k3d-dev) · all namespaces · Overview"
     );
   });
 });
@@ -478,7 +478,7 @@ describe("a tab with no cluster", () => {
     // The scope that cannot exist yet, and the page with nothing on it.
     expect(strip.textContent).not.toContain("no cluster");
     expect(strip.textContent).not.toContain("all namespaces");
-    expect(strip.textContent).not.toContain("overview");
+    expect(strip.textContent).not.toContain("Overview");
   });
 
   it("keeps its place, because it is where a cluster gets picked", async () => {

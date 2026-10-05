@@ -275,7 +275,7 @@ function ScopeTabItem({
   const mark = useClusterMark(context);
   const alias = mark.alias?.trim();
   const color = clusterColor(context, mark.hue);
-  const route = tabRouteLabel(tab.href);
+  const route = tabRouteLabel(tab.href, t);
   // A cluster the kubeconfig has lost is the odd one out however many
   // clusters are open — that is exactly when the name is the fact the
   // reader needs.

@@ -480,9 +480,10 @@ export const useScopeTabStore = create<ScopeTabState>()(
  *
  * A detail route is named by the object it shows, not by its kind — the
  * reader opened `api-7f9`, not "pods" — and an open peek wins over the list
- * behind it, because the peek is what is on screen.
+ * behind it, because the peek is what is on screen. A list or page is
+ * named the way the sidebar names it.
  */
-export function tabRouteLabel(href: string): string {
+export function tabRouteLabel(href: string, t: T): string {
   const [path, query = ""] = href.split("?");
   const peek = new URLSearchParams(query).get("peek");
   const peeked = peek?.split("/").filter(Boolean).at(-1);
@@ -491,13 +492,23 @@ export function tabRouteLabel(href: string): string {
   const segments = path.split("/").filter(Boolean);
   // The cluster is said by the tab's own name, not by its route.
   const route = segments[0] === "c" ? segments.slice(2) : segments;
-  if (route.length === 0) return "overview";
+  if (route.length === 0) return t("nav", "overview");
   // One segment is a list page, `/c/prod/pods` as much as `/c/prod/events`.
   // Anything longer is the object the route shows.
   if (route.length > 1) return route.at(-1) as string;
   const [page] = route;
-  return isResourceType(page) ? getDisplayPlural(page).toLowerCase() : page;
+  if (isResourceType(page)) return getDisplayPlural(page);
+  return PAGE_NAMES[page]?.(t) ?? page;
 }
+
+const PAGE_NAMES: Record<string, ((t: T) => string) | undefined> = {
+  helm: () => "Helm",
+  changes: (t) => t("nav", "changes"),
+  integrations: (t) => t("nav", "integrations"),
+  routes: (t) => t("nav", "routes"),
+  "api-resources": (t) => t("nav", "apiResources"),
+  "my-access": (t) => t("nav", "myAccess"),
+};
 
 /**
  * The list a route belongs to, for a route that names one object.
@@ -545,5 +556,5 @@ export function tabTitle(tab: ScopeTab, t: T, alias?: string): string {
     namespaces.length === 0
       ? t("nav", "allNamespacesLower")
       : namespaces.join(", ")
-  } · ${tabRouteLabel(tab.href)}`;
+  } · ${tabRouteLabel(tab.href, t)}`;
 }

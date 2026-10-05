@@ -19,7 +19,7 @@ export const ru: Catalogue = {
     myAccess: "Ваш доступ",
     changes: "Изменения",
     selectsLabels: "выбирает {selector}",
-    allNamespacesLower: "все неймспейсы",
+    allNamespacesLower: "все пространства имён",
     dataTable: "Таблица данных",
     protectsVerb: "защищает",
     scalesVerb: "масштабирует",
@@ -27,7 +27,7 @@ export const ru: Catalogue = {
     nothingIsTheTop: "ничего — {kind} и есть вершина",
     replicaCountSetHere: "число реплик задаётся здесь",
     noServiceSelectsThese:
-      "Ни один сервис в этом неймспейсе не выбирает эти поды, поэтому внутри кластера трафик до этого объекта ({kind}) не доходит.",
+      "Ни один Service в этом пространстве имён не выбирает эти поды, поэтому внутри кластера трафик до этого объекта ({kind}) не доходит.",
     serviceResolvesExternal:
       "У этого сервиса нет селектора: он разрешается в {name}, а не во что-либо внутри кластера.",
     servesTlsFor: "обслуживает TLS для {hosts}",
@@ -57,9 +57,9 @@ export const ru: Catalogue = {
     governedByNote:
       "— действует по своему расписанию, и никто отсюда об этом не просил",
     madeByAndMakes: "Кем создано и что создаёт",
-    theServices: "Service в этом namespace",
-    theIngresses: "Ingress в этом namespace",
-    thePods: "поды в этом namespace",
+    theServices: "Service в этом пространстве имён",
+    theIngresses: "Ingress в этом пространстве имён",
+    thePods: "поды в этом пространстве имён",
     notLookedAt: "Не проверялось",
     notLookedAtNote:
       "— названо, чтобы отсутствующая группа не читалась как пустая",
@@ -73,7 +73,7 @@ export const ru: Catalogue = {
     identityItRunsAs: "удостоверение, под которым он работает",
     servesTlsForHosts: "обслуживает TLS для всех хостов этого Ingress",
     noSelector: "без селектора",
-    notInThisNamespace: "в этом неймспейсе не существует",
+    notInThisNamespace: "в этом пространстве имён не существует",
     notChecked: "не проверялось",
     nobodyDoes: "никто",
     overHttps: "по HTTPS",
@@ -81,13 +81,13 @@ export const ru: Catalogue = {
     resourceBackend: "ресурсный бэкенд — приложение по таким не ходит",
     ownerNotController: "владелец, но не контроллер",
     replicasSetHere: "число реплик задаётся здесь",
-    noNamespaceValue: "без неймспейса",
+    noNamespaceValue: "без пространства имён",
     servicePublishesNoEndpoint: "Этот Service не публикует ни одного эндпоинта",
     stopNoSliceNote:
       "{matched}, и ни один из них не попал ни в один эндпоинт этого Service. Почему — эти объекты не сообщают: под попадает в срез через мгновение после того, как становится Ready, и не попадает вовсе, пока не работает контроллер эндпоинтов.",
     stopUnnamedPortNote:
       "{matched}, но он просит {asked}, а порта с таким именем не объявляет ни один контейнер — контроллер эндпоинтов пропускает их все. До них ничего не доходит. Назовите порт в контейнере или укажите Service номер.",
-    stopNoServiceNamed: "В этом неймспейсе нет Service по имени {name}",
+    stopNoServiceNamed: "В этом пространстве имён нет Service с именем {name}",
     stopPublishesNothingYet: "За {selector} пока ничего не опубликовано",
     stopNoPodCarries: "Ни один под не несёт {selector}",
     stopNotScheduledNote:
@@ -131,7 +131,7 @@ export const ru: Catalogue = {
     ingressStatesNoBackend:
       "Этот Ingress не называет бэкенда, поэтому ничего не маршрутизирует.",
     noServiceSelectsPod:
-      "Ни один Service в этом неймспейсе не выбирает этот под, поэтому трафик до него не доходит ни от чего в кластере.",
+      "Ни один Service в этом пространстве имён не выбирает этот под, поэтому трафик до него ниоткуда в кластере не доходит.",
     trafficPath: "Путь трафика",
     releases: "Релизы",
     charts: "Чарты",
@@ -230,7 +230,7 @@ export const ru: Catalogue = {
     details: "Подробности",
     dnsNames: "DNS-имена",
     domains: "Домены",
-    endpoints: "Эндпоинты",
+    endpoints: "Адреса",
     expires: "Истекает",
     exportTo: "Экспорт в",
     gateways: "Gateway",
@@ -490,7 +490,7 @@ export const ru: Catalogue = {
     stepClass: "классе",
     stepGateway: "шлюзе",
     stepListener: "слушателе",
-    stepNamespace: "неймспейсе",
+    stepNamespace: "пространстве имён",
     stepRefs: "ссылках",
     stepRoute: "маршруте",
     stepBackend: "бэкенде",
@@ -549,7 +549,7 @@ export const ru: Catalogue = {
       "Как строка называет свою дорожку: только цветом, последними символами имени или полным именем.",
     laneRulePod: "дорожка = под",
     laneRuleOrdinal: "дорожка = порядковый номер",
-    laneRuleNode: "дорожка = нода",
+    laneRuleNode: "дорожка = узел",
     laneRuleRun: "дорожка = запуск",
     legendGone: "· ушёл",
     eventsStories: "Истории",
@@ -870,7 +870,7 @@ export const ru: Catalogue = {
     mixedFormat: "смешанный",
     showInNamespace: "Показать {label} в {namespace}",
     showInNamespaceNarrows:
-      "Показать {label} в {namespace} — вкладка сузится до этого пространства имён",
+      "Показать {label} в {namespace}: вкладка сузится до этого пространства имён",
     scopeTabTo: "Сузить вкладку до {namespace}",
     ageOldSuffix: "назад",
     searchChartsPlaceholder: "Поиск чартов — nginx, redis, postgresql…",
@@ -1102,7 +1102,7 @@ export const ru: Catalogue = {
     paletteRecent: "Недавнее",
     paletteNavigation: "Навигация",
     paletteResources: "Ресурсы",
-    paletteKinds: "Kind'ы",
+    paletteKinds: "Виды ресурсов",
     paletteThisObject: "Этот объект",
     actionsOn: "Действия с",
     filterActions: "Фильтр действий…",
@@ -1354,9 +1354,9 @@ export const ru: Catalogue = {
     effectStatefulSetUnread:
       "удалит его и его поды. Останутся ли PersistentVolumeClaim, зависит от его volumeClaimTemplates, а они ещё не прочитаны.",
     effectStatefulSetClaimsStay:
-      "удалит его и его поды. PersistentVolumeClaim, созданные по его volumeClaimTemplates ({templates}), останутся вместе с данными и продолжат стоить денег: при удалении его политика хранения claim'ов указывает Retain.",
+      "удалит его и его поды. PersistentVolumeClaim, созданные по его volumeClaimTemplates ({templates}), останутся вместе с данными и продолжат стоить денег: его persistentVolumeClaimRetentionPolicy при удалении указывает Retain.",
     effectStatefulSetClaimsGo:
-      "удалит его, его поды и PersistentVolumeClaim, созданные по его volumeClaimTemplates ({templates}): при удалении его политика хранения claim'ов указывает Delete.",
+      "удалит его, его поды и PersistentVolumeClaim, созданные по его volumeClaimTemplates ({templates}): его persistentVolumeClaimRetentionPolicy при удалении указывает Delete.",
     effectDaemonSet: "удалит его и его под на каждом узле, где он работает.",
     effectJob: "удалит его и созданные им поды вместе с их логами.",
     effectCronJob:
@@ -1370,7 +1370,7 @@ export const ru: Catalogue = {
     effectVolume:
       "удалит объект тома. Переживут ли это данные, решает его политика возврата.",
     effectCrd:
-      "удалит kind, который он определяет, и все объекты этого kind'а во всех пространствах имён. Отменить это нельзя.",
+      "удалит вид ресурса, который он определяет, и все объекты этого вида во всех пространствах имён. Отменить это нельзя.",
     effectPermanent: "необратимо.",
     podSubject: "под {name}",
     validate: "Проверить",
@@ -1434,7 +1434,7 @@ export const ru: Catalogue = {
     close: "Закрыть",
     save: "Сохранить",
     delete: "Удалить",
-    pickOneNamespace: "Выбрать один namespace",
+    pickOneNamespace: "Выбрать одно пространство имён",
     retry: "Повторить",
     download: "Скачать",
     refresh: "Обновить",
@@ -1453,7 +1453,7 @@ export const ru: Catalogue = {
     copyListenerHostname: "Хост слушателя {host}",
     inInline: "в",
     probe: "Проверить",
-    openScopedTo: "Открыть {plural} в неймспейсе {namespace}",
+    openScopedTo: "Открыть {plural} в пространстве имён {namespace}",
     copyKindAddress: "Адрес {kind}",
     probing: "Проверяем…",
     copyManifest: "Скопировать манифест",
@@ -1726,13 +1726,13 @@ export const ru: Catalogue = {
     guessCrashServiceUncounted:
       "Скорее всего: приложение не может достучаться до {host}:{port}. Этот адрес у Service {service}, а что стоит за ним — прочитать не удалось: с этого, скорее всего, и стоит начать, но сказать отсюда нечего.",
     guessCrashInClusterUnread:
-      "Скорее всего: приложение не может достучаться до {host}:{port}, адреса внутри кластера. Services этого namespace прочитать не удалось, так что кто на него отвечает, скорее всего, стоит посмотреть руками — отсюда не видно.",
+      "Скорее всего: приложение не может достучаться до {host}:{port}, адреса внутри кластера. Объекты Service этого пространства имён прочитать не удалось, поэтому кто отвечает на этот адрес, отсюда не видно; это стоит проверить вручную.",
     guessCrashLoopback:
       "Скорее всего: {host}:{port} отказал в соединении, а этот адрес принадлежит самому поду. Обычно это sidecar-контейнер, который не поднялся или не слушает этот порт. Ни один контейнер этого пода его не объявляет.",
     guessCrashUnreachableOutside:
       "Скорее всего: до {host}:{port} не достучаться, и строка не говорит, ответил ли кто-нибудь — обычно это маршрут или имя, которое из этого кластера ведёт в никуда. Приложение видит дорогу, не то, что в её конце.",
     guessCrashInClusterUnknown:
-      "Скорее всего: приложение не может достучаться до {host}:{port}, адреса внутри кластера, на который не отвечает ни один Service в этом namespace. Скорее всего, адрес неверный или Service в другом namespace.",
+      "Скорее всего: приложение не может достучаться до {host}:{port}, адреса внутри кластера, на который не отвечает ни один Service в этом пространстве имён. Вероятно, адрес неверный или Service находится в другом пространстве имён.",
     guessCrashTimeoutOutside:
       "Скорее всего: {host} снаружи кластера, и пакеты теряются по дороге, обычно из-за egress-политики, файрвола или allow-list без адреса этого кластера. Приложение видит только дорогу, не то, что в её конце.",
     guessCrashRefusedOutside:
@@ -1746,9 +1746,9 @@ export const ru: Catalogue = {
     guessFailedMount:
       "Скорее всего: том{volume} не монтируется, уже {attempts}, обычно Secret или ConfigMap, которых ещё нет, или несвязанный PersistentVolumeClaim.",
     guessPendingSame:
-      "Скорее всего: ни одна нода не подходит. Планировщик дал один и тот же ответ {times}, так что, скорее всего, с нодами ничего не менялось с первого вопроса.",
+      "Скорее всего: ни один узел не подходит. Планировщик дал один и тот же ответ {times}, так что с узлами, вероятно, ничего не менялось с первого вопроса.",
     guessPendingVaried:
-      "Скорее всего: ни одна нода не подходит, и ответ планировщика менялся за {attempts}, так что ноды, скорее всего, меняются у него под руками.",
+      "Скорее всего: ни один узел не подходит, а ответ планировщика менялся за {attempts}, так что узлы, вероятно, меняются у него на глазах.",
     guessUnknownUnread:
       "События пода прочитать не удалось, так что сказать, что скорее всего не так, отсюда нельзя — состояния контейнеров ниже это всё, на что приложение смогло посмотреть.",
     guessProbeUnnamed:
@@ -1802,15 +1802,15 @@ export const ru: Catalogue = {
     checkConfig:
       "Посмотреть {kind} {name}, если адрес неверный, а не недоступный",
     checkLimits: "Сравнить лимит памяти с тем, сколько контейнер потребляет",
-    checkNode: "Посмотреть ноду {node}: давление памяти и что ещё там работает",
+    checkNode: "Посмотреть узел {node}: давление памяти и что ещё там работает",
     checkImageRef:
       "Проверить ссылку на образ {image}: тег, registry, pull secret",
     checkMountedSecret:
       "Secret {name}: его под монтирует — pull-секрет это другое поле, которое приложение не читает",
     checkPullSecret: "Secret {name}: pull secret, который монтирует под",
     checkVolumeRef: "{kind} {name}: существует ли, связан ли",
-    checkRequests: "Сравнить requests с тем, сколько свободно на нодах",
-    checkNodes: "Посмотреть ноды: taints, ёмкость, что уже размещено",
+    checkRequests: "Сравнить requests с тем, сколько свободно на узлах",
+    checkNodes: "Посмотреть узлы: taints, ёмкость, что уже размещено",
     checkProbe:
       "Прочитать пробу: порт, путь, начальная задержка, против того, что слушает контейнер",
     notReadService: "Service в {namespace} ({reason})",
@@ -1818,7 +1818,7 @@ export const ru: Catalogue = {
     notReadLogs: "последние строки {container} ({reason})",
     notReadEvents: "события этого пода ({reason})",
     notReadOtherNamespace:
-      "Services в {namespace}, где живёт этот адрес — приложение перечислило только namespace самого пода",
+      "объекты Service в {namespace}, где находится этот адрес: приложение прочитало только пространство имён самого пода",
     notReadPolicies: "NetworkPolicy пространства имён {namespace} ({reason})",
     notReadPods: "поды пространства имён {namespace} ({reason})",
   },
@@ -2004,7 +2004,7 @@ export const ru: Catalogue = {
     argoSync: "Синхронизация",
     argoHealth: "Здоровье",
     clKubernetesVersion: "Версия Kubernetes",
-    clSectionPodsOnNode: "Поды на этой ноде",
+    clSectionPodsOnNode: "Поды на этом узле",
     clPodsNotOpened:
       "Вкладка «Поды» не была открыта на этой странице на момент создания отчёта.",
     clSectionKeys: "Ключи",
@@ -2064,7 +2064,7 @@ export const ru: Catalogue = {
     scyllaDatacenter: "Датацентр",
     scyllaUpgrade: "Обновление",
     scyllaRacks: "Стойки",
-    scyllaNodes: "Настроенные ноды",
+    scyllaNodes: "Настроенные узлы",
     intConnectionAuth: "Аутентификация",
     intConnectionReachable: "Доступность",
     intAuthBasicInUrl: "basic, в адресе",
@@ -2076,7 +2076,7 @@ export const ru: Catalogue = {
       many: "сужено {n} выражениями, которые этот отчёт не может расписать",
       other: "сужено {n} выражения, которые этот отчёт не может расписать",
     },
-    ciliumNodes: "ноды, не эндпоинты подов",
+    ciliumNodes: "узлы, а не эндпоинты подов",
     ciliumSpecNotHere:
       "не в том виде, который читает этот отчёт, записано как список specs:",
     ciliumAccepted: "принята",
@@ -2254,7 +2254,7 @@ export const ru: Catalogue = {
     cnpgPageDescription:
       "Сначала сам оператор, потом каждый Cluster словами CloudNativePG, первым тот, которому вы нужны. Бэкапы берутся из объектов Backup, потому что поля статуса устарели и с плагинами пусты.",
     cnpgOperatorExplained:
-      "CloudNativePG запускает один Deployment, cnpg-controller-manager, который согласует каждый Cluster в каждом namespace. Его версия читается с этого образа; его CRD это то, что нашло определение.",
+      "CloudNativePG запускает один Deployment, cnpg-controller-manager, который согласует каждый Cluster в каждом пространстве имён. Версия читается из его образа, а CRD найдены при обнаружении.",
     couldNotReadClusters: "Не удалось прочитать объекты Cluster",
     clustersTab: "Кластеры",
     backupsTab: "Бэкапы",
@@ -2267,7 +2267,7 @@ export const ru: Catalogue = {
       other: "{n} кластера требуют внимания",
     },
     noClusters:
-      "Объектов Cluster нет ни в одном namespace. Оператор здесь; базу у него ещё никто не попросил.",
+      "Объектов Cluster нет ни в одном пространстве имён. Оператор установлен, но базу у него ещё никто не запросил.",
     controllerFact: "Контроллер",
     controllerNotFound:
       "ни один Deployment не несёт app.kubernetes.io/name=cloudnative-pg; CRD есть, а оператора может и не быть",
@@ -2373,10 +2373,10 @@ export const ru: Catalogue = {
     confirmTitle: "{action} {target}?",
     actionDone: "{action}: выполнено на {cluster}",
     actionFailed: "{action} на {cluster} не прошло",
-    noBackupObjects: "Объектов Backup нет ни в одном namespace.",
+    noBackupObjects: "Объектов Backup нет ни в одном пространстве имён.",
     allBackupObjects: "Все объекты Backup списком",
     poolersUnknown: "Объекты Pooler прочитать не удалось",
-    noPoolers: "Объектов Pooler нет ни в одном namespace.",
+    noPoolers: "Объектов Pooler нет ни в одном пространстве имён.",
     operatorLogs: "Логи контроллера",
     scyllaPageDescription:
       "Сначала оператор: контроллер, ScyllaDB Manager, NodeConfig, которые готовят локальные диски. Потом каждый ScyllaCluster как стойки и члены с тремя условиями Scylla, идущий апгрейд и задачи Manager, которые он объявляет.",
@@ -2385,9 +2385,9 @@ export const ru: Catalogue = {
     couldNotReadScyllaClusters: "Не удалось прочитать объекты ScyllaCluster",
     nodeConfigsTab: "Конфигурации узлов",
     noScyllaClusters:
-      "Объектов ScyllaCluster нет ни в одном namespace. CRD есть; кластер ещё никто не попросил.",
+      "Объектов ScyllaCluster нет ни в одном пространстве имён. CRD установлены, но кластер ещё никто не запросил.",
     deploymentsUnreadable:
-      "Deployment'ы прочитать не удалось, поэтому работает ли оператор — неизвестно; это не значит, что его нет",
+      "Объекты Deployment прочитать не удалось, поэтому неизвестно, работает ли оператор; это не значит, что его нет",
     scyllaOperatorNotFound:
       "ни один Deployment не несёт app.kubernetes.io/name=scylla-operator; CRD есть, а оператора может и не быть, и каждый ScyllaCluster останется без статуса",
     managerPresent: "ремонты и бэкапы могут выполняться",
@@ -2908,8 +2908,9 @@ export const ru: Catalogue = {
     rowRecordingOnly: "только recording-правила",
     recordingOnly:
       "Только recording-правила. Prometheus перечисляет их отдельно от алертов, и здесь ничего не горит.",
-    filter: "Фильтр по имени, namespace или алерту",
-    filterLabel: "Фильтровать объекты правил по имени, namespace или алерту",
+    filter: "Фильтр по имени, пространству имён или алерту",
+    filterLabel:
+      "Фильтровать объекты правил по имени, пространству имён или алерту",
     ruleCount: {
       one: "{n} правило",
       few: "{n} правила",
@@ -2924,7 +2925,7 @@ export const ru: Catalogue = {
     },
     inPrometheus: "Алерты в Prometheus",
     notPickedUp:
-      "ни один ruleSelector не совпадает с ним в namespace, за которым тому Prometheus разрешено следить",
+      "ни один ruleSelector не совпадает с ним в пространстве имён, за которым этому Prometheus разрешено следить",
     loaded: "Загружен",
     notLoadedShort: "не загружен",
     loadedOf: "{n} из {total}",
@@ -3014,7 +3015,8 @@ export const ru: Catalogue = {
     clustersReading: "читаю ваши кластеры…",
     clusterOnlyInHost:
       "кластер не назван ни одной меткой; это хост из Source. Какой из ваших?",
-    whichIsTheNamespace: "в этой строке нет ключей. Что из этого namespace?",
+    whichIsTheNamespace:
+      "в этой строке нет ключей. Что из этого пространство имён?",
     noKeysToReadItBy: "нет ключа, по которому это читать",
     namesSeveral: {
       one: "назван {n} объект. Он нужен?",
@@ -3034,7 +3036,8 @@ export const ru: Catalogue = {
       "В этой строке не сказано, где какое поле. То, что выше, распознано по форме, и стоит проверить перед открытием.",
     theAlertsWords: "Слова алерта. Приложение их не проверяло.",
     noPageForKind: "для {kind} в приложении нет страницы",
-    noNamespaceToOpenBy: "здесь не назван namespace, в котором этот {kind}",
+    noNamespaceToOpenBy:
+      "здесь не названо пространство имён, в котором находится этот {kind}",
     grouped: {
       one: "в сообщении {n} алерт, и поля ниже — его",
       few: "в сообщении {n} алерта, и поля ниже — первого из них",
@@ -3043,7 +3046,7 @@ export const ru: Catalogue = {
     },
     openThis: "Открыть {kind} {name}",
     openIt: "Открыть",
-    orTheNamespace: "или namespace {namespace}",
+    orTheNamespace: "или пространство имён {namespace}",
     saidAt: "{name} сказал в {when}, {ago} назад",
     dismiss: "Скрыть",
     readAgo: "прочитано {ago} назад",
@@ -3115,7 +3118,7 @@ export const ru: Catalogue = {
     storyVolumeTrouble: "Проблема с томом, {times} за {span}: {detail}",
     storyJobTrouble: "Проблема с job, {times} за {span}: {detail}",
     storyScaling: "Проблема автоскейлера, {times} за {span}: {detail}",
-    storyNode: "Проблема ноды, {times} за {span}: {detail}",
+    storyNode: "Проблема узла, {times} за {span}: {detail}",
     storyRolloutTrouble: "Проблема развёртывания, {times} за {span}: {detail}",
     storyTrouble: "{reason} ×{n} за {span}: {detail}",
     storyStillHappening: "продолжается",
@@ -3183,7 +3186,7 @@ export const ru: Catalogue = {
       other: "{count} вещей вернут это число обратно.",
     },
     rowsOfTotal: "{shown} из {total} — {label}",
-    rowsWhereAnswered: "{n} — {label}, из ответивших namespace",
+    rowsWhereAnswered: "{label}: {n}, из ответивших пространств имён",
     rowCount: {
       one: "{n} строка",
       few: "{n} строки",
@@ -3191,10 +3194,10 @@ export const ru: Catalogue = {
       other: "{n} строки",
     },
     rowCountWhereAnswered: {
-      one: "{n} строка, из ответивших namespace",
-      few: "{n} строки, из ответивших namespace",
-      many: "{n} строк, из ответивших namespace",
-      other: "{n} строки, из ответивших namespace",
+      one: "{n} строка, из ответивших пространств имён",
+      few: "{n} строки, из ответивших пространств имён",
+      many: "{n} строк, из ответивших пространств имён",
+      other: "{n} строки, из ответивших пространств имён",
     },
     longListTrim: {
       one: "{n} строка — сузьте область или поиск",
@@ -3308,7 +3311,7 @@ export const ru: Catalogue = {
     traefikNoArgs:
       "Он запущен без аргументов, поэтому его точки входа заданы в файле конфигурации, который приложение прочитать не может.",
     reachClusterDns:
-      "{host} — имя, которое умеет разрешать только кластер, а это приложение работает на вашей машине и спрашивает отсюда, а не изнутри кластера. Либо укажите адрес, доступный отсюда (имя из Ingress, адрес LoadBalancer), либо пробросьте порт и используйте его: kubectl port-forward -n <namespace> svc/<service> 9090:9090, затем http://localhost:9090.",
+      "{host} это имя, которое умеет разрешать только кластер, а это приложение работает на вашей машине и спрашивает отсюда, а не изнутри кластера. Либо укажите адрес, доступный отсюда (имя из Ingress, адрес LoadBalancer), либо пробросьте порт и используйте его: kubectl port-forward -n <namespace> svc/<service> 9090:9090, затем http://localhost:9090.",
     reachNoScheme:
       "У {host} нет схемы — допишите впереди http:// или https://.",
     connReasonAndShape: "{said} — {shape}",
@@ -3346,10 +3349,10 @@ export const ru: Catalogue = {
     argoNotCompared: "не сверялось",
     argoThisCluster: "этот кластер",
     argoNamespaceCount: {
-      one: "{n} неймспейс",
-      few: "{n} неймспейса",
-      many: "{n} неймспейсов",
-      other: "{n} неймспейса",
+      one: "{n} пространство имён",
+      few: "{n} пространства имён",
+      many: "{n} пространств имён",
+      other: "{n} пространства имён",
     },
     relReadsFrom: "читает из",
     relWaitsFor: "ждёт",
@@ -3435,7 +3438,7 @@ export const ru: Catalogue = {
     gcpPortNumber: "порт {port}",
     gcpNamedFor: "назначен на {scope}",
     gcpNoBackendConfig:
-      "В этом неймспейсе нет BackendConfig с именем {name} — ничего не применяется.",
+      "В этом пространстве имён нет BackendConfig с именем {name}, поэтому ничего не применяется.",
     azureGatewayDefaults: "настройки шлюза по умолчанию",
     agicSpeaks: "общается с подами по {protocol}",
     agicRewritesPath: "переписывает путь на {path}",
@@ -4544,7 +4547,7 @@ export const ru: Catalogue = {
     allNamespaces: "Все пространства имён",
     namespaces: "Пространства имён",
     namespaceLimitRefused:
-      "Нельзя следить ещё и за {namespace} — окно читает не больше {limit} пространств имён сразу. Откройте его отдельно.",
+      "Нельзя следить ещё и за {namespace}: окно читает не больше {limit} пространств имён сразу. Откройте его отдельно.",
     namespaceLimitFull: {
       one: "{n} пространство имён — больше одно окно не читает.",
       few: "{n} пространства имён — больше одно окно не читает.",
@@ -4613,7 +4616,7 @@ export const ru: Catalogue = {
     searchingInline: "поиск…",
     failedInline: "ошибка",
     kindsUnreadInline: "не удалось прочитать: {kinds}",
-    otherKindsNotSearched: "в kind'ах вне приложения не искали",
+    otherKindsNotSearched: "в видах ресурсов вне приложения не искали",
     lastUsedAgo: "открывался {age} назад",
     retryInline: "повторить",
     toSearchIt: "искать в нём",
@@ -4859,7 +4862,7 @@ export const ru: Catalogue = {
     searchCustomUrl: "Свой URL поиска",
     stripNames: "Вырезать имена из поискового запроса",
     stripNamesHint:
-      "Имена подов, namespace, образов и хостов заменяются на … до того, как запрос покинет приложение. Выключите, если ваши имена не чувствительны.",
+      "Имена подов, пространств имён, образов и хостов заменяются на … до того, как запрос покинет приложение. Выключите, если ваши имена не секретны.",
     handoffLogLines:
       "«Скопировать для агента» и «Поделиться» включают строки лога",
     handoffLogLinesHint:
@@ -5071,7 +5074,7 @@ export const ru: Catalogue = {
   },
   owns: {
     tab: "Владеет",
-    none: "Среди прочитанных kind'ов ничем не владеет.",
+    none: "Среди прочитанных видов ресурсов ничем не владеет.",
     notController: "владелец, но не контроллер",
     expand: "Показать, чем владеет {name}",
     collapse: "Скрыть, чем владеет {name}",
@@ -5089,15 +5092,15 @@ export const ru: Catalogue = {
   cascade: {
     working: "Выясняю, что удалится вместе с ним…",
     takes: "Удалит также:",
-    nothing: "Среди прочитанных kind'ов больше ничего не удалится.",
-    possibly: "И, возможно, объекты kind'ов, которые не удалось прочитать:",
+    nothing: "Среди прочитанных видов ресурсов больше ничего не удалится.",
+    possibly: "И, возможно, объекты тех видов, которые не удалось прочитать:",
     failed: "Не удалось выяснить, что удалится вместе с ним. {error}",
     objectsGo: "Вместе с ним удалятся все {kind} в кластере:",
     objectsNone:
       "{kind} в кластере нет ни одного, так что ни один не удалится вместе с ним.",
     openList: "Открыть их список",
     inside: "Вместе с ним удалится всё, что внутри:",
-    insideNothing: "Среди прочитанных kind'ов внутри ничего нет.",
+    insideNothing: "Среди прочитанных видов ресурсов внутри ничего нет.",
     holdsUnread:
       "Вместе с ним удалится всё, что он содержит, а что именно, прочитать не удалось.",
   },
@@ -5118,14 +5121,14 @@ export const ru: Catalogue = {
   },
   apiResources: {
     description:
-      "Все kind'ы, которые обслуживает этот кластер, по группам API. Каждый открывает свой список.",
-    filter: "Фильтр kind'ов",
+      "Все виды ресурсов, которые обслуживает этот кластер, по группам API. Каждый открывает свой список.",
+    filter: "Фильтр видов",
     core: "core",
     namespaced: "в пространстве имён",
     clusterWide: "на весь кластер",
     notListable: "нельзя получить списком",
     groupUnread:
-      "Discovery не ответил по этой группе, поэтому её kind'ы показать нельзя.",
+      "Discovery не ответил по этой группе, поэтому её виды ресурсов показать нельзя.",
     noMatch: "Ни один обслуживаемый kind не подходит под {filter}.",
     noMatchAnswered:
       "Ни один kind в ответивших группах не подходит под {filter}. Группы ниже не ответили.",
@@ -5244,8 +5247,8 @@ export const ru: Catalogue = {
     fromAnywhere: "откуда угодно",
     toAnywhere: "куда угодно",
     podsInNamespaces: "{pods} в {namespaces}",
-    inThisNamespace: "этом неймспейсе",
-    inEveryNamespace: "любом неймспейсе",
+    inThisNamespace: "этом пространстве имён",
+    inEveryNamespace: "любом пространстве имён",
     exceptRanges: "кроме {ranges}",
     everyPortOf: "любой порт {protocol}",
     governsNeither:
@@ -5824,7 +5827,7 @@ export const ru: Catalogue = {
     renewalNotFinished: "Продление не завершено",
     noEventsInScope: "Событий в {scope} пока нет.",
     noEventsMatch:
-      "В {scope} нет событий по запросу «{query}». Фильтр смотрит на причину, объект, его неймспейс и сообщение.",
+      "В {scope} нет событий по запросу «{query}». Фильтр смотрит на причину, объект, его пространство имён и сообщение.",
     drainExplained:
       "Узел закрывается для планирования, и каждый под на нём, который контроллер может пересоздать, вытесняется. Поды DaemonSet остаются.",
     readingWhatRefusesToMove: "Читаем, что откажется переезжать…",
@@ -6554,7 +6557,7 @@ export const ru: Catalogue = {
     registeredByHand: "добавлен вручную",
     stillReading: "Всё ещё читаю {label} в {scope}",
     narrowerIsFaster:
-      "Большой кластер быстрее отвечает на узкий вопрос: один namespace это один список вместо нескольких.",
+      "Большой кластер быстрее отвечает на узкий вопрос: одно пространство имён это один список вместо нескольких.",
     readDeadline: "Чтение {label} в {scope} не уложилось в {seconds} с.",
     readDeadlineHint:
       "Кластер не ответил вовремя. Так отсюда выглядит большой кластер, и это не поломка, в которую стоит повторять запрос: выход в более узком вопросе.",
@@ -6742,7 +6745,7 @@ export const ru: Catalogue = {
       "Объектов по запросу «{query}» нет на {answered} из {total} кластеров, где шёл поиск.",
     nothingMatchesQuery: "По запросу «{query}» ничего не найдено.",
     nothingMatchesInReadable:
-      "В тех kind'ах, что удалось прочитать, объектов по запросу «{query}» нет. Не прочитаны: {kinds}.",
+      "В тех видах ресурсов, что удалось прочитать, объектов по запросу «{query}» нет. Не прочитаны: {kinds}.",
     noHelmHistory: "Истории нет — Helm её для этого релиза не хранит.",
     nothingRoutesThroughController:
       "Через этот контроллер ничего не проходит, поэтому рисовать нечего.",
@@ -6783,14 +6786,14 @@ export const ru: Catalogue = {
     gwClassClaimedSay: "Класс {name} заявлен контроллером {controller}",
     gwGatewayBlind: "Gateway {name} — отсюда не прочитать",
     gwSetsUnreadSay: "Не удалось понять, какой Gateway несёт {name}",
-    gwSetsUnreadTitle: "ListenerSet'ы не прочитались",
+    gwSetsUnreadTitle: "Объекты ListenerSet прочитать не удалось",
     gwSetsUnreadBody:
       "Этот маршрут привязан к ListenerSet, а к какому Gateway относится набор — записано на нём самом. Получить их список не вышло: отказ в правах либо вид не установлен. Значит назвать Gateway отсюда нельзя, а это не то же самое, что его нет.",
     gwGatewayMissingSay: "Gateway {name} не существует в {namespace}",
     gwGatewayMissingShort: "{name} не существует",
     gwGatewayMissingTitle: "parentRef называет Gateway, которого нет",
     gwGatewayMissingBody:
-      "Принять этот маршрут некому. Обычно это опечатка в имени или неймспейсе, либо Gateway удалили после того, как маршрут был написан.",
+      "Принять этот маршрут некому. Обычно это опечатка в имени или пространстве имён, либо Gateway удалили после того, как маршрут был написан.",
     gwNotProgrammedSay: "Gateway {name} не запрограммирован",
     gwNotProgrammedShort: "{name} не запрограммирован",
     gwNotProgrammedTitle: "Контроллер отвергает этот Gateway",
@@ -6827,10 +6830,10 @@ export const ru: Catalogue = {
     gwNoAcceptedYet: "Контроллер написал статус, но вердикта Accepted ещё нет",
     gwListenerMatches: "{label} подходит этому маршруту",
     gwNsNotAllowedSay: "Слушатель не допускает маршруты из {namespace}",
-    gwNsNotAllowedShort: "неймспейс {namespace} не допущен",
-    gwNsNotAllowedTitle: "Неймспейс вне того, что допускает слушатель",
+    gwNsNotAllowedShort: "пространство имён {namespace} не допущено",
+    gwNsNotAllowedTitle: "Пространство имён вне того, что допускает слушатель",
     gwNsNotAllowedBody:
-      "{said}. allowedRoutes слушателя решают, каким неймспейсам можно привязываться — расширьте их на Gateway или перенесите маршрут.",
+      "{said}. allowedRoutes слушателя решают, каким пространствам имён можно привязываться. Расширьте их на Gateway или перенесите маршрут.",
     gwListenerRefusesSay: "{label} не принимает этот маршрут",
     gwHostnamesShort: "хосты не пересекаются",
     gwHostnamesTitle: "Хосты не пересекаются",
@@ -6842,16 +6845,17 @@ export const ru: Catalogue = {
     gwStaleTitle: "Этот вердикт — о предыдущей версии маршрута",
     gwStaleBody:
       "Контроллер в последний раз смотрел на generation {observed}; вы на {current}. Всё ниже может измениться, когда он догонит — обычно за секунды. Здесь пока ничего не сломано; оно просто устарело.",
-    gwNsAllowedListSay: "Неймспейс {namespace} допущен слушателем ({list})",
-    gwNsAllowedSay: "Неймспейс {namespace} допущен слушателем",
-    gwNsAllowedQuiet: "Неймспейс допущен слушателем",
+    gwNsAllowedListSay:
+      "Пространство имён {namespace} допущено слушателем ({list})",
+    gwNsAllowedSay: "Пространство имён {namespace} допущено слушателем",
+    gwNsAllowedQuiet: "Пространство имён допущено слушателем",
     gwRefNotPermittedSay: "Ссылка на {target} не разрешена",
     gwRefNotPermittedAnon: "Одна из ссылок не разрешена",
     gwRefNotPermittedShort: "нужен ReferenceGrant в {namespace}",
     gwRefNotPermittedTitle:
       "Ни один ReferenceGrant в {namespace} её не разрешает",
     gwRefNotPermittedBody:
-      "{said}. Ссылка через границу неймспейсов требует согласия целевого неймспейса, и контроллер обязан ронять этот трафик, пока согласия нет. Вот грант, который это чинит:",
+      "{said}. Ссылке через границу пространств имён нужно согласие целевого пространства имён, и пока его нет, контроллер обязан отклонять этот трафик. Исправит это ровно такой ReferenceGrant:",
     gwRefUnresolvedSay: "Одна из ссылок этого маршрута не разрешилась",
     gwRefUnresolvedShort: "ссылка не разрешилась",
     gwRefsResolveQuiet: "Контроллер не сообщил, разрешаются ли ссылки",
@@ -6942,7 +6946,7 @@ export const ru: Catalogue = {
     gwStaleChipRow: "вердикт о gen {observed}, вы на {current}",
     gwContestedBy: "хост также заявлен {by} — побеждает более старый маршрут",
     gwGhostTooltip:
-      "{kind} {name} не существует в {namespace} — маршрут называет объект, которого нет, и принять его некому. Обычно это опечатка, либо объект удалили после того, как маршрут был написан.",
+      "{kind} {name} не существует в {namespace}: маршрут называет объект, которого нет, и принять его некому. Обычно это опечатка, либо объект удалили после того, как маршрут был написан.",
     gwNoCrdsPage:
       "Этот кластер не обслуживает route-kinds Gateway API. Установите CRD (достаточно standard-канала) — и эта страница заполнится сама.",
     gwAllServing: "все обслуживаются",
@@ -6994,7 +6998,7 @@ export const ru: Catalogue = {
     gwClassNoAnswer:
       "ни один контроллер не ответил — всё через этот класс мертво",
     nsNoLabelsSelector:
-      "Меток нет — ни один namespaceSelector нигде не совпадает с этим неймспейсом.",
+      "Меток нет, поэтому ни один namespaceSelector нигде не совпадает с этим пространством имён.",
     matchesEverythingWord: "всё",
     matchesEverything: "ловит всё",
     gwNoRules: "Правил нет — ничего не матчится.",
@@ -7023,15 +7027,15 @@ export const ru: Catalogue = {
   },
   statusMeaning: {
     phasePending:
-      "кластер принял Pod, но ещё не все контейнеры запущены; обычно он ждёт узел или образ.",
+      "кластер принял под, но ещё не все контейнеры запущены; обычно он ждёт узел или образ.",
     phaseRunning:
-      "Pod размещён на узле, все контейнеры созданы, и хотя бы один из них работает или перезапускается.",
+      "под размещён на узле, все контейнеры созданы, и хотя бы один из них работает или перезапускается.",
     phaseSucceeded:
       "все контейнеры завершились с кодом 0 и не будут перезапущены.",
     phaseFailed:
       "все контейнеры остановились, и хотя бы один из них завершился с ошибкой.",
     phaseUnknown:
-      "узел перестал сообщать кластеру об этом Pod, поэтому его состояние неизвестно.",
+      "узел перестал сообщать кластеру об этом поде, поэтому его состояние неизвестно.",
     containerCreating: "узел скачивает образы и готовит контейнеры.",
     podInitializing:
       "init-контейнеры завершились, запускаются контейнеры приложения.",
@@ -7044,7 +7048,7 @@ export const ru: Catalogue = {
     createContainerConfigError:
       "нет ConfigMap, Secret или ключа, которые нужны контейнеру, поэтому его нельзя создать.",
     createContainerError:
-      "среда выполнения отказалась создавать контейнер; причина указана в событиях Pod.",
+      "среда выполнения отказалась создавать контейнер; причина указана в событиях пода.",
     invalidImageName: "ссылка на образ не является допустимым именем образа.",
     runContainerError:
       "контейнер создан, но не запустился; часто из-за неверной команды или отсутствующего файла.",
@@ -7053,17 +7057,17 @@ export const ru: Catalogue = {
     error: "контейнер завершился с ненулевым кодом.",
     completed: "все контейнеры успешно завершились.",
     terminating:
-      "Pod получил команду остановиться и завершает работу; он исчезнет, когда остановятся его контейнеры.",
-    evicted: "узел выселил этот Pod, обычно из-за нехватки памяти или диска.",
-    nodeLost: "узел, на котором работает этот Pod, перестал отвечать.",
+      "под получил команду остановиться и завершает работу; он исчезнет, когда остановятся его контейнеры.",
+    evicted: "узел вытеснил этот под, обычно из-за нехватки памяти или диска.",
+    nodeLost: "узел, на котором работает этот под, перестал отвечать.",
     schedulingGated:
-      "Pod не назначается на узел, пока с него не снимут scheduling gates.",
+      "под не назначается на узел, пока с него не снимут scheduling gates.",
     notReady:
-      "контейнеры работают, но Pod не проходит проверку готовности, поэтому Service не отправляют ему трафик.",
+      "контейнеры работают, но под не проходит проверку готовности, поэтому Service не отправляют ему трафик.",
     containerStatusUnknown:
       "состояние контейнера потеряно, обычно после перезапуска узла.",
     deadlineExceeded:
-      "Pod работал дольше, чем разрешает activeDeadlineSeconds, и был остановлен.",
+      "под работал дольше, чем разрешает activeDeadlineSeconds, и был остановлен.",
     initProgress:
       "init-контейнеры запускаются по одному перед контейнерами приложения; завершено {done} из {total}.",
     initNote:
@@ -7072,11 +7076,11 @@ export const ru: Catalogue = {
     signal: "контейнер остановлен сигналом {signal}.",
     workloadReady: "все нужные реплики запущены и доступны.",
     workloadProgressing:
-      "поднимаются новые Pod или уходят старые: идёт развёртывание или масштабирование.",
+      "поднимаются новые поды или уходят старые: идёт развёртывание или масштабирование.",
     workloadIdle:
       "нагрузка намеренно масштабирована до нуля реплик, ничего не запущено.",
     workloadStalled:
-      "развёртывание не продвинулось за отведённое время; старые Pod могут продолжать обслуживать трафик.",
+      "развёртывание не продвинулось за отведённое время; старые поды могут продолжать обслуживать трафик.",
     workloadUnavailable: "готовых реплик меньше, чем нужно для работы.",
     workloadPaused:
       "развёртывание приостановлено: изменения шаблона не применяются, пока его не возобновят.",
@@ -7095,28 +7099,28 @@ export const ru: Catalogue = {
     jobPending: "ни один Pod ещё не запущен.",
   },
   kindAbout: {
-    Pod: "В Pod работает одна копия приложения: один или несколько контейнеров с общим сетевым адресом; здесь видно, какие копии работают, перезапускаются или зависли.",
+    Pod: "Pod запускает одну копию приложения: один или несколько контейнеров с общим сетевым адресом; здесь видно, какие копии работают, перезапускаются или зависли.",
     Deployment:
-      "Deployment держит заданное число одинаковых Pod и постепенно заменяет их при выходе новой версии; здесь видно, закончилось ли развёртывание.",
+      "Deployment держит заданное число одинаковых подов и постепенно заменяет их при выходе новой версии; здесь видно, закончилось ли развёртывание.",
     ReplicaSet:
       "ReplicaSet держит фиксированное число одинаковых подов, а Deployment создаёт новый ReplicaSet для каждой новой версии, поэтому каждый ReplicaSet соответствует одной ревизии.",
     StatefulSet:
-      "StatefulSet запускает Pod, которые сохраняют имя и диск между перезапусками, как нужно базам данных и очередям; здесь видно, все ли реплики готовы.",
+      "StatefulSet запускает поды, которые сохраняют имя и диск между перезапусками, как нужно базам данных и очередям; здесь видно, все ли реплики готовы.",
     DaemonSet:
-      "DaemonSet запускает по одной копии Pod на каждом узле или на каждом подходящем узле, так обычно работают агенты логов, метрик и сети.",
-    Job: "Job запускает Pod, пока задача не завершится, и затем останавливается; здесь видно, выполнилась ли разовая задача, упала или ещё идёт.",
+      "DaemonSet запускает по одной копии пода на каждом узле или на каждом подходящем узле; так обычно работают агенты логов, метрик и сети.",
+    Job: "Job запускает поды, пока задача не завершится, и затем останавливается; здесь видно, выполнилась ли разовая задача, упала или ещё идёт.",
     CronJob:
       "CronJob запускает Job по расписанию, как cron; здесь видно, когда был последний запуск и прошёл ли он успешно.",
     ConfigMap:
-      "ConfigMap хранит настройки в виде ключей и значений, которые Pod читают как переменные окружения или файлы, и его изменение не перезапускает Pod, которые его используют.",
+      "ConfigMap хранит настройки в виде ключей и значений, которые поды читают как переменные окружения или файлы, и его изменение не перезапускает поды, которые его используют.",
     Secret:
-      "Secret хранит пароли, токены и ключи, которые Pod читают как переменные окружения или файлы; значения закодированы в base64, а это не шифрование.",
+      "Secret хранит пароли, токены и ключи, которые поды читают как переменные окружения или файлы; значения закодированы в base64, а это не шифрование.",
     Service:
-      "Service даёт группе Pod одно постоянное имя и адрес внутри кластера, чтобы другие приложения находили их, пока сами Pod появляются и исчезают.",
+      "Service даёт группе подов одно постоянное имя и адрес внутри кластера, чтобы другие приложения находили их, пока сами поды появляются и исчезают.",
     Ingress:
       "Ingress направляет HTTP- и HTTPS-трафик извне кластера в Service по имени хоста и пути и ничего не делает, пока не установлен ingress-контроллер.",
     NetworkPolicy:
-      "NetworkPolicy определяет, каким Pod можно обмениваться трафиком, и как только Pod попадает под политику, всё, что она не разрешает, отбрасывается.",
+      "NetworkPolicy определяет, с какими подами можно обмениваться трафиком, и как только политика выбирает под, всё, что она не разрешает, отбрасывается.",
     Gateway:
       "Gateway служит точкой входа: принимает трафик на выбранных портах и именах хостов, а обслуживает его контроллер, установленный в кластере.",
     GatewayClass:
@@ -7132,22 +7136,22 @@ export const ru: Catalogue = {
     UDPRoute:
       "UDPRoute направляет UDP-трафик, пришедший на порт Gateway, в Service.",
     PersistentVolumeClaim:
-      "PersistentVolumeClaim запрашивает для Pod диск заданного размера и остаётся в Pending, пока к нему не привязан PersistentVolume.",
+      "PersistentVolumeClaim запрашивает для пода диск заданного размера и остаётся в Pending, пока к нему не привязан PersistentVolume.",
     PersistentVolume:
       "PersistentVolume описывает часть хранилища в кластере, созданную администратором или по требованию через StorageClass, к которой может привязаться один запрос.",
     StorageClass:
       "StorageClass описывает вид хранилища, который кластер умеет создавать по требованию, например быстрый SSD или сетевой диск.",
     Endpoints:
-      "Endpoints перечисляют адреса Pod за каждым Service, то есть то, куда на самом деле уходит его трафик; пустой список значит, что Service никуда не ведёт.",
-    Node: "На Node, физической или виртуальной машине, работают Pod; здесь видно, готов ли каждый узел и насколько он загружен.",
+      "Endpoints перечисляют адреса подов за каждым Service, то есть то, куда на самом деле уходит его трафик; пустой список значит, что Service никуда не ведёт.",
+    Node: "Node это физическая или виртуальная машина, на которой работают поды; здесь видно, готов ли каждый узел и насколько он загружен.",
     Event:
-      "Кластер записывает Event, когда с объектом что-то происходит, например Pod назначен на узел или проверка не прошла, и такие записи исчезают примерно через час.",
+      "Кластер записывает Event, когда с объектом что-то происходит, например под назначен на узел или проверка не прошла; такие записи исчезают примерно через час.",
     Namespace:
       "Namespace объединяет объекты внутри одного кластера в именованную группу, чтобы разделять команды и приложения; большинство имён должны быть уникальны только внутри одного пространства имён.",
     HorizontalPodAutoscaler:
       "HorizontalPodAutoscaler меняет число реплик нагрузки по CPU, памяти или другим метрикам.",
     PodDisruptionBudget:
-      "PodDisruptionBudget ограничивает, сколько Pod приложения можно остановить одновременно во время плановых работ, например при освобождении узла.",
+      "PodDisruptionBudget ограничивает, сколько подов приложения можно остановить одновременно во время плановых работ, например при освобождении узла.",
     CustomResourceDefinition:
       "CustomResourceDefinition добавляет в API кластера новый вид объектов; так операторы и дополнения приносят свои ресурсы.",
   },
@@ -7161,7 +7165,7 @@ export const ru: Catalogue = {
     upADirectory: "На каталог вверх",
     selectLogs: "Выделить строки на экране",
     connectCluster: "Подключиться к кластеру под кареткой",
-    scopeAnother: "Добавить ещё неймспейс в область",
+    scopeAnother: "Добавить в область ещё одно пространство имён",
     sectionNavigate: "Перейти",
     sectionPage: "На странице объекта",
     sectionTabs: "Вкладки",
@@ -7178,12 +7182,12 @@ export const ru: Catalogue = {
     help: "Этот список",
     escape: "Закрыть открытое",
     goOverview: "Обзор",
-    goPods: "Поды",
+    goPods: "Pods",
     goDeployments: "Deployments",
     goServices: "Services",
     goIngresses: "Ingresses",
-    goNodes: "Ноды",
-    goEvents: "События",
+    goNodes: "Nodes",
+    goEvents: "Events",
     goJobs: "Jobs",
     goConfigMaps: "ConfigMaps",
     tabOverview: "Вкладка «Обзор»",
@@ -7253,16 +7257,16 @@ export const ru: Catalogue = {
       other: "владеет {n}",
     },
     servedKinds: {
-      one: "{n} kind",
-      few: "{n} kind'а",
-      many: "{n} kind'ов",
-      other: "{n} kind'а",
+      one: "{n} вид",
+      few: "{n} вида",
+      many: "{n} видов",
+      other: "{n} вида",
     },
     kindsReadOf: {
-      one: "Читаю kind'ы: прочитан {n} из {total}",
-      few: "Читаю kind'ы: прочитано {n} из {total}",
-      many: "Читаю kind'ы: прочитано {n} из {total}",
-      other: "Читаю kind'ы: прочитано {n} из {total}",
+      one: "Читаю виды ресурсов: прочитан {n} из {total}",
+      few: "Читаю виды ресурсов: прочитано {n} из {total}",
+      many: "Читаю виды ресурсов: прочитано {n} из {total}",
+      other: "Читаю виды ресурсов: прочитано {n} из {total}",
     },
     readSoFar: {
       one: "Пока прочитан {n}",
@@ -7271,10 +7275,10 @@ export const ru: Catalogue = {
       other: "Пока прочитано {n}",
     },
     kindsNotRead: {
-      one: "{n} kind не прочитан",
-      few: "{n} kind'а не прочитаны",
-      many: "{n} kind'ов не прочитано",
-      other: "{n} kind'а не прочитано",
+      one: "{n} вид не прочитан",
+      few: "{n} вида не прочитаны",
+      many: "{n} видов не прочитано",
+      other: "{n} вида не прочитано",
     },
     notReadList: "Не прочитано: {list}",
     podsStreaming: {
@@ -8076,28 +8080,28 @@ export const ru: Catalogue = {
     },
     moreOnThisCluster: "ещё {n} на этом кластере",
     kindsSearchedByName: {
-      one: "Поиск по имени в {n} kind'е",
-      few: "Поиск по имени в {n} kind'ах",
-      many: "Поиск по имени в {n} kind'ах",
-      other: "Поиск по имени в {n} kind'а",
+      one: "Поиск по имени в {n} виде ресурсов",
+      few: "Поиск по имени в {n} видах ресурсов",
+      many: "Поиск по имени в {n} видах ресурсов",
+      other: "Поиск по имени в {n} вида ресурсов",
     },
     kindsRefused: {
-      one: "{n} kind запрещён",
-      few: "{n} kind'а запрещены",
-      many: "{n} kind'ов запрещено",
-      other: "{n} kind'а запрещены",
+      one: "{n} вид запрещён",
+      few: "{n} вида запрещены",
+      many: "{n} видов запрещено",
+      other: "{n} вида запрещены",
     },
     kindsStillLoading: {
-      one: "{n} kind ещё загружается",
-      few: "{n} kind'а ещё загружаются",
-      many: "{n} kind'ов ещё загружается",
-      other: "{n} kind'а ещё загружаются",
+      one: "{n} вид ещё загружается",
+      few: "{n} вида ещё загружаются",
+      many: "{n} видов ещё загружается",
+      other: "{n} вида ещё загружаются",
     },
     kindsNotSearched: {
-      one: "в {n} kind'е не искали",
-      few: "в {n} kind'ах не искали",
-      many: "в {n} kind'ах не искали",
-      other: "в {n} kind'а не искали",
+      one: "в {n} виде не искали",
+      few: "в {n} видах не искали",
+      many: "в {n} видах не искали",
+      other: "в {n} вида не искали",
     },
     apiGroupsNotDiscovered: {
       one: "{n} группа API не ответила на discovery",
@@ -8106,36 +8110,37 @@ export const ru: Catalogue = {
       other: "{n} группы API не ответили на discovery",
     },
     noObjectWhileLoading: {
-      one: "В прочитанном объектов по запросу «{query}» нет; ещё загружается {n} kind.",
-      few: "В прочитанном объектов по запросу «{query}» нет; ещё загружаются {n} kind'а.",
-      many: "В прочитанном объектов по запросу «{query}» нет; ещё загружается {n} kind'ов.",
+      one: "В прочитанном объектов по запросу «{query}» нет; ещё загружается {n} вид.",
+      few: "В прочитанном объектов по запросу «{query}» нет; ещё загружаются {n} вида.",
+      many: "В прочитанном объектов по запросу «{query}» нет; ещё загружается {n} видов.",
       other:
-        "В прочитанном объектов по запросу «{query}» нет; ещё загружаются {n} kind'а.",
+        "В прочитанном объектов по запросу «{query}» нет; ещё загружаются {n} вида.",
     },
     noObjectInKinds: {
-      one: "В {n} kind'е, где искали, объектов по запросу «{query}» нет.",
-      few: "В {n} kind'ах, где искали, объектов по запросу «{query}» нет.",
-      many: "В {n} kind'ах, где искали, объектов по запросу «{query}» нет.",
-      other: "В {n} kind'а, где искали, объектов по запросу «{query}» нет.",
+      one: "В {n} виде ресурсов, где искали, объектов по запросу «{query}» нет.",
+      few: "В {n} видах ресурсов, где искали, объектов по запросу «{query}» нет.",
+      many: "В {n} видах ресурсов, где искали, объектов по запросу «{query}» нет.",
+      other:
+        "В {n} вида ресурсов, где искали, объектов по запросу «{query}» нет.",
     },
     noObjectOnClusters: {
-      one: "Объектов по запросу «{query}» нет в kind'ах, где искали, на {n} кластере.",
-      few: "Объектов по запросу «{query}» нет в kind'ах, где искали, на {n} кластерах.",
-      many: "Объектов по запросу «{query}» нет в kind'ах, где искали, на {n} кластерах.",
+      one: "Объектов по запросу «{query}» нет в тех видах ресурсов, где искали, на {n} кластере.",
+      few: "Объектов по запросу «{query}» нет в тех видах ресурсов, где искали, на {n} кластерах.",
+      many: "Объектов по запросу «{query}» нет в тех видах ресурсов, где искали, на {n} кластерах.",
       other:
-        "Объектов по запросу «{query}» нет в kind'ах, где искали, на {n} кластера.",
+        "Объектов по запросу «{query}» нет в тех видах ресурсов, где искали, на {n} кластера.",
     },
     otherKindsWereNotSearched: {
-      one: "Ещё в {n} kind'е не искали.",
-      few: "Ещё в {n} kind'ах не искали.",
-      many: "Ещё в {n} kind'ах не искали.",
-      other: "Ещё в {n} kind'а не искали.",
+      one: "Ещё в {n} виде не искали.",
+      few: "Ещё в {n} видах не искали.",
+      many: "Ещё в {n} видах не искали.",
+      other: "Ещё в {n} вида не искали.",
     },
     searchKindsToo: {
-      one: "Искать ещё и в {n} kind'е",
-      few: "Искать ещё и в {n} kind'ах",
-      many: "Искать ещё и в {n} kind'ах",
-      other: "Искать ещё и в {n} kind'а",
+      one: "Искать ещё и в {n} виде",
+      few: "Искать ещё и в {n} видах",
+      many: "Искать ещё и в {n} видах",
+      other: "Искать ещё и в {n} вида",
     },
     withFailed: "{total} · с ошибкой: {n}",
     conditions: {

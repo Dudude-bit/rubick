@@ -356,33 +356,43 @@ describe("a cluster the kubeconfig has lost", () => {
 
 describe("titles", () => {
   it.each([
-    ["/", "overview"],
-    ["/c/prod", "overview"],
-    ["/c/prod/pods", "pods"],
-    ["/c/prod/nodes", "nodes"],
-    ["/c/prod/events", "events"],
-    ["/c/prod/helm", "helm"],
+    ["/", "Overview"],
+    ["/c/prod", "Overview"],
+    ["/c/prod/pods", "Pods"],
+    ["/c/prod/nodes", "Nodes"],
+    ["/c/prod/events", "Events"],
+    ["/c/prod/helm", "Helm"],
     ["/c/prod/pods/web/api-7f9", "api-7f9"],
     ["/c/prod/nodes/k3d-agent-0", "k3d-agent-0"],
     ["/c/prod/helm/native/web/redis", "redis"],
   ])("names %s as %s", (href, expected) => {
-    expect(tabRouteLabel(href)).toBe(expected);
+    expect(tabRouteLabel(href, t)).toBe(expected);
+  });
+
+  /** A Russian strip read "overview" and "changes" beside a sidebar that
+   *  said Обзор and Изменения. */
+  it("names a page the way the sidebar does, in the reader's language", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    expect(tabRouteLabel("/c/prod", ru)).toBe("Обзор");
+    expect(tabRouteLabel("/c/prod/changes", ru)).toBe("Изменения");
+    expect(tabRouteLabel("/c/prod/pods", ru)).toBe("Pods");
   });
 
   /** The cluster is the tab's own name; its route must not repeat it. */
   it("never names the cluster as the route", () => {
-    expect(tabRouteLabel("/c/pods")).toBe("overview");
+    expect(tabRouteLabel("/c/pods", t)).toBe("Overview");
   });
 
   // The peek is the foreground, so it is what the tab is showing.
   it("names the open peek over the list behind it", () => {
-    expect(tabRouteLabel("/c/prod/pods?peek=pods%2Fweb%2Fapi-7f9")).toBe(
+    expect(tabRouteLabel("/c/prod/pods?peek=pods%2Fweb%2Fapi-7f9", t)).toBe(
       "api-7f9"
     );
   });
 
   it("never falls back to a raw pathname", () => {
-    expect(tabRouteLabel("/c/prod/some/unknown/place")).toBe("place");
+    expect(tabRouteLabel("/c/prod/some/unknown/place", t)).toBe("place");
   });
 
   it("spells the whole tab for a tooltip", () => {
@@ -391,12 +401,12 @@ describe("titles", () => {
         tab({ context: "prod", namespace: "web", href: "/c/prod/nodes" }),
         t
       )
-    ).toBe("prod · web · nodes");
+    ).toBe("prod · web · Nodes");
     expect(tabTitle(tab({ href: "/" }), t)).toBe(
-      "no cluster · all namespaces · overview"
+      "no cluster · all namespaces · Overview"
     );
     expect(tabTitle(tab({ context: "old", missing: true }), t)).toBe(
-      "old (missing) · all namespaces · overview"
+      "old (missing) · all namespaces · Overview"
     );
   });
 });
