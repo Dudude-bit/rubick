@@ -889,8 +889,6 @@ export const ru: Catalogue = {
     recentChanges: "Недавние изменения",
     nativeHelmRelease: "Собственный релиз Helm",
     searchKindPlaceholder: "Поиск {kind}…",
-    deleteCrdDetail:
-      "Удаление «{name}» удалит и все экземпляры этого custom resource.",
     rollBackReleaseQuestion: "Откатить релиз?",
     rollBackReleaseDetail: "«{name}» будет откачен до ревизии {revision}.",
     uninstallRelease: "Удалить релиз",
@@ -924,8 +922,6 @@ export const ru: Catalogue = {
     notSetHere: "здесь не задано",
     anywhereSubnetsAllow: "откуда разрешают подсети",
     anyHost: "любой хост",
-    deleteCrdWarning:
-      "Удаление «{name}» также удалит в кластере все экземпляры этого ресурса.",
     addHelmRepository: "Добавить репозиторий Helm",
     addHelmRepositoryHint:
       "Добавьте репозиторий чартов Helm, чтобы искать и устанавливать из него чарты.",
@@ -1294,6 +1290,8 @@ export const ru: Catalogue = {
       "освободит том. В зависимости от политики возврата у storage class данные могут быть стёрты.",
     effectVolume:
       "удалит объект тома. Переживут ли это данные, решает его политика возврата.",
+    effectCrd:
+      "удалит kind, который он определяет, и все объекты этого kind'а во всех пространствах имён. Отменить это нельзя.",
     effectPermanent: "необратимо.",
     podSubject: "под {name}",
     validate: "Проверить",
@@ -4802,6 +4800,15 @@ export const ru: Catalogue = {
     nothing: "Среди прочитанных kind'ов больше ничего не удалится.",
     possibly: "И, возможно, объекты kind'ов, которые не удалось прочитать:",
     failed: "Не удалось выяснить, что удалится вместе с ним. {error}",
+    objectsGo: "Вместе с ним удалятся все {kind} в кластере:",
+    objectsNone:
+      "{kind} в кластере нет ни одного, так что ни один не удалится вместе с ним.",
+    counting: "Считаю их…",
+    openList: "Открыть их список",
+    inside: "Вместе с ним удалится всё, что внутри:",
+    insideNothing: "Среди прочитанных kind'ов внутри ничего нет.",
+    holdsUnread:
+      "Вместе с ним удалится всё, что он содержит, а что именно, прочитать не удалось.",
   },
   attached: {
     openedFrom: "Открыто из {object}, который относится сюда.",
@@ -6681,6 +6688,12 @@ export const ru: Catalogue = {
       few: "Ещё читаю {n} kind'а",
       many: "Ещё читаю {n} kind'ов",
       other: "Ещё читаю {n} kind'а",
+    },
+    readSoFar: {
+      one: "Пока прочитан {n}",
+      few: "Пока прочитано {n}",
+      many: "Пока прочитано {n}",
+      other: "Пока прочитано {n}",
     },
     kindsNotRead: {
       one: "{n} kind не прочитан",

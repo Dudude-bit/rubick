@@ -22,6 +22,7 @@ use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use tokio_util::sync::CancellationToken;
 
+use crate::client::served::Served;
 use crate::commands::catalog::UnreadGroup;
 use crate::error::Result;
 use crate::state::AppState;
@@ -81,6 +82,40 @@ pub struct KindReading {
     pub group: String,
     pub plural: String,
     pub reading: Reading,
+}
+
+/// What a deletion takes because the object holds it, which no
+/// ownerReference says.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum Holds {
+    /// A `CustomResourceDefinition`: every object of the kind it defines.
+    Objects {
+        kind: Option<String>,
+        group: String,
+        plural: String,
+        count: usize,
+        /// How well that kind was read; none where it is live.
+        reading: Option<Reading>,
+    },
+    /// A Namespace: everything inside it.
+    Namespace,
+}
+
+const DEFINITIONS: (&str, &str) = ("apiextensions.k8s.io", "customresourcedefinitions");
+const NAMESPACES: (&str, &str) = ("", "namespaces");
+
+fn is(key: &KindKey, (group, plural): (&str, &str)) -> bool {
+    key.group == group && key.plural == plural
+}
+
+/// The kind a CRD named `<plural>.<group>` defines.
+fn defined_by(name: &str) -> Option<KindKey> {
+    let (plural, group) = name.split_once('.')?;
+    Some(KindKey {
+        group: group.to_string(),
+        plural: plural.to_string(),
+    })
 }
 
 /// Everything the index could not vouch for when it answered.
@@ -248,10 +283,75 @@ impl ClusterIndex {
         (self.graph.read().dependents_of(uid), self.not_read())
     }
 
-    /// What deleting `uid` would take with it, and what was not read.
+    /// What deleting `uid` would take with it, what it holds besides, and
+    /// what was not read. `unindexed` is why a CRD's kind is not read when
+    /// the index has never heard of it.
     #[must_use]
-    pub fn cascade(&self, uid: &str) -> (Vec<KindCount>, NotRead) {
-        (self.graph.read().cascade(uid), self.not_read())
+    pub fn cascade(
+        &self,
+        uid: &str,
+        unindexed: Option<Reading>,
+    ) -> (Vec<KindCount>, NotRead, Option<Holds>) {
+        let not_read = self.not_read();
+        let graph = self.graph.read();
+        let (takes, holds) = cascade_in(
+            &graph,
+            uid,
+            &not_read,
+            |kind| {
+                self.watched
+                    .lock()
+                    .get(kind)
+                    .map(|watched| watched.resource.kind.clone())
+            },
+            unindexed,
+        );
+        (takes, not_read, holds)
+    }
+
+    /// The kind a CRD defines, where `uid` is a CRD the index has read and
+    /// its kind is one the index does not.
+    #[must_use]
+    pub fn unindexed_definition(&self, uid: &str) -> Option<KindKey> {
+        let defined = {
+            let graph = self.graph.read();
+            let node = graph.node(uid)?;
+            if !is(&node.key, DEFINITIONS) {
+                return None;
+            }
+            defined_by(&node.name)?
+        };
+        (!self.knows(&defined)).then_some(defined)
+    }
+
+    fn knows(&self, kind: &KindKey) -> bool {
+        self.watched.lock().contains_key(kind) || self.unwatched.lock().contains_key(kind)
+    }
+
+    /// Starts reading a kind served since the index began: a CRD installed
+    /// after it.
+    pub fn watch(self: &Arc<Self>, kind: KindKey, served: Served) {
+        {
+            let mut watched = self.watched.lock();
+            if watched.contains_key(&kind) || self.unwatched.lock().contains_key(&kind) {
+                return;
+            }
+            watched.insert(
+                kind.clone(),
+                Watched {
+                    resource: served.resource.clone(),
+                    namespaced: served.namespaced,
+                },
+            );
+        }
+        slots::spawn(
+            self,
+            SlotKey {
+                kind,
+                namespace: None,
+            },
+            served.resource,
+        );
     }
 
     /// Every kind that is not live, named, plus every group discovery missed.
@@ -327,6 +427,48 @@ impl ClusterIndex {
             slots::spawn(self, slot, resource.clone());
         }
     }
+}
+
+/// The cascade from `uid`, with what it holds: a namespace its contents, a
+/// CRD every object of its kind. `indexed` names a kind the index watches.
+fn cascade_in(
+    graph: &Graph,
+    uid: &str,
+    not_read: &NotRead,
+    indexed: impl Fn(&KindKey) -> Option<String>,
+    unindexed: Option<Reading>,
+) -> (Vec<KindCount>, Option<Holds>) {
+    let Some(node) = graph.node(uid) else {
+        return (graph.cascade(uid, &[]), None);
+    };
+    if is(&node.key, NAMESPACES) {
+        let inside = graph.inside(&node.name);
+        return (graph.cascade(uid, &inside), Some(Holds::Namespace));
+    }
+    let Some(defined) = is(&node.key, DEFINITIONS)
+        .then(|| defined_by(&node.name))
+        .flatten()
+    else {
+        return (graph.cascade(uid, &[]), None);
+    };
+    let objects = graph.of_kind(&defined);
+    let named = not_read
+        .kinds
+        .iter()
+        .find(|reading| reading.group == defined.group && reading.plural == defined.plural);
+    let (kind, reading) = match (named, indexed(&defined)) {
+        (Some(named), _) => (Some(named.kind.clone()), Some(named.reading.clone())),
+        (None, Some(kind)) => (Some(kind), None),
+        (None, None) => (None, Some(unindexed.unwrap_or(Reading::Syncing))),
+    };
+    let holds = Holds::Objects {
+        kind,
+        group: defined.group,
+        plural: defined.plural,
+        count: objects.len(),
+        reading,
+    };
+    (graph.cascade(uid, &objects), Some(holds))
 }
 
 /// One kind's reading from its slots: `None` where it is simply live.
@@ -441,5 +583,138 @@ mod tests {
     fn a_kind_still_listing_says_so() {
         let slots = BTreeMap::from([(slot(None), SlotState::Syncing)]);
         assert_eq!(reading_of(&kind(), &slots), Some(Reading::Syncing));
+    }
+
+    fn put(
+        graph: &mut Graph,
+        uid: &str,
+        key: (&str, &str),
+        kind: &str,
+        name: &str,
+        ns: Option<&str>,
+    ) {
+        let key = KindKey {
+            group: key.0.to_string(),
+            plural: key.1.to_string(),
+        };
+        graph.apply(
+            &SlotKey {
+                kind: key.clone(),
+                namespace: None,
+            },
+            uid.to_string(),
+            graph::Node {
+                key,
+                kind: kind.to_string(),
+                version: "v1".to_string(),
+                name: name.to_string(),
+                namespace: ns.map(str::to_string),
+                owners: Vec::new(),
+            },
+        );
+    }
+
+    const WIDGETS: (&str, &str) = ("demo.example.com", "widgets");
+
+    fn widgets() -> Graph {
+        let mut graph = Graph::default();
+        put(
+            &mut graph,
+            "crd",
+            DEFINITIONS,
+            "CustomResourceDefinition",
+            "widgets.demo.example.com",
+            None,
+        );
+        put(&mut graph, "w1", WIDGETS, "Widget", "one", Some("shop"));
+        put(&mut graph, "w2", WIDGETS, "Widget", "two", Some("web"));
+        graph
+    }
+
+    fn objects(holds: Option<Holds>) -> (Option<String>, usize, Option<Reading>) {
+        match holds {
+            Some(Holds::Objects {
+                kind,
+                count,
+                reading,
+                ..
+            }) => (kind, count, reading),
+            other => panic!("expected the objects a CRD defines, got {other:?}"),
+        }
+    }
+
+    /// No ownerReference names a custom resource's CRD, so the plain
+    /// cascade said in green that nothing else goes with it.
+    #[test]
+    fn a_crd_holds_every_object_of_its_kind_in_every_namespace() {
+        let (takes, holds) = cascade_in(
+            &widgets(),
+            "crd",
+            &NotRead::default(),
+            |_| Some("Widget".to_string()),
+            None,
+        );
+        assert_eq!(objects(holds), (Some("Widget".to_string()), 2, None));
+        assert_eq!(takes.len(), 1);
+        assert_eq!(takes[0].count, 2);
+    }
+
+    /// Two objects read is not every object when the list was refused.
+    #[test]
+    fn a_crd_whose_kind_was_refused_says_so_beside_what_it_counted() {
+        let refused = Reading::Refused {
+            message: "widgets is forbidden".to_string(),
+        };
+        let not_read = NotRead {
+            kinds: vec![KindReading {
+                kind: "Widget".to_string(),
+                group: WIDGETS.0.to_string(),
+                plural: WIDGETS.1.to_string(),
+                reading: refused.clone(),
+            }],
+            groups: Vec::new(),
+        };
+        let (_, holds) = cascade_in(&widgets(), "crd", &not_read, |_| None, None);
+        assert_eq!(objects(holds).2, Some(refused));
+    }
+
+    /// A kind the index never watched has not been counted, whatever the
+    /// count of zero would say.
+    #[test]
+    fn a_crd_whose_kind_the_index_never_read_says_why() {
+        let mut graph = Graph::default();
+        put(
+            &mut graph,
+            "crd",
+            DEFINITIONS,
+            "CustomResourceDefinition",
+            "widgets.demo.example.com",
+            None,
+        );
+        let (_, holds) = cascade_in(
+            &graph,
+            "crd",
+            &NotRead::default(),
+            |_| None,
+            Some(Reading::Unlistable),
+        );
+        assert_eq!(objects(holds), (None, 0, Some(Reading::Unlistable)));
+    }
+
+    #[test]
+    fn a_namespace_holds_everything_inside_it() {
+        let mut graph = widgets();
+        put(&mut graph, "ns", NAMESPACES, "Namespace", "shop", None);
+        let (takes, holds) = cascade_in(&graph, "ns", &NotRead::default(), |_| None, None);
+        assert_eq!(holds, Some(Holds::Namespace));
+        assert_eq!(takes.len(), 1);
+        assert_eq!((takes[0].kind.as_str(), takes[0].count), ("Widget", 1));
+    }
+
+    /// Any other object holds nothing beyond what it owns.
+    #[test]
+    fn an_ordinary_object_holds_nothing() {
+        let (_, holds) = cascade_in(&widgets(), "w1", &NotRead::default(), |_| None, None);
+        assert_eq!(holds, None);
     }
 }

@@ -36,6 +36,13 @@ const { CascadePreview } = await import("./CascadePreview");
 
 const NOTHING_UNREAD: NotRead = { kinds: [], groups: [] };
 
+const SECRETS_REFUSED = {
+  kind: "Secret",
+  group: "",
+  plural: "secrets",
+  reading: { says: "refused" as const, message: "forbidden" },
+};
+
 const chipOf = (kind: string) => screen.getByText(kind).closest("li");
 
 const dependent = (kind: string, name: string, dependents = 0): Dependent => ({
@@ -237,6 +244,7 @@ describe("what deleting an object takes with it", () => {
           ],
           groups: [],
         },
+        holds: null,
       });
     await renderWithRouter(
       <CascadePreview kind="Deployment" name="api" namespace="shop" />
@@ -250,6 +258,29 @@ describe("what deleting an object takes with it", () => {
     expect(chipOf("Secret")).toHaveTextContent("refused");
   });
 
+  /** "Nothing" is green only when nothing could be hiding; a hedge is not safe. */
+  it("does not paint nothing green while a kind is unread", async () => {
+    const nothing = (notRead: NotRead) => {
+      answers.cascade = () =>
+        Promise.resolve({ takes: [], notRead, holds: null });
+      return renderWithRouter(
+        <CascadePreview kind="ConfigMap" name="settings" namespace="shop" />
+      );
+    };
+    const view = await nothing(NOTHING_UNREAD);
+    const line = await screen.findByText(
+      "Nothing else goes with it, among the kinds read."
+    );
+    expect(line).toHaveClass("text-ok");
+    view.unmount();
+    await nothing({ kinds: [SECRETS_REFUSED], groups: [] });
+    expect(
+      await screen.findByText(
+        "Nothing else goes with it, among the kinds read."
+      )
+    ).not.toHaveClass("text-ok");
+  });
+
   /** Before a delete, a count it could not work out is said, never skipped. */
   it("says it could not work out the cascade rather than saying nothing", async () => {
     answers.cascade = () =>
@@ -260,5 +291,133 @@ describe("what deleting an object takes with it", () => {
     expect(
       await screen.findByText(/Could not work out what goes with it/)
     ).toBeInTheDocument();
+  });
+});
+
+describe("what deleting a CRD or a namespace takes with it", () => {
+  beforeEach(() => {
+    answers.lineage = () =>
+      Promise.resolve({ uid: "x", ancestors: [], others: [], stop: null });
+  });
+
+  const widgets = (
+    count: number,
+    reading: Extract<Cascade["holds"], { says: "objects" }>["reading"]
+  ): Cascade => ({
+    takes: count
+      ? [{ kind: "Widget", group: "demo.k8s-gui.io", plural: "widgets", count }]
+      : [],
+    notRead: NOTHING_UNREAD,
+    holds: {
+      says: "objects",
+      kind: "Widget",
+      group: "demo.k8s-gui.io",
+      plural: "widgets",
+      count,
+      reading,
+    },
+  });
+
+  const crd = () =>
+    renderWithRouter(
+      <CascadePreview
+        kind="CustomResourceDefinition"
+        name="widgets.demo.k8s-gui.io"
+      />
+    );
+
+  /**
+   * The reported case: no ownerReference names a CRD, so the dialog said in
+   * green that nothing else goes, about a CRD with live objects.
+   */
+  it("counts every object of a CRD's kind as going, in the danger tone", async () => {
+    answers.cascade = () => Promise.resolve(widgets(62, null));
+    await crd();
+    const said = await screen.findByText(
+      "Every Widget in the cluster goes with it:"
+    );
+    expect(said.closest("p")).toHaveClass("text-err");
+    expect(screen.getByText("62")).toHaveClass("text-err");
+    expect(screen.queryByText(/Nothing else goes with it/)).toBeNull();
+    expect(
+      screen.getByRole("link", { name: /Open their list/ })
+    ).toHaveAttribute(
+      "href",
+      "/c/test/customresourcedefinitions/widgets.demo.k8s-gui.io?tab=instances"
+    );
+  });
+
+  /** A refused list is not "none": the kind is named with why, and they still go. */
+  it("names a refused kind as unread rather than counting it as none", async () => {
+    answers.cascade = () =>
+      Promise.resolve(
+        widgets(0, { says: "refused", message: "widgets is forbidden" })
+      );
+    await crd();
+    expect(
+      await screen.findByText("Every Widget in the cluster goes with it:")
+    ).toBeInTheDocument();
+    expect(chipOf("Widget")).toHaveTextContent("refused");
+    expect(screen.queryByText(/No Widget exists/)).toBeNull();
+  });
+
+  it("says it is still counting while the kind is listed", async () => {
+    answers.cascade = () => Promise.resolve(widgets(0, { says: "syncing" }));
+    await crd();
+    expect(await screen.findByText("Counting them…")).toBeInTheDocument();
+    expect(screen.queryByText(/No Widget exists/)).toBeNull();
+  });
+
+  it("says none goes only when the kind was read and has none", async () => {
+    answers.cascade = () => Promise.resolve(widgets(0, null));
+    await crd();
+    expect(
+      await screen.findByText("No Widget exists, so none goes with it.")
+    ).toHaveClass("text-ok");
+  });
+
+  /** The index had not read the CRD itself: what it holds is unknown, not nothing. */
+  it("says what a CRD holds is unread when the index could not place it", async () => {
+    answers.cascade = () =>
+      Promise.resolve({
+        takes: [],
+        notRead: {
+          kinds: [
+            {
+              kind: "CustomResourceDefinition",
+              group: "apiextensions.k8s.io",
+              plural: "customresourcedefinitions",
+              reading: { says: "refused", message: "forbidden" },
+            },
+          ],
+          groups: [],
+        },
+        holds: null,
+      });
+    await crd();
+    expect(
+      await screen.findByText(/what it holds could not be read/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing else goes with it/)).toBeNull();
+  });
+
+  /** A namespace takes everything inside it, counted per kind, unread kinds named. */
+  it("counts everything inside a namespace and names what it could not read", async () => {
+    answers.cascade = () =>
+      Promise.resolve({
+        takes: [
+          { kind: "Pod", group: "", plural: "pods", count: 3 },
+          { kind: "ConfigMap", group: "", plural: "configmaps", count: 2 },
+        ],
+        notRead: { kinds: [SECRETS_REFUSED], groups: [] },
+        holds: { says: "namespace" },
+      });
+    await renderWithRouter(<CascadePreview kind="Namespace" name="shop" />);
+    expect(
+      await screen.findByText("Everything inside goes with it:")
+    ).toBeInTheDocument();
+    expect(chipOf("Pod")).toHaveTextContent("3");
+    expect(chipOf("ConfigMap")).toHaveTextContent("2");
+    expect(chipOf("Secret")).toHaveTextContent("refused");
   });
 });

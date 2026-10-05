@@ -902,8 +902,6 @@ export const en = {
     recentChanges: "Recent Changes",
     nativeHelmRelease: "Native Helm release",
     searchKindPlaceholder: "Search {kind}...",
-    deleteCrdDetail:
-      'Deleting "{name}" also deletes every instance of this custom resource.',
     rollBackReleaseQuestion: "Roll back release?",
     rollBackReleaseDetail:
       '"{name}" will be rolled back to revision {revision}.',
@@ -938,8 +936,6 @@ export const en = {
     notSetHere: "not set here",
     anywhereSubnetsAllow: "anywhere the subnets allow",
     anyHost: "any host",
-    deleteCrdWarning:
-      "Deleting “{name}” also deletes every instance of this custom resource in the cluster.",
     addHelmRepository: "Add Helm Repository",
     addHelmRepositoryHint:
       "Add a new Helm chart repository to search and install charts from.",
@@ -1293,6 +1289,8 @@ export const en = {
       "releases the volume. Depending on the storage class's reclaim policy the data may be erased.",
     effectVolume:
       "removes the volume object. Whether the data survives is up to its reclaim policy.",
+    effectCrd:
+      "removes the kind it defines and every object of that kind, in every namespace. It cannot be undone.",
     effectPermanent: "is permanent and cannot be undone.",
     podSubject: "pod {name}",
     validate: "Validate",
@@ -4359,6 +4357,14 @@ export const en = {
     nothing: "Nothing else goes with it, among the kinds read.",
     possibly: "And possibly objects of the kinds it could not read:",
     failed: "Could not work out what goes with it. {error}",
+    objectsGo: "Every {kind} in the cluster goes with it:",
+    objectsNone: "No {kind} exists, so none goes with it.",
+    counting: "Counting them…",
+    openList: "Open their list",
+    inside: "Everything inside goes with it:",
+    insideNothing: "Nothing is inside it, among the kinds read.",
+    holdsUnread:
+      "Everything it holds goes with it, and what it holds could not be read.",
   },
   // An object whose meaning belongs to one parent, opened there or not.
   attached: {
@@ -6163,6 +6169,7 @@ export const en = {
     pods: { one: "{n} pod", other: "{n} pods" },
     dependents: { one: "owns {n}", other: "owns {n}" },
     kindsNotRead: { one: "{n} kind not read", other: "{n} kinds not read" },
+    readSoFar: { one: "{n} read so far", other: "{n} read so far" },
     kindsReading: {
       one: "Still reading {n} kind",
       other: "Still reading {n} kinds",

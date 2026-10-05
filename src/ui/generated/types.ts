@@ -914,6 +914,7 @@ export interface Ancestor {
 export interface Cascade {
   takes: KindCount[];
   notRead: NotRead;
+  holds: Holds | null;
 }
 
 export interface NotRead {
@@ -2235,6 +2236,17 @@ export type LineageStop =
   | { says: "kindNotServed"; kind: string; group: string }
   | { says: "several" }
   | { says: "tooDeep" };
+
+export type Holds =
+  | {
+      says: "objects";
+      kind: string | null;
+      group: string;
+      plural: string;
+      count: number;
+      reading: Reading | null;
+    }
+  | { says: "namespace" };
 
 export type Reading =
   | { says: "syncing" }

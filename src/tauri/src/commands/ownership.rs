@@ -9,7 +9,7 @@ use tauri::State;
 use crate::client::served::Served;
 use crate::commands::helpers::{scope_of, ResourceContext};
 use crate::error::{Error, Result};
-use crate::ownership::{Dependent, KindCount, NotRead};
+use crate::ownership::{Dependent, Holds, KindCount, NotRead, Reading};
 use crate::state::AppState;
 
 /// Deeper than any controller chain a cluster builds; a loop stops here.
@@ -43,6 +43,7 @@ pub async fn list_dependents(
 pub struct Cascade {
     pub takes: Vec<KindCount>,
     pub not_read: NotRead,
+    pub holds: Option<Holds>,
 }
 
 /// What deleting `uid` would take with it, as the garbage collector decides.
@@ -54,8 +55,25 @@ pub async fn preview_cascade(
 ) -> Result<Cascade> {
     validate_uid(&uid)?;
     let index = state.ownership.ensure(&state, scope_of(scope)?).await?;
-    let (takes, not_read) = index.cascade(&uid);
-    Ok(Cascade { takes, not_read })
+    let unindexed = match index.unindexed_definition(&uid) {
+        None => None,
+        Some(kind) => match state.served(&kind.group, &kind.plural).await {
+            Ok(Some(served)) => {
+                index.watch(kind, served);
+                None
+            }
+            Ok(None) => Some(Reading::Unlistable),
+            Err(error) => Some(Reading::Failed {
+                message: error.to_string(),
+            }),
+        },
+    };
+    let (takes, not_read, holds) = index.cascade(&uid, unindexed);
+    Ok(Cascade {
+        takes,
+        not_read,
+        holds,
+    })
 }
 
 fn validate_uid(uid: &str) -> Result<()> {

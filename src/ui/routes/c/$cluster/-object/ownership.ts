@@ -106,6 +106,15 @@ export function mightHold(reading: KindReading): boolean {
   );
 }
 
+/** The kinds whose delete takes what they hold, which no ownerReference names. */
+const HOLDERS = new Set([
+  "apiextensions.k8s.io/customresourcedefinitions",
+  "/namespaces",
+]);
+
+export const holdsContents = (served: ServedResource | null): boolean =>
+  !!served && HOLDERS.has(`${served.group}/${served.plural}`);
+
 /** Whether nothing could still be hiding: every listable kind read live. */
 export function readAll(notRead: NotRead): boolean {
   return notRead.groups.length === 0 && !notRead.kinds.some(mightHold);

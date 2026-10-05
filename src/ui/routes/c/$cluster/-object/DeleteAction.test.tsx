@@ -13,6 +13,7 @@ vi.mock("@/lib/commands", () => ({
       Promise.resolve({
         takes: [{ kind: "Pod", group: "", plural: "pods", count: 3 }],
         notRead: { kinds: [], groups: [] },
+        holds: null,
       }),
   },
 }));

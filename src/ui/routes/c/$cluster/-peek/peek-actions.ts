@@ -516,6 +516,8 @@ function deletionEffect(kind: string, detail: unknown, t: T): string {
       return t("action", "effectClaim");
     case "PersistentVolume":
       return t("action", "effectVolume");
+    case "CustomResourceDefinition":
+      return t("action", "effectCrd");
     default:
       return t("action", "effectPermanent");
   }

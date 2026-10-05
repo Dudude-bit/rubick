@@ -170,13 +170,44 @@ impl Graph {
         found
     }
 
+    #[must_use]
+    pub fn node(&self, uid: &str) -> Option<&Node> {
+        self.nodes.get(uid)
+    }
+
+    /// Every object of one kind the index holds, wherever it was read.
+    #[must_use]
+    pub fn of_kind(&self, kind: &KindKey) -> Vec<String> {
+        self.slots
+            .iter()
+            .filter(|(slot, _)| slot.kind == *kind)
+            .flat_map(|(_, members)| members.iter().cloned())
+            .collect()
+    }
+
+    /// Every object inside one namespace.
+    #[must_use]
+    pub fn inside(&self, namespace: &str) -> Vec<String> {
+        self.nodes
+            .iter()
+            .filter(|(_, node)| node.namespace.as_deref() == Some(namespace))
+            .map(|(uid, _)| uid.clone())
+            .collect()
+    }
+
     /// What deleting `root` takes with it, as the garbage collector decides:
     /// a dependent goes only once every one of its owners is going. One
-    /// that another living object also owns stays.
+    /// that another living object also owns stays. `contents` go whatever
+    /// owns them, as a CRD's objects and a namespace's do.
     #[must_use]
-    pub fn cascade(&self, root: &str) -> Vec<KindCount> {
+    pub fn cascade(&self, root: &str, contents: &[String]) -> Vec<KindCount> {
         let mut going: HashSet<String> = HashSet::from([root.to_string()]);
         let mut frontier = vec![root.to_string()];
+        for uid in contents {
+            if going.insert(uid.clone()) {
+                frontier.push(uid.clone());
+            }
+        }
         while let Some(owner) = frontier.pop() {
             for uid in self.dependents.get(&owner).into_iter().flatten() {
                 if going.contains(uid) {
@@ -319,7 +350,7 @@ mod tests {
     #[test]
     fn a_cascade_takes_every_descendant_whose_owners_all_go() {
         let graph = deployment_tree();
-        let counts = graph.cascade("d");
+        let counts = graph.cascade("d", &[]);
         let by_kind: Vec<_> = counts.iter().map(|c| (c.kind.as_str(), c.count)).collect();
         assert_eq!(by_kind, [("Pod", 2), ("ReplicaSet", 1)]);
     }
@@ -339,10 +370,50 @@ mod tests {
             node("pods", "Pod", "api-7f9-b", &[("r", true), ("o", false)]),
         );
         let pods = graph
-            .cascade("d")
+            .cascade("d", &[])
             .into_iter()
             .find(|c| c.kind == "Pod")
             .map(|c| c.count);
         assert_eq!(pods, Some(1));
+    }
+
+    /// A namespace's objects go with it whoever owns them, and what they own
+    /// goes with them.
+    #[test]
+    fn contents_go_whatever_owns_them_and_take_their_dependents() {
+        let mut graph = deployment_tree();
+        graph.apply(
+            &slot("configmaps"),
+            "c".into(),
+            node(
+                "configmaps",
+                "ConfigMap",
+                "settings",
+                &[("elsewhere", false)],
+            ),
+        );
+        let inside = graph.inside("shop");
+        assert_eq!(inside.len(), 5);
+        let by_kind: Vec<_> = graph
+            .cascade("ns", &inside)
+            .into_iter()
+            .map(|c| (c.kind, c.count))
+            .collect();
+        assert_eq!(
+            by_kind,
+            [
+                ("ConfigMap".to_string(), 1),
+                ("Deployment".to_string(), 1),
+                ("Pod".to_string(), 2),
+                ("ReplicaSet".to_string(), 1)
+            ]
+        );
+    }
+
+    #[test]
+    fn every_object_of_a_kind_is_found_by_its_kind() {
+        let graph = deployment_tree();
+        assert_eq!(graph.of_kind(&key("pods")).len(), 2);
+        assert!(graph.of_kind(&key("widgets")).is_empty());
     }
 }

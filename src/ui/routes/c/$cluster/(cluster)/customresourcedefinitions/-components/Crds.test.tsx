@@ -11,7 +11,25 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 
 vi.mock("@/lib/commands", () => ({
-  commands: { listCrds: vi.fn() },
+  commands: {
+    listCrds: vi.fn(),
+    deleteCrd: vi.fn(),
+    objectLineage: () =>
+      Promise.resolve({ uid: "crd", ancestors: [], others: [], stop: null }),
+    previewCascade: () =>
+      Promise.resolve({
+        takes: [],
+        notRead: { kinds: [], groups: [] },
+        holds: {
+          says: "objects",
+          kind: "Certificate",
+          group: "cert-manager.io",
+          plural: "certificates",
+          count: 4,
+          reading: null,
+        },
+      }),
+  },
 }));
 
 import { commands } from "@/lib/commands";
@@ -157,5 +175,44 @@ describe("the row's way to a CRD's objects", () => {
     expect(item.getAttribute("href")).toBe(
       "/c/prod/customresourcedefinitions/certificates.cert-manager.io?tab=instances"
     );
+  });
+});
+
+describe("deleting a CRD from the list", () => {
+  /**
+   * The row's Delete asked one click and said nothing of how many objects
+   * go with the definition. It asks for the name and counts them now.
+   */
+  it("counts the objects that go and asks for the name first", async () => {
+    listCrds.mockResolvedValue([
+      {
+        group: "cert-manager.io",
+        crds: [
+          {
+            name: "certificates.cert-manager.io",
+            group: "cert-manager.io",
+            kind: "Certificate",
+            plural: "certificates",
+            scope: "Namespaced",
+            version: "v1",
+            shortNames: [],
+            categories: [],
+            createdAt: null,
+          },
+        ],
+      },
+    ]);
+    await draw();
+    fireEvent.keyDown(
+      await screen.findByRole("button", { name: "Open actions" }),
+      { key: "Enter" }
+    );
+    fireEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    expect(
+      await screen.findByText("Every Certificate in the cluster goes with it:")
+    ).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toBeInTheDocument();
+    expect(commands.deleteCrd).not.toHaveBeenCalled();
   });
 });

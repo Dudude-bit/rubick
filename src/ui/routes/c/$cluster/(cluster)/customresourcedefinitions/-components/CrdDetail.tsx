@@ -1,14 +1,7 @@
 import { useCallback, useState } from "react";
 import { useNavigate, useParams } from "@tanstack/react-router";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  BadgeCheck,
-  GitBranch,
-  Info,
-  ListTree,
-  Tag,
-  Trash2,
-} from "lucide-react";
+import { BadgeCheck, GitBranch, Info, ListTree, Tag } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
 import {
@@ -16,7 +9,6 @@ import {
   crdFactsSection,
   crdVersionsSection,
 } from "@/lib/share/crd-share";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -46,7 +38,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "../../../-delivery/delivery-intercept";
+import { DeleteAction } from "../../../-object/DeleteAction";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
@@ -73,7 +65,6 @@ export function CrdDetail() {
     setActiveTab(tab);
     setSearch({ tab: tab === "overview" ? undefined : tab }, { replace: true });
   };
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedVersion, setSelectedVersion] = useState<string | null>(null);
 
   const goBack = () =>
@@ -421,34 +412,16 @@ export function CrdDetail() {
         }
         onBack={goBack}
         actions={
-          <InterceptedAction
+          <DeleteAction
+            kind={ResourceType.CustomResourceDefinition}
+            name={name ?? ""}
             intercept={intercept("Delete")}
-            label={t("action", "delete")}
-            icon={Trash2}
-            onClick={() => setDeleteDialogOpen(true)}
-            busy={deleteMutation.isPending}
-            danger
+            mutation={name ? deleteMutation : null}
           />
         }
         tabs={tabs}
         activeTab={activeTab}
         onTabChange={changeTab}
-      />
-
-      <ConfirmDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        title={t("action", "deleteKindQuestion", { kind: "CRD" })}
-        description={t("action", "deleteCrdWarning", {
-          name: name ?? "",
-        })}
-        confirmLabel={t("action", "delete")}
-        confirmVariant="destructive"
-        confirmDisabled={deleteMutation.isPending}
-        onConfirm={() => {
-          deleteMutation.mutate();
-          setDeleteDialogOpen(false);
-        }}
       />
     </>
   );

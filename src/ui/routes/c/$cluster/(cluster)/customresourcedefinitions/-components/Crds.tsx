@@ -12,7 +12,9 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { DataTable } from "@/components/ui/data-table";
 import { byNamespace } from "@/components/ui/row-grouping";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
+import { CascadePreview } from "../../../-object/CascadePreview";
+import { describeDeletion } from "../../../-peek/peek-actions";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ResourceListHeader } from "../../../-list/ResourceListHeader";
@@ -47,6 +49,15 @@ export function Crds() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<CrdListItem | null>(null);
+  const deletion = deleteTarget
+    ? describeDeletion(
+        ResourceType.CustomResourceDefinition,
+        deleteTarget.name,
+        null,
+        undefined,
+        t
+      )
+    : null;
 
   const {
     data: crdGroups = [],
@@ -253,16 +264,22 @@ export function Crds() {
         }
       />
 
-      <ConfirmDialog
+      <DangerousConfirmDialog
         open={!!deleteTarget}
-        onOpenChange={() => setDeleteTarget(null)}
-        title={t("action", "deleteKindQuestion", { kind: "CRD" })}
-        description={t("action", "deleteCrdDetail", {
-          name: deleteTarget?.name ?? "",
-        })}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title={deletion?.title ?? ""}
+        description={deletion?.description}
+        details={
+          deleteTarget ? (
+            <CascadePreview
+              kind={ResourceType.CustomResourceDefinition}
+              name={deleteTarget.name}
+            />
+          ) : null
+        }
+        confirmationText={deleteTarget?.name ?? ""}
         confirmLabel={t("action", "delete")}
-        confirmVariant="destructive"
-        confirmDisabled={deleteMutation.isPending}
+        isLoading={deleteMutation.isPending}
         onConfirm={() => {
           if (deleteTarget) {
             deleteMutation.mutate(deleteTarget);
