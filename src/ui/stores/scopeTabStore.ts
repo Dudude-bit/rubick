@@ -481,22 +481,22 @@ export const useScopeTabStore = create<ScopeTabState>()(
  *
  * A detail route is named by the object it shows, not by its kind — the
  * reader opened `api-7f9`, not "pods" — and an open peek wins over the list
- * behind it, because the peek is what is on screen. A list or page is
- * named the way the sidebar names it.
+ * behind it, because the peek is what is on screen. Over an object's page
+ * the page keeps the name: a peek there is a glance from it. A list or page
+ * is named the way the sidebar names it.
  */
 export function tabRouteLabel(href: string, t: T): string {
   const [path, query = ""] = href.split("?");
-  const peek = new URLSearchParams(query).get("peek");
-  const peeked = peek?.split("/").filter(Boolean).at(-1);
-  if (peeked) return peeked;
-
   const segments = path.split("/").filter(Boolean).map(decoded);
   // The cluster is said by the tab's own name, not by its route.
   const route = segments[0] === "c" ? segments.slice(2) : segments;
-  if (route.length === 0) return t("nav", "overview");
   // One segment is a list page, `/c/prod/pods` as much as `/c/prod/events`.
   // Anything longer is the object the route shows.
   if (route.length > 1) return route.at(-1) as string;
+  const peek = new URLSearchParams(query).get("peek");
+  const peeked = peek?.split("/").filter(Boolean).at(-1);
+  if (peeked) return peeked;
+  if (route.length === 0) return t("nav", "overview");
   const [page] = route;
   if (isResourceType(page)) return getDisplayPlural(page);
   return (

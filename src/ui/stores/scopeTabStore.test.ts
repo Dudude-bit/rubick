@@ -392,6 +392,27 @@ describe("titles", () => {
   });
 
   /**
+   * Marco opened the ServiceAccount peek from a pod's page and the tab read
+   * "default" while the pod page was still the page. Fails if a peek over an
+   * object's page renames the tab.
+   */
+  it("keeps the page's object as the name under a peek opened from it", () => {
+    expect(
+      tabRouteLabel(
+        "/c/prod/pods/team-checkout/checkout-api-6767?peek=serviceaccounts%2Fteam-checkout%2Fdefault",
+        t
+      )
+    ).toBe("checkout-api-6767");
+  });
+
+  /** The Overview is a page too: a peek opened over it is what is on screen. */
+  it("names the open peek over the Overview", () => {
+    expect(tabRouteLabel("/c/prod?peek=pods%2Fweb%2Fapi-7f9", t)).toBe(
+      "api-7f9"
+    );
+  });
+
+  /**
    * A ClusterRole named `system:controller:...` reached the strip as
    * `system%3Acontroller%3A...` while the page header read it decoded. Fails
    * if the tab shows the address's escapes.
