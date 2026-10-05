@@ -151,7 +151,7 @@ export type Scope =
 /** One rendered line. Only some of them are places the arrows stop. */
 export type Entry =
   | { id: string; kind: "caption"; text: ReactNode }
-  | { id: string; kind: "hint"; text: ReactNode }
+  | { id: string; kind: "hint"; text: ReactNode; tone?: HintTone }
   | {
       id: string;
       kind: "cluster";
@@ -213,6 +213,9 @@ export type Entry =
 
 export type IconType = React.ComponentType<{ className?: string }>;
 
+/** What an empty result is: still coming, partly unread, or read and empty. */
+export type HintTone = "loading" | "unread" | "empty";
+
 /** What Enter does on a cluster's own row, when it does anything. */
 export type GroupAction = "none" | "search-it" | "retry";
 
@@ -266,6 +269,100 @@ export function notSearchedOf(
       entry.verbs.includes("list") &&
       !seen.has(`${entry.group}/${entry.plural}`)
   );
+}
+
+/**
+ * What an empty result says, about objects and never about kinds: a kind row
+ * above it may well have matched. It claims nothing it did not read. Still
+ * answering is not empty, a refused or loading kind is named as such, and
+ * "no object matches" names the kinds or clusters it covers.
+ */
+function emptyHint({
+  query,
+  clusters,
+  working,
+  answered,
+  notSearched,
+  t,
+}: {
+  query: string;
+  clusters: ClusterSearchState[];
+  working: boolean;
+  answered: number;
+  notSearched: number;
+  t: T;
+}): { text: ReactNode; tone: HintTone } {
+  const total = clusters.length;
+  const done = clusters.filter((cluster) => cluster.status === "done");
+  const loading = new Set(
+    clusters.flatMap((cluster) => cluster.loading.map((kind) => kind.kind))
+  );
+  if (working) {
+    return {
+      tone: "loading",
+      text:
+        total > 1
+          ? t("empty", "noMatchesYet", { answered, total })
+          : loading.size > 0
+            ? t("count", "noObjectWhileLoading", { query, n: loading.size })
+            : t("empty", "stillSearchingFor", { query }),
+    };
+  }
+  if (done.length === 0) {
+    return {
+      tone: "unread",
+      text: clusters.every(isCold)
+        ? t("empty", "nothingSearchedNoCluster")
+        : t("empty", "nothingSearchedAnywhere"),
+    };
+  }
+  if (loading.size > 0) {
+    return {
+      tone: "loading",
+      text: t("count", "noObjectWhileLoading", { query, n: loading.size }),
+    };
+  }
+  const unread = [
+    ...new Set(
+      done.flatMap((cluster) => cluster.unreadable.map((kind) => kind.kind))
+    ),
+  ];
+  if (unread.length > 0) {
+    return {
+      tone: "unread",
+      text: t("empty", "nothingMatchesInReadable", {
+        query,
+        kinds: unread.join(", "),
+      }),
+    };
+  }
+  if (done.length < total) {
+    return {
+      tone: "unread",
+      text: t("empty", "nothingMatchesOnSearched", {
+        query,
+        answered: done.length,
+        total,
+      }),
+    };
+  }
+  if (total > 1) {
+    return {
+      tone: "empty",
+      text: t("count", "noObjectOnClusters", { query, n: total }),
+    };
+  }
+  const searched = t("count", "noObjectInKinds", {
+    query,
+    n: done[0].searched.length,
+  });
+  return {
+    tone: "empty",
+    text:
+      notSearched > 0
+        ? `${searched} ${t("count", "otherKindsWereNotSearched", { n: notSearched })}`
+        : searched,
+  };
 }
 
 export function isCold(cluster: ClusterSearchState): boolean {
@@ -605,36 +702,21 @@ export function buildPaletteEntries({
   // Rows, not hits: a cluster whose every match was a kind with nowhere to
   // go has shown the reader nothing.
   if (!out.some((entry) => entry.kind === "hit")) {
-    // "No results" while a cluster is still working is a lie, and so is
-    // "no results" for a cluster nobody has connected to. The count is
-    // the one thing a reader needs before believing an empty list.
-    // A failed cluster has answered and searched nothing: only `done` ones
-    // can say the query matches nothing there.
-    const total = shownClusters.length;
-    const done = shownClusters.filter((cluster) => cluster.status === "done");
-    // A cluster that could not list some kinds has not searched them.
-    const searched = done.filter(
-      (cluster) =>
-        cluster.unreadable.length === 0 && cluster.loading.length === 0
-    ).length;
+    const own = shownClusters.find(
+      (cluster) => !scoped && cluster.context === currentContext
+    );
     out.push({
       id: "hint:empty",
       kind: "hint",
-      text: working
-        ? t("empty", "noMatchesYet", { answered, total })
-        : done.length === 0
-          ? shownClusters.every(isCold)
-            ? t("empty", "nothingSearchedNoCluster")
-            : t("empty", "nothingSearchedAnywhere")
-          : searched < done.length
-            ? t("empty", "nothingMatchesInReadable", { query })
-            : searched < total
-              ? t("empty", "nothingMatchesOnSearched", {
-                  query,
-                  answered: searched,
-                  total,
-                })
-              : t("empty", "nothingMatchesQuery", { query }),
+      ...emptyHint({
+        query,
+        clusters: shownClusters,
+        working,
+        answered,
+        notSearched:
+          own && kinds.length > 0 ? notSearchedOf(kinds, own).length : 0,
+        t,
+      }),
     });
   }
 

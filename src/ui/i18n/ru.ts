@@ -6679,16 +6679,17 @@ export const ru: Catalogue = {
     noClusterMatchesNeedle:
       "Ни один кластер в kubeconfig не отзывается на «{needle}».",
     noMatchesYet:
-      "Совпадений пока нет — ответили {answered} из {total} кластеров.",
+      "Совпадений пока нет: ответили {answered} из {total} кластеров.",
+    stillSearchingFor: "Имена по запросу «{query}» ещё читаются…",
     nothingSearchedNoCluster:
       "Поиск не выполнялся: ни один кластер ещё не подключён.",
     nothingSearchedAnywhere:
       "Поиск не выполнен: ни на одном кластере здесь он не завершился.",
     nothingMatchesOnSearched:
-      "По запросу «{query}» ничего не найдено на {answered} из {total} кластеров, где выполнялся поиск.",
+      "Объектов по запросу «{query}» нет на {answered} из {total} кластеров, где шёл поиск.",
     nothingMatchesQuery: "По запросу «{query}» ничего не найдено.",
     nothingMatchesInReadable:
-      "В том, что удалось прочитать, «{query}» не нашлось — часть видов прочитать не удалось.",
+      "В тех kind'ах, что удалось прочитать, объектов по запросу «{query}» нет. Не прочитаны: {kinds}.",
     noHelmHistory: "Истории нет — Helm её для этого релиза не хранит.",
     nothingRoutesThroughController:
       "Через этот контроллер ничего не проходит, поэтому рисовать нечего.",
@@ -8005,6 +8006,32 @@ export const ru: Catalogue = {
       few: "{n} группы API не ответили на discovery",
       many: "{n} групп API не ответили на discovery",
       other: "{n} группы API не ответили на discovery",
+    },
+    noObjectWhileLoading: {
+      one: "В прочитанном объектов по запросу «{query}» нет; ещё загружается {n} kind.",
+      few: "В прочитанном объектов по запросу «{query}» нет; ещё загружаются {n} kind'а.",
+      many: "В прочитанном объектов по запросу «{query}» нет; ещё загружается {n} kind'ов.",
+      other:
+        "В прочитанном объектов по запросу «{query}» нет; ещё загружаются {n} kind'а.",
+    },
+    noObjectInKinds: {
+      one: "В {n} kind'е, где искали, объектов по запросу «{query}» нет.",
+      few: "В {n} kind'ах, где искали, объектов по запросу «{query}» нет.",
+      many: "В {n} kind'ах, где искали, объектов по запросу «{query}» нет.",
+      other: "В {n} kind'а, где искали, объектов по запросу «{query}» нет.",
+    },
+    noObjectOnClusters: {
+      one: "Объектов по запросу «{query}» нет в kind'ах, где искали, на {n} кластере.",
+      few: "Объектов по запросу «{query}» нет в kind'ах, где искали, на {n} кластерах.",
+      many: "Объектов по запросу «{query}» нет в kind'ах, где искали, на {n} кластерах.",
+      other:
+        "Объектов по запросу «{query}» нет в kind'ах, где искали, на {n} кластера.",
+    },
+    otherKindsWereNotSearched: {
+      one: "Ещё в {n} kind'е не искали.",
+      few: "Ещё в {n} kind'ах не искали.",
+      many: "Ещё в {n} kind'ах не искали.",
+      other: "Ещё в {n} kind'а не искали.",
     },
     searchKindsToo: {
       one: "Искать ещё и в {n} kind'е",

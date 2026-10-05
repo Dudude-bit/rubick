@@ -17,6 +17,7 @@ import {
   Lock,
   ScanSearch,
   Search,
+  SearchX,
   TriangleAlert,
   X,
 } from "lucide-react";
@@ -58,6 +59,7 @@ import {
   isCold,
   isSelectable,
   type Entry,
+  type HintTone,
   type Scope,
 } from "./palette-entries";
 
@@ -813,7 +815,19 @@ function EntryRow({
   }
 
   if (entry.kind === "hint") {
-    return <p className="px-2 py-1.5 text-xs text-fg-mut">{entry.text}</p>;
+    return (
+      <p
+        data-tone={entry.tone}
+        className="flex items-start gap-2 px-2 py-1.5 text-xs text-fg-mut"
+      >
+        {entry.tone && (
+          <span className="flex h-4 flex-none items-center">
+            {HINT_MARK[entry.tone]}
+          </span>
+        )}
+        <span>{entry.text}</span>
+      </p>
+    );
   }
 
   if (entry.kind === "coverage") {
@@ -1000,6 +1014,15 @@ function EntryRow({
       return null;
   }
 }
+
+/** Still coming, partly unread and read-and-empty never look alike. */
+const HINT_MARK: Record<HintTone, ReactNode> = {
+  loading: (
+    <span className="h-1.5 w-1.5 animate-pulse-subtle rounded-full bg-info" />
+  ),
+  unread: <TriangleAlert className="h-3.5 w-3.5 text-warn" aria-hidden />,
+  empty: <SearchX className="h-3.5 w-3.5 text-fg-fnt" aria-hidden />,
+};
 
 const kindNames = (kinds: readonly { kind: string }[]) =>
   kinds.map((kind) => kind.kind).join(", ");

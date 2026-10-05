@@ -95,6 +95,17 @@ function hintText(entries: Entry[]): unknown {
   return hint?.kind === "hint" ? hint.text : undefined;
 }
 
+function hintTone(entries: Entry[]): unknown {
+  const hint = entries.find((entry) => entry.kind === "hint");
+  return hint?.kind === "hint" ? hint.tone : undefined;
+}
+
+const read = (kind: string, group = "", plural = `${kind.toLowerCase()}s`) => ({
+  kind,
+  group,
+  plural,
+});
+
 describe("the palette's entries with nothing typed", () => {
   /**
    * Recent objects are what a reader opens the palette for most often;
@@ -467,17 +478,127 @@ describe("the palette's resource rows", () => {
     );
 
     expect(hintText(entries)).toBe(
-      "No matches yet — 1 of 2 clusters have answered."
+      "No matches yet: 1 of 2 clusters have answered."
+    );
+    expect(hintTone(entries)).toBe("loading");
+  });
+
+  /**
+   * Only once every kind it names was read is an empty list the answer, and
+   * it names them: a bare "Nothing matches" read as "does not exist" over
+   * kinds the search never looked at.
+   */
+  it("names the kinds an empty answer covers once every one was read", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "api",
+        shownClusters: [
+          { ...cluster("k3d-dev"), searched: [read("Pod"), read("Service")] },
+        ],
+      })
+    );
+
+    expect(hintText(entries)).toBe(
+      "No object matches “api” in the 2 kinds searched."
+    );
+    expect(hintTone(entries)).toBe("empty");
+  });
+
+  /** The served kinds it did not look at are part of the answer, not a footnote. */
+  it("says how many served kinds an empty answer did not search", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "api",
+        shownClusters: [{ ...cluster("k3d-dev"), searched: [read("Pod")] }],
+        kinds: [
+          { ...read("Pod"), version: "v1", namespaced: true, verbs: ["list"] },
+          {
+            ...read("Widget", "demo.example.com"),
+            version: "v1",
+            namespaced: true,
+            verbs: ["list"],
+          },
+        ],
+      })
+    );
+
+    expect(hintText(entries)).toBe(
+      "No object matches “api” in the 1 kind searched. 1 other kind was not searched."
     );
   });
 
-  /** Only once every cluster has answered is an empty list the answer. */
-  it("says nothing matches once every cluster has answered", () => {
+  /**
+   * One cluster still reading has said nothing yet; "0 of 1 clusters have
+   * answered" was the only sentence it had, and a kind still loading is
+   * named apart from a search that has not finished.
+   */
+  it("says the one cluster is still reading, and how many kinds are still loading", () => {
+    const searching = buildPaletteEntries(
+      state({ text: "api", shownClusters: [cluster("k3d-dev", "searching")] })
+    );
+    expect(hintText(searching)).toBe("Still reading names for “api”…");
+    expect(hintTone(searching)).toBe("loading");
+
+    const loading = buildPaletteEntries(
+      state({
+        text: "api",
+        shownClusters: [
+          {
+            ...cluster("k3d-dev"),
+            searched: [read("Pod")],
+            loading: [read("Widget", "demo.example.com")],
+          },
+        ],
+      })
+    );
+    expect(hintText(loading)).toBe(
+      "No object matches “api” in what has been read; 1 kind is still loading."
+    );
+    expect(hintTone(loading)).toBe("loading");
+  });
+
+  /**
+   * "Leases" found the Lease kind and said "Nothing matches Leases" under
+   * it. The sentence is about objects, so it cannot contradict a kind row.
+   */
+  it("words an empty answer about objects, beside a kind that matched", () => {
     const entries = buildPaletteEntries(
-      state({ text: "api", shownClusters: [cluster("k3d-dev")] })
+      state({
+        text: "Leases",
+        shownClusters: [
+          {
+            ...cluster("k3d-dev"),
+            searched: [read("Lease", "coordination.k8s.io")],
+          },
+        ],
+        kinds: [
+          {
+            ...read("Lease", "coordination.k8s.io"),
+            version: "v1",
+            namespaced: true,
+            verbs: ["list"],
+          },
+        ],
+      })
     );
 
-    expect(hintText(entries)).toBe("Nothing matches “api”.");
+    expect(entries.some((entry) => entry.kind === "kind")).toBe(true);
+    expect(String(hintText(entries))).toMatch(/^No object matches/);
+    expect(String(hintText(entries))).not.toMatch(/Nothing matches/);
+  });
+
+  /** Several clusters read whole say which they covered, not that nothing exists. */
+  it("names the clusters a whole empty answer covers", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "api",
+        scope: { kind: "all" },
+        shownClusters: [cluster("k3d-dev"), cluster("prod-eu")],
+      })
+    );
+    expect(hintText(entries)).toBe(
+      "No object matches “api” in the kinds searched on 2 clusters."
+    );
   });
 
   /**
@@ -497,8 +618,9 @@ describe("the palette's resource rows", () => {
     );
 
     expect(hintText(entries)).toBe(
-      "Nothing matches “api” on the 1 of 2 clusters that were searched."
+      "No object matches “api” on the 1 of 2 clusters that were searched."
     );
+    expect(hintTone(entries)).toBe("unread");
   });
 
   /**
@@ -528,8 +650,9 @@ describe("the palette's resource rows", () => {
     );
 
     expect(hintText(entries)).toBe(
-      "Nothing matches “api” in what could be read — some kinds could not be."
+      "No object matches “api” in the kinds that could be read. Not read: Service."
     );
+    expect(hintTone(entries)).toBe("unread");
   });
 
   /** One cluster, and its search failed: nothing was searched at all. */

@@ -6133,16 +6133,17 @@ export const en = {
     noClusterMatchesNeedle:
       "No cluster in the kubeconfig answers to “{needle}”.",
     noMatchesYet:
-      "No matches yet — {answered} of {total} clusters have answered.",
+      "No matches yet: {answered} of {total} clusters have answered.",
+    stillSearchingFor: "Still reading names for “{query}”…",
     nothingSearchedNoCluster:
       "Nothing has been searched: no cluster here is connected yet.",
     nothingSearchedAnywhere:
       "Nothing has been searched: the search did not complete on any cluster here.",
     nothingMatchesOnSearched:
-      "Nothing matches “{query}” on the {answered} of {total} clusters that were searched.",
+      "No object matches “{query}” on the {answered} of {total} clusters that were searched.",
     nothingMatchesQuery: "Nothing matches “{query}”.",
     nothingMatchesInReadable:
-      "Nothing matches “{query}” in what could be read — some kinds could not be.",
+      "No object matches “{query}” in the kinds that could be read. Not read: {kinds}.",
     noHelmHistory: "No history — Helm keeps none for this release.",
     nothingRoutesThroughController:
       "Nothing routes through this controller, so there is no shape to draw.",
@@ -7074,6 +7075,24 @@ export const en = {
     searchKindsToo: {
       one: "Search {n} more kind too",
       other: "Search the other {n} kinds too",
+    },
+    noObjectWhileLoading: {
+      one: "No object matches “{query}” in what has been read; {n} kind is still loading.",
+      other:
+        "No object matches “{query}” in what has been read; {n} kinds are still loading.",
+    },
+    noObjectInKinds: {
+      one: "No object matches “{query}” in the {n} kind searched.",
+      other: "No object matches “{query}” in the {n} kinds searched.",
+    },
+    noObjectOnClusters: {
+      one: "No object matches “{query}” in the kinds searched on {n} cluster.",
+      other:
+        "No object matches “{query}” in the kinds searched on {n} clusters.",
+    },
+    otherKindsWereNotSearched: {
+      one: "{n} other kind was not searched.",
+      other: "{n} other kinds were not searched.",
     },
     withFailed: "{total} · {n} failed",
     conditions: { one: "{n} condition", other: "{n} conditions" },
