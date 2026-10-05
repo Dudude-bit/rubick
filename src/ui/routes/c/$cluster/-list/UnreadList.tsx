@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Lock } from "lucide-react";
 
-import { isRefusal, verbatim } from "@/lib/error-utils";
+import { errorToShow, isRefusal } from "@/lib/error-utils";
 
 /** A list that has no rows because nobody could read it, in place of its table. */
 export function UnreadList({
@@ -22,7 +22,7 @@ export function UnreadList({
         {words}
       </p>
       <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-        {verbatim(error.message)}
+        {errorToShow(error)}
       </p>
       {children}
     </div>
