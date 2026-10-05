@@ -1,4 +1,6 @@
 import {
+  lazy,
+  Suspense,
   useCallback,
   useEffect,
   useId,
@@ -8,7 +10,7 @@ import {
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
 } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   CircleDashed,
@@ -20,6 +22,7 @@ import {
   SearchX,
   TriangleAlert,
   X,
+  Zap,
 } from "lucide-react";
 
 import { useActivityPanelStore } from "@/stores/activityPanelStore";
@@ -33,6 +36,25 @@ import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
 import { Kbd } from "@/components/ui/kbd";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { KindIcon } from "@/components/object/KindIcon";
+import { ResourceName } from "@/components/object/ResourceName";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { buildDeepLink } from "@/lib/deep-link";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import { planPeekActions } from "../-peek/peek-actions";
+import {
+  actionTargetOfEntry,
+  objectOnScreen,
+  paletteActionsOf,
+  registryKindOf,
+  sameReport,
+  targetKey,
+  targetLink,
+  type ActionsReport,
+  type ActionTarget,
+  type PaletteActionId,
+} from "./palette-actions";
+import type { ActionsRunner } from "./PaletteActionsHost";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   useResourceSearch,
@@ -53,6 +75,7 @@ import type { RecentItem } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { catalogQuery } from "../-object/served";
 import {
+  buildActionEntries,
   buildPaletteEntries,
   hasAnswered,
   hitKey,
@@ -62,6 +85,31 @@ import {
   type HintTone,
   type Scope,
 } from "./palette-entries";
+
+const PaletteActionsHost = lazy(() => import("./PaletteActionsHost"));
+
+const english: T = (section, key, values) =>
+  translate("en", section, key, values);
+
+/** Each action's English words, so they find it in every language. */
+function englishLabels(target: ActionTarget): ReadonlyMap<string, string> {
+  const plan = planPeekActions(
+    registryKindOf(target) ?? target.kind,
+    undefined,
+    english
+  );
+  return new Map(
+    paletteActionsOf(target, [...plan.inline, ...plan.menu], {}, english).map(
+      (action) => [action.id, action.label]
+    )
+  );
+}
+
+/** One object's actions on screen, and the search row they were opened from. */
+interface ActionsOf {
+  target: ActionTarget;
+  selected: string | null;
+}
 
 /**
  * The clusters the reader has explicitly agreed to open a connection to,
@@ -92,6 +140,19 @@ export function CommandPalette() {
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [opening, setOpening] = useState("");
   const [everything, setEverything] = useState(false);
+  const [actionsOf, setActionsOf] = useState<ActionsOf | null>(null);
+  const [actionText, setActionText] = useState("");
+  // The object an action ran on stays mounted after the palette closes, so
+  // the dialog it opened outlives the palette.
+  const [pinned, setPinned] = useState<ActionTarget | null>(null);
+  const [report, setReport] = useState<ActionsReport | null>(null);
+  const runner = useRef<ActionsRunner | null>(null);
+  const copy = useCopyToClipboard();
+  const onReport = useCallback(
+    (next: ActionsReport) =>
+      setReport((previous) => (sameReport(previous, next) ? previous : next)),
+    []
+  );
 
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -111,6 +172,25 @@ export function CommandPalette() {
   const openSettings = useSettingsStore((s) => s.openSettings);
   const marks = useClusterIdentityStore((s) => s.marks);
   const openTab = useScopeTabStore((s) => s.openTab);
+  const onScreen = useRouterState({ select: (state) => state.matches.at(-1) });
+  const pageObject = useMemo(
+    () =>
+      onScreen && currentContext && isConnected
+        ? objectOnScreen(
+            {
+              fullPath: onScreen.fullPath,
+              params: onScreen.params as Record<string, string | undefined>,
+            },
+            currentContext,
+            catalog.data?.entries
+          )
+        : null,
+    [onScreen, currentContext, isConnected, catalog.data?.entries]
+  );
+  const hostTarget =
+    pinned ?? (open ? (actionsOf?.target ?? pageObject) : null);
+  const hostReport =
+    hostTarget && report?.target === targetKey(hostTarget) ? report : null;
 
   // A bang is only ever at the start, so it survives the rest of the query
   // being retyped and cannot be triggered by a `!` inside a resource name.
@@ -140,6 +220,26 @@ export function CommandPalette() {
     everything: everything && !scoped,
     enabled: open && bang === null && (scoped || isConnected),
   });
+
+  const pageActions = useMemo(
+    () =>
+      pageObject && !actionsOf
+        ? {
+            target: pageObject,
+            actions:
+              hostReport?.reading === "ready"
+                ? paletteActionsOf(
+                    pageObject,
+                    hostReport.actions,
+                    hostReport.busy,
+                    t
+                  )
+                : null,
+            english: englishLabels(pageObject),
+          }
+        : undefined,
+    [pageObject, actionsOf, hostReport, t]
+  );
 
   /** Cluster rows in the order they were asked, cold ones included. */
   const shownClusters = useMemo(() => {
@@ -188,7 +288,7 @@ export function CommandPalette() {
 
   // ----- what the list is made of -----
 
-  const entries = useMemo(
+  const searchEntries = useMemo(
     () =>
       buildPaletteEntries({
         text,
@@ -205,6 +305,7 @@ export function CommandPalette() {
         unreadGroups,
         everything,
         scopeLabel: namespaceScope.label,
+        page: pageActions,
         t,
       }),
     [
@@ -222,9 +323,24 @@ export function CommandPalette() {
       unreadGroups,
       everything,
       namespaceScope.label,
+      pageActions,
       t,
     ]
   );
+  const actionEntries = useMemo(
+    () =>
+      actionsOf
+        ? buildActionEntries({
+            target: actionsOf.target,
+            report: hostReport,
+            text: actionText,
+            english: englishLabels(actionsOf.target),
+            t,
+          })
+        : null,
+    [actionsOf, hostReport, actionText, t]
+  );
+  const entries = actionEntries ?? searchEntries;
 
   const selectable = useMemo(() => entries.filter(isSelectable), [entries]);
   // Selection follows the row, not its position: groups arrive as each
@@ -238,6 +354,28 @@ export function CommandPalette() {
   // ----- acting on it -----
 
   const close = useCallback(() => setOpen(false), []);
+
+  const actionTargetOf = useCallback(
+    (entry: Entry | undefined) => actionTargetOfEntry(entry, currentContext),
+    [currentContext]
+  );
+
+  const showActions = useCallback(
+    (target: ActionTarget, from: string | null) => {
+      setActionsOf({ target, selected: from });
+      setActionText("");
+      setSelectedId(null);
+      inputRef.current?.focus();
+    },
+    []
+  );
+
+  const backToSearch = useCallback(() => {
+    setSelectedId(actionsOf?.selected ?? null);
+    setActionsOf(null);
+    setActionText("");
+    inputRef.current?.focus();
+  }, [actionsOf]);
 
   /**
    * An alert somebody pasted, instead of a search.
@@ -335,6 +473,49 @@ export function CommandPalette() {
     [shownClusters]
   );
 
+  /**
+   * One action on one object. The registry's run on the mounted host, which
+   * stays mounted for the dialog they open once the palette is gone; the
+   * object menu's own copy, open and Logs are a link or a copy.
+   */
+  const runAction = useCallback(
+    (target: ActionTarget, id: PaletteActionId) => {
+      const link = targetLink(target);
+      switch (id) {
+        case "logs": {
+          const logs = targetLink(target, { tab: "logs" });
+          if (logs) go(logs);
+          return;
+        }
+        case "copyName":
+          void copy(
+            target.name,
+            t("action", "nameCopied", { name: target.name })
+          );
+          close();
+          return;
+        case "copyLink":
+          if (link) {
+            void copy(
+              buildDeepLink(hrefOf(link)),
+              t("cluster", "objectLinkCopied", { name: target.name })
+            );
+          }
+          close();
+          return;
+        case "openTab":
+          // Behind this one, as from the object menu: the palette stays.
+          if (link) openTab({ href: hrefOf(link), background: true });
+          return;
+        default:
+          setPinned(target);
+          runner.current?.run(id);
+          close();
+      }
+    },
+    [close, copy, go, openTab, t]
+  );
+
   const activate = useCallback(
     (entry: Entry, newTab: boolean) => {
       // Once here rather than in each arm that moves the reader: Settings is
@@ -428,6 +609,12 @@ export function CommandPalette() {
           setEverything(true);
           inputRef.current?.focus();
           return;
+        case "page-actions":
+          showActions(entry.target, entry.id);
+          return;
+        case "action":
+          runAction(entry.target, entry.action.id);
+          return;
         case "panel":
           // Nothing to open in a tab: it is a panel over the current page,
           // not a page of its own.
@@ -450,6 +637,8 @@ export function CommandPalette() {
       openSettings,
       openTab,
       pickScope,
+      runAction,
+      showActions,
       switchNamespace,
       wakeCluster,
     ]
@@ -471,6 +660,28 @@ export function CommandPalette() {
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
       const entry = selectable.find((item) => item.id === activeId);
+
+      if (actionsOf) {
+        if (
+          (event.key === "Tab" && event.shiftKey) ||
+          (event.key === "Backspace" && actionText === "")
+        ) {
+          event.preventDefault();
+          backToSearch();
+          return;
+        }
+        if (event.key === "Tab") {
+          event.preventDefault();
+          return;
+        }
+      } else if (event.key === "Tab" && !bang && !event.shiftKey) {
+        const target = actionTargetOf(entry);
+        if (target && entry) {
+          event.preventDefault();
+          showActions(target, entry.id);
+          return;
+        }
+      }
 
       if (event.key === "ArrowDown") {
         event.preventDefault();
@@ -498,13 +709,26 @@ export function CommandPalette() {
       }
       // The chip is a token in the field, and every token field in the app
       // gives it back to backspace at an empty caret.
-      if (event.key === "Backspace" && text === "" && scoped) {
+      if (event.key === "Backspace" && text === "" && scoped && !actionsOf) {
         event.preventDefault();
         setScope({ kind: "current" });
         setWake(null);
       }
     },
-    [activate, activeId, bang, move, scoped, selectable, text]
+    [
+      actionText,
+      actionTargetOf,
+      actionsOf,
+      activate,
+      activeId,
+      backToSearch,
+      bang,
+      move,
+      scoped,
+      selectable,
+      showActions,
+      text,
+    ]
   );
 
   // ----- lifecycle -----
@@ -533,6 +757,7 @@ export function CommandPalette() {
   useEffect(() => {
     if (open) {
       inputRef.current?.focus();
+      setPinned(null);
       setOpening(
         `${Date.now().toString(36)}.${Math.random().toString(36).slice(2)}`
       );
@@ -545,6 +770,8 @@ export function CommandPalette() {
       setScope({ kind: "current" });
       setWake(null);
       setEverything(false);
+      setActionsOf(null);
+      setActionText("");
       setSelectedId(null);
       // The alert too: a reader who pasted one, closed the palette and
       // pressed ⌘K again got the same alert's panel back instead of the
@@ -573,154 +800,201 @@ export function CommandPalette() {
         ? scope.context
         : null;
 
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="z-60 max-w-[620px] gap-0 overflow-hidden p-0">
-        <DialogTitle className="sr-only">
-          {t("action", "commandPalette")}
-        </DialogTitle>
+  const activeEntry = selectable.find((entry) => entry.id === activeId);
+  const actionable = !actionsOf && actionTargetOf(activeEntry) !== null;
 
-        {/* One field on the raised surface. A bordered input inside an
+  return (
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          className="z-60 max-w-[620px] gap-0 overflow-hidden p-0"
+          onEscapeKeyDown={(event) => {
+            if (!actionsOf) return;
+            // Out of one object's actions, back to the search it came from.
+            event.preventDefault();
+            backToSearch();
+          }}
+        >
+          <DialogTitle className="sr-only">
+            {t("action", "commandPalette")}
+          </DialogTitle>
+
+          {/* One field on the raised surface. A bordered input inside an
             overlay is a second surface on top of the only surface the
             design allows — the hairline below is the whole chrome. */}
-        <div className="flex items-center gap-2 border-b border-hair px-3 py-2.5 text-fg-fnt">
-          <Search className="h-3.5 w-3.5 flex-none" />
-          {scopeLabel && (
-            <ScopeChip
-              label={scopeLabel}
-              onRemove={() => {
-                setScope({ kind: "current" });
-                setWake(null);
-                inputRef.current?.focus();
-              }}
-            />
-          )}
-          <input
-            autoComplete="off"
-            autoCorrect="off"
-            autoCapitalize="off"
-            spellCheck={false}
-            ref={inputRef}
-            autoFocus
-            aria-label={t("action", "searchResourcesActionsPages")}
-            role="combobox"
-            // While an alert is being read there is no listbox under this
-            // box at all — the panel has its own controls — so the box
-            // pointed a screen reader at elements that are not in the DOM.
-            aria-expanded={alert === null}
-            aria-controls={alert === null ? listId : undefined}
-            aria-activedescendant={
-              alert === null && activeId ? `${listId}-${activeId}` : undefined
-            }
-            placeholder={
-              scopeLabel
-                ? t("action", "searchThisCluster")
-                : t("action", "searchOrBang")
-            }
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            onPaste={(event) => {
-              const pasted = event.clipboardData.getData("text");
-              if (!looksLikeAlert(pasted)) return;
-              // The field would swallow the newlines, and the newlines are
-              // the grammar this is read by.
-              event.preventDefault();
-              setAlert(parseAlert(pasted));
-            }}
-            onKeyDown={(event) => {
-              if (alert !== null) {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setAlert(null);
-                }
-                return;
+          <div className="flex items-center gap-2 border-b border-hair px-3 py-2.5 text-fg-fnt">
+            <Search className="h-3.5 w-3.5 flex-none" />
+            {actionsOf && (
+              <span className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded bg-hover px-1.5 text-[11px] leading-[18px] text-fg-mut">
+                <Zap className="h-3 w-3 flex-none" aria-hidden />
+                {actionsOf.target.name}
+              </span>
+            )}
+            {!actionsOf && scopeLabel && (
+              <ScopeChip
+                label={scopeLabel}
+                onRemove={() => {
+                  setScope({ kind: "current" });
+                  setWake(null);
+                  inputRef.current?.focus();
+                }}
+              />
+            )}
+            <input
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              ref={inputRef}
+              autoFocus
+              aria-label={t("action", "searchResourcesActionsPages")}
+              role="combobox"
+              // While an alert is being read there is no listbox under this
+              // box at all — the panel has its own controls — so the box
+              // pointed a screen reader at elements that are not in the DOM.
+              aria-expanded={alert === null}
+              aria-controls={alert === null ? listId : undefined}
+              aria-activedescendant={
+                alert === null && activeId ? `${listId}-${activeId}` : undefined
               }
-              handleKeyDown(event);
-            }}
-            className="w-full bg-transparent text-[13px] text-fg outline-hidden placeholder:text-fg-fnt"
-          />
-        </div>
+              placeholder={
+                actionsOf
+                  ? t("action", "filterActions")
+                  : scopeLabel
+                    ? t("action", "searchThisCluster")
+                    : t("action", "searchOrBang")
+              }
+              value={actionsOf ? actionText : text}
+              onChange={(event) =>
+                actionsOf
+                  ? setActionText(event.target.value)
+                  : setText(event.target.value)
+              }
+              onPaste={(event) => {
+                const pasted = event.clipboardData.getData("text");
+                if (!looksLikeAlert(pasted)) return;
+                // The field would swallow the newlines, and the newlines are
+                // the grammar this is read by.
+                event.preventDefault();
+                setAlert(parseAlert(pasted));
+              }}
+              onKeyDown={(event) => {
+                if (alert !== null) {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setAlert(null);
+                  }
+                  return;
+                }
+                handleKeyDown(event);
+              }}
+              className="w-full bg-transparent text-[13px] text-fg outline-hidden placeholder:text-fg-fnt"
+            />
+          </div>
 
-        {alert !== null ? (
-          <div className="max-h-[420px] overflow-y-auto scrollbar-thin">
-            {/*
+          {alert !== null ? (
+            <div className="max-h-[420px] overflow-y-auto scrollbar-thin">
+              {/*
               Keyed by the alert itself: the panel holds which cluster,
               object and namespace the reader picked, and a second paste
               into the same panel kept the first alert's answers.
             */}
-            <AlertReadingPanel
-              key={alertKey(alert)}
-              reading={alert}
-              onOpen={openFromAlert}
-            />
-          </div>
-        ) : (
-          <div
-            id={listId}
-            role="listbox"
-            aria-label={t("action", "results")}
-            className="max-h-[380px] overflow-y-auto p-1 scrollbar-thin"
-          >
-            {entries.map((entry) => (
-              <EntryRow
-                key={entry.id}
-                domId={`${listId}-${entry.id}`}
-                entry={entry}
-                selected={entry.id === activeId}
-                onHover={() => isSelectable(entry) && setSelectedId(entry.id)}
-                onPick={(event) =>
-                  activate(
-                    entry,
-                    event.metaKey || event.ctrlKey || event.button === 1
-                  )
-                }
+              <AlertReadingPanel
+                key={alertKey(alert)}
+                reading={alert}
+                onOpen={openFromAlert}
               />
-            ))}
-          </div>
-        )}
-
-        <div className="flex items-center gap-3.5 border-t border-hair px-3 py-1.5 text-[11px] text-fg-fnt">
-          {alert !== null ? (
-            <>
-              <FootKey shortcut="↑↓">{t("action", "hintMove")}</FootKey>
-              <FootKey shortcut="↵">{t("action", "hintOpen")}</FootKey>
-              <FootKey shortcut="esc">{t("alerts", "backToSearch")}</FootKey>
-            </>
-          ) : bang ? (
-            <>
-              <FootKey shortcut="↵">{t("action", "hintScopeToIt")}</FootKey>
-              <FootKey shortcut="⇥">{t("action", "hintComplete")}</FootKey>
-              <span className="ml-auto">
-                {t("action", "hintTypeAllPrefix")}{" "}
-                <span className="font-mono text-fg-mut">!*</span>{" "}
-                {t("action", "hintTypeAllSuffix")}
-              </span>
-            </>
+            </div>
           ) : (
-            <>
-              <FootKey shortcut="↑↓">{t("action", "hintMove")}</FootKey>
-              <FootKey shortcut="↵">{t("action", "hintOpen")}</FootKey>
-              <FootKey shortcut="mod+↵">{t("action", "hintNewTab")}</FootKey>
-              {scoped ? (
-                <FootKey shortcut="⌫">{t("action", "hintDropCluster")}</FootKey>
-              ) : (
-                <FootKey shortcut="!">{t("action", "hintACluster")}</FootKey>
-              )}
-              {shownClusters.length > 1 && hasQuery && (
-                <span className="ml-auto">
-                  {t("count", "clustersAnswered", {
-                    n: answered,
-                    total: shownClusters.length,
-                  })}
-                  {isSearching && ` · ${t("cluster", "resultsAsTheyAnswer")}`}
-                </span>
-              )}
-            </>
+            <div
+              id={listId}
+              role="listbox"
+              aria-label={t("action", "results")}
+              className="max-h-[380px] overflow-y-auto p-1 scrollbar-thin"
+            >
+              {entries.map((entry) => (
+                <EntryRow
+                  key={entry.id}
+                  domId={`${listId}-${entry.id}`}
+                  entry={entry}
+                  selected={entry.id === activeId}
+                  actionable={actionable && entry.id === activeId}
+                  onHover={() => isSelectable(entry) && setSelectedId(entry.id)}
+                  onPick={(event) =>
+                    activate(
+                      entry,
+                      event.metaKey || event.ctrlKey || event.button === 1
+                    )
+                  }
+                />
+              ))}
+            </div>
           )}
-        </div>
-      </DialogContent>
-    </Dialog>
+
+          <div className="flex items-center gap-3.5 border-t border-hair px-3 py-1.5 text-[11px] text-fg-fnt">
+            {alert !== null ? (
+              <>
+                <FootKey shortcut="↑↓">{t("action", "hintMove")}</FootKey>
+                <FootKey shortcut="↵">{t("action", "hintOpen")}</FootKey>
+                <FootKey shortcut="esc">{t("alerts", "backToSearch")}</FootKey>
+              </>
+            ) : actionsOf ? (
+              <>
+                <FootKey shortcut="↑↓">{t("action", "hintMove")}</FootKey>
+                <FootKey shortcut="↵">{t("action", "hintRun")}</FootKey>
+                <FootKey shortcut="esc">{t("alerts", "backToSearch")}</FootKey>
+              </>
+            ) : bang ? (
+              <>
+                <FootKey shortcut="↵">{t("action", "hintScopeToIt")}</FootKey>
+                <FootKey shortcut="⇥">{t("action", "hintComplete")}</FootKey>
+                <span className="ml-auto">
+                  {t("action", "hintTypeAllPrefix")}{" "}
+                  <span className="font-mono text-fg-mut">!*</span>{" "}
+                  {t("action", "hintTypeAllSuffix")}
+                </span>
+              </>
+            ) : (
+              <>
+                <FootKey shortcut="↑↓">{t("action", "hintMove")}</FootKey>
+                <FootKey shortcut="↵">{t("action", "hintOpen")}</FootKey>
+                <FootKey shortcut="mod+↵">{t("action", "hintNewTab")}</FootKey>
+                {actionable && (
+                  <FootKey shortcut="⇥">{t("action", "hintActions")}</FootKey>
+                )}
+                {scoped ? (
+                  <FootKey shortcut="⌫">
+                    {t("action", "hintDropCluster")}
+                  </FootKey>
+                ) : (
+                  <FootKey shortcut="!">{t("action", "hintACluster")}</FootKey>
+                )}
+                {shownClusters.length > 1 && hasQuery && (
+                  <span className="ml-auto">
+                    {t("count", "clustersAnswered", {
+                      n: answered,
+                      total: shownClusters.length,
+                    })}
+                    {isSearching && ` · ${t("cluster", "resultsAsTheyAnswer")}`}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {hostTarget && (
+        <Suspense fallback={null}>
+          <PaletteActionsHost
+            key={targetKey(hostTarget)}
+            target={hostTarget}
+            onReport={onReport}
+            ref={runner}
+          />
+        </Suspense>
+      )}
+    </>
   );
 }
 
@@ -793,12 +1067,15 @@ function EntryRow({
   domId,
   entry,
   selected,
+  actionable,
   onHover,
   onPick,
 }: {
   domId: string;
   entry: Entry;
   selected: boolean;
+  /** Tab opens this row's actions. */
+  actionable: boolean;
   onHover: () => void;
   onPick: (event: ReactMouseEvent) => void;
 }) {
@@ -832,6 +1109,50 @@ function EntryRow({
 
   if (entry.kind === "coverage") {
     return <Coverage entry={entry} />;
+  }
+
+  if (entry.kind === "target") {
+    return (
+      <div
+        role="presentation"
+        className="flex items-center gap-2 px-2 pb-1 pt-1.5 text-[11px] text-fg-fnt"
+      >
+        <span className="min-w-0">
+          <ResourceName
+            kind={entry.target.kind}
+            name={entry.target.name}
+            namespace={entry.target.namespace}
+          />
+        </span>
+        <span className="ml-auto flex-none">{entry.target.kind}</span>
+      </div>
+    );
+  }
+
+  if (entry.kind === "action" && (entry.action.reason || entry.action.busy)) {
+    const { action } = entry;
+    return (
+      <div
+        id={domId}
+        role="option"
+        aria-selected={false}
+        aria-disabled
+        className="flex w-full items-center gap-2 rounded-[5px] px-2 py-[5px] text-xs text-fg-fnt"
+      >
+        <action.icon className="h-3.5 w-3.5 flex-none" />
+        <span className="flex-none">{action.label}</span>
+        {action.busy ? (
+          <span className="ml-auto h-1.5 w-1.5 flex-none animate-pulse-subtle rounded-full bg-info" />
+        ) : (
+          <span
+            className="ml-auto min-w-0 truncate text-[11px]"
+            title={action.reason}
+          >
+            {action.reason}
+          </span>
+        )}
+      </div>
+    );
   }
 
   if (entry.kind === "group") {
@@ -927,8 +1248,46 @@ function EntryRow({
               {t("action", "hintUseAsScope")}
             </span>
           )}
-          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+          <span className="ml-auto flex flex-none items-center gap-1.5 text-[11px] text-fg-fnt">
+            {actionable && <Kbd shortcut="⇥" />}
             {entry.hit.kind}
+          </span>
+        </Row>
+      );
+    case "page-actions":
+      return (
+        <Row {...shared}>
+          <Zap className="h-3.5 w-3.5 flex-none text-info" />
+          <span className="flex-none">{t("action", "actionsOn")}</span>
+          <span className="min-w-0">
+            <ResourceName
+              kind={entry.target.kind}
+              name={entry.target.name}
+              showKind={false}
+            />
+          </span>
+          <Kbd shortcut="⇥" className="ml-auto flex-none" />
+        </Row>
+      );
+    case "action":
+      return (
+        <Row {...shared}>
+          <entry.action.icon
+            className={cn(
+              "h-3.5 w-3.5 flex-none",
+              entry.action.danger ? "text-err" : "text-fg-fnt"
+            )}
+          />
+          <span
+            className={cn(
+              "min-w-0 truncate",
+              entry.action.danger && "text-err"
+            )}
+          >
+            {entry.action.label}
+          </span>
+          <span className="ml-auto min-w-0 truncate text-[11px] text-fg-fnt">
+            {entry.target.name}
           </span>
         </Row>
       );

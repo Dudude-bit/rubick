@@ -1109,6 +1109,10 @@ export const en = {
     paletteNavigation: "Navigation",
     paletteResources: "Resources",
     paletteKinds: "Kinds",
+    paletteThisObject: "This object",
+    actionsOn: "Actions on",
+    filterActions: "Filter actions…",
+    readingObject: "Reading {name}…",
     commandPalette: "Command palette",
     searchResourcesActionsPages: "Search resources, actions and pages",
     searchThisCluster: "Search this cluster…",
@@ -1118,6 +1122,8 @@ export const en = {
     hintUseAsScope: "scope to it",
     hintOpenList: "open its list",
     hintComplete: "complete",
+    hintRun: "run",
+    hintActions: "actions",
     hintNewTab: "new tab",
     hintDropCluster: "drop the cluster",
     hintACluster: "a cluster",
@@ -6130,6 +6136,7 @@ export const en = {
       "{kind} are read from a cluster, and this window is not on one yet.",
     notOnClusterYet: "This window is not on a cluster yet.",
     kubeconfigListsNoClusters: "Your kubeconfig lists no clusters either.",
+    noActionMatches: "No action matches “{query}”.",
     noClusterMatchesNeedle:
       "No cluster in the kubeconfig answers to “{needle}”.",
     noMatchesYet:

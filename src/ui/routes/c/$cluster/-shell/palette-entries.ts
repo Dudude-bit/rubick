@@ -40,6 +40,13 @@ import type { CatalogEntry, RecentItem } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 import { highlight } from "./palette-highlight";
+import {
+  actionMatches,
+  paletteActionsOf,
+  type ActionsReport,
+  type ActionTarget,
+  type PaletteAction,
+} from "./palette-actions";
 
 const quickActions: Array<{
   icon: IconType;
@@ -190,6 +197,11 @@ export type Entry =
     }
   /** Reads every other kind the current cluster serves too. */
   | { id: string; kind: "search-more"; count: number }
+  /** Opens the actions of the object the page on screen is about. */
+  | { id: string; kind: "page-actions"; target: ActionTarget }
+  /** Whose actions the list is showing. */
+  | { id: string; kind: "target"; target: ActionTarget }
+  | { id: string; kind: "action"; target: ActionTarget; action: PaletteAction }
   /** A row that does something instead of going somewhere. See `PANELS`. */
   | {
       id: string;
@@ -238,9 +250,12 @@ export function isSelectable(entry: Entry): boolean {
   if (
     entry.kind === "caption" ||
     entry.kind === "hint" ||
-    entry.kind === "coverage"
+    entry.kind === "coverage" ||
+    entry.kind === "target"
   )
     return false;
+  if (entry.kind === "action")
+    return !entry.action.reason && !entry.action.busy;
   if (entry.kind === "group") return entry.action !== "none";
   return true;
 }
@@ -395,7 +410,16 @@ export interface PaletteState {
   everything?: boolean;
   /** The window's namespaces, as the scope picker names them. */
   scopeLabel?: string;
+  /** The object the page on screen is about, and its actions once read. */
+  page?: PageActions;
   t: T;
+}
+
+export interface PageActions {
+  target: ActionTarget;
+  actions: PaletteAction[] | null;
+  /** Each action's English words, matched in every language. */
+  english: ReadonlyMap<string, string>;
 }
 
 export function buildPaletteEntries({
@@ -413,6 +437,7 @@ export function buildPaletteEntries({
   unreadGroups = 0,
   everything = false,
   scopeLabel = "",
+  page,
   t,
 }: PaletteState): Entry[] {
   const bang = parseBang(text);
@@ -476,6 +501,35 @@ export function buildPaletteEntries({
       });
     }
     return out;
+  }
+
+  if (!scoped && page) {
+    if (!hasQuery) {
+      out.push({
+        id: "page-actions",
+        kind: "page-actions",
+        target: page.target,
+      });
+    } else {
+      const matching = (page.actions ?? []).filter((action) =>
+        actionMatches(action, page.english.get(action.id), query)
+      );
+      if (matching.length > 0) {
+        out.push({
+          id: "cap:page",
+          kind: "caption",
+          text: t("action", "paletteThisObject"),
+        });
+        for (const action of matching) {
+          out.push({
+            id: `act:${action.id}`,
+            kind: "action",
+            target: page.target,
+            action,
+          });
+        }
+      }
+    }
   }
 
   if (!scoped) {
@@ -720,5 +774,61 @@ export function buildPaletteEntries({
     });
   }
 
+  return out;
+}
+
+/**
+ * The list while it shows one object's actions: whose they are, then each
+ * action the text names. Reading the object first is said as reading, and a
+ * failed read as what failed, never as an object with no actions.
+ */
+export function buildActionEntries({
+  target,
+  report,
+  text,
+  english,
+  t,
+}: {
+  target: ActionTarget;
+  report: ActionsReport | null;
+  text: string;
+  english: ReadonlyMap<string, string>;
+  t: T;
+}): Entry[] {
+  const out: Entry[] = [{ id: "target", kind: "target", target }];
+  if (report === null || report.reading === "pending") {
+    out.push({
+      id: "hint:reading",
+      kind: "hint",
+      tone: "loading",
+      text: t("action", "readingObject", { name: target.name }),
+    });
+    return out;
+  }
+  if (report.reading === "failed") {
+    out.push({
+      id: "hint:unread",
+      kind: "hint",
+      tone: "unread",
+      text: report.error,
+    });
+    return out;
+  }
+  const actions = paletteActionsOf(
+    target,
+    report.actions,
+    report.busy,
+    t
+  ).filter((action) => actionMatches(action, english.get(action.id), text));
+  for (const action of actions) {
+    out.push({ id: `act:${action.id}`, kind: "action", target, action });
+  }
+  if (actions.length === 0) {
+    out.push({
+      id: "hint:no-action",
+      kind: "hint",
+      text: t("empty", "noActionMatches", { query: text.trim() }),
+    });
+  }
   return out;
 }

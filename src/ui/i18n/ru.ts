@@ -1103,6 +1103,10 @@ export const ru: Catalogue = {
     paletteNavigation: "Навигация",
     paletteResources: "Ресурсы",
     paletteKinds: "Kind'ы",
+    paletteThisObject: "Этот объект",
+    actionsOn: "Действия с",
+    filterActions: "Фильтр действий…",
+    readingObject: "Читаю {name}…",
     commandPalette: "Палитра команд",
     searchResourcesActionsPages: "Поиск ресурсов, действий и страниц",
     searchThisCluster: "Поиск в этом кластере…",
@@ -1112,6 +1116,8 @@ export const ru: Catalogue = {
     hintUseAsScope: "выбрать областью",
     hintOpenList: "открыть список",
     hintComplete: "дополнить",
+    hintRun: "выполнить",
+    hintActions: "действия",
     hintNewTab: "новая вкладка",
     hintDropCluster: "убрать кластер",
     hintACluster: "кластер",
@@ -6676,6 +6682,7 @@ export const ru: Catalogue = {
       "{kind} читаются из кластера, а это окно пока ни к одному не подключено.",
     notOnClusterYet: "Это окно пока не подключено к кластеру.",
     kubeconfigListsNoClusters: "В вашем kubeconfig кластеров тоже нет.",
+    noActionMatches: "Нет действий по запросу «{query}».",
     noClusterMatchesNeedle:
       "Ни один кластер в kubeconfig не отзывается на «{needle}».",
     noMatchesYet:

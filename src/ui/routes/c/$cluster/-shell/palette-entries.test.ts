@@ -8,9 +8,12 @@ import type { ClusterSearchState, SearchHit } from "./useResourceSearch";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { hrefOf, setRouter, type AppLink } from "@/lib/links";
+import { Box } from "lucide-react";
 import {
+  buildActionEntries,
   buildPaletteEntries,
   hitKey,
+  isSelectable,
   ROWS_PER_CLUSTER,
   type Entry,
   type PaletteState,
@@ -937,5 +940,147 @@ describe("what a name search covered", () => {
       })
     );
     expect(coverage(entries)).toEqual([]);
+  });
+});
+
+describe("an object's actions", () => {
+  const target = {
+    context: "k3d-dev",
+    kind: "Deployment",
+    group: "apps",
+    plural: "deployments",
+    name: "search",
+    namespace: "shop",
+  };
+  const ready = {
+    target: "k3d-dev/apps/deployments/shop/search",
+    reading: "ready" as const,
+    actions: [
+      { id: "scale" as const, label: "Scale", icon: Box },
+      { id: "restart" as const, label: "Restart", icon: Box },
+    ],
+    busy: {},
+  };
+  const english = new Map([
+    ["scale", "Scale"],
+    ["restart", "Restart"],
+  ]);
+
+  /** On an object's page the palette opens on a way into that object's actions. */
+  it("offers the page's object first while nothing is typed", () => {
+    const entries = buildPaletteEntries(
+      state({ page: { target, actions: null, english } })
+    );
+    expect(entries[0]).toMatchObject({ kind: "page-actions", target });
+  });
+
+  /**
+   * "restart" typed on a Deployment's page found nothing; the k9s habit of
+   * acting from the keyboard has the page's own action first.
+   */
+  it("finds the page's own action by its words before anything else", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "resta",
+        shownClusters: [cluster("k3d-dev")],
+        page: {
+          target,
+          actions: [
+            { id: "restart", label: "Restart", icon: Box },
+            { id: "delete", label: "Delete", icon: Box, danger: true },
+          ],
+          english,
+        },
+      })
+    );
+    expect(ids(entries).slice(0, 2)).toEqual(["cap:page", "act:restart"]);
+  });
+
+  /**
+   * Reading the object first is said as reading; a failed read is the
+   * failure. Either drawn as no actions would be "this has none".
+   */
+  it("says the object is still being read, or why it could not be", () => {
+    const pending = buildActionEntries({
+      target,
+      report: { target: "x", reading: "pending" },
+      text: "",
+      english,
+      t,
+    });
+    expect(ids(pending)).toEqual(["target", "hint:reading"]);
+    expect(hintTone(pending)).toBe("loading");
+
+    const failed = buildActionEntries({
+      target,
+      report: {
+        target: "x",
+        reading: "failed",
+        error: 'deployments.apps "search" is forbidden',
+      },
+      text: "",
+      english,
+      t,
+    });
+    expect(hintText(failed)).toBe('deployments.apps "search" is forbidden');
+    expect(hintTone(failed)).toBe("unread");
+  });
+
+  it("lists the object's actions, narrowed by what is typed", () => {
+    const all = buildActionEntries({
+      target,
+      report: ready,
+      text: "",
+      english,
+      t,
+    });
+    expect(ids(all)).toEqual([
+      "target",
+      "act:logs",
+      "act:scale",
+      "act:restart",
+      "act:copyName",
+      "act:copyLink",
+      "act:openTab",
+    ]);
+    const narrowed = buildActionEntries({
+      target,
+      report: ready,
+      text: "sca",
+      english,
+      t,
+    });
+    expect(ids(narrowed)).toEqual(["target", "act:scale"]);
+    const none = buildActionEntries({
+      target,
+      report: ready,
+      text: "zzz",
+      english,
+      t,
+    });
+    expect(hintText(none)).toBe("No action matches “zzz”.");
+  });
+
+  /** An action that cannot run says why and takes no Enter, as in the peek. */
+  it("does not stop the arrows on an action that cannot run", () => {
+    const entries = buildActionEntries({
+      target,
+      report: {
+        ...ready,
+        actions: [
+          {
+            id: "shell",
+            label: "Shell",
+            icon: Box,
+            reason: "This pod has finished",
+          },
+        ],
+      },
+      text: "",
+      english,
+      t,
+    });
+    const shell = entries.find((entry) => entry.id === "act:shell")!;
+    expect(isSelectable(shell)).toBe(false);
   });
 });

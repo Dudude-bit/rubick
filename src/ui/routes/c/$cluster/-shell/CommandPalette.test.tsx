@@ -77,6 +77,43 @@ vi.mock("./useResourceSearch", async (importOriginal) => ({
   },
 }));
 
+const objectActions = vi.hoisted(() => ({
+  run: vi.fn(),
+  asked: [] as { kind: string; name: string }[],
+}));
+
+vi.mock("../-object/useObjectActions", async () => {
+  const { createElement } = await import("react");
+  const { RefreshCw, Trash2 } = await import("lucide-react");
+  return {
+    useObjectActions: (options: { kind: string; name: string }) => {
+      objectActions.asked.push(options);
+      return {
+        plan: {
+          inline: [{ id: "restart", label: "Restart", icon: RefreshCw }],
+          menu: [{ id: "delete", label: "Delete", icon: Trash2, danger: true }],
+        },
+        busy: {},
+        run: objectActions.run,
+        dialogs: createElement(
+          "div",
+          { "data-testid": "object-dialogs" },
+          options.name
+        ),
+      };
+    },
+  };
+});
+
+vi.mock("../-peek/peek-sources", () => ({
+  peekQueryKey: (target: { kind: string; name: string }) => [
+    "detail",
+    target.kind,
+    target.name,
+  ],
+  resolveSource: () => ({ fetch: async () => ({ ownerReferences: [] }) }),
+}));
+
 import { CommandPalette } from "./CommandPalette";
 import { renderWithRouter } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -268,5 +305,79 @@ describe("the command palette's hits", () => {
     search.hits = [hit()];
     await open("burst-demo");
     expect(await screen.findByText(/burst-demo/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * Dana's k9s habit had no home: the palette was object search only. A hit's
+ * actions and the page's own object's are the object menu's registry, run
+ * through the very hook and dialogs the peek uses.
+ */
+describe("the command palette's object actions", () => {
+  beforeEach(() => {
+    search.hits = [];
+    search.unreadable = [];
+    search.searched = [{ kind: "Pod", group: "", plural: "pods" }];
+    search.loading = [];
+    objectActions.run.mockClear();
+    objectActions.asked = [];
+    useClusterStore.setState({
+      currentContext: "k3d-dev",
+      currentNamespace: "",
+      isConnected: true,
+    });
+  });
+
+  /** Tab opens a hit's actions; Escape gives the search back as it was. */
+  it("opens a highlighted hit's actions with Tab and goes back with Escape", async () => {
+    search.hits = [hit()];
+    await open("burst");
+    await screen.findByText("burst-demo");
+    await userEvent.keyboard("{Tab}");
+    expect(await screen.findByText("Restart")).toBeInTheDocument();
+    expect(screen.getByText("Copy name")).toBeInTheDocument();
+    expect(objectActions.asked.at(-1)).toMatchObject({
+      kind: "Pod",
+      name: "burst-demo",
+    });
+
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("combobox")).toHaveValue("burst");
+    expect(screen.queryByText("Restart")).toBeNull();
+    expect(screen.getByText("burst-demo")).toBeInTheDocument();
+  });
+
+  /**
+   * An action runs through the registry and its dialog outlives the
+   * palette: closing the palette must not take the confirmation with it.
+   */
+  it("runs a registry action through the object menu's hook and keeps its dialog", async () => {
+    search.hits = [hit()];
+    await open("burst");
+    await screen.findByText("burst-demo");
+    await userEvent.keyboard("{Tab}");
+    await screen.findByText("Delete");
+    await userEvent.keyboard("del{Enter}");
+
+    expect(objectActions.run).toHaveBeenCalledWith("delete");
+    expect(screen.queryByRole("combobox")).toBeNull();
+    expect(screen.getByTestId("object-dialogs")).toHaveTextContent(
+      "burst-demo"
+    );
+  });
+
+  /** On an object's page its own actions are one word away. */
+  it("offers the page's own object, and finds its action by name", async () => {
+    await renderWithRouter(<CommandPalette />, {
+      at: "/c/k3d-dev/pods/shop/burst-demo",
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    window.dispatchEvent(new Event("command-palette-open"));
+    expect(await screen.findByText("Actions on")).toBeInTheDocument();
+
+    await userEvent.type(screen.getByRole("combobox"), "restart");
+    expect(await screen.findByText("This object")).toBeInTheDocument();
+    await userEvent.keyboard("{Enter}");
+    expect(objectActions.run).toHaveBeenCalledWith("restart");
   });
 });
