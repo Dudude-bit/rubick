@@ -27,7 +27,7 @@ const DOT = "h-[5px] w-[5px] flex-none rounded-full";
  * A mark, and the words it stands for.
  *
  * Colour never carries it alone. The dot sits beside a label that changed,
- * and `says` reaches the accessible name — "Containers — 1 of 4 failing" —
+ * and `says` reaches the accessible name ("Containers: 1 of 4 failing"),
  * because a red disc is nothing at all to a reader who cannot see red.
  */
 export function TabMark({

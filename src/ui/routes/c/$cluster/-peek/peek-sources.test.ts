@@ -368,7 +368,7 @@ describe("what a peek shows of a spec it has no schema for", () => {
     });
     expect(rows).toContainEqual({
       label: "conditions.Programmed",
-      value: "False — Invalid: listener not found",
+      value: "False (Invalid): listener not found",
       mono: true,
       tone: "err",
     });

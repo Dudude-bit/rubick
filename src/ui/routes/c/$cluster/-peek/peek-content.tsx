@@ -295,7 +295,7 @@ export function PeekContent({
               key={tab.id}
               value={tab.id}
               className="group min-w-0"
-              title={tab.mark ? `${tab.label} — ${tab.mark.of}` : undefined}
+              title={tab.mark ? `${tab.label}: ${tab.mark.of}` : undefined}
             >
               <TabGlyph glyph={tab.glyph} isActive={tab.id === activeTab} />
               <span className="truncate">{tab.label}</span>
@@ -636,7 +636,7 @@ function BackendPolicies({
                 showKind={false}
               />
               <span>
-                —{" "}
+                (
                 {parts(t("empty", "gwSpeaksTlsSni", {}), {
                   sni: (
                     <CopyableValue
@@ -646,6 +646,7 @@ function BackendPolicies({
                     />
                   ),
                 })}
+                )
               </span>
               <span
                 className={
@@ -768,7 +769,7 @@ function NamespaceContents({ namespace }: { namespace: string }) {
     ) : (
       <span className="inline-flex flex-wrap items-baseline gap-x-1 tabular-nums">
         {data.length}
-        {trouble && <span className="text-err">— {trouble}</span>}
+        {trouble && <span className="text-err">({trouble})</span>}
       </span>
     ),
     tone: error ? ("warn" as const) : trouble ? ("err" as const) : undefined,

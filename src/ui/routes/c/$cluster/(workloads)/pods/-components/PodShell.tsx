@@ -335,7 +335,7 @@ export function PodShell({
                 disabled={!!why && !selected}
                 title={
                   why
-                    ? `${c.name} — ${why}`
+                    ? `${c.name}: ${why}`
                     : t("action", "attachShellTo", { name: c.name })
                 }
                 onClick={() => onChoose(c.name)}

@@ -754,7 +754,7 @@ describe("PeekPanel tab strip", () => {
     await wrap(CONFIGMAP_PEEK);
     const data = await screen.findByRole("tab", { name: /Data/ });
     await waitFor(() => expect(data).toHaveTextContent("Data1"));
-    expect(data).toHaveAttribute("title", "Data — 1");
+    expect(data).toHaveAttribute("title", "Data: 1");
     // The keys came with the summary; the values did not, and are still
     // unread until the tab is opened.
     expect(commands.getConfigmapData).not.toHaveBeenCalled();

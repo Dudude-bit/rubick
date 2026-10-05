@@ -177,7 +177,7 @@ export function graphSections(
         .filter((group) => group.rows.length > 0)
         .map((group) => ({
           title: group.title,
-          caption: group.caption?.replace(/^[\s–-]+/, "") ?? null,
+          caption: group.caption,
           rows: group.rows.map((row) => ({
             label: row.label,
             ref: row.object ? refOf(row.object) : null,

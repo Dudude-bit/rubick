@@ -26,7 +26,7 @@ function DetailTabTrigger({
 }) {
   const says =
     tab.mark && tab.mark.shows !== "count"
-      ? `${tab.label} — ${tab.mark.says}`
+      ? `${tab.label}: ${tab.mark.says}`
       : null;
 
   return (
@@ -35,7 +35,7 @@ function DetailTabTrigger({
       title={
         says ??
         (tab.mark?.shows === "count"
-          ? `${tab.label} — ${tab.mark.of}`
+          ? `${tab.label}: ${tab.mark.of}`
           : undefined)
       }
       aria-label={says ?? undefined}

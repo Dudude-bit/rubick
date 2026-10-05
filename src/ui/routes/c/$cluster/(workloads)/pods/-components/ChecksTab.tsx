@@ -123,7 +123,7 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
                         disabled={!!why}
                         title={why ?? undefined}
                       >
-                        {why ? `${c.name} — ${why}` : c.name}
+                        {why ? `${c.name}: ${why}` : c.name}
                       </SelectItem>
                     );
                   })}

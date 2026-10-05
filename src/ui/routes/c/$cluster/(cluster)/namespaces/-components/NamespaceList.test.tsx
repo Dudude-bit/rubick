@@ -25,7 +25,7 @@ const namespaces: NamespaceInfo[] = [
   { name: "prod", uid: "prod", status: "Active", labels: {}, createdAt: null },
 ];
 
-function counts(podCount: number) {
+function counts(podCount: number | null) {
   vi.mocked(useClusterSummary).mockReturnValue({
     namespaces: [{ name: "prod", podCount, problemCount: 0 }],
     podCount,
@@ -85,4 +85,19 @@ it("updates the scope marker without remounting the name cell", async () => {
 
   expect(nameCell).not.toHaveTextContent("current scope");
   expect(screen.getByRole("link", { name: "Namespace prod" })).toBe(link);
+});
+
+/**
+ * A pod count the overview could not read drew a bare dash, which reads as
+ * nothing there. Fails if the unread count says "none" or a glyph, or if a
+ * real 0 stops being a number.
+ */
+it("says an unread pod count is unknown, not none", async () => {
+  counts(null);
+  await mount();
+  expect(screen.getByText("unknown")).toBeInTheDocument();
+  expect(screen.queryByText("none")).toBeNull();
+  counts(0);
+  await mount();
+  expect(screen.getByText("0")).toBeInTheDocument();
 });

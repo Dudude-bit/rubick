@@ -151,9 +151,14 @@ export function GatewayClassDetail() {
 
   const conditions: KeyValue[] = (cls?.conditions ?? []).map((condition) => ({
     label: condition.type,
-    value: [condition.status, condition.reason, condition.message]
+    value: [
+      condition.reason
+        ? `${condition.status} (${condition.reason})`
+        : condition.status,
+      condition.message,
+    ]
       .filter(Boolean)
-      .join(" — "),
+      .join(": "),
     tone: condition.status === "False" ? ("err" as const) : undefined,
   }));
 

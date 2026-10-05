@@ -579,7 +579,7 @@ export function PodDetail() {
             n: podReadiness(pod).ready,
             total: podReadiness(pod).total,
           })
-        : "—",
+        : t("empty", "unknownLower"),
       tone: pod && !podReadiness(pod).allReady ? ("warn" as const) : undefined,
     },
     serviceAccountRow(pod?.serviceAccountName, pod?.namespace, t),

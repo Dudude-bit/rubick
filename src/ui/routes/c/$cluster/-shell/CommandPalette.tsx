@@ -1507,8 +1507,8 @@ function ClusterGroup({
   } else if (cluster.status === "failed") {
     state = (
       <>
-        {cluster.message ?? t("cluster", "failedInline")} — <Kbd shortcut="↵" />{" "}
-        {t("cluster", "retryInline")}
+        {cluster.message ?? t("cluster", "failedInline")} (
+        <Kbd shortcut="↵" /> {t("cluster", "retryInline")})
       </>
     );
     tone = "text-err";
@@ -1516,8 +1516,8 @@ function ClusterGroup({
     state =
       cluster.reason === "not-connected" ? (
         <>
-          {t("cluster", "notConnectedInline")} — <Kbd shortcut="↵" />{" "}
-          {t("cluster", "toSearchIt")}
+          {t("cluster", "notConnectedInline")} (
+          <Kbd shortcut="↵" /> {t("cluster", "toSearchIt")})
         </>
       ) : (
         t("cluster", "notInKubeconfig")

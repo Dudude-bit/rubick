@@ -12,6 +12,7 @@ import { formatBytes, formatCPU } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
 import type { NodeBudget, ResourceBudget } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 /** Usage the node itself reported, where a source exists for the resource. */
 export interface NodeUsage {
@@ -159,7 +160,7 @@ export function NodeResources({
                   value={row.limited}
                   of={row.allocatable}
                   unknown={!budget?.known && row.name !== "pods"}
-                  dash={row.name === "pods"}
+                  none={row.name === "pods"}
                 />
                 <Figure
                   unit={row.unit}
@@ -204,20 +205,24 @@ function Figure({
   value,
   of,
   unknown = false,
-  dash = false,
+  none = false,
   noSource = false,
 }: {
   unit: ResourceBudget["unit"];
   value: number | null;
   of: number | null;
   unknown?: boolean;
-  dash?: boolean;
+  none?: boolean;
   noSource?: boolean;
 }) {
   const t = useT();
   const absence = useMetricsAbsence();
-  if (dash) {
-    return <TableCell className="text-right text-fg-fnt">–</TableCell>;
+  if (none) {
+    return (
+      <TableCell className="text-right">
+        <None />
+      </TableCell>
+    );
   }
   if (unknown) {
     return (
@@ -236,7 +241,7 @@ function Figure({
   if (value === null) {
     return (
       <TableCell className="text-right text-fg-fnt">
-        {noSource ? t("empty", "noUsageSource") : "–"}
+        {noSource ? t("empty", "noUsageSource") : <None />}
       </TableCell>
     );
   }

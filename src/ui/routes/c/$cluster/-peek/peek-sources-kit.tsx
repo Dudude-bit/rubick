@@ -89,14 +89,10 @@ export function source<T>(
 /** A condition, in the reason-first wording every condition row speaks. */
 export function conditionItem(condition: ConditionInfo): KeyValue {
   const role = conditionRole(condition);
-  const spoken = [
-    condition.status,
+  const spoken =
     condition.reason && condition.reason !== condition.type
-      ? condition.reason
-      : null,
-  ]
-    .filter(Boolean)
-    .join(" — ");
+      ? `${condition.status} (${condition.reason})`
+      : condition.status;
   return {
     label: condition.type,
     value:

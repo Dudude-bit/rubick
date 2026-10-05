@@ -224,7 +224,7 @@ function EdgeNote({
           {joinSayings(config.summary, t)}
           {config.problem && (
             <span className={TONE_TEXT[config.problem.tone]}>
-              {" — "}
+              {": "}
               {sayWords(config.problem.text, t)}
             </span>
           )}
@@ -319,7 +319,7 @@ export function RouteLine({ route }: { route: ServiceRoute }) {
         value={routeAddress(route)}
         label={t("columns", "address")}
       />
-      {route.h2c ? " (gRPC)" : ""} — {route.source.kind}{" "}
+      {route.h2c ? " (gRPC)" : ""}: {route.source.kind}{" "}
       <RouteSource route={route} />
     </>
   );

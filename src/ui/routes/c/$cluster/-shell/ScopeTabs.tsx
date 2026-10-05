@@ -1051,7 +1051,9 @@ function NamespaceRow({
   const t = useT();
   const note = row.source ? t("cluster", SOURCE_NOTE[row.source]) : null;
   const pods =
-    row.podCount === null ? "—" : t("cluster", "podCount", { n: row.podCount });
+    row.podCount === null
+      ? t("empty", "unknownLower")
+      : t("cluster", "podCount", { n: row.podCount });
   return (
     <div
       id={id}
@@ -1119,7 +1121,7 @@ function NamespaceRow({
         )}
       >
         {row.podCount === null
-          ? "—"
+          ? t("empty", "unknownLower")
           : (row.problemCount ?? 0) > 0
             ? `${row.podCount} · ${t("count", "badPods", { n: row.problemCount ?? 0 })}`
             : row.podCount}

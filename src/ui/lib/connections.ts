@@ -464,7 +464,7 @@ function saidBy(stop: {
 }): string {
   const message = stop.message?.replace(/\.\s*$/, "");
   return (
-    (stop.conditionReason ? ` — ${stop.conditionReason}` : "") +
+    (stop.conditionReason ? ` (${stop.conditionReason})` : "") +
     (message ? `: ${message}` : "")
   );
 }
@@ -1402,7 +1402,10 @@ function runsHere(
   return {
     key: "placed",
     title: t("nav", "whatRunsHere"),
-    caption: `— ${join(tally, facts?.kind === "node" ? nodeCapacity(facts, t) : null)}`,
+    caption: join(
+      tally,
+      facts?.kind === "node" ? nodeCapacity(facts, t) : null
+    ),
     rows: labelled(
       pods.map((pod) =>
         rowFor(pod.namespace ?? t("nav", "noNamespaceValue"), pod, t)

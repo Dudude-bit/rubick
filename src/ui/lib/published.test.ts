@@ -152,7 +152,7 @@ describe("what is not published", () => {
         t
       )
     ).toBe(
-      "Ready, and in a slice that carries no port — targetPort: metrics matches no port this pod's containers declare"
+      "Ready, and in a slice that carries no port (targetPort: metrics matches no port this pod's containers declare)"
     );
   });
 

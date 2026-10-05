@@ -188,8 +188,8 @@ function DrainConfirm({
               >
                 <span className="font-mono text-fg-mid">
                   {budget.object.namespace}/{budget.object.name}
-                </span>{" "}
-                —{" "}
+                </span>
+                :{" "}
                 {t("empty", "budgetRuleHealthyCovering", {
                   rule: budgetRule(budget.facts, t),
                   healthy: budget.facts.currentHealthy,
@@ -399,8 +399,8 @@ function PodLines({ pods, t }: { pods: RefusedPod[]; t: T }) {
         >
           <span className="font-mono text-fg-mid">
             {pod.namespace}/{pod.name}
-          </span>{" "}
-          — {pod.message ?? t("cluster", REFUSAL_LABEL[pod.refusal])}
+          </span>
+          : {pod.message ?? t("cluster", REFUSAL_LABEL[pod.refusal])}
         </p>
       ))}
     </div>

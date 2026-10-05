@@ -100,7 +100,7 @@ function gatewayRouteSource(kind: string): PeekSource {
                       parent.namespace ?? route.namespace
                     )}
                     <span className="text-fg-fnt">
-                      — {t("empty", "meshGamma")}
+                      ({t("empty", "meshGamma")})
                     </span>
                   </span>
                 ),
@@ -236,12 +236,12 @@ export const GATEWAY_SOURCES: PeekSources = {
                   )}
                   {broken && (
                     <span className="text-err">
-                      — {broken.reason ?? t("empty", "brokenWord")}
+                      ({broken.reason ?? t("empty", "brokenWord")})
                     </span>
                   )}
                   {caution && (
                     <span className="text-warn">
-                      — {caution.reason ?? caution.type}
+                      ({caution.reason ?? caution.type})
                     </span>
                   )}
                 </span>

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 
@@ -32,6 +32,7 @@ import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { sayWords } from "@/i18n/say";
 import type { en } from "@/i18n/catalogue";
+import { None } from "@/components/ui/none";
 
 /** The ranges worth a sparkline: a quarter hour is what the table already shows. */
 const TREND_RANGES = USAGE_RANGES.filter((range) => range !== "15m");
@@ -228,7 +229,7 @@ export function NodeUtilisation({
               key={trend.node.name}
               trend={trend}
               quiet={silent}
-              note={noted ? (notes[index] ?? "–") : null}
+              note={noted ? (notes[index] ?? <None />) : null}
             />
           ))}
         </TableBody>
@@ -308,7 +309,7 @@ function Row({
 }: {
   trend: NodeTrend;
   quiet: boolean;
-  note: string | null;
+  note: ReactNode;
 }) {
   const t = useT();
   const placement = nodePlacement(trend.node);
@@ -333,7 +334,7 @@ function Row({
       </TableCell>
       <Lane lane={trend.cpu} blind={trend.blind} quiet={quiet} />
       <Lane lane={trend.memory} blind={trend.blind} quiet={quiet} />
-      {note !== null && (
+      {note != null && (
         <TableCell className="text-[11px] text-fg-fnt">{note}</TableCell>
       )}
     </TableRow>
@@ -359,7 +360,7 @@ function Lane({
   if (lane === null) {
     return (
       <TableCell className="text-[11px] text-fg-fnt">
-        {quiet ? "–" : t("empty", BLIND_SHORT[blind ?? "noSeries"])}
+        {quiet ? <None /> : t("empty", BLIND_SHORT[blind ?? "noSeries"])}
       </TableCell>
     );
   }

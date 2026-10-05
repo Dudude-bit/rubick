@@ -532,14 +532,14 @@ describe("ResourceDetailLayout tab marks", () => {
   it("puts a severity dot's meaning into words", async () => {
     await strip(severityMark("err", "1 of 4 failing"));
     expect(
-      screen.getByRole("tab", { name: "Containers — 1 of 4 failing" })
+      screen.getByRole("tab", { name: "Containers: 1 of 4 failing" })
     ).toBeInTheDocument();
   });
 
   it("does the same for a live session", async () => {
     await strip(liveMark("session attached to app"));
     expect(
-      screen.getByRole("tab", { name: "Containers — session attached to app" })
+      screen.getByRole("tab", { name: "Containers: session attached to app" })
     ).toBeInTheDocument();
   });
 

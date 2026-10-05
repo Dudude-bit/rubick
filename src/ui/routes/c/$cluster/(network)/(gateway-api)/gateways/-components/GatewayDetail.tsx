@@ -232,8 +232,9 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                               showKind={false}
                               showNamespace
                             />
-                            {" — "}
+                            {" ("}
                             {t("readings", "certCrossNamespace")}
+                            {")"}
                           </span>
                         )
                       )}
@@ -372,7 +373,7 @@ export function GatewayDetail() {
     if (!gatewayClass) {
       return {
         label: t("columns", "class"),
-        value: `${gateway.className || "—"} — ${t("empty", "noSuchGatewayClass")}`,
+        value: `${gateway.className || t("empty", "noneLower")} (${t("empty", "noSuchGatewayClass")})`,
         tone: "err" as const,
       };
     }
@@ -380,7 +381,7 @@ export function GatewayDetail() {
       return {
         label: t("columns", "class"),
         value: named(
-          `— ${t("empty", "claimedBy", { name: gatewayClass.controllerName })}`
+          `(${t("empty", "claimedBy", { name: gatewayClass.controllerName })})`
         ),
       };
     }
@@ -388,14 +389,14 @@ export function GatewayDetail() {
       return {
         label: t("columns", "class"),
         value: named(
-          `— ${t("empty", "refusedBy", { name: gatewayClass.controllerName })}`
+          `(${t("empty", "refusedBy", { name: gatewayClass.controllerName })})`
         ),
         tone: "err" as const,
       };
     }
     return {
       label: t("columns", "class"),
-      value: named(`— ${t("empty", "noControllerClaimed")}`),
+      value: named(`(${t("empty", "noControllerClaimed")})`),
       tone: "warn" as const,
     };
   })();

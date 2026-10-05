@@ -88,7 +88,7 @@ export function ActionWarnings({
       </p>
       {warnings.map((warning) => (
         <p key={warning.key} className="wrap-break-word text-xs text-fg-mut">
-          <span className="text-fg">{warning.subject}</span> —{" "}
+          <span className="text-fg">{warning.subject}</span>:{" "}
           {warning.description}
           {warning.to && (
             <>

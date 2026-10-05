@@ -208,7 +208,7 @@ describe("NodeUtilisation", () => {
     expect(screen.queryByRole("columnheader", { name: "Note" })).toBeNull();
     const rows = screen.getAllByRole("row");
     expect(rows).toHaveLength(4);
-    expect(rows[1]).toHaveTextContent("–");
+    expect(rows[1]).toHaveTextContent("none");
   });
 
   /**

@@ -248,7 +248,7 @@ export function fieldTerm(key: string, value: string): QueryTerm {
  * same would look like a mistake.
  */
 export function formatTimeRange(from: number, to: number): string {
-  return `${formatTimestamp(new Date(from).toISOString())}–${formatTimestamp(
+  return `${formatTimestamp(new Date(from).toISOString())}…${formatTimestamp(
     new Date(to).toISOString()
   )}`;
 }

@@ -260,17 +260,24 @@ describe("an access kind on the generic list", () => {
     expect(screen.queryByText(/serviceaccounts/)).toBeNull();
   });
 
-  /** RoleBindings printed "Role" in English above a Russian "Имя" and "Возраст". */
-  it("names the RoleBinding's Role column in the reader's language", async () => {
+  /**
+   * RoleBindings printed "Role" in English above a Russian "Имя" and
+   * "Возраст", and an empty cell drew a dash where the reader's word belongs.
+   */
+  it("names the RoleBinding's Role column and an empty cell in the reader's language", async () => {
     await inRussian(
       ROLE_BINDINGS,
       printed(
         [column("Name"), column("Role"), AGE],
-        [row("demo", "lena-sandbox", ["demo", "Role/demo-reader", "2h0m"])]
+        [
+          row("demo", "lena-sandbox", ["demo", "Role/demo-reader", "2h0m"]),
+          row("orphan", "lena-sandbox", ["orphan", "", "2h0m"]),
+        ]
       )
     );
     expect(await screen.findByText("Role/demo-reader")).toBeVisible();
     expect(screen.getByText("Роль")).toBeVisible();
-    expect(screen.getByText("2 ч")).toBeVisible();
+    expect(screen.getAllByText("2 ч")).toHaveLength(2);
+    expect(screen.getByText("нет")).toBeVisible();
   });
 });

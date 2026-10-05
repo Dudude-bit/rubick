@@ -166,9 +166,10 @@ function servesOf(
 function viaOf(
   parents: ParentRefInfo[],
   routeNamespace: string,
-  gateways: GatewayInfo[]
+  gateways: GatewayInfo[],
+  t: T
 ): string {
-  if (parents.length === 0) return "—";
+  if (parents.length === 0) return t("empty", "noneLower");
   const first = parents[0];
   const named =
     gatewayOfParent(gateways, first, routeNamespace)?.name ?? first.name;
@@ -371,7 +372,7 @@ export function routesBoard(
             at: "route",
             short: t("empty", "gwRowNoParents"),
           },
-          via: "—",
+          via: t("empty", "noneLower"),
           viaRef: null,
           viaGhost: null,
           contested: null,
@@ -433,7 +434,7 @@ export function routesBoard(
       // The worst trace is the one whose break the row shows — its
       // staleness first, so the badge never belongs to the other gateway.
       stale: staleOf([worst, ...traces.filter((trace) => trace !== worst)]),
-      via: viaOf(gatewayParents, route.namespace, sources.gateways),
+      via: viaOf(gatewayParents, route.namespace, sources.gateways, t),
       ...(() => {
         const first = gatewayParents[0];
         const at = first.namespace ?? route.namespace;

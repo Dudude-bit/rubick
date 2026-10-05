@@ -180,10 +180,10 @@ export function unpublishedNote(entry: UnpublishedPod, t: T): string {
   const asked = entry.unnamedPorts
     .map((name) => t("readings", "epTargetPort", { name }))
     .join(", ");
-  return `${head} — ${t("count", "portsMatchNothing", {
+  return `${head} (${t("count", "portsMatchNothing", {
     n: entry.unnamedPorts.length,
     ports: asked,
-  })}`;
+  })})`;
 }
 
 /**

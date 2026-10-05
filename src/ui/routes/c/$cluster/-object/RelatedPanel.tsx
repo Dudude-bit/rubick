@@ -135,7 +135,7 @@ export function RelatedPanel({
           <p className="max-w-[64ch] text-[11.5px] text-fg-mut">
             No integration in this app reads {kind} objects, so nothing here
             knows what this one is connected to. That is a gap in the app and
-            not a fact about the cluster — the object&rsquo;s own spec and
+            not a fact about the cluster. The object&rsquo;s own spec and
             status, on the tabs beside this one, are what it says about itself.
           </p>
         ))}

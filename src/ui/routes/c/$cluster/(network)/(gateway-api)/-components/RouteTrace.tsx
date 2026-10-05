@@ -293,7 +293,7 @@ function BackendPolicyNote({
               showKind={false}
             />
             <span>
-              — SNI{" "}
+              (SNI{" "}
               <CopyableValue
                 value={policy.hostname}
                 label={`SNI ${policy.hostname}`}
@@ -304,6 +304,7 @@ function BackendPolicyNote({
                 : policy.caCertRefs.length > 0
                   ? `, ${t("empty", "gwCaFrom", { refs: policy.caCertRefs.join(", ") })}`
                   : ""}
+              )
             </span>
             <span
               className={
@@ -476,10 +477,10 @@ function ProbePanel({
                 label={t("action", "copyHost", { host })}
                 quietMark
               />{" "}
-              {dns.status === "idle" && `— ${t("empty", "gwDnsIdle")}`}
-              {dns.status === "loading" && `— ${t("empty", "gwResolving")}`}
+              {dns.status === "idle" && `(${t("empty", "gwDnsIdle")})`}
+              {dns.status === "loading" && `(${t("empty", "gwResolving")})`}
               {dns.status === "error" && (
-                <span className="text-err">— {dns.message}</span>
+                <span className="text-err">({dns.message})</span>
               )}
               {dns.status === "finished" &&
                 (dns.result.error ? (
@@ -489,7 +490,7 @@ function ProbePanel({
                     </span>{" "}
                     {/* The resolver's own words are jargon; they stay, but
                         quietly — the sentence before them is the finding. */}
-                    <span className="text-fg-fnt">— {dns.result.error}</span>
+                    <span className="text-fg-fnt">({dns.result.error})</span>
                   </>
                 ) : (
                   <>
@@ -512,7 +513,7 @@ function ProbePanel({
                     {dns.result.matchesGateway === false && address && (
                       <span className="text-err">
                         {" "}
-                        —{" "}
+                        (
                         {parts(t("empty", "gwNotTheGateways", {}), {
                           address: (
                             <CopyableValue
@@ -525,10 +526,11 @@ function ProbePanel({
                             />
                           ),
                         })}
+                        )
                       </span>
                     )}
                     {dns.result.matchesGateway === true &&
-                      ` — ${t("empty", "gwGatewaysAddress")}`}
+                      ` (${t("empty", "gwGatewaysAddress")})`}
                   </>
                 ))}
             </span>
@@ -558,7 +560,7 @@ function ProbePanel({
                 ) : (
                   ` :${port}`
                 ))}{" "}
-              — {t("empty", "gwUdpNoCheck")}
+              ({t("empty", "gwUdpNoCheck")})
             </span>
           </li>
         ) : (
@@ -589,11 +591,11 @@ function ProbePanel({
                   </CopyableValue>
                 </>
               )}{" "}
-              {tcp.status === "idle" && `— ${t("empty", "gwNotCheckedYet")}`}
-              {tcp.status === "pending" && `— ${t("empty", "gwWaitingDns")}`}
-              {tcp.status === "loading" && `— ${t("empty", "gwConnecting")}`}
+              {tcp.status === "idle" && `(${t("empty", "gwNotCheckedYet")})`}
+              {tcp.status === "pending" && `(${t("empty", "gwWaitingDns")})`}
+              {tcp.status === "loading" && `(${t("empty", "gwConnecting")})`}
               {tcp.status === "error" && (
-                <span className="text-err">— {tcp.message}</span>
+                <span className="text-err">({tcp.message})</span>
               )}
               {tcp.status === "finished" &&
                 (tcp.result.reason || tcp.result.error ? (
@@ -601,7 +603,7 @@ function ProbePanel({
                   // reader's language; anything else is the operating
                   // system's own words, quoted.
                   <span className="text-err">
-                    —{" "}
+                    (
                     {tcp.result.reason
                       ? t(
                           "empty",
@@ -610,6 +612,7 @@ function ProbePanel({
                             : "gwProbeTimedOut"
                         )
                       : tcp.result.error}
+                    )
                   </span>
                 ) : (
                   parts(t("empty", "gwAnswersIn", {}), {
@@ -665,10 +668,10 @@ function TraceCard({
             empty={t("empty", "gwAllHostsListenerServes")}
           />
           {trace.stopStep != null &&
-            ` — ${t("empty", "gwStopsAtStep", {
+            ` (${t("empty", "gwStopsAtStep", {
               n: trace.stopStep,
               total: trace.steps.length,
-            })}`}
+            })})`}
         </span>
         {named && (
           <span className="ml-auto inline-flex items-baseline gap-1 text-[11px] text-fg-fnt">

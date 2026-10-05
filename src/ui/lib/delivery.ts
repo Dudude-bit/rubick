@@ -238,7 +238,7 @@ export function deliveryLine(
             kind: claim.ownerKind,
           }),
       detail: claim.owner
-        ? `The label is a claim anybody can write, and the ${claim.ownerKind} it names does not have this object in its inventory. Nothing is applying it, so an edit here stands — and nothing will put it back if it is deleted.`
+        ? `The label is a claim anybody can write, and the ${claim.ownerKind} it names does not have this object in its inventory. Nothing is applying it, so an edit here stands, and nothing will put it back if it is deleted.`
         : `Nothing here is applying this object. A ${claim.ownerKind} that was deleted without pruning, or a manifest committed with the label already in it, both leave exactly this.`,
       where: null,
       to: claim.owner?.to ?? null,
@@ -481,8 +481,8 @@ export function deliveryApplyIntercept(
     // The vendor's name is data, so the sentence is built to need no article
     // in front of it — "a Argo CD label" is the shape that comes out otherwise.
     description: disowned
-      ? `It carries a delivery label from ${claim.vendor} naming ${claim.claim}, and that ${claim.ownerKind}'s inventory does not list it. So this apply stands and nothing will put it back — but the permanent change does not belong in ${claim.claim}'s repository either, because ${claim.claim} is not applying this.`
-      : `It carries a delivery label from ${claim.vendor} naming ${claim.claim}, and no ${claim.ownerKind} by that name exists. So this apply stands and nothing will put it back — and there is no repository behind the label to make the change in.`,
+      ? `It carries a delivery label from ${claim.vendor} naming ${claim.claim}, and that ${claim.ownerKind}'s inventory does not list it. So this apply stands and nothing will put it back. But the permanent change does not belong in ${claim.claim}'s repository either, because ${claim.claim} is not applying this.`
+      : `It carries a delivery label from ${claim.vendor} naming ${claim.claim}, and no ${claim.ownerKind} by that name exists. So this apply stands and nothing will put it back, and there is no repository behind the label to make the change in.`,
     confirmLabel: "Apply",
     // No link, deliberately. "Open what delivers it" would send the reader to
     // an owner that does not deliver this, which is the misunderstanding the

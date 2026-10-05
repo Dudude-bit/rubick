@@ -321,7 +321,7 @@ export function answeredByItsController(
 }
 
 const said = (c: ConditionInfo): string =>
-  [c.reason, c.message].filter(Boolean).join(" — ") || `${c.type}: ${c.status}`;
+  [c.reason, c.message].filter(Boolean).join(": ") || `${c.type}: ${c.status}`;
 
 /** The staleness trap: a verdict written about an older spec generation. */
 function freshnessOf(

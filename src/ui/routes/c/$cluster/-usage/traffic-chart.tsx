@@ -27,6 +27,7 @@ import { formatSince } from "@/lib/utils";
 import type { TrafficWindow } from "@/integrations";
 import { useT } from "@/i18n/useT";
 import { BAND_H, BAND_MARGIN, useBandWidth } from "./band-frame";
+import { T } from "@/i18n/T";
 
 /** Room above the peak, so a maximum is not a stroke sliced by the frame. */
 const HEADROOM = 1.25;
@@ -193,7 +194,11 @@ function Key({
       />
       {name}{" "}
       <span className="font-mono tabular-nums text-fg-mut">
-        {value === null ? "—" : formatQuantity(value, "throughput")}
+        {value === null ? (
+          <T section="empty" k="unknownLower" />
+        ) : (
+          formatQuantity(value, "throughput")
+        )}
       </span>
     </span>
   );
@@ -226,9 +231,17 @@ function TrafficTooltip({
       </div>
       <div className="mt-0.5 font-mono text-[11px] tabular-nums text-fg-mid">
         {t("columns", "trafficIn")}{" "}
-        {point.rx === null ? "—" : formatQuantity(point.rx, "throughput")} ·{" "}
-        {t("columns", "trafficOut")}{" "}
-        {point.tx === null ? "—" : formatQuantity(point.tx, "throughput")}
+        {point.rx === null ? (
+          <T section="empty" k="unknownLower" />
+        ) : (
+          formatQuantity(point.rx, "throughput")
+        )}{" "}
+        · {t("columns", "trafficOut")}{" "}
+        {point.tx === null ? (
+          <T section="empty" k="unknownLower" />
+        ) : (
+          formatQuantity(point.tx, "throughput")
+        )}
       </div>
     </div>
   );

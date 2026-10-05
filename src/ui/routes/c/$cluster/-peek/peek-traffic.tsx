@@ -120,7 +120,7 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
     ...shownRoutes.map((route) => (
       <div key={`route/${route.host}${route.path}`}>
         <p className="text-[11px] text-fg-fnt">
-          <RouteSource route={route} /> — {route.source.kind}
+          <RouteSource route={route} /> ({route.source.kind})
         </p>
         <p className="text-[11px] text-fg-fnt">
           <CopyableAddress
@@ -177,10 +177,11 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
               />
             )}
             <span className={entry.ghost ? "text-err" : undefined}>
-              —{" "}
+              (
               {entry.ghost
                 ? t("empty", "metaMissing", { meta: entry.meta })
                 : entry.meta}
+              )
             </span>
           </p>
           <div className="mt-1 flex flex-col gap-0.5">
@@ -270,7 +271,7 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
             namespace={entry.namespace}
             showKind={false}
           />{" "}
-          — {t("empty", "theServiceInFront")}
+          ({t("empty", "theServiceInFront")})
         </p>
       )),
     });
@@ -286,7 +287,7 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
             namespace={namespace}
             showKind={false}
           />{" "}
-          — {t("empty", "theServiceEndpointsPublish")}
+          ({t("empty", "theServiceEndpointsPublish")})
         </p>,
       ],
     });
@@ -303,7 +304,7 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
             showKind={false}
           />
         </span>{" "}
-        — {t("empty", "thisKind", { kind: target.kind })}
+        ({t("empty", "thisKind", { kind: target.kind })})
       </p>,
     ],
   });
@@ -318,7 +319,7 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
             namespace={namespace}
             showKind={false}
           />{" "}
-          — {t("empty", "addressesAnswering")}
+          ({t("empty", "addressesAnswering")})
         </p>,
         ...(behind
           ? [
