@@ -101,7 +101,7 @@ describe("one verdict for a Service on every surface", () => {
       null
     );
     expect(serviceHealthWords(health, t)).toMatchObject({
-      label: "No endpoints",
+      label: "no endpoints",
       reason:
         "No container declares the port it asks for (targetPort: web), so nothing is published",
     });
