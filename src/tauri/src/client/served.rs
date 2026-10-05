@@ -623,7 +623,7 @@ mod tests {
             .is_none());
     }
 
-    /// CiliumL2AnnouncementPolicy is served at `v2alpha1` only, and the API
+    /// `CiliumL2AnnouncementPolicy` is served at `v2alpha1` only, and the API
     /// resources page left it out because it read the preferred `v2` alone.
     #[tokio::test]
     async fn the_catalogue_holds_a_kind_the_preferred_version_lacks() {
