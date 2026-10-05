@@ -7,10 +7,12 @@ export interface PeekTarget {
   name: string;
   namespace?: string | null;
   /**
-   * The CRD that defines this kind, `<plural>.<group>`.
+   * The segment the kind is served at: `<plural>.<group>` for a custom
+   * resource, the bare plural of a core kind the registry does not hold
+   * (`serviceaccounts`).
    *
-   * Set for a custom resource and for nothing else, and it is what makes one
-   * peekable at all. The registry cannot spell a kind it has never heard of,
+   * Set for a kind outside the registry and for nothing else, and it is what
+   * makes one peekable at all. The registry cannot spell a kind it has never heard of,
    * so there is no plural to address the object by and no `apiVersion` to
    * read it with — a peek that guessed either would ask the core API for
    * `/api/v1/applications` and show the reader a 404 where an Argo
@@ -27,12 +29,16 @@ export interface PeekTarget {
  */
 const isCrdName = (segment: string) => segment.includes(".");
 
+/** A first segment the registry cannot spell is a served segment, dotted or a core plural. */
+const isServedSegment = (segment: string) =>
+  isCrdName(segment) || toKind(segment) === null;
+
 /** The parameter's value as a target, or `null` for a value in neither shape. */
 export function parsePeekValue(raw: string): PeekTarget | null {
   if (!raw) return null;
   const parts = raw.split("/");
 
-  if (isCrdName(parts[0])) {
+  if (isServedSegment(parts[0])) {
     const [crd, kind, ...rest] = parts;
     // A kind is UpperCamelCase — required of every CRD by the API server.
     // Without this check a link truncated to `<crd>/<ns>/<name>` would open

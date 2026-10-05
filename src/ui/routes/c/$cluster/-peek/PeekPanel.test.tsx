@@ -90,6 +90,8 @@ vi.mock("@/lib/commands", () => ({
     listServices: vi.fn(),
     detectGatewayApi: vi.fn(),
     listBackendTlsPolicies: vi.fn(),
+    listRoleBindingsIn: vi.fn(() => new Promise(() => {})),
+    listClusterRoleBindings: vi.fn(() => new Promise(() => {})),
   },
 }));
 
@@ -114,6 +116,7 @@ import {
   useDisplaySettingsStore,
 } from "@/stores/displaySettingsStore";
 import { PeekPanel } from "./PeekPanel";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import { preloadPeekContent } from "./peek-loader";
 import { pageTab } from "@/hooks/usePeek";
 
@@ -930,6 +933,54 @@ describe("PeekPanel on a custom resource", () => {
         "argocd"
       )
     );
+  });
+});
+
+describe("PeekPanel on a core kind the registry does not hold", () => {
+  beforeEach(mockCluster);
+
+  /**
+   * The Pod page's ServiceAccount link wrote `?peek=` and nothing opened: the
+   * parser took only a dotted CRD, and `serviceaccounts` has no dot.
+   */
+  it("opens the ServiceAccount a Pod page names, read by its bare plural", async () => {
+    vi.mocked(commands.getCustomResource).mockResolvedValue({
+      ...buildApplication(),
+      name: "marco",
+      namespace: "checkout",
+      apiVersion: "v1",
+      kind: "ServiceAccount",
+      spec: null,
+      status: null,
+      labels: {},
+    });
+    await wrap(
+      "/c/prod/pods/checkout/api-1",
+      <>
+        <ResourceRef
+          kind="ServiceAccount"
+          name="marco"
+          namespace="checkout"
+          showKind={false}
+        />
+        <PeekPanel />
+      </>
+    );
+    await userEvent.click(screen.getByRole("link", { name: /marco/ }));
+    const panel = await screen.findByRole("dialog");
+    expect(
+      within(panel).getByRole("link", { name: "ServiceAccount marco" })
+    ).toHaveAttribute("href", "/c/prod/serviceaccounts/checkout/marco");
+    await waitFor(() =>
+      expect(commands.getCustomResource).toHaveBeenCalledWith(
+        "serviceaccounts",
+        "marco",
+        "checkout"
+      )
+    );
+    expect(
+      await within(panel).findByRole("heading", { name: /What it may do/ })
+    ).toBeInTheDocument();
   });
 });
 

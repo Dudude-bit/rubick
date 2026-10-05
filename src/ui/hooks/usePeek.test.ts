@@ -113,6 +113,19 @@ describe("usePeek", () => {
       expect(result.current.target?.crd).toBeUndefined();
     });
 
+    /** A core kind outside the registry is served at a bare plural, with no dot to find. */
+    it("reads a core kind the registry does not hold by its bare plural", async () => {
+      const { result } = await renderPeek(
+        "/c/prod/events?peek=serviceaccounts/ServiceAccount/checkout/marco"
+      );
+      expect(result.current.target).toEqual({
+        kind: "ServiceAccount",
+        name: "marco",
+        namespace: "checkout",
+        crd: "serviceaccounts",
+      });
+    });
+
     /** A name may contain dots; only the first segment is ever a CRD. */
     it("does not read a dotted object name as a CRD", async () => {
       const { result } = await renderPeek(
