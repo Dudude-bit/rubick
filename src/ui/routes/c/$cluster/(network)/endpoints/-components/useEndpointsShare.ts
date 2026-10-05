@@ -70,7 +70,7 @@ export function endpointsAddressesSection(
                   namespace: address.targetRef.namespace,
                 }),
               }
-            : { text: "–", quiet: true },
+            : { text: t("empty", "noneLower"), quiet: true },
           address.nodeName
             ? {
                 text: address.nodeName,
@@ -80,7 +80,7 @@ export function endpointsAddressesSection(
                   namespace: null,
                 }),
               }
-            : { text: "–", quiet: true },
+            : { text: t("empty", "noneLower"), quiet: true },
         ],
       })),
       more: null,

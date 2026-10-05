@@ -58,8 +58,8 @@ describe("asMarkdown", () => {
 
   it("marks what is absent rather than leaving a blank the reader must interpret", () => {
     const out = asMarkdown(base);
-    expect(out).toContain("`~/.krew/bin` — not there");
-    expect(out).toContain("`kubectl-oidc_login` — not found");
+    expect(out).toContain("`~/.krew/bin` (not there)");
+    expect(out).toContain("`kubectl-oidc_login`: not found");
     expect(out).toContain("not found");
   });
 
@@ -129,9 +129,9 @@ describe("asMarkdown", () => {
       ],
     });
 
-    expect(out).toContain("`kubectl` — /usr/local/bin/kubectl · v1.31.0");
-    expect(out).toContain("`helm` — /usr/local/bin/helm · no version reported");
-    expect(out).toContain("`az` — not installed");
+    expect(out).toContain("`kubectl`: /usr/local/bin/kubectl · v1.31.0");
+    expect(out).toContain("`helm`: /usr/local/bin/helm · no version reported");
+    expect(out).toContain("`az`: not installed");
   });
 });
 

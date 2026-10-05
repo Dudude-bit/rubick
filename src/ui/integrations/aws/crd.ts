@@ -9,7 +9,7 @@
 
 import { joinSayings } from "@/i18n/say";
 import type { CrdColumn } from "../kit";
-import { matchByGroup, dash } from "../kit";
+import { matchByGroup, orNone } from "../kit";
 import type { CrdView } from "../registry";
 import {
   bindingFailure,
@@ -29,19 +29,19 @@ const targetGroupBindingColumns: CrdColumn[] = [
       const port = boundPort(resource);
       return service === null ? null : port ? `${service}:${port}` : service;
     },
-    cell: dash,
+    cell: orNone,
   },
   {
     id: "targetGroup",
     header: "targetGroup",
     accessor: (resource) => targetGroupLabel(resource),
-    cell: dash,
+    cell: orNone,
   },
   {
     id: "targetType",
     header: "targets",
     accessor: (resource, t) => joinSayings(bindingSummary(resource), t),
-    cell: dash,
+    cell: orNone,
   },
   {
     id: "failure",
@@ -50,7 +50,7 @@ const targetGroupBindingColumns: CrdColumn[] = [
     // header promising status would make that emptiness read as "fine".
     header: "controllerSays",
     accessor: (resource) => bindingFailure(resource),
-    cell: dash,
+    cell: orNone,
   },
 ];
 
@@ -59,7 +59,7 @@ const ingressClassParamsColumns: CrdColumn[] = [
     id: "applies",
     header: "applies",
     accessor: (resource) => ingressClassParamsSummary(resource),
-    cell: dash,
+    cell: orNone,
   },
 ];
 

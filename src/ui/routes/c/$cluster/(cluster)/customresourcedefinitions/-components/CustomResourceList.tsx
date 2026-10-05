@@ -23,6 +23,7 @@ import { crdWidthsKey } from "@/lib/resource-identity";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 interface CustomResourceListProps {
   crdName: string;
@@ -150,7 +151,7 @@ export function CustomResourceList({
               return <StatusBadge status={value} />;
             }
             if (value === null || value === undefined) {
-              return <span className="text-fg-fnt">—</span>;
+              return <None />;
             }
             return String(value);
           },
@@ -305,7 +306,7 @@ function formatColumnValue(
   columnType: string
 ): React.ReactNode {
   if (value === null || value === undefined) {
-    return <span className="text-fg-fnt">—</span>;
+    return <None />;
   }
 
   switch (columnType) {

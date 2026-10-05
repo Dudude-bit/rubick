@@ -71,9 +71,9 @@ export function gatewayRouteRulesSection(
         {
           cells: [
             { text: match },
-            { text: "–", quiet: true },
-            { text: "–" },
-            { text: "–" },
+            { text: t("empty", "noneLower"), quiet: true },
+            { text: t("empty", "noneLower") },
+            { text: t("empty", "noneLower") },
           ],
         },
       ];
@@ -91,14 +91,19 @@ export function gatewayRouteRulesSection(
               }),
             }
           : { text: `${backend.kind} ${backend.name}` },
-        { text: backend.port != null ? String(backend.port) : "–" },
+        {
+          text:
+            backend.port != null
+              ? String(backend.port)
+              : t("empty", "noneLower"),
+        },
         {
           text:
             backend.weight === 0
               ? t("empty", "zeroWeight")
               : backend.weight != null
                 ? String(backend.weight)
-                : "–",
+                : t("action", "notSet"),
         },
       ],
     }));

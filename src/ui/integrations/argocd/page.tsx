@@ -472,11 +472,11 @@ function SourceLine({ app }: { app: ArgoApp }) {
             <span className="text-fg-fnt">·</span>
             <RevisionRef app={app} source={source} />
             <span className="text-fg-fnt">
+              (
               {app.lastSyncAt
-                ? `— ${t("empty", "syncedAgo", {
-                    age: formatAge(app.lastSyncAt, t),
-                  })}`
-                : `— ${t("empty", "neverSynced")}`}
+                ? t("empty", "syncedAgo", { age: formatAge(app.lastSyncAt, t) })
+                : t("empty", "neverSynced")}
+              )
             </span>
           </span>
           <span className="text-[11px] text-fg-fnt">
@@ -643,7 +643,7 @@ function ResourceLine({
         )}
         {resource.message && (
           <span className="text-fg-fnt">
-            {said ? " — " : ""}
+            {said ? ": " : ""}
             {resource.message}
           </span>
         )}

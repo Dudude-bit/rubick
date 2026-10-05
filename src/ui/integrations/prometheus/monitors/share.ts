@@ -187,7 +187,7 @@ function targetsTableSection(row: MonitorRow, t: T): PlacedSection {
             target.lastScrape
               ? { text: target.lastScrape, at: target.lastScrape }
               : { text: "" },
-            { text: target.lastError || "–" },
+            { text: target.lastError || t("empty", "noneLower") },
           ],
         }))
       : [];

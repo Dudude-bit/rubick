@@ -28,7 +28,9 @@ export function helmFactsSection(
     },
     {
       label: t("columns", "appVersion"),
-      values: [{ text: release.appVersion || "–", mono: true }],
+      values: [
+        { text: release.appVersion || t("empty", "noneLower"), mono: true },
+      ],
     },
     {
       label: t("columns", "revision"),
@@ -77,14 +79,14 @@ export function helmHistorySection(
           { text: String(rev.revision), mono: true },
           { text: rev.status, role: statusRole(rev.status) },
           { text: rev.chart, mono: true },
-          { text: rev.appVersion || "–" },
+          { text: rev.appVersion || t("empty", "noneLower") },
           Number.isNaN(Date.parse(rev.updated))
-            ? { text: "–" }
+            ? { text: rev.updated || t("empty", "noneLower") }
             : {
                 text: rev.updated,
                 at: new Date(Date.parse(rev.updated)).toISOString(),
               },
-          { text: rev.description || "–" },
+          { text: rev.description || t("empty", "noneLower") },
         ],
       })),
       more:
@@ -128,7 +130,7 @@ export function helmResourcesSection(
               namespace: object.namespace,
             }),
           },
-          { text: object.namespace ?? "–" },
+          { text: object.namespace ?? t("empty", "noneLower") },
         ],
       })),
       more:

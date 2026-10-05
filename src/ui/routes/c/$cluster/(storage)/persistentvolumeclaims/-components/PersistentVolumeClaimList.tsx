@@ -26,6 +26,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
 // refresh: a save remounts the page instead of hot-swapping it.
@@ -54,7 +55,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
           showKind={false}
         />
       ) : (
-        <span className="text-fg-fnt">—</span>
+        <None />
       ),
   },
   createCapacityColumn<PersistentVolumeClaimInfo>(),

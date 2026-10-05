@@ -18,6 +18,7 @@ import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import type { GatewayInfo } from "@/generated/types";
 import { gatewayProgrammed } from "@/lib/route-trace";
+import { None } from "@/components/ui/none";
 
 /** The controller's reason is quoted raw; only this app's own words are
  *  spoken through the catalogue. */
@@ -64,7 +65,7 @@ function ListenersCell({ gateway }: { gateway: GatewayInfo }) {
 function AddressesCell({ gateway }: { gateway: GatewayInfo }) {
   const t = useT();
   const addresses = gateway.addresses;
-  if (addresses.length === 0) return <span className="text-fg-fnt">—</span>;
+  if (addresses.length === 0) return <None />;
   return (
     <span className="truncate">
       <CopyableAddress
@@ -107,7 +108,7 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
             showKind={false}
           />
         ) : (
-          <span className="text-fg-fnt">—</span>
+          <None />
         ),
     },
     {

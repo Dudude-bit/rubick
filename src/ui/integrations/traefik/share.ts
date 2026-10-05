@@ -41,10 +41,10 @@ export function routesTableSection(
         {
           text:
             route.middlewares.map((middleware) => middleware.name).join(", ") ||
-            "–",
+            t("empty", "noneLower"),
         },
         // The host's TLS as the status list reads it, not only the Secret
-        // this one router names: "–" beside "TLS not checked" is two answers.
+        // this one router names: "none" beside "TLS not checked" is two answers.
         {
           text: route.tlsSecret ?? hostTlsWords(group.tls, t),
           role: route.tlsSecret
@@ -64,7 +64,7 @@ export function routesTableSection(
                 namespace: route.service.namespace,
               }),
             }
-          : { text: route.resourceBackend ?? "–" },
+          : { text: route.resourceBackend ?? t("empty", "noneLower") },
       ],
     }))
   );
@@ -127,7 +127,7 @@ export function entryPointsSection(
     return {
       cells: [
         { text: entry.name, mono: true },
-        { text: entry.address ?? "–" },
+        { text: entry.address ?? t("empty", "noneLower") },
         {
           text: entry.tls ? "TLS" : t("empty", "plainLower"),
           role: (entry.tls ? "ok" : "warn") as "ok" | "warn",

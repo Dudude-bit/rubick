@@ -28,6 +28,7 @@ import { scopeCacheKey } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useClusterStore } from "@/stores/clusterStore";
+import { None } from "@/components/ui/none";
 
 type PrintedRow = TableRow & { namespace: string };
 
@@ -266,8 +267,7 @@ function Cell({
   link: AppLink | null;
   createdAt: string | null;
 }) {
-  if (value === null || value === undefined || value === "")
-    return <span className="text-fg-fnt">—</span>;
+  if (value === null || value === undefined || value === "") return <None />;
   const text =
     typeof value === "object" ? JSON.stringify(value) : String(value);
   if (link)

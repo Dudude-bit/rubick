@@ -49,6 +49,7 @@ import { useNow } from "@/hooks/useNow";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT, type T } from "@/i18n/useT";
 import { ControllerLine, Fact, OperatorActionButton } from "../operator-kit";
+import { None } from "@/components/ui/none";
 
 /**
  * The words for a failed action. Two of them are this module's own sentinels
@@ -463,7 +464,7 @@ function ClusterRow({
           )}
           <div className="grid gap-x-6 gap-y-1.5 text-xs md:grid-cols-2">
             <Fact label={t("operators", "primaryFact")}>
-              <span className="font-mono">{cluster.primary ?? "–"}</span>
+              <span className="font-mono">{cluster.primary ?? <None />}</span>
               {cluster.switchingOver && (
                 <span className="ml-2 font-mono text-warn">
                   → {cluster.targetPrimary}
@@ -506,7 +507,7 @@ function ClusterRow({
             </Fact>
             <Fact label={t("nav", "storage")}>
               {cluster.pvcCount !== null ? `${cluster.pvcCount} × ` : ""}
-              {cluster.storage.size ?? "–"}
+              {cluster.storage.size ?? <None />}
               {cluster.storage.storageClass &&
                 ` ${cluster.storage.storageClass}`}
             </Fact>
@@ -801,7 +802,7 @@ function BackupsTab({ companions }: { companions: Companions | undefined }) {
 
 function BackupLine({ backup }: { backup: CustomResourceInfo }) {
   const t = useT();
-  const phase = String(getValueByPath(backup, "status.phase") ?? "–");
+  const phase = getValueByPath(backup, "status.phase");
   const error = getValueByPath(backup, "status.error");
   return (
     <li className="flex flex-wrap items-baseline gap-x-3 py-1.5">
@@ -819,7 +820,9 @@ function BackupLine({ backup }: { backup: CustomResourceInfo }) {
       <span className="text-fg-fnt">
         {String(getValueByPath(backup, "spec.cluster.name") ?? "")}
       </span>
-      <span className={cn(phase === "failed" && "text-err")}>{phase}</span>
+      <span className={cn(phase === "failed" && "text-err")}>
+        {typeof phase === "string" ? phase : <None />}
+      </span>
       <span className="text-fg-fnt">{formatAge(backup.createdAt, t)}</span>
       {typeof error === "string" && error && (
         <span className="font-mono text-[11px] text-err">{error}</span>
@@ -870,7 +873,7 @@ function PoolersTab({ companions }: { companions: Companions | undefined }) {
             {pooler.namespace} · {pooler.cluster}
           </span>
           <span>
-            {pooler.type ?? "–"}
+            {pooler.type ?? <None />}
             {pooler.poolMode && ` · pgbouncer ${pooler.poolMode}`}
             {pooler.instances !== null && ` · ${pooler.instances}`}
           </span>

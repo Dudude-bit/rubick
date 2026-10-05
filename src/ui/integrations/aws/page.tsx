@@ -53,6 +53,7 @@ import {
   boundService,
 } from "./model";
 import type { en } from "@/i18n/catalogue";
+import { None } from "@/components/ui/none";
 
 /** Past this many groups with a finding, nothing opens itself. */
 const AUTO_OPEN = 6;
@@ -389,7 +390,7 @@ function MembersBlock({
             <Column label={t("columns", "targetGroups")}>
               {backends.length === 0 ? (
                 <Cell>
-                  <span className="text-fg-fnt">—</span>
+                  <None />
                 </Cell>
               ) : (
                 backends.map((backend) => {

@@ -74,7 +74,7 @@ export function ingressRulesSection(ingress: IngressInfo, t: T): PlacedSection {
                 }),
               }
             : { text: t("empty", "noBackend"), role: "warn" as const },
-        { text: path.backendPort || "–" },
+        { text: path.backendPort || t("empty", "noneLower") },
       ],
     }))
   );

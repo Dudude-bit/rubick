@@ -65,6 +65,7 @@ import {
   type GkeRoute,
   type GkeSources,
 } from "./routes";
+import { None } from "@/components/ui/none";
 
 /** Past this many broken hosts, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -480,7 +481,7 @@ function RouteChain({
               }
               title={
                 config.found
-                  ? `${config.name} — ${joinSayings(
+                  ? `${config.name}: ${joinSayings(
                       backendConfigSummary(config.found),
                       t
                     )}`
@@ -558,7 +559,7 @@ function RouteChain({
         })}
         {route.configs.length === 0 && (
           <Cell>
-            <span className="text-fg-fnt">—</span>
+            <None />
           </Cell>
         )}
       </Column>

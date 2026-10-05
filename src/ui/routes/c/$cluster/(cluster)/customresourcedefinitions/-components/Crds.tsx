@@ -35,6 +35,7 @@ import { T } from "@/i18n/T";
 import { scopeKey } from "./crd-scope";
 import { columnHeader } from "@/i18n/column-header";
 import { toastError } from "@/lib/toast-error";
+import { None } from "@/components/ui/none";
 
 // CRDs are cluster-scoped, so `namespace` carries the API group instead:
 // it is the field DataTable groups its captions on, and the API group is
@@ -167,7 +168,7 @@ export function Crds() {
         cell: ({ row }) => {
           const shortNames = row.original.shortNames;
           if (!shortNames || shortNames.length === 0) {
-            return <span className="text-fg-fnt">—</span>;
+            return <None />;
           }
           return (
             <span className="font-mono text-fg-mut">

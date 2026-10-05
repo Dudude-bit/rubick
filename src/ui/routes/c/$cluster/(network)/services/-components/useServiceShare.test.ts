@@ -127,7 +127,7 @@ describe("the ports the Service declares", () => {
             { text: "80" },
             { text: "8080" },
             { text: "TCP" },
-            { text: "–" },
+            { text: "none" },
           ],
         },
       ],

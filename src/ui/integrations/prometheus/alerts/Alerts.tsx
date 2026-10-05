@@ -912,7 +912,7 @@ function RuleCard({
                         time: hourMinute(alert.activeAt),
                         ago: formatSince(Date.parse(alert.activeAt), now),
                       })
-                    : "–"}
+                    : t("empty", "noneLower")}
                 </span>
               </div>
             );

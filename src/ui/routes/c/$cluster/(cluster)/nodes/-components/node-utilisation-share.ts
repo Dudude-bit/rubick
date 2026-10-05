@@ -105,7 +105,7 @@ export function nodeUtilisationSections(
           },
           laneValue(trend.cpu, trend.blind, t),
           laneValue(trend.memory, trend.blind, t),
-          { text: notes[index] ?? "–", quiet: true },
+          { text: notes[index] ?? t("empty", "noneLower"), quiet: true },
         ],
       })),
       more: null,

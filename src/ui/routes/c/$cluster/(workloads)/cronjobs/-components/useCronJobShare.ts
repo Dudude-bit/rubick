@@ -30,7 +30,10 @@ export function cronJobStatsOf(
   t: T
 ): ReportStat[] {
   const stats: ReportStat[] = [
-    { label: t("columns", "schedule"), value: cronJob.schedule || "–" },
+    {
+      label: t("columns", "schedule"),
+      value: cronJob.schedule || t("empty", "noneLower"),
+    },
     { label: t("columns", "active"), value: String(cronJob.active) },
     {
       label: t("columns", "lastRun"),
@@ -44,7 +47,7 @@ export function cronJobStatsOf(
       ? {
           label: t("columns", "lastSuccess"),
           value: Number.isNaN(Date.parse(cronJob.lastSuccessfulTime))
-            ? "–"
+            ? cronJob.lastSuccessfulTime
             : utcMoment(Date.parse(cronJob.lastSuccessfulTime)),
         }
       : {
@@ -77,7 +80,7 @@ export function jobsSection(
       {
         text: job.createdAt
           ? formatSince(Date.parse(job.createdAt), Date.parse(capturedAt))
-          : "–",
+          : t("empty", "noneLower"),
       },
     ];
     return { cells };

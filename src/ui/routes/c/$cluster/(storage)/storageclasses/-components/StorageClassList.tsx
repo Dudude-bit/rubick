@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { createResourceListPage } from "../../../-list/createResourceListPage";
+import { None } from "@/components/ui/none";
 
 export const columns = (): ColumnDef<StorageClassInfo>[] => [
   {
@@ -88,7 +89,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     header: columnHeader("columns", "parameters"),
     cell: ({ row }) => {
       const params = Object.entries(row.original.parameters);
-      if (params.length === 0) return <span className="text-fg-fnt">—</span>;
+      if (params.length === 0) return <None />;
       return (
         <Tooltip>
           <TooltipTrigger className="text-fg-mut">

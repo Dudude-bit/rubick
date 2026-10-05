@@ -3,6 +3,7 @@ import { copyText } from "@/lib/host";
 import { ClipboardCopy } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { None } from "@/components/ui/none";
 import { useToast } from "@/components/ui/use-toast";
 import { SettingRow, SettingsGroup } from "@/components/settings/settings-row";
 import { IPC_TARGET_BYTES, perf } from "@/lib/perf";
@@ -74,7 +75,7 @@ function StatsRows({
               <td className="py-1 pr-3 text-right">{ms(s.p50)}</td>
               <td className="py-1 pr-3 text-right">{ms(s.p95)}</td>
               <td className="py-1 pr-3 text-right">{ms(s.max)}</td>
-              <td className="py-1 pr-3 text-right">{s.maxRows ?? "–"}</td>
+              <td className="py-1 pr-3 text-right">{s.maxRows ?? <None />}</td>
               <td
                 className={cn(
                   "py-1 text-right",
@@ -83,7 +84,13 @@ function StatsRows({
                     "text-warn"
                 )}
               >
-                {s.maxBytes !== undefined ? kb(s.maxBytes) : "–"}
+                {s.maxBytes !== undefined ? (
+                  kb(s.maxBytes)
+                ) : (
+                  <span className="text-fg-fnt">
+                    {t("empty", "unknownLower")}
+                  </span>
+                )}
               </td>
             </tr>
           ))}

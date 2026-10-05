@@ -100,6 +100,7 @@ import { describeFinding, findingDetail } from "./finding-words";
 import { entryPointsSection, routesTableSection } from "./share";
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 /** Past this many troubled hosts, nothing opens itself. */
 const AUTO_OPEN = 8;
@@ -618,7 +619,7 @@ function PathRow({
                 ? t("empty", "unknownLower")
                 : "…"
               : backing?.stop
-                ? "—"
+                ? t("count", "nPublished", { n: 0 })
                 : backing
                   ? t("count", "nReady", { n: backing.ready })
                   : ""}
@@ -788,7 +789,9 @@ function HostChain({
         </Column>
         <Column label={t("columns", "published")}>
           {route.resourceBackend ? (
-            <Cell under={t("empty", "notAService")}>—</Cell>
+            <Cell under={t("empty", "notAService")}>
+              {t("cluster", "markUnchecked")}
+            </Cell>
           ) : !route.service?.kubernetes ? (
             <Cell under={t("empty", "insideTheProxy")}>
               {t("empty", "notPods")}
@@ -801,7 +804,7 @@ function HostChain({
               )}
               title={backing.error ?? undefined}
             >
-              —
+              {backing.error ? t("empty", "notReadLower") : "…"}
             </Cell>
           ) : backing.stop ? (
             <Cell bad under={t("empty", stopUnder(backing.stop))}>
@@ -1053,7 +1056,7 @@ function MiddlewaresTab({ uses }: { uses: ReturnType<typeof middlewareUses> }) {
               {use.middleware.name}
             </Link>
             <span className="truncate font-mono text-fg-mid">
-              {use.type ?? "—"}
+              {use.type ?? <None />}
             </span>
             {use.usedBy.length === 0 ? (
               <span className="text-warn">
@@ -1135,7 +1138,7 @@ function EntryPointsTab({
                 {entry.name}
               </span>
               <span className="truncate font-mono text-fg-mut">
-                {entry.address ?? "—"}
+                {entry.address ?? <None />}
               </span>
               <span className={entry.tls ? "text-ok" : "text-fg-fnt"}>
                 {entry.tls ? "TLS" : t("empty", "plainLower")}

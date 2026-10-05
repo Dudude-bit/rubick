@@ -650,7 +650,7 @@ function TargetsStep({ row, now, t }: { row: MonitorRow; now: number; t: T }) {
                 ? t("monitors", "scrapedAgo", {
                     ago: formatSince(Date.parse(target.lastScrape), now),
                   })
-                : "–"}
+                : t("action", "never")}
             </span>
             <span
               className={cn(
@@ -658,7 +658,7 @@ function TargetsStep({ row, now, t }: { row: MonitorRow; now: number; t: T }) {
                 target.lastError ? "text-err" : "text-fg-fnt"
               )}
             >
-              {target.lastError || "–"}
+              {target.lastError || t("empty", "noneLower")}
             </span>
           </div>
         ))}

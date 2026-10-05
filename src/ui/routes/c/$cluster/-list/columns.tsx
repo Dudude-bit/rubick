@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import type { ResourceKind } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { CopyName } from "../-object/CopyName";
+import { None } from "@/components/ui/none";
 
 interface WithCreatedAt {
   createdAt?: string | null;
@@ -195,7 +196,7 @@ export function createAccessModesColumn<
     header: columnHeader("columns", "accessModes"),
     cell: ({ row }) => {
       const modes = row.original.accessModes;
-      if (modes.length === 0) return <span className="text-fg-fnt">—</span>;
+      if (modes.length === 0) return <None />;
       return (
         <Tooltip>
           <TooltipTrigger className="font-mono text-fg-mid">
@@ -226,7 +227,7 @@ export function createCapacityColumn<
       row.original.capacity ? (
         <UnitValue value={row.original.capacity} />
       ) : (
-        <span className="text-fg-fnt">—</span>
+        <None />
       ),
   };
 }
@@ -279,7 +280,7 @@ export function createDataKeysColumn<
     },
     cell: ({ row }) => {
       const keys = row.original.dataKeys ?? [];
-      if (keys.length === 0) return <span className="text-fg-fnt">—</span>;
+      if (keys.length === 0) return <None />;
       return (
         <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px]">
           {keys.slice(0, maxDisplay).map((key) => (

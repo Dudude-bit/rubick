@@ -52,7 +52,7 @@ export function configMapKeysSection(
               ? { text: formatBytes(binary.bytes) }
               : value !== undefined
                 ? { text: formatBytes(byteSize(value)) }
-                : { text: "–", quiet: true };
+                : { text: t("empty", "noneLower"), quiet: true };
         return { cells: [{ text: key, mono: true }, size] };
       }),
       more: null,

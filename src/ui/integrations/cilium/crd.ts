@@ -11,7 +11,7 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchByGroup } from "../kit";
+import { getValueByPath, matchByGroup, orNone } from "../kit";
 import type { CrdView } from "../registry";
 import {
   directionsOf,
@@ -91,7 +91,9 @@ const policyColumns: CrdColumn[] = [
     accessor: (policy) => leavesTheCluster(policy),
     cell: (value, t) => {
       if (value === null) return t("readings", "ciliumNotOnTheWire");
-      return value === true ? t("readings", "ciliumLeavesCluster") : "—";
+      return value === true
+        ? t("readings", "ciliumLeavesCluster")
+        : orNone(null);
     },
   },
 ];
@@ -109,13 +111,13 @@ const endpointColumns: CrdColumn[] = [
     id: "identity",
     header: "identity",
     accessor: (endpoint) => getValueByPath(endpoint, "status.identity.id"),
-    cell: (value) => (typeof value === "number" ? String(value) : "—"),
+    cell: (value) => orNone(typeof value === "number" ? value : null),
   },
   {
     id: "state",
     header: "state",
     accessor: (endpoint) => getValueByPath(endpoint, "status.state"),
-    cell: (value) => (typeof value === "string" ? value : "—"),
+    cell: (value) => orNone(typeof value === "string" ? value : null),
   },
   {
     id: "podIp",
@@ -128,7 +130,7 @@ const endpointColumns: CrdColumn[] = [
       const first = addressing?.[0];
       return first?.ipv4 ?? first?.ipv6 ?? null;
     },
-    cell: (value) => (typeof value === "string" ? value : "—"),
+    cell: (value) => orNone(typeof value === "string" ? value : null),
   },
 ];
 

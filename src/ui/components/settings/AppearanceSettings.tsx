@@ -75,7 +75,7 @@ export function AppearanceSettings() {
                       not, and hiding it would hide where to contribute. */}
                   {isTranslated(locale)
                     ? ""
-                    : ` — ${t("settings", "notTranslatedYet")}`}
+                    : ` (${t("settings", "notTranslatedYet")})`}
                 </SelectItem>
               ))}
             </SelectContent>

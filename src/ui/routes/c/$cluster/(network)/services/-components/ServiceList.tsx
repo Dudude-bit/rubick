@@ -14,6 +14,7 @@ import {
   createAgeColumn,
 } from "../../../-list/columns";
 import { createResourceListPage } from "../../../-list/createResourceListPage";
+import { None } from "@/components/ui/none";
 
 /**
  * A service type is a configuration fact, so it is printed rather than badged.
@@ -66,7 +67,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     cell: ({ row }) => {
       const service = row.original;
       if (service.externalIps.length === 0 && service.type !== "LoadBalancer")
-        return <span className="text-fg-fnt">—</span>;
+        return <None />;
       return (
         <div className="flex flex-col gap-1">
           {service.externalIps.map((ip) => (

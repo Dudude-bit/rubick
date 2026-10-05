@@ -7,6 +7,8 @@
  * the tree is free of plain functions.
  */
 
+import { createElement, type ReactNode } from "react";
+import { None } from "@/components/ui/none";
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import { formatWhen } from "@/lib/utils";
@@ -124,7 +126,7 @@ export interface CrdColumn {
   header: keyof (typeof en)["columns"];
   /** Takes the translator: some of these compose a sentence per row. */
   accessor: (resource: CustomResourceInfo, t: T) => unknown;
-  /** Without one the value is stringified, and `null` draws an em dash. */
+  /** Without one the value is stringified, and `null` says "none". */
   cell?: (value: unknown, t: T) => React.ReactNode;
 }
 
@@ -245,9 +247,11 @@ export function summariseNames(names: readonly string[]): string {
   return `${names.slice(0, 3).join(", ")} +${names.length - 3}`;
 }
 
-/** A field the object left empty, drawn as a dash rather than as nothing. */
-export const dash = (value: unknown) =>
-  value === null || value === undefined || value === "" ? "—" : String(value);
+/** A field the object left empty, said as "none" rather than drawn as nothing. */
+export const orNone = (value: unknown): ReactNode =>
+  value === null || value === undefined || value === ""
+    ? createElement(None)
+    : String(value);
 
 /** `14:22` in the reader's own zone. */
 export const hourMinute = (at: number | string) => formatWhen(at, "hourMinute");

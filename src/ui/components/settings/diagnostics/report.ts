@@ -34,10 +34,10 @@ export function asMarkdown(d: Diagnostics): string {
           // the same entry the pane renders — so the paste and the screen
           // cannot say different things about one machine.
           f.aboutShell
-            ? `- **${english("settings", "shellFindingTitle")}** — ${shellEnvLine(
+            ? `- **${english("settings", "shellFindingTitle")}**: ${shellEnvLine(
                 d.shell
               )} ${english("settings", "shellFindingConsequence")}`
-            : `- **${f.title}** — ${f.detail}`
+            : `- **${f.title}**: ${f.detail}`
         )),
     "",
     "### Shell",
@@ -45,7 +45,7 @@ export function asMarkdown(d: Diagnostics): string {
     "",
     "### Search path",
     ...d.searchPath.map(
-      (e) => `- \`${e.path}\`${e.exists ? "" : " — not there"}`
+      (e) => `- \`${e.path}\`${e.exists ? "" : " (not there)"}`
     ),
     "",
     "### Tools",
@@ -58,10 +58,10 @@ export function asMarkdown(d: Diagnostics): string {
     // kubectl answered, and "installed" alone has never settled that.
     ...d.tools.map((tool) =>
       tool.path
-        ? `- \`${tool.name}\` — ${tool.path}${
+        ? `- \`${tool.name}\`: ${tool.path}${
             tool.version ? ` · ${tool.version}` : " · no version reported"
           }`
-        : `- \`${tool.name}\` — not installed`
+        : `- \`${tool.name}\`: not installed`
     ),
     "",
     "### Plugins",
@@ -69,7 +69,7 @@ export function asMarkdown(d: Diagnostics): string {
       ? ["No context needs one."]
       : d.plugins.map(
           (p) =>
-            `- \`${p.name}\` — ${p.path ?? "not found"} · needed by ${p.requiredBy.join(", ")}`
+            `- \`${p.name}\`: ${p.path ?? "not found"} · needed by ${p.requiredBy.join(", ")}`
         )),
     "",
     "### Contexts",
@@ -77,7 +77,7 @@ export function asMarkdown(d: Diagnostics): string {
       ? ["None read."]
       : d.contexts.map(
           (c) =>
-            `- \`${c.context}\` — ${c.method}${
+            `- \`${c.context}\`: ${c.method}${
               c.command
                 ? ` (\`${c.command}\`${c.commandPath ? "" : ", not found"})`
                 : ""
@@ -86,7 +86,7 @@ export function asMarkdown(d: Diagnostics): string {
     "",
     "### Kubeconfig",
     d.kubeconfig
-      ? `\`${d.kubeconfig.path}\` — ${
+      ? `\`${d.kubeconfig.path}\`: ${
           d.kubeconfig.parseError ?? `${d.kubeconfig.contextCount} contexts`
         }`
       : "None loaded.",

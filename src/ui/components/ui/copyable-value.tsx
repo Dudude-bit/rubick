@@ -8,6 +8,7 @@ import {
 } from "react";
 import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { None } from "@/components/ui/none";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -120,7 +121,7 @@ export interface CopyableAddressProps {
   /** Field name, e.g. "Pod IP" — the address is appended for the reader. */
   label?: string;
   /** Printed plainly when there is no address. */
-  fallback?: string;
+  fallback?: ReactNode;
   className?: string;
 }
 
@@ -134,7 +135,7 @@ export interface CopyableAddressProps {
 export function CopyableAddress({
   value,
   label,
-  fallback = "—",
+  fallback = <None />,
   className,
 }: CopyableAddressProps) {
   if (!value || value === "None") {
@@ -153,7 +154,7 @@ export interface CopyableAddressesProps {
   values: string[];
   label?: string;
   /** Printed plainly when the list is empty. */
-  empty?: string;
+  empty?: ReactNode;
   className?: string;
 }
 
@@ -164,7 +165,7 @@ export interface CopyableAddressesProps {
 export function CopyableAddresses({
   values,
   label,
-  empty = "—",
+  empty = <None />,
   className,
 }: CopyableAddressesProps) {
   if (values.length === 0) {

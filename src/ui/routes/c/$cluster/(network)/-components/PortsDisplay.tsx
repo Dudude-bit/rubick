@@ -5,6 +5,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { ServicePortInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
+import { None } from "@/components/ui/none";
 
 /**
  * A service's ports inside a list row.
@@ -52,7 +53,7 @@ function PortText({ port }: { port: ServicePortInfo }) {
 
 export function PortsDisplay({ ports, maxDisplay = 2 }: PortsDisplayProps) {
   if (ports.length === 0) {
-    return <span className="text-fg-fnt">—</span>;
+    return <None />;
   }
 
   const shown = ports.slice(0, maxDisplay);

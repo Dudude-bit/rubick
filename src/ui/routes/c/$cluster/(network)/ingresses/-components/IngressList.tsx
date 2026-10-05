@@ -42,6 +42,7 @@ import type { IngressInfo, Scoped } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 /**
  * What a cloud controller says about these rows' TLS, handed to the cells
@@ -84,7 +85,7 @@ function IngressAddressCell({ ingress }: { ingress: IngressInfo }) {
   const t = useT();
   const ips = ingress.loadBalancerIps;
   // Whether one is coming is the status column's to say, from the class.
-  if (ips.length === 0) return <span className="text-fg-fnt">—</span>;
+  if (ips.length === 0) return <None />;
   return (
     <span className="flex items-baseline gap-2">
       <CopyableAddress
@@ -188,7 +189,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     },
     cell: ({ row }) => {
       const allPaths = row.original.rules.flatMap((rule) => rule.paths);
-      if (allPaths.length === 0) return <span className="text-fg-fnt">—</span>;
+      if (allPaths.length === 0) return <None />;
       return (
         <Tooltip>
           <TooltipTrigger className="text-fg-mut">

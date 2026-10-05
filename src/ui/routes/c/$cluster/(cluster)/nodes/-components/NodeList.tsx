@@ -37,6 +37,7 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { useNodeActions } from "./useNodeActions";
 import { useT, type T as TranslateFn } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 /**
  * Nodes, grouped by the pool the cloud says made them.
@@ -102,7 +103,7 @@ export const columns = (
     cell: ({ row }) => (
       <span className="flex flex-wrap items-baseline gap-x-2 text-fg-mut">
         {row.original.roles.length === 0 ? (
-          <span className="text-fg-fnt">—</span>
+          <None />
         ) : (
           row.original.roles.map((role) => <span key={role}>{role}</span>)
         )}

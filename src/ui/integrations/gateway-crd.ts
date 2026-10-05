@@ -9,11 +9,11 @@
  */
 
 import type { CrdColumn } from "./kit";
-import { getValueByPath, matchByGroup } from "./kit";
+import { getValueByPath, matchByGroup, orNone } from "./kit";
 import type { CrdView } from "./registry";
 
-function names(value: unknown): string {
-  if (!Array.isArray(value) || value.length === 0) return "—";
+function names(value: unknown) {
+  if (!Array.isArray(value) || value.length === 0) return orNone(null);
   if (value.length === 1) return String(value[0]);
   return `${value[0]} +${value.length - 1}`;
 }
@@ -73,7 +73,7 @@ const backendTlsPolicyColumns: CrdColumn[] = [
     header: "sni",
     accessor: (resource) =>
       getValueByPath(resource, "spec.validation.hostname"),
-    cell: (value) => String(value ?? "—"),
+    cell: orNone,
   },
   {
     id: "trust",
@@ -91,8 +91,7 @@ const backendTlsPolicyColumns: CrdColumn[] = [
       ) as Array<{ name?: string }> | undefined;
       return (refs ?? []).map((ref) => ref.name ?? "?");
     },
-    cell: (value) =>
-      Array.isArray(value) ? names(value) : String(value ?? "—"),
+    cell: (value) => (Array.isArray(value) ? names(value) : orNone(value)),
   },
 ];
 
@@ -101,7 +100,7 @@ const gatewayColumns: CrdColumn[] = [
     id: "class",
     header: "class",
     accessor: (resource) => getValueByPath(resource, "spec.gatewayClassName"),
-    cell: (value) => String(value ?? "—"),
+    cell: orNone,
   },
   {
     id: "listeners",
@@ -137,7 +136,7 @@ const gatewayClassColumns: CrdColumn[] = [
     id: "controller",
     header: "controller",
     accessor: (resource) => getValueByPath(resource, "spec.controllerName"),
-    cell: (value) => String(value ?? "—"),
+    cell: orNone,
   },
 ];
 
@@ -146,7 +145,7 @@ const listenerSetColumns: CrdColumn[] = [
     id: "gateway",
     header: "gateway",
     accessor: (resource) => getValueByPath(resource, "spec.parentRef.name"),
-    cell: (value) => String(value ?? "—"),
+    cell: orNone,
   },
   {
     id: "listeners",

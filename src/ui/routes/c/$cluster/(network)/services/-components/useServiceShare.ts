@@ -72,11 +72,16 @@ export function servicePortsSection(service: ServiceInfo, t: T): PlacedSection {
       ],
       rows: service.ports.map((port) => ({
         cells: [
-          { text: port.name || "–" },
+          { text: port.name || t("empty", "noneLower") },
           { text: String(port.port), mono: true },
           { text: port.targetPort, mono: true },
           { text: port.protocol },
-          { text: port.nodePort != null ? String(port.nodePort) : "–" },
+          {
+            text:
+              port.nodePort != null
+                ? String(port.nodePort)
+                : t("empty", "noneLower"),
+          },
         ],
       })),
       more: null,

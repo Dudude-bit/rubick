@@ -61,6 +61,7 @@ import type {
   ListenerInfo,
   RouteInfo,
 } from "@/generated/types";
+import { None } from "@/components/ui/none";
 
 const ROUTE_KINDS = new Set<string>(GATEWAY_ROUTE_KINDS);
 
@@ -208,7 +209,7 @@ function ListenerRows({ gateway }: { gateway: GatewayInfo }) {
                 </TableCell>
                 <TableCell>
                   {listener.tlsMode === null ? (
-                    <span className="text-fg-fnt">—</span>
+                    <None />
                   ) : (
                     <span className="text-fg-mut">
                       {listener.tlsMode}

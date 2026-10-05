@@ -238,7 +238,7 @@ export function RenewalNote({
       {story.since
         ? `, ${t("empty", "startedWhen", { when: relative(t, story.since) })}`
         : ""}
-      {story.stalled ? ` — ${stalledWords(story.stalled, t)}` : ""}
+      {story.stalled ? `: ${stalledWords(story.stalled, t)}` : ""}
     </p>
   );
 }

@@ -28,7 +28,7 @@ export function pvFactsSection(pv: PersistentVolumeInfo, t: T): PlacedSection {
   const rows: { label: string; values: ReportValue[] }[] = [
     {
       label: t("columns", "capacity"),
-      values: [{ text: pv.capacity ?? "–", mono: true }],
+      values: [{ text: pv.capacity ?? t("empty", "noneLower"), mono: true }],
     },
     {
       label: t("columns", "accessModes"),
@@ -66,7 +66,9 @@ export function pvFactsSection(pv: PersistentVolumeInfo, t: T): PlacedSection {
     },
     {
       label: t("columns", "reclaimPolicy"),
-      values: [{ text: pv.reclaimPolicy ?? "–", mono: true }],
+      values: [
+        { text: pv.reclaimPolicy ?? t("empty", "noneLower"), mono: true },
+      ],
     },
     ...(pv.reason
       ? [

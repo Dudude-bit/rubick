@@ -566,7 +566,7 @@ function PathRow({
               ? t("empty", "unknownLower")
               : "…"
             : backing?.stop
-              ? "—"
+              ? t("count", "nPublished", { n: 0 })
               : backing
                 ? t("count", "nReady", { n: backing.ready })
                 : ""}
@@ -722,7 +722,9 @@ function HostChain({
         </Column>
         <Column label={t("columns", "published")}>
           {route.service === null ? (
-            <Cell under={t("empty", "notAService")}>—</Cell>
+            <Cell under={t("empty", "notAService")}>
+              {t("cluster", "markUnchecked")}
+            </Cell>
           ) : !backing.known ? (
             <Cell
               under={t(
@@ -731,7 +733,7 @@ function HostChain({
               )}
               title={backing.error ?? undefined}
             >
-              —
+              {backing.error ? t("empty", "notReadLower") : "…"}
             </Cell>
           ) : backing.stop ? (
             <Cell bad under={t("empty", stopUnder(backing.stop))}>

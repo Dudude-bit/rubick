@@ -7,7 +7,7 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchMultiple, dash } from "../kit";
+import { getValueByPath, matchMultiple, orNone } from "../kit";
 import type { CrdView } from "../registry";
 import {
   bindingIdentity,
@@ -23,19 +23,19 @@ const identityColumns: CrdColumn[] = [
     id: "type",
     header: "type",
     accessor: (resource, t) => identityType(resource, t),
-    cell: dash,
+    cell: orNone,
   },
   {
     id: "resource",
     header: "identity",
     accessor: (resource) => identityResource(resource),
-    cell: dash,
+    cell: orNone,
   },
   {
     id: "clientId",
     header: "clientId",
     accessor: (resource) => identityClientId(resource),
-    cell: dash,
+    cell: orNone,
   },
 ];
 
@@ -44,7 +44,7 @@ const bindingColumns: CrdColumn[] = [
     id: "identity",
     header: "binds",
     accessor: (resource) => bindingIdentity(resource),
-    cell: dash,
+    cell: orNone,
   },
   {
     id: "selector",
@@ -53,7 +53,7 @@ const bindingColumns: CrdColumn[] = [
       const selector = bindingSelector(resource);
       return selector === null ? null : `aadpodidbinding=${selector}`;
     },
-    cell: dash,
+    cell: orNone,
   },
 ];
 
@@ -70,26 +70,26 @@ const assignedColumns: CrdColumn[] = [
     id: "pod",
     header: "pod",
     accessor: (resource) => getValueByPath(resource, "spec.pod"),
-    cell: dash,
+    cell: orNone,
   },
   {
     id: "identity",
     header: "identity",
     accessor: (resource) =>
       getValueByPath(resource, "spec.azureIdentityRef.metadata.name"),
-    cell: dash,
+    cell: orNone,
   },
   {
     id: "node",
     header: "node",
     accessor: (resource) => getValueByPath(resource, "spec.nodename"),
-    cell: dash,
+    cell: orNone,
   },
   {
     id: "status",
     header: "status",
     accessor: (resource) => getValueByPath(resource, "status.status"),
-    cell: dash,
+    cell: orNone,
   },
 ];
 
@@ -98,7 +98,7 @@ const prohibitedColumns: CrdColumn[] = [
     id: "target",
     header: "leavesAlone",
     accessor: (resource, t) => prohibitedTargetSummary(resource, t),
-    cell: dash,
+    cell: orNone,
   },
 ];
 

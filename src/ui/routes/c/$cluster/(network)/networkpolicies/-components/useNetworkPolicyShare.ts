@@ -57,7 +57,7 @@ export function networkPolicyStats(
     },
     {
       label: t("share", "netPolicyTypes"),
-      value: types.length > 0 ? types.join(", ") : "–",
+      value: types.length > 0 ? types.join(", ") : t("empty", "noneLower"),
     },
   ];
 }

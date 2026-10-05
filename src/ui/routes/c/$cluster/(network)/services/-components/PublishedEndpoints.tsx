@@ -42,6 +42,7 @@ import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { ObjectRef, ServicePublished } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 /** How many rows are worth drawing before the reader has to ask for more.
  *  1240 rows is not an answer; the count and the disagreements are. */
@@ -173,7 +174,7 @@ function Lists({ published }: { published: ServicePublished }) {
                           showKind={false}
                         />
                       ) : (
-                        <span className="text-fg-fnt">—</span>
+                        <None />
                       )}
                     </TableCell>
                     {zoned && (

@@ -15,7 +15,7 @@
 
 import { joinSayings, sayWords } from "@/i18n/say";
 import type { CrdColumn } from "../kit";
-import { matchMultiple, dash } from "../kit";
+import { matchMultiple, orNone } from "../kit";
 import type { CrdView } from "../registry";
 import {
   backendConfigSummary,
@@ -35,13 +35,13 @@ const backendConfigColumns: CrdColumn[] = [
       const said = healthCheckOf(resource);
       return said === null ? null : sayWords(said, t);
     },
-    cell: dash,
+    cell: orNone,
   },
   {
     id: "behaviour",
     header: "applies",
     accessor: (resource, t) => joinSayings(backendConfigSummary(resource), t),
-    cell: dash,
+    cell: orNone,
   },
 ];
 
@@ -50,7 +50,7 @@ const frontendConfigColumns: CrdColumn[] = [
     id: "behaviour",
     header: "applies",
     accessor: (resource, t) => joinSayings(frontendConfigSummary(resource), t),
-    cell: dash,
+    cell: orNone,
   },
 ];
 
@@ -63,13 +63,13 @@ const managedCertificateColumns: CrdColumn[] = [
     // writes before it has looked at the certificate *and* what a cluster
     // with no controller running has, and a pill saying "Unknown" over the
     // second one would dress a missing controller up as a certificate state.
-    cell: (value) => (typeof value === "string" && value !== "" ? value : "—"),
+    cell: (value) => (typeof value === "string" ? orNone(value) : orNone(null)),
   },
   {
     id: "domains",
     header: "domains",
     accessor: (resource) => certificateDomains(resource).join(", "),
-    cell: dash,
+    cell: orNone,
   },
   {
     id: "notProvisioned",
@@ -83,7 +83,7 @@ const managedCertificateColumns: CrdColumn[] = [
         .filter((entry) => certificateTone(entry.status) !== "ok")
         .map((entry) => `${entry.domain} ${entry.status}`)
         .join(", "),
-    cell: dash,
+    cell: orNone,
   },
 ];
 

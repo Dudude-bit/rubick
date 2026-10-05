@@ -1,5 +1,5 @@
 import type { CrdColumn } from "../kit";
-import { conditionOf, getValueByPath, matchByGroup } from "../kit";
+import { conditionOf, getValueByPath, matchByGroup, orNone } from "../kit";
 import type { CrdView } from "../registry";
 import { GROUP } from "./data";
 
@@ -17,14 +17,12 @@ function condensedStatus(
   return null;
 }
 
-const text = (value: unknown) => String(value ?? "-");
-
 const clusterColumns: CrdColumn[] = [
   {
     id: "version",
     header: "version",
     accessor: (resource) => getValueByPath(resource, "spec.version"),
-    cell: text,
+    cell: orNone,
   },
   {
     id: "members",
@@ -35,10 +33,10 @@ const clusterColumns: CrdColumn[] = [
     accessor: (resource) => {
       const ready = getValueByPath(resource, "status.readyMembers");
       const total = getValueByPath(resource, "status.members");
-      if (ready === undefined && total === undefined) return "–";
+      if (ready === undefined && total === undefined) return null;
       return `${ready ?? "?"}/${total ?? "?"}`;
     },
-    cell: text,
+    cell: orNone,
   },
   {
     id: "racks",
@@ -47,7 +45,7 @@ const clusterColumns: CrdColumn[] = [
       const racks = getValueByPath(resource, "spec.datacenter.racks");
       return Array.isArray(racks) ? racks.length : null;
     },
-    cell: text,
+    cell: orNone,
   },
 ];
 
@@ -56,7 +54,7 @@ const defaultColumns: CrdColumn[] = [
     id: "conditions",
     header: "conditions",
     accessor: (resource) => condensedStatus(resource),
-    cell: text,
+    cell: orNone,
   },
 ];
 

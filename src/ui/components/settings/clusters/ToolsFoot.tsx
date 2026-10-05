@@ -68,7 +68,7 @@ export function ToolsFoot({
       />
       {" · "}
       <Tool name="helm" found={helm?.available} version={helm?.version} />
-      {" — "}
+      {" · "}
       <Foot onClick={onManagePaths} expanded={toolPathsOpen}>
         {t("settings", "manageToolPaths")}
       </Foot>

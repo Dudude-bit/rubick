@@ -67,6 +67,7 @@ import {
 import { useSearchParam } from "@/hooks/useSearchParam";
 import { useT } from "@/i18n/useT";
 import { troubleMark } from "../kit";
+import { None } from "@/components/ui/none";
 
 const AUTO_OPEN = 8;
 
@@ -601,7 +602,9 @@ function HostChain({
         </Column>
         <Column label={t("columns", "published")}>
           {!destination || destination.external === true ? (
-            <Cell under={t("empty", "notThisClustersPods")}>—</Cell>
+            <Cell under={t("empty", "notThisClustersPods")}>
+              {t("cluster", "markUnchecked")}
+            </Cell>
           ) : !backing?.known ? (
             <Cell
               unknown
@@ -611,7 +614,7 @@ function HostChain({
               )}
               title={backing?.error ?? undefined}
             >
-              —
+              {backing?.error ? t("empty", "notReadLower") : "…"}
             </Cell>
           ) : backing.stop ? (
             <Cell bad under={t("empty", stopUnder(backing.stop))}>
@@ -1040,7 +1043,7 @@ function SubsetsTab({
                   />
                 </span>
                 <span className="truncate font-mono text-fg-mut">
-                  {spec.host ?? "—"}
+                  {spec.host ?? <None />}
                 </span>
                 <span className="truncate text-fg-mut">
                   {subsets.length === 0 ? (

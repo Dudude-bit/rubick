@@ -78,11 +78,11 @@ export function revisionsSection(
         }),
       },
       { text: `${rs.replicas.ready}/${rs.replicas.desired}` },
-      { text: tags || "–", mono: Boolean(tags) },
+      { text: tags || t("empty", "noneLower"), mono: Boolean(tags) },
       {
         text: rs.createdAt
           ? formatSince(Date.parse(rs.createdAt), Date.parse(capturedAt))
-          : "–",
+          : t("empty", "noneLower"),
       },
     ];
     return { cells };

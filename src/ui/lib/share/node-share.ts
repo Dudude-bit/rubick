@@ -49,7 +49,8 @@ export function nodeStatsOf(
   const stats: ReportStat[] = [
     {
       label: t("columns", "roles"),
-      value: node.roles.length > 0 ? node.roles.join(", ") : "–",
+      value:
+        node.roles.length > 0 ? node.roles.join(", ") : t("empty", "noneLower"),
     },
     { label: t("share", "clKubernetesVersion"), value: node.version },
     { label: t("columns", "os"), value: `${node.os}/${node.arch}` },
@@ -125,7 +126,7 @@ export function taintsSection(taints: TaintInfo[], t: T): PlacedSection | null {
       rows: taints.map((taint) => ({
         cells: [
           { text: taint.key, mono: true },
-          { text: taint.value ?? "–" },
+          { text: taint.value ?? t("empty", "noneLower") },
           {
             text: taint.effect,
             role: taint.effect === "PreferNoSchedule" ? undefined : "warn",
@@ -188,7 +189,7 @@ export function podsOnNodeSection(
           {
             text: pod.createdAt
               ? formatSince(Date.parse(pod.createdAt), Date.parse(capturedAt))
-              : "–",
+              : t("empty", "noneLower"),
           },
         ],
       })),

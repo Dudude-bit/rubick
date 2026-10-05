@@ -47,7 +47,7 @@ describe("what the Endpoints page leads with", () => {
 });
 
 describe("the addresses table", () => {
-  it("carries a pod reference on the ready row and a plain dash on the unnamed one, deleting this breaks the row content", () => {
+  it("carries a pod reference on the ready row and the word none on the unnamed one, deleting this breaks the row content", () => {
     const section = endpointsAddressesSection(endpoints, t);
     expect(section.count).toBe(2);
     expect(section.body).toMatchObject({
@@ -65,8 +65,8 @@ describe("the addresses table", () => {
           cells: [
             { text: "10.42.0.2" },
             { role: "err" },
-            { text: "–" },
-            { text: "–" },
+            { text: "none" },
+            { text: "none" },
           ],
         },
       ],

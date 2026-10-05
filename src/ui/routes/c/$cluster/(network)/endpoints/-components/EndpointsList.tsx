@@ -19,6 +19,7 @@ import {
   createAgeColumn,
 } from "../../../-list/columns";
 import { createResourceListPage } from "../../../-list/createResourceListPage";
+import { None } from "@/components/ui/none";
 
 export const columns = (): ColumnDef<EndpointsInfo>[] => [
   createNameColumn<EndpointsInfo>(ResourceType.Endpoints),
@@ -142,7 +143,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
     },
     cell: ({ row }) => {
       const ports = row.original.subsets.flatMap((s) => s.ports);
-      if (ports.length === 0) return <span className="text-fg-fnt">—</span>;
+      if (ports.length === 0) return <None />;
       // Ports are values, not states: a pill around each one turns a
       // three-item list into three little boxes.
       return (
@@ -178,7 +179,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
     cell: ({ row }) => {
       const addresses = row.original.subsets.flatMap((s) => s.addresses);
       if (addresses.length === 0) {
-        return <span className="text-fg-fnt">—</span>;
+        return <None />;
       }
       return (
         <Tooltip>

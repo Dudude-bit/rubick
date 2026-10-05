@@ -48,6 +48,7 @@ import { deliveryOfKind } from "@/lib/delivery";
 import { sayMatch } from "@/lib/route-match";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import type { EventFilters, RouteInfo, RouteRuleInfo } from "@/generated/types";
+import { None } from "@/components/ui/none";
 
 function RuleRows({ route }: { route: RouteInfo }) {
   const t = useT();
@@ -150,7 +151,7 @@ function RuleRows({ route }: { route: RouteInfo }) {
                                     name={backend.namespace}
                                     showKind={false}
                                   />{" "}
-                                  — {t("empty", "needsReferenceGrant")}
+                                  ({t("empty", "needsReferenceGrant")})
                                 </span>
                               )}
                           </TableCell>
@@ -163,17 +164,19 @@ function RuleRows({ route }: { route: RouteInfo }) {
                                 namespace={namespace}
                               />
                             ) : (
-                              (backend.port ?? "—")
+                              (backend.port ?? <None />)
                             )}
                           </TableCell>
                           <TableCell className="text-fg-fnt">
                             {backend.weight === 0
                               ? t("empty", "zeroWeight")
-                              : (backend.weight ?? "—")}
+                              : (backend.weight ?? t("action", "notSet"))}
                           </TableCell>
                           <TableCell className="text-xs">
                             {state === null ? (
-                              <span className="text-fg-fnt">—</span>
+                              <span className="text-fg-fnt">
+                                {t("cluster", "markUnchecked")}
+                              </span>
                             ) : !state.known ? (
                               <span className="text-fg-fnt">
                                 {t("action", "readingInline")}

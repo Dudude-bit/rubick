@@ -25,6 +25,7 @@ import { commands } from "@/lib/commands";
 import { legacyNote, publishedSummary } from "@/lib/published";
 import type { EndpointAddress, EndpointsInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 /** Every address in the object, flattened, carrying its readiness. */
 type Backend = {
@@ -212,7 +213,7 @@ export function EndpointsDetail() {
                           showKind={address.targetRef.kind !== ResourceType.Pod}
                         />
                       ) : (
-                        <span className="text-fg-fnt">—</span>
+                        <None />
                       )}
                     </TableCell>
                     <TableCell>
@@ -225,7 +226,7 @@ export function EndpointsDetail() {
                           showKind={false}
                         />
                       ) : (
-                        <span className="text-fg-fnt">—</span>
+                        <None />
                       )}
                     </TableCell>
                     {showSubset && (

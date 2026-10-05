@@ -13,7 +13,10 @@ import type { GatewayInfo, ListenerInfo } from "@/generated/types";
 export function gatewayStats(gateway: GatewayInfo, t: T): ReportStat[] {
   const programmed = gatewayProgrammed(gateway);
   return [
-    { label: t("columns", "class"), value: gateway.className || "–" },
+    {
+      label: t("columns", "class"),
+      value: gateway.className || t("empty", "noneLower"),
+    },
     programmed
       ? {
           label: t("columns", "programmed"),
@@ -94,7 +97,7 @@ export function gatewayListenersSection(
               text:
                 listener.attachedRoutes != null
                   ? String(listener.attachedRoutes)
-                  : "–",
+                  : t("empty", "unknownLower"),
             },
             { text: state.text, role: state.role },
           ],
@@ -115,7 +118,7 @@ export function gatewayListenerConditionsSection(
         { text: listener.name },
         { text: condition.type, mono: true },
         { text: condition.status, role: conditionRole(condition) },
-        { text: condition.reason ?? "–" },
+        { text: condition.reason ?? t("empty", "noneLower") },
       ],
     }))
   );

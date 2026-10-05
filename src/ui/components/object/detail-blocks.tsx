@@ -2,6 +2,7 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
+import { None } from "@/components/ui/none";
 import { conditionRole } from "@/lib/condition-health";
 import { eventReasonMark } from "@/lib/event-reason";
 import type { MessageSubject } from "@/lib/message-refs";
@@ -419,7 +420,7 @@ export function Composition({
             total == null ? "text-fg-fnt" : "text-fg"
           )}
         >
-          {total ?? "—"}
+          {total ?? <T section="empty" k="notReadLower" />}
         </span>
         <span className="text-[11px] text-fg-mut">{label}</span>
       </div>
@@ -601,7 +602,7 @@ function EventRow({
           className="h-2.5 w-2.5 flex-none self-center"
           aria-hidden="true"
         />
-        <span className="truncate">{event.reason ?? "—"}</span>
+        <span className="truncate">{event.reason ?? <None />}</span>
       </span>
       {/* The row truncates, and an Event has no detail page to open, so the
        *  controller's own sentence is otherwise unreachable. */}
@@ -618,7 +619,7 @@ function EventRow({
         )}
         {event.message && (
           <span className="text-fg-fnt">
-            {showObject ? " — " : ""}
+            {showObject ? ": " : ""}
             <ResourceMessage message={event.message} subject={subject} />
           </span>
         )}
@@ -630,7 +631,7 @@ function EventRow({
         className="whitespace-nowrap text-right text-[11px] text-fg-fnt"
         title={formatDate(event.lastTimestamp) ?? undefined}
       >
-        {event.lastTimestamp ? age : "—"}
+        {event.lastTimestamp ? age : <None />}
       </span>
     </div>
   );
