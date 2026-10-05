@@ -1640,7 +1640,11 @@ export const ru: Catalogue = {
     guessCrashTimeoutServiceEmpty:
       "Скорее всего: {host}:{port} так и не ответил. Этот адрес у Service {service}, за которым сейчас нет ни одного готового эндпоинта; сам под, скорее всего, в порядке.",
     guessCrashTimeoutServiceReady:
-      "Скорее всего: {host}:{port} так и не ответил. Этот адрес у Service {service}, готово {ready} из {total} эндпоинтов, так что пакеты, скорее всего, теряются по дороге — обычно это NetworkPolicy, а их приложение не читало.",
+      "Скорее всего: {host}:{port} так и не ответил. Этот адрес у Service {service}, готово {ready} из {total} эндпоинтов, и ни одна NetworkPolicy здесь не ограничивает исходящий трафик этого пода или входящий трафик тех подов, поэтому пакеты, скорее всего, теряются где-то ещё: в собственной политике сетевого плагина или потому, что на этом порту никто не слушает.",
+    guessCrashTimeoutServicePolicy:
+      "Скорее всего: {host}:{port} так и не ответил. Этот адрес у Service {service}, готово {ready} из {total} эндпоинтов, а на пути стоит NetworkPolicy: {policies}. Соединение, которое она не разрешает, отбрасывается, и выглядит это, скорее всего, именно так.",
+    guessCrashTimeoutServicePoliciesUnread:
+      "Скорее всего: {host}:{port} так и не ответил. Этот адрес у Service {service}, готово {ready} из {total} эндпоинтов, так что пакеты, скорее всего, теряются по дороге. Обычно причина в NetworkPolicy, но политики на этом пути прочитать не удалось, поэтому приложение не может сказать.",
     guessCrashServiceUncounted:
       "Скорее всего: приложение не может достучаться до {host}:{port}. Этот адрес у Service {service}, а что стоит за ним — прочитать не удалось: с этого, скорее всего, и стоит начать, но сказать отсюда нечего.",
     guessCrashInClusterUnread:
@@ -1674,6 +1678,16 @@ export const ru: Catalogue = {
     guessProbe:
       "Скорее всего: проба {probe} падает, и kubelet на это реагирует, уже {times}. Приложение, скорее всего, стартует медленнее, чем позволяет проба, или слушает другой порт или путь.",
     factLastLineSaid: "Последняя строка перед выходом: {line}",
+    factEgressRestricted:
+      "Исходящий трафик этого пода ограничивает NetworkPolicy: {policies}. Выходит только то, что она разрешает.",
+    factEgressOpen:
+      "Ни одна NetworkPolicy в {namespace} не ограничивает исходящий трафик этого пода.",
+    factIngressRestricted:
+      "Входящий трафик подов за {service} ограничивает NetworkPolicy: {policies}. Входит только то, что она разрешает.",
+    factIngressOpen:
+      "Ни одна NetworkPolicy не ограничивает входящий трафик подов за {service}.",
+    factPoliciesUnread:
+      "NetworkPolicy пространства имён {namespace} прочитать не удалось, поэтому сказать, отбрасывает ли одна из них это соединение, нельзя.",
     factExited: "{container} завершился с кодом {code}, уже {restarts}.",
     factRestarts: "{container} перезапускался {times}.",
     countRestarts: {
@@ -1705,6 +1719,7 @@ export const ru: Catalogue = {
     stateRunningNotReady: "работает, не готов",
     checkLastLines: "Прочитать последние строки {container} перед выходом",
     checkSidecarLines: "Прочитать последние строки {sidecar}",
+    checkNetworkPolicy: "Прочитать NetworkPolicy {name}: что она пропускает",
     checkService: "Проверить Service {service}: эндпоинты и что за ними",
     checkConfig:
       "Посмотреть {kind} {name}, если адрес неверный, а не недоступный",
@@ -1726,7 +1741,8 @@ export const ru: Catalogue = {
     notReadEvents: "события этого пода ({reason})",
     notReadOtherNamespace:
       "Services в {namespace}, где живёт этот адрес — приложение перечислило только namespace самого пода",
-    notReadPolicies: "NetworkPolicy: у приложения пока нет для них читателя",
+    notReadPolicies: "NetworkPolicy пространства имён {namespace} ({reason})",
+    notReadPods: "поды пространства имён {namespace} ({reason})",
   },
   services: {
     myServices: "Мои сервисы",

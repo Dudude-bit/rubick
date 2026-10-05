@@ -152,6 +152,7 @@ const NONE: Chain = {
   endpointsKnown: true,
   service: null,
   sidecar: null,
+  policies: { read: "unread", why: null },
   notRead: [],
 };
 
@@ -354,6 +355,7 @@ describe("hintFor", () => {
       servicesKnown: true,
       endpointsKnown: true,
       sidecar: null,
+      policies: { read: "unread", why: null },
       notRead: [],
     };
     const hint = hintFor(troubleOf(crashing(), [])!, crashing(), chain);
@@ -385,6 +387,7 @@ describe("hintFor", () => {
       servicesKnown: true,
       endpointsKnown: true,
       sidecar,
+      policies: { read: "unread", why: null },
       notRead: [],
     };
     const hint = hintFor(troubleOf(crashing(), [])!, crashing(), chain);
@@ -408,7 +411,8 @@ describe("hintFor", () => {
       servicesKnown: true,
       endpointsKnown: true,
       sidecar: null,
-      notRead: ["NetworkPolicies: this app has no reader for them yet"],
+      policies: { read: "unread", why: null },
+      notRead: ["the NetworkPolicies of shop (forbidden)"],
     };
     const hint = hintFor(troubleOf(crashing(), [])!, crashing(), chain);
     expect(hint.headline.key).toBe("guessCrashTimeoutOutside");
@@ -690,6 +694,7 @@ describe("the Service leg, when the app could not read it", () => {
         ...NONE,
         address: timedOut,
         service,
+        policies: { read: "read", egress: [], ingress: [] },
       }).headline.key
     ).toBe("guessCrashTimeoutServiceReady");
     expect(
@@ -714,6 +719,97 @@ describe("the Service leg, when the app could not read it", () => {
       ]),
     });
     expect(hint.headline.key).toBe("guessCrashLoopback");
+  });
+});
+
+describe("the NetworkPolicies on the way to a timed-out address", () => {
+  const timedOut = () => addressIn(["dial tcp 10.43.39.231:5432: i/o timeout"]);
+  const service = {
+    name: "shop-db-rw",
+    namespace: "shop",
+    ready: 3,
+    total: 3,
+  };
+  const hint = (policies: Chain["policies"]) =>
+    hintFor(troubleOf(crashing(), [])!, crashing(), {
+      ...NONE,
+      address: timedOut(),
+      service,
+      policies,
+    });
+
+  /**
+   * The sentence said "a NetworkPolicy is the usual reason, and this app
+   * did not read any" while the Pod page read them. A policy on the path is
+   * named, linked, and becomes the guess.
+   */
+  it("names the policy that restricts the path and links it", () => {
+    const said = hint({
+      read: "read",
+      egress: ["egress-allowlist"],
+      ingress: ["db-from-api"],
+    });
+    expect(said.headline.key).toBe("guessCrashTimeoutServicePolicy");
+    expect(said.headline.values?.policies).toBe(
+      "egress-allowlist, db-from-api"
+    );
+    expect(said.lines.map((line) => line.key)).toEqual(
+      expect.arrayContaining(["factEgressRestricted", "factIngressRestricted"])
+    );
+    expect(
+      said.checks.filter(
+        (check) =>
+          check.to?.kind === "object" && check.to.objectKind === "NetworkPolicy"
+      )
+    ).toHaveLength(2);
+  });
+
+  /** Read and nothing restricts it: said so, and the guess looks elsewhere. */
+  it("says no policy restricts the path when none does", () => {
+    const said = hint({ read: "read", egress: [], ingress: [] });
+    expect(said.headline.key).toBe("guessCrashTimeoutServiceReady");
+    expect(said.lines.map((line) => line.key)).toEqual(
+      expect.arrayContaining(["factEgressOpen", "factIngressOpen"])
+    );
+  });
+
+  /**
+   * The thesis: policies nobody could read are not "no policy". Fails if a
+   * refused read falls through to the sentence that clears them.
+   */
+  it("cannot say when the policies were not read", () => {
+    const said = hint({ read: "unread", why: "forbidden" });
+    expect(said.headline.key).toBe("guessCrashTimeoutServicePoliciesUnread");
+    expect(said.lines.map((line) => line.key)).toContain("factPoliciesUnread");
+    expect(said.lines.map((line) => line.key)).not.toContain("factEgressOpen");
+  });
+
+  /** Outside the cluster only this pod's egress is on the path. */
+  it("says what restricts this pod's egress to an address outside", () => {
+    const outside = hintFor(troubleOf(crashing(), [])!, crashing(), {
+      ...NONE,
+      address: addressIn(["dial tcp api.example.com:443: i/o timeout"]),
+      policies: { read: "read", egress: ["egress-allowlist"], ingress: null },
+    });
+    expect(outside.headline.key).toBe("guessCrashTimeoutOutside");
+    expect(outside.lines.map((line) => line.key)).toContain(
+      "factEgressRestricted"
+    );
+  });
+
+  /** A refusal is something answering: no policy line is offered for it. */
+  it("leaves policies out of a refused connection", () => {
+    const refused = hintFor(troubleOf(crashing(), [])!, crashing(), {
+      ...NONE,
+      address: addressIn([
+        "dial tcp 10.43.39.231:5432: connect: connection refused",
+      ]),
+      service,
+      policies: { read: "read", egress: ["egress-allowlist"], ingress: [] },
+    });
+    expect(refused.lines.map((line) => line.key)).not.toContain(
+      "factEgressRestricted"
+    );
   });
 });
 
@@ -851,6 +947,7 @@ describe("agentReport", () => {
         endpointsKnown: true,
         service: { name: "shop-db-rw", namespace: "shop", ready: 0, total: 3 },
         sidecar: null,
+        policies: { read: "unread", why: null },
         notRead: ["NetworkPolicy in shop (403)"],
       },
       mounts: [leaky],

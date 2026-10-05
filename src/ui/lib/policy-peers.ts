@@ -101,6 +101,12 @@ export function peerMatch(
   };
 }
 
+/** A namespace's NetworkPolicies, and why that namespace was not read. */
+export type PolicyRows = Known<{
+  rows: NetworkPolicyInfo[];
+  unreadHere: string | null;
+}>;
+
 export type Direction = "ingress" | "egress";
 
 /** What one direction of one pod is under. */
@@ -135,7 +141,7 @@ function directionOf(
 /** The NetworkPolicies that select one pod, per direction. */
 export function podPolicies(
   pod: { namespace: string; labels: Labels },
-  policies: Known<{ rows: NetworkPolicyInfo[]; unreadHere: string | null }>
+  policies: PolicyRows
 ): PodPolicies {
   if (!policies.known || policies.value.unreadHere !== null) {
     const why = policies.known ? policies.value.unreadHere : policies.why;
@@ -155,4 +161,41 @@ export function podPolicies(
     ingress: directionOf("ingress", selecting, undecided),
     egress: directionOf("egress", selecting, undecided),
   };
+}
+
+/**
+ * The NetworkPolicies on a connection's path: what restricts the source
+ * pod's egress, and the target pods' ingress. `ingress` is `null` where
+ * there are no target pods to ask about, an address outside the cluster.
+ */
+export type PathPolicies =
+  | { read: "unread"; why: string | null }
+  | { read: "read"; egress: string[]; ingress: string[] | null };
+
+const isolatingNames = (direction: PodDirection): string[] | null =>
+  direction.state === "cannotSay"
+    ? null
+    : direction.state === "isolated"
+      ? direction.by.map((policy) => policy.name)
+      : [];
+
+export function pathPolicies(
+  source: { namespace: string; labels: Labels },
+  targets: Known<Array<{ namespace: string; labels: Labels }>> | null,
+  policies: PolicyRows
+): PathPolicies {
+  const from = podPolicies(source, policies);
+  if (from.egress.state === "cannotSay") {
+    return { read: "unread", why: from.egress.why };
+  }
+  const egress = isolatingNames(from.egress) ?? [];
+  if (targets === null) return { read: "read", egress, ingress: null };
+  if (!targets.known) return { read: "unread", why: targets.why };
+  const ingress = new Set<string>();
+  for (const target of targets.value) {
+    const names = isolatingNames(podPolicies(target, policies).ingress);
+    if (names === null) return { read: "unread", why: null };
+    for (const name of names) ingress.add(name);
+  }
+  return { read: "read", egress, ingress: [...ingress] };
 }

@@ -17,6 +17,7 @@ import type {
 } from "@/generated/types";
 import type { en } from "@/i18n/catalogue";
 import { formatMemory } from "@/lib/k8s-quantity";
+import type { PathPolicies } from "@/lib/policy-peers";
 
 export type HintKey = keyof typeof en.hints;
 
@@ -404,6 +405,12 @@ export interface Chain {
   } | null;
   /** The container in this pod the address belongs to. */
   sidecar: ContainerInfo | null;
+  /**
+   * The NetworkPolicies on the way to the address, the reading the Pod's
+   * NetworkPolicies tab makes. Required, so no caller can leave it to read
+   * as "none restricts it".
+   */
+  policies: PathPolicies;
   /** What was asked for and refused or never read, in the reader's words. */
   notRead: string[];
 }
@@ -447,6 +454,62 @@ function stateWord(container: ContainerInfo): HintSaying {
       values: { code: state.termination.exitCode },
     };
   return { key: container.ready ? "stateRunning" : "stateRunningNotReady" };
+}
+
+/** Every policy the path names, once each. */
+function policyNames(policies: PathPolicies): string[] {
+  if (policies.read !== "read") return [];
+  return [...new Set([...policies.egress, ...(policies.ingress ?? [])])];
+}
+
+/**
+ * A timeout to a Service with ready endpoints: the packets are dropped on
+ * the way, and whether a NetworkPolicy is what drops them is now read.
+ */
+function timeoutPastPolicies(
+  policies: PathPolicies,
+  counts: Record<string, string | number>
+): HintSaying {
+  const names = policyNames(policies);
+  if (names.length > 0) {
+    return {
+      key: "guessCrashTimeoutServicePolicy",
+      values: { ...counts, policies: names.join(", ") },
+    };
+  }
+  // The target pods were not asked about: no policy found is not none.
+  if (policies.read === "unread" || policies.ingress === null) {
+    return { key: "guessCrashTimeoutServicePoliciesUnread", values: counts };
+  }
+  return { key: "guessCrashTimeoutServiceReady", values: counts };
+}
+
+/** What the NetworkPolicies say about the path, a line per direction. */
+function policyLines(chain: Chain, namespace: string): HintSaying[] {
+  const policies = chain.policies;
+  if (policies.read === "unread") {
+    return [{ key: "factPoliciesUnread", values: { namespace } }];
+  }
+  const lines: HintSaying[] = [
+    policies.egress.length > 0
+      ? {
+          key: "factEgressRestricted",
+          values: { policies: policies.egress.join(", ") },
+        }
+      : { key: "factEgressOpen", values: { namespace } },
+  ];
+  if (policies.ingress !== null && chain.service) {
+    const service = chain.service.name;
+    lines.push(
+      policies.ingress.length > 0
+        ? {
+            key: "factIngressRestricted",
+            values: { service, policies: policies.ingress.join(", ") },
+          }
+        : { key: "factIngressOpen", values: { service } }
+    );
+  }
+  return lines;
 }
 
 /** The sentence and the checks for one trouble, from the chain the app read. */
@@ -501,6 +564,12 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
           headline = { key: "guessCrashLoopback", values: at };
         } else if (address.where === "inCluster" && chain.service) {
           const verb = address.timedOut ? "Timeout" : "Refused";
+          const counts = {
+            ...at,
+            service: chain.service.name,
+            ready: chain.service.ready ?? 0,
+            total: chain.service.total ?? 0,
+          };
           headline =
             chain.service.ready === null
               ? {
@@ -512,15 +581,9 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
                     key: `guessCrash${verb}ServiceEmpty` as const,
                     values: { ...at, service: chain.service.name },
                   }
-                : {
-                    key: `guessCrash${verb}ServiceReady` as const,
-                    values: {
-                      ...at,
-                      service: chain.service.name,
-                      ready: chain.service.ready,
-                      total: chain.service.total ?? 0,
-                    },
-                  };
+                : address.timedOut
+                  ? timeoutPastPolicies(chain.policies, counts)
+                  : { key: "guessCrashRefusedServiceReady", values: counts };
           objectCheck(
             { key: "checkService", values: { service: chain.service.name } },
             "Service",
@@ -543,6 +606,19 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
           headline = { key: "guessCrashRefusedOutside", values: at };
         }
         lines.push({ key: "factLastLineSaid", values: { line: address.line } });
+        // A dropped packet is the one failure a NetworkPolicy causes; a
+        // refusal is something answering.
+        if (address.where !== "sidecar" && !address.refused) {
+          lines.push(...policyLines(chain, pod.namespace));
+          for (const name of policyNames(chain.policies)) {
+            objectCheck(
+              { key: "checkNetworkPolicy", values: { name } },
+              "NetworkPolicy",
+              name,
+              pod.namespace
+            );
+          }
+        }
       }
       if (exit) {
         lines.push({
@@ -988,6 +1064,8 @@ export function agentReport(input: AgentReportInput): string {
       );
     if (chain.sidecar)
       out.push(`  sidecar ${chain.sidecar.name}: ${stateWord(chain.sidecar)}`);
+    if (chain.address && chain.address.where !== "sidecar")
+      out.push(`  NetworkPolicies: ${policyReport(chain.policies)}`);
     for (const mount of input.mounts)
       out.push(
         `  ${mount.kind} ${mount.name} mounted at ${mount.path}${mount.keys !== null ? ` (${mount.keys} keys, values not included)` : " (values not included)"}`
@@ -1001,4 +1079,20 @@ export function agentReport(input: AgentReportInput): string {
     out.push(`App's own guess: ${input.guess}`);
   }
   return out.join("\n");
+}
+
+function policyReport(policies: PathPolicies): string {
+  if (policies.read === "unread") {
+    return `not read${policies.why ? ` (${policies.why})` : ""}`;
+  }
+  const egress =
+    policies.egress.length > 0
+      ? `egress restricted by ${policies.egress.join(", ")}`
+      : "no policy restricts this pod's egress";
+  if (policies.ingress === null) return egress;
+  const ingress =
+    policies.ingress.length > 0
+      ? `ingress to the target restricted by ${policies.ingress.join(", ")}`
+      : "no policy restricts the target's ingress";
+  return `${egress}; ${ingress}`;
 }

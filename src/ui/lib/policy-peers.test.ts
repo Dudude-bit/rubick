@@ -7,6 +7,7 @@ import type {
 } from "@/generated/types";
 import type { Known } from "./known";
 import {
+  pathPolicies,
   peerMatch,
   podPolicies,
   type LabeledNamespace,
@@ -167,5 +168,50 @@ describe("the policies that select one pod", () => {
       rows
     );
     expect(elsewhere.ingress).toEqual({ state: "open" });
+  });
+});
+
+describe("the NetworkPolicies on a connection's path", () => {
+  const WEB = { namespace: "net", labels: { app: "web", role: "frontend" } };
+  const API = { namespace: "net", labels: { app: "api" } };
+  const rows = read({
+    rows: [DEFAULT_DENY, API_FROM_FRONTEND],
+    unreadHere: null,
+  });
+
+  /** web to api: nothing on web's egress, both policies on api's ingress. */
+  it("names what restricts the source's egress and the target's ingress", () => {
+    expect(pathPolicies(WEB, read([API]), rows)).toEqual({
+      read: "read",
+      egress: [],
+      ingress: ["default-deny-ingress", "api-from-frontend"],
+    });
+  });
+
+  it("finds nothing on a path no policy names", () => {
+    const shop = { namespace: "shop", labels: { app: "x" } };
+    expect(pathPolicies(shop, read([shop]), rows)).toEqual({
+      read: "read",
+      egress: [],
+      ingress: [],
+    });
+    expect(pathPolicies(WEB, null, rows)).toEqual({
+      read: "read",
+      egress: [],
+      ingress: null,
+    });
+  });
+
+  /**
+   * Refused policies, or target pods nobody could read, are "cannot say".
+   * Fails if either is answered as a clear path.
+   */
+  it("cannot say when the policies or the target pods were not read", () => {
+    expect(
+      pathPolicies(WEB, read([API]), { known: false, why: "forbidden" })
+    ).toEqual({ read: "unread", why: "forbidden" });
+    expect(
+      pathPolicies(WEB, { known: false, why: "pods is forbidden" }, rows)
+    ).toEqual({ read: "unread", why: "pods is forbidden" });
   });
 });

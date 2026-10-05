@@ -13,6 +13,10 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
 import { addressIn, namespaceOf, type Chain, type Trouble } from "@/lib/hints";
+import { usePolicyPeerData } from "@/hooks/usePolicyPeers";
+import { knownOf } from "@/lib/known";
+import { labelSelectorMatches } from "@/lib/label-selector";
+import { pathPolicies, type PolicyRows } from "@/lib/policy-peers";
 import { ResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
@@ -20,6 +24,7 @@ import type { PodInfo } from "@/generated/types";
 
 /** One array, so "no lines yet" is the same value on every render. */
 const EMPTY_LINES: string[] = [];
+const NO_SELECTOR: Record<string, string> = {};
 
 const LOG_LINES = 40;
 const STALE = 15_000;
@@ -140,6 +145,53 @@ export function useHintChain(
     retry: false,
   });
 
+  // The NetworkPolicies on the way, read as the Pod's NetworkPolicies tab
+  // reads them and from the same cache entry.
+  const onTheWay = address !== null && address.where !== "sidecar";
+  const policyList = useQuery({
+    queryKey: queryKeys.resources(ResourceType.NetworkPolicy, pod.namespace),
+    queryFn: () => commands.listNetworkPoliciesIn([pod.namespace]),
+    enabled: onTheWay,
+    staleTime: STALE,
+    retry: false,
+  });
+  const selector = service?.selector ?? NO_SELECTOR;
+  const selecting = Object.keys(selector).length > 0;
+  const { home: namespacePods } = usePolicyPeerData(
+    onTheWay && selecting ? pod.namespace : null
+  );
+  const policies = useMemo(() => {
+    const listed = knownOf(policyList);
+    const rows: PolicyRows = listed.known
+      ? {
+          known: true,
+          value: {
+            rows: listed.value.rows,
+            unreadHere:
+              listed.value.unread.find(
+                (entry) => entry.namespace === pod.namespace
+              )?.message ?? null,
+          },
+        }
+      : listed;
+    const targets =
+      address?.where === "inCluster" && selecting
+        ? namespacePods.known
+          ? {
+              known: true as const,
+              value: namespacePods.value.filter(
+                (candidate) =>
+                  labelSelectorMatches(
+                    { matchLabels: selector },
+                    candidate.labels
+                  ) === true
+              ),
+            }
+          : namespacePods
+        : null;
+    return pathPolicies(pod, targets, rows);
+  }, [policyList, namespacePods, address, selecting, selector, pod]);
+
   const chain = useMemo<Chain>(() => {
     const notRead: string[] = [];
     if (logs.error && logContainer)
@@ -163,8 +215,20 @@ export function useHintChain(
           reason: errorToShow(endpoints.error),
         })
       );
-    if (address?.where === "outside")
-      notRead.push(t("hints", "notReadPolicies"));
+    if (policyList.error)
+      notRead.push(
+        t("hints", "notReadPolicies", {
+          namespace: pod.namespace,
+          reason: errorToShow(policyList.error),
+        })
+      );
+    if (!namespacePods.known && namespacePods.why !== null)
+      notRead.push(
+        t("hints", "notReadPods", {
+          namespace: pod.namespace,
+          reason: namespacePods.why,
+        })
+      );
     if (elsewhere)
       notRead.push(
         t("hints", "notReadOtherNamespace", { namespace: elsewhere })
@@ -208,9 +272,13 @@ export function useHintChain(
           }
         : null,
       sidecar,
+      policies,
       notRead,
     };
   }, [
+    policies,
+    policyList.error,
+    namespacePods,
     address,
     service,
     endpoints.data,

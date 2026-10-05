@@ -1615,7 +1615,11 @@ export const en = {
     guessCrashTimeoutServiceEmpty:
       "Most likely: {host}:{port} never answered. That address is Service {service}, which has nothing ready behind it right now; the pod itself is probably fine.",
     guessCrashTimeoutServiceReady:
-      "Most likely: {host}:{port} never answered. That address is Service {service}, with {ready} of {total} endpoints ready, so the packets are probably being dropped on the way — a NetworkPolicy is the usual reason, and this app did not read any.",
+      "Most likely: {host}:{port} never answered. That address is Service {service}, with {ready} of {total} endpoints ready, and no NetworkPolicy here restricts this pod's egress or their ingress, so the packets are probably dropped somewhere else: a network plugin's own policy, or nothing listening on that port.",
+    guessCrashTimeoutServicePolicy:
+      "Most likely: {host}:{port} never answered. That address is Service {service}, with {ready} of {total} endpoints ready, and a NetworkPolicy stands on the way: {policies}. A connection it does not allow is dropped, which probably looks exactly like this.",
+    guessCrashTimeoutServicePoliciesUnread:
+      "Most likely: {host}:{port} never answered. That address is Service {service}, with {ready} of {total} endpoints ready, so the packets are probably dropped on the way. A NetworkPolicy is the usual reason, and the ones on this path could not be read, so this app cannot say.",
     guessCrashServiceUncounted:
       "Most likely: the app cannot reach {host}:{port}. That address is Service {service}, and what is behind it could not be read — so whether anything is ready there is probably the first thing to look at, and this app cannot say.",
     guessCrashInClusterUnread:
@@ -1649,6 +1653,16 @@ export const en = {
     guessProbe:
       "Most likely: the {probe} probe fails and the kubelet acts on it, {times} so far. The app probably starts slower than the probe allows, or listens on another port or path.",
     factLastLineSaid: "The last line before the exit said: {line}",
+    factEgressRestricted:
+      "A NetworkPolicy restricts this pod's egress: {policies}. Only what it allows goes out.",
+    factEgressOpen:
+      "No NetworkPolicy in {namespace} restricts this pod's egress.",
+    factIngressRestricted:
+      "A NetworkPolicy restricts ingress to the pods behind {service}: {policies}. Only what it allows comes in.",
+    factIngressOpen:
+      "No NetworkPolicy restricts ingress to the pods behind {service}.",
+    factPoliciesUnread:
+      "The NetworkPolicies of {namespace} could not be read, so whether one drops this connection cannot be said.",
     factExited: "{container} exited with code {code}, {restarts} so far.",
     factRestarts: "{container} restarted {times}.",
     countRestarts: { one: "{n} restart", other: "{n} restarts" },
@@ -1665,6 +1679,7 @@ export const en = {
     stateRunning: "running",
     stateRunningNotReady: "running, not ready",
     checkSidecarLines: "Read the last lines of {sidecar}",
+    checkNetworkPolicy: "Read NetworkPolicy {name}: what it lets through",
     checkService:
       "Check Service {service}: its endpoints and what stands behind them",
     checkConfig:
@@ -1687,7 +1702,8 @@ export const en = {
     notReadEvents: "the events of this pod ({reason})",
     notReadOtherNamespace:
       "the Services of {namespace}, where that address lives — this app only listed this pod's own namespace",
-    notReadPolicies: "NetworkPolicies: this app has no reader for them yet",
+    notReadPolicies: "the NetworkPolicies of {namespace} ({reason})",
+    notReadPods: "the pods of {namespace} ({reason})",
   },
   services: {
     myServices: "My services",
