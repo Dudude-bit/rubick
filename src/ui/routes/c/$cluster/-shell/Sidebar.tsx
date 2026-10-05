@@ -130,20 +130,12 @@ function resource(kind: ResourceKind, count?: keyof ResourceCounts): NavItem {
   };
 }
 
-/** The counts of the access kinds that live in a namespace. */
-const ACCESS_COUNTS: Partial<Record<string, keyof ResourceCounts>> = {
-  serviceaccounts: "serviceAccounts",
-  roles: "roles",
-  rolebindings: "roleBindings",
-};
-
 /** A row for a kind the registry does not hold, listed as kubectl prints it. */
 function servedRow(entry: AccessKind): NavItem {
   return {
     label: entry.displayPlural,
     path: servedListLink(entry),
     icon: entry.icon,
-    count: ACCESS_COUNTS[entry.plural],
     query: {
       group: entry.group,
       resource: entry.plural,
@@ -155,9 +147,9 @@ function servedRow(entry: AccessKind): NavItem {
 /**
  * The nav, in reading order.
  *
- * One rule for the numbers: a row listing a kind that lives in a namespace
- * counts it in the namespaces the window is on. A cluster-wide kind or a
- * page has no number, so every number in the rail follows the picker.
+ * One rule for the numbers: a row shows one only for a kind the overview's
+ * count request already returns, and nothing for a kind it does not count
+ * or could not read, never a 0 it did not measure.
  *
  * A group is a caption, not a control: the resources under it are what the
  * sidebar is for, and hiding them behind a disclosure the user has to open
@@ -186,8 +178,8 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
   {
     caption: "cluster",
     items: [
-      resource(ResourceType.Node),
-      resource(ResourceType.Namespace),
+      resource(ResourceType.Node, "nodes"),
+      resource(ResourceType.Namespace, "namespaces"),
       resource(ResourceType.CustomResourceDefinition),
       {
         labelKey: "apiResources",
@@ -204,15 +196,16 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       // Services name the endpoints behind each one; this is the only place
       // that answers "what is behind everything at once" — which is the
       // question asked when it is not yet known which Service is wrong.
-      resource(ResourceType.Endpoints, "endpoints"),
+      // No count: `ResourceCounts` has no endpoints field to read.
+      resource(ResourceType.Endpoints),
       resource(ResourceType.Ingress, "ingresses"),
-      resource(ResourceType.NetworkPolicy, "networkPolicies"),
+      resource(ResourceType.NetworkPolicy),
     ],
   },
   {
     caption: "storage",
     items: [
-      resource(ResourceType.PersistentVolumeClaim, "persistentVolumeClaims"),
+      resource(ResourceType.PersistentVolumeClaim),
       resource(ResourceType.PersistentVolume),
       resource(ResourceType.StorageClass),
     ],

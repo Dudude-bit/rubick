@@ -192,25 +192,19 @@ describe("the counts at the end of each row", () => {
     expect(screen.queryByText("41")).not.toBeInTheDocument();
   });
   /**
-   * Marco's rail said Ingresses 0 beside an Endpoints row with one object
-   * and no number, and a PVCs row with none: some lists counted and some
-   * did not, by no rule a reader could see. Fails if a row listing a
-   * namespaced kind goes uncounted, or a cluster-wide one shows a number
-   * that does not follow the picker.
+   * Marco's rail said Ingresses 0 beside Endpoints and PVCs with no number.
+   * The 0 was measured; the blanks are kinds the count request does not
+   * return. Fails if a row shows a number for a kind nobody counted, or a 0
+   * for a count the cluster refused.
    */
-  it("counts every row listing a namespaced kind and no cluster-wide one", async () => {
+  it("numbers only the kinds it counted, and never a 0 it did not measure", async () => {
     overview = {
       counts: {
         pods: 11,
-        services: 12,
-        endpoints: 13,
-        ingresses: 14,
-        networkPolicies: 15,
-        persistentVolumeClaims: 16,
-        serviceAccounts: 17,
-        roles: 18,
-        roleBindings: 19,
         nodes: 20,
+        namespaces: 21,
+        ingresses: 0,
+        secrets: null,
       } as ClusterOverview["counts"],
       problems: [],
       problemsTruncated: 0,
@@ -219,17 +213,11 @@ describe("the counts at the end of each row", () => {
 
     const row = (name: string) =>
       screen.findByRole("link", { name: new RegExp(`^${name}`) });
-    for (const [name, n] of [
-      ["Endpoints", "13"],
-      ["Ingresses", "14"],
-      ["NetworkPolicies", "15"],
-      ["PVCs", "16"],
-      ["ServiceAccounts", "17"],
-      ["Roles", "18"],
-      ["RoleBindings", "19"],
-    ] as const)
-      expect(within(await row(name)).getByText(n)).toBeInTheDocument();
-    expect(within(await row("Nodes")).queryByText("20")).toBeNull();
+    expect(within(await row("Nodes")).getByText("20")).toBeInTheDocument();
+    expect(within(await row("Namespaces")).getByText("21")).toBeInTheDocument();
+    expect(within(await row("Ingresses")).getByText("0")).toBeInTheDocument();
+    for (const name of ["Endpoints", "PVCs", "Secrets"])
+      expect(within(await row(name)).queryByText(/^\d+$/)).toBeNull();
   });
 
   /**

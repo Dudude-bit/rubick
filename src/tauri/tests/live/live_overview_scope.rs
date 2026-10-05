@@ -32,7 +32,7 @@ async fn connected() -> AppState {
     state
 }
 
-fn namespaced(counts: &ResourceCounts) -> [Option<usize>; 16] {
+fn namespaced(counts: &ResourceCounts) -> [Option<usize>; 10] {
     [
         counts.pods,
         counts.deployments,
@@ -41,15 +41,9 @@ fn namespaced(counts: &ResourceCounts) -> [Option<usize>; 16] {
         counts.jobs,
         counts.cron_jobs,
         counts.services,
-        counts.endpoints,
         counts.ingresses,
-        counts.network_policies,
-        counts.persistent_volume_claims,
         counts.config_maps,
         counts.secrets,
-        counts.service_accounts,
-        counts.roles,
-        counts.role_bindings,
     ]
 }
 
@@ -72,7 +66,7 @@ fn warnings(overviews: &[&ClusterOverview]) -> BTreeMap<String, i32> {
 /// What differs between the joined answer and its parts, or nothing.
 fn differences(whole: &ClusterOverview, parts: &[ClusterOverview]) -> Vec<String> {
     let mut wrong = Vec::new();
-    let sums: Vec<Option<usize>> = (0..16)
+    let sums: Vec<Option<usize>> = (0..10)
         .map(|i| parts.iter().map(|p| namespaced(&p.counts)[i]).sum())
         .collect();
     if namespaced(&whole.counts).to_vec() != sums {
@@ -83,6 +77,7 @@ fn differences(whole: &ClusterOverview, parts: &[ClusterOverview]) -> Vec<String
     }
     for part in parts {
         if part.counts.nodes != whole.counts.nodes
+            || part.counts.namespaces != whole.counts.namespaces
             || part.nodes.len() != whole.nodes.len()
             || part.served_from != whole.served_from
             || part.metrics_available != whole.metrics_available

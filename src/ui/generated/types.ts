@@ -1864,16 +1864,11 @@ export interface ResourceCounts {
   jobs: number | null;
   cronJobs: number | null;
   nodes: number | null;
+  namespaces: number | null;
   services: number | null;
-  endpoints: number | null;
   ingresses: number | null;
-  networkPolicies: number | null;
-  persistentVolumeClaims: number | null;
   configMaps: number | null;
   secrets: number | null;
-  serviceAccounts: number | null;
-  roles: number | null;
-  roleBindings: number | null;
   events: number | null;
 }
 
