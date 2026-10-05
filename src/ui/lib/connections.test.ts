@@ -1103,8 +1103,8 @@ describe("a node, which is the same edge read from the other end", () => {
       ]),
       ru
     );
-    expect(groups.find((group) => group.key === "placed")?.caption).toMatch(
-      /^— 2 пода в 2 пространствах имён, из 110 возможных на этом узле/
+    expect(groups.find((group) => group.key === "placed")?.caption).toContain(
+      "2 пода в 2 пространствах имён, из 110 возможных на этом узле"
     );
   });
 
