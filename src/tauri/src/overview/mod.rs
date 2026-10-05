@@ -54,7 +54,12 @@ pub struct OverviewCache {
     cooldown: Arc<DashMap<String, Instant>>,
     /// Clusters that refused a watch: not started again until a reconnect.
     refused: Arc<DashSet<String>>,
+    /// Per cluster, the counts it refused: not asked again until a reconnect.
+    refused_counts: DashMap<String, Arc<RefusedCounts>>,
 }
+
+/// The kinds, by reach and plural, a cluster refused to count.
+pub type RefusedCounts = DashSet<String>;
 
 /// What the stores held at one moment. Arcs, not clones: ten thousand pods
 /// are looked at, not copied, on every request.
@@ -236,6 +241,7 @@ impl OverviewCache {
         }
         self.cooldown.remove(context);
         self.refused.remove(context);
+        self.refused_counts.remove(context);
     }
 
     pub fn forget_all(&self) {
@@ -245,6 +251,16 @@ impl OverviewCache {
         self.clusters.clear();
         self.cooldown.clear();
         self.refused.clear();
+        self.refused_counts.clear();
+    }
+
+    /// The counts `context` refused on this connection.
+    #[must_use]
+    pub fn refused_counts(&self, context: &str) -> Arc<RefusedCounts> {
+        self.refused_counts
+            .entry(context.to_string())
+            .or_default()
+            .clone()
     }
 
     /// The watches this process holds, for diagnostics.

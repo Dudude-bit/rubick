@@ -192,6 +192,47 @@ describe("the counts at the end of each row", () => {
     expect(screen.queryByText("41")).not.toBeInTheDocument();
   });
   /**
+   * Marco's rail said Ingresses 0 beside an Endpoints row with one object
+   * and no number, and a PVCs row with none: some lists counted and some
+   * did not, by no rule a reader could see. Fails if a row listing a
+   * namespaced kind goes uncounted, or a cluster-wide one shows a number
+   * that does not follow the picker.
+   */
+  it("counts every row listing a namespaced kind and no cluster-wide one", async () => {
+    overview = {
+      counts: {
+        pods: 11,
+        services: 12,
+        endpoints: 13,
+        ingresses: 14,
+        networkPolicies: 15,
+        persistentVolumeClaims: 16,
+        serviceAccounts: 17,
+        roles: 18,
+        roleBindings: 19,
+        nodes: 20,
+      } as ClusterOverview["counts"],
+      problems: [],
+      problemsTruncated: 0,
+    };
+    await wrap(<Sidebar />);
+
+    const row = (name: string) =>
+      screen.findByRole("link", { name: new RegExp(`^${name}`) });
+    for (const [name, n] of [
+      ["Endpoints", "13"],
+      ["Ingresses", "14"],
+      ["NetworkPolicies", "15"],
+      ["PVCs", "16"],
+      ["ServiceAccounts", "17"],
+      ["Roles", "18"],
+      ["RoleBindings", "19"],
+    ] as const)
+      expect(within(await row(name)).getByText(n)).toBeInTheDocument();
+    expect(within(await row("Nodes")).queryByText("20")).toBeNull();
+  });
+
+  /**
    * The Overview row carries the panel's own total in its worst row's tone.
    * Fails if the badge goes back to counting only the backend's problems, or
    * paints a list of warnings red.

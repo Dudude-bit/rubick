@@ -22,10 +22,13 @@ use chrono::{DateTime, Utc};
 use futures::future::join_all;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
-use k8s_openapi::api::core::v1::{ConfigMap, Event, Namespace, Node, Pod, Secret, Service};
-use k8s_openapi::api::networking::v1::Ingress;
+use k8s_openapi::api::core::v1::{
+    ConfigMap, Endpoints, Event, Node, PersistentVolumeClaim, Pod, Secret, Service, ServiceAccount,
+};
+use k8s_openapi::api::networking::v1::{Ingress, NetworkPolicy};
+use k8s_openapi::api::rbac::v1::{Role, RoleBinding};
 use kube::api::ListParams;
-use kube::{Api, Client};
+use kube::{Api, Client, Resource};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -33,7 +36,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use tauri::State;
 
-use crate::overview::Snapshot;
+use crate::overview::{RefusedCounts, Snapshot};
 
 /// How far back an event still counts as "recent" for the warnings feed.
 const RECENT_WARNING_WINDOW_MINUTES: i64 = 60;
@@ -229,8 +232,8 @@ pub struct NamespaceLoad {
 /// announce that the namespace has none. "Nothing there" and "not allowed to
 /// look" are different facts and the UI renders them differently.
 ///
-/// Namespaced kinds follow the selected namespace; `nodes` and `namespaces`
-/// are cluster-wide because they have no namespace to be scoped to.
+/// Namespaced kinds follow the selected namespace; `nodes` is the cluster's,
+/// read anyway for the scheduler view.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceCounts {
@@ -241,11 +244,16 @@ pub struct ResourceCounts {
     pub jobs: Option<usize>,
     pub cron_jobs: Option<usize>,
     pub nodes: Option<usize>,
-    pub namespaces: Option<usize>,
     pub services: Option<usize>,
+    pub endpoints: Option<usize>,
     pub ingresses: Option<usize>,
+    pub network_policies: Option<usize>,
+    pub persistent_volume_claims: Option<usize>,
     pub config_maps: Option<usize>,
     pub secrets: Option<usize>,
+    pub service_accounts: Option<usize>,
+    pub roles: Option<usize>,
+    pub role_bindings: Option<usize>,
     /// Events the apiserver still holds. Events expire on the cluster's own
     /// TTL — an hour on most installs — so this is a recent-activity count,
     /// not a lifetime total.
@@ -998,19 +1006,36 @@ fn tally(meta: &kube::core::ListMeta, seen: usize) -> Option<usize> {
 /// (pre-1.15, or something in the middle that drops it) leaves us knowing
 /// only "at least a page", and the rail draws `None` as nothing at all
 /// rather than a number that is wrong.
-async fn count_of<K>(api: &Api<K>) -> Option<usize>
+async fn count_of<K>(client: &Client, reach: Option<&str>, refused: &RefusedCounts) -> Option<usize>
 where
-    K: Clone + DeserializeOwned + Debug,
+    K: Resource<DynamicType = (), Scope = k8s_openapi::NamespaceResourceScope>
+        + Clone
+        + DeserializeOwned
+        + Debug,
 {
+    let api: Api<K> = api_in(client, reach);
+    // Asked again on every refresh, a kind the token may not list was one
+    // more 403 every ten seconds for a number the screen never shows.
+    let asked = format!("{}/{}", reach.unwrap_or_default(), K::plural(&()));
+    if refused.contains(&asked) {
+        return None;
+    }
     // A list that could not be read is not an empty list: every caller here
     // is counting a kind the screen can do without, so a refusal degrades
     // that one number to "unknown" instead of stating as fact that the
     // namespace holds none of them.
-    let page = api
+    match api
         .list_metadata(&ListParams::default().limit(COUNT_PAGE_SIZE))
         .await
-        .ok()?;
-    tally(&page.metadata, page.items.len())
+    {
+        Ok(page) => tally(&page.metadata, page.items.len()),
+        Err(error) => {
+            if Error::from(error).is_refusal() {
+                refused.insert(asked);
+            }
+            None
+        }
+    }
 }
 
 fn namespace_loads<'a>(
@@ -1252,28 +1277,51 @@ struct Sides {
     usage_by_node: Option<BTreeMap<String, (f64, u64)>>,
 }
 
-/// Six bounded metadata pages, for one namespace or the whole cluster.
-async fn namespaced_counts(client: &Client, reach: Option<&str>) -> ResourceCounts {
-    let cron_jobs_api: Api<CronJob> = api_in(client, reach);
-    let services_api: Api<Service> = api_in(client, reach);
-    let ingresses_api: Api<Ingress> = api_in(client, reach);
-    let config_maps_api: Api<ConfigMap> = api_in(client, reach);
-    let secrets_api: Api<Secret> = api_in(client, reach);
-    let events_api: Api<Event> = api_in(client, reach);
-    let (cron_jobs, services, ingresses, config_maps, secrets, events) = tokio::join!(
-        count_of(&cron_jobs_api),
-        count_of(&services_api),
-        count_of(&ingresses_api),
-        count_of(&config_maps_api),
-        count_of(&secrets_api),
-        count_of(&events_api),
+/// The namespaced kinds' bounded metadata pages, for one namespace or the whole cluster.
+async fn namespaced_counts(
+    client: &Client,
+    reach: Option<&str>,
+    refused: &RefusedCounts,
+) -> ResourceCounts {
+    let (
+        cron_jobs,
+        services,
+        endpoints,
+        ingresses,
+        network_policies,
+        persistent_volume_claims,
+        config_maps,
+        secrets,
+        service_accounts,
+        roles,
+        role_bindings,
+        events,
+    ) = tokio::join!(
+        count_of::<CronJob>(client, reach, refused),
+        count_of::<Service>(client, reach, refused),
+        count_of::<Endpoints>(client, reach, refused),
+        count_of::<Ingress>(client, reach, refused),
+        count_of::<NetworkPolicy>(client, reach, refused),
+        count_of::<PersistentVolumeClaim>(client, reach, refused),
+        count_of::<ConfigMap>(client, reach, refused),
+        count_of::<Secret>(client, reach, refused),
+        count_of::<ServiceAccount>(client, reach, refused),
+        count_of::<Role>(client, reach, refused),
+        count_of::<RoleBinding>(client, reach, refused),
+        count_of::<Event>(client, reach, refused),
     );
     ResourceCounts {
         cron_jobs,
         services,
+        endpoints,
         ingresses,
+        network_policies,
+        persistent_volume_claims,
         config_maps,
         secrets,
+        service_accounts,
+        roles,
+        role_bindings,
         events,
         ..Default::default()
     }
@@ -1291,29 +1339,33 @@ fn add_counts(parts: &[ResourceCounts]) -> ResourceCounts {
     ResourceCounts {
         cron_jobs: sum(|c| c.cron_jobs),
         services: sum(|c| c.services),
+        endpoints: sum(|c| c.endpoints),
         ingresses: sum(|c| c.ingresses),
+        network_policies: sum(|c| c.network_policies),
+        persistent_volume_claims: sum(|c| c.persistent_volume_claims),
         config_maps: sum(|c| c.config_maps),
         secrets: sum(|c| c.secrets),
+        service_accounts: sum(|c| c.service_accounts),
+        roles: sum(|c| c.roles),
+        role_bindings: sum(|c| c.role_bindings),
         events: sum(|c| c.events),
         ..Default::default()
     }
 }
 
-/// The namespaced counts in every reach, added up, and the namespace count once.
-async fn side_counts(client: &Client, scope: Option<&[String]>) -> ResourceCounts {
-    let namespaces_api: Api<Namespace> = Api::all(client.clone());
-    let (namespaces, parts) = tokio::join!(
-        count_of(&namespaces_api),
-        join_all(
-            reaches(scope)
-                .into_iter()
-                .map(|reach| namespaced_counts(client, reach))
-        ),
-    );
-    ResourceCounts {
-        namespaces,
-        ..add_counts(&parts)
-    }
+/// The namespaced counts in every reach, added up.
+async fn side_counts(
+    client: &Client,
+    scope: Option<&[String]>,
+    refused: &RefusedCounts,
+) -> ResourceCounts {
+    let parts = join_all(
+        reaches(scope)
+            .into_iter()
+            .map(|reach| namespaced_counts(client, reach, refused)),
+    )
+    .await;
+    add_counts(&parts)
 }
 
 /// The overview for `scope` (`None` is the whole cluster): from the
@@ -1327,9 +1379,10 @@ pub async fn cluster_overview(
     let context = state
         .get_current_context()
         .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
+    let refused = state.overview_cache.refused_counts(&context);
     let (metrics, counts, snapshot) = tokio::join!(
         crate::metrics::overview_node_metrics(state),
-        side_counts(&client, scope.as_deref()),
+        side_counts(&client, scope.as_deref(), &refused),
         state.overview_cache.snapshot(&context, || client.clone()),
     );
     let sides = Sides {
@@ -3285,7 +3338,6 @@ mod across_namespaces {
             let paths = [
                 "/api/v1/nodes",
                 "/api/v1/pods",
-                "/api/v1/namespaces",
                 "/api/v1/namespaces/prod/pods",
                 "/api/v1/namespaces/staging/pods",
                 "/apis/apps/v1/namespaces/prod/deployments",
@@ -3308,6 +3360,18 @@ mod across_namespaces {
                 "/api/v1/namespaces/staging/configmaps",
                 "/api/v1/namespaces/prod/secrets",
                 "/api/v1/namespaces/staging/secrets",
+                "/api/v1/namespaces/prod/endpoints",
+                "/api/v1/namespaces/staging/endpoints",
+                "/apis/networking.k8s.io/v1/namespaces/prod/networkpolicies",
+                "/apis/networking.k8s.io/v1/namespaces/staging/networkpolicies",
+                "/api/v1/namespaces/prod/persistentvolumeclaims",
+                "/api/v1/namespaces/staging/persistentvolumeclaims",
+                "/api/v1/namespaces/prod/serviceaccounts",
+                "/api/v1/namespaces/staging/serviceaccounts",
+                "/apis/rbac.authorization.k8s.io/v1/namespaces/prod/roles",
+                "/apis/rbac.authorization.k8s.io/v1/namespaces/staging/roles",
+                "/apis/rbac.authorization.k8s.io/v1/namespaces/prod/rolebindings",
+                "/apis/rbac.authorization.k8s.io/v1/namespaces/staging/rolebindings",
             ];
             Self(
                 paths
@@ -3341,7 +3405,7 @@ mod across_namespaces {
             let (client, hits) = server(self.0).await;
             let scope =
                 scope_of(Some(vec![STAGING.to_string(), PROD.to_string()])).expect("a valid scope");
-            let counts = side_counts(&client, scope.as_deref()).await;
+            let counts = side_counts(&client, scope.as_deref(), &RefusedCounts::default()).await;
             let sides = Sides {
                 counts,
                 usage_by_node: None,
@@ -3359,7 +3423,7 @@ mod across_namespaces {
     }
 
     /// The reason this moved to Rust. Asked once per namespace, every part
-    /// re-read the nodes, the namespace count and — listing — a full
+    /// re-read the nodes and, listing, a full
     /// cluster-wide pod LIST: four namespaces were five of those a round.
     /// A cluster read issued per namespace fails here.
     #[tokio::test]
@@ -3367,7 +3431,7 @@ mod across_namespaces {
         let (answer, hits) = Cluster::new().overview().await;
         answer.expect("an overview");
 
-        for path in ["/api/v1/nodes", "/api/v1/pods", "/api/v1/namespaces"] {
+        for path in ["/api/v1/nodes", "/api/v1/pods"] {
             assert_eq!(asked(&hits, path), 1, "{path} is the cluster's, read once");
         }
         for namespace in [PROD, STAGING] {
@@ -3465,8 +3529,7 @@ mod across_namespaces {
     }
 
     /// Would report a three-node cluster as six the moment two namespaces
-    /// were watched: the nodes and the namespace count are cluster facts,
-    /// taken once, never added up.
+    /// were watched: the nodes are a cluster fact, taken once, never added up.
     #[tokio::test]
     async fn cluster_facts_are_taken_once_instead_of_summed() {
         let overview = Cluster::new()
@@ -3474,13 +3537,29 @@ mod across_namespaces {
                 "/api/v1/nodes",
                 vec![node("a", true), node("b", true), node("c", true)],
             )
-            .items("/api/v1/namespaces", named(12))
             .listed()
             .await;
 
         assert_eq!(overview.nodes.len(), 3);
         assert_eq!(overview.counts.nodes, Some(3));
-        assert_eq!(overview.counts.namespaces, Some(12));
+    }
+
+    /// Marco's token may not list Roles; counted on every refresh, that was
+    /// one more 403 every ten seconds for a badge that never shows. Fails if
+    /// a refused count is asked again on the same connection.
+    #[tokio::test]
+    async fn a_refused_count_is_asked_once_per_connection() {
+        let roles = "/apis/rbac.authorization.k8s.io/v1/namespaces/prod/roles";
+        let (client, hits) = server(Cluster::new().refuse(roles).0).await;
+        let scope =
+            scope_of(Some(vec![STAGING.to_string(), PROD.to_string()])).expect("a valid scope");
+        let refused = RefusedCounts::default();
+        for _ in 0..3 {
+            let counts = side_counts(&client, scope.as_deref(), &refused).await;
+            assert_eq!(counts.roles, None, "refused in one namespace is no total");
+            assert_eq!(counts.role_bindings, Some(0));
+        }
+        assert_eq!(asked(&hits, roles), 1);
     }
 
     /// The counts that belong to a namespace add up across the scope.
@@ -3496,11 +3575,18 @@ mod across_namespaces {
             .items("/api/v1/namespaces/staging/pods", pods(STAGING, 7))
             .items("/api/v1/namespaces/prod/services", named(1))
             .items("/api/v1/namespaces/staging/services", named(2))
+            .items("/api/v1/namespaces/prod/endpoints", named(1))
+            .items(
+                "/api/v1/namespaces/staging/persistentvolumeclaims",
+                named(2),
+            )
             .listed()
             .await;
 
         assert_eq!(overview.counts.pods, Some(11));
         assert_eq!(overview.counts.services, Some(3));
+        assert_eq!(overview.counts.endpoints, Some(1));
+        assert_eq!(overview.counts.persistent_volume_claims, Some(2));
     }
 
     /// Would break the app's one rule about numbers. Two namespaces
