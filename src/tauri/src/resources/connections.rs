@@ -248,6 +248,11 @@ pub enum Usage {
         container: String,
         name: String,
         key: String,
+        /// `optional: true`: the pod starts without the key.
+        optional: bool,
+        /// Whether the object holds `key`. `None` where it was not read.
+        #[serde(rename = "keyPresent")]
+        key_present: Option<bool>,
     },
     /// Every key becomes an environment variable.
     EnvFrom { container: String },
@@ -603,19 +608,21 @@ pub fn usages_in_pod_spec(spec: &PodSpec, target_kind: &str, target_name: &str) 
                     .config_map_key_ref
                     .as_ref()
                     .filter(|r| r.name == target_name)
-                    .map(|r| r.key.clone()),
+                    .map(|r| (r.key.clone(), r.optional)),
                 "Secret" => from
                     .secret_key_ref
                     .as_ref()
                     .filter(|r| r.name == target_name)
-                    .map(|r| r.key.clone()),
+                    .map(|r| (r.key.clone(), r.optional)),
                 _ => None,
             };
-            if let Some(key) = key {
+            if let Some((key, optional)) = key {
                 usages.push(Usage::Env {
                     container: container.name.clone(),
                     name: env.name.clone(),
                     key,
+                    optional: optional.unwrap_or(false),
+                    key_present: None,
                 });
             }
         }
@@ -771,6 +778,8 @@ mod tests {
                     container: "app".to_string(),
                     name: "APP_MESSAGE".to_string(),
                     key: "app.conf".to_string(),
+                    optional: false,
+                    key_present: None,
                 }
             ]
         );

@@ -175,4 +175,55 @@ describe("ConnectionsPanel", () => {
     );
     expect(screen.getByText(/connection refused/)).toBeInTheDocument();
   });
+
+  /** checkout-worker sat on the Secret's tab as an ordinary user while the
+   *  key it reads was not there; this fails if the mark is not drawn. */
+  it("marks a user that reads a key the Secret does not hold", async () => {
+    const secret: ObjectRef = {
+      kind: "Secret",
+      name: "checkout-db",
+      namespace: "team-checkout",
+      existence: "notChecked",
+      facts: null,
+    };
+    await wrap(
+      <ConnectionsPanel
+        query={query({
+          data: {
+            subject: secret,
+            edges: [
+              {
+                from: {
+                  kind: "Deployment",
+                  name: "checkout-worker",
+                  namespace: "team-checkout",
+                  existence: "present",
+                  facts: null,
+                },
+                to: secret,
+                relation: {
+                  verb: "uses",
+                  usages: [
+                    {
+                      how: "env",
+                      container: "worker",
+                      name: "DB_PASSWORD",
+                      key: "DB_PASSWORD",
+                      optional: false,
+                      keyPresent: false,
+                    },
+                  ],
+                },
+              },
+            ],
+            stops: [],
+            published: [],
+            notLookedAt: [],
+          },
+        })}
+      />
+    );
+    const mark = screen.getByText("key DB_PASSWORD is not in this Secret");
+    expect(mark).toHaveClass("text-err");
+  });
 });

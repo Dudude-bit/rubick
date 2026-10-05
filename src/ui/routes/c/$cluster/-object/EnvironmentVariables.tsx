@@ -24,7 +24,14 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  ChevronRight,
+  Loader2,
+  Lock,
+  Unlink,
+} from "lucide-react";
 import type {
   EnvVarInfo,
   EnvFromInfo,
@@ -34,9 +41,21 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/object/ResourceRef";
+import {
+  ResourceName,
+  RESOURCE_NAME_SHELL,
+} from "@/components/object/ResourceName";
 import { MaskedValue } from "@/components/ui/masked-value";
 import { T } from "@/i18n/T";
+import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
+import { cn } from "@/lib/utils";
+import {
+  refObjectOf,
+  verdictOf,
+  type RefObject,
+  type RefVerdict,
+} from "./env-refs";
 
 /**
  * Where a variable's value came from.
@@ -141,6 +160,103 @@ function SourceCell({
   );
 }
 
+/**
+ * A reference that does not resolve to a value, said before anyone reveals it.
+ *
+ * Nine masked dots over a key the Secret does not hold read as a real secret
+ * until the eye is clicked. Missing is broken, in the error tone, unless the
+ * reference is optional; a read the cluster refused is neither and says so.
+ */
+function RefState({
+  verdict,
+  kind,
+  name,
+  refKey,
+  optional,
+  namespace,
+}: {
+  verdict: Exclude<RefVerdict, { verdict: "present" }>;
+  kind: "Secret" | "ConfigMap";
+  name: string;
+  refKey: string | null;
+  optional: boolean;
+  namespace?: string;
+}) {
+  const t = useT();
+  if (verdict.verdict === "reading") {
+    return (
+      <span className="inline-flex items-center gap-1 text-xs text-fg-fnt">
+        <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+        {t("settings", "loading")}
+      </span>
+    );
+  }
+  const object =
+    verdict.verdict === "objectMissing" || !namespace ? (
+      <span className={RESOURCE_NAME_SHELL}>
+        <ResourceName kind={kind} name={name} />
+      </span>
+    ) : (
+      <ResourceRef kind={kind} name={name} namespace={namespace} />
+    );
+  const key = <span className="font-mono">{refKey}</span>;
+
+  if (verdict.verdict === "refused" || verdict.verdict === "unread") {
+    const Icon = verdict.verdict === "refused" ? Lock : AlertTriangle;
+    const text =
+      verdict.verdict === "refused"
+        ? refKey === null
+          ? t("readings", "envObjectRefusedAll")
+          : t("readings", "envObjectRefused")
+        : t("readings", "envObjectUnread", { error: verdict.error });
+    return (
+      <span
+        className={cn(
+          "flex items-start gap-1 text-xs",
+          verdict.verdict === "refused" ? "text-fg-mut" : "text-warn"
+        )}
+      >
+        <Icon className="mt-0.5 h-3 w-3 flex-none" aria-hidden="true" />
+        <span className="min-w-0">{parts(text, { object, key })}</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex flex-col gap-0.5 text-xs">
+      <span
+        className={cn(
+          "flex items-start gap-1",
+          optional ? "text-warn" : "text-err"
+        )}
+      >
+        <Unlink className="mt-0.5 h-3 w-3 flex-none" aria-hidden="true" />
+        <span className="min-w-0">
+          {verdict.verdict === "keyMissing"
+            ? parts(t("readings", "envKeyNotInObject"), { key, object })
+            : parts(t("readings", "envObjectNotThere"), { object })}
+        </span>
+      </span>
+      {verdict.verdict === "keyMissing" && (
+        <span className="pl-4 text-fg-mut">
+          {verdict.keys.length > 0
+            ? parts(t("readings", "envObjectHasKeys"), {
+                keys: (
+                  <span className="font-mono">{verdict.keys.join(", ")}</span>
+                ),
+              })
+            : t("readings", "envObjectHasNoKeys")}
+        </span>
+      )}
+      {optional && (
+        <span className="pl-4 text-fg-mut">
+          {t("readings", "envRefOptional")}
+        </span>
+      )}
+    </span>
+  );
+}
+
 interface EnvironmentVariablesProps {
   env: EnvVarInfo[];
   envFrom: EnvFromInfo[];
@@ -204,6 +320,7 @@ interface ExpandedEnvVar {
   fieldPath?: string;
   resource?: string;
   isFromEnvFrom?: boolean;
+  optional?: boolean;
 }
 
 export function EnvironmentVariables({
@@ -306,6 +423,55 @@ export function EnvironmentVariables({
     })),
   });
 
+  // Keys only, read whether or not values are revealed: a reference to a key
+  // the object lacks is the one thing that has to be said before a click.
+  const secretObjectQueries = useQueries({
+    queries: allSecretNames.map((name) => ({
+      queryKey: queryKeys.detail(ResourceType.Secret, namespace, name),
+      queryFn: () => commands.getSecret(name, namespace!),
+      enabled: !!namespace,
+      retry: false,
+    })),
+  });
+  const configMapObjectQueries = useQueries({
+    queries: allConfigMapNames.map((name) => ({
+      queryKey: queryKeys.detail(ResourceType.ConfigMap, namespace, name),
+      queryFn: () => commands.getConfigmap(name, namespace!),
+      enabled: !!namespace,
+      retry: false,
+    })),
+  });
+  const objectsOf = (
+    names: string[],
+    queries: { data?: { dataKeys: string[] }; error: unknown }[]
+  ): Record<string, RefObject> =>
+    Object.fromEntries(
+      names.map((name, i) => [name, refObjectOf(queries[i] ?? { error: null })])
+    );
+  const secretObjects = objectsOf(allSecretNames, secretObjectQueries);
+  const configMapObjects = objectsOf(allConfigMapNames, configMapObjectQueries);
+
+  /** How a row's reference resolved; null for a row that names no object. */
+  const verdictFor = (ev: ExpandedEnvVar): RefVerdict | null => {
+    if (!ev.sourceName) return null;
+    const isPlaceholder = ev.name.endsWith("*");
+    if (ev.sourceType === "secret" || ev.sourceType === "envFromSecret") {
+      if (ev.isFromEnvFrom && !isPlaceholder) return null;
+      return verdictOf(
+        secretObjects[ev.sourceName],
+        isPlaceholder ? null : (ev.sourceKey ?? null)
+      );
+    }
+    if (ev.sourceType === "configmap" || ev.sourceType === "envFromConfigMap") {
+      if (ev.isFromEnvFrom && !isPlaceholder) return null;
+      return verdictOf(
+        configMapObjects[ev.sourceName],
+        isPlaceholder ? null : (ev.sourceKey ?? null)
+      );
+    }
+    return null;
+  };
+
   // Only the values the backend was willing to hand over, for both kinds. A
   // withheld or binary key stays out of the cache, so an env var reading one
   // is drawn as an env var whose value the app does not have rather than as
@@ -326,7 +492,7 @@ export function EnvironmentVariables({
 
       if (ef.configMapRef) {
         const cmData = configMapCache[ef.configMapRef];
-        if (cmData) {
+        if (cmData && Object.keys(cmData).length > 0) {
           for (const [key, value] of Object.entries(cmData)) {
             result.push({
               name: `${prefix}${key}`,
@@ -345,6 +511,7 @@ export function EnvironmentVariables({
             sourceType: "envFromConfigMap",
             sourceName: ef.configMapRef,
             isFromEnvFrom: true,
+            optional: ef.optional ?? false,
           });
         }
       }
@@ -370,6 +537,7 @@ export function EnvironmentVariables({
             sourceType: "envFromSecret",
             sourceName: ef.secretRef,
             isFromEnvFrom: true,
+            optional: ef.optional ?? false,
           });
         }
       }
@@ -386,6 +554,7 @@ export function EnvironmentVariables({
           sourceKey: envVar.valueFrom.key || undefined,
           fieldPath: envVar.valueFrom.fieldPath || undefined,
           resource: envVar.valueFrom.resource || undefined,
+          optional: envVar.valueFrom.optional ?? false,
         });
       } else {
         result.push({
@@ -630,6 +799,13 @@ export function EnvironmentVariables({
                   const isRevealed = revealedSecrets.has(ev.name);
                   const displayValue = getDisplayValue(ev);
                   const isPlaceholder = ev.name.endsWith("*");
+                  const verdict = verdictFor(ev);
+                  const unresolved =
+                    verdict &&
+                    verdict.verdict !== "present" &&
+                    !(isPlaceholder && verdict.verdict === "reading")
+                      ? verdict
+                      : null;
 
                   return (
                     <TableRow
@@ -659,7 +835,22 @@ export function EnvironmentVariables({
                         )}
                       </TableCell>
                       <TableCell>
-                        {isPlaceholder ? (
+                        {unresolved && ev.sourceName ? (
+                          <RefState
+                            verdict={unresolved}
+                            kind={
+                              isSecret
+                                ? ResourceType.Secret
+                                : ResourceType.ConfigMap
+                            }
+                            name={ev.sourceName}
+                            refKey={
+                              isPlaceholder ? null : (ev.sourceKey ?? null)
+                            }
+                            optional={ev.optional ?? false}
+                            namespace={namespace}
+                          />
+                        ) : isPlaceholder ? (
                           <span className="text-xs text-fg-fnt">
                             {displayValue}
                           </span>

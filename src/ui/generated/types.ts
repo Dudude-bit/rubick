@@ -2351,7 +2351,14 @@ export type Usage =
       projected: boolean;
     }
   | { how: "unmounted"; volume: string; projected: boolean }
-  | { how: "env"; container: string; name: string; key: string }
+  | {
+      how: "env";
+      container: string;
+      name: string;
+      key: string;
+      optional: boolean;
+      keyPresent: boolean | null;
+    }
   | { how: "envFrom"; container: string }
   | { how: "imagePullSecret" }
   | { how: "identity" }

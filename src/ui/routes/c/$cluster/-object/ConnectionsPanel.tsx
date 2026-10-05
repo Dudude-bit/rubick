@@ -12,7 +12,7 @@
 
 import * as React from "react";
 import { Link } from "@tanstack/react-router";
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, Unlink } from "lucide-react";
 
 import { PerfProfiler } from "@/lib/perf-profiler";
 
@@ -144,6 +144,22 @@ function Row({ row }: { row: ConnRow }) {
               {way}
             </p>
           ))}
+        {row.missingKeys?.map((missing) => (
+          <p
+            key={missing.key}
+            className={cn(
+              "flex items-center gap-1 text-[11px]",
+              missing.optional ? "text-warn" : "text-err"
+            )}
+          >
+            <Unlink className="h-3 w-3 flex-none" aria-hidden="true" />
+            {t(
+              "nav",
+              missing.optional ? "keyNotInSubjectOptional" : "keyNotInSubject",
+              { key: missing.key, kind: missing.from }
+            )}
+          </p>
+        ))}
       </div>
     </div>
   );

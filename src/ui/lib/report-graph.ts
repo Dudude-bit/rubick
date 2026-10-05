@@ -182,7 +182,21 @@ export function graphSections(
             label: row.label,
             ref: row.object ? refOf(row.object) : null,
             name: row.outside?.name ?? null,
-            detail: [...row.ways, row.detail].filter(Boolean).join(" · "),
+            detail: [
+              ...row.ways,
+              ...(row.missingKeys ?? []).map((missing) =>
+                t(
+                  "nav",
+                  missing.optional
+                    ? "keyNotInSubjectOptional"
+                    : "keyNotInSubject",
+                  { key: missing.key, kind: missing.from }
+                )
+              ),
+              row.detail,
+            ]
+              .filter(Boolean)
+              .join(" · "),
             existence: row.object
               ? describeExistence(row.object, t, row.verifiable ?? false)
               : null,

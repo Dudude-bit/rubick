@@ -981,6 +981,8 @@ export interface ConnRow {
   verifiable?: boolean;
   /** Set where the row is the app admitting it did not look. */
   unasked?: boolean;
+  /** Keys this row reads that the subject was read and found not to hold. */
+  missingKeys?: { key: string; optional: boolean; from: string }[];
 }
 
 export interface ConnGroup {
@@ -1161,8 +1163,19 @@ function usedBy(conns: ResourceConnections, t: T): ConnRow[] {
       .map((edge) => ({
         ...rowFor(edge.from.kind, edge.from, t),
         ways: describeUsages(edge.relation.usages, t),
+        missingKeys: missingKeysOf(edge.relation.usages, conns.subject.kind),
       }))
   );
+}
+
+/** Only a key the subject was read and found without; an unread one is not missing. */
+function missingKeysOf(usages: Usage[], from: string): ConnRow["missingKeys"] {
+  const missing = usages.flatMap((use) =>
+    use.how === "env" && use.keyPresent === false
+      ? [{ key: use.key, optional: use.optional, from }]
+      : []
+  );
+  return missing.length > 0 ? missing : undefined;
 }
 
 /**

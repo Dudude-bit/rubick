@@ -14,7 +14,7 @@
 //! module holds, as the one file they were cut from did.
 #![allow(clippy::wildcard_imports)]
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::sync::Arc;
 
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, ReplicaSet, StatefulSet};
@@ -23,7 +23,8 @@ use k8s_openapi::api::autoscaling::v2::{
 };
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{
-    Endpoints, Node, PersistentVolume, PersistentVolumeClaim, Pod, PodSpec, Service,
+    ConfigMap, Endpoints, Node, PersistentVolume, PersistentVolumeClaim, Pod, PodSpec, Secret,
+    Service,
 };
 use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::api::networking::v1::{HTTPIngressPath, Ingress, IngressBackend};

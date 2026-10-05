@@ -57,6 +57,9 @@ export const en = {
     mountedAt: "mounted at {path}",
     projectedInto: "projected into {path}",
     envReadsKey: "{env} reads {key}",
+    keyNotInSubject: "key {key} is not in this {kind}",
+    keyNotInSubjectOptional:
+      "key {key} is not in this {kind}; it is optional, so the pod still starts",
     // Said on a nav row the authorizer refused, and on the page behind it.
     // The reader is not being told the app is broken: they are being told
     // whose decision it was, which is the one fact that makes it actionable.
@@ -2903,6 +2906,15 @@ export const en = {
     envFromConfigMap: "configmap · envFrom",
     envAllSources: "all sources",
     envFromWord: "envFrom",
+    envKeyNotInObject: "key {key} is not in {object}",
+    envObjectNotThere: "{object} does not exist",
+    envObjectHasKeys: "keys it has: {keys}",
+    envObjectHasNoKeys: "it holds no keys at all",
+    envRefOptional: "optional, so the pod starts without it",
+    envObjectRefused:
+      "no access to {object}, so whether {key} is there is unknown",
+    envObjectRefusedAll: "no access to {object}, so its keys are unknown",
+    envObjectUnread: "could not read {object}: {error}",
     readyOfNodes: "{ready} {of}",
     helmRelease: "Helm release",
     crdEstablished: "Established",

@@ -788,6 +788,8 @@ describe("the groups", () => {
     container: "app",
     name: "APP_MESSAGE",
     key: "app.conf",
+    optional: false,
+    keyPresent: null,
   };
 
   it("phrases a usage from what the backend sent, not from the pod spec", () => {
@@ -928,6 +930,42 @@ describe("the groups", () => {
     expect(unasked?.rows).toHaveLength(1);
     expect(unasked?.rows[0].label).toBe("Autoscaling");
     expect(unasked?.rows[0].unasked).toBe(true);
+  });
+
+  const usedByOf = (keyPresent: boolean | null) => {
+    const secret = ref("Secret", "checkout-db");
+    const worker = ref("Deployment", "checkout-worker");
+    const groups = connectionGroups(
+      connections(secret, [
+        {
+          from: worker,
+          to: secret,
+          relation: {
+            verb: "uses",
+            usages: [
+              { ...env, name: "DB_PASSWORD", key: "DB_PASSWORD", keyPresent },
+            ],
+          },
+        },
+      ]),
+      t
+    );
+    return groups.find((group) => group.key === "used-by")?.rows[0];
+  };
+
+  /** The Secret's Connections tab listed checkout-worker as an ordinary user
+   *  of a key the Secret does not hold. */
+  it("marks a user that reads a key the subject does not hold", () => {
+    expect(usedByOf(false)?.missingKeys).toEqual([
+      { key: "DB_PASSWORD", optional: false, from: "Secret" },
+    ]);
+  });
+
+  /** A Secret the session could not read says nothing about its keys, so a
+   *  user of it must not be drawn broken. */
+  it("does not mark a user whose key was never checked", () => {
+    expect(usedByOf(null)?.missingKeys).toBeUndefined();
+    expect(usedByOf(true)?.missingKeys).toBeUndefined();
   });
 });
 

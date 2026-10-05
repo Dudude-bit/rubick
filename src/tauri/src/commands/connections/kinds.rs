@@ -578,7 +578,64 @@ pub(super) async fn config_connections(
 ) -> Result<()> {
     let subject = ObjectRef::new(kind, name, Some(ns.to_string()), Existence::NotChecked);
     out.subject = Some(subject.clone());
-    users_of(ctx, ns, &subject, out).await
+    let (keys, users) = tokio::join!(keys_of(ctx, kind, name), users_of(ctx, ns, &subject, out));
+    users?;
+    mark_keys(&mut out.edges, &subject, keys.as_ref());
+    Ok(())
+}
+
+/// The keys a `ConfigMap` or Secret holds: none for one that is not there,
+/// `None` for one this session could not read.
+async fn keys_of(ctx: &ResourceContext, kind: &str, name: &str) -> Option<BTreeSet<String>> {
+    let read = if kind == "Secret" {
+        ctx.namespaced_api::<Secret>()
+            .get_opt(name)
+            .await
+            .map(|secret| {
+                secret.map(|secret| secret.data.unwrap_or_default().into_keys().collect())
+            })
+    } else {
+        ctx.namespaced_api::<ConfigMap>()
+            .get_opt(name)
+            .await
+            .map(|map| {
+                map.map(|map| {
+                    map.data
+                        .unwrap_or_default()
+                        .into_keys()
+                        .chain(map.binary_data.unwrap_or_default().into_keys())
+                        .collect()
+                })
+            })
+    };
+    match read {
+        Ok(keys) => Some(keys.unwrap_or_default()),
+        Err(_) => None,
+    }
+}
+
+/// Every environment variable reading the subject learns whether its key is there.
+pub(super) fn mark_keys(
+    edges: &mut [ConnectionEdge],
+    subject: &ObjectRef,
+    keys: Option<&BTreeSet<String>>,
+) {
+    for edge in edges
+        .iter_mut()
+        .filter(|edge| edge.to.kind == subject.kind && edge.to.name == subject.name)
+    {
+        let Relation::Uses { usages } = &mut edge.relation else {
+            continue;
+        };
+        for usage in usages {
+            if let Usage::Env {
+                key, key_present, ..
+            } = usage
+            {
+                *key_present = keys.map(|keys| keys.contains(key.as_str()));
+            }
+        }
+    }
 }
 
 /// A node: what is running on it, what would refuse to move, and what the
@@ -870,6 +927,114 @@ pub(super) fn note_users(ns: &str, target: &ObjectRef, lists: UserLists, out: &m
 #[cfg(test)]
 mod users_tests {
     use super::*;
+    use crate::client::served::test_server::{failure, server};
+
+    fn worker_reading(key: &str) -> Pod {
+        serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "checkout-worker-1", "namespace": "shop" },
+            "spec": { "containers": [{
+                "name": "worker",
+                "env": [{ "name": "DB_PASSWORD", "valueFrom": {
+                    "secretKeyRef": { "name": "checkout-db", "key": key }
+                } }]
+            }] }
+        }))
+        .unwrap()
+    }
+
+    fn key_present_of(out: &Neighbourhood) -> Option<bool> {
+        let Relation::Uses { usages } = &out.edges[0].relation else {
+            panic!("a pod reading a key uses the Secret");
+        };
+        let Usage::Env { key_present, .. } = &usages[0] else {
+            panic!("the use is one variable");
+        };
+        *key_present
+    }
+
+    fn worker_using(key: &str) -> (ObjectRef, Neighbourhood) {
+        let target = ObjectRef::new(
+            "Secret",
+            "checkout-db",
+            Some("shop".into()),
+            Existence::NotChecked,
+        );
+        let mut out = Neighbourhood::new();
+        let lists = UserLists {
+            pods: Ok(vec![worker_reading(key)]),
+            deploys: Ok(Vec::new()),
+            sets: Ok(Vec::new()),
+            daemons: Ok(Vec::new()),
+            jobs: Ok(Vec::new()),
+            crons: Ok(Vec::new()),
+            ingresses: None,
+        };
+        note_users("shop", &target, lists, &mut out);
+        (target, out)
+    }
+
+    /// The Secret's own Connections tab listed checkout-worker as an ordinary
+    /// user while the key it reads was not in the Secret.
+    #[test]
+    fn a_variable_reading_a_key_the_secret_lacks_is_marked_missing() {
+        let (target, mut out) = worker_using("DB_PASSWORD");
+        let keys = BTreeSet::from(["password".to_string(), "username".to_string()]);
+        mark_keys(&mut out.edges, &target, Some(&keys));
+        assert_eq!(key_present_of(&out), Some(false));
+    }
+
+    /// A key that is there must not be drawn broken.
+    #[test]
+    fn a_variable_reading_a_key_the_secret_holds_is_marked_present() {
+        let (target, mut out) = worker_using("password");
+        let keys = BTreeSet::from(["password".to_string()]);
+        mark_keys(&mut out.edges, &target, Some(&keys));
+        assert_eq!(key_present_of(&out), Some(true));
+    }
+
+    /// A Secret this session may not read says nothing about its keys, so
+    /// the use stays unknown rather than missing.
+    #[tokio::test]
+    async fn a_secret_that_could_not_be_read_leaves_the_key_unknown() {
+        let (code, body) = failure(403, "Forbidden");
+        let (client, _) = server(vec![(
+            "/api/v1/namespaces/shop/secrets/checkout-db",
+            code,
+            body,
+        )])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+        let keys = keys_of(&ctx, "Secret", "checkout-db").await;
+        assert_eq!(keys, None);
+
+        let (target, mut out) = worker_using("DB_PASSWORD");
+        mark_keys(&mut out.edges, &target, keys.as_ref());
+        assert_eq!(key_present_of(&out), None);
+    }
+
+    /// A Secret that answered hands over its key names.
+    #[tokio::test]
+    async fn a_secret_that_answered_names_its_keys() {
+        let secret = serde_json::json!({
+            "apiVersion": "v1", "kind": "Secret",
+            "metadata": { "name": "checkout-db", "namespace": "shop" },
+            "data": { "password": "cA==", "username": "dQ==" },
+        });
+        let (client, _) = server(vec![(
+            "/api/v1/namespaces/shop/secrets/checkout-db",
+            200,
+            secret.to_string(),
+        )])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+        assert_eq!(
+            keys_of(&ctx, "Secret", "checkout-db").await,
+            Some(BTreeSet::from([
+                "password".to_string(),
+                "username".to_string()
+            ]))
+        );
+    }
 
     const REFUSED: &str = "cronjobs.batch is forbidden: User \"narrow\" cannot list \
          resource \"cronjobs\" in API group \"batch\" in the namespace \"shop\"";
