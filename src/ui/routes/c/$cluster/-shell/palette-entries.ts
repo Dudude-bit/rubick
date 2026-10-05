@@ -116,7 +116,7 @@ const quickActions: Array<{
   { icon: ShieldUser, label: "goToMyAccess", path: pageLink("my-access") },
 ];
 
-const english: T = (section, key, values) =>
+export const english: T = (section, key, values) =>
   translate("en", section, key, values);
 
 /** The words a page or kind is found by besides its title, in both languages. */

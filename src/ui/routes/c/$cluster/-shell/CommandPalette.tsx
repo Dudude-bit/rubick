@@ -39,8 +39,6 @@ import { KindIcon } from "@/components/object/KindIcon";
 import { ResourceName } from "@/components/object/ResourceName";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { buildDeepLink } from "@/lib/deep-link";
-import { translate } from "@/i18n";
-import type { T } from "@/i18n/useT";
 import { planPeekActions } from "../-peek/peek-actions";
 import {
   actionTargetOfEntry,
@@ -77,6 +75,7 @@ import { catalogQuery } from "../-object/served";
 import {
   buildActionEntries,
   buildPaletteEntries,
+  english,
   hasAnswered,
   hitKey,
   isCold,
@@ -87,9 +86,6 @@ import {
 } from "./palette-entries";
 
 const PaletteActionsHost = lazy(() => import("./PaletteActionsHost"));
-
-const english: T = (section, key, values) =>
-  translate("en", section, key, values);
 
 /** Each action's English words, so they find it in every language. */
 function englishLabels(target: ActionTarget): ReadonlyMap<string, string> {
