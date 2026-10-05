@@ -4,7 +4,8 @@ import type { CompositionSegment } from "@/components/object/detail-blocks";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
-import type { StatusRole } from "@/lib/status-role";
+import { statusRole, type StatusRole } from "@/lib/status-role";
+import { NEEDS_ATTENTION, ROLLOUT_CODES } from "@/lib/workload-status";
 import { foldedWords, type Attention } from "@/lib/attention";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
@@ -160,24 +161,42 @@ export function podSegments(pods: PodComposition): Segment[] {
   ];
 }
 
+const FLAGGED_ROLLOUTS = [...NEEDS_ATTENTION].map(
+  (state) => ROLLOUT_CODES[state]
+);
+
+const SEGMENT_TONE: Record<StatusRole, Segment["tone"]> = {
+  ok: "ok",
+  warn: "warn",
+  err: "err",
+  pending: "neutral",
+  neutral: "neutral",
+};
+
 /**
- * Deployments split into available and not.
+ * Deployments by the rollout verdict the list and Needs attention print.
  *
- * The unavailable half is the problem list, which the backend already ranked;
- * the available half is the total minus it, so the two agree by construction.
+ * The flagged ones are the problem list, which the backend already ranked,
+ * one segment per verdict word in the list's own colour: a Stalled rollout
+ * whose old pods still serve is not Unavailable. The rest is the total minus
+ * them, so the two agree by construction.
  */
 export function deploymentSegments(
   problems: ClusterProblem[],
   total: number | null
 ): Segment[] {
-  const unavailable = problems.filter((p) => p.kind === "Deployment").length;
+  const flagged = problems.filter((p) => p.kind === "Deployment");
   return [
     {
       label: "Available",
-      count: Math.max(0, (total ?? 0) - unavailable),
+      count: Math.max(0, (total ?? 0) - flagged.length),
       tone: "ok",
     },
-    { label: "Unavailable", count: unavailable, tone: "err" },
+    ...FLAGGED_ROLLOUTS.map((code) => ({
+      label: code,
+      count: flagged.filter((p) => p.reason === code).length,
+      tone: SEGMENT_TONE[statusRole(code)],
+    })),
   ];
 }
 

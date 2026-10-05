@@ -7,6 +7,7 @@ import { renderWithRouter } from "@/test/render";
 import { AttentionPanel, WarningsPanel } from "./health";
 import {
   attentionShare,
+  deploymentSegments,
   nodesShare,
   warningsShare,
   workloadsShare,
@@ -249,6 +250,40 @@ describe("the healthy line when the node read was refused", () => {
     );
     expect(known.getByText(/nodes ready/)).toBeInTheDocument();
     known.unmount();
+  });
+});
+
+describe("the Deployments tile", () => {
+  /**
+   * Dana: the tile said "4 Unavailable" beside a list and a Needs attention
+   * that called one of them Stalled, old pods still serving. Each flagged
+   * Deployment is counted under the verdict word the list prints, in the
+   * list's colour. Fails if Stalled or Degraded is folded into Unavailable.
+   */
+  it("counts flagged Deployments under the verdict the list prints", () => {
+    const flagged = (reason: string): ClusterProblem => ({
+      ...problem,
+      kind: "Deployment",
+      reason,
+      severity: "critical",
+    });
+    const segments = deploymentSegments(
+      [
+        flagged("Stalled"),
+        flagged("Unavailable"),
+        flagged("Unavailable"),
+        flagged("Degraded"),
+        { ...problem, kind: "Pod" },
+      ],
+      5
+    );
+
+    expect(segments.filter((segment) => segment.count > 0)).toEqual([
+      { label: "Available", count: 1, tone: "ok" },
+      { label: "Stalled", count: 1, tone: "err" },
+      { label: "Unavailable", count: 2, tone: "err" },
+      { label: "Degraded", count: 1, tone: "warn" },
+    ]);
   });
 });
 
