@@ -23,9 +23,10 @@ use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 
-use super::connections::{ChainStop, Existence, ObjectFacts, ObjectRef};
+use super::connections::{ChainStop, Existence, NotServing, ObjectFacts, ObjectRef};
 use super::selector::Selector;
 use super::types::condition_is_true;
+use super::types::pod_display::display_status;
 
 /// The label the endpoint controllers put on every slice they write, and the
 /// only stated link from a slice back to its Service.
@@ -625,6 +626,7 @@ pub fn service_stop(
                 service: at,
                 selector: text,
                 pods: published.not_ready,
+                why: NotServing::InSlices,
             });
         }
         return Some(ChainStop::PublishesNothingYet {
@@ -647,6 +649,7 @@ pub fn service_stop(
             service: at,
             selector: text,
             pods: count(selected.len()),
+            why: not_serving(selected),
         });
     }
     Some(ChainStop::PublishesNothing {
@@ -656,6 +659,48 @@ pub fn service_stop(
         ready_pods: count(ready_pods),
         unnamed_ports: unresolved_target_ports(service, selected),
     })
+}
+
+/// Why one pod that is not Ready is not, in the terms of [`NotServing`].
+fn pod_not_serving(pod: &Pod) -> NotServing {
+    if pod.metadata.deletion_timestamp.is_some() {
+        return NotServing::Terminating;
+    }
+    let phase = pod.status.as_ref().and_then(|s| s.phase.as_deref());
+    if matches!(phase, Some("Succeeded" | "Failed")) {
+        return NotServing::Finished;
+    }
+    if display_status(pod).ends_with("CrashLoopBackOff") {
+        return NotServing::CrashLooping;
+    }
+    let placed = pod
+        .spec
+        .as_ref()
+        .and_then(|s| s.node_name.as_deref())
+        .is_some_and(|node| !node.is_empty());
+    match (phase, placed) {
+        (Some("Pending") | None, false) => NotServing::Unscheduled,
+        (Some("Pending"), true) => NotServing::Starting,
+        (Some("Running"), true) => NotServing::FailingReadiness,
+        _ => NotServing::Other,
+    }
+}
+
+/// Why the selected pods are not taking traffic: the one reason they share,
+/// or `Mixed`. Pods that are Ready while the slices say none serves leave
+/// only the slices to speak.
+fn not_serving(selected: &[&Pod]) -> NotServing {
+    let reasons: BTreeSet<NotServing> = selected
+        .iter()
+        .filter(|pod| !condition_is_true(pod.status.as_ref(), "Ready"))
+        .map(|pod| pod_not_serving(pod))
+        .collect();
+    let mut each = reasons.into_iter();
+    match (each.next(), each.next()) {
+        (None, _) => NotServing::InSlices,
+        (Some(only), None) => only,
+        (Some(_), Some(_)) => NotServing::Mixed,
+    }
 }
 
 /// The `targetPort` names not one selected container declares — only the
@@ -682,12 +727,14 @@ fn unresolved_target_ports(service: &Service, selected: &[&Pod]) -> Vec<String> 
 mod tests {
     use super::*;
     use k8s_openapi::api::core::v1::{
-        Container, ContainerPort, EndpointAddress, EndpointPort as LegacyPort, EndpointSubset,
-        PodSpec, ServiceSpec,
+        Container, ContainerPort, ContainerState, ContainerStateWaiting, ContainerStatus,
+        EndpointAddress, EndpointPort as LegacyPort, EndpointSubset, PodSpec, PodStatus,
+        ServiceSpec,
     };
     use k8s_openapi::api::discovery::v1::{
         EndpointConditions, EndpointHints, EndpointPort, ForZone,
     };
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
     use kube::core::ObjectMeta;
 
     fn service(name: &str, ports: Vec<ServicePort>) -> Service {
@@ -1304,6 +1351,124 @@ mod tests {
         assert!(matches!(
             stop_of(&svc, &[], Some(&refs)),
             Some(ChainStop::NoneReady { pods: 1, .. })
+        ));
+    }
+
+    fn in_state(name: &str, node: Option<&str>, phase: &str, waiting: Option<&str>) -> Pod {
+        let mut pod = pod(name, Some("http"));
+        if let Some(spec) = pod.spec.as_mut() {
+            spec.node_name = node.map(str::to_string);
+        }
+        pod.status = Some(PodStatus {
+            phase: Some(phase.to_string()),
+            container_statuses: waiting.map(|reason| {
+                vec![ContainerStatus {
+                    name: "web".to_string(),
+                    state: Some(ContainerState {
+                        waiting: Some(ContainerStateWaiting {
+                            reason: Some(reason.to_string()),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }]
+            }),
+            ..Default::default()
+        });
+        pod
+    }
+
+    fn why_of(svc: &Service, pods: &[Pod]) -> Option<NotServing> {
+        let refs: Vec<&Pod> = pods.iter().collect();
+        match stop_of(svc, &[], Some(&refs)) {
+            Some(ChainStop::NoneReady { why, .. }) => Some(why),
+            _ => None,
+        }
+    }
+
+    /// topology-demo: Pending, no node, no address, an empty slice. The stop
+    /// told the reader to debug a readiness probe on running pods.
+    #[test]
+    fn pending_pods_with_no_node_are_unscheduled_not_failing_a_probe() {
+        let svc = selecting("web");
+        let pods = [
+            in_state("a", None, "Pending", None),
+            in_state("b", None, "Pending", None),
+        ];
+        assert_eq!(why_of(&svc, &pods), Some(NotServing::Unscheduled));
+    }
+
+    #[test]
+    fn each_state_a_pod_is_in_names_its_own_reason() {
+        let svc = selecting("web");
+        let cases = [
+            (
+                in_state("a", Some("n1"), "Pending", Some("ContainerCreating")),
+                NotServing::Starting,
+            ),
+            (
+                in_state("a", Some("n1"), "Running", Some("CrashLoopBackOff")),
+                NotServing::CrashLooping,
+            ),
+            (
+                in_state("a", Some("n1"), "Running", None),
+                NotServing::FailingReadiness,
+            ),
+            (
+                in_state("a", Some("n1"), "Succeeded", None),
+                NotServing::Finished,
+            ),
+        ];
+        for (pod, want) in cases {
+            assert_eq!(why_of(&svc, &[pod]), Some(want));
+        }
+
+        let mut leaving = in_state("a", Some("n1"), "Running", None);
+        leaving.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(chrono::Utc::now()).expect("now is a time"),
+        ));
+        assert_eq!(why_of(&svc, &[leaving]), Some(NotServing::Terminating));
+    }
+
+    #[test]
+    fn pods_not_ready_for_different_reasons_are_mixed() {
+        let svc = selecting("web");
+        let pods = [
+            in_state("a", None, "Pending", None),
+            in_state("b", Some("n1"), "Running", None),
+        ];
+        assert_eq!(why_of(&svc, &pods), Some(NotServing::Mixed));
+    }
+
+    /// A reader holding the slices alone has no pod to ask, so it says the
+    /// slices spoke rather than guess at a state.
+    #[test]
+    fn a_reader_without_pods_says_the_slices_spoke() {
+        let svc = selecting("web");
+        let slices = [slice(
+            "web-1",
+            "web",
+            Some(vec![EndpointPort {
+                port: Some(80),
+                ..Default::default()
+            }]),
+            vec![Endpoint {
+                addresses: vec!["10.0.0.1".to_string()],
+                conditions: Some(EndpointConditions {
+                    ready: Some(false),
+                    serving: Some(false),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }],
+        )];
+        assert!(matches!(
+            stop_of(&svc, &slices, None),
+            Some(ChainStop::NoneReady {
+                why: NotServing::InSlices,
+                ..
+            })
         ));
     }
 }

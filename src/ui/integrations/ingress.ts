@@ -36,6 +36,7 @@ import type {
   DeploymentContainerInfo,
   IngressClassSummary,
   IngressInfo,
+  NotServing,
   ObjectRef,
   ServiceInfo,
   ServicePublished,
@@ -401,15 +402,33 @@ export function certificateProblems(
   });
 }
 
+const NONE_READY_UNDER: Record<NotServing, keyof typeof en.empty> = {
+  unscheduled: "stopNotScheduled",
+  starting: "stopNotStarted",
+  crashLooping: "stopCrashLooping",
+  terminating: "stopTerminating",
+  failingReadiness: "stopRunningNoneReady",
+  finished: "stopFinished",
+  mixed: "stopNoneReady",
+  other: "stopNoneReady",
+  inSlices: "stopNoneReady",
+};
+
 /** What a stopped path says in the column, in four words or fewer. */
-export const STOP_UNDER: Record<ServiceStop["reason"], keyof typeof en.empty> =
-  {
-    backendMissing: "stopNoServiceToSendTo",
-    selectsNothing: "stopSelectorMatchesNothing",
-    publishesNothingYet: "stopNothingPublishedYet",
-    noneReady: "stopRunningNoneReady",
-    publishesNothing: "stopNoPortToSendTo",
-  };
+export function stopUnder(stop: ServiceStop): keyof typeof en.empty {
+  switch (stop.reason) {
+    case "backendMissing":
+      return "stopNoServiceToSendTo";
+    case "selectsNothing":
+      return "stopSelectorMatchesNothing";
+    case "publishesNothingYet":
+      return "stopNothingPublishedYet";
+    case "noneReady":
+      return NONE_READY_UNDER[stop.why];
+    case "publishesNothing":
+      return "stopNoPortToSendTo";
+  }
+}
 
 // --- what stands in front of the proxy ----------------------------------
 

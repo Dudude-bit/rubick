@@ -115,6 +115,7 @@ describe("TrafficChain", () => {
       service,
       selector: "app=unready-demo",
       pods: 2,
+      why: "failingReadiness",
     });
 
     expect(missing).toContain("No Service named demo in this namespace");

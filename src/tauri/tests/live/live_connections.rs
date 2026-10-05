@@ -24,7 +24,8 @@
 use k8s_gui_lib::commands::connections::connections_of;
 use k8s_gui_lib::commands::helpers::ResourceContext;
 use k8s_gui_lib::resources::{
-    ChainStop, ConnectionEdge, Existence, ObjectFacts, Relation, ResourceConnections, Usage,
+    ChainStop, ConnectionEdge, Existence, NotServing, ObjectFacts, Relation, ResourceConnections,
+    Usage,
 };
 use k8s_gui_lib::state::AppState;
 
@@ -440,7 +441,9 @@ async fn the_three_stops_are_different_stops() {
             service,
             selector,
             pods,
+            why,
         } => {
+            assert_eq!(*why, NotServing::FailingReadiness);
             assert_eq!(service.name, "unready-demo");
             assert_eq!(selector, "app=unready-demo");
             assert_eq!(

@@ -31,9 +31,11 @@ import {
   publishedFor,
   sourceMark,
 } from "./published";
+import type { en } from "@/i18n/catalogue";
 import type {
   ChainStop,
   ConnectionEdge,
+  NotServing,
   ObjectFacts,
   ObjectRef,
   Relation,
@@ -311,6 +313,19 @@ export function hopTone(hop: ChainHop): HopTone {
 
 // --- where the path stops ----------------------------------------------
 
+/** Why none is ready, each sentence sending the reader somewhere else. */
+const NONE_READY_NOTE: Record<NotServing, keyof typeof en.nav> = {
+  unscheduled: "stopNotScheduledNote",
+  starting: "stopNotStartedNote",
+  crashLooping: "stopCrashLoopingNote",
+  terminating: "stopTerminatingNote",
+  failingReadiness: "stopFailingReadinessNote",
+  finished: "stopFinishedNote",
+  mixed: "stopMixedNote",
+  other: "stopOtherNote",
+  inSlices: "stopInSlicesNote",
+};
+
 /**
  * The four ways a path stops, each a different repair.
  *
@@ -373,7 +388,7 @@ export function describeStop(
           n: stop.pods,
           selector: stop.selector,
         }),
-        note: t("nav", "stopNoneReadyNote"),
+        note: t("nav", NONE_READY_NOTE[stop.why]),
       };
     case "routeNotAccepted":
       return {

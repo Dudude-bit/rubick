@@ -27,7 +27,7 @@ import {
   hostRole,
   hostSeverity,
   useRouteCertificates,
-  STOP_UNDER,
+  stopUnder,
 } from "../ingress";
 import {
   Box,
@@ -735,7 +735,7 @@ function HostChain({
               —
             </Cell>
           ) : backing.stop ? (
-            <Cell bad under={t("empty", STOP_UNDER[backing.stop.reason])}>
+            <Cell bad under={t("empty", stopUnder(backing.stop))}>
               {t("count", "nPublished", { n: 0 })}
             </Cell>
           ) : (

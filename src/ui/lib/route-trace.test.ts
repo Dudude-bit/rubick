@@ -229,6 +229,7 @@ const published = (name: string, ready: number): ServicePublished => ({
           },
           selector: `app=${name}`,
           pods: 1,
+          why: "failingReadiness",
         }
       : null,
 });

@@ -14,6 +14,7 @@ import {
 } from "./connections";
 import type {
   ChainStop,
+  NotServing,
   PublishedEndpoint,
   ServicePublished,
   ConnectionEdge,
@@ -669,6 +670,7 @@ describe("the traffic chain", () => {
             service: svc,
             selector: "app=unready-demo",
             pods: 2,
+            why: "failingReadiness",
           },
         ]
       ),
@@ -695,7 +697,13 @@ describe("the traffic chain", () => {
           service: svc,
         },
         { reason: "selectsNothing", service: svc, selector: "app=tls-demo" },
-        { reason: "noneReady", service: svc, selector: "app=x", pods: 2 },
+        {
+          reason: "noneReady",
+          service: svc,
+          selector: "app=x",
+          pods: 2,
+          why: "failingReadiness",
+        },
       ] satisfies ChainStop[]
     ).map((stop) => describeStop(stop, t).title);
 
@@ -1199,6 +1207,43 @@ describe("what the Service publishes", () => {
     expect(said.note).toContain("all of them are Ready");
     expect(said.note).toContain("targetPort: http");
     expect(said.note).toContain("Name the port in the container");
+  });
+
+  /**
+   * topology-demo: Pending, no node, no address, an empty slice. The note
+   * told the reader to debug a readiness probe on running pods. Fails if
+   * the reason the backend read stops choosing the sentence.
+   */
+  it("says pods with no node are unscheduled, not failing a probe", () => {
+    const stop = (why: NotServing): ChainStop => ({
+      reason: "noneReady",
+      service: service("topology-demo", "app=topology-demo"),
+      selector: "app=topology-demo",
+      pods: 2,
+      why,
+    });
+    const pending = describeStop(stop("unscheduled"), t).note;
+    expect(pending).toContain("Pending with no node");
+    expect(pending).not.toContain("readiness probe");
+    expect(describeStop(stop("failingReadiness"), t).note).toContain(
+      "readiness probe"
+    );
+
+    const notes = (
+      [
+        "unscheduled",
+        "starting",
+        "crashLooping",
+        "terminating",
+        "failingReadiness",
+        "finished",
+        "mixed",
+        "other",
+        "inSlices",
+      ] satisfies NotServing[]
+    ).map((why) => describeStop(stop(why), t).note);
+    expect(new Set(notes).size).toBe(notes.length);
+    for (const note of notes) expect(note).not.toContain("list page");
   });
 
   /** Three stops about routes were English literals, so a Russian screen

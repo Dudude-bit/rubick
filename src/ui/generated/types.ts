@@ -2136,7 +2136,13 @@ export type ChainStop =
   | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
   | { reason: "selectsNothing"; service: ObjectRef; selector: string }
   | { reason: "publishesNothingYet"; service: ObjectRef; selector: string }
-  | { reason: "noneReady"; service: ObjectRef; selector: string; pods: number }
+  | {
+      reason: "noneReady";
+      service: ObjectRef;
+      selector: string;
+      pods: number;
+      why: NotServing;
+    }
   | {
       reason: "publishesNothing";
       service: ObjectRef;
@@ -2145,6 +2151,17 @@ export type ChainStop =
       readyPods: number;
       unnamedPorts: string[];
     };
+
+export type NotServing =
+  | "unscheduled"
+  | "starting"
+  | "crashLooping"
+  | "terminating"
+  | "failingReadiness"
+  | "finished"
+  | "mixed"
+  | "other"
+  | "inSlices";
 
 export type EndpointSource = "slices" | "legacyEndpoints" | "podReadiness";
 

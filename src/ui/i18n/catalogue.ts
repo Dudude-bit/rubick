@@ -112,8 +112,24 @@ export const en = {
     stopNoServiceNamed: "No Service named {name} in this namespace",
     stopPublishesNothingYet: "Nothing is published behind {selector} yet",
     stopNoPodCarries: "No pod carries {selector}",
-    stopNoneReadyNote:
-      "A Service publishes no endpoint for a pod that fails its readiness probe, so traffic is refused while the pods sit there running — which is why every list page in the app draws this as healthy. The slices say the same: every address behind this Service is in them, and not one is serving.",
+    stopNotScheduledNote:
+      "No node has taken them: they are Pending with no node, so they have no address and nothing is published. Their events say why the scheduler passes them over.",
+    stopNotStartedNote:
+      "They are on a node and have not started, so they have no address yet and nothing is published. Their events say what they are waiting for: an image, a volume, a Secret.",
+    stopCrashLoopingNote:
+      "Their containers keep exiting, so they never become Ready and nothing is published. The logs of the last run say why.",
+    stopTerminatingNote:
+      "They are being deleted. A terminating pod is not Ready, so nothing is published until a replacement is.",
+    stopFailingReadinessNote:
+      "They are running and fail their readiness probe, and a Service publishes no endpoint for a pod that is not Ready, so traffic is refused while they run. The probe's events say what it got.",
+    stopFinishedNote:
+      "They have run to completion and will not serve again. A Service in front of finished pods publishes nothing.",
+    stopMixedNote:
+      "They are not Ready for more than one reason. The Service's Endpoints tab names the state of each one.",
+    stopOtherNote:
+      "Their own status says why. The Service's Endpoints tab names the state of each one.",
+    stopInSlicesNote:
+      "Every address behind this Service is in its slices and not one is serving. The pods were not read here, so which state they are in is not said.",
     stopRouteNotAcceptedTitle: "{gateway} does not accept this route",
     stopRouteNotAcceptedNote:
       "The controller answered Accepted: False{said}. The route's YAML is valid and nothing serves it — an unaccepted route is simply never programmed.",
@@ -4927,6 +4943,12 @@ export const en = {
     stopSelectorMatchesNothing: "selector matches nothing",
     stopNothingPublishedYet: "nothing published yet",
     stopRunningNoneReady: "running, none ready",
+    stopNotScheduled: "not scheduled",
+    stopNotStarted: "not started",
+    stopCrashLooping: "crash looping",
+    stopTerminating: "terminating",
+    stopFinished: "finished",
+    stopNoneReady: "none ready",
     stopNoPortToSendTo: "no port to send to",
     everyRequest503:
       "This host answers, and every request gets a 503 — {reason}",

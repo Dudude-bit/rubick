@@ -338,10 +338,7 @@ pub struct ConnectionEdge {
     pub relation: Relation,
 }
 
-/// Where a path into the subject stops, named.
-///
-/// The four are different repairs, and the last two are the ones every list
-/// page in the app draws as healthy.
+/// Where a path into the subject stops, named. Each is a different repair.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "reason", rename_all = "camelCase")]
 pub enum ChainStop {
@@ -413,6 +410,7 @@ pub enum ChainStop {
         service: ObjectRef,
         selector: String,
         pods: i32,
+        why: NotServing,
     },
     /// Ready pods match the selector and the Service publishes not one
     /// address:port pair — the case with a healthy selector, healthy pods, a
@@ -429,6 +427,32 @@ pub enum ChainStop {
         #[serde(rename = "unnamedPorts")]
         unnamed_ports: Vec<String>,
     },
+}
+
+/// Why the pods behind a [`ChainStop::NoneReady`] are not taking traffic,
+/// read from each pod's own status through the same `display_status` the
+/// Endpoints tab prints. Each is a different place to look.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum NotServing {
+    /// Pending with no node: no address, so nothing to publish.
+    Unscheduled,
+    /// On a node and not started yet: still no address.
+    Starting,
+    /// A container keeps exiting.
+    CrashLooping,
+    /// Being deleted.
+    Terminating,
+    /// Running, and failing its readiness check.
+    FailingReadiness,
+    /// Succeeded or Failed: it will not serve again.
+    Finished,
+    /// The pods are not ready for more than one of these reasons.
+    Mixed,
+    /// A state none of the above names, such as a node that stopped reporting.
+    Other,
+    /// Only the slices were read: the addresses are in them, none serving.
+    InSlices,
 }
 
 /// One object's whole neighbourhood, in one answer.

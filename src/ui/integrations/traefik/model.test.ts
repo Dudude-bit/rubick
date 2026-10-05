@@ -285,6 +285,7 @@ describe("the findings", () => {
               service: published("promo-web", 0).service,
               selector: "app=promo",
               pods: 2,
+              why: "failingReadiness",
             },
           }),
         ],
