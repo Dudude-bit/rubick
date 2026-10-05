@@ -125,7 +125,7 @@ async function paints(terminated: boolean | null) {
         ? "TLS not checked"
         : terminated
           ? "0 hosts"
-          : "none — traffic is unencrypted",
+          : "none: traffic is unencrypted",
       { selector: "dd *, dd" }
     )
   );

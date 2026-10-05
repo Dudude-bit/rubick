@@ -4822,9 +4822,9 @@ export const en = {
     eventsRefused: "Could not read the events in {scope}:",
     noStoriesMatch: "No story in {scope} matches “{query}”.",
     noEventsMatchInWindow: {
-      one: "Nothing in the latest {n} event of {scope} matches «{query}». Anything older was not read — raise the limit to search further back.",
+      one: "Nothing in the latest {n} event of {scope} matches «{query}». Anything older was not read; raise the limit to search further back.",
       other:
-        "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read — raise the limit to search further back.",
+        "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read; raise the limit to search further back.",
     },
     kindMayBeGone:
       "The {kind} may have been deleted or recreated under a new name.",
@@ -4853,9 +4853,9 @@ export const en = {
     showLineDetail: "Show line detail",
     collapseRepeats: "Collapse these repeats",
     watchingFromNow:
-      "Watching from now — metrics-server keeps no history, so the line starts here and grows to the right.",
+      "Watching from now: metrics-server keeps no history, so the line starts here and grows to the right.",
     noLimitSet:
-      "No limit set — the scale is what it has used, and nothing stops it taking the node's.",
+      "No limit set: the scale is what it has used, and nothing stops it taking the node's.",
     noRulesRoutesNothing: "No rules, so this ingress routes nothing.",
     noContainerToAttach: "No container is running to attach to",
     whichFailedTimes: {
@@ -4881,10 +4881,10 @@ export const en = {
     everyContainerExited:
       "Every container in this pod has exited; {container} was the last{when}.",
     shellNeedsLiveProcessNoneLeft:
-      "A shell needs a live process on the other end, and this pod has none left — what they printed is all that is still here.",
+      "A shell needs a live process on the other end, and this pod has none left. What they printed is all that is still here.",
     containerHasNotStarted: "{container} has not started.",
     containerHeldAt:
-      "{container} has not started — the kubelet is holding it at {reason}.",
+      "{container} has not started: the kubelet is holding it at {reason}.",
     podIsStatusNoneRunning:
       "This pod is {status}, and none of its containers is running.",
     overPlainHttp: "{n} over plain HTTP",
@@ -4894,7 +4894,7 @@ export const en = {
     readingWhatConnects: "Reading what connects to this…",
     couldNotReadFlux: "Could not read what Flux is reconciling",
     couldNotReadFluxBody:
-      "Everything on this page comes from Flux’s own objects in this API server, and that request failed — so a list here would be a guess rather than an answer.",
+      "Everything on this page comes from Flux’s own objects in this API server, and that request failed, so a list here would be a guess rather than an answer.",
     fluxPageDescription:
       "What Flux is applying, what it is applying from, and where the two have come apart.",
     readingWhatFluxApplies: "Reading what Flux applies…",
@@ -4918,19 +4918,19 @@ export const en = {
     fluxSuspendedTitle:
       "Suspended: it is not reconciling and it is not failing",
     fluxSuspendedTitleAgo:
-      "Suspended — {age} ago: it is not reconciling and it is not failing",
+      "Suspended {age} ago: it is not reconciling and it is not failing",
     fluxSuspendedWasReady:
-      "A suspended {kind} keeps the Ready condition from the last time it ran, so it reads as healthy in every list — Flux's own included. It last applied {revision}; whatever has been committed since is not here.",
+      "A suspended {kind} keeps the Ready condition from the last time it ran, so it reads as healthy in every list, Flux's own included. It last applied {revision}; whatever has been committed since is not here.",
     fluxSuspendedNeverRan:
       "It was suspended before it ever reconciled, so nothing it describes has been applied at all.",
     fluxFrozenTitle:
       "Its source stopped fetching; everything below it is frozen at {revision}",
     fluxFrozenHelm:
-      "The release is installed and healthy — from a chart version the source can no longer refresh.",
+      "The release is installed and healthy, from a chart version the source can no longer refresh.",
     fluxFrozenObjects: {
-      one: "The {n} object is applied and healthy — from a revision the source can no longer refresh.",
+      one: "The {n} object is applied and healthy, from a revision the source can no longer refresh.",
       other:
-        "The {n} objects are applied and healthy — from a revision the source can no longer refresh.",
+        "The {n} objects are applied and healthy, from a revision the source can no longer refresh.",
     },
     fluxFrozenExceptPre: "Nothing here says “failed” except",
     fluxFrozenExceptPost: ", and every reconciler under it looks fine.",
@@ -4940,7 +4940,7 @@ export const en = {
     fluxSourceNeverFetched:
       "Its source has never fetched, so this has never applied anything",
     fluxNotReconciling: "Not reconciling",
-    fluxNotReconcilingReason: "Not reconciling — {reason}",
+    fluxNotReconcilingReason: "Not reconciling: {reason}",
     fluxStalledTitle:
       "Stalled: it has stopped retrying and will not try again on its own",
     fluxStalledNote:
@@ -4951,14 +4951,14 @@ export const en = {
     },
     fluxBlockingDeclares: { one: "declares", other: "both declare" },
     fluxBlockingTail: {
-      one: ", so it has reconciled either. Fixing this one releases it.",
+      one: ", so it has not reconciled either. Fixing this one releases it.",
       other:
         ", so neither has reconciled either. Fixing this one releases them.",
     },
     fluxWaitingOn: "Waiting on {name}, which is not ready",
     fluxWaitingSays: "says:",
     fluxWaitingTail:
-      "— nothing here is wrong, and nothing here will move until that does.",
+      ". Nothing here is wrong, and nothing here will move until that does.",
     fluxWaitingQueue:
       "Nothing here is wrong; it is in the queue behind something that is.",
     readingSources: "Reading the sources…",
@@ -4998,20 +4998,20 @@ export const en = {
     readingFluxWorkloads: "Reading Flux’s own workloads…",
     fluxWorkloadsTitle: "Flux's own workloads",
     fluxWorkloadsDescription:
-      "One controller per kind of object, each with its own logs — which is where a Flux problem this page cannot see is actually diagnosed. Flux ships no dashboard, so there is nowhere else to go.",
+      "One controller per kind of object, each with its own logs, and that is where a Flux problem this page cannot see is actually diagnosed. Flux ships no dashboard, so there is nowhere else to go.",
     fluxNoControllersPre: "Nothing in this cluster carries",
     fluxNoControllersPost:
-      ", so Flux’s own workloads could not be found. Its objects are still read from the API server — but with no controller running, none of them is being acted on.",
+      ", so Flux’s own workloads could not be found. Its objects are still read from the API server, but with no controller running, none of them is being acted on.",
     allHosts: "All hosts",
     noClassNamed: "no class",
-    nothingServesClass: "{name} — nothing serves it",
-    noneTrafficUnencrypted: "none — traffic is unencrypted",
+    nothingServesClass: "{name}, which nothing serves",
+    noneTrafficUnencrypted: "none: traffic is unencrypted",
     catchAllCertificate: "catch-all certificate",
     ingressDefaultBackendOnly:
-      "No rules — every request reaching this load balancer goes to the default backend:",
+      "No rules, so every request reaching this load balancer goes to the default backend:",
     ingressNoRulesNoDefault:
       "No rules and no default backend, so this ingress routes nothing.",
-    noTlsConfigured: "No TLS configured — this ingress serves plain HTTP.",
+    noTlsConfigured: "No TLS configured: this ingress serves plain HTTP.",
     autoGenerated: "(auto-generated)",
     catchAllAppliesToRest: "catch-all · applies to every host not listed",
     noHosts: "no hosts",
@@ -5019,13 +5019,13 @@ export const en = {
       "The page failed to render. You can reload or return home.",
     readingRepositories: "Reading repositories…",
     noRepositoriesConfigured:
-      "No repositories configured — add one to search for charts.",
+      "No repositories configured. Add one to search for charts.",
     resourceNotFoundInCluster: "Resource not found in cluster",
     supersededByRevision:
       "Superseded by revision {revision}. The Deployment keeps this one at zero so a rollback can bring it straight back.",
     deploymentScaledToZeroNote:
       "The Deployment is scaled to zero, so its current revision runs no pods.",
-    noDeploymentRollingOut: "nothing — no Deployment is rolling this out",
+    noDeploymentRollingOut: "nothing: no Deployment is rolling this out",
     currentRevisionLower: "current revision",
     supersededLower: "superseded",
     revisionCurrentWord: "current",
@@ -5038,14 +5038,14 @@ export const en = {
     certificateStillServed:
       "The certificate already in {secret} is still being served, so this is not an outage yet.",
     certificateStillServedUntil:
-      "The certificate already in {secret} is still being served, so this is not an outage yet — it {expiry}.",
+      "The certificate already in {secret} is still being served, so this is not an outage yet: it {expiry}.",
     noIssuerNoClusterIssuer: "This cluster has no Issuer and no ClusterIssuer.",
     certManagerNeedsIssuer:
       "cert-manager signs nothing without one, so any Certificate here will sit unissued until one exists.",
     issuersCouldNotBeRead: "issuers could not be read",
     containerIsWaiting: "{container} is waiting · {reason}",
     schedulerHasNotPlacedIt: "The scheduler has not placed it on a node yet.",
-    noContainerHasStarted: "No container has started — this pod is {status}.",
+    noContainerHasStarted: "No container has started: this pod is {status}.",
     recentEventsSayMore:
       "{explanation} Recent events on the Overview tab say more.",
     podDeclaresNoContainers: "This pod declares no containers.",
@@ -5094,7 +5094,7 @@ export const en = {
     noSuchIntegration: "no such integration",
     couldNotReadMeshRouting: "Could not read this mesh’s routing",
     meshRoutingRequestFailed:
-      "Every route this page draws is a Gateway, a VirtualService or a DestinationRule in this API server, and that request failed — so the chain would be a guess rather than an answer.",
+      "Every route this page draws is a Gateway, a VirtualService or a DestinationRule in this API server, and that request failed, so the chain would be a guess rather than an answer.",
     istioPageDescription:
       "What this mesh routes, and where each hostname stops.",
     readingMesh: "Reading the mesh…",
@@ -5103,7 +5103,7 @@ export const en = {
     istioNothingRoutes:
       "Istio is installed here and nothing routes through it.",
     istioNoVirtualServiceHost:
-      "No VirtualService declares a host. The mesh will still carry traffic between the workloads that have a sidecar — that is the default and needs no object — but there is no routing rule to draw.",
+      "No VirtualService declares a host. The mesh will still carry traffic between the workloads that have a sidecar, which is the default and needs no object, but there is no routing rule to draw.",
     noHostVirtualServiceMatches:
       "No host, VirtualService or destination here matches that.",
     noGatewayServesIt: "no Gateway serves it",
@@ -5124,8 +5124,8 @@ export const en = {
     noRuleNamesThisHost: "no rule names this host",
     outsideThisCluster: "outside this cluster",
     notThisClustersPods: "not this cluster's pods",
-    maybeThisClustersService: "Services not read — may be one here",
-    subsetUnconfirmed: "defined if this is the Service — Services not read",
+    maybeThisClustersService: "Services not read; may be one here",
+    subsetUnconfirmed: "defined if this is the Service; Services not read",
     istioSubsetsMaybeRouted:
       "{list} routed only through a host the unread Services would confirm",
     matchShownAsWrittenBecause:
@@ -5136,9 +5136,9 @@ export const en = {
     },
     istioNoGatewayServes: "No Gateway serves {host}",
     istioGatewaysAbsentNote: {
-      one: "{list} is named here and does not exist in this cluster. Istio accepts the reference without complaint and the VirtualService receives nothing at the edge — there is no status, no event and no condition anywhere that says so.",
+      one: "{list} is named here and does not exist in this cluster. Istio accepts the reference without complaint and the VirtualService receives nothing at the edge. No status, event or condition anywhere says so.",
       other:
-        "{list} are named here and do not exist in this cluster. Istio accepts the reference without complaint and the VirtualService receives nothing at the edge — there is no status, no event and no condition anywhere that says so.",
+        "{list} are named here and do not exist in this cluster. Istio accepts the reference without complaint and the VirtualService receives nothing at the edge. No status, event or condition anywhere says so.",
     },
     istioGatewaysCoverNothingNote: {
       one: "{list} exists and no server on it covers this hostname, so nothing at the edge is listening for it. The VirtualService is correct YAML that receives no request.",
@@ -5149,7 +5149,7 @@ export const en = {
       "{name} routes to a subset called {subset}, and nothing defines it",
     istioSubsetRuleDeclaresNote:
       "A DestinationRule names {host} and declares {declares}. Istio has no endpoints to send this route to, and every request on it is answered with a 503.",
-    istioSubsetDeclaredNot: "{list} — not {subset}",
+    istioSubsetDeclaredNot: "{list}, but not {subset}",
     istioNoSubsetsAtAll: "no subsets at all",
     istioNoRuleNamesHostNote:
       "No DestinationRule in this cluster names {host} at all, so the subset {subset} is defined nowhere. A subset is a label selector that has to exist before it can be routed to; every request on this route gets a 503.",
@@ -5161,7 +5161,7 @@ export const en = {
     istioWeightsOver:
       "the shares written here are not the shares that will be served",
     istioRouteResolves503:
-      "This route resolves and every request gets a 503 — {detail}",
+      "This route resolves and every request gets a 503: {detail}",
     istioNoGatewayObjects:
       "This cluster has no Gateway objects, so nothing in the mesh is exposed at the edge. Traffic between workloads that have a sidecar still flows, which needs no Gateway.",
     istioGatewaysDescription:
@@ -5174,11 +5174,11 @@ export const en = {
       "A subset is a label selector that has to exist before a route can name it. Istio accepts the reference and answers every request on that route with a 503.",
     istioSubsetsDescription:
       "Every DestinationRule, the subsets it defines, and whether anything routes to them.",
-    noSubsetsTrafficPolicyOnly: "no subsets — traffic policy only",
+    noSubsetsTrafficPolicyOnly: "no subsets, traffic policy only",
     theLoadBalancerInFront: "the load balancer in front",
     cannotPullImage: "{container} cannot pull its image",
     imagePullRetrying:
-      "— the kubelet is retrying, waiting longer after each attempt. The name, the tag or the pull credentials are what to check.",
+      "is being retried by the kubelet, with a longer wait after each attempt. The name, the tag or the pull credentials are what to check.",
     startsAndExits: "{container} starts and then exits, over and over",
     crashRestartsWithLastRun: {
       one: "{n} restart so far; the last run ended {how}. What it printed before it died is in Logs.",
@@ -5196,7 +5196,7 @@ export const en = {
     waitingToStart: "{container} is waiting to start",
     containerExitedWith: "{container} exited with {code}",
     lastRunNotClean:
-      "{how} — the last run of this container did not finish cleanly.",
+      "{how}: the last run of this container did not finish cleanly.",
     noNodeWillTakePod: "No node will take this pod",
     conditionIsStatus: "{type} is {status}",
     thisPodFailed: "This pod failed",
@@ -5222,32 +5222,32 @@ export const en = {
     stopNoneReady: "none ready",
     stopNoPortToSendTo: "no port to send to",
     everyRequest503:
-      "This host answers, and every request gets a 503 — {reason}",
+      "This host answers, and every request gets a 503: {reason}",
     servedInClearTitle:
-      "Served in the clear — nothing offers this host over TLS",
+      "Served in the clear: nothing offers this host over TLS",
     nginxClearRedirectAnyway:
       "No Ingress under this host declares a certificate, so nginx serves it on :80 and nothing else. One of them does carry ssl-redirect, which reads like protection and is doing nothing: nginx applies that redirect only where the Ingress has a certificate to redirect to.",
     nginxClearNote:
       "No Ingress under this host declares a certificate, so nginx serves it on :80 and there is no encrypted way to reach it, even for a client that asks for one.",
     twoIngressesClaimPath: "Two Ingresses claim {path} on this host",
     nginxDuplicateWinner:
-      "nginx serves {object} — the older object wins a conflict — and writes a warning to its log that nothing else in this cluster surfaces. The other never fires.",
+      "nginx serves {object}, since the older object wins a conflict, and writes a warning to its log that nothing else in this cluster surfaces. The other never fires.",
     nginxDuplicateTie:
       "nginx breaks the tie by creation time and serves the older object; these do not both state one, so which of them is serving the request is not something this app can say from here.",
     canaryShadowingNothingTitle: "{name} is a canary shadowing nothing",
     canaryShadowingNothingNote:
-      "A canary Ingress is merged into the server block of a host another Ingress already serves. No other Ingress serves this host, so there is nothing to merge it into and nginx never routes a request to it — the object is correct YAML that does nothing at all.",
+      "A canary Ingress is merged into the server block of a host another Ingress already serves. No other Ingress serves this host, so there is nothing to merge it into and nginx never routes a request to it. The object is correct YAML that does nothing at all.",
     secretNotACertificate: "{name} could not be read as a certificate",
     secretNotParsable:
       "The Secret is there and what is in it is not a certificate this app could parse.",
     certExpiryBrowserNote:
       "Requests to this host fail closed in every browser once it goes, and nothing on the Ingress or the Service says so.",
     traefikRoutingRequestFailed:
-      "The routes this page draws come from the Ingresses and IngressRoutes in this API server, and that request failed — so the table would be a guess rather than an answer.",
+      "The routes this page draws come from the Ingresses and IngressRoutes in this API server, and that request failed, so the table would be a guess rather than an answer.",
     traefikPageDescription:
       "What this proxy serves, and where each hostname goes.",
     traefikRestOnNodeHint:
-      "Rest on a node to light up everything one edge away. A host goes to its own paths and their chain; a Service goes to its page — every line is one object naming another.",
+      "Rest on a node to light up everything one edge away. A host goes to its own paths and their chain; a Service goes to its page. Every line is one object naming another.",
     traefikRunningNothingRoutes:
       "Traefik is running here and nothing routes to it.",
     traefikNoRouteClaimsClass:
@@ -5272,7 +5272,7 @@ export const en = {
     },
     notFoundInThisCluster: "not found in this cluster",
     everyRequest502:
-      "This host answers, and every request gets a 502 — {reason}",
+      "This host answers, and every request gets a 502: {reason}",
     traefikClearNote: {
       one: "No route under this host carries a certificate, and it is bound to {list}, which terminates no TLS and carries no redirection. There is no encrypted way to reach it, even for a client that asks for one.",
       other:
@@ -5280,28 +5280,28 @@ export const en = {
     },
     twoObjectsClaimPath: "Two objects claim {path} on this host",
     traefikDuplicateWinner:
-      "wins — {because} — and the rest never fire for this path.",
+      "wins because {because}, and the rest never fire for this path.",
     traefikPriorityDeclared:
       "it declares priority {n}, above the others' declared or defaulted weight",
     traefikPriorityLongest:
       "its rule is the longest, which is Traefik's default priority for a router that declares none",
     traefikDuplicateTied:
-      "carry the same priority, declared or defaulted to their rule’s length — Traefik’s pick between them is not something the objects state.",
+      "carry the same priority, declared or defaulted to their rule’s length, so Traefik’s pick between them is not something the objects state.",
     traefikDuplicateUnsettled:
-      "both match it. Traefik breaks the tie by router priority — declared, or defaulting to the length of the router’s rule — and for an Ingress that rule is one Traefik generates and this app never sees, so which of them serves the request is not settled from here.",
+      "both match it. Traefik breaks the tie by router priority, which is declared or defaults to the length of the router’s rule. For an Ingress that rule is one Traefik generates and this app never sees, so which of them serves the request is not settled from here.",
     noMiddlewareObjects:
       "This cluster has no Middleware objects. Traefik serves every route without one, which is the ordinary case.",
     middlewaresDescription:
       "Every one, and who uses it. A middleware nothing references is doing nothing, and nowhere else in this app could tell you.",
     middlewareUnreferenced:
-      "nothing references it — it is configuration that does nothing",
+      "nothing references it, so it is configuration that does nothing",
     readingTheProxy: "Reading the proxy…",
     cannotSayWhatTraefikListensOn:
       "This cluster cannot say what Traefik listens on.",
     entryPointsAreStatic:
-      "Entry points are static configuration — they exist only in the flags the proxy was started with, and nothing in the API server carries them.",
+      "Entry points are static configuration: they exist only in the flags the proxy was started with, and nothing in the API server carries them.",
     entryPointsDescription:
-      "What the proxy listens on, which of them terminate TLS, and which hosts land on each — the answer to “why is my route on :80”.",
+      "What the proxy listens on, which of them terminate TLS, and which hosts land on each: the answer to “why is my route on :80”.",
     plainLower: "plain",
     redirectsTo: "redirects to {target}",
     plainEntryPointsHead: {
@@ -5309,7 +5309,7 @@ export const en = {
       other: "{list} terminate no TLS and redirect nowhere.",
     },
     plainEntryPointsNote:
-      "A route that names no entry point is bound to all of them, so every host in this cluster is also reachable unencrypted — including the ones with a certificate. Setting a redirection on the entry point fixes all of them at once; a redirect middleware fixes one route.",
+      "A route that names no entry point is bound to all of them, so every host in this cluster is also reachable unencrypted, including the ones with a certificate. Setting a redirection on the entry point fixes all of them at once; a redirect middleware fixes one route.",
     theProxyTitle: "The proxy",
     theProxyDescription:
       "Where a Traefik problem is actually diagnosed: its own pods, and its own logs.",
@@ -5372,7 +5372,7 @@ export const en = {
     couldNotReadManifest: "Could not read the manifest",
     couldNotReadApplications: "Could not read this cluster’s Applications",
     applicationsUnreadableBody:
-      "Everything on this page comes from the {kind} objects in this API server, and that request failed — so a list here would be a guess rather than an answer.",
+      "Everything on this page comes from the {kind} objects in this API server, and that request failed, so a list here would be a guess rather than an answer.",
     argoPageDescription:
       "Whether what is running is what git says should be running, and what is stopping it where it is not.",
     acrossEveryNamespace: "{count} across every namespace",
@@ -5400,9 +5400,9 @@ export const en = {
       "Argo has not compared this Application yet, so it lists no objects.",
     generatedByApplicationSet: "Generated by ApplicationSet",
     editingGeneratedAppUndone:
-      ". Editing this Application is undone the next time the generator runs — the file to change is the ApplicationSet.",
+      ". Editing this Application is undone the next time the generator runs; the file to change is the ApplicationSet.",
     argoDiffNoAddress:
-      "The line-by-line diff lives in Argo’s own API, which needs a credential this app does not hold — and no Ingress in this cluster serves {service}, so there is no address to send you to.",
+      "The line-by-line diff lives in Argo’s own API, which needs a credential this app does not hold, and no Ingress in this cluster serves {service}, so there is no address to send you to.",
     forLineByLineDiff:
       "for the line-by-line diff, which needs a credential this app does not hold.",
     syncFailingFor: "Sync has been failing for {age}, and auto-sync is on",
@@ -5414,7 +5414,7 @@ export const en = {
     nothingRetryingSync:
       "Nothing is retrying it. It will stay exactly as it is until somebody syncs it again.",
     outOfSyncLastSynced:
-      "Out of sync — last synced {age} ago, and auto-sync is off",
+      "Out of sync: last synced {age} ago, and auto-sync is off",
     outOfSyncNeverSynced: "Out of sync and never synced, and auto-sync is off",
     driftedNote:
       "Nothing is going to fix this on its own. Somebody either changed the cluster by hand and meant to, or changed git and nobody pressed sync.",
@@ -5425,10 +5425,10 @@ export const en = {
     noApplicationSets:
       "No ApplicationSet in this cluster. Every Application here was written by hand, which means editing one is a change that stays.",
     applicationSetsDescription:
-      "A generator and the Applications it made. What it generated is a template's output — editing one of those Applications is undone the next time the generator runs.",
+      "A generator and the Applications it made. What it generated is a template's output, so editing one of those Applications is undone the next time the generator runs.",
     generatedNothing: "generated nothing in this cluster",
     noAppProjects:
-      "This cluster has no AppProject objects — not even {name}, which Argo normally installs. Every Application names a project, so one of them is naming something that is not there.",
+      "This cluster has no AppProject objects, not even {name}, which Argo normally installs. Every Application names a project, so one of them is naming something that is not there.",
     projectsDescription:
       "What each project lets an Application do: which repositories it may deploy from, and where it may deploy to.",
     noRepositoryAllowed: "no repository allowed",
@@ -5446,7 +5446,7 @@ export const en = {
     argoWorkloadsDescription:
       "Where an Argo problem is actually diagnosed. A repository it cannot reach and a webhook it never received are in the repo-server's and the controller's logs, not in any Application's status.",
     argoUiDescription:
-      "Half of what Argo knows needs a credential this app does not hold — the line-by-line diff above all. Where the cluster says how to reach Argo's UI, this page hands those questions over.",
+      "Half of what Argo knows needs a credential this app does not hold, the line-by-line diff above all. Where the cluster says how to reach Argo's UI, this page hands those questions over.",
     kindNameServes: "{kind} {name} serves",
     anIngressServes: "An Ingress serves",
     soEveryApplicationOffersWayIn:
@@ -5454,11 +5454,11 @@ export const en = {
     readingWhatRoutes: "Reading what routes {service}…",
     somethingWord: "Something",
     hostNotKnownTls:
-      ", but nothing in the API server says whether that host is served over TLS — the proxy’s entry points are start-up flags and this app could not read them. Rather than guess a scheme and hand you a link that may refuse the connection, the host is stated and left to you.",
+      ", but nothing in the API server says whether that host is served over TLS: the proxy’s entry points are start-up flags and this app could not read them. Rather than guess a scheme and hand you a link that may refuse the connection, the host is stated and left to you.",
     nothingRoutesServiceToHostname:
       "Nothing this app can read routes {service} to a hostname",
     noIngressNoRoutingController:
-      " — no Ingress, and no routing controller installed that could be asked about its own objects",
+      ": there is no Ingress, and no routing controller installed that could be asked about its own objects",
     serviceIsClusterIpNoRoute:
       ". {service} is a ClusterIP with no route from this machine, so there is no address this app could construct, and a link into a connection error is worse than no link.",
     everythingReadFromObjects:
@@ -5469,17 +5469,17 @@ export const en = {
       "The CRDs this page reads, for a reader who wants the raw thing.",
     loadingTerminal: "Loading terminal…",
     noMetricsReading:
-      "metrics-server has no reading for this object — its containers may not be running",
+      "metrics-server has no reading for this object; its containers may not be running",
     helmReleases: "Helm releases",
     manifests: "Manifests",
     customResourceNotRead:
-      "This custom resource has not been read yet — its spec is whatever the CRD defines, and nothing here has seen it.",
+      "This custom resource has not been read yet. Its spec is whatever the CRD defines, and nothing here has seen it.",
     noShellAttached: "No shell is attached",
     shellSessionEnded:
-      "The session was ended. Choosing a container above opens a new one — nothing is running here in the meantime.",
-    pvUnbound: "unbound — no claim is using this volume",
+      "The session was ended. Choosing a container above opens a new one; nothing is running here in the meantime.",
+    pvUnbound: "unbound: no claim is using this volume",
     vendorDidNotAnswer:
-      "{vendor} did not answer — {reason}. This is the window the app watched itself; the longer ranges are gone until it is back.",
+      "{vendor} did not answer: {reason}. This is the window the app watched itself; the longer ranges are gone until it is back.",
     longerNeedsPrometheus: "Longer than this needs a Prometheus: {link}.",
     trendsNeedPrometheus: "Utilisation over time needs a Prometheus: {link}.",
     trendsSortNote: "least headroom first, each point the peak of its bucket",
@@ -5508,20 +5508,20 @@ export const en = {
     declaredUnknown:
       "Could not read whether kube-state-metrics kept what was declared, so the window is unknown either way; request and limit are today's figures, drawn flat.",
     declaredSizeNotFullness:
-      "Declared size, not how full. metrics-server reports CPU and memory only — how much of a volume is in use comes from the kubelet, which a Prometheus can read and this app cannot.",
+      "Declared size, not how full. metrics-server reports CPU and memory only; how much of a volume is in use comes from the kubelet, which a Prometheus can read and this app cannot.",
     declaredSizeForUnreported:
       "Declared size, not how full, for the {n} of these the kubelet does not report on.",
     terminalSessionEnded: "Session ended: {status}",
     valuesHiddenByDefault: "values hidden by default",
-    binaryNotText: "binary, not text — {size}",
+    binaryNotText: "binary, not text: {size}",
     blindReconcilers: {
-      one: "{vendors} reports no per-object drift — it corrects silently, so its objects appear here only when the reconciler itself has stopped.",
+      one: "{vendors} reports no per-object drift: it corrects silently, so its objects appear here only when the reconciler itself has stopped.",
       other:
-        "{vendors} report no per-object drift — they correct silently, so their objects appear here only when the reconciler itself has stopped.",
+        "{vendors} report no per-object drift: they correct silently, so their objects appear here only when the reconciler itself has stopped.",
     },
     promCouldNotAsk: "Could not ask this Prometheus anything",
     promPageDescription:
-      "Whether the Prometheus this cluster is pointed at is scraping this cluster — which a connection test cannot tell you — and whether it holds the metrics the app's history is built on.",
+      "Whether the Prometheus this cluster is pointed at is scraping this cluster, which a connection test cannot tell you, and whether it holds the metrics the app's history is built on.",
     promAsking: "Asking it what it knows…",
     promWhichCluster: "Which cluster it is watching",
     promNodeNamesWhy:
@@ -5531,12 +5531,12 @@ export const en = {
     nothingElse: "nothing else",
     promNotWatching: "This Prometheus is not watching this cluster",
     promNotWatchingBody: {
-      one: "This cluster’s one node does not appear in it. The address answers PromQL — which is all the connection test proved — and every history and volume figure the app draws from it is about somebody else’s cluster.",
+      one: "This cluster’s one node does not appear in it. The address answers PromQL, which is all the connection test proved, and every history and volume figure the app draws from it is about somebody else’s cluster.",
       other:
-        "Not one of this cluster’s {n} nodes appears in it. The address answers PromQL — which is all the connection test proved — and every history and volume figure the app draws from it is about somebody else’s cluster.",
+        "Not one of this cluster’s {n} nodes appears in it. The address answers PromQL, which is all the connection test proved, and every history and volume figure the app draws from it is about somebody else’s cluster.",
     },
     promUnseenNodesBody:
-      "are in the cluster and not in Prometheus, so a pod that happens to be scheduled on one of them draws an empty history — which looks exactly like a pod that used nothing.",
+      "are in the cluster and not in Prometheus, so a pod that happens to be scheduled on one of them draws an empty history, which looks exactly like a pod that used nothing.",
     promWhatAppAsks: "What the app asks it for",
     promFamiliesWhy:
       "The exact metric names the queries use. A family that is absent answers every query with an empty series, and an empty series is drawn as a flat chart rather than as a gap — so the absence is named here instead.",

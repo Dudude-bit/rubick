@@ -633,7 +633,7 @@ function describe(
           <>
             <span className="font-mono text-fg-mid">{finding.on}</span>{" "}
             {t("empty", "fluxWaitingSays")}{" "}
-            <span className="font-mono">{finding.because}</span>{" "}
+            <span className="font-mono">{finding.because}</span>
             {t("empty", "fluxWaitingTail")}
           </>
         ) : (

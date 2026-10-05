@@ -140,7 +140,7 @@ describe("DataSection", () => {
     );
 
     expect(screen.getByText("blob")).toBeInTheDocument();
-    expect(screen.getByText("binary, not text — 5 Bytes")).toBeInTheDocument();
+    expect(screen.getByText("binary, not text: 5 Bytes")).toBeInTheDocument();
     // Neither the bytes nor a mangled stand-in appears anywhere.
     expect(screen.queryByText(/�/)).not.toBeInTheDocument();
     // Nothing to reveal, so no control claiming there is.
