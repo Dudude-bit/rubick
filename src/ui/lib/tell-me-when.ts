@@ -7,6 +7,7 @@ import type {
   DeploymentInfo,
   JobInfo,
   PodInfo,
+  Rollout,
   StatefulSetInfo,
 } from "@/generated/types";
 
@@ -61,6 +62,7 @@ export const ASK_OF: Record<WatchKind, Ask> = {
 export type Says =
   | "rolledOut"
   | "rolloutFailed"
+  | "rolloutPaused"
   | "ready"
   | "crashedAgain"
   | "succeeded"
@@ -99,6 +101,8 @@ export interface Verdict {
 export const SAYS_TONE: Record<Says, string> = {
   rolledOut: "bg-ok",
   rolloutFailed: "bg-err",
+  // Nothing broke: the rollout waits for somebody to resume it.
+  rolloutPaused: "bg-warn",
   ready: "bg-ok",
   crashedAgain: "bg-err",
   succeeded: "bg-ok",
@@ -275,11 +279,18 @@ export function judge(
   }
 }
 
-interface Rollout {
+/**
+ * One look at a workload, judged by the rollout verdict its badge, peek and
+ * list print, so the answer here never disagrees with the word beside it.
+ */
+interface Look {
+  /** Ready, with every pod on the newest template: under `OnDelete` the verdict is Ready before anything rolls. */
   settled: boolean;
+  /** Stalled: the controller stopped waiting, in its own words. */
   failed: string | null;
   /** When the failing condition last changed, as the cluster stamped it. */
   failedAt: number | null;
+  paused: boolean;
   desired: number;
   ready: number;
   generation: number | null;
@@ -288,74 +299,61 @@ interface Rollout {
   revision: string | null;
 }
 
-function rolloutOf(kind: WatchKind, resource: unknown): Rollout {
-  if (kind === "Deployment") {
-    const d = resource as DeploymentInfo;
-    const r = d.replicas;
-    const progressing = d.conditions.find((c) => c.type === "Progressing");
-    const failed =
-      progressing?.status === "False"
-        ? (progressing.message ?? progressing.reason ?? "Progressing=False")
-        : null;
-    const failedAt =
-      failed !== null && progressing?.lastTransitionTime
-        ? (Date.parse(progressing.lastTransitionTime) ?? null)
-        : null;
-    return {
-      settled:
-        r.updated === r.desired &&
-        r.available === r.desired &&
-        r.ready === r.desired &&
-        (progressing === undefined ||
-          progressing.reason === "NewReplicaSetAvailable"),
-      failed,
-      failedAt: Number.isNaN(failedAt) ? null : failedAt,
-      desired: r.desired,
-      ready: r.ready,
-      generation: d.generation ?? null,
-      observedGeneration: d.observedGeneration ?? null,
-      revision: d.annotations?.["deployment.kubernetes.io/revision"] ?? null,
-    };
-  }
-  if (kind === "StatefulSet") {
-    const s = resource as StatefulSetInfo;
-    const r = s.replicas;
-    return {
-      // `updated` is what tells a finished rollout from one that has not
-      // started: every other count is already at `desired` the instant the
-      // template changes, and under `OnDelete` they stay there forever
-      // while nothing rolls. The Deployment arm has always asked this.
-      settled:
-        r.ready === r.desired &&
-        r.current === r.desired &&
-        r.updated === r.desired,
-      failed: null,
-      failedAt: null,
-      desired: r.desired,
-      ready: r.ready,
-      generation: s.generation ?? null,
-      observedGeneration: s.observedGeneration ?? null,
-      revision: null,
-    };
-  }
-  const d = resource as DaemonSetInfo;
+const DEADLINE_EXCEEDED = "ProgressDeadlineExceeded";
+
+function stamp(at: string | null | undefined): number | null {
+  const parsed = at ? Date.parse(at) : Number.NaN;
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function lookOf(kind: WatchKind, resource: unknown): Look {
+  const counts =
+    kind === "Deployment"
+      ? (resource as DeploymentInfo).replicas
+      : kind === "StatefulSet"
+        ? (resource as StatefulSetInfo).replicas
+        : (resource as DaemonSetInfo);
+  const { rollout, generation, observedGeneration } = resource as {
+    rollout: Rollout;
+    generation?: number | null;
+    observedGeneration?: number | null;
+  };
+  const progressing =
+    kind === "Deployment"
+      ? (resource as DeploymentInfo).conditions.find(
+          (c) => c.type === "Progressing"
+        )
+      : undefined;
   return {
     settled:
-      d.current === d.desired &&
-      d.ready === d.desired &&
-      d.updated === d.desired,
-    failedAt: null,
-    failed: null,
-    desired: d.desired,
-    ready: d.ready,
-    generation: d.generation ?? null,
-    observedGeneration: d.observedGeneration ?? null,
-    revision: null,
+      (rollout.state === "ready" || rollout.state === "idle") &&
+      counts.updated === counts.desired,
+    failed:
+      rollout.state === "stalled"
+        ? rollout.message
+          ? `${DEADLINE_EXCEEDED}: ${rollout.message}`
+          : DEADLINE_EXCEEDED
+        : null,
+    failedAt:
+      rollout.state === "stalled"
+        ? stamp(progressing?.lastTransitionTime)
+        : null,
+    paused: rollout.state === "paused",
+    desired: counts.desired,
+    ready: counts.ready,
+    generation: generation ?? null,
+    observedGeneration: observedGeneration ?? null,
+    revision:
+      kind === "Deployment"
+        ? ((resource as DeploymentInfo).annotations?.[
+            "deployment.kubernetes.io/revision"
+          ] ?? null)
+        : null,
   };
 }
 
 /** "3 of 3 ready, revision 8": what the last look said, for a verdict to carry. */
-function seenWords(now: Rollout): Saying {
+function seenWords(now: Look): Saying {
   return now.revision === null
     ? { key: "rolloutSeen", values: { ready: now.ready, desired: now.desired } }
     : {
@@ -374,7 +372,7 @@ function seenWords(now: Rollout): Saying {
  * a Deployment that was fine before the click looks fine for a second after
  * it too.
  */
-function acknowledged(now: Rollout, was: Baseline, after: After): boolean {
+function acknowledged(now: Look, was: Baseline, after: After): boolean {
   if (after.action === "scale") return now.desired === after.replicas;
   if (after.generationBefore !== null && now.generation !== null) {
     return now.generation > after.generationBefore;
@@ -392,7 +390,7 @@ function judgeOutcome(
   was: Baseline,
   after: After
 ): Judgement {
-  const now = rolloutOf(kind, resource);
+  const now = lookOf(kind, resource);
   const baseline: Baseline = {
     ...was,
     armed: true,
@@ -429,6 +427,12 @@ function judgeOutcome(
     }
     return { verdict: null, baseline };
   }
+  if (now.paused) {
+    return {
+      verdict: { says: "rolloutPaused", detail: seenWords(now) },
+      baseline,
+    };
+  }
   if (now.settled && caughtUp) {
     return {
       verdict: { says: "rolledOut", detail: seenWords(now) },
@@ -443,7 +447,15 @@ function judgeRollout(
   resource: unknown,
   was: Baseline
 ): Judgement {
-  const now = rolloutOf(kind, resource);
+  const now = lookOf(kind, resource);
+  // A paused rollout moves for nobody until it is resumed, so waiting on it
+  // is waiting for ever.
+  if (now.paused) {
+    return {
+      verdict: { says: "rolloutPaused", detail: seenWords(now) },
+      baseline: was,
+    };
+  }
   if (!was.armed) {
     // Already there when asked: the answer is the next arrival, not this one.
     return { verdict: null, baseline: { armed: !now.settled } };

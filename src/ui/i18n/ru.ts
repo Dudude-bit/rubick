@@ -2489,6 +2489,7 @@ export const ru: Catalogue = {
     swap: "Снять то, наблюдать это",
     saysRolledOut: "{name} раскатился",
     saysRolloutFailed: "{name}: раскатка не удалась",
+    saysRolloutPaused: "{name} на паузе и не раскатится, пока паузу не снимут",
     saysReady: "{name} готов",
     saysCrashedAgain: "{name} снова упал",
     saysSucceeded: "{name} завершился успешно",

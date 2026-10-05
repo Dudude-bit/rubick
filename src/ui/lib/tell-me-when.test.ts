@@ -13,6 +13,7 @@ import type {
   DeploymentInfo,
   JobInfo,
   PodInfo,
+  Rollout,
   StatefulSetInfo,
 } from "@/generated/types";
 import {
@@ -38,11 +39,26 @@ function watchOn(kind: Watch["kind"], ask: Watch["ask"]): Watch {
   };
 }
 
+/** The verdict the badge prints, which is what a watch is judged by. */
+const READY: Rollout = { state: "ready" };
+const moving = (updated: number, desired = 3): Rollout => ({
+  state: "rollingOut",
+  updated,
+  desired,
+});
+const stalled = (message: string): Rollout => ({
+  state: "stalled",
+  message,
+  serving: 2,
+});
+
 function deployment(
   replicas: Partial<DeploymentInfo["replicas"]>,
-  progressing?: { status: string; reason?: string; message?: string }
+  progressing?: { status: string; reason?: string; message?: string },
+  rollout: Rollout = READY
 ): DeploymentInfo {
   return {
+    rollout,
     replicas: { desired: 3, ready: 3, available: 3, updated: 3, ...replicas },
     conditions: progressing
       ? [
@@ -75,7 +91,11 @@ describe("a rollout", () => {
     const looks = [
       deployment({}),
       ...Array.from({ length: 20 }, (_, i) =>
-        deployment({ updated: 1 + (i % 3), available: 2, ready: 2 })
+        deployment(
+          { updated: 1 + (i % 3), available: 2, ready: 2 },
+          undefined,
+          moving(1 + (i % 3))
+        )
       ),
       deployment({}, { status: "True", reason: "NewReplicaSetAvailable" }),
     ];
@@ -85,22 +105,64 @@ describe("a rollout", () => {
     ]);
   });
 
-  it("carries the controller's words when it gives up", () => {
+  /**
+   * The badge reads the rollout verdict and this read the conditions its
+   * own way, so a Deployment the badge called Stalled could leave the wait
+   * open. Fails if the Stalled verdict stops ending it as failed.
+   */
+  it("ends the wait as failed on a Stalled verdict, naming ProgressDeadlineExceeded", () => {
+    const message = 'ReplicaSet "payments-7d9" has timed out progressing.';
     const looks = [
-      deployment({ updated: 1 }),
-      deployment(
-        { updated: 1 },
-        {
-          status: "False",
-          reason: "ProgressDeadlineExceeded",
-          message: 'ReplicaSet "payments-7d9" has timed out progressing.',
-        }
-      ),
+      deployment({ updated: 1 }, undefined, moving(1)),
+      deployment({ updated: 1 }, undefined, stalled(message)),
     ];
     expect(walk(watchOn("Deployment", "rollout"), looks)).toEqual([
       {
         says: "rolloutFailed",
-        detail: 'ReplicaSet "payments-7d9" has timed out progressing.',
+        detail: `ProgressDeadlineExceeded: ${message}`,
+      },
+    ]);
+  });
+
+  /**
+   * Every count at desired is not what the badge calls done: with no pod
+   * available it says Unavailable, and the wait said "rolled out" beside it.
+   */
+  it("does not say rolled out while the badge says anything but Ready", () => {
+    const unavailable: Rollout = {
+      state: "unavailable",
+      reason: "MinimumReplicasUnavailable",
+      message: null,
+    };
+    const short: Rollout = { state: "short", available: 2, desired: 3 };
+    expect(
+      walk(watchOn("Deployment", "rollout"), [
+        deployment({ updated: 1 }, undefined, moving(1)),
+        deployment({}, undefined, unavailable),
+        deployment({}, undefined, short),
+      ])
+    ).toEqual([]);
+    expect(
+      walk(watchOn("Deployment", "rollout"), [
+        deployment({ updated: 1 }, undefined, moving(1)),
+        deployment({}, undefined, READY),
+      ])
+    ).toEqual([{ says: "rolledOut", detail: null }]);
+  });
+
+  /** A paused rollout moves for nobody, so the wait would never end. Fails if Paused is waited on. */
+  it("says Paused at once rather than waiting for ever", () => {
+    expect(
+      walk(watchOn("Deployment", "rollout"), [
+        deployment({ updated: 1 }, undefined, { state: "paused" }),
+      ])
+    ).toEqual([
+      {
+        says: "rolloutPaused",
+        detail: {
+          key: "rolloutSeen",
+          values: { ready: 3, desired: 3 },
+        },
       },
     ]);
   });
@@ -160,7 +222,10 @@ function statefulSet(
   desired = 3,
   updated = current
 ): StatefulSetInfo {
-  return { replicas: { desired, ready, current, updated } } as StatefulSetInfo;
+  return {
+    rollout: ready === desired ? READY : moving(updated, desired),
+    replicas: { desired, ready, current, updated },
+  } as StatefulSetInfo;
 }
 
 function daemonSet(
@@ -169,7 +234,13 @@ function daemonSet(
   desired = 3,
   updated = current
 ): DaemonSetInfo {
-  return { desired, current, ready, updated } as DaemonSetInfo;
+  return {
+    rollout: ready === desired ? READY : moving(updated, desired),
+    desired,
+    current,
+    ready,
+    updated,
+  } as DaemonSetInfo;
 }
 
 describe("a statefulset or daemonset", () => {
@@ -289,6 +360,7 @@ describe("the tone a verdict is shown in", () => {
   ];
   const notFailures: Says[] = [
     "rolledOut",
+    "rolloutPaused",
     "ready",
     "succeeded",
     "drained",
@@ -326,9 +398,10 @@ describe("an action being followed", () => {
     generation: number,
     observed: number,
     replicas: Partial<DeploymentInfo["replicas"]> = {},
-    revision = "8"
+    revision = "8",
+    rollout: Rollout = READY
   ): DeploymentInfo => ({
-    ...deployment(replicas),
+    ...deployment(replicas, undefined, rollout),
     generation,
     observedGeneration: observed,
     annotations: { "deployment.kubernetes.io/revision": revision },
@@ -348,7 +421,7 @@ describe("an action being followed", () => {
     expect(
       walk(after("restart"), [
         look(4, 4),
-        look(5, 4, { updated: 1, ready: 2 }),
+        look(5, 4, { updated: 1, ready: 2 }, "8", { state: "unobserved" }),
         look(5, 5, { updated: 3, ready: 3 }, "9"),
       ])
     ).toEqual([
@@ -366,7 +439,11 @@ describe("an action being followed", () => {
     expect(
       walk(after("scale", 5, null), [
         look(4, 4, { desired: 3 }),
-        look(5, 5, { desired: 5, ready: 3, updated: 5, available: 3 }),
+        look(5, 5, { desired: 5, ready: 3, updated: 5, available: 3 }, "8", {
+          state: "short",
+          available: 3,
+          desired: 5,
+        }),
         look(5, 5, { desired: 5, ready: 5, updated: 5, available: 5 }),
       ])
     ).toEqual([
@@ -384,23 +461,19 @@ describe("an action being followed", () => {
     expect(
       walk(after("image"), [
         look(4, 4),
-        {
-          ...look(5, 5, { updated: 1, ready: 2 }),
-          conditions: [
-            {
-              type: "Progressing",
-              status: "False",
-              reason: "ProgressDeadlineExceeded",
-              message: "ReplicaSet has timed out progressing.",
-              lastTransitionTime: null,
-            },
-          ],
-        },
+        look(
+          5,
+          5,
+          { updated: 1, ready: 2 },
+          "8",
+          stalled("ReplicaSet has timed out progressing.")
+        ),
       ])
     ).toEqual([
       {
         says: "rolloutFailed",
-        detail: "ReplicaSet has timed out progressing.",
+        detail:
+          "ProgressDeadlineExceeded: ReplicaSet has timed out progressing.",
       },
     ]);
   });
@@ -417,7 +490,13 @@ describe("an action being followed", () => {
   it("does not read a failure the reader's action cannot have caused", () => {
     const asked = 1_700_000_100_000;
     const stuck = (at: string | null) => ({
-      ...look(8, 7, { updated: 1, ready: 2 }),
+      ...look(
+        8,
+        7,
+        { updated: 1, ready: 2 },
+        "8",
+        stalled("the previous rollout timed out.")
+      ),
       conditions: [
         {
           type: "Progressing",
@@ -445,7 +524,12 @@ describe("an action being followed", () => {
 
     // Stamped after it: this one, and it is the reader's to hear about.
     expect(walk(watch, [stuck(new Date(asked + 1_000).toISOString())])).toEqual(
-      [{ says: "rolloutFailed", detail: "the previous rollout timed out." }]
+      [
+        {
+          says: "rolloutFailed",
+          detail: "ProgressDeadlineExceeded: the previous rollout timed out.",
+        },
+      ]
     );
   });
 
@@ -483,7 +567,7 @@ describe("an action being followed", () => {
    */
   it("holds a failure with no stamp until the controller has looked", () => {
     const stuck = (observed: number, message: string) => ({
-      ...look(8, observed, { updated: 1, ready: 2 }),
+      ...look(8, observed, { updated: 1, ready: 2 }, "8", stalled(message)),
       conditions: [
         {
           type: "Progressing",
@@ -499,7 +583,12 @@ describe("an action being followed", () => {
         stuck(7, "the rollout before the click timed out."),
         stuck(8, "this rollout timed out."),
       ])
-    ).toEqual([{ says: "rolloutFailed", detail: "this rollout timed out." }]);
+    ).toEqual([
+      {
+        says: "rolloutFailed",
+        detail: "ProgressDeadlineExceeded: this rollout timed out.",
+      },
+    ]);
   });
 
   /**
@@ -515,20 +604,17 @@ describe("an action being followed", () => {
 
     const [theirs] = walk(after("image"), [
       look(4, 4),
-      {
-        ...look(5, 5, { updated: 1, ready: 2 }),
-        conditions: [
-          {
-            type: "Progressing",
-            status: "False",
-            reason: "ProgressDeadlineExceeded",
-            message: "ReplicaSet has timed out progressing.",
-            lastTransitionTime: null,
-          },
-        ],
-      },
+      look(
+        5,
+        5,
+        { updated: 1, ready: 2 },
+        "8",
+        stalled("ReplicaSet has timed out progressing.")
+      ),
     ]);
-    expect(theirs.detail).toBe("ReplicaSet has timed out progressing.");
+    expect(theirs.detail).toBe(
+      "ProgressDeadlineExceeded: ReplicaSet has timed out progressing."
+    );
   });
 
   /**
@@ -553,6 +639,7 @@ describe("an action being followed", () => {
         namespace: "shop",
         generation: 5,
         observedGeneration: 5,
+        rollout: READY,
         replicas: { desired: 3, ready: 3, current: 3, updated },
       }),
     ],
@@ -563,6 +650,7 @@ describe("an action being followed", () => {
         namespace: "shop",
         generation: 5,
         observedGeneration: 5,
+        rollout: READY,
         desired: 3,
         ready: 3,
         current: 3,
@@ -610,6 +698,7 @@ describe("an action being followed", () => {
       namespace: "shop",
       generation,
       observedGeneration: generation,
+      rollout: READY,
       replicas: { desired: 1, ready: 1, current: 1, updated },
     });
     const following = (generationBefore: number | null) => ({
@@ -629,9 +718,30 @@ describe("an action being followed", () => {
     expect(walk(following(null), [look(5, 1)])).toEqual([]);
   });
 
+  /** A restart on a paused Deployment lands and rolls nothing; the wait says so instead of timing out. */
+  it("says Paused once the action has landed on a paused rollout", () => {
+    expect(
+      walk(after("restart"), [
+        look(4, 4, {}, "8", { state: "paused" }),
+        look(5, 5, {}, "8", { state: "paused" }),
+      ])
+    ).toEqual([
+      {
+        says: "rolloutPaused",
+        detail: {
+          key: "rolloutSeenRevision",
+          values: { ready: 3, desired: 3, revision: "8" },
+        },
+      },
+    ]);
+  });
+
   it("remembers the last look in words, for the timeout to say", () => {
     let current = after("restart");
-    for (const l of [look(4, 4), look(5, 4, { updated: 1, ready: 2 })]) {
+    for (const l of [
+      look(4, 4),
+      look(5, 4, { updated: 1, ready: 2 }, "8", moving(1)),
+    ]) {
       current = { ...current, baseline: judge(current, "applied", l).baseline };
     }
     expect(current.baseline?.seen).toEqual({

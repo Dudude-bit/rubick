@@ -2373,6 +2373,8 @@ export const en = {
     swap: "Stop that one, watch this",
     saysRolledOut: "{name} rolled out",
     saysRolloutFailed: "{name} rollout failed",
+    saysRolloutPaused:
+      "{name} is paused and will not roll out until it is resumed",
     saysReady: "{name} is ready",
     saysCrashedAgain: "{name} fell over again",
     saysSucceeded: "{name} succeeded",

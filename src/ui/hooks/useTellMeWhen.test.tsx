@@ -55,8 +55,13 @@ function emit(event: string, payload: unknown) {
   for (const handler of listeners[event] ?? []) handler({ payload });
 }
 
+/** As the backend sends it: the rollout verdict beside the counts it was read from. */
 function deployment(updated: number, reason?: string): DeploymentInfo {
   return {
+    rollout:
+      updated < 3
+        ? { state: "rollingOut", updated, desired: 3 }
+        : { state: "ready" },
     replicas: { desired: 3, ready: 3, available: 3, updated },
     conditions: reason
       ? [
