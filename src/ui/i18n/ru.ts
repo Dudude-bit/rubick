@@ -5337,6 +5337,12 @@ export const ru: Catalogue = {
     kindCouldNotRead: "Не удалось прочитать этот объект ({kind})",
     whatIsThisKind: "Что это за объект ({kind})?",
     kindNotFound: "{kind} не найден",
+    moreFieldsInYaml: {
+      one: "Ещё {n} поле, на вкладке YAML",
+      few: "Ещё {n} поля, на вкладке YAML",
+      many: "Ещё {n} полей, на вкладке YAML",
+      other: "Ещё {n} поля, на вкладке YAML",
+    },
     goneMark: "удалён",
     goneTitle: "Объекта {kind} больше нет.",
     goneReplacedBy:

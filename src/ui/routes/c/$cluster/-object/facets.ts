@@ -56,11 +56,38 @@ export function stateOf(status: unknown): string | undefined {
   return ready.status === "True" ? "Ready" : "Not ready";
 }
 
+interface Walked {
+  rows: KeyValue[];
+  limit: number;
+  /** Leaves past the limit, counted so the cut can say what it left out. */
+  omitted: number;
+}
+
+function keep(walked: Walked, row: KeyValue): void {
+  if (walked.rows.length < walked.limit) walked.rows.push(row);
+  else walked.omitted += 1;
+}
+
+function walked(value: unknown, limit: number): Walked {
+  const out: Walked = { rows: [], limit, omitted: 0 };
+  walk(value, "", out);
+  return out;
+}
+
 /** Scalar leaves, dotted, so a nested `status.conditions` does not explode. */
 export function flatten(value: unknown, limit: number): KeyValue[] {
-  const rows: KeyValue[] = [];
-  walk(value, "", rows, limit);
-  return rows;
+  return walked(value, limit).rows;
+}
+
+/** A glance's worth of rows, and one more saying how many the YAML tab still holds. */
+function capped(value: unknown, t: T): KeyValue[] {
+  const { rows, omitted } = walked(value, FACET_ROW_LIMIT);
+  return omitted > 0
+    ? [
+        ...rows,
+        { label: "…", value: t("empty", "moreFieldsInYaml", { n: omitted }) },
+      ]
+    : rows;
 }
 
 /** The one shape the whole API machinery shares, enough to read as one. */
@@ -79,17 +106,18 @@ function isConditionList(
   );
 }
 
-function walk(
-  value: unknown,
-  path: string,
-  rows: KeyValue[],
-  limit: number
-): void {
-  if (rows.length >= limit || value === null || value === undefined) return;
+function walk(value: unknown, path: string, out: Walked): void {
+  if (value === undefined) return;
+  // An explicit null is the API saying the field is empty, which can be the
+  // whole answer: an EndpointSlice with `ports: null` routes nothing.
+  if (value === null) {
+    if (path) keep(out, { label: path, value: "null", mono: true });
+    return;
+  }
   if (Array.isArray(value)) {
     const scalars = value.filter((entry) => typeof entry !== "object");
     if (scalars.length === value.length) {
-      rows.push({
+      keep(out, {
         label: path,
         value: value.length ? scalars.join(" · ") : "[]",
         mono: true,
@@ -99,7 +127,7 @@ function walk(
     // A conditions array is verdicts, not data: one row per condition, in
     // the reason-first wording every condition row in the app carries.
     if (isConditionList(path, value)) {
-      for (const entry of value.slice(0, limit - rows.length)) {
+      for (const entry of value) {
         const condition: ConditionInfo = {
           type: String(entry.type),
           status: String(entry.status),
@@ -107,7 +135,7 @@ function walk(
           message: typeof entry.message === "string" ? entry.message : null,
           lastTransitionTime: null,
         };
-        rows.push({
+        keep(out, {
           ...conditionItem(condition),
           label: `${path}.${condition.type}`,
         });
@@ -117,18 +145,19 @@ function walk(
     // An array of objects is where a custom resource keeps the part anybody
     // opens it for, so it is descended with indexed paths.
     value.forEach((child, index) => {
-      walk(child, path ? `${path}.${index}` : String(index), rows, limit);
+      walk(child, path ? `${path}.${index}` : String(index), out);
     });
     return;
   }
   if (typeof value === "object") {
     for (const [key, child] of Object.entries(value)) {
-      walk(child, path ? `${path}.${key}` : key, rows, limit);
+      walk(child, path ? `${path}.${key}` : key, out);
     }
     return;
   }
   const said = String(value);
-  rows.push(
+  keep(
+    out,
     said.includes("\n") || said.length > DOCUMENT_CHARS
       ? { label: path, value: said, document: said }
       : { label: path, value: said, mono: true }
@@ -208,7 +237,7 @@ function payloadGroups(object: Json, t: T): PeekGroup[] {
   const words: KeyValue[] = [];
   const groups: PeekGroup[] = [];
   for (const [field, value] of Object.entries(object)) {
-    if (ENVELOPE.has(field) || value === null || value === undefined) continue;
+    if (ENVELOPE.has(field) || value === undefined) continue;
     const shaped = rbac && rbacGroup(rbac, field, object, namespace, t);
     if (shaped) {
       groups.push(shaped);
@@ -220,13 +249,13 @@ function payloadGroups(object: Json, t: T): PeekGroup[] {
           .map((key) => ({ label: key, value: "••••••", mono: true })),
         emptyMessage: t("empty", "none"),
       });
-    } else if (isWords(value)) {
+    } else if (value === null || isWords(value)) {
       words.push(...flatten({ [field]: value }, FACET_ROW_LIMIT));
     } else {
       groups.push({
         title: field,
         count: Array.isArray(value) ? value.length : undefined,
-        items: flatten(value, FACET_ROW_LIMIT),
+        items: capped(value, t),
         emptyMessage: t("empty", "none"),
       });
     }
@@ -283,8 +312,8 @@ export function objectFacets(object: unknown, t: T): PeekSummary {
   const sorted = (map: Record<string, string>) =>
     Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
 
-  const status = flatten(fields.status, FACET_ROW_LIMIT);
-  const spec = flatten(fields.spec, FACET_ROW_LIMIT);
+  const status = capped(fields.status, t);
+  const spec = capped(fields.spec, t);
   const payload = payloadGroups(fields, t);
   const enveloped = payload.length === 0 || spec.length > 0;
 

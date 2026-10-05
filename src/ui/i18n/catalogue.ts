@@ -4839,6 +4839,10 @@ export const en = {
     kindCouldNotRead: "Could not read this {kind}",
     whatIsThisKind: "What is this {kind}?",
     kindNotFound: "{kind} not found",
+    moreFieldsInYaml: {
+      one: "{n} more field, in the YAML tab",
+      other: "{n} more fields, in the YAML tab",
+    },
     goneMark: "gone",
     goneTitle: "This {kind} no longer exists.",
     goneReplacedBy:

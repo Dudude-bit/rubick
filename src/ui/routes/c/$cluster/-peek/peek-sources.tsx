@@ -58,7 +58,16 @@ export function resolveSource(target: PeekTarget): PeekSource {
   // A custom resource first, and never by kind: two CRDs may declare the same
   // kind in different groups, and the object being looked at is the one whose
   // CRD the reference named.
-  if (target.crd) return customResourceSource(target.crd);
+  if (target.crd) {
+    const custom = customResourceSource(target.crd);
+    // The Service's Owns tab names a slice by its group, and the peek it
+    // opened lost the line saying the slice has no ports.
+    return target.crd === "endpointslices.discovery.k8s.io"
+      ? endpointSliceSource(custom, (data) =>
+          asObject(data as CustomResourceDetailInfo)
+        )
+      : custom;
+  }
   const resolved = toKind(target.kind);
   const known = resolved ? SOURCES[resolved] : undefined;
   if (!known && target.kind === "EndpointSlice") {

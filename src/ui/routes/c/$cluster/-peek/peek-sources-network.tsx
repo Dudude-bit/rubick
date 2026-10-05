@@ -33,12 +33,15 @@ interface SliceShape {
  * Service's page and peek show. A slice with no ports is the `web` case,
  * addresses kube-proxy routes nothing to, and it is said in words.
  */
-export function endpointSliceSource(base: PeekSource): PeekSource {
+export function endpointSliceSource(
+  base: PeekSource,
+  whole: (data: unknown) => unknown = (data) => data
+): PeekSource {
   return {
     fetch: base.fetch,
     summarise: (data, target, t) => {
       const summary = base.summarise(data, target, t);
-      const slice = (data ?? {}) as SliceShape;
+      const slice = (whole(data) ?? {}) as SliceShape;
       const service = slice.metadata?.labels?.["kubernetes.io/service-name"];
       const endpoints = slice.endpoints ?? [];
       // The API reads an unset `ready` as true.

@@ -483,6 +483,15 @@ describe("a peek at a kind addressed by its plural and group", () => {
     const titles = summary.groups.map((group) => group.title);
     expect(titles).toContain("endpoints");
     expect(titles).not.toContain("spec");
-    expect(titles[0]).toBe("controlledBy");
+    expect(titles.slice(0, 2)).toEqual(["backends", "controlledBy"]);
+  });
+
+  /** Opened from the Service's Owns tab, the slice lost the line saying it routes nothing. */
+  it("says in red that a slice with addresses has no ports", () => {
+    const backends = resolveSource(target).summarise(slice, target, t)
+      .groups[0];
+    expect(backends.items).toContainEqual(
+      expect.objectContaining({ value: "sliceNoPorts", tone: "err" })
+    );
   });
 });

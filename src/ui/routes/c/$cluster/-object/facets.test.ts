@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { objectFacets } from "./facets";
 
 /** The key itself, so a group is found by the catalogue key it is titled with. */
@@ -90,6 +92,45 @@ describe("a kind that keeps what it says at the top level", () => {
       "false",
     ]);
     expect(rows(slice, "ports")).toContainEqual(["0.port", "53"]);
+  });
+
+  /**
+   * Sam's `web` slice: twelve rows, then nothing, so the second endpoint read
+   * as one with no node and no target pod, and `ports: null`, why the
+   * Service had no endpoints, was not on the page at all.
+   */
+  it("says how many fields it left out and draws a null that is there", () => {
+    const endpoint = (ip: string) => ({
+      addresses: [ip],
+      conditions: { ready: true, serving: true, terminating: false },
+      nodeName: "node01",
+      targetRef: { kind: "Pod", name: ip, namespace: "net", uid: "u" },
+    });
+    const web = {
+      kind: "EndpointSlice",
+      metadata: { name: "web-5dwk4", namespace: "net" },
+      addressType: "IPv4",
+      endpoints: [endpoint("192.168.1.137"), endpoint("192.168.0.61")],
+      ports: null,
+    };
+    const en: T = (section, key, values) =>
+      translate("en", section, key, values);
+    const items =
+      objectFacets(web, en).groups.find((g) => g.title === "endpoints")
+        ?.items ?? [];
+    expect(items).toHaveLength(13);
+    expect(items.at(-1)).toEqual({
+      label: "…",
+      value: "6 more fields, in the YAML tab",
+    });
+    expect(rows(web, "fields")).toContainEqual(["ports", "null"]);
+  });
+
+  it("adds no such row when everything fits", () => {
+    expect(rows(slice, "endpoints")?.at(-1)).toEqual([
+      "1.conditions.ready",
+      "false",
+    ]);
   });
 
   it("reads a revision's number and its data", () => {
