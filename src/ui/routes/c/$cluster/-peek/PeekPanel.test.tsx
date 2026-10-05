@@ -571,6 +571,31 @@ describe("PeekPanel", () => {
     await waitFor(() => expect(location()).toBe("/c/prod/events"));
   });
 
+  /**
+   * The body stays mounted after a close so the slide-out stays whole, and
+   * its query kept polling a ReplicaSet nobody could see, every two seconds.
+   */
+  it("stops polling the object once it is closed", async () => {
+    await wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    const intervals = () =>
+      wrap.client
+        .getQueryCache()
+        .find({
+          queryKey: queryKeys.detail(
+            "Pod",
+            "k8s-gui-test",
+            "crash-demo-56588f6b8c-8bj9v"
+          ),
+        })
+        ?.observers.map((observer) => observer.options.refetchInterval);
+    expect(intervals()).not.toContain(false);
+
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(location()).toBe("/c/prod/events"));
+    await waitFor(() => expect(intervals()).toEqual([false]));
+  });
+
   it("replaces its contents when a reference inside it is clicked", async () => {
     await wrap(POD_PEEK);
     await userEvent.click(

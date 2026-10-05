@@ -7,6 +7,7 @@ import { PeekContent, preloadPeekContent } from "./peek-loader";
 import { PeekSkeleton } from "./peek-skeleton";
 import type { PeekTabId } from "./peek-tabs";
 import { usePeekWidth } from "./peek-width";
+import { SurfaceVisibility, useSurfaceVisible } from "@/lib/surface-visibility";
 import { ownView } from "../-object/attachment";
 
 /**
@@ -25,6 +26,7 @@ export function PeekPanel() {
   const [previous, setPrevious] = useState<PeekTarget | null>(target);
   if (target && target !== previous) setPrevious(target);
   const shown = target ?? previous;
+  const visible = useSurfaceVisible();
   // The tab lives above the target, not inside it: clicking down a list of
   // pods with Logs open should stay on Logs rather than resetting each time.
   const [requestedTab, setRequestedTab] = useState<PeekTabId>("overview");
@@ -50,14 +52,18 @@ export function PeekPanel() {
           swaps the target, and remounting the sheet replayed its slide-in
           for what is a content change. The body below carries the key, so
           scroll and per-object tab state still reset. */}
+      {/* The body outlives the close to keep the slide whole, and its
+          queries must not outlive it with it. */}
       {shown && (
-        <Suspense fallback={<PeekLoading target={shown} />}>
-          <PeekContent
-            target={shown}
-            requestedTab={requestedTab}
-            onTabChange={setRequestedTab}
-          />
-        </Suspense>
+        <SurfaceVisibility.Provider value={visible && !!target}>
+          <Suspense fallback={<PeekLoading target={shown} />}>
+            <PeekContent
+              target={shown}
+              requestedTab={requestedTab}
+              onTabChange={setRequestedTab}
+            />
+          </Suspense>
+        </SurfaceVisibility.Provider>
       )}
     </Sheet>
   );
