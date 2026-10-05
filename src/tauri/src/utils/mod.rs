@@ -8,6 +8,12 @@ pub use quantities::{format_cpu, format_memory, parse_cpu, parse_memory};
 
 use regex::Regex;
 
+/// The group half of an `apiVersion`; `""` for the core group's `v1`.
+#[must_use]
+pub fn group_of(api_version: &str) -> &str {
+    api_version.split_once('/').map_or("", |(group, _)| group)
+}
+
 /// Normalize namespace input, returning None for "all namespaces".
 #[must_use]
 pub fn normalize_namespace(namespace: Option<String>, fallback: String) -> Option<String> {

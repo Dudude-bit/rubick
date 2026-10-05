@@ -226,4 +226,49 @@ describe("ConnectionsPanel", () => {
     const mark = screen.getByText("key DB_PASSWORD is not in this Secret");
     expect(mark).toHaveClass("text-err");
   });
+
+  /**
+   * An owner reference names a group. Read by the kind alone, a pod made by
+   * a namesake of a built-in controller linked to the built-in's page.
+   */
+  it("opens an owner by its group and draws a namesake as text while its CRD is unknown", async () => {
+    const pod: ObjectRef = { ...subject, kind: "Pod", name: "web-0" };
+    const owner = (group: string, name: string): ObjectRef => ({
+      ...subject,
+      kind: "StatefulSet",
+      name,
+      group,
+      existence: "notChecked",
+    });
+    await wrap(
+      <ConnectionsPanel
+        query={query({
+          data: {
+            ...answered({
+              edges: [
+                {
+                  from: owner("apps", "db"),
+                  to: pod,
+                  relation: { verb: "owns", controller: true },
+                },
+                {
+                  from: owner("apps.kruise.io", "kruise-db"),
+                  to: pod,
+                  relation: { verb: "owns", controller: false },
+                },
+              ],
+            }),
+            subject: pod,
+          },
+        })}
+      />
+    );
+    expect(
+      await screen.findByRole("link", { name: "StatefulSet db" })
+    ).toHaveAttribute("href", "/c/prod/statefulsets/k8s-gui-test/db");
+    expect(
+      screen.queryByRole("link", { name: "StatefulSet kruise-db" })
+    ).toBeNull();
+    expect(screen.getByText("StatefulSet kruise-db")).toBeInTheDocument();
+  });
 });

@@ -44,6 +44,9 @@ pub struct ObjectRef {
     /// `None` for the cluster-scoped kinds — a Node has no namespace, and a
     /// claim's `PersistentVolume` is not in the claim's.
     pub namespace: Option<String>,
+    /// The API group an owner reference named; `None` is the built-in `kind`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
     pub existence: Existence,
     /// What the object itself says, where the far end is only reachable
     /// through this edge and the reader needs it to draw the hop.
@@ -57,9 +60,17 @@ impl ObjectRef {
             kind: kind.to_string(),
             name: name.to_string(),
             namespace,
+            group: None,
             existence,
             facts: None,
         }
+    }
+
+    /// The group of an `apiVersion`: an owner may be a namesake of a built-in kind.
+    #[must_use]
+    pub fn with_group_of(mut self, api_version: &str) -> Self {
+        self.group = Some(crate::utils::group_of(api_version).to_string());
+        self
     }
 
     /// A name another object stated, which this call did not go and read.

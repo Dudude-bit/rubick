@@ -96,9 +96,14 @@ export function crdInGroup(
   crdOf: (group: string, kind: string) => string | null
 ): string | null | undefined {
   const group = ref.group ?? "";
-  const known = isResourceType(ref.kind) ? toKind(ref.kind) : null;
-  const builtIn = known ? getResourceDefinition(known) : accessKind(ref.kind);
-  return builtIn?.group === group ? undefined : crdOf(group, ref.kind);
+  return isBuiltInGroup(ref.kind, group) ? undefined : crdOf(group, ref.kind);
+}
+
+/** Whether `group` is the one the built-in `kind` is served in. */
+export function isBuiltInGroup(kind: string, group: string): boolean {
+  const known = isResourceType(kind) ? toKind(kind) : null;
+  const builtIn = known ? getResourceDefinition(known) : accessKind(kind);
+  return builtIn?.group === group;
 }
 
 /**

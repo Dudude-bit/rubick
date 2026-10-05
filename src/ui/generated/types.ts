@@ -317,6 +317,7 @@ export interface ObjectRef {
   kind: string;
   name: string;
   namespace: string | null;
+  group?: string;
   existence: Existence;
   facts: ObjectFacts | null;
 }

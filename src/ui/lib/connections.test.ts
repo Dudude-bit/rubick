@@ -1376,6 +1376,24 @@ describe("where a pod's replica count is really set", () => {
   });
 
   /**
+   * An OpenKruise StatefulSet is not the apps/v1 kind its name says, and its
+   * page has no Scale control. Judged by the name, the clause sent the
+   * reader to one.
+   */
+  it("stays quiet where the top of the chain is a namesake from another group", () => {
+    const pod = ref("Pod", "kruise-db-0");
+    const set = { ...ref("StatefulSet", "kruise-db"), group: "apps.kruise.io" };
+    const builtIn = { ...ref("StatefulSet", "db"), group: "apps" };
+
+    expect(ownerRows(pod, [owns(set, pod)])[0].detail ?? "").not.toContain(
+      "replica count"
+    );
+    expect(ownerRows(pod, [owns(builtIn, pod)])[0].detail).toContain(
+      "the replica count is set here"
+    );
+  });
+
+  /**
    * A DaemonSet has no replica count to set, and a Job's parallelism is not
    * one either. Pointing at them would send the reader to a page with no
    * control on it.

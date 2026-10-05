@@ -12,7 +12,7 @@ use super::*;
 /// kinds — and produced a reference to something that is not there.
 pub(super) fn owner_ref(owner: &OwnerReference, ns: &str) -> ObjectRef {
     let namespace = (!cluster_scoped(&owner.kind)).then(|| ns.to_string());
-    ObjectRef::unchecked(&owner.kind, &owner.name, namespace)
+    ObjectRef::unchecked(&owner.kind, &owner.name, namespace).with_group_of(&owner.api_version)
 }
 
 /// Walk `metadata.ownerReferences` to the top.
@@ -59,7 +59,14 @@ pub(super) async fn owner_chain(
         if !seen.insert(controller.uid.clone()) {
             break;
         }
-        let next = match fetch_owners(ctx, &controller.kind, &controller.name).await? {
+        let next = match fetch_owners(
+            ctx,
+            &controller.api_version,
+            &controller.kind,
+            &controller.name,
+        )
+        .await?
+        {
             Above::Owners(next) => next,
             Above::Nothing => break,
             Above::Unread(unread) => {
@@ -72,7 +79,8 @@ pub(super) async fn owner_chain(
             &controller.name,
             Some(ns.to_string()),
             Existence::Present,
-        );
+        )
+        .with_group_of(&controller.api_version);
         owners = next;
     }
     Ok(())
@@ -91,14 +99,20 @@ pub(super) enum Above {
 ///
 /// A Deployment, a `StatefulSet`, a `DaemonSet` and a `CronJob` are tops; fetching
 /// them would buy nothing, so the walk ends there rather than spending a
-/// request to learn that.
-pub(super) async fn fetch_owners(ctx: &ResourceContext, kind: &str, name: &str) -> Result<Above> {
-    match kind {
-        "ReplicaSet" => {
+/// request to learn that. A namesake in another group is a top too: reading
+/// the built-in of its name would walk a chain that is not this object's.
+pub(super) async fn fetch_owners(
+    ctx: &ResourceContext,
+    api_version: &str,
+    kind: &str,
+    name: &str,
+) -> Result<Above> {
+    match (crate::utils::group_of(api_version), kind) {
+        ("apps", "ReplicaSet") => {
             let got = ctx.namespaced_api::<ReplicaSet>().get(name).await;
             above(got, kind, "apps/v1")
         }
-        "Job" => above(
+        ("batch", "Job") => above(
             ctx.namespaced_api::<Job>().get(name).await,
             kind,
             "batch/v1",
@@ -178,12 +192,12 @@ mod walk_tests {
     const PODS: &str = "/api/v1/namespaces/shop/pods";
     const SET: &str = "/apis/apps/v1/namespaces/shop/replicasets/web-7d9";
 
-    fn pods() -> String {
+    fn pods(owner_api_version: &str) -> String {
         let pod = serde_json::json!({
             "metadata": {
                 "name": "web-7d9-x", "namespace": "shop",
                 "ownerReferences": [{
-                    "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "web-7d9",
+                    "apiVersion": owner_api_version, "kind": "ReplicaSet", "name": "web-7d9",
                     "uid": "rs-uid", "controller": true,
                 }],
             },
@@ -192,10 +206,37 @@ mod walk_tests {
             .to_string()
     }
 
-    async fn pod_page(set: (u16, String)) -> Result<ResourceConnections> {
-        let (client, _) = server(vec![(PODS, 200, pods()), (SET, set.0, set.1)]).await;
+    async fn page_owned_by(
+        owner_api_version: &str,
+        set: (u16, String),
+    ) -> Result<ResourceConnections> {
+        let (client, _) = server(vec![
+            (PODS, 200, pods(owner_api_version)),
+            (SET, set.0, set.1),
+        ])
+        .await;
         let ctx = ResourceContext::from_client(client, "shop".to_string());
         connections_of(&ctx, "Pod", "web-7d9-x", None).await
+    }
+
+    async fn pod_page(set: (u16, String)) -> Result<ResourceConnections> {
+        page_owned_by("apps/v1", set).await
+    }
+
+    /// Would link a namesake owner to the built-in kind's page and walk the
+    /// apps/v1 `ReplicaSet` of its name, a chain that is not this pod's.
+    #[tokio::test]
+    async fn a_namesake_owner_carries_its_group_and_is_not_walked() {
+        let page = page_owned_by("example.io/v1", failure(403, "Forbidden"))
+            .await
+            .expect("a page");
+        let owner = page
+            .edges
+            .iter()
+            .find(|edge| edge.from.kind == "ReplicaSet")
+            .expect("the owner edge");
+        assert_eq!(owner.from.group.as_deref(), Some("example.io"));
+        assert!(page.not_looked_at.iter().all(|e| e.kind != "ReplicaSet"));
     }
 
     /// Would say nothing is above the `ReplicaSet` for a token refused

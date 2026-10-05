@@ -31,6 +31,8 @@ import { useDelivery } from "../-delivery/useDelivery";
 import { openExternal } from "@/lib/open-external";
 import type { DeliveryQuery } from "@/integrations";
 import { ResourceRef } from "@/components/object/ResourceRef";
+import { useCrdIndex } from "@/hooks/useCrdIndex";
+import { crdInGroup } from "@/lib/links";
 import {
   ResourceName,
   RESOURCE_NAME_SHELL,
@@ -42,6 +44,7 @@ const GROUP_HEADING =
   "text-[10px] font-semibold uppercase tracking-[0.07em] text-fg-fnt";
 
 function Name({ object }: { object: ObjectRef }) {
+  const { crdFor } = useCrdIndex();
   if (object.existence === "missing") {
     return (
       <span className={RESOURCE_NAME_SHELL}>
@@ -54,6 +57,11 @@ function Name({ object }: { object: ObjectRef }) {
       kind={object.kind}
       name={object.name}
       namespace={object.namespace}
+      crd={
+        object.group === undefined
+          ? undefined
+          : crdInGroup({ kind: object.kind, group: object.group }, crdFor)
+      }
       showKind={false}
     />
   );

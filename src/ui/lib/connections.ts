@@ -11,7 +11,7 @@
  * that into a sentence.
  */
 
-import type { AppLink } from "@/lib/links";
+import { isBuiltInGroup, type AppLink } from "@/lib/links";
 import type { T } from "@/i18n/useT";
 import { covers, expiryOf } from "./certificates";
 import { formatKubernetesBytes } from "./k8s-quantity";
@@ -1293,7 +1293,11 @@ function madeByAndMakes(conns: ResourceConnections, t: T): ConnRow[] {
   }
 
   const top = rows.findIndex((row) => row.key === `owner:${refKey(child)}`);
-  if (top !== -1 && isScalable(child.kind)) {
+  if (
+    top !== -1 &&
+    isScalable(child.kind) &&
+    (child.group === undefined || isBuiltInGroup(child.kind, child.group))
+  ) {
     rows[top] = {
       ...rows[top],
       detail: join(t("nav", REPLICAS_SET_HERE), rows[top].detail),

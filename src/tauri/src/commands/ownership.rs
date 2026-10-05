@@ -11,6 +11,7 @@ use crate::commands::helpers::{scope_of, ResourceContext};
 use crate::error::{Error, Result};
 use crate::ownership::{Dependent, Holds, KindCount, NotRead, Reading};
 use crate::state::AppState;
+use crate::utils::group_of;
 
 /// Deeper than any controller chain a cluster builds; a loop stops here.
 const MAX_DEPTH: usize = 8;
@@ -141,10 +142,6 @@ pub struct Lineage {
     pub ancestors: Vec<Ancestor>,
     pub others: Vec<OtherOwner>,
     pub stop: Option<LineageStop>,
-}
-
-fn group_of(api_version: &str) -> &str {
-    api_version.split_once('/').map_or("", |(group, _)| group)
 }
 
 /// The owner a chain follows: the controller, or the only owner there is.
