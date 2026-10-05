@@ -150,7 +150,9 @@ function AttentionRow({ item }: { item: AttentionItem }) {
           className="h-2.5 w-2.5 flex-none self-center"
           aria-hidden="true"
         />
-        <span className="truncate">{item.reason}</span>
+        <span className="truncate" title={item.reason}>
+          {item.reason}
+        </span>
       </span>
       <span className="truncate text-fg-mid">
         <ResourceRef

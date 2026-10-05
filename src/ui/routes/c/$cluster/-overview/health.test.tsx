@@ -575,6 +575,28 @@ describe("what Needs attention says it checked", () => {
   });
 
   /**
+   * "FailedGetResourceM..." in a 150px column, with no way to read the
+   * rest. Fails if the cut reason stops carrying its whole word on hover.
+   */
+  it("keeps a reason its column cuts readable on hover", async () => {
+    await panel(
+      attentionFrom([
+        {
+          ...problem,
+          kind: "Pod",
+          reason: "CreateContainerConfigError",
+          severity: "critical",
+        },
+      ])
+    );
+
+    expect(screen.getByText("CreateContainerConfigError")).toHaveAttribute(
+      "title",
+      "CreateContainerConfigError"
+    );
+  });
+
+  /**
    * Dana: one failed CronJob run was three rows. The backend folds the
    * Job's failed pods into its row; the row and Share both say how many.
    * Fails if the count is dropped on either reader.
