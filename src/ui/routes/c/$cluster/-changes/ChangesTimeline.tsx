@@ -1,13 +1,15 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Undo2 } from "lucide-react";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
 import {
+  canRollBackTo,
   journalWords,
   type ChangeItem,
   type Comparison,
   type FieldChange,
   type JournalEntry,
+  type Revision,
 } from "@/lib/changes";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
@@ -27,12 +29,15 @@ export function ChangesTimeline({
   items,
   since,
   showObject = false,
+  onRollback,
 }: {
   items: ChangeItem[];
   /** A moment the reader came from; everything after it is marked. */
   since?: number | null;
   /** Name the object on each row, for a page that mixes many. */
   showObject?: boolean;
+  /** Offered on every older revision whose template was read. */
+  onRollback?: (revision: Revision) => void;
 }) {
   const t = useT();
   if (items.length === 0) {
@@ -63,7 +68,7 @@ export function ChangesTimeline({
                   ? "?"
                   : clock(item.at)}
             </span>
-            <Row item={item} showObject={showObject} />
+            <Row item={item} showObject={showObject} onRollback={onRollback} />
           </li>
         );
       })}
@@ -76,7 +81,15 @@ export function ChangesTimeline({
   );
 }
 
-function Row({ item, showObject }: { item: ChangeItem; showObject: boolean }) {
+function Row({
+  item,
+  showObject,
+  onRollback,
+}: {
+  item: ChangeItem;
+  showObject: boolean;
+  onRollback?: (revision: Revision) => void;
+}) {
   const t = useT();
   switch (item.kind) {
     case "gap":
@@ -109,6 +122,16 @@ function Row({ item, showObject }: { item: ChangeItem; showObject: boolean }) {
             <span className="font-mono text-[11px] text-fg-fnt">
               {revision.name}
             </span>
+            {onRollback && canRollBackTo(revision) && (
+              <button
+                type="button"
+                onClick={() => onRollback(revision)}
+                className="ml-auto inline-flex items-center gap-1 rounded text-[11px] text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+              >
+                <Undo2 className="h-3 w-3" aria-hidden="true" />
+                {t("action", "rollBackToThis")}
+              </button>
+            )}
           </div>
           {revision.changeCause ? (
             <p className="text-fg-mut">

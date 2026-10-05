@@ -70,3 +70,26 @@ describe("the rows a workload's own objects get, in the reader's language", () =
     expect(container.textContent).not.toMatch(/completed|failed/);
   });
 });
+
+describe("rolling back from the Revisions tab", () => {
+  /**
+   * Dana right-clicked the superseded revision looking for a rollback and
+   * found Copy name. Every older revision offers it; the live one does not,
+   * and pressing it does not open the ReplicaSet's page instead.
+   */
+  it("offers a rollback on each older revision and not on the live one", async () => {
+    const offered: string[] = [];
+    const { router } = await renderWithRouter(
+      <RevisionRows
+        revisions={[revision("web-4", "4", 2, 2), revision("web-3", "3", 0, 0)]}
+        onRollback={(rs) => offered.push(rs.name)}
+      />,
+      onDeployment
+    );
+    const buttons = document.querySelectorAll("button");
+    expect(buttons).toHaveLength(1);
+    buttons[0].click();
+    expect(offered).toEqual(["web-3"]);
+    expect(router.state.location.pathname).toBe(onDeployment.at);
+  });
+});

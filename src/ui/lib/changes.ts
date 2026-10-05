@@ -99,6 +99,13 @@ export function revisionOfController(cr: ControllerRevisionInfo): Revision {
   };
 }
 
+/** Whether a revision can be rolled back to: an older one whose template was read. */
+export function canRollBackTo(revision: Revision): boolean {
+  return (
+    !revision.current && revision.number !== null && revision.templateKnown
+  );
+}
+
 export interface FieldChange {
   /** The container the field belongs to; `null` for a template-level field. */
   container: string | null;

@@ -195,4 +195,58 @@ describe("ChangesTimeline", () => {
       screen.getByText(/the rest of the template could not be compared/)
     ).toHaveClass("text-warn");
   });
+
+  /** Only an older revision whose template was read can be rolled back to. */
+  it("offers a rollback on an older revision and not on the current one", async () => {
+    const base = {
+      changeCause: null,
+      containers: [],
+      initContainers: [],
+      templateAnnotations: {},
+      templateKnown: true,
+      template: null,
+      at: new Date(T0).toISOString(),
+    };
+    const offered: number[] = [];
+    await renderWithRouter(
+      <ChangesTimeline
+        items={[
+          {
+            kind: "revision",
+            at: T0 + HOUR,
+            readopted: false,
+            against: { state: "oldest" },
+            revision: {
+              ...base,
+              id: "r2",
+              number: 2,
+              name: "api-2",
+              current: true,
+            },
+          },
+          {
+            kind: "revision",
+            at: T0,
+            readopted: false,
+            against: { state: "oldest" },
+            revision: {
+              ...base,
+              id: "r1",
+              number: 1,
+              name: "api-1",
+              current: false,
+            },
+          },
+        ]}
+        onRollback={(revision) => offered.push(revision.number ?? -1)}
+      />,
+      { at: "/c/dev", route: "/c/$cluster" }
+    );
+    const buttons = screen.getAllByRole("button", {
+      name: /Roll back to this revision/,
+    });
+    expect(buttons).toHaveLength(1);
+    buttons[0].click();
+    expect(offered).toEqual([1]);
+  });
 });

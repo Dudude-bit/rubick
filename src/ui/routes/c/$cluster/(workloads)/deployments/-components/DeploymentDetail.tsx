@@ -44,6 +44,8 @@ import {
 } from "@/components/object/detail-tab";
 import { RevisionRows } from "../../../-object/child-rows";
 import { ChangesTab } from "../../-components/ChangesTab";
+import { useRollback } from "../../../-object/useRollback";
+import { revisionOfReplicaSet } from "@/lib/changes";
 import { ScaleDialog } from "../../../-object/ScaleDialog";
 import { ContainerRows } from "../../../-object/container-rows";
 import { deliveryOfKind } from "@/lib/delivery";
@@ -270,6 +272,16 @@ export function DeploymentDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.Deployment, deployment);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
+  const rollback = useRollback({
+    subject: {
+      kind: "Deployment",
+      name: name ?? "",
+      namespace: namespace ?? "",
+    },
+    revisions: revisions.map(revisionOfReplicaSet),
+    intercept: intercept(t("action", "rollBack")),
+  });
+
   const share = useDeploymentShare(deployment, revisions, pods, podsError);
 
   if (!deployment && !isLoading && !error) {
@@ -413,7 +425,12 @@ export function DeploymentDetail() {
       // A count rather than a severity: an old revision at zero is what a
       // rollout leaves behind, not a fault.
       mark: countMark(revisions.length),
-      content: <RevisionRows revisions={revisions} />,
+      content: (
+        <RevisionRows
+          revisions={revisions}
+          onRollback={(rs) => rollback.offer(revisionOfReplicaSet(rs))}
+        />
+      ),
     },
     {
       id: "changes",
@@ -596,6 +613,7 @@ export function DeploymentDetail() {
         </DialogContent>
       </Dialog>
       {asking.dialog}
+      {rollback.dialog}
     </>
   );
 }

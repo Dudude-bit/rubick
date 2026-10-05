@@ -265,6 +265,7 @@ fn main() {
             commands::replicasets::get_replicaset_pods,
             commands::replicasets::get_deployment_replicasets,
             commands::revisions::get_controller_revisions,
+            commands::revisions::rollback_workload,
             // Service commands
             commands::services::list_services,
             commands::services::list_services_in,

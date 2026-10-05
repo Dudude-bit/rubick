@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { Undo2 } from "lucide-react";
 
 import { ROLE_DOT, statusRole, type StatusRole } from "@/lib/status-role";
 import { objectLink } from "@/lib/links";
@@ -134,11 +135,12 @@ function ChildRowItem({ row }: { row: ChildRow }) {
       role="link"
       tabIndex={0}
       onClick={(event) => {
-        if ((event.target as HTMLElement).closest("a")) return;
+        if ((event.target as HTMLElement).closest("a, button")) return;
         if (link) navigate(link);
       }}
       onKeyDown={(event) => {
-        if (event.key !== "Enter") return;
+        if (event.key !== "Enter" || event.target !== event.currentTarget)
+          return;
         if (link) navigate(link);
       }}
       className="grid cursor-pointer grid-cols-[7px_minmax(0,1fr)_auto_44px] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs hover:bg-hover"
@@ -177,9 +179,12 @@ function ChildRowItem({ row }: { row: ChildRow }) {
 export function RevisionRows({
   revisions,
   emptyMessage,
+  onRollback,
 }: {
   revisions: ReplicaSetInfo[];
   emptyMessage?: string;
+  /** Offered on every older revision. */
+  onRollback?: (rs: ReplicaSetInfo) => void;
 }) {
   const t = useT();
   return (
@@ -208,6 +213,16 @@ export function RevisionRows({
                       ready: <span className="text-fg-mut">{ready}</span>,
                     })}
               </span>
+              {onRollback && !live && rs.revision !== null && (
+                <button
+                  type="button"
+                  onClick={() => onRollback(rs)}
+                  className="ml-2 inline-flex items-center gap-1 rounded text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+                >
+                  <Undo2 className="h-3 w-3" aria-hidden="true" />
+                  {t("action", "rollBackToThis")}
+                </button>
+              )}
             </>
           ),
           timestamp: rs.createdAt,

@@ -1360,6 +1360,16 @@ export const en = {
     viewHistory: "View History",
     remove: "Remove",
     rollBack: "Roll back",
+    rollBackToThis: "Roll back to this revision",
+    rollbackTitle: "Roll back {subject} to revision {n}?",
+    rollbackBody:
+      "Its pod template becomes the one revision {n} recorded, and the controller rolls that out like any other change.",
+    rollbackWhatChanges: "What changes",
+    rollbackCurrentUnknown:
+      "The revision it is on now could not be read, so what will change is not known.",
+    rollbackStarted: "{kind} {name} is rolling out revision {n}'s template.",
+    rollbackAlreadyThere:
+      "{kind} {name} already runs revision {n}'s template; nothing was changed.",
     uninstall: "Uninstall",
     install: "Install",
     upgrade: "Upgrade",

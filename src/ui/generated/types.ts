@@ -2515,6 +2515,10 @@ export type FieldOp = "=" | "≠";
 
 export type LevelOp = "=" | "≥";
 
+export type RollbackOutcome =
+  | { outcome: "rolledBack" }
+  | { outcome: "alreadyThere" };
+
 export type OverviewSource = "watch" | "list";
 
 export type ProblemDetail =

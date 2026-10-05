@@ -14,7 +14,11 @@ import {
   CHANGES_KINDS,
 } from "@/lib/changes";
 import { deliveryOfKind } from "@/lib/delivery";
-import { useDeliveries } from "../../-delivery/useDelivery";
+import {
+  useDeliveries,
+  useDeliveryIntercept,
+} from "../../-delivery/useDelivery";
+import { useRollback } from "../../-object/useRollback";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
 import { useAppSearch } from "@/hooks/useSearchParam";
@@ -121,6 +125,12 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
     [subject]
   );
   const deliveries = useDeliveries(deliveryQuery ? [deliveryQuery] : []);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+  const rollback = useRollback({
+    subject,
+    revisions: revisions.data ?? [],
+    intercept: intercept(t("action", "rollBack")),
+  });
   const claims = ownersOf(deliveries, subject);
   const listed = claims.filter((claim) => claim.listed);
   const historians = useCapabilities("delivery.history");
@@ -242,7 +252,9 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
         <ChangesTimeline
           items={items}
           since={Number.isFinite(sinceMs) ? sinceMs : null}
+          onRollback={rollback.offer}
         />
+        {rollback.dialog}
         <p className="px-1.5 pt-2 text-[11px] text-fg-fnt">
           {t("changes", "explained")}
         </p>

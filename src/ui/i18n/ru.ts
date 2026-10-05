@@ -1366,6 +1366,16 @@ export const ru: Catalogue = {
     viewHistory: "Показать историю",
     remove: "Удалить",
     rollBack: "Откатить",
+    rollBackToThis: "Откатить к этой ревизии",
+    rollbackTitle: "Откатить {subject} к ревизии {n}?",
+    rollbackBody:
+      "Шаблон подов станет тем, что записан в ревизии {n}, и контроллер раскатает его, как любое другое изменение.",
+    rollbackWhatChanges: "Что изменится",
+    rollbackCurrentUnknown:
+      "Текущую ревизию прочитать не удалось, поэтому неизвестно, что изменится.",
+    rollbackStarted: "{kind} {name} раскатывает шаблон ревизии {n}.",
+    rollbackAlreadyThere:
+      "{kind} {name} уже работает на шаблоне ревизии {n}; ничего не изменено.",
     uninstall: "Удалить",
     install: "Установить",
     upgrade: "Обновить",

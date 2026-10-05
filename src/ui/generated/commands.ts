@@ -107,6 +107,7 @@ import type {
   ResourceConnections,
   ResourceFilters,
   ResourceTable,
+  RollbackOutcome,
   RolloutStatus,
   RouteInfo,
   Scoped,
@@ -358,6 +359,20 @@ export async function getControllerRevisions(
     kind,
     name,
     namespace,
+  });
+}
+
+export async function rollbackWorkload(
+  kind: string,
+  name: string,
+  namespace: string | null,
+  revision: number
+): Promise<RollbackOutcome> {
+  return invoke<RollbackOutcome>("rollback_workload", {
+    kind,
+    name,
+    namespace,
+    revision,
   });
 }
 
