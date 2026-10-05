@@ -54,6 +54,7 @@ export function formatTimeUnit(
       style: "unit",
       unit,
       unitDisplay: "narrow",
+      useGrouping: false,
       minimumFractionDigits: fractionDigits,
       maximumFractionDigits: fractionDigits,
     });

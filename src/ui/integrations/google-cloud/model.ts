@@ -19,6 +19,7 @@
 import type { Saying } from "@/i18n/say";
 import type { CustomResourceInfo } from "@/generated/types";
 import { getValueByPath } from "../kit";
+import { formatTimeUnit } from "@/lib/utils";
 
 export const BACKEND_CONFIG_CRD = "backendconfigs.cloud.google.com";
 export const FRONTEND_CONFIG_CRD = "frontendconfigs.networking.gke.io";
@@ -273,15 +274,17 @@ export function cdnOf(
   config: CustomResourceInfo
 ): { mode: string | null; detail: string | null } | null {
   if (!flag(config, "spec.cdn.enabled")) return null;
+  const seconds = (path: string, field: string) => {
+    const value = number(config, path);
+    return value === null
+      ? null
+      : `${field} ${formatTimeUnit(value, "second")}`;
+  };
   const details = [
-    number(config, "spec.cdn.defaultTtl") === null
-      ? null
-      : `default ${number(config, "spec.cdn.defaultTtl")}s`,
-    number(config, "spec.cdn.maxTtl") === null
-      ? null
-      : `max ${number(config, "spec.cdn.maxTtl")}s`,
-    flag(config, "spec.cdn.negativeCaching") ? "caches errors" : null,
-    flag(config, "spec.cdn.requestCoalescing") ? "coalesces" : null,
+    seconds("spec.cdn.defaultTtl", "defaultTtl"),
+    seconds("spec.cdn.maxTtl", "maxTtl"),
+    flag(config, "spec.cdn.negativeCaching") ? "negativeCaching" : null,
+    flag(config, "spec.cdn.requestCoalescing") ? "requestCoalescing" : null,
   ].filter(Boolean);
   return {
     mode: text(config, "spec.cdn.cacheMode"),

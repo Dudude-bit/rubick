@@ -154,12 +154,21 @@ describe("what a BackendConfig configures", () => {
 
     expect(cdnOf(config)).toEqual({
       mode: "CACHE_ALL_STATIC",
-      detail: "default 3600s",
+      detail: "defaultTtl 3600s",
     });
     expect(joinSayings(backendConfigSummary(config, { cdn: false }), t)).toBe(
       "health check HTTP :8080/healthz"
     );
     expect(cdnOf(resource({}))).toBeNull();
+  });
+
+  /** "default 3600s · caches errors" was English composed in code under a
+   *  Russian page; the spec's own field names read the same in any language. */
+  it("names what the CDN was told by its spec fields", () => {
+    const config = resource({
+      cdn: { enabled: true, maxTtl: 86400, negativeCaching: true },
+    });
+    expect(cdnOf(config)?.detail).toBe("maxTtl 86400s · negativeCaching");
   });
 });
 

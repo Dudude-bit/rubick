@@ -27,6 +27,7 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { ObjectLink, ResourceRef } from "@/components/object/ResourceRef";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { ResourceType } from "@/lib/resource-registry";
+import { formatTimeUnit } from "@/lib/utils";
 import { describeStop } from "@/lib/connections";
 import { refOf } from "@/lib/report-parts";
 import {
@@ -540,12 +541,15 @@ function RouteChain({
               key={config.name}
               under={
                 stated
-                  ? `${timing.intervalSec}s × ${timing.unhealthyThreshold}`
+                  ? `${formatTimeUnit(timing.intervalSec!, "second")} × ${timing.unhealthyThreshold}`
                   : undefined
               }
             >
               {stated ? (
-                `${timing.intervalSec! * timing.unhealthyThreshold!}s`
+                formatTimeUnit(
+                  timing.intervalSec! * timing.unhealthyThreshold!,
+                  "second"
+                )
               ) : (
                 <span className="text-fg-fnt">{t("empty", "gkeDefaults")}</span>
               )}
