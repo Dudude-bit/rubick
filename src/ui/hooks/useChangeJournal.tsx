@@ -168,10 +168,11 @@ export function useChangeJournal() {
               }
               if (change.op === "restarted") {
                 // The relist is a stretch nothing is being watched, however
-                // it ends: the span closes here and reopens on `synced`.
+                // it ends: the span closes here and reopens on `synced`. A
+                // watch that never synced was not in the span, and a refused
+                // one announces every retry this way.
                 staged = new Map();
-                synced.delete(watch);
-                closeSpan();
+                if (synced.delete(watch)) closeSpan();
                 continue;
               }
               if (change.op === "synced") {
