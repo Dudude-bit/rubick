@@ -1018,6 +1018,22 @@ export interface DeploymentContainerInfo {
   envFrom: EnvFromInfo[];
   command: string[];
   args: string[];
+  probes: ContainerProbes;
+}
+
+export interface ContainerProbes {
+  readiness: ProbeInfo | null;
+  liveness: ProbeInfo | null;
+  startup: ProbeInfo | null;
+}
+
+export interface ProbeInfo {
+  handler: ProbeHandler;
+  initialDelaySeconds: number;
+  periodSeconds: number;
+  timeoutSeconds: number;
+  successThreshold: number;
+  failureThreshold: number;
 }
 
 export interface EnvFromInfo {
@@ -1186,6 +1202,7 @@ export interface ReplicaSetInfo {
   labels: Record<string, string>;
   annotations: Record<string, string>;
   templateAnnotations: Record<string, string>;
+  template: unknown | null;
   conditions: ConditionInfo[];
   ownerReferences: OwnerReference[];
   createdAt: string | null;
@@ -1719,6 +1736,7 @@ export interface ControllerRevisionInfo {
   containers: DeploymentContainerInfo[];
   initContainers: DeploymentContainerInfo[];
   templateAnnotations: Record<string, string>;
+  template: unknown | null;
   createdAt: string | null;
 }
 
@@ -2301,6 +2319,19 @@ export type Reading =
   | { says: "failed"; message: string }
   | { says: "unlistable" }
   | { says: "skipped" };
+
+export type ProbeHandler =
+  | {
+      type: "httpGet";
+      path: string;
+      port: string;
+      scheme: string;
+      host: string | null;
+    }
+  | { type: "tcpSocket"; port: string }
+  | { type: "exec"; command: string[] }
+  | { type: "grpc"; port: number; service: string | null }
+  | { type: "unknown" };
 
 export type EnvVarSourceType =
   | "configMapKeyRef"

@@ -17,7 +17,10 @@ mod statefulset;
 pub use cronjob::{CronJobDetailInfo, CronJobInfo};
 pub use daemonset::{DaemonSetDetailInfo, DaemonSetInfo};
 pub use job::{JobDetailInfo, JobInfo};
-pub use replicaset::{ReplicaSetInfo, ReplicaSetReplicaInfo, REVISION_ANNOTATION};
+pub use replicaset::{
+    deployment_template_of, ReplicaSetInfo, ReplicaSetReplicaInfo, POD_TEMPLATE_HASH,
+    REVISION_ANNOTATION,
+};
 pub use rollout::{daemonset_rollout, deployment_rollout, statefulset_rollout, Rollout};
 pub use rollout_plan::{daemonset_plan, deployment_plan, statefulset_plan, RolloutPlan};
 pub use statefulset::{StatefulSetDetailInfo, StatefulSetInfo, StatefulSetReplicaInfo};

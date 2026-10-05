@@ -327,6 +327,7 @@ export const en = {
     lastExit: "Last exit",
     requests: "Requests",
     limits: "Limits",
+    probes: "Probes",
     resources: "Resources",
     health: "Health",
     whatThisRevisionRuns: "what this revision runs",
@@ -1574,8 +1575,14 @@ export const en = {
     revisionNumber: "revision {n}",
     revisionCurrent: "current",
     revisionOldest: "oldest known; nothing earlier to compare with",
-    unchangedTemplate:
-      "nothing changed in what is compared: image, env, envFrom, ports, resources, checksum annotations",
+    sameTemplate: "the same template as the revision before it",
+    comparedUnchangedRestUnread:
+      "no change in image, env, envFrom, ports, resources, readinessProbe, livenessProbe, startupProbe or checksum annotations; the rest of the template could not be compared",
+    otherFieldsDiffer: {
+      one: "{n} other field differs",
+      other: "{n} other fields differ",
+    },
+    moreOtherFields: { one: "and {n} more", other: "and {n} more" },
     templateUnread:
       "this revision's template, or the one before it, could not be read; what changed is not known",
     revisionsMissing: {

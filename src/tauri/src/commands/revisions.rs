@@ -39,6 +39,8 @@ pub struct ControllerRevisionInfo {
     pub containers: Vec<DeploymentContainerInfo>,
     pub init_containers: Vec<DeploymentContainerInfo>,
     pub template_annotations: BTreeMap<String, String>,
+    /// The whole template, for comparing revisions on every field.
+    pub template: Option<serde_json::Value>,
     pub created_at: Option<String>,
 }
 
@@ -127,6 +129,7 @@ pub async fn get_controller_revisions(
                 containers: containers.containers,
                 init_containers: containers.init_containers,
                 template_annotations: annotations,
+                template: template.as_ref().and_then(|t| serde_json::to_value(t).ok()),
                 created_at: cr.metadata.creation_timestamp.as_ref().to_rfc3339_opt(),
             }
         })

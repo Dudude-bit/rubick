@@ -76,6 +76,7 @@ pub struct DeploymentContainerInfo {
     /// keep their configuration in these flags, and nowhere in the API.
     pub command: Vec<String>,
     pub args: Vec<String>,
+    pub probes: super::probe::ContainerProbes,
 }
 
 /// A pod template's containers, split the way `PodInfo` splits a pod's.
@@ -311,6 +312,7 @@ impl DeploymentContainerInfo {
             env_from: extract_env_from(container),
             command: container.command.clone().unwrap_or_default(),
             args: container.args.clone().unwrap_or_default(),
+            probes: super::probe::ContainerProbes::of(container),
         }
     }
 }

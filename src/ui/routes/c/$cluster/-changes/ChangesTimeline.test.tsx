@@ -107,11 +107,92 @@ describe("ChangesTimeline", () => {
           initContainers: [],
           templateAnnotations: {},
           templateKnown: true,
+          template: null,
         },
       },
     ]);
     expect(document.body.textContent).toContain("revision 1");
     expect(document.body.textContent).toContain("first deploy");
     expect(document.body.textContent).toContain("oldest known");
+  });
+
+  /**
+   * The thesis applied to a diff: "no difference in what we compared" must
+   * not read as "no difference". A change outside the named fields is
+   * counted, and one click shows it.
+   */
+  it("says other fields differ, and shows them on asking, instead of saying nothing changed", async () => {
+    await mount([
+      {
+        kind: "revision",
+        at: T0,
+        readopted: false,
+        against: {
+          state: "compared",
+          missing: 0,
+          changes: [],
+          others: [
+            {
+              container: null,
+              field: "spec.containers[app].command",
+              from: '["nginx"]',
+              to: '["nginx","-g","daemon off;"]',
+            },
+          ],
+        },
+        revision: {
+          id: "r2",
+          number: 2,
+          name: "api-2",
+          current: true,
+          at: new Date(T0).toISOString(),
+          changeCause: null,
+          containers: [],
+          initContainers: [],
+          templateAnnotations: {},
+          templateKnown: true,
+          template: null,
+        },
+      },
+    ]);
+    expect(document.body.textContent).not.toContain("same template");
+    const toggle = screen.getByRole("button", {
+      name: /1 other field differs/,
+    });
+    expect(document.body.textContent).not.toContain(
+      "spec.containers[app].command"
+    );
+    toggle.click();
+    expect(
+      await screen.findByText("spec.containers[app].command")
+    ).toBeInTheDocument();
+  });
+
+  /** An empty named diff without the whole templates is a warning that the rest was not read. */
+  it("warns that the rest was not compared when the whole templates were not read", async () => {
+    await mount([
+      {
+        kind: "revision",
+        at: T0,
+        readopted: false,
+        against: { state: "compared", missing: 0, changes: [], others: null },
+        revision: {
+          id: "r2",
+          number: 2,
+          name: "api-2",
+          current: true,
+          at: new Date(T0).toISOString(),
+          changeCause: null,
+          containers: [],
+          initContainers: [],
+          templateAnnotations: {},
+          templateKnown: true,
+          template: null,
+        },
+      },
+    ]);
+    expect(
+      screen.getByText(/the rest of the template could not be compared/)
+    ).toHaveClass("text-warn");
   });
 });

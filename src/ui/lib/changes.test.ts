@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import type { DeploymentContainerInfo } from "@/generated/types";
+import type { DeploymentContainerInfo, ProbeInfo } from "@/generated/types";
 import { en } from "@/i18n/catalogue";
 import { ru } from "@/i18n/ru";
 import {
@@ -9,6 +9,7 @@ import {
   diffSnapshots,
   gapsOf,
   helmReleaseOf,
+  otherDifferences,
   timelineOf,
   type ObservedSpan,
   type Revision,
@@ -28,11 +29,29 @@ function container(
     phase: "app",
     ports: [],
     resources: { requests: {}, limits: {} },
+    probes: { readiness: null, liveness: null, startup: null },
     command: [],
     args: [],
     env: [],
     envFrom: [],
     ...over,
+  };
+}
+
+function probe(path: string, period = 10): ProbeInfo {
+  return {
+    handler: {
+      type: "httpGet",
+      path,
+      port: "http",
+      scheme: "HTTP",
+      host: null,
+    },
+    initialDelaySeconds: 0,
+    periodSeconds: period,
+    timeoutSeconds: 1,
+    successThreshold: 1,
+    failureThreshold: 3,
   };
 }
 
@@ -52,6 +71,7 @@ function revision(
     initContainers: [],
     templateAnnotations: {},
     templateKnown: true,
+    template: null,
     ...over,
   };
 }
@@ -255,6 +275,11 @@ describe("what two revisions are compared on", () => {
           },
           command: [`/bin/app-${n}`],
           args: [`--n=${n}`],
+          probes: {
+            readiness: probe(`/ready-${n}`, n),
+            liveness: probe(`/live-${n}`, n),
+            startup: probe(`/start-${n}`, n),
+          },
         }),
       ],
       {
@@ -285,13 +310,108 @@ describe("what two revisions are compared on", () => {
   it("names each compared container field in the unchanged-template line, in both languages", () => {
     const named = COMPARED_FIELDS.filter((field) => field !== "annotations");
     for (const line of [
-      en.changes.unchangedTemplate,
-      ru.changes.unchangedTemplate,
+      en.changes.comparedUnchangedRestUnread,
+      ru.changes.comparedUnchangedRestUnread,
     ]) {
       // By word, not by the catalogue's punctuation, which is a translator's.
       const said = line.match(/[A-Za-z]+/g) ?? [];
       for (const field of named) expect(said).toContain(field);
     }
+  });
+});
+
+describe("a revision that changed only what the named fields do not cover", () => {
+  const template = (path: string, command: string[]) => ({
+    metadata: { labels: { app: "search" } },
+    spec: {
+      containers: [
+        {
+          name: "app",
+          image: "nginx:1.27-alpine",
+          command,
+          readinessProbe: { httpGet: { path, port: "http" } },
+        },
+      ],
+      volumes: [],
+    },
+  });
+  const search = (n: number, path: string, command: string[]) =>
+    revision(
+      n,
+      [
+        container("app", "nginx:1.27-alpine", {
+          probes: { readiness: probe(path), liveness: null, startup: null },
+        }),
+      ],
+      {
+        template: template(path, command),
+      }
+    );
+
+  /**
+   * Dana's `search`: revision 2 changed only `readinessProbe.httpGet.path`,
+   * and the comparison said nothing changed in what it compared.
+   */
+  it("names a readiness probe's path change", () => {
+    expect(
+      diffRevisions(search(1, "/", []), search(2, "/healthz", []))
+    ).toEqual([
+      {
+        container: "app",
+        field: "readinessProbe.httpGet.path",
+        from: "/",
+        to: "/healthz",
+      },
+    ]);
+  });
+
+  /** A field the named comparison does not read is still a difference, said as one. */
+  it("reports every other differing field rather than calling the templates the same", () => {
+    const items = timelineOf({
+      revisions: [
+        search(1, "/", ["nginx"]),
+        search(2, "/", ["nginx", "-g", "daemon off;"]),
+      ],
+      deliveries: [],
+      helm: [],
+      journal: [],
+      spans: [],
+      window: { from: T0, to: T0 + 10 * HOUR },
+    });
+    const newest = items.find(
+      (item) => item.kind === "revision" && item.revision.number === 2
+    );
+    expect(newest?.kind === "revision" && newest.against).toEqual({
+      state: "compared",
+      missing: 0,
+      changes: [],
+      others: [
+        {
+          container: null,
+          field: "spec.containers[app].command",
+          from: '["nginx"]',
+          to: '["nginx","-g","daemon off;"]',
+        },
+      ],
+    });
+  });
+
+  /** What the named comparison reported is not said a second time among the others. */
+  it("leaves out of the others what the named fields already reported", () => {
+    expect(
+      otherDifferences(
+        search(1, "/", []),
+        search(2, "/healthz", []),
+        diffRevisions(search(1, "/", []), search(2, "/healthz", []))
+      )
+    ).toEqual([]);
+  });
+
+  /** Without the whole templates, an empty named diff is not a claim that nothing changed. */
+  it("says it could not compare the rest when a whole template is missing", () => {
+    expect(
+      otherDifferences(revision(1, []), search(2, "/", []), [])
+    ).toBeNull();
   });
 });
 
@@ -395,6 +515,7 @@ describe("timelineOf", () => {
       changes: [
         { container: "app", field: "image", from: "app:1", to: "app:2" },
       ],
+      others: null,
     });
     const oldest = items[3];
     expect(oldest.kind === "revision" && oldest.against).toEqual({

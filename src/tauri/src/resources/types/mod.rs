@@ -11,6 +11,7 @@ pub mod node;
 pub mod pod;
 pub mod pod_display;
 pub mod pod_row;
+pub mod probe;
 pub mod service;
 
 pub use common::{
@@ -30,4 +31,5 @@ pub use pod::{
 };
 pub use pod_display::{condition_is_true, restarts};
 pub use pod_row::{PodRow, PodRowStatus, RowContainer};
+pub use probe::{ContainerProbes, ProbeHandler, ProbeInfo};
 pub use service::{ServiceInfo, ServicePortInfo};

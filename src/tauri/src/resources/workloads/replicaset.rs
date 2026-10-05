@@ -2,6 +2,7 @@
 //! one the Deployment is on.
 
 use k8s_openapi::api::apps::v1::{ReplicaSet, ReplicaSetCondition};
+use k8s_openapi::api::core::v1::PodTemplateSpec;
 use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -15,6 +16,22 @@ use crate::utils::Moment;
 /// for the one it is currently on. Comparing the two is the whole of
 /// "is this the current revision".
 pub const REVISION_ANNOTATION: &str = "deployment.kubernetes.io/revision";
+
+/// The label the Deployment controller adds to every `ReplicaSet`'s template;
+/// never part of the Deployment's own template.
+pub const POD_TEMPLATE_HASH: &str = "pod-template-hash";
+
+/// A `ReplicaSet`'s template as its Deployment would have written it, which
+/// is what `kubectl rollout undo` patches back and what two revisions are
+/// compared on.
+#[must_use]
+pub fn deployment_template_of(template: &PodTemplateSpec) -> PodTemplateSpec {
+    let mut template = template.clone();
+    if let Some(labels) = template.metadata.as_mut().and_then(|m| m.labels.as_mut()) {
+        labels.remove(POD_TEMPLATE_HASH);
+    }
+    template
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,6 +75,9 @@ pub struct ReplicaSetInfo {
     /// The pod template's own annotations, where a chart writes the config
     /// checksum it rolls on. Not the same map as `annotations`.
     pub template_annotations: BTreeMap<String, String>,
+    /// The whole template, hash label removed, for comparing revisions on
+    /// the fields the rows above do not carry.
+    pub template: Option<serde_json::Value>,
     pub conditions: Vec<ConditionInfo>,
     pub owner_references: Vec<OwnerReference>,
     pub created_at: Option<String>,
@@ -104,6 +124,9 @@ impl ReplicaSetInfo {
                 .and_then(|t| t.metadata.as_ref())
                 .and_then(|m| m.annotations.clone())
                 .unwrap_or_default(),
+            template: spec
+                .and_then(|s| s.template.as_ref())
+                .and_then(|t| serde_json::to_value(deployment_template_of(t)).ok()),
             conditions,
             owner_references: extract_owner_references(rs.metadata.owner_references.as_ref()),
             created_at: rs.creation_timestamp().to_rfc3339_opt(),
@@ -128,8 +151,34 @@ impl From<&ReplicaSetCondition> for ConditionInfo {
 mod tests {
     use super::*;
     use k8s_openapi::api::apps::v1::{ReplicaSetSpec, ReplicaSetStatus};
-    use k8s_openapi::api::core::v1::{Container, PodSpec, PodTemplateSpec};
+    use k8s_openapi::api::core::v1::{Container, PodSpec};
     use kube::core::ObjectMeta;
+
+    /// Every `ReplicaSet` carries its own hash label, so leaving it on made
+    /// two revisions differ in a field no Deployment ever wrote, and a
+    /// rollback patch would pin the Deployment's pods to one hash.
+    #[test]
+    fn the_hash_label_is_not_part_of_the_deployments_template() {
+        let template = PodTemplateSpec {
+            metadata: Some(ObjectMeta {
+                labels: Some(
+                    [
+                        ("app".to_string(), "search".to_string()),
+                        (POD_TEMPLATE_HASH.to_string(), "6df9f694b5".to_string()),
+                    ]
+                    .into(),
+                ),
+                ..Default::default()
+            }),
+            spec: None,
+        };
+        let labels = deployment_template_of(&template)
+            .metadata
+            .and_then(|m| m.labels)
+            .unwrap_or_default();
+        assert_eq!(labels.len(), 1);
+        assert_eq!(labels.get("app").map(String::as_str), Some("search"));
+    }
 
     fn replica_set(revision: Option<&str>, desired: i32) -> ReplicaSet {
         ReplicaSet {

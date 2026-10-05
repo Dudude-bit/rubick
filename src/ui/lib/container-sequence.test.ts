@@ -198,6 +198,7 @@ function declared(
     image: "busybox:1.36",
     phase: "app",
     ports: [],
+    probes: { readiness: null, liveness: null, startup: null },
     resources: { requests: {}, limits: {} },
     command: [],
     args: [],

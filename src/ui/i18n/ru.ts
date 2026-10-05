@@ -297,6 +297,7 @@ export const ru: Catalogue = {
     lastExit: "Последнее завершение",
     requests: "Запросы",
     limits: "Лимиты",
+    probes: "Пробы",
     resources: "Ресурсы",
     health: "Состояние",
     whatThisRevisionRuns: "что запускает эта ревизия",
@@ -1599,8 +1600,21 @@ export const ru: Catalogue = {
     revisionNumber: "ревизия {n}",
     revisionCurrent: "текущая",
     revisionOldest: "самая старая из известных; сравнивать не с чем",
-    unchangedTemplate:
-      "в сравниваемом ничего не изменилось: image, env, envFrom, ports, resources, аннотации с контрольной суммой",
+    sameTemplate: "тот же шаблон, что и в предыдущей ревизии",
+    comparedUnchangedRestUnread:
+      "в image, env, envFrom, ports, resources, readinessProbe, livenessProbe, startupProbe и аннотациях с контрольной суммой изменений нет; остальной шаблон сравнить не удалось",
+    otherFieldsDiffer: {
+      one: "отличается {n} другое поле",
+      few: "отличаются {n} других поля",
+      many: "отличаются {n} других полей",
+      other: "отличаются {n} других поля",
+    },
+    moreOtherFields: {
+      one: "и ещё {n}",
+      few: "и ещё {n}",
+      many: "и ещё {n}",
+      other: "и ещё {n}",
+    },
     templateUnread:
       "шаблон этой ревизии или предыдущей не прочитан; что изменилось — неизвестно",
     revisionsMissing: {

@@ -20,6 +20,7 @@ import type {
   StatefulSetInfo,
 } from "@/generated/types";
 import type { DeliveryRevision } from "@/integrations";
+import { probeFields } from "./probe-words";
 import type { T } from "@/i18n/useT";
 
 /**
@@ -61,6 +62,8 @@ export interface Revision {
   /** Whether the template below was read at all. False leaves every field
    * above empty because nothing was read, not because nothing was there. */
   templateKnown: boolean;
+  /** The whole template, for the fields the ones above do not carry. */
+  template: unknown;
 }
 
 export function revisionOfReplicaSet(rs: ReplicaSetInfo): Revision {
@@ -76,6 +79,7 @@ export function revisionOfReplicaSet(rs: ReplicaSetInfo): Revision {
     initContainers: rs.initContainers,
     templateAnnotations: rs.templateAnnotations,
     templateKnown: true,
+    template: rs.template,
   };
 }
 
@@ -91,6 +95,7 @@ export function revisionOfController(cr: ControllerRevisionInfo): Revision {
     initContainers: cr.initContainers,
     templateAnnotations: cr.templateAnnotations,
     templateKnown: cr.templateRead,
+    template: cr.template,
   };
 }
 
@@ -167,9 +172,9 @@ export function configHashes(
 }
 
 /**
- * The template fields two revisions are compared on. Everything outside this
- * list — `command`, probes, volumes, `nodeSelector`, the service account — is
- * not read, which is why no copy anywhere says the templates are the same.
+ * The template fields two revisions are compared on by name. Everything else
+ * in the template is compared too, by {@link otherDifferences}, so a change
+ * outside this list is "another field differs" and never "nothing changed".
  */
 export const COMPARED_FIELDS = [
   "image",
@@ -177,8 +182,25 @@ export const COMPARED_FIELDS = [
   "envFrom",
   "ports",
   "resources",
+  "readinessProbe",
+  "livenessProbe",
+  "startupProbe",
   "annotations",
 ] as const;
+
+const PROBE_FIELDS = [
+  ["readinessProbe", "readiness"],
+  ["livenessProbe", "liveness"],
+  ["startupProbe", "startup"],
+] as const;
+
+function probeMap(container: DeploymentContainerInfo): Map<string, string> {
+  return new Map(
+    PROBE_FIELDS.flatMap(([field, key]) => [
+      ...probeFields(field, container.probes[key]),
+    ])
+  );
+}
 
 /** What differs between two revisions, container by container, in the template's own field names. */
 export function diffRevisions(older: Revision, newer: Revision): FieldChange[] {
@@ -219,7 +241,8 @@ export function diffRevisions(older: Revision, newer: Revision): FieldChange[] {
         new Map(b.env.map((e) => [e.name, envWord(e)]))
       ),
       ...diffMaps(name, "envFrom.", envFrom(a), envFrom(b)),
-      ...diffMaps(name, "", resourceMap(a), resourceMap(b))
+      ...diffMaps(name, "", resourceMap(a), resourceMap(b)),
+      ...diffMaps(name, "", probeMap(a), probeMap(b))
     );
   }
   out.push(
@@ -230,6 +253,103 @@ export function diffRevisions(older: Revision, newer: Revision): FieldChange[] {
       configHashes(newer.templateAnnotations)
     )
   );
+  return out;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const CONTAINER_LISTS = new Set(["containers", "initContainers"]);
+
+/** Every leaf of a template, containers keyed by name so a reorder is no change. */
+function leaves(
+  value: unknown,
+  path: string[],
+  out: Map<string, { path: string[]; text: string }>
+) {
+  const put = (text: string) => out.set(path.join("\u0000"), { path, text });
+  if (Array.isArray(value)) {
+    const keyed =
+      path.length === 2 &&
+      path[0] === "spec" &&
+      CONTAINER_LISTS.has(path[1]) &&
+      value.every((item) => isRecord(item) && typeof item.name === "string");
+    if (keyed) {
+      for (const item of value as Record<string, unknown>[])
+        leaves(item, [...path, String(item.name)], out);
+      return;
+    }
+    if (value.length === 0 || value.every((item) => !isRecord(item)))
+      return put(JSON.stringify(value));
+    value.forEach((item, index) => leaves(item, [...path, String(index)], out));
+    return;
+  }
+  if (isRecord(value)) {
+    const entries = Object.entries(value);
+    if (entries.length === 0) return put("{}");
+    for (const [key, item] of entries) leaves(item, [...path, key], out);
+    return;
+  }
+  put(typeof value === "string" ? value : JSON.stringify(value));
+}
+
+/** `spec.containers[app].readinessProbe.httpGet.path`, as the API spells the place. */
+function spell(path: string[]): string {
+  return path.reduce((said, segment, index) => {
+    const named =
+      index === 2 && path[0] === "spec" && CONTAINER_LISTS.has(path[1]);
+    if (named || /^\d+$/.test(segment)) return `${said}[${segment}]`;
+    return said ? `${said}.${segment}` : segment;
+  }, "");
+}
+
+/** Whether a field the named comparison already reported covers this leaf. */
+function explained(path: string[], named: FieldChange[]): boolean {
+  if (path[0] === "metadata" && path[1] === "annotations")
+    return named.some(
+      (change) =>
+        change.container === null &&
+        change.field === `annotations.${path.slice(2).join(".")}`
+    );
+  if (path[0] !== "spec" || !CONTAINER_LISTS.has(path[1])) return false;
+  const container = path[2];
+  const root = path[3];
+  return named.some(
+    (change) =>
+      change.container === container &&
+      (change.field === "container" || change.field.split(".")[0] === root)
+  );
+}
+
+/**
+ * What differs between two whole templates beyond what {@link diffRevisions}
+ * names, or `null` where either template was not read. This is what keeps
+ * "no difference in what we compared" from ever reading as "no difference".
+ */
+export function otherDifferences(
+  older: Revision,
+  newer: Revision,
+  named: FieldChange[]
+): FieldChange[] | null {
+  if (!isRecord(older.template) || !isRecord(newer.template)) return null;
+  const before = new Map<string, { path: string[]; text: string }>();
+  const after = new Map<string, { path: string[]; text: string }>();
+  leaves(older.template, [], before);
+  leaves(newer.template, [], after);
+  const out: FieldChange[] = [];
+  for (const key of new Set([...before.keys(), ...after.keys()])) {
+    const from = before.get(key);
+    const to = after.get(key);
+    if (from?.text === to?.text) continue;
+    const path = (from ?? to)!.path;
+    if (explained(path, named)) continue;
+    out.push({
+      container: null,
+      field: spell(path),
+      from: from?.text ?? null,
+      to: to?.text ?? null,
+    });
+  }
   return out;
 }
 
@@ -429,6 +549,8 @@ export type Comparison =
   | {
       state: "compared";
       changes: FieldChange[];
+      /** Every other field of the template that differs; `null` where the whole templates were not read. */
+      others: FieldChange[] | null;
       /** Revisions between the two the cluster no longer holds. */
       missing: number;
     };
@@ -467,14 +589,23 @@ export interface TimelineInput {
   window: { from: number; to: number };
 }
 
-function comparisonOf(older: Revision | null, newer: Revision): Comparison {
+export function comparisonOf(
+  older: Revision | null,
+  newer: Revision
+): Comparison {
   if (!older) return { state: "oldest" };
   if (!older.templateKnown || !newer.templateKnown) return { state: "unread" };
   const missing =
     older.number !== null && newer.number !== null
       ? Math.max(0, newer.number - older.number - 1)
       : 0;
-  return { state: "compared", changes: diffRevisions(older, newer), missing };
+  const changes = diffRevisions(older, newer);
+  return {
+    state: "compared",
+    changes,
+    others: otherDifferences(older, newer, changes),
+    missing,
+  };
 }
 
 /** Everything on one clock, newest first, with the unwatched stretches in it. */

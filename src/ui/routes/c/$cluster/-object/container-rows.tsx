@@ -34,6 +34,7 @@ import type {
   ContainerPhase,
   DeploymentContainerInfo,
 } from "@/generated/types";
+import { describeProbe, PROBE_LABEL } from "@/lib/probe-words";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 
@@ -235,6 +236,39 @@ export function ContainerRows(props: ContainerRowsProps) {
   );
 }
 
+/** Each declared probe in `kubectl describe`'s words, or one row saying there are none. */
+function probeRows(
+  container: DeploymentContainerInfo,
+  t: ReturnType<typeof useT>
+): KeyValue[] {
+  const declared = (["readiness", "liveness", "startup"] as const).flatMap(
+    (kind) => {
+      const probe = container.probes[kind];
+      return probe ? [{ kind, probe }] : [];
+    }
+  );
+  if (declared.length === 0)
+    return [
+      {
+        label: t("columns", "probes"),
+        value: <span className="text-fg-fnt">{t("empty", "noneSet")}</span>,
+      },
+    ];
+  return declared.map(({ kind, probe }) => {
+    const { target, timing } = describeProbe(probe);
+    return {
+      label: PROBE_LABEL[kind],
+      mono: true,
+      value: (
+        <span className="flex flex-col">
+          <span>{target}</span>
+          <span className="text-[11px] text-fg-mut">{timing}</span>
+        </span>
+      ),
+    };
+  });
+}
+
 function ContainerBlock({
   container,
   step,
@@ -329,6 +363,7 @@ function ContainerBlock({
       mono: limits != null,
       tone: limits ? undefined : "warn",
     });
+    items.push(...probeRows(container, t));
   }
 
   // A container that has never run has no log to open, and offering one

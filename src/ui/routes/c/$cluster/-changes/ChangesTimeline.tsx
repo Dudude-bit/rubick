@@ -1,3 +1,6 @@
+import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+
 import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   journalWords,
@@ -193,7 +196,7 @@ function Row({ item, showObject }: { item: ChangeItem; showObject: boolean }) {
   }
 }
 
-function Against({ against }: { against: Comparison }) {
+export function Against({ against }: { against: Comparison }) {
   const t = useT();
   if (against.state === "oldest")
     return (
@@ -205,20 +208,68 @@ function Against({ against }: { against: Comparison }) {
     return (
       <p className="text-[11px] text-warn">{t("changes", "templateUnread")}</p>
     );
-  if (against.changes.length === 0)
+  const { changes, others } = against;
+  if (changes.length === 0 && others?.length === 0)
     return (
-      <p className="text-[11px] text-fg-fnt">
-        {t("changes", "unchangedTemplate")}
-      </p>
+      <p className="text-[11px] text-fg-fnt">{t("changes", "sameTemplate")}</p>
     );
   return (
-    <ul className="mt-0.5 flex flex-col gap-px">
-      {against.changes.map((change, index) => (
-        <li key={index} className="font-mono text-[11px]">
-          <Field change={change} />
-        </li>
-      ))}
-    </ul>
+    <>
+      {changes.length === 0 && others === null && (
+        <p className="text-[11px] text-warn">
+          {t("changes", "comparedUnchangedRestUnread")}
+        </p>
+      )}
+      {changes.length > 0 && (
+        <ul className="mt-0.5 flex flex-col gap-px">
+          {changes.map((change, index) => (
+            <li key={index} className="font-mono text-[11px]">
+              <Field change={change} />
+            </li>
+          ))}
+        </ul>
+      )}
+      {others && others.length > 0 && <OtherFields others={others} />}
+    </>
+  );
+}
+
+/** Past this, the rest of a large template diff is a count, not a wall. */
+const OTHER_FIELDS_SHOWN = 40;
+
+/** Everything else that differs, folded behind the count so the named changes stay the headline. */
+function OtherFields({ others }: { others: FieldChange[] }) {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const Chevron = open ? ChevronDown : ChevronRight;
+  return (
+    <div className="mt-0.5">
+      <button
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen(!open)}
+        className="inline-flex items-center gap-1 rounded text-[11px] text-warn hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+      >
+        <Chevron className="h-3 w-3" aria-hidden="true" />
+        {t("changes", "otherFieldsDiffer", { n: others.length })}
+      </button>
+      {open && (
+        <ul className="mt-0.5 flex flex-col gap-px border-l border-hair pl-2">
+          {others.slice(0, OTHER_FIELDS_SHOWN).map((change, index) => (
+            <li key={index} className="font-mono text-[11px] wrap-break-word">
+              <Field change={change} />
+            </li>
+          ))}
+          {others.length > OTHER_FIELDS_SHOWN && (
+            <li className="text-[11px] text-fg-fnt">
+              {t("changes", "moreOtherFields", {
+                n: others.length - OTHER_FIELDS_SHOWN,
+              })}
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
   );
 }
 
@@ -240,10 +291,30 @@ function Field({ change }: { change: FieldChange }) {
     <>
       <span className="text-fg-fnt">{prefix}</span>
       <span className="text-fg">{change.field}</span>{" "}
-      <span className="text-fg-mut">{change.from ?? "∅"}</span>
+      <Value value={change.from} className="text-fg-mut" />
       <span className="text-fg-fnt"> → </span>
-      <span className="text-fg">{change.to ?? "∅"}</span>
+      <Value value={change.to} className="text-fg" />
     </>
+  );
+}
+
+/** A whole volume or a sidecar spec is one value; it is clipped, with the rest on hover. */
+const VALUE_CHARS = 120;
+
+function Value({
+  value,
+  className,
+}: {
+  value: string | null;
+  className: string;
+}) {
+  if (value === null) return <span className={className}>∅</span>;
+  const clipped =
+    value.length > VALUE_CHARS ? `${value.slice(0, VALUE_CHARS)}…` : value;
+  return (
+    <span className={className} title={clipped === value ? undefined : value}>
+      {clipped}
+    </span>
   );
 }
 
