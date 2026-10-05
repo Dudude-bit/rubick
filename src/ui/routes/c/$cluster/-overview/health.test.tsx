@@ -1,6 +1,7 @@
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vite-plus/test";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter } from "@/test/render";
 import { AttentionPanel, WarningsPanel } from "./health";
@@ -552,5 +553,30 @@ describe("what Needs attention says it checked", () => {
       "href",
       "/c/prod/pods"
     );
+  });
+
+  /**
+   * Dana: "and 3 more" was plain text, and Stalled payments sat behind it.
+   * The count is a button that opens the held rows in place; what the
+   * backend cut keeps its count. Fails if the count stops being reachable
+   * by keyboard or opens nothing.
+   */
+  it("opens the rows past the cap in place from the keyboard", async () => {
+    const pods = Array.from({ length: 14 }, (_, at) => ({
+      ...problem,
+      kind: "Pod",
+      name: `api-${at}`,
+      severity: "critical" as const,
+    }));
+    const attention = attentionFrom(pods);
+    await panel({ ...attention, total: attention.total + 3 });
+
+    const more = screen.getByRole("button", { name: "and 5 more" });
+    more.focus();
+    await userEvent.keyboard("{Enter}");
+
+    expect(screen.getAllByRole("link", { name: /^Pod api-/ })).toHaveLength(14);
+    expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
+    expect(screen.getByText("and 3 more")).toBeInTheDocument();
   });
 });

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { Loader2, Lock, TriangleAlert } from "lucide-react";
 
@@ -215,15 +216,38 @@ function AttentionRow({ item }: { item: AttentionItem }) {
   );
 }
 
-/** The rows past the cap, by kind, each a way into its list. */
-function MoreRows({ hidden, cut }: { hidden: AttentionItem[]; cut: number }) {
+/**
+ * The rows past the cap, by kind, each a way into its list. The count opens
+ * the rows this list holds in place; what the backend cut has only a count.
+ */
+function MoreRows({
+  hidden,
+  cut,
+  onExpand,
+}: {
+  hidden: AttentionItem[];
+  cut: number;
+  onExpand: () => void;
+}) {
   const t = useT();
   const byKind = new Map<string, number>();
   for (const item of hidden)
     byKind.set(item.kind, (byKind.get(item.kind) ?? 0) + 1);
+  const more = t("cluster", "attentionMore", { n: hidden.length + cut });
   return (
     <p className="flex flex-wrap items-baseline gap-x-2 px-1.5 py-[5px] text-[11px] text-fg-fnt">
-      <span>{t("cluster", "attentionMore", { n: hidden.length + cut })}</span>
+      {hidden.length > 0 ? (
+        <button
+          type="button"
+          aria-expanded={false}
+          onClick={onExpand}
+          className="rounded text-fg-mut underline decoration-hair underline-offset-2 transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+        >
+          {more}
+        </button>
+      ) : (
+        <span>{more}</span>
+      )}
       {[...byKind].map(([kind, n]) => (
         <Link
           key={kind}
@@ -338,8 +362,9 @@ export function AttentionPanel({
   const t = useT();
   useShareSection("overview-problems", () => attentionShare(attention, t));
   const { items, total, complete, worst } = attention;
-  const shown = items.slice(0, VISIBLE);
-  const hidden = items.slice(VISIBLE);
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? items : items.slice(0, VISIBLE);
+  const hidden = expanded ? [] : items.slice(VISIBLE);
   const cut = total - items.length;
   const unchecked = attention.checks.filter((check) => check.state !== "read");
   const serving = pods.running - pods.crashLooping;
@@ -363,7 +388,13 @@ export function AttentionPanel({
         {shown.map((item) => (
           <AttentionRow key={item.key} item={item} />
         ))}
-        {hidden.length + cut > 0 && <MoreRows hidden={hidden} cut={cut} />}
+        {hidden.length + cut > 0 && (
+          <MoreRows
+            hidden={hidden}
+            cut={cut}
+            onExpand={() => setExpanded(true)}
+          />
+        )}
         {unchecked.length > 0 && (
           <div
             className="mt-1 border-t border-hair pt-1.5"
