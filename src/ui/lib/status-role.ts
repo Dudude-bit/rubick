@@ -102,6 +102,8 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "released",
     // `kubectl rollout pause`: somebody's decision, like a cordon.
     "paused",
+    // A Job whose Pods failed while its controller still has retries left.
+    "retrying",
   ],
   err: [
     "error",
@@ -134,6 +136,8 @@ const ROLES: Record<StatusRole, readonly string[]> = {
   ],
   neutral: [
     "completed",
+    // A Job its controller marked Complete: finished, like a completed Pod.
+    "complete",
     "terminated",
     "superseded",
     "uninstalled",

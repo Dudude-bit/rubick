@@ -59,6 +59,24 @@ const WORKLOAD: Record<WorkloadStatus, Meaning> = {
   Degraded: "workloadDegraded",
 };
 
+/** What a Job's badge prints, held to the backend by `src/contracts/job-codes.json`. */
+export type JobStatus =
+  | "Complete"
+  | "Failed"
+  | "Suspended"
+  | "Retrying"
+  | "Running"
+  | "Pending";
+
+export const JOB: Record<JobStatus, Meaning> = {
+  Complete: "jobComplete",
+  Failed: "jobFailed",
+  Suspended: "jobSuspended",
+  Retrying: "jobRetrying",
+  Running: "jobRunning",
+  Pending: "jobPending",
+};
+
 const WORKLOAD_KINDS = new Set(["Deployment", "StatefulSet", "DaemonSet"]);
 
 const INIT_PROGRESS = /^(\d+)\/(\d+)$/;
@@ -131,5 +149,7 @@ export function statusMeaning(
   if (resolved === "Pod") return podStatusMeaning(status, null, t);
   if (resolved && WORKLOAD_KINDS.has(resolved))
     return workloadStatusMeaning(status, t);
+  if (resolved === "Job" && Object.hasOwn(JOB, status))
+    return line(status, t("statusMeaning", JOB[status as JobStatus]));
   return undefined;
 }

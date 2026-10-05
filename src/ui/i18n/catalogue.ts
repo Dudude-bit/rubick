@@ -6528,6 +6528,16 @@ export const en = {
     workloadWaiting: "the controller has not acted on the latest change yet.",
     workloadDegraded:
       "the rollout finished, but fewer replicas are available than desired.",
+    jobComplete:
+      "the Job's controller marked it Complete: every run it needed succeeded.",
+    jobFailed:
+      "the Job's controller gave up and marked it Failed, for the reason it states.",
+    jobSuspended:
+      "the Job is suspended, so no new Pods are started until it resumes.",
+    jobRetrying:
+      "a Pod failed and the Job is trying again, within its backoffLimit.",
+    jobRunning: "Pods are running and none has failed.",
+    jobPending: "no Pod has started yet.",
   },
   kindAbout: {
     Pod: "A Pod is one running copy of an app, one or more containers sharing a network address; look here to see which copies are up, restarting or stuck.",
@@ -6846,6 +6856,7 @@ export const en = {
     runningSegment: "running",
     succeededSegment: "succeeded",
     failedSegment: "failed",
+    retryingSegment: "retrying",
     notScheduledSegment: "not scheduled",
     plusMore: "+{n} more",
     hostsNeedAttention: {

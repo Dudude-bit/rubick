@@ -5,7 +5,6 @@ import type { JobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { matchJobPods, type ResourceMetrics } from "@/lib/metrics";
-import { StatusBadge } from "@/components/ui/status-badge";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -14,6 +13,7 @@ import {
   createMemoryColumn,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
+import { JobStatusCell } from "./JobStatusCell";
 
 type JobInfoWithMetrics = JobInfo & ResourceMetrics;
 
@@ -35,11 +35,16 @@ export const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
       `${row.original.succeeded}/${row.original.completions || "∞"}`,
   },
   {
-    size: 110,
+    size: 220,
     id: "status",
     header: columnHeader("columns", "status"),
-    meta: { share: (row: JobInfoWithMetrics) => row.status },
-    cell: ({ row }) => <StatusBadge status={row.original.status} />,
+    meta: {
+      share: (row: JobInfoWithMetrics) =>
+        row.failure?.reason
+          ? `${row.status} ${row.failure.reason}`
+          : row.status,
+    },
+    cell: ({ row }) => <JobStatusCell job={row.original} />,
   },
   createAgeColumn<JobInfoWithMetrics>(),
 ];

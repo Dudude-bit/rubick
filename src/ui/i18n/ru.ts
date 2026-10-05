@@ -7075,6 +7075,16 @@ export const ru: Catalogue = {
     workloadWaiting: "контроллер ещё не обработал последнее изменение.",
     workloadDegraded:
       "развёртывание завершилось, но доступных реплик меньше, чем нужно.",
+    jobComplete:
+      "контроллер отметил Job как Complete: все нужные запуски прошли успешно.",
+    jobFailed:
+      "контроллер прекратил попытки и отметил Job как Failed по указанной причине.",
+    jobSuspended:
+      "Job приостановлен: новые Pod не запускаются, пока его не возобновят.",
+    jobRetrying:
+      "Pod завершился с ошибкой, и Job пробует снова в пределах backoffLimit.",
+    jobRunning: "Pod работают, и ни один не завершился с ошибкой.",
+    jobPending: "ни один Pod ещё не запущен.",
   },
   kindAbout: {
     Pod: "В Pod работает одна копия приложения: один или несколько контейнеров с общим сетевым адресом; здесь видно, какие копии работают, перезапускаются или зависли.",
@@ -7522,6 +7532,7 @@ export const ru: Catalogue = {
     runningSegment: "выполняются",
     succeededSegment: "завершились",
     failedSegment: "не удались",
+    retryingSegment: "повторяются",
     notScheduledSegment: "не назначено",
     plusMore: "ещё {n}",
     hostsNeedAttention: {

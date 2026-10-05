@@ -298,6 +298,12 @@ export function CronJobDetail() {
                           tone: "neutral",
                         },
                         {
+                          label: t("count", "retryingSegment"),
+                          count: jobs.filter((job) => job.status === "Retrying")
+                            .length,
+                          tone: "warn",
+                        },
+                        {
                           label: t("count", "failedSegment"),
                           count: jobs.filter((job) => job.status === "Failed")
                             .length,

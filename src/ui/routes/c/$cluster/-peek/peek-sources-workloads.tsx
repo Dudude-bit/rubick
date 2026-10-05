@@ -320,8 +320,27 @@ export const WORKLOAD_SOURCES: PeekSources = {
             label: t("settings", "failed"),
             value: job.failed,
             mono: true,
-            tone: job.failed > 0 ? "err" : undefined,
+            // Red only once the controller gave up; a pod it is retrying is a warning.
+            tone:
+              job.status === "Failed"
+                ? "err"
+                : job.failed > 0
+                  ? "warn"
+                  : undefined,
           },
+          ...(job.failure?.reason
+            ? [
+                {
+                  label: t("columns", "reason"),
+                  value: job.failure.reason,
+                  mono: true,
+                  tone: "err" as const,
+                },
+              ]
+            : []),
+          ...(job.failure?.message
+            ? [{ label: t("columns", "message"), value: job.failure.message }]
+            : []),
           { label: t("columns", "active"), value: job.active, mono: true },
           {
             label: t("columns", "backoffLimit"),

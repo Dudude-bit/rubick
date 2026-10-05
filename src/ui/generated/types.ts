@@ -1105,6 +1105,7 @@ export interface JobDetailInfo {
   failed: number;
   active: number;
   status: string;
+  failure: JobFailure | null;
   startTime: string | null;
   completionTime: string | null;
   containers: DeploymentContainerInfo[];
@@ -1119,6 +1120,11 @@ export interface JobDetailInfo {
   createdAt: string | null;
 }
 
+export interface JobFailure {
+  reason: string | null;
+  message: string | null;
+}
+
 export interface JobInfo {
   name: string;
   namespace: string;
@@ -1127,6 +1133,7 @@ export interface JobInfo {
   failed: number;
   active: number;
   status: string;
+  failure: JobFailure | null;
   createdAt: string | null;
 }
 

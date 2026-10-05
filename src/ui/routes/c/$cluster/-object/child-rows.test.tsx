@@ -33,6 +33,7 @@ const job: JobInfo = {
   failed: 2,
   active: 0,
   status: "Failed",
+  failure: { reason: "BackoffLimitExceeded", message: null },
   createdAt: null,
 };
 

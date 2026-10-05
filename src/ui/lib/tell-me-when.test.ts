@@ -263,6 +263,27 @@ describe("a statefulset or daemonset", () => {
 });
 
 describe("a job", () => {
+  /**
+   * The list once called a Job Failed when any pod failed, so the wait
+   * ended as failed on a retry the controller went on to win.
+   */
+  it("keeps waiting on a Job that is retrying, and names the controller's reason when it fails", () => {
+    expect(
+      walk(watchOn("Job", "jobOutcome"), [
+        { status: "Retrying", failed: 2, failure: null } as JobInfo,
+      ])
+    ).toEqual([]);
+    expect(
+      walk(watchOn("Job", "jobOutcome"), [
+        {
+          status: "Failed",
+          failed: 7,
+          failure: { reason: "BackoffLimitExceeded", message: null },
+        } as JobInfo,
+      ])
+    ).toEqual([{ says: "failed", detail: "BackoffLimitExceeded" }]);
+  });
+
   it("answers as soon as it is over, even on the first look", () => {
     expect(
       walk(watchOn("Job", "jobOutcome"), [{ status: "Failed" } as JobInfo])

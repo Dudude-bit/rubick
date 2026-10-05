@@ -510,7 +510,7 @@ function judgeJob(job: JobInfo): Judgement {
   }
   if (job.status === "Failed") {
     return {
-      verdict: { says: "failed", detail: null },
+      verdict: { says: "failed", detail: job.failure?.reason ?? null },
       baseline: { armed: true },
     };
   }

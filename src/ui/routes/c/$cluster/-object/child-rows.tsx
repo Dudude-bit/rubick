@@ -260,7 +260,9 @@ export function JobRows({
               )}
             </span>
             {job.failed > 0 && (
-              <span className="text-err">
+              <span
+                className={job.status === "Failed" ? "text-err" : "text-warn"}
+              >
                 {" · "}
                 {t("action", "jobsFailed", { n: job.failed })}
               </span>

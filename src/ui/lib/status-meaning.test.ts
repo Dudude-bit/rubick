@@ -1,12 +1,16 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import { loadLocale, translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import {
+  JOB,
   podStatusMeaning,
   statusMeaning,
   workloadStatusMeaning,
 } from "./status-meaning";
+import { statusRole } from "./status-role";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -77,5 +81,30 @@ describe("what a status means", () => {
     expect(podStatusMeaning("OOMKilled", "Running", ru)).toBe(
       "OOMKilled: контейнер превысил лимит памяти и был принудительно остановлен."
     );
+  });
+});
+
+describe("what a Job's word means", () => {
+  const shared = JSON.parse(
+    readFileSync(resolve(process.cwd(), "src/contracts/job-codes.json"), "utf8")
+  ) as { codes: string[] };
+
+  /**
+   * The backend prints these words for the list, the page and the peek. A
+   * word missing here turns the badge grey and its tooltip blank with
+   * nothing failing, which is how Complete went unlisted.
+   */
+  it("explains and colours every word the backend prints", () => {
+    expect(Object.keys(JOB)).toEqual(shared.codes);
+    for (const code of shared.codes)
+      expect(statusMeaning("Job", code, t)).toMatch(new RegExp(`^${code}: `));
+    expect(shared.codes.map(statusRole)).toEqual([
+      "neutral",
+      "err",
+      "warn",
+      "warn",
+      "ok",
+      "pending",
+    ]);
   });
 });

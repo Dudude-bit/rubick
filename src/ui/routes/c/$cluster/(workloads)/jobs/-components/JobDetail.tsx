@@ -325,10 +325,18 @@ export function JobDetail() {
       createdAt={job?.createdAt}
       statusBadge={job && <StatusBadge status={job.status} />}
       badges={
-        failed > 0 && (
-          <span className="text-[11px] text-err">
-            {t("count", "failedPods", { n: failed })}
+        job?.failure?.reason ? (
+          <span className="font-mono text-[11px] text-err">
+            {job.failure.reason}
           </span>
+        ) : (
+          failed > 0 && (
+            // A failed pod the Job is still retrying is a warning; only the
+            // controller's Failed condition is a failure.
+            <span className="text-[11px] text-warn">
+              {t("count", "failedPods", { n: failed })}
+            </span>
+          )
         )
       }
       onBack={goBack}
