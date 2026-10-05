@@ -487,8 +487,8 @@ const FAILURE: Record<
       | "notReachable";
   }
 > = {
-  dns: { icon: SearchX, title: "didNotAnswer", line: "failDns" },
-  refused: { icon: Ban, title: "didNotAnswer", line: "failRefused" },
+  dns: { icon: SearchX, title: "couldNotConnect", line: "failDns" },
+  refused: { icon: Ban, title: "couldNotConnect", line: "failRefused" },
   timeout: { icon: TimerOff, title: "didNotAnswer", line: "failTimeout" },
   tls: { icon: ShieldX, title: "couldNotConnect", line: "failTls" },
   credentials: {

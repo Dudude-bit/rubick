@@ -265,8 +265,9 @@ describe("a cluster that could not be reached", () => {
   /**
    * Dana read "Connection error: Connection error: ..." and seven lines of
    * kubectl stderr naming a shim in her home directory. Fails if the class of
-   * failure stops leading, or if stderr and the home path reach the visible
-   * screen instead of the folded details.
+   * failure stops leading, if a refused connection is headed "did not answer",
+   * or if stderr and the home path reach the visible screen instead of the
+   * folded details.
    */
   it("leads with the kind of failure and folds the raw error away", async () => {
     attempt.mockResolvedValueOnce({
@@ -299,6 +300,12 @@ describe("a cluster that could not be reached", () => {
         })
       )
     ).toBeVisible();
+    expect(
+      screen.getByText(
+        t("cluster", "couldNotConnect", { context: "acme-prod-eu" })
+      )
+    ).toBeVisible();
+    expect(screen.queryByText(t("cluster", "didNotAnswer"))).toBeNull();
     expect(screen.getByText(t("cluster", "proxyFailedToo"))).toBeVisible();
     const raw = screen.getByText(/Connection refused \(os error 111\)/);
     expect(raw).not.toBeVisible();
