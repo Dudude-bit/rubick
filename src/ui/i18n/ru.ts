@@ -7833,10 +7833,10 @@ export const ru: Catalogue = {
       other: "{n} символа",
     },
     valuesCopiedWithBinary: {
-      one: "Скопировано {n} значение, {binary} в base64.",
-      few: "Скопировано {n} значения, {binary} в base64.",
-      many: "Скопировано {n} значений, {binary} в base64.",
-      other: "Скопировано {n} значения, {binary} в base64.",
+      one: "Скопировано {n} значение, {binary} в виде base64.",
+      few: "Скопировано {n} значения, {binary} в виде base64.",
+      many: "Скопировано {n} значений, {binary} в виде base64.",
+      other: "Скопировано {n} значения, {binary} в виде base64.",
     },
     allValuesCopied: {
       one: "Скопировано {n} значение.",
