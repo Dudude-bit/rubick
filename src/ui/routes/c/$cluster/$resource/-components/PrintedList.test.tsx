@@ -8,6 +8,7 @@ import type {
   TableRow,
 } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
@@ -171,5 +172,71 @@ describe("a kind listed as the API server prints it", () => {
       await screen.findByText("leases.coordination.k8s.io cannot be listed")
     ).toBeInTheDocument();
     expect(answers.pages).toEqual([]);
+  });
+});
+
+describe("an access kind on the generic list", () => {
+  const SERVICE_ACCOUNTS: CatalogEntry = {
+    ...LEASES,
+    group: "",
+    kind: "ServiceAccount",
+    plural: "serviceaccounts",
+  };
+  const created = new Date(Date.now() - 2 * 3600_000).toISOString();
+  const accounts: ResourceTable = {
+    columns: [
+      {
+        name: "Name",
+        columnType: "string",
+        format: "name",
+        description: "",
+        priority: 0,
+      },
+      {
+        name: "Age",
+        columnType: "date",
+        format: "",
+        description: "",
+        priority: 0,
+      },
+    ],
+    rows: [
+      {
+        name: "default",
+        namespace: "lena-sandbox",
+        uid: "uid-default",
+        createdAt: created,
+        cells: ["default", "2h0m"],
+      },
+    ],
+    cursor: null,
+    unread: [],
+  };
+
+  /**
+   * The page was headed by the raw plural, counted "1 объект serviceaccounts"
+   * under English headers, printed kubectl's "2h0m" and said nothing of what
+   * the kind is. Fails if any of those comes back.
+   */
+  it("is named, counted and explained by its kind, in the reader's language", async () => {
+    answers.catalog = () =>
+      Promise.resolve({ entries: [SERVICE_ACCOUNTS], unread: [] });
+    answers.table = () => Promise.resolve(accounts);
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      await renderWithRouter(<PrintedList resource="serviceaccounts" />);
+      expect(await screen.findByText("1 объект ServiceAccount")).toBeVisible();
+      expect(
+        screen.getByRole("heading", { name: "ServiceAccounts" })
+      ).toBeVisible();
+      expect(screen.getByText(/учётную запись/)).toBeVisible();
+      expect(screen.getByText("Подробнее")).toBeVisible();
+      expect(screen.getByText("Имя")).toBeVisible();
+      expect(screen.getByText("Возраст")).toBeVisible();
+      expect(screen.queryByText("2h0m")).toBeNull();
+      expect(screen.queryByText("serviceaccounts")).toBeNull();
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 });

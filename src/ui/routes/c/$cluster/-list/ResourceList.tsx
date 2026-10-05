@@ -153,6 +153,8 @@ export interface ResourceListProps<
     | ((setDeleteTarget: (item: Row) => void) => ColumnDef<Row>[]);
   /** Label for empty state (e.g., "pods", "services") */
   emptyStateLabel: string;
+  /** The kind the footer counts, for a kind the registry does not hold. */
+  noun?: { kind: string; plural: string };
   /**
    * What the dragged column widths are filed under, where the row label is
    * not specific enough. Two CRDs can share a plural — `certificates` is
@@ -236,6 +238,7 @@ export function ResourceList<
   onRetry,
   columns,
   emptyStateLabel,
+  noun,
   widthsKey,
   emptyMessage,
   deleteConfig,
@@ -690,6 +693,7 @@ export function ResourceList<
           getRowId={getRowId}
           grouping={grouping ?? byNamespace(emptyStateLabel.toLowerCase())}
           rowLabel={emptyStateLabel.toLowerCase()}
+          rowNoun={noun}
           partial={partial}
           widthsKey={widthsKey}
           share={embedded ? undefined : share}

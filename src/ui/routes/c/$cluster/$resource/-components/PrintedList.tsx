@@ -18,6 +18,10 @@ import type {
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useT } from "@/i18n/useT";
+import { columnHeader } from "@/i18n/column-header";
+import { KindAbout } from "@/components/object/KindAbout";
+import { accessKind } from "@/lib/access-kinds";
+import { isExplained } from "@/lib/docs";
 import { commands } from "@/lib/commands";
 import { hrefOf, objectLink, type AppLink } from "@/lib/links";
 import { scopeCacheKey } from "@/lib/namespace-scope";
@@ -39,6 +43,12 @@ const PAGES_PER_STEP = 5;
 const NO_COLUMNS: TableColumn[] = [];
 /** The columns kubectl prints without `-o wide`. */
 const DEFAULT_PRIORITY = 0;
+/** The columns the API server prints for every kind, named in the reader's language. */
+const STANDARD_HEADERS: Partial<Record<string, "name" | "age" | "created">> = {
+  Name: "name",
+  Age: "age",
+  "Created At": "created",
+};
 
 /**
  * Any kind the cluster serves, listed as the API server prints it for
@@ -145,11 +155,25 @@ function PrintedTable({
     [serverColumns, showNamespace, linkOf]
   );
   const rows = printed.data?.rows;
+  const access = accessKind(entry.kind);
+  const plural =
+    access?.group === entry.group ? access.displayPlural : entry.plural;
+  const noun = useMemo(
+    () => ({ kind: entry.kind, plural }),
+    [entry.kind, plural]
+  );
 
   return (
     <ResourceList<PrintedRow>
-      title={entry.kind}
-      description={resource}
+      title={access?.group === entry.group ? plural : entry.kind}
+      description={
+        isExplained(entry.kind) && access?.group === entry.group ? (
+          <KindAbout kind={entry.kind} />
+        ) : (
+          resource
+        )
+      }
+      noun={noun}
       data={rows}
       unread={printed.data?.unread}
       isLoading={printed.isLoading}
@@ -159,7 +183,7 @@ function PrintedTable({
       onRetry={() => void printed.refetch()}
       placeholder={printed.isPlaceholderData}
       columns={columns}
-      emptyStateLabel={resource}
+      emptyStateLabel={plural}
       widthsKey={`printed:${resource}`}
       narrowingHelps={entry.namespaced}
       listQuery={{
@@ -205,16 +229,18 @@ function columnsOf(
   const columns: ColumnDef<PrintedRow>[] = [];
   printed.forEach((column, index) => {
     if (column.priority > DEFAULT_PRIORITY) return;
+    const standard = STANDARD_HEADERS[column.name];
     columns.push({
       id: `printed-${index}`,
       size: column.format === "name" ? 320 : 140,
-      header: column.name,
+      header: standard ? columnHeader("columns", standard) : column.name,
       accessorFn: (row) => row.cells[index],
       cell: ({ row }) => (
         <Cell
           value={row.original.cells[index]}
           column={column}
           link={column.format === "name" ? linkOf(row.original) : null}
+          createdAt={row.original.createdAt}
         />
       ),
     });
@@ -228,10 +254,12 @@ function Cell({
   value,
   column,
   link,
+  createdAt,
 }: {
   value: unknown;
   column: TableColumn;
   link: AppLink | null;
+  createdAt: string | null;
 }) {
   if (value === null || value === undefined || value === "")
     return <span className="text-fg-fnt">—</span>;
@@ -243,12 +271,19 @@ function Cell({
         {text}
       </RouteLink>
     );
-  if (column.columnType === "date")
+  if (column.columnType === "date") {
+    // kubectl's Age cell is already a duration ("8m38s"), in English.
+    const at = Number.isNaN(Date.parse(text))
+      ? column.name === "Age"
+        ? createdAt
+        : null
+      : text;
     return (
       <span className="text-fg-fnt">
-        <RealtimeAge timestamp={text} />
+        {at ? <RealtimeAge timestamp={at} /> : text}
       </span>
     );
+  }
   if (column.columnType === "integer" || column.columnType === "number")
     return <span className="tabular-nums">{text}</span>;
   return <span>{text}</span>;

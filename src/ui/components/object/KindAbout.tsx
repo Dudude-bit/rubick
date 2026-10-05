@@ -1,10 +1,9 @@
 import { OutLink } from "@/components/ui/out-link";
 import { useT } from "@/i18n/useT";
-import { kindDocs } from "@/lib/docs";
-import type { ResourceKind } from "@/lib/resource-registry";
+import { kindDocs, type ExplainedKind } from "@/lib/docs";
 
 /** What this kind is, in a sentence, and where Kubernetes explains it in full. */
-export function KindAbout({ kind }: { kind: ResourceKind }) {
+export function KindAbout({ kind }: { kind: ExplainedKind }) {
   const t = useT();
   return (
     <>

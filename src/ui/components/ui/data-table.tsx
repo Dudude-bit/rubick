@@ -115,6 +115,8 @@ interface DataTableProps<TData extends RowData> {
   grouping?: RowGrouping<TData> | null;
   /** Plural noun for the group caption count, e.g. "pods". */
   rowLabel?: string;
+  /** The kind the footer counts, where the label is not a kind the registry knows. */
+  rowNoun?: { kind: string; plural: string };
   /** What dragged column widths are filed under; the row label otherwise. */
   widthsKey?: string;
   /** The rows are not the whole of what was asked for, so no total. */
@@ -305,6 +307,7 @@ function DataTableInner<TData extends RowData>({
   emptyMessage,
   grouping = null,
   rowLabel,
+  rowNoun,
   widthsKey,
   partial = false,
   share,
@@ -556,6 +559,8 @@ function DataTableInner<TData extends RowData>({
 
   const filteredRows = table.getFilteredRowModel().rows.length;
   const totalRows = data.length;
+  const nounsOf = (n: number) =>
+    rowNoun ? { n, ...rowNoun } : rowNouns(rowLabel ?? "", n);
 
   const { items, rowLine } = React.useMemo(
     () => buildTableRows(rows, groupingActive ? grouping : null),
@@ -1248,20 +1253,16 @@ function DataTableInner<TData extends RowData>({
             {/* The noun is the kind's own plural and stays as the cluster
               spells it; only the frame around it is translated. Without one
               — a table of something with no kind — the frame counts rows. */}
-            {rowLabel === undefined
+            {rowLabel === undefined && rowNoun === undefined
               ? partial
                 ? t("readings", "rowCountWhereAnswered", { n: filteredRows })
                 : t("readings", "rowCount", { n: filteredRows })
               : partial
-                ? t(
-                    "readings",
-                    "rowsWhereAnswered",
-                    rowNouns(rowLabel, filteredRows)
-                  )
+                ? t("readings", "rowsWhereAnswered", nounsOf(filteredRows))
                 : filteredRows === totalRows
-                  ? t("readings", "objectCount", rowNouns(rowLabel, totalRows))
+                  ? t("readings", "objectCount", nounsOf(totalRows))
                   : t("readings", "rowsOfTotal", {
-                      ...rowNouns(rowLabel, totalRows),
+                      ...nounsOf(totalRows),
                       shown: filteredRows,
                     })}
           </div>

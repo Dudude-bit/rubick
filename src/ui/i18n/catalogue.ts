@@ -6620,6 +6620,15 @@ export const en = {
       "A PodDisruptionBudget limits how many Pods of an app may be taken down at once during planned work such as draining a node.",
     CustomResourceDefinition:
       "A CustomResourceDefinition adds a new kind of object to the cluster's API, which is how operators and add-ons bring their own resources.",
+    ServiceAccount:
+      "A ServiceAccount is the identity a Pod's processes use with the API server; the roles bound to it decide what they may do.",
+    Role: "A Role lists what may be done to which resources in one namespace, and grants nothing until a RoleBinding gives it to someone.",
+    RoleBinding:
+      "A RoleBinding gives the rules of a Role or ClusterRole to users, groups or ServiceAccounts inside one namespace.",
+    ClusterRole:
+      "A ClusterRole lists what may be done to which resources across the whole cluster, or in the namespace a RoleBinding names.",
+    ClusterRoleBinding:
+      "A ClusterRoleBinding gives the rules of a ClusterRole to users, groups or ServiceAccounts in every namespace at once.",
   },
   shortcuts: {
     title: "Keyboard",

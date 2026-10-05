@@ -41,8 +41,26 @@ const KIND_DOCS: Record<ResourceKind, string> = {
     "concepts/extend-kubernetes/api-extension/custom-resources/",
 };
 
-export function kindDocs(kind: ResourceKind): string {
-  return K8S + KIND_DOCS[kind];
+/** Built-in kinds with no page of their own, which the generic list still explains. */
+const ACCESS_DOCS = {
+  ServiceAccount: "concepts/security/service-accounts/",
+  Role: "reference/access-authn-authz/rbac/",
+  RoleBinding: "reference/access-authn-authz/rbac/",
+  ClusterRole: "reference/access-authn-authz/rbac/",
+  ClusterRoleBinding: "reference/access-authn-authz/rbac/",
+};
+
+/** A kind with a sentence in `kindAbout` and a page on kubernetes.io. */
+export type ExplainedKind = ResourceKind | keyof typeof ACCESS_DOCS;
+
+const DOCS: Record<ExplainedKind, string> = { ...KIND_DOCS, ...ACCESS_DOCS };
+
+export function isExplained(kind: string): kind is ExplainedKind {
+  return Object.hasOwn(DOCS, kind);
+}
+
+export function kindDocs(kind: ExplainedKind): string {
+  return K8S + DOCS[kind];
 }
 
 /** The kind a page is about, from its address: its list, or one object of it. */

@@ -7187,6 +7187,15 @@ export const ru: Catalogue = {
       "PodDisruptionBudget ограничивает, сколько подов приложения можно остановить одновременно во время плановых работ, например при освобождении узла.",
     CustomResourceDefinition:
       "CustomResourceDefinition добавляет в API кластера новый вид объектов; так операторы и дополнения приносят свои ресурсы.",
+    ServiceAccount:
+      "ServiceAccount задаёт учётную запись, от имени которой процессы пода обращаются к API-серверу; что им разрешено, решают привязанные к ней роли.",
+    Role: "Role перечисляет, что можно делать с какими ресурсами в одном пространстве имён, и ничего не разрешает, пока RoleBinding не выдаст её кому-то.",
+    RoleBinding:
+      "RoleBinding выдаёт правила Role или ClusterRole пользователям, группам или ServiceAccount в одном пространстве имён.",
+    ClusterRole:
+      "ClusterRole перечисляет, что можно делать с какими ресурсами во всём кластере или в пространстве имён, которое укажет RoleBinding.",
+    ClusterRoleBinding:
+      "ClusterRoleBinding выдаёт правила ClusterRole пользователям, группам или ServiceAccount сразу во всех пространствах имён.",
   },
   shortcuts: {
     title: "Клавиатура",
