@@ -1421,6 +1421,19 @@ describe("where a pod's replica count is really set", () => {
 
     expect(rows[0].detail ?? "").not.toContain("replica count");
   });
+
+  /** A Russian Connections tab labelled its children "Revisions" and "Runs". */
+  it("labels a Deployment's revisions in the reader's language", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const deployment = ref("Deployment", "crash-demo");
+    const rs = ref("ReplicaSet", "crash-demo-c688f57cf");
+    const rows =
+      connectionGroups(connections(deployment, [owns(deployment, rs)]), ru)
+        .find((group) => group.key === "owners")
+        ?.rows.filter((row) => row.object?.kind === "ReplicaSet") ?? [];
+    expect(rows.map((row) => row.label)).toEqual(["Ревизии"]);
+  });
 });
 
 describe("a list the cluster refused", () => {

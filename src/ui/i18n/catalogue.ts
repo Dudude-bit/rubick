@@ -182,6 +182,7 @@ export const en = {
     globalSettings: "Global settings",
     template: "Template",
     revisions: "Revisions",
+    childrenRuns: "Runs",
     conditions: "Conditions",
     backends: "Backends",
     access: "Access",
@@ -3615,6 +3616,7 @@ export const en = {
       "Rollout paused: changes to the template wait until it is resumed",
     rolloutUnobserved:
       "The controller has not read the latest change yet, so these counts are from before it",
+    controllerSaid: "The controller says: {said}",
     rolloutMoving: {
       one: "Rolling out: {updated} of {n} pod on the new template",
       other: "Rolling out: {updated} of {n} pods on the new template",
@@ -5006,6 +5008,7 @@ export const en = {
     noDeploymentRollingOut: "nothing — no Deployment is rolling this out",
     currentRevisionLower: "current revision",
     supersededLower: "superseded",
+    revisionCurrentWord: "current",
     noCertificateObjectAnywhere:
       "No Certificate object exists in any namespace, and no Ingress carries the {annotation} annotation that would make one.",
     noIngressMountsSecret: "No Ingress in {namespace} mounts {secret}.",
@@ -5989,6 +5992,7 @@ export const en = {
     helmCliNotFound: "Helm CLI not found",
     helmWriteOpsNeedCli:
       "Releases and their details still read over the Kubernetes API. Installing, upgrading, rolling back, uninstalling and managing repositories need the CLI.",
+    helmLookedIn: "Looked in: {paths}",
     getOneRunning: "Get one running",
     dockerDesktopHint: "enable Kubernetes in its settings",
     localClusterHint: "a local cluster in one command",

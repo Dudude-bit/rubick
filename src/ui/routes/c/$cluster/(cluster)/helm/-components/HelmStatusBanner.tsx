@@ -62,7 +62,15 @@ export function HelmStatusBanner({
       </AlertTitle>
       <AlertDescription className="flex flex-col gap-1 text-fg-mut">
         <p>{t("empty", "helmWriteOpsNeedCli")}</p>
-        {helm.error && <p className="text-fg-fnt">{helm.error}</p>}
+        {helm.searchedPaths.length > 0 ? (
+          <p className="text-fg-fnt">
+            {t("empty", "helmLookedIn", {
+              paths: helm.searchedPaths.join(", "),
+            })}
+          </p>
+        ) : (
+          helm.error && <p className="text-fg-fnt">{helm.error}</p>
+        )}
         <p className="flex items-center gap-3 pt-0.5">
           <button
             type="button"

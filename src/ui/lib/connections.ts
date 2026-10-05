@@ -1322,7 +1322,9 @@ function madeByAndMakes(conns: ResourceConnections, t: T): ConnRow[] {
   for (const edge of [...revisions, ...rest]) {
     rows.push({
       ...rowFor(
-        edge.to.kind === "ReplicaSet" ? "Revisions" : "Runs",
+        edge.to.kind === "ReplicaSet"
+          ? t("nav", "revisions")
+          : t("nav", "childrenRuns"),
         edge.to,
         t
       ),
@@ -1356,7 +1358,7 @@ function placement(conns: ResourceConnections, t: T): ConnGroup | null {
     caption: null,
     rows: labelled(
       unique(edges.map((edge) => edge.to)).map((object) =>
-        rowFor("Nodes", object, t)
+        rowFor("Node", object, t)
       )
     ),
   };

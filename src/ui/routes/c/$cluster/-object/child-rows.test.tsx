@@ -60,6 +60,21 @@ describe("the rows a workload's own objects get, in the reader's language", () =
     expect(container.textContent).not.toMatch(/revision|ready|scaled/);
   });
 
+  /** The live and older revisions read "Current" and "Superseded" in a
+   *  Russian list; the code still picks the colour, the words are the reader's. */
+  it("names which revision is live in Russian", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    const { container } = await renderWithRouter(
+      <RevisionRows
+        revisions={[revision("web-4", "4", 3, 3), revision("web-3", "3", 0, 0)]}
+      />,
+      onDeployment
+    );
+    expect(container.textContent).toContain("текущая");
+    expect(container.textContent).toContain("заменена");
+    expect(container.textContent).not.toMatch(/Current|Superseded/);
+  });
+
   /** Would break if the Job row's counts went back to English words. */
   it("says a Job's completions and failures in Russian", async () => {
     useLocaleStore.setState({ choice: "ru" });

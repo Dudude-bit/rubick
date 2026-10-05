@@ -1,6 +1,7 @@
 import { ResourceMessage } from "@/components/object/ResourceMessage";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 import { ROLE_ICON } from "@/lib/status-role";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
@@ -50,7 +51,9 @@ export function RolloutSummary({
         {line.said && (
           <span className="text-fg-fnt">
             {" · "}
-            <ResourceMessage message={line.said} subject={subject} />
+            {parts(t("readings", "controllerSaid"), {
+              said: <ResourceMessage message={line.said} subject={subject} />,
+            })}
           </span>
         )}
       </span>
@@ -66,7 +69,14 @@ export function RolloutBadge({ rollout }: { rollout: Rollout }) {
     <StatusBadge
       status={workloadStatus(rollout)}
       title={
-        line ? [line.text, line.said].filter(Boolean).join(". ") : undefined
+        line
+          ? [
+              line.text,
+              line.said && t("readings", "controllerSaid", { said: line.said }),
+            ]
+              .filter(Boolean)
+              .join(". ")
+          : undefined
       }
     />
   );

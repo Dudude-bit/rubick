@@ -159,6 +159,7 @@ export const ru: Catalogue = {
     globalSettings: "Общие настройки",
     template: "Шаблон",
     revisions: "Ревизии",
+    childrenRuns: "Запускает",
     conditions: "Условия",
     backends: "Бэкенды",
     access: "Доступ",
@@ -1668,7 +1669,7 @@ export const ru: Catalogue = {
     journalCreated: "{kind} появился",
     objectCreated: "создан; всё, что было раньше, к нему не относится",
     journalDeleted: "{kind} исчез",
-    journalGeneration: "generation spec {from} → {to}",
+    journalGeneration: "изменена спецификация (generation {from} → {to})",
     journalImage: "{container}: образ {from} → {to}",
     journalReplicas: "реплики {from} → {to}",
     journalAnnotation: "{key} {from} → {to}",
@@ -2439,7 +2440,7 @@ export const ru: Catalogue = {
       other: "объявлено {n}, сколько готово — не записано",
     },
     findingNoStatus: "Оператор ещё ничего не записал на этот объект",
-    actionRollingRestart: "Rolling restart",
+    actionRollingRestart: "Поочерёдный перезапуск",
     actionRollingRestartExplained:
       "Ставит новое значение в spec.forceRedeploymentReason. Оператор перезапускает члены по одному, сначала старшие ординалы, стойка за стойкой, каждый ждёт готовности предыдущего.",
     rollingRestartConfirm:
@@ -4022,6 +4023,7 @@ export const ru: Catalogue = {
       "Развёртывание приостановлено: изменения шаблона ждут, пока его не возобновят",
     rolloutUnobserved:
       "Контроллер ещё не прочитал последнее изменение, поэтому счётчики относятся к предыдущему",
+    controllerSaid: "Сообщение контроллера: {said}",
     rolloutMoving: {
       one: "Идёт развёртывание: {updated} из {n} пода на новом шаблоне",
       few: "Идёт развёртывание: {updated} из {n} подов на новом шаблоне",
@@ -5518,6 +5520,7 @@ export const ru: Catalogue = {
       "ничего — эту ревизию не разворачивает ни один Deployment",
     currentRevisionLower: "текущая ревизия",
     supersededLower: "заменена",
+    revisionCurrentWord: "текущая",
     noCertificateObjectAnywhere:
       "Ни в одном пространстве имён нет объекта Certificate, и ни один Ingress не несёт аннотацию {annotation}, которая создала бы его.",
     noIngressMountsSecret:
@@ -6562,6 +6565,7 @@ export const ru: Catalogue = {
     helmCliNotFound: "Helm CLI не найден",
     helmWriteOpsNeedCli:
       "Релизы и их подробности по-прежнему читаются через API Kubernetes. Для установки, обновления, отката, удаления и работы с репозиториями нужен CLI.",
+    helmLookedIn: "Где искали: {paths}",
     getOneRunning: "Как поднять кластер",
     dockerDesktopHint: "включите Kubernetes в его настройках",
     localClusterHint: "локальный кластер одной командой",
@@ -8194,10 +8198,10 @@ export const ru: Catalogue = {
     versionsWithDeprecated: "{n} · {deprecated} устарели",
     slashReady: "{n}/{total} готовы",
     podsReadySlash: {
-      one: "готово {ready}/{n} пода",
-      few: "готово {ready}/{n} подов",
-      many: "готово {ready}/{n} подов",
-      other: "готово {ready}/{n} подов",
+      one: "готово {ready} из {n} пода",
+      few: "готово {ready} из {n} подов",
+      many: "готово {ready} из {n} подов",
+      other: "готово {ready} из {n} пода",
     },
     readySummary: "готовы: {n}",
     notReadySummary: "не готовы: {n}",

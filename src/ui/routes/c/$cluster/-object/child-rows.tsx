@@ -30,6 +30,8 @@ export interface ChildRow {
   namespace?: string | null;
   /** Raw status word from the API, shown as-is beside the name. */
   status: string;
+  /** Words for a status this app made up rather than read; `status` still picks the colour. */
+  statusLabel?: string;
   /**
    * Draw the status without its colour, keeping the word.
    *
@@ -156,7 +158,9 @@ function ChildRowItem({ row }: { row: ChildRow }) {
           namespace={row.namespace}
           showKind={false}
         />
-        <span className={cn("text-[11px]", WORD[role])}>{row.status}</span>
+        <span className={cn("text-[11px]", WORD[role])}>
+          {row.statusLabel ?? row.status}
+        </span>
       </span>
       <span className="text-right text-[11px] text-fg-mut">{row.detail}</span>
       <span
@@ -198,6 +202,9 @@ export function RevisionRows({
           name: rs.name,
           namespace: rs.namespace,
           status: live ? "Current" : "Superseded",
+          statusLabel: live
+            ? t("empty", "revisionCurrentWord")
+            : t("empty", "supersededLower"),
           detail: (
             <>
               {rs.revision !== null && (
