@@ -31,7 +31,7 @@ describe("a sentence with two counts", () => {
       "3 из 21 приложения требуют внимания"
     );
     expect(valuesCopiedWithBinary(5, 1, ru)).toBe(
-      "Скопировано 5 значений, 1 двоичное — в base64."
+      "Скопировано 5 значений, 1 двоичное в base64."
     );
   });
 });

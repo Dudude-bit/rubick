@@ -6755,8 +6755,8 @@ export const en = {
     stories: { one: "{n} story", other: "{n} stories" },
     eventsSeen: { one: "{n} event", other: "{n} events" },
     namespacesHidden: {
-      one: "{n} namespace hidden — no access",
-      other: "{n} namespaces hidden — no access",
+      one: "{n} namespace hidden: no access",
+      other: "{n} namespaces hidden: no access",
     },
     endpointsAcrossSlices: "{endpoints} across {slices}",
     endpointsCount: { one: "{n} endpoint", other: "{n} endpoints" },
@@ -6851,9 +6851,9 @@ export const en = {
     },
     overPlainHttp: "{n} over plain HTTP",
     ingressProxyHosts: {
-      one: "That Service is {vendor}'s own proxy — this Ingress is its front door, and the {n} host it serves is on",
+      one: "That Service is {vendor}'s own proxy: this Ingress is its front door, and the {n} host it serves is on",
       other:
-        "That Service is {vendor}'s own proxy — this Ingress is its front door, and the {n} hosts it serves are on",
+        "That Service is {vendor}'s own proxy: this Ingress is its front door, and the {n} hosts it serves are on",
     },
     moreCertificatesInBundle: {
       one: "with {n} more certificate in the bundle",
@@ -6873,9 +6873,9 @@ export const en = {
       other: "{n} issuers not ready",
     },
     servedNotInDnsNames: {
-      one: "{names} is served from this Secret and not in its {field}. Every other surface reads this as healthy — the Secret is populated, the certificate is valid, the Ingress is serving — and a browser refuses the connection outright.",
+      one: "{names} is served from this Secret and not in its {field}. Every other surface reads this as healthy, since the Secret is populated, the certificate is valid and the Ingress is serving, yet a browser refuses the connection outright.",
       other:
-        "{names} are served from this Secret and not in its {field}. Every other surface reads this as healthy — the Secret is populated, the certificate is valid, the Ingress is serving — and a browser refuses the connection outright.",
+        "{names} are served from this Secret and not in its {field}. Every other surface reads this as healthy, since the Secret is populated, the certificate is valid and the Ingress is serving, yet a browser refuses the connection outright.",
     },
     servicesFrontThis: {
       one: "{n} Service fronts this",
@@ -6892,8 +6892,8 @@ export const en = {
       other: "{n} hosts name it, none covered",
     },
     subsetsNothingRoutesTo: {
-      one: "{list} — nothing routes to it",
-      other: "{list} — nothing routes to them",
+      one: "{list}: nothing routes to it",
+      other: "{list}: nothing routes to them",
     },
     runningSegment: "running",
     succeededSegment: "succeeded",
@@ -6947,8 +6947,8 @@ export const en = {
       other: "{n} DaemonSet pods stay, as they always do.",
     },
     staticPodsStay: {
-      one: "One static pod stays — it belongs to the node, not the cluster.",
-      other: "{n} static pods stay — they belong to the node, not the cluster.",
+      one: "One static pod stays: it belongs to the node, not the cluster.",
+      other: "{n} static pods stay: they belong to the node, not the cluster.",
     },
     podsHadAlreadyLeft: {
       one: "One pod had already gone on its own.",
@@ -6974,9 +6974,9 @@ export const en = {
       other: "and {n} more Argo reports as synced",
     },
     argoRetriesAfterAttempts: {
-      one: "Argo retries and fails — {n} attempt so far; nothing will converge until the manifest changes.",
+      one: "Argo retries and fails, {n} attempt so far; nothing will converge until the manifest changes.",
       other:
-        "Argo retries and fails — {n} attempts so far; nothing will converge until the manifest changes.",
+        "Argo retries and fails, {n} attempts so far; nothing will converge until the manifest changes.",
     },
     resourcesDegraded: {
       one: "{list} is degraded",
@@ -7015,9 +7015,9 @@ export const en = {
     },
     lastMinutes: { one: "last {n} minute", other: "last {n} minutes" },
     namespacesNotAsked: {
-      one: "{n} more namespace was not asked about — the check is one query each, and a page that cost a hundred of them to say “yes” would not be worth opening.",
+      one: "{n} more namespace was not asked about. The check is one query each, and a page that cost a hundred of them to say “yes” would not be worth opening.",
       other:
-        "{n} more namespaces were not asked about — the check is one query each, and a page that cost a hundred of them to say “yes” would not be worth opening.",
+        "{n} more namespaces were not asked about. The check is one query each, and a page that cost a hundred of them to say “yes” would not be worth opening.",
     },
     identities: { one: "{n} identity", other: "{n} identities" },
     bindingsNameMissingIdentity: {
@@ -7074,14 +7074,14 @@ export const en = {
     hiddenShowAll: "{n} hidden · show all",
     heldFor: "for {age}",
     historyMoreNotHeld: {
-      one: "{count} more came back and is not held — the live stream already fills Keep {keep}. Raise it, or clear the pane, and ask again.",
+      one: "{count} more came back and is not held: the live stream already fills Keep {keep}. Raise it, or clear the pane, and ask again.",
       other:
-        "{count} more came back and are not held — the live stream already fills Keep {keep}. Raise it, or clear the pane, and ask again.",
+        "{count} more came back and are not held: the live stream already fills Keep {keep}. Raise it, or clear the pane, and ask again.",
     },
     historyTruncated: {
-      one: "Showing the newest {count} line of this range — the limit was reached, so there is more inside it.",
+      one: "Showing the newest {count} line of this range. The limit was reached, so there is more inside it.",
       other:
-        "Showing the newest {count} lines of this range — the limit was reached, so there is more inside it.",
+        "Showing the newest {count} lines of this range. The limit was reached, so there is more inside it.",
     },
     trafficReadings: {
       one: "Network: {n} reading, now in {rx}, out {tx}, peak {peak}",
@@ -7106,17 +7106,17 @@ export const en = {
       other: "{n} failed attempts so far",
     },
     nothingSignsCanRenew: {
-      one: "Nothing it signs can renew while it is in this state — {n} certificate names it.",
+      one: "Nothing it signs can renew while it is in this state; {n} certificate names it.",
       other:
-        "Nothing it signs can renew while it is in this state — {n} certificates name it.",
+        "Nothing it signs can renew while it is in this state; {n} certificates name it.",
     },
     healthyAndSigns: {
       one: "It is healthy and signs {n} certificate.",
       other: "It is healthy and signs {n} certificates.",
     },
     vendorProxyHosts: {
-      one: "{vendor}'s own proxy — the {n} host it serves is on",
-      other: "{vendor}'s own proxy — the {n} hosts it serves are on",
+      one: "{vendor}'s own proxy: the {n} host it serves is on",
+      other: "{vendor}'s own proxy: the {n} hosts it serves are on",
     },
     nOfTotal: "{n} of {total}",
     gwControllerConfiguredBody: {
@@ -7163,7 +7163,7 @@ export const en = {
     restartNoun: { one: "restart", other: "restarts" },
     podNoun: { one: "pod", other: "pods" },
     worstFirst: "{n} · worst first",
-    moreMostSevere: "+{n} more — showing the {shown} most severe",
+    moreMostSevere: "+{n} more; showing the {shown} most severe",
     unrankedProblems: {
       one: "{n} unranked problem",
       other: "{n} unranked problems",
@@ -7248,8 +7248,8 @@ export const en = {
     ofPods: { one: "of {n} pod", other: "of {n} pods" },
     ofNodes: { one: "of {n} node", other: "of {n} nodes" },
     moreNotDrawn: {
-      one: "{n} more not drawn — the counts above are the whole of it.",
-      other: "{n} more not drawn — the counts above are the whole of it.",
+      one: "{n} more not drawn; the counts above are the whole of it.",
+      other: "{n} more not drawn; the counts above are the whole of it.",
     },
     restartsSoFar: { one: "{n} restart so far", other: "{n} restarts so far" },
     olderLinesDropped: {
@@ -7343,9 +7343,9 @@ export const en = {
       other: "name a gateway parent this app could not resolve to a Gateway.",
     },
     gwMeshAlsoNames: {
-      one: "also names this Service as a mesh parent — GAMMA, not through any gateway.",
+      one: "also names this Service as a mesh parent: GAMMA, not through any gateway.",
       other:
-        "also name this Service as a mesh parent — GAMMA, not through any gateway.",
+        "also name this Service as a mesh parent: GAMMA, not through any gateway.",
     },
     gwEndpointsPublish: {
       one: "Endpoints publish {n} ready",
