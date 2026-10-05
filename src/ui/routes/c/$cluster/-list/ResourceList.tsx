@@ -32,7 +32,12 @@ import { FolderOpen, TriangleAlert } from "lucide-react";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { NO_TABLE, tableSection } from "@/components/share/table-share";
-import { isResourceType, listQueryFor, toKind } from "@/lib/resource-registry";
+import {
+  isResourceType,
+  listQueryFor,
+  narrowingHelps as narrowsByKind,
+  toKind,
+} from "@/lib/resource-registry";
 import {
   DeliveryColumnCell,
   DeliveryFilterControl,
@@ -227,7 +232,7 @@ export function ResourceList<
   resyncing,
   slowed: externalSlowed,
   waitingSince: externalWaitingSince,
-  narrowingHelps = true,
+  narrowingHelps: narrowingHelpsProp,
   onRetry,
   columns,
   emptyStateLabel,
@@ -258,6 +263,8 @@ export function ResourceList<
     );
     return said ? toKind(said) : null;
   }, [queryKey, emptyStateLabel, title]);
+  const narrowingHelps =
+    narrowingHelpsProp ?? (listKind ? narrowsByKind(listKind) : true);
   const screen = useMemo(
     () => ({
       title,

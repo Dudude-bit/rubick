@@ -157,6 +157,31 @@ describe("a list whose rows come from outside", () => {
     store.state.contexts = [];
   });
 
+  /**
+   * Nodes are one list whatever namespace is chosen, so the page sent a
+   * reader refused them to a picker that could not change the answer. Fails
+   * if a cluster-scoped kind is offered the namespace picker.
+   */
+  it("offers no namespace to a cluster-scoped kind refused across the cluster", async () => {
+    await draw(
+      <ResourceList<Item>
+        title="Nodes"
+        columns={columns}
+        emptyStateLabel="nodes"
+        data={[]}
+        error={new Error("nodes is forbidden: RBAC")}
+      />
+    );
+
+    expect(
+      screen.getByText(/do not have permission to list these/)
+    ).toBeVisible();
+    expect(screen.queryByText(/may still answer/)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Choose a namespace" })
+    ).toBeNull();
+  });
+
   /** No error, no rows: the scope really is empty, and says so. */
   it("draws the empty state when nothing failed", async () => {
     await list({ data: [] });

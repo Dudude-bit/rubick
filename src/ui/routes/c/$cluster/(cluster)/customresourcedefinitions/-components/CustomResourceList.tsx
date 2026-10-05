@@ -229,6 +229,12 @@ export function CustomResourceList({
       columns={baseColumns}
       quickActions={quickActions}
       emptyStateLabel={crdPlural}
+      narrowingHelps={isNamespaced}
+      listQuery={{
+        group: crdGroup,
+        resource: crdPlural,
+        namespaced: isNamespaced,
+      }}
       widthsKey={crdWidthsKey(crdPlural, crdGroup)}
       // The generic fallback ("No resources of this type…") is the one
       // message a CRD list must not show: the whole question a reader
