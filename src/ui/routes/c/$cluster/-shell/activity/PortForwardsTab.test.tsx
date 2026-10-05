@@ -222,6 +222,25 @@ describe("PortForwardsTab", () => {
     });
 
     /**
+     * Behind the ports on one truncating line, "via Service hello-web" was cut
+     * to "via Se…" in the panel's width. Fails if it rejoins that line or
+     * loses the hover that carries it whole.
+     */
+    it("gives what the forward follows a line of its own, whole on hover", async () => {
+      usePortForwardStore.setState({
+        sessions: [
+          {
+            ...SESSION,
+            via: { kind: "service", name: "hello-web", port: 80 },
+          },
+        ],
+      });
+      await mount();
+      const via = screen.getByTitle("via Service hello-web");
+      expect(via).toHaveTextContent(/^via Service hello-web$/);
+    });
+
+    /**
      * With nothing to move to, the forward ends: it leaves Running, and the
      * reason stays on screen in the error tone instead of the row vanishing
      * like one somebody stopped.

@@ -31,7 +31,7 @@ export function Kbd({ shortcut, className, ...props }: KbdProps) {
   return (
     <kbd
       className={cn(
-        "rounded border border-hair px-1 py-px font-mono text-[10px] text-fg-fnt",
+        "whitespace-nowrap rounded border border-hair px-1 py-px font-mono text-[10px] text-fg-fnt",
         className
       )}
       {...props}

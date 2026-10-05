@@ -18,7 +18,7 @@ function Keys({ entry }: { entry: Shortcut }) {
   const t = useT();
   const chord = entry.section === "navigate";
   return (
-    <span className="flex items-center gap-1 font-mono text-[11px]">
+    <span className="flex flex-none items-center gap-1 font-mono text-[11px]">
       {entry.keys.map((key, index) => (
         <span key={key} className="flex items-center gap-1">
           {index > 0 && (
@@ -26,7 +26,7 @@ function Keys({ entry }: { entry: Shortcut }) {
               {chord ? t("shortcuts", "then") : "/"}
             </span>
           )}
-          <kbd className="rounded border border-hair px-1.5 py-0.5 text-fg-mid">
+          <kbd className="whitespace-nowrap rounded border border-hair px-1.5 py-0.5 text-fg-mid">
             {formatShortcut(key)}
           </kbd>
         </span>

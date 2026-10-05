@@ -146,7 +146,8 @@ export function Crds() {
       {
         accessorKey: "scope",
         header: columnHeader("columns", "scope"),
-        size: 110,
+        // "в пространстве имён" is the widest value, whole at 170.
+        size: 170,
         cell: ({ row }) => (
           <span className="text-fg-mut">
             <T section="apiResources" k={scopeKey(row.original.scope)} />

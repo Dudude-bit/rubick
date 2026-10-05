@@ -43,7 +43,7 @@ import {
   ActivityGroup,
 } from "./primitives";
 import { useAsk } from "../../-object/useAsk";
-import { useT, type T } from "@/i18n/useT";
+import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 
 /** Same shape the store keys sessions by; do not reorder the parts. */
@@ -123,10 +123,10 @@ function SessionRow({
         <span className="block truncate font-mono text-[11px] text-fg-fnt">
           {namesCluster && `${session.context} · `}
           {session.namespace} · :{session.localPort} → :{session.remotePort}
-          {viaWords(session.via, t)}
           {status?.status === "reconnecting" &&
             ` · ${t("activity", "reconnectingInline")}`}
         </span>
+        <Via via={session.via} />
         {note && (
           <span
             className={cn(
@@ -170,10 +170,20 @@ function SessionRow({
 }
 
 /** " · via Deployment api", where the forward follows something past its pod. */
-function viaWords(via: ForwardVia, t: T): string {
-  if (via.kind === "pod") return "";
+/** What the forward was opened through, on a line of its own so a narrow panel cuts the name, not the word. */
+function Via({ via }: { via: ForwardVia }) {
+  const t = useT();
+  if (via.kind === "pod") return null;
   const kind = via.kind === "service" ? "Service" : via.ownerKind;
-  return ` · ${t("activity", "viaInline", { kind, name: via.name })}`;
+  const words = t("activity", "viaInline", { kind, name: via.name });
+  return (
+    <span
+      className="block truncate font-mono text-[11px] text-fg-fnt"
+      title={words}
+    >
+      {words}
+    </span>
+  );
 }
 
 /**
@@ -200,8 +210,8 @@ function FailedRow({
         <span className="block truncate text-fg-mid">{session.pod}</span>
         <span className="block truncate font-mono text-[11px] text-fg-fnt">
           {session.namespace} · :{session.localPort} → :{session.remotePort}
-          {viaWords(session.via, t)}
         </span>
+        <Via via={session.via} />
         <span className="block text-[11px] text-err">
           {forwardNoteWords(failed.note, t) ?? t("cluster", "failedInline")}
         </span>

@@ -149,15 +149,17 @@ function KindRow({ entry }: { entry: CatalogEntry }) {
       {listable(entry) ? (
         <RouteLink
           {...servedListLink(entry)}
-          className="-mx-1 flex min-w-0 items-center gap-2 rounded px-1 hover:bg-hover"
+          className="-mx-1 flex max-w-full shrink-0 items-center gap-2 rounded px-1 hover:bg-hover"
         >
           {name}
         </RouteLink>
       ) : (
-        <span className="flex min-w-0 items-center gap-2">{name}</span>
+        <span className="flex max-w-full shrink-0 items-center gap-2">
+          {name}
+        </span>
       )}
       <span
-        // Gives way first: the kind is what the row is read by.
+        // Gives way whole before the kind, which the row is read by, loses a letter.
         className="min-w-0 shrink-[100] truncate font-mono text-[11px] text-fg-fnt"
         title={version}
       >

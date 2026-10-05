@@ -766,16 +766,21 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
       : null;
 
   return (
-    <div className="grid grid-cols-[150px_minmax(0,1fr)_46px] items-center gap-2.5 px-1.5 py-[5px] text-xs">
+    <div className="grid grid-cols-[260px_minmax(0,1fr)_46px] items-center gap-2.5 px-1.5 py-[5px] text-xs">
+      {/* 260px holds FailedComputeMetricsReplicas and its count whole. */}
       <span className="inline-flex min-w-0 items-baseline gap-1 font-mono font-medium text-warn">
         <Icon
           className="h-2.5 w-2.5 flex-none self-center"
           aria-hidden="true"
         />
-        <span className="truncate">
+        <span className="truncate" title={warning.reason}>
           {warning.reason}
-          {warning.count > 1 && <Unit> ×{warning.count}</Unit>}
         </span>
+        {warning.count > 1 && (
+          <span className="flex-none">
+            <Unit>×{warning.count}</Unit>
+          </span>
+        )}
       </span>
       <span className="truncate text-fg-mid">
         {subject && (
