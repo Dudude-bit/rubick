@@ -18,7 +18,7 @@ import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
 import { useOpenCluster } from "@/hooks/useOpenCluster";
 import { commands } from "@/lib/commands";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
-import { useClusterStore } from "@/stores/clusterStore";
+import { connectingTo, failedAt, useClusterStore } from "@/stores/clusterStore";
 import { verbatim } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
 import type {
@@ -51,22 +51,21 @@ export function ClusterFrontDoor() {
   // a heading that kept reading `contexts.length` would go on saying "42
   // contexts" over three rows, with nothing failing anywhere.
   const cluster = useClusterFilter();
-  const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
-  const pendingContext = useClusterStore((s) => s.pendingContext);
+  const connecting = useClusterStore(connectingTo);
+  const failed = useClusterStore(failedAt);
   const connectStartedAt = useClusterStore((s) => s.connectStartedAt);
   const isLoading = useClusterStore((s) => s.isLoading);
   const error = useClusterStore((s) => s.error);
-  const errorContext = useClusterStore((s) => s.errorContext);
   const openCluster = useOpenCluster();
   const disconnect = useClusterStore((s) => s.disconnect);
 
   const kubeconfig = useKubeconfigPath();
 
-  if (isAuthenticating && pendingContext) {
+  if (connecting) {
     return (
       <Door>
         <Connecting
-          context={pendingContext}
+          context={connecting}
           startedAt={connectStartedAt}
           onCancel={() => disconnect()}
         />
@@ -74,13 +73,13 @@ export function ClusterFrontDoor() {
     );
   }
 
-  if (error && errorContext) {
+  if (failed && error) {
     return (
       <Door>
         <Failed
-          context={errorContext}
+          context={failed}
           message={error}
-          onRetry={() => openCluster(errorContext)}
+          onRetry={() => openCluster(failed)}
         />
         <div className="mt-7">
           <ClusterList
@@ -91,7 +90,7 @@ export function ClusterFrontDoor() {
             query={cluster.query}
             inputRef={cluster.inputRef}
             onSelect={openCluster}
-            failedContext={errorContext}
+            failedContext={failed}
           />
         </div>
         <SourceLine kubeconfig={kubeconfig} />

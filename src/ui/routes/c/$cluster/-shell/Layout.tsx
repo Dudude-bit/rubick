@@ -1,9 +1,7 @@
 import { lazy, Suspense, useState } from "react";
 import { TriangleAlert } from "lucide-react";
-import { Outlet } from "@tanstack/react-router";
 import { Sidebar } from "./Sidebar";
-import { CredentialsExpired } from "./CredentialsExpired";
-import { useExpiredCredentials } from "./useExpiredCredentials";
+import { PageArea } from "./PageArea";
 import { ScopeTabs } from "./ScopeTabs";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
@@ -15,8 +13,6 @@ import { useScopeTabs } from "./useScopeTabs";
 import { useCopyLink } from "./useCopyLink";
 import { useShortcuts } from "./useShortcuts";
 import { ShortcutsOverlay } from "./ShortcutsOverlay";
-import { DeepLinkBanner } from "./DeepLinkBanner";
-import { ObjectMenu } from "../-object/ObjectMenu";
 import { WhatsNew } from "./WhatsNew";
 import { useClusterForwards } from "@/hooks/useClusterForwards";
 import { usePrefetchCoreLists } from "./usePrefetchCoreLists";
@@ -25,8 +21,6 @@ import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useScopeTabStore } from "@/stores/scopeTabStore";
-import { ScreenShareProvider } from "@/components/share/screen-share";
 
 // Loaded on first use: it carries the YAML parser and the diff view, which
 // nothing needs until an object is opened for editing.
@@ -54,8 +48,6 @@ export function Layout({ page }: { page?: React.ReactNode } = {}) {
   const currentContext = useClusterStore((s) => s.currentContext);
   const { hue } = useClusterMark(currentContext);
   const { critical } = useCritical();
-  const expired = useExpiredCredentials();
-  const catchingUp = useScopeTabStore((s) => s.pendingHref !== null);
   useScopeTabs();
   useCopyLink();
   useShortcuts();
@@ -105,29 +97,7 @@ export function Layout({ page }: { page?: React.ReactNode } = {}) {
                 overflow as before. */}
             <div className="h-full animate-in fade-in duration-200">
               <Suspense fallback={<PageSkeleton className="p-0" />}>
-                {/* A tab that has been parked has no watches and no
-                    connection, so what is cached under it was true minutes
-                    ago. Holding the outlet shut until the tab's route has
-                    landed and its scope is applied is what stops the reader
-                    being handed those numbers as though they were live. */}
-                {/* A refused session replaces the page rather than warning
-                    over it: nothing behind this is answerable, and every list
-                    under it would draw its empty state — which is how an
-                    expired token came to tell the reader their cluster had no
-                    pods. */}
-                {expired ? (
-                  <CredentialsExpired expired={expired} />
-                ) : catchingUp ? (
-                  <PageSkeleton className="p-0" />
-                ) : (
-                  <>
-                    <DeepLinkBanner />
-                    <ObjectMenu />
-                    <ScreenShareProvider>
-                      {page ?? <Outlet />}
-                    </ScreenShareProvider>
-                  </>
-                )}
+                <PageArea page={page} />
               </Suspense>
             </div>
           </main>

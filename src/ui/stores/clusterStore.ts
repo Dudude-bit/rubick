@@ -135,6 +135,14 @@ function scopeFor(
   return { namespaceScope: scope, currentNamespace: wireNamespace(scope) };
 }
 
+/** The context a connect is in flight to. */
+export const connectingTo = (s: ClusterState): string | null =>
+  s.isAuthenticating ? s.pendingContext : null;
+
+/** The context the last connect failed for, while its error stands. */
+export const failedAt = (s: ClusterState): string | null =>
+  s.error ? s.errorContext : null;
+
 export const useClusterStore = create<ClusterState>((set, get) => ({
   contexts: [],
   contextsKnown: false,
