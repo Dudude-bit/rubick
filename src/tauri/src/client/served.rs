@@ -336,7 +336,7 @@ impl std::error::Error for Shared {
     }
 }
 
-/// Every kind once: at the preferred version — kubectl's choice — where it
+/// Every kind once: at the preferred version, kubectl's choice, where it
 /// serves the kind, otherwise at the most stable version that does. A kind
 /// may be missing from the preferred version, which is the common pitfall
 /// `ApiGroup` warns about.
