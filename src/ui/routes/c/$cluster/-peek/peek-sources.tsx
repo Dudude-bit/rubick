@@ -18,7 +18,7 @@ import { CLUSTER_SOURCES } from "./peek-sources-cluster";
 import { GATEWAY_SOURCES } from "./peek-sources-gateway";
 import { WORKLOAD_SOURCES } from "./peek-sources-workloads";
 import { CONFIG_STORAGE_SOURCES } from "./peek-sources-storage";
-import { NETWORK_SOURCES } from "./peek-sources-network";
+import { endpointSliceSource, NETWORK_SOURCES } from "./peek-sources-network";
 
 export type { PeekGroup, PeekSummary } from "./peek-sources-kit";
 export { flatten };
@@ -61,6 +61,9 @@ export function resolveSource(target: PeekTarget): PeekSource {
   if (target.crd) return customResourceSource(target.crd);
   const resolved = toKind(target.kind);
   const known = resolved ? SOURCES[resolved] : undefined;
+  if (!known && target.kind === "EndpointSlice") {
+    return endpointSliceSource(manifestSource(target.kind));
+  }
   return known ?? manifestSource(resolved ?? target.kind);
 }
 

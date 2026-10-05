@@ -5,10 +5,101 @@ import {
 import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { commands } from "@/lib/commands";
 import { BalancerAddress } from "../-object/BalancerAddress";
+import { IngressHealthView, ServiceHealthView } from "../-object/health-views";
 import { Peer, ReachCell } from "../-object/network-policy-cells";
 import { directionFact, portText, reachOf } from "@/lib/network-policy";
 import type { PolicyDirection } from "@/generated/types";
-import { list, ref, source, type PeekSources } from "./peek-sources-kit";
+import {
+  list,
+  ref,
+  source,
+  type PeekSource,
+  type PeekSources,
+} from "./peek-sources-kit";
+
+interface SliceShape {
+  metadata?: { labels?: Record<string, string> | null };
+  endpoints?: Array<{ conditions?: { ready?: boolean | null } | null }> | null;
+  ports?: Array<{
+    name?: string | null;
+    port?: number | null;
+    protocol?: string | null;
+  }> | null;
+}
+
+/**
+ * An EndpointSlice is read whole, like any kind the app has no schema for,
+ * and its Service's verdict goes above the facets: the same one the
+ * Service's page and peek show. A slice with no ports is the `web` case,
+ * addresses kube-proxy routes nothing to, and it is said in words.
+ */
+export function endpointSliceSource(base: PeekSource): PeekSource {
+  return {
+    fetch: base.fetch,
+    summarise: (data, target, t) => {
+      const summary = base.summarise(data, target, t);
+      const slice = (data ?? {}) as SliceShape;
+      const service = slice.metadata?.labels?.["kubernetes.io/service-name"];
+      const endpoints = slice.endpoints ?? [];
+      // The API reads an unset `ready` as true.
+      const ready = endpoints.filter(
+        (endpoint) => endpoint.conditions?.ready !== false
+      ).length;
+      const ports = (slice.ports ?? []).map(
+        (port) =>
+          `${port.name ? `${port.name}:` : ""}${port.port ?? "*"}/${port.protocol ?? "TCP"}`
+      );
+      return {
+        ...summary,
+        groups: [
+          {
+            title: t("nav", "backends"),
+            items: [
+              ...(service
+                ? [
+                    {
+                      label: "Service",
+                      value: ref("Service", service, target.namespace),
+                    },
+                    {
+                      label: t("columns", "status"),
+                      value: (
+                        <ServiceHealthView
+                          name={service}
+                          namespace={target.namespace ?? null}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
+              {
+                label: t("columns", "endpoints"),
+                value: t("count", "readyOfTotal", {
+                  ready,
+                  total: endpoints.length,
+                }),
+                tone: ready < endpoints.length ? ("warn" as const) : undefined,
+              },
+              {
+                label: t("columns", "ports"),
+                value:
+                  ports.length > 0
+                    ? ports.join(" · ")
+                    : t("readings", "sliceNoPorts"),
+                mono: ports.length > 0,
+                tone:
+                  ports.length === 0 && endpoints.length > 0
+                    ? ("err" as const)
+                    : undefined,
+              },
+            ],
+          },
+          ...summary.groups,
+        ],
+      };
+    },
+  };
+}
 
 export const NETWORK_SOURCES: PeekSources = {
   Service: source(commands.getService, (service, _target, t) => ({
@@ -17,6 +108,15 @@ export const NETWORK_SOURCES: PeekSources = {
       {
         title: t("columns", "routing"),
         items: [
+          {
+            label: t("columns", "status"),
+            value: (
+              <ServiceHealthView
+                name={service.name}
+                namespace={service.namespace}
+              />
+            ),
+          },
           { label: t("columns", "type"), value: service.type },
           {
             label: t("columns", "clusterIp"),
@@ -66,16 +166,22 @@ export const NETWORK_SOURCES: PeekSources = {
               </span>
             ),
           },
-          {
-            label: t("nav", "selector"),
-            value: list(
-              Object.entries(service.selector).map(
-                ([key, value]) => `${key}=${value}`
-              ),
-              t("empty", "endpointsByHand")
-            ),
-            mono: true,
-          },
+          // An ExternalName is a DNS alias: it has no selector to be
+          // missing and no endpoints to be written by hand.
+          ...(service.type === "ExternalName"
+            ? []
+            : [
+                {
+                  label: t("nav", "selector"),
+                  value: list(
+                    Object.entries(service.selector).map(
+                      ([key, value]) => `${key}=${value}`
+                    ),
+                    t("empty", "endpointsByHand")
+                  ),
+                  mono: true,
+                },
+              ]),
         ],
       },
     ],
@@ -163,22 +269,23 @@ export const NETWORK_SOURCES: PeekSources = {
         title: t("columns", "routing"),
         items: [
           {
+            label: t("columns", "status"),
+            value: <IngressHealthView ingress={ingress} />,
+          },
+          {
             label: t("columns", "class"),
             value: ingress.className || t("empty", "clusterDefault"),
           },
           {
             label: t("columns", "address"),
-            // The empty state keeps its own tone, so it stays plain text
-            // rather than the component's faint fallback.
             value: ingress.loadBalancerIps.length ? (
               <CopyableAddresses
                 values={ingress.loadBalancerIps}
                 label={t("columns", "ingressAddress")}
               />
             ) : (
-              t("empty", "notAssignedYet")
+              t("empty", "none")
             ),
-            tone: ingress.loadBalancerIps.length ? undefined : "warn",
           },
           {
             label: t("columns", "tlsHosts"),
@@ -248,6 +355,15 @@ export const NETWORK_SOURCES: PeekSources = {
         {
           title: t("nav", "backends"),
           items: [
+            {
+              label: t("columns", "status"),
+              value: (
+                <ServiceHealthView
+                  name={endpoints.name}
+                  namespace={target.namespace ?? null}
+                />
+              ),
+            },
             {
               label: t("columns", "ready"),
               value: addresses.length,

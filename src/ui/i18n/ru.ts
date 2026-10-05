@@ -4247,6 +4247,7 @@ export const ru: Catalogue = {
     healthNoAddressYetWhy:
       "Контроллер его класса есть, но адрес для этого Ingress он ещё не опубликовал.",
     healthServed: "обслуживается",
+    sliceNoPorts: "нет, поэтому на эти адреса ничего не направляется",
   },
   cluster: {
     integrationsHint:
@@ -6382,7 +6383,6 @@ export const ru: Catalogue = {
     noKeys: "Ключей нет",
     clusterLocal: "локальное время кластера",
     endpointsByHand: "нет — эндпоинты ведутся вручную",
-    notAssignedYet: "ещё не назначен",
     anythingUnmatched: "всё, что не совпало",
     noRulesNoBackend: "Ни правил, ни бэкенда по умолчанию",
     nothingBackingService: "За этим сервисом никого нет",

@@ -3835,6 +3835,7 @@ export const en = {
     healthNoAddressYetWhy:
       "A controller serves its class and has not published an address for it yet.",
     healthServed: "served",
+    sliceNoPorts: "none, so nothing is routed to these addresses",
   },
   cluster: {
     integrationsHint:
@@ -5868,7 +5869,6 @@ export const en = {
     noKeys: "No keys",
     clusterLocal: "cluster local",
     endpointsByHand: "none — endpoints are managed by hand",
-    notAssignedYet: "not assigned yet",
     anythingUnmatched: "anything unmatched",
     noRulesNoBackend: "No rules and no default backend",
     nothingBackingService: "Nothing is backing this service",
