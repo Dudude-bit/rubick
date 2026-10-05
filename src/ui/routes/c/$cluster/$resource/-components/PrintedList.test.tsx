@@ -122,6 +122,38 @@ describe("a kind listed as the API server prints it", () => {
     expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
   });
 
+  /**
+   * The Access rows lead here, and a namespace-only reader is refused
+   * ServiceAccounts cluster-wide. Fails if the refusal draws as no rows.
+   */
+  it("says a list the reader may not read is refused, not empty", async () => {
+    answers.catalog = () =>
+      Promise.resolve({
+        entries: [
+          {
+            ...LEASES,
+            group: "",
+            kind: "ServiceAccount",
+            plural: "serviceaccounts",
+          },
+        ],
+        unread: [],
+      });
+    answers.table = () =>
+      Promise.reject({
+        code: "PERMISSION_DENIED",
+        message: "serviceaccounts is forbidden",
+      });
+    await renderWithRouter(<PrintedList resource="serviceaccounts" />);
+    expect(
+      await screen.findByText("You do not have permission to list these")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/serviceaccounts is forbidden/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No resources of this type/)).toBeNull();
+  });
+
   /** A kind without the list verb would otherwise read as an empty list. */
   it("says a kind that cannot be listed cannot be, rather than that it has none", async () => {
     answers.catalog = () =>

@@ -293,11 +293,12 @@ export function ResourceList<
   );
   // The last scope's answer, held while this one is read: its unread
   // namespaces are not this scope's, and its rows are not this scope's total.
-  const placeholder =
-    data === undefined ? queryResult.isPlaceholderData : externalPlaceholder;
+  const placeholder = shouldUseQuery
+    ? queryResult.isPlaceholderData
+    : externalPlaceholder;
   const unread = placeholder
     ? NOTHING_UNREAD
-    : ((data === undefined ? queryResult.data?.unread : externalUnread) ??
+    : ((shouldUseQuery ? queryResult.data?.unread : externalUnread) ??
       NOTHING_UNREAD);
   const loading = isLoading ?? queryResult.isLoading;
   // Read at last. A failed list used to render `resources = []` with
@@ -307,8 +308,9 @@ export function ResourceList<
   // the app was empty. The error only replaces the table when there is nothing
   // to show: a refetch that fails keeps the rows it already had, the same rule
   // a resync follows.
-  const failed =
-    (data === undefined ? queryResult.error : externalError) ?? null;
+  // Asked of the query, not of `data`: rows from outside are undefined
+  // exactly when their read failed, and that error is the caller's.
+  const failed = (shouldUseQuery ? queryResult.error : externalError) ?? null;
   const dataUpdatedAt = externalDataUpdatedAt ?? queryResult.dataUpdatedAt;
 
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");

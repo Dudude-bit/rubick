@@ -18,7 +18,7 @@ import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { Spinner } from "@/components/ui/spinner";
 import { problemTotal, useScopedOverview } from "@/hooks/useClusterOverview";
-import { useListAccess } from "./useListAccess";
+import { useListAccess, useResourceAccess } from "./useListAccess";
 import { useAppSearch } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
@@ -38,7 +38,14 @@ import {
   getResourceIcon,
   type ResourceKind,
 } from "@/lib/resource-registry";
-import { clusterLink, listLink, pageLink, type AppLink } from "@/lib/links";
+import { ACCESS_KINDS, type AccessKind } from "@/lib/access-kinds";
+import {
+  clusterLink,
+  listLink,
+  pageLink,
+  servedListLink,
+  type AppLink,
+} from "@/lib/links";
 import type { en } from "@/i18n/catalogue";
 import { T } from "@/i18n/T";
 import { cn } from "@/lib/utils";
@@ -55,7 +62,11 @@ import {
 } from "@/lib/namespace-scope";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
-import type { ClusterOverview, ResourceCounts } from "@/generated/types";
+import type {
+  ClusterOverview,
+  ListQuery,
+  ResourceCounts,
+} from "@/generated/types";
 import { errorWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
 import { carriedSearch } from "@/lib/carried-search";
@@ -81,6 +92,8 @@ type NavItem = NavName & {
   count?: keyof ResourceCounts;
   /** The kind this row lists, for the rows that list one. */
   kind?: ResourceKind;
+  /** What the authorizer is asked, for a row listing a kind outside the registry. */
+  query?: ListQuery;
 };
 
 // Split by state because the router joins a link's state classes onto it
@@ -105,6 +118,20 @@ function resource(kind: ResourceKind, count?: keyof ResourceCounts): NavItem {
     path: listLink(kind),
     icon: getResourceIcon(kind),
     count,
+  };
+}
+
+/** A row for a kind the registry does not hold, listed as kubectl prints it. */
+function servedRow(entry: AccessKind): NavItem {
+  return {
+    label: entry.displayPlural,
+    path: servedListLink(entry),
+    icon: entry.icon,
+    query: {
+      group: entry.group,
+      resource: entry.plural,
+      namespaced: entry.namespaced,
+    },
   };
 }
 
@@ -177,6 +204,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       resource(ResourceType.Secret, "secrets"),
     ],
   },
+  { caption: "access", items: ACCESS_KINDS.map(servedRow) },
 ];
 
 const pathnameOf = (state: { location: { pathname: string } }) =>
@@ -197,6 +225,9 @@ const isCatalogLocation = (state: { location: { pathname: string } }) => {
 /** Every kind the nav offers, which is exactly what to ask the authorizer about. */
 const NAV_KINDS: ResourceKind[] = GROUPS.flatMap((group) =>
   group.items.map((item) => item.kind).filter((kind) => kind !== undefined)
+);
+const NAV_QUERIES: ListQuery[] = GROUPS.flatMap((group) =>
+  group.items.map((item) => item.query).filter((query) => query !== undefined)
 );
 
 /**
@@ -242,6 +273,7 @@ export function Sidebar() {
   const isConnected = useClusterStore((s) => s.isConnected);
   const { data } = useScopedOverview();
   const access = useListAccess(NAV_KINDS);
+  const servedAccess = useResourceAccess(NAV_QUERIES);
 
   // The overview query keeps its last answer as placeholder data across the
   // key change a disconnect causes, which is right while switching clusters
@@ -262,7 +294,13 @@ export function Sidebar() {
                 key={item.labelKey ?? item.label}
                 item={item}
                 overview={overview}
-                denied={item.kind ? access[item.kind] === false : false}
+                denied={
+                  item.kind
+                    ? access[item.kind] === false
+                    : item.query
+                      ? servedAccess.get(item.query.resource) === false
+                      : false
+                }
               />
             ))}
             {group.caption === "network" && <GatewayRows overview={overview} />}

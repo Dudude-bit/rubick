@@ -12,6 +12,7 @@ export const RBAC_GROUP = "rbac.authorization.k8s.io";
 /** A built-in kind with no page of its own, opened on the generic one. */
 export interface AccessKind {
   kind: string;
+  displayPlural: string;
   group: string;
   plural: string;
   namespaced: boolean;
@@ -22,6 +23,7 @@ export interface AccessKind {
 export const ACCESS_KINDS: readonly AccessKind[] = [
   {
     kind: "ServiceAccount",
+    displayPlural: "ServiceAccounts",
     group: "",
     plural: "serviceaccounts",
     namespaced: true,
@@ -29,6 +31,7 @@ export const ACCESS_KINDS: readonly AccessKind[] = [
   },
   {
     kind: "Role",
+    displayPlural: "Roles",
     group: RBAC_GROUP,
     plural: "roles",
     namespaced: true,
@@ -36,6 +39,7 @@ export const ACCESS_KINDS: readonly AccessKind[] = [
   },
   {
     kind: "RoleBinding",
+    displayPlural: "RoleBindings",
     group: RBAC_GROUP,
     plural: "rolebindings",
     namespaced: true,
@@ -43,6 +47,7 @@ export const ACCESS_KINDS: readonly AccessKind[] = [
   },
   {
     kind: "ClusterRole",
+    displayPlural: "ClusterRoles",
     group: RBAC_GROUP,
     plural: "clusterroles",
     namespaced: false,
@@ -50,6 +55,7 @@ export const ACCESS_KINDS: readonly AccessKind[] = [
   },
   {
     kind: "ClusterRoleBinding",
+    displayPlural: "ClusterRoleBindings",
     group: RBAC_GROUP,
     plural: "clusterrolebindings",
     namespaced: false,

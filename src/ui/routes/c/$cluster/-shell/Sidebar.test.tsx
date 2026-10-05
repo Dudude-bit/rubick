@@ -253,6 +253,65 @@ describe("the API resources row", () => {
   });
 });
 
+describe("the Access group", () => {
+  /**
+   * Priya could not reach Role developer, RoleBinding marco-developer or
+   * ServiceAccount marco from anywhere: no list offered them.
+   */
+  it("lists every RBAC kind where the cluster serves it", async () => {
+    await wrap(<Sidebar />);
+    const hrefs = await Promise.all(
+      [
+        "ServiceAccounts",
+        "Roles",
+        "RoleBindings",
+        "ClusterRoles",
+        "ClusterRoleBindings",
+      ].map(async (name) =>
+        (await screen.findByRole("link", { name })).getAttribute("href")
+      )
+    );
+    expect(hrefs).toEqual([
+      "/c/prod/serviceaccounts",
+      "/c/prod/roles.rbac.authorization.k8s.io",
+      "/c/prod/rolebindings.rbac.authorization.k8s.io",
+      "/c/prod/clusterroles.rbac.authorization.k8s.io",
+      "/c/prod/clusterrolebindings.rbac.authorization.k8s.io",
+    ]);
+  });
+
+  /**
+   * A namespace-only reader may list Roles and not ClusterRoles. Fails if
+   * the access rows stop asking the authorizer, or ask without their group.
+   */
+  it("locks the access row the authorizer refuses, and only that one", async () => {
+    checkListAccess.mockResolvedValue([
+      { resource: "clusterroles", allowed: false },
+      { resource: "roles", allowed: true },
+      { resource: "rolebindings", allowed: null },
+    ]);
+    await wrap(<Sidebar />);
+    const locked = await screen.findByRole("link", { name: /ClusterRoles/ });
+    await waitFor(() =>
+      expect(within(locked).getByLabelText(/permission to list/)).toBeVisible()
+    );
+    for (const name of ["Roles", "RoleBindings"])
+      expect(
+        within(screen.getByRole("link", { name })).queryByLabelText(
+          /permission to list/
+        )
+      ).toBeNull();
+    const asked = checkListAccess.mock.calls.flatMap(
+      ([queries]) => queries as { group: string; resource: string }[]
+    );
+    expect(asked).toContainEqual({
+      group: "rbac.authorization.k8s.io",
+      resource: "clusterroles",
+      namespaced: false,
+    });
+  });
+});
+
 describe("the Network group", () => {
   /**
    * Endpoints was collateral of a nav rebuild and spent months reachable

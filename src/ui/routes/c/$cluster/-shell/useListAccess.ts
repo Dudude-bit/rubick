@@ -18,6 +18,7 @@ import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
 import { listQueryFor, type ResourceKind } from "@/lib/resource-registry";
+import type { ListQuery } from "@/generated/types";
 
 /** What the authorizer said, for the rows that carry a kind. */
 export type ListAccessMap = Partial<Record<ResourceKind, boolean>>;
@@ -31,6 +32,20 @@ export type ListAccessMap = Partial<Record<ResourceKind, boolean>>;
 const REVIEW_FRESH_MS = 5 * 60 * 1000;
 
 export function useListAccess(kinds: ResourceKind[]): ListAccessMap {
+  const byPlural = useResourceAccess(kinds.map(listQueryFor));
+  const marks: ListAccessMap = {};
+  for (const kind of kinds) {
+    const allowed = byPlural.get(listQueryFor(kind).resource);
+    if (allowed !== undefined) marks[kind] = allowed;
+  }
+  return marks;
+}
+
+/**
+ * The same question for kinds the registry does not hold, asked in the
+ * terms the API server matches. Keyed by plural, as the answer comes home.
+ */
+export function useResourceAccess(queries: ListQuery[]): Map<string, boolean> {
   const currentContext = useClusterStore((s) => s.currentContext);
   const isConnected = useClusterStore((s) => s.isConnected);
   const scope = useClusterStore((s) => s.namespaceScope);
@@ -43,12 +58,11 @@ export function useListAccess(kinds: ResourceKind[]): ListAccessMap {
   // The asked kinds are part of the question: the nav asks about its own
   // rows, the Gateway rows ask about theirs, and one key for both would
   // hand the second asker the first one's answers.
-  const asked = kinds.map((kind) => listQueryFor(kind).resource).sort();
+  const asked = queries.map((query) => query.resource).sort();
 
   const { data } = useQuery({
     queryKey: ["list-access", currentContext, namespaces, asked],
-    queryFn: () =>
-      commands.checkListAccess(kinds.map(listQueryFor), namespaces),
+    queryFn: () => commands.checkListAccess(queries, namespaces),
     enabled: isConnected && Boolean(currentContext),
     staleTime: REVIEW_FRESH_MS,
     // A cluster that cannot answer leaves every row unmarked, which is the
@@ -57,16 +71,11 @@ export function useListAccess(kinds: ResourceKind[]): ListAccessMap {
     retry: false,
   });
 
-  // Keyed back by kind: the answer comes home addressed by plural, which is
-  // what the API server matched, and the nav thinks in kinds.
-  const byPlural = new Map((data ?? []).map((e) => [e.resource, e.allowed]));
-  const marks: ListAccessMap = {};
-  for (const kind of kinds) {
-    const allowed = byPlural.get(listQueryFor(kind).resource);
-    // `null` and `undefined` are both "could not ask", and both have to stay
-    // out: a row drawn as refused because the review failed says something
-    // untrue about the reader.
-    if (allowed !== null && allowed !== undefined) marks[kind] = allowed;
-  }
-  return marks;
+  // `null` is "could not ask", and has to stay out: a row drawn as refused
+  // because the review failed says something untrue about the reader.
+  return new Map(
+    (data ?? []).flatMap((entry) =>
+      entry.allowed === null ? [] : [[entry.resource, entry.allowed]]
+    )
+  );
 }
