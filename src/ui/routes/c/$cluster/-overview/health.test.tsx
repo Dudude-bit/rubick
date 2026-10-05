@@ -462,6 +462,80 @@ describe("what Needs attention says it checked", () => {
     expect(summary.querySelector(".bg-ok")).toBeNull();
   });
 
+  /**
+   * Dana: a CrashLoopBackOff and an autoscaler blind to its metrics wore the
+   * same red cross. Each row takes its reader's tone, and the icon changes
+   * with it. Fails if the rows are drawn in one tone again.
+   */
+  it("draws each row in its own reader's tone and icon", async () => {
+    await panel(
+      attentionFrom(
+        [
+          {
+            ...problem,
+            kind: "Pod",
+            name: "checkout-1",
+            reason: "CrashLoopBackOff",
+            severity: "critical",
+          },
+        ],
+        {
+          autoscalers: {
+            data: {
+              rows: [
+                {
+                  autoscaler: {
+                    kind: "HorizontalPodAutoscaler",
+                    name: "cart",
+                    namespace: "shop",
+                    existence: "present",
+                    facts: {
+                      kind: "autoscaler",
+                      minReplicas: 1,
+                      maxReplicas: 5,
+                      currentReplicas: 2,
+                      desiredReplicas: 0,
+                      metrics: [],
+                      conditions: [
+                        {
+                          type: "ScalingActive",
+                          status: "False",
+                          reason: "FailedGetResourceMetric",
+                          message: "failed to get cpu utilization",
+                          lastTransitionTime: null,
+                        },
+                      ],
+                      lastScaleTime: null,
+                    },
+                  },
+                  target: {
+                    kind: "Deployment",
+                    name: "cart",
+                    namespace: "shop",
+                    existence: "notChecked",
+                    facts: null,
+                  },
+                },
+              ],
+              unread: [],
+            },
+            error: null,
+          },
+        }
+      )
+    );
+
+    const pod = screen.getByText("CrashLoopBackOff").closest('[role="link"]')!;
+    const hpa = screen
+      .getByText("FailedGetResourceMetric")
+      .closest('[role="link"]')!;
+    expect(pod.querySelector("svg.lucide-x.text-err")).not.toBeNull();
+    expect(
+      hpa.querySelector("svg.lucide-triangle-alert.text-warn")
+    ).not.toBeNull();
+    expect(hpa.querySelector(".text-err")).toBeNull();
+  });
+
   /** Fifty rows push the rest of the page off screen; the tail is a count and a way into each list. */
   it("caps the rows and links what it left out to each kind's list", async () => {
     const pods = Array.from({ length: 14 }, (_, at) => ({

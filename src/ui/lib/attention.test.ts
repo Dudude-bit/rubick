@@ -254,7 +254,7 @@ describe("what Needs attention lists beyond pods", () => {
     expect(listed.items[0]).toMatchObject({
       kind: "HorizontalPodAutoscaler",
       name: "cart",
-      tone: "err",
+      tone: "warn",
       reason: "FailedGetResourceMetric",
       detail: { says: "said", text: "unable to get metrics for resource cpu" },
       opens: { kind: "Deployment", name: "cart", namespace: "shop" },

@@ -184,9 +184,11 @@ export function autoscalerVerdict(
     // Zero replicas is the one `ScalingActive=False` that is a setting rather
     // than a fault: an HPA deliberately stops at zero and waits to be scaled
     // up by hand, and colouring it red would fire on every idle workload.
+    // Blind to its metrics, it stops scaling and the workload keeps serving
+    // at its size: degraded, the amber of a warning, not the red of down.
     return active?.reason === "ScalingDisabled"
       ? { says: "standingBy", tone: "neutral", condition: active }
-      : { says: "noMetrics", tone: "err", condition: active };
+      : { says: "noMetrics", tone: "warn", condition: active };
   }
   if (isTrue(limited)) {
     // `ScalingLimited` covers the floor, the ceiling and the stabilisation

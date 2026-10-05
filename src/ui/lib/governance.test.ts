@@ -187,7 +187,13 @@ describe("what an autoscaler is worth saying", () => {
     expect(autoscalerFinding(auto, t)).toBeNull();
   });
 
-  it("is loudest about one that cannot read its metrics", () => {
+  /**
+   * Blind to its metrics, an autoscaler stops scaling while the workload
+   * keeps serving: amber, apart from the red of a pod that cannot start.
+   * Fails if it goes back to red, where Dana could not tell it from a
+   * CrashLoopBackOff in Needs attention.
+   */
+  it("warns about one that cannot read its metrics", () => {
     const auto = autoscalers(
       conns([
         governs(
@@ -208,7 +214,7 @@ describe("what an autoscaler is worth saying", () => {
       ])
     )[0];
     const finding = autoscalerFinding(auto, t);
-    expect(finding?.tone).toBe("err");
+    expect(finding?.tone).toBe("warn");
     expect(finding?.title).toContain("cannot read its metrics");
     expect(metricReadings(auto.facts)[0].current).toBeNull();
     // `desiredReplicas` stays at zero on an autoscaler that never computed,
