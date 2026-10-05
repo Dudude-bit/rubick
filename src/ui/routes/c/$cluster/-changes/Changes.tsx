@@ -6,7 +6,7 @@ import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { changesScreenSection, watchedSection } from "./changes-share";
-import { timelineOf, unwatchedWords } from "@/lib/changes";
+import { spansCovering, timelineOf, unwatchedWords } from "@/lib/changes";
 import { Lock } from "lucide-react";
 import { cn, formatWhen } from "@/lib/utils";
 import { useNow } from "@/hooks/useNow";
@@ -47,10 +47,13 @@ export function Changes() {
         deliveries: [],
         helm: [],
         journal: mine,
-        spans: currentContext ? (spans[currentContext] ?? []) : [],
+        spans: spansCovering(
+          currentContext ? (spans[currentContext] ?? []) : [],
+          { kinds: [], namespaces: scope.scope }
+        ),
         window: { from: now - WINDOWS[window], to: now },
       }).filter((item) => item.at !== null && item.at >= now - WINDOWS[window]),
-    [mine, spans, currentContext, now, window]
+    [mine, spans, currentContext, now, window, scope.scope]
   );
   const watching = currentContext
     ? (spans[currentContext] ?? []).find((span) => span.to === null)

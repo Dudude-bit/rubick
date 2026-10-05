@@ -94,7 +94,10 @@ export function useChangeJournal() {
           .filter((w) => refused.has(`${w.kind}/${w.namespace ?? "*"}`))
           .map((w) => w.kind)
       );
-      beginSpan(cluster, Date.now(), [...unwatched]);
+      beginSpan(cluster, Date.now(), {
+        unwatched: [...unwatched],
+        scope: namespaces,
+      });
       ticker = setInterval(() => heartbeat(cluster, Date.now()), HEARTBEAT_MS);
     };
     const closeSpan = () => {

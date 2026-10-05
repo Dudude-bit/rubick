@@ -1605,6 +1605,10 @@ export const en = {
       "What this app saw change in the cluster's workloads while it was connected, in the order it saw it. A gap is a stretch it was not watching; nothing is known about it.",
     notObserved: "Not observed {from} to {to}",
     notObservedStill: "Not observed since {from}",
+    notObservedBrief: {
+      one: "Not observed for {n} second at {at}",
+      other: "Not observed for {n} seconds at {at}",
+    },
     revisionNumber: "revision {n}",
     revisionCurrent: "current",
     revisionOldest: "oldest known; nothing earlier to compare with",

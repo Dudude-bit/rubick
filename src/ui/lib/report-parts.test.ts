@@ -427,6 +427,20 @@ describe("changesSection", () => {
     });
   });
 
+  /** Hours scoped to another namespace are not hours this object was watched. */
+  it("says it was not watching an object outside the span's namespaces", () => {
+    const section = changesSection(
+      { entries: [], spans: [{ ...WATCHED[0], scope: ["kube-system"] }] },
+      "prod-eu",
+      owned,
+      AT,
+      t
+    );
+    expect(section?.body).toMatchObject({
+      changes: [{ at: null, parts: [{ text: "share.journalEmpty" }] }],
+    });
+  });
+
   /**
    * One rollout wrote two journal rows with one stamp, and the file printed
    * both with the full image reference twice: the tag that changed was the

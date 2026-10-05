@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import type { JournalEntry, ObservedSpan } from "@/lib/changes";
+import type { JournalEntry, ObservedSpan, SpanCover } from "@/lib/changes";
 
 /** Entries kept per cluster; the oldest go first. */
 export const MAX_JOURNAL_ENTRIES = 5000;
@@ -54,7 +54,18 @@ function batchedStorage(): Storage {
   } as Storage;
 }
 
-/** Overlapping and touching spans folded together, and the old ones dropped. */
+const coverKey = (span: SpanCover) =>
+  `${[...(span.unwatched ?? [])].sort().join()}|${[...(span.scope ?? [])].sort().join()}`;
+
+/** Only spans that watched the same things fold into one. */
+function covered(cover: SpanCover): SpanCover {
+  return {
+    ...(cover.unwatched?.length && { unwatched: cover.unwatched }),
+    ...(cover.scope?.length && { scope: cover.scope }),
+  };
+}
+
+/** Overlapping and touching spans that watched alike folded together, and the old ones dropped. */
 function pruned(spans: ObservedSpan[], now: number): ObservedSpan[] {
   const live = spans
     .filter((span) => now - (span.to ?? span.seenAt) < JOURNAL_TTL_MS)
@@ -62,15 +73,16 @@ function pruned(spans: ObservedSpan[], now: number): ObservedSpan[] {
   const out: ObservedSpan[] = [];
   for (const span of live) {
     const last = out[out.length - 1];
-    if (last && last.to !== null && span.from <= last.to) {
-      const unwatched = [
-        ...new Set([...(last.unwatched ?? []), ...(span.unwatched ?? [])]),
-      ];
+    if (
+      last &&
+      last.to !== null &&
+      span.from <= last.to &&
+      coverKey(last) === coverKey(span)
+    ) {
       out[out.length - 1] = {
-        from: last.from,
+        ...last,
         seenAt: Math.max(last.seenAt, span.seenAt),
         to: span.to === null ? null : Math.max(last.to, span.to),
-        ...(unwatched.length > 0 && { unwatched }),
       };
       continue;
     }
@@ -97,8 +109,8 @@ interface ChangeJournalState {
    */
   seenCluster: (context: string, identity: string | null) => void;
   record: (entries: JournalEntry[]) => void;
-  /** The watch is up and has its baseline, for every kind but `unwatched`. */
-  beginSpan: (context: string, now: number, unwatched?: string[]) => void;
+  /** The watch is up and has its baseline, over what `cover` says. */
+  beginSpan: (context: string, now: number, cover?: SpanCover) => void;
   /** Still alive; a crash after this leaves the span ending here. */
   heartbeat: (context: string, now: number) => void;
   endSpan: (context: string, now: number) => void;
@@ -165,7 +177,7 @@ export const useChangeJournalStore = create<ChangeJournalState>()(
           entries: trimmed([...state.entries, ...entries], now),
         }));
       },
-      beginSpan: (context, now, unwatched = []) =>
+      beginSpan: (context, now, cover = {}) =>
         set((state) => ({
           spans: {
             ...state.spans,
@@ -176,12 +188,7 @@ export const useChangeJournalStore = create<ChangeJournalState>()(
                 ),
                 now
               ),
-              {
-                from: now,
-                seenAt: now,
-                to: null,
-                ...(unwatched.length > 0 && { unwatched }),
-              },
+              { from: now, seenAt: now, to: null, ...covered(cover) },
             ],
           },
         })),

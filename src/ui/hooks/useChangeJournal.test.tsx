@@ -73,7 +73,11 @@ describe("the change journal under a refused kind", () => {
     await journal();
     expect(span()).toBeUndefined();
     await emit("ds", "failed", REFUSED);
-    expect(span()).toMatchObject({ to: null, unwatched: ["DaemonSet"] });
+    expect(span()).toMatchObject({
+      to: null,
+      unwatched: ["DaemonSet"],
+      scope: ["team-checkout"],
+    });
   });
 
   /** A watch that failed for any other reason is unknown, not refused: still no span. */

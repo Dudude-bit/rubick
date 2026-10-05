@@ -514,7 +514,11 @@ export interface ObservedSpan {
   to: number | null;
   /** Kinds the cluster refused to let it watch, so this span says nothing about them. */
   unwatched?: string[];
+  /** The namespaces it watched; absent for all of them. */
+  scope?: string[];
 }
+
+export type SpanCover = Pick<ObservedSpan, "unwatched" | "scope">;
 
 /** The kinds a span was refused, in words, or `null` when it watched them all. */
 export function unwatchedWords(span: ObservedSpan, t: T): string | null {
@@ -523,14 +527,39 @@ export function unwatchedWords(span: ObservedSpan, t: T): string | null {
     : null;
 }
 
-/** The spans that watched every one of `kinds`. */
-export function spansWatching(
+/**
+ * The spans that watched every one of `kinds` in every one of `namespaces`,
+ * `[]` meaning all of them. A span under kube-system watched nothing in shop.
+ */
+export function spansCovering(
   spans: readonly ObservedSpan[],
-  kinds: readonly string[]
+  {
+    kinds,
+    namespaces,
+  }: { kinds: readonly string[]; namespaces: readonly string[] }
 ): ObservedSpan[] {
   return spans.filter(
-    (span) => !kinds.some((kind) => span.unwatched?.includes(kind))
+    (span) =>
+      !kinds.some((kind) => span.unwatched?.includes(kind)) &&
+      (!span.scope?.length ||
+        (namespaces.length > 0 &&
+          namespaces.every((namespace) => span.scope?.includes(namespace))))
   );
+}
+
+/** A gap in words; one under a minute by its length, which minutes would draw as 20:23 to 20:23. */
+export function gapWords(
+  gap: Gap,
+  t: T,
+  clock: (ms: number) => string
+): string {
+  const ms = gap.to - gap.from;
+  return ms < 60_000
+    ? t("changes", "notObservedBrief", {
+        n: Math.max(1, Math.round(ms / 1000)),
+        at: clock(gap.from),
+      })
+    : t("changes", "notObserved", { from: clock(gap.from), to: clock(gap.to) });
 }
 
 export interface Gap {

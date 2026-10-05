@@ -15,7 +15,8 @@ import type { ConditionInfo, EventInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import {
   gapsOf,
-  spansWatching,
+  gapWords,
+  spansCovering,
   hasChangesTab,
   journalWords,
   type Gap,
@@ -269,15 +270,7 @@ export function gapChange(gap: Gap, t: T): ReportChange {
   return {
     at: new Date(gap.to).toISOString(),
     ref: null,
-    parts: [
-      {
-        text: t("changes", "notObserved", {
-          from: utcMoment(gap.from),
-          to: utcMoment(gap.to),
-        }),
-        quiet: false,
-      },
-    ],
+    parts: [{ text: gapWords(gap, t, utcMoment), quiet: false }],
   };
 }
 
@@ -328,10 +321,10 @@ export function changesSection(
 ): PlacedSection | null {
   const targets = watchedAs(subject, subject.owners);
   if (!targets) return null;
-  const spans = spansWatching(
-    journal.spans,
-    targets.map((target) => target.kind)
-  );
+  const spans = spansCovering(journal.spans, {
+    kinds: targets.map((target) => target.kind),
+    namespaces: subject.namespace ? [subject.namespace] : [],
+  });
   const mine = journal.entries
     .filter(
       (entry) =>

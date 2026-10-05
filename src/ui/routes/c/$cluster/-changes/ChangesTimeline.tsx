@@ -4,6 +4,7 @@ import { ChevronDown, ChevronRight, CirclePlus, Undo2 } from "lucide-react";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   canRollBackTo,
+  gapWords,
   journalWords,
   type ChangeItem,
   type Comparison,
@@ -92,10 +93,7 @@ function Row({
           role="note"
           className="rounded border border-dashed border-warn/60 bg-warn/5 px-2 py-1 text-[11px] text-warn"
         >
-          {t("changes", "notObserved", {
-            from: clock(item.gap.from),
-            to: clock(item.gap.to),
-          })}
+          {gapWords(item.gap, t, clock)}
         </div>
       );
     case "created":

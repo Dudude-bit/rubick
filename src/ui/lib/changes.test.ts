@@ -3,12 +3,16 @@ import { describe, expect, it } from "vite-plus/test";
 import type { DeploymentContainerInfo, ProbeInfo } from "@/generated/types";
 import { en } from "@/i18n/catalogue";
 import { ru } from "@/i18n/ru";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import {
   COMPARED_FIELDS,
   diffRevisions,
   diffSnapshots,
   gapsOf,
+  gapWords,
   helmReleaseOf,
+  spansCovering,
   otherDifferences,
   timelineOf,
   type JournalEntry,
@@ -772,5 +776,65 @@ describe("the words", () => {
       // The Russian half really does match something when something is there.
       expect(`x: причина`).toMatch(claims[1]);
     }
+  });
+});
+
+describe("which spans watched an object", () => {
+  const span = (scope?: string[], unwatched?: string[]): ObservedSpan => ({
+    from: T0,
+    seenAt: T0,
+    to: T0 + HOUR,
+    ...(scope && { scope }),
+    ...(unwatched && { unwatched }),
+  });
+
+  /**
+   * Hours spent scoped to kube-system were drawn as hours watched on a
+   * Deployment in lena-sandbox.
+   */
+  it("counts a span only for the namespaces it watched", () => {
+    const kubeSystem = span(["kube-system"]);
+    const both = span(["kube-system", "shop"]);
+    const everywhere = span();
+    expect(
+      spansCovering([kubeSystem, both, everywhere], {
+        kinds: [],
+        namespaces: ["shop"],
+      })
+    ).toEqual([both, everywhere]);
+    expect(
+      spansCovering([kubeSystem, both, everywhere], {
+        kinds: [],
+        namespaces: [],
+      })
+    ).toEqual([everywhere]);
+  });
+
+  it("does not count a span for a kind it was refused", () => {
+    expect(
+      spansCovering([span(undefined, ["DaemonSet"])], {
+        kinds: ["DaemonSet"],
+        namespaces: ["shop"],
+      })
+    ).toEqual([]);
+  });
+});
+
+describe("a gap in words", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  const r: T = (section, key, values) => translate("ru", section, key, values);
+  const clock = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+
+  /** A resubscribe of a few seconds read "Не наблюдали с 20:23 по 20:23". */
+  it("gives a gap under a minute its length, not two equal minutes", () => {
+    const gap = { from: T0, to: T0 + 4_000 };
+    expect(gapWords(gap, t, clock)).toBe("Not observed for 4 seconds at 00:00");
+    expect(gapWords(gap, r, clock)).toBe("Не наблюдали 4 секунды в 00:00");
+  });
+
+  it("gives a longer gap its two ends", () => {
+    expect(gapWords({ from: T0, to: T0 + HOUR }, t, clock)).toBe(
+      "Not observed 00:00 to 01:00"
+    );
   });
 });

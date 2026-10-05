@@ -134,24 +134,36 @@ describe("spans", () => {
     expect(spans.map((s) => s.to)).toEqual([T0 + MINUTE, null]);
   });
 
-  /** A span that lost its refused kinds on a late tick or a fold would claim to have watched them. */
-  it("keeps the kinds a span was refused through a late tick and a fold", () => {
+  /** A span that lost what it did not watch on a late tick would claim to have watched it. */
+  it("keeps what a span did not watch through a late tick", () => {
     const store = useChangeJournalStore.getState();
-    store.beginSpan("dev", T0, ["DaemonSet"]);
+    store.beginSpan("dev", T0, { unwatched: ["DaemonSet"], scope: ["shop"] });
     store.heartbeat("dev", T0 + 8 * 60 * MINUTE);
-    expect(
-      useChangeJournalStore.getState().spans.dev.map((s) => s.unwatched)
-    ).toEqual([["DaemonSet"], ["DaemonSet"]]);
+    expect(useChangeJournalStore.getState().spans.dev).toMatchObject([
+      { unwatched: ["DaemonSet"], scope: ["shop"] },
+      { unwatched: ["DaemonSet"], scope: ["shop"], to: null },
+    ]);
+  });
 
-    store.endSpan("dev", T0 + 9 * 60 * MINUTE);
-    store.beginSpan("dev", T0 + 9 * 60 * MINUTE);
-    store.endSpan("dev", T0 + 10 * 60 * MINUTE);
-    store.beginSpan("dev", T0 + 11 * 60 * MINUTE);
-    const folded = useChangeJournalStore.getState().spans.dev;
-    expect(folded[1]).toMatchObject({
-      from: T0 + 8 * 60 * MINUTE,
-      unwatched: ["DaemonSet"],
-    });
+  /** A span under kube-system folded into one under shop would cover shop for both. */
+  it("folds touching spans only when they watched the same things", () => {
+    const store = useChangeJournalStore.getState();
+    store.beginSpan("dev", T0, { scope: ["kube-system"] });
+    store.endSpan("dev", T0 + MINUTE);
+    store.beginSpan("dev", T0 + MINUTE, { scope: ["shop"] });
+    store.endSpan("dev", T0 + 2 * MINUTE);
+    store.beginSpan("dev", T0 + 2 * MINUTE, { scope: ["shop"] });
+    store.endSpan("dev", T0 + 3 * MINUTE);
+    store.beginSpan("dev", T0 + 4 * MINUTE);
+    expect(
+      useChangeJournalStore
+        .getState()
+        .spans.dev.map(({ from, to, scope }) => ({ from, to, scope }))
+    ).toEqual([
+      { from: T0, to: T0 + MINUTE, scope: ["kube-system"] },
+      { from: T0 + MINUTE, to: T0 + 3 * MINUTE, scope: ["shop"] },
+      { from: T0 + 4 * MINUTE, to: null, scope: undefined },
+    ]);
   });
 
   it("keeps clusters apart", () => {
