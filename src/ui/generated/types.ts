@@ -1796,10 +1796,10 @@ export interface ClusterOverview {
   jobs: JobComposition | null;
   metricsAvailable: boolean;
   servedFrom: OverviewSource;
-  unread: UnreadKind[];
+  unread: OverviewUnread[];
 }
 
-export interface UnreadKind {
+export interface OverviewUnread {
   kind: string;
   namespace: string | null;
   code: string;

@@ -321,14 +321,14 @@ pub struct ClusterOverview {
     /// Whether this answer came from the watch-fed stores or from listing.
     pub served_from: OverviewSource,
     /// The kinds whose problems this answer could not look for, and why.
-    pub unread: Vec<UnreadKind>,
+    pub unread: Vec<OverviewUnread>,
 }
 
 /// A kind the overview asked for in one reach and got no list of: its
 /// problems there are unknown, not absent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct UnreadKind {
+pub struct OverviewUnread {
     pub kind: String,
     /// `None` for a read of the whole cluster.
     pub namespace: Option<String>,
@@ -337,7 +337,7 @@ pub struct UnreadKind {
     pub message: String,
 }
 
-impl UnreadKind {
+impl OverviewUnread {
     fn of(kind: &str, namespace: Option<&str>, error: &Error) -> Self {
         Self {
             kind: kind.to_string(),
@@ -1111,7 +1111,7 @@ struct OverviewInputs<'a> {
     /// `None` when a namespace in scope refused its Job list.
     jobs: Option<&'a [Arc<Job>]>,
     /// The workload, Job and Node lists that were not read, and where.
-    unread: &'a [UnreadKind],
+    unread: &'a [OverviewUnread],
     events: &'a [Arc<Event>],
     /// False when an events list failed.
     events_known: bool,
@@ -1420,7 +1420,7 @@ struct Gathered {
     jobs: Option<Vec<Arc<Job>>>,
     events: Vec<Arc<Event>>,
     events_known: bool,
-    unread: Vec<UnreadKind>,
+    unread: Vec<OverviewUnread>,
 }
 
 /// What one reach answered for one kind, kept; or why not, written down.
@@ -1429,11 +1429,11 @@ fn take<K>(
     reach: Option<&str>,
     answer: Result<Vec<K>>,
     into: &mut Vec<Arc<K>>,
-    unread: &mut Vec<UnreadKind>,
+    unread: &mut Vec<OverviewUnread>,
 ) {
     match answer {
         Ok(items) => into.extend(arcs(items)),
-        Err(error) => unread.push(UnreadKind::of(kind, reach, &error)),
+        Err(error) => unread.push(OverviewUnread::of(kind, reach, &error)),
     }
 }
 
@@ -1535,7 +1535,7 @@ async fn by_listing(
     let cluster_pods = match cluster_pods_result.transpose() {
         Ok(listed) => listed.map(|list| arcs(list.items)),
         Err(error) => {
-            unread.push(UnreadKind::of("Node", None, &Error::from(error)));
+            unread.push(OverviewUnread::of("Node", None, &Error::from(error)));
             None
         }
     };
@@ -1543,7 +1543,7 @@ async fn by_listing(
         Ok(list) => Some(arcs(list.items)),
         Err(error) => {
             unread.retain(|kind| kind.kind != "Node");
-            unread.push(UnreadKind::of("Node", None, &Error::from(error)));
+            unread.push(OverviewUnread::of("Node", None, &Error::from(error)));
             None
         }
     };
@@ -2700,12 +2700,12 @@ mod tests {
             stateful_sets: &[],
             daemon_sets: &[],
             unread: &[
-                UnreadKind::of(
+                OverviewUnread::of(
                     "Deployment",
                     None,
                     &Error::PermissionDenied("deployments".into()),
                 ),
-                UnreadKind::of("Job", None, &Error::PermissionDenied("jobs".into())),
+                OverviewUnread::of("Job", None, &Error::PermissionDenied("jobs".into())),
             ],
             jobs: None,
             events: &[],
