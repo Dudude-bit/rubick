@@ -96,7 +96,8 @@ export interface Coverage {
   /** Why this namespace's NetworkPolicies are unknown; `null` once read. */
   kubernetesUnread: string | null;
   directions: Record<Direction, DirectionState>;
-  verdict: "covered" | "onlyRejected" | "unrestricted" | "cannotSay";
+  /** `partly`: one direction restricted and the other open. */
+  verdict: "covered" | "partly" | "onlyRejected" | "unrestricted" | "cannotSay";
 }
 
 /**
@@ -219,13 +220,19 @@ export function coverageOf(
       egress: stateOf("egress", selecting, undecided),
     };
     const states = DIRECTIONS.map((direction) => directions[direction]);
-    const verdict: Coverage["verdict"] = states.includes("restricted")
+    // The worst direction speaks for the endpoint: an open Egress beside a
+    // restricted Ingress was a green "covered".
+    const verdict: Coverage["verdict"] = states.every(
+      (state) => state === "restricted"
+    )
       ? "covered"
-      : states.includes("cannotSay")
-        ? "cannotSay"
-        : states.includes("onlyRejected")
-          ? "onlyRejected"
-          : "unrestricted";
+      : states.includes("onlyRejected")
+        ? "onlyRejected"
+        : states.includes("cannotSay")
+          ? "cannotSay"
+          : states.includes("restricted")
+            ? "partly"
+            : "unrestricted";
 
     return {
       endpoint,

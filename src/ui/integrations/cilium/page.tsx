@@ -26,7 +26,8 @@ import {
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { ResourceRef } from "@/components/object/ResourceRef";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import { ShareScreenAction } from "@/components/share/ShareAction";
@@ -53,6 +54,7 @@ import { enforcementOf } from "./model";
 
 const VERDICT_TONE: Record<Coverage["verdict"], RowTone> = {
   covered: "ok",
+  partly: "warn",
   // Not red: a pod nobody wrote a policy for is a choice, and most clusters
   // have made it for most of their pods. Red here would paint a default
   // cluster in failures and hide the row below, which is the real one.
@@ -65,11 +67,13 @@ const VERDICT_TONE: Record<Coverage["verdict"], RowTone> = {
 const VERDICT_WORD: Record<
   Coverage["verdict"],
   | "ciliumCovered"
+  | "ciliumPartly"
   | "ciliumUnrestricted"
   | "ciliumOnlyRejected"
   | "ciliumCannotSay"
 > = {
   covered: "ciliumCovered",
+  partly: "ciliumPartly",
   unrestricted: "ciliumUnrestricted",
   onlyRejected: "ciliumOnlyRejected",
   cannotSay: "ciliumCannotSay",
@@ -79,18 +83,36 @@ const VERDICT_WORD: Record<
 // so it lands on "neutral" rather than borrowing warn or err.
 const FINDING_ROLE: Record<Coverage["verdict"], StatusRole | null> = {
   covered: null,
+  partly: "warn",
   unrestricted: "warn",
   onlyRejected: "err",
   cannotSay: "neutral",
 };
 
+/** The verdict in words; `partly` names the one direction that is restricted. */
+function verdictWords(one: Coverage, t: T): string {
+  const restricted = DIRECTIONS.find(
+    (direction) => one.directions[direction] === "restricted"
+  );
+  return t("readings", VERDICT_WORD[one.verdict], {
+    direction: restricted ? DIRECTION_NAME[restricted] : "",
+  });
+}
+
 export default function CiliumPage() {
   const t = useT();
   const picture = usePicture();
+  const scope = useNamespaceScope();
 
+  // Read across the cluster, drawn for the namespaces the picker names.
   const coverage = useMemo(
-    () => (picture.data ? pictureCoverage(picture.data) : []),
-    [picture.data]
+    () =>
+      picture.data
+        ? pictureCoverage(picture.data).filter((one) =>
+            scope.matches(one.endpoint.namespace)
+          )
+        : [],
+    [picture.data, scope]
   );
   const kubernetes = picture.data?.kubernetes;
 
@@ -99,7 +121,11 @@ export default function CiliumPage() {
   const rejected = [
     ...(picture.data?.policies ?? []),
     ...(picture.data?.clusterwide ?? []),
-  ].filter((policy) => enforcementOf(policy).state === "rejected");
+  ].filter(
+    (policy) =>
+      enforcementOf(policy).state === "rejected" &&
+      (!policy.namespace || scope.matches(policy.namespace))
+  );
 
   useShareSection("cilium-rejected-policies", () => {
     if (rejected.length === 0) return null;
@@ -215,7 +241,7 @@ export default function CiliumPage() {
                 if (!role) return null;
                 return {
                   title: one.endpoint.name,
-                  detail: t("readings", VERDICT_WORD[one.verdict]),
+                  detail: verdictWords(one, t),
                   role,
                   ref: refOf({
                     kind: "CiliumEndpoint",
@@ -247,7 +273,7 @@ function CoverageRow({ one, last }: { one: Coverage; last: boolean }) {
       }}
       meta={one.endpoint.namespace}
       state={{
-        text: t("readings", VERDICT_WORD[one.verdict]),
+        text: verdictWords(one, t),
         tone: VERDICT_TONE[one.verdict],
       }}
       last={last}

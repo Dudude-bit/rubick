@@ -305,7 +305,7 @@ describe("the standard NetworkPolicies Cilium also enforces", () => {
       ingress: "restricted",
       egress: "unrestricted",
     });
-    expect(api.verdict).toBe("covered");
+    expect(api.verdict).toBe("partly");
     expect(api.selecting.map((one) => one.kind)).toEqual(["NetworkPolicy"]);
   });
 
@@ -367,5 +367,30 @@ describe("the standard NetworkPolicies Cilium also enforces", () => {
       ingress: "restricted",
       egress: "cannotSay",
     });
+    expect(api.verdict).toBe("cannotSay");
+  });
+
+  /**
+   * The worst direction speaks for the row: one restricted way in beside an
+   * egress only a rejected policy meant to close is the rejected finding.
+   */
+  it("lets a rejected direction outweigh a restricted one", () => {
+    const [api] = coverageOf(
+      [API],
+      [
+        policy("shop", {
+          endpointSelector: { matchLabels: { app: "api" } },
+          ingress: [{}],
+        }),
+        policy(
+          "shop",
+          { endpointSelector: { matchLabels: { app: "api" } }, egress: [{}] },
+          false
+        ),
+      ],
+      [],
+      NONE
+    );
+    expect(api.verdict).toBe("onlyRejected");
   });
 });

@@ -18,6 +18,7 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const { KINDS } = await import("./data");
+const { useClusterStore } = await import("@/stores/clusterStore");
 const { en } = await import("@/i18n/catalogue");
 const { TONE_TEXT } = await import("@/lib/tone");
 const { default: CiliumPage } = await import("./page");
@@ -139,7 +140,8 @@ describe("the Cilium page", () => {
   /**
    * The persona review's blocker: a pod under a default-deny NetworkPolicy
    * was "nothing selects it" here. The row names the NetworkPolicy and says
-   * ingress is restricted; egress, which it does not govern, stays open.
+   * ingress is restricted; egress, which it does not govern, stays open,
+   * and the row's word is amber, not the green "covered" it once was.
    */
   it("names the NetworkPolicy that restricts an endpoint's ingress", async () => {
     answers.set(KINDS.endpoints, () => Promise.resolve([API_ENDPOINT]));
@@ -149,8 +151,11 @@ describe("the Cilium page", () => {
 
     await renderPage();
 
-    const state = await screen.findByText(en.readings.ciliumCovered);
-    expect(state).toHaveClass(TONE_TEXT.ok);
+    const state = await screen.findByText("only Ingress restricted");
+    expect(state).toHaveClass(TONE_TEXT.warn);
+    expect(
+      screen.queryByText(en.readings.ciliumCovered)
+    ).not.toBeInTheDocument();
     expect(
       screen.queryByText(en.readings.ciliumUnrestricted)
     ).not.toBeInTheDocument();
@@ -174,5 +179,22 @@ describe("the Cilium page", () => {
     expect(
       screen.queryByText(en.readings.ciliumUnrestricted)
     ).not.toBeInTheDocument();
+  });
+
+  /** The page drew k8s-gui-test and team-checkout pods under a picker on net. */
+  it("draws only the endpoints in the namespaces the picker names", async () => {
+    useClusterStore.setState({ namespaceScope: ["net"] });
+    answers.set(KINDS.endpoints, () =>
+      Promise.resolve([
+        API_ENDPOINT,
+        { ...API_ENDPOINT, name: "checkout-api-1", namespace: "team-checkout" },
+      ])
+    );
+
+    await renderPage();
+
+    expect(await screen.findByText(API_ENDPOINT.name)).toBeInTheDocument();
+    expect(screen.queryByText("checkout-api-1")).not.toBeInTheDocument();
+    useClusterStore.setState({ namespaceScope: [] });
   });
 });

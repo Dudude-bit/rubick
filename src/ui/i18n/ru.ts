@@ -4328,6 +4328,7 @@ export const ru: Catalogue = {
     ciliumSelectsAll: "все эндпоинты в области действия",
     ciliumSelectsNodes: "узлы, по nodeSelector; ни одного эндпоинта",
     ciliumCovered: "под политикой",
+    ciliumPartly: "ограничен только {direction}",
     ciliumUnrestricted: "ничем не ограничен",
     ciliumOnlyRejected: "только отвергнутые",
     ciliumCannotSay: "нельзя сказать",

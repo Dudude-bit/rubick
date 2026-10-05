@@ -3897,6 +3897,7 @@ export const en = {
     ciliumSelectsAll: "every endpoint in scope",
     ciliumSelectsNodes: "nodes, by nodeSelector; no endpoint",
     ciliumCovered: "covered",
+    ciliumPartly: "only {direction} restricted",
     ciliumUnrestricted: "nothing restricts it",
     ciliumOnlyRejected: "only rejected policies",
     ciliumCannotSay: "cannot say",
