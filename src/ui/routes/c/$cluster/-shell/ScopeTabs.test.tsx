@@ -364,7 +364,7 @@ describe("watching several namespaces at once", () => {
     await draw(Array.from({ length: SCOPE_LIMIT }, (_, i) => `ns-${i}`));
     await openPicker(user);
 
-    const ceiling = `${SCOPE_LIMIT} namespaces — the most one window reads at once.`;
+    const ceiling = `${SCOPE_LIMIT} namespaces is the most one window reads at once.`;
     expect(screen.getByText(ceiling)).toBeInTheDocument();
 
     // The row that cannot be added is described by that sentence, so it is
@@ -381,7 +381,7 @@ describe("watching several namespaces at once", () => {
     expect(scope()).toHaveLength(SCOPE_LIMIT);
     expect(
       screen.getByText(
-        `Cannot watch ns-${SCOPE_LIMIT} as well — ${SCOPE_LIMIT} namespaces is the most one window reads at once. Open it on its own instead.`
+        `Cannot watch ns-${SCOPE_LIMIT} as well: ${SCOPE_LIMIT} namespaces is the most one window reads at once. Open it on its own instead.`
       )
     ).toBeInTheDocument();
   });

@@ -77,7 +77,7 @@ export function ToolsFoot({
       <Foot onClick={onManageProfiles} expanded={profilesOpen}>
         {t("settings", "cloudProfiles")}
       </Foot>
-      {` ${profileSummary(gcpProfiles?.length, azureProfiles?.length, t)}`}
+      {profileSummary(gcpProfiles?.length, azureProfiles?.length, t)}
     </p>
   );
 }

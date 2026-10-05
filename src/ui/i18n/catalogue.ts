@@ -3988,10 +3988,10 @@ export const en = {
   cluster: {
     integrationsHint:
       "What this cluster has that the app can use. Most of it is detected by whether its CRDs exist; anything with its own address is configured here, per cluster.",
-    configuredGroup: "Configured — an address per cluster",
+    configuredGroup: "Configured: an address per cluster",
     detectedGroup: "Detected in this cluster",
     operatorsGroup:
-      "Operators — a controller in the cluster running a database for you",
+      "Operators: a controller in the cluster running a database for you",
     refusalNotNow: "Refused for now",
     refusalNothingWouldReplaceIt: "Nothing would replace it",
     refusalHoldsLocalData: "Holds local data",
@@ -4031,7 +4031,7 @@ export const en = {
     unknownAge: "Unknown",
     freshPolling: "polling",
     freshPollingNote:
-      "No watch on this view — it re-reads the cluster on a timer.",
+      "No watch on this view: it re-reads the cluster on a timer.",
     clustersInKubeconfig: "Clusters in the kubeconfig",
     recent: "Recent",
     allContexts: "All contexts",
@@ -4072,7 +4072,7 @@ export const en = {
     linkOpenClusters: "Settings › Clusters",
     linkDismiss: "Dismiss",
     tunnelAsleep: "asleep",
-    renameOrRecolour: "{name} — rename or recolour",
+    renameOrRecolour: "Rename or recolour {name}",
     called: "Called",
     colour: "Colour",
     hueDefault: "Default",
@@ -4090,19 +4090,19 @@ export const en = {
     credentialsRefusedAgo:
       "The cluster refused this window's credentials {since} ago. ",
     credentialsExpiredBody:
-      "Every list, count and chart in this window stopped being answerable at that moment — which is why the page is this rather than a screen of empty ones.",
+      "Every list, count and chart in this window stopped being answerable at that moment, which is why the page is this rather than a screen of empty ones.",
     renewalWasScheduled:
       "This window was set to renew them quietly before they expired, and the cluster refused them anyway. ",
     renewalNoDeadline:
-      "The credential plugin named no expiry, so there was no moment to renew them before — nothing here could act early. ",
+      "The credential plugin named no expiry, so there was no moment to renew them before; nothing here could act early. ",
     renewalPassed:
       "The moment they expired had already gone by when this window looked, so there was nothing left to renew ahead of. ",
     renewalFailed:
-      "Renewing them quietly was tried and did not come back — a read that failed rather than anything about you. ",
+      "Renewing them quietly was tried and did not come back. That is a read that failed, not anything about you. ",
     renewalRanOut:
       "Renewing them quietly was tried at every moment there was room for, and the plugin handed back the same credentials each time, so there was nothing newer to put in place. ",
     renewalLastChance:
-      "Renewing them quietly was tried while they were still good and the plugin handed back the same credentials, so one more attempt is set for just after they expire — some plugins mint nothing until the old ones are actually gone. ",
+      "Renewing them quietly was tried while they were still good and the plugin handed back the same credentials, so one more attempt is set for just after they expire: some plugins mint nothing until the old ones are actually gone. ",
     renewalNeedsYouBody:
       "This window did try to renew them quietly; the plugin needed you, which is what this screen is. ",
     renewalDelegated:
@@ -4110,11 +4110,11 @@ export const en = {
     renewalUnknown: "",
     renewalNeedsYou: "sign-in needed",
     renewalNeedsYouHint:
-      "Renewing this session in the background needed a person, so it stopped. Nothing is wrong yet — the current credentials still work, and you will be asked to sign in when they expire.",
+      "Renewing this session in the background needed a person, so it stopped. Nothing is wrong yet: the current credentials still work, and you will be asked to sign in when they expire.",
     renewalRanOutHint:
       "The credential plugin kept handing back the credentials already in use, so there was nothing newer to put in place before they expire. Nothing is wrong yet, and you will be asked to sign in when they do.",
     stillRefusedHint:
-      "Still refused? The credential plugin this context uses may need a sign-in of its own first — for GKE that is",
+      "Still refused? The credential plugin this context uses may need a sign-in of its own first. For GKE that is",
     healthy: "Healthy",
     schedulerHeadroom: "Scheduler headroom",
     headroomLegend: "requests vs allocatable · tick marks live usage",
@@ -4131,13 +4131,13 @@ export const en = {
     allNamespaces: "All namespaces",
     namespaces: "Namespaces",
     namespaceLimitRefused:
-      "Cannot watch {namespace} as well — {limit} namespaces is the most one window reads at once. Open it on its own instead.",
+      "Cannot watch {namespace} as well: {limit} namespaces is the most one window reads at once. Open it on its own instead.",
     namespaceLimitFull: {
-      one: "{n} namespace — the most one window reads at once.",
-      other: "{n} namespaces — the most one window reads at once.",
+      one: "{n} namespace is the most one window reads at once.",
+      other: "{n} namespaces is the most one window reads at once.",
     },
     namespaceScopeCount:
-      "{n} of {limit} namespaces — every list is narrowed to them.",
+      "{n} of {limit} namespaces; every list is narrowed to them.",
     namespaceMultiHint:
       "{click}-click or {enter}, or the box, to watch up to {limit} at once.",
     whatCanIDoIn: "What can I do in {namespace}?",
@@ -4200,7 +4200,7 @@ export const en = {
     toSearchIt: "to search it",
     notInKubeconfig: "not in the kubeconfig",
     resultsAsTheyAnswer: "results appear as each one does",
-    connectionFailedRetry: "connection failed — retry",
+    connectionFailedRetry: "connection failed, retry",
     chooseCluster: "Choose a cluster",
     signingIn: "Signing in…",
     notConnected: "No cluster connected",
@@ -4247,8 +4247,8 @@ export const en = {
     provenanceDefault:
       "found by the default lookup, since $KUBECONFIG is unset",
     notOnPathSearched: {
-      one: "Not on PATH — {n} location searched, including the app's own.",
-      other: "Not on PATH — {n} locations searched, including the app's own.",
+      one: "Not on PATH: {n} location searched, including the app's own.",
+      other: "Not on PATH: {n} locations searched, including the app's own.",
     },
     provenanceEnvMerged: {
       one: "named by $KUBECONFIG, merged with {n} more file",
@@ -4282,10 +4282,10 @@ export const en = {
     searchCloudWords:
       "cloud profiles gcp google azure adc az login credentials",
     searchNoContextsWords: "no contexts kubeconfig empty clusters",
-    toolsNoProfiles: "— none defined.",
+    toolsNoProfiles: ": none defined.",
     toolsNoGcp: "none for GCP",
     toolsNoAzure: "none for Azure",
-    toolsProfiles: "— {gcp}, {azure}.",
+    toolsProfiles: ": {gcp}, {azure}.",
     toolsGcpCount: "{n} GCP",
     toolsAzureCount: "{n} Azure",
     notOnPath: "{label} is not on PATH. Set the path below.",
@@ -4303,7 +4303,7 @@ export const en = {
     clearKubeconfigFailed: "Failed to clear kubeconfig override",
     pointAtServiceYourself: "Point at a Service yourself",
     pointAtServiceHint:
-      "For anything that speaks this API without carrying the vendor's name — a VictoriaMetrics is called vmsingle and answers the same queries.",
+      "For anything that speaks this API without carrying the vendor's name: a VictoriaMetrics is called vmsingle and answers the same queries.",
     serviceLabel: "Service",
     chooseService: "Choose a Service",
     portLabel: "Port",
@@ -4315,31 +4315,31 @@ export const en = {
     authRunsPlugin: "Runs {plugin} for a token.",
     aCredentialPlugin: "a credential plugin",
     authClientCertFrom:
-      "Client certificate, from {source} — nothing else needed.",
+      "Client certificate, from {source}. Nothing else needed.",
     authClientCertEmbedded:
-      "Client certificate, embedded in the file — nothing else needed.",
+      "Client certificate, embedded in the file. Nothing else needed.",
     authTokenFrom: "A bearer token, read from {source}.",
     authTokenInFile:
-      "A bearer token, written in the file — nothing else needed.",
+      "A bearer token, written in the file. Nothing else needed.",
     authBasicAs: "Username and password, as {username}.",
     authBasicInFile: "Username and password, stored in the file.",
     authProviderNamed: "The {name} auth provider, configured in the file.",
     authUnrecognised:
-      "The file does not say how this context authenticates — this app cannot tell.",
+      "The file does not say how this context authenticates, and this app cannot tell.",
     forwardingTunnelNote:
-      "Forwarding {target} to {local}. Left off, the row stays in the sidebar and pressing it opens the tunnel — kept per cluster, on this machine only.",
-    tokenUnchangedPlaceholder: "unchanged — type to replace it",
+      "Forwarding {target} to {local}. Left off, the row stays in the sidebar and pressing it opens the tunnel. Kept per cluster, on this machine only.",
+    tokenUnchangedPlaceholder: "unchanged; type to replace it",
     tokenNewPlaceholder: "pasted here, kept out of this window afterwards",
     credentialStorageNote:
       "Stored in plain text in this app’s config file, which only your account can read. It is sent only from the backend and never handed back to this window.",
     lookingEllipsis: "Looking…",
     findVendorInCluster: "Find {vendor} in this cluster",
     probeAnswered: "Answered in {ms}ms",
-    probeDidNotAnswer: "Did not answer — {reason}",
+    probeDidNotAnswer: "Did not answer: {reason}",
     oneAddressPerCluster:
-      "One address per cluster, because a {vendor} is per cluster — staging's is not production's. Gives {gives}.",
+      "One address per cluster, because a {vendor} is per cluster: staging's is not production's. Gives {gives}.",
     addressIsFromHere:
-      "Asked from this machine, not from inside the cluster — so a cluster-internal name like {example} will not resolve. Give an address that reaches it from here, or let the app forward a port to it.",
+      "Asked from this machine, not from inside the cluster, so a cluster-internal name like {example} will not resolve. Give an address that reaches it from here, or let the app forward a port to it.",
     openTunnelOnSwitch: "Open the tunnel when I switch to this cluster",
     sendBearerToken: "Send a bearer token",
     acceptUntrustedCert: "Accept a certificate this machine does not trust",
@@ -4352,7 +4352,7 @@ export const en = {
     bindOne: "Bind one",
     awsNoProfilesPrefix:
       "This app has no AWS profiles, so it will use whatever",
-    awsNoProfilesMid: " defaults to —",
+    awsNoProfilesMid: " defaults to:",
     awsNoProfilesSuffix: ", then the default profile.",
     inWord: "in",
     displayName: "Display name",
@@ -4419,7 +4419,7 @@ export const en = {
       "Pod, namespace, image and host names are replaced with … before the query leaves the app. Turn off if your names are not sensitive.",
     handoffLogLines: "«Copy for agent» and Share include log lines",
     handoffLogLinesHint:
-      "Up to 40 lines before the last exit, as the container wrote them. No Secret is ever read, but a container that printed one prints it here too — passwords, tokens and connection strings are taken out where they are recognisable, and that cannot be complete.",
+      "Up to 40 lines before the last exit, as the container wrote them. No Secret is ever read, but a container that printed one prints it here too. Passwords, tokens and connection strings are taken out where they are recognisable, and that cannot be complete.",
     showMostLikely: "Show the «Most likely» panel",
     showMostLikelyHint:
       "Only on pods with a problem the app can read a chain for. Off hides the panel, not the facts.",
@@ -4468,7 +4468,7 @@ export const en = {
     copyDiagnostics: "Copy diagnostics",
     redactNamesAndPaths: "Redact names and paths",
     diagnosticsAllClear:
-      "Nothing here needs attention. The environment below is what this app sees when it spawns a credential plugin — which is not always what your shell sees.",
+      "Nothing here needs attention. The environment below is what this app sees when it spawns a credential plugin, which is not always what your shell sees.",
     searchPathBlock: {
       one: "Search path · {n} directory",
       other: "Search path · {n} directories",
@@ -4503,7 +4503,7 @@ export const en = {
     noneRead: "None read.",
     contextCount: { one: "{n} context", other: "{n} contexts" },
     noKubeconfigLoaded:
-      "None loaded yet — connect a cluster and this will name the file.",
+      "None loaded yet. Connect a cluster and this will name the file.",
     applicationBlock: "Application",
     connectionsBlock: "Connections · {n}",
     noConnectionsYet: "No connection attempted yet.",
@@ -4516,11 +4516,11 @@ export const en = {
     appVersion: "Version {version}",
     logsTo: "Logs: {destination}",
     logsNowhere:
-      "No log file this run — nothing on disk to send. This window could not create the folder it writes to.",
+      "No log file this run, so there is nothing on disk to send. This window could not create the folder it writes to.",
     logsMoreDetail: "Start with RUST_LOG=debug for more detail.",
     readingFile: "Reading the file…",
     contexts: "Contexts",
-    searchFiltersList: "{n} — search filters this list",
+    searchFiltersList: "{n} in all; search filters this list",
     kubeconfigFile: "Kubeconfig file",
     browseKubeconfig: "Browse for a kubeconfig file",
     noKubeconfig: "no kubeconfig",
@@ -4531,7 +4531,7 @@ export const en = {
     addKubeconfigFile: "Add a file",
     removeKubeconfigFile: "Stop reading this file",
     mergedFirstWins:
-      "merged in this order — the first file to name a context keeps it",
+      "merged in this order: the first file to name a context keeps it",
     everyContextClaimedElsewhere:
       "every context here is also in a file above, which keeps them",
     manageToolPaths: "manage tool paths",
@@ -4553,7 +4553,7 @@ export const en = {
     toolPathsIntro:
       "Where these binaries live, when they are somewhere the app does not look. Leave a field empty to search PATH again.",
     recheckTool: "Re-check {tool}",
-    toolPathPlaceholder: "/path/to/{tool} — leave empty to auto-detect",
+    toolPathPlaceholder: "/path/to/{tool}, or leave empty to auto-detect",
     browseForBinary: "Browse for the {tool} binary",
     selectBinaryTitle: "Select {tool} binary",
     cloudProfilesIntro:
