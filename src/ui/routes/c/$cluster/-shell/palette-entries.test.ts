@@ -10,6 +10,7 @@ import type { T } from "@/i18n/useT";
 import { hrefOf, setRouter, type AppLink } from "@/lib/links";
 import {
   buildPaletteEntries,
+  hitKey,
   ROWS_PER_CLUSTER,
   type Entry,
   type PaletteState,
@@ -59,6 +60,7 @@ function cluster(
     message: null,
     matched: 0,
     truncated: false,
+    searched: [],
     unreadable: [],
   };
 }
@@ -67,6 +69,8 @@ function pods(context: string, n: number): SearchHit[] {
   return Array.from({ length: n }, (_, i) => ({
     context,
     kind: "Pod",
+    group: "",
+    plural: "pods",
     name: `api-${i}`,
     namespace: "default",
   }));
@@ -77,7 +81,7 @@ function byContext(hits: SearchHit[]): Map<string, Map<string, SearchHit>> {
   const grouped = new Map<string, Map<string, SearchHit>>();
   for (const hit of hits) {
     const bucket = grouped.get(hit.context) ?? new Map<string, SearchHit>();
-    bucket.set(`${hit.kind}/${hit.namespace ?? ""}/${hit.name}`, hit);
+    bucket.set(hitKey(hit), hit);
     grouped.set(hit.context, bucket);
   }
   return grouped;
@@ -287,18 +291,20 @@ describe("the palette's resource rows", () => {
   });
 
   /**
-   * The cap was spent before the unroutable hits were dropped: five Widgets
-   * took every slot, none was drawn, and "3 more" sat under "Nothing
-   * matches" for the three pods nobody was shown.
+   * The cap was spent before the unroutable hits were dropped: five hits
+   * with no address took every slot, none was drawn, and "3 more" sat under
+   * "Nothing matches" for the three pods nobody was shown.
    */
   it("spends a cluster's rows on hits it can open, not on the ones it drops", () => {
     const widgets: SearchHit[] = Array.from(
       { length: ROWS_PER_CLUSTER },
       (_, i) => ({
         context: "k3d-dev",
-        kind: "Widget",
+        kind: "Pod",
+        group: "",
+        plural: "pods",
         name: `api-w${i}`,
-        namespace: "default",
+        namespace: null,
       })
     );
     const entries = buildPaletteEntries(
@@ -366,10 +372,11 @@ describe("the palette's resource rows", () => {
   });
 
   /**
-   * A Namespace is a scope to switch to, not a page; a kind with no page
-   * would blank the shell if offered, so it is left out.
+   * A Namespace is a scope to switch to, not a page. A kind with no page of
+   * its own opens where every served kind does, by its group and plural; a
+   * ServiceAccount found and then dropped read as no ServiceAccount at all.
    */
-  it("opens objects on their page, namespaces as a scope, and drops the unroutable", () => {
+  it("opens objects on their page, namespaces as a scope, and other served kinds on the generic page", () => {
     const entries = buildPaletteEntries(
       state({
         text: "api",
@@ -378,20 +385,34 @@ describe("the palette's resource rows", () => {
           {
             context: "k3d-dev",
             kind: "Pod",
+            group: "",
+            plural: "pods",
             name: "api-0",
             namespace: "default",
           },
           {
             context: "k3d-dev",
             kind: "Namespace",
+            group: "",
+            plural: "namespaces",
             name: "api",
             namespace: null,
           },
           {
             context: "k3d-dev",
-            kind: "Widget",
+            kind: "ServiceAccount",
+            group: "",
+            plural: "serviceaccounts",
             name: "api",
             namespace: "default",
+          },
+          {
+            context: "k3d-dev",
+            kind: "Lease",
+            group: "coordination.k8s.io",
+            plural: "leases",
+            name: "api",
+            namespace: "kube-system",
           },
         ]),
       })
@@ -403,6 +424,8 @@ describe("the palette's resource rows", () => {
     expect(paths).toEqual([
       ["Pod", "/c/k3d-dev/pods/default/api-0"],
       ["Namespace", null],
+      ["ServiceAccount", "/c/k3d-dev/serviceaccounts/default/api"],
+      ["Lease", "/c/k3d-dev/leases.coordination.k8s.io/kube-system/api"],
     ]);
   });
 
@@ -484,7 +507,20 @@ describe("the palette's resource rows", () => {
     const entries = buildPaletteEntries(
       state({
         text: "api",
-        shownClusters: [{ ...cluster("k3d-dev"), unreadable: ["Service"] }],
+        shownClusters: [
+          {
+            ...cluster("k3d-dev"),
+            unreadable: [
+              {
+                kind: "Service",
+                group: "",
+                plural: "services",
+                reason: "forbidden",
+                message: "services is forbidden",
+              },
+            ],
+          },
+        ],
       })
     );
 

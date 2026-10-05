@@ -4,7 +4,7 @@
 //! testable without a cluster.
 
 use super::types::{
-    SearchFailureKind, SearchRequest, SearchTarget, SearchableKind, DEFAULT_KINDS, SEARCHABLE_KINDS,
+    SearchFailureKind, SearchRequest, SearchTarget, SearchableKind, SEARCHABLE_KINDS,
 };
 use crate::error::{Error, Result};
 use std::collections::BTreeSet;
@@ -57,9 +57,8 @@ pub fn normalize_query(query: &str) -> Result<String> {
 
 /// Resolve requested kind labels against the searchable table.
 pub fn resolve_kinds(requested: Option<&[String]>) -> Result<Vec<&'static SearchableKind>> {
-    let labels: Vec<String> = match requested {
-        Some(list) if !list.is_empty() => list.to_vec(),
-        _ => DEFAULT_KINDS.iter().map(|k| (*k).to_string()).collect(),
+    let Some(labels) = requested.filter(|list| !list.is_empty()) else {
+        return Ok(SEARCHABLE_KINDS.iter().collect());
     };
 
     labels
@@ -174,6 +173,7 @@ mod tests {
             all_contexts: false,
             namespace: None,
             kinds: None,
+            session: None,
             connect: false,
             limit_per_context: None,
         }
@@ -267,11 +267,26 @@ mod tests {
         assert_eq!(targets[0].reason, Some(SearchFailureKind::UnknownContext));
     }
 
+    /// Seven kinds were searched and the rest said "Nothing matches": a
+    /// service account, a stateful set, an autoscaler and a lease were never
+    /// looked at.
     #[test]
-    fn default_kinds_resolve_and_unknown_kinds_are_rejected() {
+    fn an_unqualified_query_searches_every_typed_kind_and_unknown_kinds_are_rejected() {
         let kinds = resolve_kinds(None).unwrap();
-        assert_eq!(kinds.len(), DEFAULT_KINDS.len());
-        assert!(kinds.iter().any(|k| k.label == "Pod"));
+        assert_eq!(kinds.len(), SEARCHABLE_KINDS.len());
+        for label in [
+            "ServiceAccount",
+            "StatefulSet",
+            "HorizontalPodAutoscaler",
+            "Lease",
+            "ClusterRoleBinding",
+            "EndpointSlice",
+        ] {
+            assert!(
+                kinds.iter().any(|k| k.label == label),
+                "{label} is searched"
+            );
+        }
 
         let explicit = resolve_kinds(Some(&["pod".to_string()])).unwrap();
         assert_eq!(explicit.len(), 1);

@@ -59,6 +59,7 @@ async fn fan_out_reports_every_cluster() {
             all_contexts: false,
             namespace: None,
             kinds: None,
+            session: None,
             connect,
             limit_per_context: Some(20),
         },
@@ -127,6 +128,7 @@ async fn fan_out_reports_every_cluster() {
                 matched,
                 truncated,
                 unreadable,
+                ..
             } if search_id == handle.search_id => {
                 println!(
                     "[{:>6}ms] status {context} :: {status:?} reason={reason:?} matched={matched} truncated={truncated} unreadable={unreadable:?} message={}",

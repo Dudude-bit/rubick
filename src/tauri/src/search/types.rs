@@ -17,8 +17,31 @@ use serde::{Deserialize, Serialize};
 pub struct SearchHit {
     pub context: String,
     pub kind: String,
+    /// Where the kind is served, which is how a kind with no page of its own opens.
+    pub group: String,
+    pub plural: String,
     pub name: String,
     pub namespace: Option<String>,
+}
+
+/// A kind whose names a search compared.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchedKind {
+    pub kind: String,
+    pub group: String,
+    pub plural: String,
+}
+
+/// A kind a cluster would not list, and why, in the cluster's own words.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UnreadKind {
+    pub kind: String,
+    pub group: String,
+    pub plural: String,
+    pub reason: SearchFailureKind,
+    pub message: String,
 }
 
 /// Where a single cluster stands in a search.
@@ -243,9 +266,13 @@ pub struct SearchRequest {
     /// namespaces.
     #[serde(default)]
     pub namespace: Option<String>,
-    /// Kind labels to search; None = the default set.
+    /// Kind labels to search; None = every kind in `SEARCHABLE_KINDS`.
     #[serde(default)]
     pub kinds: Option<Vec<String>>,
+    /// One opening of the palette. Names listed under it are filtered again
+    /// on the next keystroke rather than listed again.
+    #[serde(default)]
+    pub session: Option<String>,
     /// Allow connecting contexts that have no live client yet. False
     /// on keystroke-driven searches: connecting can run an exec
     /// credential plugin, and typing must never trigger an auth prompt.
@@ -276,6 +303,20 @@ pub struct SearchableKind {
     pub label: &'static str,
     pub cluster_scoped: bool,
     pub coordinates: Coordinates,
+}
+
+impl SearchableKind {
+    /// The group and plural discovery files this kind under.
+    #[must_use]
+    pub fn key(&self) -> (String, String) {
+        match &self.coordinates {
+            Coordinates::Typed(resource) => {
+                let resource = resource();
+                (resource.group, resource.plural)
+            }
+            Coordinates::Served { group, plural } => ((*group).to_string(), (*plural).to_string()),
+        }
+    }
 }
 
 /// Where a searchable kind is listed.
@@ -318,8 +359,9 @@ macro_rules! searchable_gateway {
     };
 }
 
-/// Everything the search can look at. The `DEFAULT_KINDS` subset is
-/// what an unqualified query hits.
+/// Everything the search can look at, and what an unqualified query hits:
+/// every kind the app has a type for. Events are left out, turning over by
+/// the thousand with names nobody searches by.
 pub static SEARCHABLE_KINDS: &[SearchableKind] = &[
     searchable!("Pod", k8s_openapi::api::core::v1::Pod, false),
     searchable!("Deployment", k8s_openapi::api::apps::v1::Deployment, false),
@@ -329,10 +371,32 @@ pub static SEARCHABLE_KINDS: &[SearchableKind] = &[
         false
     ),
     searchable!("DaemonSet", k8s_openapi::api::apps::v1::DaemonSet, false),
+    searchable!("ReplicaSet", k8s_openapi::api::apps::v1::ReplicaSet, false),
     searchable!("Job", k8s_openapi::api::batch::v1::Job, false),
     searchable!("CronJob", k8s_openapi::api::batch::v1::CronJob, false),
+    searchable!(
+        "HorizontalPodAutoscaler",
+        k8s_openapi::api::autoscaling::v2::HorizontalPodAutoscaler,
+        false
+    ),
+    searchable!(
+        "PodDisruptionBudget",
+        k8s_openapi::api::policy::v1::PodDisruptionBudget,
+        false
+    ),
     searchable!("Service", k8s_openapi::api::core::v1::Service, false),
+    searchable!("Endpoints", k8s_openapi::api::core::v1::Endpoints, false),
+    searchable!(
+        "EndpointSlice",
+        k8s_openapi::api::discovery::v1::EndpointSlice,
+        false
+    ),
     searchable!("Ingress", k8s_openapi::api::networking::v1::Ingress, false),
+    searchable!(
+        "NetworkPolicy",
+        k8s_openapi::api::networking::v1::NetworkPolicy,
+        false
+    ),
     searchable_gateway!("Gateway", "gateways", false),
     searchable_gateway!("GatewayClass", "gatewayclasses", true),
     searchable_gateway!("HTTPRoute", "httproutes", false),
@@ -345,22 +409,39 @@ pub static SEARCHABLE_KINDS: &[SearchableKind] = &[
     searchable!("ConfigMap", k8s_openapi::api::core::v1::ConfigMap, false),
     searchable!("Secret", k8s_openapi::api::core::v1::Secret, false),
     searchable!(
+        "ServiceAccount",
+        k8s_openapi::api::core::v1::ServiceAccount,
+        false
+    ),
+    searchable!("Role", k8s_openapi::api::rbac::v1::Role, false),
+    searchable!("RoleBinding", k8s_openapi::api::rbac::v1::RoleBinding, false),
+    searchable!("ClusterRole", k8s_openapi::api::rbac::v1::ClusterRole, true),
+    searchable!(
+        "ClusterRoleBinding",
+        k8s_openapi::api::rbac::v1::ClusterRoleBinding,
+        true
+    ),
+    searchable!(
         "PersistentVolumeClaim",
         k8s_openapi::api::core::v1::PersistentVolumeClaim,
         false
     ),
+    searchable!(
+        "PersistentVolume",
+        k8s_openapi::api::core::v1::PersistentVolume,
+        true
+    ),
+    searchable!(
+        "StorageClass",
+        k8s_openapi::api::storage::v1::StorageClass,
+        true
+    ),
+    searchable!("Lease", k8s_openapi::api::coordination::v1::Lease, false),
     searchable!("Node", k8s_openapi::api::core::v1::Node, true),
     searchable!("Namespace", k8s_openapi::api::core::v1::Namespace, true),
-];
-
-/// Kinds searched when the caller does not name any. Mirrors what the
-/// command palette searched before this existed.
-pub const DEFAULT_KINDS: &[&str] = &[
-    "Pod",
-    "Deployment",
-    "Service",
-    "ConfigMap",
-    "Secret",
-    "Ingress",
-    "Node",
+    searchable!(
+        "CustomResourceDefinition",
+        k8s_openapi::apiextensions_apiserver::pkg::apis::apiextensions::v1::CustomResourceDefinition,
+        true
+    ),
 ];

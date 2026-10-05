@@ -1475,6 +1475,7 @@ export interface SearchRequest {
   allContexts: boolean;
   namespace?: string;
   kinds?: string[];
+  session?: string;
   connect: boolean;
   limitPerContext?: number;
 }
@@ -1955,9 +1956,25 @@ export interface RefusedPod {
   message: string | null;
 }
 
+export interface UnreadKind {
+  kind: string;
+  group: string;
+  plural: string;
+  reason: SearchFailureKind;
+  message: string;
+}
+
+export interface SearchedKind {
+  kind: string;
+  group: string;
+  plural: string;
+}
+
 export interface SearchHit {
   context: string;
   kind: string;
+  group: string;
+  plural: string;
   name: string;
   namespace: string | null;
 }
@@ -2599,7 +2616,8 @@ export type AppEvent =
       message: string | null;
       matched: number;
       truncated: boolean;
-      unreadable: string[];
+      searched: SearchedKind[];
+      unreadable: UnreadKind[];
     }
   | { channel: "terminal-output"; session_id: string; data: string }
   | { channel: "terminal-closed"; session_id: string; status: string | null }

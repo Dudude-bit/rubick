@@ -31,6 +31,7 @@ import {
   objectLink,
   pageLink,
   servedListLink,
+  servedObjectLink,
   type AppLink,
 } from "@/lib/links";
 import { isResourceType, ResourceType, toKind } from "@/lib/resource-registry";
@@ -204,8 +205,16 @@ export type GroupAction = "none" | "search-it" | "retry";
 /** A hit that names a scope instead of an object the router can open. */
 function isNamespaceHit(hit: SearchHit): boolean {
   return (
-    isResourceType(hit.kind) && toKind(hit.kind) === ResourceType.Namespace
+    hit.group === "" &&
+    isResourceType(hit.kind) &&
+    toKind(hit.kind) === ResourceType.Namespace
   );
+}
+
+/** One object among a cluster's hits; two groups may name a kind alike. */
+export function hitKey(hit: SearchHit): string {
+  const kind = hit.group ? `${hit.kind}.${hit.group}` : hit.kind;
+  return `${kind}/${hit.namespace ?? ""}/${hit.name}`;
 }
 
 export function isSelectable(entry: Entry): boolean {
@@ -500,13 +509,13 @@ export function buildPaletteEntries({
       ...(hitsByContext.get(cluster.context)?.values() ?? []),
     ].flatMap((hit): { hit: SearchHit; path: AppLink | null }[] => {
       if (isNamespaceHit(hit)) return [{ hit, path: null }];
-      const path = objectLink(hit, { cluster: hit.context });
+      const path = servedObjectLink(hit, { cluster: hit.context });
       return path ? [{ hit, path }] : [];
     });
     const cap = shownClusters.length > 1 ? ROWS_PER_CLUSTER : found.length;
     for (const { hit, path } of found.slice(0, cap)) {
       out.push({
-        id: `hit:${hit.context}/${hit.kind}/${hit.namespace ?? ""}/${hit.name}`,
+        id: `hit:${hit.context}/${hitKey(hit)}`,
         kind: "hit",
         hit,
         path,

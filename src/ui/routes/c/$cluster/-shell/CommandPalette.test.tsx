@@ -11,10 +11,18 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 const search = vi.hoisted(() => ({
-  unreadable: [] as string[],
+  unreadable: [] as {
+    kind: string;
+    group: string;
+    plural: string;
+    reason: "forbidden";
+    message: string;
+  }[],
   hits: [] as {
     context: string;
     kind: string;
+    group: string;
+    plural: string;
     name: string;
     namespace: string | null;
   }[],
@@ -32,6 +40,7 @@ vi.mock("./useResourceSearch", async (importOriginal) => ({
         message: null,
         matched: search.hits.length,
         truncated: false,
+        searched: [],
         unreadable: search.unreadable,
       },
     ],
@@ -48,6 +57,8 @@ import { useScopeTabStore } from "@/stores/scopeTabStore";
 const hit = (over: Partial<(typeof search.hits)[number]> = {}) => ({
   context: "k3d-dev",
   kind: "Pod",
+  group: "",
+  plural: "pods",
   name: "burst-demo",
   namespace: "k8s-gui-test",
   ...over,
@@ -95,7 +106,12 @@ describe("the command palette's hits", () => {
 
   it("points the window at a namespace instead of opening a page for it", async () => {
     search.hits = [
-      hit({ kind: "Namespace", name: "kube-system", namespace: null }),
+      hit({
+        kind: "Namespace",
+        plural: "namespaces",
+        name: "kube-system",
+        namespace: null,
+      }),
     ];
     await open("kube-system");
     await userEvent.click(await screen.findByText("scope to it"));
@@ -107,7 +123,12 @@ describe("the command palette's hits", () => {
 
   it("opens a namespace in a tab already scoped to it", async () => {
     search.hits = [
-      hit({ kind: "Namespace", name: "kube-system", namespace: null }),
+      hit({
+        kind: "Namespace",
+        plural: "namespaces",
+        name: "kube-system",
+        namespace: null,
+      }),
     ];
     await open("kube-system");
     fireEvent.click(await screen.findByText("scope to it"), { ctrlKey: true });
@@ -141,24 +162,34 @@ describe("the command palette's hits", () => {
    *  list; the unread kinds are part of its answer. */
   it("names the kinds a cluster could not read beside its matches", async () => {
     search.hits = [hit()];
-    search.unreadable = ["Service"];
+    search.unreadable = [
+      {
+        kind: "Service",
+        group: "",
+        plural: "services",
+        reason: "forbidden",
+        message: "services is forbidden",
+      },
+    ];
     await open("burst-demo");
     expect(
       await screen.findByText(/could not read Service/)
     ).toBeInTheDocument();
   });
 
-  it("does not offer a kind the router has no page for at all", async () => {
+  /** A ServiceAccount named marco was found and then dropped for having no page of its own. */
+  it("offers a kind with no page of its own, to open on the generic page", async () => {
     search.hits = [
       hit({
-        kind: "Widget",
-        name: "burst-demo.17f",
-        namespace: "k8s-gui-test",
+        kind: "ServiceAccount",
+        plural: "serviceaccounts",
+        name: "marco",
+        namespace: "team-checkout",
       }),
     ];
-    await open("burst-demo");
-    expect(screen.queryByText(/burst-demo\.17f/)).toBeNull();
-    expect(await screen.findByText(/Nothing matches/)).toBeInTheDocument();
+    await open("marco");
+    expect(await screen.findByText("marco")).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing matches/)).toBeNull();
   });
 
   it("still opens the kinds it does have a page for", async () => {

@@ -12,6 +12,7 @@ import {
   objectLink,
   retargetHref,
   servedListLink,
+  servedObjectLink,
   setRouter,
 } from "./links";
 import { RESOURCE_REGISTRY } from "./resource-registry";
@@ -143,6 +144,59 @@ describe("a served kind's list", () => {
         })
       )
     ).toBe("/c/prod/serviceaccounts");
+  });
+});
+
+describe("an object of a served kind", () => {
+  /**
+   * A search hit for a ServiceAccount, a ClusterRole or an Istio Gateway
+   * carries its group and plural. Linked by kind name alone, the first two
+   * had nowhere to go and the third opened the Gateway API page of a
+   * Gateway that does not exist.
+   */
+  it("opens the registry's page only for that very kind, and the generic page otherwise", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const href = (ref: Parameters<typeof servedObjectLink>[0]) =>
+      hrefOf(servedObjectLink(ref)!);
+
+    const pod = href({
+      kind: "Pod",
+      group: "",
+      plural: "pods",
+      name: "api-0",
+      namespace: "web",
+    });
+    expect(pod).toBe("/c/prod/pods/web/api-0");
+    expect(routeOf(router, pod)).not.toMatch(GENERIC);
+
+    expect(
+      href({
+        kind: "ServiceAccount",
+        group: "",
+        plural: "serviceaccounts",
+        name: "marco",
+        namespace: "team-checkout",
+      })
+    ).toBe("/c/prod/serviceaccounts/team-checkout/marco");
+    const role = href({
+      kind: "ClusterRole",
+      group: "rbac.authorization.k8s.io",
+      plural: "clusterroles",
+      name: "view",
+      namespace: null,
+    });
+    expect(role).toBe("/c/prod/clusterroles.rbac.authorization.k8s.io/view");
+    expect(routeOf(router, role)).toMatch(GENERIC);
+    expect(
+      href({
+        kind: "Gateway",
+        group: "networking.istio.io",
+        plural: "gateways",
+        name: "edge",
+        namespace: "istio-system",
+      })
+    ).toBe("/c/prod/gateways.networking.istio.io/istio-system/edge");
   });
 });
 

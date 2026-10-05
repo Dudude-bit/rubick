@@ -5,9 +5,11 @@ import { errorToShow } from "@/lib/error-utils";
 import { listenEvent } from "@/lib/events";
 import type {
   SearchContextStatus,
+  SearchedKind,
   SearchFailureKind,
   SearchHit,
   SearchTarget,
+  UnreadKind,
 } from "@/generated/types";
 
 /** Shortest query the backend accepts, in characters; `src/contracts/search-limits.json`. */
@@ -38,8 +40,10 @@ export interface ClusterSearchState {
   message: string | null;
   matched: number;
   truncated: boolean;
-  /** Kinds this cluster would not list; `matched` counts only the rest. */
-  unreadable: string[];
+  /** Kinds whose names were compared; empty until the cluster answers. */
+  searched: SearchedKind[];
+  /** Kinds this cluster would not list, each with why; `matched` counts only the rest. */
+  unreadable: UnreadKind[];
 }
 
 export interface UseResourceSearchOptions {
@@ -58,6 +62,8 @@ export interface UseResourceSearchOptions {
    */
   connect?: boolean;
   kinds?: string[];
+  /** One opening of the palette: what it listed once is filtered after. */
+  session?: string;
   limitPerContext?: number;
   enabled?: boolean;
   debounceMs?: number;
@@ -94,6 +100,7 @@ function fromTarget(target: SearchTarget): ClusterSearchState {
     message: target.message,
     matched: 0,
     truncated: false,
+    searched: [],
     unreadable: [],
   };
 }
@@ -124,6 +131,7 @@ export function useResourceSearch({
   namespace = null,
   connect = false,
   kinds,
+  session,
   limitPerContext,
   enabled = true,
   debounceMs = DEFAULT_DEBOUNCE_MS,
@@ -158,6 +166,7 @@ export function useResourceSearch({
         namespace ?? "",
         String(connect),
         String(attempt),
+        session ?? "",
       ].join(SEP)
     : "";
 
@@ -188,6 +197,7 @@ export function useResourceSearch({
           allContexts,
           namespace: namespace ?? undefined,
           kinds: kindsKey ? kindsKey.split(SEP) : undefined,
+          session,
           connect,
           limitPerContext: limitPerContext ?? undefined,
         });
@@ -228,6 +238,7 @@ export function useResourceSearch({
                       message: payload.message,
                       matched: payload.matched,
                       truncated: payload.truncated,
+                      searched: payload.searched,
                       unreadable: payload.unreadable,
                     }
                   : cluster
@@ -279,6 +290,7 @@ export function useResourceSearch({
     limitPerContext,
     debounceMs,
     attempt,
+    session,
     scope,
   ]);
 
@@ -300,6 +312,7 @@ export function useResourceSearch({
                     status: "searching" as const,
                     matched: 0,
                     truncated: false,
+                    searched: [],
                     unreadable: [],
                   }
             )

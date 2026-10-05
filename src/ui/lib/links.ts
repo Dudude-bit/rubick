@@ -131,22 +131,49 @@ export function listLink(
  * The list of a kind the catalogue names: its own page where the registry
  * holds that very kind, the generic list of whatever is served otherwise.
  */
-export function servedListLink(kind: {
+export function servedListLink(kind: ServedKindRef): AppLink {
+  const known = registryKindOf(kind);
+  return known ? listLink(known) : resourceListLink(servedSegment(kind));
+}
+
+/** Where one object of a served kind opens, by the same rule as its list. */
+export function servedObjectLink(
+  ref: ServedKindRef & { name: string; namespace?: string | null },
+  options?: ObjectLinkOptions
+): AppLink | null {
+  const known = registryKindOf(ref);
+  return objectLink(
+    known
+      ? { kind: known, name: ref.name, namespace: ref.namespace }
+      : {
+          kind: ref.kind,
+          name: ref.name,
+          namespace: ref.namespace,
+          crd: servedSegment(ref),
+        },
+    options
+  );
+}
+
+interface ServedKindRef {
   kind: string;
   group: string;
   plural: string;
-}): AppLink {
+}
+
+/** The registry's kind only where it is that very kind, not a namesake in another group. */
+function registryKindOf(kind: ServedKindRef): ResourceKind | null {
   const known = isResourceType(kind.kind) ? toKind(kind.kind) : null;
   const definition = known ? getResourceDefinition(known) : null;
-  if (
-    known &&
+  return known &&
     definition?.group === kind.group &&
     definition.plural === kind.plural
-  )
-    return listLink(known);
-  return resourceListLink(
-    kind.group ? `${kind.plural}.${kind.group}` : kind.plural
-  );
+    ? known
+    : null;
+}
+
+function servedSegment(kind: ServedKindRef): string {
+  return kind.group ? `${kind.plural}.${kind.group}` : kind.plural;
 }
 
 /**

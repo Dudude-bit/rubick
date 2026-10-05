@@ -45,6 +45,7 @@ import { catalogQuery } from "../-object/served";
 import {
   buildPaletteEntries,
   hasAnswered,
+  hitKey,
   isCold,
   isSelectable,
   type Entry,
@@ -78,6 +79,7 @@ export function CommandPalette() {
   const [wake, setWake] = useState<Wake | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
+  const [opening, setOpening] = useState("");
 
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -121,6 +123,8 @@ export function CommandPalette() {
     namespace: scoped ? null : currentNamespace || null,
     connect: wake !== null,
     attempt: wake?.attempt ?? 0,
+    // A retry is a question asked again, so it lists again too.
+    session: `${opening}:${wake?.attempt ?? 0}`,
     enabled: open && bang === null && (scoped || isConnected),
   });
 
@@ -145,6 +149,7 @@ export function CommandPalette() {
           message: null,
           matched: 0,
           truncated: false,
+          searched: [],
           unreadable: [],
         }
     );
@@ -157,9 +162,8 @@ export function CommandPalette() {
     // the same rule the lists follow. A scoped search keeps every hit:
     // another cluster's namespaces are not this one's.
     for (const hit of scoped ? hits : namespaceScope.narrow(hits)) {
-      const key = `${hit.kind}/${hit.namespace ?? ""}/${hit.name}`;
       const bucket = grouped.get(hit.context) ?? new Map<string, SearchHit>();
-      bucket.set(key, hit);
+      bucket.set(hitKey(hit), hit);
       grouped.set(hit.context, bucket);
     }
     return grouped;
@@ -504,6 +508,9 @@ export function CommandPalette() {
   useEffect(() => {
     if (open) {
       inputRef.current?.focus();
+      setOpening(
+        `${Date.now().toString(36)}.${Math.random().toString(36).slice(2)}`
+      );
       commands
         .getRecentItems()
         .then(setRecentItems)
@@ -1017,10 +1024,14 @@ function ClusterGroup({
       state = t("count", "matchesCapped", { n: cluster.matched });
     if (cluster.unreadable.length > 0) {
       state = (
-        <span title={cluster.message ?? undefined}>
+        <span
+          title={cluster.unreadable
+            .map((unread) => `${unread.kind}: ${unread.message}`)
+            .join("\n")}
+        >
           {state} ·{" "}
           {t("cluster", "kindsUnreadInline", {
-            kinds: cluster.unreadable.join(", "),
+            kinds: cluster.unreadable.map((unread) => unread.kind).join(", "),
           })}
         </span>
       );

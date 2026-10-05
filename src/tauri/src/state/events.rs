@@ -308,9 +308,12 @@ pub enum AppEvent {
         message: Option<String>,
         matched: u32,
         truncated: bool,
-        /// The kinds this cluster would not list, by kind name. Empty when
+        /// The kinds whose names were compared; a kind the cluster does not
+        /// serve is in no list at all.
+        searched: Vec<crate::search::SearchedKind>,
+        /// The kinds this cluster would not list, each with why. Empty when
         /// every kind was read; `matched` counts only the others.
-        unreadable: Vec<String>,
+        unreadable: Vec<crate::search::UnreadKind>,
     },
     /// Terminal output received
     TerminalOutput { session_id: String, data: String },
@@ -557,6 +560,7 @@ mod tests {
                 message: None,
                 matched: 0,
                 truncated: false,
+                searched: Vec::new(),
                 unreadable: Vec::new(),
             },
             AppEvent::TerminalOutput {
@@ -870,7 +874,7 @@ mod tests {
     /// time — this time for a whole cluster.
     #[test]
     fn search_status_payload_separates_a_failure_from_an_empty_result() {
-        use crate::search::{SearchContextStatus, SearchFailureKind};
+        use crate::search::{SearchContextStatus, SearchFailureKind, SearchedKind, UnreadKind};
 
         let empty = AppEvent::SearchStatus {
             search_id: "s-1".into(),
@@ -880,6 +884,7 @@ mod tests {
             message: None,
             matched: 0,
             truncated: false,
+            searched: Vec::new(),
             unreadable: Vec::new(),
         }
         .payload();
@@ -894,6 +899,7 @@ mod tests {
             message: Some("connection refused".into()),
             matched: 0,
             truncated: false,
+            searched: Vec::new(),
             unreadable: Vec::new(),
         }
         .payload();
@@ -919,6 +925,7 @@ mod tests {
             message: Some("not connected".into()),
             matched: 0,
             truncated: false,
+            searched: Vec::new(),
             unreadable: Vec::new(),
         }
         .payload();
@@ -931,17 +938,38 @@ mod tests {
             search_id: "s-1".into(),
             context: "dev".into(),
             status: SearchContextStatus::Done,
-            reason: Some(SearchFailureKind::Forbidden),
-            message: Some("services is forbidden".into()),
+            reason: None,
+            message: None,
             matched: 2,
             truncated: false,
-            unreadable: vec!["Service".into()],
+            searched: vec![SearchedKind {
+                kind: "Pod".into(),
+                group: String::new(),
+                plural: "pods".into(),
+            }],
+            unreadable: vec![UnreadKind {
+                kind: "Service".into(),
+                group: String::new(),
+                plural: "services".into(),
+                reason: SearchFailureKind::Forbidden,
+                message: "services is forbidden".into(),
+            }],
         }
         .payload();
         assert_eq!(
             partial.get("unreadable"),
-            Some(&serde_json::json!(["Service"])),
-            "the unread kinds travel as data, not inside a sentence"
+            Some(&serde_json::json!([{
+                "kind": "Service",
+                "group": "",
+                "plural": "services",
+                "reason": "forbidden",
+                "message": "services is forbidden",
+            }])),
+            "each unread kind travels as data with its own reason, not inside a sentence"
+        );
+        assert_eq!(
+            partial.get("searched"),
+            Some(&serde_json::json!([{ "kind": "Pod", "group": "", "plural": "pods" }])),
         );
     }
 

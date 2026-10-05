@@ -242,6 +242,12 @@ impl OwnershipIndexes {
         Ok(index)
     }
 
+    /// A context's index where one is already running; none is started.
+    #[must_use]
+    pub fn running(&self, context: &str) -> Option<Arc<ClusterIndex>> {
+        self.clusters.get(context).map(|held| held.clone())
+    }
+
     pub fn forget(&self, context: &str) {
         if let Some((_, index)) = self.clusters.remove(context) {
             index.stop.cancel();
@@ -324,6 +330,45 @@ impl ClusterIndex {
             defined_by(&node.name)?
         };
         (!self.knows(&defined)).then_some(defined)
+    }
+
+    /// Every name of one kind the index holds, where it reads that kind whole
+    /// or, for `namespace`, in that namespace; how it reads it otherwise.
+    ///
+    /// # Errors
+    ///
+    /// The kind is not live here: still listing, refused, stale or unwatched.
+    pub fn names(
+        &self,
+        kind: &KindKey,
+        namespace: Option<&str>,
+    ) -> std::result::Result<Vec<(String, Option<String>)>, Reading> {
+        let slots = self.slots.lock().clone();
+        let whole = SlotKey {
+            kind: kind.clone(),
+            namespace: None,
+        };
+        if !slots.contains_key(&whole) {
+            return Err(self
+                .unwatched
+                .lock()
+                .get(kind)
+                .map_or(Reading::Syncing, |(_, reading)| reading.clone()));
+        }
+        match reading_of(kind, &slots) {
+            None => {}
+            Some(Reading::Partial { namespaces })
+                if namespace.is_some_and(|ns| namespaces.iter().any(|read| read == ns)) => {}
+            Some(reading) => return Err(reading),
+        }
+        let graph = self.graph.read();
+        Ok(graph
+            .of_kind(kind)
+            .iter()
+            .filter_map(|uid| graph.node(uid))
+            .filter(|node| namespace.is_none() || node.namespace.as_deref() == namespace)
+            .map(|node| (node.name.clone(), node.namespace.clone()))
+            .collect())
     }
 
     fn knows(&self, kind: &KindKey) -> bool {
@@ -429,6 +474,59 @@ impl ClusterIndex {
             }
             slots::spawn(self, slot, resource.clone());
         }
+    }
+}
+
+#[cfg(test)]
+type Named<'a> = (KindKey, &'a [(&'a str, Option<&'a str>)]);
+
+#[cfg(test)]
+impl ClusterIndex {
+    /// An index that has read `live` kinds whole and is still listing the
+    /// `syncing` ones, with no watch behind either.
+    pub(crate) fn holding(client: Client, live: &[Named<'_>], syncing: &[KindKey]) -> Arc<Self> {
+        let index = Self {
+            graph: RwLock::new(Graph::default()),
+            slots: Mutex::new(BTreeMap::new()),
+            watched: Mutex::new(BTreeMap::new()),
+            unwatched: Mutex::new(BTreeMap::new()),
+            unread_groups: Mutex::new(Vec::new()),
+            scope: Mutex::new(None),
+            last_used: Mutex::new(Instant::now()),
+            client,
+            stop: CancellationToken::new(),
+        };
+        for (key, names) in live {
+            let slot = SlotKey {
+                kind: key.clone(),
+                namespace: None,
+            };
+            index.slots.lock().insert(slot.clone(), SlotState::Live);
+            for (at, (name, namespace)) in names.iter().enumerate() {
+                index.graph.write().apply(
+                    &slot,
+                    format!("{}/{at}", key.plural),
+                    graph::Node {
+                        key: key.clone(),
+                        kind: key.plural.clone(),
+                        version: "v1".to_string(),
+                        name: (*name).to_string(),
+                        namespace: namespace.map(str::to_string),
+                        owners: Vec::new(),
+                    },
+                );
+            }
+        }
+        for key in syncing {
+            index.slots.lock().insert(
+                SlotKey {
+                    kind: key.clone(),
+                    namespace: None,
+                },
+                SlotState::Syncing,
+            );
+        }
+        Arc::new(index)
     }
 }
 

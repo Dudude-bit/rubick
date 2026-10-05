@@ -290,6 +290,31 @@ describe("useResourceSearch", () => {
     expect(startedRequests[1]).toEqual(startedRequests[0]);
   });
 
+  /**
+   * The session is what lets the backend list a kind once per palette open
+   * and filter it after. Dropped from the request, every keystroke listed
+   * every kind again; dropped from the key, a new opening reused the last.
+   */
+  it("sends the palette's session and asks again when a new one begins", async () => {
+    const { rerender } = renderHook(
+      ({ session }: { session: string }) =>
+        useResourceSearch({ query: "api", session }),
+      { initialProps: { session: "open-1" } }
+    );
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(startedRequests[0]).toMatchObject({ session: "open-1" });
+
+    rerender({ session: "open-2" });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(startedRequests).toHaveLength(2);
+    expect(startedRequests[1]).toMatchObject({ session: "open-2" });
+  });
+
   it("keeps the roster across a keystroke, and the hits with the old query", async () => {
     targetsForNextStart = [
       ...searching("dev"),
