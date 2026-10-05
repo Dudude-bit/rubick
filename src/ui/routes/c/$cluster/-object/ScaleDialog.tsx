@@ -127,8 +127,16 @@ function ScaleForm({
   const t = useT();
   const [replicas, setReplicas] = useState(current);
 
+  // A form, so Enter scales as the button does; a disabled submit button
+  // holds Enter back too.
   return (
-    <>
+    <form
+      className="grid grid-cols-[minmax(0,1fr)] gap-3"
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit(replicas);
+      }}
+    >
       <div className="space-y-2">
         <Label htmlFor="replicas">{t("action", "replicasLabel")}</Label>
         <Input
@@ -143,13 +151,13 @@ function ScaleForm({
       </div>
       {gateInput}
       <DialogFooter>
-        <Button variant="outline" onClick={onCancel}>
+        <Button type="button" variant="outline" onClick={onCancel}>
           {t("action", "cancel")}
         </Button>
-        <Button onClick={() => onSubmit(replicas)} disabled={busy || blocked}>
+        <Button type="submit" disabled={busy || blocked}>
           {confirmLabel}
         </Button>
       </DialogFooter>
-    </>
+    </form>
   );
 }

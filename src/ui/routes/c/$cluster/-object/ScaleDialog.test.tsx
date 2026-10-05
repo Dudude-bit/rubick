@@ -104,3 +104,24 @@ describe("what the dialog is about", () => {
     );
   });
 });
+
+describe("submitting from the keyboard", () => {
+  /** Lena typed the count and pressed Enter; nothing happened. */
+  it("scales on Enter in the replica field", async () => {
+    const onSubmit = vi.fn();
+    render(scale({ onSubmit }));
+    const field = screen.getByLabelText(/replicas/i);
+    await userEvent.clear(field);
+    await userEvent.type(field, "5{Enter}");
+    expect(onSubmit).toHaveBeenCalledWith(5);
+  });
+
+  /** Enter goes through the same gate the button does. */
+  it("scales nothing on Enter while the cluster's name is untyped", async () => {
+    useClusterIdentityStore.getState().setCritical(PROD, true);
+    const onSubmit = vi.fn();
+    render(scale({ onSubmit }));
+    await userEvent.type(screen.getByLabelText(/replicas/i), "{Enter}");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+});
