@@ -133,3 +133,32 @@ describe("cluster summary counts when the overview is refused", () => {
     expect(dev?.problemCount).toBe(1);
   });
 });
+
+describe("who asks for the whole cluster", () => {
+  /**
+   * Marco, scoped to his one namespace: the picker is mounted on every
+   * screen and asked for the whole cluster every ten seconds while shut,
+   * refused every time. Fails if a summary nobody is reading asks at all.
+   */
+  it("asks only while someone reads the counts", async () => {
+    getClusterOverview.mockResolvedValue({
+      namespaces: [],
+      problems: [],
+      problemsTruncated: 0,
+      counts: { pods: 3 },
+    } as never);
+    listNamespaces.mockResolvedValue([] as never);
+
+    const { result, rerender } = renderHook(
+      ({ open }) => useClusterSummary(open),
+      { wrapper, initialProps: { open: false } }
+    );
+    await waitFor(() => expect(listNamespaces).toHaveBeenCalled());
+    expect(getClusterOverview).not.toHaveBeenCalled();
+    expect(result.current.podCount).toBeNull();
+
+    rerender({ open: true });
+    await waitFor(() => expect(result.current.podCount).toBe(3));
+    expect(getClusterOverview).toHaveBeenCalledWith(null);
+  });
+});

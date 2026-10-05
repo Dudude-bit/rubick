@@ -60,12 +60,17 @@ export function useNamespaceList() {
  * namespace, so counting only inside it would show every other row as
  * empty. The query key matches the overview page's key when the window
  * is already on "all namespaces", so the common case costs one request.
+ * `enabled` is whether anyone is reading the counts: the picker is mounted
+ * on every screen, and while it was shut it asked a namespace-only token
+ * for the whole cluster every ten seconds, and was refused every time.
  */
 const WHOLE_CLUSTER: readonly string[] = [];
 
-export function useClusterSummary(): ClusterSummary {
-  const { data: overview, isLoading: overviewLoading } =
-    useClusterOverview(WHOLE_CLUSTER);
+export function useClusterSummary(enabled = true): ClusterSummary {
+  const { data: overview, isLoading: overviewLoading } = useClusterOverview(
+    WHOLE_CLUSTER,
+    enabled
+  );
 
   const {
     data: namespaceInfos,

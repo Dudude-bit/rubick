@@ -30,8 +30,16 @@ const summary = vi.hoisted(() => ({
   namespaceList: "listed" as "listed" | "refused" | "failed" | "pending",
 }));
 
+/** Whether each render of the picker asked for the cluster-wide counts. */
+const counted = vi.hoisted(() => ({
+  enabled: [] as Array<boolean | undefined>,
+}));
+
 vi.mock("@/hooks/useClusterSummary", () => ({
-  useClusterSummary: () => summary,
+  useClusterSummary: (enabled?: boolean) => {
+    counted.enabled.push(enabled);
+    return summary;
+  },
 }));
 
 import { commands } from "@/lib/commands";
@@ -219,6 +227,19 @@ describe("watching several namespaces at once", () => {
    * against: a plain click still swaps the window onto one namespace and
    * shuts the list. Would break if adding several ever became the default.
    */
+  /**
+   * The counts are the whole cluster's, which a namespace-only token is
+   * refused. Fails if the shut picker keeps asking for them.
+   */
+  it("asks for the cluster-wide counts only while the list is open", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-0"]);
+    expect(counted.enabled.at(-1)).toBe(false);
+
+    await openPicker(user);
+    expect(counted.enabled.at(-1)).toBe(true);
+  });
+
   it("replaces the selection on a plain click and shuts the list", async () => {
     const user = userEvent.setup();
     await draw(["ns-0", "ns-1"]);

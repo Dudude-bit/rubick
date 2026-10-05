@@ -694,7 +694,7 @@ function NamespacePopover({
   onSelect: (namespaces: string[], keepOpen: boolean) => void;
 }) {
   const t = useT();
-  const { namespaces, podCount, namespaceList } = useClusterSummary();
+  const { namespaces, podCount, namespaceList } = useClusterSummary(open);
   const contextNamespace = useClusterStore(
     (s) => s.contexts.find((c) => c.name === s.currentContext)?.namespace
   );

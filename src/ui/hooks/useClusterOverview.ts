@@ -38,14 +38,14 @@ export async function readOverview(
  * this hook does not read the selection itself. {@link useScopedOverview} is
  * the one that follows it.
  */
-export function useClusterOverview(scope: readonly string[]) {
+export function useClusterOverview(scope: readonly string[], enabled = true) {
   const currentContext = useClusterStore((s) => s.currentContext);
   const isConnected = useClusterStore((s) => s.isConnected);
 
   return useLiveQuery({
     queryKey: queryKeys.clusterOverview(currentContext, scope),
     queryFn: () => readOverview(scope),
-    enabled: isConnected,
+    enabled: isConnected && enabled,
     staleTime: STALE_TIMES.overview,
     // Previous, but only of this cluster: `keepPreviousData` answered the
     // new context's key with the old context's totals, which is how the rail
