@@ -1447,6 +1447,10 @@ export async function getNodesMetrics(): Promise<NodeMetricsResponse> {
   return invoke<NodeMetricsResponse>("get_nodes_metrics");
 }
 
+export async function recheckMetrics(): Promise<void> {
+  return invoke<void>("recheck_metrics");
+}
+
 export async function perfSetRecording(recording: boolean): Promise<void> {
   return invoke<void>("perf_set_recording", { recording });
 }

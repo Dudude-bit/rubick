@@ -1350,7 +1350,7 @@ pub async fn cluster_overview(
         .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
     let refused = state.overview_cache.refused_counts(&context);
     let (metrics, counts, snapshot) = tokio::join!(
-        crate::metrics::overview_node_metrics(state),
+        crate::metrics::get_node_metrics(state),
         side_counts(&client, scope.as_deref(), &refused),
         state.overview_cache.snapshot(&context, || client.clone()),
     );

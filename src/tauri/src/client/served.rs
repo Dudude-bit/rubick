@@ -430,6 +430,15 @@ pub(crate) mod test_server {
         served: super::ServedIndex,
         answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
     ) -> (crate::state::AppState, Hits) {
+        let (state, hits, _) = reconnectable(served, answer).await;
+        (state, hits)
+    }
+
+    /// The same, with the kubeconfig a reconnect to the same context takes.
+    pub(crate) async fn reconnectable(
+        served: super::ServedIndex,
+        answer: impl Fn(&str, usize) -> (u16, String) + Send + Sync + 'static,
+    ) -> (crate::state::AppState, Hits, kube::config::Kubeconfig) {
         let (url, hits) = listening(answer).await;
         let mut state = crate::state::AppState::new().expect("state");
         state.client_manager = Arc::new(crate::client::K8sClientManager::with_served(served));
@@ -442,11 +451,11 @@ pub(crate) mod test_server {
         .expect("kubeconfig");
         state
             .client_manager
-            .connect_with_kubeconfig("fake", kubeconfig)
+            .connect_with_kubeconfig("fake", kubeconfig.clone())
             .await
             .expect("connected");
         state.set_current_context(Some("fake".to_string()));
-        (state, hits)
+        (state, hits, kubeconfig)
     }
 
     /// A failure as the API server words it.

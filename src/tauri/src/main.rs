@@ -482,6 +482,7 @@ fn main() {
             commands::metrics::get_pods_metrics,
             commands::metrics::get_pods_metrics_in,
             commands::metrics::get_nodes_metrics,
+            commands::metrics::recheck_metrics,
             // Workloads commands
             commands::workloads::list_statefulsets,
             commands::workloads::list_statefulsets_in,

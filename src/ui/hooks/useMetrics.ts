@@ -2,6 +2,7 @@ import { useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import type {
+  MetricsStatus,
   PodMetricsResponse,
   NodeMetricsResponse,
   UnreadNamespace,
@@ -30,6 +31,17 @@ export interface UseMetricsOptions {
   nodeQueryOptions?: MetricsQueryOptions<NodeMetricsResponse>;
 }
 
+/**
+ * Read off the cached answer, not off this mount's state: a page opened on an
+ * unserved answer already in the cache must not ask for it again.
+ */
+const staleFor = (query: {
+  state: { data?: { status: MetricsStatus | null } };
+}) =>
+  isUnserved(query.state.data?.status)
+    ? REFRESH_INTERVALS.unserved
+    : STALE_TIMES.metrics;
+
 export function useMetrics(options?: UseMetricsOptions) {
   const enabled = options?.enabled ?? true;
   const includePods = options?.includePods ?? true;
@@ -48,7 +60,7 @@ export function useMetrics(options?: UseMetricsOptions) {
         : await commands.getPodsMetrics(options?.namespace ?? null),
     enabled: enabled && includePods,
     placeholderData: keepPreviousData,
-    staleTime: podsUnserved ? REFRESH_INTERVALS.unserved : STALE_TIMES.metrics,
+    staleTime: staleFor,
     refresh: podsUnserved ? "unserved" : "metrics",
     ...options?.podQueryOptions,
   });
@@ -60,7 +72,7 @@ export function useMetrics(options?: UseMetricsOptions) {
     },
     enabled: enabled && includeNodes,
     placeholderData: keepPreviousData,
-    staleTime: nodesUnserved ? REFRESH_INTERVALS.unserved : STALE_TIMES.metrics,
+    staleTime: staleFor,
     refresh: nodesUnserved ? "unserved" : "metrics",
     ...options?.nodeQueryOptions,
   });

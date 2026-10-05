@@ -34,7 +34,11 @@ pub async fn get_pod_metrics(
     namespace: Option<&str>,
     state: &AppState,
 ) -> Result<PodMetricsResponse> {
-    let (status, data) = fetch_metrics(state, namespace, "PodMetrics", parse_pod_metric).await?;
+    let read = format!("pods/{}", namespace.unwrap_or("*"));
+    let (status, data) = remembered(state, &read, async {
+        fetch_metrics(state, namespace, "PodMetrics", parse_pod_metric).await
+    })
+    .await?;
     Ok(PodMetricsResponse {
         status,
         data,
@@ -54,16 +58,25 @@ pub async fn get_pod_metrics_in(
     let Some(names) = scope else {
         return get_pod_metrics(None, state).await;
     };
-    let answers = futures::future::join_all(
-        names
-            .iter()
-            .map(|name| list_metrics(state, Some(name), "PodMetrics", parse_pod_metric)),
-    )
-    .await;
-    Ok(combined(
-        names,
-        answers.into_iter().collect::<Result<Vec<_>>>()?,
-    ))
+    let read = format!("pods/{}", names.join(","));
+    let mut unread = Vec::new();
+    let (status, data) = remembered(state, &read, async {
+        let answers = futures::future::join_all(
+            names
+                .iter()
+                .map(|name| list_metrics(state, Some(name), "PodMetrics", parse_pod_metric)),
+        )
+        .await;
+        let answer = combined(names, answers.into_iter().collect::<Result<Vec<_>>>()?);
+        unread = answer.unread;
+        Ok((answer.status, answer.data))
+    })
+    .await?;
+    Ok(PodMetricsResponse {
+        status,
+        data,
+        unread,
+    })
 }
 
 /// Several namespaces' samples as one. The status speaks for the scope only
@@ -100,15 +113,12 @@ fn combined(
     }
 }
 
-/// Get node metrics from Metrics API, remembering an unserved answer for
-/// [`overview_node_metrics`].
+/// Get node metrics from Metrics API
 pub async fn get_node_metrics(state: &AppState) -> Result<NodeMetricsResponse> {
-    let (status, data) = fetch_metrics(state, None, "NodeMetrics", parse_node_metric).await?;
-    if let Some(context) = state.get_current_context() {
-        state
-            .metrics_unserved
-            .record(&context, &status, Instant::now());
-    }
+    let (status, data) = remembered(state, "nodes", async {
+        fetch_metrics(state, None, "NodeMetrics", parse_node_metric).await
+    })
+    .await?;
     Ok(NodeMetricsResponse { status, data })
 }
 
@@ -116,47 +126,77 @@ pub async fn get_node_metrics(state: &AppState) -> Result<NodeMetricsResponse> {
 /// as `src/contracts/unserved-retry.json` states it for both halves.
 pub const UNSERVED_RETRY: Duration = Duration::from_secs(300);
 
-/// Each context's last unserved node-metrics answer and when it came.
+/// The key "not installed" is filed under: it is the whole API's answer.
+const WHOLE_API: &str = "";
+
+/// Each context's last unserved metrics answers and when they came: "not
+/// installed" for the whole API, "refused" for the one read refused.
+/// Kept across a reconnect, which changes neither.
 #[derive(Default)]
-pub struct Unserved(Mutex<HashMap<String, (Instant, MetricsStatus)>>);
+pub struct Unserved(Mutex<HashMap<(String, String), (Instant, MetricsStatus)>>);
 
 impl Unserved {
-    /// The remembered answer, while it still stands.
+    /// The remembered answer for a read, while it still stands.
     #[must_use]
-    pub fn standing(&self, context: &str, now: Instant) -> Option<MetricsStatus> {
+    pub fn standing(&self, context: &str, read: &str, now: Instant) -> Option<MetricsStatus> {
         let remembered = self.0.lock();
-        let (at, status) = remembered.get(context)?;
-        (now.saturating_duration_since(*at) < UNSERVED_RETRY).then(|| status.clone())
+        [WHOLE_API, read].into_iter().find_map(|key| {
+            let (at, status) = remembered.get(&(context.to_string(), key.to_string()))?;
+            (now.saturating_duration_since(*at) < UNSERVED_RETRY).then(|| status.clone())
+        })
+    }
+
+    /// Check again: the next read of this context asks the API.
+    pub fn forget(&self, context: &str) {
+        self.0.lock().retain(|(of, _), _| of != context);
     }
 
     /// Only an admin changes these two answers; anything else is asked again.
-    pub fn record(&self, context: &str, status: &MetricsStatus, now: Instant) {
+    pub fn record(&self, context: &str, read: &str, status: &MetricsStatus, now: Instant) {
         let mut remembered = self.0.lock();
+        let key = |read: &str| (context.to_string(), read.to_string());
         match status.status {
-            MetricsStatusKind::NotInstalled | MetricsStatusKind::Forbidden => {
-                remembered.insert(context.to_string(), (now, status.clone()));
+            MetricsStatusKind::NotInstalled => {
+                remembered.insert(key(WHOLE_API), (now, status.clone()));
             }
-            MetricsStatusKind::Available | MetricsStatusKind::Error => {
-                remembered.remove(context);
+            MetricsStatusKind::Forbidden => {
+                remembered.insert(key(read), (now, status.clone()));
+            }
+            MetricsStatusKind::Available => {
+                remembered.remove(&key(WHOLE_API));
+                remembered.remove(&key(read));
+            }
+            MetricsStatusKind::Error => {
+                remembered.remove(&key(read));
             }
         }
     }
 }
 
-/// Node metrics for the overview, which refreshes every ten seconds: an
-/// unserved answer is reused until it has stood its time, rather than asking
-/// a cluster with no metrics-server twice a refresh for the same 404.
-pub async fn overview_node_metrics(state: &AppState) -> Result<NodeMetricsResponse> {
-    let standing = state
-        .get_current_context()
-        .and_then(|context| state.metrics_unserved.standing(&context, Instant::now()));
-    match standing {
-        Some(status) => Ok(NodeMetricsResponse {
-            status,
-            data: Vec::new(),
-        }),
-        None => get_node_metrics(state).await,
+/// Every metrics read goes through here, so a page load, a reconnect and the
+/// overview's refresh share one unserved answer instead of each asking for
+/// the same 404.
+async fn remembered<T>(
+    state: &AppState,
+    read: &str,
+    fetch: impl std::future::Future<Output = Result<(MetricsStatus, Vec<T>)>>,
+) -> Result<(MetricsStatus, Vec<T>)> {
+    let context = state.get_current_context();
+    let standing = context.as_deref().and_then(|context| {
+        state
+            .metrics_unserved
+            .standing(context, read, Instant::now())
+    });
+    if let Some(status) = standing {
+        return Ok((status, Vec::new()));
     }
+    let (status, data) = fetch.await?;
+    if let Some(context) = context {
+        state
+            .metrics_unserved
+            .record(&context, read, &status, Instant::now());
+    }
+    Ok((status, data))
 }
 
 #[cfg(test)]
@@ -191,20 +231,96 @@ mod tests {
     fn an_unserved_answer_stands_for_the_retry_time_and_no_longer() {
         let unserved = Unserved::default();
         let at = Instant::now();
-        unserved.record("lab", &status(MetricsStatusKind::NotInstalled), at);
-        unserved.record("prod", &status(MetricsStatusKind::Error), at);
+        unserved.record("lab", "nodes", &status(MetricsStatusKind::NotInstalled), at);
+        unserved.record("prod", "nodes", &status(MetricsStatusKind::Error), at);
 
-        let held = unserved.standing("lab", at + Duration::from_secs(299));
+        let held = unserved.standing("lab", "pods/shop", at + Duration::from_secs(299));
         assert!(matches!(
             held.map(|s| s.status),
             Some(MetricsStatusKind::NotInstalled)
         ));
-        assert!(unserved.standing("lab", at + UNSERVED_RETRY).is_none());
-        assert!(unserved.standing("prod", at).is_none());
+        assert!(unserved
+            .standing("lab", "nodes", at + UNSERVED_RETRY)
+            .is_none());
+        assert!(unserved.standing("prod", "nodes", at).is_none());
 
-        unserved.record("lab", &status(MetricsStatusKind::Forbidden), at);
-        unserved.record("lab", &status(MetricsStatusKind::Available), at);
-        assert!(unserved.standing("lab", at).is_none());
+        unserved.record("lab", "nodes", &status(MetricsStatusKind::Available), at);
+        assert!(unserved.standing("lab", "pods/shop", at).is_none());
+    }
+
+    /// Marco may read his namespace's pod metrics and not the nodes'. A
+    /// refusal is the refused read's alone, or one 403 would hide samples he
+    /// is allowed.
+    #[test]
+    fn a_refusal_stands_for_the_read_refused_and_no_other() {
+        let unserved = Unserved::default();
+        let at = Instant::now();
+        unserved.record("lab", "nodes", &status(MetricsStatusKind::Forbidden), at);
+        assert!(matches!(
+            unserved.standing("lab", "nodes", at).map(|s| s.status),
+            Some(MetricsStatusKind::Forbidden)
+        ));
+        assert!(unserved.standing("lab", "pods/team", at).is_none());
+    }
+
+    /// Dana's log: fifteen "404 page not found" in eleven minutes from a
+    /// cluster with no metrics-server, one per page load and four on a
+    /// reconnect, because only the overview read the memory. These are the
+    /// reads pages make, in the order a session makes them, then a reconnect
+    /// to the same context and the same reads again. Fails if any of them
+    /// asks the metrics API a second time inside the retry window.
+    #[tokio::test]
+    async fn a_cluster_with_no_metrics_server_is_asked_once_across_pages_and_a_reconnect() {
+        use crate::client::served::{test_server::reconnectable, ServedIndex};
+        crate::tls::provider();
+        let (state, hits, kubeconfig) = reconnectable(ServedIndex::default(), |_, _| {
+            (404, "404 page not found".to_string())
+        })
+        .await;
+        let asked = || {
+            hits.lock()
+                .unwrap()
+                .iter()
+                .filter(|(path, _)| path.starts_with("/apis/metrics.k8s.io/"))
+                .map(|(_, count)| *count)
+                .sum::<usize>()
+        };
+        let scope = ["shop".to_string(), "net".to_string()];
+
+        for visit in 0..2 {
+            if visit == 1 {
+                state.client_manager.disconnect("fake");
+                state
+                    .client_manager
+                    .connect_with_kubeconfig("fake", kubeconfig.clone())
+                    .await
+                    .expect("reconnected");
+            }
+            let nodes = get_node_metrics(&state).await.expect("nodes");
+            assert!(matches!(
+                nodes.status.status,
+                MetricsStatusKind::NotInstalled
+            ));
+            for namespace in [Some("shop"), None, Some("net")] {
+                let pods = get_pod_metrics(namespace, &state).await.expect("pods");
+                assert!(matches!(
+                    pods.status.status,
+                    MetricsStatusKind::NotInstalled
+                ));
+            }
+            let scoped = get_pod_metrics_in(Some(&scope), &state)
+                .await
+                .expect("scoped");
+            assert!(matches!(
+                scoped.status.status,
+                MetricsStatusKind::NotInstalled
+            ));
+        }
+        assert_eq!(asked(), 1, "one 404 for the whole session");
+
+        state.metrics_unserved.forget("fake");
+        get_node_metrics(&state).await.expect("checked again");
+        assert_eq!(asked(), 2, "Check again asks the API");
     }
 
     fn sample(name: &str) -> PodMetrics {

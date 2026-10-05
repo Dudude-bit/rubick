@@ -34,3 +34,12 @@ pub async fn get_pods_metrics_in(
 pub async fn get_nodes_metrics(state: State<'_, AppState>) -> Result<NodeMetricsResponse> {
     get_node_metrics(&state).await
 }
+
+/// Check again: forget the current context's "not installed" and "refused"
+/// answers, so the next metrics read asks the API instead of the memory.
+#[tauri::command]
+pub fn recheck_metrics(state: State<'_, AppState>) {
+    if let Some(context) = state.get_current_context() {
+        state.metrics_unserved.forget(&context);
+    }
+}

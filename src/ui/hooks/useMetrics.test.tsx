@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -62,6 +62,10 @@ describe("pod metrics for a selection", () => {
 });
 
 describe("how often an unserved metrics API is asked", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const answer = (status: "notInstalled" | "forbidden" | "error") => ({
     status: { status, message: "404 page not found" },
     data: [],
@@ -86,6 +90,47 @@ describe("how often an unserved metrics API is asked", () => {
       );
     }
   );
+
+  /**
+   * Dana: no 404 every ten seconds any more, but one on every page she
+   * opened. Each page's hook started at the two-second staleness and asked
+   * again. Pages opened one after another over four minutes, each its own
+   * mount on the same cache, ask once between them; past the unserved time
+   * the next one asks again.
+   */
+  it("is asked once by the pages opened after it answered, until its time is up", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const start = Date.now();
+    vi.mocked(commands.getPodsMetrics)
+      .mockClear()
+      .mockResolvedValue(answer("notInstalled"));
+    vi.mocked(commands.getNodesMetrics)
+      .mockClear()
+      .mockResolvedValue(answer("notInstalled"));
+    const client = new QueryClient();
+    const shared = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const open = async (minutes: number) => {
+      vi.setSystemTime(start + minutes * 60_000);
+      const page = renderHook(() => useMetrics({ namespace: "shop" }), {
+        wrapper: shared,
+      });
+      await waitFor(() =>
+        expect(page.result.current.nodeStatus?.status).toBe("notInstalled")
+      );
+      page.unmount();
+    };
+
+    for (const minutes of [0, 0.5, 1, 2, 4]) await open(minutes);
+    expect(commands.getPodsMetrics).toHaveBeenCalledTimes(1);
+    expect(commands.getNodesMetrics).toHaveBeenCalledTimes(1);
+
+    await open(5.5);
+    await waitFor(() =>
+      expect(commands.getNodesMetrics).toHaveBeenCalledTimes(2)
+    );
+  });
 
   /** A failing API may come back on its own, so it keeps the usual rate. */
   it("keeps asking a failing API at the usual rate", async () => {

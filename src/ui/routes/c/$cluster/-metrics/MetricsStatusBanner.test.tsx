@@ -1,6 +1,13 @@
-import { beforeEach, describe, expect, it } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { QueryClient } from "@tanstack/react-query";
+
+vi.mock("@/lib/commands", () => ({
+  commands: { recheckMetrics: vi.fn(async () => undefined) },
+}));
+
+import { commands } from "@/lib/commands";
 
 import { renderWithProviders } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -108,5 +115,24 @@ describe("MetricsStatusBanner", () => {
         "metrics-server is not installed, so CPU and memory are not shown"
       )
     ).toBeInTheDocument();
+  });
+
+  /**
+   * The backend now answers every metrics read from its five-minute memory,
+   * so Check again that only refetched would read the memory back: a
+   * metrics-server installed a minute ago would still say "not installed".
+   */
+  it("makes Check again forget the remembered answer before it reads", async () => {
+    const client = new QueryClient();
+    const refetch = vi.spyOn(client, "refetchQueries");
+    renderWithProviders(<MetricsStatusBanner status={notInstalled} />, {
+      client,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(refetch).toHaveBeenCalled());
+    expect(commands.recheckMetrics).toHaveBeenCalledTimes(1);
+    expect(
+      vi.mocked(commands.recheckMetrics).mock.invocationCallOrder[0]
+    ).toBeLessThan(refetch.mock.invocationCallOrder[0]);
   });
 });

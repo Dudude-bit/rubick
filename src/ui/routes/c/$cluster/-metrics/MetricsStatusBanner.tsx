@@ -5,6 +5,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ErrorDetails } from "@/components/ui/error-details";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
 import { cn } from "@/lib/utils";
+import { commands } from "@/lib/commands";
 import { useT } from "@/i18n/useT";
 import { absenceOf, type MetricsAbsence } from "@/lib/metrics-absence";
 import { queryKeys } from "@/lib/query-keys";
@@ -104,9 +105,12 @@ export function MetricsStatusBanner({
               type="button"
               disabled={checking}
               onClick={() =>
-                void queryClient.refetchQueries({
-                  queryKey: queryKeys.metrics.all(),
-                })
+                void commands.recheckMetrics().finally(
+                  () =>
+                    void queryClient.refetchQueries({
+                      queryKey: queryKeys.metrics.all(),
+                    })
+                )
               }
               className="text-[11px] text-info hover:underline disabled:text-fg-fnt disabled:no-underline"
             >
