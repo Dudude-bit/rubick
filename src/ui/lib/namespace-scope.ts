@@ -56,6 +56,20 @@ import { narrowingHelps, type ResourceKind } from "@/lib/resource-registry";
  */
 export const SCOPE_LIMIT = 4;
 
+/** An RFC 1123 label, which is what the API server accepts as a namespace. */
+export function isNamespaceName(name: string): boolean {
+  return name.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(name);
+}
+
+/**
+ * What a cluster opens on when nothing was stored for it: the kubeconfig
+ * context's own namespace, as kubectl would use, else the whole cluster.
+ */
+export function seedScope(namespace: string | null | undefined): string[] {
+  const name = namespace?.trim();
+  return name && isNamespaceName(name) ? [name] : [];
+}
+
 /** The selection, cut to what the app can answer for. See {@link SCOPE_LIMIT}. */
 export function clampScope(scope: readonly string[]): string[] {
   return scope.slice(0, SCOPE_LIMIT);

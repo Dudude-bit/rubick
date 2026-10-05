@@ -30,6 +30,7 @@ function counts(podCount: number) {
     namespaces: [{ name: "prod", podCount, problemCount: 0 }],
     podCount,
     problemCount: 0,
+    namespaceList: "listed",
     isLoading: false,
   });
 }

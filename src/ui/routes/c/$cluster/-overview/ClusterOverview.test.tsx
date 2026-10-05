@@ -22,6 +22,7 @@ import {
   useScreenSections,
 } from "@/components/share/screen-share";
 import { commands } from "@/lib/commands";
+import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
 import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
 import { usePinnedServicesStore } from "@/stores/pinnedServicesStore";
@@ -67,6 +68,24 @@ describe("what the overview does when the read is refused", () => {
     ).not.toBeInTheDocument();
     // And the framing prefix the reporter saw is off the message.
     expect(screen.queryByText(/Tauri command/)).not.toBeInTheDocument();
+  });
+
+  /**
+   * The banner used to say "pick the namespaces you can see" over a picker
+   * that showed none. Fails if the refusal stops leading to the picker.
+   */
+  it("opens the namespace picker from the refusal", async () => {
+    getClusterOverview.mockRejectedValue(
+      "pods is forbidden: Forbidden (code: 403)"
+    );
+    const opened = vi.fn();
+    window.addEventListener(SCOPE_PICKER_OPEN, opened);
+
+    await mount();
+    (await screen.findByRole("button", { name: "Choose a namespace" })).click();
+
+    window.removeEventListener(SCOPE_PICKER_OPEN, opened);
+    expect(opened).toHaveBeenCalledOnce();
   });
 
   it("keeps the fault headline and a retry when the read fails for any other reason", async () => {

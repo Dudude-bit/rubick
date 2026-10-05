@@ -612,6 +612,16 @@ export function ResourceList<
           <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
             {verbatim(failed.message)}
           </p>
+          {isRefusal(failed) && narrowingHelps && scope.isAll && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <p className="text-xs text-fg-mut">
+                {t("empty", "refusedClusterWide")}
+              </p>
+              <Button size="sm" variant="outline" onClick={openNamespacePicker}>
+                {t("action", "chooseNamespace")}
+              </Button>
+            </div>
+          )}
         </div>
       ) : (
         <DataTable

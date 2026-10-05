@@ -1031,6 +1031,8 @@ export const ru: Catalogue = {
     closeNamed: "Закрыть {name}",
     filterNamespaces: "Фильтр пространств имён",
     filterNamespacesPlaceholder: "Фильтр пространств имён…",
+    typeNamespacePlaceholder: "Введите пространство имён…",
+    chooseNamespace: "Выбрать пространство имён",
     filterClusters: "Фильтр кластеров",
     filterClustersPlaceholder: "Фильтр кластеров…",
     change: "Изменить…",
@@ -4268,6 +4270,10 @@ export const ru: Catalogue = {
       "{n} из {limit} пространств имён — все списки сужены до них.",
     namespaceMultiHint:
       "{click}-клик, {enter} или флажок — следить сразу за {limit}.",
+    nsFromKubeconfig: "из kubeconfig",
+    nsRecent: "недавнее",
+    nsAsTyped: "нажмите Enter",
+    nsNotListed: "нет в списке",
     readingKubeconfig: "Читаем ваш kubeconfig…",
     connectACluster: "Подключите кластер",
     pickOneToStart: "в вашем kubeconfig. Выберите один, чтобы начать.",
@@ -5398,7 +5404,11 @@ export const ru: Catalogue = {
       "{rule}, работоспособны {healthy} из {expected}, покрывает здесь {pods}.",
     couldNotReadClusterState: "Не удалось прочитать состояние кластера",
     noClusterOverviewAccess:
-      "У вас нет прав на просмотр всего кластера. Выберите доступные вам пространства имён сверху.",
+      "У вас нет прав на просмотр всего кластера. Откройте пространство имён, к которому у вас есть доступ: введите его имя в выборе пространства имён сверху.",
+    noScopeOverviewAccess:
+      "У вас нет прав на чтение {scope}. Введите другое пространство имён в выборе сверху.",
+    refusedClusterWide:
+      "Получить этот список по всему кластеру не разрешено. Пространство имён, к которому у вас есть доступ, может ответить.",
     noNodeAccess:
       "У вас нет прав на чтение узлов кластера — ёмкость и запас планировщика не показаны.",
     controllerLower: "контроллер",
@@ -6033,6 +6043,13 @@ export const ru: Catalogue = {
     noContextsInKubeconfig: "В kubeconfig нет контекстов.",
     noNamespacesVisible:
       "На этом кластере не видно ни одного пространства имён.",
+    namespacesListing: "Читаем список пространств имён…",
+    namespacesRefused:
+      "Список пространств имён здесь недоступен. Введите то, к которому у вас есть доступ.",
+    namespacesUnread:
+      "Не удалось получить список пространств имён. Введите нужное.",
+    notANamespaceName:
+      "«{query}» не может быть пространством имён: только строчные латинские буквы, цифры и дефис, не длиннее 63 символов.",
     serving: "обслуживает",
     noValuesSet:
       "# Значения не заданы — применяются значения чарта по умолчанию.",

@@ -1039,6 +1039,8 @@ export const en = {
     closeNamed: "Close {name}",
     filterNamespaces: "Filter namespaces",
     filterNamespacesPlaceholder: "Filter namespaces…",
+    typeNamespacePlaceholder: "Type a namespace…",
+    chooseNamespace: "Choose a namespace",
     filterClusters: "Filter clusters",
     filterClustersPlaceholder: "Filter clusters…",
     change: "Change…",
@@ -3861,6 +3863,10 @@ export const en = {
       "{n} of {limit} namespaces — every list is narrowed to them.",
     namespaceMultiHint:
       "{click}-click or {enter}, or the box, to watch up to {limit} at once.",
+    nsFromKubeconfig: "from kubeconfig",
+    nsRecent: "recent",
+    nsAsTyped: "press Enter",
+    nsNotListed: "not in the list",
     readingKubeconfig: "Reading your kubeconfig…",
     connectACluster: "Connect a cluster",
     pickOneToStart: "in your kubeconfig. Pick one to start.",
@@ -4918,7 +4924,11 @@ export const en = {
       "{rule}, {healthy} of {expected} healthy, covering {pods} here.",
     couldNotReadClusterState: "Could not read cluster state",
     noClusterOverviewAccess:
-      "You do not have permission to read the whole cluster. Pick the namespaces you can see at the top.",
+      "You do not have permission to read the whole cluster. Open a namespace you have access to: type its name in the namespace picker above.",
+    noScopeOverviewAccess:
+      "You do not have permission to read {scope}. Type another namespace in the picker above.",
+    refusedClusterWide:
+      "Listing these across the whole cluster was refused. A namespace you have access to may still answer.",
     noNodeAccess:
       "You do not have permission to read the cluster's nodes, so capacity and scheduler headroom are not shown.",
     controllerLower: "controller",
@@ -5534,6 +5544,12 @@ export const en = {
       "{vendor} has nothing for it in this window either — try a longer one, or it ran before this one was watching.",
     noContextsInKubeconfig: "No contexts in the kubeconfig.",
     noNamespacesVisible: "No namespaces visible on this cluster.",
+    namespacesListing: "Listing namespaces…",
+    namespacesRefused:
+      "Cannot list namespaces here. Type the one you have access to.",
+    namespacesUnread: "Could not list namespaces. Type the one you want.",
+    notANamespaceName:
+      "“{query}” cannot be a namespace: lowercase letters, digits and hyphens only, up to 63 characters.",
     serving: "serving",
     noValuesSet: "# No values set — the chart's defaults apply.",
     noStoredManifest: "# The release stored no manifest.",

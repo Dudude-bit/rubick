@@ -17,8 +17,14 @@ import type { ContextInfo } from "@/generated/types";
 import { errorToShow } from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
 import { credentialsRestored } from "@/lib/credentials";
-import { clampScope, decodeScope, wireNamespace } from "@/lib/namespace-scope";
+import {
+  clampScope,
+  decodeScope,
+  seedScope,
+  wireNamespace,
+} from "@/lib/namespace-scope";
 import { useClusterRecencyStore } from "./clusterRecencyStore";
+import { useNamespaceRecencyStore } from "./namespaceRecencyStore";
 
 /** Cluster store state and actions */
 interface ClusterState {
@@ -112,12 +118,19 @@ interface ClusterState {
  * two namespaces in each of six clusters had to undo on every switch.
  */
 function scopeFor(
-  state: { savedScopes: Record<string, string[]>; namespaceScope: string[] },
+  state: {
+    savedScopes: Record<string, string[]>;
+    namespaceScope: string[];
+    contexts: ContextInfo[];
+  },
   context: string,
   changed: boolean
 ): { namespaceScope: string[]; currentNamespace: string } {
   const scope = changed
-    ? clampScope(state.savedScopes[context] ?? [])
+    ? clampScope(
+        state.savedScopes[context] ??
+          seedScope(state.contexts.find((c) => c.name === context)?.namespace)
+      )
     : state.namespaceScope;
   return { namespaceScope: scope, currentNamespace: wireNamespace(scope) };
 }
@@ -235,6 +248,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       set((state) => ({
         savedScopes: { ...state.savedScopes, [context]: scope },
       }));
+      useNamespaceRecencyStore.getState().record(context, scope);
       commands
         .saveClusterPreferences(null, context, wireNamespace(scope), scope)
         .catch(() => {

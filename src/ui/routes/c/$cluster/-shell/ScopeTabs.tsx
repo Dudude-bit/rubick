@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
-import { Check, Search } from "lucide-react";
+import { AlertCircle, Check, Lock, Search } from "lucide-react";
 
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ClusterRow } from "@/components/cluster/ClusterRow";
 import { Kbd } from "@/components/ui/kbd";
+import { Spinner } from "@/components/ui/spinner";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import {
   ContextMenu,
@@ -25,7 +26,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useClusterSummary } from "@/hooks/useClusterSummary";
+import {
+  useClusterSummary,
+  type NamespaceListState,
+  type NamespaceScope,
+} from "@/hooks/useClusterSummary";
 import { useNamespaceAccess } from "./useNamespaceAccess";
 import { useOpenCluster } from "@/hooks/useOpenCluster";
 import {
@@ -33,7 +38,12 @@ import {
   detectProvider,
   providerLabel,
 } from "@/lib/cluster-identity";
-import { SCOPE_LIMIT, scopeLabel } from "@/lib/namespace-scope";
+import {
+  SCOPE_LIMIT,
+  isNamespaceName,
+  scopeLabel,
+  seedScope,
+} from "@/lib/namespace-scope";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
@@ -42,6 +52,7 @@ import {
   useClusterRecencyStore,
 } from "@/stores/clusterRecencyStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
 import { useT } from "@/i18n/useT";
 import {
   tabRouteLabel,
@@ -614,7 +625,31 @@ interface NamespaceOption {
   selected: boolean;
   /** The selection is full, so this row can only be opened on its own. */
   closed: boolean;
+  /** Why a row the namespace list did not name is offered at all. */
+  source?: NamespaceSource;
 }
+
+/** Where an offered namespace came from, when not from the list. */
+type NamespaceSource = "kubeconfig" | "recent" | "typed" | "unlisted";
+
+const SOURCE_NOTE = {
+  kubeconfig: "nsFromKubeconfig",
+  recent: "nsRecent",
+  typed: "nsAsTyped",
+  unlisted: "nsNotListed",
+} as const satisfies Record<NamespaceSource, string>;
+
+/** What the picker says above the rows when the list itself is not there. */
+const LIST_NOTE = {
+  pending: { icon: null, key: "namespacesListing", tone: "text-fg-fnt" },
+  refused: { icon: Lock, key: "namespacesRefused", tone: "text-fg-mut" },
+  failed: { icon: AlertCircle, key: "namespacesUnread", tone: "text-warn" },
+} as const satisfies Record<
+  Exclude<NamespaceListState, "listed">,
+  { icon: unknown; key: string; tone: string }
+>;
+
+const NO_RECENT: readonly string[] = [];
 
 /**
  * One namespace, or several.
@@ -657,7 +692,15 @@ function NamespacePopover({
   onSelect: (namespaces: string[], keepOpen: boolean) => void;
 }) {
   const t = useT();
-  const { namespaces, podCount } = useClusterSummary();
+  const { namespaces, podCount, namespaceList } = useClusterSummary();
+  const contextNamespace = useClusterStore(
+    (s) => s.contexts.find((c) => c.name === s.currentContext)?.namespace
+  );
+  const context = useClusterStore((s) => s.currentContext);
+  const recent =
+    useNamespaceRecencyStore((s) =>
+      context ? s.recent[context] : undefined
+    ) ?? NO_RECENT;
   const [filter, setFilter] = useState("");
   const [cursor, setCursor] = useState(-1);
   /** The namespace the ceiling has just turned down, until anything else
@@ -673,12 +716,36 @@ function NamespacePopover({
   const listId = useId();
   const noteId = `${listId}-note`;
 
-  const access = useNamespaceAccess(namespaces.map((ns) => ns.name));
+  const listed = namespaceList === "listed";
+  // Without a list the picker still offers what it can name: the
+  // kubeconfig's namespace and the ones used here before. The scope itself is
+  // always a row, or a namespace the window is on could not be seen or left.
+  const offered: Array<NamespaceScope & { source?: NamespaceSource }> = [
+    ...namespaces,
+  ];
+  const offer = (name: string, source?: NamespaceSource) => {
+    if (offered.some((ns) => ns.name === name)) return;
+    offered.push({ name, podCount: null, problemCount: null, source });
+  };
+  if (!listed) {
+    for (const name of seedScope(contextNamespace)) offer(name, "kubeconfig");
+    for (const name of recent) offer(name, "recent");
+  }
+  for (const name of scope) offer(name, listed ? "unlisted" : undefined);
 
-  const needle = filter.trim().toLowerCase();
+  const access = useNamespaceAccess(offered.map((ns) => ns.name));
+
+  const typedName = filter.trim();
+  const needle = typedName.toLowerCase();
   const visible = needle
-    ? namespaces.filter((ns) => ns.name.toLowerCase().includes(needle))
-    : namespaces;
+    ? offered.filter((ns) => ns.name.toLowerCase().includes(needle))
+    : offered;
+  // A name the reader typed is a namespace they can open, whether or not any
+  // list could name it: rights to one namespace rarely include listing them.
+  const typed =
+    isNamespaceName(typedName) && !offered.some((ns) => ns.name === typedName)
+      ? typedName
+      : null;
 
   // A namespace the authorizer firmly refused is not offered. Never one the
   // review could not reach (absent = unknown, kept) and never a selected one
@@ -721,7 +788,22 @@ function NamespacePopover({
       problemCount: ns.problemCount,
       selected: scope.includes(ns.name),
       closed: full && !scope.includes(ns.name),
+      source: ns.source,
     })),
+    ...(typed === null
+      ? []
+      : [
+          {
+            key: typed,
+            label: typed,
+            mono: true,
+            podCount: null,
+            problemCount: null,
+            selected: false,
+            closed: full,
+            source: listed ? ("unlisted" as const) : ("typed" as const),
+          },
+        ]),
   ];
 
   // A cursor left pointing past a list the filter has shortened is not a row.
@@ -827,18 +909,26 @@ function NamespacePopover({
               // Enter with nothing arrowed onto is the filter's own answer:
               // type three letters, press it, and you are in that namespace —
               // which is the frequent job done without touching the mouse.
+              const exact = rows.findIndex(
+                (row, index) => index > 0 && row.key === typedName
+              );
               const row =
                 at >= 0
                   ? rows[at]
-                  : needle !== "" && visible.length > 0
-                    ? rows[1]
+                  : needle !== ""
+                    ? rows[exact > 0 ? exact : 1]
                     : undefined;
               if (!row) return;
               event.preventDefault();
               if (event.metaKey || event.ctrlKey) toggle(row);
               else replace(row);
             }}
-            placeholder={t("action", "filterNamespacesPlaceholder")}
+            placeholder={t(
+              "action",
+              listed
+                ? "filterNamespacesPlaceholder"
+                : "typeNamespacePlaceholder"
+            )}
             aria-label={t("action", "filterNamespaces")}
             role="combobox"
             aria-expanded
@@ -849,6 +939,7 @@ function NamespacePopover({
             className="w-full bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
           />
         </div>
+        {!listed && <ListNote state={namespaceList} />}
         <div className="max-h-[260px] overflow-auto p-1">
           <div
             id={listId}
@@ -883,12 +974,12 @@ function NamespacePopover({
           </div>
           {/* Outside the listbox, because it is a sentence and not an option
               nobody can pick. */}
-          {visible.length === 0 && (
-            <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
-              {namespaces.length === 0
-                ? t("empty", "noNamespacesVisible")
-                : t("empty", "nothingMatchesQuery", { query: filter })}
-            </p>
+          {visible.length === 0 && typed === null && (
+            <EmptyNote
+              typed={typedName}
+              listed={listed}
+              anyOffered={offered.length > 0}
+            />
           )}
           {hiddenCount > 0 && !showBlocked && (
             // Not an option in the listbox: it is a sentence with a control,
@@ -946,6 +1037,7 @@ function NamespaceRow({
   onToggle: () => void;
 }) {
   const t = useT();
+  const note = row.source ? t("cluster", SOURCE_NOTE[row.source]) : null;
   const pods =
     row.podCount === null ? "—" : t("cluster", "podCount", { n: row.podCount });
   return (
@@ -956,7 +1048,7 @@ function NamespaceRow({
       // Spelled out, because an option's own text reads as "prod 12 · 3 bad".
       aria-label={[
         row.label,
-        pods,
+        note ?? pods,
         (row.problemCount ?? 0) > 0
           ? t("count", "withAProblem", { n: row.problemCount ?? 0 })
           : null,
@@ -1006,10 +1098,12 @@ function NamespaceRow({
       <span className={cn("truncate", row.mono && "font-mono")}>
         {row.label}
       </span>
+      {note !== null && <span className="text-[11px] text-fg-fnt">{note}</span>}
       <span
         className={cn(
           "font-mono text-[11px]",
-          (row.problemCount ?? 0) > 0 ? "text-err" : "text-fg-fnt"
+          (row.problemCount ?? 0) > 0 ? "text-err" : "text-fg-fnt",
+          note !== null && "hidden"
         )}
       >
         {row.podCount === null
@@ -1019,5 +1113,57 @@ function NamespaceRow({
             : row.podCount}
       </span>
     </div>
+  );
+}
+
+/** Why the rows are what they are, when the cluster would not list them. */
+function ListNote({ state }: { state: Exclude<NamespaceListState, "listed"> }) {
+  const t = useT();
+  const { icon: Icon, key, tone } = LIST_NOTE[state];
+  return (
+    <p
+      className={cn(
+        "flex items-start gap-1.5 border-b border-hair px-2.5 py-1.5 text-[11px] leading-[14px]",
+        tone
+      )}
+    >
+      {Icon ? (
+        <Icon aria-hidden="true" className="mt-px h-3 w-3 flex-none" />
+      ) : (
+        <Spinner size="sm" aria-hidden className="mt-px h-3 w-3 flex-none" />
+      )}
+      {t("empty", key)}
+    </p>
+  );
+}
+
+/** A sentence in place of rows: never "none exist" about a list not read. */
+function EmptyNote({
+  typed,
+  listed,
+  anyOffered,
+}: {
+  typed: string;
+  listed: boolean;
+  anyOffered: boolean;
+}) {
+  const t = useT();
+  const text =
+    typed !== ""
+      ? t("empty", "notANamespaceName", { query: typed })
+      : listed && !anyOffered
+        ? t("empty", "noNamespacesVisible")
+        : null;
+  if (text === null) return null;
+  return (
+    <p
+      role={typed !== "" ? "alert" : undefined}
+      className={cn(
+        "px-[7px] py-2 text-[11px]",
+        typed !== "" ? "text-warn" : "text-fg-fnt"
+      )}
+    >
+      {text}
+    </p>
   );
 }

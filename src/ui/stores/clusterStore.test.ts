@@ -22,6 +22,7 @@ import {
   readExpiredCredentials,
 } from "@/lib/credentials";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
+import type { ContextInfo } from "@/generated/types";
 import { useClusterStore } from "./clusterStore";
 
 const saveClusterPreferences = vi.mocked(commands.saveClusterPreferences);
@@ -115,6 +116,43 @@ describe("moving between clusters", () => {
     });
 
     await state().connect("staging");
+
+    expect(state().namespaceScope).toEqual([]);
+  });
+
+  /**
+   * A Role that reads one namespace cannot read "All namespaces", and the
+   * kubeconfig already says which one it is. Fails if a cluster with nothing
+   * stored stops opening on its context's namespace.
+   */
+  it("opens a cluster on its kubeconfig namespace when nothing is stored", async () => {
+    useClusterStore.setState({
+      contexts: [
+        { name: "marco", namespace: "team-checkout" },
+      ] as unknown as ContextInfo[],
+      savedScopes: {},
+      currentContext: null,
+      namespaceScope: [],
+    });
+
+    await state().connect("marco");
+
+    expect(state().namespaceScope).toEqual(["team-checkout"]);
+    expect(state().currentNamespace).toBe("team-checkout");
+  });
+
+  /** Fails if the kubeconfig overrules a scope the reader chose there. */
+  it("keeps a stored choice over the kubeconfig namespace", async () => {
+    useClusterStore.setState({
+      contexts: [
+        { name: "marco", namespace: "team-checkout" },
+      ] as unknown as ContextInfo[],
+      savedScopes: { marco: [] },
+      currentContext: null,
+      namespaceScope: [],
+    });
+
+    await state().connect("marco");
 
     expect(state().namespaceScope).toEqual([]);
   });

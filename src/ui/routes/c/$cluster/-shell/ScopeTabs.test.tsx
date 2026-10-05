@@ -25,8 +25,9 @@ const summary = vi.hoisted(() => ({
     podCount: number;
     problemCount: number;
   }>,
-  podCount: 0,
+  podCount: 0 as number | null,
   problemCount: 0,
+  namespaceList: "listed" as "listed" | "refused" | "failed" | "pending",
 }));
 
 vi.mock("@/hooks/useClusterSummary", () => ({
@@ -40,8 +41,10 @@ import { ScopeTabs } from "./ScopeTabs";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore, type ScopeTab } from "@/stores/scopeTabStore";
+import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
 
 import { translate } from "@/i18n";
+import type { ContextInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 
 /** The English catalogue — what these expectations are written in. */
@@ -66,6 +69,9 @@ const tabs = () => screen.getAllByRole("tab");
 beforeEach(() => {
   localStorage.clear();
   summary.namespaces = [];
+  summary.podCount = 0;
+  summary.namespaceList = "listed";
+  useNamespaceRecencyStore.setState({ recent: {} });
   nsAccess.answers = [];
   useClusterIdentityStore.setState({ marks: {} });
   useClusterStore.setState({
@@ -534,5 +540,114 @@ describe("the namespace picker a timed-out list asks for", () => {
     await waitFor(() => {
       expect(screen.getByRole("dialog")).toBeInTheDocument();
     });
+  });
+});
+
+describe("a token that may not list namespaces", () => {
+  const scope = () => useClusterStore.getState().namespaceScope;
+
+  beforeEach(() => {
+    summary.namespaceList = "refused";
+    summary.podCount = null;
+    useClusterStore.setState({
+      contexts: [
+        { name: "k3d-dev", namespace: "team-checkout" },
+      ] as unknown as ContextInfo[],
+    });
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a" })],
+      activeId: "a",
+      pendingHref: null,
+    });
+  });
+
+  const openPicker = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(within(tabs()[0]).getByText("All namespaces"));
+    return screen.getByRole("listbox", { name: "Namespaces" });
+  };
+
+  /**
+   * Marco's blocker: his Role reads one namespace and lists none, so the
+   * picker had nothing to offer and Enter did nothing. Fails if a typed name
+   * stops becoming the scope when the list was refused.
+   */
+  it("lets a typed namespace become the scope when the list was refused", async () => {
+    const user = userEvent.setup();
+    await mount();
+    await openPicker(user);
+
+    await user.keyboard("payments-team{Enter}");
+
+    expect(scope()).toEqual(["payments-team"]);
+  });
+
+  /**
+   * "No namespaces visible" about a list nobody could read is the third
+   * state drawn as the second. Fails if the refusal stops being said, or if
+   * the empty-cluster sentence comes back in its place.
+   */
+  it("says the list was refused, not that there are none", async () => {
+    const user = userEvent.setup();
+    await mount();
+    await openPicker(user);
+
+    expect(
+      screen.getByText(t("empty", "namespacesRefused"))
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(t("empty", "noNamespacesVisible"))
+    ).not.toBeInTheDocument();
+  });
+
+  /** Fails if the kubeconfig's own namespace stops being offered without a list. */
+  it("offers the kubeconfig namespace and the recent ones", async () => {
+    const user = userEvent.setup();
+    useNamespaceRecencyStore.setState({
+      recent: { "k3d-dev": ["team-shared"] },
+    });
+    await mount();
+    const list = await openPicker(user);
+
+    expect(
+      within(list).getByRole("option", {
+        name: "team-checkout, from kubeconfig",
+      })
+    ).toBeInTheDocument();
+    await user.click(
+      within(list).getByRole("option", { name: "team-shared, recent" })
+    );
+    expect(scope()).toEqual(["team-shared"]);
+  });
+
+  /** Fails if a name the API server would reject could become the scope. */
+  it("refuses a name that cannot be a namespace, and says why", async () => {
+    const user = userEvent.setup();
+    await mount();
+    await openPicker(user);
+
+    await user.keyboard("Team_Checkout{Enter}");
+
+    expect(scope()).toEqual([]);
+    expect(screen.getByRole("alert")).toHaveTextContent("Team_Checkout");
+  });
+
+  /**
+   * Once in, the namespace the window is on has to stay visible and
+   * leavable even though no list names it. Fails if the active scope drops
+   * out of the picker.
+   */
+  it("keeps the namespace the window is on in the list", async () => {
+    const user = userEvent.setup();
+    useClusterStore.setState({
+      contexts: [],
+      namespaceScope: ["team-checkout"],
+      currentNamespace: "team-checkout",
+    });
+    await mount();
+    await user.click(within(tabs()[0]).getByText("team-checkout"));
+
+    expect(
+      screen.getByRole("option", { name: /^team-checkout/ })
+    ).toHaveAttribute("aria-selected", "true");
   });
 });

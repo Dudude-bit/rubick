@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
 import { useClusterOverview } from "@/hooks/useClusterOverview";
 import { commands } from "@/lib/commands";
+import { isRefusal } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -17,6 +18,9 @@ export interface NamespaceScope {
   problemCount: number | null;
 }
 
+/** Whether the namespace list was read, and if not, why not. */
+export type NamespaceListState = "pending" | "listed" | "refused" | "failed";
+
 export interface ClusterSummary {
   /** `null` when the cluster-wide overview was refused or failed. The chrome
    *  shows "—", not "0", so a token without cluster read rights is never told
@@ -25,7 +29,29 @@ export interface ClusterSummary {
   /** Every problem, including the ones the backend's ranked list dropped. */
   problemCount: number | null;
   namespaces: NamespaceScope[];
+  /** A refused list is not an empty cluster: the picker then takes a name. */
+  namespaceList: NamespaceListState;
   isLoading: boolean;
+}
+
+/** The cluster's namespaces, and whether the list could be read at all. */
+export function useNamespaceList() {
+  const isConnected = useClusterStore((s) => s.isConnected);
+  const { data, error, isLoading } = useQuery({
+    queryKey: queryKeys.namespaces(),
+    queryFn: () => commands.listNamespaces(),
+    enabled: isConnected,
+    staleTime: STALE_TIMES.slow,
+    placeholderData: keepPreviousData,
+  });
+  const state: NamespaceListState = data
+    ? "listed"
+    : error
+      ? isRefusal(error)
+        ? "refused"
+        : "failed"
+      : "pending";
+  return { data, state, isLoading };
 }
 
 /**
@@ -40,18 +66,14 @@ export interface ClusterSummary {
 const WHOLE_CLUSTER: readonly string[] = [];
 
 export function useClusterSummary(): ClusterSummary {
-  const isConnected = useClusterStore((s) => s.isConnected);
-
   const { data: overview, isLoading: overviewLoading } =
     useClusterOverview(WHOLE_CLUSTER);
 
-  const { data: namespaceInfos, isLoading: namespacesLoading } = useQuery({
-    queryKey: queryKeys.namespaces(),
-    queryFn: () => commands.listNamespaces(),
-    enabled: isConnected,
-    staleTime: STALE_TIMES.slow,
-    placeholderData: keepPreviousData,
-  });
+  const {
+    data: namespaceInfos,
+    state: namespaceList,
+    isLoading: namespacesLoading,
+  } = useNamespaceList();
 
   return useMemo(() => {
     // The overview carries the counts; when it was refused or failed there is
@@ -89,7 +111,14 @@ export function useClusterSummary(): ClusterSummary {
         ? overview.problems.length + overview.problemsTruncated
         : null,
       namespaces,
+      namespaceList,
       isLoading: overviewLoading || namespacesLoading,
     };
-  }, [overview, namespaceInfos, overviewLoading, namespacesLoading]);
+  }, [
+    overview,
+    namespaceInfos,
+    namespaceList,
+    overviewLoading,
+    namespacesLoading,
+  ]);
 }

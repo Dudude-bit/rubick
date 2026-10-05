@@ -97,6 +97,23 @@ describe("a list whose rows come from outside", () => {
     expect(screen.getByText(/forbidden/)).toBeVisible();
   });
 
+  /**
+   * A namespace-only Role is refused every cluster-wide list, and the only
+   * way past it is a namespace it may read. Fails if the refusal in "All
+   * namespaces" stops pointing at the picker that takes a typed name.
+   */
+  it("points a refusal across the whole cluster at the namespace picker", async () => {
+    const opened = vi.fn();
+    window.addEventListener(SCOPE_PICKER_OPEN, opened);
+    await list({ data: [], error: new Error("pods is forbidden: RBAC") });
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Choose a namespace" })
+    );
+    window.removeEventListener(SCOPE_PICKER_OPEN, opened);
+    expect(opened).toHaveBeenCalledOnce();
+  });
+
   /** No error, no rows: the scope really is empty, and says so. */
   it("draws the empty state when nothing failed", async () => {
     await list({ data: [] });

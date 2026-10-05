@@ -1,7 +1,8 @@
 import { AlertCircle, LayoutDashboard, Lock } from "lucide-react";
 
 import { errorToShow, isRefusal } from "@/lib/error-utils";
-import { scopeLabel } from "@/lib/namespace-scope";
+import { scopeIn, scopeLabel } from "@/lib/namespace-scope";
+import { openNamespacePicker } from "@/lib/read-deadline";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
@@ -113,21 +114,29 @@ export function ClusterOverview() {
                 refused ? "text-fg" : "text-err"
               }`}
             >
-              {refused
-                ? t("empty", "noClusterOverviewAccess")
-                : t("empty", "couldNotReadClusterState")}
+              {!refused
+                ? t("empty", "couldNotReadClusterState")
+                : namespaceScope.length === 0
+                  ? t("empty", "noClusterOverviewAccess")
+                  : t("empty", "noScopeOverviewAccess", {
+                      scope: scopeIn(namespaceScope, t),
+                    })}
             </h2>
           </div>
           <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
             {errorToShow(error)}
           </p>
-          {!refused && (
-            <div className="flex items-center gap-2 pt-2">
+          <div className="flex items-center gap-2 pt-2">
+            {refused ? (
+              <Button variant="outline" size="sm" onClick={openNamespacePicker}>
+                {t("action", "chooseNamespace")}
+              </Button>
+            ) : (
               <Button variant="outline" size="sm" onClick={() => refetch()}>
                 {t("action", "retry")}
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </Section>
       </div>
     );
