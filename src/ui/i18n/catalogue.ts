@@ -2917,7 +2917,7 @@ export const en = {
     govAgainstTarget: "against {target}",
     caBundleNamed: "{name} bundle",
     govMetricFrom: "{source} metric",
-    govBudgetKeeps: "keeps {rule} — {room}",
+    govBudgetKeeps: "keeps {rule}; {room}",
     storyRollout:
       "Rolled out within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
     storyJob: "Ran within {span}: {created}, {completed} completed.",
@@ -2943,9 +2943,9 @@ export const en = {
     storySettled: "settled",
     storyStateUnknown: "cannot say",
     podStatusNotAsked: {
-      one: "1 more pod's exits are not on this clock — it was not asked.",
+      one: "1 more pod's exits are not on this clock, because it was not asked.",
       other:
-        "{n} more pods' exits are not on this clock — they were not asked.",
+        "{n} more pods' exits are not on this clock, because they were not asked.",
     },
     timesSeen: { one: "once", other: "{n} times" },
     jobsCreated: { one: "1 job created", other: "{n} jobs created" },
@@ -2994,8 +2994,8 @@ export const en = {
       other: "{n} rows, from the namespaces that answered",
     },
     longListTrim: {
-      one: "{n} row — narrow the scope or search to trim",
-      other: "{n} rows — narrow the scope or search to trim",
+      one: "{n} row. Narrow the scope or search to trim",
+      other: "{n} rows. Narrow the scope or search to trim",
     },
     limitWord: "limit",
     capacityWord: "capacity",
@@ -3068,20 +3068,20 @@ export const en = {
     podReadinessNote:
       "Neither EndpointSlices nor the Endpoints object answered, so this is a deduction rather than the cluster's own word: the pods the selector matches, each read for its own Ready condition.",
     legacyEndpointsShort:
-      "This is the object the control plane writes for compatibility. It cannot express serving or terminating, and it stops at 1000 addresses — but no EndpointSlice answered here, so it is also all there is to read.",
+      "This is the object the control plane writes for compatibility. It cannot express serving or terminating, and it stops at 1000 addresses. But no EndpointSlice answered here, so it is also all there is to read.",
     nodeStoppedReportingAgo:
       "Node {node} stopped reporting {age} ago. This status is the last one it sent, not the pod's state now.",
     nodeStoppedReporting:
       "Node {node} stopped reporting. This status is the last one it sent, not the pod's state now.",
     allContainers: "all containers",
     traefikAnotherEntryPoint: "another entry point",
-    certSelfSigned: "self-signed — nothing above it vouched for this",
+    certSelfSigned: "self-signed: nothing above it vouched for this",
     certIssuedBy: "issued by {name}",
     certIssuerNotNamed: "issuer not named",
     controllerUnread:
-      "Whether the controller is installed is unknown: the cluster refused the lists it would be found in — {why}",
+      "Whether the controller is installed is unknown, because the cluster refused the lists it would be found in: {why}",
     controllerLookupFailed:
-      "Whether the controller is installed is unknown: the lists it would be found in could not be read — {why}",
+      "Whether the controller is installed is unknown, because the lists it would be found in could not be read: {why}",
     controllerLookupDeadline:
       "Whether the controller is installed is unknown: the cluster did not answer the lists it would be found in within {seconds} s.",
     argoNoWorkloads:
@@ -3089,20 +3089,20 @@ export const en = {
     traefikNoController:
       "Nothing in this cluster carries {selector}, so the proxy's own configuration could not be read.",
     traefikManifestUnreadable:
-      "Its manifest could not be read, so its entry points are unknown — {why}",
+      "Its entry points are unknown, because its manifest could not be read: {why}",
     traefikNoArgs:
       "It was started with no arguments, so its entry points come from a configuration file this app cannot read.",
     reachClusterDns:
       "{host} is a name only the cluster can resolve, and this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or forward the port and use that: kubectl port-forward -n <namespace> svc/<service> 9090:9090, then http://localhost:9090.",
     reachNoScheme:
-      "{host} has no scheme — write http:// or https:// in front of it.",
-    connReasonAndShape: "{said} — {shape}",
+      "{host} has no scheme: write http:// or https:// in front of it.",
+    connReasonAndShape: "{said}. {shape}",
     lokiHoldsNoneShort: "holds none of it",
     lokiCouldNotTell: "could not tell",
     lokiHoldsPart: "holds part of it",
     lokiHoldsAll: "holding this cluster",
     connDidNotSayWhy: "it did not say why",
-    connDidNotAnswer: "did not answer — {reason}",
+    connDidNotAnswer: "did not answer: {reason}",
     connAnsweredAgo: "answered {age} ago",
     connKeeps: "keeps {retention}",
     connRanges: "ranges {ranges}",
@@ -3139,23 +3139,23 @@ export const en = {
     relMountedNotCovering: "mounted but not covering",
     relControlledBy: "controlled by",
     relOwnedBy: "owned by",
-    govNotRead: "{kind} — not read",
+    govNotRead: "{kind}: not read",
     govSeveralAutoscalers: {
       one: "{n} autoscaler claims this",
-      other: "{n} autoscalers claim this — each undoes the other",
+      other: "{n} autoscalers claim this, and each undoes the other",
     },
     govWhatDrainRespects: "what a drain must respect",
     govWhoSetsIt: "who sets it",
     nginxNoController:
       "Nothing in this cluster carries {selector}, so the controller's own configuration could not be read.",
     nginxManifestUnreadable:
-      "Its manifest could not be read, so the global ConfigMap it uses is unknown — {why}",
+      "The global ConfigMap it uses is unknown, because its manifest could not be read: {why}",
     nginxNoConfigMapFlag:
       "This controller was started with no --configmap flag, so it has no global ConfigMap and every setting comes from its own defaults or from an Ingress.",
     nginxConfigMapUnreadable:
-      "The controller reads {where}, and it could not be read here — {why}",
+      "The controller reads {where}, and it could not be read here: {why}",
     tlsFromVendor: "from {by}",
-    tlsHostFrom: "{host} — from {by}",
+    tlsHostFrom: "{host}, from {by}",
     awsAcmNamed: "ACM {name}",
     awsAcmCertificate: "an ACM certificate",
     awsAcmDiscovered: "a certificate discovered in ACM",
@@ -3170,15 +3170,16 @@ export const en = {
     traefikRouting: "Routing",
     traefikRouteNumber: { one: "Route {n}", other: "Route {n}" },
     traefikPriorityDefault: {
-      one: "{n} — the rule's length, Traefik's default",
-      other: "{n} — the rule's length, Traefik's default",
+      one: "{n}: the rule's length, Traefik's default",
+      other: "{n}: the rule's length, Traefik's default",
     },
     traefikRoute: "Route",
-    traefikEveryEntryPoint: "every entry point — none named",
-    traefikH2c: "h2c — gRPC, not a browser's way in",
-    traefikNotRead: "not read — {why}",
+    traefikEveryEntryPoint: "every entry point, since none is named",
+    traefikH2c: "h2c: gRPC, not a browser's way in",
+    traefikNotRead: "not read: {why}",
     traefikDefaultCertificate: "the proxy's default certificate",
-    traefikNoTlsDeclared: "none declared — an entry point may still carry it",
+    traefikNoTlsDeclared:
+      "none declared, though an entry point may still carry it",
     traefikRuleEmpty: "the rule is empty",
     traefikRuleNotPlain: "it is not a plain list of matchers",
     traefikRuleNegated:
@@ -3191,7 +3192,7 @@ export const en = {
     hpaAtCeilingDetail:
       "{said} Both replica counts read as a healthy steady state while this is true, so nothing else on this page shows it: raising maxReplicas is what would let the workload grow.",
     hpaStuckDetail:
-      "It cannot act right now ({why}), so the number you set will stand — until it can, at which point it takes the count back to somewhere between {min} and {max} without announcing it.",
+      "It cannot act right now ({why}), so the number you set will stand until it can. Then it takes the count back to somewhere between {min} and {max} without announcing it.",
     logFormatJson: "Structured JSON log format with parsed fields",
     logFormatLogfmt: 'Key=value pairs format (e.g., level=info msg="hello")',
     logFormatKlog: "Kubernetes log format with severity prefix (I/W/E/F)",
@@ -3204,7 +3205,7 @@ export const en = {
     gcpPortNumber: "port {port}",
     gcpNamedFor: "named for {scope}",
     gcpNoBackendConfig:
-      "no BackendConfig named {name} in this namespace — nothing is applied.",
+      "no BackendConfig named {name} in this namespace, so nothing is applied.",
     azureGatewayDefaults: "gateway defaults",
     agicSpeaks: "speaks {protocol} to the pods",
     agicRewritesPath: "rewrites the path to {path}",
@@ -3266,9 +3267,9 @@ export const en = {
     forwardServiceGone:
       "{where} is not in this cluster any more, so there is nothing to forward to.",
     forwardNoKnownPort: {
-      one: "{name} exposes {n} port and it is not one this app recognises — forward it by hand and give the address instead.",
+      one: "{name} exposes {n} port and it is not one this app recognises. Forward it by hand and give the address instead.",
       other:
-        "{name} exposes {n} ports and none of them is one this app recognises — forward it by hand and give the address instead.",
+        "{name} exposes {n} ports and none of them is one this app recognises. Forward it by hand and give the address instead.",
     },
     forwardByComponent: 'its "{part}" component',
     forwardByLabel: "labelled {label}",
@@ -3299,13 +3300,13 @@ export const en = {
       one: "{ready}/{n} replica ready",
       other: "{ready}/{n} replicas ready",
     },
-    problemUnschedulable: "marked unschedulable — no new pods will land here",
+    problemUnschedulable: "marked unschedulable: no new pods will land here",
     certNoSecret: "no Secret of that name in this namespace",
-    certSecretUnreadable: "the Secret could not be read — {said}",
+    certSecretUnreadable: "the Secret could not be read: {said}",
     certNoTlsCrt:
       "this Secret holds no tls.crt, so there is no certificate in it",
     certNoPem: "tls.crt holds no PEM certificate",
-    certUnparseable: "tls.crt is not a certificate the app can read — {said}",
+    certUnparseable: "tls.crt is not a certificate the app can read: {said}",
     certCrossNamespace: "cross-namespace, needs a ReferenceGrant",
     unreadUnanswered:
       "the app asked for {version} and the cluster did not answer ({said}), so it cannot say whether one applies here",
@@ -3391,7 +3392,7 @@ export const en = {
     certExpiresIn: "expires in {span}",
     certValidFor: "valid for {span}",
     certRenewsIn: "renews in {span}",
-    certRenewalOverdue: "renewal overdue — expires in {span}",
+    certRenewalOverdue: "renewal overdue: expires in {span}",
     certNotValidYet: {
       one: "not valid for another {n} day",
       other: "not valid for another {n} days",
@@ -3490,8 +3491,8 @@ export const en = {
       other: "{n} cluster-wide",
     },
     factCiliumRejected: {
-      one: "{n} policy Cilium rejected — it enforces nothing",
-      other: "{n} policies Cilium rejected — they enforce nothing",
+      one: "{n} policy Cilium rejected: it enforces nothing",
+      other: "{n} policies Cilium rejected: they enforce nothing",
     },
     factCiliumUnanswered: {
       one: "{n} policy the agent has not answered about",
@@ -3517,7 +3518,7 @@ export const en = {
     argoNotComparing: "not comparing",
     argoSyncFailing: "sync failing",
     argoCannotCompare:
-      "{name} cannot compare against its repository, so nothing is being applied and an edit here stands — until somebody fixes it, at which point it is undone.",
+      "{name} cannot compare against its repository, so nothing is being applied and an edit here stands until somebody fixes it. Then it is undone.",
     argoSelfHeals:
       "Argo self-heals this Application: an edit made here is put back on its next comparison, within about five minutes.",
     argoAutoSyncNoHeal:
@@ -3527,9 +3528,9 @@ export const en = {
     fluxSuspendedWord: "suspended",
     fluxNotReconcilingWord: "not reconciling",
     fluxKustSuspended:
-      "{name} is suspended, so nothing is being applied and an edit here stands — until somebody resumes it, at which point it is undone.",
+      "{name} is suspended, so nothing is being applied and an edit here stands until somebody resumes it. Then it is undone.",
     fluxKustStopped:
-      "{name} is not reconciling, so an edit here stands until it starts again — at which point it is undone.",
+      "{name} is not reconciling, so an edit here stands until it starts again. Then it is undone.",
     fluxKustReapplies:
       "{name} re-applies its manifests every {interval}, so an edit here is undone on the next pass.",
     fluxRelSuspended:
@@ -3549,7 +3550,7 @@ export const en = {
     promNoNodesListed:
       "This cluster's nodes could not be listed, so there is nothing to compare what Prometheus knows against.",
     promNoNodeLabel:
-      "Nothing here carries a node name — neither kube_node_info nor cAdvisor's node label — so which cluster this Prometheus is watching cannot be established from here. The metric families below are still read, and are the better evidence.",
+      "Nothing here carries a node name, neither kube_node_info nor cAdvisor's node label, so which cluster this Prometheus is watching cannot be established from here. The metric families below are still read, and are the better evidence.",
     promCouldNotTell: "could not tell",
     promNoNodesToCompare: "no nodes to compare",
     promAnotherCluster: "watching another cluster",
@@ -3579,7 +3580,7 @@ export const en = {
     epInNoSlice: "in no slice at all",
     epReadyAnd: "Ready, and {where}",
     epNotReadyNeverPublished:
-      "{state} — a pod that is not Ready is never published",
+      "{state}: a pod that is not Ready is never published",
     epNotReadyWord: "Not ready",
     epTargetPort: "targetPort: {name}",
     epLegacyCompat:
@@ -3599,23 +3600,23 @@ export const en = {
     delTwoDeliver: "{vendors} both deliver this object",
     delTwoDeliverDetail:
       "{names} each list it and each re-apply it, so whichever reconciles last wins and the other undoes it on its next pass.",
-    delSince: " — {name} last applied it {ago} ago",
+    delSince: "; {name} last applied it {ago} ago",
     delDrifted: "Live differs from git{since}",
     delDriftedDetail:
       "{vendor} says this object no longer matches what was applied. {note}",
     delStopped: "Nothing is applying this object right now",
     delStoppedDetail: "{name} has stopped reconciling.",
-    delFromGit: "Delivered from git — an edit made here does not stick",
+    delFromGit: "Delivered from git: an edit made here does not stick",
     delNotDelivered: "not delivered",
     delLabelledNotListedShort: "labelled, not listed",
     delTwoControllers: "two controllers",
     delOutOfSyncAge: "out of sync · {ago}",
     delOutOfSync: "out of sync",
     delScaleAnyway: "Scale anyway",
-    delVendorWillUndo: "{verb} — {vendor} will undo this",
+    delVendorWillUndo: "{verb}: {vendor} will undo this",
     delVendorWillUndoDetail: "{vendor} will undo this.",
     delApplyLabelNotHonoured:
-      "Apply — this object's delivery label is not honoured",
+      "Apply: this object's delivery label is not honoured",
     delApplyLabelDetail:
       "Nothing is applying this object, whatever its label says.",
     rolloutStalled:
@@ -3648,13 +3649,12 @@ export const en = {
     hpaStandingBy: "{name} is standing by while this is scaled to zero",
     hpaStandingByDetail:
       "An autoscaler does not scale a workload up from zero. Set a replica count by hand and it takes over from there.",
-    hpaNoMetrics: "{name} is not scaling this — it cannot read its metrics",
+    hpaNoMetrics: "{name} is not scaling this: it cannot read its metrics",
     hpaNoMetricsDefault: "The metric source did not answer.",
     hpaAtFloor: "{name} is holding this at its floor of {min}",
     hpaAtFloorDetail:
       "The metrics say fewer replicas would do; minReplicas is what is keeping them running.",
-    hpaAtCeiling:
-      "{name} wants more replicas than {max} — this is at its ceiling",
+    hpaAtCeiling: "{name} wants more replicas than {max}, which is its ceiling",
     hpaAtCeilingDefault: "The desired replica count is above maxReplicas.",
     hpaRunning: "{n} running",
     hpaWanted: "{n} wanted",
@@ -3666,7 +3666,7 @@ export const en = {
     pdbNoDisruption: "no disruption allowed",
     pdbRoom: "{allowed} · {healthy} healthy of {selected} selected",
     pdbBelowFloor:
-      "{name} is below its own floor — {healthy} healthy, {required} required",
+      "{name} is below its own floor: {healthy} healthy, {required} required",
     pdbBelowFloorDetail:
       "Evicting a pod here is refused, and will stay refused until the missing replicas come back. A node drain covering this workload will not finish.",
     pdbExactlyMet: "{name} allows no disruption right now",
@@ -3685,7 +3685,7 @@ export const en = {
     hpaCannotActNow: "it is not currently able to act",
     hpaOwnsStuckHead: "{name} owns this replica count, and is stuck.",
     hpaOwnsStuckDetail:
-      "It cannot act right now ({why}), so the number you set will stand — until it can, at which point it takes the count back.",
+      "It cannot act right now ({why}), so the number you set will stand until it can. Then it takes the count back.",
     hpaWillRevertHead: "{name} will put this number back.",
     hpaWillRevertDetail:
       "It keeps this between {min} and {max} and re-reads its metrics about every fifteen seconds.",
@@ -3701,21 +3701,21 @@ export const en = {
     shellStateUnknown: "state unknown, nothing to attach to",
     logsPrintedBeforeExit: "What it printed before it exited is in Logs.",
     logsAttemptsLast:
-      "{attempts}{when} — what the run that failed printed is in Logs.",
-    logsFinishedComplete: "Finished{took}{when} — its log is complete.",
+      "{attempts}{when}. What the run that failed printed is in Logs.",
+    logsFinishedComplete: "Finished{took}{when}. Its log is complete.",
     logsTook: " in {took}",
     logsWhen: ", {when}",
     logsLastWhen: ", last {when}",
-    logsNoneInitUnfinished: "No logs yet — init has not finished.",
-    logsNoneNotStarted: "No logs yet — it has not started.",
-    logsNeverRanBlocked: "Never ran — the sequence is still on {on}.",
+    logsNoneInitUnfinished: "No logs yet: init has not finished.",
+    logsNoneNotStarted: "No logs yet: it has not started.",
+    logsNeverRanBlocked: "Never ran: the sequence is still on {on}.",
     logsNeverRan: "Never ran.",
     logsSidecarRunning:
-      "Started during init and does not finish — the sequence went on once it was ready.",
+      "Started during init and does not finish; the sequence went on once it was ready.",
     groupInitCaption:
       "run in order before the pod starts, each waiting on the last",
     groupSidecarCaption: "started during init and still running",
-    groupAppBlocked: "never started — the pod is still in init",
+    groupAppBlocked: "never started: the pod is still in init",
     groupAppCaption: "run together for the life of the pod",
     groupInitCaptionEach:
       "run in order before each pod starts, each waiting on the last",
@@ -3725,11 +3725,11 @@ export const en = {
     ngxSnippetsAllowed:
       "An Ingress in this cluster may inject raw nginx configuration through configuration-snippet and server-snippet.",
     ngxSnippetsIgnored:
-      "configuration-snippet and server-snippet on an Ingress are ignored — an Ingress carrying one is not doing what it says.",
+      "configuration-snippet and server-snippet on an Ingress are ignored, so an Ingress carrying one is not doing what it says.",
     ngxRiskCritical:
       "Every annotation is honoured, including the ones that can execute configuration.",
     ngxRiskHigh:
-      "Annotations up to the High risk level are honoured; Critical ones — the snippets — are ignored.",
+      "Annotations up to the High risk level are honoured; Critical ones, which are the snippets, are ignored.",
     ngxRiskMedium:
       "Only Low and Medium risk annotations are honoured; anything above is ignored.",
     ngxRiskLow:
@@ -3818,7 +3818,7 @@ export const en = {
     nginxCanaryTotal:
       "The weight above is a share of {total} rather than a percentage.",
     nginxCanaryHeader:
-      "A request carrying {header}: always takes this route, and one carrying {header}: never never does — which is checked before any weight is.",
+      "A request carrying {header}: always takes this route, and one carrying {header}: never never does. This is checked before any weight is.",
     nginxCanaryHeaderValue:
       "A request whose {header} header is exactly {wanted} takes this route.",
     nginxCanaryCookie:
@@ -3836,7 +3836,7 @@ export const en = {
       "Plain HTTP is redirected to HTTPS even though this Ingress declares no certificate of its own.",
     nginxForceSslOff: "The forced redirect to HTTPS is switched off here.",
     nginxSslPassthrough:
-      "TLS is handed to the backend untouched — nginx terminates nothing and never sees the path.",
+      "TLS is handed to the backend untouched: nginx terminates nothing and never sees the path.",
     nginxBackendHttp: "nginx speaks plain HTTP to the backend.",
     nginxBackendHttps: "nginx speaks HTTPS to the backend.",
     nginxBackendGrpc: "nginx speaks gRPC to the backend.",
@@ -3848,7 +3848,7 @@ export const en = {
     nginxFromWww:
       "A request for the www form of this host is redirected to the bare one.",
     nginxBodyUnlimited:
-      "A request body of any size is accepted — there is no limit.",
+      "A request body of any size is accepted: there is no limit.",
     nginxBuffered:
       "The response is buffered in nginx before any of it reaches the client.",
     nginxStreamed:
@@ -3874,9 +3874,9 @@ export const en = {
     nginxServiceUpstream:
       "Requests are sent to the Service's cluster IP rather than to its pods, so kube-proxy picks the pod and nginx never sees the endpoints.",
     nginxRawUnknownKey:
-      "Shown as written — this app has no sentence for this key, and a guessed one would be worse than the key.",
+      "Shown as written: this app has no sentence for this key, and a guessed one would be worse than the key.",
     nginxRawUnknownValue:
-      "Shown as written — the key is one this app knows and the value is not a shape it can state.",
+      "Shown as written: the key is one this app knows, and the value is not a shape it can state.",
     nginxRawSnippet:
       "Raw nginx configuration, injected verbatim into the server block. Shown exactly as written; this app will not paraphrase it, because it can rewrite, redirect or deny anything on this route.",
     revisionCurrent: "{said}, current",
@@ -3886,7 +3886,7 @@ export const en = {
     rolloutSeenRevision: "{ready} of {desired} ready, revision {revision}",
     nodeCordonedWord: "cordoned",
     ciliumSelectsAll: "every endpoint in scope",
-    ciliumSelectsNodes: "nodes, by nodeSelector — no endpoint",
+    ciliumSelectsNodes: "nodes, by nodeSelector; no endpoint",
     ciliumCovered: "covered",
     ciliumUnrestricted: "nothing restricts it",
     ciliumOnlyRejected: "only rejected policies",
@@ -3905,13 +3905,13 @@ export const en = {
         "{n} more policies name endpoints somewhere this window cannot read",
     },
     ciliumFindingRejected: {
-      one: "{n} policy the operator rejected — it enforces nothing",
-      other: "{n} policies the operator rejected — they enforce nothing",
+      one: "{n} policy the operator rejected: it enforces nothing",
+      other: "{n} policies the operator rejected: they enforce nothing",
     },
     ciliumFindingOnlyRejected: {
-      one: "{n} endpoint is selected only by policies that were rejected — it reads as covered and is not",
+      one: "{n} endpoint is selected only by policies that were rejected: it reads as covered and is not",
       other:
-        "{n} endpoints are selected only by policies that were rejected — they read as covered and are not",
+        "{n} endpoints are selected only by policies that were rejected: they read as covered and are not",
     },
     ciliumFindingUnrestricted: {
       one: "{n} endpoint no policy restricts in either direction",

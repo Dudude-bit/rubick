@@ -245,7 +245,7 @@ describe("ordering by trouble", () => {
       t
     );
     expect(row.state).toEqual({
-      text: "renewal overdue — expires in 2 days",
+      text: "renewal overdue: expires in 2 days",
       tone: "warn",
     });
   });

@@ -87,7 +87,7 @@ describe("what an IngressRoute peek says", () => {
 
     expect(rows(summary, "Route")).toContainEqual([
       "Priority",
-      `${match.length} — the rule's length, Traefik's default`,
+      `${match.length}: the rule's length, Traefik's default`,
     ]);
   });
 
@@ -96,7 +96,7 @@ describe("what an IngressRoute peek says", () => {
     const bare = peekIngressRoute(resource({ routes: [] }), t);
     expect(rows(bare, "Routing")).toContainEqual([
       "TLS",
-      "none declared — an entry point may still carry it",
+      "none declared, though an entry point may still carry it",
     ]);
 
     const named = peekIngressRoute(

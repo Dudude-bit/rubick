@@ -366,7 +366,7 @@ describe("what a drain is told", () => {
 
 describe("what the Scale dialog reads", () => {
   const delivery: DeliveryIntercept = {
-    title: "Scale — Argo CD will undo this",
+    title: "Scale: Argo CD will undo this",
     subject: "Argo CD",
     lead: "Argo CD will undo this.",
     description: "shop re-applies this object every three minutes.",
@@ -486,7 +486,7 @@ describe("the bounds an autoscaler will accept", () => {
 
 describe("what the YAML editor's apply reads", () => {
   const delivery: DeliveryIntercept = {
-    title: "Apply — Argo CD will undo this",
+    title: "Apply: Argo CD will undo this",
     subject: "Argo CD",
     lead: "Argo CD will undo this.",
     description: "shop re-applies this object every three minutes.",

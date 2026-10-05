@@ -140,7 +140,7 @@ describe("CountBlock", () => {
 
     expect(screen.getByText("A drain waits")).toBeInTheDocument();
     expect(
-      screen.getByText(/keeps at least 1 available — no disruption allowed/)
+      screen.getByText(/keeps at least 1 available; no disruption allowed/)
     ).toBeInTheDocument();
     // The three-line paragraph explaining a healthy state is what went.
     expect(screen.queryByText(/which is the budget doing its job/)).toBeNull();
@@ -152,7 +152,7 @@ describe("CountBlock", () => {
     );
 
     expect(
-      screen.getByText(/is below its own floor — 1 healthy, 2 required/)
+      screen.getByText(/is below its own floor: 1 healthy, 2 required/)
     ).toBeInTheDocument();
   });
 });

@@ -193,7 +193,7 @@ describe("the detail line on a problem row", () => {
 
     useLocaleStore.setState({ choice: "ru" });
     const russian = await wrap(panel(cordoned));
-    expect(russian.getByText(/новые поды сюда не поедут/)).toBeInTheDocument();
+    expect(russian.getByText(/новые поды сюда не попадут/)).toBeInTheDocument();
     expect(russian.queryByText(/no new pods/)).toBeNull();
     russian.unmount();
 

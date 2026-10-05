@@ -235,7 +235,7 @@ describe("managedExpiryOf", () => {
     );
     expect(said(expiry)).toMatchObject({
       tone: "warn",
-      text: "renewal overdue — expires in 2 days",
+      text: "renewal overdue: expires in 2 days",
       renewalOverdue: true,
     });
   });
@@ -265,7 +265,7 @@ describe("managedExpiryOf", () => {
     );
     expect(said(expiry)).toMatchObject({
       tone: "err",
-      text: "renewal overdue — expires in 14 hours",
+      text: "renewal overdue: expires in 14 hours",
       renewalOverdue: true,
     });
   });

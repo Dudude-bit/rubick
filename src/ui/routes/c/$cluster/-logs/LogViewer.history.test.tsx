@@ -208,7 +208,7 @@ describe("a pod whose log the API server can no longer serve", () => {
     await renderStranded();
 
     const bar = await screen.findByTestId("log-history-unreachable");
-    expect(bar).toHaveTextContent(/Loki did not answer — no route to host/);
+    expect(bar).toHaveTextContent(/Loki did not answer: no route to host/);
     expect(bar).toHaveTextContent(/live stream above is untouched/);
     expect(held(), "a store that is down cost the pane its live lines").toBe(1);
     expect(

@@ -106,7 +106,7 @@ describe("containerSequence on a pod held in init", () => {
       .find((group) => group.phase === "init")!
       .steps.find((step) => step.container.name === "seed")!;
 
-    expect(seed.note).toBe("Never ran — the sequence is still on migrate.");
+    expect(seed.note).toBe("Never ran: the sequence is still on migrate.");
     // "PodInitializing" is the kubelet saying "not your turn"; printed as
     // the status it reads as a container that is coming up.
     expect(seed.status.text).toBe("Never started");
@@ -117,7 +117,7 @@ describe("containerSequence on a pod held in init", () => {
     const app = groups.find((group) => group.phase === "app")!;
 
     expect(app.caption).toContain("never started");
-    expect(app.steps[0].note).toBe("No logs yet — init has not finished.");
+    expect(app.steps[0].note).toBe("No logs yet: init has not finished.");
   });
 
   it("keeps the failed step's restart history pointing at the log", () => {
@@ -164,7 +164,7 @@ describe("containerSequence with a sidecar", () => {
     // Otherwise it is indistinguishable from a live container saying
     // nothing, down to Follow sitting there doing nothing.
     expect(groups[0].steps[0].note).toMatch(
-      /^Finished in 4s, .+ ago — its log is complete\.$/
+      /^Finished in 4s, .+ ago\. Its log is complete\.$/
     );
   });
 
