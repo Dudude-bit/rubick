@@ -261,10 +261,27 @@ async fn run(
     }
 }
 
+/// Listen on a local port, or say in a way the frontend can word why not.
+///
+/// Port 0 asks the machine for a free one, which the session then reports.
 pub(super) async fn bind(port: u16) -> Result<TcpListener> {
     TcpListener::bind(("127.0.0.1", port))
         .await
-        .map_err(|err| Error::Connection(format!("Failed to bind port {port}: {err}")))
+        .map_err(|err| bind_error(port, &err))
+}
+
+pub(super) fn bind_error(port: u16, err: &std::io::Error) -> Error {
+    match err.kind() {
+        std::io::ErrorKind::PermissionDenied => Error::LocalPortPrivileged {
+            port,
+            said: err.to_string(),
+        },
+        std::io::ErrorKind::AddrInUse => Error::LocalPortInUse {
+            port,
+            said: err.to_string(),
+        },
+        _ => Error::Connection(format!("Failed to bind port {port}: {err}")),
+    }
 }
 
 fn info_of(session: &PortForwardSession) -> PortForwardSessionInfo {
@@ -342,7 +359,7 @@ fn connected_context(state: &AppState) -> Result<(String, kube::Client)> {
     Ok((context, client))
 }
 
-/// Start port forwarding to a pod
+/// Start port forwarding to a pod. A local port of 0 takes a free one.
 #[tauri::command]
 pub async fn port_forward_pod(
     pod: String,
@@ -350,9 +367,9 @@ pub async fn port_forward_pod(
     config: PortForwardRequest,
     state: State<'_, AppState>,
 ) -> Result<PortForwardSessionInfo> {
-    if config.local_port == 0 || config.remote_port == 0 {
+    if config.remote_port == 0 {
         return Err(Error::InvalidInput(
-            "Ports must be greater than 0".to_string(),
+            "The remote port must be greater than 0".to_string(),
         ));
     }
     crate::validation::validate_dns_subdomain(&pod)?;
@@ -386,9 +403,9 @@ pub async fn port_forward_service(
     config: PortForwardRequest,
     state: State<'_, AppState>,
 ) -> Result<PortForwardSessionInfo> {
-    if config.local_port == 0 || config.remote_port == 0 {
+    if config.remote_port == 0 {
         return Err(Error::InvalidInput(
-            "Ports must be greater than 0".to_string(),
+            "The Service port must be greater than 0".to_string(),
         ));
     }
     crate::validation::validate_dns_label(&service)?;
@@ -541,6 +558,33 @@ mod tests {
                 note: ForwardNote::Said { .. }
             }
         ));
+    }
+
+    /// "Failed to bind port 80: Permission denied (os error 13)" reached a
+    /// Russian reader as is. The frontend words it from the code.
+    #[test]
+    fn a_refused_low_port_is_its_own_code() {
+        let refused = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+        assert_eq!(bind_error(80, &refused).code(), "LOCAL_PORT_PRIVILEGED");
+    }
+
+    /// A port another program holds is a different fix from a privileged one.
+    #[tokio::test]
+    async fn a_local_port_already_taken_is_said_as_in_use() {
+        let held = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let port = held.local_addr().unwrap().port();
+        let Err(err) = bind(port).await else {
+            panic!("the port is held");
+        };
+        assert_eq!(err.code(), "LOCAL_PORT_IN_USE");
+    }
+
+    /// An empty local port asks the machine for a free one, and the session
+    /// reports the one it got rather than 0.
+    #[tokio::test]
+    async fn port_zero_takes_a_free_one() {
+        let listener = bind(0).await.unwrap();
+        assert_ne!(listener.local_addr().unwrap().port(), 0);
     }
 
     /// The row has to leave with the task on every exit, a panic's included.

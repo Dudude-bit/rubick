@@ -12,7 +12,18 @@ import {
   CopyableAddresses,
 } from "@/components/ui/copyable-value";
 import { yamlTab } from "../../../-object/yaml-tab";
-import { ExternalLink, Filter, Info, Plug, Tag, Waypoints } from "lucide-react";
+import { useState } from "react";
+import {
+  ExternalLink,
+  Filter,
+  Info,
+  Network,
+  Plug,
+  Tag,
+  Waypoints,
+} from "lucide-react";
+import { DetailAction } from "@/components/object/detail-blocks";
+import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
@@ -63,6 +74,7 @@ export function ServiceDetail() {
   const share = useServiceShare(service, connections);
   const deliveryQuery = deliveryOfKind(ResourceType.Service, service);
   const intercept = useDeliveryIntercept(deliveryQuery);
+  const [forwardOpen, setForwardOpen] = useState(false);
 
   if (!service && !isLoading && !error) {
     return null;
@@ -137,7 +149,12 @@ export function ServiceDetail() {
       id: "access",
       label: t("nav", "access"),
       glyph: viewGlyph(ExternalLink),
-      content: service ? <ServiceAccessInfo service={service} /> : null,
+      content: service ? (
+        <ServiceAccessInfo
+          service={service}
+          onForward={() => setForwardOpen(true)}
+        />
+      ) : null,
     },
     connectionsTab(connections, t, deliveryQuery),
     {
@@ -267,14 +284,44 @@ export function ServiceDetail() {
       }
       onBack={goBack}
       actions={
-        <DeleteAction
-          kind={ResourceType.Service}
-          name={service?.name || name || ""}
-          namespace={service?.namespace || namespace}
-          detail={service}
-          intercept={intercept("Delete")}
-          mutation={deleteMutation}
-        />
+        <>
+          {service && service.type !== "ExternalName" && (
+            <DetailAction
+              label={t("action", "portForward")}
+              icon={Network}
+              onClick={() => setForwardOpen(true)}
+              reason={
+                service.ports.length === 0
+                  ? t("action", "serviceDeclaresNoPorts")
+                  : undefined
+              }
+            />
+          )}
+          <DeleteAction
+            kind={ResourceType.Service}
+            name={service?.name || name || ""}
+            namespace={service?.namespace || namespace}
+            detail={service}
+            intercept={intercept("Delete")}
+            mutation={deleteMutation}
+          />
+          {service && (
+            <PortForwardDialog
+              open={forwardOpen}
+              onOpenChange={setForwardOpen}
+              target={{
+                kind: "Service",
+                name: service.name,
+                namespace: service.namespace,
+                ports: service.ports.map((port) => ({
+                  port: port.port,
+                  name: port.name,
+                  protocol: port.protocol,
+                })),
+              }}
+            />
+          )}
+        </>
       }
       tabs={tabs}
       activeTab={activeTab}

@@ -1,6 +1,6 @@
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
-import { Copy, ExternalLink } from "lucide-react";
+import { Copy, ExternalLink, Network } from "lucide-react";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import type { ServiceInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -8,9 +8,14 @@ import { parts } from "@/i18n/parts";
 
 interface ServiceAccessInfoProps {
   service: ServiceInfo;
+  /** Opens the page's port-forward dialog. */
+  onForward: () => void;
 }
 
-export function ServiceAccessInfo({ service }: ServiceAccessInfoProps) {
+export function ServiceAccessInfo({
+  service,
+  onForward,
+}: ServiceAccessInfoProps) {
   const t = useT();
   const copyToClipboard = useCopyToClipboard();
 
@@ -112,16 +117,18 @@ export function ServiceAccessInfo({ service }: ServiceAccessInfoProps) {
         ))}
       </SectionBody>
 
-      {service.type === "ClusterIP" && (
-        <p className="text-sm text-fg-mut">
-          {parts(t("empty", "clusterIpOnlyInside"), {
-            type: <strong>ClusterIP</strong>,
-          })}
-          <code className="ml-1 text-xs bg-hover px-1 rounded">
-            kubectl port-forward svc/{service.name}{" "}
-            {service.ports[0]?.port || 8080}:{service.ports[0]?.port || 8080}
-          </code>
-        </p>
+      {service.type === "ClusterIP" && service.ports.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-sm text-fg-mut">
+            {parts(t("empty", "clusterIpOnlyInside"), {
+              type: <strong>ClusterIP</strong>,
+            })}
+          </p>
+          <Button variant="outline" size="sm" onClick={onForward}>
+            <Network className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
+            {t("action", "portForward")}
+          </Button>
+        </div>
       )}
     </Section>
   );

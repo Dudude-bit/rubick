@@ -61,8 +61,8 @@ import { usePodShare } from "./usePodShare";
 import { VolumeRows } from "./volume-rows";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
-import { PodPortForwardDialog } from "./PodPortForwardDialog";
-import { usePodPortForward } from "./usePodPortForward";
+import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
+import { podForwardPorts } from "@/lib/port-forward";
 import { usePodReplacementSearch } from "./usePodReplacementSearch";
 import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
@@ -366,18 +366,7 @@ export function PodDetail() {
     findReplacement,
   } = usePodReplacementSearch(pod, name, namespace);
 
-  const {
-    open: portForwardOpen,
-    setOpen: setPortForwardOpen,
-    openDialog: openPortForwardDialog,
-    form: portForwardForm,
-    setForm: setPortForwardForm,
-    busy: portForwardBusy,
-    handleSubmit: handlePortForward,
-    handleStopSession: handleStopPortForward,
-    activePortForwards,
-    portForwardStatusBySession,
-  } = usePodPortForward(pod);
+  const [portForwardOpen, setPortForwardOpen] = useState(false);
 
   const { podMetrics, podStatus, podSampledAt } = useMetrics({
     namespace: namespace || null,
@@ -704,7 +693,7 @@ export function PodDetail() {
             <DetailAction
               label={t("action", "portForward")}
               icon={Network}
-              onClick={openPortForwardDialog}
+              onClick={() => setPortForwardOpen(true)}
               disabled={!currentContext || !pod}
             />
             <InterceptedAction
@@ -966,17 +955,15 @@ export function PodDetail() {
       />
 
       {pod && (
-        <PodPortForwardDialog
+        <PortForwardDialog
           open={portForwardOpen}
           onOpenChange={setPortForwardOpen}
-          pod={pod}
-          form={portForwardForm}
-          setForm={setPortForwardForm}
-          busy={portForwardBusy}
-          onSubmit={handlePortForward}
-          activePortForwards={activePortForwards}
-          portForwardStatusBySession={portForwardStatusBySession}
-          onStopSession={handleStopPortForward}
+          target={{
+            kind: "Pod",
+            name: pod.name,
+            namespace: pod.namespace,
+            ports: podForwardPorts(pod),
+          }}
         />
       )}
 

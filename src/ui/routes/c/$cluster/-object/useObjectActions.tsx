@@ -24,7 +24,10 @@ import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { DebugNodeDialog, DebugPodDialog } from "../-debug";
-import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
+import {
+  PortForwardDialog,
+  type ForwardTarget,
+} from "@/components/port-forward/PortForwardDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
 import { CascadePreview } from "./CascadePreview";
@@ -33,7 +36,8 @@ import { useConnections } from "@/hooks/useConnections";
 import { useCritical } from "@/hooks/useCritical";
 import { useDeliveryIntercept } from "../-delivery/useDelivery";
 import { commands } from "@/lib/commands";
-import { lifetimeContainers, podPorts } from "@/lib/container-sequence";
+import { lifetimeContainers } from "@/lib/container-sequence";
+import { podForwardPorts } from "@/lib/port-forward";
 import { deliveryOfKind } from "@/lib/delivery";
 import { errorToShow } from "@/lib/error-utils";
 import { scaleWarnings } from "@/lib/governance";
@@ -335,11 +339,26 @@ export function useObjectActions({
     }
   };
 
-  const forward = service
-    ? backendQuery.data
-      ? { podName: backendQuery.data.podName, port: backendQuery.data.port }
-      : null
-    : podForward(pod);
+  const forward: ForwardTarget | null =
+    service && namespace
+      ? {
+          kind: "Service",
+          name: service.name,
+          namespace,
+          ports: service.ports.map((port) => ({
+            port: port.port,
+            name: port.name,
+            protocol: port.protocol,
+          })),
+        }
+      : pod
+        ? {
+            kind: "Pod",
+            name: pod.name,
+            namespace: pod.namespace,
+            ports: podForwardPorts(pod),
+          }
+        : null;
 
   const deletion = describeDeletion(kind, name, namespace, detail, t);
   const bareRestart = describeBareRestart(name, namespace, t);
@@ -370,14 +389,11 @@ export function useObjectActions({
         />
       )}
 
-      {forward && namespace && (
+      {forward && (
         <PortForwardDialog
           open={dialog === "portForward"}
           onOpenChange={(open) => setDialog(open ? "portForward" : null)}
-          podName={forward.podName}
-          podNamespace={namespace}
-          initialPort={forward.port}
-          portName={service ? `${service.name}:${forward.port}` : undefined}
+          target={forward}
         />
       )}
 
@@ -440,18 +456,6 @@ export function useObjectActions({
   );
 
   return { plan, busy, run, dialogs };
-}
-
-/**
- * The port a forward to this pod would default to: the first one the app
- * containers declare, and only then a sidecar's — `podPorts` puts them in
- * that order, so the default is the reader's own port rather than the
- * proxy that was injected beside it.
- */
-function podForward(pod: PodInfo | undefined): ForwardBackend | null {
-  if (!pod) return null;
-  const first = podPorts(pod)[0];
-  return first ? { podName: pod.name, port: first.port.containerPort } : null;
 }
 
 async function resolveServiceBackend(

@@ -18,6 +18,12 @@ const updatePortForwardConfig = vi.fn(async (id: string) => ({
   created_at: "now",
 }));
 
+const toast = vi.fn();
+vi.mock("@/components/ui/use-toast", () => ({
+  useToast: () => ({ toast }),
+  toast: (...args: unknown[]) => toast(...args),
+}));
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     listPortForwardConfigs: vi.fn(async () => []),
@@ -32,6 +38,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+import { commands } from "@/lib/commands";
 import { renderWithRouter } from "@/test/render";
 import { PortForwardsTab } from "./PortForwardsTab";
 import { usePortForwardStore } from "@/stores/portForwardStore";
@@ -151,6 +158,30 @@ describe("PortForwardsTab", () => {
     await user.click(screen.getByRole("button", { name: /New/ }));
     expect(await screen.findByRole("dialog")).toHaveTextContent(
       "New port forward"
+    );
+  });
+
+  /** A saved forward on a low port failed with the OS's English sentence. */
+  it("says how to fix a saved forward whose local port needs administrator rights", async () => {
+    vi.mocked(commands.portForwardPod).mockRejectedValueOnce({
+      code: "LOCAL_PORT_PRIVILEGED",
+      message: "Local port 80 needs administrator rights",
+    });
+    usePortForwardStore.setState({
+      configs: [{ ...CONFIG, localPort: 80 }],
+      sessions: [],
+    });
+    const user = userEvent.setup();
+    await mount();
+    await user.click(screen.getByRole("button", { name: "Start Auth API" }));
+
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          description:
+            "Port 80 needs administrator rights on this machine. Use 8080 or leave it empty to pick a free one.",
+        })
+      )
     );
   });
 

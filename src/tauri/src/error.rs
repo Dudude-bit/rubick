@@ -141,6 +141,14 @@ pub enum Error {
     #[error("Not connected to {0}")]
     NotConnected(String),
 
+    /// The machine would not let this app listen on a local port below 1024.
+    #[error("Local port {port} needs administrator rights: {said}")]
+    LocalPortPrivileged { port: u16, said: String },
+
+    /// Something on this machine already listens on the local port.
+    #[error("Local port {port} is already in use: {said}")]
+    LocalPortInUse { port: u16, said: String },
+
     /// A Service with no ready pod behind it has nothing to forward to.
     #[error("No ready pod is behind Service {service}")]
     NoReadyPod { service: String },
@@ -235,6 +243,8 @@ impl Error {
             Error::Timeout(_) => "TIMEOUT_ERROR",
             Error::ReadDeadline { .. } => "READ_DEADLINE",
             Error::NotConnected(_) => "NOT_CONNECTED",
+            Error::LocalPortPrivileged { .. } => "LOCAL_PORT_PRIVILEGED",
+            Error::LocalPortInUse { .. } => "LOCAL_PORT_IN_USE",
             Error::NoReadyPod { .. } => "NO_READY_POD",
         }
     }
@@ -492,7 +502,9 @@ mod tests {
                 Error::ReadDeadline { .. } => 17,
                 Error::NotConnected(_) => 18,
                 Error::Internal(_) => 19,
-                Error::NoReadyPod { .. } => 20,
+                Error::LocalPortPrivileged { .. } => 20,
+                Error::LocalPortInUse { .. } => 21,
+                Error::NoReadyPod { .. } => 22,
             }
         }
         const LIST: &str = include_str!("../../contracts/error-codes.json");
@@ -535,6 +547,14 @@ mod tests {
             Error::ReadDeadline { after_secs: 1 },
             Error::NotConnected(String::new()),
             Error::Internal(String::new()),
+            Error::LocalPortPrivileged {
+                port: 80,
+                said: String::new(),
+            },
+            Error::LocalPortInUse {
+                port: 8080,
+                said: String::new(),
+            },
             Error::NoReadyPod {
                 service: String::new(),
             },
@@ -542,7 +562,7 @@ mod tests {
         let covered: std::collections::BTreeSet<usize> = samples.iter().map(variant).collect();
         assert_eq!(
             covered,
-            (0..=20).collect(),
+            (0..=22).collect(),
             "a variant has no sample, so its code is never checked"
         );
 

@@ -1401,6 +1401,23 @@ export const ru: Catalogue = {
     viaGateway: "через Gateway",
   },
   activity: {
+    forwardDialogServiceHint:
+      "Пробросить трафик с этой машины в этот Service через готовый под за ним. Если под пропадёт, проброс переключится на другой.",
+    servicePort: "Порт Service",
+    podPort: "Порт в поде",
+    localPortEmptyHint: "Оставьте пустым, чтобы выбрать свободный порт.",
+    opensAt: "Откроется по адресу {address}",
+    opensOnFreePort:
+      "Откроется на свободном локальном порту, его выберет система при запуске.",
+    localPortPrivileged:
+      "Для порта {port} на этой машине нужны права администратора. Используйте {suggestion} или оставьте поле пустым, чтобы выбрать свободный порт.",
+    localPortInUse:
+      "Порт {port} на этой машине уже занят. Используйте {suggestion} или оставьте поле пустым, чтобы выбрать свободный порт.",
+    useSuggestedPort: "Использовать {port}",
+    localPortInvalid: "Локальный порт: число от 1 до 65535 или пустое поле.",
+    remotePortInvalid: "Порт: число от 1 до 65535.",
+    savedNeedsLocalPort:
+      "Сохранённому пробросу нужен постоянный локальный порт. Укажите его или отключите сохранение.",
     forwardMovedTitle: "Проброс порта переключён",
     forwardFailedTitle: "Проброс порта остановлен",
     failedForwards: "Завершились",
@@ -5213,7 +5230,7 @@ export const ru: Catalogue = {
     couldNotReadCronJobRuns: "Не удалось прочитать запуски этого CronJob.",
     couldNotReadKindManifest: "Не удалось прочитать манифест этого {kind}.",
     clusterIpOnlyInside:
-      "Сервисы {type} доступны только изнутри кластера. Для локальной разработки используйте проброс порта:",
+      "Сервисы {type} доступны только изнутри кластера. Чтобы обратиться к этому сервису со своей машины, пробросьте к нему порт.",
     integrationsPageLists:
       "{link} — список всех расширений, которые знает это приложение, и того, что каждое из них даёт.",
     accessExternalLb: "Снаружи (LoadBalancer)",
@@ -6622,9 +6639,7 @@ export const ru: Catalogue = {
     resolvesElsewhere: "резолвится в другое место",
     gwProgrammedWord: "запрограммирован",
     gwNotProgrammedWord: "не запрограммирован",
-    gwNothingToForward: "Пробрасывать некуда",
     gwNoReadyPodBehind: "За {name} сейчас не стоит ни одного готового пода.",
-    gwCouldNotResolve: "Не удалось разрешить {name}",
     gwForwardThrough: "Пробросить этот порт — через под за {name}",
     gwNoListeners:
       "Слушателей нет — этот Gateway не принимает трафик, и ни один маршрут к нему не привяжется.",

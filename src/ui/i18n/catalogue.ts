@@ -1400,6 +1400,22 @@ export const en = {
     viaGateway: "via Gateway",
   },
   activity: {
+    forwardDialogServiceHint:
+      "Forward traffic from your machine to this Service, through a ready pod behind it. When that pod goes, the forward moves to another.",
+    servicePort: "Service port",
+    podPort: "Port in the pod",
+    localPortEmptyHint: "Leave empty to pick a free port.",
+    opensAt: "Opens at {address}",
+    opensOnFreePort: "Opens on a free local port, picked when it starts.",
+    localPortPrivileged:
+      "Port {port} needs administrator rights on this machine. Use {suggestion} or leave it empty to pick a free one.",
+    localPortInUse:
+      "Port {port} is already in use on this machine. Use {suggestion} or leave it empty to pick a free one.",
+    useSuggestedPort: "Use {port}",
+    localPortInvalid: "The local port is a number from 1 to 65535, or empty.",
+    remotePortInvalid: "The port is a number from 1 to 65535.",
+    savedNeedsLocalPort:
+      "A saved forward needs a fixed local port. Fill one in, or turn saving off.",
     forwardMovedTitle: "Port forward moved",
     forwardFailedTitle: "Port forward ended",
     failedForwards: "Ended",
@@ -4750,7 +4766,7 @@ export const en = {
     couldNotReadCronJobRuns: "Could not read this CronJob's runs.",
     couldNotReadKindManifest: "Could not read this {kind}'s manifest.",
     clusterIpOnlyInside:
-      "{type} services are only accessible from within the cluster. Use port-forward for local development:",
+      "{type} services are only reachable from inside the cluster. To reach this one from your machine, forward a port to it.",
     integrationsPageLists:
       "{link} lists every extension this app knows about and what each one would give.",
     accessExternalLb: "External (LoadBalancer)",
@@ -6109,9 +6125,7 @@ export const en = {
     resolvesElsewhere: "resolves elsewhere",
     gwProgrammedWord: "programmed",
     gwNotProgrammedWord: "not programmed",
-    gwNothingToForward: "Nothing to forward to",
     gwNoReadyPodBehind: "No ready pod stands behind {name} right now.",
-    gwCouldNotResolve: "Could not resolve {name}",
     gwForwardThrough: "Forward this port — through a pod behind {name}",
     gwNoListeners:
       "No listeners — this Gateway accepts no traffic, and no route can attach to it.",

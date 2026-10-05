@@ -33,7 +33,7 @@ import {
   type PortForwardSession,
   type PortForwardStatus,
 } from "@/stores/portForwardStore";
-import { forwardNoteWords } from "@/lib/port-forward";
+import { forwardNoteWords, localPortProblem } from "@/lib/port-forward";
 import type { ForwardVia } from "@/generated/types";
 import { cn } from "@/lib/utils";
 import {
@@ -302,7 +302,24 @@ export function PortForwardsTab() {
       try {
         await startConfig(configId);
       } catch (error) {
-        toastError(t("activity", "startForwardFailed"), error);
+        const config = configs.find((item) => item.id === configId);
+        const problem = config
+          ? localPortProblem(
+              error,
+              config.localPort,
+              new Set(sessions.map((session) => session.localPort)),
+              t
+            )
+          : null;
+        if (problem) {
+          toast({
+            title: t("activity", "startForwardFailed"),
+            description: problem.says,
+            variant: "destructive",
+          });
+        } else {
+          toastError(t("activity", "startForwardFailed"), error);
+        }
       }
     });
 
