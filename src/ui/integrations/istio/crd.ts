@@ -88,10 +88,10 @@ const virtualServiceColumns: CrdColumn[] = [
       }
       return Array.from(destinations);
     },
-    cell: (value) => {
+    cell: (value, t) => {
       if (!Array.isArray(value) || value.length === 0) return "-";
       if (value.length === 1) return String(value[0]);
-      return `${value.length} services`;
+      return t("count", "crdServices", { n: value.length });
     },
   },
 ];
@@ -199,10 +199,10 @@ const gatewayColumns: CrdColumn[] = [
         return `${protocol}:${port} → ${hosts}`;
       });
     },
-    cell: (value) => {
+    cell: (value, t) => {
       if (!Array.isArray(value) || value.length === 0) return "-";
       if (value.length === 1) return String(value[0]);
-      return `${value.length} servers`;
+      return t("count", "crdServers", { n: value.length });
     },
   },
   {

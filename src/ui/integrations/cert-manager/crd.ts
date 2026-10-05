@@ -63,20 +63,20 @@ const certificateColumns: CrdColumn[] = [
         | undefined;
       return dnsNames?.length ?? 0;
     },
-    cell: (value) => (typeof value === "number" ? `${value} names` : "-"),
+    cell: (value, t) =>
+      typeof value === "number" ? t("count", "dnsNames", { n: value }) : "-",
   },
   {
     id: "expiry",
     header: "expires",
     accessor: (resource) => getValueByPath(resource, "status.notAfter"),
-    cell: (value) => {
+    cell: (value, t) => {
       if (!value) return "-";
       const days = daysUntil(value);
       if (days === null) return "-";
-      if (days < 0) return "Expired";
-      if (days === 0) return "Today";
-      if (days === 1) return "Tomorrow";
-      return `${days} days`;
+      if (days < 0) return t("readings", "expiredWord");
+      if (days === 0) return t("action", "today");
+      return t("count", "inDays", { n: days });
     },
   },
 ];

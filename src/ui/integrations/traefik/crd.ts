@@ -78,10 +78,10 @@ const ingressRouteColumns: CrdColumn[] = [
       }
       return Array.from(services);
     },
-    cell: (value) => {
+    cell: (value, t) => {
       if (!Array.isArray(value) || value.length === 0) return "-";
       if (value.length === 1) return value[0];
-      return `${value.length} services`;
+      return t("count", "crdServices", { n: value.length });
     },
   },
   {
@@ -251,8 +251,10 @@ const tlsOptionColumns: CrdColumn[] = [
         | undefined;
       return cipherSuites?.length ?? 0;
     },
-    cell: (value) =>
-      typeof value === "number" && value > 0 ? `${value} suites` : "Default",
+    cell: (value, t) =>
+      typeof value === "number" && value > 0
+        ? t("count", "cipherSuites", { n: value })
+        : t("readings", "cipherSuitesDefault"),
   },
   {
     id: "sniStrict",
