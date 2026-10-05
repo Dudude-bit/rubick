@@ -180,7 +180,7 @@ describe("what Needs attention lists beyond pods", () => {
       ["Service", "web", "err"],
       ["Service", "web-canary", "err"],
     ]);
-    expect(listed.items[0].reason).toBe("No endpoints");
+    expect(listed.items[0].reason).toBe("no endpoints");
     expect(listed.items[1].namespace).toBe("net");
   });
 

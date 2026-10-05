@@ -4410,6 +4410,7 @@ export const ru: Catalogue = {
     healthNoTlsSecret: "Нет Secret с именем {name} для его TLS",
     healthBackendDown: "{name} не принимает трафик",
     healthNoController: "нет контроллера",
+    healthNoEndpoints: "нет эндпоинтов",
     healthMissingBackend: "нет бэкенда",
     healthMissingTlsSecret: "нет Secret для TLS",
     healthBackendDownShort: "бэкенд недоступен",
@@ -6515,7 +6516,6 @@ export const ru: Catalogue = {
     mountFrom: "из",
     readOnly: "только для чтения",
     seeWhereReadFrom: "Посмотреть, откуда он прочитан",
-    noEndpoints: "Эндпоинтов нет",
     unscheduled: "не назначен на узел",
     spotNodeNote:
       "Облако может забрать этот узел в любой момент. Вытеснение здесь предусмотрено, это не сбой.",

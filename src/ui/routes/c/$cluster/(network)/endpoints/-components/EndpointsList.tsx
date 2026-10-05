@@ -35,7 +35,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
           0
         );
         if (ready === 0 && notReady === 0)
-          return { text: t("empty", "noEndpoints"), role: "err" };
+          return { text: t("readings", "healthNoEndpoints"), role: "err" };
         return {
           text: [
             ready > 0 ? t("count", "nReady", { n: ready }) : null,
@@ -62,7 +62,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
         // surface — it is the one state here that earns a colour.
         return (
           <span className="text-err">
-            <T section="empty" k="noEndpoints" />
+            <T section="readings" k="healthNoEndpoints" />
           </span>
         );
       }

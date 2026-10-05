@@ -75,7 +75,7 @@ describe("one verdict for a Service on every surface", () => {
 
     const words = serviceHealthWords(page, t);
     expect(words.role).toBe("err");
-    expect(words.label).toBe("No endpoints");
+    expect(words.label).toBe("no endpoints");
     expect(words.reason).toContain("not scheduled");
   });
 

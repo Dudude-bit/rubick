@@ -3953,6 +3953,7 @@ export const en = {
     healthNoTlsSecret: "No Secret named {name} for its TLS",
     healthBackendDown: "{name} takes no traffic",
     healthNoController: "no controller",
+    healthNoEndpoints: "no endpoints",
     healthMissingBackend: "missing backend",
     healthMissingTlsSecret: "missing TLS Secret",
     healthBackendDownShort: "backend down",
@@ -5938,7 +5939,6 @@ export const en = {
     mountFrom: "from",
     readOnly: "read-only",
     seeWhereReadFrom: "See where it was read from",
-    noEndpoints: "No endpoints",
     unscheduled: "unscheduled",
     spotNodeNote:
       "The cloud can reclaim this node at any time. An eviction here is the arrangement, not a fault.",

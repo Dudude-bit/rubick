@@ -601,6 +601,42 @@ describe("what Needs attention says it checked", () => {
     ).toContain("2 failed pods");
   });
 
+  /**
+   * Sam's `web`: the age column said "Unknown" on every Service and Ingress
+   * row, and its label was capitalised unlike every verdict beside it. A row
+   * nothing dates gets the column's quiet dot. Fails if "Unknown" comes back
+   * or the label leaves the verdicts' case.
+   */
+  it("draws an undated row's age as a dot, in the verdicts' own case", async () => {
+    await panel(
+      attentionFrom([], {
+        services: {
+          answered: [
+            {
+              namespace: "net",
+              groups: [
+                {
+                  names: ["web"],
+                  type: "ClusterIP",
+                  selectorless: false,
+                  ready: 0,
+                  draining: 0,
+                  notReady: 0,
+                  unrouted: 0,
+                },
+              ],
+            },
+          ],
+          unread: [],
+        },
+      })
+    );
+
+    const row = screen.getByText("no endpoints").closest('[role="link"]')!;
+    expect(row).not.toHaveTextContent("Unknown");
+    expect(row.lastElementChild).toHaveTextContent("·");
+  });
+
   /** Fifty rows push the rest of the page off screen; the tail is a count and a way into each list. */
   it("caps the rows and links what it left out to each kind's list", async () => {
     const pods = Array.from({ length: 14 }, (_, at) => ({

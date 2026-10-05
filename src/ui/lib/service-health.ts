@@ -114,7 +114,7 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
     case "noEndpoints":
       return {
         code: health.state,
-        label: t("empty", "noEndpoints"),
+        label: t("readings", "healthNoEndpoints"),
         role: "err",
         reason: stopReason(health.published, t),
       };

@@ -198,7 +198,7 @@ function AttentionRow({ item }: { item: AttentionItem }) {
         )}
       </span>
       <span className="text-right text-[11px] text-fg-fnt">
-        {formatAge(item.since, t)}
+        {item.since === null ? "·" : formatAge(item.since, t)}
       </span>
     </>
   );

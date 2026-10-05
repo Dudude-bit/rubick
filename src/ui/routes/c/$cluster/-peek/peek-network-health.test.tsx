@@ -162,7 +162,7 @@ describe("the peek draws a network object's verdict as its page does", () => {
   it("paints a Service that publishes nothing red", async () => {
     answer.connections = () => Promise.resolve(connections([EMPTY_SLICE]));
     await renderWithRouter(<>{statusOf("Service", SERVICE)}</>);
-    expect(await screen.findByText("No endpoints")).toHaveClass(ROLE_TEXT.err);
+    expect(await screen.findByText("no endpoints")).toHaveClass(ROLE_TEXT.err);
   });
 
   /** A refused neighbourhood is "not checked", never "no endpoints". */
@@ -171,7 +171,7 @@ describe("the peek draws a network object's verdict as its page does", () => {
     await renderWithRouter(<>{statusOf("Service", SERVICE)}</>);
     expect(await screen.findByText("forbidden")).toBeInTheDocument();
     expect(screen.getByText("not checked")).toHaveClass(ROLE_TEXT.neutral);
-    expect(screen.queryByText("No endpoints")).toBeNull();
+    expect(screen.queryByText("no endpoints")).toBeNull();
   });
 
   /** An Ingress whose class nothing serves says so in its peek. */
