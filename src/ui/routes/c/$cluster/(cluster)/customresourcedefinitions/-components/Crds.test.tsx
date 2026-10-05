@@ -235,3 +235,42 @@ describe("deleting a CRD from the list", () => {
     expect(commands.deleteCrd).not.toHaveBeenCalled();
   });
 });
+
+describe("a CRD's scope in the list", () => {
+  /** The column printed spec.scope as written, "Namespaced", beside an API resources page that says the same fact in words. */
+  it("says it in the words the API resources page uses", async () => {
+    listCrds.mockResolvedValue([
+      {
+        group: "cert-manager.io",
+        crds: [
+          {
+            name: "certificates.cert-manager.io",
+            group: "cert-manager.io",
+            kind: "Certificate",
+            plural: "certificates",
+            scope: "Namespaced",
+            version: "v1",
+            shortNames: [],
+            categories: [],
+            createdAt: null,
+          },
+          {
+            name: "clusterissuers.cert-manager.io",
+            group: "cert-manager.io",
+            kind: "ClusterIssuer",
+            plural: "clusterissuers",
+            scope: "Cluster",
+            version: "v1",
+            shortNames: [],
+            categories: [],
+            createdAt: null,
+          },
+        ],
+      },
+    ]);
+    await draw();
+    expect(await screen.findByText("namespaced")).toBeInTheDocument();
+    expect(screen.getByText("cluster-wide")).toBeInTheDocument();
+    expect(screen.queryByText("Namespaced")).toBeNull();
+  });
+});

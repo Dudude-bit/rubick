@@ -7,6 +7,8 @@ import { columns as storageClassColumns } from "../(storage)/storageclasses/-com
 import { columns as namespaceColumns } from "../(cluster)/namespaces/-components/NamespaceList";
 import { columns as nodeColumns } from "../(cluster)/nodes/-components/NodeList";
 import { createDataKeysColumn } from "./columns";
+import { PortsDisplay } from "../(network)/-components/PortsDisplay";
+import { renderWithProviders, renderWithRouter } from "@/test/render";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { useLocaleStore } from "@/stores/localeStore";
 
@@ -94,6 +96,52 @@ describe("the keys a ConfigMap or Secret holds, past the first few", () => {
       );
       expect(container.textContent).toContain("ещё 2");
       expect(container.textContent).not.toMatch(/more/);
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
+  });
+});
+
+describe("list markers on a Russian screen", () => {
+  /** A Service's third port was "+1 more" in English on a Russian list. */
+  it("counts a Service's ports past the first two in the reader's language", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      const port = (n: number) => ({
+        name: `p${n}`,
+        port: n,
+        targetPort: String(n),
+        nodePort: null,
+        protocol: "TCP",
+      });
+      const { container } = renderWithProviders(
+        <PortsDisplay ports={[port(53), port(54), port(9153)]} />
+      );
+      expect(container.textContent).toContain("ещё 1");
+      expect(container.textContent).not.toMatch(/more/);
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
+  });
+
+  /** The default StorageClass was marked "default" in English beside a Russian header. */
+  it("marks the default StorageClass in the reader's language", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      const name = storageClassColumns().find(
+        (c) => "accessorKey" in c && c.accessorKey === "name"
+      );
+      const cell = name?.cell;
+      if (typeof cell !== "function") throw new Error("no name cell");
+      const { container } = await renderWithRouter(
+        <>
+          {cell({
+            row: { original: { name: "local-path", isDefault: true } },
+          } as never)}
+        </>
+      );
+      expect(container.textContent).toContain("класс по умолчанию");
+      expect(container.textContent).not.toMatch(/default/);
     } finally {
       useLocaleStore.setState({ choice: null });
     }

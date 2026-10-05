@@ -32,6 +32,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import type { CrdInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
+import { scopeKey } from "./crd-scope";
 import { columnHeader } from "@/i18n/column-header";
 import { toastError } from "@/lib/toast-error";
 
@@ -145,7 +146,9 @@ export function Crds() {
         header: columnHeader("columns", "scope"),
         size: 110,
         cell: ({ row }) => (
-          <span className="text-fg-mut">{row.original.scope}</span>
+          <span className="text-fg-mut">
+            <T section="apiResources" k={scopeKey(row.original.scope)} />
+          </span>
         ),
       },
       {

@@ -4,6 +4,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { ServicePortInfo } from "@/generated/types";
+import { T } from "@/i18n/T";
 
 /**
  * A service's ports inside a list row.
@@ -77,7 +78,7 @@ export function PortsDisplay({ ports, maxDisplay = 2 }: PortsDisplayProps) {
         <Tooltip>
           <TooltipTrigger asChild>
             <span className="cursor-default text-[11px] text-fg-fnt">
-              +{rest.length} more
+              <T section="count" k="plusMore" values={{ n: rest.length }} />
             </span>
           </TooltipTrigger>
           <TooltipContent>

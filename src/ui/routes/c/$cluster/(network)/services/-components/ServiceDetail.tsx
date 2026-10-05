@@ -124,7 +124,10 @@ export function ServiceDetail() {
       : []),
     {
       label: t("columns", "sessionAffinity"),
-      value: service?.sessionAffinity || "None",
+      value:
+        service?.sessionAffinity && service.sessionAffinity !== "None"
+          ? service.sessionAffinity
+          : t("empty", "none"),
     },
   ];
 

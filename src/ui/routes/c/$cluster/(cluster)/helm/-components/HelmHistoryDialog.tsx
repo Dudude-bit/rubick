@@ -83,7 +83,7 @@ export function HelmHistoryDialog({
                         {rev.revision}
                         {current && (
                           <span className="ml-1.5 text-[11px] text-fg-fnt">
-                            current
+                            {t("empty", "revisionCurrentWord")}
                           </span>
                         )}
                       </TableCell>

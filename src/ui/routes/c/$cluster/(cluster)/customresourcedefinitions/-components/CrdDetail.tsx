@@ -46,6 +46,7 @@ import { listLink } from "@/lib/links";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
+import { scopeKey } from "./crd-scope";
 import { toastError } from "@/lib/toast-error";
 
 export function CrdDetail() {
@@ -147,7 +148,10 @@ export function CrdDetail() {
   const facts: KeyValue[] = [
     { label: t("columns", "group"), value: crd?.group || "core", mono: true },
     { label: t("columns", "kind"), value: crd?.kind ?? "—", mono: true },
-    { label: t("columns", "scope"), value: crd?.scope ?? "—" },
+    {
+      label: t("columns", "scope"),
+      value: crd && t("apiResources", scopeKey(crd.scope)),
+    },
     {
       label: t("columns", "storageVersion"),
       value: storageVersion?.name ?? t("empty", "noneDeclared"),
@@ -406,7 +410,9 @@ export function CrdDetail() {
               <span className="truncate font-mono text-[11px] text-fg-mut">
                 {crd.name}
               </span>
-              <span className="text-[11px] text-fg-fnt">{crd.scope}</span>
+              <span className="text-[11px] text-fg-fnt">
+                {t("apiResources", scopeKey(crd.scope))}
+              </span>
             </>
           )
         }
