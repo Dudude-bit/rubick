@@ -256,7 +256,6 @@ function podActions(pod: PodInfo | undefined, t: T): PeekAction[] {
   const finished = FINISHED_PHASES.has(lower);
   const failed = lower === "failed";
   const live = !!reachableContainer(pod);
-  const owned = !!pod?.ownerReferences?.length;
 
   let shellReason: string | undefined;
   if (finished) {
@@ -295,19 +294,28 @@ function podActions(pod: PodInfo | undefined, t: T): PeekAction[] {
       reason: forwardReason,
     },
     { id: "debug", label: t("action", "debug"), icon: Bug },
-    // Restarting a pod is deleting it. With a controller above, that is a
-    // replacement and reads as a restart; without one the pod simply stops
-    // existing, and calling that "Restart" would be a lie told in one word.
-    owned || !pod
-      ? { id: "restart", label: t("action", "restart"), icon: RefreshCw }
-      : {
-          id: "restart",
-          label: t("action", "restartDeletesIt"),
-          icon: RefreshCw,
-          danger: true,
-        },
+    podRestartAction(pod, t),
     ...deleteAction("Pod", t),
   ];
+}
+
+/**
+ * Restarting a pod is deleting it. With an owner above, that is a
+ * replacement and reads as a restart; with none the pod simply stops
+ * existing, and calling that "Restart" would be a lie told in one word.
+ * Owners not read yet (a list row) are not "no owner".
+ */
+export function podRestartAction(pod: PodInfo | undefined, t: T): PeekAction {
+  const bare =
+    Array.isArray(pod?.ownerReferences) && pod.ownerReferences.length === 0;
+  return bare
+    ? {
+        id: "restart",
+        label: t("action", "restartDeletesIt"),
+        icon: RefreshCw,
+        danger: true,
+      }
+    : { id: "restart", label: t("action", "restart"), icon: RefreshCw };
 }
 
 /* ---------- Service ---------- */
@@ -472,6 +480,22 @@ export const qualified = (name: string, namespace: string | null) =>
   namespace ? `${namespace}/${name}` : name;
 
 /**
+ * The confirmation's own sentence, and what delivery adds to it.
+ *
+ * Prepended rather than replacing: "this deletes the object" is still true,
+ * and "and the controller puts it straight back" is the part that changes what
+ * you would do.
+ */
+export function warned(
+  description: string,
+  intercept: { lead: string; description: string } | null
+): string {
+  return intercept
+    ? `${intercept.lead} ${intercept.description} ${description}`
+    : description;
+}
+
+/**
  * "Are you sure?" asks nothing. Naming the object and what goes with it is
  * the only wording that lets a reader catch the wrong row before typing.
  */
@@ -538,7 +562,9 @@ function deletionEffect(kind: string, detail: unknown, t: T): string {
 }
 
 function podDeletionEffect(pod: PodInfo | undefined, t: T): string {
-  const owners = pod?.ownerReferences ?? [];
+  if (!Array.isArray(pod?.ownerReferences))
+    return t("action", "effectPodUnread");
+  const owners = pod.ownerReferences;
   const controller = owners.find((owner) => owner.controller);
   if (!controller) {
     const [owner] = owners;
@@ -562,12 +588,13 @@ function podDeletionEffect(pod: PodInfo | undefined, t: T): string {
 }
 
 /**
- * The confirmation a bare pod's restart needs. Owned pods get none: the
- * controller replaces them and the panel stays honest by doing it silently.
+ * A pod's restart is its deletion, so it asks with the delete's own facts:
+ * what replaces the pod, or that nothing does.
  */
-export function describeBareRestart(
+export function describePodRestart(
   name: string,
   namespace: string | null,
+  detail: unknown,
   t: T
 ): PeekConfirmCopy {
   const subject = t("action", "podSubject", {
@@ -575,7 +602,10 @@ export function describeBareRestart(
   });
   return {
     title: t("action", "restartSubjectTitle", { subject }),
-    description: t("action", "restartBareBody", { subject }),
+    description: t("action", "restartPodBody", {
+      subject,
+      effect: podDeletionEffect(detail as PodInfo | undefined, t),
+    }),
   };
 }
 

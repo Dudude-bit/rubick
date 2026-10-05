@@ -1336,6 +1336,34 @@ describe("PeekPanel actions", () => {
     );
   });
 
+  /**
+   * Dana's Restart deleted the pod on one click while the Deployment's own
+   * Restart asked first. A pod's restart is its deletion and asks like one.
+   */
+  it("asks before restarting an owned pod, with what replaces it", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
+    await wrap(RUNNING_PEEK);
+    await screen.findByText("Running");
+
+    await openMore();
+    await userEvent.click(screen.getByRole("menuitem", { name: /Restart/ }));
+
+    const confirm = await screen.findByRole("alertdialog");
+    expect(
+      within(confirm).getByText("Restart pod k8s-gui-test/log-demo-1?")
+    ).toBeInTheDocument();
+    expect(
+      within(confirm).getByText(
+        /ReplicaSet crash-demo-56588f6b8c will start a replacement/
+      )
+    ).toBeInTheDocument();
+    expect(within(confirm).getByTestId("confirm-details")).toBeInTheDocument();
+    expect(
+      within(confirm).getByRole("button", { name: "Restart" })
+    ).toBeDisabled();
+    expect(commands.restartPod).not.toHaveBeenCalled();
+  });
+
   it("keeps the panel open across a restart", async () => {
     vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
     vi.mocked(commands.restartPod).mockResolvedValue(undefined);
@@ -1344,6 +1372,11 @@ describe("PeekPanel actions", () => {
 
     await openMore();
     await userEvent.click(screen.getByRole("menuitem", { name: /Restart/ }));
+    await userEvent.type(
+      await screen.findByLabelText(/to confirm/),
+      "log-demo-1"
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Restart" }));
 
     await waitFor(() =>
       expect(commands.restartPod).toHaveBeenCalledWith(
@@ -1369,7 +1402,7 @@ describe("PeekPanel actions", () => {
       await screen.findByRole("menuitem", { name: /Restart \(deletes it\)/ })
     );
     expect(
-      await screen.findByText(/nothing will recreate it/)
+      await screen.findByText(/nothing will bring it back/)
     ).toBeInTheDocument();
     expect(commands.restartPod).not.toHaveBeenCalled();
   });

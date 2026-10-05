@@ -11,8 +11,8 @@ import {
   restartCommandFor,
   restartNeedsAsking,
   deleteCommandFor,
-  describeBareRestart,
   describeDeletion,
+  describePodRestart,
   peekMutationKeys,
   planPeekActions,
   scaleCommandFor,
@@ -314,10 +314,42 @@ describe("restarting a pod nothing owns", () => {
   });
 
   it("spells out that nothing will bring it back", () => {
-    expect(describeBareRestart("bare-demo", "k8s-gui-test", t)).toMatchObject({
+    expect(
+      describePodRestart("bare-demo", "k8s-gui-test", bare, t)
+    ).toMatchObject({
       title: "Restart pod k8s-gui-test/bare-demo?",
-      description: expect.stringContaining("nothing will recreate it"),
+      description: expect.stringContaining("nothing will bring it back"),
     });
+  });
+
+  /** A list row carries no owners: the label must not call that "no owner". */
+  it("does not call a pod bare before its owners are read", () => {
+    const row = { ...pod(), ownerReferences: undefined } as unknown as PodInfo;
+    expect(find(all("Pod", row), "restart")).toMatchObject({
+      label: "Restart",
+    });
+    expect(find(all("Pod", row), "restart")?.danger).toBeUndefined();
+  });
+});
+
+describe("restarting a pod an owner replaces", () => {
+  /** Dana's restart deleted the pod on one click; the dialog names who brings it back. */
+  it("asks with the delete's own facts, naming what starts the replacement", () => {
+    expect(
+      describePodRestart("log-demo-1", "k8s-gui-test", pod(), t)
+    ).toMatchObject({
+      title: "Restart pod k8s-gui-test/log-demo-1?",
+      description:
+        "Restarting a pod means deleting it. Deleting pod k8s-gui-test/log-demo-1 removes it now. Its ReplicaSet log-demo-6cf will start a replacement.",
+    });
+  });
+
+  /** Owners not read yet are not "nothing owns it", in either direction. */
+  it("says the owner is not read yet rather than guessing a replacement", () => {
+    const said = describePodRestart("log-demo-1", "ns", undefined, t);
+    expect(said.description).toContain("has not been read yet");
+    expect(said.description).not.toContain("nothing will bring it back");
+    expect(said.description).not.toContain("will start a replacement");
   });
 });
 

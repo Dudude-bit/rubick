@@ -60,6 +60,7 @@ import { UnreadNamespaces } from "./UnreadNamespaces";
 import { UnreadList } from "./UnreadList";
 import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
+import { deleteCommandFor } from "../-peek/peek-actions";
 
 const NOTHING_UNREAD: UnreadNamespace[] = [];
 
@@ -286,6 +287,13 @@ export function ResourceList<
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
+  const rowMenu = useRowMenu<Row>({ kind: listKind, getRowHref });
+  // Where the row menu can delete this kind, a row's Delete button asks
+  // through it: one dialog, with what replaces the object and what goes too.
+  const requestDelete =
+    listKind && deleteCommandFor(listKind)
+      ? rowMenu.askDelete
+      : setDeleteTarget;
 
   const shouldUseQuery = data === undefined && !!queryKey && !!queryFn;
   const queryResult = useResource(
@@ -404,33 +412,26 @@ export function ResourceList<
 
   // Both memoised, and both had to be: a fresh array on every render rebuilds
   // TanStack's whole column model on every watch tick, and the table re-reads
-  // itself every two seconds. `setDeleteTarget` is a setState and holds still,
+  // itself every two seconds. `requestDelete` holds still,
   // so the only thing either depends on is what the page passed in.
   //
   // Second from the end, so Delivery lands where the other qualifiers already
   // sit and never displaces Age from the right edge of the table.
   const resolvedColumns = useMemo(() => {
     const base =
-      typeof columns === "function"
-        ? columns(setDeleteTarget as (item: Row) => void)
-        : columns;
+      typeof columns === "function" ? columns(requestDelete) : columns;
     return showDelivery
       ? [...base.slice(0, -1), deliveryColumn<Row>(), ...base.slice(-1)]
       : base;
-  }, [columns, showDelivery]);
+  }, [columns, showDelivery, requestDelete]);
 
   const resolvedQuickActions = useMemo(
     () =>
       typeof quickActions === "function"
-        ? quickActions(setDeleteTarget as (item: Row) => void)
+        ? quickActions(requestDelete)
         : quickActions,
-    [quickActions]
+    [quickActions, requestDelete]
   );
-  const rowMenu = useRowMenu<Row>({
-    kind: listKind,
-    getRowHref,
-    quickActions: resolvedQuickActions,
-  });
 
   // A resync with nothing to show is still loading; a resync with rows keeps
   // them, and says so above rather than wearing "live" over them.
@@ -727,7 +728,7 @@ export function ResourceList<
           }
         />
       )}
-      {rowMenu.element}
+      {rowMenu.element(resolvedQuickActions ?? [])}
       {deleteConfig && (
         <ConfirmDialog
           open={deleteTarget !== null}

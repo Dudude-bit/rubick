@@ -12,7 +12,6 @@ import {
   Stethoscope,
   Info,
   Network,
-  RefreshCw,
   Shield,
   SquareTerminal,
 } from "lucide-react";
@@ -76,7 +75,6 @@ import { useNodePlacement } from "./useNodePlacement";
 import { SpotMark } from "../../../-object/spot-mark";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
-import { InterceptedAction } from "../../../-delivery/delivery-intercept";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
@@ -680,13 +678,15 @@ export function PodDetail() {
               onClick={() => setPortForwardOpen(true)}
               disabled={!currentContext || !pod}
             />
-            <InterceptedAction
+            <DeleteAction
+              restart
+              kind={ResourceType.Pod}
+              name={pod?.name || name || "Pod"}
+              namespace={pod?.namespace || namespace}
+              detail={pod}
               intercept={intercept("Restart")}
-              label={t("action", "restart")}
-              icon={RefreshCw}
-              onClick={() => restartMutation.mutate()}
+              mutation={restartMutation}
               disabled={!pod}
-              busy={restartMutation.isPending}
             />
             <DeleteAction
               kind={ResourceType.Pod}

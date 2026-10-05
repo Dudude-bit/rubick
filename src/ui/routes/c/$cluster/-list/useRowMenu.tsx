@@ -15,11 +15,9 @@ import { RowMenu, type Listed } from "./RowMenu";
 export function useRowMenu<Row extends Listed>({
   kind,
   getRowHref,
-  quickActions,
 }: {
   kind: string | null;
   getRowHref?: (row: Row) => string;
-  quickActions?: QuickAction<Row>[];
 }) {
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
   const [row, setRow] = useState<Row | null>(null);
@@ -52,8 +50,18 @@ export function useRowMenu<Row extends Listed>({
     setRow(next);
     setAt(point);
   }, []);
+  // A row's own Delete asks through the menu's, so the button under the
+  // pointer asks exactly what the menu does.
+  const { askDelete: confirmDelete } = actions;
+  const askDelete = useCallback(
+    (next: Row) => {
+      setRow(next);
+      confirmDelete();
+    },
+    [confirmDelete]
+  );
 
-  const element = (
+  const element = (quickActions: QuickAction<Row>[]) => (
     <>
       {row && at && (
         <RowMenu
@@ -61,7 +69,7 @@ export function useRowMenu<Row extends Listed>({
           kind={kind}
           href={getRowHref?.(row)}
           actions={actions}
-          quickActions={quickActions ?? []}
+          quickActions={quickActions}
           at={at}
           onClose={() => setAt(null)}
         />
@@ -69,5 +77,5 @@ export function useRowMenu<Row extends Listed>({
       {actions.dialogs}
     </>
   );
-  return { open, element };
+  return { open, askDelete, element };
 }

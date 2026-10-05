@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vite-plus/test";
-import { fireEvent, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { fireEvent, screen, within } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
 
 import type { PodRow } from "@/generated/types";
 
@@ -89,5 +90,51 @@ describe("the row's shell button", () => {
         "/c/prod/pods/prod/api-0?tab=shell"
       )
     );
+  });
+});
+
+describe("the row's delete button", () => {
+  afterEach(() => {
+    vi.mocked(invoke).mockImplementation(async () => undefined);
+  });
+
+  /**
+   * It opened a plain "are you sure" while the row menu and the peek asked
+   * for the name and said what replaces the pod: one pod, two dialogs.
+   */
+  it("asks what the row menu's Delete asks, name typed and replacement named", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) =>
+      command === "get_pod"
+        ? {
+            ...api,
+            hostIp: null,
+            annotations: {},
+            status: { ...api.status, ready: true, conditions: [] },
+            ownerReferences: [
+              {
+                api_version: "apps/v1",
+                kind: "ReplicaSet",
+                name: "api-7d",
+                uid: "rs",
+                controller: true,
+              },
+            ],
+          }
+        : undefined
+    );
+    await renderWithRouter(<PodList />, { at: "/c/prod/pods" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    const confirm = await screen.findByRole("alertdialog");
+    expect(
+      within(confirm).getByText("Delete pod prod/api-0?")
+    ).toBeInTheDocument();
+    expect(within(confirm).getByLabelText(/to confirm/)).toBeInTheDocument();
+    expect(
+      await within(confirm).findByText(
+        /ReplicaSet api-7d will start a replacement/
+      )
+    ).toBeInTheDocument();
   });
 });

@@ -78,3 +78,53 @@ describe("Delete on a detail page", () => {
     expect(mutate).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("Restart on a pod's page", () => {
+  const owned = {
+    name: "cart-1",
+    namespace: "shop",
+    status: { phase: "Running" },
+    ownerReferences: [
+      {
+        api_version: "apps/v1",
+        kind: "ReplicaSet",
+        name: "cart-75",
+        uid: "rs",
+        controller: true,
+      },
+    ],
+  };
+
+  /** The page's Restart deleted the pod on the click, like the peek's did. */
+  it("asks with the delete's facts and restarts nothing on the click", async () => {
+    await renderWithRouter(
+      <DeleteAction
+        restart
+        kind="Pod"
+        name="cart-1"
+        namespace="shop"
+        detail={owned}
+        intercept={null}
+        mutation={mutation}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog).toHaveTextContent("Restart pod shop/cart-1?");
+    expect(dialog).toHaveTextContent(
+      "Its ReplicaSet cart-75 will start a replacement."
+    );
+    expect(await screen.findByText("Also deletes:")).toBeInTheDocument();
+    expect(mutate).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "cart-1" },
+    });
+    fireEvent.click(
+      Array.from(dialog.querySelectorAll("button")).find(
+        (button) => button.textContent === "Restart"
+      )!
+    );
+    expect(mutate).toHaveBeenCalledTimes(1);
+  });
+});

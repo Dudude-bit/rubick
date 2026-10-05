@@ -19,7 +19,7 @@
  * what a row should call to decide whether it has a menu at all.
  */
 
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -29,8 +29,7 @@ import {
   type ForwardTarget,
 } from "@/components/port-forward/PortForwardDialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
-import { CascadePreview } from "./CascadePreview";
+import { DeletionDialog } from "./DeleteAction";
 import { useClusterInfo } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { useCritical } from "@/hooks/useCritical";
@@ -57,8 +56,6 @@ import { ScaleDialog } from "./ScaleDialog";
 import { RestartDialog } from "./RestartDialog";
 import {
   deleteCommandFor,
-  describeBareRestart,
-  describeDeletion,
   peekMutationKeys,
   planPeekActions,
   qualified,
@@ -67,6 +64,7 @@ import {
   restartNeedsAsking,
   restartRollsOut,
   scaleCommandFor,
+  warned,
   type ForwardBackend,
   type PeekActionId,
   type PeekActionPlan,
@@ -83,6 +81,8 @@ export interface ObjectActions {
   plan: PeekActionPlan;
   busy: Partial<Record<PeekActionId, boolean>>;
   run: (id: PeekActionId) => void;
+  /** Opens the delete confirmation; holds still, unlike `run`. */
+  askDelete: () => void;
   /** Mount once, wherever the caller renders. Nothing draws without it. */
   dialogs: ReactNode;
 }
@@ -95,22 +95,6 @@ export interface ObjectActionsOptions {
   detail: unknown;
   /** Called once a delete lands: the peek closes on it, a table row does not. */
   onGone?: () => void;
-}
-
-/**
- * The confirmation's own sentence, and what delivery adds to it.
- *
- * Prepended rather than replacing: "this deletes the object" is still true,
- * and "and the controller puts it straight back" is the part that changes what
- * you would do.
- */
-export function warned(
-  description: string,
-  intercept: { lead: string; description: string } | null
-): string {
-  return intercept
-    ? `${intercept.lead} ${intercept.description} ${description}`
-    : description;
 }
 
 export function useObjectActions({
@@ -311,6 +295,8 @@ export function useObjectActions({
     });
   };
 
+  const askDelete = useCallback(() => setConfirming("delete"), []);
+
   const run = (id: PeekActionId) => {
     switch (id) {
       case "shell":
@@ -322,10 +308,8 @@ export function useObjectActions({
       case "scale":
         return setDialog("scale");
       case "restart":
-        // A bare pod has no controller to put it back, so its "restart" is a
-        // one-way door and gets the same gate as a delete.
-        if (kind === "Pod" && !pod?.ownerReferences?.length)
-          return setConfirming("restart");
+        // A pod's restart is its deletion, owned or not.
+        if (kind === "Pod") return setConfirming("restart");
         if (restartRollsOut(kind)) return setConfirming("rolling");
         // A managed restart is reversible, but it still asks when a delivery
         // controller would undo it or the cluster is marked critical — the
@@ -335,7 +319,7 @@ export function useObjectActions({
           ? setConfirming("managedRestart")
           : restart.mutate();
       case "delete":
-        return setConfirming("delete");
+        return askDelete();
       case "tell":
         if (!askTarget) return;
         return asking.watching(askTarget)
@@ -364,9 +348,6 @@ export function useObjectActions({
             ports: podForwardPorts(pod),
           }
         : null;
-
-  const deletion = describeDeletion(kind, name, namespace, detail, t);
-  const bareRestart = describeBareRestart(name, namespace, t);
 
   const dialogs = (
     <>
@@ -416,32 +397,32 @@ export function useObjectActions({
         />
       )}
 
-      <DangerousConfirmDialog
+      <DeletionDialog
         open={confirming === "delete"}
         onOpenChange={(open) => setConfirming(open ? "delete" : null)}
-        title={deletion.title}
-        description={warned(deletion.description, intercept("Delete"))}
-        details={
-          confirming === "delete" ? (
-            <CascadePreview kind={kind} name={name} namespace={namespace} />
-          ) : null
-        }
-        confirmationText={name}
-        confirmLabel={t("action", "delete")}
-        isLoading={remove.isPending}
+        kind={kind}
+        name={name}
+        namespace={namespace}
+        detail={detail}
+        intercept={intercept("Delete")}
+        busy={remove.isPending}
         onConfirm={() => remove.mutate()}
       />
 
-      <DangerousConfirmDialog
-        open={confirming === "restart"}
-        onOpenChange={(open) => setConfirming(open ? "restart" : null)}
-        title={bareRestart.title}
-        description={warned(bareRestart.description, intercept("Restart"))}
-        confirmationText={name}
-        confirmLabel={t("action", "restart")}
-        isLoading={restart.isPending}
-        onConfirm={() => restart.mutate()}
-      />
+      {kind === "Pod" && (
+        <DeletionDialog
+          restart
+          open={confirming === "restart"}
+          onOpenChange={(open) => setConfirming(open ? "restart" : null)}
+          kind={kind}
+          name={name}
+          namespace={namespace}
+          detail={detail}
+          intercept={intercept("Restart")}
+          busy={restart.isPending}
+          onConfirm={() => restart.mutate()}
+        />
+      )}
 
       {restartRollsOut(kind) && (
         <RestartDialog
@@ -478,7 +459,7 @@ export function useObjectActions({
     </>
   );
 
-  return { plan, busy, run, dialogs };
+  return { plan, busy, run, askDelete, dialogs };
 }
 
 async function resolveServiceBackend(
