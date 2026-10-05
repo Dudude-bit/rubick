@@ -15,6 +15,7 @@ import { Route as CClusterIndexRouteImport } from "./../routes/c/$cluster/index"
 import { Route as CClusterChangesRouteImport } from "./../routes/c/$cluster/changes";
 import { Route as CClusterResourceIndexRouteImport } from "./../routes/c/$cluster/$resource/index";
 import { Route as CClusterResourceNameRouteImport } from "./../routes/c/$cluster/$resource/$name";
+import { Route as CClusterApiResourcesIndexRouteImport } from "./../routes/c/$cluster/api-resources/index";
 import { Route as CClusterEventsIndexRouteImport } from "./../routes/c/$cluster/events/index";
 import { Route as CClusterIntegrationsIndexRouteImport } from "./../routes/c/$cluster/integrations/index";
 import { Route as CClusterIntegrationsVendorRouteImport } from "./../routes/c/$cluster/integrations/$vendor";
@@ -105,6 +106,12 @@ const CClusterResourceNameRoute = CClusterResourceNameRouteImport.update({
   path: "/$resource/$name",
   getParentRoute: () => CClusterRouteRoute,
 } as any);
+const CClusterApiResourcesIndexRoute =
+  CClusterApiResourcesIndexRouteImport.update({
+    id: "/api-resources/",
+    path: "/api-resources/",
+    getParentRoute: () => CClusterRouteRoute,
+  } as any);
 const CClusterEventsIndexRoute = CClusterEventsIndexRouteImport.update({
   id: "/events/",
   path: "/events/",
@@ -467,6 +474,7 @@ export interface FileRoutesByFullPath {
   "/c/$cluster/$resource/$name": typeof CClusterResourceNameRoute;
   "/c/$cluster/integrations/$vendor": typeof CClusterIntegrationsVendorRoute;
   "/c/$cluster/$resource/": typeof CClusterResourceIndexRoute;
+  "/c/$cluster/api-resources/": typeof CClusterApiResourcesIndexRoute;
   "/c/$cluster/events/": typeof CClusterEventsIndexRoute;
   "/c/$cluster/integrations/": typeof CClusterIntegrationsIndexRoute;
   "/c/$cluster/$resource/$namespace/$name": typeof CClusterResourceNamespaceNameRoute;
@@ -533,6 +541,7 @@ export interface FileRoutesByTo {
   "/c/$cluster/$resource/$name": typeof CClusterResourceNameRoute;
   "/c/$cluster/integrations/$vendor": typeof CClusterIntegrationsVendorRoute;
   "/c/$cluster/$resource": typeof CClusterResourceIndexRoute;
+  "/c/$cluster/api-resources": typeof CClusterApiResourcesIndexRoute;
   "/c/$cluster/events": typeof CClusterEventsIndexRoute;
   "/c/$cluster/integrations": typeof CClusterIntegrationsIndexRoute;
   "/c/$cluster/$resource/$namespace/$name": typeof CClusterResourceNamespaceNameRoute;
@@ -601,6 +610,7 @@ export interface FileRoutesById {
   "/c/$cluster/$resource/$name": typeof CClusterResourceNameRoute;
   "/c/$cluster/integrations/$vendor": typeof CClusterIntegrationsVendorRoute;
   "/c/$cluster/$resource/": typeof CClusterResourceIndexRoute;
+  "/c/$cluster/api-resources/": typeof CClusterApiResourcesIndexRoute;
   "/c/$cluster/events/": typeof CClusterEventsIndexRoute;
   "/c/$cluster/integrations/": typeof CClusterIntegrationsIndexRoute;
   "/c/$cluster/$resource/$namespace/$name": typeof CClusterResourceNamespaceNameRoute;
@@ -670,6 +680,7 @@ export interface FileRouteTypes {
     | "/c/$cluster/$resource/$name"
     | "/c/$cluster/integrations/$vendor"
     | "/c/$cluster/$resource/"
+    | "/c/$cluster/api-resources/"
     | "/c/$cluster/events/"
     | "/c/$cluster/integrations/"
     | "/c/$cluster/$resource/$namespace/$name"
@@ -736,6 +747,7 @@ export interface FileRouteTypes {
     | "/c/$cluster/$resource/$name"
     | "/c/$cluster/integrations/$vendor"
     | "/c/$cluster/$resource"
+    | "/c/$cluster/api-resources"
     | "/c/$cluster/events"
     | "/c/$cluster/integrations"
     | "/c/$cluster/$resource/$namespace/$name"
@@ -803,6 +815,7 @@ export interface FileRouteTypes {
     | "/c/$cluster/$resource/$name"
     | "/c/$cluster/integrations/$vendor"
     | "/c/$cluster/$resource/"
+    | "/c/$cluster/api-resources/"
     | "/c/$cluster/events/"
     | "/c/$cluster/integrations/"
     | "/c/$cluster/$resource/$namespace/$name"
@@ -910,6 +923,13 @@ declare module "@tanstack/react-router" {
       path: "/$resource/$name";
       fullPath: "/c/$cluster/$resource/$name";
       preLoaderRoute: typeof CClusterResourceNameRouteImport;
+      parentRoute: typeof CClusterRouteRoute;
+    };
+    "/c/$cluster/api-resources/": {
+      id: "/c/$cluster/api-resources/";
+      path: "/api-resources";
+      fullPath: "/c/$cluster/api-resources/";
+      preLoaderRoute: typeof CClusterApiResourcesIndexRouteImport;
       parentRoute: typeof CClusterRouteRoute;
     };
     "/c/$cluster/events/": {
@@ -1334,6 +1354,7 @@ interface CClusterRouteRouteChildren {
   CClusterResourceNameRoute: typeof CClusterResourceNameRoute;
   CClusterIntegrationsVendorRoute: typeof CClusterIntegrationsVendorRoute;
   CClusterResourceIndexRoute: typeof CClusterResourceIndexRoute;
+  CClusterApiResourcesIndexRoute: typeof CClusterApiResourcesIndexRoute;
   CClusterEventsIndexRoute: typeof CClusterEventsIndexRoute;
   CClusterIntegrationsIndexRoute: typeof CClusterIntegrationsIndexRoute;
   CClusterResourceNamespaceNameRoute: typeof CClusterResourceNamespaceNameRoute;
@@ -1400,6 +1421,7 @@ const CClusterRouteRouteChildren: CClusterRouteRouteChildren = {
   CClusterResourceNameRoute: CClusterResourceNameRoute,
   CClusterIntegrationsVendorRoute: CClusterIntegrationsVendorRoute,
   CClusterResourceIndexRoute: CClusterResourceIndexRoute,
+  CClusterApiResourcesIndexRoute: CClusterApiResourcesIndexRoute,
   CClusterEventsIndexRoute: CClusterEventsIndexRoute,
   CClusterIntegrationsIndexRoute: CClusterIntegrationsIndexRoute,
   CClusterResourceNamespaceNameRoute: CClusterResourceNamespaceNameRoute,

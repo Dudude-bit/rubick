@@ -239,6 +239,20 @@ describe("the update dot", () => {
   });
 });
 
+describe("the API resources row", () => {
+  /**
+   * Priya found Leases by accident through a breadcrumb, and PriorityClass,
+   * webhook configurations and Roles not at all: nothing listed what the
+   * cluster serves.
+   */
+  it("offers the page that lists every served kind", async () => {
+    await wrap(<Sidebar />);
+    expect(
+      await screen.findByRole("link", { name: "API resources" })
+    ).toHaveAttribute("href", "/c/prod/api-resources");
+  });
+});
+
 describe("the Network group", () => {
   /**
    * Endpoints was collateral of a nav rebuild and spent months reachable

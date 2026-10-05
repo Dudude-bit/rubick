@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   LayoutDashboard,
+  Library,
   Lock,
   Package,
   Plug,
@@ -140,6 +141,11 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       resource(ResourceType.Node, "nodes"),
       resource(ResourceType.Namespace, "namespaces"),
       resource(ResourceType.CustomResourceDefinition),
+      {
+        labelKey: "apiResources",
+        path: pageLink("api-resources"),
+        icon: Library,
+      },
       { label: "Helm", path: pageLink("helm"), icon: Package },
     ],
   },

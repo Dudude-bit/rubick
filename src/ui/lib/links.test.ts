@@ -11,6 +11,7 @@ import {
   listLink,
   objectLink,
   retargetHref,
+  servedListLink,
   setRouter,
 } from "./links";
 import { RESOURCE_REGISTRY } from "./resource-registry";
@@ -99,6 +100,49 @@ describe("every kind the registry knows", () => {
       .map((entry) => hrefOf(listLink(entry.kind)))
       .filter((href) => GENERIC.test(routeOf(router, href)));
     expect(generic).toEqual([]);
+  });
+});
+
+describe("a served kind's list", () => {
+  /** A kind the registry holds opens its own page; a namesake in another group does not. */
+  it("opens the registry's page only for that very kind", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const pods = hrefOf(
+      servedListLink({ kind: "Pod", group: "", plural: "pods" })
+    );
+    expect(pods).toBe("/c/prod/pods");
+    expect(routeOf(router, pods)).not.toMatch(GENERIC);
+    const routes = hrefOf(
+      servedListLink({
+        kind: "HTTPRoute",
+        group: "gateway.networking.k8s.io",
+        plural: "httproutes",
+      })
+    );
+    expect(routeOf(router, routes)).not.toMatch(GENERIC);
+    const events = hrefOf(
+      servedListLink({
+        kind: "Event",
+        group: "events.k8s.io",
+        plural: "events",
+      })
+    );
+    expect(events).toBe("/c/prod/events.events.k8s.io");
+    expect(routeOf(router, events)).toMatch(GENERIC);
+  });
+
+  it("lists a core kind the registry does not hold by its bare plural", async () => {
+    at("/c/prod");
+    expect(
+      hrefOf(
+        servedListLink({
+          kind: "ServiceAccount",
+          group: "",
+          plural: "serviceaccounts",
+        })
+      )
+    ).toBe("/c/prod/serviceaccounts");
   });
 });
 

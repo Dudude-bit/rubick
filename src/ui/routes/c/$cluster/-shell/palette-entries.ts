@@ -4,6 +4,7 @@ import {
   Box,
   FileText,
   LayoutDashboard,
+  Library,
   Network,
   Package,
   Server,
@@ -28,11 +29,12 @@ import {
   listLink,
   objectLink,
   pageLink,
+  servedListLink,
   type AppLink,
 } from "@/lib/links";
 import { isResourceType, ResourceType, toKind } from "@/lib/resource-registry";
 import { aliasOf, type ClusterMark } from "@/stores/clusterIdentityStore";
-import type { RecentItem } from "@/generated/types";
+import type { CatalogEntry, RecentItem } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 import { highlight } from "./palette-highlight";
@@ -67,7 +69,45 @@ const quickActions: Array<{
   },
   { icon: Activity, label: "goToEvents", path: pageLink("events") },
   { icon: Package, label: "goToHelm", path: pageLink("helm") },
+  {
+    icon: Library,
+    label: "goToApiResources",
+    path: pageLink("api-resources"),
+  },
 ];
+
+/** Kinds a query offers to open the list of, before any object it finds. */
+export const KINDS_SHOWN = 6;
+
+/** Kinds whose name or plural holds the query: whole names, then prefixes. */
+export function matchingKinds(
+  kinds: readonly CatalogEntry[],
+  query: string
+): CatalogEntry[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+  const rank = (entry: CatalogEntry) => {
+    const kind = entry.kind.toLowerCase();
+    const plural = entry.plural.toLowerCase();
+    if (kind === needle || plural === needle) return 0;
+    if (kind.startsWith(needle) || plural.startsWith(needle)) return 1;
+    if (kind.includes(needle) || plural.includes(needle)) return 2;
+    return null;
+  };
+  return kinds
+    .flatMap((entry) => {
+      const at = rank(entry);
+      return at === null ? [] : [{ entry, at }];
+    })
+    .sort(
+      (a, b) =>
+        a.at - b.at ||
+        a.entry.kind.localeCompare(b.entry.kind) ||
+        a.entry.group.localeCompare(b.entry.group)
+    )
+    .slice(0, KINDS_SHOWN)
+    .map(({ entry }) => entry);
+}
 
 /**
  * The Activity panel's tabs, by the names a reader searches for.
@@ -131,6 +171,8 @@ export type Entry =
   | { id: string; kind: "hit"; hit: SearchHit; path: AppLink | null }
   | { id: string; kind: "more"; context: string; rest: number }
   | { id: string; kind: "link"; path: AppLink; label: string; icon: IconType }
+  /** A kind the cluster serves; picking it opens its list. */
+  | { id: string; kind: "kind"; entry: CatalogEntry; path: AppLink }
   /** A row that does something instead of going somewhere. See `PANELS`. */
   | {
       id: string;
@@ -192,6 +234,8 @@ export interface PaletteState {
   /** Cluster rows in the order they were asked, cold ones included. */
   shownClusters: ClusterSearchState[];
   hitsByContext: Map<string, Map<string, SearchHit>>;
+  /** What the current cluster serves, once read. */
+  kinds?: readonly CatalogEntry[];
   t: T;
 }
 
@@ -206,6 +250,7 @@ export function buildPaletteEntries({
   error,
   shownClusters,
   hitsByContext,
+  kinds = [],
   t,
 }: PaletteState): Entry[] {
   const bang = parseBang(text);
@@ -333,6 +378,23 @@ export function buildPaletteEntries({
           kind: "settings",
           label: settingsLabel,
           icon: Settings,
+        });
+      }
+    }
+
+    const served = isConnected ? matchingKinds(kinds, query) : [];
+    if (served.length > 0) {
+      out.push({
+        id: "cap:kinds",
+        kind: "caption",
+        text: t("action", "paletteKinds"),
+      });
+      for (const entry of served) {
+        out.push({
+          id: `kind:${entry.group}/${entry.plural}`,
+          kind: "kind",
+          entry,
+          path: servedListLink(entry),
         });
       }
     }

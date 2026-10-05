@@ -15,6 +15,7 @@ import type { Catalogue } from "./catalogue";
  */
 export const ru: Catalogue = {
   nav: {
+    apiResources: "API-ресурсы",
     changes: "Изменения",
     selectsLabels: "выбирает {selector}",
     allNamespacesLower: "все неймспейсы",
@@ -1059,10 +1060,12 @@ export const ru: Catalogue = {
     goToSecrets: "Перейти к Secrets",
     goToEvents: "Перейти к Events",
     goToHelm: "Перейти к Helm",
+    goToApiResources: "Перейти к API-ресурсам",
     goToSettings: "Перейти к настройкам",
     paletteRecent: "Недавнее",
     paletteNavigation: "Навигация",
     paletteResources: "Ресурсы",
+    paletteKinds: "Kind'ы",
     commandPalette: "Палитра команд",
     searchResourcesActionsPages: "Поиск ресурсов, действий и страниц",
     searchThisCluster: "Поиск в этом кластере…",
@@ -1070,6 +1073,7 @@ export const ru: Catalogue = {
     results: "Результаты",
     hintScopeToIt: "искать в нём",
     hintUseAsScope: "выбрать областью",
+    hintOpenList: "открыть список",
     hintComplete: "дополнить",
     hintNewTab: "новая вкладка",
     hintDropCluster: "убрать кластер",
@@ -4824,6 +4828,23 @@ export const ru: Catalogue = {
     noOwner: "Эту ревизию не держит ни один контроллер.",
     involvedGone: "{kind} {name}, о котором это событие, больше не существует.",
   },
+  apiResources: {
+    description:
+      "Все kind'ы, которые обслуживает этот кластер, по группам API. Каждый открывает свой список.",
+    filter: "Фильтр kind'ов",
+    core: "core",
+    namespaced: "в пространстве имён",
+    clusterWide: "на весь кластер",
+    notListable: "нельзя получить списком",
+    groupUnread:
+      "Discovery не ответил по этой группе, поэтому её kind'ы показать нельзя.",
+    noMatch: "Ни один обслуживаемый kind не подходит под {filter}.",
+    noMatchAnswered:
+      "Ни один kind в ответивших группах не подходит под {filter}. Группы ниже не ответили.",
+    unreadTitle: "Не удалось прочитать, что обслуживает этот кластер",
+    notConnected: "Подключитесь к кластеру, чтобы увидеть, что он обслуживает.",
+    retry: "Повторить",
+  },
   rbac: {
     anyName: "любые",
     noRules: "Ничего не разрешает: правил нет.",
@@ -6681,6 +6702,12 @@ export const ru: Catalogue = {
       few: "владеет {n}",
       many: "владеет {n}",
       other: "владеет {n}",
+    },
+    servedKinds: {
+      one: "{n} kind",
+      few: "{n} kind'а",
+      many: "{n} kind'ов",
+      other: "{n} kind'а",
     },
     kindsReadOf: {
       one: "Читаю kind'ы: прочитан {n} из {total}",

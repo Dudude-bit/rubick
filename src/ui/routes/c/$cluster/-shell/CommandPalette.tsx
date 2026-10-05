@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 
 import { useActivityPanelStore } from "@/stores/activityPanelStore";
@@ -21,6 +22,7 @@ import { looksLikeAlert, parseAlert, type AlertReading } from "@/lib/alerts";
 import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
 import { Kbd } from "@/components/ui/kbd";
 import { ProviderMark } from "@/components/ui/provider-mark";
+import { KindIcon } from "@/components/object/KindIcon";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   useResourceSearch,
@@ -39,6 +41,7 @@ import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { SETTINGS_SHORTCUT, useSettingsStore } from "@/stores/settingsStore";
 import type { RecentItem } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { catalogQuery } from "../-object/served";
 import {
   buildPaletteEntries,
   hasAnswered,
@@ -85,6 +88,10 @@ export function CommandPalette() {
   const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const namespaceScope = useNamespaceScope();
   const isConnected = useClusterStore((s) => s.isConnected);
+  const catalog = useQuery({
+    ...catalogQuery(),
+    enabled: open && isConnected,
+  });
   const switchNamespace = useClusterStore((s) => s.switchNamespace);
   const openActivityOn = useActivityPanelStore((s) => s.openOn);
   const openSettings = useSettingsStore((s) => s.openSettings);
@@ -175,6 +182,7 @@ export function CommandPalette() {
         error,
         shownClusters,
         hitsByContext,
+        kinds: catalog.data?.entries,
         t,
       }),
     [
@@ -188,6 +196,7 @@ export function CommandPalette() {
       error,
       shownClusters,
       hitsByContext,
+      catalog.data?.entries,
       t,
     ]
   );
@@ -383,6 +392,7 @@ export function CommandPalette() {
           });
           return;
         case "link":
+        case "kind":
           if (newTab) {
             openTab({ href: hrefOf(entry.path), background: true });
             return;
@@ -916,6 +926,21 @@ function EntryRow({
         <Row {...shared}>
           <entry.icon className="h-3.5 w-3.5 flex-none text-fg-fnt" />
           <span className="min-w-0 truncate">{entry.label}</span>
+        </Row>
+      );
+    case "kind":
+      return (
+        <Row {...shared}>
+          <KindIcon kind={entry.entry.kind} className="h-3.5 w-3.5" />
+          <span className="min-w-0 truncate font-mono">{entry.entry.kind}</span>
+          <span className="truncate font-mono text-fg-fnt">
+            {entry.entry.group
+              ? `${entry.entry.group}/${entry.entry.version}`
+              : entry.entry.version}
+          </span>
+          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+            {t("action", "hintOpenList")}
+          </span>
         </Row>
       );
     case "settings":

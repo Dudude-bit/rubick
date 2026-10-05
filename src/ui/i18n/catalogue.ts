@@ -37,6 +37,7 @@ export const en = {
   // noun that reads the same in every language — "Pods", not "Поды".
   nav: {
     changes: "Changes",
+    apiResources: "API resources",
     selectsLabels: "selects {selector}",
     allNamespacesLower: "all namespaces",
     dataTable: "Data table",
@@ -1068,10 +1069,12 @@ export const en = {
     goToSecrets: "Go to Secrets",
     goToEvents: "Go to Events",
     goToHelm: "Go to Helm",
+    goToApiResources: "Go to API resources",
     goToSettings: "Go to Settings",
     paletteRecent: "Recent",
     paletteNavigation: "Navigation",
     paletteResources: "Resources",
+    paletteKinds: "Kinds",
     commandPalette: "Command palette",
     searchResourcesActionsPages: "Search resources, actions and pages",
     searchThisCluster: "Search this cluster…",
@@ -1079,6 +1082,7 @@ export const en = {
     results: "Results",
     hintScopeToIt: "scope to it",
     hintUseAsScope: "scope to it",
+    hintOpenList: "open its list",
     hintComplete: "complete",
     hintNewTab: "new tab",
     hintDropCluster: "drop the cluster",
@@ -4381,6 +4385,24 @@ export const en = {
     noOwner: "No controller owns this revision.",
     involvedGone: "{kind} {name}, which this event is about, no longer exists.",
   },
+  // Every kind the cluster serves, as kubectl api-resources lists them.
+  apiResources: {
+    description:
+      "Every kind this cluster serves, by API group. Each opens its list.",
+    filter: "Filter kinds",
+    core: "core",
+    namespaced: "namespaced",
+    clusterWide: "cluster-wide",
+    notListable: "cannot be listed",
+    groupUnread:
+      "Discovery did not answer for this group, so its kinds cannot be shown.",
+    noMatch: "No served kind matches {filter}.",
+    noMatchAnswered:
+      "No kind in the groups that answered matches {filter}. The groups below did not answer.",
+    unreadTitle: "Could not read what this cluster serves",
+    notConnected: "Connect to a cluster to see what it serves.",
+    retry: "Try again",
+  },
   // Roles and bindings, read as what they grant and to whom.
   rbac: {
     anyName: "any",
@@ -6169,6 +6191,7 @@ export const en = {
     dependents: { one: "owns {n}", other: "owns {n}" },
     kindsNotRead: { one: "{n} kind not read", other: "{n} kinds not read" },
     readSoFar: { one: "{n} read so far", other: "{n} read so far" },
+    servedKinds: { one: "{n} kind", other: "{n} kinds" },
     kindsReadOf: {
       one: "Reading kinds: {n} of {total} read",
       other: "Reading kinds: {n} of {total} read",

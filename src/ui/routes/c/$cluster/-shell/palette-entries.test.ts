@@ -123,6 +123,7 @@ describe("the palette's entries with nothing typed", () => {
       "nav:goToSecrets",
       "nav:goToEvents",
       "nav:goToHelm",
+      "nav:goToApiResources",
       "settings",
       "cap:activity",
       "panel:ports",
@@ -142,6 +143,7 @@ describe("the palette's entries with nothing typed", () => {
       "/c/k3d-dev/secrets",
       "/c/k3d-dev/events",
       "/c/k3d-dev/helm",
+      "/c/k3d-dev/api-resources",
     ]);
   });
 
@@ -555,5 +557,70 @@ describe("the palette's entries after a bang", () => {
     const entries = buildPaletteEntries(state({ text: "!zzz" }));
 
     expect(ids(entries)).toEqual(["cap:clusters", "hint:no-cluster"]);
+  });
+});
+
+describe("kinds the cluster serves", () => {
+  const kinds = [
+    {
+      group: "coordination.k8s.io",
+      version: "v1",
+      kind: "Lease",
+      plural: "leases",
+      namespaced: true,
+      verbs: ["list"],
+    },
+    {
+      group: "",
+      version: "v1",
+      kind: "Pod",
+      plural: "pods",
+      namespaced: true,
+      verbs: ["list"],
+    },
+    {
+      group: "scheduling.k8s.io",
+      version: "v1",
+      kind: "PriorityClass",
+      plural: "priorityclasses",
+      namespaced: false,
+      verbs: ["list"],
+    },
+  ];
+  const offered = (text: string, overrides: Partial<PaletteState> = {}) =>
+    buildPaletteEntries(state({ text, kinds, ...overrides })).flatMap(
+      (entry) => (entry.kind === "kind" ? [entry] : [])
+    );
+
+  /** "Leases" in the palette said Nothing matches, while the cluster served Leases. */
+  it("offers a kind by its plural, opening its list", () => {
+    const [lease] = offered("Leases");
+    expect(lease.entry.kind).toBe("Lease");
+    expect(where(lease.path)).toBe("/c/k3d-dev/leases.coordination.k8s.io");
+  });
+
+  it("opens a kind with a page of its own on that page", () => {
+    expect(where(offered("pod")[0].path)).toBe("/c/k3d-dev/pods");
+  });
+
+  it("puts a whole name before a name that only contains it", () => {
+    expect(offered("priority").map((entry) => entry.entry.kind)).toEqual([
+      "PriorityClass",
+    ]);
+    expect(offered("e").length).toBeGreaterThan(1);
+  });
+
+  it("offers no kind with nothing typed, or with no cluster", () => {
+    expect(offered("")).toEqual([]);
+    expect(offered("lease", { isConnected: false })).toEqual([]);
+  });
+
+  it("offers the page that lists them all", () => {
+    const links = buildPaletteEntries(state({ text: "api res" })).flatMap(
+      (entry) => (entry.kind === "link" ? [entry] : [])
+    );
+    expect(links.map((entry) => where(entry.path))).toContain(
+      "/c/k3d-dev/api-resources"
+    );
   });
 });

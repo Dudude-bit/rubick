@@ -108,6 +108,28 @@ export function listLink(
   } as AppLink;
 }
 
+/**
+ * The list of a kind the catalogue names: its own page where the registry
+ * holds that very kind, the generic list of whatever is served otherwise.
+ */
+export function servedListLink(kind: {
+  kind: string;
+  group: string;
+  plural: string;
+}): AppLink {
+  const known = isResourceType(kind.kind) ? toKind(kind.kind) : null;
+  const definition = known ? getResourceDefinition(known) : null;
+  if (
+    known &&
+    definition?.group === kind.group &&
+    definition.plural === kind.plural
+  )
+    return listLink(known);
+  return resourceListLink(
+    kind.group ? `${kind.plural}.${kind.group}` : kind.plural
+  );
+}
+
 /** The list of any served kind, by the segment its address carries. */
 export function resourceListLink(resource: string): AppLink {
   return {
@@ -129,7 +151,13 @@ export function clusterLink(cluster?: string): AppLink {
 }
 
 export function pageLink(
-  page: "events" | "changes" | "integrations" | "routes" | "helm",
+  page:
+    | "events"
+    | "changes"
+    | "integrations"
+    | "routes"
+    | "helm"
+    | "api-resources",
   search?: Record<string, string>
 ): AppLink {
   return {
