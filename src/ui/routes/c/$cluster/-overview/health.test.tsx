@@ -405,6 +405,9 @@ describe("what Needs attention says it checked", () => {
     expect(unchecked).toHaveTextContent("Services");
     expect(unchecked).toHaveTextContent("refused in net");
     expect(unchecked).toHaveTextContent('User "sam" cannot list services');
+    expect(screen.getByTestId("attention-summary")).not.toHaveTextContent(
+      "Healthy"
+    );
   });
 
   /** Still reading is its own state: not refused, and not a clean answer either. */
@@ -419,6 +422,9 @@ describe("what Needs attention says it checked", () => {
     const unchecked = screen.getByTestId("attention-unchecked");
     expect(unchecked).toHaveTextContent("PVCs");
     expect(unchecked).toHaveTextContent("still reading");
+    expect(screen.getByTestId("attention-summary")).toHaveTextContent(
+      "partly checked"
+    );
   });
 
   /** The one state that earns the words, and the only one with a green dot. */
@@ -427,6 +433,34 @@ describe("what Needs attention says it checked", () => {
 
     expect(container).toHaveTextContent("nothing needs attention");
     expect(screen.queryByTestId("attention-unchecked")).toBeNull();
+    const summary = screen.getByTestId("attention-summary");
+    expect(summary).toHaveTextContent("Healthy");
+    expect(summary.querySelector(".bg-ok")).not.toBeNull();
+  });
+
+  /**
+   * Dana: a green "Healthy, 5 of 13 pods running" under six red rows. The
+   * line counts pods without a verdict word, says what the rest are doing,
+   * and its dot is the worst row's. Fails if "Healthy" or green comes back.
+   */
+  it("counts pods neutrally and wears the worst row's tone while problems stand", async () => {
+    await panel(attentionFrom([{ ...problem, severity: "critical" }]), {
+      running: 6,
+      pending: 3,
+      succeeded: 2,
+      failed: 2,
+      unknown: 0,
+      crashLooping: 1,
+    });
+
+    const summary = screen.getByTestId("attention-summary");
+    expect(summary).not.toHaveTextContent("Healthy");
+    expect(summary).toHaveTextContent("5 of 13 pods running");
+    expect(summary).toHaveTextContent(
+      "(1 CrashLoop, 3 Pending, 2 Failed, 2 Completed)"
+    );
+    expect(summary.querySelector(".bg-err")).not.toBeNull();
+    expect(summary.querySelector(".bg-ok")).toBeNull();
   });
 
   /** Fifty rows push the rest of the page off screen; the tail is a count and a way into each list. */

@@ -4198,6 +4198,7 @@ export const en = {
       other: "in {n} namespaces",
     },
     attentionMore: "and {n} more",
+    attentionPartly: "partly checked",
     claimPendingDetail:
       "No volume is bound to it yet, so a pod that mounts it cannot start.",
   },

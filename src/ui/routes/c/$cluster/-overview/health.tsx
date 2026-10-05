@@ -27,7 +27,12 @@ import { eventReasonMark } from "@/lib/event-reason";
 import type { Attention, AttentionCheck, AttentionItem } from "@/lib/attention";
 import { ERROR_CODES } from "@/lib/error-utils";
 import { listLink, objectLink } from "@/lib/links";
-import { ROLE_ICON, ROLE_TEXT } from "@/lib/status-role";
+import {
+  ROLE_DOT,
+  ROLE_ICON,
+  ROLE_TEXT,
+  type StatusRole,
+} from "@/lib/status-role";
 import { cn, formatAge } from "@/lib/utils";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
@@ -299,6 +304,24 @@ function CheckRow({ check }: { check: AttentionCheck }) {
   );
 }
 
+/** The word beside the summary dot: none while rows above it carry the verdict. */
+const SUMMARY_LABEL: Record<StatusRole, "healthy" | "attentionPartly" | null> =
+  {
+    ok: "healthy",
+    neutral: "attentionPartly",
+    pending: null,
+    warn: null,
+    err: null,
+  };
+
+/** Not-running pods by phase, in the words the composition bar uses. */
+function notRunning(pods: PodComposition): string {
+  return podSegments(pods)
+    .filter((segment) => segment.label !== "Running" && segment.count > 0)
+    .map((segment) => `${segment.count} ${segment.label}`)
+    .join(", ");
+}
+
 export function AttentionPanel({
   attention,
   pods,
@@ -314,13 +337,15 @@ export function AttentionPanel({
 }) {
   const t = useT();
   useShareSection("overview-problems", () => attentionShare(attention, t));
-  const { items, total, complete } = attention;
+  const { items, total, complete, worst } = attention;
   const shown = items.slice(0, VISIBLE);
   const hidden = items.slice(VISIBLE);
   const cut = total - items.length;
   const unchecked = attention.checks.filter((check) => check.state !== "read");
   const serving = pods.running - pods.crashLooping;
   const readyNodes = nodes.filter((n) => n.ready).length;
+  const down = notRunning(pods);
+  const summaryRole: StatusRole = worst ?? (complete ? "ok" : "neutral");
 
   return (
     <Section>
@@ -355,17 +380,26 @@ export function AttentionPanel({
           </div>
         )}
         {/* What is fine gets one muted line at the end, never a panel of
-         *  green checkmarks competing with the rows above it. */}
+         *  green checkmarks competing with the rows above it. Its dot is the
+         *  list's verdict: green only when everything named was read clean. */}
         <div className={ROW} data-testid="attention-summary">
-          <span className="justify-self-center text-[9px] text-ok">{"●"}</span>
+          <span
+            className={cn(
+              "h-[7px] w-[7px] justify-self-center rounded-full",
+              ROLE_DOT[summaryRole]
+            )}
+            aria-hidden="true"
+          />
           <span className="truncate font-mono font-medium text-fg-mut">
-            {t("cluster", "healthy")}
+            {SUMMARY_LABEL[summaryRole] &&
+              t("cluster", SUMMARY_LABEL[summaryRole])}
           </span>
           <span className="truncate text-fg-fnt">
             {t("count", "podsRunning", {
               n: serving,
               of: t("count", "ofPods", { n: podTotal(pods) }),
             })}
+            {down && <> ({down})</>}
             {nodesKnown && (
               <>
                 {" · "}
