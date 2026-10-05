@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -50,14 +51,24 @@ describe("My services", () => {
     expect(screen.getByText("payments")).toBeInTheDocument();
   });
 
+  /**
+   * Lena met "Pin" before she knew the verb. Fails if the empty card stops
+   * saying what pinning gives, or loses the way to a workload to pin.
+   */
   it("shows a cluster none of whose services are pinned how to start", async () => {
     usePinnedServicesStore.setState({ pins: [pin("payments", "staging")] });
-    await mount();
+    const { router } = await mount();
 
     expect(screen.queryByTestId("service-card")).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Nothing is pinned in this cluster/)
+      screen.getByText(/to keep its readiness and last change here/)
     ).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("link", { name: "Find one to pin" })
+    );
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/c/prod/deployments")
+    );
   });
 
   it("leaves the other cluster's pins on the other cluster", async () => {

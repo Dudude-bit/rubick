@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
-import { useClusterOverview } from "@/hooks/useClusterOverview";
+import { problemTotal, useClusterOverview } from "@/hooks/useClusterOverview";
 import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
@@ -107,9 +107,7 @@ export function useClusterSummary(): ClusterSummary {
 
     return {
       podCount: overview ? overview.counts.pods : null,
-      problemCount: overview
-        ? overview.problems.length + overview.problemsTruncated
-        : null,
+      problemCount: overview ? problemTotal(overview) : null,
       namespaces,
       namespaceList,
       isLoading: overviewLoading || namespacesLoading,

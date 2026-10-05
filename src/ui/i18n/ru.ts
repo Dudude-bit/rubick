@@ -1675,9 +1675,9 @@ export const ru: Catalogue = {
     myServices: "Мои сервисы",
     pin: "Закрепить",
     unpin: "Открепить",
-    noneYet: "В этом кластере пока ничего не закреплено.",
     noneYetHint:
-      "Откройте Deployment, StatefulSet, DaemonSet или CronJob и нажмите «Закрепить». Здесь появляется только то, что закреплено руками.",
+      "Закрепите Deployment, StatefulSet, DaemonSet или CronJob на его странице, и здесь будут видны его готовность и последнее изменение. В этом кластере пока ничего не закреплено.",
+    pickOneToPin: "Выбрать, что закрепить",
     readyOf: "{ready}/{total} готовы",
     gone: "не существует",
     reading: "читаю…",
@@ -4274,6 +4274,18 @@ export const ru: Catalogue = {
       "{n} из {limit} пространств имён — все списки сужены до них.",
     namespaceMultiHint:
       "{click}-клик, {enter} или флажок — следить сразу за {limit}.",
+    countsUnread: "не посчитано",
+    countsIn: "в {scope}",
+    countsInAll: "во всех пространствах имён",
+    countsInMany: {
+      one: "в {n} пространстве имён",
+      few: "в {n} пространствах имён",
+      many: "в {n} пространствах имён",
+      other: "в {n} пространствах имён",
+    },
+    clusterWideCounts: "По всему кластеру: {pods} · {problems}",
+    clusterWideUnread:
+      "Весь кластер с этими правами прочитать нельзя, поэтому считается только эта область.",
     nsFromKubeconfig: "из kubeconfig",
     nsRecent: "недавнее",
     nsAsTyped: "нажмите Enter",

@@ -5,7 +5,7 @@ import { scopeIn, scopeLabel } from "@/lib/namespace-scope";
 import { openNamespacePicker } from "@/lib/read-deadline";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
-import { useScopedOverview } from "@/hooks/useClusterOverview";
+import { problemTotal, useScopedOverview } from "@/hooks/useClusterOverview";
 import { ClusterFrontDoor } from "../../../-components/ClusterFrontDoor";
 import { MyServices } from "./MyServices";
 import { ShareScreenAction } from "@/components/share/ShareAction";
@@ -26,7 +26,7 @@ import { useT, type T } from "@/i18n/useT";
 
 /** The headline numbers for Share: what is broken, and what is serving. */
 function overviewStats(overview: ClusterOverviewData, t: T): ReportStat[] {
-  const total = overview.problems.length + overview.problemsTruncated;
+  const total = problemTotal(overview);
   const critical = overview.problems.some((p) => p.severity === "critical");
   const pods = podTotal(overview.pods);
   const serving = overview.pods.running - overview.pods.crashLooping;

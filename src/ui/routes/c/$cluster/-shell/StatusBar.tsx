@@ -11,9 +11,11 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { problemTotal, useScopedOverview } from "@/hooks/useClusterOverview";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useRenewal } from "@/hooks/useCredentialRenewal";
 import type { Renewal } from "@/generated/types";
+import { scopeLabel } from "@/lib/namespace-scope";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -72,6 +74,14 @@ export function StatusBar() {
   const pendingContext = useClusterStore((s) => s.pendingContext);
   const connect = useClusterStore((s) => s.connect);
   const { podCount, problemCount } = useClusterSummary();
+  const scope = useClusterStore((s) => s.namespaceScope);
+  const scoped = useScopedOverview();
+  // A placeholder is the last scope's answer, and under this scope's label it
+  // would count the wrong namespaces.
+  const here =
+    scoped.data && !scoped.isPlaceholderData
+      ? { pods: scoped.data.counts.pods, problems: problemTotal(scoped.data) }
+      : null;
   // The two worth a line that is always up — both predict the sign-in screen,
   // and they differ in why. Everything else is quiet, and a chip that is
   // permanently lit stops being read.
@@ -165,21 +175,56 @@ export function StatusBar() {
               <span>·</span>
             </>
           )}
-          {podCount === null ? (
-            // The cluster-wide overview was refused or failed: the count is
-            // unknown, and "0 pods · 0 problems" here would say the opposite
-            // of the Overview page's own "no access". A dash is the honest
-            // chrome. The path the connection took is known either way.
-            <span className="text-fg-fnt">{"—"}</span>
-          ) : (
-            <>
-              <span>{t("cluster", "podCount", { n: podCount })}</span>
-              <span>·</span>
-              <span className={cn((problemCount ?? 0) > 0 && "text-err")}>
-                {t("cluster", "problemCount", { n: problemCount ?? 0 })}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span
+                data-testid="scope-counts"
+                className="flex cursor-default items-center gap-1.5"
+              >
+                {here === null ? (
+                  // Refused, failed or still reading: the count is unknown,
+                  // and "0 pods · 0 problems" would say the opposite of the
+                  // Overview page's own "no access".
+                  <span className="text-fg-fnt">
+                    {t("cluster", "countsUnread")}
+                  </span>
+                ) : (
+                  <>
+                    {here.pods !== null && (
+                      <>
+                        <span>
+                          {t("cluster", "podCount", { n: here.pods })}
+                        </span>
+                        <span>·</span>
+                      </>
+                    )}
+                    <span className={cn(here.problems > 0 && "text-err")}>
+                      {t("cluster", "problemCount", { n: here.problems })}
+                    </span>
+                  </>
+                )}
+                <span className="text-fg-fnt">
+                  {scope.length === 0
+                    ? t("cluster", "countsInAll")
+                    : scope.length > 2
+                      ? t("cluster", "countsInMany", { n: scope.length })
+                      : t("cluster", "countsIn", {
+                          scope: scopeLabel(scope, t),
+                        })}
+                </span>
               </span>
-            </>
-          )}
+            </TooltipTrigger>
+            <TooltipContent side="top" align="end" className="max-w-[320px]">
+              {podCount === null
+                ? t("cluster", "clusterWideUnread")
+                : t("cluster", "clusterWideCounts", {
+                    pods: t("cluster", "podCount", { n: podCount }),
+                    problems: t("cluster", "problemCount", {
+                      n: problemCount ?? 0,
+                    }),
+                  })}
+            </TooltipContent>
+          </Tooltip>
         </>
       ) : (
         <span>{t("cluster", "notConnectedLower")}</span>

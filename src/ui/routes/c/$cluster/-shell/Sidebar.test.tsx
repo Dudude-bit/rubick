@@ -84,7 +84,10 @@ type OverviewStub = Pick<
   "counts" | "problems" | "problemsTruncated"
 >;
 let overview: OverviewStub | undefined;
-vi.mock("@/hooks/useClusterOverview", () => ({
+vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
+  problemTotal: (
+    await importOriginal<typeof import("@/hooks/useClusterOverview")>()
+  ).problemTotal,
   // Deliberately ignores `enabled`, the way React Query's own
   // `keepPreviousData` does: the hook goes on handing back the last cluster's
   // answer after a disconnect, which is the condition the rail must survive.

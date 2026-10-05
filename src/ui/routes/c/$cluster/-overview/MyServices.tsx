@@ -1,6 +1,9 @@
 import { useMemo } from "react";
+import { Link } from "@tanstack/react-router";
+import { ArrowRight, Pin } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
+import { listLink } from "@/lib/links";
 import { pinKey, pinsOf } from "@/lib/my-services";
 import { useClusterStore } from "@/stores/clusterStore";
 import { usePinnedServicesStore } from "@/stores/pinnedServicesStore";
@@ -39,11 +42,21 @@ export function MyServices() {
         // Plain words, not the dashed box: in this app a dashed border is
         // what "could not be read" wears, and the home page opened with one
         // over a list that is simply empty.
-        <div className="flex flex-col gap-0.5">
-          <p className="text-xs text-fg-mut">{t("services", "noneYet")}</p>
-          <p className="text-[11px] text-fg-fnt">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="flex min-w-0 items-start gap-1.5 text-xs text-fg-mut">
+            <Pin
+              aria-hidden="true"
+              className="mt-px h-3.5 w-3.5 flex-none text-info"
+            />
             {t("services", "noneYetHint")}
           </p>
+          <Link
+            {...listLink("Deployment")}
+            className="inline-flex flex-none items-center gap-1 text-xs text-info hover:underline"
+          >
+            {t("services", "pickOneToPin")}
+            <ArrowRight aria-hidden="true" className="h-3 w-3" />
+          </Link>
         </div>
       ) : (
         <div className="flex flex-col gap-2">

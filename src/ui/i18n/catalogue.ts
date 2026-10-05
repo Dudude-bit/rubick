@@ -1638,9 +1638,9 @@ export const en = {
     myServices: "My services",
     pin: "Pin",
     unpin: "Unpin",
-    noneYet: "Nothing is pinned in this cluster yet.",
     noneYetHint:
-      "Open a Deployment, StatefulSet, DaemonSet or CronJob and press Pin. Only what you pin by hand appears here.",
+      "Pin a Deployment, StatefulSet, DaemonSet or CronJob on its page to keep its readiness and last change here. Nothing is pinned in this cluster yet.",
+    pickOneToPin: "Find one to pin",
     readyOf: "{ready}/{total} ready",
     gone: "does not exist",
     reading: "reading…",
@@ -3868,6 +3868,13 @@ export const en = {
       "{n} of {limit} namespaces — every list is narrowed to them.",
     namespaceMultiHint:
       "{click}-click or {enter}, or the box, to watch up to {limit} at once.",
+    countsUnread: "not counted",
+    countsIn: "in {scope}",
+    countsInAll: "in all namespaces",
+    countsInMany: { one: "in {n} namespace", other: "in {n} namespaces" },
+    clusterWideCounts: "Across the whole cluster: {pods} · {problems}",
+    clusterWideUnread:
+      "The whole cluster could not be read with this access, so only this scope is counted.",
     nsFromKubeconfig: "from kubeconfig",
     nsRecent: "recent",
     nsAsTyped: "press Enter",

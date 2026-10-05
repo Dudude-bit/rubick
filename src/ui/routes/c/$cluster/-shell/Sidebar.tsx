@@ -16,7 +16,7 @@ import {
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { Spinner } from "@/components/ui/spinner";
-import { useScopedOverview } from "@/hooks/useClusterOverview";
+import { problemTotal, useScopedOverview } from "@/hooks/useClusterOverview";
 import { useListAccess } from "./useListAccess";
 import { useAppSearch } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -900,7 +900,7 @@ function NavCount({
   if (item.labelKey === "overview") {
     // Uncapped: the backend truncates its ranked list, and a headline that
     // shrank when things got worse would be the one number nobody can use.
-    const problems = overview.problems.length + overview.problemsTruncated;
+    const problems = problemTotal(overview);
     if (problems === 0) return null;
     return <span className="ml-auto text-[11px] text-err">{problems}</span>;
   }

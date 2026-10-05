@@ -1,14 +1,38 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
+const whole = vi.hoisted(() => ({
+  podCount: 3 as number | null,
+  problemCount: 0 as number | null,
+}));
 
 vi.mock("@/hooks/useClusterSummary", () => ({
   useClusterSummary: () => ({
     namespaces: [],
-    podCount: 3,
-    problemCount: 0,
+    podCount: whole.podCount,
+    problemCount: whole.problemCount,
+    namespaceList: "listed",
     isLoading: false,
   }),
 }));
+
+/** The overview of whatever scope the window is on, per test. */
+const scoped = vi.hoisted(() => ({
+  data: undefined as unknown,
+  isPlaceholderData: false,
+}));
+
+vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useClusterOverview")>()),
+  useScopedOverview: () => scoped,
+}));
+
+const overviewOf = (pods: number, problems: number) => ({
+  counts: { pods },
+  problems: Array.from({ length: problems }, () => ({})),
+  problemsTruncated: 0,
+});
 
 let renewal = "scheduled";
 vi.mock("@/hooks/useCredentialRenewal", () => ({
@@ -21,7 +45,12 @@ import { StatusBar } from "./StatusBar";
 
 beforeEach(() => {
   renewal = "scheduled";
+  whole.podCount = 3;
+  whole.problemCount = 0;
+  scoped.data = overviewOf(3, 0);
+  scoped.isPlaceholderData = false;
   useClusterStore.setState({
+    namespaceScope: [],
     currentContext: "prod",
     isConnected: true,
     connectedThrough: "direct",
@@ -97,5 +126,64 @@ describe("what will interrupt the reader next", () => {
       </TooltipProvider>
     );
     expect(screen.queryByText("sign-in needed")).toBeNull();
+  });
+});
+
+describe("what the problem count counts", () => {
+  const bar = () =>
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+
+  /**
+   * Lena chose lena-sandbox and the bar kept saying "18 problems" about
+   * other teams. Fails if the count stops following the scope, or stops
+   * saying which scope it counts.
+   */
+  it("counts the namespace the window is on and names it", () => {
+    whole.podCount = 72;
+    whole.problemCount = 18;
+    scoped.data = overviewOf(2, 0);
+    useClusterStore.setState({ namespaceScope: ["lena-sandbox"] });
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveTextContent("2 pods");
+    expect(counts).toHaveTextContent("0 problems");
+    expect(counts).toHaveTextContent("in lena-sandbox");
+    expect(counts).not.toHaveTextContent("18 problems");
+  });
+
+  /** Fails if the cluster-wide figure is lost rather than moved behind a hover. */
+  it("keeps the whole cluster's figure on hover", async () => {
+    whole.podCount = 72;
+    whole.problemCount = 18;
+    scoped.data = overviewOf(2, 0);
+    useClusterStore.setState({ namespaceScope: ["lena-sandbox"] });
+    bar();
+
+    await userEvent.hover(screen.getByTestId("scope-counts"));
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(/Across the whole cluster: 72 pods · 18 problems/)
+      ).not.toHaveLength(0)
+    );
+  });
+
+  /**
+   * The previous scope's answer stands in while this one is read; under this
+   * scope's name it would count the wrong namespaces. Fails if it is shown.
+   */
+  it("shows no count while the scope's own answer is still on its way", () => {
+    scoped.data = overviewOf(40, 5);
+    scoped.isPlaceholderData = true;
+    useClusterStore.setState({ namespaceScope: ["lena-sandbox"] });
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).not.toHaveTextContent("40 pods");
+    expect(counts).toHaveTextContent("not counted");
   });
 });
