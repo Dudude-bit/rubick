@@ -182,4 +182,24 @@ describe("an object addressed by a bare plural", () => {
     expect(screen.queryByText(/serves no/)).toBeNull();
     expect(asked).toEqual([["rbac.authorization.k8s.io", "clusterroles"]]);
   });
+
+  /**
+   * Sam's link opened under a trail reading "clusterroles", and Lena's
+   * Russian pages read "deployments / lena-sandbox", while the sidebar and
+   * the list's heading say ClusterRoles and Deployments. Fails if the trail
+   * goes back to the lowercase plural from the address.
+   */
+  it("names the list the way the sidebar and the list's heading do", async () => {
+    answers.catalog = () =>
+      Promise.resolve({ entries: [CLUSTER_ROLES], unread: [] });
+    answers.object = () =>
+      Promise.resolve({ metadata: { name: "edit" }, rules: [] });
+    await renderWithRouter(
+      <GenericObjectPage resource="clusterroles" name="edit" />
+    );
+    expect(
+      await screen.findByRole("link", { name: "ClusterRoles" })
+    ).toBeVisible();
+    expect(screen.queryByRole("link", { name: "clusterroles" })).toBeNull();
+  });
 });

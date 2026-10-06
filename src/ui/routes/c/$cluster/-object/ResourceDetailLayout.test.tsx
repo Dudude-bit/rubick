@@ -578,7 +578,7 @@ describe("the breadcrumb's kind segment", () => {
       <ResourceDetailLayout {...base} activeTab="overview" tabs={tabs} />
     );
     expect(
-      screen.getByRole("link", { name: "persistentvolumes" })
+      screen.getByRole("link", { name: "Persistent Volumes" })
     ).toHaveAttribute("href", "/c/prod/persistentvolumes");
   });
 
@@ -592,8 +592,8 @@ describe("the breadcrumb's kind segment", () => {
         tabs={tabs}
       />
     );
-    expect(screen.getByText("replicasets")).toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "replicasets" })).toBeNull();
+    expect(screen.getByText("ReplicaSets")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "ReplicaSets" })).toBeNull();
   });
 });
 
@@ -686,7 +686,7 @@ describe("the breadcrumb's namespace segment", () => {
       <ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />
     );
     expect(segment()).toHaveAccessibleName(
-      "Show pods in k8s-gui-test: narrows this tab to that namespace"
+      "Show Pods in k8s-gui-test: narrows this tab to that namespace"
     );
     unmount();
 
@@ -694,7 +694,7 @@ describe("the breadcrumb's namespace segment", () => {
     await place(
       <ResourceDetailLayout {...pod} activeTab="overview" tabs={tabs} />
     );
-    expect(segment()).toHaveAccessibleName("Show pods in k8s-gui-test");
+    expect(segment()).toHaveAccessibleName("Show Pods in k8s-gui-test");
   });
 
   /**

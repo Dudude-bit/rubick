@@ -7,7 +7,7 @@ import { ResourceName } from "@/components/object/ResourceName";
 import { CopyName } from "./CopyName";
 import { useLinkGesture } from "@/hooks/useLinkGesture";
 import { clusterLink, hrefOf, listLink, type AppLink } from "@/lib/links";
-import { toPlural, type ResourceKind } from "@/lib/resource-registry";
+import { getDisplayPlural, type ResourceKind } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
@@ -174,7 +174,7 @@ export function ResourceDetailHeader({
   const t = useT();
   const segment = {
     link: given === null ? null : (given ?? listLink(kind)),
-    label: listLabel ?? toPlural(kind as ResourceKind),
+    label: listLabel ?? getDisplayPlural(kind),
   };
 
   const trail = (

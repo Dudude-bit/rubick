@@ -69,6 +69,12 @@ export function accessKind(kind: string): AccessKind | undefined {
   return BY_KIND.get(kind);
 }
 
+/** What a list of this kind is called: an access kind's plural, or else the kind as the cluster spells it. */
+export function listTitleOf(entry: { kind: string; group: string }): string {
+  const access = accessKind(entry.kind);
+  return access?.group === entry.group ? access.displayPlural : entry.kind;
+}
+
 /** `<plural>.<group>`, or the bare plural of a core kind, as kubectl names it. */
 export function segmentOf(entry: { group: string; plural: string }): string {
   return entry.group ? `${entry.plural}.${entry.group}` : entry.plural;

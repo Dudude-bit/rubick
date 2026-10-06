@@ -12,7 +12,7 @@ import { yamlTab } from "./yaml-tab";
 import { readTarget, servedOf, useServed, type Served } from "./served";
 import { WordTable } from "./WordTable";
 import { AccessPanel } from "./AccessPanel";
-import { accessSegment } from "@/lib/access-kinds";
+import { accessSegment, listTitleOf } from "@/lib/access-kinds";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -175,7 +175,7 @@ export function GenericObjectPage({
         name={name}
         namespace={namespace}
         listLink={resourceListLink(resource)}
-        listLabel={resource}
+        listLabel={listTitleOf({ kind, group: target.group })}
         served={target}
         status={
           facets?.status ? (

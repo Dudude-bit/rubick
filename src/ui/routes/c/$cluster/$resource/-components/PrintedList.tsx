@@ -20,7 +20,7 @@ import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useT } from "@/i18n/useT";
 import { columnHeader } from "@/i18n/column-header";
 import { KindAbout } from "@/components/object/KindAbout";
-import { accessKind } from "@/lib/access-kinds";
+import { accessKind, listTitleOf } from "@/lib/access-kinds";
 import { isExplained } from "@/lib/docs";
 import { commands } from "@/lib/commands";
 import { hrefOf, objectLink, type AppLink } from "@/lib/links";
@@ -183,7 +183,7 @@ function PrintedTable({
 
   return (
     <ResourceList<PrintedRow>
-      title={access?.group === entry.group ? plural : entry.kind}
+      title={listTitleOf(entry)}
       description={
         isExplained(entry.kind) && access?.group === entry.group ? (
           <KindAbout kind={entry.kind} />
