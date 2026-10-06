@@ -49,7 +49,8 @@ function serviceValue(
   t: T
 ): ReportValue {
   const services = (route.services ?? []).filter((service) => service.name);
-  if (services.length === 0) return { text: t("empty", "none"), quiet: true };
+  if (services.length === 0)
+    return { text: t("empty", "noneLower"), quiet: true };
   if (services.length === 1) {
     const service = services[0]!;
     const kubernetes =
@@ -86,7 +87,7 @@ function middlewaresValue(route: RouteSpec, t: T): ReportValue {
     .map((middleware) => middleware.name!);
   return names.length > 0
     ? { text: names.join(", "), mono: true }
-    : { text: t("empty", "none"), quiet: true };
+    : { text: t("empty", "noneLower"), quiet: true };
 }
 
 function matchValue(route: RouteSpec, t: T): ReportValue {

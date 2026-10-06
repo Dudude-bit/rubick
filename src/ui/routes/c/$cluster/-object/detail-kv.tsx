@@ -139,7 +139,7 @@ export function KeyValueList({
   if (items.length === 0) {
     return (
       <p className="py-1 text-xs text-fg-fnt">
-        {emptyMessage ?? <T section="empty" k="none" />}
+        {emptyMessage ?? <T section="empty" k="noneLower" />}
       </p>
     );
   }

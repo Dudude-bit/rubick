@@ -6747,7 +6747,6 @@ export const ru: Catalogue = {
     useStreamControl: "Подключитесь кнопкой потока на панели инструментов.",
     noPodsForJob: "У этой задачи нет подов",
     noEventsForClaim: "Для этой заявки нет событий",
-    none: "Нет",
     noLabels: "Меток нет",
     noKeys: "Ключей нет",
     clusterLocal: "локальное время кластера",

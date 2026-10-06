@@ -90,11 +90,13 @@ function targetGroupBindingSections(
               }),
             },
           ]
-        : [{ text: t("empty", "none"), quiet: true }],
+        : [{ text: t("empty", "noneLower"), quiet: true }],
     },
     {
       label: t("share", "awsTargetGroup"),
-      values: [{ text: group ?? t("empty", "none"), mono: group !== null }],
+      values: [
+        { text: group ?? t("empty", "noneLower"), mono: group !== null },
+      ],
     },
     {
       label: t("share", "awsTargets"),

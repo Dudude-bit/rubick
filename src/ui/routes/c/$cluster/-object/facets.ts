@@ -247,7 +247,7 @@ function payloadGroups(object: Json, t: T): PeekGroup[] {
         items: Object.keys(record(value))
           .sort()
           .map((key) => ({ label: key, value: "••••••", mono: true })),
-        emptyMessage: t("empty", "none"),
+        emptyMessage: t("empty", "noneLower"),
       });
     } else if (value === null || isWords(value)) {
       words.push(...flatten({ [field]: value }, FACET_ROW_LIMIT));
@@ -256,7 +256,7 @@ function payloadGroups(object: Json, t: T): PeekGroup[] {
         title: field,
         count: Array.isArray(value) ? value.length : undefined,
         items: capped(value, t),
-        emptyMessage: t("empty", "none"),
+        emptyMessage: t("empty", "noneLower"),
       });
     }
   }

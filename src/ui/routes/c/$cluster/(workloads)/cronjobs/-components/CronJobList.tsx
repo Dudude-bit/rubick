@@ -43,16 +43,16 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
       share: (row: CronJobInfoWithMetrics, t) =>
         row.suspend
           ? { text: "Suspended", role: "warn" }
-          : t("empty", "noWord"),
+          : { text: t("empty", "noLower"), quiet: true },
     },
-    // Suspended is the exception worth colouring; "No" is the resting
-    // state of every cronjob and stays quiet text.
+    // Suspended is the exception worth colouring; "no" is the resting
+    // state of every cronjob and stays quiet text, cased like "none".
     cell: ({ row }) =>
       row.original.suspend ? (
         <StatusBadge status="Suspended" />
       ) : (
         <span className="text-fg-fnt">
-          <T section="empty" k="noWord" />
+          <T section="empty" k="noLower" />
         </span>
       ),
   },

@@ -22,7 +22,12 @@ describe("what the CronJob list says about schedules", () => {
    */
   it("says a cronjob is not suspended in the reader's language", () => {
     useLocaleStore.setState({ choice: "ru" });
-    expect(cellOf("suspend", { suspend: false })).toHaveTextContent(/^Нет$/);
+    expect(cellOf("suspend", { suspend: false })).toHaveTextContent(/^нет$/);
+  });
+
+  /** A capital "Нет" here sat beside the lowercase "нет" every empty cell draws. */
+  it("cases the resting no like the none word beside it", () => {
+    expect(cellOf("suspend", { suspend: false })).toHaveTextContent(/^no$/);
   });
 
   /** Would break if the age were glued to an English "ago" again. */
@@ -54,6 +59,9 @@ describe("what the CronJob list says about schedules", () => {
     const share = (column?.meta as AppColumnMeta | undefined)?.share;
     const t = ((section: string, key: string) =>
       translate("ru", section as never, key as never)) as never;
-    expect(share?.({ suspend: false } as never, t)).toBe("Нет");
+    expect(share?.({ suspend: false } as never, t)).toEqual({
+      text: "нет",
+      quiet: true,
+    });
   });
 });

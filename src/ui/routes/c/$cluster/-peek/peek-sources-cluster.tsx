@@ -162,9 +162,11 @@ export const CLUSTER_SOURCES: PeekSources = {
             },
             {
               label: t("columns", "taints"),
-              value: node.taints.length
-                ? list(node.taints.map((taint) => taint.key))
-                : t("empty", "none"),
+              value: node.taints.length ? (
+                list(node.taints.map((taint) => taint.key))
+              ) : (
+                <None />
+              ),
               mono: node.taints.length > 0,
               tone: node.taints.length ? "warn" : undefined,
             },
@@ -200,7 +202,7 @@ export const CLUSTER_SOURCES: PeekSources = {
             },
             {
               label: t("columns", "shortNames"),
-              value: list(crd.shortNames, t("empty", "none")),
+              value: list(crd.shortNames),
             },
           ],
         },

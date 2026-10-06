@@ -460,12 +460,12 @@ function PeekOverview({
               {group.table ? (
                 <WordTable
                   table={group.table}
-                  emptyMessage={group.emptyMessage ?? t("empty", "none")}
+                  emptyMessage={group.emptyMessage ?? t("empty", "noneLower")}
                 />
               ) : (
                 <KeyValueList
                   items={group.items}
-                  emptyMessage={group.emptyMessage ?? t("empty", "none")}
+                  emptyMessage={group.emptyMessage ?? t("empty", "noneLower")}
                 />
               )}
             </div>

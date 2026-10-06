@@ -128,7 +128,6 @@ export const NETWORK_SOURCES: PeekSources = {
               <CopyableAddress
                 value={service.clusterIp}
                 label={t("columns", "clusterIp")}
-                fallback={t("empty", "none")}
               />
             ),
           },
@@ -138,7 +137,7 @@ export const NETWORK_SOURCES: PeekSources = {
             // number is the click, the target and protocol stay prose.
             value:
               service.ports.length === 0 ? (
-                t("empty", "none")
+                <None />
               ) : (
                 <span className="inline-flex flex-wrap items-baseline gap-x-2 font-mono">
                   {service.ports.map((port, index) => (
@@ -289,12 +288,12 @@ export const NETWORK_SOURCES: PeekSources = {
                 label={t("columns", "ingressAddress")}
               />
             ) : (
-              t("empty", "none")
+              <None />
             ),
           },
           {
             label: t("columns", "tlsHosts"),
-            value: list(ingress.tlsHosts, t("empty", "none")),
+            value: list(ingress.tlsHosts),
             mono: true,
           },
         ],

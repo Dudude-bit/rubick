@@ -36,7 +36,7 @@ export function pvFactsSection(pv: PersistentVolumeInfo, t: T): PlacedSection {
         {
           text: pv.accessModes.length
             ? pv.accessModes.join(" · ")
-            : t("empty", "none"),
+            : t("empty", "noneLower"),
           mono: true,
         },
       ],
@@ -61,7 +61,7 @@ export function pvFactsSection(pv: PersistentVolumeInfo, t: T): PlacedSection {
                 namespace: null,
               }),
             }
-          : { text: t("empty", "none") },
+          : { text: t("empty", "noneLower") },
       ],
     },
     {

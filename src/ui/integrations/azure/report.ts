@@ -61,7 +61,7 @@ function identitySections(resource: CustomResourceInfo, t: T): ReportSection[] {
     {
       label: t("share", "azureType"),
       values: [
-        type ? { text: type } : { text: t("empty", "none"), quiet: true },
+        type ? { text: type } : { text: t("empty", "noneLower"), quiet: true },
       ],
     },
   ];
@@ -99,14 +99,14 @@ function identityBindingSections(
               ref: refOf({ kind: "AzureIdentity", name: identity, namespace }),
             },
           ]
-        : [{ text: t("empty", "none"), quiet: true }],
+        : [{ text: t("empty", "noneLower"), quiet: true }],
     },
     {
       label: t("share", "azureToPods"),
       values: [
         selector
           ? { text: `aadpodidbinding=${selector}`, mono: true }
-          : { text: t("empty", "none"), quiet: true },
+          : { text: t("empty", "noneLower"), quiet: true },
       ],
     },
   ];
@@ -146,7 +146,7 @@ function assignedIdentitySections(
       values: [
         typeof pod === "string" && pod !== ""
           ? { text: pod, ref: refOf({ kind: "Pod", name: pod, namespace }) }
-          : { text: t("empty", "none"), quiet: true },
+          : { text: t("empty", "noneLower"), quiet: true },
       ],
     },
     {
@@ -157,7 +157,7 @@ function assignedIdentitySections(
               text: identity,
               ref: refOf({ kind: "AzureIdentity", name: identity, namespace }),
             }
-          : { text: t("empty", "none"), quiet: true },
+          : { text: t("empty", "noneLower"), quiet: true },
       ],
     },
   ];

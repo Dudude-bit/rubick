@@ -122,7 +122,7 @@ export function GenericObjectPage({
               <SectionHeader title={group.title} count={group.count} />
               <WordTable
                 table={group.table}
-                emptyMessage={group.emptyMessage ?? t("empty", "none")}
+                emptyMessage={group.emptyMessage ?? t("empty", "noneLower")}
               />
             </Section>
           ) : (
@@ -131,7 +131,7 @@ export function GenericObjectPage({
               title={group.title}
               count={group.count}
               items={group.items}
-              emptyMessage={group.emptyMessage ?? t("empty", "none")}
+              emptyMessage={group.emptyMessage ?? t("empty", "noneLower")}
             />
           )
         )}

@@ -187,7 +187,7 @@ function destinationRuleSections(spec: unknown, t: T): ReportSection[] {
                       .join(", "),
                     mono: true,
                   }
-                : { text: t("empty", "none"), quiet: true },
+                : { text: t("empty", "noneLower"), quiet: true },
             ],
           },
         ],

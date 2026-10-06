@@ -80,7 +80,7 @@ function monitorSections(
           values: [
             monitor.selector
               ? { text: selectorWords(monitor.selector) || "{}", mono: true }
-              : { text: t("empty", "none"), quiet: true },
+              : { text: t("empty", "noneLower"), quiet: true },
           ],
         },
         {
@@ -164,7 +164,7 @@ function prometheusSection(
       {
         text: instance.serviceMonitorSelector
           ? selectorWords(instance.serviceMonitorSelector) || "{}"
-          : t("empty", "none"),
+          : t("empty", "noneLower"),
         mono: true,
       },
     ],
@@ -175,7 +175,7 @@ function prometheusSection(
       {
         text: instance.podMonitorSelector
           ? selectorWords(instance.podMonitorSelector) || "{}"
-          : t("empty", "none"),
+          : t("empty", "noneLower"),
         mono: true,
       },
     ],

@@ -255,7 +255,7 @@ function poolerSections(
               }),
             },
           ]
-        : [{ text: t("empty", "none"), quiet: true }],
+        : [{ text: t("empty", "noneLower"), quiet: true }],
     },
   ];
   if (pooler.type)

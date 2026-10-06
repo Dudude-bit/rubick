@@ -6166,7 +6166,6 @@ export const en = {
     useStreamControl: "Use the stream control in the toolbar to attach.",
     noPodsForJob: "No pods for this job",
     noEventsForClaim: "No events for this claim",
-    none: "None",
     noLabels: "No labels",
     noKeys: "No keys",
     clusterLocal: "cluster local",

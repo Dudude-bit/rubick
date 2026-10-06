@@ -1,3 +1,4 @@
+import { None } from "@/components/ui/none";
 import { commands } from "@/lib/commands";
 import { ClaimRef } from "../-object/storage-refs";
 import { list, ref, source, type PeekSources } from "./peek-sources-kit";
@@ -111,9 +112,11 @@ export const CONFIG_STORAGE_SOURCES: PeekSources = {
             },
             {
               label: t("columns", "storageClass"),
-              value: volume.storageClass
-                ? ref("StorageClass", volume.storageClass)
-                : t("empty", "none"),
+              value: volume.storageClass ? (
+                ref("StorageClass", volume.storageClass)
+              ) : (
+                <None />
+              ),
             },
             {
               label: t("columns", "reclaimPolicy"),

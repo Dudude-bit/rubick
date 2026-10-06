@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import { createElement, Fragment } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 /** Every command a source asked, by name. */
@@ -493,5 +495,40 @@ describe("a peek at a kind addressed by its plural and group", () => {
     expect(backends.items).toContainEqual(
       expect.objectContaining({ value: "sliceNoPorts", tone: "err" })
     );
+  });
+});
+
+describe("the none word in a peek", () => {
+  const t = ((_section: string, key: string) => key) as never;
+  const target = { kind: "Ingress", name: "web", namespace: "shop" };
+  const ingress = {
+    name: "web",
+    namespace: "shop",
+    className: null,
+    rules: [],
+    defaultBackend: null,
+    loadBalancerIps: [],
+    tlsHosts: [],
+    tlsConfigs: [],
+    hasCatchAllTls: false,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+  };
+
+  /** The Ingress peek said "Address None" and "TLS hosts None" while its list said "none". */
+  it("draws an empty Ingress address and TLS hosts as the lists' lowercase none", () => {
+    const items = resolveSource(target).summarise(ingress, target, t).groups[0]
+      .items;
+    const drawn = (label: string) =>
+      renderToStaticMarkup(
+        createElement(
+          Fragment,
+          null,
+          items.find((item) => item.label === label)?.value
+        )
+      ).replace(/<[^>]+>/g, "");
+    expect(drawn("address")).toBe("none");
+    expect(drawn("tlsHosts")).toBe("none");
   });
 });

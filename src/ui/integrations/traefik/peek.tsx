@@ -11,6 +11,7 @@
 import { sayWords } from "@/i18n/say";
 import type { T } from "@/i18n/useT";
 import { ResourceRef } from "@/components/object/ResourceRef";
+import { None } from "@/components/ui/none";
 import type { KeyValue } from "@/components/object/key-values";
 import type { CustomResourceDetailInfo } from "@/generated/types";
 import { servedGroupName } from "./data";
@@ -162,7 +163,7 @@ function routeGroup(
           ))}
         </span>
       ) : (
-        t("empty", "none")
+        <None />
       ),
     mono: middlewares.length > 0,
   });

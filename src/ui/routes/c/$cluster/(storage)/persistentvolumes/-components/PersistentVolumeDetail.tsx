@@ -52,9 +52,7 @@ export function PersistentVolumeDetail() {
     },
     {
       label: t("columns", "accessModes"),
-      value: pv?.accessModes.length
-        ? pv.accessModes.join(" · ")
-        : t("empty", "none"),
+      value: pv?.accessModes.length ? pv.accessModes.join(" · ") : <None />,
       mono: true,
     },
     {
@@ -77,7 +75,7 @@ export function PersistentVolumeDetail() {
           showKind={false}
         />
       ) : (
-        t("empty", "none")
+        <None />
       ),
     },
     {
