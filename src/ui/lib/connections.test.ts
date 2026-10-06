@@ -1259,6 +1259,29 @@ describe("what the Service publishes", () => {
     expect(new Set(notes).size).toBe(notes.length);
     for (const note of notes) expect(note).not.toContain("list page");
   });
+  /**
+   * Lena read "трафик отклоняется, пока они работают" (refused while they
+   * run) and "Что получила проверка" as machine Russian. Fails if either
+   * comes back.
+   */
+  it("says in Russian that traffic is refused until the pods are ready", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const note = describeStop(
+      {
+        reason: "noneReady",
+        service: service("unready-demo", "app=unready-demo"),
+        selector: "app=unready-demo",
+        pods: 2,
+        why: "failingReadiness",
+      },
+      ru
+    ).note;
+    expect(note).toContain("трафик отклоняется, пока они не готовы.");
+    expect(note).toContain(
+      "Почему проверка не проходит, видно в событиях подов."
+    );
+  });
 
   /** Three stops about routes were English literals, so a Russian screen
    *  printed "gwtest-edge does not accept this route" in English. */

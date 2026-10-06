@@ -122,7 +122,7 @@ export const en = {
     stopTerminatingNote:
       "They are being deleted. A terminating pod is not Ready, so nothing is published until a replacement is.",
     stopFailingReadinessNote:
-      "They are running and fail their readiness probe, and a Service publishes no endpoint for a pod that is not Ready, so traffic is refused while they run. The probe's events say what it got.",
+      "They are running and fail their readiness probe, and a Service publishes no endpoint for a pod that is not Ready, so traffic is refused until they are Ready. Their events say why the probe fails.",
     stopFinishedNote:
       "They have run to completion and will not serve again. A Service in front of finished pods publishes nothing.",
     stopMixedNote:
