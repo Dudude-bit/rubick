@@ -45,8 +45,8 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     ),
   },
   {
-    // "ни один не готов" is the widest verdict here, whole at 160.
-    size: 160,
+    // "ни один не готов" is the widest verdict here, whole at 1440px.
+    size: 165,
     id: "health",
     header: columnHeader("columns", "endpoints"),
     cell: ({ row }) => <HealthCell service={row.original} />,
@@ -61,8 +61,8 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     ),
   },
   {
-    // An address per line, each behind an icon; "некому назначить" whole.
-    size: 170,
+    // An address per line, each behind an icon; "nothing assigns it" whole.
+    size: 180,
     accessorKey: "externalIps",
     header: columnHeader("columns", "externalIps"),
     cell: ({ row }) => {

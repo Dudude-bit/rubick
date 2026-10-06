@@ -110,7 +110,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
   createNamespaceColumn<IngressInfo>(),
   {
     // "нет Secret для TLS" and "нет контроллера", whole at 1440px.
-    size: 180,
+    size: 185,
     id: "health",
     header: columnHeader("columns", "status"),
     cell: ({ row }) => <HealthCell ingress={row.original} />,
