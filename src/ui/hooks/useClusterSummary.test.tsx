@@ -7,24 +7,27 @@
  */
 
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-vi.mock("@/lib/commands", () => ({
-  commands: {
-    getClusterOverview: vi.fn(),
-    listNamespaces: vi.fn(),
-  },
-}));
-
 import { peekMutationKeys } from "@/routes/c/$cluster/-peek/peek-actions";
-import { commands } from "@/lib/commands";
+import { setTransport, transport } from "@/lib/transport";
+import { fakeTransport } from "@/lib/transport/fake";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterSummary } from "./useClusterSummary";
 
-const getClusterOverview = vi.mocked(commands.getClusterOverview);
-const listNamespaces = vi.mocked(commands.listNamespaces);
+// Behind the real command wrapper, which is what remembers a refusal.
+const getClusterOverview = vi.fn();
+const listNamespaces = vi.fn();
+const real = transport();
+setTransport(
+  fakeTransport({
+    get_cluster_overview: (args) => getClusterOverview(args?.scope),
+    list_namespaces: () => listNamespaces(),
+  }).transport
+);
+afterAll(() => setTransport(real));
 
 let client: QueryClient;
 const wrapper = ({ children }: { children: ReactNode }) => (

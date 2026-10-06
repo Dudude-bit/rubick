@@ -1,4 +1,5 @@
 import {
+  afterAll,
   afterEach,
   beforeEach,
   describe,
@@ -9,30 +10,41 @@ import {
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { setTransport, transport } from "@/lib/transport";
+import { fakeTransport } from "@/lib/transport/fake";
+import { renderWithRouter } from "@/test/render";
+import { ScopeTabs } from "./ScopeTabs";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
+
 const REFUSED = {
   code: "PERMISSION_DENIED",
   message:
     'pods is forbidden: User "system:serviceaccount:team-checkout:marco" cannot list resource "pods" in API group "" at the cluster scope',
 };
 
-const cluster = vi.hoisted(() => ({
-  namespaces: "refused" as "refused" | "listed",
-}));
+const cluster = { namespaces: "refused" as "refused" | "listed" };
 
-vi.mock("@/lib/commands", () => ({
-  commands: {
-    connectCluster: vi.fn(async (context: string) => ({ context })),
-    disconnectCluster: vi.fn(async () => undefined),
-    saveClusterPreferences: vi.fn(async () => undefined),
-    listContexts: vi.fn(async () => []),
-    checkNamespaceAccess: vi.fn(async () => [
+// Behind the real command wrapper, which is what remembers a refusal.
+const overviewScopes: Array<string[] | null> = [];
+const real = transport();
+setTransport(
+  fakeTransport({
+    connect_cluster: (args) => ({ context: args?.context }),
+    disconnect_cluster: () => undefined,
+    save_cluster_preferences: () => undefined,
+    list_contexts: () => [],
+    check_namespace_access: () => [
       { namespace: "team-checkout", allowed: true },
-    ]),
-    listNamespaces: vi.fn(async () => {
+    ],
+    list_namespaces: () => {
       if (cluster.namespaces === "refused") throw REFUSED;
       return [{ name: "team-checkout" }, { name: "shop" }];
-    }),
-    getClusterOverview: vi.fn(async (scope: string[] | null) => {
+    },
+    get_cluster_overview: (args) => {
+      const scope = (args?.scope ?? null) as string[] | null;
+      overviewScopes.push(scope);
       if (scope === null) throw REFUSED;
       return {
         namespaces: [],
@@ -40,27 +52,19 @@ vi.mock("@/lib/commands", () => ({
         problemsTruncated: 0,
         counts: { pods: 4 },
       };
-    }),
-  },
-}));
-
-import { commands } from "@/lib/commands";
-import { renderWithRouter } from "@/test/render";
-import { ScopeTabs } from "./ScopeTabs";
-import { useClusterStore } from "@/stores/clusterStore";
-import { useScopeTabStore } from "@/stores/scopeTabStore";
-import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
+    },
+  }).transport
+);
+afterAll(() => setTransport(real));
 
 const wholeClusterAsks = () =>
-  vi
-    .mocked(commands.getClusterOverview)
-    .mock.calls.filter(([scope]) => scope === null).length;
+  overviewScopes.filter((scope) => scope === null).length;
 
 let attempt = 0;
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
-  vi.mocked(commands.getClusterOverview).mockClear();
+  overviewScopes.length = 0;
   localStorage.clear();
   cluster.namespaces = "refused";
   useNamespaceRecencyStore.setState({ recent: {} });

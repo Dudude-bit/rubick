@@ -1,18 +1,12 @@
-import { create } from "zustand";
-
 import { commands } from "@/lib/commands";
-import { isRefusal, normalizeTauriError } from "@/lib/error-utils";
+import { normalizeTauriError } from "@/lib/error-utils";
 import { ofSameCluster } from "@/lib/previous-answer";
 import { queryKeys } from "@/lib/query-keys";
+import { useRefusedOn } from "@/lib/refusals";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ClusterOverview } from "@/generated/types";
-
-/** The connection, by attempt, that was refused the whole cluster's overview. */
-const wholeClusterRefusal = create<{ attempt: number | null }>(() => ({
-  attempt: null,
-}));
 
 /**
  * Whether this connection was refused the whole cluster's overview. A
@@ -21,7 +15,7 @@ const wholeClusterRefusal = create<{ attempt: number | null }>(() => ({
  */
 export function useWholeClusterRefused(): boolean {
   const attempt = useClusterStore((s) => s.connectionAttemptId);
-  return wholeClusterRefusal((s) => s.attempt === attempt);
+  return useRefusedOn(attempt, "getClusterOverview", [null]);
 }
 
 /**
@@ -38,10 +32,6 @@ export async function readOverview(
       scope.length > 0 ? [...scope] : null
     );
   } catch (err) {
-    if (scope.length === 0 && isRefusal(err))
-      wholeClusterRefusal.setState({
-        attempt: useClusterStore.getState().connectionAttemptId,
-      });
     throw new Error(normalizeTauriError(err), { cause: err });
   }
 }

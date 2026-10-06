@@ -17,6 +17,7 @@ import type { ContextInfo } from "@/generated/types";
 import { errorToShow } from "@/lib/error-utils";
 import { commands } from "@/lib/commands";
 import { credentialsRestored } from "@/lib/credentials";
+import { followConnections } from "@/lib/refusals";
 import {
   clampScope,
   decodeScope,
@@ -390,3 +391,5 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     });
   },
 }));
+
+followConnections(() => useClusterStore.getState().connectionAttemptId);

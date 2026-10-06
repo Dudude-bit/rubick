@@ -1,0 +1,87 @@
+/**
+ * What the cluster refused on this connection. A refusal is a verdict on who
+ * asks, so a refused read is answered from here until the next connect
+ * instead of asking the cluster again on every poll and every page visit.
+ * Imports nothing that reaches `commands` or `clusterStore`, which both use it.
+ */
+
+import { create } from "zustand";
+
+let connectionOf: () => number = () => 0;
+
+/** How one connection is told from the next, handed over by `clusterStore`. */
+export function followConnections(current: () => number): void {
+  connectionOf = current;
+}
+
+export function currentConnection(): number {
+  return connectionOf();
+}
+
+interface Refused {
+  connection: number;
+  error: unknown;
+}
+
+const useRefusals = create<{ reads: ReadonlyMap<string, Refused> }>(() => ({
+  reads: new Map(),
+}));
+
+/** A read by what it asks: the command and its arguments, or `null` for arguments that do not print. */
+export function readOf(
+  command: string,
+  args: readonly unknown[]
+): string | null {
+  try {
+    return `${command} ${JSON.stringify(args)}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Commands that only read the cluster; asking one again cannot change what it would do. */
+export function isRead(command: string): boolean {
+  return /^(list|get|detect|read)[A-Z]/.test(command);
+}
+
+/** The refusal this read got on this connection, if it got one. */
+export function refusalOf(read: string): unknown {
+  const refused = useRefusals.getState().reads.get(read);
+  return refused?.connection === currentConnection()
+    ? refused.error
+    : undefined;
+}
+
+/**
+ * Keeps a read's refusal for the connection it was asked on: one that
+ * answers after a reconnect is not this one's.
+ */
+export function noteRefusal(
+  read: string,
+  error: unknown,
+  connection: number
+): void {
+  if (connection !== currentConnection()) return;
+  if (refusalOf(read) !== undefined) return;
+  const reads = new Map(useRefusals.getState().reads);
+  for (const [key, refused] of reads)
+    if (refused.connection !== connection) reads.delete(key);
+  useRefusals.setState({ reads: reads.set(read, { connection, error }) });
+}
+
+/** The reader says their rights may have changed: every refused read is asked once more. */
+export function forgetRefusals(): void {
+  useRefusals.setState({ reads: new Map() });
+}
+
+/** Whether this read was refused on `connection`, for a screen that decides on it. */
+export function useRefusedOn(
+  connection: number,
+  command: string,
+  args: readonly unknown[]
+): boolean {
+  const read = readOf(command, args);
+  return useRefusals(
+    (s) => read !== null && s.reads.get(read)?.connection === connection
+  );
+}

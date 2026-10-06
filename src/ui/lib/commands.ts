@@ -1,7 +1,14 @@
 import * as generatedCommands from "@/generated/commands";
-import { normalizeTauriError } from "@/lib/error-utils";
+import { isRefusal, normalizeTauriError } from "@/lib/error-utils";
 import { logInfo } from "@/lib/logger";
 import { measured, perf } from "@/lib/perf";
+import {
+  currentConnection,
+  isRead,
+  noteRefusal,
+  readOf,
+  refusalOf,
+} from "@/lib/refusals";
 import { stallWatch } from "@/lib/stall-watch";
 import {
   credentialsExpired,
@@ -26,7 +33,12 @@ const SLOW_COMMAND_MS = 500;
 export function wrapCommand<T extends AsyncFn>(fn: T, commandName?: string): T {
   const withErrors = wrapErrors(fn, commandName);
   const name = commandName ?? fn.name;
+  const reads = isRead(name);
   return (async (...args: Parameters<T>) => {
+    const read = reads ? readOf(name, args) : null;
+    const refused = read === null ? undefined : refusalOf(read);
+    if (refused !== undefined) throw refused;
+    const connection = currentConnection();
     const startedAt = performance.now();
     try {
       const value = perf.recording
@@ -34,6 +46,10 @@ export function wrapCommand<T extends AsyncFn>(fn: T, commandName?: string): T {
         : await withErrors(...args);
       stallWatch.noteAnswer(name, value);
       return value;
+    } catch (error) {
+      if (read !== null && isRefusal(error))
+        noteRefusal(read, error, connection);
+      throw error;
     } finally {
       const ms = Math.round(performance.now() - startedAt);
       if (ms >= SLOW_COMMAND_MS) {

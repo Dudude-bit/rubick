@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { parseRefusal, rbacRule } from "@/lib/refusal";
+import { forgetRefusals } from "@/lib/refusals";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 
@@ -58,7 +59,10 @@ export function Unknown({ question, error, onRetry, className }: UnknownProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={onRetry}
+            onClick={() => {
+              if (refused) forgetRefusals();
+              onRetry();
+            }}
             // A long label (Russian runs longer than English) must wrap inside
             // the button rather than run past the box's edge.
             className="h-auto min-h-6 items-start whitespace-normal py-0.5 text-left"

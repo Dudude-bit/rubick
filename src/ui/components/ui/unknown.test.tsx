@@ -2,6 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import {
+  currentConnection,
+  noteRefusal,
+  readOf,
+  refusalOf,
+} from "@/lib/refusals";
 import { Unknown } from "./unknown";
 
 const writeText = vi.fn().mockResolvedValue(undefined);
@@ -47,6 +53,22 @@ describe("Unknown", () => {
       screen.queryByRole("button", { name: /rule/i })
     ).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /again/i }));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * The rule was copied, an administrator granted it, and the reader asks
+   * again. Fails if the retry is answered from the connection's memory of
+   * the refusal instead of by the cluster.
+   */
+  it("asks the cluster again on a retry after a refusal", async () => {
+    const read = readOf("listServiceEndpoints", ["shop"])!;
+    noteRefusal(read, new Error(REFUSED), currentConnection());
+    expect(refusalOf(read)).toBeDefined();
+    const retry = vi.fn();
+    render(<Unknown question="q" error={new Error(REFUSED)} onRetry={retry} />);
+    await userEvent.click(screen.getByRole("button", { name: /again/i }));
+    expect(refusalOf(read)).toBeUndefined();
     expect(retry).toHaveBeenCalledTimes(1);
   });
 

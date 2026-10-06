@@ -5,6 +5,8 @@ import {
 } from "@/lib/credentials";
 
 import { commands } from "@/lib/commands";
+import { isRefusal } from "@/lib/error-utils";
+import { currentConnection, noteRefusal, readOf } from "@/lib/refusals";
 import { listenEvent } from "@/lib/events";
 import { stallWatch } from "@/lib/stall-watch";
 import { perf, sizeOf } from "@/lib/perf";
@@ -25,6 +27,7 @@ export async function listPodRows(
 ): Promise<Scoped<PodRow>> {
   const started = performance.now();
   const generation = perf.generation;
+  const connection = currentConnection();
   const id = await commands.listPodRows(scope);
   const stop = () => void commands.stopPodRows(id).catch(() => {});
   if (signal?.aborted) {
@@ -97,7 +100,11 @@ export async function listPodRows(
       if (isCredentialsExpired(event.payload.message)) {
         credentialsExpired(expiryReason(event.payload.message));
       }
-      settle.reject(new Error(event.payload.message));
+      const failure = new Error(event.payload.message);
+      const read = readOf("listPodRows", [scope]);
+      if (read !== null && isRefusal(failure))
+        noteRefusal(read, failure, connection);
+      settle.reject(failure);
     }),
   ]);
   signal?.addEventListener("abort", onAbort, { once: true });
