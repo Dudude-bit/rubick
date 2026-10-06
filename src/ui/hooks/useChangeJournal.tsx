@@ -55,10 +55,26 @@ export function useChangeJournal() {
   const beginSpan = useChangeJournalStore((s) => s.beginSpan);
   const heartbeat = useChangeJournalStore((s) => s.heartbeat);
   const endSpan = useChangeJournalStore((s) => s.endSpan);
+  // The watches of the scope being left, still watching until the next
+  // scope's have synced: a scope switch is not a stretch nobody watched.
+  const leaving = useRef<{ cluster: string; retire: (at: number) => void }>(
+    null
+  );
 
   useEffect(() => {
-    if (!connected || !context) return;
+    const previous = leaving.current;
+    leaving.current = null;
+    if (!connected || !context) {
+      previous?.retire(Date.now());
+      return;
+    }
     const cluster = context;
+    let predecessor = previous?.cluster === cluster ? previous : null;
+    if (previous && !predecessor) previous.retire(Date.now());
+    const retirePredecessor = (at: number) => {
+      predecessor?.retire(at);
+      predecessor = null;
+    };
     const scopes: Array<string | null> =
       namespaces.length === 0 ? [null] : namespaces;
     const watches = KINDS.flatMap(({ kind, subscribe }) =>
@@ -86,26 +102,30 @@ export function useChangeJournal() {
     let ticker: ReturnType<typeof setInterval> | null = null;
 
     const openSpan = () => {
-      if (open || synced.size === 0) return;
+      if (open) return;
+      if (refused.size === watches.length) retirePredecessor(Date.now());
+      if (synced.size === 0) return;
       if (synced.size + refused.size < watches.length) return;
       open = true;
+      const at = Date.now();
+      retirePredecessor(at);
       const unwatched = new Set(
         watches
           .filter((w) => refused.has(`${w.kind}/${w.namespace ?? "*"}`))
           .map((w) => w.kind)
       );
-      beginSpan(cluster, Date.now(), {
+      beginSpan(cluster, at, {
         unwatched: [...unwatched],
         scope: namespaces,
       });
       ticker = setInterval(() => heartbeat(cluster, Date.now()), HEARTBEAT_MS);
     };
-    const closeSpan = () => {
+    const closeSpan = (at = Date.now()) => {
       if (!open) return;
       open = false;
       if (ticker !== null) clearInterval(ticker);
       ticker = null;
-      endSpan(cluster, Date.now());
+      endSpan(cluster, at);
     };
 
     for (const { kind, namespace, subscribe } of watches) {
@@ -163,7 +183,10 @@ export function useChangeJournal() {
             for (const change of payload.changes) {
               if (change.op === "failed") {
                 if (isRefusal(payload.error)) refuse();
-                else goBlind();
+                else {
+                  goBlind();
+                  retirePredecessor(Date.now());
+                }
                 continue;
               }
               if (change.op === "restarted") {
@@ -274,7 +297,9 @@ export function useChangeJournal() {
           stream.off = off;
           await commands.resourceWatchSubscribed(id);
         } catch (error) {
-          if (active && isRefusal(error)) refuse();
+          if (!active) return;
+          if (isRefusal(error)) refuse();
+          else retirePredecessor(Date.now());
         }
       })();
     }
@@ -284,19 +309,29 @@ export function useChangeJournal() {
     // rather than left waiting for a relist that may never come.
     const lagged = listenEvent("event-bridge-lagged", () => {
       for (const go of blind) go();
+      retirePredecessor(Date.now());
       if (active) setRestarts((n) => n + 1);
     });
 
-    return () => {
+    const retire = (at: number) => {
       active = false;
       void lagged.then((off) => off());
-      closeSpan();
+      closeSpan(at);
       for (const stream of streams) {
         stream.off?.();
         if (stream.id) {
           void commands.unsubscribeResourceWatch(stream.id).catch(() => {});
         }
       }
+    };
+
+    return () => {
+      if (open) {
+        leaving.current = { cluster, retire };
+        return;
+      }
+      retire(Date.now());
+      leaving.current = predecessor;
     };
   }, [
     context,
@@ -309,4 +344,13 @@ export function useChangeJournal() {
     heartbeat,
     endSpan,
   ]);
+
+  // After the effect above, so its cleanup has handed over before this ends it.
+  useEffect(
+    () => () => {
+      leaving.current?.retire(Date.now());
+      leaving.current = null;
+    },
+    []
+  );
 }
