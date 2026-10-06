@@ -1,6 +1,5 @@
 import type { ColumnDef } from "@/components/ui/table-features";
 import { MetricsAbsenceContext, absenceOf } from "@/lib/metrics-absence";
-import { T } from "@/i18n/T";
 import { None } from "@/components/ui/none";
 import { columnHeader } from "@/i18n/column-header";
 import { SortableHeader } from "@/components/ui/sortable-header";
@@ -49,10 +48,23 @@ type PodRow = WithNodeSilence<PodWithMetrics>;
  * A component rather than an expression in the column literal: the age now
  * needs the translator, and a hook is only legal inside one.
  */
-function RestartAge({ at }: { at: string }) {
+/** "653 (2h ago)": kubectl's count with the age of the last one, whole on hover where the column cuts it. */
+function RestartsCell({ pod }: { pod: PodRow }) {
   const t = useT();
+  const last =
+    pod.restartCount > 0 && pod.lastRestartAt
+      ? t("action", "agoSuffix", { age: formatAge(pod.lastRestartAt, t) })
+      : null;
   return (
-    <T section="action" k="agoSuffix" values={{ age: formatAge(at, t) }} />
+    <span
+      className={
+        pod.restartCount > 5 ? "font-mono text-warn" : "font-mono text-fg-mut"
+      }
+      title={last ? `${pod.restartCount} (${last})` : undefined}
+    >
+      {pod.restartCount}
+      {last && <span className="text-fg-fnt"> ({last})</span>}
+    </span>
   );
 }
 
@@ -99,7 +111,7 @@ export const columns: ColumnDef<PodRow>[] = [
   {
     // Wide enough for "Init:CrashLoopBackOff" at 1440 px; a longer reason
     // ends in an ellipsis and keeps its whole word on hover.
-    size: 190,
+    size: 220,
     id: "status",
     // Sorted by the word the reader sees, not by the phase behind it: they
     // asked for this to group the crashing pods together, and `Running` is
@@ -111,11 +123,7 @@ export const columns: ColumnDef<PodRow>[] = [
       share: (pod: PodRow, t) =>
         podStatusValue(pod, pod.nodeSilence ?? null, t),
     },
-    header: ({ column }) => (
-      <SortableHeader column={column}>
-        <T section="columns" k="status" />
-      </SortableHeader>
-    ),
+    header: ({ column }) => <SortableHeader column={column} k="status" />,
     // The derived status, not the phase: a pod that has crashed 653
     // times is in phase `Running` and nobody means that by "how is
     // it". The phase rides along in the tooltip so it is not lost.
@@ -124,7 +132,8 @@ export const columns: ColumnDef<PodRow>[] = [
   createCpuColumn<PodRow>(),
   createMemoryColumn<PodRow>(),
   {
-    size: 110,
+    // "Готовность" and its sort mark.
+    size: 120,
     id: "ready",
     // By what is missing, so the ones short of a replica sort together —
     // 0/3 before 2/3 before 1/1.
@@ -140,11 +149,7 @@ export const columns: ColumnDef<PodRow>[] = [
         return { text: `${ready}/${total}`, mono: true };
       },
     },
-    header: ({ column }) => (
-      <SortableHeader column={column}>
-        <T section="columns" k="ready" />
-      </SortableHeader>
-    ),
+    header: ({ column }) => <SortableHeader column={column} k="ready" />,
     // The number people compare against `kubectl get pod` in the next
     // window, so it is kubectl's number: sidecars in both halves,
     // finished init containers in neither.
@@ -158,8 +163,8 @@ export const columns: ColumnDef<PodRow>[] = [
     },
   },
   {
-    // The count and the age of the last one: "653 (2h ago)".
-    size: 130,
+    // The count and the age of the last one: "7 (2 мин назад)".
+    size: 150,
     id: "restarts",
     accessorFn: (pod) => pod.restartCount,
     enableSorting: true,
@@ -171,32 +176,11 @@ export const columns: ColumnDef<PodRow>[] = [
         role: pod.restartCount > 5 ? "warn" : undefined,
       }),
     },
-    header: ({ column }) => (
-      <SortableHeader column={column}>
-        <T section="columns" k="restarts" />
-      </SortableHeader>
-    ),
+    header: ({ column }) => <SortableHeader column={column} k="restarts" />,
     // kubectl prints the count with the age of the last one, and it is
     // the half that carries the news: 653 an hour ago and 653 last
     // week are the same number and not the same pod.
-    cell: ({ row }) => (
-      <span
-        className={
-          row.original.restartCount > 5
-            ? "font-mono text-warn"
-            : "font-mono text-fg-mut"
-        }
-      >
-        {row.original.restartCount}
-        {row.original.restartCount > 0 && row.original.lastRestartAt && (
-          <span className="text-fg-fnt">
-            {" "}
-            (
-            <RestartAge at={row.original.lastRestartAt} />)
-          </span>
-        )}
-      </span>
-    ),
+    cell: ({ row }) => <RestartsCell pod={row.original} />,
   },
   {
     // A managed node's name is as long as a pod's: `gke-prod-pool-1-a3f9-x2kd`.

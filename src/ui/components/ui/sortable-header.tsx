@@ -14,8 +14,8 @@
  */
 
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
-import type { ReactNode } from "react";
 
+import type { en } from "@/i18n/catalogue";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 
@@ -27,13 +27,13 @@ interface SortableColumn {
 
 export function SortableHeader({
   column,
-  children,
+  k,
 }: {
   column: SortableColumn;
-  /** The label — usually a `<T>`, so the words stay translated. */
-  children: ReactNode;
+  k: keyof (typeof en)["columns"];
 }) {
   const t = useT();
+  const label = t("columns", k);
   const sorted = column.getIsSorted();
   const Mark =
     sorted === "asc" ? ArrowUp : sorted === "desc" ? ArrowDown : ChevronsUpDown;
@@ -50,9 +50,11 @@ export function SortableHeader({
         "focus-visible:outline-none",
         sorted ? "text-fg" : "text-fg-mut"
       )}
-      aria-label={t("action", "sortByColumn")}
+      // A narrow column cuts "Готовность" to "Готов…"; hovering has it whole.
+      title={label}
+      aria-label={`${label}: ${t("action", "sortByColumn")}`}
     >
-      <span className="min-w-0 truncate">{children}</span>
+      <span className="min-w-0 truncate">{label}</span>
       <Mark
         className={cn(
           "h-3 w-3 flex-none",
