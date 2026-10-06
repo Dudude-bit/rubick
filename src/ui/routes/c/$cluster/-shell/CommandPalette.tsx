@@ -70,7 +70,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { SETTINGS_SHORTCUT, useSettingsStore } from "@/stores/settingsStore";
 import type { RecentItem } from "@/generated/types";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 import { catalogQuery } from "../-object/served";
 import {
   buildActionEntries,
@@ -1445,6 +1445,26 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
   );
 }
 
+/** Every refused kind on one line, and any other failure with its own words. */
+function unreadHover(cluster: ClusterSearchState, t: T): string {
+  const refused = cluster.unreadable.filter(
+    (unread) => unread.reason === "forbidden"
+  );
+  const failed = cluster.unreadable.filter(
+    (unread) => unread.reason !== "forbidden"
+  );
+  return [
+    ...(refused.length > 0
+      ? [
+          t("cluster", "kindsRefusedHover", {
+            kinds: refused.map((unread) => unread.kind).join(", "),
+          }),
+        ]
+      : []),
+    ...failed.map((unread) => `${unread.kind}: ${unread.message}`),
+  ].join("\n");
+}
+
 /**
  * One cluster's own line: which cluster, and what it has said so far.
  *
@@ -1511,14 +1531,10 @@ function ClusterGroup({
         ? Lock
         : TriangleAlert;
       // The one place the palette names what it could not read: cut to the
-      // row, every kind and its reason on hover.
+      // row, whole on hover. Refusals share one line: forty 403 sentences
+      // made a tooltip taller than the screen.
       state = (
-        <span
-          className="min-w-0 truncate"
-          title={cluster.unreadable
-            .map((unread) => `${unread.kind}: ${unread.message}`)
-            .join("\n")}
-        >
+        <span className="min-w-0 truncate" title={unreadHover(cluster, t)}>
           {state} · <Mark className="inline h-3 w-3 align-[-2px]" aria-hidden />{" "}
           {t("cluster", "kindsUnreadInline", {
             kinds: cluster.unreadable.map((unread) => unread.kind).join(", "),

@@ -1,3 +1,4 @@
+import type { SearchFailureKind } from "@/generated/types";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -39,7 +40,7 @@ const search = vi.hoisted(() => ({
     kind: string;
     group: string;
     plural: string;
-    reason: "forbidden";
+    reason: SearchFailureKind;
     message: string;
   }[],
   hits: [] as {
@@ -287,14 +288,42 @@ describe("the command palette's hits", () => {
     expect(line).toHaveClass("truncate");
     expect(line).toHaveAttribute(
       "title",
-      refused
-        .map((kind) => `${kind}: ${kind.toLowerCase()}s is forbidden`)
-        .join("\n")
+      `The cluster refused: ${refused.join(", ")}`
     );
     expect(document.body.textContent?.split("PodDisruptionBudget").length).toBe(
       2
     );
     expect(screen.queryByText(/kinds? refused/)).toBeNull();
+  });
+
+  /**
+   * Marco's hover carried one 403 sentence per kind and ran past the bottom
+   * of a 900px screen. Fails if refusals stop sharing one line, or a failure
+   * that is not a refusal loses its own words.
+   */
+  it("says every refusal on one hover line and keeps other failures' words", async () => {
+    search.unreadable = [
+      ...["DaemonSet", "Role", "Lease", "Node"].map((kind) => ({
+        kind,
+        group: "",
+        plural: `${kind.toLowerCase()}s`,
+        reason: "forbidden" as const,
+        message: `${kind.toLowerCase()}s is forbidden: User "marco" cannot list resource`,
+      })),
+      {
+        kind: "Widget",
+        group: "demo.example.com",
+        plural: "widgets",
+        reason: "timeout" as const,
+        message: "request timed out",
+      },
+    ];
+    await open("access");
+    const line = await screen.findByText(/could not read DaemonSet/);
+    expect(line.getAttribute("title")?.split("\n")).toEqual([
+      "The cluster refused: DaemonSet, Role, Lease, Node",
+      "Widget: request timed out",
+    ]);
   });
 
   /**
@@ -319,7 +348,7 @@ describe("the command palette's hits", () => {
     expect(refused.parentElement).toHaveClass("text-warn");
     expect(refused).toHaveAttribute(
       "title",
-      "ServiceAccount: serviceaccounts is forbidden"
+      "The cluster refused: ServiceAccount"
     );
     expect(
       screen.getByText("1 kind still loading").closest("span")

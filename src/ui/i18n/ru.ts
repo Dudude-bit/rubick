@@ -4682,6 +4682,7 @@ export const ru: Catalogue = {
     searchingInline: "поиск…",
     failedInline: "ошибка",
     kindsUnreadInline: "не удалось прочитать: {kinds}",
+    kindsRefusedHover: "Кластер отказал: {kinds}",
     otherKindsNotSearched: "в видах ресурсов вне приложения не искали",
     lastUsedAgo: "открывался {age} назад",
     retryInline: "повторить",

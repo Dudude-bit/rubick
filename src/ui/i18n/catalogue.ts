@@ -4221,6 +4221,7 @@ export const en = {
     searchingInline: "searching…",
     failedInline: "failed",
     kindsUnreadInline: "could not read {kinds}",
+    kindsRefusedHover: "The cluster refused: {kinds}",
     otherKindsNotSearched: "kinds outside the app's own are not searched",
     lastUsedAgo: "last used {age} ago",
     retryInline: "retry",
