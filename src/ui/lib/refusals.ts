@@ -95,7 +95,10 @@ export function useRefusedAmong(
 ): ReadonlySet<string> {
   const refused = useRefusals((s) =>
     reads
-      .filter((read) => s.reads.get(read)?.connection === connection)
+      .filter((read) => {
+        const refused = s.reads.get(read);
+        return refused !== undefined && refused.connection === connection;
+      })
       .join("\n")
   );
   return useMemo(() => new Set(refused ? refused.split("\n") : []), [refused]);
