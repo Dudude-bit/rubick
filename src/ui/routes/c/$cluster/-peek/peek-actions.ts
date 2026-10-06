@@ -597,13 +597,13 @@ export function describePodRestart(
   detail: unknown,
   t: T
 ): PeekConfirmCopy {
-  const subject = t("action", "podSubject", {
-    name: qualified(name, namespace),
-  });
+  const pod = qualified(name, namespace);
   return {
-    title: t("action", "restartSubjectTitle", { subject }),
+    title: t("action", "restartSubjectTitle", {
+      subject: t("action", "podSubject", { name: pod }),
+    }),
     description: t("action", "restartPodBody", {
-      subject,
+      name: pod,
       effect: podDeletionEffect(detail as PodInfo | undefined, t),
     }),
   };

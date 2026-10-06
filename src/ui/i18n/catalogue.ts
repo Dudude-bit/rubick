@@ -1344,7 +1344,7 @@ export const en = {
         "Replaces the pod on each of {nodes}, starting the new pod before stopping the old one on {n} nodes at a time.",
     },
     restartPodBody:
-      "Restarting a pod means deleting it. Deleting {subject} {effect}",
+      "Restarting a pod means deleting it. Deleting pod {name} {effect}",
     effectPodUnread:
       "removes it now. Whether anything starts a replacement depends on its owner, which has not been read yet.",
     effectPodOwned:

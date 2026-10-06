@@ -344,6 +344,21 @@ describe("restarting a pod an owner replaces", () => {
     });
   });
 
+  /**
+   * Lena read "Удаление под ..." (the wrong case) and "Перезапустить под
+   * значит удалить его", which parses as "under means". Fails if either
+   * comes back, or if the body says that deleting deletes.
+   */
+  it("asks a Russian reader in whole, grammatical sentences", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    expect(describePodRestart("web-1", "shop", pod(), ru)).toEqual({
+      title: "Перезапустить под shop/web-1?",
+      description:
+        "Перезапуск пода означает его удаление. Удаление пода shop/web-1 произойдёт сразу. Его ReplicaSet log-demo-6cf создаст замену.",
+    });
+  });
+
   /** Owners not read yet are not "nothing owns it", in either direction. */
   it("says the owner is not read yet rather than guessing a replacement", () => {
     const said = describePodRestart("log-demo-1", "ns", undefined, t);
