@@ -107,6 +107,40 @@ describe("one verdict for a Service on every surface", () => {
     });
   });
 
+  /**
+   * Lena read "2 пода несут app=unready-demo, и ни один не готов: ни один не
+   * готов" in the Services tooltip and on the Overview. Fails if the clause
+   * after the colon repeats the verdict instead of naming a cause, or the
+   * place that knows one.
+   */
+  it.each([
+    ["failingReadiness", "не проходят проверку готовности"],
+    ["inSlices", "причину покажет страница Service"],
+  ] as const)(
+    "follows none ready with a cause when the pods are %s",
+    (why, cause) => {
+      const ru: T = (section, key, values) =>
+        translate("ru", section, key, values);
+      const health = serviceHealthOf(
+        SELECTING,
+        published({
+          notReady: 2,
+          stop: {
+            reason: "noneReady",
+            service: SERVICE,
+            selector: "app=unready-demo",
+            pods: 2,
+            why,
+          },
+        }),
+        null
+      );
+      expect(serviceHealthWords(health, ru).reason).toBe(
+        `2 пода несут app=unready-demo, и ни один не готов: ${cause}`
+      );
+    }
+  );
+
   /** Addresses in the slices, none serving: the outage on running pods. */
   it("calls addresses that are listed and not ready none ready", () => {
     const health = serviceHealthOf(SELECTING, published({ notReady: 2 }), null);

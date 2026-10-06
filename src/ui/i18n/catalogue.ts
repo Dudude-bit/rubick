@@ -5259,6 +5259,10 @@ export const en = {
     stopTerminating: "terminating",
     stopFinished: "finished",
     stopNoneReady: "none ready",
+    causeFailingReadiness: "they fail their readiness probe",
+    causeSeveral: "for more than one reason",
+    causeOwnStatus: "their own status says why",
+    causeOnServicePage: "the Service's page says why",
     stopNoPortToSendTo: "no port to send to",
     everyRequest503:
       "This host answers, and every request gets a 503: {reason}",

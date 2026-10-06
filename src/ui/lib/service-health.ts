@@ -8,13 +8,15 @@
  * only adds a sharper reason.
  */
 
+import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import type {
   ChainStop,
+  NotServing,
   ResourceConnections,
   ServicePublished,
 } from "@/generated/types";
-import { askedPorts, describeStop, stopUnder } from "@/lib/connections";
+import { askedPorts, describeStop } from "@/lib/connections";
 import { errorToShow } from "@/lib/error-utils";
 import { endpointCount, publishedFor, servingCount } from "@/lib/published";
 import type { StatusRole } from "@/lib/status-role";
@@ -74,6 +76,19 @@ export interface Verdict {
   reason: string | null;
 }
 
+/** What follows "none of them is ready": a cause, never the same words again. */
+const NONE_READY_CAUSE: Record<NotServing, keyof typeof en.empty> = {
+  unscheduled: "stopNotScheduled",
+  starting: "stopNotStarted",
+  crashLooping: "stopCrashLooping",
+  terminating: "stopTerminating",
+  failingReadiness: "causeFailingReadiness",
+  finished: "stopFinished",
+  mixed: "causeSeveral",
+  other: "causeOwnStatus",
+  inSlices: "causeOnServicePage",
+};
+
 function stopReason(published: PublishedCounts, t: T): string | null {
   const stop = published.stop;
   if (!stop || !("service" in stop)) return null;
@@ -85,7 +100,7 @@ function stopReason(published: PublishedCounts, t: T): string | null {
     });
   const title = describeStop(stop, t).title;
   return stop.reason === "noneReady"
-    ? `${title}: ${t("empty", stopUnder(stop))}`
+    ? `${title}: ${t("empty", NONE_READY_CAUSE[stop.why])}`
     : title;
 }
 

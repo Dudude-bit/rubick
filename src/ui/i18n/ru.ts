@@ -5800,6 +5800,10 @@ export const ru: Catalogue = {
     stopTerminating: "удаляются",
     stopFinished: "завершились",
     stopNoneReady: "ни один не готов",
+    causeFailingReadiness: "не проходят проверку готовности",
+    causeSeveral: "по разным причинам",
+    causeOwnStatus: "причину называет их собственный статус",
+    causeOnServicePage: "причину покажет страница Service",
     stopNoPortToSendTo: "нет порта, куда отправлять",
     everyRequest503:
       "Этот хост отвечает, но на каждый запрос отдаёт 503: {reason}",
