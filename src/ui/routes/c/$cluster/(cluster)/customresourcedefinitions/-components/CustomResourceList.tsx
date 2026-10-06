@@ -212,9 +212,15 @@ export function CustomResourceList({
     reportFailure: crdKind,
   });
 
+  const noun = useMemo(
+    () => ({ kind: crdKind, plural: crdPlural }),
+    [crdKind, crdPlural]
+  );
+
   return (
     <ResourceList<CustomResourceListItem>
       title={t("count", "kindInstances", { kind: crdKind })}
+      noun={noun}
       queryKey={queryKey}
       getRowId={getResourceRowId}
       queryFn={async () => {
