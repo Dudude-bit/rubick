@@ -9,7 +9,7 @@ import { useLineage } from "./ownership";
 import { useOwnershipKeys } from "./ownership-keys";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { yamlTab } from "./yaml-tab";
-import { servedOf, useServed, type Served } from "./served";
+import { readTarget, servedOf, useServed, type Served } from "./served";
 import { WordTable } from "./WordTable";
 import { AccessPanel } from "./AccessPanel";
 import { accessSegment } from "@/lib/access-kinds";
@@ -49,8 +49,9 @@ export function GenericObjectPage({
   const router = useRouter();
   const copy = useCopyToClipboard();
   const isConnected = useClusterStore((state) => state.isConnected);
-  const target = servedOf(resource);
-  const served = useServed(target);
+  const served = useServed(servedOf(resource));
+  const read = readTarget(resource, served);
+  const target = read ?? servedOf(resource);
   const yaml = useLiveQuery({
     queryKey: queryKeys.servedObjectYaml(
       target.group,
@@ -65,7 +66,7 @@ export function GenericObjectPage({
         name,
         namespace ?? null
       ),
-    enabled: isConnected,
+    enabled: isConnected && read !== null,
     refresh: "resourceDetail",
     staleTime: STALE_TIMES.resourceDetail,
   });
@@ -83,7 +84,7 @@ export function GenericObjectPage({
         name,
         namespace ?? null
       ),
-    enabled: isConnected,
+    enabled: isConnected && read !== null,
     refresh: "resourceDetail",
     staleTime: STALE_TIMES.resourceDetail,
   });
@@ -97,8 +98,8 @@ export function GenericObjectPage({
   const registryKind = isResourceType(resource) ? toKind(resource) : null;
   const kind =
     served.state === "served" ? served.entry.kind : (registryKind ?? resource);
-  const uid = useLineage(target, name, namespace).data?.uid ?? null;
-  useOwnershipKeys(target, name, namespace);
+  const uid = useLineage(read, name, namespace).data?.uid ?? null;
+  useOwnershipKeys(read, name, namespace);
   const activeTab = useAppSearch().tab ?? "overview";
   const setSearch = useSetSearch();
 
@@ -134,7 +135,10 @@ export function GenericObjectPage({
             />
           )
         )}
-        {accessSegment(kind) === resource && (
+        {accessSegment(kind) ===
+          (target.group
+            ? `${target.plural}.${target.group}`
+            : target.plural) && (
           <Section>
             <AccessPanel
               kind={kind}

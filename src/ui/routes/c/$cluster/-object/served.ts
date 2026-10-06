@@ -46,9 +46,13 @@ export function servedIn(
 ): Served {
   if (failure) return { state: "unknown", error: errorToShow(failure) };
   if (!catalog) return { state: "reading" };
-  const entry = catalog.entries.find(
-    (e) => e.group === group && e.plural === plural
-  );
+  // A bare plural the core group lacks is another group's, as kubectl reads
+  // it: `clusterroles` is rbac.authorization.k8s.io's, not a missing kind.
+  const entry =
+    catalog.entries.find((e) => e.group === group && e.plural === plural) ??
+    (group === ""
+      ? catalog.entries.find((e) => e.plural === plural)
+      : undefined);
   if (entry) return { state: "served", entry };
   const unread = catalog.unread.find((g) => g.group === group);
   return unread
@@ -66,6 +70,22 @@ export const catalogQuery = () => ({
   staleTime: CATALOG_STALE_MS,
   retry: false,
 });
+
+/**
+ * What an address reads with: the served entry's group where discovery
+ * resolved a bare plural, the address's own guess otherwise. `null` while a
+ * bare plural the registry does not know waits for discovery, so the first
+ * read is not a 404 from the core group.
+ */
+export function readTarget(
+  segment: string,
+  served: Served
+): ServedResource | null {
+  if (served.state === "served")
+    return { group: served.entry.group, plural: served.entry.plural };
+  const bare = !segment.includes(".") && !isResourceType(segment);
+  return bare && served.state === "reading" ? null : servedOf(segment);
+}
 
 export function useServed(resource: ServedResource): Served {
   const isConnected = useClusterStore((state) => state.isConnected);

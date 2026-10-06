@@ -8,7 +8,8 @@ import { renderWithRouter } from "@/test/render";
 const answers = vi.hoisted(() => ({
   catalog: (): Promise<ApiCatalog> =>
     Promise.resolve({ entries: [], unread: [] }),
-  object: (): Promise<unknown> => Promise.reject(new Error("unset")),
+  object: (_group?: string, _plural?: string): Promise<unknown> =>
+    Promise.reject(new Error("unset")),
 }));
 
 vi.mock("@/lib/commands", () => ({
@@ -16,7 +17,8 @@ vi.mock("@/lib/commands", () => ({
     listApiCatalog: () => answers.catalog(),
     getServedObjectYaml: () =>
       Promise.reject({ code: "NOT_FOUND", message: 'leases "x" not found' }),
-    getServedObject: () => answers.object(),
+    getServedObject: (group: string, plural: string) =>
+      answers.object(group, plural),
     objectLineage: () =>
       Promise.reject({ code: "NOT_FOUND", message: 'leases "x" not found' }),
   },
@@ -141,5 +143,43 @@ describe("an object of a kind no screen draws, when the read finds nothing", () 
         "This cluster serves no leases.coordination.k8s.io"
       )
     ).toBeInTheDocument();
+  });
+});
+
+describe("an object addressed by a bare plural", () => {
+  const CLUSTER_ROLES: CatalogEntry = {
+    group: "rbac.authorization.k8s.io",
+    version: "v1",
+    kind: "ClusterRole",
+    plural: "clusterroles",
+    namespaced: false,
+    verbs: ["get", "list"],
+    shortNames: [],
+  };
+
+  /**
+   * Sam's hand-typed link, clusterroles/<name>, said "This cluster serves no
+   * clusterroles" while API resources listed ClusterRole: the bare plural
+   * was read as a core kind. Discovery names its group, as kubectl reads it.
+   */
+  it("reads it in the group discovery names, and never says it is not served", async () => {
+    answers.catalog = () =>
+      Promise.resolve({ entries: [CLUSTER_ROLES], unread: [] });
+    const asked: Array<[string, string]> = [];
+    answers.object = (group?: string, plural?: string) => {
+      asked.push([group ?? "", plural ?? ""]);
+      return group === "rbac.authorization.k8s.io"
+        ? Promise.resolve({
+            metadata: { name: "system:controller:x", labels: { tier: "rbac" } },
+            rules: [],
+          })
+        : Promise.reject({ code: "NOT_FOUND", message: "not found" });
+    };
+    await renderWithRouter(
+      <GenericObjectPage resource="clusterroles" name="system:controller:x" />
+    );
+    expect(await screen.findByText("tier")).toBeInTheDocument();
+    expect(screen.queryByText(/serves no/)).toBeNull();
+    expect(asked).toEqual([["rbac.authorization.k8s.io", "clusterroles"]]);
   });
 });

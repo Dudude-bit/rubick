@@ -113,6 +113,19 @@ describe("a kind listed as the API server prints it", () => {
     );
   });
 
+  /** A bare plural is another group's where the core group lacks it, as kubectl reads it. */
+  it("lists a bare plural in the group discovery names", async () => {
+    answers.catalog = () =>
+      Promise.resolve({
+        entries: [{ ...LEASES, group: "coordination.k8s.io" }],
+        unread: [],
+      });
+    answers.table = () => Promise.resolve(table([lease("node-1")]));
+    await renderWithRouter(<PrintedList resource="leases" />);
+    expect(await screen.findByText("holder-node-1")).toBeInTheDocument();
+    expect(screen.queryByText(/serves no/)).toBeNull();
+  });
+
   /**
    * A list that stopped at a page boundary is not the whole kind: it says so
    * and reads on from the cursor it was handed.
