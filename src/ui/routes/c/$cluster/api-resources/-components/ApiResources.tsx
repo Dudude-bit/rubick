@@ -132,7 +132,7 @@ function GroupSection({ group }: { group: CatalogGroup }) {
 
 function KindRow({ entry }: { entry: CatalogEntry }) {
   const t = useT();
-  const version = entry.group
+  const apiVersion = entry.group
     ? `${entry.group}/${entry.version}`
     : entry.version;
   const ScopeIcon = entry.namespaced ? FolderOpen : Globe;
@@ -159,11 +159,12 @@ function KindRow({ entry }: { entry: CatalogEntry }) {
         </span>
       )}
       <span
-        // Gives way whole before the kind, which the row is read by, loses a letter.
+        // The group is the section's heading; repeating it pushed the version
+        // itself off the end of a long kind's row.
         className="min-w-0 shrink-[100] truncate font-mono text-[11px] text-fg-fnt"
-        title={version}
+        title={apiVersion}
       >
-        {version}
+        {entry.version}
       </span>
       <span className="ml-auto flex flex-none items-center gap-2 text-[11px]">
         {!listable(entry) && (

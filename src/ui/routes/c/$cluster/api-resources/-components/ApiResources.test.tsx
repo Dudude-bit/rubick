@@ -156,4 +156,17 @@ describe("a kind name longer than its row", () => {
       "PriorityClass"
     );
   });
+
+  /**
+   * ValidatingAdmissionPolicyBinding's row ended in
+   * "admissionregistration.k8s.io/…", the version cut and the group said
+   * again under its own heading. Fails if the row repeats the group.
+   */
+  it("says the version beside the kind, with the whole apiVersion on hover", async () => {
+    catalog.answer = () => Promise.resolve(SERVED);
+    await draw();
+    const row = (await screen.findByText("Lease")).closest("li")!;
+    const version = within(row).getByTitle("coordination.k8s.io/v1");
+    expect(version).toHaveTextContent(/^v1$/);
+  });
 });
