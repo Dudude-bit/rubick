@@ -59,7 +59,7 @@ const published = (over: Partial<ServicePublished> = {}): ServicePublished => ({
 });
 
 describe("the address of one endpoint", () => {
-  /** A pod with no IP yet drew "—:8080"; fails if the port is glued to a missing address. */
+  /** A pod with no IP yet drew a dash glyph with ":8080" glued to it; fails if the port is glued to a missing address. */
   it("has no address for a pod the cluster has not given an IP", () => {
     expect(endpointAddress(endpoint({ address: null }))).toBeNull();
     expect(endpointAddress(endpoint())).toBe("10.42.1.51:8080");

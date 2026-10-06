@@ -183,10 +183,11 @@ describe("the punctuation of the copy", () => {
   });
 
   /**
-   * A TLS Secret's tls.key row read "a private key — the app never shows
-   * one" on the Russian screen: the sentence came from Rust, which no scan
-   * read. Fails on a dash in any string or char literal under src/tauri/src;
-   * comments keep theirs, and code that must match one spells it \u{2014}.
+   * A TLS Secret's tls.key row read "a private key, the app never shows
+   * one" with an em dash for the comma, in English on the Russian screen:
+   * the sentence came from Rust, which no scan read. Fails on a dash in
+   * any string or char literal under src/tauri/src; comments keep theirs,
+   * and code that must match one spells it \u{2014}.
    */
   it("keeps every em and en dash out of the strings the backend writes", () => {
     const dashed = rustFiles("src/tauri/src").flatMap((path) =>
@@ -227,14 +228,14 @@ describe("the punctuation of the copy", () => {
   /** The scan itself: a Rust comment, lifetime or escape is skipped, a literal of any kind is not. */
   it("tells a dash in a Rust literal from one in a comment", () => {
     const source = [
-      "/// a doc — fine",
-      "/* outer /* nested — fine */ still — fine */",
+      "/// a doc \u2014 fine",
+      "/* outer /* nested \u2014 fine */ still \u2014 fine */",
       "fn f<'a>(x: &'a str) -> char { '\\u{2014}' }",
-      'let a = "plain — caught";',
-      'let b = r#"raw "quoted" – caught"#;',
-      'let c = "escaped \\" quote — caught";',
-      "let d = '—';",
-      'let e = "two\nlines — caught";',
+      'let a = "plain \u2014 caught";',
+      'let b = r#"raw "quoted" \u2013 caught"#;',
+      'let c = "escaped \\" quote \u2014 caught";',
+      "let d = '\u2014';",
+      'let e = "two\nlines \u2014 caught";',
     ].join("\n");
     expect(dashedRustLiterals("x.rs", source)).toEqual([
       "x.rs:4",

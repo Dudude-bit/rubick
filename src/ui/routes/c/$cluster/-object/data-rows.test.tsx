@@ -204,7 +204,7 @@ describe("the per-key controls, in the reader's language", () => {
   });
 
   /**
-   * The TLS Secret's tls.key row read "a private key — the app never shows
+   * The TLS Secret's tls.key row read "a private key, the app never shows
    * one" in English in the Russian UI. Fails if the backend's reason is drawn
    * as text again rather than worded here.
    */
