@@ -61,8 +61,8 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     ),
   },
   {
-    // An address per line, each behind an icon.
-    size: 140,
+    // An address per line, each behind an icon; "некому назначить" whole.
+    size: 170,
     accessorKey: "externalIps",
     header: columnHeader("columns", "externalIps"),
     cell: ({ row }) => {

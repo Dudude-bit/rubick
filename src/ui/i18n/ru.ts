@@ -4411,7 +4411,7 @@ export const ru: Catalogue = {
     },
     ciliumLeavesCluster: "за пределы кластера",
     lbWaiting: "ожидает адрес",
-    lbNeverAssigned: "адрес назначать некому",
+    lbNeverAssigned: "некому назначить",
     lbWaitingWhy:
       "Kubernetes сам этот адрес не назначает, это делает реализация балансировщика в кластере. У других Service типа LoadBalancer здесь адреса есть, значит, она существует, и этот Service ждёт своего адреса.",
     lbNeverAssignedWhy:

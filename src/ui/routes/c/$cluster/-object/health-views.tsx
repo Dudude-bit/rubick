@@ -46,8 +46,10 @@ export function VerdictBadge({
   );
   if (!verdict.reason) return badge;
   if (tipped) {
+    // Not hoverable: the cause is read, not clicked, and a pointer that
+    // jumps to the next row would otherwise keep it open over that row.
     return (
-      <Tooltip>
+      <Tooltip disableHoverableContent>
         <TooltipTrigger className="max-w-full text-left align-middle">
           {badge}
         </TooltipTrigger>
