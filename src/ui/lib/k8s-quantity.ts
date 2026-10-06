@@ -11,6 +11,7 @@
 
 import { translate, type Locale } from "@/i18n";
 import { currentLocale } from "@/stores/localeStore";
+import { formatDecimal } from "@/lib/utils";
 
 // Binary unit multipliers (Ki, Mi, Gi, Ti, Pi, Ei)
 export const BINARY_UNITS: Record<string, number> = {
@@ -175,11 +176,7 @@ export function formatBytes(
     SIZE_KEYS.length - 1
   );
   // Trailing zeros kept, so the caller's `decimals` is honoured verbatim.
-  const value = new Intl.NumberFormat(locale, {
-    minimumFractionDigits: dm,
-    maximumFractionDigits: dm,
-    useGrouping: false,
-  }).format(bytes / Math.pow(k, i));
+  const value = formatDecimal(bytes / Math.pow(k, i), dm, locale);
   return translate(locale, "cluster", SIZE_KEYS[i], { n: value });
 }
 

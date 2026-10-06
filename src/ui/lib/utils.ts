@@ -63,6 +63,27 @@ export function formatTimeUnit(
   return format.format(value);
 }
 
+const decimalFormats = new Map<string, Intl.NumberFormat>();
+
+/** A plain number with exactly `fractionDigits` decimals, in the reader's decimal mark. */
+export function formatDecimal(
+  value: number,
+  fractionDigits: number,
+  locale: string = currentLocale()
+): string {
+  const key = `${locale}|${fractionDigits}`;
+  let format = decimalFormats.get(key);
+  if (!format) {
+    format = new Intl.NumberFormat(locale, {
+      minimumFractionDigits: fractionDigits,
+      maximumFractionDigits: fractionDigits,
+      useGrouping: false,
+    });
+    decimalFormats.set(key, format);
+  }
+  return format.format(value);
+}
+
 /**
  * The same age as {@link formatAge}, from a timestamp and a clock the caller
  * owns: the largest whole unit only.
