@@ -11,6 +11,7 @@ import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo } from "@/generated/types";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportSection, ReportValue } from "@/lib/report";
+import { textOrNone } from "../kit";
 import {
   GROUP,
   readMonitor,
@@ -103,9 +104,9 @@ function monitorSections(
       ],
       rows: monitor.endpoints.map((endpoint) => ({
         cells: [
-          { text: endpoint.port ?? "-", mono: true },
+          textOrNone(endpoint.port, t, true),
           { text: endpoint.path, mono: true },
-          { text: endpoint.interval ?? "-" },
+          textOrNone(endpoint.interval, t),
         ],
       })),
       more: null,
@@ -218,9 +219,9 @@ function ruleSection(spec: unknown, t: T): ReportSection {
       rows: groups.flatMap((group) =>
         (group.rules ?? []).map((rule) => ({
           cells: [
-            { text: group.name ?? "-" },
-            { text: rule.alert ?? rule.record ?? "-", mono: true },
-            { text: rule.expr ?? "-", mono: true },
+            textOrNone(group.name, t),
+            textOrNone(rule.alert ?? rule.record, t, true),
+            textOrNone(rule.expr, t, true),
           ],
         }))
       ),

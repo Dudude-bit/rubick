@@ -9,29 +9,27 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchMultiple } from "../kit";
+import { getValueByPath, matchMultiple, orNone, orNotWritten } from "../kit";
 import type { CrdView } from "../registry";
-
-const text = (value: unknown) => String(value ?? "-");
 
 const applicationColumns: CrdColumn[] = [
   {
     id: "sync",
     header: "sync",
     accessor: (resource) => getValueByPath(resource, "status.sync.status"),
-    cell: text,
+    cell: orNotWritten,
   },
   {
     id: "health",
     header: "health",
     accessor: (resource) => getValueByPath(resource, "status.health.status"),
-    cell: text,
+    cell: orNotWritten,
   },
   {
     id: "project",
     header: "project",
     accessor: (resource) => getValueByPath(resource, "spec.project"),
-    cell: text,
+    cell: orNone,
   },
   {
     id: "repo",
@@ -47,7 +45,7 @@ const applicationColumns: CrdColumn[] = [
     header: "destination",
     accessor: (resource) =>
       getValueByPath(resource, "spec.destination.namespace"),
-    cell: text,
+    cell: orNone,
   },
   {
     id: "autoSync",
@@ -70,14 +68,14 @@ const applicationSetColumns: CrdColumn[] = [
             .join(", ")
         : null;
     },
-    cell: text,
+    cell: orNone,
   },
   {
     id: "goTemplate",
     header: "template",
     accessor: (resource) =>
       getValueByPath(resource, "spec.template.metadata.name"),
-    cell: text,
+    cell: orNone,
   },
 ];
 
@@ -89,7 +87,7 @@ const projectColumns: CrdColumn[] = [
       const repos = getValueByPath(resource, "spec.sourceRepos");
       return Array.isArray(repos) ? repos.join(", ") : null;
     },
-    cell: text,
+    cell: orNone,
   },
   {
     id: "destinations",

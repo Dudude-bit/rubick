@@ -6,7 +6,7 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath } from "../kit";
+import { getValueByPath, orNone } from "../kit";
 import type { CrdView } from "../registry";
 
 /**
@@ -23,7 +23,7 @@ const virtualServiceColumns: CrdColumn[] = [
       return hosts ?? [];
     },
     cell: (value) => {
-      if (!Array.isArray(value) || value.length === 0) return "-";
+      if (!Array.isArray(value) || value.length === 0) return orNone(null);
       if (value.length === 1) return String(value[0]);
       return `${value[0]} +${value.length - 1}`;
     },
@@ -52,7 +52,7 @@ const virtualServiceColumns: CrdColumn[] = [
       return http?.length ?? 0;
     },
     cell: (value) =>
-      typeof value === "number" && value > 0 ? `${value}` : "-",
+      orNone(typeof value === "number" && value > 0 ? value : null),
   },
   {
     id: "tcpRoutes",
@@ -62,7 +62,7 @@ const virtualServiceColumns: CrdColumn[] = [
       return tcp?.length ?? 0;
     },
     cell: (value) =>
-      typeof value === "number" && value > 0 ? `${value}` : "-",
+      orNone(typeof value === "number" && value > 0 ? value : null),
   },
   {
     id: "destinations",
@@ -89,7 +89,7 @@ const virtualServiceColumns: CrdColumn[] = [
       return Array.from(destinations);
     },
     cell: (value, t) => {
-      if (!Array.isArray(value) || value.length === 0) return "-";
+      if (!Array.isArray(value) || value.length === 0) return orNone(null);
       if (value.length === 1) return String(value[0]);
       return t("count", "crdServices", { n: value.length });
     },
@@ -104,7 +104,7 @@ const destinationRuleColumns: CrdColumn[] = [
     id: "host",
     header: "host",
     accessor: (resource) => getValueByPath(resource, "spec.host"),
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "trafficPolicy",
@@ -113,7 +113,7 @@ const destinationRuleColumns: CrdColumn[] = [
       const policy = getValueByPath(resource, "spec.trafficPolicy") as
         | Record<string, unknown>
         | undefined;
-      if (!policy) return "None";
+      if (!policy) return null;
 
       const features: string[] = [];
       if (policy.connectionPool) features.push("ConnectionPool");
@@ -123,7 +123,7 @@ const destinationRuleColumns: CrdColumn[] = [
 
       return features.length > 0 ? features.join(", ") : "Default";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "subsets",
@@ -135,7 +135,7 @@ const destinationRuleColumns: CrdColumn[] = [
       return subsets?.map((s) => s.name) ?? [];
     },
     cell: (value) => {
-      if (!Array.isArray(value) || value.length === 0) return "-";
+      if (!Array.isArray(value) || value.length === 0) return orNone(null);
       return value.join(", ");
     },
   },
@@ -177,7 +177,7 @@ const gatewayColumns: CrdColumn[] = [
         .map(([k, v]) => `${k}=${v}`)
         .join(", ");
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "servers",
@@ -200,7 +200,7 @@ const gatewayColumns: CrdColumn[] = [
       });
     },
     cell: (value, t) => {
-      if (!Array.isArray(value) || value.length === 0) return "-";
+      if (!Array.isArray(value) || value.length === 0) return orNone(null);
       if (value.length === 1) return String(value[0]);
       return t("count", "crdServers", { n: value.length });
     },
@@ -236,7 +236,7 @@ const serviceEntryColumns: CrdColumn[] = [
       return hosts ?? [];
     },
     cell: (value) => {
-      if (!Array.isArray(value) || value.length === 0) return "-";
+      if (!Array.isArray(value) || value.length === 0) return orNone(null);
       if (value.length === 1) return String(value[0]);
       return `${value[0]} +${value.length - 1}`;
     },
@@ -268,7 +268,7 @@ const serviceEntryColumns: CrdColumn[] = [
       return ports.map((p) => `${p.protocol ?? "TCP"}:${p.number ?? "?"}`);
     },
     cell: (value) => {
-      if (!Array.isArray(value) || value.length === 0) return "-";
+      if (!Array.isArray(value) || value.length === 0) return orNone(null);
       return value.join(", ");
     },
   },
@@ -282,7 +282,7 @@ const serviceEntryColumns: CrdColumn[] = [
       return endpoints?.length ?? 0;
     },
     cell: (value) =>
-      typeof value === "number" && value > 0 ? `${value}` : "-",
+      orNone(typeof value === "number" && value > 0 ? value : null),
   },
 ];
 
@@ -309,7 +309,7 @@ const authorizationPolicyColumns: CrdColumn[] = [
         .map(([k, v]) => `${k}=${v}`)
         .join(", ");
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "rules",

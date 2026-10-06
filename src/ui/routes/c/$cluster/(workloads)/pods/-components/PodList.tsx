@@ -1,6 +1,7 @@
 import type { ColumnDef } from "@/components/ui/table-features";
 import { MetricsAbsenceContext, absenceOf } from "@/lib/metrics-absence";
 import { T } from "@/i18n/T";
+import { None } from "@/components/ui/none";
 import { columnHeader } from "@/i18n/column-header";
 import { SortableHeader } from "@/components/ui/sortable-header";
 import { useNavigate } from "@tanstack/react-router";
@@ -84,7 +85,6 @@ function PodIpCell({ pod }: { pod: PodRow }) {
     <CopyableAddress
       value={pod.podIp}
       label={t("columns", "podIp")}
-      fallback="-"
       className="text-fg-mut"
     />
   );
@@ -204,13 +204,13 @@ export const columns: ColumnDef<PodRow>[] = [
     id: "node",
     header: columnHeader("columns", "node"),
     meta: {
-      share: (pod: PodRow) =>
+      share: (pod: PodRow, t) =>
         pod.nodeName
           ? {
               text: pod.nodeName,
               ref: refOf({ kind: "Node", name: pod.nodeName, namespace: null }),
             }
-          : "-",
+          : { text: t("empty", "noneLower"), quiet: true },
     },
     cell: ({ row }) =>
       row.original.nodeName ? (
@@ -220,14 +220,19 @@ export const columns: ColumnDef<PodRow>[] = [
           showKind={false}
         />
       ) : (
-        <span className="text-fg-fnt">-</span>
+        <None />
       ),
   },
   {
     size: 130,
     id: "ip",
     header: columnHeader("columns", "ip"),
-    meta: { share: (pod: PodRow) => ({ text: pod.podIp ?? "-", mono: true }) },
+    meta: {
+      share: (pod: PodRow, t) =>
+        pod.podIp
+          ? { text: pod.podIp, mono: true }
+          : { text: t("empty", "noneLower"), quiet: true },
+    },
     cell: ({ row }) => <PodIpCell pod={row.original} />,
   },
   createAgeColumn<PodRow>(),

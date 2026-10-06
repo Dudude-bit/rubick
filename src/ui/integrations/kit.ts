@@ -12,6 +12,7 @@ import { None } from "@/components/ui/none";
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import { formatWhen } from "@/lib/utils";
+import type { ReportValue } from "@/lib/report";
 import type {
   ConditionInfo,
   CustomResourceInfo,
@@ -247,11 +248,30 @@ export function summariseNames(names: readonly string[]): string {
   return `${names.slice(0, 3).join(", ")} +${names.length - 3}`;
 }
 
+const blank = (value: unknown) =>
+  value === null || value === undefined || value === "";
+
 /** A field the object left empty, said as "none" rather than drawn as nothing. */
 export const orNone = (value: unknown): ReactNode =>
-  value === null || value === undefined || value === ""
-    ? createElement(None)
+  blank(value) ? createElement(None) : String(value);
+
+/** A status field its controller has not written yet, which is not an empty one. */
+export const orNotWritten = (value: unknown, t: T): ReactNode =>
+  blank(value)
+    ? createElement(
+        "span",
+        { className: "text-fg-fnt" },
+        t("share", "notWrittenYet")
+      )
     : String(value);
+
+/** A report cell for a field the object left empty, in the lists' quiet "none". */
+export const textOrNone = (
+  text: string | null | undefined,
+  t: T,
+  mono = false
+): ReportValue =>
+  text ? { text, mono } : { text: t("empty", "noneLower"), quiet: true };
 
 /** `14:22` in the reader's own zone. */
 export const hourMinute = (at: number | string) => formatWhen(at, "hourMinute");

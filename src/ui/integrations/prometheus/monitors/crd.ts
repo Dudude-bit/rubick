@@ -1,10 +1,10 @@
 import type { CrdColumn } from "../../kit";
-import { getValueByPath, matchByGroup } from "../../kit";
+import { getValueByPath, matchByGroup, orNone } from "../../kit";
 import type { CrdView } from "../../registry";
 import { GROUP } from "./model";
 
-function selectorText(value: unknown): string {
-  if (typeof value !== "object" || value === null) return "-";
+function selectorText(value: unknown): string | null {
+  if (typeof value !== "object" || value === null) return null;
   const labels = (value as { matchLabels?: Record<string, string> })
     .matchLabels;
   const pairs = Object.entries(labels ?? {}).map(([k, v]) => `${k}=${v}`);
@@ -21,7 +21,7 @@ const monitorColumns = (endpointsPath: string): CrdColumn[] => [
     header: "selector",
     accessor: (resource) =>
       selectorText(getValueByPath(resource, "spec.selector")),
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "endpoints",
@@ -43,19 +43,19 @@ const prometheusColumns: CrdColumn[] = [
       const wanted = getValueByPath(resource, "spec.replicas") ?? 1;
       return `${typeof available === "number" ? available : "?"}/${String(wanted)}`;
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "version",
     header: "version",
     accessor: (resource) => getValueByPath(resource, "spec.version"),
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "retention",
     header: "retention",
     accessor: (resource) => getValueByPath(resource, "spec.retention"),
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
 ];
 

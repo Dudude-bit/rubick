@@ -11,6 +11,7 @@ import { Waypoints } from "lucide-react";
 import type { T } from "@/i18n/useT";
 import { refOf } from "@/lib/report-parts";
 import type { ReportSection, ReportValue } from "@/lib/report";
+import { textOrNone } from "../kit";
 import { describeMatch, readMatches } from "./match";
 import { resolveHost } from "./model";
 import { iconSvg } from "@/lib/icon-svg";
@@ -89,7 +90,7 @@ function virtualServiceSections(
       rows: [
         {
           label: t("columns", "hosts"),
-          values: [{ text: hosts.join(", ") || "-", mono: true }],
+          values: [textOrNone(hosts.join(", "), t, true)],
         },
         {
           label: t("share", "istioGateways"),
@@ -120,7 +121,7 @@ function virtualServiceSections(
       const destinations = entry.route ?? [];
       if (destinations.length === 0) {
         rows.push({
-          cells: [{ text: protocol }, { text: matchText }, { text: "-" }],
+          cells: [{ text: protocol }, { text: matchText }, textOrNone(null, t)],
         });
         continue;
       }
@@ -173,7 +174,7 @@ function destinationRuleSections(spec: unknown, t: T): ReportSection[] {
         rows: [
           {
             label: t("columns", "hosts"),
-            values: [{ text: fields.host ?? "-", mono: true }],
+            values: [textOrNone(fields.host, t, true)],
           },
           {
             label: t("share", "istioSubsets"),
@@ -220,8 +221,8 @@ function gatewaySections(spec: unknown, t: T): ReportSection[] {
               text: `${server.port?.protocol ?? "?"}:${server.port?.number ?? "?"}`,
               mono: true,
             },
-            { text: (server.hosts ?? []).join(", ") || "-", mono: true },
-            { text: server.tls?.mode ?? "-" },
+            textOrNone((server.hosts ?? []).join(", "), t, true),
+            textOrNone(server.tls?.mode, t),
           ],
         })),
         more: null,

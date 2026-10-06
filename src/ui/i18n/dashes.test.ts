@@ -38,6 +38,48 @@ function dashedLines(path: string, source: string): string[] {
     );
 }
 
+/** Files whose "-" is a notation of its own: `ls` mode bits, a diff's removed line. */
+const HYPHEN_NOTATION = new Set([
+  "src/ui/lib/container-files.ts",
+  "src/ui/routes/c/$cluster/-yaml/YamlDiffViewer.tsx",
+]);
+
+type Node = { type?: string; start: number; [key: string]: unknown };
+
+/** Lines where a lone "-" is what a value falls back to, as `path:line`. */
+function hyphenPlaceholders(path: string, source: string): string[] {
+  if (!/["'`]-["'`]|>\s*-\s*<|^\s*-\s*$/m.test(source)) return [];
+  const found: number[] = [];
+  const visit = (node: unknown, parent: Node | null, inTemplate: boolean) => {
+    if (Array.isArray(node)) {
+      for (const child of node) visit(child, parent, inTemplate);
+      return;
+    }
+    if (!node || typeof node !== "object") return;
+    const current = node as Node;
+    const hyphen =
+      (current.type === "Literal" && current.value === "-") ||
+      (current.type === "JSXText" && String(current.value).trim() === "-");
+    const fallsBack =
+      parent?.type === "LogicalExpression" ||
+      parent?.type === "ConditionalExpression" ||
+      parent?.type === "ReturnStatement" ||
+      parent?.type === "ArrowFunctionExpression" ||
+      parent?.type === "JSXAttribute" ||
+      parent?.type === "JSXElement" ||
+      parent?.type === "JSXExpressionContainer" ||
+      parent?.type === "Property";
+    if (hyphen && fallsBack && !inTemplate) found.push(current.start);
+    const nested = inTemplate || current.type === "TemplateLiteral";
+    for (const [key, child] of Object.entries(current))
+      if (key !== "parent") visit(child, current, nested);
+  };
+  visit(parseSync(path, source).program, null, false);
+  return found.map(
+    (offset) => `${path}:${source.slice(0, offset).split("\n").length}`
+  );
+}
+
 describe("the punctuation of the copy", () => {
   /** An em or en dash pasted into a string reaches the screen, and no other test, lint rule or scanner looks for one. */
   it.each([
@@ -61,6 +103,35 @@ describe("the punctuation of the copy", () => {
       (path) => !path.startsWith("src/ui/generated/")
     ).flatMap((path) => dashedLines(path, readFileSync(path, "utf8")));
     expect(dashed).toEqual([]);
+  });
+
+  /**
+   * Node page External IP drew "-" where a Service says "none", and the CRD
+   * columns of istio, flux, traefik and others did the same. Fails on a lone
+   * hyphen that a value falls back to, in code or in JSX text.
+   */
+  it("keeps a bare hyphen from standing in for an empty value", () => {
+    const placeholders = CODE_FILES.filter(
+      (path) =>
+        !path.startsWith("src/ui/generated/") && !HYPHEN_NOTATION.has(path)
+    ).flatMap((path) => hyphenPlaceholders(path, readFileSync(path, "utf8")));
+    expect(placeholders).toEqual([]);
+  });
+
+  /** The scan itself: a fallback "-" is caught; a key built in a template and a split are not. */
+  it("tells a hyphen standing in for a value from one inside a key", () => {
+    const source = [
+      'const a = value ?? "-";',
+      'const key = `${ns ?? "-"}/${name}`;',
+      'const parts = name.split("-");',
+      "const Cell = () => <span>-</span>;",
+      'const Ip = () => <Address fallback="-" />;',
+    ].join("\n");
+    expect(hyphenPlaceholders("x.tsx", source)).toEqual([
+      "x.tsx:1",
+      "x.tsx:4",
+      "x.tsx:5",
+    ]);
   });
 
   /** The scan itself: a dash in a comment is skipped, one in drawn text is not. */

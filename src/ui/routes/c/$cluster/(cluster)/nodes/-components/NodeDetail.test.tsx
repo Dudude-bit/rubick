@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import type { NodeBudget, NodeInfo } from "@/generated/types";
 
 // ----- Mocks -----
@@ -236,7 +236,8 @@ describe("NodeDetail", () => {
     expect(screen.getByText("1.2.3.4")).toBeInTheDocument();
   });
 
-  it('shows "-" for IPs when the node has no matching address', async () => {
+  /** External IP drew a bare "-" here while a Service's empty External IP said "none". */
+  it("says none for an address the node does not report", async () => {
     const noExternal = buildNode({
       status: {
         ready: true,
@@ -250,9 +251,9 @@ describe("NodeDetail", () => {
       >
     );
     await renderPage();
-    // External IP row should fall back to the dash placeholder.
-    const dashes = screen.getAllByText("-");
-    expect(dashes.length).toBeGreaterThan(0);
+    const row = screen.getByText("External IP").closest("div")!;
+    expect(within(row).getByText("none")).toBeInTheDocument();
+    expect(screen.queryByText("-")).toBeNull();
   });
 
   it("shows the kubernetes version, runtime, OS and arch", async () => {

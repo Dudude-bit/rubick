@@ -1,4 +1,6 @@
+import type { T } from "@/i18n/useT";
 import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
+import type { ReportValue } from "@/lib/report";
 
 /**
  * Pure helpers behind the table's quantity cells.
@@ -78,3 +80,9 @@ export function formatUsage(value: number, type: "cpu" | "memory"): string {
   if (type === "cpu") return formatCPU(value);
   return formatMemory(value, 1).replace(/\.0(?=\D|$)/, "");
 }
+
+/** A shared usage nobody measured: neither zero nor "none". */
+export const notMeasured = (t: T): ReportValue => ({
+  text: t("cluster", "metricNotAvailable"),
+  quiet: true,
+});

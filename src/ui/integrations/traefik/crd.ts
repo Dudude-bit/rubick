@@ -8,7 +8,7 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchByPattern } from "../kit";
+import { getValueByPath, matchByPattern, orNone } from "../kit";
 import type { CrdView } from "../registry";
 
 /**
@@ -25,7 +25,7 @@ const ingressRouteColumns: CrdColumn[] = [
       return entryPoints ?? [];
     },
     cell: (value) => {
-      if (!Array.isArray(value) || value.length === 0) return "-";
+      if (!Array.isArray(value) || value.length === 0) return orNone(null);
       return value.join(", ");
     },
   },
@@ -51,7 +51,7 @@ const ingressRouteColumns: CrdColumn[] = [
       return Array.from(hosts);
     },
     cell: (value) => {
-      if (!Array.isArray(value) || value.length === 0) return "-";
+      if (!Array.isArray(value) || value.length === 0) return orNone(null);
       if (value.length === 1) return value[0];
       return `${value[0]} +${value.length - 1}`;
     },
@@ -79,7 +79,7 @@ const ingressRouteColumns: CrdColumn[] = [
       return Array.from(services);
     },
     cell: (value, t) => {
-      if (!Array.isArray(value) || value.length === 0) return "-";
+      if (!Array.isArray(value) || value.length === 0) return orNone(null);
       if (value.length === 1) return value[0];
       return t("count", "crdServices", { n: value.length });
     },
@@ -107,7 +107,7 @@ const ingressRouteColumns: CrdColumn[] = [
       return middlewares.size;
     },
     cell: (value) =>
-      typeof value === "number" && value > 0 ? `${value}` : "-",
+      orNone(typeof value === "number" && value > 0 ? value : null),
   },
   {
     id: "tls",
@@ -125,7 +125,7 @@ const ingressRouteColumns: CrdColumn[] = [
       if (tls.secretName) return `Secret: ${tls.secretName}`;
       return "Yes";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
 ];
 
@@ -175,7 +175,7 @@ const middlewareColumns: CrdColumn[] = [
       }
       return "Unknown";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "details",
@@ -222,7 +222,7 @@ const middlewareColumns: CrdColumn[] = [
 
       return null;
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
 ];
 

@@ -6,7 +6,7 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchMultiple } from "../kit";
+import { getValueByPath, matchMultiple, orNone, orNotWritten } from "../kit";
 import type { CrdView } from "../registry";
 import { formatDate } from "@/lib/utils";
 
@@ -34,7 +34,7 @@ const helmReleaseColumns: CrdColumn[] = [
       if (readyCondition.reason === "Progressing") return "Progressing";
       return "False";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "chart",
@@ -47,9 +47,9 @@ const helmReleaseColumns: CrdColumn[] = [
           }
         | undefined;
 
-      return chartSpec?.chart ?? "-";
+      return chartSpec?.chart ?? null;
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "version",
@@ -71,7 +71,7 @@ const helmReleaseColumns: CrdColumn[] = [
 
       return chartSpec?.version ?? "*";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "sourceRef",
@@ -83,11 +83,11 @@ const helmReleaseColumns: CrdColumn[] = [
           }
         | undefined;
 
-      if (!chartSpec?.sourceRef) return "-";
+      if (!chartSpec?.sourceRef) return null;
       const kind = chartSpec.sourceRef.kind ?? "HelmRepository";
       return `${kind}/${chartSpec.sourceRef.name}`;
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "targetNamespace",
@@ -120,14 +120,14 @@ const helmRepositoryColumns: CrdColumn[] = [
       const readyCondition = conditions.find((c) => c.type === "Ready");
       return readyCondition?.status === "True" ? "True" : "False";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "url",
     header: "url",
     accessor: (resource) => getValueByPath(resource, "spec.url"),
     cell: (value) => {
-      if (!value) return "-";
+      if (!value) return orNone(null);
       // Truncate long URLs
       const url = String(value);
       if (url.length > 50) {
@@ -145,22 +145,20 @@ const helmRepositoryColumns: CrdColumn[] = [
         | undefined;
       return repoType ?? "default";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "interval",
     header: "interval",
     accessor: (resource) => getValueByPath(resource, "spec.interval"),
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "artifact",
     header: "lastFetched",
     accessor: (resource) =>
       getValueByPath(resource, "status.artifact.lastUpdateTime"),
-    cell: (value) => {
-      return formatDate(value) ?? "-";
-    },
+    cell: (value, t) => formatDate(value) ?? orNotWritten(null, t),
   },
 ];
 
@@ -181,13 +179,13 @@ const helmChartColumns: CrdColumn[] = [
       const readyCondition = conditions.find((c) => c.type === "Ready");
       return readyCondition?.status === "True" ? "True" : "False";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "chart",
     header: "chart",
     accessor: (resource) => getValueByPath(resource, "spec.chart"),
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "version",
@@ -203,7 +201,7 @@ const helmChartColumns: CrdColumn[] = [
       // Fall back to spec version constraint
       return getValueByPath(resource, "spec.version") ?? "*";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "sourceRef",
@@ -216,16 +214,16 @@ const helmChartColumns: CrdColumn[] = [
           }
         | undefined;
 
-      if (!sourceRef) return "-";
+      if (!sourceRef) return null;
       return `${sourceRef.kind ?? "HelmRepository"}/${sourceRef.name}`;
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "interval",
     header: "interval",
     accessor: (resource) => getValueByPath(resource, "spec.interval"),
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
 ];
 

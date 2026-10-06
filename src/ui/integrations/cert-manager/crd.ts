@@ -8,7 +8,7 @@
  */
 
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchByGroup } from "../kit";
+import { getValueByPath, matchByGroup, orNone, orNotWritten } from "../kit";
 import type { CrdView } from "../registry";
 import { daysUntil } from "@/lib/utils";
 import { acmeServerLabel } from "./model";
@@ -33,13 +33,13 @@ const certificateColumns: CrdColumn[] = [
       const readyCondition = conditions.find((c) => c.type === "Ready");
       return readyCondition?.status === "True" ? "True" : "False";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "secret",
     header: "secret",
     accessor: (resource) => getValueByPath(resource, "spec.secretName"),
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "issuer",
@@ -52,7 +52,7 @@ const certificateColumns: CrdColumn[] = [
       if (!issuerRef) return null;
       return `${issuerRef.kind || "Issuer"}/${issuerRef.name}`;
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "dnsNames",
@@ -64,16 +64,18 @@ const certificateColumns: CrdColumn[] = [
       return dnsNames?.length ?? 0;
     },
     cell: (value, t) =>
-      typeof value === "number" ? t("count", "dnsNames", { n: value }) : "-",
+      typeof value === "number"
+        ? t("count", "dnsNames", { n: value })
+        : orNone(null),
   },
   {
     id: "expiry",
     header: "expires",
     accessor: (resource) => getValueByPath(resource, "status.notAfter"),
     cell: (value, t) => {
-      if (!value) return "-";
+      if (!value) return orNotWritten(null, t);
       const days = daysUntil(value);
-      if (days === null) return "-";
+      if (days === null) return String(value);
       if (days < 0) return t("readings", "expiredWord");
       if (days === 0) return t("action", "today");
       return t("count", "inDays", { n: days });
@@ -98,7 +100,7 @@ const issuerColumns: CrdColumn[] = [
       const readyCondition = conditions.find((c) => c.type === "Ready");
       return readyCondition?.status === "True" ? "True" : "False";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "type",
@@ -117,7 +119,7 @@ const issuerColumns: CrdColumn[] = [
       if (spec.venafi) return "Venafi";
       return "Unknown";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "server",
@@ -143,7 +145,7 @@ const issuerColumns: CrdColumn[] = [
       }
       return null;
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
 ];
 
@@ -170,7 +172,7 @@ const certificateRequestColumns: CrdColumn[] = [
       if (approved?.status === "True") return "Approved";
       return "Pending";
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "issuer",
@@ -183,13 +185,13 @@ const certificateRequestColumns: CrdColumn[] = [
       if (!issuerRef) return null;
       return `${issuerRef.kind || "Issuer"}/${issuerRef.name}`;
     },
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
   {
     id: "requestor",
     header: "requestor",
     accessor: (resource) => getValueByPath(resource, "spec.username"),
-    cell: (value) => String(value ?? "-"),
+    cell: orNone,
   },
 ];
 

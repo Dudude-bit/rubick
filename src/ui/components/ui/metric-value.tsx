@@ -94,7 +94,7 @@ export function MetricValue({
   if (usedNum === null) {
     return absence === null ? (
       <span className="text-fg-fnt" title={t("cluster", "metricNoSampleYet")}>
-        -
+        {t("cluster", "metricNoSample")}
       </span>
     ) : (
       <span

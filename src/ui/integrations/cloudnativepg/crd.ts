@@ -1,17 +1,14 @@
 import type { CrdColumn } from "../kit";
-import { getValueByPath, matchByGroup } from "../kit";
+import { getValueByPath, matchByGroup, orNone, orNotWritten } from "../kit";
 import type { CrdView } from "../registry";
 import { GROUP } from "./data";
-
-/** `status.phase` is CNPG's own sentence; the badge colours it and keeps the words. */
-const text = (value: unknown) => String(value ?? "-");
 
 const clusterColumns: CrdColumn[] = [
   {
     id: "phase",
     header: "phase",
     accessor: (resource) => getValueByPath(resource, "status.phase"),
-    cell: text,
+    cell: orNotWritten,
   },
   {
     id: "instances",
@@ -20,13 +17,13 @@ const clusterColumns: CrdColumn[] = [
       `${getValueByPath(resource, "status.readyInstances") ?? 0}/${
         getValueByPath(resource, "spec.instances") ?? 0
       }`,
-    cell: text,
+    cell: orNone,
   },
   {
     id: "primary",
     header: "primaryInstance",
     accessor: (resource) => getValueByPath(resource, "status.currentPrimary"),
-    cell: text,
+    cell: orNotWritten,
   },
   {
     id: "image",
@@ -34,7 +31,7 @@ const clusterColumns: CrdColumn[] = [
     accessor: (resource) =>
       getValueByPath(resource, "status.image") ??
       getValueByPath(resource, "spec.imageName"),
-    cell: text,
+    cell: orNone,
   },
 ];
 
@@ -43,13 +40,13 @@ const backupColumns: CrdColumn[] = [
     id: "cluster",
     header: "cluster",
     accessor: (resource) => getValueByPath(resource, "spec.cluster.name"),
-    cell: text,
+    cell: orNone,
   },
   {
     id: "phase",
     header: "phase",
     accessor: (resource) => getValueByPath(resource, "status.phase"),
-    cell: text,
+    cell: orNotWritten,
   },
   {
     id: "method",
@@ -57,7 +54,7 @@ const backupColumns: CrdColumn[] = [
     accessor: (resource) =>
       getValueByPath(resource, "status.method") ??
       getValueByPath(resource, "spec.method"),
-    cell: text,
+    cell: orNone,
   },
 ];
 
@@ -66,19 +63,19 @@ const scheduledColumns: CrdColumn[] = [
     id: "cluster",
     header: "cluster",
     accessor: (resource) => getValueByPath(resource, "spec.cluster.name"),
-    cell: text,
+    cell: orNone,
   },
   {
     id: "schedule",
     header: "schedule",
     accessor: (resource) => getValueByPath(resource, "spec.schedule"),
-    cell: text,
+    cell: orNone,
   },
   {
     id: "lastRun",
     header: "lastRun",
     accessor: (resource) => getValueByPath(resource, "status.lastScheduleTime"),
-    cell: text,
+    cell: orNotWritten,
   },
 ];
 
@@ -87,19 +84,19 @@ const poolerColumns: CrdColumn[] = [
     id: "cluster",
     header: "cluster",
     accessor: (resource) => getValueByPath(resource, "spec.cluster.name"),
-    cell: text,
+    cell: orNone,
   },
   {
     id: "type",
     header: "type",
     accessor: (resource) => getValueByPath(resource, "spec.type"),
-    cell: text,
+    cell: orNone,
   },
   {
     id: "mode",
     header: "mode",
     accessor: (resource) => getValueByPath(resource, "spec.pgbouncer.poolMode"),
-    cell: text,
+    cell: orNone,
   },
 ];
 
@@ -108,7 +105,7 @@ const defaultColumns: CrdColumn[] = [
     id: "phase",
     header: "phase",
     accessor: (resource) => getValueByPath(resource, "status.phase"),
-    cell: text,
+    cell: orNotWritten,
   },
 ];
 

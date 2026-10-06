@@ -4505,6 +4505,7 @@ export const ru: Catalogue = {
     metricsShortError: "API метрик отвечает ошибкой",
     metricNotAvailable: "н/д",
     metricNoSampleYet: "замера пока нет",
+    metricNoSample: "нет замера",
     podMetricsLabel: "метрики подов",
     markBroken: "сломано",
     markUnchecked: "не проверено",

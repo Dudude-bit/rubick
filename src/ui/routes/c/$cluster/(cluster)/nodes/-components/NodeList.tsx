@@ -1,4 +1,5 @@
 import { columnHeader } from "@/i18n/column-header";
+import { T } from "@/i18n/T";
 import { MetricsAbsenceContext, absenceOf } from "@/lib/metrics-absence";
 import { useClusterStore } from "@/stores/clusterStore";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -20,7 +21,7 @@ import { commands } from "@/lib/commands";
 import { whole } from "@/lib/namespace-scope";
 import { useMetrics } from "@/hooks/useMetrics";
 import { errorToShow } from "@/lib/error-utils";
-import { formatUsage } from "@/lib/metric-format";
+import { formatUsage, notMeasured } from "@/lib/metric-format";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
 import { MetricsStatusBanner } from "../../../-metrics";
 import { ResourceList } from "../../../-list/ResourceList";
@@ -65,13 +66,7 @@ const poolGrouping = (t: TranslateFn): RowGrouping<NodeInfo> => ({
 /** The copy label is a word, so the cell needs the hook the array cannot use. */
 function InternalIpCell({ address }: { address: string | undefined }) {
   const t = useT();
-  return (
-    <CopyableAddress
-      value={address}
-      label={t("columns", "internalIp")}
-      fallback="-"
-    />
-  );
+  return <CopyableAddress value={address} label={t("columns", "internalIp")} />;
 }
 
 // Exported for `column-widths.test.ts`, at the cost of this file's fast
@@ -142,9 +137,11 @@ export const columns = (
     id: "cpu",
     header: columnHeader("columns", "cpuUsage"),
     meta: {
-      share: (row: NodeInfo) => {
+      share: (row: NodeInfo, t) => {
         const used = nodeMetricsByName.get(row.name)?.cpuMillicores;
-        return typeof used === "number" ? formatUsage(used, "cpu") : "-";
+        return typeof used === "number"
+          ? formatUsage(used, "cpu")
+          : notMeasured(t);
       },
     },
     cell: ({ row }) => {
@@ -164,9 +161,11 @@ export const columns = (
     id: "memory",
     header: columnHeader("columns", "memoryUsage"),
     meta: {
-      share: (row: NodeInfo) => {
+      share: (row: NodeInfo, t) => {
         const used = nodeMetricsByName.get(row.name)?.memoryBytes;
-        return typeof used === "number" ? formatUsage(used, "memory") : "-";
+        return typeof used === "number"
+          ? formatUsage(used, "memory")
+          : notMeasured(t);
       },
     },
     cell: ({ row }) => {
@@ -187,8 +186,19 @@ export const columns = (
     size: 120,
     id: "capacity_pods",
     header: columnHeader("columns", "podCap"),
-    meta: { share: (row: NodeInfo) => row.capacity?.pods || "-" },
-    cell: ({ row }) => row.original.capacity?.pods || "-",
+    meta: {
+      share: (row: NodeInfo, t) =>
+        row.capacity?.pods || {
+          text: t("empty", "unknownLower"),
+          quiet: true,
+        },
+    },
+    cell: ({ row }) =>
+      row.original.capacity?.pods || (
+        <span className="text-fg-fnt">
+          <T section="empty" k="unknownLower" />
+        </span>
+      ),
   },
   createAgeColumn<NodeInfo>(),
 ];

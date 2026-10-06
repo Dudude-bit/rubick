@@ -13,6 +13,7 @@ import type { CustomResourceInfo } from "@/generated/types";
 import { iconSvg } from "@/lib/icon-svg";
 import { refOf } from "@/lib/report-parts";
 import type { ReportSection, ReportValue } from "@/lib/report";
+import { textOrNone } from "../kit";
 import { statusRole } from "@/lib/status-role";
 import { GROUP } from "./data";
 import { readCluster, readPooler } from "./model";
@@ -205,7 +206,7 @@ function scheduledBackupSections(
       values: [
         suspended
           ? { text: t("action", "suspendedLower"), role: "warn" }
-          : { text: schedule ?? "-", mono: true },
+          : textOrNone(schedule, t, true),
       ],
     },
   ];

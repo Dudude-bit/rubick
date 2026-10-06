@@ -25,6 +25,9 @@ describe("a metric cell with no sample", () => {
   /** Fails if a pod not scraped yet is blamed on the metrics API. */
   it("calls a missing sample a missing sample when the API answered", () => {
     render(<MetricValue used={null} type="memory" />);
-    expect(screen.getByText("-")).toHaveAttribute("title", "no sample yet");
+    expect(screen.getByText("no sample")).toHaveAttribute(
+      "title",
+      "no sample yet"
+    );
   });
 });

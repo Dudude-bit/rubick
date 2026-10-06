@@ -4044,6 +4044,7 @@ export const en = {
     metricsShortError: "metrics API failing",
     metricNotAvailable: "n/a",
     metricNoSampleYet: "no sample yet",
+    metricNoSample: "no sample",
     podMetricsLabel: "pod metrics",
     markBroken: "broken",
     markUnchecked: "not checked",

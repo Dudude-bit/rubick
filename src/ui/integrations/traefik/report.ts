@@ -11,6 +11,7 @@ import { redact } from "@/lib/hints";
 import { iconSvg } from "@/lib/icon-svg";
 import { refOf } from "@/lib/report-parts";
 import type { ReportSection, ReportValue } from "@/lib/report";
+import { textOrNone } from "../kit";
 import { readRule } from "./rule";
 
 const GROUPS = /^traefik\.(io|containo\.us)$/;
@@ -100,11 +101,12 @@ function matchValue(route: RouteSpec, t: T): ReportValue {
   return { text: raw || t("empty", "emptyParens"), mono: true };
 }
 
-function priorityValue(route: RouteSpec): ReportValue {
-  return {
-    text: route.priority !== undefined ? String(route.priority) : "-",
-    mono: route.priority !== undefined,
-  };
+function priorityValue(route: RouteSpec, t: T): ReportValue {
+  return textOrNone(
+    route.priority !== undefined ? String(route.priority) : null,
+    t,
+    true
+  );
 }
 
 function ingressRouteSections(
@@ -152,7 +154,7 @@ function ingressRouteSections(
         rows: routes.map((route) => ({
           cells: [
             matchValue(route, t),
-            priorityValue(route),
+            priorityValue(route, t),
             serviceValue(route, namespace, t),
             middlewaresValue(route, t),
           ],

@@ -11,6 +11,7 @@ import type { T } from "@/i18n/useT";
 import type { CustomResourceInfo } from "@/generated/types";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportSection, ReportValue } from "@/lib/report";
+import { textOrNone } from "../kit";
 import type { StatusRole } from "@/lib/status-role";
 import {
   backendConfigSummary,
@@ -131,7 +132,7 @@ function managedCertificateSections(
     },
     {
       label: t("share", "gceDomains"),
-      values: [{ text: domains.join(", ") || "-", mono: true }],
+      values: [textOrNone(domains.join(", "), t, true)],
     },
   ];
   return [

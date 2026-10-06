@@ -148,7 +148,9 @@ function clusterSections(
                     ? "ok"
                     : "warn",
             },
-            { text: rack.version ?? "-", mono: true },
+            rack.version
+              ? { text: rack.version, mono: true }
+              : { text: t("share", "notWrittenYet"), quiet: true },
           ],
         })),
         more: null,

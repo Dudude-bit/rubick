@@ -652,8 +652,7 @@ export function EnvironmentVariables({
     if (ev.fieldPath) return ev.fieldPath;
     if (ev.resource) return ev.resource;
 
-    // Direct value
-    return ev.value || "-";
+    return ev.value || "";
   };
 
   const toggleReveal = (name: string) => {
@@ -866,7 +865,11 @@ export function EnvironmentVariables({
                           />
                         ) : (
                           <span className="font-mono text-xs break-all">
-                            {displayValue}
+                            {displayValue || (
+                              <span className="font-sans text-fg-fnt">
+                                {t("empty", "emptyParens")}
+                              </span>
+                            )}
                           </span>
                         )}
                       </TableCell>

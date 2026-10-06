@@ -15,7 +15,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
-import { formatUsage } from "@/lib/metric-format";
+import { formatUsage, notMeasured } from "@/lib/metric-format";
 import { cn } from "@/lib/utils";
 import type { ResourceKind } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -116,10 +116,10 @@ export function createCpuColumn<
     id: "cpu",
     header: columnHeader("columns", "cpu"),
     meta: {
-      share: (row: Row) =>
+      share: (row: Row, t) =>
         typeof row.cpuMillicores === "number"
           ? formatUsage(row.cpuMillicores, "cpu")
-          : "-",
+          : notMeasured(t),
     },
     cell: ({ row }) => {
       const used = row.original.cpuMillicores ?? null;
@@ -148,10 +148,10 @@ export function createMemoryColumn<
     id: "memory",
     header: columnHeader("columns", "memory"),
     meta: {
-      share: (row: Row) =>
+      share: (row: Row, t) =>
         typeof row.memoryBytes === "number"
           ? formatUsage(row.memoryBytes, "memory")
-          : "-",
+          : notMeasured(t),
     },
     cell: ({ row }) => {
       const used = row.original.memoryBytes ?? null;

@@ -171,19 +171,11 @@ export function formatBytes(bytes: number, decimals: number = 2): string {
   return `${value} ${sizes[i]}`;
 }
 
-/**
- * Format Kubernetes bytes string to human-readable format
- *
- * @param value - Kubernetes quantity string
- * @param decimals - Number of decimal places (default: 1)
- * @returns Formatted string or "-" if invalid
- */
+/** A Kubernetes byte quantity for a person; one that does not parse is returned as written. */
 export function formatKubernetesBytes(
-  value: string | null | undefined,
+  value: string,
   decimals: number = 1
 ): string {
-  if (!value) return "-";
-
   const bytes = parseQuantity(value);
   if (bytes === null || isNaN(bytes)) return value;
 

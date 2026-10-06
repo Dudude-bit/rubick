@@ -62,6 +62,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { objectLink } from "@/lib/links";
 import type { NodeInfo, DebugResult, TaintInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
 
 /** A taint is the usual answer to "why is nothing scheduling here". */
 function taintKeyValues(taints: TaintInfo[]): KeyValue[] {
@@ -209,7 +210,6 @@ export function NodeDetail() {
         <CopyableAddress
           value={address("InternalIP")}
           label={t("columns", "internalIp")}
-          fallback="-"
         />
       ),
     },
@@ -219,11 +219,10 @@ export function NodeDetail() {
         <CopyableAddress
           value={address("ExternalIP")}
           label={t("columns", "externalIp")}
-          fallback="-"
         />
       ),
     },
-    { label: "Hostname", value: address("Hostname") ?? "-", mono: true },
+    { label: "Hostname", value: address("Hostname") ?? <None />, mono: true },
     { label: "Kubernetes", value: node?.version, mono: true },
     {
       label: t("columns", "containerRuntime"),
@@ -234,7 +233,7 @@ export function NodeDetail() {
     { label: t("columns", "architecture"), value: node?.arch },
     {
       label: t("columns", "created"),
-      value: node?.createdAt ? formatWhen(node.createdAt) : "-",
+      value: node?.createdAt ? formatWhen(node.createdAt) : undefined,
     },
   ];
 
