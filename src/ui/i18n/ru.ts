@@ -979,6 +979,8 @@ export const ru: Catalogue = {
     hpaBoundsLead:
       "Чтобы получить другое число, измените границы автомасштабировщика:",
     hpaBoundsChange: "Изменить границы",
+    hpaBoundsUnchanged:
+      "У {name} уже minReplicas {min} и maxReplicas {max}. Измените одно из значений, чтобы задать новые границы.",
     hpaBoundsConfirm:
       "Задать для {name} minReplicas {min} и maxReplicas {max}?",
     hpaMinTooLow: "minReplicas должно быть не меньше 1.",

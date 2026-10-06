@@ -125,3 +125,32 @@ describe("submitting from the keyboard", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
+
+describe("a count read after the dialog opened", () => {
+  /**
+   * The field is remounted with the count once it lands; it lost the focus
+   * then, and the digits typed next went nowhere.
+   */
+  it("keeps the cursor in the count when the count arrives", () => {
+    const { rerender } = render(scale({ current: undefined }));
+    expect(screen.getByLabelText(/replicas/i)).toHaveValue(null);
+    expect(scaleButton()).toBeDisabled();
+    rerender(scale({ current: 4 }));
+    const field = screen.getByLabelText(/replicas/i);
+    expect(field).toHaveValue(4);
+    expect(field).toHaveFocus();
+  });
+
+  /** An emptied field scaled to 0 on Enter, read as a count nobody typed. */
+  it("scales nothing on Enter in an emptied field, and says why", async () => {
+    const onSubmit = vi.fn();
+    render(scale({ onSubmit }));
+    const field = screen.getByLabelText(/replicas/i);
+    await userEvent.clear(field);
+    await userEvent.type(field, "{Enter}");
+    expect(onSubmit).not.toHaveBeenCalled();
+    expect(
+      screen.getByText("Type how many replicas to run, 0 or more.")
+    ).toBeInTheDocument();
+  });
+});

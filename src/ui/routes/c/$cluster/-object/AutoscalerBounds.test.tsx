@@ -26,7 +26,7 @@ const stuck: ActionWarning = {
   },
 };
 
-const open = () =>
+const open = (onSubmit: (replicas: number) => void = () => {}) =>
   renderWithRouter(
     <ScaleDialog
       open
@@ -37,7 +37,7 @@ const open = () =>
       busy={false}
       warnings={[stuck]}
       onOpenChange={() => {}}
-      onSubmit={() => {}}
+      onSubmit={onSubmit}
     />
   );
 
@@ -94,6 +94,40 @@ describe("changing the autoscaler's bounds from the Scale dialog", () => {
     await setBounds("7", "5");
     expect(screen.getByRole("alert")).toHaveTextContent(
       "minReplicas cannot be above maxReplicas."
+    );
+  });
+});
+
+describe("the keyboard in a Scale dialog with an autoscaler's bounds", () => {
+  /**
+   * With the bounds cached they drew first and took the focus, so "open,
+   * type 3, Enter" typed into minReplicas and nothing scaled.
+   */
+  it("puts the cursor in the replica count, and Enter scales to what was typed", async () => {
+    const onSubmit = vi.fn();
+    await open(onSubmit);
+    expect(field("Number of replicas")).toHaveFocus();
+    await userEvent.keyboard("3{Enter}");
+    expect(onSubmit).toHaveBeenCalledWith(3);
+  });
+
+  /** Enter in a bounds field did nothing at all; it belongs to the bounds. */
+  it("asks to change the bounds on Enter in minReplicas", async () => {
+    await open();
+    await userEvent.clear(field("minReplicas"));
+    await userEvent.type(field("minReplicas"), "3{Enter}");
+    expect(
+      screen.getByText("Set cart to minReplicas 3 and maxReplicas 5?")
+    ).toBeInTheDocument();
+    expect(commands.setAutoscalerBounds).not.toHaveBeenCalled();
+  });
+
+  /** Enter on bounds nobody changed says so, instead of nothing. */
+  it("says the bounds are unchanged on Enter with nothing changed", async () => {
+    await open();
+    await userEvent.type(field("maxReplicas"), "{Enter}");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "cart already has minReplicas 2 and maxReplicas 5."
     );
   });
 });

@@ -26,6 +26,7 @@ export function AutoscalerBounds({
   const [min, setMin] = useState(String(autoscaler.minReplicas));
   const [max, setMax] = useState(String(autoscaler.maxReplicas));
   const [confirming, setConfirming] = useState(false);
+  const [tried, setTried] = useState(false);
   const bounds = { min: Number(min), max: Number(max) };
   const problem = boundsProblem(bounds.min, bounds.max);
   const unchanged =
@@ -88,7 +89,15 @@ export function AutoscalerBounds({
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-end gap-2">
+          <form
+            className="flex flex-wrap items-end gap-2"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (problem) return;
+              if (unchanged) setTried(true);
+              else setConfirming(true);
+            }}
+          >
             <div className="space-y-1">
               <Label htmlFor={`${id}-min`} className="font-mono text-[11px]">
                 minReplicas
@@ -98,7 +107,10 @@ export function AutoscalerBounds({
                 type="number"
                 min={1}
                 value={min}
-                onChange={(event) => setMin(event.target.value)}
+                onChange={(event) => {
+                  setMin(event.target.value);
+                  setTried(false);
+                }}
                 className="h-7 w-24"
                 aria-invalid={problem !== null}
               />
@@ -112,24 +124,32 @@ export function AutoscalerBounds({
                 type="number"
                 min={1}
                 value={max}
-                onChange={(event) => setMax(event.target.value)}
+                onChange={(event) => {
+                  setMax(event.target.value);
+                  setTried(false);
+                }}
                 className="h-7 w-24"
                 aria-invalid={problem === "hpaMinAboveMax"}
               />
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={problem !== null || unchanged}
-              onClick={() => setConfirming(true)}
-            >
+            <Button type="submit" variant="outline" disabled={problem !== null}>
               {t("action", "hpaBoundsChange")}
             </Button>
-          </div>
-          {problem && (
+          </form>
+          {problem ? (
             <p className="text-[11px] text-err" role="alert">
               {t("action", problem)}
             </p>
+          ) : (
+            tried &&
+            unchanged && (
+              <p className="text-[11px] text-fg-mut" role="status">
+                {t("action", "hpaBoundsUnchanged", {
+                  name: autoscaler.name,
+                  ...bounds,
+                })}
+              </p>
+            )
           )}
         </>
       )}

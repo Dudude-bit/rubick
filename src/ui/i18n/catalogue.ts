@@ -993,6 +993,8 @@ export const en = {
     openAutoscaler: "Open the autoscaler",
     hpaBoundsLead: "For a different count, change the autoscaler's bounds:",
     hpaBoundsChange: "Change bounds",
+    hpaBoundsUnchanged:
+      "{name} already has minReplicas {min} and maxReplicas {max}. Change one to set new bounds.",
     hpaBoundsConfirm: "Set {name} to minReplicas {min} and maxReplicas {max}?",
     hpaMinTooLow: "minReplicas must be at least 1.",
     hpaMinAboveMax: "minReplicas cannot be above maxReplicas.",

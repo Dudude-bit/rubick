@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -132,6 +132,18 @@ function ScaleForm({
   const replicas = typed.trim() === "" ? null : Number(typed);
   const counted =
     replicas !== null && Number.isInteger(replicas) && replicas >= 0;
+  // The count takes focus on every opening, and again when it arrives: once
+  // the autoscaler's bounds were cached they came first, and a typed count
+  // went into minReplicas.
+  const claimFocus = useCallback((input: HTMLInputElement | null) => {
+    if (
+      !input ||
+      input.closest("[role=dialog]")?.contains(document.activeElement)
+    )
+      return;
+    input.focus();
+    input.select();
+  }, []);
 
   // A form, so Enter scales as the button does; a disabled submit button
   // holds Enter back too.
@@ -146,6 +158,7 @@ function ScaleForm({
       <div className="space-y-2">
         <Label htmlFor="replicas">{t("action", "replicasLabel")}</Label>
         <Input
+          ref={claimFocus}
           id="replicas"
           type="number"
           min={0}
