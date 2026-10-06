@@ -155,20 +155,22 @@ export const NETWORK_SOURCES: PeekSources = {
               ),
           },
           {
-            label: t("columns", "external"),
+            label: t("columns", "externalIps"),
             value: (
-              <span className="flex flex-col items-start gap-0.5">
-                {(service.externalIps.length > 0 ||
-                  service.type !== "LoadBalancer") && (
-                  <CopyableAddresses
-                    values={service.externalIps}
-                    label={t("columns", "externalAddress")}
-                  />
-                )}
-                <BalancerAddress service={service} />
-              </span>
+              <CopyableAddresses
+                values={service.externalIps}
+                label={t("columns", "externalIp")}
+              />
             ),
           },
+          ...(service.type === "LoadBalancer"
+            ? [
+                {
+                  label: t("columns", "loadBalancer"),
+                  value: <BalancerAddress service={service} />,
+                },
+              ]
+            : []),
           // An ExternalName is a DNS alias: it has no selector to be
           // missing and no endpoints to be written by hand.
           ...(service.type === "ExternalName"
@@ -367,11 +369,6 @@ export const NETWORK_SOURCES: PeekSources = {
                   namespace={target.namespace ?? null}
                 />
               ),
-            },
-            {
-              label: t("columns", "ready"),
-              value: addresses.length,
-              mono: true,
             },
             {
               label: t("columns", "notReadyCount"),

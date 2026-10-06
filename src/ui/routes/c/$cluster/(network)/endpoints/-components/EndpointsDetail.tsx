@@ -110,7 +110,6 @@ export function EndpointsDetail() {
         />
       ),
     },
-    { label: t("columns", "ready"), value: totalReady, mono: true },
     {
       label: t("columns", "notReadyCount"),
       value: totalNotReady,

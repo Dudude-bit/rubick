@@ -159,6 +159,45 @@ describe("the peek draws a network object's verdict as its page does", () => {
     expect(labels).toContain("Status");
   });
 
+  /**
+   * The Service peek said "Внешний: нет" where its page says "Внешние IP",
+   * and folded the balancer into that row. Fails if the peek's rows stop
+   * being the page's.
+   */
+  it("labels external IPs and the balancer as the Service page does", () => {
+    const labels = (service: ServiceInfo) =>
+      resolveSource(target("Service"))
+        .summarise(service, target("Service"), t)
+        .groups.flatMap((group) => group.items.map((item) => item.label));
+    expect(labels(SERVICE)).toContain("External IPs");
+    expect(labels(SERVICE)).not.toContain("Load balancer");
+    expect(labels({ ...SERVICE, type: "LoadBalancer" })).toEqual(
+      expect.arrayContaining(["External IPs", "Load balancer"])
+    );
+  });
+
+  /**
+   * The Endpoints peek said "готово 1", then "Готовность 1", then "Не готовы
+   * 0". Fails if the ready count comes back as a row of its own beside the
+   * verdict that already carries it.
+   */
+  it("gives the Endpoints peek no ready row beside its verdict", () => {
+    const labels = resolveSource(target("Endpoints"))
+      .summarise(
+        {
+          name: "web",
+          namespace: "net",
+          subsets: [],
+          createdAt: null,
+        } as unknown as EndpointsInfo,
+        target("Endpoints"),
+        t
+      )
+      .groups.flatMap((group) => group.items.map((item) => item.label));
+    expect(labels).toEqual(expect.arrayContaining(["Status", "Not ready"]));
+    expect(labels).not.toContain("Ready");
+  });
+
   it("paints a Service that publishes nothing red", async () => {
     answer.connections = () => Promise.resolve(connections([EMPTY_SLICE]));
     await renderWithRouter(<>{statusOf("Service", SERVICE)}</>);
