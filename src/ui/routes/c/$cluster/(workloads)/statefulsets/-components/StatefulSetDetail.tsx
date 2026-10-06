@@ -499,7 +499,7 @@ export function StatefulSetDetail() {
         kind={ResourceType.StatefulSet}
         name={name ?? ""}
         namespace={namespace || null}
-        current={desired}
+        current={replicas?.desired}
         busy={scaleMutation.isPending}
         onSubmit={(replicas) => scaleMutation.mutate(replicas)}
       />

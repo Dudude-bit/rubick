@@ -942,6 +942,9 @@ export const ru: Catalogue = {
     andClusterDefault: ", класс по умолчанию в этом кластере",
     scaleKind: "Масштабировать {kind} {name}",
     replicasLabel: "Количество реплик",
+    scaleCountUnread:
+      "Текущее количество ещё не прочитано. Укажите, сколько реплик запустить.",
+    scaleNeedsCount: "Укажите, сколько реплик запустить: 0 или больше.",
     scopeWindowToIt: "Переключить окно на него",
     itsOwnAlb: "собственный ALB",
     filterLoadBalancers: "Фильтр балансировщиков",

@@ -573,7 +573,7 @@ export function DeploymentDetail() {
         kind={ResourceType.Deployment}
         name={name ?? ""}
         namespace={namespace || null}
-        current={deployment?.replicas.desired ?? 0}
+        current={deployment?.replicas.desired}
         busy={scaleMutation.isPending}
         onSubmit={(replicas) => scaleMutation.mutate(replicas)}
       />

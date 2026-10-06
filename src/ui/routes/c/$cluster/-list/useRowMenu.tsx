@@ -21,9 +21,9 @@ export function useRowMenu<Row extends Listed>({
 }) {
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
   const [row, setRow] = useState<Row | null>(null);
-  // The object as the peek and the page read it, not the list's row: a
-  // StatefulSet row has no claim templates, and its delete dialog said they
-  // were not read yet, for ever.
+  // The object as the peek and the page read it, never the list's row: a row
+  // is a summary of another shape (a pod row's containers carry no ports), and
+  // until the read lands the actions know as little as the peek's do.
   const target = useMemo(
     () =>
       kind && row
@@ -44,7 +44,7 @@ export function useRowMenu<Row extends Listed>({
     kind: kind ?? "",
     name: row?.name ?? "",
     namespace: row?.namespace ?? null,
-    detail: detail.data ?? row ?? undefined,
+    detail: detail.data,
   });
   const open = useCallback((next: Row, point: { x: number; y: number }) => {
     setRow(next);

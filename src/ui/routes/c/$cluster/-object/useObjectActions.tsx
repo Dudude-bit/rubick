@@ -390,7 +390,7 @@ export function useObjectActions({
           kind={kind}
           name={name}
           namespace={namespace}
-          current={(detail as ScalableInfo | undefined)?.replicas.desired ?? 0}
+          current={(detail as ScalableInfo | undefined)?.replicas.desired}
           busy={scale.isPending}
           warnings={scaleWarnings(governance.data, intercept("Scale"), t)}
           onSubmit={(replicas) => scale.mutate(replicas)}

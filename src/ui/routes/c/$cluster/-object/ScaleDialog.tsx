@@ -24,8 +24,8 @@ export interface ScaleDialogProps {
   kind: string;
   name: string;
   namespace: string | null;
-  /** Where the field starts: the replica count the object has right now. */
-  current: number;
+  /** Where the field starts: the replica count, undefined until it is read. */
+  current: number | undefined;
   busy: boolean;
   onSubmit: (replicas: number) => void;
   /**
@@ -88,6 +88,7 @@ export function ScaleDialog({
             )
         )}
         <ScaleForm
+          key={current === undefined ? "unread" : "read"}
           current={current}
           busy={busy}
           blocked={gate.blocked}
@@ -114,7 +115,7 @@ function ScaleForm({
   onCancel,
   onSubmit,
 }: {
-  current: number;
+  current: number | undefined;
   busy: boolean;
   /** True while the critical-cluster name has not been typed back. */
   blocked: boolean;
@@ -125,7 +126,12 @@ function ScaleForm({
   onSubmit: (replicas: number) => void;
 }) {
   const t = useT();
-  const [replicas, setReplicas] = useState(current);
+  const [typed, setTyped] = useState(
+    current === undefined ? "" : String(current)
+  );
+  const replicas = typed.trim() === "" ? null : Number(typed);
+  const counted =
+    replicas !== null && Number.isInteger(replicas) && replicas >= 0;
 
   // A form, so Enter scales as the button does; a disabled submit button
   // holds Enter back too.
@@ -134,7 +140,7 @@ function ScaleForm({
       className="grid grid-cols-[minmax(0,1fr)] gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit(replicas);
+        if (counted) onSubmit(replicas);
       }}
     >
       <div className="space-y-2">
@@ -143,18 +149,23 @@ function ScaleForm({
           id="replicas"
           type="number"
           min={0}
-          value={replicas}
-          onChange={(event) =>
-            setReplicas(parseInt(event.target.value, 10) || 0)
-          }
+          value={typed}
+          onChange={(event) => setTyped(event.target.value)}
         />
+        {!counted && (
+          <p className="text-[11px] text-fg-mut">
+            {current === undefined && typed === ""
+              ? t("action", "scaleCountUnread")
+              : t("action", "scaleNeedsCount")}
+          </p>
+        )}
       </div>
       {gateInput}
       <DialogFooter>
         <Button type="button" variant="outline" onClick={onCancel}>
           {t("action", "cancel")}
         </Button>
-        <Button type="submit" disabled={busy || blocked}>
+        <Button type="submit" disabled={busy || blocked || !counted}>
           {confirmLabel}
         </Button>
       </DialogFooter>

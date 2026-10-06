@@ -957,6 +957,9 @@ export const en = {
     andClusterDefault: ", this cluster's default",
     scaleKind: "Scale {kind} {name}",
     replicasLabel: "Number of replicas",
+    scaleCountUnread:
+      "The current count is not read yet. Type how many replicas to run.",
+    scaleNeedsCount: "Type how many replicas to run, 0 or more.",
     scopeWindowToIt: "Scope this window to it",
     itsOwnAlb: "its own ALB",
     filterLoadBalancers: "Filter load balancers",

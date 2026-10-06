@@ -12,13 +12,18 @@ import { Eye, Trash2 } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
 
 const getStatefulset = vi.hoisted(() => vi.fn());
+const getDeployment = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/commands", async (original) => {
   const real = await original<typeof import("@/lib/commands")>();
-  return { commands: { ...real.commands, getStatefulset } };
+  return { commands: { ...real.commands, getStatefulset, getDeployment } };
 });
 
 import { ResourceList } from "./ResourceList";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { hrefOf, objectLink } from "@/lib/links";
+import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
+import { planPeekActions } from "../-peek/peek-actions";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 
@@ -80,6 +85,8 @@ beforeEach(() => {
 
 afterEach(() => {
   listDelete.mockReset();
+  getDeployment.mockReset();
+  getStatefulset.mockReset();
 });
 
 describe("a list row's right-click menu", () => {
@@ -131,13 +138,34 @@ describe("a list row's right-click menu", () => {
     expect(listDelete).not.toHaveBeenCalled();
   });
 
-  /** Scale opens the dialog the peek opens, seeded with the row's count. */
+  /** Scale opens the dialog the peek opens, seeded with the object's count. */
   it("opens the scale dialog the peek uses", async () => {
+    getDeployment.mockResolvedValue({ ...WEB, generation: 1 });
     const user = userEvent.setup();
     await draw();
     openMenu();
     await user.click(screen.getByRole("menuitem", { name: "Scale" }));
     expect(await screen.findByRole("spinbutton")).toHaveValue(2);
+  });
+
+  /**
+   * The row is not the object, so until the Deployment is read its count is
+   * not known; seeding 0 made Scale then Enter a scale to zero.
+   */
+  it("starts the scale field empty, and holds Scale, while the count is unread", async () => {
+    getDeployment.mockReturnValue(new Promise(() => {}));
+    const user = userEvent.setup();
+    await draw();
+    openMenu();
+    await user.click(screen.getByRole("menuitem", { name: "Scale" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByRole("spinbutton")).toHaveValue(null);
+    expect(
+      within(dialog).getByText(/current count is not read yet/)
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Scale" })
+    ).toBeDisabled();
   });
 
   it("copies the kubectl command that reads this object", async () => {
@@ -222,4 +250,51 @@ describe("a StatefulSet row's delete", () => {
     ).toBeInTheDocument();
     expect(getStatefulset).toHaveBeenCalledWith("orders-db", "shop");
   });
+});
+
+const t: T = (section, key, values) => translate("en", section, key, values);
+
+describe("every list kind's row menu", () => {
+  /**
+   * The menu planned from the list's row as though it were the object, and a
+   * row carries only what its list command answered: right-clicking a pod
+   * fell over on its containers' ports. A row with nothing but its name must
+   * open the same menu the kind's unread object plans.
+   */
+  it.each(RESOURCE_REGISTRY.map((entry) => [entry.kind, entry] as const))(
+    "opens on a bare %s row before the object is read",
+    async (_kind, entry) => {
+      const row = {
+        name: "x",
+        namespace: entry.scope === "cluster" ? null : "shop",
+      };
+      const link = objectLink({ kind: entry.kind, ...row });
+      await renderWithRouter(
+        <ResourceList<typeof row>
+          title={entry.plural}
+          emptyStateLabel={entry.plural}
+          data={[row]}
+          columns={[
+            {
+              accessorKey: "name",
+              header: "Name",
+              cell: ({ row: r }) => (
+                <span data-testid="cell">{r.original.name}</span>
+              ),
+            },
+          ]}
+          getRowHref={link ? () => hrefOf(link) : undefined}
+        />,
+        { at: `/c/prod/${entry.plural}`, route: "/c/$cluster/$" }
+      );
+      openMenu();
+      const menu = await screen.findByRole("menu");
+      const plan = planPeekActions(entry.kind, undefined, t);
+      for (const action of [...plan.inline, ...plan.menu]) {
+        expect(
+          within(menu).getByRole("menuitem", { name: action.label })
+        ).toBeInTheDocument();
+      }
+    }
+  );
 });

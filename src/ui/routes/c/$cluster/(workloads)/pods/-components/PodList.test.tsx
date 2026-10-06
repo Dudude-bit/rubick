@@ -26,7 +26,15 @@ const api: PodRow = {
   status: { phase: "Running", display: "Running" },
   nodeName: "n1",
   podIp: null,
-  containers: [],
+  containers: [
+    {
+      name: "app",
+      ready: true,
+      started: true,
+      phase: "app",
+      state: { type: "running" },
+    },
+  ],
   initContainers: [],
   labels: {},
   createdAt: null,
@@ -107,6 +115,15 @@ describe("the row's delete button", () => {
       command === "get_pod"
         ? {
             ...api,
+            containers: api.containers.map((container) => ({
+              ...container,
+              image: "api:1",
+              lastTerminated: null,
+              restartCount: 0,
+              ports: [],
+              env: [],
+              envFrom: [],
+            })),
             hostIp: null,
             annotations: {},
             status: { ...api.status, ready: true, conditions: [] },
@@ -135,6 +152,29 @@ describe("the row's delete button", () => {
       await within(confirm).findByText(
         /ReplicaSet api-7d will start a replacement/
       )
+    ).toBeInTheDocument();
+  });
+});
+
+describe("the row's right-click menu", () => {
+  /**
+   * The menu planned a pod's actions from the list's row, whose containers
+   * carry no ports, and the whole page fell over on `container.ports.map`.
+   */
+  it("opens on a row the list command answered, before the pod is read", async () => {
+    await renderWithRouter(<PodList />, { at: "/c/prod/pods" });
+
+    fireEvent.contextMenu(screen.getAllByRole("row")[1], {
+      clientX: 30,
+      clientY: 40,
+    });
+
+    const menu = await screen.findByRole("menu");
+    expect(
+      within(menu).getByRole("menuitem", { name: "Restart" })
+    ).toBeInTheDocument();
+    expect(
+      within(menu).getByRole("menuitem", { name: "Port forward" })
     ).toBeInTheDocument();
   });
 });
