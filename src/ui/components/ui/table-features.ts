@@ -41,6 +41,8 @@ export interface AppColumnMeta {
   share?: (row: never, t: T) => ReportValue | string | null;
   /** The header's words, where the header is a control rather than `columnHeader`. */
   label?: HeaderSaying;
+  /** Pixels the column is never drawn under, whatever the table's width. */
+  floor?: number;
 }
 
 /**

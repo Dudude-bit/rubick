@@ -29,6 +29,11 @@ import { useT } from "@/i18n/useT";
 /** Long enough to read, short enough that a second copy is not blocked on it. */
 const CONFIRM_MS = 1200;
 
+const IPV4 = /^(?:\d{1,3}\.){3}\d{1,3}$/;
+
+/** `255.255.255.255` at 7.2px a glyph, its 14px copy mark and a cell's 20px of padding. */
+export const IPV4_CELL_PX = 144;
+
 export interface CopyableValueProps {
   value: string;
   /** What the button announces, e.g. "Pod IP 10.42.0.6". */
@@ -96,7 +101,15 @@ export function CopyableValue({
         className
       )}
     >
-      <span className="truncate">{children ?? value}</span>
+      <span
+        className={
+          children === undefined && IPV4.test(value)
+            ? "whitespace-nowrap"
+            : "truncate"
+        }
+      >
+        {children ?? value}
+      </span>
       {!(quietMark && !copied) && (
         <Mark
           className={cn(

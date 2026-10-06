@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { columnShares } from "@/components/ui/column-shares";
+
 import { configMapColumns } from "../(config)/configmaps/-components/ConfigMapList";
 import { columns as cronJobs } from "../(workloads)/cronjobs/-components/CronJobList";
 import { columns as daemonSets } from "../(workloads)/daemonsets/-components/DaemonSetList";
@@ -25,7 +27,7 @@ interface Column {
   accessorKey?: unknown;
   accessorFn?: unknown;
   header?: unknown;
-  meta?: { share?: unknown; label?: unknown };
+  meta?: { share?: unknown; label?: unknown; floor?: number };
 }
 
 /**
@@ -146,6 +148,48 @@ describe("what a list page declares about its columns", () => {
         )
         .map(nameOf);
       expect(unnamed).toEqual([]);
+    }
+  );
+});
+
+describe("an address column", () => {
+  const ADDRESS = new Set([
+    "ip",
+    "clusterIp",
+    "internal_ip",
+    "externalIps",
+    "loadBalancerIps",
+  ]);
+  /** 15 glyphs of 12px JetBrains Mono, the 14px copy mark, 20px of cell padding. */
+  const WHOLE_IPV4_PX = 15 * 7.2 + 14 + 20;
+  /** A 1440px window with and without the peek open; four quick actions. */
+  const WIDTHS = [640, 1160];
+  const ACTIONS = { size: 20 + 4 * 22 };
+
+  /**
+   * Sam read "10.111.219.1..." for 10.111.219.134 in Services, "192.168..."
+   * on every Pods row and "172.30.1..." on Nodes: the share a column got of
+   * the table was narrower than the address. Fails if any list draws an
+   * address column narrower than a whole IPv4 and its copy mark.
+   */
+  it.each(
+    PAGES.filter(([, columns]) => columns.some((c) => ADDRESS.has(nameOf(c))))
+  )(
+    "%s draws a whole IPv4 at every width a list is drawn at",
+    (_page, columns) => {
+      const specs = [...columns, ACTIONS].map((c) => ({
+        size: c.size ?? 150,
+        floor: "meta" in c ? c.meta?.floor : undefined,
+      }));
+      for (const width of WIDTHS) {
+        const shares = columnShares(specs, width);
+        columns.forEach((column, index) => {
+          if (!ADDRESS.has(nameOf(column))) return;
+          expect((shares[index] / 100) * width).toBeGreaterThanOrEqual(
+            WHOLE_IPV4_PX
+          );
+        });
+      }
     }
   );
 });

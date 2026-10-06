@@ -913,6 +913,32 @@ describe("column widths", () => {
   });
 
   /**
+   * A ClusterIP column's share of a 1160px table was 136px, and a 14-digit
+   * address ended "10.111.219.1...". Fails if a column's floor stops reaching
+   * its header once the table has been measured.
+   */
+  it("draws a column with a floor no narrower than the floor, once measured", async () => {
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(600);
+    try {
+      await wrap(
+        <DataTable<Item>
+          columns={[
+            { ...columns[0], size: 500 },
+            { ...columns[1], size: 100, meta: { floor: 300 } },
+          ]}
+          data={DATA}
+        />
+      );
+      expect(widthOf("Status")).toBe("50%");
+      expect(widthOf("Name")).toBe("50%");
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  /**
    * A drag moves width from one column to the next; it does not add width.
    *
    * These tables are laid out in shares of their own width, and a dragged

@@ -15,7 +15,7 @@ import type { QuickAction } from "@/components/ui/quick-actions";
 import { hrefOf, objectLink } from "@/lib/links";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { MetricValue } from "@/components/ui/metric-value";
-import { CopyableAddress } from "@/components/ui/copyable-value";
+import { CopyableAddress, IPV4_CELL_PX } from "@/components/ui/copyable-value";
 import { useCallback, useMemo } from "react";
 import { commands } from "@/lib/commands";
 import { whole } from "@/lib/namespace-scope";
@@ -116,6 +116,7 @@ export const columns = (
     id: "internal_ip",
     header: columnHeader("columns", "internalIp"),
     meta: {
+      floor: IPV4_CELL_PX,
       share: (row: NodeInfo, t) => ({
         text:
           row.status.addresses.find((a) => a.type === "InternalIP")?.address ??

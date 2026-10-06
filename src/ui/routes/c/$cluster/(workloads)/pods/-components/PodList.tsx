@@ -12,7 +12,7 @@ import {
 } from "@/hooks/usePodsWithMetrics";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { silenceNote, type WithNodeSilence } from "@/lib/node-reporting";
-import { CopyableAddress } from "@/components/ui/copyable-value";
+import { CopyableAddress, IPV4_CELL_PX } from "@/components/ui/copyable-value";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -212,6 +212,7 @@ export const columns: ColumnDef<PodRow>[] = [
     id: "ip",
     header: columnHeader("columns", "ip"),
     meta: {
+      floor: IPV4_CELL_PX,
       share: (pod: PodRow, t) =>
         pod.podIp
           ? { text: pod.podIp, mono: true }

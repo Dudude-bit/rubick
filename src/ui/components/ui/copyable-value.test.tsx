@@ -31,6 +31,25 @@ describe("CopyableValue", () => {
     expect(screen.getByRole("button")).toHaveClass("max-w-full", "min-w-0");
   });
 
+  /**
+   * "10.111.219.1..." read as a different address than 10.111.219.134. Fails
+   * if an IPv4 may end in an ellipsis again, or if a hostname, which no
+   * column can promise to fit, stops ending in one.
+   */
+  it("never cuts an IPv4 address and still cuts a hostname", () => {
+    render(
+      <>
+        <CopyableValue value="10.111.219.134" />
+        <CopyableValue value="a1b2c3d4.elb.eu-west-1.amazonaws.com" />
+      </>
+    );
+    expect(screen.getByText("10.111.219.134")).not.toHaveClass("truncate");
+    expect(screen.getByText("10.111.219.134")).toHaveClass("whitespace-nowrap");
+    expect(
+      screen.getByText("a1b2c3d4.elb.eu-west-1.amazonaws.com")
+    ).toHaveClass("truncate");
+  });
+
   it("copies the value on a click", async () => {
     const user = userEvent.setup();
     const writeText = stubClipboard();

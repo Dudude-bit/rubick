@@ -55,6 +55,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { buildTableRows, type BodyItem } from "./data-table-rows";
+import { columnShares } from "./column-shares";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 
 import { cn } from "@/lib/utils";
@@ -251,6 +252,32 @@ function createActionsColumn<TData extends RowData>(
     enableSorting: false,
     enableHiding: false,
   };
+}
+
+/** The scroll port's width, measured only for a table with a column that needs it. */
+function usePortWidth(
+  ref: React.RefObject<HTMLElement | null>,
+  enabled: boolean
+): number {
+  const [width, setWidth] = React.useState(0);
+  React.useLayoutEffect(() => {
+    const node = ref.current;
+    if (!enabled || !node) return;
+    setWidth(node.clientWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    let frame = 0;
+    // A frame later, for the reason the virtualiser below measures in one.
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setWidth(node.clientWidth));
+    });
+    observer.observe(node);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
+  }, [ref, enabled]);
+  return width;
 }
 
 /** Where a nav key wants to go, or null if it is not a nav key. */
@@ -470,8 +497,7 @@ function DataTableInner<TData extends RowData>({
       columnId: string,
       nextColumnId: string,
       sizes: { own: number; next: number },
-      totalWidth: number,
-      total: number,
+      pairWidth: number,
       started: ColumnWidths
     ) => {
       // Only the primary button. A right-click on the grip started a drag
@@ -480,10 +506,10 @@ function DataTableInner<TData extends RowData>({
       if (event.button !== 0) return;
       event.preventDefault();
       const startX = event.clientX;
-      // A share is `size / total`, so a screen pixel is `total / width` of
-      // size. Zero width means nobody has measured the table yet, and
+      // A screen pixel is the pair's size over the pixels it is drawn
+      // across. Zero width means nobody has measured the table yet, and
       // dividing by it would send the first move straight to the clamp.
-      const perPixel = totalWidth > 0 ? total / totalWidth : 1;
+      const perPixel = pairWidth > 0 ? (sizes.own + sizes.next) / pairWidth : 1;
       // A floor never wider than the column already is. The actions strip is
       // 64 units by design, so a flat 80 made the first pixel of any drag
       // inflate it and narrow its neighbour, undoing sizing nobody touched.
@@ -590,6 +616,11 @@ function DataTableInner<TData extends RowData>({
   }, [ordered, selection]);
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const hasFloor = React.useMemo(
+    () => columnsWithActions.some((column) => column.meta?.floor),
+    [columnsWithActions]
+  );
+  const portWidth = usePortWidth(scrollRef, hasFloor);
 
   // The window is spliced into the table with spacer rows rather than
   // absolutely positioned ones: an out-of-flow `tr` leaves the fixed-layout
@@ -1105,13 +1136,13 @@ function DataTableInner<TData extends RowData>({
               )}
             >
               {table.getHeaderGroups().map((headerGroup) => {
-                // The denominator for the shares below. Only the columns
-                // actually on screen count, so hiding one hands its room to the
-                // rest instead of leaving a gap.
-                const totalSize = headerGroup.headers.reduce(
-                  (sum, header) => sum + header.getSize(),
-                  0
-                );
+                // Only the columns actually on screen count, so hiding one
+                // hands its room to the rest instead of leaving a gap.
+                const specs = headerGroup.headers.map((header) => ({
+                  size: header.getSize(),
+                  floor: header.column.columnDef.meta?.floor,
+                }));
+                const shares = columnShares(specs, portWidth);
                 return (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header, index) => {
@@ -1130,9 +1161,7 @@ function DataTableInner<TData extends RowData>({
                           // actions off the right edge. As percentages the same
                           // numbers keep their proportions and sum to the table
                           // at any width.
-                          style={{
-                            width: `${(header.getSize() / totalSize) * 100}%`,
-                          }}
+                          style={{ width: `${shares[index]}%` }}
                         >
                           {header.isPlaceholder
                             ? null
@@ -1156,7 +1185,10 @@ function DataTableInner<TData extends RowData>({
                               // to resize". The keyboard path belongs on an
                               // affordance of its own, not on this grip.
                               role="presentation"
-                              onPointerDown={(event) =>
+                              onPointerDown={(event) => {
+                                const port =
+                                  scrollRef.current?.clientWidth ?? 0;
+                                const drawn = columnShares(specs, port);
                                 startResize(
                                   event,
                                   header.column.id,
@@ -1165,11 +1197,11 @@ function DataTableInner<TData extends RowData>({
                                     own: header.getSize(),
                                     next: next.getSize(),
                                   },
-                                  scrollRef.current?.clientWidth ?? 0,
-                                  totalSize,
+                                  ((drawn[index] + drawn[index + 1]) / 100) *
+                                    port,
                                   columnSizing
-                                )
-                              }
+                                );
+                              }}
                               onDoubleClick={() =>
                                 setColumnSizing((old) => {
                                   const back = { ...old };

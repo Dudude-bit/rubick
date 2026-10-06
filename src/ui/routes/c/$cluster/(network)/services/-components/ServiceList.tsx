@@ -5,7 +5,7 @@ import type { ServiceInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { PortsDisplay } from "../../-components";
-import { AddressCell } from "@/components/ui/copyable-value";
+import { AddressCell, IPV4_CELL_PX } from "@/components/ui/copyable-value";
 import { BalancerAddress } from "../../../-object/BalancerAddress";
 import { BackingAround, HealthCell } from "./ServiceHealthCell";
 import {
@@ -52,10 +52,10 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     cell: ({ row }) => <HealthCell service={row.original} />,
   },
   {
-    // `255.255.255.255` and its copy mark, whole at 1440px.
     size: 150,
     accessorKey: "clusterIp",
     header: columnHeader("columns", "clusterIp"),
+    meta: { floor: IPV4_CELL_PX },
     cell: ({ row }) => (
       <AddressCell value={row.original.clusterIp} labelKey="clusterIp" />
     ),
@@ -65,6 +65,8 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     size: 180,
     accessorKey: "externalIps",
     header: columnHeader("columns", "externalIps"),
+    // The address and the 16px icon before it.
+    meta: { floor: IPV4_CELL_PX + 16 },
     cell: ({ row }) => {
       const service = row.original;
       if (service.externalIps.length === 0 && service.type !== "LoadBalancer")

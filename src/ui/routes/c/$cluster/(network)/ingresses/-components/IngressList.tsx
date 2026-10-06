@@ -22,7 +22,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { CopyableAddress } from "@/components/ui/copyable-value";
+import { CopyableAddress, IPV4_CELL_PX } from "@/components/ui/copyable-value";
 import { ResourceList } from "../../../-list/ResourceList";
 import {
   createNameColumn,
@@ -213,6 +213,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
     size: 150,
     accessorKey: "loadBalancerIps",
     header: columnHeader("columns", "address"),
+    meta: { floor: IPV4_CELL_PX },
     cell: ({ row }) => <IngressAddressCell ingress={row.original} />,
   },
   {

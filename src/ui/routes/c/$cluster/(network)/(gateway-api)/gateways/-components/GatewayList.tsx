@@ -10,7 +10,7 @@ import {
   createNameColumn,
   createNamespaceColumn,
 } from "../../../../-list/columns";
-import { CopyableAddress } from "@/components/ui/copyable-value";
+import { CopyableAddress, IPV4_CELL_PX } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { columnHeader } from "@/i18n/column-header";
 import { useT, type T } from "@/i18n/useT";
@@ -122,6 +122,7 @@ export const GatewayList = createResourceListPage<GatewayInfo>({
       id: "addresses",
       header: columnHeader("columns", "addresses"),
       meta: {
+        floor: IPV4_CELL_PX,
         share: (row: GatewayInfo, t) => ({
           text: row.addresses.join(", ") || t("empty", "noneLower"),
           mono: true,
