@@ -44,10 +44,39 @@ export interface ResourceChange<T> {
   resource: T | null;
 }
 
+type Watcher = (payload: EventPayload<"resource-event">) => void;
+const watchers = new Set<Watcher>();
+let shared: Promise<Unlisten> | null = null;
+
+/**
+ * Every watch hears one shared listener. Tauri forgets an unlistened
+ * callback a round trip before the backend stops sending to it, so a watch
+ * with its own listener that left while another's batch was in flight logged
+ * "Couldn't find callback id". Leaving the set never reaches Tauri.
+ */
 export function listenResourceEvents<T>(
   handler: AppEventHandler<ResourceEvent<T>>
 ): Promise<Unlisten> {
-  return transport().listen("resource-event", (payload) =>
-    handler({ payload: payload as unknown as ResourceEvent<T> })
+  const watcher: Watcher = (payload) =>
+    handler({ payload: payload as unknown as ResourceEvent<T> });
+  watchers.add(watcher);
+  const registering = (shared ??= transport().listen(
+    "resource-event",
+    (payload) => {
+      for (const each of watchers) each(payload);
+    }
+  ));
+  const release = () => {
+    watchers.delete(watcher);
+    if (watchers.size > 0 || shared !== registering) return;
+    shared = null;
+    void registering.then((off) => off());
+  };
+  return registering.then(
+    () => release,
+    (error: unknown) => {
+      release();
+      throw error;
+    }
   );
 }
