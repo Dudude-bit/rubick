@@ -10,12 +10,21 @@ import { fireEvent, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Eye, Trash2 } from "lucide-react";
 import type { ColumnDef } from "@/components/ui/table-features";
+import type { ObjectRef, ResourceConnections } from "@/generated/types";
 
 const getStatefulset = vi.hoisted(() => vi.fn());
 const getDeployment = vi.hoisted(() => vi.fn());
+const getResourceConnections = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/commands", async (original) => {
   const real = await original<typeof import("@/lib/commands")>();
-  return { commands: { ...real.commands, getStatefulset, getDeployment } };
+  return {
+    commands: {
+      ...real.commands,
+      getStatefulset,
+      getDeployment,
+      getResourceConnections,
+    },
+  };
 });
 
 import { ResourceList } from "./ResourceList";
@@ -46,6 +55,37 @@ const columns: ColumnDef<Deployment>[] = [
     cell: ({ row }) => <span data-testid="cell">{row.original.name}</span>,
   },
 ];
+
+const ref = (kind: string, facts: ObjectRef["facts"]): ObjectRef => ({
+  kind,
+  name: "web",
+  namespace: "shop",
+  existence: "present",
+  facts,
+});
+
+const governedByAutoscaler: ResourceConnections = {
+  subject: ref("Deployment", null),
+  edges: [
+    {
+      from: ref("HorizontalPodAutoscaler", {
+        kind: "autoscaler",
+        minReplicas: 2,
+        maxReplicas: 5,
+        currentReplicas: 2,
+        desiredReplicas: 2,
+        metrics: [],
+        conditions: [],
+        lastScaleTime: null,
+      }),
+      to: ref("Deployment", null),
+      relation: { verb: "governs", selector: null },
+    },
+  ],
+  stops: [],
+  published: [],
+  notLookedAt: [],
+};
 
 const listDelete = vi.fn();
 
@@ -87,6 +127,7 @@ afterEach(() => {
   listDelete.mockReset();
   getDeployment.mockReset();
   getStatefulset.mockReset();
+  getResourceConnections.mockReset();
 });
 
 describe("a list row's right-click menu", () => {
@@ -166,6 +207,31 @@ describe("a list row's right-click menu", () => {
     expect(
       within(dialog).getByRole("button", { name: "Scale" })
     ).toBeDisabled();
+  });
+
+  /**
+   * The menu's trapped focus took the field's focus back while the dialog
+   * mounted, and the dialog then focused its first field: minReplicas once
+   * the autoscaler was cached, so "3, Enter" asked to change the bounds.
+   */
+  it("puts the cursor in the replica count on every opening, the autoscaler cached or not", async () => {
+    getDeployment.mockResolvedValue({ ...WEB, generation: 1 });
+    getResourceConnections.mockResolvedValue(governedByAutoscaler);
+    const user = userEvent.setup();
+    await draw();
+    for (const opening of [1, 2, 3]) {
+      openMenu();
+      await user.click(screen.getByRole("menuitem", { name: "Scale" }));
+      const dialog = await screen.findByRole("dialog");
+      await within(dialog).findByLabelText("minReplicas");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(
+        within(dialog).getByLabelText("Number of replicas"),
+        `opening ${opening}`
+      ).toHaveFocus();
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+      await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    }
   });
 
   it("copies the kubectl command that reads this object", async () => {

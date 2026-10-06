@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -61,10 +68,29 @@ export function ScaleDialog({
   useEffect(() => {
     if (!open) gateReset();
   }, [open, gateReset]);
+  const count = useRef<HTMLInputElement>(null);
+  // A count read after the dialog opened remounts the field, which drops the
+  // focus it held.
+  const claimFocus = useCallback((input: HTMLInputElement | null) => {
+    count.current = input;
+    if (
+      !input ||
+      input.closest("[role=dialog]")?.contains(document.activeElement)
+    )
+      return;
+    focusCount(input);
+  }, []);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent
+        // Opened from a menu, the menu's focus trap takes the count's focus
+        // back while this mounts, and Radix then focuses the first field.
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          focusCount(count.current);
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
             {t("action", "scaleKind", {
@@ -89,6 +115,7 @@ export function ScaleDialog({
         )}
         <ScaleForm
           key={current === undefined ? "unread" : "read"}
+          countRef={claimFocus}
           current={current}
           busy={busy}
           blocked={gate.blocked}
@@ -106,7 +133,13 @@ export function ScaleDialog({
   );
 }
 
+function focusCount(input: HTMLInputElement | null) {
+  input?.focus();
+  input?.select();
+}
+
 function ScaleForm({
+  countRef,
   current,
   busy,
   blocked,
@@ -115,6 +148,7 @@ function ScaleForm({
   onCancel,
   onSubmit,
 }: {
+  countRef: Ref<HTMLInputElement>;
   current: number | undefined;
   busy: boolean;
   /** True while the critical-cluster name has not been typed back. */
@@ -132,19 +166,6 @@ function ScaleForm({
   const replicas = typed.trim() === "" ? null : Number(typed);
   const counted =
     replicas !== null && Number.isInteger(replicas) && replicas >= 0;
-  // The count takes focus on every opening, and again when it arrives: once
-  // the autoscaler's bounds were cached they came first, and a typed count
-  // went into minReplicas.
-  const claimFocus = useCallback((input: HTMLInputElement | null) => {
-    if (
-      !input ||
-      input.closest("[role=dialog]")?.contains(document.activeElement)
-    )
-      return;
-    input.focus();
-    input.select();
-  }, []);
-
   // A form, so Enter scales as the button does; a disabled submit button
   // holds Enter back too.
   return (
@@ -158,7 +179,7 @@ function ScaleForm({
       <div className="space-y-2">
         <Label htmlFor="replicas">{t("action", "replicasLabel")}</Label>
         <Input
-          ref={claimFocus}
+          ref={countRef}
           id="replicas"
           type="number"
           min={0}
