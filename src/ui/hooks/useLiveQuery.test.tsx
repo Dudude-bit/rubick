@@ -141,6 +141,14 @@ const advance = async (ms: number) => {
   });
 };
 
+/** Until a stretch of `ms` passes with no read in it. */
+const quietFor = async (ms: number) => {
+  for (let before = -1; before !== reads;) {
+    before = reads;
+    await advance(ms);
+  }
+};
+
 const wrap = (ui: React.ReactNode) =>
   render(
     <QueryClientProvider client={client()}>
@@ -436,6 +444,53 @@ async function outageThenAnswer(): Promise<number> {
   }
   return reads;
 }
+
+describe("a refused read the reader touches", () => {
+  /**
+   * Asked again, a read with nothing to show went back to loading, and the
+   * refusal's Choose a namespace button was gone before the click that woke
+   * it landed. The refusal memory would have answered the same.
+   */
+  it("is not asked again by a touch or a return to the window", async () => {
+    wrap(<Refused />);
+    await settle();
+    await advance(60_000);
+    await quietFor(RATE + 1);
+    const quiet = reads;
+
+    act(() => useWindowActivity.setState({ interactionAt: Date.now() }));
+    await settle();
+    expect(reads).toBe(quiet);
+
+    act(() => useWindowActivity.setState({ visible: false, focused: false }));
+    act(() => useWindowActivity.setState({ visible: true, focused: true }));
+    await settle();
+    expect(reads).toBe(quiet);
+  });
+
+  /** In a group only the refused part is left alone; the rest are re-read. */
+  it("leaves a group's refused part alone and re-reads the rest", async () => {
+    outage.on = true;
+    try {
+      wrap(<RecoveringFanout />);
+      await settle();
+      await advance(60_000);
+      await quietFor(RATE + 1);
+      const quiet = reads;
+
+      act(() => useWindowActivity.setState({ interactionAt: Date.now() }));
+      await settle();
+      expect(reads).toBe(quiet + 1);
+
+      act(() => useWindowActivity.setState({ visible: false, focused: false }));
+      act(() => useWindowActivity.setState({ visible: true, focused: true }));
+      await settle();
+      expect(reads).toBe(quiet + 2);
+    } finally {
+      outage.on = false;
+    }
+  });
+});
 
 describe("a read that answers again after a refusal", () => {
   afterEach(() => {

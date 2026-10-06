@@ -37,7 +37,7 @@ import {
   effectiveInterval,
   type RefreshRate,
 } from "@/lib/refresh";
-import { ERROR_CODES, errorCode } from "@/lib/error-utils";
+import { ERROR_CODES, errorCode, isRefusal } from "@/lib/error-utils";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { useWindowActivity } from "@/lib/window-activity";
 
@@ -116,6 +116,8 @@ interface JoinedParts<T> {
   settled: number[];
   /** Which parts' latest read failed. */
   failed: boolean[];
+  /** Which parts the cluster refused. */
+  refused: boolean[];
   isLoading: boolean;
   /** Some part is in flight right now. */
   fetching: boolean;
@@ -140,6 +142,7 @@ function joinParts<T>(parts: Array<UseQueryResult<T, Error>>): JoinedParts<T> {
       Math.max(part.dataUpdatedAt, part.errorUpdatedAt)
     ),
     failed: parts.map((part) => part.status === "error"),
+    refused: parts.map((part) => isRefusal(part.error)),
     isLoading: parts.some((part) => part.isLoading),
     fetching: parts.some((part) => part.fetchStatus === "fetching"),
     error: parts.find((part) => part.error)?.error ?? null,
@@ -204,6 +207,7 @@ export function useLiveQueries<T>(options: {
     stamps,
     settled,
     failed,
+    refused,
     isLoading,
     fetching,
     error,
@@ -271,8 +275,10 @@ export function useLiveQueries<T>(options: {
     // `cancelRefetch: false`: a part whose own focus refetch is already in
     // flight joins it instead of being restarted, which is the difference
     // between one wave of requests and two on a group of four.
-    for (const refetch of refetchers) void refetch({ cancelRefetch: false });
-  }, [visible, focused, enabled, oldest, refetchers]);
+    refetchers.forEach((refetch, index) => {
+      if (!refused[index]) void refetch({ cancelRefetch: false });
+    });
+  }, [visible, focused, enabled, oldest, refetchers, refused]);
 
   // The reader touching the window retires whatever a still screen had
   // concluded. Subscribed imperatively rather than selected: an interaction
@@ -284,7 +290,8 @@ export function useLiveQueries<T>(options: {
     enabled: boolean;
     oldest: number;
     refetchers: Array<(options?: RefetchOptions) => Promise<unknown>>;
-  }>({ steadyRuns, base, enabled, oldest, refetchers });
+    refused: boolean[];
+  }>({ steadyRuns, base, enabled, oldest, refetchers, refused });
   useEffect(() => {
     group.current = {
       steadyRuns,
@@ -292,8 +299,9 @@ export function useLiveQueries<T>(options: {
       enabled: enabled && surfaceVisible,
       oldest,
       refetchers,
+      refused,
     };
-  }, [steadyRuns, base, enabled, surfaceVisible, oldest, refetchers]);
+  }, [steadyRuns, base, enabled, surfaceVisible, oldest, refetchers, refused]);
   useEffect(
     () =>
       useWindowActivity.subscribe((state, previous) => {
@@ -306,8 +314,9 @@ export function useLiveQueries<T>(options: {
         // reader would expect of it. Otherwise a reader scrolling a page would
         // refetch every query on it once a second.
         if (Date.now() - woken.oldest <= woken.base) return;
-        for (const refetch of woken.refetchers)
-          void refetch({ cancelRefetch: false });
+        woken.refetchers.forEach((refetch, index) => {
+          if (!woken.refused[index]) void refetch({ cancelRefetch: false });
+        });
       }),
     []
   );
@@ -414,6 +423,11 @@ export function useLiveQuery<
   // The object is gone, and asking again every few seconds only logs it
   // again. A mount or an explicit refetch still asks.
   const notFound = failed && errorCode(error) === ERROR_CODES.NOT_FOUND;
+  // The refusal memory answers a refused read until the next connect, so a
+  // touch or a return that asks again changes nothing but puts a read with
+  // no data back to loading: the button under the pointer is gone before its
+  // click lands. The timer still asks, so a new connection notices a grant.
+  const refused = failed && isRefusal(error);
   const seenAt = useRef(0);
   const seenData = useRef<TData | undefined>(undefined);
   const seenFailed = useRef(false);
@@ -446,10 +460,10 @@ export function useLiveQuery<
     // and the query's own mount fetch is already on its way. A query held back
     // by `enabled` has nothing to correct either, and `refetch` would go around
     // the gate that is holding it.
-    if (seenAt.current === 0 || !enabled || gone) return;
+    if (seenAt.current === 0 || !enabled || gone || refused) return;
     // Joins the read a re-enabled observer has already started.
     void refetch({ cancelRefetch: false });
-  }, [visible, focused, enabled, gone, refetch]);
+  }, [visible, focused, enabled, gone, refused, refetch]);
 
   // The reader touching the window retires whatever a still screen had
   // concluded. Subscribed imperatively rather than selected: an interaction
@@ -461,8 +475,8 @@ export function useLiveQuery<
   useEffect(() => {
     steadyRef.current = steadyRuns;
     baseRef.current = base;
-    enabledRef.current = enabled && surfaceVisible && !gone;
-  }, [steadyRuns, base, enabled, surfaceVisible, gone]);
+    enabledRef.current = enabled && surfaceVisible && !gone && !refused;
+  }, [steadyRuns, base, enabled, surfaceVisible, gone, refused]);
   useEffect(
     () =>
       useWindowActivity.subscribe((state, previous) => {

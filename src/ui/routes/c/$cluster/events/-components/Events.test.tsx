@@ -21,6 +21,8 @@ import {
   useScreenSections,
 } from "@/components/share/screen-share";
 import { commands } from "@/lib/commands";
+import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
+import { startWindowActivity } from "@/lib/window-activity";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
@@ -458,6 +460,54 @@ describe("stories", () => {
     await userEvent.click(screen.getByRole("tab", { name: "All events" }));
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
     expect(document.body.textContent).toContain("BackOff");
+  });
+});
+
+describe("the way out of a refused feed", () => {
+  /**
+   * Marco's first click on Choose a namespace after arriving on Events did
+   * nothing, 7 of 7: the click woke the quiet poll, the refused read went
+   * back to loading, and the button was gone before the click landed.
+   */
+  it("opens the namespace picker on the first click after a quiet stay", async () => {
+    const stop = startWindowActivity();
+    const opened = vi.fn();
+    window.addEventListener(SCOPE_PICKER_OPEN, opened);
+    useClusterStore.setState({
+      currentContext: "prod",
+      contexts: [{ name: "prod", namespace: "team-checkout" } as never],
+    });
+    vi.mocked(commands.checkListAccess).mockImplementation(
+      async (queries, namespaces) =>
+        queries.map((query) => ({
+          resource: query.resource,
+          allowed: namespaces[0] === "team-checkout",
+        }))
+    );
+    listEvents.mockRejectedValue(
+      Object.assign(new Error("events is forbidden"), {
+        code: "PERMISSION_DENIED",
+      })
+    );
+    const user = userEvent.setup();
+    try {
+      await mount("stories");
+      await screen.findByRole("button", { name: "Choose a namespace" });
+      await waitFor(() => expect(listEvents).toHaveBeenCalledTimes(3), {
+        timeout: 4000,
+      });
+      const later = Date.now() + 5000;
+      vi.spyOn(Date, "now").mockReturnValue(later);
+      await user.click(
+        screen.getByRole("button", { name: "Choose a namespace" })
+      );
+      expect(opened).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.mocked(Date.now).mockRestore();
+      window.removeEventListener(SCOPE_PICKER_OPEN, opened);
+      stop();
+      useClusterStore.setState({ currentContext: null, contexts: [] });
+    }
   });
 });
 
