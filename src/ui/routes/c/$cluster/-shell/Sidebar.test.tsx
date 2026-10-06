@@ -444,27 +444,15 @@ describe("the Network group", () => {
   });
 
   /**
-   * Reported on #178: a release's name is part of its pods, its deployments
-   * and its configmaps alike, and walking between those lists to follow one
-   * name meant typing it again at every stop.
-   *
-   * Asserted on the row's `href` rather than on the helper: a test that only
-   * calls `carriedSearch` stays green when the sidebar stops calling it,
-   * which is the whole of the change reverting with nothing to show for it.
+   * Sam typed "Crash" in Pods, opened Services from the sidebar, and read
+   * "Nothing matches Crash, 0 of 27 shown": a filter typed for one list
+   * emptied another. Fails if a sidebar row carries the list search again.
    */
-  it("carries the search on a row that lists a kind", async () => {
-    await wrap(<Sidebar />, `/c/prod/${listSegment("Pod")}?q=release-42`);
+  it("leaves the search with the list it was typed in", async () => {
+    await wrap(<Sidebar />, `/c/prod/${listSegment("Pod")}?q=Crash`);
     expect(
-      await screen.findByRole("link", { name: "Deployments" })
-    ).toHaveAttribute("href", "/c/prod/deployments?q=release-42");
-  });
-
-  /** Changes is not more of the same question, so it carries nothing. */
-  it("carries nothing to a row that lists no kind", async () => {
-    await wrap(<Sidebar />, `/c/prod/${listSegment("Pod")}?q=release-42`);
-    expect(
-      await screen.findByRole("link", { name: "Changes" })
-    ).toHaveAttribute("href", "/c/prod/changes");
+      await screen.findByRole("link", { name: "Services" })
+    ).toHaveAttribute("href", "/c/prod/services");
   });
 });
 

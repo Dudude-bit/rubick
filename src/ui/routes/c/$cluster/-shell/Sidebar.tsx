@@ -78,7 +78,6 @@ import type {
 } from "@/generated/types";
 import { errorWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
-import { carriedSearch } from "@/lib/carried-search";
 
 type NavKey = keyof typeof en.nav;
 
@@ -225,9 +224,6 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
     ],
   },
 ];
-
-const pathnameOf = (state: { location: { pathname: string } }) =>
-  state.location.pathname;
 
 /**
  * The catalog itself, `/c/<cluster>/integrations`. Every vendor without a
@@ -909,9 +905,6 @@ function NavRow({
   active?: boolean;
 }) {
   const t = useT();
-  const pathname = useRouterState({ select: pathnameOf });
-  const carried = carriedSearch(item.kind, useAppSearch(), pathname);
-  const link = carried ? { ...item.path, search: carried } : item.path;
   const overviewRow = item.labelKey === "overview";
 
   const isOpen = (routerSaysActive: boolean) => active ?? routerSaysActive;
@@ -920,7 +913,7 @@ function NavRow({
 
   return (
     <Link
-      {...link}
+      {...item.path}
       activeOptions={{ exact: overviewRow, includeSearch: false }}
       onClick={onPress}
       className={
