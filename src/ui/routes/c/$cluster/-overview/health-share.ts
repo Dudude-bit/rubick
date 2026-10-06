@@ -6,7 +6,11 @@ import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { NEEDS_ATTENTION, ROLLOUT_CODES } from "@/lib/workload-status";
-import { foldedWords, type Attention } from "@/lib/attention";
+import {
+  foldedWords,
+  type Attention,
+  type AttentionDetail,
+} from "@/lib/attention";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
   ClusterOverview,
@@ -42,6 +46,17 @@ export function composedDetail(
     case "unschedulable":
       return t("readings", "problemUnschedulable");
   }
+}
+
+/** A row's detail as plain words, whoever wrote them. */
+export function detailWords(
+  detail: AttentionDetail | null,
+  t: T
+): string | null {
+  if (detail === null) return null;
+  return detail.says === "said" || detail.says === "ours"
+    ? detail.text
+    : composedDetail(detail, t);
 }
 
 /** Reserved share past which the scheduler is the binding constraint. */
@@ -91,14 +106,7 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
   const items: ReportFinding[] = attention.items.map((item) => ({
     title: item.reason,
     detail:
-      [
-        foldedWords(item, t),
-        item.detail === null
-          ? null
-          : item.detail.says === "said" || item.detail.says === "ours"
-            ? item.detail.text
-            : composedDetail(item.detail, t),
-      ]
+      [foldedWords(item, t), detailWords(item.detail, t)]
         .filter((part) => part !== null)
         .join(" · ") || null,
     role: item.tone,

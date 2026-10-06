@@ -629,6 +629,19 @@ describe("what Needs attention says it checked", () => {
   });
 
   /**
+   * Lena read "...поэтому н…" and "...никто не подхваты…" with nothing to
+   * hover. Fails if a cut detail sentence stops carrying its whole text.
+   */
+  it("keeps a detail sentence its row cuts readable on hover", async () => {
+    const sentence =
+      "IngressClass traefik is served by nothing in this cluster, so nothing picks this Ingress up";
+    await panel(
+      attentionFrom([{ ...problem, detail: { says: "said", text: sentence } }])
+    );
+    expect(screen.getByTitle(sentence)).toBeInTheDocument();
+  });
+
+  /**
    * Dana: one failed CronJob run was three rows. The backend folds the
    * Job's failed pods into its row; the row and Share both say how many.
    * Fails if the count is dropped on either reader.

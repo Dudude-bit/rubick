@@ -10,6 +10,7 @@ import { KindIcon } from "@/components/object/KindIcon";
 import { useShareSection } from "@/components/share/screen-share";
 import {
   composedDetail,
+  detailWords,
   cpuRatio,
   deploymentSegments,
   memoryRatio,
@@ -179,7 +180,11 @@ function AttentionRow({ item }: { item: AttentionItem }) {
           <span className="text-fg-mut"> · {foldedWords(item, t)}</span>
         )}
         {item.detail && (
-          <span className="text-fg-fnt">
+          // The row cuts a long sentence; hovering it has the whole one.
+          <span
+            className="text-fg-fnt"
+            title={detailWords(item.detail, t) ?? undefined}
+          >
             {": "}
             <AttentionDetailText item={item} />
           </span>
