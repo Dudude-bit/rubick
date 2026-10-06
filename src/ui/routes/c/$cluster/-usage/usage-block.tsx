@@ -98,6 +98,18 @@ export interface UsageBlockProps {
   idleNote?: string;
 }
 
+/** Whole phrases per noun: a built "{noun}s" printed "capacitys". */
+const DECLARED = {
+  limitWord: {
+    none: "usageNoneDeclaredLimit",
+    against: "usageAgainstDeclaredLimit",
+  },
+  capacityWord: {
+    none: "usageNoneDeclaredCapacity",
+    against: "usageAgainstDeclaredCapacity",
+  },
+} as const;
+
 export function UsageBlock({
   title,
   kind,
@@ -184,11 +196,7 @@ export function UsageBlock({
   const caption = !available
     ? // The block cannot promise a comparison the workload does not
       // declare — that pairing is what made an empty track read as 0%.
-      neither
-      ? t("readings", "usageNoneDeclared", { noun: t("readings", limitNoun) })
-      : t("readings", "usageAgainstDeclared", {
-          noun: t("readings", limitNoun),
-        })
+      t("readings", DECLARED[limitNoun][neither ? "none" : "against"])
     : past.window !== null
       ? [
           scope,

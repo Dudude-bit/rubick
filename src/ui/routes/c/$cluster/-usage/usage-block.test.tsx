@@ -394,6 +394,40 @@ describe("UsageBlock degraded, on a workload that declares no limits", () => {
   });
 });
 
+describe("UsageBlock on a node with no metrics-server", () => {
+  beforeEach(() => useUsageHistoryStore.getState().clear());
+
+  /**
+   * Sam's node page read "against declared capacitys", a plural built by
+   * adding "s", and "metrics-server not installed/1.0" ran the reason into
+   * the capacity.
+   */
+  it("says what it measures against in a whole phrase, and no ratio of nothing", async () => {
+    await wrap(
+      <UsageBlock
+        kind="Node"
+        uid="node-1"
+        cpu={null}
+        memory={null}
+        cpuLimit={1000}
+        memoryLimit={2 * 1024 ** 3}
+        limitNoun="capacityWord"
+        sampledAt={null}
+        status={{ status: "notInstalled", message: "404 page not found" }}
+      />
+    );
+    expect(screen.getByText("against declared capacity")).toBeInTheDocument();
+    expect(screen.queryByText(/capacitys/)).toBeNull();
+    const reasons = screen.getAllByText("metrics-server not installed");
+    expect(reasons).toHaveLength(2);
+    for (const reason of reasons) {
+      expect(reason.parentElement).toHaveTextContent(
+        /^metrics-server not installed$/
+      );
+    }
+  });
+});
+
 describe("UsageBlock in its first seconds", () => {
   beforeEach(() => useUsageHistoryStore.getState().clear());
 

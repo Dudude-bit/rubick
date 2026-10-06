@@ -3027,8 +3027,10 @@ export const en = {
     requestWord: "request",
     usageLimitIs: "{noun} {value}",
     usageNoLimit: "no {noun} set, scaled to {value} used",
-    usageNoneDeclared: "no {noun}s declared",
-    usageAgainstDeclared: "against declared {noun}s",
+    usageNoneDeclaredLimit: "no limits declared",
+    usageNoneDeclaredCapacity: "no capacity declared",
+    usageAgainstDeclaredLimit: "against declared limits",
+    usageAgainstDeclaredCapacity: "against declared capacity",
     usageReadingsWatched: {
       one: "{label}: {n} reading watched",
       other: "{label}: {n} readings watched",

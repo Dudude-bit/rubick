@@ -338,7 +338,9 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
         ) : (
           <UnitValue value={formatQuantity(usedNum, type, unit)} />
         )}
-        {totalNum !== null && (
+        {/* A denominator under a reason reads as one phrase run into a
+            number: "not installed/1.0". */}
+        {usedNum !== null && totalNum !== null && (
           <>
             <span className="text-[0.85em] text-fg-fnt">/</span>
             <UnitValue value={formatQuantity(totalNum, type, unit)} />

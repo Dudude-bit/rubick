@@ -3262,8 +3262,10 @@ export const ru: Catalogue = {
     requestWord: "request",
     usageLimitIs: "{noun} {value}",
     usageNoLimit: "{noun} не задан, масштаб по {value} потребления",
-    usageNoneDeclared: "{noun} не объявлен",
-    usageAgainstDeclared: "относительно объявленных значений «{noun}»",
+    usageNoneDeclaredLimit: "лимиты не объявлены",
+    usageNoneDeclaredCapacity: "ёмкость не объявлена",
+    usageAgainstDeclaredLimit: "относительно объявленных лимитов",
+    usageAgainstDeclaredCapacity: "относительно объявленной ёмкости",
     usageReadingsWatched: {
       one: "{label}: {n} отсчёт под наблюдением",
       few: "{label}: {n} отсчёта под наблюдением",
