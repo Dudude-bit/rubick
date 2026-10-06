@@ -6,7 +6,23 @@ const TooltipProvider = TooltipPrimitive.Provider;
 
 const Tooltip = TooltipPrimitive.Root;
 
-const TooltipTrigger = TooltipPrimitive.Trigger;
+/**
+ * A trigger of its own is a button that only shows the tooltip; marked, so a
+ * row it sits in still takes the click. With `asChild` the child is whatever
+ * control the caller made, and keeps its click.
+ */
+const TooltipTrigger = React.forwardRef<
+  React.ElementRef<typeof TooltipPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Trigger>
+>(({ asChild, ...props }, ref) => (
+  <TooltipPrimitive.Trigger
+    ref={ref}
+    asChild={asChild}
+    data-tooltip-only={asChild ? undefined : ""}
+    {...props}
+  />
+));
+TooltipTrigger.displayName = TooltipPrimitive.Trigger.displayName;
 
 const TooltipContent = React.forwardRef<
   React.ElementRef<typeof TooltipPrimitive.Content>,

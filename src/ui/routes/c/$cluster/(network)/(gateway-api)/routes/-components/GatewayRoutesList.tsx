@@ -28,6 +28,7 @@ import { UnreadNamespaces } from "../../../../-list/UnreadNamespaces";
 import { Unknown } from "@/components/ui/unknown";
 import { noneWhereAnswered } from "@/lib/namespace-scope";
 import { RealtimeAge } from "@/components/ui/realtime";
+import { controlAt } from "@/lib/row-control";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -137,8 +138,7 @@ function Row({
   // same rule the data table's rows follow — inner links and buttons are
   // their own targets, everything else activates the row.
   const act = (event: React.MouseEvent | React.KeyboardEvent) => {
-    const target = event.target as HTMLElement;
-    if (target.closest("a") || target.closest("button")) return;
+    if (controlAt(event.target as HTMLElement)) return;
     linkGesture(event, href, () => navigate(link));
   };
 

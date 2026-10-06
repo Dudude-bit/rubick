@@ -23,7 +23,12 @@ import { buildTableRows } from "./data-table-rows";
 import { DataTable } from "./data-table";
 import type { RowGrouping } from "./row-grouping";
 import { RouteLink } from "./route-link";
-import { TooltipProvider } from "./tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./tooltip";
 import { helmReleaseLink, hrefOf, objectLink } from "@/lib/links";
 import { renderWithRouter } from "@/test/render";
 import { useShortcuts } from "@/routes/c/$cluster/-shell/useShortcuts";
@@ -278,6 +283,55 @@ describe("DataTable rows", () => {
     expect(tabs()).toHaveLength(1);
     fireEvent.doubleClick(whitespace());
     await goesTo("/c/prod/pods/ns/a-1");
+  });
+
+  /**
+   * Sam clicked the row body in Ingresses and Services and nothing opened:
+   * most of their cells ("1 path", the hosts, the status verdict) are
+   * tooltip triggers, which are buttons, and the row left every button
+   * alone. Fails if a cell that only shows a tooltip swallows the click
+   * again, or if a real control inside a tooltip stops keeping its own.
+   */
+  it("peeks on a click on a cell that only shows a tooltip, and leaves a real control alone", async () => {
+    const pressed = vi.fn();
+    await wrap(
+      <DataTable<Item>
+        columns={[
+          ...columns,
+          {
+            id: "paths",
+            header: "Paths",
+            cell: () => (
+              <Tooltip>
+                <TooltipTrigger>1 path</TooltipTrigger>
+                <TooltipContent>/ to storefront:80</TooltipContent>
+              </Tooltip>
+            ),
+          },
+          {
+            id: "copy",
+            header: "Copy",
+            cell: () => (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" onClick={pressed}>
+                    copy
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Copy</TooltipContent>
+              </Tooltip>
+            ),
+          },
+        ]}
+        data={DATA}
+        getRowHref={href}
+      />
+    );
+    fireEvent.click(screen.getAllByText("copy")[0]);
+    expect(pressed).toHaveBeenCalledOnce();
+    await staysAt();
+    fireEvent.click(screen.getAllByText("1 path")[0]);
+    await goesTo("/c/prod/pods?peek=pods%2Fns%2Fa-1");
   });
 
   /**

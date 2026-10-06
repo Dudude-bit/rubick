@@ -56,6 +56,7 @@ import {
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { buildTableRows, type BodyItem } from "./data-table-rows";
 import { columnShares } from "./column-shares";
+import { controlAt } from "@/lib/row-control";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 
 import { cn } from "@/lib/utils";
@@ -764,15 +765,7 @@ function DataTableInner<TData extends RowData>({
     event: React.MouseEvent | React.KeyboardEvent | KeyboardEvent
   ) => {
     // Quick actions, menus and the row's own links are their own targets.
-    const target = event.target as HTMLElement;
-    if (
-      target.closest("button") ||
-      target.closest("a") ||
-      target.closest('[role="menuitem"]') ||
-      target.closest("[data-quick-actions]")
-    ) {
-      return;
-    }
+    if (controlAt(event.target as HTMLElement)) return;
 
     const href = getRowHref?.(row);
     if (href) {
@@ -883,24 +876,21 @@ function DataTableInner<TData extends RowData>({
     const openPage =
       href && peekTargetOfHref(href)
         ? (event: React.MouseEvent) => {
-            const target = event.target as HTMLElement;
             // The same places a single click keeps its hands off, so the
             // two gestures agree about what belongs to the row and what
-            // belongs to the controls sitting in it.
+            // belongs to the controls sitting in it. A link to somewhere
+            // else (a row's node, its owner) keeps the double click; the
+            // row's own name is where the eye goes when told "double click
+            // the row", so it must not be the one spot where nothing happens.
+            const control = controlAt(event.target as HTMLElement);
             if (
-              target.closest("button") ||
-              target.closest('[role="menuitem"]') ||
-              target.closest("[data-quick-actions]")
+              control &&
+              !(
+                control.tagName === "A" && control.getAttribute("href") === href
+              )
             ) {
               return;
             }
-            // A link to somewhere else — a row's node, its owner — keeps the
-            // double click, because the reader aimed at that link and not at
-            // the row. The row's own name is the place the eye goes to when
-            // told "double click the row", so it must not be the one spot
-            // where nothing happens.
-            const link = target.closest("a");
-            if (link && link.getAttribute("href") !== href) return;
             navigate({ href });
           }
         : undefined;
