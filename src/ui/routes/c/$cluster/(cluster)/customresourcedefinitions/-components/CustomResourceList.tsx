@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { columnHeader } from "@/i18n/column-header";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
-import { Eye, Trash2 } from "lucide-react";
+import { CircleHelp, Eye, Trash2 } from "lucide-react";
 import { RouteLink } from "@/components/ui/route-link";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { QuickAction } from "@/components/ui/quick-actions";
@@ -13,7 +13,7 @@ import { RealtimeAge } from "@/components/ui/realtime";
 import { hrefOf, objectLink } from "@/lib/links";
 import { statusRole } from "@/lib/status-role";
 import { useCrdView } from "@/integrations";
-import { drawnSeparately } from "./printer-columns";
+import { drawnSeparately, printerCell } from "./printer-columns";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceList } from "../../../-list/ResourceList";
@@ -167,8 +167,12 @@ export function CustomResourceList({
           id: pc.name.toLowerCase().replace(/\s+/g, "-"),
           header: pc.name,
           cell: ({ row }) => {
-            const value = getValueFromJsonPath(row.original, pc.jsonPath);
-            return formatColumnValue(value, pc.columnType);
+            const cell = printerCell(row.original, pc.jsonPath);
+            return cell.evaluated ? (
+              formatColumnValue(cell.value, pc.columnType)
+            ) : (
+              <NotEvaluated expression={pc.jsonPath} />
+            );
           },
         });
       }
@@ -277,33 +281,18 @@ export function CustomResourceList({
   );
 }
 
-function getValueFromJsonPath(
-  obj: CustomResourceInfo,
-  jsonPath: string
-): unknown {
-  // Remove leading dot if present
-  const path = jsonPath.startsWith(".") ? jsonPath.slice(1) : jsonPath;
-  const parts = path.split(".");
-
-  let current: unknown = obj;
-  for (const part of parts) {
-    if (current === null || current === undefined) return undefined;
-    if (typeof current !== "object") return undefined;
-
-    // Handle array notation like [0]
-    const arrayMatch = part.match(/^(\w+)\[(\d+)\]$/);
-    if (arrayMatch) {
-      const [, key, index] = arrayMatch;
-      current = (current as Record<string, unknown>)[key];
-      if (Array.isArray(current)) {
-        current = current[parseInt(index, 10)];
-      }
-    } else {
-      current = (current as Record<string, unknown>)[part];
-    }
-  }
-
-  return current;
+/** A printer column this app cannot evaluate, never drawn as the cluster's "none". */
+function NotEvaluated({ expression }: { expression: string }) {
+  const t = useT();
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-fg-mut"
+      title={t("empty", "printerNotEvaluated", { expression })}
+    >
+      <CircleHelp className="h-3 w-3 flex-none text-warn" aria-hidden="true" />
+      {t("empty", "notEvaluatedLower")}
+    </span>
+  );
 }
 
 // Helper function to format column value based on type
@@ -338,6 +327,7 @@ function formatColumnValue(
       if (typeof value === "string" && isKnownStatus(value)) {
         return <StatusBadge status={value} />;
       }
+      if (typeof value === "object") value = JSON.stringify(value);
       // A printer column is whatever the CRD author chose to show; some are
       // long, and the cell is the only place it appears.
       return (

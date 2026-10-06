@@ -5903,6 +5903,9 @@ export const en = {
     healthySigningNothing:
       "It is healthy and no Certificate names it, so it is signing nothing.",
     noneLower: "none",
+    notEvaluatedLower: "not evaluated",
+    printerNotEvaluated:
+      "This app cannot evaluate the column's JSONPath, so this is not a reading of the object: {expression}",
     noLower: "no",
     couldNotReadRouting: "Could not read this cluster’s routing",
     routingRequestFailed:

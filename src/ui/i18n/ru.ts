@@ -6483,6 +6483,9 @@ export const ru: Catalogue = {
     healthySigningNothing:
       "Он в порядке, но его не называет ни один Certificate, поэтому он ничего не подписывает.",
     noneLower: "нет",
+    notEvaluatedLower: "не вычислено",
+    printerNotEvaluated:
+      "Приложение не умеет вычислять JSONPath этой колонки, поэтому значение не прочитано: {expression}",
     noLower: "нет",
     couldNotReadRouting: "Не удалось прочитать маршрутизацию этого кластера",
     routingRequestFailed:
