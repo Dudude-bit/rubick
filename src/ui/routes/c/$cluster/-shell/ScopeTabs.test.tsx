@@ -682,3 +682,27 @@ describe("a token that may not list namespaces", () => {
     ).toHaveAttribute("aria-selected", "true");
   });
 });
+
+describe("the count beside a namespace", () => {
+  /**
+   * Dana's picker said "shop 14 · 10 bad" beside 9 pods not ready: the
+   * number is the namespace's Needs attention rows, Deployments and Jobs
+   * included, and "bad" read it as pods. Fails if it is called anything but
+   * the problems the Overview lists.
+   */
+  it("calls the namespace's problems problems, as Needs attention counts them", async () => {
+    summary.namespaces = [{ name: "shop", podCount: 14, problemCount: 10 }];
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a" })],
+      activeId: "a",
+      pendingHref: null,
+    });
+    const user = userEvent.setup();
+    await mount();
+    await user.click(within(tabs()[0]).getByText("All namespaces"));
+    const list = screen.getByRole("listbox", { name: "Namespaces" });
+
+    expect(within(list).getByText("14 · 10 problems")).toBeInTheDocument();
+    expect(within(list).queryByText(/bad/)).toBeNull();
+  });
+});

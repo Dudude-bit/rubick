@@ -14,7 +14,7 @@
 use crate::commands::helpers::{api_in, reaches, scope_of};
 use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
-use crate::resources::{job_state, JobState, Rollout};
+use crate::resources::{crash_looping, job_state, JobState, Rollout};
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
 use crate::utils::Moment;
@@ -449,6 +449,22 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
     // init containers and sidecars out — so a pod whose sidecar was flapping
     // had one restart count on the Pods page and a different one here.
     let (restarts, last_restart_at) = crate::resources::restarts(pod);
+
+    // Before the waiting reason, so the row reads the same at every instant
+    // of the back-off cycle rather than turning amber while the container is up.
+    if crash_looping(pod, now) {
+        return Some(ClusterProblem {
+            severity: ProblemSeverity::Critical,
+            kind: "Pod".to_string(),
+            name,
+            namespace,
+            reason: "CrashLoopBackOff".to_string(),
+            detail: Some(ProblemDetail::Restarts { n: restarts }),
+            since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
+            restarts: Some(restarts),
+            folded_pods: None,
+        });
+    }
 
     if let Some((reason, message)) = stuck_reason(pod) {
         return Some(ClusterProblem {
@@ -932,7 +948,10 @@ fn account_by_node<'a>(pods: impl IntoIterator<Item = &'a Pod>) -> NodeAccountin
     accounting
 }
 
-fn pod_composition<'a>(pods: impl IntoIterator<Item = &'a Pod>) -> PodComposition {
+fn pod_composition<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    now: DateTime<Utc>,
+) -> PodComposition {
     let mut composition = PodComposition::default();
     for pod in pods {
         match pod
@@ -943,7 +962,7 @@ fn pod_composition<'a>(pods: impl IntoIterator<Item = &'a Pod>) -> PodCompositio
         {
             "Running" => {
                 composition.running += 1;
-                if stuck_reason(pod).is_some() {
+                if crash_looping(pod, now) || stuck_reason(pod).is_some() {
                     composition.crash_looping += 1;
                 }
             }
@@ -1236,7 +1255,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         warnings: recent_warnings(refs(input.events)),
         warnings_known: input.events_known,
         counts,
-        pods: pod_composition(refs(input.scoped_pods)),
+        pods: pod_composition(refs(input.scoped_pods), input.now),
         jobs: input.jobs.map(|jobs| job_composition(refs(jobs))),
         namespaces,
         metrics_available,
@@ -2227,16 +2246,61 @@ mod tests {
         );
     }
 
-    /// And one that is genuinely flapping still is. `CrashLoopBackOff` waits
-    /// at most five minutes, so anything alive comes round well inside the
-    /// window.
+    /// One that settled inside the hour is still news, in amber: it is past
+    /// the kubelet's back-off window, so it is no longer crash-looping.
     #[test]
-    fn a_pod_still_flapping_is_reported() {
+    fn a_pod_that_flapped_within_the_hour_is_reported_as_restarting() {
         let now = Utc::now();
-        let problems = pod_problems(&[restarted_pod("flapper", now, 7, Some(120))], now);
+        let problems = pod_problems(&[restarted_pod("flapper", now, 7, Some(30 * 60))], now);
         assert_eq!(problems.len(), 1);
         assert_eq!(problems[0].reason, "Restarting");
+        assert_eq!(problems[0].severity, ProblemSeverity::Warning);
         assert_eq!(problems[0].restarts, Some(7));
+    }
+
+    /// Dana's shop Overview said "9 of 14 pods running" when it caught the
+    /// checkout pods between crashes and `3 CrashLoop` a minute later, and
+    /// their Needs attention rows went from red `CrashLoopBackOff` to amber
+    /// "Restarting" and back. Fails if the two instants of one crash loop
+    /// are counted or read differently.
+    #[test]
+    fn a_crash_loop_counts_and_reads_the_same_whether_its_container_is_up_or_waiting() {
+        let now = Utc::now();
+        let up = restarted_pod("checkout", now, 9, Some(20));
+        let mut backing_off = restarted_pod("checkout", now, 9, Some(40));
+        let container = &mut backing_off
+            .status
+            .as_mut()
+            .unwrap()
+            .container_statuses
+            .as_mut()
+            .unwrap()[0];
+        container.ready = false;
+        container.state = Some(ContainerState {
+            waiting: Some(ContainerStateWaiting {
+                reason: Some("CrashLoopBackOff".to_string()),
+                message: Some("back-off 5m0s restarting failed container=app".to_string()),
+            }),
+            ..Default::default()
+        });
+
+        for (instant, pod) in [("up", &up), ("backing off", &backing_off)] {
+            let composition = pod_composition([pod], now);
+            assert_eq!(
+                (composition.running, composition.crash_looping),
+                (1, 1),
+                "{instant}"
+            );
+            let problems = pod_problems([pod], now);
+            assert_eq!(problems.len(), 1, "{instant}");
+            assert_eq!(problems[0].reason, "CrashLoopBackOff", "{instant}");
+            assert_eq!(problems[0].severity, ProblemSeverity::Critical, "{instant}");
+            assert_eq!(
+                problems[0].detail,
+                Some(ProblemDetail::Restarts { n: 9 }),
+                "{instant}"
+            );
+        }
     }
 
     /// The distinction the field exists for. A row that quotes the cluster
@@ -2322,11 +2386,12 @@ mod tests {
         assert_eq!(problems[0].reason, "Restarting");
     }
 
-    /// Below the threshold nothing is said, however recent.
+    /// One restart, however recent, is not a loop: a node reboot gives every
+    /// pod on it one. A second inside the back-off window is, and reads so.
     #[test]
-    fn a_couple_of_restarts_are_not_worth_a_row() {
+    fn a_single_restart_is_not_worth_a_row() {
         let now = Utc::now();
-        let problems = pod_problems(&[restarted_pod("fine", now, 2, Some(30))], now);
+        let problems = pod_problems(&[restarted_pod("fine", now, 1, Some(30))], now);
         assert!(problems.is_empty());
     }
 
@@ -2855,7 +2920,7 @@ mod tests {
             })
             .collect();
 
-        let composition = pod_composition(&pods);
+        let composition = pod_composition(&pods, Utc::now());
         assert_eq!(composition.running, 1);
         assert_eq!(composition.succeeded, 2);
         assert_eq!(composition.pending, 1);
@@ -2887,14 +2952,14 @@ mod tests {
             ..Default::default()
         }]);
 
-        let composition = pod_composition(&[looping]);
+        let composition = pod_composition(&[looping], Utc::now());
         assert_eq!(composition.running, 1);
         assert_eq!(composition.crash_looping, 1);
     }
 
     #[test]
     fn pods_with_no_phase_are_unknown_not_dropped() {
-        let composition = pod_composition(&[pod("mystery", PodStatus::default())]);
+        let composition = pod_composition(&[pod("mystery", PodStatus::default())], Utc::now());
         assert_eq!(composition.unknown, 1);
         assert_eq!(composition.running, 0);
     }

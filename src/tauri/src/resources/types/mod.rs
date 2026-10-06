@@ -29,7 +29,7 @@ pub use pod::{
     mounts_of, volume_source, PodInfo, PodStatusInfo, PodVolumeInfo, VolumeMountInfo,
     VolumeObjectRef,
 };
-pub use pod_display::{condition_is_true, restarts};
+pub use pod_display::{condition_is_true, crash_looping, restarts};
 pub use pod_row::{PodRow, PodRowStatus, RowContainer};
 pub use probe::{ContainerProbes, ProbeHandler, ProbeInfo};
 pub use service::{ServiceInfo, ServicePortInfo};

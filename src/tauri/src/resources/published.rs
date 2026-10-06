@@ -25,8 +25,8 @@ use serde::{Deserialize, Serialize};
 
 use super::connections::{ChainStop, Existence, NotServing, ObjectFacts, ObjectRef};
 use super::selector::Selector;
-use super::types::condition_is_true;
 use super::types::pod_display::display_status;
+use super::types::{condition_is_true, crash_looping};
 
 /// The label the endpoint controllers put on every slice they write, and the
 /// only stated link from a slice back to its Service.
@@ -663,7 +663,7 @@ fn pod_not_serving(pod: &Pod) -> NotServing {
     if matches!(phase, Some("Succeeded" | "Failed")) {
         return NotServing::Finished;
     }
-    if display_status(pod).ends_with("CrashLoopBackOff") {
+    if display_status(pod).ends_with("CrashLoopBackOff") || crash_looping(pod, chrono::Utc::now()) {
         return NotServing::CrashLooping;
     }
     let placed = pod
@@ -1422,6 +1422,36 @@ mod tests {
             crate::utils::moment::as_cluster_time(chrono::Utc::now()).expect("now is a time"),
         ));
         assert_eq!(why_of(&svc, &[leaving]), Some(NotServing::Terminating));
+    }
+
+    /// A crash-looping pod caught in the seconds its container is up read as
+    /// one failing its readiness probe. Fails if the stop reads the instant
+    /// rather than the loop.
+    #[test]
+    fn a_crash_looping_pod_caught_while_up_is_still_crash_looping() {
+        let svc = selecting("web");
+        let mut up = in_state("a", Some("n1"), "Running", None);
+        up.status.as_mut().unwrap().container_statuses = Some(vec![ContainerStatus {
+            name: "web".to_string(),
+            restart_count: 9,
+            state: Some(ContainerState {
+                running: Some(k8s_openapi::api::core::v1::ContainerStateRunning::default()),
+                ..Default::default()
+            }),
+            last_state: Some(ContainerState {
+                terminated: Some(k8s_openapi::api::core::v1::ContainerStateTerminated {
+                    exit_code: 1,
+                    finished_at: Some(Time(
+                        crate::utils::moment::as_cluster_time(chrono::Utc::now())
+                            .expect("now is a time"),
+                    )),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }]);
+        assert_eq!(why_of(&svc, &[up]), Some(NotServing::CrashLooping));
     }
 
     #[test]

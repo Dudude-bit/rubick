@@ -1123,7 +1123,7 @@ function NamespaceRow({
         {row.podCount === null
           ? t("empty", "unknownLower")
           : (row.problemCount ?? 0) > 0
-            ? `${row.podCount} · ${t("count", "badPods", { n: row.problemCount ?? 0 })}`
+            ? `${row.podCount} · ${t("cluster", "problemCount", { n: row.problemCount ?? 0 })}`
             : row.podCount}
       </span>
     </div>

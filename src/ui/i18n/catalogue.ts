@@ -7248,7 +7248,6 @@ export const en = {
     clusters: { one: "{n} cluster", other: "{n} clusters" },
     users: { one: "{n} user", other: "{n} users" },
     withAProblem: { one: "{n} with a problem", other: "{n} with a problem" },
-    badPods: { one: "{n} bad", other: "{n} bad" },
     typeAtLeastChars: {
       one: "Type at least {n} character to search resources.",
       other: "Type at least {n} characters to search resources.",

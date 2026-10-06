@@ -191,6 +191,50 @@ pub fn display_status(pod: &Pod) -> String {
     reason
 }
 
+/// How long after a container's last exit its pod still counts as
+/// crash-looping. The kubelet's back-off tops out at five minutes and resets
+/// only once a container has run for ten, so a loop comes round inside this.
+pub const CRASH_LOOP_WINDOW_SECONDS: i64 = 15 * 60;
+
+/// Whether this pod is crash-looping, read the same in every phase of the
+/// kubelet's back-off cycle.
+///
+/// kubectl's status is one instant of the cycle: `CrashLoopBackOff` while the
+/// kubelet waits, `Error` or `OOMKilled` the moment the container dies, and
+/// `Running` for the seconds it is up. Counted by that word, the same pod is
+/// healthy on one read and crash-looping on the next. A container waiting in
+/// `CrashLoopBackOff`, or one that has restarted twice or more and last exited
+/// inside the back-off window, is crash-looping whichever instant this is.
+#[must_use]
+pub fn crash_looping(pod: &Pod, now: DateTime<Utc>) -> bool {
+    let Some(status) = pod.status.as_ref() else {
+        return false;
+    };
+    if status.phase.as_deref() != Some("Running") || pod.metadata.deletion_timestamp.is_some() {
+        return false;
+    }
+    status.container_statuses.iter().flatten().any(|cs| {
+        let state = cs.state.as_ref();
+        let waiting = state
+            .and_then(|s| s.waiting.as_ref())
+            .and_then(|w| w.reason.as_deref());
+        if waiting == Some("CrashLoopBackOff") {
+            return true;
+        }
+        if cs.restart_count < 2 {
+            return false;
+        }
+        state
+            .and_then(|s| s.terminated.as_ref())
+            .or_else(|| last_terminated(cs))
+            .is_some_and(|exit| {
+                exit.finished_at.as_ref().is_none_or(|at| {
+                    now - at.moment() < chrono::Duration::seconds(CRASH_LOOP_WINDOW_SECONDS)
+                })
+            })
+    })
+}
+
 /// Restarts as kubectl counts them, and when the last one happened.
 ///
 /// Not a plain sum over `containerStatuses`: a sidecar's restarts count
@@ -482,5 +526,81 @@ mod tests {
         });
         p.status.as_mut().unwrap().container_statuses = Some(vec![cs]);
         assert_eq!(restarts(&p), (653, Some(when)));
+    }
+
+    fn exited(
+        now: DateTime<Utc>,
+        seconds_ago: i64,
+        reason: &str,
+        code: i32,
+    ) -> ContainerStateTerminated {
+        ContainerStateTerminated {
+            exit_code: code,
+            reason: Some(reason.to_string()),
+            finished_at: Some(Time(
+                crate::utils::moment::as_cluster_time(now - chrono::Duration::seconds(seconds_ago))
+                    .expect("an instant this test wrote itself"),
+            )),
+            ..Default::default()
+        }
+    }
+
+    /// One container, 9 restarts, at one instant of its back-off cycle.
+    fn looping(state: ContainerState, last_exit: ContainerStateTerminated, restarts: i32) -> Pod {
+        let mut p = pod("Running");
+        let mut cs = status("app", state, false);
+        cs.restart_count = restarts;
+        cs.last_state = Some(ContainerState {
+            terminated: Some(last_exit),
+            ..Default::default()
+        });
+        p.status.as_mut().unwrap().container_statuses = Some(vec![cs]);
+        p
+    }
+
+    /// Dana's checkout pods read "Running" on the Overview whenever the read
+    /// caught them between crashes, and `CrashLoopBackOff` a minute later.
+    /// Fails if any instant of the cycle reads as not crash-looping.
+    #[test]
+    fn a_crash_loop_is_one_answer_at_every_instant_of_its_back_off() {
+        let now = Utc::now();
+        let waiting_phase = looping(waiting("CrashLoopBackOff"), exited(now, 40, "Error", 1), 9);
+        let died_now = {
+            let mut p = looping(running(), exited(now, 200, "Error", 1), 9);
+            p.status
+                .as_mut()
+                .unwrap()
+                .container_statuses
+                .as_mut()
+                .unwrap()[0]
+                .state = Some(ContainerState {
+                terminated: Some(exited(now, 1, "OOMKilled", 137)),
+                ..Default::default()
+            });
+            p
+        };
+        let up_for_seconds = looping(running(), exited(now, 20, "Error", 1), 9);
+        for (instant, p) in [
+            ("waiting", &waiting_phase),
+            ("terminated", &died_now),
+            ("running", &up_for_seconds),
+        ] {
+            assert!(
+                crash_looping(p, now),
+                "the {instant} instant read as not crash-looping"
+            );
+        }
+        assert_eq!(display_status(&up_for_seconds), "Running");
+    }
+
+    /// Fails if a pod that crashed long ago, or restarted once with its
+    /// node, is called crash-looping now.
+    #[test]
+    fn a_pod_that_settled_or_restarted_once_is_not_crash_looping() {
+        let now = Utc::now();
+        let settled = looping(running(), exited(now, 20 * 60, "Error", 1), 9);
+        let rebooted = looping(running(), exited(now, 30, "Unknown", 255), 1);
+        assert!(!crash_looping(&settled, now));
+        assert!(!crash_looping(&rebooted, now));
     }
 }
