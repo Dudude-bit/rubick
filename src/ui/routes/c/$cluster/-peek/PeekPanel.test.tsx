@@ -129,6 +129,7 @@ import {
   useDisplaySettingsStore,
 } from "@/stores/displaySettingsStore";
 import { PeekPanel } from "./PeekPanel";
+import { forgetLastOwners } from "@/hooks/useLastOwners";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { preloadPeekContent } from "./peek-loader";
 import { pageTab } from "@/hooks/usePeek";
@@ -973,7 +974,10 @@ describe("PeekPanel on a custom resource", () => {
 });
 
 describe("PeekPanel on an object that is gone", () => {
-  beforeEach(mockCluster);
+  beforeEach(() => {
+    mockCluster();
+    forgetLastOwners();
+  });
 
   const notFound = () =>
     Object.assign(
@@ -1098,6 +1102,27 @@ describe("PeekPanel on an object that is gone", () => {
     expect(
       screen.getByText("Nothing owned it, so nothing replaces it.")
     ).toBeInTheDocument();
+  });
+
+  /**
+   * A tab switch drops the whole cache, so the peek in the tab that comes
+   * back may first read the pod after it died, and said only that it no
+   * longer exists, with no Deployment or ReplicaSet to follow.
+   */
+  it("names the owner its last read found, though the cache was dropped since", async () => {
+    await wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    cleanup();
+
+    vi.mocked(commands.getPod).mockRejectedValue(notFound());
+    await wrap(POD_PEEK);
+
+    expect(
+      await screen.findByText("This Pod no longer exists.")
+    ).toBeInTheDocument();
+    expect(await screen.findByText(/owned it/)).toHaveTextContent(
+      /^ReplicaSet (ReplicaSet )?crash-demo-56588f6b8c owned it and replaces what it loses/
+    );
   });
 
   /** Never read, its owners are unknown, and an unknown is not "nothing owned it". */

@@ -56,3 +56,8 @@ export function useLastOwners(target: Named): Owner[] | undefined {
   const context = useClusterStore((state) => state.currentContext);
   return lastRead.get(keyOf(context, target));
 }
+
+/** For tests: a fresh session, with nothing read yet. */
+export function forgetLastOwners(): void {
+  lastRead.clear();
+}

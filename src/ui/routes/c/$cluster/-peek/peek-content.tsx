@@ -68,7 +68,12 @@ import { parts } from "@/i18n/parts";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { Ghost } from "lucide-react";
 import { GoneNotice } from "../-object/gone";
-import { ownersOf, type Owner } from "@/hooks/useLastOwners";
+import {
+  ownersOf,
+  useLastOwners,
+  useRememberOwners,
+  type Owner,
+} from "@/hooks/useLastOwners";
 import { NEEDS_ATTENTION } from "@/lib/workload-status";
 
 export function PeekContent({
@@ -119,6 +124,10 @@ export function PeekContent({
     [data, source, target, t, hasStatus]
   );
   const gone = error !== null && errorCode(error) === ERROR_CODES.NOT_FOUND;
+  // The cache is dropped on every tab switch, so a peek mounted after the pod
+  // died may never hold a read of it; the owners outlive that.
+  useRememberOwners(target, data);
+  const lastOwners = useLastOwners(target);
 
   const age = useRealtimeAge(summary?.createdAt ?? null);
   // The badge says what the kubelet last wrote. When that kubelet stopped
@@ -316,7 +325,7 @@ export function PeekContent({
                 target={target}
                 summary={summary}
                 error={error}
-                gone={gone ? ownersOf(data) : false}
+                gone={gone ? (ownersOf(data) ?? lastOwners) : false}
                 isLoading={isLoading}
               />
             ) : (
