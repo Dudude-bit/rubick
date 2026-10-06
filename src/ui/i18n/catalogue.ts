@@ -783,8 +783,8 @@ export const en = {
     runsSubject: "jobs this CronJob still owns",
     barUpToDate: "up to date",
     barOutdated: "outdated",
-    historyLimits: "{succeeded} · {failed} kept",
-    jobsSucceeded: { one: "{n} succeeded", other: "{n} succeeded" },
+    historyLimits:
+      "keeps the last {succeeded} succeeded and {failed} failed runs",
     jobsFailed: { one: "{n} failed", other: "{n} failed" },
     activePerController: "{n} active per the controller",
     howDeclared: "How it is declared",

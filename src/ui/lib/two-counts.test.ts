@@ -76,12 +76,9 @@ describe("counts in the catalogue", () => {
         warnings: ru("count", "densityWarnings", { n: 5, count: "5" }),
       })
     ).toBe("1 строка, 2 ошибки, 5 предупреждений.");
-    expect(
-      ru("action", "historyLimits", {
-        succeeded: ru("action", "jobsSucceeded", { n: 1 }),
-        failed: ru("action", "jobsFailed", { n: 3 }),
-      })
-    ).toBe("хранится 1 успешный · 3 неудачных");
+    expect(ru("action", "historyLimits", { succeeded: 1, failed: 3 })).toBe(
+      "хранит последние запуски: успешных до 1, неудачных до 3"
+    );
     expect(
       ru("operators", "nodesSetUp", { tuned: 1, of: ofNodes(ru, 1) })
     ).toBe("1 из 1 узла подготовлено");

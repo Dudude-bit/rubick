@@ -755,13 +755,8 @@ export const ru: Catalogue = {
     runsSubject: "задачи, которые этот CronJob ещё хранит",
     barUpToDate: "актуальны",
     barOutdated: "устарели",
-    historyLimits: "хранится {succeeded} · {failed}",
-    jobsSucceeded: {
-      one: "{n} успешный",
-      few: "{n} успешных",
-      many: "{n} успешных",
-      other: "{n} успешных",
-    },
+    historyLimits:
+      "хранит последние запуски: успешных до {succeeded}, неудачных до {failed}",
     jobsFailed: {
       one: "{n} неудачный",
       few: "{n} неудачных",

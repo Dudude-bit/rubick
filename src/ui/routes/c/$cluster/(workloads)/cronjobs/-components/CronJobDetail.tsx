@@ -314,12 +314,8 @@ export function CronJobDetail() {
                       note={
                         <>
                           {t("action", "historyLimits", {
-                            succeeded: t("action", "jobsSucceeded", {
-                              n: cronJob?.successfulJobsHistoryLimit ?? 3,
-                            }),
-                            failed: t("action", "jobsFailed", {
-                              n: cronJob?.failedJobsHistoryLimit ?? 1,
-                            }),
+                            succeeded: cronJob?.successfulJobsHistoryLimit ?? 3,
+                            failed: cronJob?.failedJobsHistoryLimit ?? 1,
                           })}
                           {cronJob?.active
                             ? ` · ${t("action", "activePerController", {

@@ -178,4 +178,20 @@ describe("CronJobDetail", () => {
     ).toBeInTheDocument();
     expect(screen.getByText(/0 kept · history limits/)).toBeInTheDocument();
   });
+
+  /**
+   * shop/reports read "no run has succeeded yet" above "2 succeeded · 2
+   * failed kept": the history limits, worded like counts. Fails if the
+   * limits read as runs that happened again.
+   */
+  it("words the history limits as limits, not as runs", async () => {
+    mockDetail(
+      buildCronJob({ successfulJobsHistoryLimit: 2, failedJobsHistoryLimit: 2 })
+    );
+    await renderPage();
+    expect(
+      await screen.findByText(/keeps the last 2 succeeded and 2 failed runs/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/succeeded · /)).toBeNull();
+  });
 });
