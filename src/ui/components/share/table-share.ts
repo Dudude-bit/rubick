@@ -1,8 +1,8 @@
 import { Table2 } from "lucide-react";
 
 import type { AppColumnMeta } from "@/components/ui/table-features";
-import type { HeaderSaying } from "@/i18n/column-header";
 import type { T } from "@/i18n/useT";
+import { columnLabel } from "@/lib/column-label";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportValue } from "@/lib/report";
 import { ORDER, refOf, slugOf, type PlacedSection } from "@/lib/report-parts";
@@ -55,23 +55,6 @@ export interface TableShare {
   partial?: string | null;
   /** What the list's search box holds: the rows are only the ones matching it. */
   search?: string;
-}
-
-/** The header in the reader's language, or `null` where the app never names it in words. */
-function headerOf(column: Column, t: T): string | null {
-  const header = column.columnDef.header as
-    | { saying?: HeaderSaying }
-    | string
-    | undefined;
-  if (typeof header === "string") return header;
-  const saying =
-    header?.saying ??
-    (column.columnDef.meta as AppColumnMeta | undefined)?.label;
-  if (!saying) return null;
-  return (t as unknown as (section: string, key: string) => string)(
-    saying.section,
-    saying.key
-  );
 }
 
 function textOf(value: unknown): string {
@@ -212,7 +195,7 @@ export function tableSection(
     });
   });
   const said = facts.flatMap((column, index) => {
-    const header = headerOf(column, t);
+    const header = columnLabel(column.columnDef, t);
     return header !== null &&
       speaks[index] &&
       values[index].some((value) => value.text)
@@ -220,7 +203,7 @@ export function tableSection(
       : [];
   });
   const leftOut = facts.flatMap((column, index) => {
-    const header = headerOf(column, t);
+    const header = columnLabel(column.columnDef, t);
     return header !== null && !speaks[index] ? [header] : [];
   });
 

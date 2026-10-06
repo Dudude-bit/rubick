@@ -109,8 +109,7 @@ export const columns: ColumnDef<PodRow>[] = [
   createNameColumn<PodRow>(ResourceType.Pod),
   createNamespaceColumn<PodRow>(),
   {
-    // Wide enough for "Init:CrashLoopBackOff" at 1440 px beside the row's
-    // quick actions; a longer reason ends in an ellipsis, whole on hover.
+    // A longer reason ends in an ellipsis, whole on hover.
     size: 235,
     id: "status",
     // Sorted by the word the reader sees, not by the phase behind it: they
@@ -119,6 +118,8 @@ export const columns: ColumnDef<PodRow>[] = [
     accessorFn: (pod) => pod.status.display,
     enableSorting: true,
     meta: {
+      // "CreateContainerConfigError" at 7.2px a glyph, its mark and padding.
+      floor: 224,
       label: { section: "columns", key: "status" },
       share: (pod: PodRow, t) =>
         podStatusValue(pod, pod.nodeSilence ?? null, t),

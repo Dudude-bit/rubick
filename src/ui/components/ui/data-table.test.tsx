@@ -23,6 +23,7 @@ import { buildTableRows } from "./data-table-rows";
 import { DataTable } from "./data-table";
 import type { RowGrouping } from "./row-grouping";
 import { RouteLink } from "./route-link";
+import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   Tooltip,
   TooltipContent,
@@ -268,6 +269,40 @@ describe("DataTable rows", () => {
     const statusCell = screen.getByTestId("status-a-1").closest("td");
     expect(menuCell).not.toHaveClass("text-ellipsis");
     expect(statusCell).toHaveClass("text-ellipsis");
+  });
+
+  /**
+   * The PVs list drew "k8s-gui-hostpath." with a stray dot: the storage
+   * class link took its name's whole width, the cell clipped it, and the
+   * cell's own ellipsis drew after it. Fails if a link that is a text cell's
+   * whole content stops being bounded by the cell.
+   */
+  it("bounds a link that is a text cell's content by the cell", async () => {
+    await wrap(
+      <DataTable<Item>
+        columns={[
+          ...columns,
+          {
+            id: "storageClass",
+            header: "Storage class",
+            cell: () => (
+              <ResourceRef
+                kind="StorageClass"
+                name="k8s-gui-hostpath"
+                showKind={false}
+              />
+            ),
+          },
+        ]}
+        data={DATA}
+        getRowHref={href}
+      />
+    );
+    const cell = screen
+      .getAllByRole("link", { name: /k8s-gui-hostpath/ })[0]
+      .closest("td");
+    expect(cell?.firstElementChild?.tagName).toBe("A");
+    expect(cell).toHaveClass("[&>a]:max-w-full", "text-ellipsis");
   });
 
   /**
@@ -987,6 +1022,34 @@ describe("column widths", () => {
       );
       expect(widthOf("Status")).toBe("50%");
       expect(widthOf("Name")).toBe("50%");
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  /**
+   * Lena's Pods headers were cut to "Возр..." while other columns had room:
+   * a header's share could be narrower than its label. Fails if a header's
+   * words stop setting a floor under its column.
+   */
+  it("never draws a column narrower than its header's words, once measured", async () => {
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(400);
+    try {
+      await wrap(
+        <DataTable<Item>
+          columns={[
+            { ...columns[0], size: 900 },
+            { ...columns[1], header: "Перезапуски", size: 10 },
+          ]}
+          data={DATA}
+        />
+      );
+      const floor = Math.ceil("Перезапуски".length * 6.8 + 20);
+      expect(
+        (Number.parseFloat(widthOf("Перезапуски")) / 100) * 400
+      ).toBeGreaterThanOrEqual(floor);
     } finally {
       width.mockRestore();
     }

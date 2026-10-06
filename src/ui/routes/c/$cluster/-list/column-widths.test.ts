@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { columnShares } from "@/components/ui/column-shares";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import { headerFloor } from "@/lib/column-label";
 
 import { configMapColumns } from "../(config)/configmaps/-components/ConfigMapList";
 import { columns as cronJobs } from "../(workloads)/cronjobs/-components/CronJobList";
@@ -152,6 +155,21 @@ describe("what a list page declares about its columns", () => {
   );
 });
 
+const en: T = (section, key, values) => translate("en", section, key, values);
+
+/** Four quick actions, the most a list carries. */
+const ACTIONS = { size: 20 + 4 * 22 };
+
+/** What `DataTable` lays a list out by: its sizes, and the floors under them. */
+const drawn = (columns: Column[]) =>
+  [...columns, ACTIONS].map((c) => ({
+    size: c.size ?? 150,
+    floor: Math.max(
+      "meta" in c ? (c.meta?.floor ?? 0) : 0,
+      "header" in c ? headerFloor(c, en) : 0
+    ),
+  }));
+
 describe("an address column", () => {
   const ADDRESS = new Set([
     "ip",
@@ -162,9 +180,8 @@ describe("an address column", () => {
   ]);
   /** 15 glyphs of 12px JetBrains Mono, the 14px copy mark, 20px of cell padding. */
   const WHOLE_IPV4_PX = 15 * 7.2 + 14 + 20;
-  /** A 1440px window with and without the peek open; four quick actions. */
+  /** A 1440px window with and without the peek open. */
   const WIDTHS = [640, 1160];
-  const ACTIONS = { size: 20 + 4 * 22 };
 
   /**
    * Sam read "10.111.219.1..." for 10.111.219.134 in Services, "192.168..."
@@ -177,10 +194,7 @@ describe("an address column", () => {
   )(
     "%s draws a whole IPv4 at every width a list is drawn at",
     (_page, columns) => {
-      const specs = [...columns, ACTIONS].map((c) => ({
-        size: c.size ?? 150,
-        floor: "meta" in c ? c.meta?.floor : undefined,
-      }));
+      const specs = drawn(columns);
       for (const width of WIDTHS) {
         const shares = columnShares(specs, width);
         columns.forEach((column, index) => {
@@ -192,4 +206,19 @@ describe("an address column", () => {
       }
     }
   );
+});
+
+describe("the Pods status column", () => {
+  /**
+   * Sam read "CreateContainerConfi..." on checkout-worker: the one status a
+   * reader matches against the terminal, cut. Fails if the column stops
+   * fitting that reason, its mark and its padding at 1440px.
+   */
+  it("fits CreateContainerConfigError whole at 1440px", () => {
+    const status = pods.findIndex((c) => c.id === "status");
+    const shares = columnShares(drawn(pods), 1160);
+    expect((shares[status] / 100) * 1160).toBeGreaterThanOrEqual(
+      "CreateContainerConfigError".length * 7.2 + 14 + 20
+    );
+  });
 });

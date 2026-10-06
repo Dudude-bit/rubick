@@ -124,6 +124,9 @@ export const ref = (
     name={name}
     namespace={namespace}
     showKind={false}
+    // Bounded by the row it sits in, so a long name ends in an ellipsis at
+    // the panel's edge instead of being cut there.
+    className="max-w-full"
     {...options}
   />
 );

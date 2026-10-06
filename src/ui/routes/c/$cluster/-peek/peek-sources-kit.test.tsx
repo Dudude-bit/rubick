@@ -12,7 +12,7 @@ vi.mock("@/lib/commands", () => ({
   commands: { listCrds: () => crds.answer() },
 }));
 
-const { controlledBy } = await import("./peek-sources-kit");
+const { controlledBy, ref } = await import("./peek-sources-kit");
 
 const say = ((_section: string, key: string) => key) as never;
 
@@ -77,5 +77,31 @@ describe("what controls an object, in the peek", () => {
       screen.queryByRole("link", { name: "StatefulSet kruise-db" })
     ).toBeNull();
     expect(screen.getByText("StatefulSet kruise-db")).toBeInTheDocument();
+  });
+});
+
+describe("a reference in a peek row", () => {
+  /**
+   * The ClusterRoleBinding peek cut "system:controller:clusterrole-aggregation-co"
+   * at the panel's edge with no ellipsis: the link took the name's whole
+   * width and the panel clipped it. Fails if a peek reference stops being
+   * bounded by its row, which is what lets the name end in an ellipsis.
+   */
+  it("is bounded by its row so a long name ends in an ellipsis", async () => {
+    await renderWithRouter(
+      <dl>
+        <dd>
+          {ref(
+            "ClusterRole",
+            "system:controller:clusterrole-aggregation-controller"
+          )}
+        </dd>
+      </dl>
+    );
+    const link = await screen.findByRole("link");
+    expect(link).toHaveClass("max-w-full", "min-w-0");
+    expect(screen.getByTestId("resource-ref-stem").parentElement).toHaveClass(
+      "truncate"
+    );
   });
 });

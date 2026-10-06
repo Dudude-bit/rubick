@@ -57,6 +57,7 @@ import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { buildTableRows, type BodyItem } from "./data-table-rows";
 import { columnShares } from "./column-shares";
 import { controlAt } from "@/lib/row-control";
+import { headerFloor } from "@/lib/column-label";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 
 import { cn } from "@/lib/utils";
@@ -255,15 +256,12 @@ function createActionsColumn<TData extends RowData>(
   };
 }
 
-/** The scroll port's width, measured only for a table with a column that needs it. */
-function usePortWidth(
-  ref: React.RefObject<HTMLElement | null>,
-  enabled: boolean
-): number {
+/** The scroll port's width, which the column floors are pixels of. */
+function usePortWidth(ref: React.RefObject<HTMLElement | null>): number {
   const [width, setWidth] = React.useState(0);
   React.useLayoutEffect(() => {
     const node = ref.current;
-    if (!enabled || !node) return;
+    if (!node) return;
     setWidth(node.clientWidth);
     if (typeof ResizeObserver === "undefined") return;
     let frame = 0;
@@ -277,7 +275,7 @@ function usePortWidth(
       cancelAnimationFrame(frame);
       observer.disconnect();
     };
-  }, [ref, enabled]);
+  }, [ref]);
   return width;
 }
 
@@ -386,7 +384,11 @@ function DataTableInner<TData extends RowData>({
   // the same either way. Text cells only: the actions cell holds 20px buttons
   // whose pointer target is pushed back out to 24px by a pseudo-element
   // hanging over the cell's padding, and clipping it clips the hit area.
-  const clipText = "overflow-hidden text-ellipsis whitespace-nowrap";
+  // A link straight in the cell (a node, a storage class) is bounded by it,
+  // so its name ends in its own ellipsis; overflowing, the cell clipped it
+  // and drew a stray "." after it.
+  const clipText =
+    "overflow-hidden text-ellipsis whitespace-nowrap [&>a]:max-w-full";
 
   // Grouping only switches on once the data has enough groups to be worth
   // captioning at all — which is also what keeps an unmanaged cluster's Nodes
@@ -617,11 +619,7 @@ function DataTableInner<TData extends RowData>({
   }, [ordered, selection]);
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
-  const hasFloor = React.useMemo(
-    () => columnsWithActions.some((column) => column.meta?.floor),
-    [columnsWithActions]
-  );
-  const portWidth = usePortWidth(scrollRef, hasFloor);
+  const portWidth = usePortWidth(scrollRef);
 
   // The window is spliced into the table with spacer rows rather than
   // absolutely positioned ones: an out-of-flow `tr` leaves the fixed-layout
@@ -1130,7 +1128,10 @@ function DataTableInner<TData extends RowData>({
                 // hands its room to the rest instead of leaving a gap.
                 const specs = headerGroup.headers.map((header) => ({
                   size: header.getSize(),
-                  floor: header.column.columnDef.meta?.floor,
+                  floor: Math.max(
+                    header.column.columnDef.meta?.floor ?? 0,
+                    headerFloor(header.column.columnDef, t)
+                  ),
                 }));
                 const shares = columnShares(specs, portWidth);
                 return (
