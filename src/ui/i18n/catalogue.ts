@@ -2377,7 +2377,7 @@ export const en = {
     expired: "Expired after a day with no answer",
     empty: "Nothing being watched",
     emptyHint:
-      "Ask on a rollout, a pod, a job, a drain or a port forward, and the answer comes as a notification.",
+      "Choose “Tell me…” in the side panel of a pod, a job or a workload, in a node's drain dialog or beside a port forward: the answer comes as a notification and stays here.",
     dismiss: "Dismiss",
     openWatching: "Open Watching",
     severalAnswered: {

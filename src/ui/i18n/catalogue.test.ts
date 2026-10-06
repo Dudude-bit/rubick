@@ -115,3 +115,25 @@ describe("the Russian word for a pod", () => {
     expect(found).toEqual([]);
   });
 });
+
+describe("the Watching tab's empty hint", () => {
+  /**
+   * Lena read "Попросите сообщить о..." and could not tell what to press.
+   * Fails if the hint stops quoting the first words every ask control
+   * starts with, in either language.
+   */
+  it.each([
+    ["en", en],
+    ["ru", ru],
+  ] as const)(
+    "names the %s ask controls by their label",
+    (_locale, catalogue) => {
+      const { askPod, askJob, askRollout, askDrain, askForward, emptyHint } =
+        catalogue.tell;
+      const asks = [askPod, askJob, askRollout, askDrain, askForward];
+      const lead = asks[0].split(/[ ,]/)[0];
+      for (const ask of asks) expect(ask.startsWith(lead)).toBe(true);
+      expect(emptyHint).toMatch(new RegExp(`[“«]${lead}`));
+    }
+  );
+});
