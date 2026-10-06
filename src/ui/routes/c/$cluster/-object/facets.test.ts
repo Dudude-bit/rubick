@@ -184,6 +184,27 @@ describe("a kind that keeps what it says at the top level", () => {
     ).toContain("status");
   });
 
+  /**
+   * Marco's ServiceAccount peek said "Spec: No spec", as if the object had an
+   * empty one; the kind has none. Unknown is not "none": a kind discovery has
+   * not answered for keeps the line.
+   */
+  it("says nothing about a spec a kind with no status subresource does not have", () => {
+    const account = { kind: "ServiceAccount", metadata: { name: "default" } };
+    const titlesFor = (hasStatus?: boolean) =>
+      objectFacets(account, t, hasStatus).groups.map((g) => g.title);
+    expect(titlesFor(false)).not.toContain("spec");
+    expect(titlesFor(undefined)).toContain("spec");
+    expect(titlesFor(true)).toContain("spec");
+    expect(
+      objectFacets(
+        { kind: "Lease", metadata: {}, spec: { holderIdentity: "a" } },
+        t,
+        false
+      ).groups.map((g) => g.title)
+    ).toContain("spec");
+  });
+
   it("keeps an object's spec and status where it has them", () => {
     const lease = {
       kind: "Lease",

@@ -322,6 +322,9 @@ export function objectFacets(
   const payload = payloadGroups(fields, t);
   const enveloped = payload.length === 0 || spec.length > 0;
   const statusDrawn = status.length > 0 || (enveloped && hasStatus !== false);
+  // No status subresource and no spec: a ServiceAccount, a ConfigMap, a Role,
+  // which keep their fields at the top level. "No spec" there reads as a gap.
+  const specDrawn = spec.length > 0 || (enveloped && hasStatus !== false);
 
   return {
     status: stateOf(fields.status),
@@ -336,7 +339,7 @@ export function objectFacets(
             },
           ]
         : []),
-      ...(enveloped
+      ...(specDrawn
         ? [
             {
               title: t("columns", "spec"),
