@@ -277,7 +277,7 @@ pub async fn subscribe_custom_object_watch(
     name: String,
     state: State<'_, AppState>,
 ) -> Result<String> {
-    crate::validation::validate_dns_subdomain(&name)?;
+    crate::validation::validate_path_segment(&name)?;
     if let Some(ns) = &namespace {
         crate::validation::validate_namespace(ns)?;
     }

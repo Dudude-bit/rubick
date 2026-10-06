@@ -15,6 +15,13 @@ use crate::state::AppState;
 use super::convert::{dynamic_object_to_custom_resource_info, dynamic_object_to_detail_info};
 use super::types::{CustomResourceDetailInfo, CustomResourceInfo};
 
+/// The kind's name is a subdomain; the object's only one path segment, as the
+/// API server holds every kind: `system:controller:x` is not a subdomain.
+fn names(crd_name: &str, name: &str) -> Result<()> {
+    crate::validation::validate_dns_subdomain(crd_name)?;
+    crate::validation::validate_path_segment(name)
+}
+
 /// One request on a CRD's kind, at the version the cluster serves it — its
 /// name is `<plural>.<group>`, and discovery says the rest. Every instance
 /// command asks through here, and a 404 is taken as the CRD having moved on:
@@ -124,8 +131,7 @@ pub async fn get_custom_resource(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<CustomResourceDetailInfo> {
-    crate::validation::validate_dns_subdomain(&crd_name)?;
-    crate::validation::validate_dns_subdomain(&name)?;
+    names(&crd_name, &name)?;
 
     let obj = on_served(&state, &crd_name, namespace, false, |api| async move {
         api.get(&name).await
@@ -143,8 +149,7 @@ pub async fn get_custom_resource_yaml(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<String> {
-    crate::validation::validate_dns_subdomain(&crd_name)?;
-    crate::validation::validate_dns_subdomain(&name)?;
+    names(&crd_name, &name)?;
 
     let obj = on_served(&state, &crd_name, namespace, false, |api| async move {
         api.get(&name).await
@@ -165,8 +170,7 @@ pub async fn patch_custom_resource(
     patch: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_subdomain(&crd_name)?;
-    crate::validation::validate_dns_subdomain(&name)?;
+    names(&crd_name, &name)?;
     // The namespace is a path segment too. `normalize_optional_namespace`
     // only trims it, so without this the one command in this file that
     // *writes* took an unchecked string straight into the request path.
@@ -208,8 +212,7 @@ pub async fn patch_custom_resource_json(
     operations: serde_json::Value,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_subdomain(&crd_name)?;
-    crate::validation::validate_dns_subdomain(&name)?;
+    names(&crd_name, &name)?;
     if let Some(ns) = namespace.as_deref() {
         crate::validation::validate_namespace(ns)?;
     }
@@ -236,8 +239,7 @@ pub async fn delete_custom_resource(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<()> {
-    crate::validation::validate_dns_subdomain(&crd_name)?;
-    crate::validation::validate_dns_subdomain(&name)?;
+    names(&crd_name, &name)?;
     if let Some(ns) = namespace.as_deref() {
         crate::validation::validate_namespace(ns)?;
     }
@@ -294,6 +296,28 @@ mod tests {
                 "a writing command took an unchecked namespace"
             );
         }
+    }
+
+    /// Sam's log: opening `ClusterRole` system:controller:clusterrole-
+    /// aggregation-controller failed `getCustomResource` as "not a valid
+    /// DNS-1123 subdomain". Fails if any command here holds an object name
+    /// to the subdomain rule again.
+    #[test]
+    fn an_rbac_name_with_colons_reaches_the_api_server() {
+        assert!(super::names(
+            "clusterroles.rbac.authorization.k8s.io",
+            "system:controller:clusterrole-aggregation-controller"
+        )
+        .is_ok());
+        assert!(super::names("clusterroles.rbac.authorization.k8s.io", "a/b").is_err());
+        assert!(super::names("../clusterroles", "admin").is_err());
+
+        let source = include_str!("instance.rs");
+        let code = source.split("#[cfg(test)]").next().expect("has code");
+        assert!(
+            !code.contains("validate_dns_subdomain(&name)"),
+            "an object name checked as a subdomain"
+        );
     }
 
     /// A `ServiceAccount` is addressed as `serviceaccounts`, with no group to
