@@ -5253,6 +5253,7 @@ export const en = {
     splitShares: "split {shares}",
     tlsFrom: "TLS from {name}",
     noTls: "no TLS",
+    tlsEveryHost: "every host",
     tlsNotChecked: "TLS not checked",
     relatedShortBy:
       "An integration that reads {kind} objects could not answer, so what is below is short by an unknown amount.",

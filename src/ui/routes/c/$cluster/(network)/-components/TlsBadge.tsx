@@ -57,7 +57,7 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
     return (
       <Tooltip>
         <TooltipTrigger className="text-fg-mid">
-          TLS {vendorHosts.length}
+          {t("count", "hosts", { n: vendorHosts.length })}
         </TooltipTrigger>
         <TooltipContent>
           <div className="text-xs">
@@ -78,15 +78,14 @@ export function TlsBadge({ tlsHosts, hasCatchAllTls, vendor }: TlsBadgeProps) {
     );
   }
 
-  const label =
-    explicitCount > 0
-      ? hasCatchAllTls
-        ? `TLS ${explicitCount} + all`
-        : `TLS ${explicitCount}`
-      : "TLS all";
+  // A catch-all certificate covers every host, whatever spec.tls also names.
+  const label = hasCatchAllTls
+    ? t("empty", "tlsEveryHost")
+    : t("count", "hosts", { n: explicitCount });
 
   const hosts = [
-    ...(hasCatchAllTls ? [...tlsHosts, "+ catch-all certificate"] : tlsHosts),
+    ...tlsHosts,
+    ...(hasCatchAllTls ? [t("empty", "catchAllCertificate")] : []),
     ...vendorHosts.map((host) =>
       vendor ? t("readings", "tlsHostFrom", { host, by: vendor.by }) : host
     ),

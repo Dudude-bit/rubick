@@ -5791,6 +5791,7 @@ export const ru: Catalogue = {
     splitShares: "делится {shares}",
     tlsFrom: "TLS из {name}",
     noTls: "без TLS",
+    tlsEveryHost: "все хосты",
     tlsNotChecked: "TLS не проверен",
     relatedShortBy:
       "Интеграция, которая читает объекты {kind}, не ответила, поэтому ниже не хватает неизвестно скольких.",
