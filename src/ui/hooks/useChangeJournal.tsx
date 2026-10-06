@@ -10,6 +10,7 @@ import {
   refusalOf,
 } from "@/lib/refusals";
 import {
+  alreadySeen,
   diffSnapshots,
   snapshotOf,
   type JournalEntry,
@@ -37,6 +38,18 @@ const KINDS: Array<{
 
 let counter = 0;
 
+type Change = Pick<JournalEntry, "field" | "key" | "from" | "to">;
+const CREATED: Change = { field: "created", key: null, from: null, to: null };
+const DELETED: Change = { field: "deleted", key: null, from: null, to: null };
+
+interface Seen {
+  rows: Map<string, Snapshot>;
+  /** The creation time of what was deleted under each key. */
+  gone: Map<string, string | null>;
+  /** When each key was last written, on {@link counter}'s clock. */
+  wrote: Map<string, number>;
+}
+
 /**
  * Keeps a journal of what the cluster's workloads changed while this app
  * was connected: generation, images, replicas, config checksums. Three
@@ -53,7 +66,9 @@ export function useChangeJournal() {
   const namespaces = useClusterStore((s) => s.namespaceScope);
   // Kept across a re-subscribe so a relist after a break still knows what the
   // cluster looked like before it, and reports the changes made in the gap.
-  const baselines = useRef(new Map<string, Map<string, Snapshot>>());
+  // One per object, whichever watch saw it last: a scope switch runs two
+  // watches over one namespace, and each change is still one entry.
+  const baselines = useRef(new Map<string, Seen>());
   const established = useRef(new Set<string>());
   const [restarts, setRestarts] = useState(0);
   const record = useChangeJournalStore((s) => s.record);
@@ -140,8 +155,34 @@ export function useChangeJournal() {
       streams.push(stream);
       const watch = `${kind}/${namespace ?? "*"}`;
       const held = `${cluster}|${watch}`;
-      const rows = baselines.current.get(held) ?? new Map<string, Snapshot>();
-      baselines.current.set(held, rows);
+      const objects = `${cluster}|${kind}`;
+      const seen = baselines.current.get(objects) ?? {
+        rows: new Map<string, Snapshot>(),
+        gone: new Map<string, string | null>(),
+        wrote: new Map<string, number>(),
+      };
+      baselines.current.set(objects, seen);
+      const inScope = (key: string) =>
+        namespace === null || key.startsWith(`${namespace}/`);
+      const comparable = (ns: string) =>
+        established.current.has(`${objects}/*`) ||
+        established.current.has(`${objects}/${ns}`);
+      const apply = (key: string, next: Snapshot): Change[] => {
+        const prev = seen.rows.get(key);
+        if (prev ? alreadySeen(prev, next) : seen.gone.get(key) === next.born)
+          return [];
+        seen.rows.set(key, next);
+        seen.wrote.set(key, (counter += 1));
+        return prev ? diffSnapshots(prev, next) : [CREATED];
+      };
+      const remove = (key: string, born: string | null): boolean => {
+        if (seen.rows.get(key)?.born !== born || !seen.rows.delete(key))
+          return false;
+        seen.gone.set(key, born);
+        seen.wrote.set(key, (counter += 1));
+        return true;
+      };
+      let listFrom = 0;
       let staged: Map<string, Snapshot> | null = null;
       // Anything that blinded this watch — a failure, a lag — makes the next
       // relist a comparison rather than a first sight.
@@ -182,10 +223,7 @@ export function useChangeJournal() {
               ...written,
               atRelist: true,
             });
-            const entry = (
-              row: Row,
-              change: Pick<JournalEntry, "field" | "key" | "from" | "to">
-            ): JournalEntry => ({
+            const entry = (row: Row, change: Change): JournalEntry => ({
               id: `${now}-${(counter += 1)}`,
               context: cluster,
               kind,
@@ -209,6 +247,7 @@ export function useChangeJournal() {
                 // watch that never synced was not in the span, and a refused
                 // one announces every retry this way.
                 staged = new Map();
+                listFrom = counter;
                 if (synced.delete(watch)) closeSpan();
                 continue;
               }
@@ -218,46 +257,25 @@ export function useChangeJournal() {
                 // A relist after a break: what differs from before the break
                 // is a change this app did not see happen, dated now and
                 // said to have happened in the gap before it.
-                if (established.current.has(held)) {
-                  for (const [key, next] of fresh) {
-                    const prev = rows.get(key);
-                    const [row, name] = key.split("/");
-                    if (!prev) {
-                      entries.push(
-                        relisted(
-                          entry(
-                            { namespace: row, name },
-                            {
-                              field: "created",
-                              key: null,
-                              from: null,
-                              to: null,
-                            }
-                          )
-                        )
-                      );
-                      continue;
-                    }
-                    for (const diff of diffSnapshots(prev, next))
-                      entries.push(
-                        relisted(entry({ namespace: row, name }, diff))
-                      );
-                  }
-                  for (const key of rows.keys()) {
-                    if (fresh.has(key)) continue;
-                    const [row, name] = key.split("/");
+                for (const [key, next] of fresh) {
+                  const [row, name] = key.split("/");
+                  const changes = apply(key, next);
+                  if (!comparable(row)) continue;
+                  for (const change of changes)
                     entries.push(
-                      relisted(
-                        entry(
-                          { namespace: row, name },
-                          { field: "deleted", key: null, from: null, to: null }
-                        )
-                      )
+                      relisted(entry({ namespace: row, name }, change))
                     );
-                  }
                 }
-                rows.clear();
-                for (const [key, value] of fresh) rows.set(key, value);
+                // Absent from a list taken before another watch saw it born.
+                for (const [key, prev] of [...seen.rows]) {
+                  if (!inScope(key) || fresh.has(key)) continue;
+                  if ((seen.wrote.get(key) ?? 0) > listFrom) continue;
+                  remove(key, prev.born);
+                  const [row, name] = key.split("/");
+                  entries.push(
+                    relisted(entry({ namespace: row, name }, DELETED))
+                  );
+                }
                 established.current.add(held);
                 if (refused.delete(watch)) closeSpan();
                 synced.add(watch);
@@ -273,34 +291,13 @@ export function useChangeJournal() {
                 continue;
               }
               if (!synced.has(watch)) continue;
-              if (change.op === "deleted") {
-                if (rows.delete(key))
-                  entries.push(
-                    entry(row, {
-                      field: "deleted",
-                      key: null,
-                      from: null,
-                      to: null,
-                    })
-                  );
-                continue;
-              }
               const next = snapshotOf(kind, row as never);
-              const prev = rows.get(key);
-              rows.set(key, next);
-              if (!prev) {
-                entries.push(
-                  entry(row, {
-                    field: "created",
-                    key: null,
-                    from: null,
-                    to: null,
-                  })
-                );
+              if (change.op === "deleted") {
+                if (remove(key, next.born)) entries.push(entry(row, DELETED));
                 continue;
               }
-              for (const diff of diffSnapshots(prev, next))
-                entries.push(entry(row, diff));
+              for (const each of apply(key, next))
+                entries.push(entry(row, each));
             }
             if (entries.length > 0) record(entries);
           });

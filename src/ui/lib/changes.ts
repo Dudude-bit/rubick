@@ -425,6 +425,8 @@ export function journalWords(
 
 /** The fields the journal watches, read off one list row. */
 export interface Snapshot {
+  /** The creation time, which tells a recreated object from the one it replaced. */
+  born: string | null;
   generation: number | null;
   /** Container name to image, so a removed container is not read as a
    * changed image on every container after it. */
@@ -445,6 +447,7 @@ export function snapshotOf(kind: string, row: WatchedRow): Snapshot {
   if (kind === "Deployment") {
     const d = row as DeploymentInfo;
     return {
+      born: d.createdAt,
       generation: d.generation,
       images: new Map(
         [...d.containers, ...d.initContainers].map((c) => [c.name, c.image])
@@ -456,6 +459,7 @@ export function snapshotOf(kind: string, row: WatchedRow): Snapshot {
   if (kind === "StatefulSet") {
     const s = row as StatefulSetInfo;
     return {
+      born: s.createdAt,
       generation: s.generation,
       images: namedImages(s.containerImages),
       replicas: s.replicas.desired,
@@ -464,6 +468,7 @@ export function snapshotOf(kind: string, row: WatchedRow): Snapshot {
   }
   const ds = row as DaemonSetInfo;
   return {
+    born: ds.createdAt,
     generation: ds.generation,
     images: namedImages(ds.containerImages),
     replicas: null,
@@ -471,10 +476,24 @@ export function snapshotOf(kind: string, row: WatchedRow): Snapshot {
   };
 }
 
+/**
+ * Whether `next` is a state of the same object already past `prev`. Every
+ * field a snapshot holds is spec, so generation orders them; two watches over
+ * one namespace deliver each change twice, and one may lag the other.
+ */
+export function alreadySeen(prev: Snapshot, next: Snapshot): boolean {
+  return (
+    prev.born === next.born &&
+    prev.generation !== null &&
+    next.generation !== null &&
+    next.generation <= prev.generation
+  );
+}
+
 /** The entries one row's change writes; empty when the watched fields held still. */
 export function diffSnapshots(
-  prev: Snapshot,
-  next: Snapshot
+  prev: Omit<Snapshot, "born">,
+  next: Omit<Snapshot, "born">
 ): Array<Pick<JournalEntry, "field" | "key" | "from" | "to">> {
   const out: Array<Pick<JournalEntry, "field" | "key" | "from" | "to">> = [];
   if (prev.generation !== next.generation) {

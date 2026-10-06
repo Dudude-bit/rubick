@@ -253,3 +253,178 @@ describe("the change journal across a namespace switch", () => {
     expect(spans().at(-1)?.to).toBe(now);
   });
 });
+
+describe("one change seen by two scopes' watches", () => {
+  const KIND_IDS = [
+    [commands.subscribeDeploymentWatch, "deploy"],
+    [commands.subscribeStatefulsetWatch, "sts"],
+    [commands.subscribeDaemonsetWatch, "ds"],
+  ] as const;
+  let opened = 0;
+  const latest = (subscribe: (typeof KIND_IDS)[number][0]) =>
+    vi.mocked(subscribe).mock.results.at(-1)?.value as Promise<string>;
+  const send = (stream: string, changes: Array<[string, unknown]>) =>
+    act(() => {
+      for (const handler of bus.handlers)
+        handler({
+          payload: {
+            stream_id: stream,
+            changes: changes.map(([op, resource]) => ({ op, resource })),
+            error: null,
+          },
+        });
+    });
+  const deployment = (name: string, generation: number, replicas: number) => ({
+    name,
+    namespace: "lena-sandbox",
+    uid: `uid-${name}`,
+    createdAt: `2026-10-06T18:37:00Z`,
+    generation,
+    replicas: {
+      desired: replicas,
+      ready: replicas,
+      available: replicas,
+      updated: replicas,
+    },
+    containers: [{ name: "web", image: "nginx:1.27" }],
+    initContainers: [],
+    templateAnnotations: {},
+  });
+  const relist = async (rows: unknown[]) => {
+    await send(await latest(commands.subscribeDeploymentWatch), [
+      ["restarted", null],
+      ...rows.map((row): [string, unknown] => ["applied", row]),
+      ["synced", null],
+    ]);
+  };
+  const syncRest = async () => {
+    for (const subscribe of [
+      commands.subscribeStatefulsetWatch,
+      commands.subscribeDaemonsetWatch,
+    ])
+      await send(await latest(subscribe), [
+        ["restarted", null],
+        ["synced", null],
+      ]);
+  };
+  const scope = async (namespaces: string[]) => {
+    const before = bus.handlers.length;
+    act(() => useClusterStore.setState({ namespaceScope: namespaces }));
+    await waitFor(() => expect(bus.handlers).toHaveLength(before + 3));
+  };
+  const written = () =>
+    useChangeJournalStore
+      .getState()
+      .entries.map(
+        (e) =>
+          `${e.name} ${e.field} ${e.from}->${e.to}${e.atRelist ? " relist" : ""}`
+      );
+
+  beforeEach(async () => {
+    for (const [subscribe, id] of KIND_IDS)
+      vi.mocked(subscribe).mockImplementation(
+        async (namespaces) => `${id}:${namespaces?.[0] ?? "*"}:${(opened += 1)}`
+      );
+    useClusterStore.setState({ namespaceScope: [] });
+    renderHook(() => useChangeJournal());
+    await waitFor(() => expect(bus.handlers).toHaveLength(3));
+    await relist([deployment("hello-web", 3, 1)]);
+    await syncRest();
+  });
+
+  afterEach(() => {
+    for (const [subscribe, id] of KIND_IDS)
+      vi.mocked(subscribe).mockImplementation(async () => id);
+  });
+
+  /**
+   * Lena scaled hello-web while on All namespaces, then picked lena-sandbox:
+   * the relist compared against what lena-sandbox's own watch saw minutes
+   * earlier and wrote the scale a second time. Fails if a change one scope's
+   * watch recorded is recorded again by another scope's relist.
+   */
+  it("records a change seen under All namespaces once after switching to its namespace", async () => {
+    await scope(["lena-sandbox"]);
+    await relist([deployment("hello-web", 3, 1)]);
+    await syncRest();
+    await scope([]);
+    await relist([deployment("hello-web", 3, 1)]);
+    await syncRest();
+
+    await send(await latest(commands.subscribeDeploymentWatch), [
+      ["applied", deployment("hello-web", 4, 2)],
+    ]);
+    await scope(["lena-sandbox"]);
+    await relist([deployment("hello-web", 4, 2)]);
+    await syncRest();
+
+    expect(written()).toEqual([
+      "hello-web generation 3->4",
+      "hello-web replicas 1->2",
+    ]);
+  });
+
+  /**
+   * While the old scope's watches wait for the new scope to sync, both see
+   * every change, and one may run behind the other. Fails if the overlap
+   * writes a change twice or the lagging watch writes it backwards.
+   */
+  it("records each change once while both scopes' watches deliver it", async () => {
+    const all = await latest(commands.subscribeDeploymentWatch);
+    await scope(["lena-sandbox"]);
+    await relist([deployment("hello-web", 3, 1)]);
+    const sandbox = await latest(commands.subscribeDeploymentWatch);
+
+    const scaled = [
+      ["applied", deployment("hello-web", 4, 2)],
+      ["applied", deployment("hello-web", 5, 3)],
+    ] as Array<[string, unknown]>;
+    await send(all, scaled);
+    await send(sandbox, scaled);
+    await syncRest();
+
+    expect(written()).toEqual([
+      "hello-web generation 3->4",
+      "hello-web replicas 1->2",
+      "hello-web generation 4->5",
+      "hello-web replicas 2->3",
+    ]);
+  });
+
+  /** Fails if a lagging watch's echo of a deleted object writes it back as created. */
+  it("records a deletion during the hand-over once, and the lagging watch does not revive it", async () => {
+    const all = await latest(commands.subscribeDeploymentWatch);
+    await scope(["lena-sandbox"]);
+    await relist([deployment("hello-web", 3, 1)]);
+    const sandbox = await latest(commands.subscribeDeploymentWatch);
+
+    await send(all, [["deleted", deployment("hello-web", 3, 1)]]);
+    await send(sandbox, [
+      ["applied", deployment("hello-web", 3, 1)],
+      ["deleted", deployment("hello-web", 3, 1)],
+    ]);
+    await syncRest();
+
+    expect(written()).toEqual(["hello-web deleted null->null"]);
+  });
+
+  /**
+   * The new scope lists before the old scope's watch sees a Deployment
+   * created. Fails if that list's silence about it is written as a deletion.
+   */
+  it("does not read a list taken before a creation as that object's deletion", async () => {
+    const all = await latest(commands.subscribeDeploymentWatch);
+    await scope(["lena-sandbox"]);
+    const sandbox = await latest(commands.subscribeDeploymentWatch);
+    await send(sandbox, [
+      ["restarted", null],
+      ["applied", deployment("hello-web", 3, 1)],
+    ]);
+    await send(all, [["applied", deployment("api", 1, 1)]]);
+    await send(sandbox, [["synced", null]]);
+    await send(sandbox, [["applied", deployment("api", 1, 1)]]);
+    await syncRest();
+
+    expect(written()).toEqual(["api created null->null"]);
+  });
+});
