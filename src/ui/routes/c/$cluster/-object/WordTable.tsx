@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { ShieldAlert } from "lucide-react";
 
 import type { WordCell, WordTable as Table } from "../-peek/peek-sources-kit";
@@ -90,11 +91,24 @@ function Words({ cell }: { cell: WordCell }) {
             {escalating && (
               <ShieldAlert className="h-3 w-3 flex-none" aria-hidden />
             )}
-            {word}
+            <Breakable word={word} />
             {said && <span className="sr-only">{`, ${said}`}</span>}
           </span>
         );
       })}
     </span>
   );
+}
+
+/**
+ * `rbac.authorization.k8s.io` may wrap after a dot or a slash. Unbroken, it
+ * pushed the verbs column past the peek's edge and cut "escalate".
+ */
+function Breakable({ word }: { word: string }) {
+  return word.split(/(?<=[./])/).map((part, index) => (
+    <Fragment key={index}>
+      {index > 0 && <wbr />}
+      {part}
+    </Fragment>
+  ));
 }

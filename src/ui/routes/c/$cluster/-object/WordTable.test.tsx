@@ -35,4 +35,29 @@ describe("a rules table", () => {
     );
     expect(screen.queryByText(/Marked verbs/)).toBeNull();
   });
+
+  /**
+   * In a peek "rbac.authorization.k8s.io" could not wrap, so the table ran
+   * past the edge and the verbs column showed "escalat". Fails if a group
+   * name loses its break points or any of its letters.
+   */
+  it("lets an API group wrap after a dot, keeping every letter", () => {
+    const { container } = render(
+      <WordTable
+        table={{
+          columns: ["apiGroups", "verbs"],
+          rows: [
+            [
+              { words: ["rbac.authorization.k8s.io"] },
+              { words: ["escalate"], escalating: ["escalate"] },
+            ],
+          ],
+        }}
+        emptyMessage="none"
+      />
+    );
+    const group = container.querySelector("tbody td")!;
+    expect(group.querySelectorAll("wbr")).toHaveLength(3);
+    expect(group).toHaveTextContent(/^rbac\.authorization\.k8s\.io$/);
+  });
 });
