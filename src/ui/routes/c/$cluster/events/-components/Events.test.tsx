@@ -392,6 +392,27 @@ describe("stories", () => {
   });
 
   /**
+   * Stories, the windows, the search and the limit sat over the refusal as
+   * though there were events to arrange. Fails if they are drawn over a feed
+   * nothing was read from.
+   */
+  it("draws no view or filter controls over a feed it could not read", async () => {
+    listEvents.mockRejectedValue(
+      new Error(
+        'events is forbidden: User "marco" cannot list resource "events"'
+      )
+    );
+    await mount("stories");
+    await screen.findByText(/across the whole cluster was refused/);
+
+    expect(screen.queryByRole("tab", { name: "Stories" })).toBeNull();
+    expect(screen.queryByPlaceholderText(/filter events/i)).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: "Events fetched" })
+    ).toBeNull();
+  });
+
+  /**
    * Marco under All namespaces: events are refused across the cluster and
    * readable in team-checkout, yet the page said it could not read them in
    * any namespace and offered no way there. Fails if the feed stops naming

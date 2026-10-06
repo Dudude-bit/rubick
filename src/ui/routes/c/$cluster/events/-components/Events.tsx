@@ -236,6 +236,7 @@ export function Events() {
   const warningCount = counted.filter((e) => e.type === "Warning").length;
   const normalCount = counted.length - warningCount;
   const showSkeleton = isLoading && events.length === 0;
+  const nothingRead = failed !== null && pool.length === 0;
 
   useShareSection("events", () => [
     eventsSection(
@@ -268,7 +269,7 @@ export function Events() {
         title="Events"
         description={<KindAbout kind={ResourceType.Event} />}
         count={
-          showSkeleton || (failed && pool.length === 0)
+          showSkeleton || nothingRead
             ? undefined
             : summarise(
                 t,
@@ -280,139 +281,145 @@ export function Events() {
         }
         actions={
           <>
-            <span
-              role="tablist"
-              aria-label={t("columns", "view")}
-              className="flex items-center gap-0.5"
-            >
-              {(["stories", "list"] as const).map((candidate) => (
-                <button
-                  key={candidate}
-                  type="button"
-                  role="tab"
-                  aria-selected={view === candidate}
-                  onClick={() =>
-                    setSearch({
-                      view: candidate === "stories" ? undefined : "list",
-                    })
-                  }
-                  className={cn(
-                    "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
-                    view === candidate ? "bg-sel text-fg" : "text-fg-mut"
-                  )}
-                >
-                  {t(
-                    "action",
-                    candidate === "stories" ? "eventsStories" : "eventsAll"
-                  )}
-                </button>
-              ))}
-            </span>
-            {view === "stories" ? (
+            {!nothingRead && (
               <>
-                <div
+                <span
+                  role="tablist"
+                  aria-label={t("columns", "view")}
                   className="flex items-center gap-0.5"
-                  role="group"
-                  aria-label={t("action", "storyWindow")}
                 >
-                  {STORY_WINDOWS.map((candidate) => (
+                  {(["stories", "list"] as const).map((candidate) => (
                     <button
                       key={candidate}
                       type="button"
-                      aria-pressed={window === candidate}
+                      role="tab"
+                      aria-selected={view === candidate}
                       onClick={() =>
                         setSearch({
-                          range: candidate === "1h" ? undefined : candidate,
+                          view: candidate === "stories" ? undefined : "list",
                         })
                       }
                       className={cn(
-                        "h-6 whitespace-nowrap rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
-                        window === candidate ? "bg-sel text-fg" : "text-fg-mut"
+                        "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
+                        view === candidate ? "bg-sel text-fg" : "text-fg-mut"
                       )}
                     >
-                      {formatTimeUnit(
-                        Number.parseInt(candidate, 10),
-                        candidate.endsWith("m") ? "minute" : "hour"
+                      {t(
+                        "action",
+                        candidate === "stories" ? "eventsStories" : "eventsAll"
                       )}
                     </button>
                   ))}
+                </span>
+                {view === "stories" ? (
+                  <>
+                    <div
+                      className="flex items-center gap-0.5"
+                      role="group"
+                      aria-label={t("action", "storyWindow")}
+                    >
+                      {STORY_WINDOWS.map((candidate) => (
+                        <button
+                          key={candidate}
+                          type="button"
+                          aria-pressed={window === candidate}
+                          onClick={() =>
+                            setSearch({
+                              range: candidate === "1h" ? undefined : candidate,
+                            })
+                          }
+                          className={cn(
+                            "h-6 whitespace-nowrap rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
+                            window === candidate
+                              ? "bg-sel text-fg"
+                              : "text-fg-mut"
+                          )}
+                        >
+                          {formatTimeUnit(
+                            Number.parseInt(candidate, 10),
+                            candidate.endsWith("m") ? "minute" : "hour"
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-0.5" role="group">
+                      {ORDERS.map((candidate) => (
+                        <button
+                          key={candidate.value}
+                          type="button"
+                          aria-pressed={order === candidate.value}
+                          onClick={() => setOrder(candidate.value)}
+                          className={cn(
+                            "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
+                            order === candidate.value
+                              ? "bg-sel text-fg"
+                              : "text-fg-mut"
+                          )}
+                        >
+                          {t("action", candidate.label)}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : null}
+                {/* Same shape as the lists' search box: a text entry, not a
+                  panel, so it only draws a background once it is in use. */}
+                <div className="flex h-6 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
+                  <Search className="h-3 w-3 shrink-0" aria-hidden="true" />
+                  <input
+                    autoComplete="off"
+                    autoCorrect="off"
+                    autoCapitalize="off"
+                    spellCheck={false}
+                    type="text"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    aria-label={t("action", "filterEventsPlaceholder")}
+                    placeholder={t("action", "filterEventsPlaceholder")}
+                    className="w-36 bg-transparent text-[11px] text-fg outline-hidden placeholder:text-fg-fnt"
+                  />
                 </div>
-                <div className="flex items-center gap-0.5" role="group">
-                  {ORDERS.map((candidate) => (
+                <div
+                  className="flex items-center gap-0.5"
+                  role="group"
+                  aria-label={t("action", "eventType")}
+                >
+                  {TYPE_FILTERS.map((filter) => (
                     <button
-                      key={candidate.value}
+                      key={filter.value}
                       type="button"
-                      aria-pressed={order === candidate.value}
-                      onClick={() => setOrder(candidate.value)}
+                      aria-pressed={eventType === filter.value}
+                      onClick={() => setEventType(filter.value)}
                       className={cn(
                         "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
-                        order === candidate.value
+                        eventType === filter.value
                           ? "bg-sel text-fg"
                           : "text-fg-mut"
                       )}
                     >
-                      {t("action", candidate.label)}
+                      {t("action", filter.label)}
                     </button>
                   ))}
                 </div>
+                <Select value={eventLimit} onValueChange={setEventLimit}>
+                  <SelectTrigger
+                    aria-label={t("action", "eventsFetched")}
+                    className="h-6 w-auto shrink-0 gap-1 whitespace-nowrap border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LIMITS.map((limit) => (
+                      <SelectItem key={limit} value={limit}>
+                        {limit === "all"
+                          ? t("action", "noLimit")
+                          : t("action", "latestN", { n: limit })}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </>
-            ) : null}
-            {/* Same shape as the lists' search box: a text entry, not a
-              panel, so it only draws a background once it is in use. */}
-            <div className="flex h-6 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
-              <Search className="h-3 w-3 shrink-0" aria-hidden="true" />
-              <input
-                autoComplete="off"
-                autoCorrect="off"
-                autoCapitalize="off"
-                spellCheck={false}
-                type="text"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                aria-label={t("action", "filterEventsPlaceholder")}
-                placeholder={t("action", "filterEventsPlaceholder")}
-                className="w-36 bg-transparent text-[11px] text-fg outline-hidden placeholder:text-fg-fnt"
-              />
-            </div>
-            <div
-              className="flex items-center gap-0.5"
-              role="group"
-              aria-label={t("action", "eventType")}
-            >
-              {TYPE_FILTERS.map((filter) => (
-                <button
-                  key={filter.value}
-                  type="button"
-                  aria-pressed={eventType === filter.value}
-                  onClick={() => setEventType(filter.value)}
-                  className={cn(
-                    "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
-                    eventType === filter.value
-                      ? "bg-sel text-fg"
-                      : "text-fg-mut"
-                  )}
-                >
-                  {t("action", filter.label)}
-                </button>
-              ))}
-            </div>
-            <Select value={eventLimit} onValueChange={setEventLimit}>
-              <SelectTrigger
-                aria-label={t("action", "eventsFetched")}
-                className="h-6 w-auto shrink-0 gap-1 whitespace-nowrap border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {LIMITS.map((limit) => (
-                  <SelectItem key={limit} value={limit}>
-                    {limit === "all"
-                      ? t("action", "noLimit")
-                      : t("action", "latestN", { n: limit })}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            )}
             <DataFreshness
               dataUpdatedAt={freshness.dataUpdatedAt}
               slowed={freshness.slowed}
