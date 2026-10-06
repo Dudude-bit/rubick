@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act } from "@testing-library/react";
-import type { AnyRouter } from "@tanstack/react-router";
-import type { QueryClient } from "@tanstack/react-query";
+import { act, render } from "@testing-library/react";
+import {
+  createBrowserHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  RouterProvider,
+  type AnyRouter,
+} from "@tanstack/react-router";
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -233,5 +240,79 @@ describe("the kubeconfig", () => {
       });
     });
     expect(state().tabs[0].missing).toBe(true);
+  });
+});
+
+describe("Back in a tab", () => {
+  /** The window's own history, as the app runs on, so Back is a real popstate. */
+  async function mountOnWindowHistory(entry: string) {
+    window.history.replaceState(null, "", entry);
+    client = testQueryClient();
+    const root = createRootRoute();
+    const page = createRoute({
+      getParentRoute: () => root,
+      path: "$",
+      component: Probe,
+    });
+    router = createRouter({
+      routeTree: root.addChildren([page]),
+      history: createBrowserHistory(),
+    });
+    await act(() => router.load());
+    const view = render(
+      <QueryClientProvider client={client}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    );
+    return () => {
+      view.unmount();
+      router.history.destroy();
+    };
+  }
+
+  async function activate(id: string, at: string) {
+    await act(async () => {
+      await state().activateTab(id);
+    });
+    await vi.waitFor(() => expect(href()).toBe(at));
+    await vi.waitFor(() => expect(state().pendingHref).toBeNull());
+  }
+
+  /**
+   * Sam opened ClusterRoles then one ClusterRole in tab 2, looked at tab 1
+   * and came back: Back loaded tab 1's PersistentVolume into tab 2, and both
+   * tabs ended on it.
+   */
+  it("returns to the tab's own last route after a visit to another tab", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({ id: "a", href: "/c/prod/persistentvolumes/pv-demo" }),
+        tab({ id: "b", href: "/c/prod/clusterroles" }),
+      ],
+      activeId: "a",
+    });
+    const unmount = await mountOnWindowHistory(
+      "/c/prod/persistentvolumes/pv-demo"
+    );
+
+    await activate("b", "/c/prod/clusterroles");
+    await act(async () => {
+      await router.navigate({ href: "/c/prod/clusterroles/admin" });
+    });
+    await vi.waitFor(() =>
+      expect(state().tabs[1].href).toBe("/c/prod/clusterroles/admin")
+    );
+    await activate("a", "/c/prod/persistentvolumes/pv-demo");
+    await activate("b", "/c/prod/clusterroles/admin");
+
+    act(() => router.history.back());
+
+    await vi.waitFor(() => expect(href()).toBe("/c/prod/clusterroles"));
+    await vi.waitFor(() => expect(state().pendingHref).toBeNull());
+    expect(state().tabs.map((each) => each.href)).toEqual([
+      "/c/prod/persistentvolumes/pv-demo",
+      "/c/prod/clusterroles",
+    ]);
+    unmount();
   });
 });

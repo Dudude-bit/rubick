@@ -123,6 +123,63 @@ describe("a tab holds a route", () => {
   });
 });
 
+describe("each tab's own Back", () => {
+  /**
+   * The window had one history for every tab: Back in one tab after a visit
+   * to another loaded the other tab's object, and both tabs ended on it.
+   */
+  it("walks back through this tab's routes, never another tab's", async () => {
+    seed([
+      tab({ id: "a", href: "/c/prod/persistentvolumes/pv-demo" }),
+      tab({ id: "b", href: "/c/prod/clusterroles" }),
+    ]);
+    await state().activateTab("b");
+    state().routeSettled();
+    state().pushed("/c/prod/clusterroles", "/c/prod/clusterroles/admin");
+    state().recordHref("/c/prod/clusterroles/admin");
+
+    await state().activateTab("a");
+    state().routeSettled();
+    await state().activateTab("b");
+    state().routeSettled();
+
+    state().goBack();
+    expect(state().pendingHref).toBe("/c/prod/clusterroles");
+    expect(state().pendingReplace).toBe(true);
+    expect(state().tabs.map((each) => each.href)).toEqual([
+      "/c/prod/persistentvolumes/pv-demo",
+      "/c/prod/clusterroles",
+    ]);
+  });
+
+  /** A tab with nothing behind it stays, as a browser tab does. */
+  it("stays where it is with nothing behind it", () => {
+    seed([tab({ id: "a", href: "/c/prod/nodes" })]);
+    state().goBack();
+    expect(state().pendingHref).toBe("/c/prod/nodes");
+    expect(state().tabs[0].href).toBe("/c/prod/nodes");
+  });
+
+  /**
+   * The window's history starts empty on launch, so a Back restored from
+   * disk would walk to routes the window has no entries for.
+   */
+  it("keeps Back out of what is written to disk", () => {
+    seed([tab({ id: "a", href: "/c/prod/nodes" })]);
+    state().pushed("/c/prod/pods", "/c/prod/nodes");
+    expect(state().tabs[0].back).toEqual(["/c/prod/pods"]);
+    expect(localStorage.getItem("scope-tabs")).not.toContain("/c/prod/pods");
+  });
+
+  /** An activation's own route is not a step the reader took in the tab. */
+  it("remembers nothing pushed while a tab is being activated", async () => {
+    seed([tab({ id: "a" }), tab({ id: "b", href: "/c/prod/nodes" })]);
+    await state().activateTab("b");
+    state().pushed("/", "/c/prod/nodes");
+    expect(state().tabs[1].back ?? []).toEqual([]);
+  });
+});
+
 describe("opening", () => {
   it("opens on the overview of the cluster already on screen", async () => {
     live("prod", "web");

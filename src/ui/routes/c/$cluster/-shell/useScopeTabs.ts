@@ -22,6 +22,9 @@ import { useScopeTabStore } from "@/stores/scopeTabStore";
  */
 let delivering: string | null = null;
 
+const hrefOf = (location: { pathname: string; search: string }) =>
+  `${location.pathname}${location.search}`;
+
 export function useScopeTabs(): void {
   const navigate = useNavigate();
   const router = useRouter();
@@ -60,8 +63,43 @@ export function useScopeTabs(): void {
       const { pathname, searchStr } = router.state.location;
       store.recordHref(`${pathname}${searchStr}`);
     };
-    void navigate({ href: pendingHref }).then(landed, landed);
+    const replace = useScopeTabStore.getState().pendingReplace;
+    void navigate({ href: pendingHref, replace }).then(landed, landed);
   }, [pendingHref, href, navigate, router]);
+
+  // The window keeps one history for every tab. A route pushed is remembered
+  // by the tab it was pushed in, and Back, the arrow's or the mouse's, walks
+  // that tab's own: the window's is put back where it was before anything
+  // renders the other tab's route, which would also connect its cluster.
+  useEffect(() => {
+    let previous = hrefOf(router.history.location);
+    const unsubscribe = router.history.subscribe(({ location, action }) => {
+      const next = hrefOf(location);
+      if (action.type === "PUSH")
+        useScopeTabStore.getState().pushed(previous, next);
+      previous = next;
+    });
+    const unblock = router.history.block({
+      enableBeforeUnload: false,
+      blockerFn: ({ action, currentLocation, nextLocation }) => {
+        if (action === "PUSH" || action === "REPLACE") return false;
+        const backwards =
+          nextLocation.state.__TSR_index < currentLocation.state.__TSR_index;
+        window.addEventListener(
+          "popstate",
+          () => {
+            if (backwards) useScopeTabStore.getState().goBack();
+          },
+          { once: true }
+        );
+        return true;
+      },
+    });
+    return () => {
+      unsubscribe();
+      unblock();
+    };
+  }, [router]);
 
   // A route that names an object names it in one cluster; the list it came
   // from is the same list anywhere.

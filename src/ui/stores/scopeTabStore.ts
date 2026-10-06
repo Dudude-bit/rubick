@@ -69,6 +69,11 @@ export interface ScopeTab {
   href: string;
   /** The kubeconfig no longer lists `context`. Owned by `reconcileContexts`. */
   missing: boolean;
+  /**
+   * Where Back goes, newest last: this tab's own earlier routes. The window
+   * has one history for every tab, and Back in it walked into the others.
+   */
+  back?: string[];
 }
 
 interface ScopeTabState {
@@ -81,6 +86,8 @@ interface ScopeTabState {
    * renders one tab's route under another tab's scope.
    */
   pendingHref: string | null;
+  /** The pending route takes the place of the one on screen, as Back does. */
+  pendingReplace: boolean;
 
   openTab: (options?: {
     href?: string;
@@ -98,6 +105,10 @@ interface ScopeTabState {
   /** Re-apply the active tab's scope, e.g. once the kubeconfig has loaded. */
   resumeActive: () => Promise<void>;
   recordHref: (href: string) => void;
+  /** The router went from one route to a new one in the active tab. */
+  pushed: (from: string, to: string) => void;
+  /** Back in the active tab, to its own last route and never another tab's. */
+  goBack: () => void;
   /** Let go of a route that belongs to the cluster just left. */
   retargetAfterSwitch: (connected: string | null) => void;
   /** The window connected while the active tab named a lost cluster. */
@@ -108,6 +119,12 @@ interface ScopeTabState {
 
 let nextId = 0;
 const makeId = () => `scope-${++nextId}`;
+
+/** As far back as a tab remembers, like a browser tab's own limit. */
+const BACK_LIMIT = 50;
+
+/** A tab as it is written to disk: its Back belongs to this session. */
+const withoutHistory = ({ back: _back, ...tab }: ScopeTab): ScopeTab => tab;
 
 function makeTab(init: Partial<ScopeTab> = {}): ScopeTab {
   return {
@@ -208,6 +225,7 @@ export const useScopeTabStore = create<ScopeTabState>()(
       tabs: [initialTab],
       activeId: initialTab.id,
       pendingHref: null,
+      pendingReplace: false,
 
       openTab: async ({ href, context, namespace, background } = {}) => {
         const live = useClusterStore.getState();
@@ -384,7 +402,41 @@ export const useScopeTabStore = create<ScopeTabState>()(
           };
         }),
 
-      routeSettled: () => set({ pendingHref: null }),
+      pushed: (from: string, to: string) =>
+        set((state) => {
+          if (state.pendingHref !== null || from === to) return state;
+          return {
+            tabs: state.tabs.map((tab) =>
+              tab.id === state.activeId
+                ? {
+                    ...tab,
+                    back: [...(tab.back ?? []), from].slice(-BACK_LIMIT),
+                  }
+                : tab
+            ),
+          };
+        }),
+
+      goBack: () =>
+        set((state) => {
+          if (state.pendingHref !== null) return state;
+          const active = state.tabs.find((tab) => tab.id === state.activeId);
+          if (!active) return state;
+          const back = active.back ?? [];
+          // Nothing behind it: the tab stays where it is, as a browser tab does.
+          const to = back.at(-1) ?? active.href;
+          return {
+            tabs: state.tabs.map((tab) =>
+              tab.id === active.id
+                ? { ...tab, href: to, back: back.slice(0, -1) }
+                : tab
+            ),
+            pendingHref: to,
+            pendingReplace: true,
+          };
+        }),
+
+      routeSettled: () => set({ pendingHref: null, pendingReplace: false }),
 
       reconcileContexts: (names: string[]) =>
         set((state) => {
@@ -416,7 +468,10 @@ export const useScopeTabStore = create<ScopeTabState>()(
       version: 2,
       // The route and the parked scope are the workspace; `pendingHref` is
       // one activation's in-flight state and means nothing next launch.
-      partialize: (state) => ({ tabs: state.tabs, activeId: state.activeId }),
+      partialize: (state) => ({
+        tabs: state.tabs.map(withoutHistory),
+        activeId: state.activeId,
+      }),
       // Version 1 is the first payload that carries routes at all, and
       // version 2 the first whose routes name their cluster. Anything older
       // keeps its tabs and scopes and loses its routes: an address from
