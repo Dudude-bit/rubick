@@ -21,6 +21,11 @@ const PAGE_SIZE: u32 = 500;
 type Meta = PartialObjectMeta<DynamicObject>;
 
 pub(super) fn spawn(index: &Arc<ClusterIndex>, slot: SlotKey, resource: ApiResource) {
+    let known = index.refusals.lock().get(&slot).cloned();
+    if let Some(message) = known {
+        index.refused(&slot, message);
+        return;
+    }
     index.slots.lock().insert(slot.clone(), SlotState::Syncing);
     let index = index.clone();
     tokio::spawn(async move {
@@ -147,6 +152,7 @@ impl ClusterIndex {
     /// Nothing more will be read here. Across the cluster, the window's
     /// namespaces are tried instead.
     fn refused(self: &Arc<Self>, slot: &SlotKey, message: String) {
+        self.refusals.lock().insert(slot.clone(), message.clone());
         self.graph.write().drop_slot(slot);
         self.slots
             .lock()

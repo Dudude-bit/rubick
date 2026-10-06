@@ -145,11 +145,19 @@ pub struct ClusterIndex {
     last_used: Mutex<Instant>,
     client: Client,
     stop: CancellationToken,
+    /// What this connection was refused, kept across the index idling out.
+    refusals: Refusals,
 }
+
+/// Slots the cluster refused on one connection, and its words for it.
+type Refusals = Arc<Mutex<BTreeMap<SlotKey, String>>>;
 
 #[derive(Default)]
 pub struct OwnershipIndexes {
     clusters: Arc<DashMap<String, Arc<ClusterIndex>>>,
+    /// Per context, until it connects again: a refused list is not asked again
+    /// when an idle index starts over, which was a 403 and a warning per kind.
+    refusals: DashMap<String, Refusals>,
 }
 
 impl OwnershipIndexes {
@@ -184,6 +192,7 @@ impl OwnershipIndexes {
             last_used: Mutex::new(Instant::now()),
             client,
             stop: CancellationToken::new(),
+            refusals: self.refusals.entry(context.clone()).or_default().clone(),
         });
         let index = self
             .clusters
@@ -249,12 +258,14 @@ impl OwnershipIndexes {
     }
 
     pub fn forget(&self, context: &str) {
+        self.refusals.remove(context);
         if let Some((_, index)) = self.clusters.remove(context) {
             index.stop.cancel();
         }
     }
 
     pub fn forget_all(&self) {
+        self.refusals.clear();
         for entry in self.clusters.iter() {
             entry.stop.cancel();
         }
@@ -491,6 +502,11 @@ impl ClusterIndex {
 impl ClusterIndex {
     /// An index watching `kinds`, each still listing, with no watch behind it.
     pub(crate) fn holding(client: Client, kinds: &[(&str, KindKey)]) -> Arc<Self> {
+        Self::remembering(client, kinds, Refusals::default())
+    }
+
+    /// The same, sharing what a connection was refused with another index.
+    fn remembering(client: Client, kinds: &[(&str, KindKey)], refusals: Refusals) -> Arc<Self> {
         let index = Self {
             graph: RwLock::new(Graph::default()),
             slots: Mutex::new(BTreeMap::new()),
@@ -501,6 +517,7 @@ impl ClusterIndex {
             last_used: Mutex::new(Instant::now()),
             client,
             stop: CancellationToken::new(),
+            refusals,
         };
         for (kind, key) in kinds {
             let resource = ApiResource {
@@ -844,5 +861,65 @@ mod tests {
     fn an_ordinary_object_holds_nothing() {
         let (_, holds) = cascade_in(&widgets(), "w1", &NotRead::default(), |_| None, None);
         assert_eq!(holds, None);
+    }
+
+    /// Marco's index idled out and started again, and every kind his Role
+    /// cannot list across the cluster was asked again: a 403 and a warning
+    /// line each, about ninety at a time. Fails if a kind this connection was
+    /// refused is asked across the cluster when a new index starts.
+    #[tokio::test]
+    async fn a_kind_refused_on_this_connection_is_not_asked_again_after_the_index_restarts() {
+        use crate::client::served::test_server::{answering, failure};
+
+        let (client, hits) = answering(|path, _| match path {
+            "/api/v1/pods" => failure(403, "Forbidden"),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let refusals = Refusals::default();
+        let whole = slot(None);
+        let resource = ApiResource {
+            group: String::new(),
+            version: "v1".to_string(),
+            api_version: "v1".to_string(),
+            kind: "Pod".to_string(),
+            plural: "pods".to_string(),
+        };
+        let asked = || {
+            hits.lock()
+                .unwrap()
+                .get("/api/v1/pods")
+                .copied()
+                .unwrap_or(0)
+        };
+
+        let first = ClusterIndex::remembering(client.clone(), &[("Pod", kind())], refusals.clone());
+        slots::spawn(&first, whole.clone(), resource.clone());
+        for _ in 0..200 {
+            if matches!(
+                first.slots.lock().get(&whole),
+                Some(SlotState::Refused { .. })
+            ) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(matches!(
+            first.slots.lock().get(&whole),
+            Some(SlotState::Refused { .. })
+        ));
+        first.stop.cancel();
+        let before = asked();
+
+        let second = ClusterIndex::remembering(client, &[("Pod", kind())], refusals);
+        slots::spawn(&second, whole.clone(), resource);
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        assert!(matches!(
+            second.slots.lock().get(&whole),
+            Some(SlotState::Refused { .. })
+        ));
+        assert_eq!(asked(), before);
+        second.stop.cancel();
     }
 }
