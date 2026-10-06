@@ -140,11 +140,15 @@ function Lists({ published }: { published: ServicePublished }) {
               {rows.map((endpoint) => {
                 const state = endpointState(endpoint, t);
                 return (
-                  <TableRow key={endpoint.address} data-quiet>
+                  <TableRow
+                    key={endpoint.address ?? endpoint.target?.name}
+                    data-quiet
+                  >
                     <TableCell>
                       <CopyableAddress
                         value={endpointAddress(endpoint)}
                         label={t("columns", "address")}
+                        fallback={t("readings", "healthNoAddressYet")}
                       />
                     </TableCell>
                     <TableCell>

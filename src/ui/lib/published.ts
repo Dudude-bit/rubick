@@ -226,8 +226,9 @@ export function legacyNote(
   return t("readings", "epDisagree", { listed, real, from });
 }
 
-/** `10.42.1.51:8080`, or the bare address where the slice publishes no port. */
-export function endpointAddress(endpoint: PublishedEndpoint): string {
+/** `10.42.1.51:8080`, the bare address where the slice publishes no port, or `null` for a pod with no IP yet. */
+export function endpointAddress(endpoint: PublishedEndpoint): string | null {
   const port = endpoint.ports[0];
+  if (endpoint.address === null) return null;
   return port === undefined ? endpoint.address : `${endpoint.address}:${port}`;
 }

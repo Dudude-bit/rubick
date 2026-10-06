@@ -78,7 +78,8 @@ pub struct PublishedPort {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PublishedEndpoint {
-    pub address: String,
+    /// `None` for a pod the cluster has not given an IP yet.
+    pub address: Option<String>,
     /// The pod behind it, where `targetRef` names one. A hand-written slice
     /// names nothing, and that is a real state rather than a gap.
     pub target: Option<ObjectRef>,
@@ -280,11 +281,7 @@ fn endpoint_of(endpoint: &Endpoint, ports: &[i32], ns: &str) -> PublishedEndpoin
     let ready = conditions.and_then(|c| c.ready).unwrap_or(true);
     let serving = conditions.and_then(|c| c.serving).unwrap_or(ready);
     PublishedEndpoint {
-        address: endpoint
-            .addresses
-            .first()
-            .cloned()
-            .unwrap_or_else(|| "—".to_string()),
+        address: endpoint.addresses.first().cloned(),
         target: endpoint.target_ref.as_ref().and_then(|target| {
             target.name.as_ref().map(|name| {
                 ObjectRef::new(
@@ -459,7 +456,7 @@ pub fn from_legacy(
                     not_ready += 1;
                 }
                 endpoints.push(PublishedEndpoint {
-                    address: address.ip.clone(),
+                    address: Some(address.ip.clone()),
                     target: address.target_ref.as_ref().and_then(|target| {
                         target.name.as_ref().map(|name| {
                             ObjectRef::new(
@@ -519,11 +516,7 @@ pub fn from_pod_readiness(
             not_ready += 1;
         }
         endpoints.push(PublishedEndpoint {
-            address: pod
-                .status
-                .as_ref()
-                .and_then(|status| status.pod_ip.clone())
-                .unwrap_or_else(|| "—".to_string()),
+            address: pod.status.as_ref().and_then(|status| status.pod_ip.clone()),
             target: Some(pod_ref(pod, &ns)),
             ready: is_ready,
             serving: is_ready,
@@ -1470,5 +1463,16 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    /// A pending pod has no IP yet. Would break if its row went back to a
+    /// stand-in glyph where the address goes, which the page drew as one.
+    #[test]
+    fn a_pod_with_no_ip_publishes_no_address_rather_than_a_placeholder() {
+        let svc = selecting("web");
+        let waiting = pod("web-0", None);
+        let published = from_pod_readiness(&svc, svc_ref("web"), &[&waiting]);
+
+        assert_eq!(published.endpoints[0].address, None);
     }
 }

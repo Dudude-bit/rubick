@@ -140,9 +140,12 @@ export function servicePublishedSection(
       ],
       rows: rows.map((endpoint) => {
         const state = endpointState(endpoint, t);
+        const address = endpointAddress(endpoint);
         return {
           cells: [
-            { text: endpointAddress(endpoint), mono: true },
+            address === null
+              ? { text: t("readings", "healthNoAddressYet"), quiet: true }
+              : { text: address, mono: true },
             endpoint.target
               ? {
                   text: endpoint.target.name,

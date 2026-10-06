@@ -311,7 +311,7 @@ export interface UnpublishedPod {
 }
 
 export interface PublishedEndpoint {
-  address: string;
+  address: string | null;
   target: ObjectRef | null;
   ready: boolean;
   serving: boolean;

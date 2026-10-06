@@ -6,6 +6,7 @@ import { describe, expect, it } from "vite-plus/test";
 const t: T = (section, key, values) => translate("en", section, key, values);
 
 import {
+  endpointAddress,
   endpointState,
   legacyNote,
   publishedSummary,
@@ -55,6 +56,14 @@ const published = (over: Partial<ServicePublished> = {}): ServicePublished => ({
   unpublished: [],
   stop: null,
   ...over,
+});
+
+describe("the address of one endpoint", () => {
+  /** A pod with no IP yet drew "—:8080"; fails if the port is glued to a missing address. */
+  it("has no address for a pod the cluster has not given an IP", () => {
+    expect(endpointAddress(endpoint({ address: null }))).toBeNull();
+    expect(endpointAddress(endpoint())).toBe("10.42.1.51:8080");
+  });
 });
 
 describe("the state of one address", () => {
