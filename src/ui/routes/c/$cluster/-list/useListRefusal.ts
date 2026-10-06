@@ -37,7 +37,14 @@ export function useListRefusal(
           namespaces: reach.refusedIn.join(", "),
         })
       : acrossCluster
-        ? t("empty", "refusedClusterWide")
+        ? t(
+            "empty",
+            // The way out under it names the namespace; saying one may answer
+            // as well said it twice.
+            reach.readableIn.length > 0
+              ? "refusedClusterWideOnly"
+              : "refusedClusterWide"
+          )
         : t("nav", "noListAccess"),
   };
 }

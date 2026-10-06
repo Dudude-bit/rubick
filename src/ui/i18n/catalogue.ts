@@ -5419,6 +5419,8 @@ export const en = {
       "You do not have permission to read {scope}. Type another namespace in the picker above.",
     refusedClusterWide:
       "Listing these across the whole cluster was refused. A namespace you have access to may still answer.",
+    refusedClusterWideOnly:
+      "Listing these across the whole cluster was refused.",
     refusedAcrossCluster:
       "Listing these across the whole cluster was refused. Choose a namespace you have access to in the picker above.",
     listableIn: {

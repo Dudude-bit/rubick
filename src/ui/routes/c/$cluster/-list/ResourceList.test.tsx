@@ -148,6 +148,7 @@ describe("a list whose rows come from outside", () => {
     expect(
       await screen.findByText("You can list them in team-checkout.")
     ).toBeVisible();
+    expect(screen.queryByText(/may still answer/)).toBeNull();
     expect(asked).toHaveBeenCalledWith(
       [{ group: "", resource: "pods", namespaced: true }],
       ["team-checkout"]

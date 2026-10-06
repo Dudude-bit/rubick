@@ -422,6 +422,7 @@ describe("stories", () => {
     expect(
       screen.getByText(/across the whole cluster was refused/)
     ).toBeVisible();
+    expect(screen.queryByText(/may still answer/)).toBeNull();
     expect(screen.queryByText(/Could not read the events/)).toBeNull();
     expect(
       screen.getByRole("button", { name: "Choose a namespace" })
