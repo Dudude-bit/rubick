@@ -1,7 +1,12 @@
 //! The app's own log: where it is written and how tracing is set up.
 
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
+use tracing::field::{Field, Visit};
+use tracing::{Event, Metadata, Subscriber};
+use tracing_subscriber::filter::FilterExt;
+use tracing_subscriber::layer::{Context, Filter};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter, Layer};
 
 /// The file the current run is written to, inside [`log_dir`].
@@ -51,6 +56,62 @@ impl std::io::Write for Capped {
     }
 }
 
+/// One line for a burst of requests that a closed keep-alive connection failed.
+///
+/// kube logs every attempt that fails on the wire at ERROR, from inside its
+/// client and whether or not the caller then recovers. Keep-alive connections
+/// the far end had closed fail every request sent on them, each with the same
+/// line in the same millisecond. The first of a burst stays, and so does every
+/// failure a caller reports in its own words.
+#[derive(Default)]
+struct OncePerBurst {
+    said: parking_lot::Mutex<Option<Instant>>,
+}
+
+const KUBE_CLIENT: &str = "kube_client::client::builder";
+const CLOSED_UNDER_REQUEST: &str = "(SendRequest)";
+const BURST: Duration = Duration::from_secs(10);
+
+impl<S> Filter<S> for OncePerBurst {
+    fn enabled(&self, _: &Metadata<'_>, _: &Context<'_, S>) -> bool {
+        true
+    }
+
+    fn event_enabled(&self, event: &Event<'_>, _: &Context<'_, S>) -> bool {
+        if event.metadata().target() != KUBE_CLIENT {
+            return true;
+        }
+        let mut message = Message::default();
+        event.record(&mut message);
+        if !message.0.contains(CLOSED_UNDER_REQUEST) {
+            return true;
+        }
+        let now = Instant::now();
+        let mut said = self.said.lock();
+        if said.is_some_and(|at| now.duration_since(at) < BURST) {
+            return false;
+        }
+        *said = Some(now);
+        true
+    }
+}
+
+#[derive(Default)]
+struct Message(String);
+
+impl Visit for Message {
+    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
+        if field.name() == "message" {
+            self.0 = format!("{value:?}");
+        }
+    }
+}
+
+/// What each output lets through: the level asked for, and a burst once.
+fn filter<S: Subscriber>(level: EnvFilter) -> impl Filter<S> {
+    level.and(OncePerBurst::default())
+}
+
 /// Initialize tracing subscriber with default configuration
 ///
 /// This function sets up the tracing subscriber with:
@@ -82,9 +143,9 @@ pub fn log_path() -> Option<PathBuf> {
 }
 
 pub fn init_tracing(dir: Option<&Path>) {
-    let filter = || EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
-    let registry =
-        tracing_subscriber::registry().with(tracing_subscriber::fmt::layer().with_filter(filter()));
+    let level = || EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+    let registry = tracing_subscriber::registry()
+        .with(tracing_subscriber::fmt::layer().with_filter(filter(level())));
 
     let Some(dir) = dir else {
         let _ = LOG_PATH.set(None);
@@ -105,7 +166,7 @@ pub fn init_tracing(dir: Option<&Path>) {
                             written: 0,
                             said: false,
                         }))
-                        .with_filter(filter()),
+                        .with_filter(filter(level())),
                 )
                 .init();
         }
@@ -228,6 +289,47 @@ mod tests {
             std::fs::read_to_string(rolled(&dir, 2)).unwrap().trim(),
             "run 1"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Three requests failing on closed keep-alive connections in one breath
+    /// were three ERROR lines, every few minutes. One stays; a server's 500
+    /// and a refused connect are other causes and keep every line.
+    #[test]
+    fn a_burst_of_requests_on_closed_connections_is_one_line() {
+        use tracing_subscriber::layer::SubscriberExt;
+
+        let dir = std::env::temp_dir().join(format!("rubick-log-burst-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let file = open_log(&dir).expect("a log file");
+
+        let subscriber = tracing_subscriber::registry().with(
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_writer(std::sync::Mutex::new(Capped {
+                    file,
+                    written: 0,
+                    said: false,
+                }))
+                .with_filter(filter(EnvFilter::new("info"))),
+        );
+        tracing::subscriber::with_default(subscriber, || {
+            for _ in 0..3 {
+                tracing::error!(target: "kube_client::client::builder", "failed with error {}", "client error (SendRequest)");
+            }
+            tracing::error!(target: "kube_client::client::builder", "failed with status {}", 500);
+            tracing::error!(target: "kube_client::client::builder", "failed with error {}", "client error (Connect)");
+            tracing::error!(target: "kube_client::client::builder", "failed with error {}", "client error (Connect)");
+        });
+
+        let written = std::fs::read_to_string(dir.join(LOG_FILE)).expect("the file is readable");
+        assert_eq!(written.matches("(SendRequest)").count(), 1, "{written}");
+        assert_eq!(
+            written.matches("failed with status 500").count(),
+            1,
+            "{written}"
+        );
+        assert_eq!(written.matches("(Connect)").count(), 2, "{written}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
