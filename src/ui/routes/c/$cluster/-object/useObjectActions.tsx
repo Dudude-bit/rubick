@@ -40,6 +40,7 @@ import { podForwardPorts } from "@/lib/port-forward";
 import { deliveryOfKind } from "@/lib/delivery";
 import { errorToShow } from "@/lib/error-utils";
 import { scaleWarnings } from "@/lib/governance";
+import { readinessOf } from "@/lib/restart-plan";
 import { objectLink } from "@/lib/links";
 import { STALE_TIMES } from "@/lib/refresh";
 import { toKind } from "@/lib/resource-registry";
@@ -443,6 +444,7 @@ export function useObjectActions({
           plan={
             (detail as { rolloutPlan?: RolloutPlan } | undefined)?.rolloutPlan
           }
+          readiness={readinessOf(detail)}
           intercept={intercept("Restart")}
           busy={restart.isPending}
           onConfirm={() => restart.mutate()}

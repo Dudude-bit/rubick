@@ -57,6 +57,7 @@ import {
 } from "../../-components/workload-overview";
 import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { RestartAction } from "../../../-object/RestartDialog";
+import { readinessOf } from "@/lib/restart-plan";
 import { guardedOf, useDenied } from "../../../-object/access";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
@@ -539,6 +540,7 @@ export function DeploymentDetail() {
               name={name ?? ""}
               namespace={namespace || null}
               plan={deployment?.rolloutPlan}
+              readiness={readinessOf(deployment)}
               intercept={intercept("Restart")}
               mutation={restartMutation}
             />

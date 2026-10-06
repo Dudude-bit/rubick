@@ -30,6 +30,7 @@ import {
 } from "../../-components/workload-overview";
 import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { RestartAction } from "../../../-object/RestartDialog";
+import { readinessOf } from "@/lib/restart-plan";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { Composition, ConditionRows } from "@/components/object/detail-blocks";
 import { serviceAccountRow } from "../../-components/identity-rows";
@@ -433,6 +434,7 @@ export function DaemonSetDetail() {
               name={name ?? ""}
               namespace={namespace || null}
               plan={daemonSet?.rolloutPlan}
+              readiness={readinessOf(daemonSet)}
               intercept={intercept("Restart")}
               mutation={restartMutation}
             />

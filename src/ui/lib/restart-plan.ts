@@ -96,3 +96,20 @@ export function restartWords(
       };
   }
 }
+
+export interface Readiness {
+  ready: number;
+  desired: number;
+}
+
+/** A workload's ready and desired pods, from the object as read, or `null`. */
+export function readinessOf(detail: unknown): Readiness | null {
+  if (!detail || typeof detail !== "object") return null;
+  const { replicas } = detail as { replicas?: unknown };
+  const counts = (
+    typeof replicas === "object" && replicas !== null ? replicas : detail
+  ) as { ready?: unknown; desired?: unknown };
+  return typeof counts.ready === "number" && typeof counts.desired === "number"
+    ? { ready: counts.ready, desired: counts.desired }
+    : null;
+}

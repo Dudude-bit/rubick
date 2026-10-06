@@ -32,6 +32,7 @@ import { ContainerRows } from "../../../-object/container-rows";
 import { ChangesTab } from "../../-components/ChangesTab";
 import { deliveryOfKind } from "@/lib/delivery";
 import { RestartAction } from "../../../-object/RestartDialog";
+import { readinessOf } from "@/lib/restart-plan";
 import { guardedOf, useDenied } from "../../../-object/access";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
@@ -463,6 +464,7 @@ export function StatefulSetDetail() {
               name={name ?? ""}
               namespace={namespace || null}
               plan={statefulSet?.rolloutPlan}
+              readiness={readinessOf(statefulSet)}
               intercept={intercept("Restart")}
               mutation={restartMutation}
             />

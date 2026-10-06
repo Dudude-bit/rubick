@@ -83,3 +83,46 @@ describe("what a Deployment's actions leave watching", () => {
     expect(open()[0].after?.action).toBe("restart");
   });
 });
+
+describe("the restart dialog of a workload whose pods are failing", () => {
+  const restartOf = async (ready: number) => {
+    await renderWithRouter(
+      <PeekActions
+        target={{ kind: "Deployment", name: "checkout", namespace: "shop" }}
+        detail={{
+          ...CART,
+          name: "checkout",
+          replicas: { desired: 2, ready, available: ready, updated: 2 },
+        }}
+        onClose={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }));
+    return screen.findByRole("dialog");
+  };
+
+  /**
+   * Dana's checkout had 0 of 2 pods ready and the dialog only said how the
+   * restart would roll, as if restarting were the cure. Fails if a restart
+   * of failing pods is asked without saying they are failing and where to
+   * see why.
+   */
+  it("says how many pods are ready and points at why before restarting", async () => {
+    const dialog = await restartOf(0);
+    expect(
+      within(dialog).getByText(/Not every pod is ready: 0 of 2/)
+    ).toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("link", { name: "See why on the Pods tab." })
+    ).toHaveAttribute(
+      "href",
+      expect.stringMatching(/\/deployments\/shop\/checkout\?tab=pods$/)
+    );
+  });
+
+  /** Fails if the warning is drawn over a workload whose pods are all ready. */
+  it("says nothing of the kind when every pod is ready", async () => {
+    const dialog = await restartOf(2);
+    expect(within(dialog).queryByText(/Not every pod is ready/)).toBeNull();
+  });
+});

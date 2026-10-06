@@ -1,8 +1,10 @@
 import { useRef, useState } from "react";
 import type { UseMutationResult } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, TriangleAlert } from "lucide-react";
 
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { RouteLink } from "@/components/ui/route-link";
 import { ReasonedAction } from "@/components/object/detail-blocks";
 import {
   Dialog,
@@ -13,9 +15,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
+import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
 import type { DeliveryIntercept } from "@/lib/delivery";
-import { restartWords } from "@/lib/restart-plan";
+import { objectLink } from "@/lib/links";
+import { restartWords, type Readiness } from "@/lib/restart-plan";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import type { RolloutPlan } from "@/generated/types";
@@ -32,6 +36,8 @@ export interface RestartDialogProps {
   /** Undefined until the workload is read; the dialog then says the general case. */
   plan: RolloutPlan | undefined;
   intercept: DeliveryIntercept | null;
+  /** The pods ready now, as the workload was last read; absent where it was not. */
+  readiness?: Readiness | null;
   busy: boolean;
   onConfirm: () => void;
 }
@@ -49,6 +55,7 @@ export function RestartDialog({
   namespace,
   plan,
   intercept,
+  readiness,
   busy,
   onConfirm,
 }: RestartDialogProps) {
@@ -98,6 +105,36 @@ export function RestartDialog({
               <span data-testid="restart-plan">{words.text}</span>
             </DialogDescription>
           </DialogHeader>
+          {readiness &&
+            readiness.desired > 0 &&
+            readiness.ready < readiness.desired && (
+              <Alert variant="warn">
+                <TriangleAlert aria-hidden="true" />
+                <AlertDescription>
+                  {parts(
+                    t("action", "restartWhileUnready", {
+                      ready: readiness.ready,
+                      desired: readiness.desired,
+                    }),
+                    {
+                      pods: (
+                        <span onClick={() => close(false)}>
+                          <RouteLink
+                            {...objectLink(
+                              { kind, name, namespace },
+                              { tab: "pods" }
+                            )!}
+                            className="text-info hover:underline"
+                          >
+                            {t("action", "restartSeeWhy")}
+                          </RouteLink>
+                        </span>
+                      ),
+                    }
+                  )}
+                </AlertDescription>
+              </Alert>
+            )}
           {intercept && <DeliveryInterceptBody intercept={intercept} />}
           {gate.input}
           <DialogFooter>

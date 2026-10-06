@@ -1210,6 +1210,9 @@ export const en = {
     willDelete: "This will delete {name}.",
     willDeleteInNamespace: "This will delete {name} in {namespace}.",
     couldNotDo: "Could not {action} {name}",
+    restartWhileUnready:
+      "Not every pod is ready: {ready} of {desired}. A restart starts the same template again, so pods that crash or fail their probes will do so again. {pods}",
+    restartSeeWhy: "See why on the Pods tab.",
     notPermitted:
       "Your access does not allow this: the cluster answers no to kubectl auth can-i {check}.",
     validationPassed: "Validation passed",

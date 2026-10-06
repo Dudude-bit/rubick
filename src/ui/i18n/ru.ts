@@ -1202,6 +1202,9 @@ export const ru: Catalogue = {
     willDeleteInNamespace:
       "Объект {name} в пространстве имён {namespace} будет удалён.",
     couldNotDo: "Не удалось {action} {name}",
+    restartWhileUnready:
+      "Готовы не все поды: {ready} из {desired}. Перезапуск запустит тот же шаблон, и поды, которые падают или не проходят проверки, снова поведут себя так же. {pods}",
+    restartSeeWhy: "Причина видна на вкладке Pods.",
     notPermitted:
       "Ваши права этого не позволяют: на kubectl auth can-i {check} кластер отвечает no.",
     validationPassed: "Проверка пройдена",
