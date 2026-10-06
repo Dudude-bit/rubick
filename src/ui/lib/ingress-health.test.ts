@@ -90,7 +90,11 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     expect(said.reason).toContain("IngressClass nginx");
   });
 
-  /** Lena read "...никто не обслуживает, поэтому этот Ingress никто не подхватывает" as machine Russian. */
+  /**
+   * Lena read "...никто не обслуживает, поэтому этот Ingress никто не
+   * подхватывает" as machine Russian, then "IngressClass nginx не обслуживает
+   * ни один контроллер" as the class serving no controller.
+   */
   it("says in plain Russian that no controller serves the class", () => {
     const ru: T = (section, key, values) =>
       translate("ru", section, key, values);
@@ -104,7 +108,34 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
       ru
     );
     expect(said.reason).toBe(
-      "IngressClass nginx не обслуживает ни один контроллер, и этот Ingress никто не обрабатывает"
+      "IngressClass nginx не обслуживается ни одним контроллером, и этот Ingress никто не обрабатывает."
+    );
+  });
+
+  /** The tooltip ended "...для его TLS" with no full stop after a first sentence that had one. */
+  it("ends every sentence of a reason with a full stop", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const said = ingressHealthWords(
+      ingressHealthOf({
+        ingress: ingress(["api"], "checkout-tls"),
+        binding: { known: true, value: UNSERVED },
+        backing: { known: true, value: BACKING },
+        certificates: new Map<string, TlsCertificate>([
+          [
+            "checkout-tls",
+            {
+              secretName: "checkout-tls",
+              certificate: null,
+              problem: { says: "noSecret" },
+            },
+          ],
+        ]),
+      }),
+      ru
+    );
+    expect(said.reason).toBe(
+      "IngressClass nginx не обслуживается ни одним контроллером, и этот Ingress никто не обрабатывает. Нет Secret с именем checkout-tls для его TLS."
     );
   });
 

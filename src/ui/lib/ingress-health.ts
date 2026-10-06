@@ -163,7 +163,7 @@ export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
       code: worst.kind,
       label: t("readings", PROBLEM_LABEL[worst.kind]),
       role: partial ? "warn" : "err",
-      reason: problems.map((problem) => problemSentence(problem, t)).join(". "),
+      reason: `${problems.map((problem) => problemSentence(problem, t)).join(". ")}.`,
     };
   }
   if (health.unread.length > 0) {

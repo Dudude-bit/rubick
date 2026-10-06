@@ -3868,10 +3868,10 @@ export const ru: Catalogue = {
       other: "{n} рассинхронизированы, и это никто не чинит",
     },
     factHostsNoGateway: {
-      one: "{n} хост, который не обслуживает ни один Gateway",
-      few: "{n} хоста, которые не обслуживает ни один Gateway",
-      many: "{n} хостов, которые не обслуживает ни один Gateway",
-      other: "{n} хоста, которые не обслуживает ни один Gateway",
+      one: "{n} хост, который не обслуживается ни одним Gateway",
+      few: "{n} хоста, которые не обслуживаются ни одним Gateway",
+      many: "{n} хостов, которые не обслуживаются ни одним Gateway",
+      other: "{n} хоста, которые не обслуживаются ни одним Gateway",
     },
     factHostsRouted: {
       one: "{n} хост маршрутизируется",
@@ -4426,7 +4426,7 @@ export const ru: Catalogue = {
     healthByHand: "вручную",
     healthStillReading: "ещё читается",
     healthNothingServesClass:
-      "IngressClass {name} не обслуживает ни один контроллер, и этот Ingress никто не обрабатывает",
+      "IngressClass {name} не обслуживается ни одним контроллером, и этот Ingress никто не обрабатывает",
     healthNoClassNoDefault:
       "IngressClass не указан, а класса по умолчанию в кластере нет, и этот Ingress никто не обрабатывает",
     healthNoTlsSecret: "Нет Secret с именем {name} для его TLS",
@@ -6019,7 +6019,7 @@ export const ru: Catalogue = {
     editingGeneratedAppUndone:
       ". Правки этого Application отменятся при следующем запуске генератора, поэтому менять нужно ApplicationSet.",
     argoDiffNoAddress:
-      "Построчный diff живёт в собственном API Argo, которому нужны учётные данные, которых у приложения нет. А {service} не обслуживает ни один Ingress в этом кластере, так что отправить вас некуда.",
+      "Построчный diff живёт в собственном API Argo, которому нужны учётные данные, которых у приложения нет. А {service} не обслуживается ни одним Ingress в этом кластере, так что отправить вас некуда.",
     forLineByLineDiff:
       "за построчным diff, которому нужны учётные данные, которых у приложения нет.",
     syncFailingFor:
@@ -6269,7 +6269,7 @@ export const ru: Catalogue = {
     legacyAddonInstalled:
       " Снятое с поддержки дополнение pod-identity всё ещё установлено, его содержимое показано ниже.",
     legacyAddonNotInstalled:
-      " Снятое с поддержки дополнение pod-identity тоже не установлено: ни один из двух его видов, AzureIdentity и AzureIdentityBinding, этот API-сервер не обслуживает.",
+      " Снятое с поддержки дополнение pod-identity тоже не установлено: этот API-сервер не обслуживает ни один из двух его видов, AzureIdentity и AzureIdentityBinding.",
     podIdentityRetired: "Pod identity, снятое с поддержки",
     podIdentityRetiredHint:
       "aad-pod-identity объявлен устаревшим в октябре 2022, заархивирован в сентябре 2023, а его дополнение для AKS вышло из поддержки в сентябре 2025. Всё это работает, пока работает; переезжать надо на Workload ID выше.",
