@@ -12,6 +12,7 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     listEvents: vi.fn(async () => []),
     getPod: vi.fn(async () => ({ containers: [] })),
+    checkListAccess: vi.fn(async () => []),
   },
 }));
 
@@ -377,7 +378,7 @@ describe("stories", () => {
     );
     await mount("stories");
     expect(
-      await screen.findByText(/Could not read the events/)
+      await screen.findByText(/across the whole cluster was refused/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/Nothing happened in/)).not.toBeInTheDocument();
     expect(document.body.textContent).toContain("forbidden");
@@ -386,6 +387,48 @@ describe("stories", () => {
     expect(
       within(heading.parentElement!).queryByTestId("section-count")
     ).toBeNull();
+  });
+
+  /**
+   * Marco under All namespaces: events are refused across the cluster and
+   * readable in team-checkout, yet the page said it could not read them in
+   * any namespace and offered no way there. Fails if the feed stops naming
+   * where they can be listed or drops the picker the lists offer.
+   */
+  it("names the namespace a refused feed reads in, and offers the picker", async () => {
+    useClusterStore.setState({
+      currentContext: "prod",
+      contexts: [{ name: "prod", namespace: "team-checkout" } as never],
+    });
+    vi.mocked(commands.checkListAccess).mockImplementation(
+      async (queries, namespaces) =>
+        queries.map((query) => ({
+          resource: query.resource,
+          allowed: namespaces[0] === "team-checkout",
+        }))
+    );
+    listEvents.mockRejectedValue(
+      new Error(
+        'events is forbidden: User "marco" cannot list resource "events" at the cluster scope'
+      )
+    );
+    await mount("stories");
+
+    expect(
+      await screen.findByText("You can list them in team-checkout.")
+    ).toBeVisible();
+    expect(
+      screen.getByText(/across the whole cluster was refused/)
+    ).toBeVisible();
+    expect(screen.queryByText(/Could not read the events/)).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Choose a namespace" })
+    ).toBeVisible();
+    expect(commands.checkListAccess).toHaveBeenCalledWith(
+      [{ group: "", resource: "events", namespaced: true }],
+      ["team-checkout"]
+    );
+    useClusterStore.setState({ currentContext: null, contexts: [] });
   });
 
   /**

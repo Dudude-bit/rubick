@@ -11,12 +11,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AlertCircle, Search } from "lucide-react";
+import { Search } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW, EventRows } from "@/components/object/detail-blocks";
 import { StoryCard } from "./StoryCard";
+import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
+import { useListRefusal } from "../../-list/useListRefusal";
 import { KindAbout } from "@/components/object/KindAbout";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
@@ -24,7 +26,7 @@ import { eventsFiltersSection } from "./events-share";
 import { eventsSection } from "@/lib/report-parts";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
-import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
+import { errorToShow, isRefusal, normalizeTauriError } from "@/lib/error-utils";
 import { spanWords } from "@/i18n/say";
 import { filterEvents } from "@/lib/event-filter";
 import {
@@ -38,7 +40,7 @@ import {
 import { useNow } from "@/hooks/useNow";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { STALE_TIMES } from "@/lib/refresh";
-import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { listQueryFor, ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn, formatTimeUnit } from "@/lib/utils";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -72,9 +74,11 @@ async function read(filters: EventFilters) {
   try {
     return await commands.listEvents(filters);
   } catch (err) {
-    throw normalizeTauriError(err);
+    throw new Error(normalizeTauriError(err), { cause: err });
   }
 }
+
+const EVENTS = listQueryFor(ResourceType.Event);
 
 function filtersFor(
   namespace: string,
@@ -427,20 +431,11 @@ export function Events() {
             // Before either tab's empty state. Both of them are sentences
             // about what the cluster holds, and neither is answerable from a
             // read that did not come back — the API server's own words are.
-            <div className="flex items-start gap-2 px-1.5 py-1">
-              <AlertCircle
-                className="mt-0.5 size-3.5 flex-none text-err"
-                aria-hidden="true"
-              />
-              <div className="min-w-0">
-                <p className="text-xs text-fg-mut">
-                  {t("empty", "eventsRefused", { scope: scope.inWords })}
-                </p>
-                <p className="select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-                  {errorToShow(failed)}
-                </p>
-              </div>
-            </div>
+            <UnreadFeed
+              failed={failed}
+              everyNamespace={scope.isAll}
+              scopeWords={scope.inWords}
+            />
           ) : view === "stories" ? (
             stories.length === 0 ? (
               <p className="px-1.5 py-1 text-xs text-fg-fnt">
@@ -511,6 +506,34 @@ export function Events() {
           )}
         </SectionBody>
       </Section>
+    </div>
+  );
+}
+
+/** A feed nobody could read, said the way the lists say it. */
+function UnreadFeed({
+  failed,
+  everyNamespace,
+  scopeWords,
+}: {
+  failed: Error;
+  everyNamespace: boolean;
+  scopeWords: string;
+}) {
+  const t = useT();
+  const refusal = useListRefusal(failed, everyNamespace, EVENTS);
+  return (
+    <div className="px-1.5">
+      <UnreadList
+        error={failed}
+        words={
+          isRefusal(failed)
+            ? refusal.words
+            : t("empty", "eventsRefused", { scope: scopeWords })
+        }
+      >
+        <RefusalWayOut refusal={refusal} />
+      </UnreadList>
     </div>
   );
 }

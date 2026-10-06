@@ -28,7 +28,7 @@ import {
 } from "@/lib/read-deadline";
 import { useNowSeconds } from "@/hooks/useNow";
 import { Button } from "@/components/ui/button";
-import { FolderOpen, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { NO_TABLE, tableSection } from "@/components/share/table-share";
@@ -55,9 +55,9 @@ import {
   whole,
 } from "@/lib/namespace-scope";
 import type { ListQuery, Scoped, UnreadNamespace } from "@/generated/types";
-import { refusedEverywhereAsked, useListableIn } from "../-shell/useListAccess";
 import { UnreadNamespaces } from "./UnreadNamespaces";
-import { UnreadList } from "./UnreadList";
+import { RefusalWayOut, UnreadList } from "./UnreadList";
+import { useListRefusal } from "./useListRefusal";
 import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
 import { deleteCommandFor } from "../-peek/peek-actions";
@@ -460,25 +460,12 @@ export function ResourceList<
 
   // Refused across the whole cluster is not refused everywhere: a namespace
   // the reader has may still list it, and saying "no permission" hides that.
-  const refusedAcrossCluster =
-    failed !== null && isRefusal(failed) && narrowingHelps && scope.isAll;
-  const reach = useListableIn(
-    refusedAcrossCluster
-      ? (listQuery ?? (listKind ? listQueryFor(listKind) : null))
-      : null
+  const refusal = useListRefusal(
+    failed,
+    narrowingHelps && scope.isAll,
+    listQuery ?? (listKind ? listQueryFor(listKind) : null)
   );
-  const listableIn = reach.readableIn;
-  // Asked in every namespace the app knows the reader has, and refused there
-  // too: no namespace is left to send them to.
-  const nowhere = refusedAcrossCluster && refusedEverywhereAsked(reach);
-  const refusalWords = nowhere
-    ? t("empty", "refusedClusterWideAndIn", {
-        n: reach.refusedIn.length,
-        namespaces: reach.refusedIn.join(", "),
-      })
-    : refusedAcrossCluster
-      ? t("empty", "refusedClusterWide")
-      : t("nav", "noListAccess");
+  const refusalWords = refusal.words;
 
   // What the file says about the read, in the words the screen uses: a list
   // nobody could read, or read only part of, is not an empty or a whole one.
@@ -673,25 +660,7 @@ export function ResourceList<
               : t("empty", "couldNotReadInScope", { label: emptyStateLabel })
           }
         >
-          {refusedAcrossCluster && !nowhere && (
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              {listableIn.length > 0 && (
-                <p className="flex items-center gap-1.5 text-xs text-info">
-                  <FolderOpen
-                    className="h-3.5 w-3.5 flex-none"
-                    aria-hidden="true"
-                  />
-                  {t("empty", "listableInNamespaces", {
-                    n: listableIn.length,
-                    namespaces: listableIn.join(", "),
-                  })}
-                </p>
-              )}
-              <Button size="sm" variant="outline" onClick={openNamespacePicker}>
-                {t("action", "chooseNamespace")}
-              </Button>
-            </div>
-          )}
+          <RefusalWayOut refusal={refusal} />
         </UnreadList>
       ) : (
         <DataTable
