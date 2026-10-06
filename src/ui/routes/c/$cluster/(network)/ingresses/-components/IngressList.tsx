@@ -109,8 +109,8 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
   createNameColumn<IngressInfo>(ResourceType.Ingress),
   createNamespaceColumn<IngressInfo>(),
   {
-    // "missing TLS Secret", and its longer Russian, are the widest verdicts.
-    size: 150,
+    // "нет Secret для TLS" and "нет контроллера", whole at 1440px.
+    size: 180,
     id: "health",
     header: columnHeader("columns", "status"),
     cell: ({ row }) => <HealthCell ingress={row.original} />,
@@ -126,7 +126,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
   },
   {
     // The column people came to this page to read, and a hostname is long.
-    size: 280,
+    size: 250,
     // The hostnames, not the rules that hold them: an accessor over an array
     // of objects stringifies to `[object Object]`, so the search box matched
     // nothing on the one column people open this page to read.
