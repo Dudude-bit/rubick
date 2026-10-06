@@ -26,6 +26,7 @@ import { markStartup } from "@/lib/startup";
 import { loadLocale } from "@/i18n";
 import { currentLocale, useLocaleStore } from "@/stores/localeStore";
 import { applyTheme, cachedTheme } from "@/lib/theme";
+import { shareStructure } from "@/lib/watched-rows";
 
 // After every eagerly imported module has loaded.
 markStartup("main");
@@ -53,6 +54,7 @@ const queryClient = new QueryClient({
   }),
   defaultOptions: {
     queries: {
+      structuralSharing: shareStructure,
       staleTime: STALE_TIMES.slow,
       // Every queryFn here is a Tauri call the Rust side answers, so the
       // webview's idea of being offline says nothing about whether the

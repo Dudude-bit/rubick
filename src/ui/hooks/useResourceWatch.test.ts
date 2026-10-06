@@ -40,6 +40,7 @@ vi.mock("@/lib/commands", () => ({
 
 import { commands } from "@/lib/commands";
 import { useResourceWatch } from "./useResourceWatch";
+import { testQueryClient } from "@/test/render";
 import type { Scoped } from "@/generated/types";
 
 // ----- Test harness -----
@@ -217,8 +218,66 @@ describe("useResourceWatch", () => {
     expect(answer?.unread).toEqual([]);
   });
 
-  /** Stale positions after deletion would update the wrong row or move a replacement to the front. */
-  it("keeps updates in place and appends a deleted row when it is added again", async () => {
+  /**
+   * Dana saw reports-29855212-snmdw land under search-d76577dcb at the
+   * bottom of shop until she left the page. Fails if a new row stops landing
+   * where the list puts it, if any other row is replaced, or if finding the
+   * place reads more than a handful of the 10,000 keys.
+   */
+  it("puts one new pod of 10,000 in its sorted place and leaves every other row as it was", async () => {
+    let keyReads = 0;
+    const rows = Array.from({ length: 10_000 }, (_, index) => {
+      const name = `pod-${String(index).padStart(5, "0")}`;
+      return {
+        get name() {
+          keyReads++;
+          return name;
+        },
+        namespace: "shop",
+      };
+    });
+    // The app's own client: structural sharing is where a shifted row lost
+    // its identity.
+    const client = testQueryClient();
+    seed(client, rows);
+    await start(client);
+    // The first event indexes the list, which reads every key once.
+    emit("stream-cm-1", "applied", { name: "pod-09999", namespace: "shop" });
+    const before = rowsIn(client)!;
+    keyReads = 0;
+    emit("stream-cm-1", "applied", { name: "pod-04999x", namespace: "shop" });
+    const after = rowsIn(client)!;
+    expect(after).toHaveLength(10_001);
+    expect(after[5000].name).toBe("pod-04999x");
+    for (let index = 0; index < before.length; index++) {
+      expect(after[index < 5000 ? index : index + 1]).toBe(before[index]);
+    }
+    expect(keyReads).toBeLessThan(40);
+  });
+
+  /** Fails if a new row stops landing inside its own namespace's rows. */
+  it("puts a new row among its own namespace's rows", async () => {
+    const client = new QueryClient();
+    seed(client, [
+      { name: "cart-9df89489c-kzfc6", namespace: "shop" },
+      { name: "search-d76577dcb-zbtv9", namespace: "shop" },
+      { name: "checkout-7db8bc9ffd-w5b7p", namespace: "team-checkout" },
+    ]);
+    await start(client);
+    emit("stream-cm-1", "applied", {
+      name: "reports-29855212-snmdw",
+      namespace: "shop",
+    });
+    expect(rowsIn(client)?.map((row) => row.name)).toEqual([
+      "cart-9df89489c-kzfc6",
+      "reports-29855212-snmdw",
+      "search-d76577dcb-zbtv9",
+      "checkout-7db8bc9ffd-w5b7p",
+    ]);
+  });
+
+  /** Stale positions after deletion would update the wrong row, or put a row added again anywhere but its place. */
+  it("keeps updates in place and puts a deleted row back in its place when it is added again", async () => {
     const client = new QueryClient();
     seed(
       client,
@@ -231,16 +290,16 @@ describe("useResourceWatch", () => {
       { op: "applied", resource: { name: "a", data: 2 } },
     ]);
     expect(rowsIn(client)).toEqual([
+      { name: "a", data: 2 },
       { name: "b", data: 1 },
       { name: "c" },
-      { name: "a", data: 2 },
     ]);
     emit("stream-cm-1", "deleted", { name: "c" });
     emit("stream-cm-1", "applied", { name: "c", data: 3 });
     emit("stream-cm-1", "applied", { name: "b", data: 4 });
     expect(rowsIn(client)).toEqual([
-      { name: "b", data: 4 },
       { name: "a", data: 2 },
+      { name: "b", data: 4 },
       { name: "c", data: 3 },
     ]);
   });

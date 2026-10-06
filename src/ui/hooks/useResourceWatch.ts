@@ -10,6 +10,7 @@ import {
 import { useRenewals } from "@/hooks/useCredentialRenewal";
 import { useT } from "@/i18n/useT";
 import type { Scoped } from "@/generated/types";
+import { watched } from "@/lib/watched-rows";
 
 interface UseResourceWatchOptions {
   /**
@@ -222,7 +223,7 @@ export function useResourceWatch<
                 }
                 const rows = applyChanges(prev?.rows ?? [], changes, positions);
                 if (prev && rows === prev.rows) return prev;
-                return { rows, unread: prev?.unread ?? [] };
+                return watched({ rows, unread: prev?.unread ?? [] });
               }
             );
             indexedList = stored?.rows;
@@ -304,8 +305,34 @@ function stage<T extends { name: string; namespace?: string | null }>(
   else rows.set(identify(incoming), incoming);
 }
 
-// Lookup and replacement touch only changes; immutable publication and
-// ordered deletion still copy O(N) array slots.
+/** The order a list arrives in: by namespace, then by name, as the API keys it. */
+function before<T extends { name: string; namespace?: string | null }>(
+  a: T,
+  b: T
+): boolean {
+  const left = a.namespace ?? "";
+  const right = b.namespace ?? "";
+  return left === right ? a.name < b.name : left < right;
+}
+
+/** Where a new row goes in a list in arrival order, found in O(log N) reads. */
+function sortedIndex<T extends { name: string; namespace?: string | null }>(
+  rows: T[],
+  row: T
+): number {
+  let low = 0;
+  let high = rows.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (before(rows[middle], row)) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+// Lookup and replacement touch only changes; immutable publication, an
+// insert's shift and ordered deletion still copy O(N) array slots. A new row
+// goes where the list would have put it, not at the end.
 function applyChanges<T extends { name: string; namespace?: string | null }>(
   list: T[],
   changes: Array<ResourceChange<T>>,
@@ -326,8 +353,11 @@ function applyChanges<T extends { name: string; namespace?: string | null }>(
       if (index !== undefined && (next ?? list)[index] === incoming) continue;
       next ??= list.slice();
       if (index === undefined) {
-        positions.set(key, next.length);
-        next.push(incoming);
+        const at = sortedIndex(next, incoming);
+        next.splice(at, 0, incoming);
+        for (const [other, position] of positions)
+          if (position >= at) positions.set(other, position + 1);
+        positions.set(key, at);
       } else {
         next[index] = incoming;
       }
@@ -335,11 +365,16 @@ function applyChanges<T extends { name: string; namespace?: string | null }>(
   }
   if (deleted) {
     const rows = next ?? list;
-    next = [];
-    for (const [key, index] of positions) {
-      positions.set(key, next.length);
-      next.push(rows[index]);
+    const slots: Array<string | undefined> = new Array(rows.length);
+    for (const [key, index] of positions) slots[index] = key;
+    const kept: T[] = [];
+    for (let index = 0; index < slots.length; index++) {
+      const key = slots[index];
+      if (key === undefined) continue;
+      positions.set(key, kept.length);
+      kept.push(rows[index]);
     }
+    next = kept;
   }
   return next ?? list;
 }

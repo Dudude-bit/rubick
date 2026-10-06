@@ -14,6 +14,7 @@ import { useSyncExternalStore, type ReactElement, type ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { appSearch } from "@/lib/app-search";
 import { setRouter } from "@/lib/links";
+import { shareStructure } from "@/lib/watched-rows";
 
 /**
  * A client for one test. React Query's own default retries a failed query
@@ -23,7 +24,13 @@ import { setRouter } from "@/lib/links";
  */
 export function testQueryClient(): QueryClient {
   return new QueryClient({
-    defaultOptions: { queries: { retry: false, retryDelay: 0 } },
+    defaultOptions: {
+      queries: {
+        retry: false,
+        retryDelay: 0,
+        structuralSharing: shareStructure,
+      },
+    },
   });
 }
 
