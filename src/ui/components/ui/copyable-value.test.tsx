@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CopyButton, CopyableValue } from "./copyable-value";
+import { TooltipProvider } from "./tooltip";
 
 /**
  * `userEvent.setup()` installs its own clipboard stub, so ours has to go in
@@ -133,9 +140,11 @@ describe("CopyButton", () => {
     const writeText = vi.fn(async () => {});
     stubClipboard(writeText);
     render(
-      <div onClick={rowClick} onDoubleClick={rowDouble}>
-        <CopyButton value="web-7f4" label="Copy name: web-7f4" />
-      </div>
+      <TooltipProvider>
+        <div onClick={rowClick} onDoubleClick={rowDouble}>
+          <CopyButton value="web-7f4" label="Copy name: web-7f4" />
+        </div>
+      </TooltipProvider>
     );
     await user.dblClick(
       screen.getByRole("button", { name: "Copy name: web-7f4" })
@@ -143,5 +152,27 @@ describe("CopyButton", () => {
     expect(writeText).toHaveBeenCalledWith("web-7f4");
     expect(rowClick).not.toHaveBeenCalled();
     expect(rowDouble).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Dana right-clicked a Deployment row and a black "Copy name: checkout"
+   * stayed drawn over the menu's Open: a native `title`, which the webview
+   * draws and no menu can close. Fails if the mark goes back to a native
+   * title, or if its tooltip outlives a press on the row.
+   */
+  it("says what it copies in the app's tooltip, which a press closes", async () => {
+    render(
+      <TooltipProvider>
+        <CopyButton value="checkout" label="Copy name: checkout" />
+      </TooltipProvider>
+    );
+    const button = screen.getByRole("button", { name: "Copy name: checkout" });
+    expect(button).not.toHaveAttribute("title");
+    act(() => button.focus());
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Copy name: checkout"
+    );
+    fireEvent.pointerDown(button, { button: 2 });
+    await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
   });
 });

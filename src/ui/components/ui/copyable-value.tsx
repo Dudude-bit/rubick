@@ -10,6 +10,11 @@ import { Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { None } from "@/components/ui/none";
 import { useT } from "@/i18n/useT";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 /**
  * A value whose only useful action is being copied — an IP, an address, an
@@ -256,26 +261,32 @@ export function CopyButton({
     }
   };
   const Mark = copied ? Check : Copy;
+  // The app's own tooltip rather than a native `title`: that one is drawn by
+  // the webview, no menu can close it, and it sat over the row menu's Open.
   return (
-    <button
-      type="button"
-      onClick={copy}
-      onDoubleClick={(event) => event.stopPropagation()}
-      title={copied ? t("action", "copied") : label}
-      aria-label={label}
-      className={cn(
-        "inline-flex size-4 flex-none items-center justify-center rounded-sm transition-opacity",
-        "focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
-        copied
-          ? "text-ok opacity-100"
-          : "text-fg-fnt opacity-0 hover:text-fg-mut group-hover/name:opacity-100",
-        className
-      )}
-    >
-      <Mark className="size-2.5" aria-hidden="true" />
-      <span className="sr-only" role="status">
-        {copied ? t("action", "copied") : ""}
-      </span>
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          onClick={copy}
+          onDoubleClick={(event) => event.stopPropagation()}
+          aria-label={label}
+          className={cn(
+            "inline-flex size-4 flex-none items-center justify-center rounded-sm transition-opacity",
+            "focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
+            copied
+              ? "text-ok opacity-100"
+              : "text-fg-fnt opacity-0 hover:text-fg-mut group-hover/name:opacity-100",
+            className
+          )}
+        >
+          <Mark className="size-2.5" aria-hidden="true" />
+          <span className="sr-only" role="status">
+            {copied ? t("action", "copied") : ""}
+          </span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{copied ? t("action", "copied") : label}</TooltipContent>
+    </Tooltip>
   );
 }
