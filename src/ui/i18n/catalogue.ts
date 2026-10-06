@@ -4066,7 +4066,7 @@ export const en = {
     allContexts: "All contexts",
     rename: "rename",
     freshLive: "live",
-    freshSlowed: "slowed",
+    freshSlowed: "polled less often",
     freshOffline: "offline",
     freshLiveNote:
       "The cluster is pushing changes to this view as they happen.",

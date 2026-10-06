@@ -30,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { RealtimeAge } from "./realtime-age";
 import { useT } from "@/i18n/useT";
+import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 
 export interface DataFreshnessProps {
   /** Timestamp of the last successful fetch, from React Query. */
@@ -81,6 +82,14 @@ const STATES = {
   },
 } as const;
 
+/** "5 с назад", not a bare "5 с" a reader has to guess the meaning of. */
+function AgeOnFace({ stamp }: { stamp: string }) {
+  const t = useT();
+  return (
+    <span>{t("action", "agoSuffix", { age: useRealtimeAge(stamp) })}</span>
+  );
+}
+
 export const DataFreshness = memo(function DataFreshness({
   dataUpdatedAt,
   live = false,
@@ -121,7 +130,7 @@ export const DataFreshness = memo(function DataFreshness({
           {(state === "offline" || state === "slowed") && (
             <>
               <span aria-hidden="true">·</span>
-              <RealtimeAge timestamp={stamp} fallback="" />
+              <AgeOnFace stamp={stamp} />
             </>
           )}
         </div>

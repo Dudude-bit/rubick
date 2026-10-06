@@ -4524,7 +4524,7 @@ export const ru: Catalogue = {
     allContexts: "Все контексты",
     rename: "переименовать",
     freshLive: "онлайн",
-    freshSlowed: "замедлено",
+    freshSlowed: "опрос реже обычного",
     freshOffline: "нет связи",
     freshLiveNote:
       "Кластер присылает изменения на этот экран по мере их появления.",

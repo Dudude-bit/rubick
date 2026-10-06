@@ -338,7 +338,7 @@ describe("what a backed-off query says about itself", () => {
       await advance(RATE * 2);
     }
 
-    expect(screen.getByText("slowed")).toBeInTheDocument();
+    expect(screen.getByText("polled less often")).toBeInTheDocument();
     expect(screen.queryByText("polling")).not.toBeInTheDocument();
     // And it may never have been the other word. A poll that has backed off is
     // the exact case a green "live" would be a lie about.
@@ -351,7 +351,7 @@ describe("what a backed-off query says about itself", () => {
     for (let round = 0; round <= BACKOFF.steadyAfter; round++) {
       await advance(RATE * 2);
     }
-    expect(screen.getByText("slowed")).toBeInTheDocument();
+    expect(screen.getByText("polled less often")).toBeInTheDocument();
 
     act(() => {
       useWindowActivity.setState({ interactionAt: Date.now() });
@@ -480,7 +480,7 @@ describe("one question asked of several namespaces", () => {
     for (let round = 0; round <= BACKOFF.steadyAfter; round++) {
       await advance(RATE * 2);
     }
-    expect(screen.getByText("slowed")).toBeInTheDocument();
+    expect(screen.getByText("polled less often")).toBeInTheDocument();
 
     const settled = reads;
     // A minute of two queries at the base rate is sixty reads. Backed off,
@@ -501,7 +501,7 @@ describe("one question asked of several namespaces", () => {
       await advance(RATE * 2);
     }
     expect(screen.getByText("polling")).toBeInTheDocument();
-    expect(screen.queryByText("slowed")).not.toBeInTheDocument();
+    expect(screen.queryByText("polled less often")).not.toBeInTheDocument();
   });
 
   /**
@@ -531,7 +531,7 @@ describe("one question asked of several namespaces", () => {
     }
 
     expect([...new Set(held)]).toEqual([REFRESH_INTERVALS.fast]);
-    expect(screen.queryByText("slowed")).not.toBeInTheDocument();
+    expect(screen.queryByText("polled less often")).not.toBeInTheDocument();
   });
 
   /**
@@ -569,7 +569,7 @@ describe("one question asked of several namespaces", () => {
     for (let round = 0; round <= BACKOFF.steadyAfter; round++) {
       await advance(RATE * 2);
     }
-    expect(screen.getByText("slowed")).toBeInTheDocument();
+    expect(screen.getByText("polled less often")).toBeInTheDocument();
 
     act(() => {
       useWindowActivity.setState({ interactionAt: Date.now() });

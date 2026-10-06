@@ -6,6 +6,7 @@ vi.mock("@/lib/commands", () => ({ commands: {} }));
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { DataFreshness } from "./data-freshness";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useLocaleStore } from "@/stores/localeStore";
 
 const wrap = (ui: React.ReactNode) =>
   render(<TooltipProvider>{ui}</TooltipProvider>);
@@ -14,6 +15,7 @@ const UPDATED = Date.now();
 
 beforeEach(() => {
   useClusterStore.setState({ isConnected: true });
+  useLocaleStore.setState({ choice: null });
 });
 
 describe("what the freshness reading claims", () => {
@@ -45,6 +47,18 @@ describe("what the freshness reading claims", () => {
       </TooltipProvider>
     );
     expect(screen.getByText("offline")).toBeInTheDocument();
+  });
+
+  /**
+   * Lena read "замедлено · 0 с" beside a page title and could not tell what
+   * was slowed or what the bare age meant. Fails if the face goes back to a
+   * word without its subject or an age without "назад".
+   */
+  it("says in Russian what is slowed and how long ago it read", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    wrap(<DataFreshness dataUpdatedAt={Date.now() - 5000} slowed />);
+    expect(screen.getByText("опрос реже обычного")).toBeInTheDocument();
+    expect(screen.getByText(/^\d+\s*с назад$/)).toBeInTheDocument();
   });
 
   it("distinguishes the three states without relying on colour", () => {
