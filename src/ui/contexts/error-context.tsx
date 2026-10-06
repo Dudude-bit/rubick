@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useT } from "@/i18n/useT";
 import {
   errorToShow,
   reportError,
@@ -29,6 +30,7 @@ interface Props {
  * Error Provider component - wrap your app with this
  */
 export function ErrorProvider({ children }: Props) {
+  const t = useT();
   const { toast } = useToast();
   const recentToasts = useRef<Map<string, number>>(new Map());
 
@@ -37,7 +39,7 @@ export function ErrorProvider({ children }: Props) {
 
   // Deduplicated toast emitter
   const emitToast = useCallback(
-    (title: string, description: string) => {
+    (title: string, description?: string) => {
       const key = `${title}:${description}`;
       const now = Date.now();
       const lastShown = recentToasts.current.get(key);
@@ -86,12 +88,15 @@ export function ErrorProvider({ children }: Props) {
     [emitToast]
   );
 
-  // Handle cluster store errors
+  // The page says why the connect failed, with the server's words folded
+  // under Details; the toast only says that it did.
   useEffect(() => {
-    if (clusterError && clusterErrorContext) {
-      handleError(clusterError, clusterErrorContext);
-    }
-  }, [clusterError, clusterErrorContext, handleError]);
+    if (!clusterError || !clusterErrorContext) return;
+    reportError(clusterError, clusterErrorContext);
+    emitToast(
+      t("cluster", "couldNotConnect", { context: clusterErrorContext })
+    );
+  }, [clusterError, clusterErrorContext, emitToast, t]);
 
   // Listen for global window errors
   useEffect(() => {

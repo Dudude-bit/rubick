@@ -41,3 +41,33 @@ describe("the toast for a failure nobody caught", () => {
     );
   });
 });
+
+describe("the toast for a cluster that could not be reached", () => {
+  /**
+   * Dana's toast read "Network error / Connection error: Failed to get
+   * server version: ServiceError: client error (Connect): deadline has
+   * elapsed", the text the page folds under Details. Fails if any of the
+   * server's words reach the toast.
+   */
+  it("names the cluster and leaves the raw error to the page's Details", () => {
+    render(
+      <ErrorProvider>
+        <span />
+      </ErrorProvider>
+    );
+    act(() => {
+      useClusterStore.setState({
+        error:
+          "Connection error: Failed to get server version: ServiceError: client error (Connect): deadline has elapsed",
+        errorContext: "acme-prod-eu",
+      });
+    });
+
+    expect(toast).toHaveBeenCalledTimes(1);
+    const shown = toast.mock.calls[0][0];
+    expect(shown.title).toBe("Could not connect to acme-prod-eu");
+    expect(JSON.stringify(shown)).not.toMatch(
+      /ServiceError|deadline|Network error/
+    );
+  });
+});
