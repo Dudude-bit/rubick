@@ -256,16 +256,9 @@ export function useObjectActions({
       if (!scaleCommand) throw new Error(`No scale command for ${kind}`);
       return scaleCommand(name, replicas, namespace);
     },
-    onSuccess: (_data, replicas) => {
+    onSuccess: () => {
       invalidate();
       setDialog(null);
-      if (askTarget) {
-        asking.ask(askTarget, {
-          action: "scale",
-          replicas,
-          generationBefore: null,
-        });
-      }
     },
     onError: failed("scale"),
   });

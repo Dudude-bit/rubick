@@ -192,19 +192,7 @@ export function StatefulSetDetail() {
         namespace && name
           ? [queryKeys.detail(ResourceType.StatefulSet, namespace, name)]
           : [],
-      onSuccess: (_data, replicas) => {
-        setScaleOpen(false);
-        if (name) {
-          asking.ask(
-            { kind: "StatefulSet", namespace: namespace || null, name },
-            {
-              action: "scale",
-              replicas,
-              generationBefore: statefulSet?.generation ?? null,
-            }
-          );
-        }
-      },
+      onSuccess: () => setScaleOpen(false),
     }
   );
 

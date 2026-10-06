@@ -191,10 +191,7 @@ export function DeploymentDetail() {
         namespace && name
           ? [queryKeys.detail(ResourceType.Deployment, namespace, name)]
           : [],
-      onSuccess: (_data, replicas) => {
-        setScaleDialogOpen(false);
-        follow({ action: "scale", replicas, generationBefore: generationNow });
-      },
+      onSuccess: () => setScaleDialogOpen(false),
     }
   );
 
