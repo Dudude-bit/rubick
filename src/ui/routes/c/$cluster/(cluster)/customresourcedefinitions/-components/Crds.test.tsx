@@ -274,3 +274,41 @@ describe("a CRD's scope in the list", () => {
     expect(screen.queryByText("Namespaced")).toBeNull();
   });
 });
+
+describe("a CRD with long names in the list", () => {
+  /**
+   * Sam read "ciliumclusterwidenetworkpoli…" and "ippools ippool lbippoo…"
+   * at 1440 px with nothing to hover. Fails if either cut loses its whole
+   * text, or the plural gets less room than the kind it is the plural of.
+   */
+  it("keeps the plural and the short names whole on hover", async () => {
+    listCrds.mockResolvedValue([
+      {
+        group: "cilium.io",
+        crds: [
+          {
+            name: "ciliumloadbalancerippools.cilium.io",
+            group: "cilium.io",
+            kind: "CiliumLoadBalancerIPPool",
+            plural: "ciliumloadbalancerippools",
+            scope: "Cluster",
+            version: "v2",
+            shortNames: ["ippools", "ippool", "lbippool", "lbippools"],
+            categories: [],
+            createdAt: null,
+          },
+        ],
+      },
+    ]);
+    await draw();
+    expect(
+      await screen.findByText("ciliumloadbalancerippools")
+    ).toHaveAttribute("title", "ciliumloadbalancerippools");
+    expect(
+      screen.getByText("ippools ippool lbippool lbippools")
+    ).toHaveAttribute("title", "ippools ippool lbippool lbippools");
+    const width = (header: string) =>
+      parseFloat(screen.getByText(header).closest("th")!.style.width);
+    expect(width("Plural")).toBeGreaterThanOrEqual(width("Kind"));
+  });
+});

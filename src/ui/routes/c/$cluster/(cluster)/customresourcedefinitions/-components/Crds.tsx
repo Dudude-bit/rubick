@@ -120,7 +120,8 @@ export function Crds() {
       {
         accessorKey: "kind",
         header: columnHeader("columns", "kind"),
-        size: 220,
+        // "CiliumClusterwideNetworkPolicy" and its plural, whole at 1440px.
+        size: 240,
         // An `ObjectLink` and not a `RouteLink`: the row's own href resolves
         // to a peek, so a click on the whitespace opens one. A name that
         // navigated instead left this list answering a click two different
@@ -138,16 +139,18 @@ export function Crds() {
       {
         accessorKey: "plural",
         header: columnHeader("columns", "plural"),
-        size: 200,
+        size: 240,
         cell: ({ row }) => (
-          <span className="font-mono text-fg-mut">{row.original.plural}</span>
+          <span className="font-mono text-fg-mut" title={row.original.plural}>
+            {row.original.plural}
+          </span>
         ),
       },
       {
         accessorKey: "scope",
         header: columnHeader("columns", "scope"),
-        // "в пространстве имён" is the widest value, whole at 170.
-        size: 170,
+        // "в пространстве имён" is the widest value, whole at 150.
+        size: 150,
         cell: ({ row }) => (
           <span className="text-fg-mut">
             <T section="apiResources" k={scopeKey(row.original.scope)} />
@@ -157,7 +160,7 @@ export function Crds() {
       {
         accessorKey: "version",
         header: columnHeader("columns", "version"),
-        size: 110,
+        size: 90,
         cell: ({ row }) => (
           <span className="font-mono text-fg-mut">{row.original.version}</span>
         ),
@@ -165,15 +168,16 @@ export function Crds() {
       {
         accessorKey: "shortNames",
         header: columnHeader("columns", "shortNames"),
-        size: 160,
+        size: 190,
         cell: ({ row }) => {
           const shortNames = row.original.shortNames;
           if (!shortNames || shortNames.length === 0) {
             return <None />;
           }
+          const said = shortNames.join(" ");
           return (
-            <span className="font-mono text-fg-mut">
-              {shortNames.join(" ")}
+            <span className="font-mono text-fg-mut" title={said}>
+              {said}
             </span>
           );
         },
