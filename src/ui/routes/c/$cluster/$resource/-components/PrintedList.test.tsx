@@ -293,4 +293,24 @@ describe("an access kind on the generic list", () => {
     expect(screen.getAllByText("2 ч")).toHaveLength(2);
     expect(screen.getByText("нет")).toBeVisible();
   });
+
+  /**
+   * At 1440 px the Role column cut "Role/system::leader-locking-kube-contr…"
+   * beside an Age as wide as itself. Fails if the Role gets no more room
+   * than an age, or a cut Role cannot be read whole on hover.
+   */
+  it("gives a RoleBinding's Role the room an age does not need, and its whole text on hover", async () => {
+    const role = "Role/system::leader-locking-kube-controller-manager";
+    await inRussian(
+      ROLE_BINDINGS,
+      printed(
+        [column("Name"), column("Role"), AGE],
+        [row("leader", "kube-system", ["leader", role, "2h0m"])]
+      )
+    );
+    expect(await screen.findByText(role)).toHaveAttribute("title", role);
+    const width = (header: string) =>
+      parseFloat(screen.getByText(header).closest("th")!.style.width);
+    expect(width("Роль")).toBeGreaterThan(2 * width("Возраст"));
+  });
 });

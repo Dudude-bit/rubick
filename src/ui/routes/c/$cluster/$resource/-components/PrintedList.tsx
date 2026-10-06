@@ -56,6 +56,18 @@ const STANDARD_HEADERS: Partial<
 /** How the server describes a column that reads `metadata.creationTimestamp`. */
 const CREATION = /creationTimestamp/i;
 
+const isAge = (column: TableColumn) =>
+  CREATION.test(column.description) || column.columnType === "date";
+
+/** An age or a count needs a few characters; a RoleBinding's Role needs the rest. */
+function sizeOf(column: TableColumn): number {
+  if (column.format === "name") return 320;
+  if (isAge(column)) return 80;
+  if (column.columnType === "integer" || column.columnType === "number")
+    return 90;
+  return 220;
+}
+
 /**
  * Any kind the cluster serves, listed as the API server prints it for
  * kubectl. What the catalogue cannot vouch for is said instead of an empty
@@ -238,7 +250,7 @@ function columnsOf(
     const standard = STANDARD_HEADERS[column.name];
     columns.push({
       id: `printed-${index}`,
-      size: column.format === "name" ? 320 : 140,
+      size: sizeOf(column),
       header: standard ? columnHeader("columns", standard) : column.name,
       accessorFn: (row) => row.cells[index],
       cell: ({ row }) => (
@@ -292,5 +304,5 @@ function Cell({
     return <span className="text-fg-fnt">{text}</span>;
   if (column.columnType === "integer" || column.columnType === "number")
     return <span className="tabular-nums">{text}</span>;
-  return <span>{text}</span>;
+  return <span title={text}>{text}</span>;
 }
