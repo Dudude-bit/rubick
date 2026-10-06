@@ -4,7 +4,7 @@
 //! round-trip per line).
 
 use crate::commands::helpers::ResourceContext;
-use crate::error::{Error, Result};
+use crate::error::{Error, KubeErrorExt, Result};
 use crate::state::perf::{wire_len, IPC_TARGET_BYTES};
 use crate::state::{
     is_missing_previous_run, is_runtime_dropped_log, readable_cause, AppEvent, LogLineEvent,
@@ -67,7 +67,7 @@ impl LogStreamer {
         let mut body = Vec::new();
         api.log_stream(&config.pod, &params)
             .await
-            .map_err(|e| log_error(&e.to_string(), &container, "Failed to get logs"))?
+            .map_err(|e| log_error(&e, &container, "Failed to get logs"))?
             .read_to_end(&mut body)
             .await
             .map_err(|e| Error::LogStream(format!("Log read failed: {e}")))?;
@@ -128,7 +128,7 @@ impl LogStreamer {
         let stream = match api.log_stream(&config.pod, &params).await {
             Ok(stream) => stream,
             Err(e) => {
-                let error = log_error(&e.to_string(), &container, "Failed to start log stream");
+                let error = log_error(&e, &container, "Failed to start log stream");
                 let cause = readable_cause(&error);
                 let kind = StreamFailureKind::classify(&error);
                 emit_failure(
@@ -378,8 +378,9 @@ fn take_line(
 /// the first ends in "not found", so flattening them into one
 /// `LogStream` string is what made a container that has simply never
 /// restarted indistinguishable from a pod that has been deleted.
-fn log_error(cause: &str, container: &str, context: &str) -> Error {
-    if is_missing_previous_run(cause) {
+fn log_error(error: &kube::Error, container: &str, context: &str) -> Error {
+    let cause = error.display_clean();
+    if is_missing_previous_run(&cause) {
         return Error::NoPreviousRun {
             container: container.to_string(),
         };
@@ -448,6 +449,35 @@ impl LineBatch {
             stream_id: self.stream_id.clone(),
             lines: std::mem::take(&mut self.lines),
         });
+    }
+}
+
+#[cfg(test)]
+mod log_error_tests {
+    use super::*;
+
+    /// The body the apiserver sends for the logs of a container stuck in
+    /// `ImagePullBackOff`.
+    const IMAGE_PULL_BACKOFF: &str = r#"{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"container \"app\" in pod \"payments-6d9d7d9db4-26vcv\" is waiting to start: trying and failing to pull image","reason":"BadRequest","code":400}"#;
+
+    /// The payments pod's diagnosis card printed `Status { status:
+    /// Some(Failure), code: 400, ... ListMeta { continue_: None ... } }`.
+    /// Fails if a log failure carries kube's `Debug` dump of the status again.
+    #[test]
+    fn a_refused_log_read_says_the_server_message_and_no_status_dump() {
+        let status: kube::core::Status = serde_json::from_str(IMAGE_PULL_BACKOFF).unwrap();
+        let shown = log_error(
+            &kube::Error::Api(Box::new(status)),
+            "app",
+            "Failed to get logs",
+        )
+        .to_string();
+        assert!(
+            shown.contains("is waiting to start: trying and failing to pull image"),
+            "{shown}"
+        );
+        assert!(!shown.contains("Status {"), "{shown}");
+        assert!(!shown.contains("ListMeta"), "{shown}");
     }
 }
 

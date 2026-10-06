@@ -13,7 +13,7 @@
 //! read means the connection closed, and no bytes available means
 //! nothing was typed, not that anything is wrong.
 
-use crate::error::Result;
+use crate::error::{KubeErrorExt, Result};
 use crate::terminal::TerminalAdapter;
 use k8s_openapi::api::core::v1::Pod;
 use kube::{
@@ -98,7 +98,9 @@ impl TerminalAdapter for PodExecAdapter {
         let mut attached = api
             .exec(&self.pod, &self.command, &attach_params)
             .await
-            .map_err(|e| crate::error::Error::Terminal(format!("Failed to exec: {e}")))?;
+            .map_err(|e| {
+                crate::error::Error::Terminal(format!("Failed to exec: {}", e.display_clean()))
+            })?;
 
         // Extract stdin and stdout writers/readers once and store them
         // This is critical - kube-rs AttachedProcess.stdin()/stdout() consume the values via .take()

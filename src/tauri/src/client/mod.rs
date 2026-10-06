@@ -3,7 +3,7 @@
 //! This module provides a client manager that handles multiple Kubernetes
 //! cluster connections with support for different authentication methods.
 
-use crate::error::{AuthError, Error, Result};
+use crate::error::{AuthError, Error, KubeErrorExt, Result};
 use dashmap::DashMap;
 use kube::{
     config::{KubeConfigOptions, Kubeconfig},
@@ -112,10 +112,15 @@ impl ConnectFailure {
 /// An error and every cause under it, each said once: hyper's own `Display`
 /// stops at "client error (Connect)", and the reason is two sources down.
 pub(crate) fn with_causes(error: &(dyn std::error::Error + 'static)) -> String {
-    let mut text = error.to_string();
+    let clean = |error: &(dyn std::error::Error + 'static)| {
+        error
+            .downcast_ref::<kube::Error>()
+            .map_or_else(|| error.to_string(), KubeErrorExt::display_clean)
+    };
+    let mut text = clean(error);
     let mut cursor = error.source();
     while let Some(cause) = cursor {
-        let said = cause.to_string();
+        let said = clean(cause);
         if !text.contains(&said) {
             text.push_str(": ");
             text.push_str(&said);
@@ -946,6 +951,20 @@ pub(crate) fn canonicalize_kubeconfig_path(path: &std::path::Path) -> Result<Pat
 mod tests {
     use super::*;
     use std::io::Write;
+
+    /// A cluster that refuses `/version` failed the connection with kube's
+    /// `Debug` dump of the status on the Clusters screen. Fails if a refusal
+    /// in the chain is said with its `Status { ... }` tail again.
+    #[test]
+    fn a_refused_version_read_is_said_without_the_status_dump() {
+        let status: kube::core::Status = serde_json::from_str(
+            r#"{"kind":"Status","apiVersion":"v1","metadata":{},"status":"Failure","message":"forbidden: User \"system:anonymous\" cannot get path \"/version\"","reason":"Forbidden","details":{},"code":403}"#,
+        )
+        .unwrap();
+        let shown = with_causes(&kube::Error::Api(Box::new(status)));
+        assert!(shown.contains("cannot get path"), "{shown}");
+        assert!(!shown.contains("Status {"), "{shown}");
+    }
 
     #[tokio::test]
     async fn test_client_manager_creation() {

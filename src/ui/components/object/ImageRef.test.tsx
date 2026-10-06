@@ -59,6 +59,21 @@ describe("ImageRef", () => {
     );
   });
 
+  /**
+   * The payments pod's headline read `"nginx:1.27.99-alpi...` and then the
+   * sentence. Fails if a reference inside a sentence may end in an ellipsis
+   * again.
+   */
+  it("keeps a reference inside a sentence whole", async () => {
+    await wrap(<ImageRef image="nginx:1.27.99-alpine" inline />);
+    const text = screen
+      .getByRole("button", { name: "Copy image nginx:1.27.99-alpine" })
+      .querySelector("span");
+    expect(text).toHaveTextContent('"nginx:1.27.99-alpine"');
+    expect(text).not.toHaveClass("truncate");
+    expect(text).toHaveClass("wrap-anywhere");
+  });
+
   it("still copies a reference it cannot split", async () => {
     await wrap(<ImageRef image="NOT A REF" />);
     expect(

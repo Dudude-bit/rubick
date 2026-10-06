@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use crate::commands::helpers::ResourceContext;
-use crate::error::Result;
+use crate::error::{KubeErrorExt, Result};
 use crate::resources::{read_certificate, CertificateFacts, CertificateProblem};
 use crate::state::AppState;
 
@@ -57,7 +57,7 @@ pub async fn get_tls_certificates(
                 secret_name: name,
                 certificate: None,
                 problem: Some(CertificateProblem::SecretUnreadable {
-                    said: err.to_string(),
+                    said: err.display_clean(),
                 }),
             },
         });

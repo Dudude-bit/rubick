@@ -311,7 +311,7 @@ fn ran_out_of_time(err: &(dyn std::error::Error + 'static)) -> bool {
 /// tail is a wall of `None`s no reader wants, and it crosses the IPC boundary
 /// onto the screen. Rebuild the message from the status; leave every other
 /// kube error exactly as it displays.
-trait KubeErrorExt {
+pub(crate) trait KubeErrorExt {
     fn display_clean(&self) -> String;
 }
 

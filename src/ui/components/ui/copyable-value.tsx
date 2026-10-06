@@ -103,9 +103,11 @@ export function CopyableValue({
     >
       <span
         className={
-          children === undefined && IPV4.test(value)
-            ? "whitespace-nowrap"
-            : "truncate"
+          quietMark
+            ? "wrap-anywhere"
+            : children === undefined && IPV4.test(value)
+              ? "whitespace-nowrap"
+              : "truncate"
         }
       >
         {children ?? value}
