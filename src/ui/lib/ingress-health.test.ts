@@ -90,6 +90,24 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     expect(said.reason).toContain("IngressClass nginx");
   });
 
+  /** Lena read "...никто не обслуживает, поэтому этот Ingress никто не подхватывает" as machine Russian. */
+  it("says in plain Russian that no controller serves the class", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const said = ingressHealthWords(
+      ingressHealthOf({
+        ingress: ingress(["api"]),
+        binding: { known: true, value: UNSERVED },
+        backing: { known: true, value: BACKING },
+        certificates: undefined,
+      }),
+      ru
+    );
+    expect(said.reason).toBe(
+      "IngressClass nginx не обслуживает ни один контроллер, и этот Ingress никто не обрабатывает"
+    );
+  });
+
   it("names a backend Service that does not exist", () => {
     const said = verdict({
       ingress: ingress(["admin-ui"]),

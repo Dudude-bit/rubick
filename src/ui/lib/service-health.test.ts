@@ -141,6 +141,26 @@ describe("one verdict for a Service on every surface", () => {
     }
   );
 
+  /** "За app=tls-demo пока ничего не опубликовано" read as machine Russian on the Overview. */
+  it("says in plain Russian that nothing is published for the selector yet", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const health = serviceHealthOf(
+      SELECTING,
+      published({
+        stop: {
+          reason: "publishesNothingYet",
+          service: SERVICE,
+          selector: "app=tls-demo",
+        },
+      }),
+      null
+    );
+    expect(serviceHealthWords(health, ru).reason).toBe(
+      "По селектору app=tls-demo пока ничего не опубликовано"
+    );
+  });
+
   /** Addresses in the slices, none serving: the outage on running pods. */
   it("calls addresses that are listed and not ready none ready", () => {
     const health = serviceHealthOf(SELECTING, published({ notReady: 2 }), null);

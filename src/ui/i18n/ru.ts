@@ -88,7 +88,8 @@ export const ru: Catalogue = {
     stopUnnamedPortNote:
       "{matched}, но он просит {asked}, а порта с таким именем не объявляет ни один контейнер, поэтому контроллер эндпоинтов пропускает их все. До них ничего не доходит. Назовите порт в контейнере или укажите в Service номер порта.",
     stopNoServiceNamed: "В этом пространстве имён нет Service с именем {name}",
-    stopPublishesNothingYet: "За {selector} пока ничего не опубликовано",
+    stopPublishesNothingYet:
+      "По селектору {selector} пока ничего не опубликовано",
     stopNoPodCarries: "Ни один под не несёт {selector}",
     stopNotScheduledNote:
       "Ни один узел их не принял: они в Pending без узла, поэтому адреса у них нет и публиковать нечего. В их событиях сказано, почему планировщик их обходит.",
@@ -4420,9 +4421,9 @@ export const ru: Catalogue = {
     healthByHand: "вручную",
     healthStillReading: "ещё читается",
     healthNothingServesClass:
-      "IngressClass {name} в этом кластере никто не обслуживает, поэтому этот Ingress никто не подхватывает",
+      "IngressClass {name} не обслуживает ни один контроллер, и этот Ingress никто не обрабатывает",
     healthNoClassNoDefault:
-      "Он не называет IngressClass, а класса по умолчанию в кластере нет, поэтому его никто не подхватывает",
+      "IngressClass не указан, а класса по умолчанию в кластере нет, и этот Ingress никто не обрабатывает",
     healthNoTlsSecret: "Нет Secret с именем {name} для его TLS",
     healthBackendDown: "{name} не принимает трафик",
     healthNoController: "нет контроллера",
