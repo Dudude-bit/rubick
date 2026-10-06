@@ -103,12 +103,14 @@ export function PeekContent({
     retry: false,
   });
 
+  const gone = error !== null && errorCode(error) === ERROR_CODES.NOT_FOUND;
   // The Overview fetch is also what a tab is marked from, so the strip is
-  // built after it rather than beside it.
-  const tabs = useMemo(
-    () => peekTabsFor(target.kind, t, data, target.crd),
-    [target.kind, data, target.crd, t]
-  );
+  // built after it rather than beside it. A gone object has nothing left to
+  // read but the Overview that says so.
+  const tabs = useMemo(() => {
+    const all = peekTabsFor(target.kind, t, data, target.crd);
+    return gone ? all.filter((tab) => tab.id === "overview") : all;
+  }, [target.kind, data, target.crd, t, gone]);
   const activeTab = resolvePeekTab(requestedTab, tabs);
 
   const served = useServed(
@@ -123,7 +125,6 @@ export function PeekContent({
         : source.summarise(data, target, t, { hasStatus }),
     [data, source, target, t, hasStatus]
   );
-  const gone = error !== null && errorCode(error) === ERROR_CODES.NOT_FOUND;
   // The cache is dropped on every tab switch, so a peek mounted after the pod
   // died may never hold a read of it; the owners outlive that.
   useRememberOwners(target, data);

@@ -1024,6 +1024,19 @@ describe("PeekPanel on an object that is gone", () => {
     expect(within(panel).queryByRole("button", { name: /^Shell/ })).toBeNull();
   });
 
+  /**
+   * Dana's peek of a deleted pod still offered Logs and Containers, two
+   * readings of a pod that is not there. Fails if a gone object's peek keeps
+   * any tab but the Overview that says it is gone.
+   */
+  it("offers only the Overview once the pod is gone", async () => {
+    await replacedAfterRead(buildPod());
+    const panel = screen.getByRole("dialog");
+    expect(within(panel).getAllByRole("tab")).toHaveLength(1);
+    expect(within(panel).queryByRole("tab", { name: /Logs/ })).toBeNull();
+    expect(within(panel).queryByRole("tab", { name: /Containers/ })).toBeNull();
+  });
+
   const underDeployment = (desired: number) =>
     buildReplicaSet({
       replicas: { desired, current: desired, ready: desired, available: 0 },
