@@ -35,7 +35,7 @@ describe("a ConfigMap's keys table", () => {
       {
         data: {
           values: {},
-          withheld: { "tls.key": "private key" },
+          withheld: { "tls.key": { says: "privateKey" } },
           binary: {},
         },
         error: null,
@@ -43,7 +43,9 @@ describe("a ConfigMap's keys table", () => {
       t
     );
     if (section.body.type !== "table") throw new Error("expected a table");
-    expect(section.body.rows[0].cells[1].text).toBe("private key");
+    expect(section.body.rows[0].cells[1].text).toBe(
+      "a private key, which the app never shows"
+    );
   });
 
   /** An empty table and a refused read are different answers. */

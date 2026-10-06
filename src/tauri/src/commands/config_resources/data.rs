@@ -31,7 +31,7 @@ pub struct BinaryValue {
 pub struct ConfigData {
     pub values: BTreeMap<String, String>,
     /// Key to the reason it is withheld.
-    pub withheld: BTreeMap<String, String>,
+    pub withheld: BTreeMap<String, crate::resources::Withheld>,
     /// Key to its size and base64, for bytes that are not UTF-8.
     pub binary: BTreeMap<String, BinaryValue>,
 }

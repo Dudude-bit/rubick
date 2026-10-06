@@ -3326,6 +3326,10 @@ export const en = {
     certNoPem: "tls.crt holds no PEM certificate",
     certUnparseable: "tls.crt is not a certificate the app can read: {said}",
     certCrossNamespace: "cross-namespace, needs a ReferenceGrant",
+    withheldPrivateKey: "a private key, which the app never shows",
+    withheldDeclared:
+      "{type} declares this to be the private key, which the app never shows",
+    withheldKeyName: "named like a private key, which the app never shows",
     unreadUnanswered:
       "the app asked for {version} and the cluster did not answer ({said}), so it cannot say whether one applies here",
     unreadNodeClaims:

@@ -88,7 +88,7 @@ describe("DataSection", () => {
     render(
       <DataSection
         data={{ "tls.crt": "-----BEGIN CERTIFICATE-----" }}
-        withheld={{ "tls.key": "a private key — the app never shows one" }}
+        withheld={{ "tls.key": { says: "privateKey" } }}
         keys={["tls.crt", "tls.key"]}
         sensitive
       />
@@ -96,7 +96,7 @@ describe("DataSection", () => {
 
     expect(screen.getByText("tls.key")).toBeInTheDocument();
     expect(
-      screen.getByText("a private key — the app never shows one")
+      screen.getByText("a private key, which the app never shows")
     ).toBeInTheDocument();
 
     // One Reveal and one Copy, both belonging to tls.crt.
@@ -113,7 +113,7 @@ describe("DataSection", () => {
     render(
       <DataSection
         data={{}}
-        withheld={{ "tls.key": "a private key — the app never shows one" }}
+        withheld={{ "tls.key": { says: "privateKey" } }}
         keys={["tls.key"]}
         sensitive
       />
@@ -203,6 +203,37 @@ describe("the per-key controls, in the reader's language", () => {
     ).toBeNull();
   });
 
+  /**
+   * The TLS Secret's tls.key row read "a private key — the app never shows
+   * one" in English in the Russian UI. Fails if the backend's reason is drawn
+   * as text again rather than worded here.
+   */
+  it("says why a private key is withheld in Russian", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(
+      <DataSection
+        data={{}}
+        withheld={{
+          "tls.key": { says: "declared", by: "kubernetes.io/tls" },
+          "server.key": { says: "keyName" },
+        }}
+        keys={["tls.key", "server.key"]}
+        sensitive
+      />
+    );
+    expect(
+      screen.getByText(
+        "тип kubernetes.io/tls объявляет это значение закрытым ключом, такие приложение никогда не показывает"
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "судя по имени, закрытый ключ, такие приложение никогда не показывает"
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/private key/)).toBeNull();
+  });
+
   /** Would break if the base64 copy went back to an English label. */
   it("names the base64 copy in Russian", () => {
     useLocaleStore.setState({ choice: "ru" });
@@ -278,7 +309,7 @@ describe("editing one key", () => {
     render(
       <DataSection
         data={{ "tls.key": "" }}
-        withheld={{ "tls.key": "a private key never leaves the backend" }}
+        withheld={{ "tls.key": { says: "keyName" } }}
         onEditKey={vi.fn()}
       />
     );

@@ -1,7 +1,8 @@
 import { KeyRound } from "lucide-react";
 
-import type { BinaryValue } from "@/generated/types";
+import type { BinaryValue, Withheld } from "@/generated/types";
 import type { T } from "@/i18n/useT";
+import { withheldWords } from "@/lib/certificates";
 import { errorToShow } from "@/lib/error-utils";
 import { iconSvg } from "@/lib/icon-svg";
 import { formatBytes } from "@/lib/k8s-quantity";
@@ -13,7 +14,7 @@ function byteSize(value: string): number {
 
 export interface ConfigMapDataQuery {
   values?: Record<string, string>;
-  withheld?: Record<string, string>;
+  withheld?: Record<string, Withheld>;
   binary?: Record<string, BinaryValue>;
 }
 
@@ -47,7 +48,7 @@ export function configMapKeysSection(
         const value = query.data?.values?.[key];
         const size =
           reason !== undefined
-            ? { text: reason, quiet: true }
+            ? { text: withheldWords(reason, t), quiet: true }
             : binary !== undefined
               ? { text: formatBytes(binary.bytes) }
               : value !== undefined

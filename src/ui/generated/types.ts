@@ -2189,7 +2189,7 @@ export interface SecretInfo {
 
 export interface ConfigData {
   values: Record<string, string>;
-  withheld: Record<string, string>;
+  withheld: Record<string, Withheld>;
   binary: Record<string, BinaryValue>;
 }
 
@@ -2622,6 +2622,11 @@ export type CertificateProblem =
   | { says: "noTlsCrt" }
   | { says: "noPemCertificate" }
   | { says: "unparseable"; said: string };
+
+export type Withheld =
+  | { says: "privateKey" }
+  | { says: "declared"; by: string }
+  | { says: "keyName" };
 
 export type AppEvent =
   | { channel: "log-batch"; stream_id: string; lines: LogLineEvent[] }

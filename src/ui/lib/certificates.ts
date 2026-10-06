@@ -25,6 +25,7 @@ import type {
   CertificateProblem,
   Stalled,
   StepNote,
+  Withheld,
 } from "@/generated/types";
 
 /** The last point a normal change still fits, or a third of the lifetime. */
@@ -295,6 +296,18 @@ export function problemWords(problem: CertificateProblem, t: T): string {
       return t("readings", "certNoPem");
     case "unparseable":
       return t("readings", "certUnparseable", { said: problem.said });
+  }
+}
+
+/** Why a Secret's value stays in the backend, in the reader's language. */
+export function withheldWords(reason: Withheld, t: T): string {
+  switch (reason.says) {
+    case "privateKey":
+      return t("readings", "withheldPrivateKey");
+    case "declared":
+      return t("readings", "withheldDeclared", { type: reason.by });
+    case "keyName":
+      return t("readings", "withheldKeyName");
   }
 }
 

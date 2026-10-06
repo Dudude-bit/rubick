@@ -3612,6 +3612,11 @@ export const ru: Catalogue = {
     certUnparseable:
       "tls.crt не является сертификатом, который приложение умеет читать: {said}",
     certCrossNamespace: "из другого пространства имён, нужен ReferenceGrant",
+    withheldPrivateKey: "закрытый ключ, такие приложение никогда не показывает",
+    withheldDeclared:
+      "тип {type} объявляет это значение закрытым ключом, такие приложение никогда не показывает",
+    withheldKeyName:
+      "судя по имени, закрытый ключ, такие приложение никогда не показывает",
     unreadUnanswered:
       "приложение спросило {version}, а кластер не ответил ({said}), поэтому нельзя сказать, есть ли он здесь",
     unreadNodeClaims:

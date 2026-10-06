@@ -9,7 +9,8 @@ import { useCopyToClipboard } from "@/hooks";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
 import { DetailAction } from "@/components/object/detail-blocks";
-import type { BinaryValue } from "@/generated/types";
+import type { BinaryValue, Withheld } from "@/generated/types";
+import { withheldWords } from "@/lib/certificates";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
@@ -40,7 +41,7 @@ export interface DataSectionProps {
    * nothing else so far. Said in the row rather than left to read as "not
    * readable with this access", which would be a different and untrue claim.
    */
-  withheld?: Record<string, string>;
+  withheld?: Record<string, Withheld>;
   /**
    * Keys whose bytes are not text. Described by size rather than rendered:
    * a keystore run through a lossy decode is a screenful of replacement
@@ -103,7 +104,7 @@ export function DataSection({
       .map((key) => ({
         key,
         value: data[key] as string | undefined,
-        refusal: withheld[key] as string | undefined,
+        refusal: withheld[key] as Withheld | undefined,
         blob: binary[key] as BinaryValue | undefined,
       }));
   }, [data, keys, withheld, binary]);
@@ -213,7 +214,7 @@ export function DataSection({
                   )}
                 >
                   {refusal
-                    ? refusal
+                    ? withheldWords(refusal, t)
                     : blob
                       ? t("empty", "binaryNotText", {
                           size: formatBytes(blob.bytes, 0),

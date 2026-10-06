@@ -223,6 +223,18 @@ const PRIVATE_KEY_NAMES: &[&str] = &[
     "private.key",
 ];
 
+/// Which net caught a withheld value, worded by the frontend.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum Withheld {
+    /// The bytes are a private key, whatever the key is called.
+    PrivateKey,
+    /// The Secret's `type` names this key as its private key.
+    Declared { by: String },
+    /// A key name that exists to hold a private key.
+    KeyName,
+}
+
 /// Why a Secret value is withheld, or `None` where it is safe to hand over.
 ///
 /// Three nets, because no one of them is enough on its own:
@@ -240,22 +252,20 @@ const PRIVATE_KEY_NAMES: &[&str] = &[
 /// Withholding is one-way: a value that trips any net is never returned, so
 /// nothing downstream has to remember not to render it.
 #[must_use]
-pub fn withhold_reason(secret_type: &str, key: &str, value: &[u8]) -> Option<String> {
+pub fn withhold_reason(secret_type: &str, key: &str, value: &[u8]) -> Option<Withheld> {
     // The PEM label says which flavour it is — RSA, EC, encrypted — and
     // none of that changes what the reader can do, so the row does not
-    // carry it. One sentence, whichever net caught the value.
+    // carry it.
     if has_pem_private_key_label(value) || decodes_as_private_key(value) {
-        return Some("a private key — the app never shows one".to_string());
+        return Some(Withheld::PrivateKey);
     }
     if key_declared_private(secret_type, key) {
-        return Some(format!(
-            "{secret_type} declares {key} to be the private key — the app never shows one"
-        ));
+        return Some(Withheld::Declared {
+            by: secret_type.to_string(),
+        });
     }
     if PRIVATE_KEY_NAMES.contains(&key.to_ascii_lowercase().as_str()) {
-        return Some(format!(
-            "{key} is where a private key lives — the app never shows one"
-        ));
+        return Some(Withheld::KeyName);
     }
     None
 }
@@ -294,7 +304,7 @@ fn decodes_as_private_key(value: &[u8]) -> bool {
 /// it and applies it would otherwise overwrite the real key with a
 /// placeholder and take the service down; this way the API server rejects
 /// the object and says why.
-pub const WITHHELD_MARKER: &str = "<withheld — the app never shows a private key>";
+pub const WITHHELD_MARKER: &str = "<withheld: the app never shows a private key>";
 
 /// Blank every private key in a rendered object, in place.
 ///
@@ -397,19 +407,29 @@ mod tests {
         assert!(read_certificate(KEY_PEM.as_bytes()).is_err());
     }
 
-    /// Would break if a private key became renderable. Each assertion is one
-    /// of the three nets on its own, so removing any one of them fails here.
+    /// Would break if a private key became renderable, or if the reason the
+    /// screen words stopped naming the net that caught it. Each assertion is
+    /// one of the three nets on its own, so removing any one of them fails here.
     #[test]
     fn a_private_key_is_never_handed_over() {
         // 1 — what the value says it is, under a name that says nothing.
-        assert!(withhold_reason("Opaque", "notes", KEY_PEM.as_bytes()).is_some());
+        assert_eq!(
+            withhold_reason("Opaque", "notes", KEY_PEM.as_bytes()),
+            Some(Withheld::PrivateKey)
+        );
         // 2 — what the type declares, for bytes the first net cannot read.
-        assert!(
-            withhold_reason("kubernetes.io/tls", "tls.key", &[0x30, 0x82, 0x04, 0xa4]).is_some()
+        assert_eq!(
+            withhold_reason("kubernetes.io/tls", "tls.key", &[0x30, 0x82, 0x04, 0xa4]),
+            Some(Withheld::Declared {
+                by: "kubernetes.io/tls".into()
+            })
         );
         assert!(withhold_reason("kubernetes.io/ssh-auth", "ssh-privatekey", b"").is_some());
         // 3 — the name, outside any built-in type.
-        assert!(withhold_reason("Opaque", "server.key", &[0x30, 0x82]).is_some());
+        assert_eq!(
+            withhold_reason("Opaque", "server.key", &[0x30, 0x82]),
+            Some(Withheld::KeyName)
+        );
     }
 
     /// Would break if the rule started swallowing values it has no business
