@@ -91,7 +91,10 @@ export function EnvironmentBlocks({
             <li key={tool.name} className="text-xs text-fg-mut">
               <span className="font-mono text-fg">{tool.name}</span>
               {tool.path ? (
-                <span className="ml-2 font-mono">{tool.path}</span>
+                // With paths hidden the path is the bare name again: "kubectl kubectl".
+                tool.path !== tool.name && (
+                  <span className="ml-2 font-mono">{tool.path}</span>
+                )
               ) : (
                 // Muted, not red. Nothing here is required: somebody who never
                 // touches Azure is not missing `az`, and painting six absent

@@ -138,6 +138,20 @@ describe("EnvironmentBlocks", () => {
     expect(row?.querySelector(".text-warn")).not.toBeNull();
   });
 
+  /** With names and paths hidden Lena read "kubectl kubectl v1.37.1". Fails if a path that is only the name is printed again. */
+  it("does not repeat a tool's name where its hidden path would be", () => {
+    render(
+      <EnvironmentBlocks
+        diagnostics={{
+          ...sample,
+          tools: [{ name: "kubectl", path: "kubectl", version: "v1.37.1" }],
+        }}
+      />
+    );
+    const row = screen.getByText("v1.37.1").closest("li");
+    expect(row).toHaveTextContent(/^kubectlv1\.37\.1$/);
+  });
+
   /** The heading counts what resolved, not what was asked about: three rows
    *  with one missing is "2 of 3", which is the number worth reading. */
   it("counts the tools that resolved", () => {
