@@ -147,14 +147,16 @@ export function useScopeTabs(): void {
   // lot costs a refetch and buys the guarantee that the numbers on screen
   // came from the cluster the tab names. The outlet is shut while this
   // runs, so the pages that reappear mount against an empty cache and show
-  // their own loading state rather than a minutes-old count.
+  // their own loading state rather than a minutes-old count. Reset rather
+  // than removed: the shell never unmounts, and its counts would go on
+  // polling an evicted entry on their own schedule beside a fresh list.
   const firstRender = useRef(true);
   useEffect(() => {
     if (firstRender.current) {
       firstRender.current = false;
       return;
     }
-    queryClient.removeQueries();
+    void queryClient.resetQueries();
   }, [activeId, queryClient]);
 
   // A tab outlives the kubeconfig that made it, so what is on disk has to

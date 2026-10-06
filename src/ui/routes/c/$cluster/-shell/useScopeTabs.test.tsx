@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, render } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import {
   createBrowserHistory,
   createRootRoute,
@@ -8,7 +8,11 @@ import {
   RouterProvider,
   type AnyRouter,
 } from "@tanstack/react-router";
-import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import {
+  QueryClientProvider,
+  useQuery,
+  type QueryClient,
+} from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -138,6 +142,48 @@ describe("the router bridge", () => {
       await state().activateTab("b");
     });
     expect(client.getQueryData(["pods", "web"])).toBeUndefined();
+  });
+
+  /**
+   * Dana's sidebar said 14 pods beside a list of 15 for twenty seconds
+   * after switching back to a tab: the list mounted onto a fresh read and
+   * the shell's count, which never unmounts, kept its old answer and its
+   * own schedule. Fails if a count the shell is showing is not read again
+   * at the switch.
+   */
+  it("reads the shell's counts again at a tab switch, with the page", async () => {
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a" }), tab({ id: "b", href: "/c/prod/pods" })],
+      activeId: "a",
+    });
+    let reads = 0;
+    function ShellCount() {
+      const { data } = useQuery({
+        queryKey: ["cluster-overview", "prod", "shop"],
+        queryFn: async () => (reads += 1),
+        staleTime: 60_000,
+      });
+      return <span data-testid="count">{data}</span>;
+    }
+    client = testQueryClient();
+    ({ router } = await renderWithRouter(
+      <>
+        <Probe />
+        <ShellCount />
+      </>,
+      { client, at: "/", route: "$" }
+    ));
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("count")).toHaveTextContent("1")
+    );
+
+    await act(async () => {
+      await state().activateTab("b");
+    });
+
+    await vi.waitFor(() =>
+      expect(screen.getByTestId("count")).toHaveTextContent("2")
+    );
   });
 });
 
