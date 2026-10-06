@@ -26,6 +26,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useT } from "@/i18n/useT";
 import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
+import { useRememberOwners } from "./useLastOwners";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -163,8 +164,16 @@ export function useResourceDetail<T>(
   // the *previous* name — the reader has navigated, and holding a pod's fields
   // under another pod's URL because the new one 404'd is the one thing this
   // must never do. Then the error is the page.
+  //
+  // NotFound is not a dropped poll: the object is gone, and the page says so
+  // as the peek does, from the owners its last read named.
   const holdsThisObject = resource !== undefined && !isPlaceholderData;
-  const error = holdsThisObject ? null : readError;
+  const error =
+    holdsThisObject && !isResourceNotFoundError(readError) ? null : readError;
+  useRememberOwners(
+    { kind: resourceKind, name: name ?? "", namespace },
+    holdsThisObject ? resource : undefined
+  );
 
   // Always use useResourceYaml for YAML fetching
   const {

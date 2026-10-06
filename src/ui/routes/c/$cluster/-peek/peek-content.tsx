@@ -11,7 +11,6 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -67,10 +66,9 @@ import { usePeekWidth } from "./peek-width";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { ErrorDetails } from "@/components/ui/error-details";
 import { Ghost } from "lucide-react";
-import { OwnerRef, type Owner as OwnerShape } from "./OwnerRef";
+import { GoneNotice } from "../-object/gone";
+import { ownersOf, type Owner } from "@/hooks/useLastOwners";
 import { NEEDS_ATTENTION } from "@/lib/workload-status";
 
 export function PeekContent({
@@ -429,6 +427,7 @@ function PeekOverview({
     <div className="h-full overflow-y-auto scrollbar-thin px-3.5 pb-5">
       {error && gone !== false ? (
         <GoneNotice
+          className="mt-4"
           kind={target.kind}
           namespace={target.namespace ?? null}
           owners={gone}
@@ -508,148 +507,6 @@ function LiveReads({ target }: { target: PeekTarget }) {
         )}
     </>
   );
-}
-
-/**
- * A replaced pod's read is a 404, and the raw ApiError said only that. The
- * last read still names who owned it, and so who made what runs now.
- */
-function GoneNotice({
-  kind,
-  namespace,
-  owners,
-  error,
-}: {
-  kind: string;
-  namespace: string | null;
-  owners: Owner[] | undefined;
-  error: Error;
-}) {
-  const t = useT();
-  const owner = owners?.find((o) => o.controller) ?? owners?.[0];
-  const ref = owner && <OwnerRef owner={owner} namespace={namespace} />;
-  return (
-    <Alert className="mt-4">
-      <Ghost aria-hidden="true" />
-      <AlertTitle className="text-fg">
-        {t("empty", "goneTitle", { kind })}
-      </AlertTitle>
-      <AlertDescription className="space-y-1.5">
-        {owner ? (
-          <p>
-            {owner.kind === "ReplicaSet" && namespace ? (
-              <ReplicaSetSuccession owner={owner} namespace={namespace} />
-            ) : (
-              parts(
-                t(
-                  "empty",
-                  REPLACES.has(owner.kind) ? "goneReplacedBy" : "goneOwnedBy",
-                  { kind: owner.kind }
-                ),
-                { owner: ref }
-              )
-            )}
-          </p>
-        ) : (
-          owners && <p>{t("empty", "goneUnowned")}</p>
-        )}
-        <ErrorDetails text={errorToShow(error)} />
-      </AlertDescription>
-    </Alert>
-  );
-}
-
-/**
- * What replaces a pod a ReplicaSet owned. After a rollout that ReplicaSet is
- * scaled to 0 and replaces nothing: the Deployment above it does, through its
- * current one. Until the ReplicaSet is read, only the ownership is said.
- */
-function ReplicaSetSuccession({
-  owner,
-  namespace,
-}: {
-  owner: Owner;
-  namespace: string;
-}) {
-  const t = useT();
-  const replicaSet = useQuery({
-    queryKey: queryKeys.detail("ReplicaSet", namespace, owner.name),
-    queryFn: () => commands.getReplicaset(owner.name, namespace),
-    staleTime: STALE_TIMES.resourceDetail,
-    retry: false,
-  }).data;
-  const deployment = replicaSet?.ownerReferences.find(
-    (ref) => ref.controller && ref.kind === "Deployment"
-  );
-  const wants = (replicaSet?.replicas.desired ?? 0) > 0;
-  const siblings = useQuery({
-    queryKey: queryKeys.deploymentReplicaSets(namespace, deployment?.name),
-    queryFn: () =>
-      commands.getDeploymentReplicasets(deployment!.name, namespace),
-    enabled: !!deployment && !wants,
-    staleTime: STALE_TIMES.resourceList,
-    retry: false,
-  }).data;
-  const current = siblings?.find(
-    (rs) =>
-      rs.revision !== null &&
-      rs.revision === rs.currentRevision &&
-      rs.name !== owner.name
-  );
-  const nodes = {
-    owner: <OwnerRef owner={owner} namespace={namespace} />,
-    replicaSet: <OwnerRef owner={owner} namespace={namespace} />,
-    deployment: deployment && (
-      <ResourceRef
-        kind="Deployment"
-        name={deployment.name}
-        namespace={namespace}
-        showKind={false}
-      />
-    ),
-    current: current && (
-      <ResourceRef
-        kind="ReplicaSet"
-        name={current.name}
-        namespace={namespace}
-        showKind={false}
-      />
-    ),
-  };
-  const key = !replicaSet
-    ? "goneOwnedBy"
-    : !deployment
-      ? wants
-        ? "goneReplacedBy"
-        : "goneScaledDown"
-      : wants
-        ? "goneThroughReplicaSet"
-        : current
-          ? "goneRolledTo"
-          : "goneRolledOn";
-  return parts(t("empty", key, { kind: owner.kind }), nodes);
-}
-
-/** Controllers that make a new object when one of theirs disappears. */
-const REPLACES = new Set([
-  "ReplicaSet",
-  "StatefulSet",
-  "DaemonSet",
-  "ReplicationController",
-  "Job",
-  "Deployment",
-]);
-
-type Owner = OwnerShape & { controller?: boolean | null };
-
-/** Where the last read keeps its owners: a typed read at the top, a manifest under metadata. */
-function ownersOf(data: unknown): Owner[] | undefined {
-  if (data === undefined) return undefined;
-  const object = data as {
-    ownerReferences?: Owner[];
-    metadata?: { ownerReferences?: Owner[] };
-  };
-  return object.ownerReferences ?? object.metadata?.ownerReferences ?? [];
 }
 
 /**

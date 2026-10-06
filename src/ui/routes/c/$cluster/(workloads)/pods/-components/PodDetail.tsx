@@ -67,6 +67,7 @@ import { podForwardPorts } from "@/lib/port-forward";
 import { PodNetworkPolicies } from "./PodNetworkPolicies";
 import { usePodReplacementSearch } from "./usePodReplacementSearch";
 import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
+import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { silenceNote, silenceOf } from "@/lib/node-reporting";
 import { useConnections } from "@/hooks/useConnections";
@@ -336,7 +337,9 @@ export function PodDetail() {
     defaultTab: requestedShell ? "shell" : undefined,
   });
 
-  const connections = useConnections(ResourceType.Pod, name, namespace);
+  // A gone pod is the page's whole answer; nothing else about it is asked.
+  const gone = isResourceNotFoundError(error);
+  const connections = useConnections(ResourceType.Pod, name, namespace, !gone);
   // The pod's own events, for the "most likely" sentence: read here rather
   // than inside the panel so a refusal reaches it as a line, not a crash.
   const podEvents = useLiveQuery({
@@ -350,7 +353,7 @@ export function PodDetail() {
         field_selector: null,
         limit: 200,
       }),
-    enabled: !!name,
+    enabled: !!name && !gone,
     refresh: "slow",
     retry: false,
   });
@@ -372,7 +375,7 @@ export function PodDetail() {
   const { podMetrics, podStatus, podSampledAt } = useMetrics({
     namespace: namespace || null,
     includeNodes: false,
-    enabled: !!pod,
+    enabled: !!pod && !gone,
   });
 
   const podWithMetrics = useMemo(() => {

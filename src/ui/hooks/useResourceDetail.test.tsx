@@ -34,22 +34,36 @@ import {
   useResourceDetail,
   type UseResourceDetailResult,
 } from "./useResourceDetail";
+import { useLastOwners, type Owner } from "./useLastOwners";
 
 interface Pod {
   name: string;
+  ownerReferences?: Owner[];
 }
+
+const NOT_FOUND = Object.assign(new Error('pods "api-7bcd" not found'), {
+  code: "NOT_FOUND",
+});
 
 const PATH = "/c/prod/pods/default/api-7bcd";
 
 /** Mounted at a route, because the hook reads the name out of the path. */
 async function detail(fetchResource: (name: string) => Promise<Pod>) {
   const client = testQueryClient();
-  const result = {} as { current: UseResourceDetailResult<Pod> };
+  const result = {} as {
+    current: UseResourceDetailResult<Pod>;
+    owners: Owner[] | undefined;
+  };
   function Probe() {
     result.current = useResourceDetail<Pod>({
       resourceKind: "Pod",
       fetchResource: (name) => fetchResource(name),
       refresh: false,
+    });
+    result.owners = useLastOwners({
+      kind: "Pod",
+      name: result.current.name ?? "",
+      namespace: result.current.namespace,
     });
     return null;
   }
@@ -119,6 +133,58 @@ describe("what a detail page calls an error", () => {
 
     await waitFor(() => expect(result.current.error).not.toBeNull());
     expect(result.current.error?.message).toMatch(/forbidden/);
+  });
+});
+
+describe("a detail page whose object is deleted", () => {
+  /**
+   * NotFound was held back like a dropped poll, so the page drew the deleted
+   * pod as live while the peek of it said it was gone.
+   */
+  it("reports the NotFound over the object it held", async () => {
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockResolvedValueOnce({ name: "api-7bcd" })
+      .mockRejectedValue(NOT_FOUND);
+
+    const { result, settled } = await detail(fetch);
+    await waitFor(() => expect(result.current.resource).toBeDefined());
+
+    result.current.refetch();
+
+    await waitFor(() => expect(settled()?.error).not.toBeNull());
+    expect(result.current.error).toBe(NOT_FOUND);
+  });
+
+  /**
+   * The object shown while the next one loads is the one before; its owners
+   * filed under the new name would point a gone pod at a stranger's
+   * ReplicaSet.
+   */
+  it("files no owners under a name it navigated to from another", async () => {
+    const owner = {
+      api_version: "apps/v1",
+      kind: "ReplicaSet",
+      name: "api-7b",
+      controller: true,
+    };
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockImplementation(async (name) => {
+        if (name === "api-7bcd") return { name, ownerReferences: [owner] };
+        throw NOT_FOUND;
+      });
+
+    const { result, router } = await detail(fetch);
+    await waitFor(() => expect(result.owners).toEqual([owner]));
+
+    await act(() =>
+      router.navigate({ to: "/c/prod/pods/default/web-0" as string })
+    );
+
+    await waitFor(() => expect(result.current.error).toBe(NOT_FOUND));
+    expect(result.current.name).toBe("web-0");
+    expect(result.owners).toBeUndefined();
   });
 });
 

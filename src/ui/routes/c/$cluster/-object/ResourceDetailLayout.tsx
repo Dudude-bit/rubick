@@ -22,6 +22,8 @@ import { DetailSkeleton } from "@/components/ui/skeleton";
 import { CaptionScope, Section } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
+import { useLastOwners, type Owner } from "@/hooks/useLastOwners";
+import { GoneNotice } from "./gone";
 import { DETAIL_TAB_OPEN } from "@/lib/shortcuts";
 import { AlertBanner } from "../-alerts/AlertBanner";
 import { AttachedFrom } from "./Attached";
@@ -56,6 +58,9 @@ export type { DetailTab } from "@/components/object/detail-tab";
 interface DetailErrorProps {
   error: Error | string | null;
   resourceKind: string;
+  namespace?: string | null;
+  /** What the object's last read named as its owners, when it was ever read. */
+  owners?: Owner[];
   onBack: () => void;
   /** Pods are replaced rather than restarted, so a 404 offers to follow. */
   onFindReplacement?: () => void;
@@ -66,6 +71,8 @@ interface DetailErrorProps {
 export function DetailError({
   error,
   resourceKind,
+  namespace = null,
+  owners,
   onBack,
   onFindReplacement,
   isSearching,
@@ -77,19 +84,23 @@ export function DetailError({
 
   return (
     <Section className="max-w-lg">
-      <div className="flex items-center gap-2">
-        <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
-        <h2 className="text-[13px] font-semibold tracking-tight text-err">
-          {isNotFound
-            ? t("empty", "kindNotFound", { kind: resourceKind })
-            : t("empty", "kindCouldNotRead", { kind })}
-        </h2>
-      </div>
-      {isNotFound ? (
-        <p className="text-xs text-fg-mut">
-          {t("empty", "kindMayBeGone", { kind })}
-        </p>
+      {isNotFound && error ? (
+        // The peek's answer for the same 404, so the two never disagree.
+        <GoneNotice
+          kind={resourceKind}
+          namespace={namespace}
+          owners={owners}
+          error={error}
+        />
       ) : (
+        <div className="flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
+          <h2 className="text-[13px] font-semibold tracking-tight text-err">
+            {t("empty", "kindCouldNotRead", { kind })}
+          </h2>
+        </div>
+      )}
+      {!isNotFound && (
         <Unknown
           // The heading already says "could not read this kind"; the box asks
           // the question the read was, so the same sentence is not stacked twice.
@@ -268,6 +279,7 @@ export function ResourceDetailLayout({
     [pageTabs, uid, namespace, t]
   );
   const { deliveries } = useDelivery(delivery ?? null);
+  const owners = useLastOwners({ kind: resourceKind, name: title, namespace });
   const subject = useMemo(
     () =>
       resource
@@ -324,6 +336,8 @@ export function ResourceDetailLayout({
         <DetailError
           error={error}
           resourceKind={resourceKind}
+          namespace={namespace}
+          owners={owners}
           onBack={onBack}
           onFindReplacement={onFindReplacement}
           isSearching={isSearchingReplacement}

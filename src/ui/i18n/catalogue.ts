@@ -4849,11 +4849,8 @@ export const en = {
       other:
         "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read; raise the limit to search further back.",
     },
-    kindMayBeGone:
-      "The {kind} may have been deleted or recreated under a new name.",
     kindCouldNotRead: "Could not read this {kind}",
     whatIsThisKind: "What is this {kind}?",
-    kindNotFound: "{kind} not found",
     moreFieldsInYaml: {
       one: "{n} more field, in the YAML tab",
       other: "{n} more fields, in the YAML tab",

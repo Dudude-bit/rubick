@@ -5347,11 +5347,8 @@ export const ru: Catalogue = {
       other:
         "Среди последних {n} событий в {scope} по запросу «{query}» ничего нет. Более старые не читались: увеличьте лимит, чтобы искать глубже.",
     },
-    kindMayBeGone:
-      "Объект ({kind}) мог быть удалён или пересоздан под новым именем.",
     kindCouldNotRead: "Не удалось прочитать этот объект ({kind})",
     whatIsThisKind: "Что это за объект ({kind})?",
-    kindNotFound: "{kind} не найден",
     moreFieldsInYaml: {
       one: "Ещё {n} поле, на вкладке YAML",
       few: "Ещё {n} поля, на вкладке YAML",
