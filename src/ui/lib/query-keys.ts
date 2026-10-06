@@ -247,6 +247,16 @@ export const queryKeys = {
     home(namespace),
     name,
   ],
+  accessReview: (
+    context: string | null,
+    connection: number,
+    asked: readonly string[]
+  ): (string | null)[] => [
+    "access-review",
+    context,
+    String(connection),
+    ...asked,
+  ],
   lineage: (
     group: string,
     plural: string,

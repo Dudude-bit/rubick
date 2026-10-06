@@ -30,13 +30,13 @@ import { useCritical } from "@/hooks/useCritical";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { ActionWarnings } from "../-object/action-warnings";
 import {
-  DetailAction,
+  ReasonedAction,
   type DetailActionProps,
 } from "@/components/object/detail-blocks";
 import { useT } from "@/i18n/useT";
 
 /**
- * A {@link DetailAction} that asks first, and only when there is something to
+ * A {@link ReasonedAction} that asks first, and only when there is something to
  * ask about.
  *
  * With `intercept` null this was the control exactly as it was — same click,
@@ -60,7 +60,7 @@ export function InterceptedAction({
 
   return (
     <>
-      <DetailAction
+      <ReasonedAction
         {...props}
         label={label}
         onClick={() => (guarded ? setOpen(true) : onClick())}

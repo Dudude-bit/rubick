@@ -2,6 +2,11 @@ import type { ButtonHTMLAttributes, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { None } from "@/components/ui/none";
 import { conditionRole } from "@/lib/condition-health";
 import { eventReasonMark } from "@/lib/event-reason";
@@ -92,6 +97,21 @@ export function DetailAction({
       {Icon && <Icon className={cn("h-3.5 w-3.5", busy && "animate-spin")} />}
       {label}
     </button>
+  );
+}
+
+/** A header action that, when it cannot run, says why on hover and focus. */
+export function ReasonedAction(props: DetailActionProps) {
+  if (!props.reason) return <DetailAction {...props} />;
+  return (
+    // Faster than the default second: this is not a hint about a control, it
+    // is the answer to why the control did nothing.
+    <Tooltip delayDuration={200}>
+      <TooltipTrigger asChild>
+        <DetailAction {...props} />
+      </TooltipTrigger>
+      <TooltipContent className="max-w-[260px]">{props.reason}</TooltipContent>
+    </Tooltip>
   );
 }
 

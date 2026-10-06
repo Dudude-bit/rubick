@@ -170,6 +170,7 @@ export function RowMenu<Row extends Listed>({
       key: `own-${action.label}`,
       label: action.label,
       icon: action.icon,
+      reason: action.reason?.(row),
       disabled: action.disabled?.(row),
       danger: action.variant === "destructive",
       run: () => action.onClick(row),

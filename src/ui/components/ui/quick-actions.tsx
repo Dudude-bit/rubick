@@ -20,6 +20,8 @@ export interface QuickAction<T> {
   hidden?: (item: T) => boolean;
   /** Condition to disable action */
   disabled?: (item: T) => boolean;
+  /** Why it cannot run on this item; the button stays, greyed, and says so. */
+  reason?: (item: T) => string | undefined;
 }
 
 interface QuickActionsProps<T> {
@@ -59,6 +61,7 @@ export function QuickActions<T>({
     >
       {visibleActions.map((action) => {
         const isDisabled = action.disabled?.(item);
+        const reason = action.reason?.(item);
         const Icon = action.icon;
 
         return (
@@ -75,20 +78,22 @@ export function QuickActions<T>({
                   // 20px click target is hostile even when it looks tidy.
                   "relative h-5 w-5 before:absolute before:-inset-0.5 before:content-['']",
                   action.variant === "destructive" &&
-                    "text-err hover:bg-err/16 hover:text-err"
+                    "text-err hover:bg-err/16 hover:text-err",
+                  reason && "cursor-default opacity-40 hover:bg-transparent"
                 )}
                 aria-label={action.label}
+                aria-disabled={reason ? true : undefined}
                 disabled={isDisabled}
                 onClick={(e) => {
                   e.stopPropagation();
-                  action.onClick(item);
+                  if (!reason) action.onClick(item);
                 }}
               >
                 <Icon className="h-3.5 w-3.5" aria-hidden="true" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="top" className="text-xs">
-              {action.label}
+            <TooltipContent side="top" className="max-w-[260px] text-xs">
+              {reason ?? action.label}
             </TooltipContent>
           </Tooltip>
         );

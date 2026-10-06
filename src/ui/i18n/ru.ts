@@ -1202,6 +1202,8 @@ export const ru: Catalogue = {
     willDeleteInNamespace:
       "Объект {name} в пространстве имён {namespace} будет удалён.",
     couldNotDo: "Не удалось {action} {name}",
+    notPermitted:
+      "Ваши права этого не позволяют: на kubectl auth can-i {check} кластер отвечает no.",
     validationPassed: "Проверка пройдена",
     applySucceeded: "Применение выполнено",
     applyFailed: "Не удалось применить",

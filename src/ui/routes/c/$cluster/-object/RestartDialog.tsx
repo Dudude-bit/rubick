@@ -3,7 +3,7 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DetailAction } from "@/components/object/detail-blocks";
+import { ReasonedAction } from "@/components/object/detail-blocks";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import type { RolloutPlan } from "@/generated/types";
 import { DeliveryInterceptBody } from "../-delivery/delivery-intercept";
 import { qualified } from "../-peek/peek-actions";
+import { guardedOf, noteDenied, useDenied } from "./access";
 
 export interface RestartDialogProps {
   open: boolean;
@@ -129,13 +130,16 @@ export function RestartAction({
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const guarded = guardedOf(dialog.kind, dialog.namespace);
+  const denied = useDenied(guarded).patch;
   return (
     <>
-      <DetailAction
+      <ReasonedAction
         label={t("action", "restart")}
         icon={RefreshCw}
         onClick={() => setOpen(true)}
         busy={mutation.isPending}
+        reason={denied}
       />
       <RestartDialog
         {...dialog}
@@ -143,7 +147,10 @@ export function RestartAction({
         onOpenChange={setOpen}
         busy={mutation.isPending}
         onConfirm={() =>
-          mutation.mutate(undefined, { onSuccess: () => setOpen(false) })
+          mutation.mutate(undefined, {
+            onSuccess: () => setOpen(false),
+            onError: (error) => noteDenied("patch", guarded, error),
+          })
         }
       />
     </>

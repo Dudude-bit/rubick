@@ -40,13 +40,10 @@ import type { T } from "@/i18n/useT";
  * React. It answers here, in one place, testable without a DOM — the panel
  * only has to render the answer and own the dialogs.
  *
- * Nothing here pre-flights access, even though the nav does. A
- * `SelfSubjectAccessReview` decides how a nav row is *drawn*, and a wrong
- * mark costs a mark the real call then corrects. A button is a commitment:
- * greying it out on a guess shuts somebody out of an action they could have
- * taken, in exactly the cases where the review and the call disagree. So an
- * RBAC refusal surfaces here the way it does on every detail page — the call
- * is made, it fails, and the error says so.
+ * A destructive action the cluster's access review refuses arrives in
+ * `denied` and stays in the row, greyed, saying so: a red Delete offered to
+ * someone who may not delete is a promise the click then breaks. A review
+ * that could not be asked denies nothing, so nothing is shut on a guess.
  */
 
 export type PeekActionId =
@@ -90,6 +87,8 @@ export interface PeekActionContext {
   backendError?: string | null;
   /** A "tell me when" is already open on this object. */
   watching?: boolean;
+  /** Why the access review says this user may not run an action. */
+  denied?: Partial<Record<PeekActionId, string>>;
 }
 
 /** Open full page and Copy name; the panel shows them for every kind. */
@@ -105,7 +104,12 @@ export function planPeekActions(
   context: PeekActionContext = {}
 ): PeekActionPlan {
   const resolved = toKind(kind);
-  const actions = resolved ? actionsFor(resolved, detail, t, context) : [];
+  const actions = (
+    resolved ? actionsFor(resolved, detail, t, context) : []
+  ).map((action) => {
+    const denied = context.denied?.[action.id];
+    return denied ? { ...action, reason: denied } : action;
+  });
   // The bell is asked about a lot less than it is glanced at, so it does not
   // count towards the fold: a row stays whole with it, and folds without it.
   const tell = tellAction(kind, t, context);

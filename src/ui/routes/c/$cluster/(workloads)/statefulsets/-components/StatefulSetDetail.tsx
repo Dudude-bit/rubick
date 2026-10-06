@@ -32,11 +32,12 @@ import { ContainerRows } from "../../../-object/container-rows";
 import { ChangesTab } from "../../-components/ChangesTab";
 import { deliveryOfKind } from "@/lib/delivery";
 import { RestartAction } from "../../../-object/RestartDialog";
+import { guardedOf, useDenied } from "../../../-object/access";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
   Composition,
   ConditionRows,
-  DetailAction,
+  ReasonedAction,
 } from "@/components/object/detail-blocks";
 import { ScaleDialog } from "../../../-object/ScaleDialog";
 import { scaleWarnings } from "@/lib/governance";
@@ -84,6 +85,9 @@ export function StatefulSetDetail() {
     deleteResource: (name, ns) => commands.deleteStatefulset(name, ns),
     defaultTab: "overview",
   });
+  const scaleDenied = useDenied(
+    guardedOf(ResourceType.StatefulSet, namespace || null)
+  ).patch;
 
   const connections = useConnections(ResourceType.StatefulSet, name, namespace);
 
@@ -460,8 +464,9 @@ export function StatefulSetDetail() {
             {/* Plain, not intercepted: the Scale dialog carries the delivery
                 warning itself, stacked with the autoscaler's. A second dialog
                 in front of it would ask the same question twice. */}
-            <DetailAction
+            <ReasonedAction
               label={t("action", "scale")}
+              reason={scaleDenied}
               icon={Scale}
               onClick={() => statefulSet && setScaleOpen(true)}
             />

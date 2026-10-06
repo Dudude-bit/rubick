@@ -1210,6 +1210,8 @@ export const en = {
     willDelete: "This will delete {name}.",
     willDeleteInNamespace: "This will delete {name} in {namespace}.",
     couldNotDo: "Could not {action} {name}",
+    notPermitted:
+      "Your access does not allow this: the cluster answers no to kubectl auth can-i {check}.",
     validationPassed: "Validation passed",
     applySucceeded: "Apply succeeded",
     applyFailed: "Apply failed",

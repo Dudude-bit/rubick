@@ -17,6 +17,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "../yaml-tab";
 import { ResourceDetailLayout } from "../ResourceDetailLayout";
 import { servedOf } from "../served";
+import { noteDenied, useDenied } from "../access";
 import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { RelatedPanel } from "../RelatedPanel";
@@ -230,6 +231,13 @@ export function CustomResourceDetail({
     staleTime: STALE_TIMES.resourceDetail,
   });
 
+  const served = servedOf(crdName);
+  const guarded = {
+    group: served.group,
+    resource: served.plural,
+    namespace: namespace || null,
+  };
+  const deleteDenied = useDenied(guarded).delete;
   const deleteMutation = useMutation({
     mutationFn: () =>
       commands.deleteCustomResource(crdName, name, namespace || null),
@@ -246,6 +254,7 @@ export function CustomResourceDetail({
       goBack();
     },
     onError: (error: Error) => {
+      noteDenied("delete", guarded, error);
       toastError(
         t("action", "deleteKindFailed", {
           kind: crdInfo?.kind || t("action", "resourceNoun"),
@@ -460,7 +469,7 @@ export function CustomResourceDetail({
   return (
     <>
       <ResourceDetailLayout
-        served={servedOf(crdName)}
+        served={served}
         resource={resource}
         share={share}
         isLoading={isLoading}
@@ -492,6 +501,7 @@ export function CustomResourceDetail({
             onClick={() => setDeleteDialogOpen(true)}
             busy={deleteMutation.isPending}
             danger
+            reason={deleteDenied}
           />
         }
         tabs={tabs}

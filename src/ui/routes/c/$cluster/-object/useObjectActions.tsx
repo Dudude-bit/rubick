@@ -70,6 +70,7 @@ import {
   type PeekActionPlan,
 } from "../-peek/peek-actions";
 import { useAsk } from "./useAsk";
+import { guardedOf, noteDenied, useDenied } from "./access";
 import { askableKind } from "@/lib/tell-me-when";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
@@ -164,7 +165,16 @@ export function useObjectActions({
     }
   };
 
-  const failed = (verb: "restart" | "delete" | "scale") => (error: unknown) =>
+  const guarded = guardedOf(kind, namespace);
+  const denied = useDenied(guarded);
+  const verbOf = {
+    delete: "delete",
+    scale: "patch",
+    restart: kind === "Pod" ? "delete" : "patch",
+  } as const;
+
+  const failed = (verb: "restart" | "delete" | "scale") => (error: unknown) => {
+    noteDenied(verbOf[verb], guarded, error);
     toastError(
       t("action", "couldNotDo", {
         action: t("action", verb).toLowerCase(),
@@ -172,6 +182,7 @@ export function useObjectActions({
       }),
       error
     );
+  };
 
   const asking = useAsk();
   const askTarget = (() => {
@@ -265,6 +276,11 @@ export function useObjectActions({
     backendPending:
       backendQuery.isPending && backendQuery.fetchStatus !== "idle",
     backendError: backendQuery.error ? errorToShow(backendQuery.error) : null,
+    denied: {
+      delete: denied[verbOf.delete],
+      scale: denied[verbOf.scale],
+      restart: denied[verbOf.restart],
+    },
   });
 
   const busy: Partial<Record<PeekActionId, boolean>> = {

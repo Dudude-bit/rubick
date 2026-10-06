@@ -58,6 +58,7 @@ import type { ListQuery, Scoped, UnreadNamespace } from "@/generated/types";
 import { UnreadNamespaces } from "./UnreadNamespaces";
 import { RefusalWayOut, UnreadList } from "./UnreadList";
 import { useListRefusal } from "./useListRefusal";
+import { useRowDeleteDenial } from "../-object/access";
 import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
 import { deleteCommandFor } from "../-peek/peek-actions";
@@ -425,12 +426,20 @@ export function ResourceList<
       : base;
   }, [columns, showDelivery, requestDelete]);
 
+  const listed = listQuery ?? (listKind ? listQueryFor(listKind) : null);
+  const deleteDenial = useRowDeleteDenial(listed, namespaceScope);
+  const deleteLabel = t("action", "delete");
   const resolvedQuickActions = useMemo(
     () =>
-      typeof quickActions === "function"
+      (typeof quickActions === "function"
         ? quickActions(requestDelete)
-        : quickActions,
-    [quickActions, requestDelete]
+        : quickActions
+      )?.map((action) =>
+        action.variant === "destructive" && action.label === deleteLabel
+          ? { ...action, reason: deleteDenial }
+          : action
+      ),
+    [quickActions, requestDelete, deleteLabel, deleteDenial]
   );
 
   // A resync with nothing to show is still loading; a resync with rows keeps
@@ -460,11 +469,7 @@ export function ResourceList<
 
   // Refused across the whole cluster is not refused everywhere: a namespace
   // the reader has may still list it, and saying "no permission" hides that.
-  const refusal = useListRefusal(
-    failed,
-    narrowingHelps && scope.isAll,
-    listQuery ?? (listKind ? listQueryFor(listKind) : null)
-  );
+  const refusal = useListRefusal(failed, narrowingHelps && scope.isAll, listed);
   const refusalWords = refusal.words;
 
   // What the file says about the read, in the words the screen uses: a list

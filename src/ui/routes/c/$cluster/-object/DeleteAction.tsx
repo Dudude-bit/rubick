@@ -10,11 +10,12 @@ import {
 } from "../-peek/peek-actions";
 import { CascadePreview } from "./CascadePreview";
 import type { ServedResource } from "./served";
-import { DetailAction } from "@/components/object/detail-blocks";
+import { ReasonedAction } from "@/components/object/detail-blocks";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
 import type { DeliveryIntercept } from "@/lib/delivery";
 import type { PodInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { guardedOf, noteDenied, useDenied, type Guarded } from "./access";
 
 /**
  * The one confirmation for taking an object away: the name typed, what a
@@ -102,6 +103,14 @@ export function DeleteAction({
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
+  const guarded: Guarded | null = served
+    ? {
+        group: served.group,
+        resource: served.plural,
+        namespace: namespace ?? null,
+      }
+    : guardedOf(kind, namespace ?? null);
+  const denied = useDenied(guarded).delete;
   if (!mutation) return null;
   const action = restart
     ? podRestartAction(detail as PodInfo | undefined, t)
@@ -109,13 +118,14 @@ export function DeleteAction({
 
   return (
     <>
-      <DetailAction
+      <ReasonedAction
         label={action.label}
         icon={action.icon}
         onClick={() => setOpen(true)}
         disabled={disabled}
         busy={mutation.isPending}
         danger={action.danger}
+        reason={denied}
       />
       <DeletionDialog
         open={open}
@@ -129,7 +139,10 @@ export function DeleteAction({
         restart={restart}
         busy={mutation.isPending}
         onConfirm={() =>
-          mutation.mutate(undefined, { onSettled: () => setOpen(false) })
+          mutation.mutate(undefined, {
+            onSettled: () => setOpen(false),
+            onError: (error) => noteDenied("delete", guarded, error),
+          })
         }
       />
     </>

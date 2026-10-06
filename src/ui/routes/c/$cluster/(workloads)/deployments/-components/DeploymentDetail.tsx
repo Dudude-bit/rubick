@@ -57,12 +57,13 @@ import {
 } from "../../-components/workload-overview";
 import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { RestartAction } from "../../../-object/RestartDialog";
+import { guardedOf, useDenied } from "../../../-object/access";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
   Composition,
   ConditionRows,
-  DetailAction,
+  ReasonedAction,
 } from "@/components/object/detail-blocks";
 import { WorkloadUsage } from "../../-components/workload-usage";
 import { serviceAccountRow } from "../../-components/identity-rows";
@@ -113,6 +114,9 @@ export function DeploymentDetail() {
     deleteResource: (name, ns) => commands.deleteDeployment(name, ns),
     defaultTab: "overview",
   });
+  const scaleDenied = useDenied(
+    guardedOf(ResourceType.Deployment, namespace || null)
+  ).patch;
 
   const { data: pods = [], error: podsError } = useLiveQuery({
     queryKey: queryKeys.ownedPods(ResourceType.Deployment, namespace, name),
@@ -527,8 +531,9 @@ export function DeploymentDetail() {
         actions={
           <>
             <PinAction kind="Deployment" namespace={namespace} name={name} />
-            <DetailAction
+            <ReasonedAction
               label={t("action", "scale")}
+              reason={scaleDenied}
               icon={Scale}
               onClick={openScaleDialog}
             />

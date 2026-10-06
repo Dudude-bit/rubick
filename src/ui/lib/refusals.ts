@@ -5,6 +5,7 @@
  * Imports nothing that reaches `commands` or `clusterStore`, which both use it.
  */
 
+import { useMemo } from "react";
 import { create } from "zustand";
 
 let connectionOf: () => number = () => 0;
@@ -85,6 +86,19 @@ export function useRefusedOn(
     const refused = read === null ? undefined : s.reads.get(read);
     return refused !== undefined && refused.connection === connection;
   });
+}
+
+/** Which of `reads` were refused on `connection`, for a screen deciding on several at once. */
+export function useRefusedAmong(
+  connection: number,
+  reads: readonly string[]
+): ReadonlySet<string> {
+  const refused = useRefusals((s) =>
+    reads
+      .filter((read) => s.reads.get(read)?.connection === connection)
+      .join("\n")
+  );
+  return useMemo(() => new Set(refused ? refused.split("\n") : []), [refused]);
 }
 
 let told: { connection: number; reads: Set<string> } = {

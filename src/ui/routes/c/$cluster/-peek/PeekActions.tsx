@@ -7,15 +7,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Kbd } from "@/components/ui/kbd";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { cn } from "@/lib/utils";
 import type { PeekTarget } from "@/hooks/usePeek";
-import { DetailAction } from "@/components/object/detail-blocks";
+import {
+  DetailAction,
+  ReasonedAction,
+} from "@/components/object/detail-blocks";
 import type { PeekAction, PeekActionId } from "./peek-actions";
 import { useObjectActions } from "../-object/useObjectActions";
 import { useT } from "@/i18n/useT";
@@ -108,8 +106,8 @@ function PeekActionButton({
   busy?: boolean;
   onRun: () => void;
 }) {
-  const control = (
-    <DetailAction
+  return (
+    <ReasonedAction
       label={action.label}
       icon={action.icon}
       onClick={onRun}
@@ -117,16 +115,6 @@ function PeekActionButton({
       danger={action.danger}
       reason={action.reason}
     />
-  );
-  if (!action.reason) return control;
-
-  return (
-    // Faster than the default second: this is not a hint about a control, it
-    // is the answer to why the control did nothing.
-    <Tooltip delayDuration={200}>
-      <TooltipTrigger asChild>{control}</TooltipTrigger>
-      <TooltipContent className="max-w-[260px]">{action.reason}</TooltipContent>
-    </Tooltip>
   );
 }
 
