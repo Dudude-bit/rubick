@@ -345,15 +345,16 @@ describe("restarting a pod an owner replaces", () => {
   });
 
   /**
-   * Lena read "Удаление под ..." (the wrong case) and "Перезапустить под
-   * значит удалить его", which parses as "under means". Fails if either
-   * comes back, or if the body says that deleting deletes.
+   * Lena read "Удаление под ..." (the wrong case), "Перезапустить под
+   * значит удалить его", which parses as "under means", and "Перезапустить
+   * под shop/web-1?", which parses as "under shop/web-1". Fails if any comes
+   * back, or if the body says that deleting deletes.
    */
   it("asks a Russian reader in whole, grammatical sentences", () => {
     const ru: T = (section, key, values) =>
       translate("ru", section, key, values);
     expect(describePodRestart("web-1", "shop", pod(), ru)).toEqual({
-      title: "Перезапустить под shop/web-1?",
+      title: "Перезапустить Pod shop/web-1?",
       description:
         "Перезапуск пода означает его удаление. Удаление пода shop/web-1 произойдёт сразу. Его ReplicaSet log-demo-6cf создаст замену.",
     });

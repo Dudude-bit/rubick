@@ -96,3 +96,22 @@ describe("counting in a language with more than two forms", () => {
     expect(flat).toEqual([]);
   });
 });
+
+describe("the Russian word for a pod", () => {
+  /**
+   * "Перезапустить под shop/web-1?" and "под {pod} удалён" read as the
+   * preposition "under" with a name after it. Fails on "под" right before an
+   * object's name, where the kind's own name, Pod, belongs.
+   */
+  it("never stands right before a pod's name", () => {
+    const beforeName = /(^|[^А-Яа-яЁё])[Пп]од «?\{(name|pod)\}/;
+    const found = Object.entries(ru).flatMap(([section, keys]) =>
+      Object.entries(keys as Record<string, unknown>).flatMap(([key, value]) =>
+        Object.values(typeof value === "string" ? { value } : (value as object))
+          .filter((text) => beforeName.test(String(text)))
+          .map(() => `${section}.${key}`)
+      )
+    );
+    expect(found).toEqual([]);
+  });
+});

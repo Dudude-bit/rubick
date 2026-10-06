@@ -40,7 +40,7 @@ export const ru: Catalogue = {
     envReadsKey: "{env} читает ключ {key}",
     keyNotInSubject: "ключа {key} нет в этом {kind}",
     keyNotInSubjectOptional:
-      "ключа {key} нет в этом {kind}; он необязательный, поэтому под всё равно запустится",
+      "ключа {key} нет в этом {kind}; он необязательный, поэтому под запустится и без него",
     noListAccess: "У вас нет прав смотреть этот список",
     noVendorAccess: "У вас нет прав смотреть ресурсы интеграции {vendor}",
     relatedResources: "Связанные ресурсы",
@@ -1089,7 +1089,7 @@ export const ru: Catalogue = {
     invalidImage: "Некорректный образ",
     invalidImageDetail: "Выберите или введите корректный образ для отладки",
     debugPodDeleted: "Под для отладки удалён",
-    podDeletedDetail: "Под «{pod}» удалён",
+    podDeletedDetail: "Pod «{pod}» удалён",
     failedToDeletePod: "Не удалось удалить под",
     containerNotReady: "Контейнер не готов",
     debugContainerInPod: "Контейнер для отладки в поде",
@@ -1384,7 +1384,7 @@ export const ru: Catalogue = {
     effectCrd:
       "удалит вид ресурса, который он определяет, и все объекты этого вида во всех пространствах имён. Отменить это нельзя.",
     effectPermanent: "необратимо.",
-    podSubject: "под {name}",
+    podSubject: "Pod {name}",
     validate: "Проверить",
     apply: "Применить",
     applyAnyway: "Всё равно применить",
@@ -1557,7 +1557,7 @@ export const ru: Catalogue = {
         "{n} проброса сохранено в других кластерах. Чтобы ими воспользоваться, переключитесь на эти кластеры.",
     },
     forwardSavedHint:
-      "Сохранённый здесь проброс можно запустить снова, не вводя под и порты заново.",
+      "Сохранённый здесь проброс можно запустить снова, не указывая заново ни пода, ни портов.",
     startForwardFailed: "Не удалось запустить проброс портов",
     stopForwardFailed: "Не удалось остановить проброс портов",
     deleteForwardFailed: "Не удалось удалить проброс портов",
@@ -3308,11 +3308,11 @@ export const ru: Catalogue = {
       many: "Попытки прекращены после {n} попыток: {text}",
       other: "Попытки прекращены после {n} попытки: {text}",
     },
-    forwardPodGone: "под {pod} удалён",
-    forwardWaiting: "под {pod} удалён; ожидается готовый под от {kind} {name}",
+    forwardPodGone: "Pod {pod} удалён",
+    forwardWaiting: "Pod {pod} удалён; ожидается готовый под от {kind} {name}",
     forwardNoReplacement:
-      "под {pod} удалён, а у {kind} {name} нет готового пода, на который можно переключиться",
-    forwardSearchFailed: "под {pod} удалён, а найти другой не удалось: {text}",
+      "Pod {pod} удалён, а у {kind} {name} нет готового пода, на который можно переключиться",
+    forwardSearchFailed: "Pod {pod} удалён, а найти другой не удалось: {text}",
     forwardMoved: "переключён сюда с {from}",
     forwardNoStream:
       "под принял соединение, но не открыл поток для этого порта",
@@ -4164,7 +4164,7 @@ export const ru: Catalogue = {
     groupInitCaption:
       "выполняются по порядку до старта пода, каждый ждёт предыдущего",
     groupSidecarCaption: "запущены во время init и работают до сих пор",
-    groupAppBlocked: "не запускались: под всё ещё в init",
+    groupAppBlocked: "не запускались: под ещё в init",
     groupAppCaption: "работают вместе всю жизнь пода",
     groupInitCaptionEach:
       "выполняются по порядку до старта каждого пода, каждый ждёт предыдущего",
@@ -4244,7 +4244,7 @@ export const ru: Catalogue = {
       "Бэкенду отправляется Host: {host}, а не то имя хоста, которое запросил клиент.",
     nginxBodyLimit: "Тело запроса больше {limit} отклоняется с кодом 413.",
     nginxHeaderBuffer:
-      "Под заголовки ответа бэкенда отводится до {limit}; больший набор заголовков падает с кодом 502.",
+      "Для заголовков ответа бэкенда отводится до {limit}; больший набор заголовков падает с кодом 502.",
     nginxReadTimeout:
       "Между чтениями от бэкенда nginx ждёт до {wait}, потом сдаётся с кодом 504.",
     nginxSendTimeout: "Отправляя запрос бэкенду, nginx ждёт до {wait}.",
@@ -4324,7 +4324,7 @@ export const ru: Catalogue = {
     nginxLeastTime:
       "Каждый запрос уходит в под, который отвечает быстрее всех.",
     nginxServiceUpstream:
-      "Запросы идут на cluster IP Service, а не в его поды: под выбирает kube-proxy, а nginx эндпоинтов вообще не видит.",
+      "Запросы идут на cluster IP Service, а не в его поды: какой под получит запрос, решает kube-proxy, а nginx эндпоинтов вообще не видит.",
     nginxRawUnknownKey:
       "Показано как написано: у приложения нет фразы для этого ключа, а выдуманная была бы хуже самого ключа.",
     nginxRawUnknownValue:
@@ -4465,7 +4465,7 @@ export const ru: Catalogue = {
       "Ничего не пропускает: указывает {direction} и не перечисляет ни одного правила.",
     podPoliciesReading: "Читаются NetworkPolicy этого пространства имён…",
     podPoliciesUndecided:
-      "Выбирают ли этот под эти политики, вычислить нельзя: {names}",
+      "Выбирают ли эти политики этот под, вычислить нельзя: {names}",
   },
   cluster: {
     integrationsHint:
@@ -5416,7 +5416,7 @@ export const ru: Catalogue = {
     shellAnswerIsInTheLog:
       "То, что сказала бы оболочка, есть в логе упавшего запуска.",
     podStoppedInInit:
-      "Под всё ещё в инициализации и встал на {container}: {failure}.",
+      "Под ещё в инициализации и застрял на {container}: {failure}.",
     haveNotStarted: {
       one: "{names} не запустился.",
       few: "{names} не запустились.",
@@ -6436,7 +6436,8 @@ export const ru: Catalogue = {
     theServiceInFront: "Service перед ним",
     theServiceEndpointsPublish: "Service, который публикует этот Endpoints",
     thisKind: "этот {kind}",
-    addressesAnswering: "адреса, которые действительно отвечают, под за подом",
+    addressesAnswering:
+      "адреса, которые действительно отвечают, для каждого пода",
     itsPage: "его странице",
     metricOfLimit: "{used} / {limit} лимита ({percent}%)",
     metricRequestedNoLimit: "{used} · запрошено {requested}, без лимита",
@@ -6821,7 +6822,7 @@ export const ru: Catalogue = {
     noContainersInSpec:
       "В этой спецификации нет контейнеров: смотреть нечего, и ни образ, ни пробу читать неоткуда.",
     noEnvVarsMatchFilter:
-      "Под выбранный фильтр не подходит ни одна переменная окружения",
+      "Ни одна переменная окружения не подходит под выбранный фильтр",
     nothingReadForService: "Для этого Service ничего не прочитано.",
     servicePublishesNothing:
       "Этот Service не публикует ни одного адреса, так что до него ничего не доходит.",
@@ -7257,7 +7258,7 @@ export const ru: Catalogue = {
       "Endpoints перечисляют адреса подов за каждым Service, то есть то, куда на самом деле уходит его трафик; если список пуст, Service никуда не ведёт.",
     Node: "Node соответствует одной машине, физической или виртуальной, на которой работают поды; здесь видно, готов ли каждый узел и насколько он загружен.",
     Event:
-      "Кластер записывает Event, когда с объектом что-то происходит, например под назначен на узел или проверка не прошла; такие записи исчезают примерно через час.",
+      "Кластер записывает Event, когда с объектом что-то происходит, например, планировщик назначил под на узел или проверка не прошла; такие записи исчезают примерно через час.",
     Namespace:
       "Namespace объединяет объекты внутри одного кластера в именованную группу, чтобы разделять команды и приложения; большинство имён должны быть уникальны только внутри одного пространства имён.",
     HorizontalPodAutoscaler:
