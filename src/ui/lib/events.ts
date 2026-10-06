@@ -75,7 +75,8 @@ export function listenResourceEvents<T>(
   return registering.then(
     () => release,
     (error: unknown) => {
-      release();
+      watchers.delete(watcher);
+      if (shared === registering) shared = null;
       throw error;
     }
   );
