@@ -6,6 +6,7 @@ import {
   statusRole,
   type StatusRole,
 } from "@/lib/status-role";
+import { iconSvg } from "@/lib/icon-svg";
 import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
 
 const ROLES: StatusRole[] = ["ok", "pending", "warn", "err", "neutral"];
@@ -122,6 +123,13 @@ describe("role marks", () => {
     expect(new Set(ROLES.map((role) => ROLE_ICON[role])).size).toBe(
       ROLES.length
     );
+  });
+
+  /** A bar before "Complete" or "DNS alias" reads as a dash typed into the value. */
+  it("draws the neutral mark as a ring, not a horizontal bar", () => {
+    const svg = iconSvg(ROLE_ICON.neutral);
+    expect(svg).toContain("<circle ");
+    expect(svg).not.toMatch(/d="M[\d.]+ [\d.]+h[\d.]+"/);
   });
 
   it("never reuses a kind's glyph", () => {

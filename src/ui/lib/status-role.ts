@@ -1,7 +1,7 @@
 import {
   Check,
+  CircleSmall,
   Clock,
-  Minus,
   TriangleAlert,
   X,
   type LucideIcon,
@@ -17,7 +17,8 @@ export type StatusRole = "ok" | "pending" | "warn" | "err" | "neutral";
  * Shape, not decoration. Severity has to survive greyscale and the roughly
  * one reader in twelve who cannot separate the red from the green, so the
  * glyphs differ in *silhouette*: a diagonal V, a round face, a triangle, a
- * cross, a line.
+ * cross, a small ring. Not a line: before "Complete" or "DNS alias" a
+ * horizontal bar reads as a dash typed into the value.
  *
  * Not the circled variants (`CircleCheck`, `CircleX`, `CircleMinus`): at the
  * 10px these are drawn at the ring is the whole glyph, leaving ok and err one
@@ -33,7 +34,7 @@ export const ROLE_ICON: Record<StatusRole, LucideIcon> = {
   pending: Clock,
   warn: TriangleAlert,
   err: X,
-  neutral: Minus,
+  neutral: CircleSmall,
 };
 
 export const ROLE_TEXT: Record<StatusRole, string> = {
