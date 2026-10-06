@@ -48,6 +48,7 @@ import { covers, expiryOf, expiryText } from "@/lib/certificates";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { TLS_NOT_CHECKED_TONE } from "../../-components";
 import { deliveryOfKind } from "@/lib/delivery";
+import { ingressAddressOf, INGRESS_ADDRESS_WORDS } from "@/lib/ingress-health";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
@@ -257,6 +258,7 @@ export function IngressDetail() {
     queryFn: () => commands.resolveIngressClass(ingress?.className ?? null),
     enabled: !!ingress,
   });
+  const address = ingressAddressOf({ loadBalancerIps }, controller);
 
   // The soonest expiry across every certificate this Ingress serves: one
   // Ingress with four hosts has four certificates, and the badge can only
@@ -336,20 +338,22 @@ export function IngressDetail() {
     },
     {
       label: t("columns", "loadBalancer"),
-      // Until the controller assigns an address nothing reaches this ingress,
-      // which is the single most common reason it "does not work".
-      // The empty state keeps its own tone, so it stays plain text rather
-      // than the component's faint fallback.
+      // "Pending" only where a controller serves the class and can assign
+      // one; beside "nothing serves this class" it promised an address that
+      // will not come.
       value:
-        loadBalancerIps.length > 0 ? (
+        address === "assigned" ? (
           <CopyableAddresses
             values={loadBalancerIps}
             label={t("columns", "ingressAddress")}
           />
         ) : (
-          t("empty", "pendingInline")
+          t("empty", INGRESS_ADDRESS_WORDS[address].key)
         ),
-      tone: loadBalancerIps.length > 0 ? undefined : ("warn" as const),
+      tone:
+        address === "assigned"
+          ? undefined
+          : (INGRESS_ADDRESS_WORDS[address].tone ?? undefined),
     },
     { label: t("columns", "rules"), value: rules.length, mono: true },
     { label: t("columns", "paths"), value: accessUrls.length, mono: true },

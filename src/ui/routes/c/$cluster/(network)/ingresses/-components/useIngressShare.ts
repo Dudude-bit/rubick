@@ -7,6 +7,7 @@ import type { ReportStat } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { useT, type T } from "@/i18n/useT";
 import { ResourceType } from "@/lib/resource-registry";
+import { ingressAddressOf, INGRESS_ADDRESS_WORDS } from "@/lib/ingress-health";
 import type {
   IngressClassBinding,
   IngressInfo,
@@ -27,6 +28,7 @@ export function ingressStats(
   t: T
 ): ReportStat[] {
   const loadBalancerIps = ingress.loadBalancerIps;
+  const address = ingressAddressOf(ingress, controller);
   return [
     {
       label: t("columns", "class"),
@@ -47,10 +49,13 @@ export function ingressStats(
     {
       label: t("columns", "loadBalancer"),
       value:
-        loadBalancerIps.length > 0
+        address === "assigned"
           ? loadBalancerIps.join(", ")
-          : t("empty", "pendingInline"),
-      role: loadBalancerIps.length > 0 ? undefined : "warn",
+          : t("empty", INGRESS_ADDRESS_WORDS[address].key),
+      role:
+        address === "assigned"
+          ? undefined
+          : (INGRESS_ADDRESS_WORDS[address].tone ?? "neutral"),
     },
   ];
 }

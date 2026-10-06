@@ -6074,6 +6074,7 @@ export const en = {
     noneDeclared: "none declared",
     noneInline: "none",
     pendingInline: "pending",
+    addressNoController: "none: nothing serves its class to assign one",
     helmCliNotFound: "Helm CLI not found",
     helmWriteOpsNeedCli:
       "Releases and their details still read over the Kubernetes API. Installing, upgrading, rolling back, uninstalling and managing repositories need the CLI.",

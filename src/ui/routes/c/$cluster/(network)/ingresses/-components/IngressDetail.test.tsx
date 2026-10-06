@@ -28,8 +28,12 @@ vi.mock("@/hooks/useIngressTls", () => ({
   }),
 }));
 
+const answers = vi.hoisted(() => ({}) as Record<string, unknown>);
 vi.mock("@/lib/commands", () => ({
-  commands: new Proxy({}, { get: () => vi.fn(async () => null) }),
+  commands: new Proxy(
+    {},
+    { get: (_, key: string) => vi.fn(async () => answers[key] ?? null) }
+  ),
 }));
 
 import { useResourceDetail } from "@/hooks";
@@ -65,11 +69,11 @@ const shop: IngressInfo = {
   createdAt: null,
 };
 
-const open = async (tab: string) => {
+const open = async (tab: string, resource: IngressInfo = shop) => {
   vi.mocked(useResourceDetail).mockReturnValue({
     name: "shop",
     namespace: "web",
-    resource: shop,
+    resource,
     isLoading: false,
     error: null,
     yaml: "",
@@ -87,6 +91,7 @@ const open = async (tab: string) => {
 };
 
 beforeEach(() => {
+  for (const key of Object.keys(answers)) delete answers[key];
   vendor.terminated = null;
   vendor.answered = true;
   vendor.error = null;
@@ -187,5 +192,32 @@ describe("an Ingress whose certificate the controller could not read", () => {
       expect(unknown[place], place).not.toBe(yes[place]);
       expect(unknown[place], place).not.toBe(no[place]);
     }
+  });
+});
+
+describe("the load balancer row of an Ingress with no address", () => {
+  /**
+   * Sam read "Load balancer: pending" beside "nothing picks this Ingress
+   * up ... never will": IngressClass traefik does not exist. Fails if the
+   * page promises an address nothing can assign.
+   */
+  it("says nothing can assign one when nothing serves the class", async () => {
+    answers.listEvents = [];
+    answers.resolveIngressClass = {
+      requested: "traefik",
+      resolved: null,
+      controller: null,
+      viaDefault: false,
+      available: [],
+    };
+    await open("overview", {
+      ...shop,
+      className: "traefik",
+      loadBalancerIps: [],
+    });
+    expect(
+      await screen.findByText("none: nothing serves its class to assign one")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("pending")).toBeNull();
   });
 });

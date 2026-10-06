@@ -6656,6 +6656,8 @@ export const ru: Catalogue = {
     notReadyOne: "Не готов",
     noneDeclared: "не объявлена",
     noneInline: "нет",
+    addressNoController:
+      "нет: его класс никто не обслуживает, и назначить адрес некому",
     pendingInline: "ожидается",
     helmCliNotFound: "Helm CLI не найден",
     helmWriteOpsNeedCli:

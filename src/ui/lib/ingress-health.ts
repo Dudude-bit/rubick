@@ -113,6 +113,39 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
   };
 }
 
+/**
+ * What an Ingress's load balancer row can say: an address, one on its way
+ * from a controller that serves the class, none because nothing serves it,
+ * or nothing known because the class could not be read.
+ */
+export type IngressAddress =
+  | "assigned"
+  | "pending"
+  | "noController"
+  | "unknown";
+
+export function ingressAddressOf(
+  ingress: Pick<IngressInfo, "loadBalancerIps">,
+  binding: IngressClassBinding | undefined
+): IngressAddress {
+  if (ingress.loadBalancerIps.length > 0) return "assigned";
+  if (!binding) return "unknown";
+  return binding.resolved ? "pending" : "noController";
+}
+
+/** The words and tone of each state without an address. */
+export const INGRESS_ADDRESS_WORDS: Record<
+  Exclude<IngressAddress, "assigned">,
+  {
+    key: "pendingInline" | "addressNoController" | "unknownLower";
+    tone: "warn" | "err" | null;
+  }
+> = {
+  pending: { key: "pendingInline", tone: "warn" },
+  noController: { key: "addressNoController", tone: "err" },
+  unknown: { key: "unknownLower", tone: null },
+};
+
 const ORDER: IngressProblem["kind"][] = [
   "noController",
   "backendMissing",
