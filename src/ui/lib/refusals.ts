@@ -81,9 +81,10 @@ export function useRefusedOn(
   args: readonly unknown[]
 ): boolean {
   const read = readOf(command, args);
-  return useRefusals(
-    (s) => read !== null && s.reads.get(read)?.connection === connection
-  );
+  return useRefusals((s) => {
+    const refused = read === null ? undefined : s.reads.get(read);
+    return refused !== undefined && refused.connection === connection;
+  });
 }
 
 let told: { connection: number; reads: Set<string> } = {

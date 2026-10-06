@@ -4,7 +4,11 @@ import { act, renderHook } from "@testing-library/react";
 const toast = vi.fn();
 vi.mock("@/components/ui/use-toast", () => ({ useToast: () => ({ toast }) }));
 
-let callbacks: { onError?: (m: string) => void; onRecovered?: () => void } = {};
+let callbacks: {
+  enabled?: boolean;
+  onError?: (m: string) => void;
+  onRecovered?: () => void;
+} = {};
 vi.mock("@/hooks/useResourceWatch", () => ({
   useResourceWatch: (options: typeof callbacks) => {
     callbacks = options;
@@ -12,6 +16,7 @@ vi.mock("@/hooks/useResourceWatch", () => ({
   },
 }));
 
+import { useClusterStore } from "@/stores/clusterStore";
 import { useWatchedList } from "./useWatchedList";
 
 const watched = (
@@ -28,7 +33,12 @@ const watched = (
   );
 
 describe("a list kept current by a watch", () => {
-  beforeEach(() => toast.mockClear());
+  beforeEach(() => {
+    toast.mockClear();
+    useClusterStore.setState((s) => ({
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+  });
 
   /** A live list that polled anyway would be the idle cost the watch exists to remove. */
   it("does not poll while the watch runs", () => {
@@ -72,6 +82,34 @@ describe("a list kept current by a watch", () => {
       refresh: "resourceList",
     });
     expect(toast).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Marco's DaemonSets page subscribed a watch on every visit, refused each
+   * time, two warnings in the log apiece. Fails if a watch refused on this
+   * connection is subscribed again, or if the list stops polling instead.
+   */
+  it("does not subscribe a watch again on the connection that refused it", () => {
+    const first = watched();
+    act(() =>
+      callbacks.onError?.(
+        'ApiError: daemonsets.apps is forbidden: User "marco" cannot watch resource "daemonsets"'
+      )
+    );
+    first.unmount();
+    const { result } = watched();
+    expect(callbacks.enabled).toBe(false);
+    expect(result.current).toMatchObject({
+      live: false,
+      refresh: "resourceList",
+    });
+
+    act(() =>
+      useClusterStore.setState((s) => ({
+        connectionAttemptId: s.connectionAttemptId + 1,
+      }))
+    );
+    expect(callbacks.enabled).toBe(true);
   });
 
   /** Fails if the cluster's own words reach the toast again. */

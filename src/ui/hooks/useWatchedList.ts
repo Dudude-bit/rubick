@@ -5,6 +5,13 @@ import { useToast } from "@/components/ui/use-toast";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { useT } from "@/i18n/useT";
 import { isRefusal } from "@/lib/error-utils";
+import {
+  currentConnection,
+  noteRefusal,
+  readOf,
+  useRefusedOn,
+} from "@/lib/refusals";
+import { useClusterStore } from "@/stores/clusterStore";
 
 export interface WatchedList {
   /** The watch is running and feeding the cache. */
@@ -45,6 +52,10 @@ export function useWatchedList<
   // stream, and a failure held over from the last one kept a healthy list
   // polling with nothing left to clear it.
   const subscription = JSON.stringify(queryKey);
+  const connection = useClusterStore((s) => s.connectionAttemptId);
+  // Refused once, not subscribed again until a reconnect: each try is two
+  // warnings in the log and a 403 in the cluster's audit.
+  const refusedBefore = useRefusedOn(connection, "watch", [subscription]);
   const [failedFor, setFailedFor] = useState<string | null>(null);
   // Read synchronously, so a burst of failures reports once.
   const failed = useRef<string | null>(null);
@@ -59,7 +70,11 @@ export function useWatchedList<
         return;
       }
       // A refused watch is the list's own refusal, which the page states.
-      if (isRefusal(message)) return;
+      if (isRefusal(message)) {
+        const read = readOf("watch", [subscription]);
+        if (read !== null) noteRefusal(read, message, currentConnection());
+        return;
+      }
       toast({
         title: t("action", "realtimeUnavailable"),
         description: t("action", "fallingBackToPolling", {
@@ -75,14 +90,14 @@ export function useWatchedList<
   }, []);
 
   const { resyncing } = useResourceWatch<T>({
-    enabled,
+    enabled: enabled && !refusedBefore,
     subscribe,
     queryKey,
     onError,
     onRecovered,
   });
 
-  const watchFailed = failedFor === subscription;
+  const watchFailed = refusedBefore || failedFor === subscription;
   const live = enabled && !watchFailed;
   return {
     live,
