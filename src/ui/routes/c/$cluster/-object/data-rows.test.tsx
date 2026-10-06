@@ -234,6 +234,15 @@ describe("the per-key controls, in the reader's language", () => {
     expect(screen.queryByText(/private key/)).toBeNull();
   });
 
+  /** A ConfigMap's ca.crt read "1107 символов"; fails if a long count loses its group space. */
+  it("groups the thousands of a character count", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(<DataSection data={{ "ca.crt": "x".repeat(1107) }} />);
+    expect(screen.getByText(/символов/).textContent).toBe(
+      "1\u202f107 символов"
+    );
+  });
+
   /** Would break if the base64 copy went back to an English label. */
   it("names the base64 copy in Russian", () => {
     useLocaleStore.setState({ choice: "ru" });

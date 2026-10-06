@@ -7048,7 +7048,7 @@ export const en = {
     notBound: { one: "{n} not bound", other: "{n} not bound" },
     usedOfTotal: "{used} used of {total}",
     params: { one: "{n} param", other: "{n} params" },
-    chars: { one: "{n} char", other: "{n} chars" },
+    chars: { one: "{count} char", other: "{count} chars" },
     valuesCopiedWithBinary: {
       one: "{n} value copied, {binary} as base64.",
       other: "{n} values copied, {binary} as base64.",
