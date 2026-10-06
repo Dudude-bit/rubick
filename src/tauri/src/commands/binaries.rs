@@ -135,7 +135,7 @@ pub(crate) fn ensure_kubectl_plugin_present(command: &str, args: &[String]) -> R
     match crate::diagnostics::missing_plugin_finding("this context", command, args) {
         None => Ok(()),
         Some(finding) => Err(crate::error::Error::Plugin(
-            crate::error::PluginError::NotFound(format!("{} — {}", finding.title, finding.detail)),
+            crate::error::PluginError::NotFound(format!("{}: {}", finding.title, finding.detail)),
         )),
     }
 }

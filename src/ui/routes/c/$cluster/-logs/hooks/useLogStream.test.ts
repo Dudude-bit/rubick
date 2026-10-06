@@ -468,7 +468,7 @@ describe("useLogStream surfaces a stream that dies after it started", () => {
         failureEvent(
           "c",
           "gone",
-          "n/p stopped streaming — container c is no longer running."
+          "n/p stopped streaming: container c is no longer running."
         )
       );
     });

@@ -716,7 +716,7 @@ mod tests {
             // would also lose `channel` from the top level, checked below.
             assert!(
                 !obj.contains_key("type"),
-                "{} payload looks tagged-enum-wrapped — frontend reads fields at top level",
+                "{} payload looks tagged-enum-wrapped, but the frontend reads fields at top level",
                 event.channel()
             );
             assert_eq!(

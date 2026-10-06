@@ -194,7 +194,7 @@ describe("useResourceSearch", () => {
         context: "prod",
         status: "skipped",
         reason: "not-connected",
-        message: "'prod' is not connected — searching it opens a connection",
+        message: "'prod' is not connected, and searching it opens a connection",
       },
     ];
     const { result } = renderHook(() =>

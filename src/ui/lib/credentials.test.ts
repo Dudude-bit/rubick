@@ -20,10 +20,10 @@ describe("recognising a session the cluster has stopped accepting", () => {
    */
   it("matches the marker the backend puts on a 401", () => {
     const wire =
-      "Tauri command 'list_pods' failed: CREDENTIALS_EXPIRED: the cluster rejected this session's credentials — Unauthorized";
+      "Tauri command 'list_pods' failed: CREDENTIALS_EXPIRED: the cluster rejected this session's credentials: Unauthorized";
     expect(isCredentialsExpired(wire)).toBe(true);
     expect(expiryReason(wire)).toBe(
-      "the cluster rejected this session's credentials — Unauthorized"
+      "the cluster rejected this session's credentials: Unauthorized"
     );
   });
 

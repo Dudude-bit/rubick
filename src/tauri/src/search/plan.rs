@@ -142,7 +142,7 @@ pub fn plan_targets(
                 SearchTarget::skipped(
                     name.clone(),
                     SearchFailureKind::NotConnected,
-                    format!("'{name}' is not connected — searching it opens a connection"),
+                    format!("'{name}' is not connected, and searching it opens a connection"),
                 )
             }
         })

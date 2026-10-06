@@ -372,7 +372,7 @@ pub async fn collect(client: &crate::client::K8sClientManager) -> Diagnostics {
     };
 
     let path = loaded.source.map_or_else(
-        || "unknown — loaded before the path was recorded".to_string(),
+        || "unknown, loaded before the path was recorded".to_string(),
         |p| p.to_string_lossy().into_owned(),
     );
 

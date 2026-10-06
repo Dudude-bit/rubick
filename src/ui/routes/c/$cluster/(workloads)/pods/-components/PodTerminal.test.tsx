@@ -92,7 +92,7 @@ describe("PodTerminal when the session dies after openPodShell returned", () => 
 
     fireFailure(
       "broken",
-      "Could not open the shell — failed to upgrade to a WebSocket connection: 500."
+      "Could not open the shell: failed to upgrade to a WebSocket connection: 500."
     );
 
     await waitFor(() => {
@@ -118,7 +118,7 @@ describe("PodTerminal when the session dies after openPodShell returned", () => 
 
     fireFailure(
       "gone",
-      'There is no container left to attach to — pods "log-demo-7f9" not found.'
+      'There is no container left to attach to: pods "log-demo-7f9" not found.'
     );
 
     await waitFor(() => {

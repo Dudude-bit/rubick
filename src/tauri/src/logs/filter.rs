@@ -295,7 +295,7 @@ mod tests {
             assert_eq!(
                 IntakeFilter::new(std::slice::from_ref(&case.term)).matches(&log, case.epoch),
                 case.expect,
-                "{} — through IntakeFilter, which is the path the streamer takes",
+                "{}: through IntakeFilter, which is the path the streamer takes",
                 case.name
             );
         }

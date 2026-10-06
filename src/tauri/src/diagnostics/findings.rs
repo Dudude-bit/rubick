@@ -82,13 +82,13 @@ pub fn settings_recovered_finding(path: &str, backup: Option<&str>, why: &str) -
     let detail = match backup {
         Some(backup) => format!(
             "{why}. The app started on default settings and kept your previous \
-             file at {backup}, so nothing was lost — open it to recover a value \
+             file at {backup}, so nothing was lost. Open it to recover a value \
              by hand. Saving any setting writes a fresh {path}."
         ),
         // The rename failed too — do not promise a backup that is not there.
         None => format!(
             "{why}. The app started on default settings but could not move the \
-             unreadable file aside, so {path} is still there — saving a setting \
+             unreadable file aside, so {path} is still there, and saving a setting \
              will fail until you fix or remove it by hand."
         ),
     };

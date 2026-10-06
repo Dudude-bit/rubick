@@ -413,7 +413,7 @@ mod tests {
     fn a_token_a_console_padded_is_stored_without_the_padding() {
         let mut auth_info = AuthInfo::default();
         apply_exec_credentials(&mut auth_info, token_status("header.pay load.sig \nnature"))
-            .expect("whitespace is not a reason to refuse — it is one to remove");
+            .expect("whitespace is not a reason to refuse, it is one to remove");
 
         assert_eq!(
             auth_info.token.as_ref().expect("the token").expose_secret(),

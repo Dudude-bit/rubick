@@ -732,7 +732,7 @@ mod tests {
                 .collect::<Vec<_>>(),
             [("migrate", "/etc/config"), ("app", "/etc/config")],
             "a ConfigMap read only by an init container is exactly the mount \
-             whose absence explains a pod stuck in Init:Error — walking only \
+             whose absence explains a pod stuck in Init:Error, and walking only \
              .containers would report it as mounted by nothing"
         );
     }

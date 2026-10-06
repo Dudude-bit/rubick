@@ -1129,7 +1129,7 @@ mod tests {
         assert!((curl.says_no)(Some(7)), "7 is the connection refused");
         assert!(
             !(curl.says_no)(Some(6)),
-            "6 is a name curl could not resolve — nothing about the port"
+            "6 is a name curl could not resolve, nothing about the port"
         );
     }
 }

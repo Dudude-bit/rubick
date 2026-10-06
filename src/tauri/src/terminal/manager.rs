@@ -184,14 +184,14 @@ impl TerminalManager {
                         kind,
                         match kind {
                             StreamFailureKind::Gone => {
-                                format!("There is no container left to attach to — {cause}.")
+                                format!("There is no container left to attach to: {cause}.")
                             }
                             // An exec has no previous run and no log to drop;
                             // either kind here still means the shell did not open.
                             StreamFailureKind::Broken
                             | StreamFailureKind::NoPreviousRun
                             | StreamFailureKind::LogNotKept => {
-                                format!("Could not open the shell — {cause}.")
+                                format!("Could not open the shell: {cause}.")
                             }
                         },
                     );
@@ -251,7 +251,7 @@ impl TerminalManager {
                                         &session_id_clone,
                                         StreamFailureKind::Broken,
                                         format!(
-                                            "The shell stopped accepting input — {}.",
+                                            "The shell stopped accepting input: {}.",
                                             readable_cause(&e)
                                         ),
                                     );
@@ -315,7 +315,7 @@ impl TerminalManager {
                                     &session_id_clone,
                                     StreamFailureKind::classify(&e),
                                     format!(
-                                        "The shell connection dropped — {}.",
+                                        "The shell connection dropped: {}.",
                                         readable_cause(&e)
                                     ),
                                 );
@@ -1114,7 +1114,7 @@ mod tests {
                 );
                 assert_eq!(
                     message,
-                    "Could not open the shell — failed to upgrade to a WebSocket connection: 500."
+                    "Could not open the shell: failed to upgrade to a WebSocket connection: 500."
                 );
             }
             other => panic!("expected StreamFailed, got {other:?}"),

@@ -137,18 +137,18 @@ impl LogStreamer {
                     kind,
                     match kind {
                         StreamFailureKind::Gone => {
-                            format!("Pod {target} is not there any more — {cause}.")
+                            format!("Pod {target} is not there any more: {cause}.")
                         }
                         StreamFailureKind::Broken => {
-                            format!("Could not attach to the logs of {target} — {cause}.")
+                            format!("Could not attach to the logs of {target}: {cause}.")
                         }
                         StreamFailureKind::NoPreviousRun => format!(
-                            "There is no previous run of {container} to show — \
+                            "There is no previous run of {container} to show: \
                              it has not restarted since {target} started."
                         ),
                         StreamFailureKind::LogNotKept => format!(
                             "The node running {target} no longer has that log of \
-                             {container} — {cause}."
+                             {container}: {cause}."
                         ),
                     },
                 );
@@ -223,7 +223,7 @@ impl LogStreamer {
                                 &stream_id,
                                 StreamFailureKind::Broken,
                                 format!(
-                                    "The log stream from {target} broke — {}.",
+                                    "The log stream from {target} broke: {}.",
                                     readable_cause(&error)
                                 ),
                             );
@@ -259,7 +259,7 @@ impl LogStreamer {
                 StreamFailureKind::LogNotKept,
                 format!(
                     "The node running {target} no longer has that log of \
-                     {container} — {said}."
+                     {container}: {said}."
                 ),
             );
             return Ok(());
@@ -270,7 +270,7 @@ impl LogStreamer {
                 &self.event_tx,
                 &stream_id,
                 StreamFailureKind::Gone,
-                format!("{target} stopped streaming — container {container} is no longer running."),
+                format!("{target} stopped streaming: container {container} is no longer running."),
             );
         }
 

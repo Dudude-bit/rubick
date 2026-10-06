@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { parseSync } from "vite-plus";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -36,6 +36,83 @@ function dashedLines(path: string, source: string): string[] {
     .flatMap((line, index) =>
       DASH.test(line) ? [`${path}:${index + 1}`] : []
     );
+}
+
+/** Each Rust string or char literal that holds a dash, as `path:line` of the dash. */
+function dashedRustLiterals(path: string, source: string): string[] {
+  if (!DASH.test(source)) return [];
+  const found = new Set<string>();
+  const chars = Array.from(source);
+  let line = 1;
+  let i = 0;
+  const step = () => {
+    if (chars[i] === "\n") line++;
+    i++;
+  };
+  const word = /[A-Za-z0-9_]/;
+  while (i < chars.length) {
+    const c = chars[i];
+    const next = chars[i + 1];
+    if (c === "/" && next === "/") {
+      while (i < chars.length && chars[i] !== "\n") step();
+    } else if (c === "/" && next === "*") {
+      let depth = 0;
+      do {
+        if (chars[i] === "/" && chars[i + 1] === "*") {
+          depth++;
+          step();
+        } else if (chars[i] === "*" && chars[i + 1] === "/") {
+          depth--;
+          step();
+        }
+        step();
+      } while (depth > 0 && i < chars.length);
+    } else if (
+      c === '"' ||
+      (c === "'" && (next === "\\" || chars[i + 2] === "'"))
+    ) {
+      step();
+      while (i < chars.length && chars[i] !== c) {
+        if (DASH.test(chars[i])) found.add(`${path}:${line}`);
+        if (chars[i] === "\\") step();
+        step();
+      }
+      step();
+    } else if (
+      /[rb]/.test(c) &&
+      !word.test(chars[i - 1] ?? "") &&
+      /^(b?r#*"|br#*")/.test(chars.slice(i, i + 16).join(""))
+    ) {
+      while (chars[i] !== "r") step();
+      step();
+      let hashes = 0;
+      while (chars[i] === "#") {
+        hashes++;
+        step();
+      }
+      step();
+      const close = '"' + "#".repeat(hashes);
+      while (
+        i < chars.length &&
+        chars.slice(i, i + close.length).join("") !== close
+      ) {
+        if (DASH.test(chars[i])) found.add(`${path}:${line}`);
+        step();
+      }
+      for (let k = 0; k < close.length; k++) step();
+    } else {
+      step();
+    }
+  }
+  return [...found];
+}
+
+function rustFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) return rustFiles(path);
+    return path.endsWith(".rs") ? [path] : [];
+  });
 }
 
 /** Files whose "-" is a notation of its own: `ls` mode bits, a diff's removed line. */
@@ -106,6 +183,19 @@ describe("the punctuation of the copy", () => {
   });
 
   /**
+   * A TLS Secret's tls.key row read "a private key — the app never shows
+   * one" on the Russian screen: the sentence came from Rust, which no scan
+   * read. Fails on a dash in any string or char literal under src/tauri/src;
+   * comments keep theirs, and code that must match one spells it \u{2014}.
+   */
+  it("keeps every em and en dash out of the strings the backend writes", () => {
+    const dashed = rustFiles("src/tauri/src").flatMap((path) =>
+      dashedRustLiterals(path, readFileSync(path, "utf8"))
+    );
+    expect(dashed).toEqual([]);
+  });
+
+  /**
    * Node page External IP drew "-" where a Service says "none", and the CRD
    * columns of istio, flux, traefik and others did the same. Fails on a lone
    * hyphen that a value falls back to, in code or in JSX text.
@@ -131,6 +221,27 @@ describe("the punctuation of the copy", () => {
       "x.tsx:1",
       "x.tsx:4",
       "x.tsx:5",
+    ]);
+  });
+
+  /** The scan itself: a Rust comment, lifetime or escape is skipped, a literal of any kind is not. */
+  it("tells a dash in a Rust literal from one in a comment", () => {
+    const source = [
+      "/// a doc — fine",
+      "/* outer /* nested — fine */ still — fine */",
+      "fn f<'a>(x: &'a str) -> char { '\\u{2014}' }",
+      'let a = "plain — caught";',
+      'let b = r#"raw "quoted" – caught"#;',
+      'let c = "escaped \\" quote — caught";',
+      "let d = '—';",
+      'let e = "two\nlines — caught";',
+    ].join("\n");
+    expect(dashedRustLiterals("x.rs", source)).toEqual([
+      "x.rs:4",
+      "x.rs:5",
+      "x.rs:6",
+      "x.rs:7",
+      "x.rs:9",
     ]);
   });
 

@@ -127,7 +127,7 @@ describe("LogViewer when a live stream dies", () => {
 
     fireFailure(
       "broken",
-      "The log stream from default/log-demo-7f9 broke — connection reset."
+      "The log stream from default/log-demo-7f9 broke: connection reset."
     );
 
     await waitFor(() => {
@@ -158,7 +158,7 @@ describe("LogViewer when a live stream dies", () => {
 
     fireFailure(
       "gone",
-      "default/log-demo-7f9 stopped streaming — container app is no longer running."
+      "default/log-demo-7f9 stopped streaming: container app is no longer running."
     );
 
     await waitFor(() => {
@@ -223,7 +223,7 @@ describe("LogViewer when a live stream dies", () => {
 
     fireFailure(
       "no-previous-run",
-      "There is no previous run of app to show — it has not restarted."
+      "There is no previous run of app to show: it has not restarted."
     );
 
     const notice = await screen.findByTestId("log-stream-failure");

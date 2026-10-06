@@ -42,7 +42,7 @@ pub enum Error {
     ///
     /// This sentence *is* the wire format: the frontend matches on the
     /// `CREDENTIALS_EXPIRED` prefix, so changing it changes an API.
-    #[error("CREDENTIALS_EXPIRED: the cluster rejected this session's credentials — {0}")]
+    #[error("CREDENTIALS_EXPIRED: the cluster rejected this session's credentials: {0}")]
     CredentialsExpired(String),
 
     /// Configuration errors

@@ -320,7 +320,7 @@ pub(super) async fn run_exec_auth(
         // the plugin is broken.
         let msg = "The authentication plugin produced no output. If this is an \
              interactive OIDC plugin (kubectl-oidc_login / kubelogin), it was \
-             waiting for you to finish signing in through the browser — make \
+             waiting for you to finish signing in through the browser. Make \
              sure the authentication URL opened and you completed the login."
             .to_string();
         announce(
@@ -784,7 +784,7 @@ mod preview_tests {
         const MIN_REASONABLE_TIMEOUT_SECS: u64 = 15 * 60;
         assert!(
             AUTH_FLOW_TIMEOUT_SECS >= MIN_REASONABLE_TIMEOUT_SECS,
-            "auth flow timeout is {AUTH_FLOW_TIMEOUT_SECS}s — too short \
+            "auth flow timeout is {AUTH_FLOW_TIMEOUT_SECS}s, too short \
              to safely outlast common exec-plugin internal timeouts. \
              Bump AUTH_FLOW_TIMEOUT_SECS to at least \
              {MIN_REASONABLE_TIMEOUT_SECS}s (see its doc-comment for why)."
