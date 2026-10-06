@@ -7,8 +7,6 @@
  * reader opens first, and switching tabs costs nothing.
  */
 
-import { keepPreviousData } from "@tanstack/react-query";
-
 import { commands } from "@/lib/commands";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
@@ -44,20 +42,29 @@ export function useConnections(
   // a chain answered before the scan landed must not stay cached as the
   // whole answer once the cluster turns out to speak Gateway API.
   const gateway = useGatewayApi().data ?? null;
+  const queryKey = [
+    "connections",
+    kind,
+    namespace ?? null,
+    name,
+    gateway?.installed ? gateway.kinds.map((k) => k.readVersion) : null,
+  ];
   return useLiveQuery<ResourceConnections>({
-    queryKey: [
-      "connections",
-      kind,
-      namespace ?? null,
-      name,
-      gateway?.installed ? gateway.kinds.map((k) => k.readVersion) : null,
-    ],
+    queryKey,
     queryFn: () =>
       commands.getResourceConnections(kind, name!, namespace ?? null, gateway),
     enabled: enabled && !!name,
+    // The scan landing changes the key, not the object. A list's row menu
+    // keeps one observer across rows, and drew one row's autoscaler in the
+    // next row's Scale dialog.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey
+        .slice(0, 4)
+        .every((part, index) => part === queryKey[index])
+        ? previous
+        : undefined,
     // A pod going ready is the fact this view exists to show, so it follows
     // the list pages rather than sitting on a stale answer.
-    placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceDetail,
     refresh,
     retry: false,

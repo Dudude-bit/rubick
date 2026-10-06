@@ -234,6 +234,57 @@ describe("a list row's right-click menu", () => {
     }
   });
 
+  /**
+   * The neighbourhood read kept the last row's answer while the next row's
+   * was in flight, so search's Scale dialog drew cart's autoscaler, and its
+   * removal left the focus on the dialog itself.
+   */
+  it("never shows the previous row's autoscaler in the next row's Scale dialog", async () => {
+    const search = { ...WEB, name: "search" };
+    let answerSearch: (answer: ResourceConnections) => void = () => {};
+    getDeployment.mockImplementation(async (name: string) => ({
+      ...(name === "web" ? WEB : search),
+      generation: 1,
+    }));
+    getResourceConnections.mockImplementation((_kind: string, name: string) =>
+      name === "web"
+        ? Promise.resolve(governedByAutoscaler)
+        : new Promise((resolve) => (answerSearch = resolve))
+    );
+    const user = userEvent.setup();
+    await renderWithRouter(
+      <ResourceList<Deployment>
+        title="Deployments"
+        emptyStateLabel="deployments"
+        data={[WEB, search]}
+        columns={columns}
+        getRowHref={(row) =>
+          hrefOf(objectLink({ kind: "Deployment", ...row })!)
+        }
+      />,
+      { at: "/c/prod/deployments", route: "/c/$cluster/$" }
+    );
+    const scaleFrom = async (index: number) => {
+      fireEvent.contextMenu(screen.getAllByTestId("cell")[index], {
+        clientX: 30,
+        clientY: 40,
+      });
+      await user.click(screen.getByRole("menuitem", { name: "Scale" }));
+      return screen.findByRole("dialog");
+    };
+    const first = await scaleFrom(0);
+    await within(first).findByLabelText("minReplicas");
+    await user.click(within(first).getByRole("button", { name: "Cancel" }));
+    await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    const second = await scaleFrom(1);
+    expect(second).toHaveTextContent("Scale Deployment shop/search");
+    expect(within(second).queryByLabelText("minReplicas")).toBeNull();
+    answerSearch({ ...governedByAutoscaler, edges: [] });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(within(second).getByLabelText("Number of replicas")).toHaveFocus();
+  });
+
   it("copies the kubectl command that reads this object", async () => {
     const user = userEvent.setup();
     const writeText = vi.fn(async () => {});
