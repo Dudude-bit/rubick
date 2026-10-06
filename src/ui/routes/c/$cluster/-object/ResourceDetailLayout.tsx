@@ -66,6 +66,8 @@ interface DetailErrorProps {
   onFindReplacement?: () => void;
   isSearching?: boolean;
   additionalMessage?: string;
+  /** What else ended with an object that is gone. */
+  goneNote?: ReactNode;
 }
 
 export function DetailError({
@@ -77,6 +79,7 @@ export function DetailError({
   onFindReplacement,
   isSearching,
   additionalMessage,
+  goneNote,
 }: DetailErrorProps) {
   const t = useT();
   const isNotFound = isResourceNotFoundError(error);
@@ -108,6 +111,7 @@ export function DetailError({
           error={error ?? t("empty", "clusterDidNotAnswer")}
         />
       )}
+      {isNotFound && goneNote}
       {additionalMessage && (
         <p className="text-xs text-fg-mut">{additionalMessage}</p>
       )}
@@ -194,6 +198,8 @@ interface ResourceDetailLayoutProps {
   onBack: () => void;
   onFindReplacement?: () => void;
   isSearchingReplacement?: boolean;
+  /** What else ended with the object, said under the gone notice. */
+  goneNote?: ReactNode;
 
   /**
    * What is wrong with the object, in the two or three lines that say it.
@@ -251,6 +257,7 @@ export function ResourceDetailLayout({
   onBack,
   onFindReplacement,
   isSearchingReplacement,
+  goneNote,
   summary,
   freshness,
   tabs: pageTabs,
@@ -341,6 +348,7 @@ export function ResourceDetailLayout({
           onBack={onBack}
           onFindReplacement={onFindReplacement}
           isSearching={isSearchingReplacement}
+          goneNote={goneNote}
         />
       </>
     );

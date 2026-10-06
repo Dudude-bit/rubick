@@ -6486,6 +6486,8 @@ export const ru: Catalogue = {
       "Он в порядке, но его не называет ни один Certificate, поэтому он ничего не подписывает.",
     noneLower: "нет",
     notEvaluatedLower: "не вычислено",
+    shellEndedPodGone:
+      "Сеанс оболочки завершён: Pod удалён, а вместе с ним закрылся и терминал.",
     printerNotEvaluated:
       "Приложение не умеет вычислять JSONPath этой колонки, поэтому значение не прочитано: {expression}",
     noLower: "нет",

@@ -16,6 +16,12 @@ import { useWindowActivity } from "@/lib/window-activity";
 import { renderWithRouter } from "@/test/render";
 import { PodDetail } from "./PodDetail";
 
+vi.mock("@/components/terminal/Terminal", () => ({
+  Terminal: ({ sessionId }: { sessionId?: string }) => (
+    <div data-testid="terminal-stub" data-session-id={sessionId ?? ""} />
+  ),
+}));
+
 const NAME = "cart-9df89489c-n6rzf";
 
 const POD = {
@@ -108,6 +114,7 @@ beforeEach(() => {
       return POD;
     }
     if (command === "get_replicaset") return REPLICA_SET;
+    if (command === "open_pod_shell") return "term-1";
     return undefined;
   });
 });
@@ -147,5 +154,42 @@ describe("a pod page whose pod is deleted while it is open", () => {
     await advance(60_000);
     expect(calls("get_pod")).toBe(reads);
     expect(aboutThePod()).toBe(asked);
+  });
+
+  /**
+   * Dana had a shell open on the pod when it was deleted: the page turned
+   * into "This Pod no longer exists" and the terminal vanished with no word.
+   * Fails if the gone page does not say the session ended with the pod.
+   */
+  it("says the open shell ended because the pod is gone", async () => {
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}?shell=app`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    expect(screen.queryByText(/shell session ended/)).toBeNull();
+
+    gone = true;
+    await advance(REFRESH_INTERVALS.resourceDetail);
+    await advance(0);
+
+    expect(screen.getByText("This Pod no longer exists.")).toBeInTheDocument();
+    expect(
+      screen.getByText(/shell session ended: its pod was deleted/)
+    ).toBeInTheDocument();
+  });
+
+  /** Fails if the note claims a session on a page that never opened one. */
+  it("says nothing about a shell nobody opened", async () => {
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    gone = true;
+    await advance(REFRESH_INTERVALS.resourceDetail);
+    await advance(0);
+    expect(screen.getByText("This Pod no longer exists.")).toBeInTheDocument();
+    expect(screen.queryByText(/shell session ended/)).toBeNull();
   });
 });
