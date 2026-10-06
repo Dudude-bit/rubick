@@ -8,7 +8,7 @@ import { useShareSection } from "@/components/share/screen-share";
 import { changesScreenSection, watchedSection } from "./changes-share";
 import { spansCovering, timelineOf, unwatchedWords } from "@/lib/changes";
 import { Lock } from "lucide-react";
-import { cn, formatWhen } from "@/lib/utils";
+import { cn, formatTimeUnit, formatWhen } from "@/lib/utils";
 import { useNow } from "@/hooks/useNow";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
@@ -104,11 +104,13 @@ export function Changes() {
                   aria-pressed={window === candidate}
                   onClick={() => setWindow(candidate)}
                   className={cn(
-                    "h-6 rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
+                    "h-6 whitespace-nowrap rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
                     window === candidate ? "bg-sel text-fg" : "text-fg-mut"
                   )}
                 >
-                  {t("changes", candidate === "24h" ? "window24h" : "window7d")}
+                  {candidate === "24h"
+                    ? formatTimeUnit(24, "hour")
+                    : formatTimeUnit(7, "day")}
                 </button>
               ))}
             </div>

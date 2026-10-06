@@ -25,7 +25,7 @@ describe("a ConfigMap's keys table", () => {
     const [key, size] = section.body.rows[0].cells;
     expect(key.text).toBe("app.ini");
     expect(size.text).not.toContain("secret");
-    expect(size.text).toContain("Bytes");
+    expect(size.text).toMatch(/\d B$/);
   });
 
   /** A refused key must read as refused, not as a size of zero. */

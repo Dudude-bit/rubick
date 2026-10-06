@@ -129,7 +129,7 @@ describe("formatCPU", () => {
 
 describe("formatBytes / formatMemory", () => {
   it("formats zero", () => {
-    expect(formatBytes(0)).toBe("0 Bytes");
+    expect(formatBytes(0)).toBe("0 B");
   });
 
   it("rounds to two decimals by default", () => {
@@ -140,6 +140,13 @@ describe("formatBytes / formatMemory", () => {
   it("scales through KB / MB / GB", () => {
     expect(formatBytes(1024 ** 2)).toBe("1.00 MB");
     expect(formatBytes(1024 ** 3)).toBe("1.00 GB");
+  });
+
+  /** Lena's Node page read "0 Bytes" in a Russian table. Fails if a size stops following the reader's units and decimal mark. */
+  it("says a size in the reader's units and decimal mark", () => {
+    expect(formatBytes(0, 2, "ru")).toBe("0 Б");
+    expect(formatBytes(1536, 2, "ru")).toBe("1,50 КБ");
+    expect(formatBytes(3.9 * 1024 ** 3, 1, "ru")).toBe("3,9 ГБ");
   });
 
   it("formatMemory uses Mi / Gi suffixes for binary", () => {

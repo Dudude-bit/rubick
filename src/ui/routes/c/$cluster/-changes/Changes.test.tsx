@@ -7,6 +7,7 @@ import {
 } from "@/components/share/screen-share";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
 import { Changes } from "./Changes";
 
@@ -137,5 +138,18 @@ describe("what the Changes page offers Share", () => {
       text: expect.stringContaining("DaemonSet not watched"),
       role: "warn",
     });
+  });
+});
+
+describe("the Changes window toggle", () => {
+  /** Russian read "24ч" and "7д" here and "24 ч" on every age beside it. Fails if the toggle stops using the locale's own units. */
+  it("names its windows the way every age in the reader's language is written", async () => {
+    useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+    useChangeJournalStore.setState({ entries: [], spans: {} });
+    useLocaleStore.setState({ choice: "ru" });
+    await mount();
+    expect(screen.getByRole("button", { name: "24 ч" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "7 д." })).toBeInTheDocument();
+    useLocaleStore.setState({ choice: null });
   });
 });

@@ -9,6 +9,9 @@
  * is what keeps the two one answer.
  */
 
+import { translate, type Locale } from "@/i18n";
+import { currentLocale } from "@/stores/localeStore";
+
 // Binary unit multipliers (Ki, Mi, Gi, Ti, Pi, Ei)
 export const BINARY_UNITS: Record<string, number> = {
   Ki: 1024,
@@ -149,26 +152,35 @@ export function formatMemory(bytes: number, decimals: number = 2): string {
   return `${bytes}`;
 }
 
-/**
- * Format bytes to human-readable string (generic)
- *
- * @param bytes - Number of bytes
- * @param decimals - Number of decimal places (default: 2)
- * @returns Formatted string
- */
-export function formatBytes(bytes: number, decimals: number = 2): string {
-  if (bytes === 0) return "0 Bytes";
+const SIZE_KEYS = [
+  "sizeB",
+  "sizeKB",
+  "sizeMB",
+  "sizeGB",
+  "sizeTB",
+  "sizePB",
+] as const;
 
+/** A byte count for a person, in the reader's units and decimal mark: "1.50 KB", «1,50 КБ». */
+export function formatBytes(
+  bytes: number,
+  decimals: number = 2,
+  locale: Locale = currentLocale()
+): string {
+  if (bytes === 0) return translate(locale, "cluster", "sizeB", { n: 0 });
   const k = 1024;
   const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB"];
-
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  // Keep trailing zeros so the caller's `decimals` request is honoured
-  // verbatim — `parseFloat(toFixed(2))` would silently turn "1.00" into "1".
-  const value = (bytes / Math.pow(k, i)).toFixed(dm);
-
-  return `${value} ${sizes[i]}`;
+  const i = Math.min(
+    Math.floor(Math.log(bytes) / Math.log(k)),
+    SIZE_KEYS.length - 1
+  );
+  // Trailing zeros kept, so the caller's `decimals` is honoured verbatim.
+  const value = new Intl.NumberFormat(locale, {
+    minimumFractionDigits: dm,
+    maximumFractionDigits: dm,
+    useGrouping: false,
+  }).format(bytes / Math.pow(k, i));
+  return translate(locale, "cluster", SIZE_KEYS[i], { n: value });
 }
 
 /** A Kubernetes byte quantity for a person; one that does not parse is returned as written. */
