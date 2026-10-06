@@ -240,6 +240,32 @@ describe("DataTable rows", () => {
     );
 
   /**
+   * The Helm releases row menu sat in a clipped cell, and the cell's ellipsis
+   * drew a stray "..." beside the button. Fails if a column of controls is
+   * clipped like text again, or if a text column stops ending in an ellipsis.
+   */
+  it("clips text cells with an ellipsis and leaves a row menu's cell alone", async () => {
+    await wrap(
+      <DataTable<Item>
+        columns={[
+          ...columns,
+          {
+            id: "actions",
+            size: 50,
+            cell: () => <button type="button">menu</button>,
+          },
+        ]}
+        data={DATA}
+        getRowHref={href}
+      />
+    );
+    const menuCell = screen.getAllByText("menu")[0].closest("td");
+    const statusCell = screen.getByTestId("status-a-1").closest("td");
+    expect(menuCell).not.toHaveClass("text-ellipsis");
+    expect(statusCell).toHaveClass("text-ellipsis");
+  });
+
+  /**
    * Issue #178: the name in a row peeked and the whitespace beside it went
    * to the page, and nobody could tell which they would get. Now both peek,
    * and the page is a double click. Would break if the row went back to

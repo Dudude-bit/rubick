@@ -164,6 +164,8 @@ const PENDING_FOCUS_MS = 1000;
 
 /** The generated column, named once so the cells can recognise it. */
 const ACTIONS_COLUMN_ID = "_actions";
+/** Cells holding controls, not text: an ellipsis there is a stray "..." beside a button. */
+const CONTROL_COLUMNS = new Set([ACTIONS_COLUMN_ID, "actions"]);
 
 /**
  * A row's height before it has been measured, per density. Compact is the 23px
@@ -415,7 +417,7 @@ function DataTableInner<TData extends RowData>({
     if (actionCount === 0) return columns;
     // Drop any column already claiming the id, so it cannot appear twice.
     const filteredColumns = columns.filter(
-      (col) => col.id !== ACTIONS_COLUMN_ID && col.id !== "actions"
+      (col) => !CONTROL_COLUMNS.has(col.id ?? "")
     );
     return [...filteredColumns, createActionsColumn<TData>(actionCount)];
   }, [columns, actionCount]);
@@ -932,7 +934,7 @@ function DataTableInner<TData extends RowData>({
             key={cell.id}
             className={cn(
               cellPadding,
-              cell.column.id !== ACTIONS_COLUMN_ID && clipText
+              !CONTROL_COLUMNS.has(cell.column.id) && clipText
             )}
           >
             {flexRender(cell.column.columnDef.cell, cell.getContext())}

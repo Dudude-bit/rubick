@@ -88,7 +88,9 @@ export function CopyableValue({
       title={copied ? t("action", "copied") : `${t("action", "copy")} ${value}`}
       aria-label={t("action", "copyValue", { value: label ?? value })}
       className={cn(
-        "group -mx-1 inline-flex min-w-0 items-center gap-1 rounded-sm px-1 font-mono",
+        // Never wider than its cell: past the edge the cell's own ellipsis
+        // draws after the hidden mark and reads as "..".
+        "group -mx-1 inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm px-1 font-mono",
         "hover:underline hover:decoration-dotted hover:underline-offset-2",
         "focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
         className

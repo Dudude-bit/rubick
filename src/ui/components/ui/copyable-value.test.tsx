@@ -21,6 +21,16 @@ describe("CopyableValue", () => {
     vi.useRealTimers();
   });
 
+  /**
+   * A 13-character ClusterIP overflowed its cell and the cell's ellipsis drew
+   * after the hidden copy mark as a stray "..". Fails if the button may grow
+   * past the cell again.
+   */
+  it("never grows past the cell it sits in", () => {
+    render(<CopyableValue value="10.111.217.67" />);
+    expect(screen.getByRole("button")).toHaveClass("max-w-full", "min-w-0");
+  });
+
   it("copies the value on a click", async () => {
     const user = userEvent.setup();
     const writeText = stubClipboard();

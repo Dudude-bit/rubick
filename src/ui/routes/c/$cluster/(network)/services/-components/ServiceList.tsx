@@ -52,7 +52,8 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     cell: ({ row }) => <HealthCell service={row.original} />,
   },
   {
-    size: 130,
+    // `255.255.255.255` and its copy mark, whole at 1440px.
+    size: 150,
     accessorKey: "clusterIp",
     header: columnHeader("columns", "clusterIp"),
     cell: ({ row }) => (
