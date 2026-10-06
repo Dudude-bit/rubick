@@ -1717,7 +1717,9 @@ export const en = {
     guessOom:
       "Most likely: {container} is killed for using more memory than its limit. It probably needs a higher limit, or it has a leak.",
     guessOomWithLimit:
-      "Most likely: {container} is killed for using more memory than its limit. This pod's limits add up to {limit}; it probably needs a higher one, or it has a leak.",
+      "Most likely: {container} is killed for using more memory than its limit of {limit}. It probably needs a higher limit, or it has a leak.",
+    guessOomUnsaid:
+      "Most likely: {container} is killed for going past its memory limit of {limit}. It ends with exit 137, a kill, and the kubelet says Error rather than OOMKilled, which usually means the kernel killed a process the container started rather than its main one.",
     guessImagePull:
       "Most likely: the image {image} cannot be pulled, usually a wrong tag, a private registry without a pull secret, or a registry that is rate-limiting.",
     guessFailedMount:

@@ -82,6 +82,7 @@ function container(
     restartCount: 0,
     ports: [],
     env: [],
+    resources: { requests: {}, limits: {} },
     envFrom: [],
     ...overrides,
   };

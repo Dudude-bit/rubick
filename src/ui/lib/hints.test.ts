@@ -30,6 +30,7 @@ function container(
     restartCount: 0,
     ports: [],
     env: [],
+    resources: { requests: {}, limits: {} },
     envFrom: [],
     ...over,
   };
@@ -182,6 +183,7 @@ describe("troubleOf", () => {
               finishedAt: null,
             },
             restartCount: 3,
+            resources: { requests: {}, limits: { memory: "512Mi" } },
           }),
         ],
       }),
@@ -191,18 +193,16 @@ describe("troubleOf", () => {
       reason: "oomKilled",
       limit: "512Mi",
       restarts: 3,
+      saidOom: true,
     });
   });
 
   /**
-   * The pod's figure adds up the running containers that declare a limit,
-   * and `ContainerInfo` does not say which did. An Istio app with no limit,
-   * killed beside a proxy's 1Gi, was told the pod's limits add up to 1Gi —
-   * and `migrate`, a plain init container killed at its own 1Gi, the app's
-   * 512Mi. The figure is quoted only where the killed container is all
-   * that runs.
+   * The panel used to quote the pod's sum of limits: an Istio app with no
+   * limit, killed beside a proxy's 1Gi, was told 1Gi. Fails if the limit
+   * quoted is anything but the killed container's own.
    */
-  it("quotes the pod's figure only where it can be the killed container's", () => {
+  it("quotes the killed container's own limit, never the pod's sum", () => {
     const oomKilled = (name: string, over: Partial<ContainerInfo> = {}) =>
       container(name, {
         state: { type: "waiting", reason: "CrashLoopBackOff" },
@@ -217,31 +217,140 @@ describe("troubleOf", () => {
         restartCount: 2,
         ...over,
       });
+    const proxy = container("istio-proxy", {
+      resources: { requests: {}, limits: { memory: "1Gi" } },
+    });
 
     expect(
       troubleOf(
-        pod({
-          containers: [oomKilled("app"), container("istio-proxy")],
-          memoryLimits: "1073741824",
-        }),
+        pod({ containers: [oomKilled("app"), proxy], memoryLimits: "1Gi" }),
         []
       )
     ).toMatchObject({ reason: "oomKilled", container: "app", limit: null });
-
-    const killedInit = (phase: ContainerInfo["phase"]) =>
-      troubleOf(pod({ initContainers: [oomKilled("migrate", { phase })] }), []);
-    expect(killedInit("init")).toMatchObject({
-      container: "migrate",
-      limit: null,
-    });
-    expect(killedInit("sidecar")).toMatchObject({
-      container: "migrate",
-      limit: null,
-    });
-
     expect(
-      troubleOf(pod({ containers: [oomKilled("app")] }), [])
-    ).toMatchObject({ container: "app", limit: "512Mi" });
+      troubleOf(
+        pod({
+          containers: [proxy],
+          initContainers: [
+            oomKilled("migrate", {
+              phase: "init",
+              resources: { requests: {}, limits: { memory: "256Mi" } },
+            }),
+          ],
+        }),
+        []
+      )
+    ).toMatchObject({ container: "migrate", limit: "256Mi" });
+  });
+
+  /** The recommendations pod as the kubelet reported it in the live check. */
+  const killedForMemory = (over: Partial<ContainerInfo> = {}) =>
+    pod({
+      status: {
+        phase: "Running",
+        display: "CrashLoopBackOff",
+        ready: false,
+        conditions: [],
+        message: null,
+        reason: null,
+      },
+      containers: [
+        container("app", {
+          image: "busybox:1.36",
+          ready: false,
+          started: false,
+          state: { type: "waiting", reason: "CrashLoopBackOff" },
+          lastTerminated: {
+            exitCode: 137,
+            signal: null,
+            reason: "Error",
+            message: null,
+            startedAt: "2026-10-06T18:57:02Z",
+            finishedAt: "2026-10-06T18:57:08Z",
+          },
+          restartCount: 7,
+          resources: {
+            requests: { cpu: "5m", memory: "16Mi" },
+            limits: { memory: "24Mi" },
+          },
+          ...over,
+        }),
+      ],
+      volumes: [
+        {
+          name: "kube-api-access-7x2kq",
+          source: "projected",
+          refs: [{ kind: "ConfigMap", name: "kube-root-ca.crt" }],
+          mounts: [
+            {
+              container: "app",
+              path: "/var/run/secrets/kubernetes.io/serviceaccount",
+              readOnly: true,
+              subPath: null,
+            },
+          ],
+        },
+      ],
+    });
+
+  /**
+   * `sh -c "...; tail /dev/zero"` under a 24Mi limit: the kernel killed
+   * tail, sh exited 137, and the kubelet said Error. The panel told Dana the
+   * app exits on its own and to look at ConfigMap kube-root-ca.crt "if the
+   * address is wrong". Fails if a bare exit 137 with a memory limit stops
+   * getting the memory story with that limit.
+   */
+  it("tells the memory story for an exit 137 the kubelet called Error", () => {
+    const pod = killedForMemory();
+    const trouble = troubleOf(pod, []);
+    expect(trouble).toMatchObject({
+      reason: "oomKilled",
+      container: "app",
+      limit: "24Mi",
+      saidOom: false,
+    });
+    const hint = hintFor(trouble!, pod, {
+      address: null,
+      servicesKnown: false,
+      endpointsKnown: false,
+      service: null,
+      sidecar: null,
+      policies: { read: "unread", why: null },
+      notRead: [],
+    });
+    expect(hint.headline).toEqual({
+      key: "guessOomUnsaid",
+      values: { container: "app", limit: "24Mi" },
+    });
+    expect(hint.checks.map((c) => c.says.key)).toEqual([
+      "checkLimits",
+      "checkNode",
+    ]);
+  });
+
+  /**
+   * A liveness probe the kubelet acted on also ends in SIGKILL and exit
+   * 137. Fails if that kill is blamed on memory.
+   */
+  it("leaves an exit 137 the kubelet caused for a failed liveness probe to the crash loop", () => {
+    expect(
+      troubleOf(killedForMemory(), [
+        event(
+          "Killing",
+          "Container app failed liveness probe, will be restarted"
+        ),
+      ])?.reason
+    ).toBe("crashLoop");
+  });
+
+  /** Fails if an exit 137 with no limit to blame is called a memory kill. */
+  it("does not call an exit 137 a memory kill when the container has no limit", () => {
+    expect(
+      troubleOf(
+        killedForMemory({ resources: { requests: {}, limits: {} } }),
+        []
+      )?.reason
+    ).toBe("crashLoop");
   });
 
   it("reads a pull failure with the kubelet's own message", () => {
@@ -372,6 +481,24 @@ describe("hintFor", () => {
       name: "shop-db-rw",
       namespace: "shop",
     });
+  });
+
+  /**
+   * "Look at ConfigMap kube-root-ca.crt, if the address is wrong rather than
+   * down" with no address anywhere in the logs. Fails if a mounted object is
+   * offered as the wrong address when no address was read.
+   */
+  it("offers mounted config as a wrong address only when an address was read", () => {
+    const hint = hintFor(troubleOf(crashing(), [])!, crashing(), {
+      address: null,
+      servicesKnown: true,
+      endpointsKnown: true,
+      service: null,
+      sidecar: null,
+      policies: { read: "unread", why: null },
+      notRead: [],
+    });
+    expect(hint.checks.map((c) => c.says.key)).toEqual(["checkLastLines"]);
   });
 
   it("points at the sidecar when the address is this pod itself", () => {

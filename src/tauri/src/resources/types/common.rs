@@ -270,6 +270,8 @@ pub struct ContainerInfo {
     pub last_terminated: Option<TerminationInfo>,
     pub restart_count: i32,
     pub ports: Vec<ContainerPortInfo>,
+    /// Its own requests and limits, not the pod's sum.
+    pub resources: super::deployment::DeploymentContainerResources,
     pub env: Vec<EnvVarInfo>,
     pub env_from: Vec<EnvFromInfo>,
 }
@@ -349,6 +351,7 @@ impl ContainerInfo {
             last_terminated,
             restart_count,
             ports,
+            resources: super::deployment::DeploymentContainerResources::of(container),
             env: extract_env_vars(container),
             env_from: extract_env_from(container),
         }
@@ -427,4 +430,47 @@ pub struct ContainerPortInfo {
     pub name: Option<String>,
     pub container_port: i32,
     pub protocol: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The recommendations pod's container: a 24Mi limit and an OOM kill.
+    const OOM_KILLED: &str = r#"{
+        "metadata": {"name": "recommendations-5c68fb6c5c-tvlbm", "namespace": "shop"},
+        "spec": {"containers": [{
+            "name": "app",
+            "image": "busybox:1.36",
+            "resources": {"requests": {"cpu": "5m", "memory": "16Mi"}, "limits": {"memory": "24Mi"}}
+        }]},
+        "status": {"containerStatuses": [{
+            "name": "app", "image": "busybox:1.36", "imageID": "", "ready": false, "restartCount": 7,
+            "state": {"waiting": {"reason": "CrashLoopBackOff"}},
+            "lastState": {"terminated": {"exitCode": 137, "reason": "OOMKilled"}}
+        }]}
+    }"#;
+
+    /// The Containers tab had no memory limit to show and the diagnosis
+    /// could only quote the pod's sum. Fails if a container stops carrying
+    /// its own requests and limits.
+    #[test]
+    fn a_container_carries_its_own_requests_and_limits() {
+        let pod: k8s_openapi::api::core::v1::Pod = serde_json::from_str(OOM_KILLED).unwrap();
+        let spec = pod.spec.as_ref().unwrap();
+        let info = ContainerInfo::from_container(&spec.containers[0], pod.status.as_ref());
+        assert_eq!(
+            info.resources.limits.get("memory").map(String::as_str),
+            Some("24Mi")
+        );
+        assert_eq!(
+            info.resources.requests.get("memory").map(String::as_str),
+            Some("16Mi")
+        );
+        assert_eq!(
+            info.resources.requests.get("cpu").map(String::as_str),
+            Some("5m")
+        );
+        assert!(!info.resources.limits.contains_key("cpu"));
+    }
 }

@@ -42,10 +42,9 @@ import { useT } from "@/i18n/useT";
  * A pod's containers, and a deployment's container template, as metadata
  * blocks rather than cards.
  *
- * Runtime and spec containers carry different fields — only a running one
- * has a state and a restart count, only a template has declared requests
- * and limits — so rows are built per container rather than forced into
- * one shared table.
+ * Runtime and spec containers carry different fields: only a running one
+ * has a state and a restart count, only a template has probes. So rows are
+ * built per container rather than forced into one shared table.
  *
  * Neither is a set: init containers run in order, each waiting on the one
  * before it; sidecars start during init and never finish; app containers
@@ -339,32 +338,30 @@ function ContainerBlock({
     }
   }
 
-  if (!runtime) {
-    if (container.ports.length > 0) {
-      items.push({
-        label: t("columns", "ports"),
-        value: container.ports.join(" · "),
-        mono: true,
-      });
-    }
-    const requests = quantities(container.resources.requests);
-    const limits = quantities(container.resources.limits);
-    if (requests)
-      items.push({
-        label: t("columns", "requests"),
-        value: requests,
-        mono: true,
-      });
+  if (!runtime && container.ports.length > 0) {
     items.push({
-      label: t("columns", "limits"),
-      // A container with no limit can consume the node; saying so beats
-      // omitting the row and letting it read as "not applicable".
-      value: limits ?? t("empty", "noneSet"),
-      mono: limits != null,
-      tone: limits ? undefined : "warn",
+      label: t("columns", "ports"),
+      value: container.ports.join(" · "),
+      mono: true,
     });
-    items.push(...probeRows(container, t));
   }
+  const requests = quantities(container.resources.requests);
+  const limits = quantities(container.resources.limits);
+  if (requests)
+    items.push({
+      label: t("columns", "requests"),
+      value: requests,
+      mono: true,
+    });
+  items.push({
+    label: t("columns", "limits"),
+    // A container with no limit can consume the node; saying so beats
+    // omitting the row and letting it read as "not applicable".
+    value: limits ?? t("empty", "noneSet"),
+    mono: limits != null,
+    tone: limits ? undefined : "warn",
+  });
+  if (!runtime) items.push(...probeRows(container, t));
 
   // A container that has never run has no log to open, and offering one
   // that lands on an empty pane is worse than not offering it.

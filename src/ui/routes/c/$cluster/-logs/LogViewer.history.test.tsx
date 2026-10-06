@@ -59,6 +59,7 @@ const app: ContainerInfo = {
   restartCount: 0,
   ports: [],
   env: [],
+  resources: { requests: {}, limits: {} },
   envFrom: [],
 };
 

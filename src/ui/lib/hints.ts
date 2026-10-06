@@ -16,7 +16,6 @@ import type {
   TerminationInfo,
 } from "@/generated/types";
 import type { en } from "@/i18n/catalogue";
-import { formatMemory } from "@/lib/k8s-quantity";
 import type { PathPolicies } from "@/lib/policy-peers";
 
 export type HintKey = keyof typeof en.hints;
@@ -73,8 +72,11 @@ export type Trouble =
   | {
       reason: "oomKilled";
       container: string;
+      /** The container's own memory limit, as it was declared. */
       limit: string | null;
       restarts: number;
+      /** False for a bare exit 137: killed, and the kubelet said Error. */
+      saidOom: boolean;
     }
   | {
       reason: "imagePull";
@@ -146,18 +148,29 @@ export function troubleOf(pod: PodInfo, events: EventInfo[]): Trouble | null {
   // CrashLoopBackOff, so this arm was unreachable for exactly the pods it
   // was written for — and the Containers tab on the same page said
   // OOMKilled while this panel said "cannot stay up".
-  const oom = all.find(
-    (c) =>
-      c.lastTerminated?.reason === "OOMKilled" &&
-      (c.restartCount > 0 || c.state.type !== "running") &&
-      !stale(c.lastTerminated.finishedAt, pod)
-  );
+  const died = (c: ContainerInfo) =>
+    c.lastTerminated !== null &&
+    (c.restartCount > 0 || c.state.type !== "running") &&
+    !stale(c.lastTerminated.finishedAt, pod);
+  const oom =
+    all.find((c) => died(c) && c.lastTerminated?.reason === "OOMKilled") ??
+    // A shell whose child the kernel killed exits 137 itself, and the
+    // kubelet calls that Error. With a memory limit and no liveness kill on
+    // record, the limit is still the likeliest reason.
+    all.find(
+      (c) =>
+        died(c) &&
+        c.lastTerminated?.exitCode === 137 &&
+        c.resources.limits.memory !== undefined &&
+        !killedByLiveness(events)
+    );
   if (oom) {
     return {
       reason: "oomKilled",
       container: oom.name,
-      limit: limitOf(pod, oom),
+      limit: oom.resources.limits.memory ?? null,
       restarts: oom.restartCount,
+      saidOom: oom.lastTerminated?.reason === "OOMKilled",
     };
   }
   const crashing = all.find(
@@ -242,29 +255,13 @@ function stale(finishedAt: string | null, pod: PodInfo): boolean {
 /** Older than this and still ready: whatever it was, it is over. */
 const STALE_TROUBLE_MS = 30 * 60_000;
 
-/**
- * The pod's memory limit in words.
- *
- * `pod.memoryLimits` is a plain byte count, and every container's limit
- * added up — so the panel printed "1073741824" and called it this
- * container's limit. `ContainerInfo` carries no resources, so the number
- * stays the pod's; the sentence says whose it is.
- *
- * Only where the killed container is all that runs. The figure adds up the
- * running containers that declare a limit, and nothing here says whether
- * this one did: an app with none, beside a proxy's 1Gi, was told the pod's
- * limits add up to 1Gi.
- */
-function limitOf(pod: PodInfo, killed: ContainerInfo): string | null {
-  const running = [
-    ...pod.containers,
-    ...pod.initContainers.filter((c) => c.phase === "sidecar"),
-  ];
-  if (running.length !== 1 || running[0].name !== killed.name) return null;
-  const raw = pod.memoryLimits;
-  if (!raw) return null;
-  const bytes = Number(raw);
-  return Number.isFinite(bytes) && bytes > 0 ? formatMemory(bytes) : raw;
+/** The kubelet's own record of killing a container for a failed liveness probe. */
+function killedByLiveness(events: EventInfo[]): boolean {
+  return events.some(
+    (e) =>
+      (e.reason === "Killing" && /liveness probe/i.test(e.message ?? "")) ||
+      (e.reason === "Unhealthy" && /^Liveness probe/i.test(e.message ?? ""))
+  );
 }
 
 export interface Address {
@@ -637,9 +634,14 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
         },
         to: { kind: "tab", tab: "logs", container: trouble.container },
       });
-      for (const volume of pod.volumes) {
+      // Only beside an address, which is what the check's words are about;
+      // the cluster's CA bundle every pod mounts is never one.
+      for (const volume of address ? pod.volumes : []) {
         for (const ref of volume.refs) {
-          if (ref.kind === "ConfigMap" || ref.kind === "Secret") {
+          if (
+            (ref.kind === "ConfigMap" && ref.name !== "kube-root-ca.crt") ||
+            ref.kind === "Secret"
+          ) {
             objectCheck(
               {
                 key: "checkConfig",
@@ -677,10 +679,7 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
       return {
         headline: trouble.limit
           ? {
-              // Said as the pod's total, because that is what it is:
-              // `ContainerInfo` carries no resources, so this container's
-              // own limit is not knowable here.
-              key: "guessOomWithLimit",
+              key: trouble.saidOom ? "guessOomWithLimit" : "guessOomUnsaid",
               values: { container: trouble.container, limit: trouble.limit },
             }
           : { key: "guessOom", values: { container: trouble.container } },

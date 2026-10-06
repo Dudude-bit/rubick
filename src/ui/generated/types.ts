@@ -2098,6 +2098,7 @@ export interface ContainerInfo {
   lastTerminated: TerminationInfo | null;
   restartCount: number;
   ports: ContainerPortInfo[];
+  resources: DeploymentContainerResources;
   env: EnvVarInfo[];
   envFrom: EnvFromInfo[];
 }

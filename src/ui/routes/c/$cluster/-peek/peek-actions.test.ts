@@ -43,6 +43,7 @@ function container(
       protocol: "TCP",
     })),
     env: [],
+    resources: { requests: {}, limits: {} },
     envFrom: [],
   };
 }

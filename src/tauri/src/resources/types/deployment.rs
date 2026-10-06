@@ -211,6 +211,18 @@ pub struct DeploymentContainerResources {
     pub limits: BTreeMap<String, String>,
 }
 
+impl DeploymentContainerResources {
+    /// What one container declares, as the quantities it wrote them.
+    #[must_use]
+    pub fn of(container: &Container) -> Self {
+        let declared = container.resources.as_ref();
+        Self {
+            requests: map_quantities(declared.and_then(|r| r.requests.as_ref())),
+            limits: map_quantities(declared.and_then(|r| r.limits.as_ref())),
+        }
+    }
+}
+
 /// Replica information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -292,15 +304,7 @@ impl DeploymentContainerInfo {
             .map(|ports| ports.iter().map(|p| p.container_port).collect())
             .unwrap_or_default();
 
-        let resources = DeploymentContainerResources {
-            requests: map_quantities(
-                container
-                    .resources
-                    .as_ref()
-                    .and_then(|r| r.requests.as_ref()),
-            ),
-            limits: map_quantities(container.resources.as_ref().and_then(|r| r.limits.as_ref())),
-        };
+        let resources = DeploymentContainerResources::of(container);
 
         Self {
             name: container.name.clone(),
