@@ -48,7 +48,7 @@ const NOT_SHOWN = new Map([
   ["/src/ui/lib/error-utils.ts", "the normaliser itself"],
   ["/src/ui/lib/read-deadline.ts", "searched for a marker"],
   ["/src/ui/lib/log-queue.ts", "kept for the retry"],
-  ["/src/ui/main.tsx", "logged"],
+  ["/src/ui/lib/query-log.ts", "logged"],
   ["/src/ui/integrations/cloudnativepg/page.tsx", "compared with sentinels"],
   ["/src/ui/workers/diff.worker.ts", "a worker's own failure, not a command's"],
   ["/src/ui/stores/updaterStore.ts", "the updater plugin's, not a command's"],

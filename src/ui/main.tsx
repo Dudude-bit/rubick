@@ -18,6 +18,7 @@ import "@fontsource-variable/inter";
 import "@fontsource-variable/jetbrains-mono";
 import "./index.css";
 import { logError, logInfo } from "@/lib/logger";
+import { formatError, formatKey, logQueryFailure } from "@/lib/query-log";
 import { STALE_TIMES } from "@/lib/refresh";
 import { isWorthRetrying } from "@/lib/error-utils";
 import { hostOsFromUserAgent, setHostOs } from "@/lib/platform";
@@ -29,29 +30,8 @@ import { applyTheme, cachedTheme } from "@/lib/theme";
 // After every eagerly imported module has loaded.
 markStartup("main");
 
-const formatKey = (key: unknown) => {
-  try {
-    return JSON.parse(JSON.stringify(key));
-  } catch {
-    return String(key);
-  }
-};
-
-const formatError = (error: unknown) =>
-  error instanceof Error ? error.message : String(error);
-
 const queryClient = new QueryClient({
-  queryCache: new QueryCache({
-    onError: (error, query) => {
-      logError("Query error", {
-        context: "react-query",
-        data: {
-          queryKey: formatKey(query.queryKey),
-          error: formatError(error),
-        },
-      });
-    },
-  }),
+  queryCache: new QueryCache({ onError: logQueryFailure }),
   mutationCache: new MutationCache({
     onError: (error, _variables, _context, mutation) => {
       logError("Mutation error", {

@@ -85,3 +85,21 @@ export function useRefusedOn(
     (s) => read !== null && s.reads.get(read)?.connection === connection
   );
 }
+
+let told: { connection: number; reads: Set<string> } = {
+  connection: -1,
+  reads: new Set(),
+};
+
+/**
+ * Whether a refusal of `read` is news to the log: the first time on this
+ * connection. The screen says every refusal in its own words, so the log
+ * needs each one once, not once per poll or per page visit.
+ */
+export function firstTelling(read: string): boolean {
+  const connection = currentConnection();
+  if (told.connection !== connection) told = { connection, reads: new Set() };
+  if (told.reads.has(read)) return false;
+  told.reads.add(read);
+  return true;
+}
