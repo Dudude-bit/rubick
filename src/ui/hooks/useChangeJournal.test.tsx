@@ -63,11 +63,13 @@ const span = () => useChangeJournalStore.getState().spans.dev?.at(-1);
 beforeEach(() => {
   bus.handlers = [];
   useChangeJournalStore.setState({ entries: [], spans: {}, identities: {} });
-  useClusterStore.setState({
+  // Each test is a connection of its own: a refused watch is remembered per one.
+  useClusterStore.setState((s) => ({
     currentContext: "dev",
     isConnected: true,
     namespaceScope: ["team-checkout"],
-  });
+    connectionAttemptId: s.connectionAttemptId + 1,
+  }));
 });
 
 async function journal() {
@@ -127,6 +129,32 @@ describe("the change journal under a refused kind", () => {
     await journal();
     await emit("ds", "failed", "connection reset by peer");
     expect(span()).toBeUndefined();
+  });
+});
+
+describe("a kind refused on this connection", () => {
+  /**
+   * Marco's DaemonSet watch was subscribed and refused again on every scope
+   * switch, two warnings in the log each time. Fails if the journal asks a
+   * watch it was refused on this connection, or waits on it to open a span.
+   */
+  it("is not subscribed again, and the span names it at once", async () => {
+    const view = renderHook(() => useChangeJournal());
+    await waitFor(() => expect(bus.handlers).toHaveLength(3));
+    await emit("deploy", "synced");
+    await emit("sts", "synced");
+    await emit("ds", "failed", REFUSED);
+    view.unmount();
+    vi.mocked(commands.subscribeDaemonsetWatch).mockClear();
+    bus.handlers = [];
+
+    renderHook(() => useChangeJournal());
+    await waitFor(() => expect(bus.handlers).toHaveLength(2));
+    await emit("deploy", "synced");
+    await emit("sts", "synced");
+
+    expect(commands.subscribeDaemonsetWatch).not.toHaveBeenCalled();
+    expect(span()).toMatchObject({ to: null, unwatched: ["DaemonSet"] });
   });
 });
 

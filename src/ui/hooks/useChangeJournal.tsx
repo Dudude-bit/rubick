@@ -4,6 +4,12 @@ import { listenEvent, listenResourceEvents } from "@/lib/events";
 import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
 import {
+  currentConnection,
+  noteRefusal,
+  readOf,
+  refusalOf,
+} from "@/lib/refusals";
+import {
   diffSnapshots,
   snapshotOf,
   type JournalEntry,
@@ -81,6 +87,7 @@ export function useChangeJournal() {
       scopes.map((namespace) => ({ kind, namespace, subscribe }))
     );
     let active = true;
+    const connection = currentConnection();
     // Which cluster this context name turned out to be. A reader who cannot
     // read `kube-system` gets `null`, and nothing is dropped on that.
     void commands
@@ -144,12 +151,19 @@ export function useChangeJournal() {
         closeSpan();
       };
       blind.add(goBlind);
-      const refuse = () => {
+      const read = readOf("watch", [cluster, watch]);
+      const refuse = (error: unknown) => {
+        if (read !== null) noteRefusal(read, error, connection);
         if (refused.has(watch)) return;
         goBlind();
         refused.add(watch);
         openSpan();
       };
+      const known = read === null ? undefined : refusalOf(read);
+      if (known !== undefined) {
+        refuse(known);
+        continue;
+      }
 
       void (async () => {
         try {
@@ -182,7 +196,7 @@ export function useChangeJournal() {
             });
             for (const change of payload.changes) {
               if (change.op === "failed") {
-                if (isRefusal(payload.error)) refuse();
+                if (isRefusal(payload.error)) refuse(payload.error);
                 else {
                   goBlind();
                   retirePredecessor(Date.now());
@@ -298,7 +312,7 @@ export function useChangeJournal() {
           await commands.resourceWatchSubscribed(id);
         } catch (error) {
           if (!active) return;
-          if (isRefusal(error)) refuse();
+          if (isRefusal(error)) refuse(error);
           else retirePredecessor(Date.now());
         }
       })();
