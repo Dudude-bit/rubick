@@ -197,7 +197,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
         toast({
           title: t("files", "downloadFailed", { name: selectedEntry.name }),
           description: t("files", "tooBigToDownload", {
-            cap: formatBytes(DOWNLOAD_MAX_BYTES, 0),
+            cap: formatBytes(DOWNLOAD_MAX_BYTES, { decimals: 0 }),
           }),
           variant: "destructive",
         });
@@ -234,7 +234,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
             title: t("files", "downloaded", { name: selectedEntry.name }),
             description:
               result.state === "written"
-                ? `${destination} · ${formatBytes(result.bytes, 1)}`
+                ? `${destination} · ${formatBytes(result.bytes)}`
                 : destination,
           });
         }
@@ -284,7 +284,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
         onOpenChange={setBigDownload}
         title={t("files", "bigDownloadTitle", {
           name: selectedEntry?.name ?? "",
-          size: formatBytes(selectedEntry?.size ?? 0, 1),
+          size: formatBytes(selectedEntry?.size ?? 0),
         })}
         description={t("files", "bigDownloadBody")}
         confirmLabel={t("action", "download")}
@@ -793,7 +793,7 @@ function Rows({
               </span>
               <span className="text-fg-fnt">{modeText(entry)}</span>
               <span className="text-right tabular-nums text-fg-mut">
-                {entry.kind === "dir" ? "" : formatBytes(entry.size, 1)}
+                {entry.kind === "dir" ? "" : formatBytes(entry.size)}
               </span>
               <span
                 className="text-right tabular-nums text-fg-fnt"
@@ -1003,7 +1003,7 @@ function Preview({
       <div className="border-b border-hair px-3 py-2 text-[11px]">
         <p className="truncate font-mono text-xs text-fg">{path}</p>
         <p className="mt-0.5 text-fg-fnt">
-          {formatBytes(entry.size, 1)}
+          {formatBytes(entry.size)}
           {read?.state === "preview" &&
             ` · ${read.preview.binary ? t("files", "binary") : t("files", "text")}`}
           {/* Beside the file's whole size, a bare count reads as the file's
@@ -1041,7 +1041,7 @@ function Preview({
             title={
               tooBig
                 ? t("files", "tooBigToDownload", {
-                    cap: formatBytes(DOWNLOAD_MAX_BYTES, 0),
+                    cap: formatBytes(DOWNLOAD_MAX_BYTES, { decimals: 0 }),
                   })
                 : undefined
             }
@@ -1086,7 +1086,7 @@ function Preview({
             {read.preview.truncated && (
               <p className="mt-2 text-fg-fnt">
                 {t("files", "previewTruncated", {
-                  cap: formatBytes(PREVIEW_MAX_BYTES, 0),
+                  cap: formatBytes(PREVIEW_MAX_BYTES, { decimals: 0 }),
                 })}
               </p>
             )}

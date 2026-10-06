@@ -1,5 +1,5 @@
 import type { T } from "@/i18n/useT";
-import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
+import { formatBytes, formatCPU } from "@/lib/k8s-quantity";
 import type { ReportValue } from "@/lib/report";
 
 /**
@@ -14,14 +14,15 @@ import type { ReportValue } from "@/lib/report";
  *
  * Deliberately string-level: the formatters already decided the scale
  * ("1.81Gi", "999m", "2.5"), and re-deriving the unit from the raw number
- * would let the two disagree. A value with no unit returns an empty tail,
+ * would let the two disagree. The tail keeps the space a language puts
+ * before its unit («1,8 ГиБ»). A value with no unit returns an empty tail,
  * and anything unparseable (a dash, "n/a") comes back whole so the caller
  * can still render it.
  */
 export function splitUnit(formatted: string): { value: string; unit: string } {
-  const match = /^(-?[\d.]+)\s*([^\d\s]*)$/.exec(formatted.trim());
+  const match = /^(-?\d[\d.,]*)(\s?[^\d\s][^\d]*)?$/.exec(formatted.trim());
   if (!match) return { value: formatted, unit: "" };
-  return { value: match[1], unit: match[2] };
+  return { value: match[1], unit: match[2] ?? "" };
 }
 
 /**
@@ -35,9 +36,7 @@ export type QuantityKind = "cpu" | "memory" | "count" | "throughput";
  * A usage number at the scale its unit deserves.
  *
  * Shared by the bar rows and the charts so a pod cannot read "96Mi" in one
- * block and "96.0Mi" in the one below it. The trailing `.0` is stripped
- * rather than never produced because `formatMemory` needs the precision to
- * pick the unit.
+ * block and "96.0Mi" in the one below it.
  */
 export function formatQuantity(
   value: number,
@@ -45,16 +44,8 @@ export function formatQuantity(
   unit?: string
 ): string {
   if (kind === "cpu") return formatCPU(value);
-  if (kind === "memory")
-    return formatMemory(value, 1).replace(/\.0(?=\D|$)/, "");
-  if (kind === "throughput") {
-    // `formatMemory` hands back the raw number below 1Ki, which is right for
-    // the integer byte counts it was written for and wrong for a rate: an
-    // idle pod's 10.523997160968209 bytes a second is a reading nobody can
-    // take in. Under a kibibyte, this is whole bytes.
-    if (value < 1024) return `${Math.round(value)}B/s`;
-    return `${formatMemory(value, 1).replace(/\.0(?=\D|$)/, "")}/s`;
-  }
+  if (kind === "memory") return formatBytes(value, { trim: true });
+  if (kind === "throughput") return `${formatBytes(value, { trim: true })}/s`;
   return `${Math.round(value)}${unit ?? ""}`;
 }
 
@@ -77,8 +68,7 @@ export function usageRole(ratio: number): UsageRole {
  * separating, and a trailing `.0` carries nothing.
  */
 export function formatUsage(value: number, type: "cpu" | "memory"): string {
-  if (type === "cpu") return formatCPU(value);
-  return formatMemory(value, 1).replace(/\.0(?=\D|$)/, "");
+  return formatQuantity(value, type);
 }
 
 /** A shared usage nobody measured: neither zero nor "none". */

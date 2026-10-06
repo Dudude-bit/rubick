@@ -1086,7 +1086,7 @@ describe("a node, which is the same edge read from the other end", () => {
       ["kube-system", "coredns-x"],
     ]);
     expect(here?.caption).toBe(
-      "3 pods across 2 namespaces, of the 110 this node will take · 4 CPU · 8.0 GB"
+      "3 pods across 2 namespaces, of the 110 this node will take · 4 CPU · 8Gi"
     );
   });
 
@@ -1142,7 +1142,7 @@ describe("a node, which is the same edge read from the other end", () => {
     const placement = groups.find((group) => group.key === "placement");
     expect(placement?.title).toBe("Runs on");
     expect(placement?.rows[0].object?.name).toBe("server-0");
-    expect(placement?.rows[0].detail).toBe("4 CPU · 8.0 GB");
+    expect(placement?.rows[0].detail).toBe("4 CPU · 8Gi");
   });
 });
 

@@ -6,7 +6,6 @@ import {
   parseCPU,
   parseMemory,
   formatCPU,
-  formatMemory,
   formatBytes,
 } from "./k8s-quantity";
 
@@ -127,31 +126,50 @@ describe("formatCPU", () => {
   });
 });
 
-describe("formatBytes / formatMemory", () => {
+describe("formatCPU in the reader's language", () => {
+  /** Fails if a whole-core reading stops following the reader's decimal mark. */
+  it("writes cores with the reader's decimal mark", () => {
+    expect(formatCPU(2500, "ru")).toBe("2,5");
+    expect(formatCPU(250, "ru")).toBe("250m");
+  });
+});
+
+describe("formatBytes", () => {
   it("formats zero", () => {
     expect(formatBytes(0)).toBe("0 B");
   });
 
-  it("rounds to two decimals by default", () => {
-    expect(formatBytes(1024)).toBe("1.00 KB");
-    expect(formatBytes(1536)).toBe("1.50 KB");
+  /**
+   * Sam's Node page read "1.9 GB" and "202.0 MB" for kubectl's 1948912Ki and
+   * 202Mi, beside an Overview and a PVC list in Gi. Fails if a byte count
+   * stops reading in the binary units the API writes.
+   */
+  it("reads a node's capacity and requests in the units kubectl writes", () => {
+    expect(formatBytes(parseMemory("1948912Ki"))).toBe("1.9Gi");
+    expect(formatBytes(parseMemory("202Mi"), { trim: true })).toBe("202Mi");
+    expect(formatBytes(parseMemory("202Mi"))).toBe("202.0Mi");
+    expect(formatBytes(1536, { decimals: 2 })).toBe("1.50Ki");
+    expect(formatBytes(1024 ** 4)).toBe("1.0Ti");
   });
 
-  it("scales through KB / MB / GB", () => {
-    expect(formatBytes(1024 ** 2)).toBe("1.00 MB");
-    expect(formatBytes(1024 ** 3)).toBe("1.00 GB");
+  /**
+   * Lena read "2,2 ГБ" on the Node page and "0.8/3.9Gi" on the Overview.
+   * Fails if a size stops following the reader's units and decimal mark.
+   */
+  it("says a size in the reader's binary units and decimal mark", () => {
+    expect(formatBytes(0, { locale: "ru" })).toBe("0 Б");
+    expect(formatBytes(1536, { decimals: 2, locale: "ru" })).toBe("1,50 КиБ");
+    expect(formatBytes(parseMemory("1948912Ki"), { locale: "ru" })).toBe(
+      "1,9 ГиБ"
+    );
+    expect(
+      formatBytes(parseMemory("202Mi"), { trim: true, locale: "ru" })
+    ).toBe("202 МиБ");
   });
 
-  /** Lena's Node page read "0 Bytes" in a Russian table. Fails if a size stops following the reader's units and decimal mark. */
-  it("says a size in the reader's units and decimal mark", () => {
-    expect(formatBytes(0, 2, "ru")).toBe("0 Б");
-    expect(formatBytes(1536, 2, "ru")).toBe("1,50 КБ");
-    expect(formatBytes(3.9 * 1024 ** 3, 1, "ru")).toBe("3,9 ГБ");
-  });
-
-  it("formatMemory uses Mi / Gi suffixes for binary", () => {
-    expect(formatMemory(1024 * 1024)).toMatch(/Mi$/);
-    expect(formatMemory(1024 ** 3)).toMatch(/Gi$/);
+  /** Fails if a count stops being drawable in another count's unit, for a pair that has to compare. */
+  it("reads a count in the scale it is told to", () => {
+    expect(formatBytes(512 * 1024 ** 2, { scale: 3 })).toBe("0.5Gi");
   });
 });
 /**

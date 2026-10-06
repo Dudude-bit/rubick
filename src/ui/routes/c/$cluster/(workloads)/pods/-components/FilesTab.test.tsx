@@ -363,7 +363,7 @@ describe("FilesTab", () => {
       await screen.findByRole("button", { name: "Download" })
     );
     expect(
-      await screen.findByText(/Download core.1842 \(300.0 MB\)\?/)
+      await screen.findByText(/Download core.1842 \(300.0Mi\)\?/)
     ).toBeInTheDocument();
     expect(save).not.toHaveBeenCalled();
     await userEvent.click(

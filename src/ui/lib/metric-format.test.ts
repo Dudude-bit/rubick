@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { formatQuantity, splitUnit, usageRole } from "@/lib/metric-format";
-import { formatCPU, formatMemory } from "@/lib/k8s-quantity";
+import { formatBytes, formatCPU } from "@/lib/k8s-quantity";
 
 describe("splitUnit", () => {
   it("splits a millicore value", () => {
@@ -17,8 +17,13 @@ describe("splitUnit", () => {
     expect(splitUnit("0")).toEqual({ value: "0", unit: "" });
   });
 
-  it("keeps a space-separated unit", () => {
-    expect(splitUnit("12.00 Bytes")).toEqual({ value: "12.00", unit: "Bytes" });
+  /** Fails if a language's space before its unit is lost: «1,8ГиБ». */
+  it("keeps the space a unit is written with", () => {
+    expect(splitUnit("12.00 Bytes")).toEqual({
+      value: "12.00",
+      unit: " Bytes",
+    });
+    expect(splitUnit("1,8 ГиБ")).toEqual({ value: "1,8", unit: " ГиБ" });
   });
 
   it("survives a negative value", () => {
@@ -34,7 +39,7 @@ describe("splitUnit", () => {
   it("does not mangle what the formatters actually produce", () => {
     expect(splitUnit(formatCPU(999))).toEqual({ value: "999", unit: "m" });
     expect(splitUnit(formatCPU(2500))).toEqual({ value: "2.5", unit: "" });
-    expect(splitUnit(formatMemory(1024 ** 3 * 1.81))).toEqual({
+    expect(splitUnit(formatBytes(1024 ** 3 * 1.81, { decimals: 2 }))).toEqual({
       value: "1.81",
       unit: "Gi",
     });
@@ -76,8 +81,8 @@ describe("throughput", () => {
    * "10.523997160968209/s" on screen before this.
    */
   it("rounds a sub-kibibyte rate to whole bytes and names the unit", () => {
-    expect(formatQuantity(10.523997160968209, "throughput")).toBe("11B/s");
-    expect(formatQuantity(0, "throughput")).toBe("0B/s");
+    expect(formatQuantity(10.523997160968209, "throughput")).toBe("11 B/s");
+    expect(formatQuantity(0, "throughput")).toBe("0 B/s");
   });
 
   /** And the `/s` is never dropped, or traffic reads as resident memory. */

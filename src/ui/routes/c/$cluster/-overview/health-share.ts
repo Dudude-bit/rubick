@@ -23,6 +23,11 @@ import type {
   WarningGroup,
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
+import { translate, type Locale } from "@/i18n";
+import { currentLocale } from "@/stores/localeStore";
+import { byteScale, formatBytes } from "@/lib/k8s-quantity";
+import { splitUnit } from "@/lib/metric-format";
+import { formatDecimal } from "@/lib/utils";
 
 /**
  * The detail line, for the rows this app writes itself.
@@ -62,26 +67,24 @@ export function detailWords(
 /** Reserved share past which the scheduler is the binding constraint. */
 export const PRESSURE_WARN = 0.85;
 
-const KIB = 1024;
-const MEMORY_UNITS: [string, number][] = [
-  ["Ti", KIB ** 4],
-  ["Gi", KIB ** 3],
-  ["Mi", KIB ** 2],
-  ["Ki", KIB],
-];
-
 /** A pair of quantities sharing one unit: `3.2/4.5 cores`, `27.4/31.2Gi`. */
 export type Ratio = { used: string; total: string; unit: string };
 
-export function cpuRatio(pressure: ResourcePressure): Ratio {
-  // The unit is chosen from the denominator so both halves stay comparable –
+export function cpuRatio(
+  pressure: ResourcePressure,
+  locale: Locale = currentLocale()
+): Ratio {
+  // The unit is chosen from the denominator so both halves stay comparable:
   // "250m/4.5 cores" makes the reader do the conversion.
   if (pressure.allocatable >= 1000) {
-    return {
-      used: (pressure.requested / 1000).toFixed(1),
-      total: (pressure.allocatable / 1000).toFixed(1),
-      unit: " cores",
-    };
+    const cores = (millicores: number) =>
+      formatDecimal(millicores / 1000, 1, locale);
+    const { value, unit } = splitUnit(
+      translate(locale, "cluster", "cpuCores", {
+        cores: cores(pressure.allocatable),
+      })
+    );
+    return { used: cores(pressure.requested), total: value, unit };
   }
   return {
     used: String(Math.round(pressure.requested)),
@@ -90,15 +93,16 @@ export function cpuRatio(pressure: ResourcePressure): Ratio {
   };
 }
 
-export function memoryRatio(pressure: ResourcePressure): Ratio {
-  const [unit, size] = MEMORY_UNITS.find(
-    ([, size]) => pressure.allocatable >= size
-  ) ?? ["B", 1];
-  return {
-    used: (pressure.requested / size).toFixed(1),
-    total: (pressure.allocatable / size).toFixed(1),
-    unit,
-  };
+export function memoryRatio(
+  pressure: ResourcePressure,
+  locale: Locale = currentLocale()
+): Ratio {
+  const scale = byteScale(pressure.allocatable);
+  const { value, unit } = splitUnit(
+    formatBytes(pressure.allocatable, { scale, locale })
+  );
+  const used = splitUnit(formatBytes(pressure.requested, { scale, locale }));
+  return { used: used.value, total: value, unit };
 }
 
 /** What the "Needs attention" panel draws, as a Share finding per row. */

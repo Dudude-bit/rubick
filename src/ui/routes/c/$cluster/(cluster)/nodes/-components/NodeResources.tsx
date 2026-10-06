@@ -35,7 +35,7 @@ function amount(unit: ResourceBudget["unit"], value: number): string {
     case "cpu":
       return formatCPU(value);
     case "memory":
-      return formatBytes(value, 1);
+      return formatBytes(value, { trim: true });
     case "count":
       return Number.isInteger(value) ? String(value) : value.toFixed(1);
   }

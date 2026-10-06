@@ -218,7 +218,7 @@ export function DataSection({
                     ? withheldWords(refusal, t)
                     : blob
                       ? t("empty", "binaryNotText", {
-                          size: formatBytes(blob.bytes, 0),
+                          size: formatBytes(blob.bytes, { decimals: 0 }),
                         })
                       : value === undefined
                         ? isLoading
@@ -273,7 +273,7 @@ export function DataSection({
                               blob.base64,
                               t("action", "base64Copied", {
                                 key,
-                                size: formatBytes(blob.bytes, 0),
+                                size: formatBytes(blob.bytes, { decimals: 0 }),
                               })
                             )
                           : copyToClipboard(

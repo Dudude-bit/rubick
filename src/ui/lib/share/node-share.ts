@@ -5,7 +5,7 @@ import type { T } from "@/i18n/useT";
 import { iconSvg } from "@/lib/icon-svg";
 import {
   formatCPU,
-  formatMemory,
+  formatBytes,
   parseCPU,
   parseMemory,
 } from "@/lib/k8s-quantity";
@@ -101,8 +101,8 @@ export function nodeStatsOf(
       label: t("columns", "memory"),
       value:
         allocatable !== null
-          ? `${formatMemory(memory)} / ${formatMemory(allocatable)}`
-          : formatMemory(memory),
+          ? `${formatBytes(memory)} / ${formatBytes(allocatable)}`
+          : formatBytes(memory),
     });
   }
   return stats;

@@ -110,83 +110,69 @@ export function parseMemory(memStr: string | null | undefined): number {
 }
 
 /**
- * Format CPU from millicores to string representation
- * Returns format like "500m" for < 1000 millicores, or "2" for >= 1000 millicores
- *
- * @param millicores - CPU in millicores
- * @returns Formatted CPU string
+ * Millicores below a core, cores above it with one decimal so the unit is
+ * unambiguous: "500m", "1.0", "2.5", in the reader's decimal mark.
  */
-export function formatCPU(millicores: number): string {
-  if (millicores < 1000) {
-    return `${Math.round(millicores)}m`;
-  }
-
-  // Always show one decimal for cores so the unit is unambiguous: "1.0",
-  // "2.5". `${cores}` would produce "1" / "2.5" — inconsistent.
-  const cores = millicores / 1000;
-  return cores.toFixed(1);
-}
-
-/**
- * Format memory from bytes to human-readable string
- * Returns format like "512Mi", "1Gi", etc.
- *
- * @param bytes - Memory in bytes
- * @param decimals - Number of decimal places (default: 2)
- * @returns Formatted memory string
- */
-export function formatMemory(bytes: number, decimals: number = 2): string {
-  if (bytes === 0) return "0";
-
-  const tib = bytes / BINARY_UNITS.Ti;
-  if (tib >= 1) return `${tib.toFixed(decimals)}Ti`;
-
-  const gib = bytes / BINARY_UNITS.Gi;
-  if (gib >= 1) return `${gib.toFixed(decimals)}Gi`;
-
-  const mib = bytes / BINARY_UNITS.Mi;
-  if (mib >= 1) return `${mib.toFixed(decimals)}Mi`;
-
-  const kib = bytes / BINARY_UNITS.Ki;
-  if (kib >= 1) return `${kib.toFixed(decimals)}Ki`;
-
-  return `${bytes}`;
+export function formatCPU(
+  millicores: number,
+  locale: Locale = currentLocale()
+): string {
+  if (millicores < 1000) return `${Math.round(millicores)}m`;
+  return formatDecimal(millicores / 1000, 1, locale);
 }
 
 const SIZE_KEYS = [
   "sizeB",
-  "sizeKB",
-  "sizeMB",
-  "sizeGB",
-  "sizeTB",
-  "sizePB",
+  "sizeKi",
+  "sizeMi",
+  "sizeGi",
+  "sizeTi",
+  "sizePi",
 ] as const;
 
-/** A byte count for a person, in the reader's units and decimal mark: "1.50 KB", «1,50 КБ». */
-export function formatBytes(
-  bytes: number,
-  decimals: number = 2,
-  locale: Locale = currentLocale()
-): string {
-  if (bytes === 0) return translate(locale, "cluster", "sizeB", { n: 0 });
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const i = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(k)),
+/** The binary unit a byte count is read in: 0 for bytes, 1 for Ki, 2 for Mi. */
+export function byteScale(bytes: number): number {
+  if (!(bytes >= 1024)) return 0;
+  return Math.min(
+    Math.floor(Math.log(bytes) / Math.log(1024)),
     SIZE_KEYS.length - 1
   );
-  // Trailing zeros kept, so the caller's `decimals` is honoured verbatim.
-  const value = formatDecimal(bytes / Math.pow(k, i), dm, locale);
-  return translate(locale, "cluster", SIZE_KEYS[i], { n: value });
+}
+
+export interface ByteFormat {
+  /** Decimals past a whole kibibyte; bytes are always whole. */
+  decimals?: number;
+  /** Drop a fraction that is all zeros: "96Mi", not "96.0Mi". */
+  trim?: boolean;
+  /** Read in this scale rather than the count's own, so two numbers share a unit. */
+  scale?: number;
+  locale?: Locale;
+}
+
+/**
+ * Every byte count the app prints, Kubernetes quantities and file sizes
+ * alike: binary units, as kubectl and the API write them, in the reader's
+ * decimal mark and unit names. "1.9Gi", «1,9 ГиБ».
+ */
+export function formatBytes(
+  bytes: number,
+  {
+    decimals = 1,
+    trim = false,
+    scale = byteScale(bytes),
+    locale = currentLocale(),
+  }: ByteFormat = {}
+): string {
+  const n =
+    scale === 0
+      ? formatDecimal(bytes, 0, locale)
+      : formatDecimal(bytes / 1024 ** scale, decimals, locale, trim);
+  return translate(locale, "cluster", SIZE_KEYS[scale], { n });
 }
 
 /** A Kubernetes byte quantity for a person; one that does not parse is returned as written. */
-export function formatKubernetesBytes(
-  value: string,
-  decimals: number = 1
-): string {
+export function formatKubernetesBytes(value: string): string {
   const bytes = parseQuantity(value);
   if (bytes === null || isNaN(bytes)) return value;
-
-  return formatBytes(bytes, decimals);
+  return formatBytes(bytes, { trim: true });
 }

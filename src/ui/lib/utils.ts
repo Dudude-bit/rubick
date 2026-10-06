@@ -65,17 +65,21 @@ export function formatTimeUnit(
 
 const decimalFormats = new Map<string, Intl.NumberFormat>();
 
-/** A plain number with exactly `fractionDigits` decimals, in the reader's decimal mark. */
+/**
+ * A plain number with `fractionDigits` decimals, in the reader's decimal
+ * mark; `trim` drops the zeros a whole number would carry.
+ */
 export function formatDecimal(
   value: number,
   fractionDigits: number,
-  locale: string = currentLocale()
+  locale: string = currentLocale(),
+  trim = false
 ): string {
-  const key = `${locale}|${fractionDigits}`;
+  const key = `${locale}|${fractionDigits}|${trim}`;
   let format = decimalFormats.get(key);
   if (!format) {
     format = new Intl.NumberFormat(locale, {
-      minimumFractionDigits: fractionDigits,
+      minimumFractionDigits: trim ? 0 : fractionDigits,
       maximumFractionDigits: fractionDigits,
       useGrouping: false,
     });

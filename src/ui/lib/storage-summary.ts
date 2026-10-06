@@ -12,7 +12,7 @@
  * capacity, and never produce a ratio. A "used" bar drawn against these
  * numbers would have nothing behind its fill.
  */
-import { parseMemory, formatMemory } from "@/lib/k8s-quantity";
+import { formatBytes, parseMemory } from "@/lib/k8s-quantity";
 import type { ResourceConnections } from "@/generated/types";
 
 export interface StorageClaim {
@@ -93,7 +93,7 @@ export function storageSummary(
 
   return {
     claims,
-    declared: parsed ? formatMemory(bytes, 0) : null,
+    declared: parsed ? formatBytes(bytes, { trim: true }) : null,
     unbound: claims.filter((claim) => claim.phase && claim.phase !== "Bound")
       .length,
   };
