@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatBytes, formatCPU, formatCores } from "@/lib/k8s-quantity";
+import { inCores, nodeAmount } from "@/lib/node-amount";
 import { cn } from "@/lib/utils";
 import type { NodeBudget, ResourceBudget } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -26,21 +26,6 @@ interface NodeResourcesProps {
   error: string | null;
   onRetry: () => void;
   usage: NodeUsage | null;
-}
-
-function amount(
-  unit: ResourceBudget["unit"],
-  value: number,
-  cores: boolean
-): string {
-  switch (unit) {
-    case "cpu":
-      return cores ? formatCores(value) : formatCPU(value);
-    case "memory":
-      return formatBytes(value, { trim: true });
-    case "count":
-      return Number.isInteger(value) ? String(value) : value.toFixed(1);
-  }
 }
 
 function share(value: number, of: number | null): string | null {
@@ -138,15 +123,13 @@ export function NodeResources({
         <TableBody>
           {rows.map((row) => {
             const used = usedOf(row, usage);
-            const cores =
-              row.unit === "cpu" &&
-              [
-                row.capacity,
-                row.allocatable,
-                row.requested,
-                row.limited,
-                used,
-              ].some((value) => value !== null && value >= 1000);
+            const cores = inCores(row.unit, [
+              row.capacity,
+              row.allocatable,
+              row.requested,
+              row.limited,
+              used,
+            ]);
             return (
               <TableRow key={row.name} data-quiet>
                 <TableCell className="font-mono text-xs">
@@ -271,7 +254,7 @@ function Figure({
   const pct = share(value, of);
   return (
     <TableCell className="text-right font-mono tabular-nums">
-      {amount(unit, value, cores)}
+      {nodeAmount(unit, value, cores)}
       {pct && (
         <span
           className={cn(

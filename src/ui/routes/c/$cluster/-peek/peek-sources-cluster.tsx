@@ -11,7 +11,7 @@ import {
   type PeekGroup,
   type PeekSources,
 } from "./peek-sources-kit";
-import { None } from "@/components/ui/none";
+import { NODE_RESOURCES, nodeQuantities } from "@/lib/node-amount";
 
 /**
  * What a managed cluster already says about the machine under a node: which
@@ -140,34 +140,37 @@ export const CLUSTER_SOURCES: PeekSources = {
         },
         ...placement(node, t),
         {
-          title: t("columns", "capacity"),
-          items: [
-            {
-              label: "CPU",
-              value: node.allocatable.cpu ?? <None />,
-              mono: true,
-            },
-            {
-              label: t("columns", "memory"),
-              value: node.allocatable.memory ?? <None />,
-              mono: true,
-            },
-            {
-              label: "Pods",
-              value: node.allocatable.pods ?? <None />,
-              mono: true,
-            },
-            {
-              label: t("columns", "taints"),
-              value: node.taints.length ? (
-                list(node.taints.map((taint) => taint.key))
-              ) : (
-                <None />
-              ),
-              mono: node.taints.length > 0,
-              tone: node.taints.length ? "warn" : undefined,
-            },
-          ],
+          title: t("columns", "resources"),
+          items: [],
+          table: {
+            columns: [
+              t("columns", "resource"),
+              t("columns", "capacity"),
+              t("columns", "allocatable"),
+            ],
+            rows: NODE_RESOURCES.map(({ name, key, unit }) => [
+              { words: [name] },
+              ...nodeQuantities(unit, [
+                node.capacity[key],
+                node.allocatable[key],
+              ]).map((figure) => ({
+                words: figure === null ? [] : [figure],
+                none: t("empty", "noneLower"),
+              })),
+            ]),
+          },
+        },
+        {
+          title: t("columns", "taints"),
+          items: node.taints.map((taint) => ({
+            label: taint.key,
+            value: `${taint.value ? `${taint.value} · ` : ""}${taint.effect}`,
+            mono: true,
+            tone:
+              taint.effect === "PreferNoSchedule"
+                ? undefined
+                : ("warn" as const),
+          })),
         },
       ],
     })
