@@ -86,10 +86,10 @@ function walk(watch: Watch, looks: unknown[]): Verdict[] {
 }
 
 describe("a rollout", () => {
-  /** Answering on the first look would say "rolled out" to someone who just clicked on a settled deployment. */
+  /** Twenty-one looks in motion are one rollout. Fails if any look before the settled one answers. */
   it("answers once, after it has seen the rollout move", () => {
     const looks = [
-      deployment({}),
+      deployment({ updated: 1, available: 2, ready: 2 }, undefined, moving(1)),
       ...Array.from({ length: 20 }, (_, i) =>
         deployment(
           { updated: 1 + (i % 3), available: 2, ready: 2 },
@@ -103,6 +103,55 @@ describe("a rollout", () => {
     expect(walk(watchOn("Deployment", "rollout"), looks)).toEqual([
       { says: "rolledOut", detail: null },
     ]);
+  });
+
+  /**
+   * Lena clicked "Tell me when the rollout finishes" on hello-web, 1 of 1
+   * ready on revision 2, and the row read "watching for 1 min" until she
+   * stopped it: a settled first look armed nothing and waited for movement
+   * that never came. Fails if a settled first look leaves the watch open.
+   */
+  it("answers at once on a Deployment already rolled out when asked, with what it saw", () => {
+    const helloWeb = {
+      ...deployment({ desired: 1, ready: 1, available: 1, updated: 1 }),
+      generation: 2,
+      observedGeneration: 2,
+      annotations: { "deployment.kubernetes.io/revision": "2" },
+    } as DeploymentInfo;
+    expect(walk(watchOn("Deployment", "rollout"), [helloWeb])).toEqual([
+      {
+        says: "alreadyRolledOut",
+        detail: {
+          key: "rolloutSeenRevision",
+          values: { ready: 1, desired: 1, revision: "2" },
+        },
+      },
+    ]);
+  });
+
+  /**
+   * A spec applied a moment before the click carries a generation the
+   * controller has not read, while the counts still describe the old one.
+   * Fails if that look is taken for "already rolled out".
+   */
+  it("follows a Deployment whose newest generation the controller has not read yet", () => {
+    const at = (generation: number, observed: number, rollout?: Rollout) =>
+      ({
+        ...deployment(
+          rollout ? { updated: 1, available: 2, ready: 2 } : {},
+          undefined,
+          rollout
+        ),
+        generation,
+        observedGeneration: observed,
+      }) as DeploymentInfo;
+    expect(
+      walk(watchOn("Deployment", "rollout"), [
+        at(3, 2),
+        at(3, 3, moving(1)),
+        at(3, 3),
+      ])
+    ).toEqual([{ says: "rolledOut", detail: null }]);
   });
 
   /**
@@ -398,6 +447,7 @@ describe("the tone a verdict is shown in", () => {
   ];
   const notFailures: Says[] = [
     "rolledOut",
+    "alreadyRolledOut",
     "rolloutPaused",
     "ready",
     "succeeded",

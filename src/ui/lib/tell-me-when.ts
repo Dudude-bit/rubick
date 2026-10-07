@@ -63,6 +63,7 @@ export const ASK_OF: Record<WatchKind, Ask> = {
 
 export type Says =
   | "rolledOut"
+  | "alreadyRolledOut"
   // Said as "stalled"; answered watches are persisted under this name.
   | "rolloutFailed"
   | "rolloutPaused"
@@ -103,6 +104,7 @@ export interface Verdict {
  */
 export const SAYS_TONE: Record<Says, string> = {
   rolledOut: "bg-ok",
+  alreadyRolledOut: "bg-ok",
   rolloutFailed: "bg-err",
   // Nothing broke: the rollout waits for somebody to resume it.
   rolloutPaused: "bg-warn",
@@ -126,8 +128,7 @@ export const SAYS_TONE: Record<Says, string> = {
 
 /**
  * What the last look established, so the next one can tell movement from
- * standing still. A rollout already finished when asked about is not the
- * answer; the next one is.
+ * standing still.
  */
 export interface Baseline {
   /** The ask has seen the object in motion, so settling now is an answer. */
@@ -355,6 +356,15 @@ function lookOf(kind: WatchKind, resource: unknown): Look {
   };
 }
 
+/** The controller has read the newest spec, so the counts describe it and not the one before. */
+function caughtUp(now: Look): boolean {
+  return (
+    now.generation === null ||
+    now.observedGeneration === null ||
+    now.observedGeneration >= now.generation
+  );
+}
+
 /** "3 of 3 ready, revision 8": what the last look said, for a verdict to carry. */
 function seenWords(now: Look): Saying {
   return now.revision === null
@@ -402,10 +412,6 @@ function judgeOutcome(
     seen: seenWords(now),
   };
   if (!acknowledged(now, baseline, after)) return { verdict: null, baseline };
-  const caughtUp =
-    now.generation === null ||
-    now.observedGeneration === null ||
-    now.observedGeneration >= now.generation;
   if (now.failed !== null) {
     // The same suspicion the success arm applies, and for the same reason.
     // The apiserver bumps `generation` the moment the action lands, while
@@ -421,7 +427,7 @@ function judgeOutcome(
     const ours =
       now.failedAt !== null && after.askedAt !== undefined
         ? now.failedAt >= after.askedAt
-        : caughtUp;
+        : caughtUp(now);
     if (ours) {
       return {
         verdict: { says: "rolloutFailed", detail: now.failed },
@@ -436,7 +442,7 @@ function judgeOutcome(
       baseline,
     };
   }
-  if (now.settled && caughtUp) {
+  if (now.settled && caughtUp(now)) {
     return {
       verdict: { says: "rolledOut", detail: seenWords(now) },
       baseline,
@@ -460,8 +466,13 @@ function judgeRollout(
     };
   }
   if (!was.armed) {
-    // Already there when asked: the answer is the next arrival, not this one.
-    return { verdict: null, baseline: { armed: !now.settled } };
+    if (now.settled && caughtUp(now)) {
+      return {
+        verdict: { says: "alreadyRolledOut", detail: seenWords(now) },
+        baseline: was,
+      };
+    }
+    return { verdict: null, baseline: { armed: true } };
   }
   if (now.failed !== null) {
     return {

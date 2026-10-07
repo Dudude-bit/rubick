@@ -2411,6 +2411,8 @@ export const en = {
     keepAll: "Keep all",
     swap: "Stop that one, watch this",
     saysRolledOut: "{name} rolled out",
+    saysAlreadyRolledOut:
+      "{name} was already rolled out: no rollout is under way",
     saysRolloutStalled: "{name} rollout stalled",
     saysRolloutPaused:
       "{name} is paused and will not roll out until it is resumed",

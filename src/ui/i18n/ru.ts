@@ -2532,6 +2532,7 @@ export const ru: Catalogue = {
     keepAll: "Оставить все",
     swap: "Снять то, наблюдать это",
     saysRolledOut: "{name} развёрнут",
+    saysAlreadyRolledOut: "{name} уже развёрнут: развёртывание не идёт",
     saysRolloutStalled: "{name}: развёртывание застряло",
     saysRolloutPaused:
       "{name} на паузе: развёртывание продолжится, когда паузу снимут",
