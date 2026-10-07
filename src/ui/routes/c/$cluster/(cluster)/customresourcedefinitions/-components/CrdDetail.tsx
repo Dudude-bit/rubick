@@ -32,6 +32,7 @@ import {
   type DetailTab,
 } from "@/components/object/detail-tab";
 import { ConditionRows } from "@/components/object/detail-blocks";
+import { KindIcon } from "@/components/object/KindIcon";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
@@ -395,7 +396,7 @@ export function CrdDetail() {
         isLoading={isLoading}
         error={error}
         resourceKind={ResourceType.CustomResourceDefinition}
-        title={crd?.kind || name || ""}
+        title={crd?.name || name || ""}
         createdAt={crd?.createdAt}
         statusBadge={
           crd && (
@@ -412,8 +413,9 @@ export function CrdDetail() {
         badges={
           crd && (
             <>
-              <span className="truncate font-mono text-[11px] text-fg-mut">
-                {crd.name}
+              <span className="flex min-w-0 items-center gap-1 text-[11px] text-fg-mut">
+                <KindIcon kind={crd.kind} className="h-3 w-3" />
+                <span className="truncate">{crd.kind}</span>
               </span>
               <span className="text-[11px] text-fg-fnt">
                 {t("apiResources", scopeKey(crd.scope))}
