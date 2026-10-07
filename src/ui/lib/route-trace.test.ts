@@ -1471,6 +1471,25 @@ describe("a route attached through a ListenerSet", () => {
     expect(traces[0].servingKnown).toBe(false);
     expect(traces[0].steps[1].say).toContain("Cannot tell");
   });
+
+  /**
+   * "Не удалось понять, какой Gateway несёт app-tls" said a Gateway carries
+   * a ListenerSet the way a person carries a bag. Fails if the Russian goes
+   * back to it.
+   */
+  it("says in Russian which Gateway the set belongs to, not which carries it", () => {
+    const ru = ((section, key, values) =>
+      translate("ru", section, key, values)) as T;
+    const traces = routeTraces(
+      viaSet(),
+      sources({ gateways: [gateway("edge", { listenerSetsKnown: false })] }),
+      ru
+    );
+
+    expect(traces[0].steps[1].say).toMatch(
+      /^Не удалось понять, к какому Gateway относится \S+$/
+    );
+  });
 });
 
 /**

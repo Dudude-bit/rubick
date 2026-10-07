@@ -4247,7 +4247,8 @@ export const ru: Catalogue = {
       "Настоящий адрес клиента берётся из proxy protocol или заголовка forwarded, а не из соединения.",
     ngxTrustedRanges:
       "Заголовкам forwarded верят только с {ranges}; отовсюду ещё они игнорируются.",
-    ngxServerTokensOn: "Ответы несут версию nginx в заголовке Server.",
+    ngxServerTokensOn:
+      "В заголовке Server каждого ответа указана версия nginx.",
     ngxServerTokensOff:
       "Версия nginx не попадает ни в ответы, ни в страницы ошибок.",
     ngxTlsVersions:
@@ -4278,11 +4279,12 @@ export const ru: Catalogue = {
     ngxAccessLogOff:
       "В access log ничего не пишется, поэтому в логах этого контроллера не будет запроса, который до него дошёл.",
     ngxErrorDebug:
-      "Error log несёт всё, включая подробности по каждому запросу.",
-    ngxErrorInfo: "Error log несёт информационные сообщения и хуже.",
-    ngxErrorNotice: "Error log несёт уведомления и хуже.",
-    ngxErrorWarn: "Error log несёт предупреждения и хуже.",
-    ngxErrorError: "Error log несёт только ошибки.",
+      "В error log пишется всё, включая подробности по каждому запросу.",
+    ngxErrorInfo:
+      "В error log пишутся информационные сообщения и всё, что серьёзнее.",
+    ngxErrorNotice: "В error log пишутся уведомления и всё, что серьёзнее.",
+    ngxErrorWarn: "В error log пишутся предупреждения и всё, что серьёзнее.",
+    ngxErrorError: "В error log пишутся только ошибки.",
     ngxModsecOn:
       "Каждый запрос проходит через ModSecurity, прежде чем попасть на бэкенд.",
     ngxModsecOwasp:
@@ -6505,7 +6507,7 @@ export const ru: Catalogue = {
     unnamedInline: "без имени",
     allInline: "все",
     portsNotExposedHint:
-      "Срез несёт порт под именем порта Service. Эти не называют ни один из объявленных, поэтому к ним ничего не маршрутизируется.",
+      "В срезе порты привязаны к портам Service по имени. Имена этих портов не совпадают ни с одним из объявленных в срезе, поэтому к ним ничего не маршрутизируется.",
     couldNotReadWhatConnects: "Не удалось прочитать, что с этим связано.",
     clusterDidNotAnswer: "Кластер не ответил.",
     unknownRefused: "Кластер отказал: {message}",
@@ -7010,7 +7012,7 @@ export const ru: Catalogue = {
       "Класс называет контроллер {controller}, и никто за него не ответил. Обычно контроллер не установлен или не запущен. Всё, что идёт через этот шлюз, не работает, пока он не ответит.",
     gwClassClaimedSay: "Класс {name} заявлен контроллером {controller}",
     gwGatewayBlind: "Gateway {name}: отсюда не прочитать",
-    gwSetsUnreadSay: "Не удалось понять, какой Gateway несёт {name}",
+    gwSetsUnreadSay: "Не удалось понять, к какому Gateway относится {name}",
     gwSetsUnreadTitle: "Объекты ListenerSet прочитать не удалось",
     gwSetsUnreadBody:
       "Этот маршрут привязан к ListenerSet, а к какому Gateway относится набор, записано на нём самом. Получить их список не вышло: отказ в правах либо вид не установлен. Значит, назвать Gateway отсюда нельзя, а это не то же самое, что его нет.",

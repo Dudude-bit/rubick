@@ -3802,7 +3802,7 @@ export const en = {
     ngxTrustedRanges:
       "Forwarded headers are trusted only from {ranges}; from anywhere else they are ignored.",
     ngxServerTokensOn:
-      "Responses carry the nginx version in the Server header.",
+      "Every response names the nginx version in its Server header.",
     ngxServerTokensOff:
       "The nginx version is kept out of responses and error pages.",
     ngxTlsVersions:
@@ -3830,11 +3830,11 @@ export const en = {
     ngxAccessLogOff:
       "Nothing is written to the access log, so this controller's logs will not show a request that reached it.",
     ngxErrorDebug:
-      "The error log carries everything, including per-request detail.",
-    ngxErrorInfo: "The error log carries informational messages and worse.",
-    ngxErrorNotice: "The error log carries notices and worse.",
-    ngxErrorWarn: "The error log carries warnings and worse.",
-    ngxErrorError: "The error log carries errors only.",
+      "The error log records everything, including per-request detail.",
+    ngxErrorInfo: "The error log records informational messages and worse.",
+    ngxErrorNotice: "The error log records notices and worse.",
+    ngxErrorWarn: "The error log records warnings and worse.",
+    ngxErrorError: "The error log records errors only.",
     ngxModsecOn:
       "Every request is passed through ModSecurity before it reaches a backend.",
     ngxModsecOwasp: "ModSecurity runs with the OWASP core rule set loaded.",
@@ -5900,7 +5900,7 @@ export const en = {
     unnamedInline: "unnamed",
     allInline: "all",
     portsNotExposedHint:
-      "A slice carries a port by the Service port's name. These name none it declares, so nothing routes to them.",
+      "A slice matches its ports to the Service's by name. These ports' names match none the slice declares, so nothing routes to them.",
     couldNotReadWhatConnects: "Could not read what connects to this.",
     clusterDidNotAnswer: "The cluster did not answer.",
     unknownRefused: "The cluster refused: {message}",
@@ -6402,7 +6402,7 @@ export const en = {
       "The class names controller {controller}, and nothing has answered for it. Usually the controller is not installed or not running. Everything through this gateway is dead until it answers.",
     gwClassClaimedSay: "Class {name} is claimed by {controller}",
     gwGatewayBlind: "Gateway {name}: cannot be read from here",
-    gwSetsUnreadSay: "Cannot tell which Gateway carries {name}",
+    gwSetsUnreadSay: "Cannot tell which Gateway {name} belongs to",
     gwSetsUnreadTitle: "The ListenerSets could not be read",
     gwSetsUnreadBody:
       "This route attaches to a ListenerSet, and which Gateway that set belongs to is written on the set itself. Listing them was refused or the kind is not installed, so the Gateway cannot be named from here, which is not the same as there being none.",

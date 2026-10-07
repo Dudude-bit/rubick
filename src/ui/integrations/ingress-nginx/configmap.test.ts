@@ -7,6 +7,8 @@ const t: T = (section, key, values) => translate("en", section, key, values);
 
 import { GLOBAL_KEYS, readSetting, readSettings } from "./configmap";
 
+const ru: T = (section, key, values) => translate("ru", section, key, values);
+
 describe("the global ConfigMap reader", () => {
   /**
    * The same floor annotations.test.ts holds over TABLE_SIZE. Without it a
@@ -35,6 +37,30 @@ describe("the global ConfigMap reader", () => {
     const reading = readSetting("proxy-body-size", "50m", t);
     expect(reading.said).not.toBeNull();
     expect(reading.overridable).toBe(true);
+  });
+
+  /**
+   * "Ответы несут версию nginx" and "Error log несёт всё" read as English
+   * carried over word for word. Fails if either sentence goes back to a verb
+   * of carrying, or an error level loses what it says is logged.
+   */
+  it("says in plain Russian what the version header and each error level show", () => {
+    expect(readSetting("server-tokens", "true", ru).said).toBe(
+      "В заголовке Server каждого ответа указана версия nginx."
+    );
+    const levels = Object.fromEntries(
+      ["debug", "info", "notice", "warn", "error"].map((level) => [
+        level,
+        readSetting("error-log-level", level, ru).said,
+      ])
+    );
+    expect(levels).toEqual({
+      debug: "В error log пишется всё, включая подробности по каждому запросу.",
+      info: "В error log пишутся информационные сообщения и всё, что серьёзнее.",
+      notice: "В error log пишутся уведомления и всё, что серьёзнее.",
+      warn: "В error log пишутся предупреждения и всё, что серьёзнее.",
+      error: "В error log пишутся только ошибки.",
+    });
   });
 
   /** A key nobody can decode is still shown, labelled, rather than dropped. */
