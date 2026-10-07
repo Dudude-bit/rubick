@@ -55,27 +55,29 @@ impl std::io::Write for Capped {
     }
 }
 
-/// kube logs every attempt that fails on the wire at ERROR, below the retry
-/// that decides whether it failed at all: `client::send_again` sends a read on
-/// a closed keep-alive connection again and says when it gives up, and a
-/// write's failure reaches its caller.
-struct LeftToTheRetry;
+/// kube's own lines for what the code above it reports in its own words:
+/// a read on a closed keep-alive connection, which `client::send_again` sends
+/// again, and a refused watch, which every watcher here says once.
+struct SaidAbove;
 
-const KUBE_CLIENT: &str = "kube_client::client::builder";
-const CLOSED_UNDER_REQUEST: &str = "(SendRequest)";
+const SAID_ABOVE: [(&str, &str); 2] = [
+    ("kube_client::client::builder", "(SendRequest)"),
+    ("kube_runtime::watcher", "403"),
+];
 
-impl<S> Filter<S> for LeftToTheRetry {
+impl<S> Filter<S> for SaidAbove {
     fn enabled(&self, _: &Metadata<'_>, _: &Context<'_, S>) -> bool {
         true
     }
 
     fn event_enabled(&self, event: &Event<'_>, _: &Context<'_, S>) -> bool {
-        if event.metadata().target() != KUBE_CLIENT {
+        let target = event.metadata().target();
+        let Some((_, needle)) = SAID_ABOVE.iter().find(|(of, _)| *of == target) else {
             return true;
-        }
+        };
         let mut message = Message::default();
         event.record(&mut message);
-        !message.0.contains(CLOSED_UNDER_REQUEST)
+        !message.0.contains(needle)
     }
 }
 
@@ -90,9 +92,9 @@ impl Visit for Message {
     }
 }
 
-/// What each output lets through: the level asked for, less what the retry reports.
+/// What each output lets through: the level asked for, less what is said above kube.
 fn filter<S: Subscriber>(level: EnvFilter) -> impl Filter<S> {
-    level.and(LeftToTheRetry)
+    level.and(SaidAbove)
 }
 
 /// Initialize tracing subscriber with default configuration
@@ -313,6 +315,40 @@ mod tests {
             "{written}"
         );
         assert_eq!(written.matches("(Connect)").count(), 2, "{written}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Marco's Delete dialog logged ninety "watch list error with 403" dumps
+    /// in 0.3 s. Fails if kube's line comes back; its other lines stay.
+    #[test]
+    fn kube_does_not_repeat_what_the_caller_reports() {
+        use tracing_subscriber::layer::SubscriberExt;
+
+        let dir = std::env::temp_dir().join(format!("rubick-log-above-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let file = open_log(&dir).expect("a log file");
+
+        let subscriber = tracing_subscriber::registry().with(
+            tracing_subscriber::fmt::layer()
+                .with_ansi(false)
+                .with_writer(std::sync::Mutex::new(Capped {
+                    file,
+                    written: 0,
+                    said: false,
+                }))
+                .with_filter(filter(EnvFilter::new("info"))),
+        );
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::warn!(target: "kube_runtime::watcher", "watch list error with 403: {}", "Api(Status { .. })");
+            tracing::warn!(target: "kube_runtime::watcher", "watcher error 403: {}", "Api(Status { .. })");
+            tracing::warn!(target: "kube_client::client", "eof in poll: {}", "reset");
+            tracing::error!(target: "kube_runtime::watcher", "got deleted event during initial watch. this is a bug");
+        });
+
+        let written = std::fs::read_to_string(dir.join(LOG_FILE)).expect("the file is readable");
+        assert!(!written.contains("403"), "{written}");
+        assert!(written.contains("eof in poll"), "{written}");
+        assert!(written.contains("this is a bug"), "{written}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -922,4 +922,18 @@ mod tests {
         assert_eq!(asked(), before);
         second.stop.cancel();
     }
+
+    /// Marco's Delete dialog started the index and the log took ninety lines
+    /// in 0.3 s: kube's 403 dump for every kind across the cluster, then for
+    /// each namespace it fell back to. kube's dump is left out (`app_log`), and
+    /// the index says a kind once. Fails if a namespace's refusal of a kind
+    /// already told about warns again.
+    #[test]
+    fn a_refused_kind_warns_once_and_its_namespaces_do_not() {
+        assert_eq!(slots::refusal_level(&slot(None)), tracing::Level::WARN);
+        assert_eq!(
+            slots::refusal_level(&slot(Some("shop"))),
+            tracing::Level::DEBUG
+        );
+    }
 }

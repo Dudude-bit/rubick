@@ -8,6 +8,7 @@ use kube::api::{Api, DynamicObject};
 use kube::core::PartialObjectMeta;
 use kube::discovery::ApiResource;
 use kube::runtime::watcher::{self, Event};
+use tracing::Level;
 
 use super::graph::{Node, OwnerLink, SlotKey};
 use super::{ClusterIndex, SlotState};
@@ -56,6 +57,7 @@ pub(super) fn spawn(index: &Arc<ClusterIndex>, slot: SlotKey, resource: ApiResou
                     errors += 1;
                     let message = watch_failure(&error);
                     if refused(&error) {
+                        told_refused(&slot);
                         index.refused(&slot, message);
                         break;
                     }
@@ -70,6 +72,31 @@ pub(super) fn spawn(index: &Arc<ClusterIndex>, slot: SlotKey, resource: ApiResou
             }
         }
     });
+}
+
+/// A kind refused across the cluster warns once per connection, since a
+/// refusal is kept and never asked again; its namespaces add nothing above debug.
+pub(super) fn refusal_level(slot: &SlotKey) -> Level {
+    if slot.namespace.is_none() {
+        Level::WARN
+    } else {
+        Level::DEBUG
+    }
+}
+
+fn told_refused(slot: &SlotKey) {
+    let (group, plural) = (&slot.kind.group, &slot.kind.plural);
+    let namespace = slot.namespace.as_deref().unwrap_or_default();
+    if refusal_level(slot) == Level::WARN {
+        tracing::warn!(group, plural, "ownership index: refused across the cluster");
+    } else {
+        tracing::debug!(
+            group,
+            plural,
+            namespace,
+            "ownership index: refused in the namespace"
+        );
+    }
 }
 
 fn refused(error: &watcher::Error) -> bool {
