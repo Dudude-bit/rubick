@@ -507,6 +507,7 @@ export function buildPaletteEntries({
 }: PaletteState): Entry[] {
   const bang = parseBang(text);
   const query = text.trim();
+  const needle = query.toLowerCase();
   const hasQuery = query.length > 0;
   const scoped = scope.kind !== "current";
   const answered = shownClusters.filter(hasAnswered).length;
@@ -626,7 +627,6 @@ export function buildPaletteEntries({
       }
     }
 
-    const needle = query.toLowerCase();
     const links = quickActions
       .map((action) => ({
         ...action,
@@ -804,8 +804,22 @@ export function buildPaletteEntries({
       const path = servedObjectLink(hit, { cluster: hit.context });
       return path ? [{ hit, path }] : [];
     });
+    const named = (hit: SearchHit) => hit.name.toLowerCase().includes(needle);
+    const ranked = [
+      ...found.filter(({ hit }) => named(hit)),
+      ...found.filter(({ hit }) => !named(hit)),
+    ];
     const cap = shownClusters.length > 1 ? ROWS_PER_CLUSTER : found.length;
-    for (const { hit, path } of found.slice(0, cap)) {
+    let viaNamespace = false;
+    for (const { hit, path } of ranked.slice(0, cap)) {
+      if (!viaNamespace && !named(hit)) {
+        viaNamespace = true;
+        out.push({
+          id: `cap:ns:${cluster.context}`,
+          kind: "caption",
+          text: t("action", "matchedByNamespaceOnly", { query }),
+        });
+      }
       out.push({
         id: `hit:${hit.context}/${hitKey(hit)}`,
         kind: "hit",

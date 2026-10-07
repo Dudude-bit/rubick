@@ -1115,6 +1115,7 @@ export const ru: Catalogue = {
     paletteRecent: "Недавнее",
     paletteNavigation: "Навигация",
     paletteResources: "Ресурсы",
+    matchedByNamespaceOnly: "Совпадает только пространство имён: {query}",
     paletteKinds: "Виды ресурсов",
     paletteThisObject: "Этот объект",
     actionsOn: "Действия с",

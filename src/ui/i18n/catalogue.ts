@@ -1125,6 +1125,7 @@ export const en = {
     paletteRecent: "Recent",
     paletteNavigation: "Navigation",
     paletteResources: "Resources",
+    matchedByNamespaceOnly: "Only the namespace matches {query}",
     paletteKinds: "Kinds",
     paletteThisObject: "This object",
     actionsOn: "Actions on",

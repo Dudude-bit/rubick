@@ -283,6 +283,58 @@ describe("the palette's resource rows", () => {
   });
 
   /**
+   * Marco typed "checkout" and five of the seventeen matches were objects
+   * called something else in a namespace called team-checkout. Fails if a
+   * namespace-only match ranks among the name matches, or goes unsaid.
+   */
+  it("ranks the matches that only the namespace made after the name matches, under a caption", () => {
+    const hit = (name: string, namespace: string): SearchHit => ({
+      context: "k3d-dev",
+      kind: "Pod",
+      group: "",
+      plural: "pods",
+      name,
+      namespace,
+    });
+    const entries = buildPaletteEntries(
+      state({
+        text: "checkout",
+        shownClusters: [cluster("k3d-dev")],
+        hitsByContext: byContext([
+          hit("migrate-db-8hblx", "team-checkout"),
+          hit("checkout-api-0", "team-checkout"),
+          hit("sidecar-1", "team-checkout"),
+        ]),
+      })
+    );
+
+    expect(ids(entries).slice(0, 6)).toEqual([
+      "grp:k3d-dev",
+      "hit:k3d-dev/Pod/team-checkout/checkout-api-0",
+      "cap:ns:k3d-dev",
+      "hit:k3d-dev/Pod/team-checkout/migrate-db-8hblx",
+      "hit:k3d-dev/Pod/team-checkout/sidecar-1",
+      "cov:k3d-dev",
+    ]);
+    const caption = entries.find((entry) => entry.id === "cap:ns:k3d-dev");
+    expect(caption).toMatchObject({
+      text: "Only the namespace matches checkout",
+    });
+  });
+
+  /** A search every hit of which is a name match has nothing to apologise for. */
+  it("adds no caption when every match is by name", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "api",
+        shownClusters: [cluster("k3d-dev")],
+        hitsByContext: byContext(pods("k3d-dev", 2)),
+      })
+    );
+    expect(ids(entries).some((id) => id.startsWith("cap:ns:"))).toBe(false);
+  });
+
+  /**
    * Twenty hits from one cluster would push every other cluster below the
    * fold, the failed one included; the rest is one row away instead.
    */
