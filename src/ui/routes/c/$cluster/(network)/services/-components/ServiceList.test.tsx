@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vite-plus/test";
 import { DataTable } from "@/components/ui/data-table";
 import type { ServiceInfo } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
+import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { columns } from "./ServiceList";
 
 vi.mock("@/lib/commands", () => ({
@@ -44,13 +45,14 @@ const headlessDemo: ServiceInfo = {
   selector: { app: "headless-demo" },
 };
 
-const clusterIpCell = (name: string) => {
+const cellOf = (name: string, column: string) => {
   const row = screen.getByText(name).closest("tr")!;
   const index = screen
     .getAllByRole("columnheader")
-    .findIndex((header) => header.textContent?.includes("Cluster IP"));
+    .findIndex((header) => header.textContent?.includes(column));
   return within(row).getAllByRole("cell")[index];
 };
+const clusterIpCell = (name: string) => cellOf(name, "Cluster IP");
 
 describe("the Services list's Cluster IP column", () => {
   /**
@@ -64,5 +66,29 @@ describe("the Services list's Cluster IP column", () => {
     );
     expect(clusterIpCell("headless-demo")).toHaveTextContent("None (headless)");
     expect(clusterIpCell("external-demo")).toHaveTextContent(/^none$/);
+  });
+});
+
+describe("the Services list's External IPs column", () => {
+  /**
+   * The list printed external-demo's alias example.com as an external IP
+   * while its page and peek said none. Fails if the column reads anything
+   * but spec.externalIPs, as the page's row does, or the alias leaves the row.
+   */
+  it("says what the page says for an ExternalName and keeps the alias beside its type", async () => {
+    await renderWithRouter(
+      <>
+        <DataTable columns={columns()} data={[externalDemo]} />
+        <div data-testid="page-row">
+          <CopyableAddresses values={externalDemo.externalIps} />
+        </div>
+      </>
+    );
+    const listed = cellOf("external-demo", "External IPs");
+    expect(listed).not.toHaveTextContent("example.com");
+    expect(listed.textContent).toBe(screen.getByTestId("page-row").textContent);
+    expect(cellOf("external-demo", "Type")).toHaveTextContent(
+      "ExternalNameexample.com"
+    );
   });
 });

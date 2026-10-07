@@ -34,15 +34,23 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     accessorKey: "type",
     header: columnHeader("columns", "type"),
     cell: ({ row }) => (
-      <span
-        className={
-          EXTERNALLY_REACHABLE.has(row.original.type)
-            ? "text-fg"
-            : "text-fg-mut"
-        }
-      >
-        {row.original.type}
-      </span>
+      <div className="flex min-w-0 flex-col">
+        <span
+          className={
+            EXTERNALLY_REACHABLE.has(row.original.type)
+              ? "text-fg"
+              : "text-fg-mut"
+          }
+        >
+          {row.original.type}
+        </span>
+        {row.original.type === "ExternalName" && (
+          <AddressCell
+            value={row.original.externalName}
+            labelKey="externalName"
+          />
+        )}
+      </div>
     ),
   },
   {
@@ -68,11 +76,6 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     meta: { floor: IPV4_CELL_PX + 16 },
     cell: ({ row }) => {
       const service = row.original;
-      // kubectl prints an ExternalName Service's alias in this column.
-      if (service.type === "ExternalName")
-        return (
-          <AddressCell value={service.externalName} labelKey="externalName" />
-        );
       if (service.externalIps.length === 0 && service.type !== "LoadBalancer")
         return <None />;
       return (
