@@ -791,7 +791,8 @@ export const en = {
     keptHistoryLimits: "{n} kept · history limits decide how many",
     concurrency: "Concurrency",
     startingDeadline: "Starting deadline",
-    noStartingDeadline: "none: missed runs are skipped",
+    noStartingDeadline:
+      "none: the latest missed run still starts, however late",
     emptyList: "empty list",
     emptyObject: "empty object",
     nameDeleted: "{name} has been deleted.",

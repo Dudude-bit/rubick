@@ -770,7 +770,8 @@ export const ru: Catalogue = {
     keptHistoryLimits: "хранится {n} · сколько именно, задают лимиты истории",
     concurrency: "Параллельные запуски",
     startingDeadline: "Срок запуска",
-    noStartingDeadline: "нет: пропущенные запуски не выполняются",
+    noStartingDeadline:
+      "нет: последний пропущенный запуск всё равно стартует, с любым опозданием",
     emptyList: "пустой список",
     emptyObject: "пустой объект",
     nameDeleted: "{name} удалён.",

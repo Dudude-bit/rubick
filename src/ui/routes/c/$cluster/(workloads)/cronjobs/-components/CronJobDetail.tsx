@@ -532,11 +532,10 @@ function policy(
     },
     {
       label: t("action", "startingDeadline"),
-      value: cronJob?.startingDeadlineSeconds
-        ? formatTimeUnit(cronJob.startingDeadlineSeconds, "second")
-        : // Without a deadline a run missed during controller downtime is
-          // skipped silently rather than started late.
-          t("action", "noStartingDeadline"),
+      value:
+        cronJob?.startingDeadlineSeconds != null
+          ? formatTimeUnit(cronJob.startingDeadlineSeconds, "second")
+          : t("action", "noStartingDeadline"),
       mono: cronJob?.startingDeadlineSeconds != null,
     },
     serviceAccountRow(cronJob?.serviceAccountName, cronJob?.namespace, t),

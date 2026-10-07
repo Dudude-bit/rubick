@@ -117,6 +117,30 @@ describe("CronJobDetail", () => {
     ).toBeInTheDocument();
   });
 
+  /**
+   * Lena's shop/reports said "missed runs are skipped" with
+   * startingDeadlineSeconds unset. The CronJob controller (`nextScheduleTime`
+   * and `syncCronJob` in pkg/controller/cronjob) skips a run only past a set
+   * deadline; unset, it starts the latest missed one however late. Fails if
+   * the page says an unset deadline skips anything.
+   */
+  it("says a CronJob with no starting deadline still starts its latest missed run", async () => {
+    await renderPage();
+    expect(
+      screen.getByText("none: the latest missed run still starts, however late")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/skipped/)).toBeNull();
+  });
+
+  /** A deadline of 0 is a deadline: a run that is late at all is skipped. Fails if 0 reads as unset. */
+  it("reads a starting deadline of 0 as a deadline, not as none", async () => {
+    mockDetail(buildCronJob({ startingDeadlineSeconds: 0 }));
+    await renderPage();
+    expect(
+      screen.queryByText(/^none: the latest missed run/)
+    ).not.toBeInTheDocument();
+  });
+
   it("flags a CronJob that has fired but never succeeded", async () => {
     mockDetail(buildCronJob({ lastSuccessfulTime: null }));
     await renderPage();
