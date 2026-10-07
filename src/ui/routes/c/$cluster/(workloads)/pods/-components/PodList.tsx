@@ -18,6 +18,7 @@ import {
   createAgeColumn,
   createCpuColumn,
   createMemoryColumn,
+  NODE_CELL_PX,
 } from "../../../-list/columns";
 import { podReadiness } from "@/lib/container-sequence";
 import { commands } from "@/lib/commands";
@@ -173,6 +174,7 @@ export const columns: ColumnDef<PodRow>[] = [
     id: "node",
     header: columnHeader("columns", "node"),
     meta: {
+      floor: NODE_CELL_PX,
       share: (pod: PodRow, t) =>
         pod.nodeName
           ? {

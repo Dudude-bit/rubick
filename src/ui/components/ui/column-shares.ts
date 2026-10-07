@@ -1,3 +1,15 @@
+/** WebKitGTK's overlay scrollbar takes the pointer over a port's last 21px. */
+export const SCROLLBAR_REACH = 24;
+
+/**
+ * The width the actions cell needs, from what it actually holds: a 20px icon
+ * and a 2px gap each, the cell's own 10px padding on the left and the
+ * scrollbar's reach on the right. TanStack's default is 150, a name column's
+ * worth of the table reserved for two buttons, on every list in the app.
+ */
+export const actionsColumnSize = (count: number) =>
+  10 + SCROLLBAR_REACH + count * 22;
+
 /** A column as the layout sees it: its size in units, and the pixels it never goes under. */
 export interface ColumnSpec {
   size: number;
@@ -39,4 +51,20 @@ export function columnShares(columns: ColumnSpec[], width: number): number[] {
       });
     }
   }
+}
+
+/**
+ * How a table is laid out in a port `port` pixels wide. The shares are of the
+ * table's own width, which is the port's unless the floors add up to more:
+ * then the table is as wide as they are and the port scrolls, because a
+ * share of a table that cannot be wider than its port is a cut.
+ */
+export function tableLayout(columns: ColumnSpec[], port: number) {
+  const floors = columns.reduce((sum, column) => sum + (column.floor ?? 0), 0);
+  const span = port > 0 ? Math.max(port, floors) : 0;
+  return {
+    span,
+    scrolls: span > port,
+    shares: columnShares(columns, span),
+  };
 }

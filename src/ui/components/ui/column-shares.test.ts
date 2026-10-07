@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { columnShares } from "./column-shares";
+import { columnShares, tableLayout } from "./column-shares";
 
 describe("columnShares", () => {
   /** Fails if an unmeasured table stops falling back to its declared proportions. */
@@ -31,5 +31,45 @@ describe("columnShares", () => {
     expect(
       columnShares([{ size: 100, floor: 50 }, { size: 100 }], 400)
     ).toEqual([50, 50]);
+  });
+});
+
+describe("tableLayout", () => {
+  /** Fails if a table whose floors fit starts asking for more than its port, which is a scrollbar nobody needs. */
+  it("is as wide as the port while the floors fit", () => {
+    const layout = tableLayout(
+      [
+        { size: 300, floor: 200 },
+        { size: 100, floor: 100 },
+      ],
+      1000
+    );
+    expect(layout.span).toBe(1000);
+    expect(layout.scrolls).toBe(false);
+    expect(layout.shares).toEqual([75, 25]);
+  });
+
+  /**
+   * Per cent of a table no wider than its port cut a column under its floor
+   * without a scrollbar to show for it. Fails if floors that outgrow the port
+   * stop widening the table to their sum, with every column at its floor.
+   */
+  it("is as wide as the floors when they outgrow the port", () => {
+    const layout = tableLayout(
+      [{ size: 300, floor: 600 }, { size: 100, floor: 300 }, { size: 100 }],
+      800
+    );
+    expect(layout.span).toBe(900);
+    expect(layout.scrolls).toBe(true);
+    expect((layout.shares[0] / 100) * 900).toBeCloseTo(600);
+    expect((layout.shares[1] / 100) * 900).toBeCloseTo(300);
+    expect(layout.shares[2]).toBe(0);
+  });
+
+  /** Fails if a table nobody has measured yet is called scrolling, and widened to its floors, before it has a port. */
+  it("does not scroll before the port is measured", () => {
+    const layout = tableLayout([{ size: 100, floor: 900 }], 0);
+    expect(layout.scrolls).toBe(false);
+    expect(layout.span).toBe(0);
   });
 });

@@ -23,8 +23,9 @@ export function columnLabel(column: LabelledColumn, t: T): string | null {
   );
 }
 
-/** 11px medium glyphs, generously, so a label is never measured short. */
+/** 11px medium Inter: 7px covers the long labels, and a short one runs wider than that ("Memory", "Домены"). */
 const GLYPH_PX = 7;
+const SHORT_WORD_SLACK_PX = 5;
 /** A sort control's 12px mark, its 4px gap and the button's own 8px of padding. */
 const SORT_MARK_PX = 24;
 /** The header cell's own padding. */
@@ -39,6 +40,15 @@ export function headerFloor(column: LabelledColumn, t: T): number {
   if (!label) return 0;
   const sortable = (column.meta as AppColumnMeta | undefined)?.label;
   return Math.ceil(
-    label.length * GLYPH_PX + (sortable ? SORT_MARK_PX : 0) + PADDING_PX
+    label.length * GLYPH_PX +
+      SHORT_WORD_SLACK_PX +
+      (sortable ? SORT_MARK_PX : 0) +
+      PADDING_PX
   );
+}
+
+/** The narrowest a column is drawn: what its cells declare, and its header's words. */
+export function columnFloor(column: LabelledColumn, t: T): number {
+  const declared = (column.meta as AppColumnMeta | undefined)?.floor ?? 0;
+  return Math.max(declared, headerFloor(column, t));
 }

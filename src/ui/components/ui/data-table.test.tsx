@@ -1070,6 +1070,52 @@ describe("column widths", () => {
   });
 
   /**
+   * Floors that add up to more than the port were drawn as per cent of a
+   * table no wider than it, which cuts a column under its floor without a
+   * scrollbar. Fails if the table stops being as wide as its floors when they
+   * outgrow the port, or is widened when they fit.
+   */
+  it("is as wide as its floors when they outgrow the port, and no wider otherwise", async () => {
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    try {
+      await wrap(
+        <DataTable<Item>
+          columns={[
+            { ...columns[0], size: 300, meta: { floor: 300 } },
+            { ...columns[1], size: 100, meta: { floor: 300 } },
+          ]}
+          data={DATA}
+        />
+      );
+      expect(screen.getByRole("table").style.minWidth).toBe("600px");
+      expect(widthOf("Name")).toBe("50%");
+      expect(widthOf("Status")).toBe("50%");
+    } finally {
+      width.mockRestore();
+    }
+    const roomy = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(900);
+    try {
+      cleanup();
+      await wrap(
+        <DataTable<Item>
+          columns={[
+            { ...columns[0], size: 300, meta: { floor: 300 } },
+            { ...columns[1], size: 100, meta: { floor: 300 } },
+          ]}
+          data={DATA}
+        />
+      );
+      expect(screen.getByRole("table").style.minWidth).toBe("");
+    } finally {
+      roomy.mockRestore();
+    }
+  });
+
+  /**
    * A drag moves width from one column to the next; it does not add width.
    *
    * These tables are laid out in shares of their own width, and a dragged

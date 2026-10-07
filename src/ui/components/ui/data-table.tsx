@@ -55,9 +55,13 @@ import {
 } from "@/components/ui/tooltip";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { buildTableRows, type BodyItem } from "./data-table-rows";
-import { columnShares } from "./column-shares";
+import {
+  SCROLLBAR_REACH,
+  actionsColumnSize,
+  tableLayout,
+} from "./column-shares";
 import { controlAt } from "@/lib/row-control";
-import { headerFloor } from "@/lib/column-label";
+import { columnFloor } from "@/lib/column-label";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 
 import { cn } from "@/lib/utils";
@@ -184,8 +188,6 @@ const ESTIMATED_ROW_PX = { compact: 23, comfortable: 33 } as const;
 /** How many rows either side of the viewport stay mounted. */
 const OVERSCAN = 12;
 
-/** WebKitGTK's overlay scrollbar takes the pointer over a port's last 21px. */
-const SCROLLBAR_REACH = 24;
 const ACTIONS_CELL_GUTTER = { paddingRight: SCROLLBAR_REACH };
 
 /** Read off the table's attribute, so a density switch restyles rows instead of drawing them. */
@@ -314,14 +316,6 @@ function sameRow<TData extends RowData>(
 const BodyRow = React.memo(BodyRowView, sameRow) as typeof BodyRowView;
 
 /**
- * The width the actions cell needs, from what it actually holds: a 20px icon
- * and a 2px gap each, the cell's own 10px padding on the left and the
- * scrollbar's reach on the right. TanStack's default is 150, a name column's
- * worth of the table reserved for two buttons, on every list in the app.
- */
-const actionsColumnSize = (count: number) => 10 + SCROLLBAR_REACH + count * 22;
-
-/**
  * What the row's buttons do, handed to the cell through a context rather than
  * captured in its closure.
  *
@@ -383,6 +377,7 @@ function createActionsColumn<TData extends RowData>(
     // rebuilt as often as it likes.
     cell: ActionsCell,
     size: actionsColumnSize(count),
+    meta: { floor: actionsColumnSize(count) },
     enableSorting: false,
     enableHiding: false,
   };
@@ -1094,6 +1089,14 @@ function DataTableInner<TData extends RowData>({
     );
   }
 
+  // Only the columns actually on screen count, so hiding one hands its room
+  // to the rest instead of leaving a gap.
+  const specs = table.getVisibleFlatColumns().map((column) => ({
+    size: column.getSize(),
+    floor: columnFloor(column.columnDef, t),
+  }));
+  const layout = tableLayout(specs, portWidth);
+
   // `min-h-0` and nothing else, at every level down to the port: a flex item
   // is `flex: 0 1 auto` by default — as tall as its content, shrinking only
   // when the column runs out of room — and `min-h-0` is what lets that shrink
@@ -1185,6 +1188,7 @@ function DataTableInner<TData extends RowData>({
             // content that changes on every watch tick.
             className="group/table table-fixed"
             data-density={tableDensity}
+            style={layout.scrolls ? { minWidth: layout.span } : undefined}
             containerClassName={cn(
               shouldVirtualScroll && "scrollbar-thin",
               fill && "min-h-0"
@@ -1208,16 +1212,6 @@ function DataTableInner<TData extends RowData>({
               )}
             >
               {table.getHeaderGroups().map((headerGroup) => {
-                // Only the columns actually on screen count, so hiding one
-                // hands its room to the rest instead of leaving a gap.
-                const specs = headerGroup.headers.map((header) => ({
-                  size: header.getSize(),
-                  floor: Math.max(
-                    header.column.columnDef.meta?.floor ?? 0,
-                    headerFloor(header.column.columnDef, t)
-                  ),
-                }));
-                const shares = columnShares(specs, portWidth);
                 return (
                   <TableRow key={headerGroup.id}>
                     {headerGroup.headers.map((header, index) => {
@@ -1236,7 +1230,7 @@ function DataTableInner<TData extends RowData>({
                           // actions off the right edge. As percentages the same
                           // numbers keep their proportions and sum to the table
                           // at any width.
-                          style={{ width: `${shares[index]}%` }}
+                          style={{ width: `${layout.shares[index]}%` }}
                         >
                           {header.isPlaceholder
                             ? null
@@ -1261,9 +1255,10 @@ function DataTableInner<TData extends RowData>({
                               // affordance of its own, not on this grip.
                               role="presentation"
                               onPointerDown={(event) => {
-                                const port =
-                                  scrollRef.current?.clientWidth ?? 0;
-                                const drawn = columnShares(specs, port);
+                                const drawn = tableLayout(
+                                  specs,
+                                  scrollRef.current?.clientWidth ?? 0
+                                );
                                 startResize(
                                   event,
                                   header.column.id,
@@ -1272,8 +1267,10 @@ function DataTableInner<TData extends RowData>({
                                     own: header.getSize(),
                                     next: next.getSize(),
                                   },
-                                  ((drawn[index] + drawn[index + 1]) / 100) *
-                                    port,
+                                  ((drawn.shares[index] +
+                                    drawn.shares[index + 1]) /
+                                    100) *
+                                    drawn.span,
                                   columnSizing
                                 );
                               }}

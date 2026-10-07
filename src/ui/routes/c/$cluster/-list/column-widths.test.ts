@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { columnShares } from "@/components/ui/column-shares";
+import { actionsColumnSize, tableLayout } from "@/components/ui/column-shares";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { headerFloor } from "@/lib/column-label";
+import { columnFloor } from "@/lib/column-label";
 
-import { NAME_CELL_PX } from "./columns";
+import { AGE_CELL_PX, NAME_CELL_PX, NODE_CELL_PX } from "./columns";
 
 import { configMapColumns } from "../(config)/configmaps/-components/ConfigMapList";
 import { columns as cronJobs } from "../(workloads)/cronjobs/-components/CronJobList";
@@ -161,17 +161,29 @@ const en: T = (section, key, values) => translate("en", section, key, values);
 const ru: T = (section, key, values) => translate("ru", section, key, values);
 
 /** Four quick actions, the most a list carries. */
-const ACTIONS = { size: 20 + 4 * 22 };
+const ACTIONS = {
+  size: actionsColumnSize(4),
+  meta: { floor: actionsColumnSize(4) },
+};
 
 /** What `DataTable` lays a list out by: its sizes, and the floors under them. */
 const drawn = (columns: Column[], t: T = en) =>
   [...columns, ACTIONS].map((c) => ({
     size: c.size ?? 150,
-    floor: Math.max(
-      "meta" in c ? (c.meta?.floor ?? 0) : 0,
-      "header" in c ? headerFloor(c, t) : 0
-    ),
+    floor: columnFloor(c, t),
   }));
+
+/** Each column's pixels in a port `port` wide, and whether the port has to scroll. */
+const laidOut = (columns: Column[], port: number, t: T = en) => {
+  const layout = tableLayout(drawn(columns, t), port);
+  return {
+    ...layout,
+    px: layout.shares.map((share) => (share / 100) * layout.span),
+  };
+};
+
+/** A 1440px window with and without the peek open, and a 1160px one: the port is the window less the sidebar and gutters. */
+const PORTS = [1160, 880, 640];
 
 describe("an address column", () => {
   const ADDRESS = new Set([
@@ -183,8 +195,6 @@ describe("an address column", () => {
   ]);
   /** 15 glyphs of 12px JetBrains Mono, the 14px copy mark, 20px of cell padding. */
   const WHOLE_IPV4_PX = 15 * 7.2 + 14 + 20;
-  /** A 1440px window with and without the peek open. */
-  const WIDTHS = [640, 1160];
 
   /**
    * Sam read "10.111.219.1..." for 10.111.219.134 in Services, "192.168..."
@@ -197,14 +207,11 @@ describe("an address column", () => {
   )(
     "%s draws a whole IPv4 at every width a list is drawn at",
     (_page, columns) => {
-      const specs = drawn(columns);
-      for (const width of WIDTHS) {
-        const shares = columnShares(specs, width);
+      for (const port of PORTS) {
+        const { px } = laidOut(columns, port);
         columns.forEach((column, index) => {
           if (!ADDRESS.has(nameOf(column))) return;
-          expect((shares[index] / 100) * width).toBeGreaterThanOrEqual(
-            WHOLE_IPV4_PX
-          );
+          expect(px[index]).toBeGreaterThanOrEqual(WHOLE_IPV4_PX);
         });
       }
     }
@@ -219,8 +226,7 @@ describe("the Pods status column", () => {
    */
   it("fits CreateContainerConfigError whole at 1440px", () => {
     const status = pods.findIndex((c) => c.id === "status");
-    const shares = columnShares(drawn(pods), 1160);
-    expect((shares[status] / 100) * 1160).toBeGreaterThanOrEqual(
+    expect(laidOut(pods, 1160).px[status]).toBeGreaterThanOrEqual(
       "CreateContainerConfigError".length * 7.2 + 14 + 20
     );
   });
@@ -235,46 +241,109 @@ describe("the Name column", () => {
       expect(name?.meta?.floor).toBeGreaterThanOrEqual(NAME_CELL_PX);
     }
   );
+
+  /** Lena read "named-port-de…-dcbc89bf5-4lh84": fails if the floor stops fitting 31 glyphs, the icon and the copy mark. */
+  it("holds a 31 character pod name whole", () => {
+    expect(NAME_CELL_PX).toBeGreaterThanOrEqual(
+      "named-port-demo-dcbc89bf5-4lh84".length * 7.2 + 2 * (14 + 4) + 20
+    );
+  });
 });
 
-describe("the Pods table at a 1440px window", () => {
+describe("every list at the windows it is drawn in", () => {
+  const LANGUAGES = [
+    ["English", en],
+    ["Russian", ru],
+  ] as const;
+
+  /**
+   * Dana read "1..." for an age and Lena "С…" for CPU, because a table that
+   * cannot give every column its floor squeezed them under it. Fails if any
+   * column of any list is drawn under its floor, in either language, at the
+   * window 1440px, 1160px wide or beside the peek.
+   */
+  it.each(
+    PAGES.flatMap(([page, columns]) =>
+      LANGUAGES.map(([name, t]) => [page, name, columns, t] as const)
+    )
+  )(
+    "%s draws every column at or over its floor in %s",
+    (_page, _language, columns, t) => {
+      const specs = drawn(columns, t);
+      for (const port of PORTS) {
+        const { px } = laidOut(columns, port, t);
+        specs.forEach((spec, index) => {
+          expect(px[index], `${index} at ${port}`).toBeGreaterThanOrEqual(
+            spec.floor - 0.0001
+          );
+        });
+      }
+    }
+  );
+
+  /**
+   * Fixed layout shares a table's width out in per cent, and per cent of a
+   * table that cannot be wider than its port are a cut. Fails if a list whose
+   * floors add up to more than the port stops asking for the width they need,
+   * or asks for more than they need when they fit.
+   */
+  it.each(
+    PAGES.flatMap(([page, columns]) =>
+      LANGUAGES.map(([name, t]) => [page, name, columns, t] as const)
+    )
+  )(
+    "%s scrolls exactly when its floors outgrow the window in %s",
+    (_page, _language, columns, t) => {
+      const floors = drawn(columns, t).reduce((sum, c) => sum + c.floor, 0);
+      for (const port of PORTS) {
+        const { span, scrolls, shares } = laidOut(columns, port, t);
+        expect(scrolls).toBe(floors > port);
+        expect(span).toBe(Math.max(port, floors));
+        expect(shares.reduce((sum, share) => sum + share, 0)).toBeCloseTo(100);
+      }
+    }
+  );
+});
+
+describe("the Pods table", () => {
   /** The scope is one namespace, or grouped by namespace: no Namespace column either way. */
   const shown: Column[] = (pods as Column[]).filter(
     (c) => nameOf(c) !== "namespace"
   );
-  const WIDTH = 1160;
+  const column = (id: string) => shown.findIndex((c) => nameOf(c) === id);
 
   /**
-   * Marco read "checko…" for three different pods and Lena "Перезапус…" on a
-   * table with room: the floors are pixels, so fails if Name is drawn under
-   * its floor, or a header under its own words, in either language.
+   * Marco read "contro…" for controlplane and Dana "1…" for 27m: the Name floor
+   * took the room the short columns needed. Fails if Age stops fitting the
+   * widest age in either language, or Node a node's usual name.
    */
   it.each([
-    ["English", en],
-    ["Russian", ru],
+    ["English", en, 29.7],
+    ["Russian", ru, 41.3],
   ] as const)(
-    "draws Name and every header whole, without a scrollbar, in %s",
-    (_language, t) => {
-      const specs = drawn(shown, t);
-      const shares = columnShares(specs, WIDTH);
-      const px = shares.map((share) => (share / 100) * WIDTH);
-      const name = shown.findIndex((c) => c.accessorKey === "name");
-      expect(px[name]).toBeGreaterThanOrEqual(NAME_CELL_PX);
-      shown.forEach((column, index) => {
-        expect(px[index], nameOf(column)).toBeGreaterThanOrEqual(
-          headerFloor(column, t)
-        );
-      });
-      expect(shares.reduce((sum, share) => sum + share, 0)).toBeLessThanOrEqual(
-        100.0001
-      );
+    "draws the widest Age, and a node name, whole in %s",
+    (_language, t, widestAgePx) => {
+      for (const port of PORTS) {
+        const { px } = laidOut(shown, port, t);
+        expect(px[column("age")]).toBeGreaterThanOrEqual(widestAgePx + 20);
+        expect(px[column("node")]).toBeGreaterThanOrEqual(NODE_CELL_PX);
+      }
+      expect(AGE_CELL_PX).toBeGreaterThanOrEqual(widestAgePx + 20);
     }
   );
 
   /** "7 (59 мин назад)" was cut to "7 (4 мин на…" beside a free strip of row actions. */
   it("keeps the whole restart count and its age in Russian", () => {
-    const restarts = shown.findIndex((c) => c.id === "restarts");
-    const px = (columnShares(drawn(shown, ru), WIDTH)[restarts] / 100) * WIDTH;
-    expect(px).toBeGreaterThanOrEqual("7 (59 мин назад)".length * 7.2 + 20);
+    const { px } = laidOut(shown, 1160, ru);
+    expect(px[column("restarts")]).toBeGreaterThanOrEqual(
+      "7 (59 мин назад)".length * 7.2 + 20
+    );
+  });
+
+  /** Fails if the row's buttons can be squeezed to nothing once every other column sits at its floor. */
+  it("keeps the room the row's buttons need when the table scrolls", () => {
+    const { px, scrolls } = laidOut(shown, 640, ru);
+    expect(scrolls).toBe(true);
+    expect(px[px.length - 1]).toBeGreaterThanOrEqual(actionsColumnSize(4));
   });
 });

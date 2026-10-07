@@ -45,12 +45,21 @@ interface WithMemoryLimits {
 }
 
 /**
- * `checkout-api-6767fbfdb7-blpfk` (29 glyphs at 7.2px), the kind's icon and the
+ * `named-port-demo-dcbc89bf5-4lh84` (31 glyphs at 7.2px), the kind's icon and the
  * copy mark with a 4px gap each, and a cell's 20px of padding. The narrowest a
  * Name column is drawn: it is the cell a reader aims at, so every other column
  * gives up its room before this one does.
  */
-export const NAME_CELL_PX = Math.ceil(29 * 7.2 + 2 * (14 + 4) + 20);
+export const NAME_CELL_PX = Math.ceil(31 * 7.2 + 2 * (14 + 4) + 20);
+
+/** `controlplane` (12 glyphs at 7.2px), the node's icon with its 4px gap, and a cell's padding; a longer name ends in an ellipsis, whole on hover. */
+export const NODE_CELL_PX = Math.ceil(12 * 7.2 + 14 + 20);
+
+/** `1.81Gi` (6 glyphs at 7.2px) and a cell's padding; the bar beside a limit is the part that goes first. */
+export const METRIC_CELL_PX = Math.ceil(6 * 7.2 + 20);
+
+/** "59 мин" and "999 д." are the widest ages, 41px of 12px Inter, and a cell's 20px of padding. */
+export const AGE_CELL_PX = 62;
 
 /**
  * The name cell.
@@ -104,6 +113,7 @@ export function createAgeColumn<Row extends WithCreatedAt>(): ColumnDef<Row> {
   return {
     size: 80,
     id: "age",
+    meta: { floor: AGE_CELL_PX },
     header: columnHeader("columns", "age"),
     cell: ({ row }) => (
       <span className="text-fg-fnt">
@@ -125,6 +135,7 @@ export function createCpuColumn<
     id: "cpu",
     header: columnHeader("columns", "cpu"),
     meta: {
+      floor: METRIC_CELL_PX,
       share: (row: Row, t) =>
         typeof row.cpuMillicores === "number"
           ? formatUsage(row.cpuMillicores, "cpu")
@@ -157,6 +168,7 @@ export function createMemoryColumn<
     id: "memory",
     header: columnHeader("columns", "memory"),
     meta: {
+      floor: METRIC_CELL_PX,
       share: (row: Row, t) =>
         typeof row.memoryBytes === "number"
           ? formatUsage(row.memoryBytes, "memory")
