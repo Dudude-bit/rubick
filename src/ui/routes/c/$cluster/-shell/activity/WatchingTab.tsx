@@ -101,7 +101,7 @@ function Row({
         className={cn("h-1.5 w-1.5 flex-none rounded-full", tone)}
       />
       <span className="min-w-0 flex-1">
-        <span className="block truncate">
+        <span className="block break-words">
           <span className="text-fg-fnt">{watch.kind} </span>
           {watch.namespace && (
             <span className="text-fg-fnt">{watch.namespace}/</span>
@@ -117,7 +117,7 @@ function Row({
         </span>
         <span
           className={cn(
-            "block truncate font-mono text-[11px]",
+            "block break-words font-mono text-[11px]",
             detail === null ? "text-fg-fnt" : "text-fg-mut"
           )}
           title={detail ?? undefined}
