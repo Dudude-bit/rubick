@@ -10,7 +10,7 @@ import type {
   PersistentVolumeClaimInfo,
   ServiceHealthGroup,
 } from "@/generated/types";
-import { attentionOf, type AttentionInputs } from "./attention";
+import { attentionOf, reasonWord, type AttentionInputs } from "./attention";
 import { ingressHealthOf, type NamespaceBacking } from "./ingress-health";
 import { serviceHealthOf, serviceHealthWords } from "./service-health";
 
@@ -459,5 +459,32 @@ describe("what Needs attention could not look at", () => {
     expect(listed.items).toEqual([]);
     expect(listed.complete).toBe(true);
     expect(listed.worst).toBeNull();
+  });
+});
+
+describe("the word a row's reason is printed in", () => {
+  const ru: T = (section, key, values) => translate("ru", section, key, values);
+
+  /**
+   * A Stalled Deployment's row read "Stalled" in a Russian panel. The app's
+   * own verdicts are the reader's language; a pod's reason is the kubelet's
+   * and is matched against kubectl, so it stays as written.
+   */
+  it("words a workload's verdict and leaves the cluster's own reasons alone", () => {
+    expect(reasonWord({ kind: "Deployment", reason: "Stalled" }, ru)).toBe(
+      "Застрял"
+    );
+    expect(reasonWord({ kind: "DaemonSet", reason: "Degraded" }, ru)).toBe(
+      "Деградировал"
+    );
+    expect(reasonWord({ kind: "Deployment", reason: "Unavailable" }, ru)).toBe(
+      "Unavailable"
+    );
+    expect(reasonWord({ kind: "Pod", reason: "Degraded" }, ru)).toBe(
+      "Degraded"
+    );
+    expect(reasonWord({ kind: "Pod", reason: "CrashLoopBackOff" }, ru)).toBe(
+      "CrashLoopBackOff"
+    );
   });
 });

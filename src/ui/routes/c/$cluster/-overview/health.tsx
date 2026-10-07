@@ -29,6 +29,7 @@ import {
 import { eventReasonMark } from "@/lib/event-reason";
 import {
   foldedWords,
+  reasonWord,
   type Attention,
   type AttentionCheck,
   type AttentionItem,
@@ -155,8 +156,8 @@ function AttentionRow({ item }: { item: AttentionItem }) {
           className="h-2.5 w-2.5 flex-none self-center"
           aria-hidden="true"
         />
-        <span className="truncate" title={item.reason}>
-          {item.reason}
+        <span className="truncate" title={reasonWord(item, t)}>
+          {reasonWord(item, t)}
         </span>
       </span>
       <span className="truncate text-fg-mid">

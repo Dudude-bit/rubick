@@ -6641,6 +6641,10 @@ export const en = {
     suspended: "Suspended",
     waiting: "Waiting",
     active: "Active",
+    idle: "Idle",
+    stalled: "Stalled",
+    degraded: "Degraded",
+    retrying: "Retrying",
   },
   statusMeaning: {
     phasePending:

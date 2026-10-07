@@ -84,6 +84,25 @@ describe("what a status means", () => {
   });
 });
 
+describe("a meaning line begins with the word the badge prints", () => {
+  const ru: T = (section, key, values) => translate("ru", section, key, values);
+
+  /**
+   * The badge said "Застрял" and its tooltip began "Stalled:". Fails if
+   * either line goes back to the English code, or if a word the cluster
+   * wrote is worded as the app's own.
+   */
+  it("uses the reader's word for the app's own verdicts and the cluster's word for the rest", async () => {
+    await loadLocale("ru");
+    expect(workloadStatusMeaning("Stalled", ru)).toMatch(/^Застрял: /);
+    expect(workloadStatusMeaning("Unavailable", ru)).toMatch(/^Unavailable: /);
+    expect(statusMeaning("Job", "Retrying", ru)).toMatch(
+      /^Повторяет попытку: /
+    );
+    expect(statusMeaning("Job", "Failed", ru)).toMatch(/^Failed: /);
+  });
+});
+
 describe("what a Job's word means", () => {
   const shared = JSON.parse(
     readFileSync(resolve(process.cwd(), "src/contracts/job-codes.json"), "utf8")

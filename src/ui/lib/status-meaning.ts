@@ -2,6 +2,7 @@ import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import type { PodReadiness } from "@/lib/container-sequence";
 import { toKind } from "@/lib/resource-registry";
+import { ownStatusWord } from "@/lib/status-words";
 import type { WorkloadStatus } from "@/lib/workload-status";
 
 /**
@@ -155,7 +156,10 @@ export function workloadStatusMeaning(
   t: T
 ): string | undefined {
   if (!Object.hasOwn(WORKLOAD, status)) return undefined;
-  return line(status, t("statusMeaning", WORKLOAD[status as WorkloadStatus]));
+  return line(
+    ownStatusWord(status, t) ?? status,
+    t("statusMeaning", WORKLOAD[status as WorkloadStatus])
+  );
 }
 
 /** For a surface that draws any kind's badge: the peek's header. */
@@ -169,6 +173,9 @@ export function statusMeaning(
   if (resolved && WORKLOAD_KINDS.has(resolved))
     return workloadStatusMeaning(status, t);
   if (resolved === "Job" && Object.hasOwn(JOB, status))
-    return line(status, t("statusMeaning", JOB[status as JobStatus]));
+    return line(
+      ownStatusWord(status, t) ?? status,
+      t("statusMeaning", JOB[status as JobStatus])
+    );
   return undefined;
 }

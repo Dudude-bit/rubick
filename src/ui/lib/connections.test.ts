@@ -1540,6 +1540,30 @@ describe("where a pod's replica count is really set", () => {
     expect(rows[0].detail ?? "").not.toContain("replica count");
   });
 
+  /**
+   * The owner row said "Stalled · 0/2 готовы" in a Russian tab, the app's own
+   * verdict in the cluster's language. Fails if the row goes back to the code.
+   */
+  it("words an owner's rollout verdict in the reader's language", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const pod = ref("Pod", "crash-demo-c688f57cf-abcde");
+    const deployment = ref("Deployment", "crash-demo", {
+      kind: "workload",
+      replicas: 2,
+      readyReplicas: 0,
+      rollout: { state: "stalled", message: null, serving: 0 },
+      revision: null,
+      current: null,
+    });
+    const rows =
+      connectionGroups(connections(pod, [owns(deployment, pod)]), ru).find(
+        (group) => group.key === "owners"
+      )?.rows ?? [];
+    expect(rows[0].detail).toContain("Застрял · готовы 0 из 2");
+    expect(rows[0].detail).not.toContain("Stalled");
+  });
+
   /** A Russian Connections tab labelled its children "Revisions" and "Runs". */
   it("labels a Deployment's revisions in the reader's language", () => {
     const ru: T = (section, key, values) =>

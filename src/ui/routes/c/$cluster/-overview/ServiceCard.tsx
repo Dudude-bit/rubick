@@ -9,6 +9,7 @@ import { useConnections } from "@/hooks/useConnections";
 import { trafficChains, unreadWhy } from "@/lib/connections";
 import { cn, formatAge } from "@/lib/utils";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { ownStatusWord } from "@/lib/status-words";
 import {
   CARD_REFRESH,
   changesFor,
@@ -247,7 +248,9 @@ function StateWords({ state, t }: { state: ServiceState; t: T }) {
   if (state.state === "short" && state.status) {
     return (
       <span className="flex flex-none items-baseline gap-1.5">
-        <StatusBadge status={state.status} />
+        <StatusBadge status={state.status}>
+          {ownStatusWord(state.status, t)}
+        </StatusBadge>
         {count}
       </span>
     );

@@ -21,6 +21,7 @@ import type {
 import type { T } from "@/i18n/useT";
 import { errorCode, errorToShow } from "@/lib/error-utils";
 import { autoscalerVerdict } from "@/lib/governance";
+import { ownStatusWord } from "@/lib/status-words";
 import { ingressHealthWords, type IngressHealth } from "@/lib/ingress-health";
 import { serviceHealthOf, serviceHealthWords } from "@/lib/service-health";
 
@@ -112,6 +113,23 @@ function remember<A extends unknown[], R>(
     last = { args, result };
     return result;
   };
+}
+
+const OWN_VERDICT_KINDS = new Set([
+  "Deployment",
+  "StatefulSet",
+  "DaemonSet",
+  "Job",
+]);
+
+/** The row's reason in the reader's language where the app reached it; every other reason is the cluster's and stays as written. */
+export function reasonWord(
+  item: Pick<AttentionItem, "kind" | "reason">,
+  t: T
+): string {
+  return OWN_VERDICT_KINDS.has(item.kind)
+    ? (ownStatusWord(item.reason, t) ?? item.reason)
+    : item.reason;
 }
 
 const keyOf = (item: Omit<AttentionItem, "key">) =>

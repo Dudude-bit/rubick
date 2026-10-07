@@ -9,7 +9,10 @@ import type { ChainPath } from "@/lib/connections";
 import { renderWithRouter } from "@/test/render";
 
 const chain = vi.hoisted(() => ({ paths: [] as ChainPath[] }));
-const read = vi.hoisted(() => ({ error: null as unknown }));
+const read = vi.hoisted(() => ({
+  error: null as unknown,
+  workload: { replicas: 1, readyReplicas: 1, rollout: null as unknown },
+}));
 
 vi.mock("@/hooks/useConnections", () => ({
   useConnections: () => ({
@@ -23,8 +26,7 @@ vi.mock("@/hooks/useConnections", () => ({
             existence: "present",
             facts: {
               kind: "workload",
-              replicas: 1,
-              readyReplicas: 1,
+              ...read.workload,
               revision: null,
               current: null,
             },
@@ -47,6 +49,7 @@ vi.mock("@/lib/connections", async (original) => ({
 import { ServiceCard } from "./ServiceCard";
 import { pinShare } from "./service-card-share";
 import { translate } from "@/i18n";
+import { useLocaleStore } from "@/stores/localeStore";
 import type { T } from "@/i18n/useT";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -67,6 +70,7 @@ const mount = () =>
 
 beforeEach(() => {
   read.error = null;
+  read.workload = { replicas: 1, readyReplicas: 1, rollout: null };
 });
 
 describe("what a card says about its state", () => {
@@ -85,6 +89,28 @@ describe("what a card says about its state", () => {
     await mount();
 
     expect(screen.getByText(/does not exist|не существует/i)).toBeVisible();
+  });
+});
+
+describe("what a card says about a rollout", () => {
+  /**
+   * A stalled Deployment's card drew the badge "Stalled" among Russian
+   * words. Fails if the badge goes back to the code.
+   */
+  it("words the rollout verdict in the reader's language", async () => {
+    read.workload = {
+      replicas: 2,
+      readyReplicas: 0,
+      rollout: { state: "stalled", message: null, serving: 0 },
+    };
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      await mount();
+      expect(screen.getByText("Застрял")).toBeVisible();
+      expect(screen.queryByText("Stalled")).toBeNull();
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 });
 

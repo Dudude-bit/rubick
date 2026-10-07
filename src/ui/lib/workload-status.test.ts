@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { Rollout } from "@/generated/types";
+import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { statusRole } from "./status-role";
 import {
@@ -11,6 +12,7 @@ import {
   rolloutLine,
   rolloutStatusOf,
   workloadStatus,
+  workloadWord as rolloutWord,
 } from "./workload-status";
 
 const t = ((section: string, key: string) => `${section}.${key}`) as T;
@@ -101,8 +103,25 @@ describe("the word a workload's rollout comes to", () => {
       role: "ok",
     });
     expect(rolloutStatusOf(2, 2, EVERY[1], t)).toEqual({
-      text: "Stalled · count.slashReady",
+      text: "statusWords.stalled · count.slashReady",
       role: "err",
     });
+  });
+
+  /**
+   * Lena's shared Deployment report said "Stalled" in English among Russian
+   * words. Fails if the report goes back to the code, or if the colour moves
+   * with the word: the role is still read from the English code.
+   */
+  it("words the report's verdict in the reader's language and keeps its colour", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    expect(rolloutStatusOf(0, 2, EVERY[1], ru)).toEqual({
+      text: "Застрял · 0/2 готовы",
+      role: "err",
+    });
+    expect(rolloutWord(EVERY[6], ru)).toBe("Деградировал");
+    expect(rolloutWord(EVERY[0], ru)).toBe("Простаивает");
+    expect(rolloutWord(EVERY[2], ru)).toBe("Unavailable");
   });
 });

@@ -215,6 +215,48 @@ describe("the detail line on a problem row", () => {
   });
 });
 
+describe("the reason on a problem row", () => {
+  const stalled: ClusterProblem = {
+    severity: "critical",
+    kind: "Deployment",
+    name: "cart",
+    namespace: "shop",
+    reason: "Stalled",
+    detail: null,
+    since: null,
+    restarts: null,
+    foldedPods: null,
+  };
+
+  /**
+   * A Stalled Deployment's row read "Stalled" among Russian rows while its
+   * list badge said "Застрял". Fails if the row goes back to the code, or
+   * words a reason the cluster wrote.
+   */
+  it("words the app's own verdict in the reader's language", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      const { unmount } = await wrap(
+        <AttentionPanel
+          attention={attentionFrom([
+            stalled,
+            { ...stalled, kind: "Pod", name: "cart-0", reason: "OOMKilled" },
+          ])}
+          pods={RUNNING}
+          nodes={[]}
+          nodesKnown={true}
+        />
+      );
+      expect(screen.getByText("Застрял")).toBeInTheDocument();
+      expect(screen.queryByText("Stalled")).toBeNull();
+      expect(screen.getByText("OOMKilled")).toBeInTheDocument();
+      unmount();
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
+  });
+});
+
 describe("the healthy line when the node read was refused", () => {
   const pods = {
     running: 1,

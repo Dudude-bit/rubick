@@ -17,7 +17,7 @@ import { covers, expiryOf } from "./certificates";
 import { formatKubernetesBytes } from "./k8s-quantity";
 import { isScalable } from "./resource-registry";
 import { groupMounts } from "./mounts";
-import { rolloutLine, workloadStatus } from "./workload-status";
+import { rolloutLine, workloadWord } from "./workload-status";
 import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
 import { ingressAddressOf, type IngressAddress } from "./ingress-health";
@@ -201,7 +201,7 @@ function describeFacts(facts: ObjectFacts | null, t: T): string | null {
           total: facts.replicas,
         });
         return facts.rollout && rolloutLine(facts.rollout, t)
-          ? join(workloadStatus(facts.rollout), counted)
+          ? join(workloadWord(facts.rollout, t), counted)
           : counted;
       }
       const revision = t("columns", "revisionInline", { n: facts.revision });

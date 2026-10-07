@@ -2,6 +2,7 @@ import type { Rollout } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import type { Tone } from "@/lib/tone";
 import { statusRole } from "@/lib/status-role";
+import { ownStatusWord } from "@/lib/status-words";
 
 /**
  * The one word a workload's rollout comes to, on every screen that draws it.
@@ -39,6 +40,12 @@ export const ROLLOUT_CODES: Record<Rollout["state"], WorkloadStatus> = {
 
 export function workloadStatus(rollout: Rollout): WorkloadStatus {
   return ROLLOUT_CODES[rollout.state];
+}
+
+/** The verdict as the reader's language words it; `workloadStatus` stays the code `statusRole` reads. */
+export function workloadWord(rollout: Rollout, t: T): string {
+  const code = workloadStatus(rollout);
+  return ownStatusWord(code, t) ?? code;
 }
 
 /** The states the overview lists as needing attention; the shared file holds the two equal. */
@@ -128,7 +135,9 @@ export function rolloutStatusOf(
   const count = t("count", "slashReady", { n: ready, total: desired });
   const code = workloadStatus(rollout);
   return {
-    text: rolloutLine(rollout, t) ? `${code} · ${count}` : count,
+    text: rolloutLine(rollout, t)
+      ? `${ownStatusWord(code, t) ?? code} · ${count}`
+      : count,
     role: statusRole(code),
   };
 }

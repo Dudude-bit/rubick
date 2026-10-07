@@ -7245,6 +7245,10 @@ export const ru: Catalogue = {
     suspended: "Приостановлен",
     waiting: "Ожидает",
     active: "Активен",
+    idle: "Простаивает",
+    stalled: "Застрял",
+    degraded: "Деградировал",
+    retrying: "Повторяет попытку",
   },
   statusMeaning: {
     phasePending:

@@ -8,6 +8,7 @@ import { statusRole, type StatusRole } from "@/lib/status-role";
 import { NEEDS_ATTENTION, ROLLOUT_CODES } from "@/lib/workload-status";
 import {
   foldedWords,
+  reasonWord,
   type Attention,
   type AttentionDetail,
 } from "@/lib/attention";
@@ -108,7 +109,7 @@ export function memoryRatio(
 /** What the "Needs attention" panel draws, as a Share finding per row. */
 export function attentionShare(attention: Attention, t: T): PlacedSection {
   const items: ReportFinding[] = attention.items.map((item) => ({
-    title: item.reason,
+    title: reasonWord(item, t),
     detail:
       [foldedWords(item, t), detailWords(item.detail, t)]
         .filter((part) => part !== null)
