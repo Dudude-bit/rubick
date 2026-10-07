@@ -4719,6 +4719,13 @@ export const en = {
     insideNothing: "Nothing is inside it, among the kinds read.",
     holdsUnread:
       "Everything it holds goes with it, and what it holds could not be read.",
+    dependentsWorking: "Looking for what still points at it…",
+    dependents: {
+      one: "Left behind, still pointing at it:",
+      other: "Left behind, still pointing at it:",
+    },
+    dependentsFailed: "Could not check what points at it. {error}",
+    dependentsUnread: "Not checked for references to it: {kinds}.",
   },
   // An object whose meaning belongs to one parent, opened there or not.
   attached: {

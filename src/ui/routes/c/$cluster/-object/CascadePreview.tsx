@@ -5,6 +5,7 @@ import {
   Inbox,
   Loader2,
   Trash2,
+  Unlink,
   XCircle,
 } from "lucide-react";
 
@@ -12,8 +13,11 @@ import type { Cascade, Holds, KindCount, NotRead } from "@/generated/types";
 import { KindIcon } from "@/components/object/KindIcon";
 import { RouteLink } from "@/components/ui/route-link";
 import { useT } from "@/i18n/useT";
+import { useConnections } from "@/hooks/useConnections";
+import { dependentsOf } from "@/lib/connections";
 import { errorToShow } from "@/lib/error-utils";
 import { crdInstancesLink } from "@/lib/links";
+import { CONNECTED_KINDS } from "@/lib/report-parts";
 import {
   holdsContents,
   listing,
@@ -77,7 +81,88 @@ export function CascadePreview({
           holder={holdsContents(subject) ? subject : null}
         />
       )}
+      {!served && CONNECTED_KINDS.has(kind) && (
+        <Dependents kind={kind} name={name} namespace={namespace ?? null} />
+      )}
     </div>
+  );
+}
+
+/** What stays after the delete and still names the object, so breaks. */
+function Dependents({
+  kind,
+  name,
+  namespace,
+}: {
+  kind: string;
+  name: string;
+  namespace: string | null;
+}) {
+  const t = useT();
+  const conns = useConnections(kind, name, namespace);
+  if (conns.error)
+    return (
+      <p className="flex items-start gap-2 text-warn">
+        <AlertTriangle
+          className="mt-px h-3.5 w-3.5 flex-none"
+          aria-hidden="true"
+        />
+        {t("cascade", "dependentsFailed", { error: errorToShow(conns.error) })}
+      </p>
+    );
+  if (!conns.data)
+    return (
+      <p className="flex items-center gap-2 text-fg-mut">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        {t("cascade", "dependentsWorking")}
+      </p>
+    );
+  const dependents = dependentsOf(conns.data, t);
+  const unread = conns.data.notLookedAt.map((entry) => entry.kind);
+  return (
+    <>
+      {dependents.length > 0 && (
+        <div className="flex flex-col gap-2" data-testid="dependents">
+          <p className="flex items-center gap-2 font-medium text-warn">
+            <Unlink className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("cascade", "dependents", { n: dependents.length })}
+          </p>
+          <ul className="flex flex-col gap-1">
+            {dependents.map(({ object, ways }) => (
+              <li
+                key={`${object.kind}/${object.namespace ?? ""}/${object.name}`}
+                className="flex min-w-0 items-baseline gap-1.5"
+              >
+                <KindIcon
+                  kind={object.kind}
+                  className="h-3 w-3 flex-none self-center"
+                />
+                <span className="flex-none font-mono text-fg">
+                  {object.kind}
+                </span>
+                <span className="truncate font-mono text-fg">
+                  {object.name}
+                </span>
+                {ways.length > 0 && (
+                  <span className="truncate text-fg-mut">
+                    {ways.join(" · ")}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {unread.length > 0 && (
+        <p className="flex items-start gap-2 text-warn">
+          <AlertTriangle
+            className="mt-px h-3.5 w-3.5 flex-none"
+            aria-hidden="true"
+          />
+          {t("cascade", "dependentsUnread", { kinds: unread.join(", ") })}
+        </p>
+      )}
+    </>
   );
 }
 

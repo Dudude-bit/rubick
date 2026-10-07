@@ -1653,6 +1653,54 @@ function deliveredRows(delivery: Delivery[], t: T): ConnRow[] {
   );
 }
 
+/** An object deleting the subject leaves behind, still naming it, and how. */
+export interface Dependent {
+  object: ObjectRef;
+  ways: string[];
+}
+
+/**
+ * What names the subject and is not deleted with it: an Ingress or a route
+ * sending traffic to it, a pod or workload reading it, a route attached to
+ * it, a claim bound to it, an autoscaler aimed at it. Ownership is the
+ * cascade's question; a selector names no object.
+ */
+export function dependentsOf(conns: ResourceConnections, t: T): Dependent[] {
+  const found = new Map<string, Dependent>();
+  for (const edge of conns.edges) {
+    if (!sameObject(edge.to, conns.subject)) continue;
+    if (sameObject(edge.from, conns.subject)) continue;
+    const ways = dependentWays(edge, t);
+    if (!ways) continue;
+    const key = refKey(edge.from);
+    const known = found.get(key);
+    if (known) known.ways = [...new Set([...known.ways, ...ways])];
+    else found.set(key, { object: edge.from, ways });
+  }
+  return [...found.values()];
+}
+
+function dependentWays(edge: ConnectionEdge, t: T): string[] | null {
+  const relation = edge.relation;
+  switch (relation.verb) {
+    case "routes":
+      return [`${relation.host ?? "*"}${relation.path}`];
+    case "ruleRoutes":
+      return [relation.hostnames.join(", ") || "*"];
+    case "uses":
+      return describeUsages(relation.usages, t);
+    case "attachesTo":
+    case "binds":
+      return [];
+    case "governs":
+      return edge.from.kind === "HorizontalPodAutoscaler" ? [] : null;
+    case "owns":
+    case "selects":
+    case "runsOn":
+      return null;
+  }
+}
+
 /**
  * A translator for the one caller that provably throws every word away.
  *

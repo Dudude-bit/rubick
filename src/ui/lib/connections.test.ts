@@ -8,6 +8,7 @@ const t: T = (section, key, values) => translate("en", section, key, values);
 import {
   chainSilence,
   connectionGroups,
+  dependentsOf,
   describeStop,
   describeUsages,
   trafficChains,
@@ -1649,5 +1650,82 @@ describe("connections read the same from both ends", () => {
   /** A Service with no pods behind it says nothing on a workload it does not select. */
   it("leaves the group out where no Service selects the workload", () => {
     expect(names(connections(deployment, []), "reached")).toBeUndefined();
+  });
+});
+
+describe("what a delete leaves pointing at the object", () => {
+  const config = ref("ConfigMap", "app-config");
+  const web = ref("Deployment", "web");
+  const conns = (edges: ConnectionEdge[]): ResourceConnections => ({
+    subject: config,
+    edges,
+    stops: [],
+    published: [],
+    notLookedAt: [],
+  });
+
+  /**
+   * A pod or workload reading the ConfigMap stays and fails its next start.
+   * Fails if a reader is dropped, or named twice for two ways it reads.
+   */
+  it("names each reader once, with every way it reads", () => {
+    const env: Usage = {
+      how: "env",
+      container: "app",
+      name: "APP_MESSAGE",
+      key: "app.conf",
+      optional: false,
+      keyPresent: true,
+    };
+    const found = dependentsOf(
+      conns([
+        { from: web, to: config, relation: { verb: "uses", usages: [env] } },
+        {
+          from: web,
+          to: config,
+          relation: {
+            verb: "uses",
+            usages: [{ how: "envFrom", container: "app" }],
+          },
+        },
+      ]),
+      t
+    );
+    expect(found.map((dependent) => dependent.object.name)).toEqual(["web"]);
+    expect(found[0].ways).toHaveLength(2);
+  });
+
+  /**
+   * An autoscaler names its target, so it breaks; a budget matched labels
+   * and an owner is the cascade's. Fails if either of the last two is named.
+   */
+  it("names an autoscaler aimed at it, and not a budget or an owner", () => {
+    const deployment = ref("Deployment", "web");
+    const found = dependentsOf(
+      {
+        ...conns([
+          {
+            from: ref("HorizontalPodAutoscaler", "web"),
+            to: deployment,
+            relation: { verb: "governs", selector: null },
+          },
+          {
+            from: ref("PodDisruptionBudget", "web"),
+            to: deployment,
+            relation: { verb: "governs", selector: "app=web" },
+          },
+          {
+            from: deployment,
+            to: ref("ReplicaSet", "web-1"),
+            relation: { verb: "owns", controller: true },
+          },
+        ]),
+        subject: deployment,
+      },
+      t
+    );
+    expect(found.map((dependent) => dependent.object.kind)).toEqual([
+      "HorizontalPodAutoscaler",
+    ]);
   });
 });

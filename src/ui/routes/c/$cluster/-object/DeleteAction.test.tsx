@@ -1,12 +1,16 @@
 import type { UseMutationResult } from "@tanstack/react-query";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
+import type { ObjectRef, ResourceConnections } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 
+const getResourceConnections = vi.hoisted(() => vi.fn());
+
 vi.mock("@/lib/commands", () => ({
   commands: {
+    getResourceConnections,
     objectLineage: () =>
       Promise.resolve({ uid: "d", ancestors: [], others: [], stop: null }),
     previewCascade: () =>
@@ -28,6 +32,7 @@ const mutation = {
 
 beforeEach(() => {
   mutate.mockReset();
+  getResourceConnections.mockReset();
   useClusterStore.setState({ currentContext: "test", isConnected: true });
 });
 
@@ -126,5 +131,119 @@ describe("Restart on a pod's page", () => {
       )!
     );
     expect(mutate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Delete on a Service that Ingresses route to", () => {
+  const ref = (kind: string, name: string): ObjectRef => ({
+    kind,
+    name,
+    namespace: "k8s-gui-test",
+    existence: "present",
+    facts: null,
+  });
+  const service = ref("Service", "topology-demo");
+  const routes = (
+    ingress: string,
+    host: string
+  ): ResourceConnections["edges"][number] => ({
+    from: ref("Ingress", ingress),
+    to: service,
+    relation: {
+      verb: "routes",
+      host,
+      path: "/",
+      pathType: "Prefix",
+      port: "80",
+      tls: false,
+    },
+  });
+  const neighbourhood = (
+    over: Partial<ResourceConnections> = {}
+  ): ResourceConnections => ({
+    subject: service,
+    edges: [
+      routes("dupe-nginx-new", "legacy.nginx.k8s-gui.test"),
+      routes("promo-nginx-canary", "promo.nginx.k8s-gui.test"),
+      {
+        from: service,
+        to: ref("Pod", "topology-demo-1"),
+        relation: { verb: "selects", selector: "app=topology-demo" },
+      },
+    ],
+    stops: [],
+    published: [],
+    notLookedAt: [],
+    ...over,
+  });
+
+  const openDelete = async () => {
+    await renderWithRouter(
+      <DeleteAction
+        kind="Service"
+        name="topology-demo"
+        namespace="k8s-gui-test"
+        intercept={null}
+        mutation={mutation}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    return screen.findByRole("alertdialog");
+  };
+
+  /**
+   * Sam's Delete on topology-demo said only "Also deletes: EndpointSlice 1"
+   * while two Ingresses route to it and stay, pointing at nothing. Fails
+   * unless the dialog names both, with the route each sends.
+   */
+  it("names the Ingresses left routing to it", async () => {
+    getResourceConnections.mockResolvedValue(neighbourhood());
+    const dialog = await openDelete();
+    const left = await within(dialog).findByTestId("dependents");
+    expect(left).toHaveTextContent("Left behind, still pointing at it:");
+    expect(left).toHaveTextContent(
+      "Ingressdupe-nginx-newlegacy.nginx.k8s-gui.test/"
+    );
+    expect(left).toHaveTextContent(
+      "promo-nginx-canarypromo.nginx.k8s-gui.test/"
+    );
+    expect(left).not.toHaveTextContent("topology-demo-1");
+  });
+
+  /**
+   * A refused or failed read is not "nothing points at it". Fails if the
+   * dialog falls silent when the neighbourhood could not be read.
+   */
+  it("says it could not check when the neighbourhood read fails", async () => {
+    getResourceConnections.mockRejectedValue(new Error("connection reset"));
+    const dialog = await openDelete();
+    expect(
+      await within(dialog).findByText(/Could not check what points at it/)
+    ).toBeInTheDocument();
+    expect(within(dialog).queryByTestId("dependents")).toBeNull();
+  });
+
+  /**
+   * Marco may not list Ingresses, so an Ingress routing here would be
+   * invisible. Fails unless the kinds the read skipped are named.
+   */
+  it("names the kinds it could not check for references", async () => {
+    getResourceConnections.mockResolvedValue(
+      neighbourhood({
+        edges: [],
+        notLookedAt: [
+          {
+            kind: "Ingress",
+            why: { says: "unanswered", version: "v1", said: "forbidden" },
+          },
+        ],
+      })
+    );
+    const dialog = await openDelete();
+    expect(
+      await within(dialog).findByText(
+        "Not checked for references to it: Ingress."
+      )
+    ).toBeInTheDocument();
   });
 });
