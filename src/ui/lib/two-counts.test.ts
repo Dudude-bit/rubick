@@ -66,7 +66,7 @@ describe("counts in the catalogue", () => {
     expect(ru("readings", "problemReplicasReady", { ready: 0, n: 3 })).toBe(
       "готово 0 из 3 реплик"
     );
-    expect(ru("readings", "ngxHstsAge", { n: 31536000 })).toBe(
+    expect(ru("readings", "ngxHstsAge", { n: "31536000" })).toBe(
       "Браузеру велено помнить это 31536000 секунд."
     );
     expect(

@@ -98,7 +98,9 @@ function oneOf(value: string, options: Record<string, string>): string | null {
 
 const seconds = (value: string, t: T) => {
   const number = whole(value);
-  return number === null ? null : t("count", "nginxSeconds", { n: number });
+  return number === null
+    ? null
+    : t("count", "nginxSeconds", { n: String(number) });
 };
 
 /** What an entry may look at: its own value, and its Ingress's other keys. */
@@ -268,7 +270,7 @@ const TABLE: ReadonlyArray<{ suffix: string; say: Say }> = [
       const rate = whole(value);
       return rate === null
         ? null
-        : t("count", "nginxRatePerSecond", { n: rate });
+        : t("count", "nginxRatePerSecond", { n: String(rate) });
     },
   },
   {
@@ -277,7 +279,7 @@ const TABLE: ReadonlyArray<{ suffix: string; say: Say }> = [
       const rate = whole(value);
       return rate === null
         ? null
-        : t("count", "nginxRatePerMinute", { n: rate });
+        : t("count", "nginxRatePerMinute", { n: String(rate) });
     },
   },
   {
@@ -286,7 +288,7 @@ const TABLE: ReadonlyArray<{ suffix: string; say: Say }> = [
       const count = whole(value);
       return count === null
         ? null
-        : t("count", "nginxConnections", { n: count });
+        : t("count", "nginxConnections", { n: String(count) });
     },
   },
 
