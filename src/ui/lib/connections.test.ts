@@ -1593,3 +1593,61 @@ describe("a list the cluster refused", () => {
     expect(chainSilence(pod(), t)).not.toBeNull();
   });
 });
+
+describe("connections read the same from both ends", () => {
+  const deployment = ref("Deployment", "log-demo");
+  const replicas = ref("ReplicaSet", "log-demo-84c4d9749c");
+  const running = pod("log-demo-84c4d9749c-c7s72", true);
+  const front = service("log-demo", "app=log-demo");
+  const ingress = ref("Ingress", "log-demo");
+  const selects = { verb: "selects", selector: "app=log-demo" } as const;
+  const routes = {
+    verb: "routes",
+    host: "logs.k8s-gui.test",
+    path: "/",
+    pathType: "Prefix",
+    port: "80",
+    tls: false,
+  } as const;
+  const names = (conns: ResourceConnections, group: string) =>
+    connectionGroups(conns, t)
+      .find((g) => g.key === group)
+      ?.rows.map((row) => `${row.object?.kind}/${row.object?.name}`);
+
+  /**
+   * Sam's Service log-demo listed Deployment log-demo while the Deployment's
+   * Connections had no Service row. Fails if either end stops naming the other.
+   */
+  it("names the Service on the Deployment that the Service names", () => {
+    const fromService = connections(front, [
+      { from: front, to: running, relation: selects },
+      {
+        from: replicas,
+        to: running,
+        relation: { verb: "owns", controller: true },
+      },
+      {
+        from: deployment,
+        to: replicas,
+        relation: { verb: "owns", controller: true },
+      },
+      { from: ingress, to: front, relation: routes },
+    ]);
+    const fromDeployment = connections(deployment, [
+      { from: front, to: deployment, relation: selects },
+      { from: ingress, to: front, relation: routes },
+      { from: deployment, to: running, relation: selects },
+    ]);
+
+    expect(names(fromService, "answers")).toEqual(["Deployment/log-demo"]);
+    expect(names(fromDeployment, "reached")).toEqual([
+      "Service/log-demo",
+      "Ingress/log-demo",
+    ]);
+  });
+
+  /** A Service with no pods behind it says nothing on a workload it does not select. */
+  it("leaves the group out where no Service selects the workload", () => {
+    expect(names(connections(deployment, []), "reached")).toBeUndefined();
+  });
+});

@@ -6,8 +6,6 @@
  * pile. *What does this need to run* is a question, and the backend returns
  * typed edges rather than groups precisely so the answering happens once,
  * here, instead of on ten detail pages.
- *
- * The traffic edges are not repeated: the chain on the Overview draws them.
  */
 
 import * as React from "react";

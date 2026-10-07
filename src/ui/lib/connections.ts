@@ -1265,6 +1265,29 @@ function answersHere(conns: ResourceConnections, t: T): ConnRow[] {
   );
 }
 
+/** The mirror of {@link answersHere}: the Services that select the subject, and what routes to them. */
+function reachedThrough(conns: ResourceConnections, t: T): ConnRow[] {
+  const services = verb(conns.edges, "selects")
+    .filter(
+      (edge) =>
+        edge.from.kind === "Service" && sameObject(edge.to, conns.subject)
+    )
+    .map((edge) => edge.from);
+  const routes = conns.edges
+    .filter(
+      (edge) =>
+        (edge.relation.verb === "routes" ||
+          edge.relation.verb === "ruleRoutes") &&
+        services.some((service) => sameObject(edge.to, service))
+    )
+    .map((edge) => edge.from);
+  return labelled(
+    unique([...services, ...routes]).map((object) =>
+      rowFor(object.kind, object, t)
+    )
+  );
+}
+
 /**
  * Who made this, all the way up, and what it made.
  *
@@ -1532,6 +1555,14 @@ export function connectionGroups(
           title: t("nav", "whatAnswersHere"),
           caption: t("nav", "whatAnswersHereNote"),
           rows: answersHere(conns, t),
+        }
+      : null,
+    OWNABLE.has(conns.subject.kind)
+      ? {
+          key: "reached",
+          title: t("nav", "reachedThrough"),
+          caption: t("nav", "reachedThroughNote"),
+          rows: reachedThrough(conns, t),
         }
       : null,
     placement(conns, t),

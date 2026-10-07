@@ -52,6 +52,8 @@ export const ru: Catalogue = {
     usedByNote: "кто ссылается на это в спецификации своего пода",
     whatAnswersHere: "Кто здесь отвечает",
     whatAnswersHereNote: "кто создал поды за этим адресом",
+    reachedThrough: "Трафик приходит через",
+    reachedThroughNote: "что направляет трафик в эти поды",
     boundTo: "Привязано к",
     governedBy: "Под управлением",
     governedByNote:
