@@ -16,6 +16,7 @@ import {
   createAgeColumn,
   createCpuColumn,
   createMemoryColumn,
+  statusCellPx,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
 import { CronStatusBadge } from "./CronStatusBadge";
@@ -41,6 +42,7 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     id: "suspend",
     header: columnHeader("columns", "suspend"),
     meta: {
+      floor: statusCellPx(14),
       share: (row: CronJobInfoWithMetrics, t) =>
         row.suspend
           ? { text: cronStatusWord(true, t), role: "warn" }

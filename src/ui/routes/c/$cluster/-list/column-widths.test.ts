@@ -4,6 +4,7 @@ import { actionsColumnSize, tableLayout } from "@/components/ui/column-shares";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { columnFloor } from "@/lib/column-label";
+import { cronStatusWord } from "@/lib/status-words";
 
 import { AGE_CELL_PX, NAME_CELL_PX, NODE_CELL_PX } from "./columns";
 
@@ -303,6 +304,25 @@ describe("every list at the windows it is drawn in", () => {
       }
     }
   );
+});
+
+describe("the CronJobs Suspend column", () => {
+  /**
+   * Lena read "Приостан…" in a column sized for "Suspended". Fails if the
+   * column stops fitting its badge's word, the mark and the padding in either
+   * language.
+   */
+  it.each([
+    ["English", en],
+    ["Russian", ru],
+  ] as const)("fits the whole Suspended badge in %s", (_language, t) => {
+    const columns = cronJobs();
+    const suspend = columns.findIndex((c) => c.id === "suspend");
+    const word = cronStatusWord(true, t);
+    expect(laidOut(columns, 1160, t).px[suspend]).toBeGreaterThanOrEqual(
+      word.length * 6.6 + 14 + 20
+    );
+  });
 });
 
 describe("the Pods table", () => {

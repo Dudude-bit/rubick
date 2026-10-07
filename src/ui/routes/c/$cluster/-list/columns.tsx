@@ -55,6 +55,10 @@ export const NAME_CELL_PX = Math.ceil(31 * 7.2 + 2 * (14 + 4) + 20);
 /** `controlplane` (12 glyphs at 7.2px), the node's icon with its 4px gap, and a cell's padding; a longer name ends in an ellipsis, whole on hover. */
 export const NODE_CELL_PX = Math.ceil(12 * 7.2 + 14 + 20);
 
+/** A status badge: its word in 11px mono at 6.6px a glyph, the 10px mark with its 4px gap, and a cell's padding. */
+export const statusCellPx = (glyphs: number) =>
+  Math.ceil(glyphs * 6.6 + 14 + 20);
+
 /** `1.81Gi` (6 glyphs at 7.2px) and a cell's padding; the bar beside a limit is the part that goes first. */
 export const METRIC_CELL_PX = Math.ceil(6 * 7.2 + 20);
 
