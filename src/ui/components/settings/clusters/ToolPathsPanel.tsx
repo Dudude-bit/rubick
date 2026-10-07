@@ -4,7 +4,7 @@ import { pickPath } from "@/lib/host";
 import { FolderOpen, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PathInput } from "@/components/ui/path-input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { CliAvailability } from "@/generated/types";
 import { commands } from "@/lib/commands";
@@ -190,7 +190,7 @@ export function ToolPathsPanel() {
             }
           >
             <div className="flex gap-1.5">
-              <Input
+              <PathInput
                 id={`${tool.id}-path`}
                 placeholder={t("settings", "toolPathPlaceholder", {
                   tool: tool.id,

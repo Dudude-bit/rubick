@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { PathInput } from "@/components/ui/path-input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/components/ui/use-toast";
@@ -189,7 +190,7 @@ export function GcpProfilesSection() {
             <div className="space-y-2">
               <Label>{t("settings", "serviceAccountKeyPath")}</Label>
               <div className="flex gap-2">
-                <Input
+                <PathInput
                   value={editingProfile.serviceAccountKeyPath || ""}
                   onChange={(e) =>
                     setEditingProfile((prev) => ({
