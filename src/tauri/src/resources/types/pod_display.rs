@@ -245,6 +245,53 @@ pub fn crash_looping(pod: &Pod, now: DateTime<Utc>) -> bool {
     })
 }
 
+/// Longest a pod may sit Pending before it counts as a problem. Scheduling
+/// and image pulls take seconds; without this grace every `CronJob` tick
+/// paints the panel red and the signal is gone.
+pub const PENDING_GRACE_SECONDS: i64 = 60;
+
+/// Waiting-state reasons that mean the pod is stuck, not starting up.
+pub const STUCK_WAITING_REASONS: &[&str] = &[
+    "CrashLoopBackOff",
+    "ImagePullBackOff",
+    "ErrImagePull",
+    "CreateContainerConfigError",
+    "CreateContainerError",
+    "InvalidImageName",
+];
+
+/// Reason and message of the first container stuck in a back-off / image-pull
+/// loop rather than starting up. The single most common real incident, and the
+/// reason string the API gives for it is already precise.
+#[must_use]
+pub fn stuck_reason(pod: &Pod) -> Option<(String, Option<String>)> {
+    pod.status
+        .as_ref()?
+        .container_statuses
+        .as_ref()?
+        .iter()
+        .find_map(|c| {
+            let waiting = c.state.as_ref()?.waiting.as_ref()?;
+            let reason = waiting.reason.as_deref()?;
+            STUCK_WAITING_REASONS
+                .contains(&reason)
+                .then(|| (reason.to_string(), waiting.message.clone()))
+        })
+}
+
+/// When a Pending pod started waiting: its last scheduling decision, or its
+/// creation where there was none yet.
+#[must_use]
+pub fn pending_since(pod: &Pod) -> Option<DateTime<Utc>> {
+    pod.status
+        .as_ref()
+        .and_then(|s| s.conditions.as_ref())
+        .and_then(|cs| cs.iter().find(|c| c.type_ == "PodScheduled"))
+        .and_then(|c| c.last_transition_time.as_ref())
+        .or(pod.metadata.creation_timestamp.as_ref())
+        .map(Moment::moment)
+}
+
 /// Restarts as kubectl counts them, and when the last one happened.
 ///
 /// Not a plain sum over `containerStatuses`: a sidecar's restarts count

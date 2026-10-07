@@ -38,6 +38,8 @@ pub struct PodRow {
     pub cpu_limits: Option<String>,
     pub memory_requests: Option<String>,
     pub memory_limits: Option<String>,
+    /// Where it stands in coming up, which the list of the set that runs it reads.
+    pub start: crate::resources::PodStart,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,6 +125,7 @@ impl From<&Pod> for PodRow {
             cpu_limits: totals.cpu_limits,
             memory_requests: totals.memory_requests,
             memory_limits: totals.memory_limits,
+            start: crate::resources::pod_start(pod),
         }
     }
 }

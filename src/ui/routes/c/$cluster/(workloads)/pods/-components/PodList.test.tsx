@@ -44,6 +44,7 @@ const api: PodRow = {
   cpuLimits: null,
   memoryRequests: null,
   memoryLimits: null,
+  start: { state: "settled" },
 };
 
 vi.mock("@/hooks/usePodsWithMetrics", () => ({

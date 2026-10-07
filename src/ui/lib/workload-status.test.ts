@@ -2,15 +2,17 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
-import type { Rollout } from "@/generated/types";
+import type { PodStart, Rollout } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { statusRole } from "./status-role";
 import {
   NEEDS_ATTENTION,
   ROLLOUT_CODES,
+  lastRunOut,
   rolloutLine,
   rolloutStatusOf,
+  withStarts,
   workloadStatus,
   workloadWord as rolloutWord,
 } from "./workload-status";
@@ -125,5 +127,45 @@ describe("the word a workload's rollout comes to", () => {
     );
     expect(rolloutWord(EVERY[0], ru)).toBe("Простаивает");
     expect(rolloutWord(EVERY[2], ru)).toBe("Unavailable");
+  });
+});
+
+const setCorpus = JSON.parse(
+  readFileSync(
+    resolve(process.cwd(), "src/contracts/set-rollout-conformance.json"),
+    "utf8"
+  )
+) as {
+  now: string;
+  cases: { name: string; rollout: Rollout; pods: PodStart[]; is: Rollout }[];
+};
+
+describe("a set's verdict with its pods asked", () => {
+  /**
+   * The list reads a set's pods here and its page, peek and Needs attention
+   * read them in Rust. Fails if this side answers any case of the shared
+   * corpus differently, which would put two words on one scale.
+   */
+  it("answers every case in the shared corpus as the backend does", () => {
+    const now = Date.parse(setCorpus.now);
+    for (const { name, rollout, pods, is } of setCorpus.cases)
+      expect(withStarts(rollout, pods, now), name).toEqual(is);
+  });
+
+  /**
+   * The list wakes on the latest start to run out instead of on every tick.
+   * Fails if that instant answers any case differently from the clock itself.
+   */
+  it("answers the same at the latest start to run out as at the clock it stands for", () => {
+    const now = Date.parse(setCorpus.now);
+    for (const { name, rollout, pods } of setCorpus.cases) {
+      const deadlines = pods.flatMap((pod) =>
+        pod.state === "starting" ? [Date.parse(pod.until)] : []
+      );
+      expect(
+        withStarts(rollout, pods, lastRunOut(deadlines, now)),
+        name
+      ).toEqual(withStarts(rollout, pods, now));
+    }
   });
 });

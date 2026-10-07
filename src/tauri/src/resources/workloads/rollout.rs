@@ -2,8 +2,15 @@
 //! counts. Every screen that draws a workload's health reads this: the list,
 //! the peek, the page, the overview and the connections graph.
 
+use chrono::{DateTime, Utc};
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
+use k8s_openapi::api::core::v1::Pod;
 use serde::{Deserialize, Serialize};
+
+use crate::resources::{
+    condition_is_true, pending_since, restarts, stuck_reason, PENDING_GRACE_SECONDS,
+};
+use crate::utils::Moment;
 
 const DEADLINE_EXCEEDED: &str = "ProgressDeadlineExceeded";
 const ROLLED_OUT: &str = "NewReplicaSetAvailable";
@@ -229,6 +236,102 @@ pub fn daemonset_rollout(set: &DaemonSet) -> Rollout {
         return Rollout::Short { available, desired };
     }
     Rollout::Ready
+}
+
+/// How long a running pod may stay not ready with no fault showing before the
+/// wait is its fault: the progress deadline a Deployment gets when it names none.
+pub const START_GRACE_SECONDS: i64 = 600;
+
+/// Where one pod stands in coming up, for the verdict of the set that runs it.
+///
+/// A `StatefulSet` or `DaemonSet` writes no condition that tells a pod still
+/// starting from one that never will, and its counts are the same for both:
+/// read alone, they called a scale whose new pod was being created `Degraded`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "camelCase")]
+pub enum PodStart {
+    /// Ready, finished, or on its way out: nothing about it is still to come.
+    Settled,
+    /// Not ready and showing no fault; once `until` passes, the wait is the fault.
+    Starting { until: DateTime<Utc> },
+    /// Not ready, and showing why it will not be: a stuck container, a
+    /// restart, a failed run.
+    Failing,
+}
+
+/// The pod's own answer, read without a clock so a watched row stays true:
+/// the reader compares `until` with its own now.
+#[must_use]
+pub fn pod_start(pod: &Pod) -> PodStart {
+    if pod.metadata.deletion_timestamp.is_some() {
+        return PodStart::Settled;
+    }
+    let status = pod.status.as_ref();
+    let phase = status.and_then(|s| s.phase.as_deref());
+    match phase {
+        Some("Succeeded") => return PodStart::Settled,
+        Some("Failed") => return PodStart::Failing,
+        _ => {}
+    }
+    if condition_is_true(status, "Ready") {
+        return PodStart::Settled;
+    }
+    if stuck_reason(pod).is_some() || restarts(pod).0 > 0 {
+        return PodStart::Failing;
+    }
+    // The overview calls a pod Pending past this grace a problem, so the set
+    // that runs it cannot call it coming up any longer than that.
+    let (since, grace) = if phase.is_none_or(|p| p == "Pending") {
+        (pending_since(pod), PENDING_GRACE_SECONDS)
+    } else {
+        (
+            pod.metadata.creation_timestamp.as_ref().map(Moment::moment),
+            START_GRACE_SECONDS,
+        )
+    };
+    since.map_or(PodStart::Failing, |at| PodStart::Starting {
+        until: at + chrono::Duration::seconds(grace),
+    })
+}
+
+/// A set short of available pods is coming up while some of its pods are
+/// still starting and none shows a fault; otherwise it stays as it read.
+///
+/// `src/contracts/set-rollout-conformance.json` holds the answers, and
+/// `withStarts` in `src/ui/lib/workload-status.ts` owes the same ones.
+#[must_use]
+pub fn with_starts<'a>(
+    rollout: Rollout,
+    starts: impl IntoIterator<Item = &'a PodStart>,
+    now: DateTime<Utc>,
+) -> Rollout {
+    let Rollout::Short { available, desired } = rollout else {
+        return rollout;
+    };
+    let mut coming = false;
+    for start in starts {
+        match start {
+            PodStart::Settled => {}
+            PodStart::Starting { until } if *until > now => coming = true,
+            PodStart::Starting { .. } | PodStart::Failing => return rollout,
+        }
+    }
+    if coming {
+        Rollout::ComingUp { available, desired }
+    } else {
+        rollout
+    }
+}
+
+/// [`with_starts`] over the pods themselves.
+#[must_use]
+pub fn with_pods<'a>(
+    rollout: Rollout,
+    pods: impl IntoIterator<Item = &'a Pod>,
+    now: DateTime<Utc>,
+) -> Rollout {
+    let starts: Vec<PodStart> = pods.into_iter().map(pod_start).collect();
+    with_starts(rollout, &starts, now)
 }
 
 #[cfg(test)]
@@ -732,5 +835,205 @@ mod tests {
         ));
         assert_eq!(daemonset_rollout(&daemonset(0, 0, 0)), Rollout::Idle);
         assert_eq!(daemonset_rollout(&daemonset(3, 3, 3)), Rollout::Ready);
+    }
+
+    /// Both halves read a set's pods through one table; fails if this side
+    /// answers any case differently from what the TypeScript list draws.
+    #[test]
+    fn a_set_with_its_pods_reads_as_the_shared_file_says() {
+        #[derive(serde::Deserialize)]
+        struct Case {
+            name: String,
+            rollout: Rollout,
+            pods: Vec<PodStart>,
+            is: Rollout,
+        }
+        #[derive(serde::Deserialize)]
+        struct Corpus {
+            now: DateTime<Utc>,
+            cases: Vec<Case>,
+        }
+        let corpus: Corpus = serde_json::from_str(include_str!(
+            "../../../../contracts/set-rollout-conformance.json"
+        ))
+        .expect("the corpus parses");
+        for case in corpus.cases {
+            assert_eq!(
+                with_starts(case.rollout, &case.pods, corpus.now),
+                case.is,
+                "{}",
+                case.name
+            );
+        }
+    }
+
+    fn at(seconds_ago: i64) -> String {
+        (Utc::now() - chrono::Duration::seconds(seconds_ago)).to_rfc3339()
+    }
+
+    fn pod(value: serde_json::Value) -> Pod {
+        serde_json::from_value(value).expect("a pod")
+    }
+
+    /// `web-1` as the kubelet writes it the second after a scale: scheduled,
+    /// its container still being created.
+    fn creating(name: &str) -> Pod {
+        pod(serde_json::json!({
+            "metadata": { "name": name, "creationTimestamp": at(5) },
+            "status": {
+                "phase": "Pending",
+                "conditions": [
+                    { "type": "PodScheduled", "status": "True", "lastTransitionTime": at(4) },
+                    { "type": "Ready", "status": "False" },
+                ],
+                "containerStatuses": [{
+                    "name": "web", "image": "web", "imageID": "", "ready": false,
+                    "restartCount": 0, "state": { "waiting": { "reason": "ContainerCreating" } },
+                }],
+            },
+        }))
+    }
+
+    fn serving(name: &str) -> Pod {
+        pod(serde_json::json!({
+            "metadata": { "name": name, "creationTimestamp": at(3600) },
+            "status": {
+                "phase": "Running",
+                "conditions": [{ "type": "Ready", "status": "True" }],
+            },
+        }))
+    }
+
+    fn waiting_on(name: &str, reason: &str) -> Pod {
+        let mut pod = creating(name);
+        let status = pod.status.as_mut().expect("a status");
+        status.phase = Some("Running".to_string());
+        status.container_statuses.as_mut().expect("containers")[0]
+            .state
+            .as_mut()
+            .expect("a state")
+            .waiting
+            .as_mut()
+            .expect("waiting")
+            .reason = Some(reason.to_string());
+        pod
+    }
+
+    /// The pod's own answer decides the set's word, so each shape a pod is
+    /// seen in during a scale has to land on the right side. Fails if a
+    /// stuck, restarted or failed pod reads as still starting, or a pod
+    /// being created reads as a fault.
+    #[test]
+    fn a_pod_being_created_is_starting_and_a_stuck_one_is_failing() {
+        assert!(matches!(
+            pod_start(&creating("web-1")),
+            PodStart::Starting { until } if until > Utc::now()
+        ));
+        for reason in [
+            "CrashLoopBackOff",
+            "ImagePullBackOff",
+            "CreateContainerConfigError",
+        ] {
+            assert_eq!(
+                pod_start(&waiting_on("web-1", reason)),
+                PodStart::Failing,
+                "{reason}"
+            );
+        }
+        let mut restarted = waiting_on("web-1", "ContainerCreating");
+        restarted
+            .status
+            .as_mut()
+            .expect("a status")
+            .container_statuses
+            .as_mut()
+            .expect("containers")[0]
+            .restart_count = 1;
+        assert_eq!(pod_start(&restarted), PodStart::Failing);
+        let mut failed = creating("web-1");
+        failed.status.as_mut().expect("a status").phase = Some("Failed".to_string());
+        assert_eq!(pod_start(&failed), PodStart::Failing);
+
+        assert_eq!(pod_start(&serving("web-0")), PodStart::Settled);
+        let mut leaving = creating("web-1");
+        leaving.metadata.deletion_timestamp = leaving.metadata.creation_timestamp.clone();
+        assert_eq!(pod_start(&leaving), PodStart::Settled);
+    }
+
+    /// A pod Pending past the overview's grace is already listed there as a
+    /// problem; a running one that never turns ready gets the progress
+    /// deadline. Fails if either waits longer than that.
+    #[test]
+    fn a_start_lasts_the_pending_grace_or_the_progress_deadline() {
+        let mut stuck = creating("web-1");
+        stuck
+            .status
+            .as_mut()
+            .expect("a status")
+            .conditions
+            .as_mut()
+            .expect("conditions")[0]
+            .last_transition_time =
+            serde_json::from_value(serde_json::json!(at(PENDING_GRACE_SECONDS + 1)))
+                .expect("a time");
+        assert!(matches!(pod_start(&stuck), PodStart::Starting { until } if until < Utc::now()));
+
+        let mut unready = serving("web-1");
+        unready.status.as_mut().expect("a status").conditions = None;
+        unready.metadata.creation_timestamp =
+            serde_json::from_value(serde_json::json!(at(START_GRACE_SECONDS - 60)))
+                .expect("a time");
+        assert!(matches!(pod_start(&unready), PodStart::Starting { until } if until > Utc::now()));
+        unready.metadata.creation_timestamp =
+            serde_json::from_value(serde_json::json!(at(START_GRACE_SECONDS + 60)))
+                .expect("a time");
+        assert!(matches!(pod_start(&unready), PodStart::Starting { until } if until < Utc::now()));
+    }
+
+    /// Lena's scale, on the two kinds that write no Progressing condition:
+    /// one pod serving, the new one being created, and the counts alone said
+    /// Degraded. Fails if the pods do not turn that into coming up, or if a
+    /// new pod that will not start is let off as one that is coming.
+    #[test]
+    fn a_set_scaling_up_with_its_new_pod_starting_is_coming_up_and_one_with_it_stuck_is_short() {
+        let set = statefulset(
+            2,
+            StatefulSetStatus {
+                replicas: 2,
+                ready_replicas: Some(1),
+                available_replicas: Some(1),
+                updated_replicas: Some(2),
+                current_revision: Some("web-1".to_string()),
+                update_revision: Some("web-1".to_string()),
+                ..Default::default()
+            },
+            None,
+        );
+        let daemon = daemonset(2, 1, 2);
+        let now = Utc::now();
+        for short in [statefulset_rollout(&set), daemonset_rollout(&daemon)] {
+            assert_eq!(
+                short,
+                Rollout::Short {
+                    available: 1,
+                    desired: 2
+                }
+            );
+            assert_eq!(
+                with_pods(short.clone(), &[serving("web-0"), creating("web-1")], now),
+                Rollout::ComingUp {
+                    available: 1,
+                    desired: 2
+                }
+            );
+            assert_eq!(
+                with_pods(
+                    short.clone(),
+                    &[serving("web-0"), waiting_on("web-1", "ImagePullBackOff")],
+                    now
+                ),
+                short
+            );
+        }
     }
 }

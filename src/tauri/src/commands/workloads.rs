@@ -2,16 +2,80 @@
 
 use crate::error::Result;
 use crate::resources::{
-    CronJobDetailInfo, CronJobInfo, DaemonSetDetailInfo, DaemonSetInfo, JobDetailInfo, JobInfo,
-    StatefulSetDetailInfo, StatefulSetInfo,
+    with_pods, CronJobDetailInfo, CronJobInfo, DaemonSetDetailInfo, DaemonSetInfo, JobDetailInfo,
+    JobInfo, Rollout, Selector, StatefulSetDetailInfo, StatefulSetInfo,
 };
 use crate::state::AppState;
 use k8s_openapi::api::apps::v1::{DaemonSet, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
+use k8s_openapi::api::core::v1::Pod;
+use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
+use kube::api::ListParams;
+use kube::ResourceExt;
 use tauri::State;
 
 use crate::commands::filters::ResourceFilters;
-use crate::commands::helpers::{get_resource_info, list_in_scope, list_resource_infos};
+use crate::commands::helpers::{
+    get_resource_info, list_in_scope, list_resource_infos, ResourceContext,
+};
+
+/// A set's verdict with its own pods asked, where its counts alone say it is
+/// short: the counts cannot tell a pod still starting from one that never
+/// will. A pod list the cluster refuses leaves the verdict as the counts read it.
+async fn with_own_pods(
+    ctx: &ResourceContext,
+    rollout: Rollout,
+    set: &ObjectMeta,
+    selector: Option<&LabelSelector>,
+) -> Rollout {
+    if !matches!(rollout, Rollout::Short { .. }) {
+        return rollout;
+    }
+    let Some(query) = Selector::Query(selector).query_text() else {
+        return rollout;
+    };
+    let Ok(pods) = ctx
+        .namespaced_api::<Pod>()
+        .list(&ListParams::default().labels(&query))
+        .await
+    else {
+        return rollout;
+    };
+    let own = pods.items.iter().filter(|pod| {
+        pod.owner_references()
+            .iter()
+            .any(|o| o.controller == Some(true) && set.uid.as_deref() == Some(o.uid.as_str()))
+    });
+    with_pods(rollout, own, chrono::Utc::now())
+}
+
+async fn statefulset_detail(
+    state: &AppState,
+    name: String,
+    namespace: Option<String>,
+) -> Result<StatefulSetDetailInfo> {
+    crate::validation::validate_name::<StatefulSet>(&name)?;
+    let ctx = ResourceContext::for_command(state, namespace)?;
+    let set: StatefulSet = ctx.namespaced_api().get(&name).await?;
+    let mut info = StatefulSetDetailInfo::from(&set);
+    let selector = set.spec.as_ref().map(|s| &s.selector);
+    info.rollout = with_own_pods(&ctx, info.rollout, &set.metadata, selector).await;
+    Ok(info)
+}
+
+async fn daemonset_detail(
+    state: &AppState,
+    name: String,
+    namespace: Option<String>,
+) -> Result<DaemonSetDetailInfo> {
+    crate::validation::validate_name::<DaemonSet>(&name)?;
+    let ctx = ResourceContext::for_command(state, namespace)?;
+    let set: DaemonSet = ctx.namespaced_api().get(&name).await?;
+    let mut info = DaemonSetDetailInfo::from(&set);
+    let selector = set.spec.as_ref().map(|s| &s.selector);
+    info.rollout = with_own_pods(&ctx, info.rollout, &set.metadata, selector).await;
+    Ok(info)
+}
 
 // ============= StatefulSet =============
 
@@ -31,7 +95,7 @@ pub async fn get_statefulset(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<StatefulSetDetailInfo> {
-    get_resource_info::<StatefulSet, StatefulSetDetailInfo>(name, namespace, state).await
+    statefulset_detail(&state, name, namespace).await
 }
 
 /// Scale a `StatefulSet`
@@ -82,7 +146,7 @@ pub async fn get_daemonset(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<DaemonSetDetailInfo> {
-    get_resource_info::<DaemonSet, DaemonSetDetailInfo>(name, namespace, state).await
+    daemonset_detail(&state, name, namespace).await
 }
 
 /// Restart a `DaemonSet` (rolling restart)
@@ -241,6 +305,123 @@ pub async fn delete_cronjob(
     state: State<'_, AppState>,
 ) -> Result<()> {
     crate::commands::helpers::delete_resource::<CronJob>(name, namespace, state, None).await
+}
+
+#[cfg(test)]
+mod set_detail_tests {
+    use super::*;
+    use crate::client::served::{
+        test_server::{connected, failure},
+        ServedIndex,
+    };
+
+    fn pod(name: &str, owner: &str, ready: bool, waiting: &str) -> serde_json::Value {
+        serde_json::json!({
+            "metadata": {
+                "name": name,
+                "namespace": "shop",
+                "creationTimestamp": (chrono::Utc::now() - chrono::Duration::seconds(5)).to_rfc3339(),
+                "ownerReferences": [{
+                    "apiVersion": "apps/v1", "kind": "StatefulSet",
+                    "name": owner, "uid": owner, "controller": true,
+                }],
+            },
+            "status": {
+                "phase": if ready { "Running" } else { "Pending" },
+                "conditions": [{ "type": "Ready", "status": if ready { "True" } else { "False" } }],
+                "containerStatuses": [{
+                    "name": "app", "image": "app", "imageID": "", "ready": ready, "restartCount": 0,
+                    "state": if ready { serde_json::json!({ "running": {} }) }
+                             else { serde_json::json!({ "waiting": { "reason": waiting } }) },
+                }],
+            },
+        })
+    }
+
+    fn stateful_set() -> String {
+        serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "StatefulSet",
+            "metadata": { "name": "web", "namespace": "shop", "uid": "web", "generation": 2 },
+            "spec": {
+                "replicas": 2, "serviceName": "web",
+                "selector": { "matchLabels": { "app": "web" } }, "template": {},
+            },
+            "status": {
+                "observedGeneration": 2, "replicas": 2, "readyReplicas": 1,
+                "availableReplicas": 1, "updatedReplicas": 2,
+                "currentRevision": "web-1", "updateRevision": "web-1",
+            },
+        })
+        .to_string()
+    }
+
+    fn daemon_set() -> String {
+        serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "DaemonSet",
+            "metadata": { "name": "agent", "namespace": "shop", "uid": "agent", "generation": 1 },
+            "spec": { "selector": { "matchLabels": { "app": "agent" } }, "template": {} },
+            "status": {
+                "observedGeneration": 1, "desiredNumberScheduled": 2,
+                "currentNumberScheduled": 2, "updatedNumberScheduled": 2,
+                "numberMisscheduled": 0, "numberReady": 1, "numberAvailable": 1,
+            },
+        })
+        .to_string()
+    }
+
+    /// A cluster where each set's second pod waits as `new_pod` says, or
+    /// where the pod list is refused when `new_pod` is empty.
+    async fn read(new_pod: &'static str) -> (Rollout, Rollout) {
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/apis/apps/v1/namespaces/shop/statefulsets/web" => (200, stateful_set()),
+            "/apis/apps/v1/namespaces/shop/daemonsets/agent" => (200, daemon_set()),
+            "/api/v1/namespaces/shop/pods" if new_pod.is_empty() => failure(403, "Forbidden"),
+            "/api/v1/namespaces/shop/pods" => (
+                200,
+                serde_json::json!({
+                    "apiVersion": "v1", "kind": "PodList", "metadata": {},
+                    "items": [
+                        pod("web-0", "web", true, ""),
+                        pod("web-1", "web", false, new_pod),
+                        pod("agent-a", "agent", true, ""),
+                        pod("agent-b", "agent", false, new_pod),
+                    ],
+                })
+                .to_string(),
+            ),
+            _ => (404, "{}".into()),
+        })
+        .await;
+        let set = statefulset_detail(&state, "web".into(), Some("shop".into()))
+            .await
+            .expect("the StatefulSet");
+        let daemon = daemonset_detail(&state, "agent".into(), Some("shop".into()))
+            .await
+            .expect("the DaemonSet");
+        (set.rollout, daemon.rollout)
+    }
+
+    /// The page, the peek and Share read a set's verdict from here, and a
+    /// scale whose new pod was being created read amber Degraded. Fails if
+    /// the set's own pods are not asked, if a stuck one is let off, or if a
+    /// refused pod list is taken for pods coming up.
+    #[tokio::test]
+    async fn a_set_scaling_up_reads_coming_up_only_while_its_new_pod_is_starting() {
+        let coming = Rollout::ComingUp {
+            available: 1,
+            desired: 2,
+        };
+        let short = Rollout::Short {
+            available: 1,
+            desired: 2,
+        };
+        assert_eq!(read("ContainerCreating").await, (coming.clone(), coming));
+        assert_eq!(
+            read("ImagePullBackOff").await,
+            (short.clone(), short.clone())
+        );
+        assert_eq!(read("").await, (short.clone(), short));
+    }
 }
 
 #[cfg(test)]

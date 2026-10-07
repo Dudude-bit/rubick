@@ -37,7 +37,10 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { toPlural, type ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useWatchedList } from "@/hooks/useWatchedList";
+import { useNowReading } from "@/hooks/useNow";
 import { useT } from "@/i18n/useT";
+import type { Rollout } from "@/generated/types";
+import { lastRunOut, rowsWithStarts, setStartsOf } from "@/lib/workload-status";
 
 type Workload = { name: string; namespace: string };
 
@@ -67,6 +70,11 @@ export interface WorkloadListPageConfig<T extends Workload> {
    * Pod metrics on the side keep their own usePodsWithMetrics path.
    */
   watch?: (params: { scope: string[] | null }) => Promise<string>;
+  /**
+   * A StatefulSet's and a DaemonSet's verdict is finished by their pods, as
+   * on their pages: the counts alone call a scale whose pod is starting short.
+   */
+  rolloutFromPods?: T extends { rollout: Rollout } ? true : never;
 }
 
 export function createWorkloadListPage<T extends Workload>(
@@ -128,14 +136,27 @@ export function createWorkloadListPage<T extends Workload>(
       { refresh }
     );
 
+    const starts = useMemo(
+      () => (config.rolloutFromPods ? setStartsOf(pods) : null),
+      [pods]
+    );
+    const ranOut = useNowReading(10_000, (now) =>
+      starts ? lastRunOut(starts.deadlines, now) : 0
+    );
+    const rows = useMemo(() => {
+      const read = listQuery.data?.rows ?? [];
+      return starts
+        ? (rowsWithStarts(
+            read as Array<T & { rollout: Rollout }>,
+            starts,
+            ranOut
+          ) as T[])
+        : read;
+    }, [listQuery.data, starts, ranOut]);
+
     const dataWithMetrics = useMemo(
-      () =>
-        attachAggregatedPodMetrics<T>(
-          listQuery.data?.rows ?? [],
-          pods,
-          config.matchPods
-        ),
-      [listQuery.data, pods]
+      () => attachAggregatedPodMetrics<T>(rows, pods, config.matchPods),
+      [rows, pods]
     );
 
     const columns = useMemo(() => config.columns(), []);

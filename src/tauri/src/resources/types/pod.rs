@@ -63,6 +63,8 @@ pub struct PodInfo {
     /// `None` where the spec left it out, which the API server fills in as
     /// `default` — so a blank here means "not stated", not "no identity".
     pub service_account_name: Option<String>,
+    /// Where it stands in coming up, as its row says.
+    pub start: crate::resources::PodStart,
 }
 
 /// A volume the pod declares, and the objects it draws from.
@@ -370,6 +372,7 @@ impl From<&Pod> for PodInfo {
             owner_references: extract_owner_references(pod.metadata.owner_references.as_ref()),
             volumes: spec.map(pod_volumes).unwrap_or_default(),
             service_account_name: spec.and_then(|s| s.service_account_name.clone()),
+            start: crate::resources::pod_start(pod),
         }
     }
 }

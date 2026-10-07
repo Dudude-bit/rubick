@@ -33,6 +33,7 @@ export const StatefulSetList = createWorkloadListPage<StatefulSetInfo>({
   fetchList: ({ scope }) => commands.listStatefulsetsIn(scope),
   matchPods: matchStatefulSetPods,
   watch: ({ scope }) => commands.subscribeStatefulsetWatch(scope),
+  rolloutFromPods: true,
   deleter: (item) => commands.deleteStatefulset(item.name, item.namespace),
   columns,
 });

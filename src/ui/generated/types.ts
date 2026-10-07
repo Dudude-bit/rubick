@@ -1978,6 +1978,7 @@ export interface PodRow {
   cpuLimits: string | null;
   memoryRequests: string | null;
   memoryLimits: string | null;
+  start: PodStart;
 }
 
 export interface RowContainer {
@@ -2089,6 +2090,7 @@ export interface PodInfo {
   ownerReferences: OwnerReference[];
   volumes: PodVolumeInfo[];
   serviceAccountName: string | null;
+  start: PodStart;
 }
 
 export interface PodVolumeInfo {
@@ -2779,6 +2781,11 @@ export type AppEvent =
     }
   | { channel: "pod-rows-failed"; stream_id: string; message: string }
   | { channel: "event-bridge-lagged"; missed: number };
+
+export type PodStart =
+  | { state: "settled" }
+  | { state: "starting"; until: string }
+  | { state: "failing" };
 
 export type ContainerState =
   | { type: "running" }

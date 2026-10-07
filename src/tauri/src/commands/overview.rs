@@ -15,7 +15,10 @@ use crate::commands::helpers::{api_in, reaches, scope_of};
 use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::resources::node_budget::holds_reservation;
-use crate::resources::{condition_is_true, crash_looping, job_state, JobState, Rollout};
+use crate::resources::{
+    condition_is_true, crash_looping, job_state, pending_since, stuck_reason, JobState, Rollout,
+    PENDING_GRACE_SECONDS,
+};
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
 use crate::utils::Moment;
@@ -61,11 +64,6 @@ const MAX_EVENT_PAGES: usize = 4;
 /// collection it replaces.
 const COUNT_PAGE_SIZE: u32 = 500;
 
-/// Longest a pod may sit Pending before it counts as a problem. Scheduling
-/// and image pulls take seconds; without this grace every `CronJob` tick
-/// paints the panel red and the signal is gone.
-const PENDING_GRACE_SECONDS: i64 = 60;
-
 /// Cap on the problems list. A node outage produces one row per pod on it,
 /// and neither the IPC payload nor the two-second re-render survives that.
 /// Applied once to the whole scope, however many namespaces it adds up.
@@ -90,16 +88,6 @@ const RESTART_ATTENTION_THRESHOLD: i32 = 5;
 /// `CrashLoopBackOff` caps its wait at five minutes — so nothing that is
 /// actually flapping escapes, and an incident that is over stops being news.
 const RESTART_RECENT_SECONDS: i64 = 3600;
-
-/// Waiting-state reasons that mean the pod is stuck, not starting up.
-const STUCK_WAITING_REASONS: &[&str] = &[
-    "CrashLoopBackOff",
-    "ImagePullBackOff",
-    "ErrImagePull",
-    "CreateContainerConfigError",
-    "CreateContainerError",
-    "InvalidImageName",
-];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -429,24 +417,6 @@ fn pod_problems<'a>(
         .collect()
 }
 
-/// Reason and message of the first container stuck in a back-off / image-pull
-/// loop rather than starting up. The single most common real incident, and the
-/// reason string the API gives for it is already precise.
-fn stuck_reason(pod: &Pod) -> Option<(String, Option<String>)> {
-    pod.status
-        .as_ref()?
-        .container_statuses
-        .as_ref()?
-        .iter()
-        .find_map(|c| {
-            let waiting = c.state.as_ref()?.waiting.as_ref()?;
-            let reason = waiting.reason.as_deref()?;
-            STUCK_WAITING_REASONS
-                .contains(&reason)
-                .then(|| (reason.to_string(), waiting.message.clone()))
-        })
-}
-
 /// The single worst thing to say about one pod, or `None` if it is fine.
 fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
     let name = pod.metadata.name.clone().unwrap_or_default();
@@ -523,10 +493,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             .conditions
             .as_ref()
             .and_then(|cs| cs.iter().find(|c| c.type_ == "PodScheduled"));
-        let pending_since = scheduled
-            .and_then(|c| c.last_transition_time.as_ref())
-            .or(pod.metadata.creation_timestamp.as_ref())
-            .map(Moment::moment);
+        let pending_since = pending_since(pod);
         // Undated pods fall through and get reported: an unknown age is not
         // evidence that the pod is young.
         if pending_since.is_some_and(|t| now - t < chrono::Duration::seconds(PENDING_GRACE_SECONDS))
@@ -649,15 +616,52 @@ fn set_problem(
     })
 }
 
+/// The pods each controller runs, by the controller's uid.
+fn pods_by_controller<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+) -> HashMap<&'a str, Vec<&'a Pod>> {
+    let mut owned: HashMap<&str, Vec<&Pod>> = HashMap::new();
+    for pod in pods {
+        if let Some(owner) = pod
+            .metadata
+            .owner_references
+            .iter()
+            .flatten()
+            .find(|o| o.controller == Some(true))
+        {
+            owned.entry(owner.uid.as_str()).or_default().push(pod);
+        }
+    }
+    owned
+}
+
+/// A set's verdict with the pods it runs asked, as its page reads it.
+fn with_own_pods(
+    rollout: Rollout,
+    set: &kube::core::ObjectMeta,
+    owned: &HashMap<&str, Vec<&Pod>>,
+    now: DateTime<Utc>,
+) -> Rollout {
+    let pods = set.uid.as_deref().and_then(|uid| owned.get(uid));
+    crate::resources::with_pods(rollout, pods.into_iter().flatten().copied(), now)
+}
+
 fn stateful_set_problems<'a>(
     sets: impl IntoIterator<Item = &'a StatefulSet>,
+    owned: &HashMap<&str, Vec<&Pod>>,
+    now: DateTime<Utc>,
 ) -> Vec<ClusterProblem> {
     sets.into_iter()
         .filter_map(|set| {
             set_problem(
                 "StatefulSet",
                 &set.metadata,
-                &crate::resources::statefulset_rollout(set),
+                &with_own_pods(
+                    crate::resources::statefulset_rollout(set),
+                    &set.metadata,
+                    owned,
+                    now,
+                ),
                 set.status
                     .as_ref()
                     .and_then(|s| s.ready_replicas)
@@ -668,14 +672,23 @@ fn stateful_set_problems<'a>(
         .collect()
 }
 
-fn daemon_set_problems<'a>(sets: impl IntoIterator<Item = &'a DaemonSet>) -> Vec<ClusterProblem> {
+fn daemon_set_problems<'a>(
+    sets: impl IntoIterator<Item = &'a DaemonSet>,
+    owned: &HashMap<&str, Vec<&Pod>>,
+    now: DateTime<Utc>,
+) -> Vec<ClusterProblem> {
     sets.into_iter()
         .filter_map(|set| {
             let status = set.status.as_ref();
             set_problem(
                 "DaemonSet",
                 &set.metadata,
-                &crate::resources::daemonset_rollout(set),
+                &with_own_pods(
+                    crate::resources::daemonset_rollout(set),
+                    &set.metadata,
+                    owned,
+                    now,
+                ),
                 status.map_or(0, |s| s.number_ready),
                 status.map_or(0, |s| s.desired_number_scheduled),
             )
@@ -1246,8 +1259,17 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
 
     let mut problems = pod_problems(refs(input.scoped_pods), input.now);
     problems.extend(deployment_problems(refs(input.deployments)));
-    problems.extend(stateful_set_problems(refs(input.stateful_sets)));
-    problems.extend(daemon_set_problems(refs(input.daemon_sets)));
+    let owned = pods_by_controller(refs(input.scoped_pods));
+    problems.extend(stateful_set_problems(
+        refs(input.stateful_sets),
+        &owned,
+        input.now,
+    ));
+    problems.extend(daemon_set_problems(
+        refs(input.daemon_sets),
+        &owned,
+        input.now,
+    ));
     problems.extend(job_problems(input.jobs.into_iter().flat_map(refs)));
     problems.extend(node_problems(refs(nodes)));
     let problems = fold_job_runs(problems, refs(input.scoped_pods));
@@ -3212,8 +3234,17 @@ mod tests {
         daemon_sets: &[DaemonSet],
         jobs: &[Job],
     ) -> Vec<ClusterProblem> {
+        problems_with_pods(stateful_sets, daemon_sets, jobs, &[])
+    }
+
+    fn problems_with_pods(
+        stateful_sets: &[StatefulSet],
+        daemon_sets: &[DaemonSet],
+        jobs: &[Job],
+        pods: &[Pod],
+    ) -> Vec<ClusterProblem> {
         build_overview(&OverviewInputs {
-            scoped_pods: &[],
+            scoped_pods: &arcs(pods.to_vec()),
             accounting_pods: &[],
             nodes: &[],
             nodes_known: true,
@@ -3287,6 +3318,84 @@ mod tests {
             .expect("the DaemonSet short of a node");
         assert_eq!(agent.reason, "Degraded");
         assert_eq!(agent.severity, ProblemSeverity::Warning);
+    }
+
+    /// Lena's scale on a `StatefulSet` and a `DaemonSet`: one pod serving, the
+    /// new one being created, and Needs attention listed both Degraded while
+    /// their pages said coming up. Fails if a set whose missing pod is still
+    /// starting is listed, or one whose new pod cannot pull its image is not.
+    #[test]
+    fn a_set_scaling_up_needs_attention_only_once_its_new_pod_is_stuck() {
+        let owned = |name: &str, owner: &str, ready: bool, waiting: &str| -> Pod {
+            serde_json::from_value(serde_json::json!({
+                "metadata": {
+                    "name": name,
+                    "namespace": "shop",
+                    "creationTimestamp": (Utc::now() - chrono::Duration::seconds(5)).to_rfc3339(),
+                    "ownerReferences": [{
+                        "apiVersion": "apps/v1",
+                        "kind": if owner == "web" { "StatefulSet" } else { "DaemonSet" },
+                        "name": owner, "uid": owner, "controller": true,
+                    }],
+                },
+                "status": {
+                    "phase": if ready { "Running" } else { "Pending" },
+                    "conditions": [{ "type": "Ready", "status": if ready { "True" } else { "False" } }],
+                    "containerStatuses": [{
+                        "name": "app", "image": "app", "imageID": "", "ready": ready,
+                        "restartCount": 0,
+                        "state": if ready { serde_json::json!({ "running": {} }) }
+                                 else { serde_json::json!({ "waiting": { "reason": waiting } }) },
+                    }],
+                },
+            }))
+            .expect("a pod")
+        };
+        let set: StatefulSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "web", "namespace": "shop", "uid": "web", "generation": 2 },
+            "spec": { "replicas": 2, "selector": {}, "serviceName": "web", "template": {} },
+            "status": {
+                "observedGeneration": 2, "replicas": 2, "readyReplicas": 1, "availableReplicas": 1,
+                "updatedReplicas": 2, "currentRevision": "web-1", "updateRevision": "web-1",
+            },
+        }))
+        .expect("a StatefulSet");
+        let daemon: DaemonSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "agent", "namespace": "shop", "uid": "agent", "generation": 1 },
+            "spec": { "selector": {}, "template": {} },
+            "status": {
+                "observedGeneration": 1, "desiredNumberScheduled": 2, "currentNumberScheduled": 2,
+                "updatedNumberScheduled": 2, "numberMisscheduled": 0, "numberReady": 1,
+                "numberAvailable": 1,
+            },
+        }))
+        .expect("a DaemonSet");
+        let starting = [
+            owned("web-0", "web", true, ""),
+            owned("web-1", "web", false, "ContainerCreating"),
+            owned("agent-a", "agent", true, ""),
+            owned("agent-b", "agent", false, "ContainerCreating"),
+        ];
+
+        let calm = problems_with_pods(
+            std::slice::from_ref(&set),
+            std::slice::from_ref(&daemon),
+            &[],
+            &starting,
+        );
+        assert!(calm.is_empty(), "{calm:?}");
+
+        let stuck = [
+            owned("web-0", "web", true, ""),
+            owned("web-1", "web", false, "ImagePullBackOff"),
+            owned("agent-a", "agent", true, ""),
+            owned("agent-b", "agent", false, "ImagePullBackOff"),
+        ];
+        let listed = problems_with_pods(&[set], &[daemon], &[], &stuck);
+        for kind in ["StatefulSet", "DaemonSet"] {
+            let problem = listed.iter().find(|p| p.kind == kind).expect(kind);
+            assert_eq!(problem.reason, "Degraded");
+        }
     }
 
     /// A Job whose controller gave up was a red segment in the Jobs bar and

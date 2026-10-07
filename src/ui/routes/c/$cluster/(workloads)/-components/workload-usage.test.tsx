@@ -47,6 +47,7 @@ function pod(name: string, phase: string): PodInfo {
     ownerReferences: [],
     volumes: [],
     serviceAccountName: null,
+    start: { state: "settled" },
   };
 }
 

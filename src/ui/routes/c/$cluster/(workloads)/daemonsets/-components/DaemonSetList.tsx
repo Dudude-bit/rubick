@@ -75,6 +75,7 @@ export const DaemonSetList = createWorkloadListPage<DaemonSetInfo>({
   fetchList: ({ scope }) => commands.listDaemonsetsIn(scope),
   matchPods: matchDaemonSetPods,
   watch: ({ scope }) => commands.subscribeDaemonsetWatch(scope),
+  rolloutFromPods: true,
   deleter: (item) => commands.deleteDaemonset(item.name, item.namespace),
   columns,
 });

@@ -19,6 +19,9 @@ pub use replicaset::{
     deployment_template_of, ReplicaSetInfo, ReplicaSetReplicaInfo, POD_TEMPLATE_HASH,
     REVISION_ANNOTATION,
 };
-pub use rollout::{daemonset_rollout, deployment_rollout, statefulset_rollout, Rollout};
+pub use rollout::{
+    daemonset_rollout, deployment_rollout, pod_start, statefulset_rollout, with_pods, with_starts,
+    PodStart, Rollout,
+};
 pub use rollout_plan::{daemonset_plan, deployment_plan, statefulset_plan, RolloutPlan};
 pub use statefulset::{StatefulSetDetailInfo, StatefulSetInfo, StatefulSetReplicaInfo};

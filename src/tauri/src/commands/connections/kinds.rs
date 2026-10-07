@@ -222,11 +222,30 @@ pub(super) async fn workload_connections(
     )?;
     let (template, uid) = template;
 
+    let selector = Selector::Query(template.selector.as_ref());
+    // As with a budget, the API server refuses a workload selector that
+    // cannot be built.
+    let mine: Vec<&Pod> = snapshot
+        .pods()
+        .iter()
+        .filter(|pod| selector.matches(pod.labels()) == Some(true))
+        .collect();
+    // The set's own pods decide whether its short count is a scale coming up,
+    // as its page reads it; with none read, the count's reading stands.
+    let rollout = template.rollout.clone().map(|rollout| {
+        let own = mine.iter().copied().filter(|pod| {
+            pod.owner_references()
+                .iter()
+                .any(|o| o.controller == Some(true) && uid.as_deref() == Some(o.uid.as_str()))
+        });
+        crate::resources::with_pods(rollout, own, chrono::Utc::now())
+    });
+
     let subject = ObjectRef::new(kind, name, Some(ns.to_string()), Existence::Present).with_facts(
         ObjectFacts::Workload {
             replicas: template.replicas,
             ready_replicas: template.ready_replicas,
-            rollout: template.rollout.clone(),
+            rollout,
             revision: None,
             current: None,
         },
@@ -237,15 +256,6 @@ pub(super) async fn workload_connections(
         uses_from_spec(ns, &subject, spec, &snapshot.claims, out);
         check_named(ctx, out).await?;
     }
-
-    let selector = Selector::Query(template.selector.as_ref());
-    // As with a budget, the API server refuses a workload selector that
-    // cannot be built.
-    let mine: Vec<&Pod> = snapshot
-        .pods()
-        .iter()
-        .filter(|pod| selector.matches(pod.labels()) == Some(true))
-        .collect();
     let selector_text = selector.says().unwrap_or_default();
     let mut nodes = HashSet::new();
     for pod in &mine {
@@ -1314,5 +1324,96 @@ mod ingress_tests {
                 "{status}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod set_rollout_tests {
+    use super::*;
+    use crate::client::served::test_server::server;
+    use crate::resources::Rollout;
+
+    fn pod(name: &str, ready: bool, waiting: &str) -> serde_json::Value {
+        serde_json::json!({
+            "metadata": {
+                "name": name,
+                "namespace": "shop",
+                "labels": { "app": "web" },
+                "creationTimestamp": (chrono::Utc::now() - chrono::Duration::seconds(5)).to_rfc3339(),
+                "ownerReferences": [{
+                    "apiVersion": "apps/v1", "kind": "StatefulSet",
+                    "name": "web", "uid": "web-uid", "controller": true,
+                }],
+            },
+            "status": {
+                "phase": if ready { "Running" } else { "Pending" },
+                "conditions": [{ "type": "Ready", "status": if ready { "True" } else { "False" } }],
+                "containerStatuses": [{
+                    "name": "web", "image": "web", "imageID": "", "ready": ready, "restartCount": 0,
+                    "state": if ready { serde_json::json!({ "running": {} }) }
+                             else { serde_json::json!({ "waiting": { "reason": waiting } }) },
+                }],
+            },
+        })
+    }
+
+    async fn subject_rollout(new_pod: &str) -> Option<Rollout> {
+        let set = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "StatefulSet",
+            "metadata": { "name": "web", "namespace": "shop", "uid": "web-uid", "generation": 2 },
+            "spec": {
+                "replicas": 2,
+                "serviceName": "web",
+                "selector": { "matchLabels": { "app": "web" } },
+                "template": { "metadata": { "labels": { "app": "web" } } },
+            },
+            "status": {
+                "observedGeneration": 2, "replicas": 2, "readyReplicas": 1,
+                "availableReplicas": 1, "updatedReplicas": 2,
+                "currentRevision": "web-1", "updateRevision": "web-1",
+            },
+        });
+        let pods = serde_json::json!({
+            "apiVersion": "v1", "kind": "List", "metadata": {},
+            "items": [pod("web-0", true, ""), pod("web-1", false, new_pod)],
+        });
+        let (client, _) = server(vec![
+            (
+                "/apis/apps/v1/namespaces/shop/statefulsets/web",
+                200,
+                set.to_string(),
+            ),
+            ("/api/v1/namespaces/shop/pods", 200, pods.to_string()),
+        ])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+        let page = connections_of(&ctx, "StatefulSet", "web", None)
+            .await
+            .expect("the neighbourhood");
+        match page.subject.facts {
+            Some(ObjectFacts::Workload { rollout, .. }) => rollout,
+            other => panic!("a workload's facts, not {other:?}"),
+        }
+    }
+
+    /// The `StatefulSet`'s Connections tab and the services built on it read
+    /// its verdict here, and said Degraded while its page said coming up.
+    /// Fails if the pods it runs are not asked, or a stuck one is let off.
+    #[tokio::test]
+    async fn a_set_scaling_up_reads_coming_up_until_its_new_pod_is_stuck() {
+        assert_eq!(
+            subject_rollout("ContainerCreating").await,
+            Some(Rollout::ComingUp {
+                available: 1,
+                desired: 2
+            })
+        );
+        assert_eq!(
+            subject_rollout("ImagePullBackOff").await,
+            Some(Rollout::Short {
+                available: 1,
+                desired: 2
+            })
+        );
     }
 }
