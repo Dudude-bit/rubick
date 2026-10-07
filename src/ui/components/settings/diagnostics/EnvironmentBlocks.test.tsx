@@ -1,9 +1,11 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import type { Diagnostics } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
 import { EnvironmentBlocks } from "./EnvironmentBlocks";
+
+afterEach(() => useLocaleStore.setState({ choice: "en" }));
 
 const sample: Diagnostics = {
   shell: { outcome: "imported", shell: "/bin/zsh", adopted: 3, removed: 0 },
@@ -127,7 +129,6 @@ describe("EnvironmentBlocks", () => {
     const row = screen.getByText("az").closest("li");
     expect(row).toHaveTextContent("не найден");
     expect(row).not.toHaveTextContent("не установлен");
-    useLocaleStore.setState({ choice: "en" });
   });
 
   it("does not call an absent tool a fault", () => {

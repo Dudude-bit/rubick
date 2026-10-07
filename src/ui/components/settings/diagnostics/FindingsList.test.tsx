@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import type { Finding } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
@@ -20,6 +20,8 @@ const optional: Finding = {
   subject: null,
   aboutShell: false,
 };
+
+afterEach(() => useLocaleStore.setState({ choice: "en" }));
 
 describe("FindingsList", () => {
   it("puts what breaks a connection above what merely limits a feature", () => {
@@ -60,7 +62,6 @@ describe("FindingsList", () => {
     const text = screen.getByText(/Проблем с kubeconfig/).textContent;
     expect(text).not.toMatch(/всё в порядке/);
     expect(text).toMatch(/это не неисправность/);
-    useLocaleStore.setState({ choice: "en" });
   });
 
   /**
