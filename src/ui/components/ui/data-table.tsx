@@ -61,6 +61,7 @@ import {
   tableLayout,
 } from "./column-shares";
 import { controlAt } from "@/lib/row-control";
+import { holdTitles } from "@/lib/hold-titles";
 import { columnFloor } from "@/lib/column-label";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 
@@ -889,6 +890,8 @@ function DataTableInner<TData extends RowData>({
       const peek = peekOfRow(row, getRowHref, getRowPeek);
       if (peek && readLinkIntent(event) === "activate") {
         event.preventDefault();
+        if ("clientX" in event)
+          holdTitles(event.target as HTMLElement, event.currentTarget, event);
         openPeek(peek);
         return;
       }

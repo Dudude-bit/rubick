@@ -384,6 +384,43 @@ describe("DataTable rows", () => {
   });
 
   /**
+   * Sam clicked a cell the peek then slid over and its native tooltip
+   * ("172.30.1.2") stayed drawn on top of the peek until the mouse moved.
+   * Fails if the clicked cell keeps its title through the click, or never
+   * gets it back once the pointer really moves.
+   */
+  it("holds the clicked cell's native tooltip back until the pointer moves", async () => {
+    await wrap(
+      <DataTable<Item>
+        columns={[
+          ...columns,
+          {
+            id: "ip",
+            header: "IP",
+            cell: ({ row }) => (
+              <span data-testid={`ip-${row.original.name}`} title="172.30.1.2">
+                172.30.1.2
+              </span>
+            ),
+          },
+        ]}
+        data={DATA}
+        getRowHref={href}
+      />
+    );
+    const cell = screen.getByTestId("ip-a-1");
+    fireEvent.click(cell, { clientX: 300, clientY: 40 });
+    await goesTo("/c/prod/pods?peek=pods%2Fns%2Fa-1");
+    expect(cell).not.toHaveAttribute("title");
+    expect(screen.getByTestId("ip-b-2")).toHaveAttribute("title", "172.30.1.2");
+
+    fireEvent.pointerMove(document.body, { clientX: 300, clientY: 40 });
+    expect(cell).not.toHaveAttribute("title");
+    fireEvent.pointerMove(document.body, { clientX: 340, clientY: 40 });
+    expect(cell).toHaveAttribute("title", "172.30.1.2");
+  });
+
+  /**
    * The name is where the eye goes when told "double click the row", and it
    * is the one spot a `target.closest("a")` guard turned into nothing at
    * all: the whitespace opened the page and the name only peeked. A link
