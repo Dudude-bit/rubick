@@ -22,9 +22,10 @@ pub fn line_text(line: &LogLine) -> String {
     format!("{stamp} {}", line.message)
 }
 
+/// Every line ends with a newline, the last too, as `kubectl logs` writes them.
 #[must_use]
 pub fn log_text(lines: &[LogLine]) -> String {
-    lines.iter().map(line_text).collect::<Vec<_>>().join("\n")
+    lines.iter().map(|line| line_text(line) + "\n").collect()
 }
 
 /// `name.log`, or `name (1).log` and so on when that is taken — what a
@@ -110,10 +111,13 @@ mod tests {
         }
     }
 
+    /// Would save a file whose last line has no newline, unlike the same
+    /// log from `kubectl logs`.
     #[test]
-    fn lines_are_joined_with_no_newline_after_the_last() {
+    fn a_saved_log_ends_every_line_with_a_newline_the_last_too() {
         let lines = [line("a", None, "a"), line("b", None, "b")];
-        assert_eq!(log_text(&lines), "a\nb");
+        assert_eq!(log_text(&lines), "a\nb\n");
+        assert_eq!(log_text(&[]), "");
     }
 
     /// A second download of the same pod must not overwrite the first.
