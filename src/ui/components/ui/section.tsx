@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { formatCount } from "@/lib/count";
 
 /**
  * A region on the flat canvas — the replacement for `Card`.
@@ -90,7 +91,7 @@ function tally(count: React.ReactNode, title: string): React.ReactNode {
   const word = caps ? title : title.toLowerCase();
   const noun =
     !caps && count === 1 && word.endsWith("s") ? word.slice(0, -1) : word;
-  return `${count} ${noun}`;
+  return `${formatCount(count)} ${noun}`;
 }
 
 export interface SectionHeaderProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -139,7 +140,7 @@ export function SectionHeader({
         </h2>
         {count != null && (
           <span data-testid="section-count" className="text-xs text-fg-fnt">
-            {count}
+            {typeof count === "number" ? formatCount(count) : count}
           </span>
         )}
         {actions && (

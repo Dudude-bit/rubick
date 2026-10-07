@@ -7,12 +7,12 @@ import {
 } from "@/components/ui/tooltip";
 import {
   FORMAT_DESCRIPTIONS,
-  formatCount,
   formatTimeRange,
   termLabel,
   type QueryTerm,
   type StreamedLogLine,
 } from "./types";
+import { formatCount } from "@/lib/count";
 import type { Frozen } from "./hooks/log-buffer";
 import { useT } from "@/i18n/useT";
 

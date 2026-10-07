@@ -2,7 +2,7 @@ import type { ContainerInfo } from "@/generated/types";
 import { PHASE_LABEL } from "@/lib/container-sequence";
 
 import type { ContainerFailure } from "./hooks/useLogStream";
-import { formatCount } from "./types";
+import { formatCount } from "@/lib/count";
 import { useT } from "@/i18n/useT";
 
 export type LegendContainer = Pick<ContainerInfo, "name" | "phase" | "state">;

@@ -16,7 +16,8 @@ import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { useLocale } from "@/stores/localeStore";
 import type { LostLines } from "./hooks/log-buffer";
-import { formatCount, formatSpan, termLabel, type QueryTerm } from "./types";
+import { formatSpan, termLabel, type QueryTerm } from "./types";
+import { formatCount } from "@/lib/count";
 
 /**
  * A stream that stopped on its own, said out loud.

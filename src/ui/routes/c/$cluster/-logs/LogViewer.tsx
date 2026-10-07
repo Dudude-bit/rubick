@@ -60,13 +60,13 @@ import {
 } from "./grouping";
 import {
   fieldTerm,
-  formatCount,
   logsToText,
   termLabel,
   type QueryTerm,
   type StreamedLogLine,
   type ViewMode,
 } from "./types";
+import { formatCount } from "@/lib/count";
 
 /** Before the first batch there is no index to read the legend's tally from. */
 const EMPTY_COUNTS: Map<string, number> = new Map();

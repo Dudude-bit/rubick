@@ -41,4 +41,14 @@ describe("Section", () => {
     );
     expect(screen.getByRole("button", { name: "Filter" })).toBeInTheDocument();
   });
+
+  /** A list header read "1107" beside a footer that groups; fails if the count loses its group space. */
+  it("groups the thousands of a row count", () => {
+    render(
+      <Section>
+        <SectionHeader title="Pods" count={1107} />
+      </Section>
+    );
+    expect(screen.getByTestId("section-count").textContent).toBe("1\u202f107");
+  });
 });

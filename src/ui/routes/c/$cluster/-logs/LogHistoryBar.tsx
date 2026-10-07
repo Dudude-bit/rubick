@@ -6,7 +6,7 @@ import {
   type UsageRange,
 } from "@/integrations";
 import { pageLink } from "@/lib/links";
-import { formatCount } from "./types";
+import { formatCount } from "@/lib/count";
 import type { HistoryState } from "./hooks/useLogHistory";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";

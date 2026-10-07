@@ -25,7 +25,8 @@ import {
   type DensityCursor,
 } from "./density";
 import type { LostLines } from "./hooks/log-buffer";
-import { formatCount, formatSpan, type StreamedLogLine } from "./types";
+import { formatSpan, type StreamedLogLine } from "./types";
+import { formatCount } from "@/lib/count";
 import { useT } from "@/i18n/useT";
 
 /**

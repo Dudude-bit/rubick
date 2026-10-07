@@ -68,6 +68,42 @@ describe("counting things", () => {
   });
 });
 
+describe("a count past a thousand", () => {
+  /**
+   * The Share dialog printed "41423 символа" while the ConfigMap label, fixed
+   * on its own, read "1 107 символов". Every plural prints its `{n}` grouped,
+   * so a caller that forgets still gets it right.
+   */
+  it("groups the thousands of a counted string, in both languages", () => {
+    expect(translate("ru", "share", "charactersLong", { n: 41423 })).toBe(
+      "41\u202f423 символа"
+    );
+    expect(translate("ru", "count", "chars", { n: 1107 })).toBe(
+      "1\u202f107 символов"
+    );
+    expect(translate("en", "count", "chars", { n: 45598 })).toBe(
+      "45\u202f598 chars"
+    );
+  });
+
+  /** A revision is a name, not a quantity: only a counted string groups. */
+  it("leaves a number in a plain string as it was given", () => {
+    expect(translate("en", "changes", "revisionNumber", { n: 1234 })).toBe(
+      "revision 1234"
+    );
+  });
+
+  /** The form comes from the number, not from the grouped text. */
+  it("still picks the Russian form from the whole number", () => {
+    expect(translate("ru", "count", "chars", { n: 21000 })).toBe(
+      "21\u202f000 символов"
+    );
+    expect(translate("ru", "count", "chars", { n: 21001 })).toBe(
+      "21\u202f001 символ"
+    );
+  });
+});
+
 describe("choosing a language from the system", () => {
   it("matches on the language, not the region", () => {
     expect(localeFrom("ru-RU")).toBe("ru");

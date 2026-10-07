@@ -65,6 +65,7 @@ import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 import { useShareSection } from "@/components/share/screen-share";
 import { tableSection, type TableShare } from "@/components/share/table-share";
+import { formatCount } from "@/lib/count";
 
 interface DataTableProps<TData extends RowData> {
   columns: ColumnDef<TData>[];
@@ -1288,7 +1289,7 @@ function DataTableInner<TData extends RowData>({
                   ? t("readings", "objectCount", nounsOf(totalRows))
                   : t("readings", "rowsOfTotal", {
                       ...nounsOf(totalRows),
-                      shown: filteredRows,
+                      shown: formatCount(filteredRows),
                     })}
           </div>
         </div>

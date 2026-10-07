@@ -47,6 +47,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import type { EventFilters, EventInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
+import { formatCount } from "@/lib/count";
 
 const TYPE_FILTERS: Array<{
   value: string;
@@ -413,7 +414,9 @@ export function Events() {
                       <SelectItem key={limit} value={limit}>
                         {limit === "all"
                           ? t("action", "noLimit")
-                          : t("action", "latestN", { n: limit })}
+                          : t("action", "latestN", {
+                              n: formatCount(Number(limit)),
+                            })}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -558,7 +561,8 @@ function summarise(
   if (warnings > 0) parts.push(t("count", "warningEvents", { n: warnings }));
   if (normal > 0) parts.push(t("count", "normalEvents", { n: normal }));
   if (parts.length === 0) parts.push(t("empty", "noneInline"));
-  if (cappedAt) parts.push(t("count", "latestKept", { n: cappedAt }));
+  if (cappedAt)
+    parts.push(t("count", "latestKept", { n: formatCount(Number(cappedAt)) }));
   return parts.join(" · ");
 }
 

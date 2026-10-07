@@ -6,6 +6,7 @@ import { iconSvg } from "@/lib/icon-svg";
 import { ORDER, type PlacedSection } from "@/lib/report-parts";
 import type { ReportValue } from "@/lib/report";
 import { WINDOW_MS, type StoryWindow } from "@/lib/event-stories";
+import { formatCount } from "@/lib/count";
 
 /** The filters narrowing what is on screen, so a shared report is not read
  *  as the whole feed when the reader had typed a search into it. With several
@@ -61,7 +62,7 @@ export function eventsFiltersSection(
         text:
           limit === "all"
             ? t("action", "noLimit")
-            : t("action", "latestN", { n: limit }),
+            : t("action", "latestN", { n: formatCount(Number(limit)) }),
       },
     ],
   });

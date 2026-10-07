@@ -52,6 +52,7 @@ import type {
   WarningGroup,
 } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
+import { formatCount } from "@/lib/count";
 
 /**
  * The unit rides along dimmed and a size smaller, so the number keeps the
@@ -403,7 +404,7 @@ export function AttentionPanel({
         title={t("action", "needsAttention")}
         count={
           total > 0
-            ? t("count", "worstFirst", { n: total })
+            ? t("count", "worstFirst", { n: formatCount(total) })
             : complete
               ? t("cluster", "attentionNothing")
               : t("cluster", "attentionNoneFound")
@@ -436,7 +437,7 @@ export function AttentionPanel({
           </span>
           <span className="truncate text-fg-fnt">
             {t("count", "podsRunning", {
-              n: serving,
+              n: formatCount(serving),
               of: t("count", "ofPods", { n: podTotal(pods) }),
             })}
             {down && <> ({down})</>}

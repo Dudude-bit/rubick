@@ -15,6 +15,7 @@
  * @module i18n
  */
 
+import { formatCount } from "@/lib/count";
 import { en, type Catalogue, type Plural } from "./catalogue";
 
 /**
@@ -122,11 +123,15 @@ export function translate<S extends Section>(
 
   if (isPlural(entry)) {
     const n = Number(values?.n ?? 0);
+    const counted =
+      typeof values?.n === "number" && Number.isInteger(n)
+        ? { ...values, n: formatCount(n) }
+        : values;
     // An English fallback takes English forms: French calls 0 `one`, and
     // "0 pod" is not a sentence in either language.
     return fill(
       pluralForm(entry, translated === undefined ? "en" : locale, n),
-      values
+      counted
     );
   }
   return fill(entry, values);

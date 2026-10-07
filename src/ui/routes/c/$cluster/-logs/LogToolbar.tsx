@@ -30,7 +30,8 @@ import {
 import type { FieldIndex, Frozen } from "./hooks/log-buffer";
 import { LOG_LIMITS } from "./hooks/useLogStream";
 import { LogQuery } from "./LogQuery";
-import { formatCount, type QueryTerm, type ViewMode } from "./types";
+import { type QueryTerm, type ViewMode } from "./types";
+import { formatCount } from "@/lib/count";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 

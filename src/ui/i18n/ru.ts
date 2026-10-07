@@ -7916,10 +7916,10 @@ export const ru: Catalogue = {
       other: "{n} параметра",
     },
     chars: {
-      one: "{count} символ",
-      few: "{count} символа",
-      many: "{count} символов",
-      other: "{count} символа",
+      one: "{n} символ",
+      few: "{n} символа",
+      many: "{n} символов",
+      other: "{n} символа",
     },
     valuesCopiedWithBinary: {
       one: "Скопировано {n} значение, {binary} в виде base64.",

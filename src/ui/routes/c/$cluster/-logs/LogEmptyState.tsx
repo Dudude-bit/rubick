@@ -3,7 +3,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { errorToShow } from "@/lib/error-utils";
 
 import { useT } from "@/i18n/useT";
-import { formatCount } from "./types";
+import { formatCount } from "@/lib/count";
 
 /** Ragged bars at log-line rhythm — the shape the output will land in. */
 const SKELETON_WIDTHS = [

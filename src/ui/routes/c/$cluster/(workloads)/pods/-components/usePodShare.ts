@@ -27,6 +27,7 @@ import { errorToShow } from "@/lib/error-utils";
 import { useT, type T } from "@/i18n/useT";
 import { useHintSettingsStore } from "@/stores/hintSettingsStore";
 import type { ContainerInfo, EventInfo, PodInfo } from "@/generated/types";
+import { formatCount } from "@/lib/count";
 
 /** A published page, not a log store: the tail is what a colleague reads. */
 const MAX_LOG_LINES = 500;
@@ -144,7 +145,7 @@ function logsOf(
             tail.length < viewed.lines.length
               ? t("share", "logsTail", {
                   n: viewed.lines.length,
-                  shown: tail.length,
+                  shown: formatCount(tail.length),
                 })
               : t("share", "logsShown", { n: tail.length }),
         },

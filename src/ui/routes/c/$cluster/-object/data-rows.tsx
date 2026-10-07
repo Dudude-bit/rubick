@@ -11,7 +11,6 @@ import { cn } from "@/lib/utils";
 import { DetailAction } from "@/components/object/detail-blocks";
 import type { BinaryValue, Withheld } from "@/generated/types";
 import { withheldWords } from "@/lib/certificates";
-import { formatCount } from "../-logs/types";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
@@ -224,10 +223,7 @@ export function DataSection({
                         ? isLoading
                           ? t("action", "readingInline")
                           : t("empty", "notReadableWithAccess")
-                        : t("count", "chars", {
-                            n: value.length,
-                            count: formatCount(value.length),
-                          })}
+                        : t("count", "chars", { n: value.length })}
                 </span>
                 {(value !== undefined || blob) && (
                   <div className="ml-auto flex items-center gap-1">

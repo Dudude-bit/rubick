@@ -177,18 +177,6 @@ export function formatSpan(ms: number): string {
   return formatDuration(ms / 1000);
 }
 
-/**
- * Long counts get a thin space between groups, as in the mock. A narrow
- * no-break space rather than a comma: these numbers sit inside prose like
- * "× 2 481 over 1m 12s", where a comma reads as punctuation of the sentence.
- */
-export function formatCount(value: number): string {
-  // Grouped by hand rather than by locale: `toLocaleString` picks its
-  // separator from whatever ICU the host was built with, and this number has
-  // to line up with the mono column beside it either way.
-  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-}
-
 const LEVEL_NAMES = new Set(Object.keys(LEVEL_RANK));
 
 const isLevel = (value: string): value is LogLevel =>

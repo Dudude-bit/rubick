@@ -11,11 +11,11 @@ import {
   LEVEL_MESSAGE_COLORS,
   LEVEL_WORDS,
   FORMAT_DESCRIPTIONS,
-  formatCount,
   formatSpan,
   formatTimestamp,
   formatTimestampPrecise,
 } from "./types";
+import { formatCount } from "@/lib/count";
 
 /**
  * Time, a rule, then the line.

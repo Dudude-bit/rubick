@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vite-plus/test";
 import {
-  formatCount,
   formatTimestamp,
   matchesQuery,
   parseQueryTerm,
@@ -111,11 +110,5 @@ describe("formatting", () => {
     const stamp = new Date(2026, 7, 6, 14, 4, 31).toISOString();
     expect(formatTimestamp(stamp)).toBe("14:04:31");
     expect(formatTimestamp(null)).toBe("--:--:--");
-  });
-
-  it("groups long counts without punctuating the sentence around them", () => {
-    expect(formatCount(2481)).toBe("2\u202f481");
-    expect(formatCount(12)).toBe("12");
-    expect(formatCount(1234567)).toBe("1\u202f234\u202f567");
   });
 });

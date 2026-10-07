@@ -84,6 +84,7 @@ import {
   type HintTone,
   type Scope,
 } from "./palette-entries";
+import { formatCount } from "@/lib/count";
 
 const PaletteActionsHost = lazy(() => import("./PaletteActionsHost"));
 
@@ -1317,7 +1318,9 @@ function EntryRow({
       return (
         <Row {...shared}>
           <span className="min-w-0 truncate text-fg-fnt">
-            {t("count", "moreOnThisCluster", { n: entry.rest })}
+            {t("count", "moreOnThisCluster", {
+              n: formatCount(entry.rest),
+            })}
           </span>
           <span className="ml-auto flex flex-none items-center gap-1 text-[11px] text-fg-fnt">
             <Kbd shortcut="↵" /> {t("action", "hintScopeToIt")}

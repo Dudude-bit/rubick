@@ -32,12 +32,12 @@ import {
 import {
   canBeIntake,
   fieldTerm,
-  formatCount,
   formatTimeRange,
   parseQueryTerm,
   termLabel,
   type QueryTerm,
 } from "./types";
+import { formatCount } from "@/lib/count";
 import { useT } from "@/i18n/useT";
 
 /**
