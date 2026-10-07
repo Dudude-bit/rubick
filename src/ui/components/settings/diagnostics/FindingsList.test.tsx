@@ -59,9 +59,22 @@ describe("FindingsList", () => {
   it("scopes the all-clear in Russian instead of claiming everything is fine", () => {
     useLocaleStore.setState({ choice: "ru" });
     render(<FindingsList findings={[]} />);
-    const text = screen.getByText(/Проблем с kubeconfig/).textContent;
+    const text = screen.getByText(/проблем не найдено/).textContent;
     expect(text).not.toMatch(/всё в порядке/);
     expect(text).toMatch(/это не неисправность/);
+  });
+
+  /**
+   * Lena read "нужными контекстам плагинами", three cases in a row that
+   * agree with nothing. Fails if the sentence goes back to it, or loses what
+   * it covers.
+   */
+  it("says in plain Russian which plugins it checked", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(<FindingsList findings={[]} />);
+    expect(screen.getByText(/проблем не найдено/).textContent).toMatch(
+      /^В kubeconfig, настройках и плагинах, нужных вашим контекстам, проблем не найдено\./
+    );
   });
 
   /**

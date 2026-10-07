@@ -4589,7 +4589,7 @@ export const en = {
     applicationBlock: "Application",
     connectionsBlock: "Connections · {n}",
     noConnectionsYet: "No connection attempted yet.",
-    pathDirect: "direct",
+    pathDirect: "Direct",
     pathProxy: "kubectl proxy",
     pathOk: "ok",
     pathProxyOk: "ok on port {port} ({kubectl})",

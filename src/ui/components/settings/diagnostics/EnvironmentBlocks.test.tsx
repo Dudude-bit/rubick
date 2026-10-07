@@ -263,6 +263,58 @@ describe("the second way in", () => {
   });
 });
 
+describe("the lines of a connection attempt in Russian", () => {
+  const worked = {
+    ...sample,
+    connections: [
+      {
+        ...sample.connections[0],
+        direct: { state: "ok" as const },
+        proxy: { state: "notTried" as const },
+      },
+    ],
+  };
+
+  /**
+   * Lena read "напрямую: ок" under a context name, a sentence-case screen's
+   * one line that began in lower case and ended in a Latin "ок". Fails if the
+   * label goes back to lower case or the answer to "ок".
+   */
+  it("starts the direct line with a capital and says the attempt connected", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(<EnvironmentBlocks diagnostics={worked} />);
+    expect(screen.getByText("Напрямую:", { exact: false }).textContent).toBe(
+      "Напрямую: подключились"
+    );
+    expect(document.body).not.toHaveTextContent(/напрямую|: ок\b/);
+  });
+
+  /** The proxy line says the same word, with its port, in the same voice. */
+  it("says the proxy connected on its port in the same words", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(
+      <EnvironmentBlocks
+        diagnostics={{
+          ...worked,
+          connections: [
+            {
+              ...worked.connections[0],
+              proxy: {
+                state: "ok" as const,
+                port: 8001,
+                kubectl: "/opt/homebrew/bin/kubectl",
+              },
+            },
+          ],
+        }}
+      />
+    );
+    expect(document.body).toHaveTextContent(
+      "kubectl proxy: подключились на порту 8001 (/opt/homebrew/bin/kubectl)"
+    );
+  });
+});
+
 describe("the time of a connection attempt", () => {
   /**
    * Lena read "2026-10-06T22:01:25.123456789Z" among dates drawn in her own
