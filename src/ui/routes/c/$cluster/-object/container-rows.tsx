@@ -11,7 +11,10 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { ClickablePorts } from "@/components/ui/clickable-port";
 import { EnvironmentVariables } from "./EnvironmentVariables";
-import { DetailAction } from "@/components/object/detail-blocks";
+import {
+  DetailAction,
+  ReasonedAction,
+} from "@/components/object/detail-blocks";
 import { ImageRef } from "@/components/object/ImageRef";
 import { KeyValueList, type KeyValue } from "./detail-kv";
 import {
@@ -121,6 +124,8 @@ interface ContainerRowsCommon {
   /** Enables the port-forward affordance on a running container's ports. */
   podName?: string;
   onOpenShell?: (containerName: string) => void;
+  /** Why the cluster will not open a shell for this user; Shell stays, greyed, and says so. */
+  shellDenied?: string;
   onUpdateImage?: (containerName: string, currentImage: string) => void;
   /** Opens the log viewer soloed on this container. */
   onOpenLogs?: (containerName: string) => void;
@@ -148,7 +153,14 @@ interface Group {
 
 export function ContainerRows(props: ContainerRowsProps) {
   const t = useT();
-  const { namespace, podName, onOpenShell, onUpdateImage, onOpenLogs } = props;
+  const {
+    namespace,
+    podName,
+    onOpenShell,
+    shellDenied,
+    onUpdateImage,
+    onOpenLogs,
+  } = props;
 
   const groups: Group[] = props.pod
     ? containerSequence(podContainers(props.pod), t).map((group) => ({
@@ -223,6 +235,7 @@ export function ContainerRows(props: ContainerRowsProps) {
                   namespace={namespace}
                   podName={podName}
                   onOpenShell={onOpenShell}
+                  shellDenied={shellDenied}
                   onUpdateImage={onUpdateImage}
                   onOpenLogs={onOpenLogs}
                 />
@@ -274,6 +287,7 @@ function ContainerBlock({
   namespace,
   podName,
   onOpenShell,
+  shellDenied,
   onUpdateImage,
   onOpenLogs,
 }: {
@@ -283,6 +297,7 @@ function ContainerBlock({
   namespace?: string;
   podName?: string;
   onOpenShell?: (containerName: string) => void;
+  shellDenied?: string;
   onUpdateImage?: (containerName: string, currentImage: string) => void;
   onOpenLogs?: (containerName: string) => void;
 }) {
@@ -404,10 +419,11 @@ function ContainerBlock({
             {/* A shell needs a process to attach to. Offered on a
                 container that has never started, it can only fail. */}
             {runtime && onOpenShell && container.state.type === "running" && (
-              <DetailAction
+              <ReasonedAction
                 label={t("action", "shell")}
                 icon={TerminalIcon}
                 onClick={() => onOpenShell(container.name)}
+                reason={shellDenied}
               />
             )}
             {!runtime && onUpdateImage && (

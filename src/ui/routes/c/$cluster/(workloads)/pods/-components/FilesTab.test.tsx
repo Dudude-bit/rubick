@@ -1,5 +1,6 @@
 import type { ReactElement } from "react";
 import { render, screen, waitFor, within } from "@testing-library/react";
+import { TooltipProvider } from "@/components/ui/tooltip";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -314,6 +315,40 @@ describe("FilesTab", () => {
     );
     expect(screen.getByText("/etc/app")).toBeInTheDocument();
     expect(screen.getByText(/ConfigMap demo-config/)).toBeInTheDocument();
+  });
+
+  /**
+   * The way in for an image with no tools is an ephemeral container. Fails
+   * if it stays live for a reader the cluster will not let add one.
+   */
+  it("greys the debug way in where the review refuses it", async () => {
+    const onDebug = vi.fn();
+    listing.mockReturnValue({
+      phase: "failed",
+      entries: [],
+      reason: "noTools",
+      message: "none exists",
+      exitCode: 127,
+      stderr: "",
+      tried: ["find", "sh"],
+    });
+    wrap(
+      <TooltipProvider>
+        <FilesTab
+          pod={pod()}
+          via={null}
+          onDebug={onDebug}
+          onStopVia={() => {}}
+          debugDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods/ephemeralcontainers -n shop."
+        />
+      </TooltipProvider>
+    );
+    const viaDebug = screen.getByRole("button", {
+      name: "Open through a debug container",
+    });
+    expect(viaDebug).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(viaDebug);
+    expect(onDebug).not.toHaveBeenCalled();
   });
 
   it("says an empty directory is empty only once the tool has said so", () => {

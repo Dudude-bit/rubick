@@ -62,6 +62,9 @@ pub struct AccessQuery {
     pub resource: String,
     pub verb: String,
     pub namespace: Option<String>,
+    /// The part of the object the verb reaches: `exec` in `pods/exec`.
+    #[serde(default)]
+    pub subresource: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -83,13 +86,7 @@ pub async fn check_access(
     let api: Api<SelfSubjectAccessReview> = Api::all(ctx.client.clone());
     let answers = join_all(queries.iter().map(|query| {
         let api = api.clone();
-        let attributes = ResourceAttributes {
-            group: Some(query.group.clone()),
-            resource: Some(query.resource.clone()),
-            verb: Some(query.verb.clone()),
-            namespace: query.namespace.clone(),
-            ..ResourceAttributes::default()
-        };
+        let attributes = access_attributes(query);
         async move { ask(&api, attributes).await }
     }))
     .await;
@@ -102,6 +99,20 @@ pub async fn check_access(
             allowed,
         })
         .collect())
+}
+
+/// A subresource rides in its own field: RBAC matches `pods/exec` from the
+/// two, and a rule for `*/exec` only matches when they arrive apart.
+#[must_use]
+fn access_attributes(query: &AccessQuery) -> ResourceAttributes {
+    ResourceAttributes {
+        group: Some(query.group.clone()),
+        resource: Some(query.resource.clone()),
+        subresource: query.subresource.clone(),
+        verb: Some(query.verb.clone()),
+        namespace: query.namespace.clone(),
+        ..ResourceAttributes::default()
+    }
 }
 
 #[must_use]
@@ -376,6 +387,39 @@ mod tests {
             resource: resource.to_string(),
             namespaced,
         }
+    }
+
+    /// Debug asks `patch pods/ephemeralcontainers`. Folded into the resource
+    /// it would ask about a resource no rule names; dropped it would ask
+    /// about patching the pod itself, a different right.
+    #[test]
+    fn an_access_question_keeps_its_subresource_apart() {
+        let query: AccessQuery = serde_json::from_value(serde_json::json!({
+            "group": "",
+            "resource": "pods",
+            "subresource": "ephemeralcontainers",
+            "verb": "patch",
+            "namespace": "team-checkout",
+        }))
+        .expect("query");
+        let asked = access_attributes(&query);
+        assert_eq!(asked.resource.as_deref(), Some("pods"));
+        assert_eq!(asked.subresource.as_deref(), Some("ephemeralcontainers"));
+        assert_eq!(asked.verb.as_deref(), Some("patch"));
+        assert_eq!(asked.namespace.as_deref(), Some("team-checkout"));
+    }
+
+    /// A question about the object itself still arrives without one.
+    #[test]
+    fn an_access_question_without_a_subresource_asks_about_the_object() {
+        let query: AccessQuery = serde_json::from_value(serde_json::json!({
+            "group": "apps",
+            "resource": "deployments",
+            "verb": "delete",
+            "namespace": null,
+        }))
+        .expect("query");
+        assert_eq!(access_attributes(&query).subresource, None);
     }
 
     #[test]

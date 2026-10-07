@@ -71,7 +71,7 @@ import {
   type PeekActionPlan,
 } from "../-peek/peek-actions";
 import { useAsk } from "./useAsk";
-import { guardedOf, noteDenied, useDenied } from "./access";
+import { guardedOf, noteDenied, useDenied, usePodDenied } from "@/lib/access";
 import { askableKind } from "@/lib/tell-me-when";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
@@ -168,6 +168,9 @@ export function useObjectActions({
 
   const guarded = guardedOf(kind, namespace);
   const denied = useDenied(guarded);
+  const podDenied = usePodDenied(
+    kind === "Pod" || kind === "Service" ? namespace : null
+  );
   const verbOf = {
     delete: "delete",
     scale: "patch",
@@ -274,6 +277,9 @@ export function useObjectActions({
       delete: denied[verbOf.delete],
       scale: denied[verbOf.scale],
       restart: denied[verbOf.restart],
+      debug: kind === "Pod" ? podDenied.debug : undefined,
+      shell: podDenied.shell,
+      portForward: podDenied.portForward,
     },
   });
 

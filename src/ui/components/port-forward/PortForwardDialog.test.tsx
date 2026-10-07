@@ -20,6 +20,7 @@ vi.mock("@/lib/commands", () => ({
     portForwardService: vi.fn(),
     portForwardSubscribed: vi.fn(async () => undefined),
     createPortForwardConfig: vi.fn(),
+    checkAccess: vi.fn(),
   },
 }));
 
@@ -27,6 +28,9 @@ import { commands } from "@/lib/commands";
 import { renderWithRouter } from "@/test/render";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { PortForwardDialog, type ForwardTarget } from "./PortForwardDialog";
+import { useClusterStore } from "@/stores/clusterStore";
+import { marcoReview } from "@/test/marco";
+import type { AccessQuery } from "@/generated/types";
 
 const POD: ForwardTarget = {
   kind: "Pod",
@@ -145,5 +149,51 @@ describe("the port-forward dialog", () => {
       )
     );
     expect(commands.portForwardPod).not.toHaveBeenCalled();
+  });
+});
+
+describe("the port-forward dialog where the access review has answered", () => {
+  beforeEach(() => {
+    useClusterStore.setState((s) => ({
+      currentContext: "acme-staging",
+      isConnected: true,
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+  });
+  const start = () =>
+    screen.getByRole("button", { name: "Start port-forward" });
+
+  /**
+   * A reader who may look at pods and not forward to them. Fails if Start
+   * stays live while can-i create pods/portforward says no.
+   */
+  it("greys Start with the can-i question for a reader who may not forward", async () => {
+    vi.mocked(commands.checkAccess).mockImplementation(
+      async (queries: AccessQuery[]) =>
+        queries.map((query) => ({ ...query, allowed: false }))
+    );
+    const user = userEvent.setup();
+    await mount();
+    await waitFor(() =>
+      expect(start()).toHaveAttribute("aria-disabled", "true")
+    );
+    await user.hover(start());
+    expect(
+      (
+        await screen.findAllByText(
+          /can-i create pods\/portforward -n lena-sandbox/
+        )
+      ).length
+    ).toBeGreaterThan(0);
+    await user.click(start());
+    expect(commands.portForwardPod).not.toHaveBeenCalled();
+  });
+
+  /** Marco's Role grants create on pods/portforward. Fails if the guard shuts it. */
+  it("leaves Start live where the review allows the forward", async () => {
+    vi.mocked(commands.checkAccess).mockImplementation(marcoReview);
+    await mount({ ...POD, namespace: "team-checkout" });
+    await waitFor(() => expect(commands.checkAccess).toHaveBeenCalled());
+    expect(start()).not.toHaveAttribute("aria-disabled");
   });
 });

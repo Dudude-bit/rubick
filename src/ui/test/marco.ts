@@ -54,9 +54,8 @@ const DEVELOPER: Rule[] = [
 /** What `kubectl auth can-i` answers Marco, matched the way the RBAC authorizer matches. */
 export function marcoMay(query: AccessQuery): boolean {
   if (query.namespace !== "team-checkout") return false;
-  const { subresource } = query as { subresource?: string | null };
-  const resource = subresource
-    ? `${query.resource}/${subresource}`
+  const resource = query.subresource
+    ? `${query.resource}/${query.subresource}`
     : query.resource;
   return DEVELOPER.some(
     (rule) =>

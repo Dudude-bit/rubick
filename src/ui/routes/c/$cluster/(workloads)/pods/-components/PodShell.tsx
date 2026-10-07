@@ -1,4 +1,5 @@
 import { useMemo, type ReactNode } from "react";
+import { Lock } from "lucide-react";
 
 import { containerColors } from "../../../-logs/container-colors";
 import {
@@ -12,6 +13,9 @@ import { lastTermination, terminationWhen } from "@/lib/pod-status";
 import type { PodInfo } from "@/generated/types";
 
 import { PodTerminal } from "./PodTerminal";
+import type { PodDenied } from "@/lib/access";
+import { ReasonTip } from "@/components/object/detail-blocks";
+import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import type { T } from "@/i18n/useT";
@@ -210,19 +214,28 @@ function Hollow({
 
 function HollowLink({
   onClick,
+  reason,
   children,
 }: {
   onClick: () => void;
+  /** Why the cluster will not let this user follow it; it stays, greyed, and says so. */
+  reason?: string;
   children: ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="rounded text-xs text-info hover:underline"
-    >
-      {children}
-    </button>
+    <ReasonTip reason={reason}>
+      <button
+        type="button"
+        onClick={() => !reason && onClick()}
+        aria-disabled={reason ? true : undefined}
+        className={cn(
+          "rounded text-xs text-info",
+          reason ? "cursor-default opacity-40" : "hover:underline"
+        )}
+      >
+        {children}
+      </button>
+    </ReasonTip>
   );
 }
 
@@ -234,11 +247,13 @@ function NoShellState({
   finished,
   onOpenLogs,
   onDebug,
+  denied,
 }: {
   state: NoShell;
   finished: boolean;
   onOpenLogs: (container: string) => void;
   onDebug: () => void;
+  denied: PodDenied;
 }) {
   const t = useT();
   const logs = state.logs;
@@ -255,7 +270,10 @@ function NoShellState({
         {/* An ephemeral container is added to a pod that still exists; on one
             that has finished, the dialog's other half — a copy of the pod with
             the failing piece taken out — is the thing that works. */}
-        <HollowLink onClick={onDebug}>
+        <HollowLink
+          onClick={onDebug}
+          reason={finished ? denied.copy : denied.ephemeral}
+        >
           {finished
             ? t("action", "debugWithCopy")
             : t("action", "debugWithEphemeral")}
@@ -280,6 +298,8 @@ export interface PodShellProps {
   onOpenLogs: (container: string) => void;
   onDebug: () => void;
   onEnd: () => void;
+  /** What the cluster's access review refuses this user on this pod. */
+  denied?: PodDenied;
 }
 
 export function PodShell({
@@ -290,6 +310,7 @@ export function PodShell({
   onOpenLogs,
   onDebug,
   onEnd,
+  denied = {},
 }: PodShellProps) {
   const t = useT();
   const containers = useMemo(() => podContainers(pod), [pod]);
@@ -367,7 +388,14 @@ export function PodShell({
         </div>
       )}
 
-      {target ? (
+      {target && denied.shell ? (
+        <Hollow headline={t("empty", "shellNotPermitted")}>
+          <p className="flex items-start gap-1.5 text-xs text-err">
+            <Lock className="mt-px h-3.5 w-3.5 flex-none" aria-hidden="true" />
+            {denied.shell}
+          </p>
+        </Hollow>
+      ) : target ? (
         // Keyed by the container, because opening a session is the one thing
         // `PodTerminal` does on mount: switching the chooser has to close the
         // old shell and open a new one, not re-label the old one.
@@ -386,6 +414,7 @@ export function PodShell({
           finished={FINISHED.has(pod.status.phase.toLowerCase())}
           onOpenLogs={onOpenLogs}
           onDebug={onDebug}
+          denied={denied}
         />
       ) : (
         <Hollow headline={t("empty", "noShellAttached")}>

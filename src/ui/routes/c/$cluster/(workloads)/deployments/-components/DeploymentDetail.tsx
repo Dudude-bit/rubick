@@ -58,7 +58,7 @@ import {
 import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { RestartAction } from "../../../-object/RestartDialog";
 import { readinessOf } from "@/lib/restart-plan";
-import { guardedOf, useDenied } from "../../../-object/access";
+import { guardedOf, useDenied } from "@/lib/access";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {

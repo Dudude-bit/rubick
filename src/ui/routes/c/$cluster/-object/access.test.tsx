@@ -14,6 +14,7 @@ vi.mock("@/lib/commands", async (original) => {
       checkAccess,
       getSecret: vi.fn(async () => SECRET),
       getDeployment: vi.fn(async () => WORKER),
+      getPod: vi.fn(async () => API_POD),
     },
   };
 });
@@ -27,6 +28,7 @@ import PaletteActionsHost from "../-shell/PaletteActionsHost";
 import type { ActionsReport } from "../-shell/palette-actions";
 import { DeleteAction } from "./DeleteAction";
 import { RestartAction } from "./RestartDialog";
+import { marcoReview } from "@/test/marco";
 
 const SECRET = { name: "checkout-db", namespace: "team-checkout" };
 const WORKER = {
@@ -49,6 +51,33 @@ function marco(queries: AccessQuery[]): AccessAnswer[] {
       ["pods", "jobs"].includes(query.resource),
   }));
 }
+
+/** checkout-api's pod as the cluster reads it: running, one container on 8080. */
+const API_POD = {
+  name: "checkout-api-6767fbfdb7-blpfk",
+  namespace: "team-checkout",
+  status: { phase: "Running", display: "Running" },
+  containers: [
+    {
+      name: "api",
+      image: "ghcr.io/acme/checkout-api:1.4.2",
+      ready: true,
+      restartCount: 0,
+      state: { type: "running", startedAt: "2026-10-06T21:00:00Z" },
+      ports: [{ containerPort: 8080, name: "http", protocol: "TCP" }],
+    },
+  ],
+  initContainers: [],
+  ownerReferences: [
+    {
+      api_version: "apps/v1",
+      kind: "ReplicaSet",
+      name: "checkout-api-6767fbfdb7",
+      uid: "rs",
+      controller: true,
+    },
+  ],
+};
 
 const mutation = (mutate = vi.fn()) =>
   ({ mutate, isPending: false }) as unknown as UseMutationResult<
@@ -309,5 +338,85 @@ describe("Delete when the access review cannot answer", () => {
     await waitFor(() =>
       expect(deleteButton()).toHaveAttribute("aria-disabled", "true")
     );
+  });
+});
+
+describe("Debug for Marco, whose Role allows exec and port-forward and neither way of debugging", () => {
+  beforeEach(() => {
+    checkAccess.mockImplementation(marcoReview);
+  });
+
+  const podsList = () =>
+    renderWithRouter(
+      <ResourceList
+        title="Pods"
+        emptyStateLabel="pods"
+        data={[API_POD]}
+        columns={[
+          {
+            accessorKey: "name",
+            header: "Name",
+            cell: ({ row }) => (
+              <span data-testid="cell">{row.original.name}</span>
+            ),
+          },
+        ]}
+        getRowHref={(row) => hrefOf(objectLink({ kind: "Pod", ...row })!)}
+      />,
+      { at: "/c/acme-staging/pods", route: "/c/$cluster/$" }
+    );
+
+  /**
+   * Marco right-clicked checkout-api's row and Debug was live; its dialog
+   * then offered Start Debug, which the cluster refuses both ways. Fails if
+   * the menu's Debug is runnable, or if Shell and Port forward, which his
+   * Role allows, are greyed with it.
+   */
+  it("is greyed in the pod row's menu with both can-i questions", async () => {
+    await podsList();
+    fireEvent.contextMenu(screen.getByTestId("cell"), {
+      clientX: 30,
+      clientY: 40,
+    });
+    const debug = await screen.findByRole("menuitem", { name: /^Debug/ });
+    await waitFor(() => expect(debug).toHaveAttribute("data-disabled"));
+    expect(debug.textContent).toContain(
+      "can-i patch pods/ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout"
+    );
+    for (const offered of [/^Shell/, /^Port forward/])
+      expect(
+        screen.getByRole("menuitem", { name: offered })
+      ).not.toHaveAttribute("data-disabled");
+  });
+
+  /** Fails if Ctrl+K offers the Debug the row menu has greyed. */
+  it("comes to the palette with its reason", async () => {
+    const reports: ActionsReport[] = [];
+    await renderWithRouter(
+      <PaletteActionsHost
+        target={{
+          context: "acme-staging",
+          kind: "Pod",
+          group: "",
+          plural: "pods",
+          name: API_POD.name,
+          namespace: API_POD.namespace,
+        }}
+        onReport={(report) => {
+          reports.push(report);
+        }}
+        ref={{ current: null }}
+      />
+    );
+    await waitFor(() => {
+      const last = reports.at(-1);
+      const actions = last?.reading === "ready" ? last.actions : [];
+      expect(actions.find((action) => action.id === "debug")?.reason).toMatch(
+        /can-i patch pods\/ephemeralcontainers -n team-checkout/
+      );
+      expect(
+        actions.find((action) => action.id === "shell")?.reason
+      ).toBeUndefined();
+    });
   });
 });

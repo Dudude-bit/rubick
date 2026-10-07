@@ -1212,6 +1212,8 @@ export const ru: Catalogue = {
     restartSeeWhy: "Причина видна на вкладке Pods.",
     notPermitted:
       "Ваши права этого не позволяют: на kubectl auth can-i {check} кластер отвечает no.",
+    notPermittedEither:
+      "Ваши права этого не позволяют: на kubectl auth can-i {check} и на kubectl auth can-i {other} кластер отвечает no.",
     validationPassed: "Проверка пройдена",
     applySucceeded: "Применение выполнено",
     applyFailed: "Не удалось применить",
@@ -6134,6 +6136,7 @@ export const ru: Catalogue = {
     manifests: "манифесты",
     customResourceNotRead:
       "Этот пользовательский ресурс ещё не прочитан. Его spec задаёт CRD, и здесь его пока никто не видел.",
+    shellNotPermitted: "С этими правами оболочка недоступна",
     noShellAttached: "Терминал не подключён",
     shellSessionEnded:
       "Сессия завершена. Выберите контейнер выше, чтобы открыть новую; пока здесь ничего не выполняется.",

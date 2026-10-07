@@ -1219,6 +1219,8 @@ export const en = {
     restartSeeWhy: "See why on the Pods tab.",
     notPermitted:
       "Your access does not allow this: the cluster answers no to kubectl auth can-i {check}.",
+    notPermittedEither:
+      "Your access does not allow this: the cluster answers no to kubectl auth can-i {check} and to kubectl auth can-i {other}.",
     validationPassed: "Validation passed",
     applySucceeded: "Apply succeeded",
     applyFailed: "Apply failed",
@@ -5562,6 +5564,7 @@ export const en = {
     manifests: "Manifests",
     customResourceNotRead:
       "This custom resource has not been read yet. Its spec is whatever the CRD defines, and nothing here has seen it.",
+    shellNotPermitted: "No shell with this access",
     noShellAttached: "No shell is attached",
     shellSessionEnded:
       "The session was ended. Choosing a container above opens a new one; nothing is running here in the meantime.",

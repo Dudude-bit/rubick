@@ -58,7 +58,7 @@ import type { ListQuery, Scoped, UnreadNamespace } from "@/generated/types";
 import { UnreadNamespaces } from "./UnreadNamespaces";
 import { RefusalWayOut, UnreadList } from "./UnreadList";
 import { useListRefusal } from "./useListRefusal";
-import { useRowDeleteDenial } from "../-object/access";
+import { useRowDeleteDenial } from "@/lib/access";
 import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
 import { deleteCommandFor } from "../-peek/peek-actions";

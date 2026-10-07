@@ -17,7 +17,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "../yaml-tab";
 import { ResourceDetailLayout } from "../ResourceDetailLayout";
 import { servedOf } from "../served";
-import { noteDenied, useDenied } from "../access";
+import { noteDenied, useDenied } from "@/lib/access";
 import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { RelatedPanel } from "../RelatedPanel";

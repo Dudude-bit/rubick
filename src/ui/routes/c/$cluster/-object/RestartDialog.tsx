@@ -25,7 +25,7 @@ import { cn } from "@/lib/utils";
 import type { RolloutPlan } from "@/generated/types";
 import { DeliveryInterceptBody } from "../-delivery/delivery-intercept";
 import { qualified } from "../-peek/peek-actions";
-import { guardedOf, noteDenied, useDenied } from "./access";
+import { guardedOf, noteDenied, useDenied } from "@/lib/access";
 
 export interface RestartDialogProps {
   open: boolean;

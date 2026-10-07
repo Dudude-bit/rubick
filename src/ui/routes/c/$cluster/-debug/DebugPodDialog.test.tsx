@@ -1,26 +1,44 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vite-plus/test";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-vi.mock("@/lib/commands", () => ({ commands: {} }));
+import type { AccessQuery } from "@/generated/types";
+
+const checkAccess = vi.hoisted(() => vi.fn());
+const startEphemeral = vi.hoisted(() => vi.fn());
+const startCopyPod = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/commands", () => ({ commands: { checkAccess } }));
 vi.mock("@/components/ui/use-toast", () => ({
   useToast: () => ({ toast: vi.fn() }),
 }));
 vi.mock("@/hooks", () => ({
   useDebugOperation: () => ({
-    isPolling: false,
+    state: "idle",
     operation: null,
-    startEphemeralContainer: vi.fn(),
-    startCopyPod: vi.fn(),
+    startEphemeral,
+    startCopyPod,
     cancel: vi.fn(),
     continueWaiting: vi.fn(),
-    stopWaiting: vi.fn(),
   }),
 }));
 
 const { DebugPodDialog } = await import("./DebugPodDialog");
+const { renderWithProviders } = await import("@/test/render");
+const { marcoReview, marcoMay } = await import("@/test/marco");
+const { useClusterStore } = await import("@/stores/clusterStore");
+
+beforeEach(() => {
+  checkAccess.mockReset();
+  startEphemeral.mockReset();
+  startCopyPod.mockReset();
+  useClusterStore.setState((s) => ({
+    currentContext: "acme-staging",
+    isConnected: true,
+    connectionAttemptId: s.connectionAttemptId + 1,
+  }));
+});
 
 function open(props: Partial<Parameters<typeof DebugPodDialog>[0]> = {}) {
-  return render(
+  return renderWithProviders(
     <DebugPodDialog
       open
       onOpenChange={() => {}}
@@ -33,6 +51,8 @@ function open(props: Partial<Parameters<typeof DebugPodDialog>[0]> = {}) {
     />
   );
 }
+
+const start = () => screen.getByRole("button", { name: "Start Debug" });
 
 describe("DebugPodDialog", () => {
   /**
@@ -73,5 +93,59 @@ describe("DebugPodDialog", () => {
     expect(
       screen.getByRole("combobox", { name: /target container/i })
     ).toHaveTextContent("app");
+  });
+});
+
+describe("DebugPodDialog where the cluster refuses this user", () => {
+  /**
+   * Marco reached the dialog from checkout-api's row and Start Debug was
+   * live, though can-i patch pods/ephemeralcontainers and can-i create pods
+   * both say no. Fails if either way reads as open or Start reaches the
+   * cluster.
+   */
+  it("says why each way is shut and starts nothing", async () => {
+    checkAccess.mockImplementation(marcoReview);
+    open({
+      podName: "checkout-api-6767fbfdb7-blpfk",
+      namespace: "team-checkout",
+      containers: ["api"],
+    });
+
+    await waitFor(() =>
+      expect(start()).toHaveAttribute("aria-disabled", "true")
+    );
+    expect(
+      screen.getByText(/can-i patch pods\/ephemeralcontainers -n team-checkout/)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/can-i create pods -n team-checkout/)
+    ).toBeInTheDocument();
+    fireEvent.click(start());
+    expect(startEphemeral).not.toHaveBeenCalled();
+    expect(startCopyPod).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A reader the cluster lets create pods but not add ephemeral containers
+   * has one way in. Fails if the dialog opens on the refused way, or greys
+   * the one that works.
+   */
+  it("opens on the way the cluster allows", async () => {
+    checkAccess.mockImplementation(async (queries: AccessQuery[]) =>
+      queries.map((query) => ({
+        ...query,
+        allowed:
+          (query.verb === "create" && !query.subresource) || marcoMay(query),
+      }))
+    );
+    open({ namespace: "team-checkout", containers: ["api"] });
+
+    await waitFor(() =>
+      expect(screen.getByRole("radio", { name: /Copy Pod/ })).toBeChecked()
+    );
+    expect(screen.getByRole("radio", { name: /Ephemeral/ })).toBeDisabled();
+    expect(start()).not.toHaveAttribute("aria-disabled");
+    fireEvent.click(start());
+    await waitFor(() => expect(startCopyPod).toHaveBeenCalled());
   });
 });

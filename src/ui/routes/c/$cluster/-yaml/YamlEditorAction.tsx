@@ -8,7 +8,7 @@ import { FileJson } from "lucide-react";
 
 import { useToast } from "@/components/ui/use-toast";
 import { ReasonedAction } from "@/components/object/detail-blocks";
-import { useEditDenied } from "../-object/access";
+import { useEditDenied } from "@/lib/access";
 import { errorToShow } from "@/lib/error-utils";
 import { useYamlEditorStore, type ResourceKey } from "@/stores/yamlEditorStore";
 import { useT } from "@/i18n/useT";

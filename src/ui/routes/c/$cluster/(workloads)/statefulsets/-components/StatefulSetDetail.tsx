@@ -33,7 +33,7 @@ import { ChangesTab } from "../../-components/ChangesTab";
 import { deliveryOfKind } from "@/lib/delivery";
 import { RestartAction } from "../../../-object/RestartDialog";
 import { readinessOf } from "@/lib/restart-plan";
-import { guardedOf, useDenied } from "../../../-object/access";
+import { guardedOf, useDenied } from "@/lib/access";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
   Composition,

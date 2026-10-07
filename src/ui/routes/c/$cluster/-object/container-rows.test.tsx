@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
+
+import type { AccessQuery, PodInfo } from "@/generated/types";
+import { useClusterStore } from "@/stores/clusterStore";
 
 import type { ContainerInfo, DeploymentContainerInfo } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
@@ -116,5 +120,72 @@ describe("a running pod's containers on the Containers tab", () => {
     );
     expect(screen.getByText("memory 24Mi")).toBeInTheDocument();
     expect(screen.getByText("cpu 5m · memory 16Mi")).toBeInTheDocument();
+  });
+});
+
+describe("a running container for a reader who may neither exec nor forward", () => {
+  /**
+   * The container's Shell and its port's forward were live for a reader the
+   * cluster refuses both. Fails if either stays runnable, or if the port
+   * still opens its dialog.
+   */
+  it("greys Shell and the port, each with its can-i question", async () => {
+    useClusterStore.setState((s) => ({
+      currentContext: "acme-staging",
+      isConnected: true,
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+    vi.mocked(invoke).mockImplementation(async (command: string, args) =>
+      command === "check_access"
+        ? (args as { queries: AccessQuery[] }).queries.map((query) => ({
+            ...query,
+            allowed: false,
+          }))
+        : undefined
+    );
+    const pod = {
+      name: "checkout-api-6767fbfdb7-blpfk",
+      namespace: "team-checkout",
+      initContainers: [],
+      containers: [
+        {
+          name: "api",
+          image: "ghcr.io/acme/checkout-api:1.4.2",
+          phase: "app",
+          ready: true,
+          started: true,
+          restartCount: 0,
+          resources: { requests: {}, limits: {} },
+          state: { type: "running", startedAt: "2026-10-06T21:00:00Z" },
+          lastTerminated: null,
+          ports: [{ containerPort: 8080, name: null, protocol: "TCP" }],
+          env: [],
+          envFrom: [],
+        },
+      ],
+    } as unknown as PodInfo;
+    await renderWithRouter(
+      <ContainerRows
+        pod={pod}
+        namespace="team-checkout"
+        podName={pod.name}
+        onOpenShell={vi.fn()}
+        shellDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i create pods/exec -n team-checkout."
+      />
+    );
+
+    expect(screen.getByRole("button", { name: "Shell" })).toHaveAttribute(
+      "aria-disabled",
+      "true"
+    );
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "8080/TCP" })).toHaveAttribute(
+        "aria-disabled",
+        "true"
+      )
+    );
+    fireEvent.click(screen.getByRole("button", { name: "8080/TCP" }));
+    expect(screen.queryByText("Start port-forward")).toBeNull();
+    vi.mocked(invoke).mockImplementation(async () => undefined);
   });
 });

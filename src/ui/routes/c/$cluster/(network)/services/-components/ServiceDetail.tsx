@@ -22,7 +22,8 @@ import {
   Tag,
   Waypoints,
 } from "lucide-react";
-import { DetailAction } from "@/components/object/detail-blocks";
+import { ReasonedAction } from "@/components/object/detail-blocks";
+import { usePodDenied } from "@/lib/access";
 import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { DeleteAction } from "../../../-object/DeleteAction";
@@ -79,6 +80,7 @@ export function ServiceDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.Service, service);
   const intercept = useDeliveryIntercept(deliveryQuery);
   const [forwardOpen, setForwardOpen] = useState(false);
+  const forwardDenied = usePodDenied(namespace || null).portForward;
 
   if (!service && !isLoading && !error) {
     return null;
@@ -294,14 +296,14 @@ export function ServiceDetail() {
       actions={
         <>
           {service && service.type !== "ExternalName" && (
-            <DetailAction
+            <ReasonedAction
               label={t("action", "portForward")}
               icon={Network}
               onClick={() => setForwardOpen(true)}
               reason={
                 service.ports.length === 0
                   ? t("action", "serviceDeclaresNoPorts")
-                  : undefined
+                  : forwardDenied
               }
             />
           )}

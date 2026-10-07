@@ -15,7 +15,7 @@ import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog
 import type { DeliveryIntercept } from "@/lib/delivery";
 import type { PodInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
-import { guardedOf, noteDenied, useDenied, type Guarded } from "./access";
+import { guardedOf, noteDenied, useDenied, type Guarded } from "@/lib/access";
 
 /**
  * The one confirmation for taking an object away: the name typed, what a

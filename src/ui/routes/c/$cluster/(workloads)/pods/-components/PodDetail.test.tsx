@@ -14,6 +14,8 @@ import { REFRESH_INTERVALS } from "@/lib/refresh";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useWindowActivity } from "@/lib/window-activity";
 import { renderWithRouter } from "@/test/render";
+import { marcoReview } from "@/test/marco";
+import type { AccessQuery } from "@/generated/types";
 import { PodDetail } from "./PodDetail";
 
 vi.mock("@/components/terminal/Terminal", () => ({
@@ -108,13 +110,18 @@ beforeEach(() => {
     interactionAt: 0,
   });
   useClusterStore.setState({ currentContext: "prod", isConnected: true });
-  vi.mocked(invoke).mockImplementation(async (command: string) => {
+  vi.mocked(invoke).mockImplementation(async (command: string, args) => {
     if (command === "get_pod") {
       if (gone) throw NOT_FOUND;
       return POD;
     }
     if (command === "get_replicaset") return REPLICA_SET;
     if (command === "open_pod_shell") return "term-1";
+    if (command === "check_access")
+      return (args as { queries: AccessQuery[] }).queries.map((query) => ({
+        ...query,
+        allowed: true,
+      }));
     return undefined;
   });
 });
@@ -191,5 +198,51 @@ describe("a pod page whose pod is deleted while it is open", () => {
     await advance(0);
     expect(screen.getByText("This Pod no longer exists.")).toBeInTheDocument();
     expect(screen.queryByText(/shell session ended/)).toBeNull();
+  });
+});
+
+describe("Marco's pod page, in a namespace where he may exec and forward but not debug", () => {
+  /**
+   * Marco's checkout-api page offered a live Debug whose Start the cluster
+   * refuses: can-i patch pods/ephemeralcontainers and can-i create pods both
+   * say no. Fails if Debug is runnable there, or if Port forward and Delete,
+   * which his Role allows, are greyed with it.
+   */
+  it("greys Debug with both can-i questions and leaves what he may do offered", async () => {
+    useClusterStore.setState((s) => ({
+      currentContext: "acme-staging",
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+    vi.mocked(invoke).mockImplementation(async (command: string, args) => {
+      if (command === "get_pod") return { ...POD, namespace: "team-checkout" };
+      if (command === "check_access")
+        return marcoReview((args as { queries: AccessQuery[] }).queries);
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/acme-staging/pods/team-checkout/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+
+    const debug = screen.getByRole("button", { name: "Debug" });
+    expect(debug).toHaveAttribute("aria-disabled", "true");
+    await act(async () => {
+      debug.focus();
+    });
+    await advance(300);
+    expect(
+      screen.getAllByText(
+        /can-i patch pods\/ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout/
+      ).length
+    ).toBeGreaterThan(0);
+    act(() => debug.click());
+    expect(screen.queryByText("Debug Mode")).toBeNull();
+
+    for (const offered of ["Port forward", "Delete"])
+      expect(screen.getByRole("button", { name: offered })).not.toHaveAttribute(
+        "aria-disabled"
+      );
   });
 });

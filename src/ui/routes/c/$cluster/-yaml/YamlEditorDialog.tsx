@@ -53,7 +53,7 @@ import { errorToShow } from "@/lib/error-utils";
 
 import { YamlEditor } from "./YamlEditor";
 import { YamlEditorToolbar } from "./YamlEditorToolbar";
-import { guardedOf, noteDenied, useEditDenied } from "../-object/access";
+import { guardedOf, noteDenied, useEditDenied } from "@/lib/access";
 import { ReasonTip } from "@/components/object/detail-blocks";
 import { cn } from "@/lib/utils";
 import { YamlDiffViewer } from "./YamlDiffViewer";

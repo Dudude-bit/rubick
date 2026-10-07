@@ -915,6 +915,7 @@ export interface AccessQuery {
   resource: string;
   verb: string;
   namespace: string | null;
+  subresource?: string;
 }
 
 export interface EventInfo {

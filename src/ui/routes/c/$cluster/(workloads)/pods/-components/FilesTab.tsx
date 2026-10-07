@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ReasonTip } from "@/components/object/detail-blocks";
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useNow, useNowTenths } from "@/hooks/useNow";
@@ -67,6 +68,8 @@ export interface FilesTabProps {
   via: Via | null;
   onDebug: (container: string) => void;
   onStopVia: () => void;
+  /** Why the cluster will not add a debug container for this user. */
+  debugDenied?: string;
 }
 
 /**
@@ -76,7 +79,13 @@ export interface FilesTabProps {
  * they come from, because the pod already says so. Every way the read can
  * end is a different sentence, and none of them is an empty list.
  */
-export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
+export function FilesTab({
+  pod,
+  via,
+  onDebug,
+  onStopVia,
+  debugDenied,
+}: FilesTabProps) {
   const t = useT();
   // offeredContainers, not pod.containers: every other pod surface counts
   // the init containers too, and a sidecar that only exists as an
@@ -421,6 +430,7 @@ export function FilesTab({ pod, via, onDebug, onStopVia }: FilesTabProps) {
           image={container.image}
           path={path}
           onDebug={onDebug}
+          debugDenied={debugDenied}
           onMounts={() => setMountsOnly(true)}
           onRetry={reload}
         />
@@ -819,6 +829,7 @@ function Failure({
   image,
   path,
   onDebug,
+  debugDenied,
   onMounts,
   onRetry,
 }: {
@@ -827,11 +838,24 @@ function Failure({
   image: string;
   path: string;
   onDebug: (container: string) => void;
+  debugDenied?: string;
   onMounts: () => void;
   onRetry: () => void;
 }) {
   const t = useT();
   const link = "text-info hover:underline";
+  const viaDebug = (
+    <ReasonTip reason={debugDenied}>
+      <button
+        type="button"
+        onClick={() => !debugDenied && onDebug(container)}
+        aria-disabled={debugDenied ? true : undefined}
+        className={debugDenied ? "cursor-default text-info opacity-40" : link}
+      >
+        {t("files", "openViaDebug")}
+      </button>
+    </ReasonTip>
+  );
   if (state.reason === "noTools") {
     return (
       <div className="px-3 py-6 text-xs">
@@ -844,13 +868,7 @@ function Failure({
           })}
         </p>
         <p className="mt-3 flex gap-4">
-          <button
-            type="button"
-            onClick={() => onDebug(container)}
-            className={link}
-          >
-            {t("files", "openViaDebug")}
-          </button>
+          {viaDebug}
           <button type="button" onClick={onMounts} className={link}>
             {t("files", "readMountsInstead")}
           </button>
@@ -871,13 +889,7 @@ function Failure({
           {t("files", "unopenable", { path })}
         </p>
         <p className="mt-3 flex gap-4">
-          <button
-            type="button"
-            onClick={() => onDebug(container)}
-            className={link}
-          >
-            {t("files", "openViaDebug")}
-          </button>
+          {viaDebug}
           <button type="button" onClick={onRetry} className={link}>
             {t("action", "retry")}
           </button>

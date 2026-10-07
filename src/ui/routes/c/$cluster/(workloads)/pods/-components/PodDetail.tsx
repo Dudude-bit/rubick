@@ -50,7 +50,9 @@ import {
   ConditionRows,
   DetailAction,
   ProblemSummary,
+  ReasonedAction,
 } from "@/components/object/detail-blocks";
+import { usePodDenied } from "@/lib/access";
 import { UsageBlock } from "../../../-usage/usage-block";
 import { ImageRef } from "@/components/object/ImageRef";
 import { ResourceMessage } from "@/components/object/ResourceMessage";
@@ -370,6 +372,7 @@ export function PodDetail() {
   } = usePodReplacementSearch(pod, name, namespace);
 
   const [portForwardOpen, setPortForwardOpen] = useState(false);
+  const denied = usePodDenied(pod?.namespace || namespace || null);
 
   const { podMetrics, podStatus, podSampledAt } = useMetrics({
     namespace: namespace || null,
@@ -668,17 +671,19 @@ export function PodDetail() {
         }
         actions={
           <>
-            <DetailAction
+            <ReasonedAction
               label={t("action", "debug")}
               icon={Bug}
               onClick={() => setDebugDialogOpen(true)}
               disabled={!currentContext || !pod}
+              reason={denied.debug}
             />
-            <DetailAction
+            <ReasonedAction
               label={t("action", "portForward")}
               icon={Network}
               onClick={() => setPortForwardOpen(true)}
               disabled={!currentContext || !pod}
+              reason={denied.portForward}
             />
             <DeleteAction
               restart
@@ -845,6 +850,7 @@ export function PodDetail() {
                 namespace={pod.namespace}
                 podName={pod.name}
                 onOpenShell={openTerminal}
+                shellDenied={denied.shell}
                 onOpenLogs={openLogs}
               />
             ) : null,
@@ -887,6 +893,7 @@ export function PodDetail() {
                   setDebugFor("shell");
                   setDebugDialogOpen(true);
                 }}
+                denied={denied}
                 onEnd={handleTerminalClose}
               />
             ) : null,
@@ -906,6 +913,7 @@ export function PodDetail() {
                   setDebugTarget(target);
                   setDebugDialogOpen(true);
                 }}
+                debugDenied={denied.ephemeral}
                 onStopVia={() => setFilesVia(null)}
               />
             ) : null,

@@ -19,7 +19,15 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { Bug, Copy, Info, AlertTriangle, Clock, Loader2 } from "lucide-react";
+import {
+  Bug,
+  Copy,
+  Info,
+  AlertTriangle,
+  Clock,
+  Loader2,
+  Lock,
+} from "lucide-react";
 import type {
   DebugConfig,
   DebugOperation,
@@ -32,6 +40,8 @@ import { DEBUG_IMAGES } from "./constants";
 import { useDebugOperation } from "@/hooks";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
+import { ReasonTip } from "@/components/object/detail-blocks";
+import { usePodDenied } from "@/lib/access";
 
 /** Debug mode - frontend only, backend has separate commands for each mode */
 type DebugMode = "ephemeralContainer" | "copyPod";
@@ -73,19 +83,32 @@ export function DebugPodDialog({
     [kubernetesVersion]
   );
 
-  const [mode, setMode] = useState<DebugMode>(
-    supportsEphemeralContainers ? "ephemeralContainer" : "copyPod"
-  );
+  // The reader's pick stands only while the cluster allows it; otherwise the
+  // first way in that it does allow, so the dialog never opens on a refusal.
+  const denied = usePodDenied(namespace);
+  const deniedOf: Record<DebugMode, string | undefined> = {
+    ephemeralContainer: denied.ephemeral,
+    copyPod: denied.copy,
+  };
+  const [picked, setMode] = useState<DebugMode | null>(null);
+  const preferred: DebugMode =
+    supportsEphemeralContainers && !denied.ephemeral
+      ? "ephemeralContainer"
+      : denied.copy && supportsEphemeralContainers
+        ? "ephemeralContainer"
+        : "copyPod";
+  const mode = picked && !deniedOf[picked] ? picked : preferred;
+  const startDenied = deniedOf[mode];
   const [selectedImage, setSelectedImage] = useState("busybox:latest");
   const [customImage, setCustomImage] = useState("");
   // Only what the person chose is stored; the default is derived on every
   // render. Frozen in `useState` it was decided once, at mount — and this
   // dialog is mounted with the pod, before its container list has arrived,
   // so the field came up blank and stayed blank whichever way it was opened.
-  const [picked, setPicked] = useState<string | null>(null);
+  const [pickedTarget, setPicked] = useState<string | null>(null);
   const targetContainer =
-    picked && containers.includes(picked)
-      ? picked
+    pickedTarget && containers.includes(pickedTarget)
+      ? pickedTarget
       : preferredTarget && containers.includes(preferredTarget)
         ? preferredTarget
         : (containers[0] ?? "");
@@ -183,7 +206,10 @@ export function DebugPodDialog({
     }
     // A choice belongs to the dialog that was open; the next one may be
     // opened for a different container.
-    if (!newOpen) setPicked(null);
+    if (!newOpen) {
+      setPicked(null);
+      setMode(null);
+    }
     onOpenChange(newOpen);
   };
 
@@ -344,21 +370,22 @@ export function DebugPodDialog({
               <div
                 className={cn(
                   "flex items-center gap-3 rounded-md px-2 py-1.5",
-                  supportsEphemeralContainers
+                  supportsEphemeralContainers && !denied.ephemeral
                     ? "cursor-pointer hover:bg-hover"
-                    : "cursor-not-allowed opacity-50"
+                    : "cursor-not-allowed",
+                  !supportsEphemeralContainers && "opacity-50"
                 )}
               >
                 <RadioGroupItem
                   value="ephemeralContainer"
                   id="ephemeral"
-                  disabled={!supportsEphemeralContainers}
+                  disabled={!supportsEphemeralContainers || !!denied.ephemeral}
                 />
                 <Label
                   htmlFor="ephemeral"
                   className={cn(
                     "flex-1",
-                    supportsEphemeralContainers
+                    supportsEphemeralContainers && !denied.ephemeral
                       ? "cursor-pointer"
                       : "cursor-not-allowed"
                   )}
@@ -377,11 +404,29 @@ export function DebugPodDialog({
                   <p className="mt-0.5 text-[11px] text-fg-mut">
                     {t("action", "ephemeralModeHint")}
                   </p>
+                  <ModeRefusal reason={denied.ephemeral} />
                 </Label>
               </div>
-              <div className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-hover">
-                <RadioGroupItem value="copyPod" id="copy" />
-                <Label htmlFor="copy" className="flex-1 cursor-pointer">
+              <div
+                className={cn(
+                  "flex items-center gap-3 rounded-md px-2 py-1.5",
+                  denied.copy
+                    ? "cursor-not-allowed"
+                    : "cursor-pointer hover:bg-hover"
+                )}
+              >
+                <RadioGroupItem
+                  value="copyPod"
+                  id="copy"
+                  disabled={!!denied.copy}
+                />
+                <Label
+                  htmlFor="copy"
+                  className={cn(
+                    "flex-1",
+                    denied.copy ? "cursor-not-allowed" : "cursor-pointer"
+                  )}
+                >
                   <div className="flex items-center gap-2">
                     <Copy className="h-3.5 w-3.5 text-fg-fnt" />
                     <span className="font-medium text-fg">
@@ -391,6 +436,7 @@ export function DebugPodDialog({
                   <p className="mt-0.5 text-[11px] text-fg-mut">
                     {t("action", "copyPodModeHint")}
                   </p>
+                  <ModeRefusal reason={denied.copy} />
                 </Label>
               </div>
             </RadioGroup>
@@ -480,11 +526,29 @@ export function DebugPodDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {t("action", "cancel")}
           </Button>
-          <Button onClick={handleDebug} disabled={!isImageValid}>
-            {t("action", "startDebug")}
-          </Button>
+          <ReasonTip reason={startDenied}>
+            <Button
+              onClick={() => !startDenied && handleDebug()}
+              disabled={!startDenied && !isImageValid}
+              aria-disabled={startDenied ? true : undefined}
+              className={cn(startDenied && "cursor-default opacity-40")}
+            >
+              {t("action", "startDebug")}
+            </Button>
+          </ReasonTip>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** A way in the cluster refuses this user, said under the way itself. */
+function ModeRefusal({ reason }: { reason?: string }) {
+  if (!reason) return null;
+  return (
+    <p className="mt-1 flex items-start gap-1.5 text-[11px] text-err">
+      <Lock className="mt-px h-3 w-3 flex-none" aria-hidden="true" />
+      {reason}
+    </p>
   );
 }

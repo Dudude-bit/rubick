@@ -21,6 +21,8 @@ import { parts } from "@/i18n/parts";
 import { toastError } from "@/lib/toast-error";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
+import { usePodDenied } from "@/lib/access";
+import { ReasonTip } from "@/components/object/detail-blocks";
 import {
   forwardNoteWords,
   localPortProblem,
@@ -105,6 +107,7 @@ function ForwardForm({
   const addConfig = usePortForwardStore((state) => state.addConfig);
   const stopSession = usePortForwardStore((state) => state.stopSession);
   const currentContext = useClusterStore((state) => state.currentContext);
+  const denied = usePodDenied(target.namespace).portForward;
 
   const taken = new Set(sessions.map((session) => session.localPort));
   const firstPort = initialPort ?? target.ports[0]?.port;
@@ -432,9 +435,17 @@ function ForwardForm({
         <Button type="button" variant="outline" onClick={onDone}>
           {t("action", "cancel")}
         </Button>
-        <Button type="button" onClick={submit} disabled={busy}>
-          {busy ? t("action", "starting") : t("action", "startPortForward")}
-        </Button>
+        <ReasonTip reason={denied}>
+          <Button
+            type="button"
+            onClick={() => !denied && submit()}
+            disabled={!denied && busy}
+            aria-disabled={denied ? true : undefined}
+            className={cn(denied && "cursor-default opacity-40")}
+          >
+            {busy ? t("action", "starting") : t("action", "startPortForward")}
+          </Button>
+        </ReasonTip>
       </DialogFooter>
     </>
   );

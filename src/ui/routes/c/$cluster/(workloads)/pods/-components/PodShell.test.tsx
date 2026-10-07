@@ -13,6 +13,7 @@ vi.mock("./PodTerminal", () => ({
 }));
 
 import { PodShell } from "./PodShell";
+import { renderWithProviders } from "@/test/render";
 
 function container(overrides: Partial<ContainerInfo>): ContainerInfo {
   return {
@@ -239,5 +240,67 @@ describe("PodShell when there is nothing to attach to", () => {
       <PodShell pod={initDemo} container={null} ended={false} {...handlers} />
     );
     expect(screen.queryByTestId("shell-chooser")).not.toBeInTheDocument();
+  });
+});
+
+describe("PodShell where the cluster refuses this user", () => {
+  const NO_EXEC =
+    "Your access does not allow this: the cluster answers no to kubectl auth can-i create pods/exec -n k8s-gui-test.";
+  const NO_EPHEMERAL =
+    "Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods/ephemeralcontainers -n k8s-gui-test.";
+
+  /**
+   * A reader who may not exec gets a terminal that fails as it opens. Fails
+   * if the tab opens a session instead of saying the access refuses it.
+   */
+  it("opens no session and says the can-i question", () => {
+    renderWithProviders(
+      <PodShell
+        pod={threeWay}
+        container={null}
+        ended={false}
+        {...handlers}
+        denied={{ shell: NO_EXEC }}
+      />
+    );
+    expect(screen.queryByTestId("pod-terminal")).toBeNull();
+    expect(screen.getByText("No shell with this access")).toBeInTheDocument();
+    expect(screen.getByText(NO_EXEC)).toBeInTheDocument();
+  });
+
+  /** Fails if the stuck pod's Debug link stays live while the review says no. */
+  it("greys the Debug way out of a stuck pod", async () => {
+    const onDebug = vi.fn();
+    renderWithProviders(
+      <PodShell
+        pod={pod({
+          status: {
+            phase: "Pending",
+            display: "Init:0/1",
+            ready: false,
+            conditions: [],
+            message: null,
+            reason: null,
+          },
+          containers: [
+            container({
+              ready: false,
+              state: { type: "waiting", reason: "PodInitializing" },
+            }),
+          ],
+        } as Partial<PodInfo>)}
+        container={null}
+        ended={false}
+        {...handlers}
+        onDebug={onDebug}
+        denied={{ ephemeral: NO_EPHEMERAL }}
+      />
+    );
+    const debug = screen.getByRole("button", {
+      name: /Debug with an ephemeral container/,
+    });
+    expect(debug).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(debug);
+    expect(onDebug).not.toHaveBeenCalled();
   });
 });

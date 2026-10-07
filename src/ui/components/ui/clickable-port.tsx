@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/tooltip";
 import { PortForwardDialog } from "@/components/port-forward/PortForwardDialog";
 import { cn } from "@/lib/utils";
+import { usePodDenied } from "@/lib/access";
 import { useT } from "@/i18n/useT";
 
 /**
@@ -16,6 +17,10 @@ import { useT } from "@/i18n/useT";
  * colour and a dotted underline mark it the way a link is marked, and it is a
  * real `<button>`, so it keeps its place in the tab order.
  */
+
+const PORT =
+  "rounded-sm font-mono text-info underline decoration-dotted underline-offset-2 transition-colors hover:decoration-solid focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info";
+const REFUSED = "cursor-default no-underline opacity-40";
 
 export interface ClickablePortProps {
   port: number;
@@ -40,6 +45,7 @@ export function ClickablePort({
 }: ClickablePortProps) {
   const t = useT();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const denied = usePodDenied(podNamespace).portForward;
 
   const label = portName
     ? `${port} (${portName})`
@@ -53,22 +59,20 @@ export function ClickablePort({
         <TooltipTrigger asChild>
           <button
             type="button"
-            className={cn(
-              "rounded-sm font-mono text-info underline decoration-dotted underline-offset-2 transition-colors hover:decoration-solid focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
-              className
-            )}
+            aria-disabled={denied ? true : undefined}
+            className={cn(PORT, denied && REFUSED, className)}
             onClick={(e) => {
               // The row underneath navigates to the pod; forwarding a port is
               // not that.
               e.stopPropagation();
-              setDialogOpen(true);
+              if (!denied) setDialogOpen(true);
             }}
           >
             {label}
           </button>
         </TooltipTrigger>
-        <TooltipContent side="top" className="text-xs">
-          {t("action", "forwardThisPort")}
+        <TooltipContent side="top" className="max-w-[260px] text-xs">
+          {denied ?? t("action", "forwardThisPort")}
         </TooltipContent>
       </Tooltip>
 
@@ -111,6 +115,7 @@ export function ClickableServicePort({
 }: ClickableServicePortProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
   const t = useT();
+  const denied = usePodDenied(namespace).portForward;
 
   return (
     <>
@@ -118,22 +123,20 @@ export function ClickableServicePort({
         <TooltipTrigger asChild>
           <button
             type="button"
-            className={cn(
-              "rounded-sm font-mono text-info underline decoration-dotted underline-offset-2 transition-colors hover:decoration-solid focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
-              className
-            )}
+            aria-disabled={denied ? true : undefined}
+            className={cn(PORT, denied && REFUSED, className)}
             onClick={(event) => {
               // The row underneath navigates; forwarding a port is not that.
               event.stopPropagation();
-              setDialogOpen(true);
+              if (!denied) setDialogOpen(true);
             }}
           >
             {prefix}
             {port}
           </button>
         </TooltipTrigger>
-        <TooltipContent side="top" className="text-xs">
-          {t("empty", "gwForwardThrough", { name: serviceName })}
+        <TooltipContent side="top" className="max-w-[260px] text-xs">
+          {denied ?? t("empty", "gwForwardThrough", { name: serviceName })}
         </TooltipContent>
       </Tooltip>
 

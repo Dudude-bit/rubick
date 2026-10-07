@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
-import { guardedOf, noteDenied, useDenied } from "../../../-object/access";
+import { guardedOf, noteDenied, useDenied } from "@/lib/access";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Table2, Tag } from "lucide-react";
 
