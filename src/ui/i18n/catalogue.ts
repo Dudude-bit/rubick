@@ -6852,7 +6852,7 @@ export const en = {
       other: "{n} gone, lines kept",
     },
     stories: { one: "{n} story", other: "{n} stories" },
-    eventsSeen: { one: "{n} event", other: "{n} events" },
+    eventsSeen: { one: "happened once", other: "happened {n} times" },
     namespacesHidden: {
       one: "{n} namespace hidden: no access",
       other: "{n} namespaces hidden: no access",
@@ -7026,9 +7026,10 @@ export const en = {
     cipherSuites: { one: "{n} suite", other: "{n} suites" },
     dnsNames: { one: "{n} name", other: "{n} names" },
     daysAgo: { one: "{n} day ago", other: "{n} days ago" },
-    warningEvents: { one: "{n} warning", other: "{n} warning" },
-    normalEvents: { one: "{n} normal", other: "{n} normal" },
-    latestKept: "latest {n}",
+    warningEvents: { one: "{n} warning event", other: "{n} warning events" },
+    normalEvents: { one: "{n} normal event", other: "{n} normal events" },
+    inStoryWindow: "in the {span} window",
+    latestKept: "of the latest {n}",
     podsStayedOnTheNode: {
       one: "One pod stayed on the node.",
       other: "{n} pods stayed on the node.",

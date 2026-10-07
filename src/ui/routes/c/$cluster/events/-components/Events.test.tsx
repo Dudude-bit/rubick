@@ -151,6 +151,36 @@ describe("what the limit is counted against", () => {
   });
 
   /**
+   * Lena's "64 warnings" beside the Warnings filter's 122: the first counted
+   * the warnings among the latest 500 events of every type, the second
+   * every warning, since the filter narrows the read itself. Fails if a
+   * count read inside the limit's cut does not say so, or a whole one does.
+   */
+  it("says the warnings it counts are among the latest 500 only where the read was cut", async () => {
+    useClusterStore.setState({
+      namespaceScope: ["shop"],
+      currentNamespace: "shop",
+    });
+    const mixed = feed("shop", 500).map((row, index) =>
+      index % 8 === 0 ? { ...row, type: "Warning" } : row
+    );
+    listEvents.mockImplementation(async (filters) =>
+      filters?.event_type === "Warning"
+        ? feed("shop", 122).map((row) => ({ ...row, type: "Warning" }))
+        : mixed
+    );
+    await mount();
+    expect(
+      await screen.findByText(
+        "63 warning events · 437 normal events · of the latest 500"
+      )
+    ).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
+    expect(await screen.findByText("122 warning events")).toBeInTheDocument();
+  }, 30_000);
+
+  /**
    * The join can hold more than the reader asked for, and "latest 500" has
    * to keep meaning 500 — with the newest kept and the overflow declared
    * rather than a feed that silently ends.
@@ -165,7 +195,7 @@ describe("what the limit is counted against", () => {
     // 300 + 300 kept as 500: the header counts what is on screen and names
     // the limit that is hiding the rest.
     expect(
-      await screen.findByText(/500 normal · latest 500/)
+      await screen.findByText(/500 normal events · of the latest 500/)
     ).toBeInTheDocument();
     // Five hundred rows in jsdom is the most expensive render in the suite.
     // Alone it takes about a second; sharing eight cores with the rest of
@@ -356,6 +386,48 @@ describe("stories", () => {
         { containers: [] }
       )
     );
+  });
+
+  /**
+   * Marco's team-checkout Events: the header said "4 warning · 21 normal",
+   * Event objects as kubectl lists them, while the stories said "276
+   * events", the times one of them happened. Fails if the header leaves out
+   * its unit and span, or a story counts occurrences in the header's unit.
+   */
+  it("counts Event objects in the header and occurrences on the story, each by name", async () => {
+    const pod = "checkout-worker-6d9f7b8c4-q2x7m";
+    const failing = {
+      ...warning("team-checkout", pod, 0),
+      reason: "Failed",
+      message: 'Error: secret "checkout-db" not found',
+      count: 276,
+    };
+    const normal = (index: number): EventInfo => ({
+      ...event("team-checkout", index),
+      reason: "Pulled",
+      message: 'Container image "busybox:1.36" already present on machine',
+      count: 1,
+      involvedObject: {
+        kind: "Pod",
+        name: pod,
+        namespace: "team-checkout",
+        uid: null,
+      },
+      lastTimestamp: new Date(Date.now() - 60_000).toISOString(),
+    });
+    listEvents.mockResolvedValue([failing, normal(1), normal(2)]);
+    await mount("stories");
+
+    const card = await screen.findByRole("article", {
+      name: /checkout-worker/,
+    });
+    expect(card.textContent).toContain("happened 278 times");
+    expect(card.textContent).not.toMatch(/278 events/);
+    expect(
+      screen.getByText(
+        "1 story · 1 warning event · 2 normal events · in the 1h window"
+      )
+    ).toBeInTheDocument();
   });
 
   /** A quiet window is a real answer only because the read succeeded; the copy says both. */

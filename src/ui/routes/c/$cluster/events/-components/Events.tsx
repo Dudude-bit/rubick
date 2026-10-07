@@ -277,7 +277,7 @@ export function Events() {
                 warningCount,
                 normalCount,
                 windowFull ? eventLimit : null,
-                view === "stories" ? stories.length : null
+                view === "stories" ? { n: stories.length, window } : null
               )
         }
         actions={
@@ -336,10 +336,7 @@ export function Events() {
                               : "text-fg-mut"
                           )}
                         >
-                          {formatTimeUnit(
-                            Number.parseInt(candidate, 10),
-                            candidate.endsWith("m") ? "minute" : "hour"
-                          )}
+                          {windowWords(candidate)}
                         </button>
                       ))}
                     </div>
@@ -548,23 +545,36 @@ function UnreadFeed({
   );
 }
 
-/** Worst first, and the healthy half stays a plain count. */
+/**
+ * Worst first. Counts Event objects, as kubectl and the sidebar do, and names
+ * the span they cover so a story's occurrences are not read as the same unit.
+ */
 function summarise(
   t: ReturnType<typeof useT>,
   warnings: number,
   normal: number,
   cappedAt: string | null,
-  stories: number | null
+  stories: { n: number; window: StoryWindow } | null
 ): string {
   const parts: string[] = [];
-  if (stories !== null) parts.push(t("count", "stories", { n: stories }));
+  if (stories !== null) parts.push(t("count", "stories", { n: stories.n }));
   if (warnings > 0) parts.push(t("count", "warningEvents", { n: warnings }));
   if (normal > 0) parts.push(t("count", "normalEvents", { n: normal }));
   if (parts.length === 0) parts.push(t("empty", "noneInline"));
+  if (stories !== null)
+    parts.push(
+      t("count", "inStoryWindow", { span: windowWords(stories.window) })
+    );
   if (cappedAt)
     parts.push(t("count", "latestKept", { n: formatCount(Number(cappedAt)) }));
   return parts.join(" · ");
 }
+
+const windowWords = (window: StoryWindow) =>
+  formatTimeUnit(
+    Number.parseInt(window, 10),
+    window.endsWith("m") ? "minute" : "hour"
+  );
 
 function EventsSkeleton() {
   return (

@@ -7481,10 +7481,10 @@ export const ru: Catalogue = {
       other: "{n} истории",
     },
     eventsSeen: {
-      one: "{n} событие",
-      few: "{n} события",
-      many: "{n} событий",
-      other: "{n} события",
+      one: "произошло {n} раз",
+      few: "произошло {n} раза",
+      many: "произошло {n} раз",
+      other: "произошло {n} раза",
     },
     namespacesHidden: {
       one: "{n} пространство скрыто: нет доступа",
@@ -7809,12 +7809,13 @@ export const ru: Catalogue = {
       other: "{n} предупреждения",
     },
     normalEvents: {
-      one: "{n} обычное",
-      few: "{n} обычных",
-      many: "{n} обычных",
-      other: "{n} обычных",
+      one: "{n} обычное событие",
+      few: "{n} обычных события",
+      many: "{n} обычных событий",
+      other: "{n} обычного события",
     },
-    latestKept: "последние {n}",
+    inStoryWindow: "в окне {span}",
+    latestKept: "из последних {n}",
     podsStayedOnTheNode: {
       one: "На узле остался {n} под.",
       few: "На узле осталось {n} пода.",
