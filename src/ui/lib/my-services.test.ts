@@ -425,7 +425,7 @@ describe("entryPointsOf", () => {
           detail: "nginx",
           via: null,
           urls: ["https://shop.example.com"],
-          publishedAt: null,
+          address: null,
         },
         {
           at: "object",
@@ -434,7 +434,7 @@ describe("entryPointsOf", () => {
           detail: "80/TCP",
           via: null,
           urls: [],
-          publishedAt: null,
+          address: null,
         },
       ])
     );
@@ -511,7 +511,7 @@ describe("entryPointsOf", () => {
           detail: "80/TCP",
           via: null,
           urls: [],
-          publishedAt: null,
+          address: null,
         },
         {
           at: "published",
@@ -570,7 +570,7 @@ describe("more ways in", () => {
           detail: null,
           via: null,
           urls: [],
-          publishedAt: null,
+          address: null,
         },
         {
           at: "object",
@@ -579,7 +579,7 @@ describe("more ways in", () => {
           detail: "80/TCP",
           via: null,
           urls: [],
-          publishedAt: null,
+          address: null,
         },
       ])
     );

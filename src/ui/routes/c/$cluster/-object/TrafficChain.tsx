@@ -399,20 +399,21 @@ function Hop({
                 yet, which is most of them — this is the number you put in
                 `--resolve` or in `/etc/hosts` to check the rest of the chain
                 without waiting for a zone to propagate. */}
-            {hop.publishedAt !== null &&
-              (hop.publishedAt.length > 0 ? (
-                <p className="text-[11px] text-fg-fnt">
-                  {t("action", "atInline")}{" "}
-                  <CopyableAddresses
-                    values={hop.publishedAt}
-                    label={t("columns", "address")}
-                  />
-                </p>
-              ) : (
-                <p className="max-w-[92ch] text-[11px] text-warn">
-                  {t("empty", "noAddressYet")}
-                </p>
-              ))}
+            {hop.address?.state === "assigned" && (
+              <p className="text-[11px] text-fg-fnt">
+                {t("action", "atInline")}{" "}
+                <CopyableAddresses
+                  values={hop.address.addresses}
+                  label={t("columns", "address")}
+                />
+              </p>
+            )}
+            {/* With no controller, the hop above already says none will come. */}
+            {hop.address?.state === "pending" && (
+              <p className="max-w-[92ch] text-[11px] text-warn">
+                {t("empty", "noAddressYet")}
+              </p>
+            )}
             {hop.object.kind === "Service" && (
               <>
                 <EdgeNote edge={edge} object={hop.object} />

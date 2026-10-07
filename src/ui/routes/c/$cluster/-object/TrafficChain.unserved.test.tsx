@@ -1,0 +1,138 @@
+import { screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vite-plus/test";
+
+import type { ConnectionsQuery } from "@/hooks/useConnections";
+import type {
+  IngressClassBinding,
+  IngressInfo,
+  ObjectRef,
+  ResourceConnections,
+} from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
+import { TrafficChain } from "./TrafficChain";
+
+/** shop as `get_ingress` returns it on a cluster with no IngressClass at all. */
+const shop: IngressInfo = {
+  name: "shop",
+  namespace: "k8s-gui-test",
+  className: "nginx",
+  rules: [
+    {
+      host: "shop.k8s-gui.test",
+      paths: [
+        {
+          path: "/",
+          pathType: "Prefix",
+          backendService: "log-demo",
+          backendPort: "80",
+          resourceBackend: null,
+        },
+      ],
+    },
+  ],
+  defaultBackend: null,
+  loadBalancerIps: [],
+  tlsHosts: [],
+  tlsConfigs: [],
+  hasCatchAllTls: false,
+  labels: {},
+  annotations: {},
+  createdAt: "2026-10-06T22:00:00Z",
+};
+
+const unserved: IngressClassBinding = {
+  requested: "nginx",
+  resolved: null,
+  controller: null,
+  viaDefault: false,
+  available: [],
+};
+
+vi.mock("@/lib/commands", () => ({
+  commands: {
+    detectInClusterExtensions: () => Promise.resolve([]),
+    getIngress: () => Promise.resolve(shop),
+    resolveIngressClass: () => Promise.resolve(unserved),
+  },
+}));
+
+const pod: ObjectRef = {
+  kind: "Pod",
+  name: "log-demo-84c4d9749c-pws9g",
+  namespace: "k8s-gui-test",
+  existence: "present",
+  facts: null,
+};
+
+const service: ObjectRef = {
+  kind: "Service",
+  name: "log-demo",
+  namespace: "k8s-gui-test",
+  existence: "present",
+  facts: {
+    kind: "service",
+    type: "ClusterIP",
+    clusterIp: "10.96.108.139",
+    externalName: null,
+    selector: "app=log-demo",
+    ports: [],
+  },
+};
+
+const ingress: ObjectRef = {
+  kind: "Ingress",
+  name: "shop",
+  namespace: "k8s-gui-test",
+  existence: "present",
+  facts: { kind: "ingress", className: "nginx" },
+};
+
+const around = (subject: ObjectRef): ResourceConnections => ({
+  subject,
+  edges: [
+    {
+      from: service,
+      to: pod,
+      relation: { verb: "selects", selector: "app=log-demo" },
+    },
+    {
+      from: ingress,
+      to: service,
+      relation: {
+        verb: "routes",
+        host: "shop.k8s-gui.test",
+        path: "/",
+        pathType: "Prefix",
+        port: "80",
+        tls: false,
+      },
+    },
+  ],
+  stops: [],
+  published: [],
+  notLookedAt: [],
+});
+
+const query = (data: ResourceConnections) =>
+  ({ data, error: null, isPending: false }) as ConnectionsQuery;
+
+describe("an Ingress no controller serves, seen from what it routes to", () => {
+  /**
+   * The Service and Pod pages said "No address yet: the controller has
+   * published none" right under "No IngressClass named nginx ... never will".
+   * Fails if the Ingress hop reads an unserved class as a pending address.
+   */
+  it.each([
+    ["Service", service],
+    ["Pod", pod],
+  ])(
+    "says no controller on the %s page, and never that one is on its way",
+    async (_kind, subject) => {
+      await renderWithRouter(<TrafficChain query={query(around(subject))} />);
+      expect(
+        await screen.findByText("No IngressClass named nginx in this cluster")
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/No address yet/)).toBeNull();
+    }
+  );
+});

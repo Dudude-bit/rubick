@@ -11,6 +11,7 @@ import {
   describeStop,
   describeUsages,
   trafficChains,
+  type RoutedIngress,
 } from "./connections";
 import type {
   ChainStop,
@@ -458,7 +459,10 @@ describe("the traffic chain", () => {
     if (route.at !== "object") throw new Error("expected the Ingress hop");
     expect(route.urls).toEqual(["https://log-demo.local/"]);
     // The URL is half an address until the hostname resolves somewhere.
-    expect(route.publishedAt).toEqual(["203.0.113.10"]);
+    expect(route.address).toEqual({
+      state: "assigned",
+      addresses: ["203.0.113.10"],
+    });
   });
 
   it("tells an unread address from one the controller never published", () => {
@@ -496,19 +500,80 @@ describe("the traffic chain", () => {
     const unread = trafficChains(connections(deployment, edges), t)[0];
     const first = unread.hops[0];
     if (first.at !== "object") throw new Error("expected the Ingress hop");
-    expect(first.publishedAt).toBeNull();
+    expect(first.address).toBeNull();
 
+    const served = {
+      requested: null,
+      resolved: "nginx",
+      controller: "k8s.io/ingress-nginx",
+      viaDefault: true,
+      available: [],
+    };
     const read = trafficChains(connections(deployment, edges), t, {
       routing: new Map([
         [
           "Ingress/k8s-gui-test/log-demo",
-          { tls: [], binding: null, addresses: [] },
+          { tls: [], binding: served, addresses: [] },
         ],
       ]),
     })[0];
-    const hop = read.hops[0];
+    const hop = read.hops[1];
     if (hop.at !== "object") throw new Error("expected the Ingress hop");
-    expect(hop.publishedAt).toEqual([]);
+    expect(hop.address).toEqual({ state: "pending", addresses: [] });
+  });
+
+  it("does not call an Ingress no controller serves one still waiting for its address", () => {
+    /** The Service and Pod pages said "No address yet: the controller has
+     *  published none" right under "No IngressClass named nginx ... never
+     *  will". Fails if an unserved class reads as a pending address. */
+    const pod = ref("Pod", "log-demo-84c4d9749c-pws9g");
+    const svc = service("log-demo", "app=log-demo");
+    const ingress = ref("Ingress", "plain-nginx", {
+      kind: "ingress",
+      className: "nginx",
+    });
+    const edges: ConnectionEdge[] = [
+      {
+        from: svc,
+        to: pod,
+        relation: { verb: "selects", selector: "app=log-demo" },
+      },
+      {
+        from: ingress,
+        to: svc,
+        relation: {
+          verb: "routes",
+          host: "plain.k8s-gui.test",
+          path: "/",
+          pathType: "Prefix",
+          port: "80",
+          tls: false,
+        },
+      },
+    ];
+    const chain = (binding: RoutedIngress["binding"]) =>
+      trafficChains(connections(pod, edges), t, {
+        routing: new Map([
+          [
+            "Ingress/k8s-gui-test/plain-nginx",
+            { tls: [], binding, addresses: [] },
+          ],
+        ]),
+      })[0].hops.find((hop) => hop.at === "object");
+
+    const unserved = chain({
+      requested: "nginx",
+      resolved: null,
+      controller: null,
+      viaDefault: false,
+      available: [],
+    });
+    if (unserved?.at !== "object") throw new Error("expected the Ingress hop");
+    expect(unserved.address?.state).toBe("noController");
+
+    const unread = chain(null);
+    if (unread?.at !== "object") throw new Error("expected the Ingress hop");
+    expect(unread.address?.state).toBe("unknown");
   });
 
   it("draws no certificate hop for a host the Secret does not cover", () => {

@@ -20,6 +20,7 @@ import { groupMounts } from "./mounts";
 import { rolloutLine, workloadStatus } from "./workload-status";
 import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
+import { ingressAddressOf, type IngressAddress } from "./ingress-health";
 import {
   autoscalerRange,
   autoscalerReplicas,
@@ -490,14 +491,16 @@ export interface ChainHopObject {
    */
   urls: string[];
   /**
-   * What that hostname has to resolve to, where the page has read it.
+   * What that hostname has to resolve to, where the page has read it, as the
+   * Ingress page reads it: an empty `status.loadBalancer` is "pending" only
+   * where a controller serves the class.
    *
    * `null` where nothing was read, which is not the same as *read and empty*
    * — an Ingress the controller has not published is unreachable whatever its
    * rules say, and that is a sentence the chain owes the reader rather than a
    * gap it can leave to be inferred.
    */
-  publishedAt: string[] | null;
+  address: { state: IngressAddress; addresses: string[] } | null;
 }
 
 /**
@@ -621,7 +624,7 @@ function gatewayRouteHop(
     detail: hostnames.join(", ") || null,
     via: drained ? t("nav", "gwWeightZero") : describeFacts(object.facts, t),
     urls: [],
-    publishedAt: null,
+    address: null,
   };
 }
 
@@ -661,7 +664,15 @@ function routeHop(
         )
       ),
     ],
-    publishedAt: known ? known.addresses : null,
+    address: known
+      ? {
+          state: ingressAddressOf(
+            { loadBalancerIps: known.addresses },
+            known.binding ?? undefined
+          ),
+          addresses: known.addresses,
+        }
+      : null,
   };
 }
 
@@ -673,7 +684,7 @@ function serviceHop(object: ObjectRef, self: boolean, t: T): ChainHopObject {
     detail: servicePorts(object),
     via: describeFacts(object.facts, t),
     urls: [],
-    publishedAt: null,
+    address: null,
   };
 }
 
@@ -838,7 +849,7 @@ export function trafficChains(
                 detail: null,
                 via: t("nav", "resourceBackend"),
                 urls: [],
-                publishedAt: null,
+                address: null,
               }
         );
       } else {
@@ -895,7 +906,7 @@ export function trafficChains(
                 : null,
               via: describeFacts(up.to.facts, t),
               urls: [],
-              publishedAt: null,
+              address: null,
             });
           }
           hops.push(gatewayRouteHop(mine, route, t));
@@ -920,7 +931,7 @@ export function trafficChains(
           detail: null,
           via: null,
           urls: [],
-          publishedAt: null,
+          address: null,
         });
       }
       if (subject.kind === "Pod") {
@@ -931,7 +942,7 @@ export function trafficChains(
           detail: null,
           via: describeFacts(subject.facts, t),
           urls: [],
-          publishedAt: null,
+          address: null,
         });
       }
 

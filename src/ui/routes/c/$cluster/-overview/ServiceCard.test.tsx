@@ -114,7 +114,7 @@ describe("what a card says about a way in", () => {
             detail: null,
             via: null,
             urls: ["https://shop.example.com"],
-            publishedAt: null,
+            address: null,
           },
         ],
       },
