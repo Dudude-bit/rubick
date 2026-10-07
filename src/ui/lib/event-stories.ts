@@ -133,12 +133,98 @@ const FOLDED_KINDS = new Set([
 
 const CREATED_POD = /(?:Created|Deleted) pod: (\S+)/;
 const STATEFUL_POD = /(?:create|delete) Pod (\S+) in StatefulSet/;
-const SCALED_RS = /replica set (\S+)/;
+const SCALED_RS =
+  /^Scaled (up|down) replica set (?:\[ReplicaSet (?:[^\]/]+\/)?([^\]]+)\]|(\S+))(?: from (\d+) to (\d+)| to (\d+)(?: from (\d+))?)?/;
 const CREATED_JOB = /(?:Created|Deleted) job:? (\S+)/;
 
 interface Owner {
   kind: string;
   name: string;
+}
+
+interface Scaling {
+  rs: string;
+  up: boolean;
+  from: number | null;
+  to: number | null;
+  at: number;
+  n: number;
+}
+
+/** A ScalingReplicaSet message, in each wording the Deployment controller has used. */
+function scalingOf(event: EventInfo): Scaling | null {
+  const said =
+    event.reason === "ScalingReplicaSet"
+      ? SCALED_RS.exec(event.message ?? "")
+      : null;
+  if (!said) return null;
+  const number = (value: string | undefined) =>
+    value === undefined ? null : Number(value);
+  return {
+    rs: said[2] ?? said[3],
+    up: said[1] === "up",
+    from: number(said[4] ?? said[7]),
+    to: number(said[5] ?? said[6]),
+    at: at(event.firstTimestamp) ?? at(event.lastTimestamp) ?? 0,
+    n: occurrencesOf(event),
+  };
+}
+
+/** A ReplicaSet going down this close to another rising is that rollout's first step. */
+const PAIRED_MS = 5_000;
+
+/**
+ * The rollouts and the scales a Deployment's ScalingReplicaSet events tell
+ * apart: a rollout raises another ReplicaSet and drains the running one, a
+ * scale moves the running one alone.
+ */
+export function rolloutsAndScales(events: EventInfo[]): {
+  rollouts: number;
+  scales: number;
+} {
+  const steps = events
+    .flatMap((event) => scalingOf(event) ?? [])
+    .sort((a, b) => a.at - b.at || Number(b.up) - Number(a.up));
+  const rises = (step: Scaling) =>
+    steps.some(
+      (other) =>
+        other.up &&
+        other.rs !== step.rs &&
+        Math.abs(other.at - step.at) <= PAIRED_MS
+    );
+  const last = new Map<string, number | null>();
+  const draining = new Set<string>();
+  let current: string | null = null;
+  let rollouts = 0;
+  let scales = 0;
+  for (const step of steps) {
+    const before = last.get(step.rs);
+    last.set(step.rs, step.to);
+    if (draining.has(step.rs)) {
+      if (step.to === 0) draining.delete(step.rs);
+    } else if (step.rs === current) {
+      if (draining.size === 0 && !rises(step)) scales += step.n;
+    } else if (!step.up) {
+      if (current !== null || rises(step)) {
+        if (step.to !== 0) draining.add(step.rs);
+      } else {
+        current = step.rs;
+        scales += step.n;
+      }
+    } else if (
+      current === null &&
+      before === undefined &&
+      (step.from ?? 0) > 0
+    ) {
+      current = step.rs;
+      scales += step.n;
+    } else {
+      rollouts += step.n;
+      if (current !== null && last.get(current) !== 0) draining.add(current);
+      current = step.rs;
+    }
+  }
+  return { rollouts, scales };
 }
 
 function at(value: string | null): number | null {
@@ -163,7 +249,7 @@ function evidenceOf(events: EventInfo[]): Map<string, Owner> {
         owner.set(objectKey(namespace, childKind, child), { kind, name });
     };
     if (kind === "Deployment" && event.reason === "ScalingReplicaSet") {
-      claim("ReplicaSet", SCALED_RS.exec(message)?.[1]);
+      claim("ReplicaSet", scalingOf(event)?.rs);
     } else if (kind === "CronJob") {
       claim("Job", CREATED_JOB.exec(message)?.[1]);
     } else if (kind === "StatefulSet") {
@@ -412,6 +498,20 @@ function topReasons(reasons: ReasonCount[]): string {
     .join(", ");
 }
 
+function changesSaid({
+  rollouts,
+  scales,
+}: {
+  rollouts: number;
+  scales: number;
+}): Saying | null {
+  const r: Saying = { key: "changesRollouts", values: { n: rollouts } };
+  const s: Saying = { key: "changesScales", values: { n: scales } };
+  if (rollouts > 0 && scales > 0)
+    return { key: "changesBoth", values: { rollouts: r, scales: s } };
+  return rollouts > 0 ? r : scales > 0 ? s : null;
+}
+
 function sentenceOf(
   activity: Activity,
   events: EventInfo[],
@@ -421,17 +521,19 @@ function sentenceOf(
 ): Saying {
   if (warnings.length === 0) {
     switch (activity) {
-      case "rollout":
-        return {
-          key: "storyRollout",
-          values: {
-            spanMs,
-            scheduled: countReason(events, "Scheduled"),
-            pulled: countReason(events, "Pulled"),
-            started: countReason(events, "Started"),
-            stopped: countReason(events, "Killing"),
-          },
+      case "rollout": {
+        const pods = {
+          spanMs,
+          scheduled: countReason(events, "Scheduled"),
+          pulled: countReason(events, "Pulled"),
+          started: countReason(events, "Started"),
+          stopped: countReason(events, "Killing"),
         };
+        const changes = changesSaid(rolloutsAndScales(events));
+        return changes
+          ? { key: "storyChanged", values: { ...pods, changes } }
+          : { key: "storyPods", values: pods };
+      }
       case "job":
         return {
           key: "storyJob",

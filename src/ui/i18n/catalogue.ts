@@ -2957,8 +2957,13 @@ export const en = {
     caBundleNamed: "{name} bundle",
     govMetricFrom: "{source} metric",
     govBudgetKeeps: "keeps {rule}; {room}",
-    storyRollout:
-      "Rolled out within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+    storyChanged:
+      "{changes} within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+    storyPods:
+      "Pods within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+    changesRollouts: { one: "{n} rollout", other: "{n} rollouts" },
+    changesScales: { one: "{n} scale", other: "{n} scales" },
+    changesBoth: "{rollouts} and {scales}",
     storyJob: "Ran within {span}: {created}, {completed} completed.",
     storyQuiet: "{reasons} within {span}. Nothing to say beyond that.",
     storyCrash:

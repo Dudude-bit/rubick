@@ -3149,8 +3149,23 @@ export const ru: Catalogue = {
     caBundleNamed: "набор {name}",
     govMetricFrom: "метрика {source}",
     govBudgetKeeps: "держит {rule}; {room}",
-    storyRollout:
-      "Развёрнуто за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
+    storyChanged:
+      "{changes} за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
+    storyPods:
+      "Поды за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
+    changesRollouts: {
+      one: "{n} развёртывание",
+      few: "{n} развёртывания",
+      many: "{n} развёртываний",
+      other: "{n} развёртывания",
+    },
+    changesScales: {
+      one: "{n} масштабирование",
+      few: "{n} масштабирования",
+      many: "{n} масштабирований",
+      other: "{n} масштабирования",
+    },
+    changesBoth: "{rollouts} и {scales}",
     storyJob: "Отработало за {span}: {created}, завершено {completed}.",
     storyQuiet: "{reasons} за {span}. Больше сказать нечего.",
     storyCrash:
