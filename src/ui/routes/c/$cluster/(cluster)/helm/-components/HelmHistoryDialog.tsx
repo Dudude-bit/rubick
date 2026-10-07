@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import {
   Table,
+  TableActionCell,
   TableBody,
   TableCell,
   TableHead,
@@ -107,17 +108,15 @@ export function HelmHistoryDialog({
                       <TableCell className="max-w-[200px] truncate text-fg-fnt">
                         {rev.description || <None />}
                       </TableCell>
-                      <TableCell>
-                        <span className="flex justify-end">
-                          {!current && helmCliAvailable && (
-                            <DetailAction
-                              label={t("action", "rollBack")}
-                              icon={RotateCcw}
-                              onClick={() => onRollback(rev.revision)}
-                            />
-                          )}
-                        </span>
-                      </TableCell>
+                      <TableActionCell>
+                        {!current && helmCliAvailable && (
+                          <DetailAction
+                            label={t("action", "rollBack")}
+                            icon={RotateCcw}
+                            onClick={() => onRollback(rev.revision)}
+                          />
+                        )}
+                      </TableActionCell>
                     </TableRow>
                   );
                 })}

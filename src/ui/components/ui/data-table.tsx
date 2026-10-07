@@ -56,7 +56,7 @@ import {
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { buildTableRows, type BodyItem } from "./data-table-rows";
 import {
-  SCROLLBAR_REACH,
+  ACTIONS_CELL_GUTTER,
   actionsColumnSize,
   tableLayout,
 } from "./column-shares";
@@ -188,8 +188,6 @@ const ESTIMATED_ROW_PX = { compact: 23, comfortable: 33 } as const;
 
 /** How many rows either side of the viewport stay mounted. */
 const OVERSCAN = 12;
-
-const ACTIONS_CELL_GUTTER = { paddingRight: SCROLLBAR_REACH };
 
 /** Read off the table's attribute, so a density switch restyles rows instead of drawing them. */
 const CELL_PADDING = "px-2.5 py-2 group-data-[density=compact]/table:py-[3px]";

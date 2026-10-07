@@ -32,6 +32,7 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
   Table,
+  TableActionCell,
   TableBody,
   TableCell,
   TableHead,
@@ -362,17 +363,15 @@ export function HelmDetail() {
                       <TableCell className="max-w-[240px] truncate text-fg-fnt">
                         {rev.description || <None />}
                       </TableCell>
-                      <TableCell>
-                        <span className="flex justify-end">
-                          {!current && helmCliAvailable && (
-                            <DetailAction
-                              label={t("action", "rollBack")}
-                              icon={RotateCcw}
-                              onClick={() => setRollbackTarget(rev.revision)}
-                            />
-                          )}
-                        </span>
-                      </TableCell>
+                      <TableActionCell>
+                        {!current && helmCliAvailable && (
+                          <DetailAction
+                            label={t("action", "rollBack")}
+                            icon={RotateCcw}
+                            onClick={() => setRollbackTarget(rev.revision)}
+                          />
+                        )}
+                      </TableActionCell>
                     </TableRow>
                   );
                 })}

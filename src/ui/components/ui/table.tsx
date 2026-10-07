@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { ACTIONS_CELL_GUTTER } from "./column-shares";
 
 interface TableProps extends React.HTMLAttributes<HTMLTableElement> {
   /**
@@ -141,6 +142,17 @@ const TableCell = React.forwardRef<
 ));
 TableCell.displayName = "TableCell";
 
+/** The cell that holds a row's last button, kept clear of the overlay scrollbar the way DataTable keeps its own. */
+const TableActionCell = React.forwardRef<
+  HTMLTableCellElement,
+  React.TdHTMLAttributes<HTMLTableCellElement>
+>(({ children, ...props }, ref) => (
+  <TableCell ref={ref} style={ACTIONS_CELL_GUTTER} {...props}>
+    <span className="flex justify-end">{children}</span>
+  </TableCell>
+));
+TableActionCell.displayName = "TableActionCell";
+
 const TableCaption = React.forwardRef<
   HTMLTableCaptionElement,
   React.HTMLAttributes<HTMLTableCaptionElement>
@@ -161,5 +173,6 @@ export {
   TableHead,
   TableRow,
   TableCell,
+  TableActionCell,
   TableCaption,
 };

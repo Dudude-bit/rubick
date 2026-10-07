@@ -2,6 +2,7 @@ import { ExternalLink, Plus, RefreshCw, Trash2 } from "lucide-react";
 
 import {
   Table,
+  TableActionCell,
   TableBody,
   TableCell,
   TableHead,
@@ -79,16 +80,14 @@ export function HelmRepositoriesTab({
                     <ExternalLink className="h-3 w-3" aria-hidden="true" />
                   </a>
                 </TableCell>
-                <TableCell>
-                  <span className="flex justify-end">
-                    <DetailAction
-                      label={t("action", "remove")}
-                      icon={Trash2}
-                      onClick={() => onDeleteRepo(repo.name)}
-                      danger
-                    />
-                  </span>
-                </TableCell>
+                <TableActionCell>
+                  <DetailAction
+                    label={t("action", "remove")}
+                    icon={Trash2}
+                    onClick={() => onDeleteRepo(repo.name)}
+                    danger
+                  />
+                </TableActionCell>
               </TableRow>
             ))}
           </TableBody>

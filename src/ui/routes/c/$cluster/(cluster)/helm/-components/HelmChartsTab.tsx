@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   Table,
+  TableActionCell,
   TableBody,
   TableCell,
   TableHead,
@@ -91,15 +92,13 @@ export function HelmChartsTab({
                 <TableCell className="max-w-[320px] truncate text-fg-fnt">
                   {chart.description || <None />}
                 </TableCell>
-                <TableCell>
-                  <span className="flex justify-end">
-                    <DetailAction
-                      label={t("action", "install")}
-                      icon={Download}
-                      onClick={() => onInstall(chart)}
-                    />
-                  </span>
-                </TableCell>
+                <TableActionCell>
+                  <DetailAction
+                    label={t("action", "install")}
+                    icon={Download}
+                    onClick={() => onInstall(chart)}
+                  />
+                </TableActionCell>
               </TableRow>
             ))}
           </TableBody>
