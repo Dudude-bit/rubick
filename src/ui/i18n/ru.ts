@@ -5002,6 +5002,7 @@ export const ru: Catalogue = {
     downloadAndInstall: "Загрузить и установить",
     updateFound: "Доступно обновление",
     updateReady: "Версия {version} готова к загрузке.",
+    lastChecked: "Проверено в {time}.",
     noUpdates: "Обновлений нет",
     upToDateToast: "У вас последняя версия.",
     checkingUpdates: "Проверка…",

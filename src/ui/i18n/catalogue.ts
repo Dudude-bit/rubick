@@ -4501,6 +4501,7 @@ export const en = {
     updateAvailable: "Version {version} is available",
     upToDate: "You are running the latest version",
     updateHint: "Downloading an update restarts the app when it is ready.",
+    lastChecked: "Checked at {time}.",
     downloadingUpdate: "Downloading update",
     downloadingUpdateHint: "The app restarts automatically when ready.",
     downloadAndInstall: "Download & install",

@@ -11,6 +11,7 @@ import { useUpdaterStore } from "@/stores/updaterStore";
 import { useWhatsNewStore } from "@/stores/whatsNewStore";
 import { SettingRow, SettingsGroup } from "./settings-row";
 import { useT } from "@/i18n/useT";
+import { formatWhen } from "@/lib/utils";
 
 /**
  * What this build is, and — separately — replacing it.
@@ -28,6 +29,7 @@ export function AboutSettings() {
     available,
     version,
     checking,
+    checkedAt,
     downloading,
     progress,
     error,
@@ -104,7 +106,11 @@ export function AboutSettings() {
               ? t("settings", "updateAvailable", { version })
               : t("settings", "upToDate")
           }
-          hint={t("settings", "updateHint")}
+          hint={
+            checkedAt === null
+              ? t("settings", "updateHint")
+              : `${t("settings", "lastChecked", { time: formatWhen(checkedAt, "clock") })} ${t("settings", "updateHint")}`
+          }
           keywords={t("settings", "searchUpdateWords")}
           control={
             canInstall === false ? (

@@ -20,6 +20,8 @@ interface UpdaterState {
   version?: string;
   notes?: string;
   checking: boolean;
+  /** When a check last got an answer, found or not; `null` until one has. */
+  checkedAt: number | null;
   downloading: boolean;
   progress: number;
   error?: string;
@@ -62,6 +64,7 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
   version: undefined,
   notes: undefined,
   checking: false,
+  checkedAt: null,
   downloading: false,
   progress: 0,
   error: undefined,
@@ -106,13 +109,14 @@ export const useUpdaterStore = create<UpdaterState>((set, get) => ({
         set({
           update: updateResult,
           checking: false,
+          checkedAt: Date.now(),
           available: true,
           version: updateResult.version,
           notes: updateResult.body ?? undefined,
         });
         return updateResult;
       } else {
-        set({ checking: false, available: false });
+        set({ checking: false, checkedAt: Date.now(), available: false });
         return null;
       }
     } catch (error) {
