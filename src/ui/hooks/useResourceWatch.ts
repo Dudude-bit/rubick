@@ -33,10 +33,11 @@ interface UseResourceWatchOptions<T> {
   /** The cache entry the watch keeps up to date: a list's `Scoped` answer. */
   queryKey: QueryKey;
   /**
-   * Where a row's own object is cached. The peek, the page and the row menu
-   * poll it, and read it again when the watch has seen the row change.
+   * Where a row's own object is cached, its manifest included. The peek, the
+   * page and the row menu poll them, and read them again when the watch has
+   * seen the row change.
    */
-  detail?: (row: T) => QueryKey;
+  detail?: (row: T) => readonly QueryKey[];
   /**
    * Called on a backend `failed` event — typically RBAC `watch` denial or a
    * persistent network problem. The cache is NOT mutated for those; the
@@ -349,14 +350,14 @@ function readSoon(client: QueryClient, queryKey: QueryKey, settleMs: number) {
 function readAgain<T>(
   client: QueryClient,
   changes: Array<ResourceChange<T>>,
-  detail: ((row: T) => QueryKey) | undefined,
+  detail: ((row: T) => readonly QueryKey[]) | undefined,
   recounted: boolean
 ) {
   if (detail)
     for (const { resource } of changes) {
       if (!resource) continue;
-      const key = detail(resource);
-      if (client.getQueryState(key)) readSoon(client, key, DETAIL_MS);
+      for (const key of detail(resource))
+        if (client.getQueryState(key)) readSoon(client, key, DETAIL_MS);
     }
   if (recounted) readSoon(client, queryKeys.everyOverview(), COUNTS_MS);
 }

@@ -22,6 +22,7 @@ import { DetailAction } from "@/components/object/detail-blocks";
 import { JobRows } from "../-object/child-rows";
 import { PodListCard } from "../-object/PodListCard";
 import type { PeekTabId } from "./peek-tabs";
+import { peekManifestKey } from "./peek-sources";
 import { RelatedPanel } from "../-object/RelatedPanel";
 import { useRelatedObjects } from "../-object/useRelatedObjects";
 import { servedOf } from "../-object/served";
@@ -579,13 +580,7 @@ function PeekYamlTab({ target }: { target: PeekTarget }) {
   const namespace = target.namespace ?? null;
 
   const { data, error, isPending, isFetching, refetch } = useLiveQuery({
-    queryKey: target.crd
-      ? queryKeys.customResourceYaml(target.crd, namespace, target.name)
-      : queryKeys.manifest(
-          toKind(target.kind) ?? target.kind,
-          namespace,
-          target.name
-        ),
+    queryKey: peekManifestKey(target),
     queryFn: () =>
       // `fetchResourceYaml` resolves the apiVersion from the registry, which
       // has never heard of this kind and answers `v1` — so a custom resource

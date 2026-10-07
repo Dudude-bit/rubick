@@ -18,7 +18,12 @@ vi.mock("@/lib/commands", () => ({
 import { queryKeys } from "@/lib/query-keys";
 import { CODE_FILES } from "@/test/source-files";
 import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
-import { flatten, peekQueryKey, resolveSource } from "./peek-sources";
+import {
+  flatten,
+  peekManifestKey,
+  peekQueryKey,
+  resolveSource,
+} from "./peek-sources";
 
 /** What the peek asks for an object, and where it keeps the answer. */
 async function peekOf(target: {
@@ -261,18 +266,20 @@ describe("the peek's Overview against the detail pages", () => {
   });
 
   /**
-   * A list's watch reads a changed row's entry again, so the peek open on it
-   * follows the row. Fails if a watched kind's peek keeps another entry,
-   * which leaves it on its own poll: "3/3" in the list, "2 of 3" beside it.
+   * A list's watch reads a changed row's entries again, so the peek open on
+   * it follows the row. Fails if a watched kind's peek, or its YAML tab,
+   * keeps another entry, which leaves it on its own poll: "3/3" in the list,
+   * "2 of 3" beside it, and the YAML a revision behind.
    */
-  it("is the entry a watched list reads again when its row changes", () => {
+  it("is the entry a watched list reads again when its row changes, YAML included", () => {
     const kinds = watchedKinds();
     expect(kinds.length).toBeGreaterThanOrEqual(15);
     const row = { name: "x", namespace: "ns" };
-    for (const kind of kinds)
-      expect(peekQueryKey({ kind, ...row })).toEqual(
-        queryKeys.rowDetail(kind)(row)
-      );
+    for (const kind of kinds) {
+      const entries = queryKeys.rowDetail(kind)(row);
+      expect(entries).toContainEqual(peekQueryKey({ kind, ...row }));
+      expect(entries).toContainEqual(peekManifestKey({ kind, ...row }));
+    }
   });
 
   it("reads a CRD where the CRD page does", async () => {

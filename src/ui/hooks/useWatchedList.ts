@@ -46,7 +46,7 @@ export function useWatchedList<
   subscribe: () => Promise<string>;
   queryKey: QueryKey;
   /** Where a row's own object is cached; see `useResourceWatch`. */
-  detail: (row: T) => QueryKey;
+  detail: (row: T) => readonly QueryKey[];
   reportFailure: string | ((message: string) => void);
 }): WatchedList {
   const t = useT();

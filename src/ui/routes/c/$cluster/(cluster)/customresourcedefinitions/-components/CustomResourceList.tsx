@@ -216,8 +216,10 @@ export function CustomResourceList({
     // down and opened another one on every single render.
     queryKey,
     detail: useCallback(
-      (row: CustomResourceListItem) =>
+      (row: CustomResourceListItem) => [
         queryKeys.customResource(crdName, row.namespace, row.name),
+        queryKeys.customResourceYaml(crdName, row.namespace, row.name),
+      ],
       [crdName]
     ),
     reportFailure: crdKind,

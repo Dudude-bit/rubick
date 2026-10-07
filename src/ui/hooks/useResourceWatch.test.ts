@@ -993,6 +993,36 @@ describe("the readers beside a watched list", () => {
   });
 
   /**
+   * Lena's peek YAML showed the old revision about four seconds after the
+   * rollout went Ready, while its Overview had followed the row. Fails if the
+   * watch's change reads the Deployment again but not its manifest.
+   */
+  it("has the peek's YAML read the manifest again when the list's watch sees it change", async () => {
+    const client = testQueryClient();
+    const getManifest = vi
+      .fn()
+      .mockResolvedValueOnce("revision: '1'\n")
+      .mockResolvedValue("revision: '2'\n");
+    client.setQueryData<Scoped<Item>>(DEPLOYMENTS, {
+      rows: [{ name: "search", namespace: "shop", data: 1 }],
+      unread: [],
+    });
+    const hook = await watching(
+      client,
+      DEPLOYMENTS,
+      queryKeys.manifest("Deployment", "shop", "search"),
+      getManifest
+    );
+
+    emit("stream-cm-1", "applied", {
+      name: "search",
+      namespace: "shop",
+      data: 2,
+    });
+    await waitFor(() => expect(hook.result.current).toBe("revision: '2'\n"));
+  });
+
+  /**
    * Scale 2 to 4: the Pods header said 16 while the sidebar and the status
    * bar said 14 until the overview's next ten-second read. Fails if a pod
    * the watch added leaves the counts to that poll, or if two pods landing

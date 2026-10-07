@@ -54,6 +54,17 @@ export function peekQueryKey(target: PeekTarget): QueryKey {
     : ["peek", resolved ?? target.kind, namespace, target.name];
 }
 
+export function peekManifestKey(target: PeekTarget): QueryKey {
+  const namespace = target.namespace ?? null;
+  return target.crd
+    ? queryKeys.customResourceYaml(target.crd, namespace, target.name)
+    : queryKeys.manifest(
+        toKind(target.kind) ?? target.kind,
+        namespace,
+        target.name
+      );
+}
+
 export function resolveSource(target: PeekTarget): PeekSource {
   // A custom resource first, and never by kind: two CRDs may declare the same
   // kind in different groups, and the object being looked at is the one whose
