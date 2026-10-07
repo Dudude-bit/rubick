@@ -3,7 +3,7 @@
 //! status mapping and dynamic-API construction.
 
 use crate::commands::helpers::ResourceContext;
-use crate::error::Result;
+use crate::error::{page_status, server_words, Result};
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
 use kube::api::ListParams;
@@ -34,7 +34,7 @@ pub(super) fn metrics_status_from_error(err: &kube::Error) -> MetricsStatus {
             if api_err.code == 404 || api_err.reason == "NotFound" {
                 MetricsStatus {
                     status: MetricsStatusKind::NotInstalled,
-                    message: Some(api_err.message.clone()),
+                    message: Some(server_words(api_err)),
                 }
             } else if matches!(api_err.code, 401 | 403)
                 || api_err.reason == "Forbidden"
@@ -42,7 +42,7 @@ pub(super) fn metrics_status_from_error(err: &kube::Error) -> MetricsStatus {
             {
                 MetricsStatus {
                     status: MetricsStatusKind::Forbidden,
-                    message: Some(api_err.message.clone()),
+                    message: Some(server_words(api_err)),
                 }
             } else {
                 MetricsStatus {
@@ -50,7 +50,10 @@ pub(super) fn metrics_status_from_error(err: &kube::Error) -> MetricsStatus {
                     // The banner's title already says this is a metrics error,
                     // in the reader's language. What is left to add is the
                     // server's own code and words.
-                    message: Some(format!("{}: {}", api_err.code, api_err.message)),
+                    message: Some(
+                        page_status(api_err)
+                            .unwrap_or_else(|| format!("{}: {}", api_err.code, api_err.message)),
+                    ),
                 }
             }
         }
@@ -175,6 +178,22 @@ mod tests {
             metadata: None,
             details: None,
         }))
+    }
+
+    /// A metrics read through a proxy that answered with its own 502 page put
+    /// the page in the banner. Fails if the HTML reaches the status message.
+    #[test]
+    fn a_proxy_error_page_is_its_status_line_in_the_banner() {
+        let page = kube::Error::Api(Box::new(
+            kube::core::Status::failure(
+                "<html><head><title>502 Bad Gateway</title></head><body></body></html>",
+                "Failed to parse error data",
+            )
+            .with_code(502),
+        ));
+        let status = metrics_status_from_error(&page);
+        assert!(matches!(status.status, MetricsStatusKind::Error));
+        assert_eq!(status.message.as_deref(), Some("502 Bad Gateway"));
     }
 
     /// A wrong plural or apiVersion lists a path the server does not have,

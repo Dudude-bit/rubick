@@ -120,7 +120,7 @@ pub fn describe_failure(error: &crate::error::Error) -> (SearchFailureKind, Stri
                 408 | 504 => SearchFailureKind::Timeout,
                 _ => SearchFailureKind::classify_text(&response.message),
             };
-            return (kind, response.message.clone());
+            return (kind, crate::error::server_words(response));
         }
     }
 

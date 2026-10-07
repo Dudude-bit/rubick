@@ -283,7 +283,7 @@ impl From<kube::Error> for Error {
     fn from(err: kube::Error) -> Self {
         if let kube::Error::Api(response) = &err {
             if response.code == 401 || response.reason == "Unauthorized" {
-                return Error::CredentialsExpired(response.message.clone());
+                return Error::CredentialsExpired(server_words(response));
             }
         }
         if let kube::Error::Service(inner) = &err {
@@ -330,12 +330,47 @@ pub(crate) trait KubeErrorExt {
 impl KubeErrorExt for kube::Error {
     fn display_clean(&self) -> String {
         match self {
-            kube::Error::Api(status) if !status.message.is_empty() => status.message.clone(),
+            kube::Error::Api(status) if !status.message.is_empty() => server_words(status),
             kube::Error::Api(status) if !status.reason.is_empty() => status.reason.clone(),
             kube::Error::Api(status) => format!("HTTP {}", status.code),
             other => other.to_string(),
         }
     }
+}
+
+/// The server's message, or the status line of an HTML page a proxy in front
+/// of it sent instead: nginx's whole 502 page was printed as the reason.
+pub(crate) fn server_words(status: &kube::core::Status) -> String {
+    page_status(status).unwrap_or_else(|| status.message.clone())
+}
+
+/// `502 Bad Gateway` for an HTML error page; `None` for anything else.
+pub(crate) fn page_status(status: &kube::core::Status) -> Option<String> {
+    let body = status.message.trim_start();
+    let lower = body.to_ascii_lowercase();
+    if !body.starts_with('<')
+        || !["<html", "<head", "<body", "<title"]
+            .iter()
+            .any(|tag| lower.contains(tag))
+    {
+        return None;
+    }
+    let code = status.code.to_string();
+    let title = ["title", "h1"].iter().find_map(|tag| {
+        let open = lower.find(&format!("<{tag}"))?;
+        let start = open + lower[open..].find('>')? + 1;
+        let end = start + lower[start..].find(&format!("</{tag}"))?;
+        let text = body[start..end]
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        (!text.is_empty()).then(|| text.chars().take(120).collect::<String>())
+    });
+    Some(match title {
+        Some(title) if status.code == 0 || title.contains(&code) => title,
+        Some(title) => format!("HTTP {code} {title}"),
+        None => format!("HTTP {code}"),
+    })
 }
 
 /// A watcher's failure in the same words, `Status` dump left off.
@@ -501,6 +536,39 @@ mod tests {
         assert_eq!(
             log.said(),
             "container \"app\" in pod \"payments-6d9d7d9db4-jflp4\" is waiting to start: trying and failing to pull image"
+        );
+    }
+
+    /// Dana's Deployment page during the outage read "The read failed: <html>
+    /// <head><title>502 Bad Gateway</title>…" with nginx's whole page in it.
+    /// Fails if any part of an HTML error page crosses as the sentence.
+    #[test]
+    fn an_html_error_page_crosses_as_its_status_line() {
+        const NGINX: &str = "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n";
+        let page = |code: u16, body: &str| {
+            kube::Error::Api(Box::new(
+                kube::core::Status::failure(body, "Failed to parse error data").with_code(code),
+            ))
+        };
+        let err = Error::from(page(502, NGINX));
+        let wire = serde_json::to_value(&err).unwrap();
+        assert_eq!(wire["said"], "502 Bad Gateway");
+        assert!(!err.to_string().contains('<'), "{err}");
+        assert_eq!(err.code(), "KUBE_API_ERROR");
+
+        let untitled = Error::from(page(
+            503,
+            "<!DOCTYPE html><html><body><p>down</p></body></html>",
+        ));
+        assert_eq!(untitled.said(), "HTTP 503");
+        let headed = Error::from(page(
+            504,
+            "<html><body><h1>Gateway Timeout</h1></body></html>",
+        ));
+        assert_eq!(headed.said(), "HTTP 504 Gateway Timeout");
+        assert_eq!(
+            Error::from(page(404, "404 page not found")).said(),
+            "404 page not found"
         );
     }
 
