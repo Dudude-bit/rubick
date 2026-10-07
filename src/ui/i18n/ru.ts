@@ -8298,6 +8298,12 @@ export const ru: Catalogue = {
       many: "в {n} видах не искали",
       other: "в {n} вида не искали",
     },
+    kindsNotListable: {
+      one: "{n} вид нельзя получить списком",
+      few: "{n} вида нельзя получить списком",
+      many: "{n} видов нельзя получить списком",
+      other: "{n} вида нельзя получить списком",
+    },
     apiGroupsNotDiscovered: {
       one: "{n} группа API не ответила на discovery",
       few: "{n} группы API не ответили на discovery",

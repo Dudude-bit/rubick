@@ -13,6 +13,7 @@ import {
 import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Ban,
   CircleDashed,
   FolderOpen,
   ListPlus,
@@ -1394,7 +1395,7 @@ const kindNames = (kinds: readonly { kind: string }[]) =>
  */
 function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
   const t = useT();
-  const { cluster, scope, notSearched, unreadGroups } = entry;
+  const { cluster, scope, notSearched, unlistable, unreadGroups } = entry;
   return (
     <div
       role="presentation"
@@ -1437,6 +1438,15 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
             {t("count", "kindsNotSearched", { n: notSearched.length })}
           </span>
         )
+      )}
+      {unlistable !== null && unlistable.length > 0 && (
+        <span
+          className="flex items-center gap-1 text-fg-fnt"
+          title={kindNames(unlistable)}
+        >
+          <Ban className="h-3 w-3 flex-none" aria-hidden />
+          {t("count", "kindsNotListable", { n: unlistable.length })}
+        </span>
       )}
       {unreadGroups > 0 && (
         <span className="flex items-center gap-1 text-warn">

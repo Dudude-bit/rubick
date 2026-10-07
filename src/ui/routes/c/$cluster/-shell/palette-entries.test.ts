@@ -5,6 +5,7 @@ import { QueryClient } from "@tanstack/react-query";
 
 import { routeTree } from "@/generated/routeTree.gen";
 import type { ClusterSearchState, SearchHit } from "./useResourceSearch";
+import { catalogGroups } from "../api-resources/-components/catalog-groups";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { hrefOf, setRouter, type AppLink } from "@/lib/links";
@@ -875,6 +876,69 @@ describe("what a name search covered", () => {
       kind: "search-more",
       count: 2,
     });
+  });
+
+  /**
+   * Lena's Ctrl+K said "28 kinds searched, 47 not searched", 75, beside API
+   * resources' 82: the seven kinds a cluster serves only to create (Binding,
+   * TokenReview and the access reviews) were in neither number. Fails if a
+   * served kind is left out of the line, or the line and API resources count
+   * the catalogue differently.
+   */
+  it("accounts for every kind API resources counts, the ones no list can read included", () => {
+    const createOnly = [
+      served("Binding", "", "bindings", ["create"]),
+      served(
+        "SelfSubjectReview",
+        "authentication.k8s.io",
+        "selfsubjectreviews",
+        ["create"]
+      ),
+      served(
+        "LocalSubjectAccessReview",
+        "authorization.k8s.io",
+        "localsubjectaccessreviews",
+        ["create"]
+      ),
+      served(
+        "SelfSubjectAccessReview",
+        "authorization.k8s.io",
+        "selfsubjectaccessreviews",
+        ["create"]
+      ),
+      served(
+        "SelfSubjectRulesReview",
+        "authorization.k8s.io",
+        "selfsubjectrulesreviews",
+        ["create"]
+      ),
+      served(
+        "SubjectAccessReview",
+        "authorization.k8s.io",
+        "subjectaccessreviews",
+        ["create"]
+      ),
+    ];
+    const kinds = [...catalogue, ...createOnly];
+    const [line] = coverage(
+      buildPaletteEntries(
+        state({ text: "marco", shownClusters: [answered], kinds })
+      )
+    );
+
+    const accounted =
+      line.cluster.searched.length +
+      line.cluster.loading.length +
+      line.cluster.unreadable.length +
+      (line.notSearched?.length ?? 0) +
+      (line.unlistable?.length ?? 0);
+    expect(accounted).toBe(
+      catalogGroups({ entries: kinds, unread: [] }, "").kinds
+    );
+    expect(line.unlistable?.map((entry) => entry.kind)).toEqual([
+      "TokenReview",
+      ...createOnly.map((entry) => entry.kind),
+    ]);
   });
 
   /** Once every kind is being read, offering to read them is a button that does nothing. */

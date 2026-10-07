@@ -259,6 +259,8 @@ export type Entry =
       scope: string | null;
       /** Served kinds left out; null where this cluster's catalogue was not read. */
       notSearched: CatalogEntry[] | null;
+      /** Served kinds no list can read (`TokenReview`, `Binding`): the rest of API resources' count. */
+      unlistable: CatalogEntry[] | null;
       /** API groups discovery did not answer, whose kinds nobody could name. */
       unreadGroups: number;
     }
@@ -820,14 +822,17 @@ export function buildPaletteEntries({
     if (!saidAnything(cluster)) continue;
     // Only the window's own cluster has a catalogue here to count against.
     const own = !scoped && cluster.context === currentContext;
-    const notSearched =
-      own && kinds.length > 0 ? notSearchedOf(kinds, cluster) : null;
+    const counted = own && kinds.length > 0;
+    const notSearched = counted ? notSearchedOf(kinds, cluster) : null;
     out.push({
       id: `cov:${cluster.context}`,
       kind: "coverage",
       cluster,
       scope: scoped ? null : scopeLabel,
       notSearched,
+      unlistable: counted
+        ? kinds.filter((entry) => !entry.verbs.includes("list"))
+        : null,
       unreadGroups: own ? unreadGroups : 0,
     });
     const more = notSearched?.length ?? 0;

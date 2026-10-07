@@ -7299,6 +7299,10 @@ export const en = {
       one: "{n} kind not searched",
       other: "{n} kinds not searched",
     },
+    kindsNotListable: {
+      one: "{n} kind cannot be listed",
+      other: "{n} kinds cannot be listed",
+    },
     apiGroupsNotDiscovered: {
       one: "{n} API group did not answer discovery",
       other: "{n} API groups did not answer discovery",
