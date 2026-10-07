@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { keepPreviousData } from "@tanstack/react-query";
 import { copyText } from "@/lib/host";
 import { ClipboardCopy } from "lucide-react";
 
@@ -26,11 +27,15 @@ export function DiagnosticsSettings() {
   const [redact, setRedact] = useState(true);
   const { toast } = useToast();
 
-  const { data } = useLiveQuery({
+  // The other read stays on screen while this one loads, so the sections
+  // the reader opened stay open; it is never what Copy hands over.
+  const { data, isPlaceholderData } = useLiveQuery({
     queryKey: ["diagnostics", redact],
     queryFn: () => commands.collectDiagnostics(redact),
+    placeholderData: keepPreviousData,
     refresh: "slow",
   });
+  const asked = isPlaceholderData ? undefined : data;
 
   return (
     <div className="max-w-[76ch] py-2">
@@ -42,10 +47,10 @@ export function DiagnosticsSettings() {
         <Button
           variant="outline"
           size="sm"
-          disabled={!data}
+          disabled={!asked}
           onClick={async () => {
-            if (!data) return;
-            await copyText(asMarkdown(data));
+            if (!asked) return;
+            await copyText(asMarkdown(asked));
             toast({ title: t("settings", "diagnosticsCopied") });
           }}
         >

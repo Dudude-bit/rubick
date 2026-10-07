@@ -10,9 +10,117 @@ use std::collections::BTreeMap;
 use super::Diagnostics;
 use crate::shell::ShellEnvReport;
 
+const XDG_BASES: [&str; 4] = [
+    "XDG_CONFIG_HOME",
+    "XDG_DATA_HOME",
+    "XDG_STATE_HOME",
+    "XDG_CACHE_HOME",
+];
+
+/// What on this machine names the person running the app, and what a report
+/// says instead.
+///
+/// `$HOME` alone is not enough: a sandbox, `sudo -E` or a snap moves it, and
+/// the search path still names `/home/<them>`; an XDG base outside the home
+/// directory puts the config and the log somewhere `~` never covers.
+pub struct Identity {
+    /// Directory prefixes, longest first, each with its stand-in.
+    roots: Vec<(String, String)>,
+    user: Option<String>,
+}
+
+impl Identity {
+    #[must_use]
+    pub fn of_this_machine() -> Self {
+        let var = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
+        Self::new(
+            dirs::home_dir().map(|home| home.to_string_lossy().into_owned()),
+            ["USER", "LOGNAME", "USERNAME"].into_iter().find_map(var),
+            XDG_BASES
+                .into_iter()
+                .filter_map(|name| var(name).map(|path| (name, path)))
+                .collect(),
+        )
+    }
+
+    fn new(home: Option<String>, user: Option<String>, xdg: Vec<(&str, String)>) -> Self {
+        let user = user.filter(|user| user.len() > 1);
+        let mut homes: Vec<String> = home.into_iter().filter(|home| home.len() > 1).collect();
+        if let Some(user) = &user {
+            homes.extend(["/home/", "/Users/", "C:\\Users\\"].map(|base| format!("{base}{user}")));
+        }
+        let under_a_home = |path: &str| homes.iter().any(|home| within(path, home));
+        let mut roots: Vec<(String, String)> = xdg
+            .into_iter()
+            .filter(|(_, path)| !under_a_home(path))
+            .map(|(name, path)| (path, format!("${name}")))
+            .collect();
+        roots.extend(homes.iter().map(|home| (home.clone(), "~".to_string())));
+        roots.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then_with(|| a.0.cmp(&b.0)));
+        roots.dedup_by(|a, b| a.0 == b.0);
+        Self { roots, user }
+    }
+
+    /// `text` with every root replaced and the login name hidden where it
+    /// stands as a path segment. Only there: a user called `dev` must not
+    /// turn prose about a dev cluster into nonsense.
+    #[must_use]
+    pub fn hide(&self, text: &str) -> String {
+        let mut out = text.to_string();
+        for (root, stand_in) in &self.roots {
+            out = replace_whole(&out, root, stand_in, |_| true);
+        }
+        if let Some(user) = &self.user {
+            out = replace_whole(&out, user, "<user>", |before| {
+                before == Some('/') || before == Some('\\')
+            });
+        }
+        out
+    }
+}
+
+/// A character that continues a name, so `marco` is not found in `marcos`.
+fn continues(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '_' | '-' | '.')
+}
+
+fn within(path: &str, root: &str) -> bool {
+    path.strip_prefix(root)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with(['/', '\\']))
+}
+
+/// Every occurrence of `needle` that ends where a name ends and whose
+/// preceding character `starts` accepts.
+fn replace_whole(
+    text: &str,
+    needle: &str,
+    with: &str,
+    starts: impl Fn(Option<char>) -> bool,
+) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find(needle) {
+        let before = rest[..at].chars().last().or_else(|| out.chars().last());
+        let after = rest[at + needle.len()..].chars().next();
+        out.push_str(&rest[..at]);
+        if starts(before) && !after.is_some_and(continues) {
+            out.push_str(with);
+        } else {
+            out.push_str(needle);
+        }
+        rest = &rest[at + needle.len()..];
+    }
+    out.push_str(rest);
+    out
+}
+
 /// Replace every identifying string in the report.
 #[must_use]
-pub fn redacted(mut d: Diagnostics) -> Diagnostics {
+pub fn redacted(d: Diagnostics) -> Diagnostics {
+    redacted_as(d, &Identity::of_this_machine())
+}
+
+fn redacted_as(mut d: Diagnostics, identity: &Identity) -> Diagnostics {
     // Longest first: a context named `prod` is a substring of `prod-eu`, and
     // replacing the short one first would leave `context-1-eu` behind.
     let mut names: Vec<String> = d.contexts.iter().map(|c| c.context.clone()).collect();
@@ -23,8 +131,6 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
         map.insert(ctx.context.clone(), format!("context-{}", i + 1));
     }
 
-    let home = dirs::home_dir().map(|h| h.to_string_lossy().into_owned());
-
     let scrub = |s: &str| -> String {
         let mut out = s.to_string();
         for name in &names {
@@ -32,12 +138,8 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
                 out = out.replace(name.as_str(), placeholder);
             }
         }
-        if let Some(home) = &home {
-            out = out.replace(home.as_str(), "~");
-        }
-        out
+        identity.hide(&out)
     };
-
     // A shell under `~/.nix-profile` names the user as surely as a path does.
     match &mut d.shell {
         ShellEnvReport::Imported { shell, .. }
@@ -100,15 +202,16 @@ pub fn redacted(mut d: Diagnostics) -> Diagnostics {
         kc.path = scrub(&kc.path);
         kc.parse_error = kc.parse_error.as_deref().map(&scrub);
     }
-    d.app.config_path = d.app.config_path.as_deref().map(&scrub);
-    // The home directory only. `scrub` also replaces context names as bare
-    // substrings, and a context called `logs` or `app` would rewrite the
-    // constant part of this path into one that does not exist — hiding
+    // Who, not which cluster, for both: `scrub` also replaces context names
+    // as bare substrings, and a context called `logs` or `app` would rewrite
+    // the constant part of these paths into ones that do not exist, hiding
     // nothing, since that part names nobody.
-    d.app.log_destination = d.app.log_destination.as_deref().map(|path| match &home {
-        Some(home) => path.replace(home.as_str(), "~"),
-        None => path.to_string(),
-    });
+    d.app.config_path = d.app.config_path.as_deref().map(|path| identity.hide(path));
+    d.app.log_destination = d
+        .app
+        .log_destination
+        .as_deref()
+        .map(|path| identity.hide(path));
 
     d
 }
@@ -247,6 +350,114 @@ mod tests {
             out.app.config_path.as_deref().unwrap().starts_with('~'),
             "the tilde is what makes the rest of the path readable"
         );
+    }
+
+    /// Marco's machine: `$HOME` is `/home/marco`, and his search path, his
+    /// config file and his log all live under it.
+    fn marco() -> Identity {
+        Identity::new(Some("/home/marco".into()), Some("marco".into()), Vec::new())
+    }
+
+    /// Lena's run: `$HOME` and the XDG bases point into a sandbox while the
+    /// search path still names the login's real home. Each printed path
+    /// stayed raw on screen and in the copied report.
+    fn sandboxed() -> Identity {
+        Identity::new(
+            Some("/tmp/rubick-fix/live/lena/home".into()),
+            Some("belliel".into()),
+            vec![
+                (
+                    "XDG_CONFIG_HOME",
+                    "/tmp/rubick-fix/live/lena/xdg/config".into(),
+                ),
+                ("XDG_DATA_HOME", "/tmp/rubick-fix/live/lena/xdg/data".into()),
+            ],
+        )
+    }
+
+    fn with_paths(home: &str, config: &str, log: &str) -> Diagnostics {
+        let mut d = sample();
+        d.search_path = vec![
+            crate::diagnostics::SearchPathEntry {
+                path: "/usr/local/bin".into(),
+                exists: true,
+            },
+            crate::diagnostics::SearchPathEntry {
+                path: format!("{home}/.local/share/mise/installs/kubectl/latest"),
+                exists: true,
+            },
+        ];
+        d.app.config_path = Some(config.into());
+        d.app.log_destination = Some(log.into());
+        d
+    }
+
+    /// Fails if a path under the home directory, or the login name, reaches
+    /// the report the "hide names and paths" box promises to clean.
+    #[test]
+    fn a_report_hides_every_path_under_the_home_and_the_login_name() {
+        let out = redacted_as(
+            with_paths(
+                "/home/marco",
+                "/home/marco/.config/k8s-gui/config.toml",
+                "/home/marco/.local/share/com.k8s-gui.app/logs/rubick.log",
+            ),
+            &marco(),
+        );
+        let all = serde_json::to_string(&out).expect("serialises");
+        assert!(!all.contains("marco"), "the login survived: {all}");
+        assert_eq!(out.search_path[0].path, "/usr/local/bin");
+        assert_eq!(
+            out.search_path[1].path,
+            "~/.local/share/mise/installs/kubectl/latest"
+        );
+        assert_eq!(
+            out.app.config_path.as_deref(),
+            Some("~/.config/k8s-gui/config.toml")
+        );
+    }
+
+    /// Fails if a sandboxed `$HOME` lets the real home, or an XDG base
+    /// outside it, through: the case the live check found.
+    #[test]
+    fn a_home_the_environment_moved_still_hides_the_login_and_the_xdg_bases() {
+        let out = redacted_as(
+            with_paths(
+                "/home/belliel",
+                "/tmp/rubick-fix/live/lena/xdg/config/k8s-gui/config.toml",
+                "/tmp/rubick-fix/live/lena/xdg/data/com.k8s-gui.app/logs/rubick.log",
+            ),
+            &sandboxed(),
+        );
+        let all = serde_json::to_string(&out).expect("serialises");
+        assert!(!all.contains("belliel"), "the login survived: {all}");
+        assert!(!all.contains("lena"), "a sandbox path survived: {all}");
+        assert_eq!(
+            out.search_path[1].path,
+            "~/.local/share/mise/installs/kubectl/latest"
+        );
+        assert_eq!(
+            out.app.config_path.as_deref(),
+            Some("$XDG_CONFIG_HOME/k8s-gui/config.toml")
+        );
+        assert_eq!(
+            out.app.log_destination.as_deref(),
+            Some("$XDG_DATA_HOME/com.k8s-gui.app/logs/rubick.log")
+        );
+    }
+
+    /// The login is hidden as a path segment, never inside a longer name or
+    /// in prose: a user `dev` must leave "dev cluster" and `devbox` alone.
+    #[test]
+    fn the_login_is_hidden_only_where_it_names_a_directory() {
+        let dev = Identity::new(Some("/home/dev".into()), Some("dev".into()), Vec::new());
+        assert_eq!(
+            dev.hide("/data/dev/.kube/config"),
+            "/data/<user>/.kube/config"
+        );
+        assert_eq!(dev.hide("the dev cluster"), "the dev cluster");
+        assert_eq!(dev.hide("/home/devbox/bin"), "/home/devbox/bin");
+        assert_eq!(dev.hide("/home/dev"), "~");
     }
 
     #[test]
