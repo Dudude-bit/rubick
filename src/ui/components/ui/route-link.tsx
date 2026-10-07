@@ -18,7 +18,7 @@ type RouteLinkProps = AppLink & {
 
 /**
  * A link to somewhere the router serves that is not a resource reference:
- * a Helm release, a CRD, a custom resource instance. `ResourceRef` covers
+ * a Helm release, a CRD. `ResourceRef` covers
  * every kind the registry can name and offers a peek; these destinations
  * have neither, so a plain click goes there. The modified gestures are the
  * same ones, from the same place.

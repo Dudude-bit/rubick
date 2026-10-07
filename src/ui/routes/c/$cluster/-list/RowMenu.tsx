@@ -20,7 +20,7 @@ import {
 import { PointMenu } from "@/components/ui/point-menu";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import { peekTargetOfHref, usePeek } from "@/hooks/usePeek";
+import { usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { useT } from "@/i18n/useT";
 import { buildDeepLink } from "@/lib/deep-link";
 import { kubectlGet } from "@/lib/kubectl";
@@ -49,6 +49,7 @@ export function RowMenu<Row extends Listed>({
   row,
   kind,
   href,
+  peek,
   actions,
   quickActions,
   at,
@@ -57,6 +58,7 @@ export function RowMenu<Row extends Listed>({
   row: Row;
   kind: string | null;
   href: string | undefined;
+  peek: PeekTarget | null;
   actions: ObjectActions;
   quickActions: QuickAction<Row>[];
   at: { x: number; y: number };
@@ -68,7 +70,6 @@ export function RowMenu<Row extends Listed>({
   const { open: openPeek } = usePeek();
   const openTab = useScopeTabStore((state) => state.openTab);
 
-  const peek = href ? peekTargetOfHref(href) : null;
   const qualified = row.namespace ? `${row.namespace}/${row.name}` : null;
   const command = kind ? kubectlGet({ kind, ...row }) : null;
   const link = href && clusterOf(href) ? buildDeepLink(href) : null;

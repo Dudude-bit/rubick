@@ -107,7 +107,7 @@ describe("a kind listed as the API server prints it", () => {
     answers.table = () => Promise.resolve(table([lease("node-1")]));
     await open();
     expect(await screen.findByText("holder-node-1")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "node-1" })).toHaveAttribute(
+    expect(screen.getByRole("link", { name: "Lease node-1" })).toHaveAttribute(
       "href",
       "/c/test/leases.coordination.k8s.io/kube-node-lease/node-1"
     );
@@ -312,5 +312,74 @@ describe("an access kind on the generic list", () => {
     const width = (header: string) =>
       parseFloat(screen.getByText(header).closest("th")!.style.width);
     expect(width("Роль")).toBeGreaterThan(2 * width("Возраст"));
+  });
+});
+
+describe("a ClusterRoleBinding row", () => {
+  const BINDINGS: CatalogEntry = {
+    ...LEASES,
+    group: "rbac.authorization.k8s.io",
+    kind: "ClusterRoleBinding",
+    plural: "clusterrolebindings",
+    namespaced: false,
+  };
+  const PEEK =
+    "clusterrolebindings.rbac.authorization.k8s.io/ClusterRoleBinding/cilium";
+
+  async function listed() {
+    answers.catalog = () =>
+      Promise.resolve({ entries: [BINDINGS], unread: [] });
+    answers.table = () =>
+      Promise.resolve({
+        columns: table([]).columns,
+        rows: [
+          {
+            name: "cilium",
+            namespace: null,
+            uid: "uid-cilium",
+            createdAt: null,
+            cells: ["cilium", "ClusterRole/cilium"],
+          },
+        ],
+        cursor: null,
+        unread: [],
+      });
+    const rendered = await renderWithRouter(
+      <PrintedList resource="clusterrolebindings.rbac.authorization.k8s.io" />,
+      { at: "/c/test/clusterrolebindings.rbac.authorization.k8s.io" }
+    );
+    await screen.findByText("ClusterRole/cilium");
+    return rendered.router;
+  }
+
+  /** Its address names no kind, so a plain click opened the full page where every other list opens the peek. */
+  it("opens in the side panel on a plain click, like every list's", async () => {
+    const router = await listed();
+
+    fireEvent.click(screen.getByText("ClusterRole/cilium"));
+
+    await vi.waitFor(() =>
+      expect(router.state.location.search).toMatchObject({ peek: PEEK })
+    );
+    expect(router.state.location.pathname).toBe(
+      "/c/test/clusterrolebindings.rbac.authorization.k8s.io"
+    );
+  });
+
+  /** The menu had Open, a new tab and the copies, and no side panel. */
+  it("offers the side panel in its menu", async () => {
+    const router = await listed();
+
+    fireEvent.contextMenu(screen.getByText("ClusterRole/cilium"), {
+      clientX: 30,
+      clientY: 40,
+    });
+    fireEvent.click(
+      screen.getByRole("menuitem", { name: /Open in side panel/ })
+    );
+
+    await vi.waitFor(() =>
+      expect(router.state.location.search).toMatchObject({ peek: PEEK })
+    );
   });
 });

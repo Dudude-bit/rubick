@@ -3,10 +3,11 @@ import { columnHeader } from "@/i18n/column-header";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { CircleHelp, Eye, Trash2 } from "lucide-react";
-import { RouteLink } from "@/components/ui/route-link";
+import { ObjectLink } from "@/components/object/ResourceRef";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import type { PeekTarget } from "@/hooks/usePeek";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { createAgeColumn, createNamespaceColumn } from "../../../-list/columns";
 import { RealtimeAge } from "@/components/ui/realtime";
@@ -69,15 +70,18 @@ export function CustomResourceList({
   // direct dependency — this is what `react-hooks/exhaustive-deps`
   // wants to see, instead of unrolling its `[scope, crdName]` closure
   // captures into the consumer's dep arrays.
-  const getDetailLink = useCallback(
-    (item: CustomResourceListItem) =>
-      objectLink({
-        kind: crdKind,
-        name: item.name,
-        namespace: scope === "Namespaced" ? item.namespace : null,
-        crd: crdName,
-      })!,
+  const targetOf = useCallback(
+    (item: CustomResourceListItem): PeekTarget => ({
+      kind: crdKind,
+      name: item.name,
+      namespace: scope === "Namespaced" ? item.namespace : null,
+      crd: crdName,
+    }),
     [scope, crdKind, crdName]
+  );
+  const getDetailLink = useCallback(
+    (item: CustomResourceListItem) => objectLink(targetOf(item))!,
+    [targetOf]
   );
 
   const quickActions = useMemo<
@@ -106,20 +110,17 @@ export function CustomResourceList({
   const baseColumns = useMemo<ColumnDef<CustomResourceListItem>[]>(() => {
     const cols: ColumnDef<CustomResourceListItem>[] = [];
 
-    // The name is the row's identity and where a person aims, so it carries
-    // the real anchor. An instance's path is built from the CRD, not from
-    // kind and name, which is why this is not a ResourceRef.
     cols.push({
       size: 320,
       accessorKey: "name",
       header: columnHeader("columns", "name"),
       cell: ({ row }) => (
-        <RouteLink
-          {...getDetailLink(row.original)}
+        <ObjectLink
+          {...targetOf(row.original)}
           className="font-mono text-info hover:underline"
         >
           {row.original.name}
-        </RouteLink>
+        </ObjectLink>
       ),
     });
 
@@ -183,7 +184,7 @@ export function CustomResourceList({
     cols.push(createAgeColumn<CustomResourceListItem>());
 
     return cols;
-  }, [crdKind, scope, printerColumns, crdView, getDetailLink, t]);
+  }, [crdKind, scope, printerColumns, crdView, targetOf, t]);
 
   // Real-time updates via the resource-watch subsystem. Same pattern
   // as the other migrated lists: watch events update the cache via
@@ -278,6 +279,7 @@ export function CustomResourceList({
       })}
       embedded={embedded}
       getRowHref={(row) => hrefOf(getDetailLink(row))}
+      getRowPeek={targetOf}
     />
   );
 }

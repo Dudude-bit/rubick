@@ -7,7 +7,7 @@ import { ResourceList } from "../../-list/ResourceList";
 import { servedOf, useServed } from "../../-object/served";
 import { Button } from "@/components/ui/button";
 import { RealtimeAge } from "@/components/ui/realtime";
-import { RouteLink } from "@/components/ui/route-link";
+import { ObjectLink } from "@/components/object/ResourceRef";
 import type { ColumnDef } from "@/components/ui/table-features";
 import type {
   CatalogEntry,
@@ -17,13 +17,14 @@ import type {
 } from "@/generated/types";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import type { PeekTarget } from "@/hooks/usePeek";
 import { useT } from "@/i18n/useT";
 import { columnHeader } from "@/i18n/column-header";
 import { KindAbout } from "@/components/object/KindAbout";
-import { accessKind, listTitleOf } from "@/lib/access-kinds";
+import { accessKind, listTitleOf, segmentOf } from "@/lib/access-kinds";
 import { isExplained } from "@/lib/docs";
 import { commands } from "@/lib/commands";
-import { hrefOf, objectLink, type AppLink } from "@/lib/links";
+import { hrefOf, objectLink } from "@/lib/links";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -155,22 +156,21 @@ function PrintedTable({
     staleTime: STALE_TIMES.resourceList,
   });
 
-  const linkOf = useMemo(
+  const targetOf = useMemo(
     () =>
-      (row: PrintedRow): AppLink | null =>
-        objectLink({
-          kind: entry.kind,
-          name: row.name,
-          namespace: entry.namespaced ? row.namespace : null,
-          crd: resource,
-        }),
-    [entry, resource]
+      (row: PrintedRow): PeekTarget => ({
+        kind: entry.kind,
+        name: row.name,
+        namespace: entry.namespaced ? row.namespace : null,
+        crd: segmentOf(entry),
+      }),
+    [entry]
   );
   const showNamespace = entry.namespaced && wire?.length !== 1;
   const serverColumns = printed.data?.columns ?? NO_COLUMNS;
   const columns = useMemo(
-    () => columnsOf(serverColumns, showNamespace, linkOf),
-    [serverColumns, showNamespace, linkOf]
+    () => columnsOf(serverColumns, showNamespace, targetOf),
+    [serverColumns, showNamespace, targetOf]
   );
   const rows = printed.data?.rows;
   const access = accessKind(entry.kind);
@@ -211,9 +211,10 @@ function PrintedTable({
       }}
       getRowId={(row) => row.uid ?? `${row.namespace}/${row.name}`}
       getRowHref={(row) => {
-        const link = linkOf(row);
+        const link = objectLink(targetOf(row));
         return link ? hrefOf(link) : "";
       }}
+      getRowPeek={targetOf}
       headerContent={
         printed.data?.more ? (
           <div className="flex items-center gap-3 text-sm text-fg-mut">
@@ -242,7 +243,7 @@ function PrintedTable({
 function columnsOf(
   printed: TableColumn[],
   showNamespace: boolean,
-  linkOf: (row: PrintedRow) => AppLink | null
+  targetOf: (row: PrintedRow) => PeekTarget
 ): ColumnDef<PrintedRow>[] {
   const columns: ColumnDef<PrintedRow>[] = [];
   printed.forEach((column, index) => {
@@ -257,7 +258,7 @@ function columnsOf(
         <Cell
           value={row.original.cells[index]}
           column={column}
-          link={column.format === "name" ? linkOf(row.original) : null}
+          target={column.format === "name" ? targetOf(row.original) : null}
           createdAt={row.original.createdAt}
         />
       ),
@@ -271,22 +272,22 @@ function columnsOf(
 function Cell({
   value,
   column,
-  link,
+  target,
   createdAt,
 }: {
   value: unknown;
   column: TableColumn;
-  link: AppLink | null;
+  target: PeekTarget | null;
   createdAt: string | null;
 }) {
   if (value === null || value === undefined || value === "") return <None />;
   const text =
     typeof value === "object" ? JSON.stringify(value) : String(value);
-  if (link)
+  if (target)
     return (
-      <RouteLink {...link} className="font-mono text-info hover:underline">
+      <ObjectLink {...target} className="font-mono text-info hover:underline">
         {text}
-      </RouteLink>
+      </ObjectLink>
     );
   // The server's own Age is an English duration ("8m38s"), typed "string".
   const at = CREATION.test(column.description)

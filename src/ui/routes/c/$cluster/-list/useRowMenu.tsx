@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import type { QuickAction } from "@/components/ui/quick-actions";
+import { peekOfRow, type PeekTarget } from "@/hooks/usePeek";
 import { useObjectActions } from "../-object/useObjectActions";
 import { peekQueryKey, resolveSource } from "../-peek/peek-sources";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -15,9 +16,11 @@ import { RowMenu, type Listed } from "./RowMenu";
 export function useRowMenu<Row extends Listed>({
   kind,
   getRowHref,
+  getRowPeek,
 }: {
   kind: string | null;
   getRowHref?: (row: Row) => string;
+  getRowPeek?: (row: Row) => PeekTarget | null;
 }) {
   const [at, setAt] = useState<{ x: number; y: number } | null>(null);
   const [row, setRow] = useState<Row | null>(null);
@@ -68,6 +71,7 @@ export function useRowMenu<Row extends Listed>({
           row={row}
           kind={kind}
           href={getRowHref?.(row)}
+          peek={peekOfRow(row, getRowHref, getRowPeek)}
           actions={actions}
           quickActions={quickActions}
           at={at}

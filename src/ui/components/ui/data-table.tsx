@@ -36,7 +36,7 @@ import { stallWatch } from "@/lib/stall-watch";
 import { claimListKeys } from "@/lib/list-keys";
 import { revealInScroller } from "@/lib/reveal";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
-import { peekTargetOfHref, usePeek } from "@/hooks/usePeek";
+import { peekOfRow, usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import type { AppSearch } from "@/lib/app-search";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -104,6 +104,8 @@ interface DataTableProps<TData extends RowData> {
   virtualScrollHeight?: number;
   /** Generate navigation URL for row click */
   getRowHref?: (row: TData) => string;
+  /** The peek a row opens, for a kind its address cannot name: one outside the registry. */
+  getRowPeek?: (row: TData) => PeekTarget | null;
   /** Custom row click handler (alternative to getRowHref) */
   onRowClick?: (row: TData) => void;
   /** Quick actions shown on row hover */
@@ -329,6 +331,7 @@ function DataTableInner<TData extends RowData>({
   fill = false,
   virtualScrollHeight = VIRTUAL_SCROLL_DEFAULT_HEIGHT,
   getRowHref,
+  getRowPeek,
   onRowClick,
   quickActions,
   enableKeyboardNav,
@@ -772,7 +775,7 @@ function DataTableInner<TData extends RowData>({
       // peek, the same as the click on the name inside it: one gesture, one
       // answer, wherever on the row it lands. The page is a double click
       // away, or Enter again in the peek. Modified ones open tabs.
-      const peek = peekTargetOfHref(href);
+      const peek = peekOfRow(row, getRowHref, getRowPeek);
       if (peek && readLinkIntent(event) === "activate") {
         event.preventDefault();
         openPeek(peek);
@@ -873,7 +876,7 @@ function DataTableInner<TData extends RowData>({
       : undefined;
     const href = getRowHref?.(row.original);
     const openPage =
-      href && peekTargetOfHref(href)
+      href && peekOfRow(row.original, getRowHref, getRowPeek)
         ? (event: React.MouseEvent) => {
             // The same places a single click keeps its hands off, so the
             // two gestures agree about what belongs to the row and what

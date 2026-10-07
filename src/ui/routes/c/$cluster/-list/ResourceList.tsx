@@ -62,6 +62,7 @@ import { useRowDeleteDenial } from "../-object/access";
 import { KindAbout } from "@/components/object/KindAbout";
 import { useRowMenu } from "./useRowMenu";
 import { deleteCommandFor } from "../-peek/peek-actions";
+import type { PeekTarget } from "@/hooks/usePeek";
 
 const NOTHING_UNREAD: UnreadNamespace[] = [];
 
@@ -187,6 +188,8 @@ export interface ResourceListProps<
   searchPlaceholder?: string;
   /** Generate navigation URL for row click */
   getRowHref?: (row: Row) => string;
+  /** The peek a row opens, for a kind its address cannot name: one outside the registry. */
+  getRowPeek?: (row: Row) => PeekTarget | null;
   /** Quick actions shown on row hover */
   quickActions?:
     | QuickAction<Row>[]
@@ -253,6 +256,7 @@ export function ResourceList<
   embedded = false,
   searchPlaceholder,
   getRowHref,
+  getRowPeek,
   quickActions,
   getRowId,
   grouping,
@@ -288,7 +292,7 @@ export function ResourceList<
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [deleteTarget, setDeleteTarget] = useState<Row | null>(null);
-  const rowMenu = useRowMenu<Row>({ kind: listKind, getRowHref });
+  const rowMenu = useRowMenu<Row>({ kind: listKind, getRowHref, getRowPeek });
   // Where the row menu can delete this kind, a row's Delete button asks
   // through it: one dialog, with what replaces the object and what goes too.
   const requestDelete =
@@ -680,6 +684,7 @@ export function ResourceList<
           searchParam={embedded ? undefined : "q"}
           searchPlaceholder={searchPlaceholder}
           getRowHref={getRowHref}
+          getRowPeek={getRowPeek}
           quickActions={resolvedQuickActions}
           getRowId={getRowId}
           grouping={grouping ?? namespaceGroups}

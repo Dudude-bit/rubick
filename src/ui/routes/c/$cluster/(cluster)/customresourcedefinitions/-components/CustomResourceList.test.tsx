@@ -6,7 +6,7 @@ import {
   it,
   vi,
 } from "vite-plus/test";
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 
 import { commands } from "@/lib/commands";
 import type { CustomResourceInfo, PrinterColumn } from "@/generated/types";
@@ -80,7 +80,9 @@ function draw(rows: CustomResourceInfo[], printerColumns: PrinterColumn[]) {
 }
 
 const rowOf = async (name: string) =>
-  (await screen.findByRole("link", { name })).closest("tr")!;
+  (await screen.findByRole("link", { name: `CiliumNode ${name}` })).closest(
+    "tr"
+  )!;
 
 beforeEach(() => {
   useClusterStore.setState({ isConnected: true, currentContext: "prod" });
@@ -199,5 +201,24 @@ describe("a custom resource list's count of several", () => {
     );
     expect(await screen.findByText("2 CiliumNodes")).toBeInTheDocument();
     expect(screen.queryByText("2 ciliumnodes")).toBeNull();
+  });
+});
+
+describe("an instance row", () => {
+  /** A custom resource's address names no kind, so its row opened the full page where every other list opens the peek. */
+  it("opens in the side panel on a plain click", async () => {
+    const { router } = await draw(
+      [node("controlplane", "172.30.1.2", "192.168.0.69")],
+      CILIUM_NODE_COLUMNS
+    );
+    const row = await rowOf("controlplane");
+
+    fireEvent.click(within(row).getByText("172.30.1.2"));
+
+    await vi.waitFor(() =>
+      expect(router.state.location.search).toMatchObject({
+        peek: "ciliumnodes.cilium.io/CiliumNode/controlplane",
+      })
+    );
   });
 });

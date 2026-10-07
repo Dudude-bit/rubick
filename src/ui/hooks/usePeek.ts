@@ -73,6 +73,17 @@ export function peekTargetOfHref(href: string): PeekTarget | null {
   return parsePeekValue(parts.map(decodeURIComponent).join("/"));
 }
 
+/** The panel a row opens in: its own answer where its list gives one, else what its address says. */
+export function peekOfRow<Row>(
+  row: Row,
+  getRowHref?: (row: Row) => string,
+  getRowPeek?: (row: Row) => PeekTarget | null
+): PeekTarget | null {
+  if (getRowPeek) return getRowPeek(row);
+  const href = getRowHref?.(row);
+  return href ? peekTargetOfHref(href) : null;
+}
+
 /**
  * The peek lives in the query string so browser back closes it and a peek is
  * linkable — the alternative, component state, makes back navigate away from
