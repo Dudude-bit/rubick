@@ -76,13 +76,13 @@ describe("the sentence about the login shell", () => {
         { outcome: "imported", shell: "/bin/zsh", adopted: 1, removed: 0 },
         t
       )
-    ).toContain("1 variable changed, 0 removed");
+    ).toContain("Variables changed: 1, removed: 0");
     expect(
       shellEnvSentence(
         { outcome: "imported", shell: "/bin/zsh", adopted: 57, removed: 2 },
         t
       )
-    ).toContain("57 variables changed, 2 removed");
+    ).toContain("Variables changed: 57, removed: 2");
   });
 
   /**

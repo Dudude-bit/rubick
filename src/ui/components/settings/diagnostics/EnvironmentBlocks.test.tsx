@@ -78,7 +78,7 @@ describe("EnvironmentBlocks", () => {
   it("says where the search path came from, and warns when it is a guess", () => {
     const { rerender } = render(<EnvironmentBlocks diagnostics={sample} />);
     const answered = screen.getByText(/\/bin\/zsh/);
-    expect(answered).toHaveTextContent("3 variables changed, 0 removed");
+    expect(answered).toHaveTextContent("Variables changed: 3, removed: 0");
     expect(answered).not.toHaveClass("text-warn");
 
     rerender(

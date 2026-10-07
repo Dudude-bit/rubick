@@ -1865,7 +1865,7 @@ export const en = {
     removeTarget: "Remove",
     targetsEmpty: "No targets yet. Reports are saved as files.",
     share: "Share",
-    shareThis: "Share this investigation",
+    shareThis: "Share this page",
     captured: "Captured",
     openInRubick: "Open in Rubick",
     linkFallback: "or paste this link into Rubick's search:",
@@ -2981,7 +2981,7 @@ export const en = {
     storyDone: "done",
     podsOf: "pods of {name}",
     groupedByName:
-      "Grouped by the generated suffix of the pod names. No controller event in this window says whose they are.",
+      "Grouped by the generated suffix of the pod names. No controller event in this window names the owner of these pods.",
     fromPodStatus: "from the pod status, not an event",
     lastSeen: "last {ago} ago",
     podStatusUnread: {
@@ -4523,11 +4523,8 @@ export const en = {
       one: "Search path · {n} directory",
       other: "Search path · {n} directories",
     },
-    shellEnvImported: {
-      one: "Read from {shell}, started as an interactive login shell the way a terminal starts it: {n} variable changed, {removed} removed, PATH merged.",
-      other:
-        "Read from {shell}, started as an interactive login shell the way a terminal starts it: {n} variables changed, {removed} removed, PATH merged.",
-    },
+    shellEnvImported:
+      "Read from {shell}, started as an interactive login shell the way a terminal starts it. Variables changed: {n}, removed: {removed}. PATH merged.",
     shellEnvTimedOut:
       "{shell} did not print its environment within {seconds} s, so this process kept the environment it was started with, and the PATH below is a list of well-known directories. A slow .zshrc or .bashrc is the usual cause.",
     shellEnvCouldNotStart:

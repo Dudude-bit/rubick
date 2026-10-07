@@ -180,3 +180,41 @@ describe("Russian copy that read wrong to a Russian reader", () => {
     expect(say("columns", "singular")).toBe("Единственное число");
   });
 });
+
+describe("Russian sentences that read machine-made or pointed at nothing", () => {
+  const say = (section: keyof typeof ru, key: string, values = {}) =>
+    translate("ru", section as never, key as never, values);
+
+  /** "изменено 0 переменных, снято 0": a bare number after "снято" had no noun. */
+  it("names what the login shell changed and removed, each with its number after the colon", () => {
+    expect(
+      say("settings", "shellEnvImported", {
+        shell: "/bin/bash",
+        n: 0,
+        removed: 0,
+      })
+    ).toBe(
+      "Прочитано из /bin/bash, запущенного как интерактивный login-shell, как это делает терминал. Переменных изменено: 0, удалено: 0. PATH объединён."
+    );
+  });
+
+  /** "Ни одному контексту он не нужен": the "он" had nothing before it to be. */
+  it("says what no context needs, in full", () => {
+    expect(say("empty", "noContextNeedsPlugin")).toBe(
+      "Ни одному контексту не нужен плагин аутентификации."
+    );
+  });
+
+  /** "чьи они" pointed at pods that were never named in the sentence. */
+  it("names the owner the controller events do not name", () => {
+    expect(say("readings", "groupedByName")).toMatch(
+      /не называет владельца этих подов\.$/
+    );
+  });
+
+  /** A healthy Deployment's Share dialog was titled as an investigation. */
+  it("titles the Share dialog by what it shares, not by a fault", () => {
+    expect(say("share", "shareThis")).toBe("Поделиться этой страницей");
+    expect(translate("en", "share", "shareThis")).toBe("Share this page");
+  });
+});
