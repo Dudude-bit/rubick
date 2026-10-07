@@ -8,12 +8,16 @@ import { templateContainersSection } from "../../-components/containers-section"
 import { podsSection } from "../../-components/pods-section";
 import type { ReportStat } from "@/lib/report";
 import { statusRole } from "@/lib/status-role";
+import { ownStatusWord } from "@/lib/status-words";
 import { jobRanFor } from "../../../-object/job-end";
 import type { JobDetailInfo, PodInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
 
-export function jobStatusOf(job: JobDetailInfo) {
-  return { text: job.status, role: statusRole(job.status) };
+export function jobStatusOf(job: JobDetailInfo, t: T) {
+  return {
+    text: ownStatusWord(job.status, t) ?? job.status,
+    role: statusRole(job.status),
+  };
 }
 
 export function jobStatsOf(
@@ -71,7 +75,7 @@ export function useJobShare(
         t
       );
       return {
-        status: jobStatusOf(job),
+        status: jobStatusOf(job, t),
         stats: jobStatsOf(job, frame.capturedAt, t),
         sections: [templateContainersSection(job, t), pods_],
       };

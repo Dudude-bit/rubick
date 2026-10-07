@@ -15,6 +15,7 @@ import { parts } from "@/i18n/parts";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 import { None } from "@/components/ui/none";
+import { ownStatusWord } from "@/lib/status-words";
 
 /**
  * The objects a workload owns, listed on its detail page.
@@ -257,6 +258,7 @@ export function JobRows({
         name: job.name,
         namespace: job.namespace,
         status: job.status || "Unknown",
+        statusLabel: ownStatusWord(job.status, t),
         detail: (
           <>
             <span className="text-fg-fnt">

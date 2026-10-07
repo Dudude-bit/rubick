@@ -42,6 +42,7 @@ import { formatDate } from "@/lib/utils";
 import { jobEndRow, jobRanFor } from "../../../-object/job-end";
 import type { JobDetailInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { ownStatusWord } from "@/lib/status-words";
 
 export function JobDetail() {
   const t = useT();
@@ -309,7 +310,13 @@ export function JobDetail() {
       title={job?.name || name || ""}
       namespace={job?.namespace || namespace}
       createdAt={job?.createdAt}
-      statusBadge={job && <StatusBadge status={job.status} />}
+      statusBadge={
+        job && (
+          <StatusBadge status={job.status}>
+            {ownStatusWord(job.status, t)}
+          </StatusBadge>
+        )
+      }
       badges={
         job?.failure?.reason ? (
           <span className="font-mono text-[11px] text-err">

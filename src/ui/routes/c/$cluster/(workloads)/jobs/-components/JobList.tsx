@@ -13,6 +13,7 @@ import {
   createMemoryColumn,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
+import { ownStatusWord } from "@/lib/status-words";
 import { JobStatusCell } from "./JobStatusCell";
 
 type JobInfoWithMetrics = JobInfo & ResourceMetrics;
@@ -39,10 +40,10 @@ export const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
     id: "status",
     header: columnHeader("columns", "status"),
     meta: {
-      share: (row: JobInfoWithMetrics) =>
-        row.failure?.reason
-          ? `${row.status} ${row.failure.reason}`
-          : row.status,
+      share: (row: JobInfoWithMetrics, t) => {
+        const word = ownStatusWord(row.status, t) ?? row.status;
+        return row.failure?.reason ? `${word} ${row.failure.reason}` : word;
+      },
     },
     cell: ({ row }) => <JobStatusCell job={row.original} />,
   },

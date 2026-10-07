@@ -36,6 +36,8 @@ export interface PeekGroup {
 export interface PeekSummary {
   /** Drives the header badge; leave unset where the API reports no state. */
   status?: string | null;
+  /** The badge's words where the code is one this app composed; absent, the code itself. */
+  statusLabel?: string;
   /**
    * The node whose kubelet wrote that status, where one did.
    *

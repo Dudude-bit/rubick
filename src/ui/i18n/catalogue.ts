@@ -6586,6 +6586,11 @@ export const en = {
     gwProbeTimedOut:
       "timed out after 3s: packets go unanswered; a firewall, or the wrong address",
   },
+  statusWords: {
+    suspended: "Suspended",
+    waiting: "Waiting",
+    active: "Active",
+  },
   statusMeaning: {
     phasePending:
       "accepted by the cluster, but not every container is running yet; usually waiting for a node or an image.",

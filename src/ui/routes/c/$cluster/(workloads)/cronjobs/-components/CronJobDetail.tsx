@@ -11,7 +11,7 @@ import { AlignLeft, Info, Layers2, Play } from "lucide-react";
 import { LogViewer } from "../../../-logs/LogViewer";
 import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { CronStatusBadge } from "./CronStatusBadge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { Unknown } from "@/components/ui/unknown";
@@ -467,11 +467,7 @@ export function CronJobDetail() {
         title={cronJob?.name || name || ""}
         namespace={cronJob?.namespace || namespace}
         createdAt={cronJob?.createdAt}
-        statusBadge={
-          cronJob && (
-            <StatusBadge status={cronJob.suspend ? "Suspended" : "Active"} />
-          )
-        }
+        statusBadge={cronJob && <CronStatusBadge suspend={cronJob.suspend} />}
         onBack={goBack}
         actions={
           <>

@@ -7,7 +7,7 @@ import { useT } from "@/i18n/useT";
 import type { CronJobInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { cronStatusWord } from "@/lib/status-words";
 import { matchCronJobPods, type ResourceMetrics } from "@/lib/metrics";
 import { RealtimeAge } from "@/components/ui/realtime/realtime-age";
 import {
@@ -18,6 +18,7 @@ import {
   createMemoryColumn,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
+import { CronStatusBadge } from "./CronStatusBadge";
 
 type CronJobInfoWithMetrics = CronJobInfo & ResourceMetrics;
 
@@ -42,14 +43,14 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     meta: {
       share: (row: CronJobInfoWithMetrics, t) =>
         row.suspend
-          ? { text: "Suspended", role: "warn" }
+          ? { text: cronStatusWord(true, t), role: "warn" }
           : { text: t("empty", "noLower"), quiet: true },
     },
     // Suspended is the exception worth colouring; "no" is the resting
     // state of every cronjob and stays quiet text, cased like "none".
     cell: ({ row }) =>
       row.original.suspend ? (
-        <StatusBadge status="Suspended" />
+        <CronStatusBadge suspend />
       ) : (
         <span className="text-fg-fnt">
           <T section="empty" k="noLower" />

@@ -1,3 +1,4 @@
+import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
 import { workloadStatus } from "@/lib/workload-status";
 import { WorkloadDiagnosis } from "./peek-workload-diagnosis";
 
@@ -170,6 +171,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
 
   Deployment: source(commands.getDeployment, (deployment, _target, t) => ({
     status: workloadStatus(deployment.rollout),
+    statusLabel: ownStatusWord(workloadStatus(deployment.rollout), t),
     createdAt: deployment.createdAt,
     lead: (
       <WorkloadDiagnosis
@@ -217,6 +219,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
 
   StatefulSet: source(commands.getStatefulset, (set, _target, t) => ({
     status: workloadStatus(set.rollout),
+    statusLabel: ownStatusWord(workloadStatus(set.rollout), t),
     createdAt: set.createdAt,
     lead: (
       <WorkloadDiagnosis
@@ -264,6 +267,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
 
   DaemonSet: source(commands.getDaemonset, (set, _target, t) => ({
     status: workloadStatus(set.rollout),
+    statusLabel: ownStatusWord(workloadStatus(set.rollout), t),
     createdAt: set.createdAt,
     lead: (
       <WorkloadDiagnosis
@@ -308,6 +312,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
 
   Job: source(commands.getJob, (job, _target, t) => ({
     status: job.status,
+    statusLabel: ownStatusWord(job.status, t),
     createdAt: job.createdAt,
     groups: [
       {
@@ -365,6 +370,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
 
   CronJob: source(commands.getCronjob, (cron, _target, t) => ({
     status: cron.suspend ? "Suspended" : "Active",
+    statusLabel: cronStatusWord(cron.suspend, t),
     createdAt: cron.createdAt,
     groups: [
       {

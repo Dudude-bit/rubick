@@ -1,7 +1,10 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 
+import { useLocaleStore } from "@/stores/localeStore";
 import { JobStatusCell } from "./JobStatusCell";
+
+afterEach(() => useLocaleStore.setState({ choice: "en" }));
 
 describe("a Job's status in the list", () => {
   /**
@@ -29,5 +32,26 @@ describe("a Job's status in the list", () => {
     );
     expect(screen.getByText("Failed")).toHaveClass("text-err");
     expect(screen.getByText("DeadlineExceeded")).toBeInTheDocument();
+  });
+});
+
+describe("a Job's status word in Russian", () => {
+  /** "Suspended" is our reading of spec.suspend; fails if it stays English beside a Russian row. */
+  it("words Suspended, which the app composes, and keeps its colour", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(
+      <JobStatusCell job={{ status: "Suspended", failed: 0, failure: null }} />
+    );
+    expect(screen.getByText("Приостановлен")).toBeInTheDocument();
+    expect(screen.queryByText("Suspended")).toBeNull();
+  });
+
+  /** "Failed" is a condition type the cluster wrote; fails if it is translated. */
+  it("keeps Failed as the cluster wrote it", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(
+      <JobStatusCell job={{ status: "Failed", failed: 1, failure: null }} />
+    );
+    expect(screen.getByText("Failed")).toBeInTheDocument();
   });
 });

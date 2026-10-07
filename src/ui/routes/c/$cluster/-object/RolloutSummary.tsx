@@ -6,6 +6,7 @@ import { ROLE_ICON } from "@/lib/status-role";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import { workloadStatusMeaning } from "@/lib/status-meaning";
+import { ownStatusWord } from "@/lib/status-words";
 import {
   rolloutLine,
   workloadStatus,
@@ -80,6 +81,8 @@ export function RolloutBadge({ rollout }: { rollout: Rollout }) {
               .join(". ")
           : workloadStatusMeaning(status, t)
       }
-    />
+    >
+      {ownStatusWord(status, t)}
+    </StatusBadge>
   );
 }

@@ -75,7 +75,7 @@ describe("what the Job page adds to Share", () => {
 
   /** The raw status word is what the badge shows; the file must not translate it into something new. */
   it("takes its status text straight from the cluster's own word", () => {
-    const status = jobStatusOf(job);
+    const status = jobStatusOf(job, t);
     expect(status.text).toBe("Running");
     expect(status.role).toBe("ok");
   });

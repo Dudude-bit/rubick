@@ -15,13 +15,16 @@ import {
   utcMoment,
 } from "@/lib/report-parts";
 import { statusRole } from "@/lib/status-role";
+import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
 import { formatSince } from "@/lib/utils";
 import type { CronJobDetailInfo, JobInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
 
-export function cronJobStatusOf(cronJob: CronJobDetailInfo) {
-  const text = cronJob.suspend ? "Suspended" : "Active";
-  return { text, role: statusRole(text) };
+export function cronJobStatusOf(cronJob: CronJobDetailInfo, t: T) {
+  return {
+    text: cronStatusWord(cronJob.suspend, t),
+    role: statusRole(cronJob.suspend ? "Suspended" : "Active"),
+  };
 }
 
 export function cronJobStatsOf(
@@ -75,7 +78,10 @@ export function jobsSection(
         text: job.name,
         ref: refOf({ kind: "Job", name: job.name, namespace: job.namespace }),
       },
-      { text: job.status || "Unknown", role: statusRole(job.status || "") },
+      {
+        text: ownStatusWord(job.status, t) ?? (job.status || "Unknown"),
+        role: statusRole(job.status || ""),
+      },
       { text: `${job.succeeded}/${job.completions ?? 1}` },
       {
         text: job.createdAt
@@ -122,7 +128,7 @@ export function useCronJobShare(
       const { capturedAt } = frame;
       const jobs_ = jobsSection(jobs, jobsError, capturedAt, t);
       return {
-        status: cronJobStatusOf(cronJob),
+        status: cronJobStatusOf(cronJob, t),
         stats: cronJobStatsOf(cronJob, capturedAt, t),
         sections: [templateContainersSection(cronJob, t), jobs_],
       };

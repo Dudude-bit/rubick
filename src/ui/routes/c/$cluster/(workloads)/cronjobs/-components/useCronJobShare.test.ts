@@ -81,8 +81,8 @@ describe("what the CronJob page adds to Share", () => {
 
   /** Suspended is a fact the badge already shows; the file must not soften it into "active". */
   it("says suspended when the CronJob is suspended", () => {
-    const status = cronJobStatusOf({ ...cronJob, suspend: true });
-    expect(status).toEqual({ text: "Suspended", role: "warn" });
+    const status = cronJobStatusOf({ ...cronJob, suspend: true }, t);
+    expect(status).toEqual({ text: "statusWords.suspended", role: "warn" });
   });
 
   /**

@@ -257,7 +257,9 @@ export function PeekContent({
                   ? silenceNote(silence, t)
                   : statusMeaning(target.kind, summary.status, t)
               }
-            />
+            >
+              {summary.statusLabel}
+            </StatusBadge>
           ) : (
             summary?.status === null && <PhaseBadge phase={null} />
           )}
