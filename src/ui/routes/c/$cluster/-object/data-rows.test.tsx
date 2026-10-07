@@ -10,6 +10,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { DataSection } from "./data-rows";
+import { translate } from "@/i18n";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
@@ -223,15 +224,22 @@ describe("the per-key controls, in the reader's language", () => {
     );
     expect(
       screen.getByText(
-        "тип kubernetes.io/tls объявляет это значение закрытым ключом, такие приложение никогда не показывает"
+        "тип kubernetes.io/tls объявляет это значение закрытым ключом, а такие ключи приложение никогда не показывает"
       )
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "судя по имени, закрытый ключ, такие приложение никогда не показывает"
+        "судя по имени, это закрытый ключ, а такие ключи приложение никогда не показывает"
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/private key/)).toBeNull();
+  });
+
+  /** Lena read "такие приложение никогда не показывает"; fails if the reason loses the noun the "такие" points at. */
+  it("names what the app never shows, in agreement, for a private key", () => {
+    expect(translate("ru", "readings", "withheldPrivateKey")).toBe(
+      "закрытый ключ, а такие ключи приложение никогда не показывает"
+    );
   });
 
   /** A ConfigMap's ca.crt read "1107 символов"; fails if a long count loses its group space. */
