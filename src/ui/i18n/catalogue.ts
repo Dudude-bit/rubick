@@ -301,6 +301,7 @@ export const en = {
     trafficPolicy: "Traffic Policy",
     url: "URL",
     reachableAt: "Reachable at",
+    wouldBeReachableAt: "Would be reachable at",
     controlledBy: "Controlled by",
     objects: "Objects",
     lastFetched: "Last fetched",

@@ -221,3 +221,111 @@ describe("the load balancer row of an Ingress with no address", () => {
     expect(screen.queryByText("pending")).toBeNull();
   });
 });
+
+/** k8s-gui-test/shop as `get_ingress` returns it: class traefik, TLS from shop-tls. */
+const shopTls: IngressInfo = {
+  ...shop,
+  namespace: "k8s-gui-test",
+  className: "traefik",
+  rules: [
+    {
+      host: "shop.k8s-gui.test",
+      paths: [
+        {
+          path: "/",
+          pathType: "Prefix",
+          backendService: "log-demo",
+          backendPort: "80",
+          resourceBackend: null,
+        },
+      ],
+    },
+  ],
+  loadBalancerIps: [],
+  tlsHosts: ["shop.k8s-gui.test"],
+  tlsConfigs: [
+    { hosts: ["shop.k8s-gui.test"], secretName: "shop-tls", isCatchAll: false },
+  ],
+};
+
+/** The cluster's answers when shop-tls does not exist and log-demo serves. */
+function shopCluster(resolved: string | null) {
+  answers.listEvents = [];
+  answers.resolveIngressClass = {
+    requested: "traefik",
+    resolved,
+    controller: resolved && "traefik.io/ingress-controller",
+    viaDefault: false,
+    available: [],
+  };
+  answers.listServiceHealthInputs = {
+    rows: [
+      {
+        namespace: "k8s-gui-test",
+        groups: [
+          {
+            names: ["log-demo"],
+            type: "ClusterIP",
+            selectorless: false,
+            ready: 2,
+            draining: 0,
+            notReady: 0,
+            unrouted: 0,
+          },
+        ],
+      },
+    ],
+    unread: [],
+  };
+  answers.getTlsCertificates = [
+    {
+      secretName: "shop-tls",
+      certificate: null,
+      problem: { says: "noSecret" },
+    },
+  ];
+}
+
+describe("the Access tab of an Ingress the page calls unserved", () => {
+  /**
+   * Sam was offered "Reachable at HTTPS shop.k8s-gui.test/" with an open
+   * button while the Overview said no controller, never will, and shop-tls
+   * did not exist. Fails if the tab stops reading the page's verdict.
+   */
+  it("offers nothing to open, says why, and names the missing Secret", async () => {
+    shopCluster(null);
+    await open("access", shopTls);
+
+    expect(await screen.findByText("Would be reachable at")).toBeTruthy();
+    expect(screen.queryByText("Reachable at")).toBeNull();
+    expect(screen.getByText("no controller")).toBeTruthy();
+    expect(screen.queryByLabelText("Open in Browser")).toBeNull();
+    expect(
+      screen.getAllByText(/No Secret named shop-tls for its TLS/).length
+    ).toBeGreaterThan(0);
+  });
+
+  /** Without TLS in the way, the class alone has to take the open button away. */
+  it("offers nothing to open over plain HTTP either", async () => {
+    shopCluster(null);
+    vendor.terminated = false;
+    await open("access", { ...shopTls, tlsHosts: [], tlsConfigs: [] });
+
+    expect(await screen.findByText("Would be reachable at")).toBeTruthy();
+    expect(screen.getByText("HTTP")).toBeTruthy();
+    expect(screen.queryByLabelText("Open in Browser")).toBeNull();
+  });
+
+  /** A served class with a missing Secret: HTTPS is not served under the certificate the Ingress names. */
+  it("marks HTTPS as broken and offers no open where its Secret is missing", async () => {
+    shopCluster("traefik");
+    await open("access", shopTls);
+
+    expect(
+      await screen.findByText("No Secret named shop-tls for its TLS")
+    ).toBeTruthy();
+    expect(screen.getByText("Reachable at")).toBeTruthy();
+    expect(colourOf(screen.getByText("HTTPS"))).toBe("text-err");
+    expect(screen.queryByLabelText("Open in Browser")).toBeNull();
+  });
+});

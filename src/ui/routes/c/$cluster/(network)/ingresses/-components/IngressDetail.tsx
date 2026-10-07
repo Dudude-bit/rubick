@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { Copy, ExternalLink, Info, Lock, Route, Tag } from "lucide-react";
+import { ExternalLink, Info, Lock, Route, Tag } from "lucide-react";
 
 import {
   Table,
@@ -36,11 +36,13 @@ import { IssuanceSection } from "@/components/object/IssuanceChain";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { IngressHealthView } from "../../../-object/health-views";
 import { connectionsTab } from "../../../-object/connections-tab";
-import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { useOneIngressHealth } from "@/hooks/useIngressHealth";
 import { useResourceDetail } from "@/hooks";
 import { Link } from "@tanstack/react-router";
 import { useConnections } from "@/hooks/useConnections";
 import { useIngressShare } from "./useIngressShare";
+import { IngressAccess } from "./IngressAccess";
+import { generateAccessUrls } from "./access-urls";
 import { useProxyBehind } from "@/hooks/useServiceRoutes";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
@@ -54,97 +56,11 @@ import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
-import type { EventFilters, IngressInfo, IngressRule } from "@/generated/types";
+import type { EventFilters, IngressInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
-
-interface AccessUrl {
-  fullUrl: string;
-  host: string;
-  displayHost: string;
-  path: string;
-  backendService: string;
-  backendPort: string;
-  resourceBackend: string | null;
-  /** `null` where the controller holding the certificate could not tell. */
-  isHttps: boolean | null;
-  /** `true` when TLS covers the host only through a catch-all entry. */
-  viaCatchAll: boolean;
-}
-
-function generateAccessUrls(
-  rules: IngressRule[],
-  tlsHosts: string[],
-  hasCatchAllTls: boolean,
-  /** What a wildcard rule reads as in the host column. */
-  allHosts: string,
-  /**
-   * What a cloud controller says about a host `spec.tls` is silent on. All
-   * three managed clouds keep the certificate off the Ingress — an ACM ARN,
-   * a `ManagedCertificate`, one installed on an Application Gateway — so
-   * without this every HTTPS site on a managed cluster was offered as
-   * `http://`. `null` where it could not tell.
-   */
-  vendorTls: (host: string) => boolean | null
-): AccessUrl[] {
-  const urls: AccessUrl[] = [];
-
-  for (const rule of rules) {
-    const isWildcard = rule.host === "*" || !rule.host;
-    // A wildcard entry in `spec.tls` serves this host; comparing literally
-    // handed the reader an http:// URL for a host that refuses it.
-    const explicit = covers(tlsHosts, rule.host);
-    const isHttps = explicit || hasCatchAllTls || vendorTls(rule.host);
-    const scheme = isHttps === null ? "" : isHttps ? "https://" : "http://";
-    const actualHost = isWildcard ? "" : rule.host;
-
-    for (const path of rule.paths) {
-      urls.push({
-        fullUrl: actualHost
-          ? `${scheme}${actualHost}${path.path}`
-          : `${scheme}<host>${path.path}`,
-        host: rule.host,
-        displayHost: isWildcard ? allHosts : rule.host,
-        path: path.path,
-        backendService: path.backendService,
-        backendPort: path.backendPort,
-        resourceBackend: path.resourceBackend,
-        isHttps,
-        viaCatchAll: isHttps === true && !explicit,
-      });
-    }
-  }
-
-  return urls;
-}
-
-const ACCESS_ROW =
-  "grid grid-cols-[44px_minmax(0,1fr)_minmax(0,190px)_50px] items-baseline gap-2.5 px-1.5 py-[3px] text-xs";
-
-function IconAction({
-  label,
-  icon: Icon,
-  onClick,
-}: {
-  label: string;
-  icon: typeof Copy;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-label={label}
-      title={label}
-      className="flex h-5 w-5 items-center justify-center rounded text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
-    >
-      <Icon className="h-3.5 w-3.5" />
-    </button>
-  );
-}
 
 export function IngressDetail() {
   const t = useT();
-  const copyToClipboard = useCopyToClipboard();
   const {
     name,
     namespace,
@@ -236,7 +152,6 @@ export function IngressDetail() {
           )
         ? "unknown"
         : "no";
-  const plainHttp = accessUrls.filter((url) => url.isHttps === false).length;
 
   const connections = useConnections(ResourceType.Ingress, name, namespace);
   const tlsSecretNames = tlsConfigs.flatMap((config) =>
@@ -259,6 +174,7 @@ export function IngressDetail() {
     enabled: !!ingress,
   });
   const address = ingressAddressOf({ loadBalancerIps }, controller);
+  const health = useOneIngressHealth(ingress);
 
   // The soonest expiry across every certificate this Ingress serves: one
   // Ingress with four hosts has four certificates, and the badge can only
@@ -395,94 +311,7 @@ export function IngressDetail() {
       label: "Access",
       glyph: viewGlyph(ExternalLink),
       content: (
-        <Section>
-          <SectionHeader
-            title={t("columns", "reachableAt")}
-            count={
-              plainHttp > 0
-                ? `${t("count", "paths", { n: accessUrls.length })} · ${t(
-                    "empty",
-                    "overPlainHttp",
-                    { n: plainHttp }
-                  )}`
-                : t("count", "paths", { n: accessUrls.length })
-            }
-          />
-          {accessUrls.length === 0 ? (
-            <p className="text-xs text-fg-fnt">
-              {t("empty", "noRulesRoutesNothing")}
-            </p>
-          ) : (
-            <div>
-              {accessUrls.map((url) => (
-                <div key={`${url.host}${url.path}`} className={ACCESS_ROW}>
-                  <span
-                    className={cn(
-                      "text-[11px] font-medium",
-                      url.isHttps === null
-                        ? TLS_NOT_CHECKED_TONE
-                        : url.isHttps
-                          ? "text-fg-fnt"
-                          : "text-warn"
-                    )}
-                    title={
-                      url.isHttps === null
-                        ? t("empty", "tlsNotChecked")
-                        : undefined
-                    }
-                  >
-                    {url.isHttps === null
-                      ? "?"
-                      : url.isHttps
-                        ? "HTTPS"
-                        : "HTTP"}
-                  </span>
-                  <span className="min-w-0 break-all font-mono text-fg">
-                    <span className="text-fg-mut">{url.displayHost}</span>
-                    {url.path}
-                  </span>
-                  <span className="min-w-0 truncate text-fg-fnt">
-                    {url.resourceBackend ? (
-                      <span className="font-mono">{url.resourceBackend}</span>
-                    ) : url.backendService ? (
-                      <>
-                        <ResourceRef
-                          kind={ResourceType.Service}
-                          name={url.backendService}
-                          namespace={ingress?.namespace}
-                          showKind={false}
-                        />
-                        <span className="font-mono">:{url.backendPort}</span>
-                      </>
-                    ) : (
-                      t("empty", "noBackend")
-                    )}
-                  </span>
-                  <span className="flex justify-end gap-0.5">
-                    <IconAction
-                      label={t("action", "copyUrl")}
-                      icon={Copy}
-                      onClick={() =>
-                        copyToClipboard(
-                          url.host && url.host !== "*" ? url.fullUrl : url.path
-                        )
-                      }
-                    />
-                    {url.host && url.host !== "*" && url.isHttps !== null && (
-                      <IconAction
-                        label={t("action", "openInBrowser")}
-                        icon={ExternalLink}
-                        onClick={() =>
-                          window.open(url.fullUrl, "_blank", "noreferrer")
-                        }
-                      />
-                    )}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Section>
+        <IngressAccess ingress={ingress} urls={accessUrls} health={health} />
       ),
     },
     connectionsTab(connections, t, deliveryQuery),

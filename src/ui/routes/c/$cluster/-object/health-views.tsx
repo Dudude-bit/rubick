@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -8,18 +7,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useConnections } from "@/hooks/useConnections";
-import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
-import { useTlsCertificates } from "@/hooks/useTlsCertificates";
+import { useOneIngressHealth } from "@/hooks/useIngressHealth";
 import { useT } from "@/i18n/useT";
-import { commands } from "@/lib/commands";
-import {
-  ingressHealthOf,
-  ingressHealthWords,
-  secretNamesOf,
-  type IngressInputs,
-} from "@/lib/ingress-health";
-import { knownOf } from "@/lib/known";
-import { queryKeys } from "@/lib/query-keys";
+import { ingressHealthWords, type IngressInputs } from "@/lib/ingress-health";
 import {
   healthFromConnections,
   serviceHealthWords,
@@ -96,20 +86,8 @@ export function IngressHealthView({
   ingress: IngressInputs["ingress"];
 }) {
   const t = useT();
-  const binding = useQuery({
-    queryKey: queryKeys.ingressClass(ingress.className),
-    queryFn: () => commands.resolveIngressClass(ingress.className ?? null),
-  });
-  const backing = useServiceHealthInputs([ingress.namespace]);
-  const certificates = useTlsCertificates(
-    ingress.namespace,
-    secretNamesOf(ingress)
-  );
-  const health = ingressHealthOf({
-    ingress,
-    binding: knownOf(binding),
-    backing: backing.in(ingress.namespace),
-    certificates,
-  });
-  return <VerdictBadge verdict={ingressHealthWords(health, t)} />;
+  const health = useOneIngressHealth(ingress);
+  return health ? (
+    <VerdictBadge verdict={ingressHealthWords(health, t)} />
+  ) : null;
 }

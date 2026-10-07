@@ -1,18 +1,26 @@
 import { useMemo } from "react";
-import { useQueries, type UseQueryResult } from "@tanstack/react-query";
+import {
+  useQueries,
+  useQuery,
+  type UseQueryResult,
+} from "@tanstack/react-query";
 
 import type {
   IngressClassBinding,
   IngressHealthInput,
   TlsCertificate,
 } from "@/generated/types";
-import type { ServiceHealthRead } from "@/hooks/useServiceHealthInputs";
-import { certificatesOf } from "@/hooks/useTlsCertificates";
+import {
+  useServiceHealthInputs,
+  type ServiceHealthRead,
+} from "@/hooks/useServiceHealthInputs";
+import { certificatesOf, useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
 import {
   ingressHealthOf,
   secretNamesOf,
   type IngressHealth,
+  type IngressInputs,
 } from "@/lib/ingress-health";
 import { knownOf } from "@/lib/known";
 import { queryKeys } from "@/lib/query-keys";
@@ -90,4 +98,32 @@ export function useIngressHealth(
     },
     [bindings, classes, backing, secrets, certificates]
   );
+}
+
+/**
+ * One Ingress's verdict, for its page, its peek and its Access tab: the same
+ * reads as the list, made for the one object.
+ */
+export function useOneIngressHealth(
+  ingress: IngressInputs["ingress"] | undefined
+): IngressHealth | undefined {
+  const binding = useQuery({
+    queryKey: queryKeys.ingressClass(ingress?.className),
+    queryFn: () => commands.resolveIngressClass(ingress?.className ?? null),
+    enabled: !!ingress,
+  });
+  const backing = useServiceHealthInputs(ingress ? [ingress.namespace] : [], {
+    enabled: !!ingress,
+  });
+  const certificates = useTlsCertificates(
+    ingress?.namespace,
+    ingress ? secretNamesOf(ingress) : []
+  );
+  if (!ingress) return undefined;
+  return ingressHealthOf({
+    ingress,
+    binding: knownOf(binding),
+    backing: backing.in(ingress.namespace),
+    certificates,
+  });
 }

@@ -272,6 +272,7 @@ export const ru: Catalogue = {
     trafficPolicy: "Политика трафика",
     url: "URL",
     reachableAt: "Доступен по",
+    wouldBeReachableAt: "Был бы доступен по",
     controlledBy: "Контролируется",
     objects: "Объекты",
     lastFetched: "Последняя загрузка",

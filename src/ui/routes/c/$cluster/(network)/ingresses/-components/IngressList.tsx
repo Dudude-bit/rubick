@@ -14,6 +14,7 @@ import { useIngressTls } from "@/hooks/useIngressTls";
 import { useIngressHealth } from "@/hooks/useIngressHealth";
 import { useServiceHealthInputs } from "@/hooks/useServiceHealthInputs";
 import { ingressHealthWords } from "@/lib/ingress-health";
+import { openExternal } from "@/lib/open-external";
 import type { Verdict } from "@/lib/service-health";
 import { VerdictBadge } from "../../../-object/health-views";
 import { hrefOf, objectLink } from "@/lib/links";
@@ -277,6 +278,16 @@ export function IngressList() {
   const healthOfRow = useIngressHealth(listed.data?.rows, backing);
   const healthOf = (ingress: IngressInfo): Verdict =>
     ingressHealthWords(healthOfRow(ingress), t);
+  // Nothing answers at an Ingress no controller serves, so nothing to open.
+  const unservedWhy = useCallback(
+    (ingress: IngressInfo): string | undefined => {
+      const health = healthOfRow(ingress);
+      return health.problems.some((problem) => problem.kind === "noController")
+        ? (ingressHealthWords(health, t).reason ?? undefined)
+        : undefined;
+    },
+    [healthOfRow, t]
+  );
   const vendorFor = useCallback(
     (ingress: IngressInfo) => vendorTlsAnswer(ingress, vendorTls, t),
     [t, vendorTls]
@@ -296,9 +307,10 @@ export function IngressList() {
         label: t("action", "openInBrowser"),
         onClick: (item) => {
           const url = ingressOpenUrl(item, vendorFor(item));
-          if (url) window.open(url, "_blank", "noreferrer");
+          if (url) void openExternal(url, new URL(url).host, t);
         },
         hidden: (item) => !ingressOpenUrl(item, vendorFor(item)),
+        reason: unservedWhy,
       },
       {
         icon: Trash2,
@@ -307,7 +319,7 @@ export function IngressList() {
         variant: "destructive",
       },
     ],
-    [t, navigate, vendorFor]
+    [t, navigate, vendorFor, unservedWhy]
   );
 
   return (
