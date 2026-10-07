@@ -7,6 +7,8 @@
 
 use std::collections::BTreeMap;
 
+use serde::{Deserialize, Serialize};
+
 use super::Diagnostics;
 use crate::shell::ShellEnvReport;
 
@@ -23,13 +25,26 @@ const XDG_BASES: [&str; 4] = [
 /// `$HOME` alone is not enough: a sandbox, `sudo -E` or a snap moves it, and
 /// the search path still names `/home/<them>`; an XDG base outside the home
 /// directory puts the config and the log somewhere `~` never covers.
-pub struct Identity {
+///
+/// The same answer reaches every other screen that prints a path:
+/// `hidePath` in `src/ui/lib/hide-paths.ts` applies it, held to this one by
+/// `src/contracts/path-redaction-conformance.json`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PathIdentity {
     /// Directory prefixes, longest first, each with its stand-in.
-    roots: Vec<(String, String)>,
+    roots: Vec<PathRoot>,
     user: Option<String>,
 }
 
-impl Identity {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PathRoot {
+    root: String,
+    stand_in: String,
+}
+
+impl PathIdentity {
     #[must_use]
     pub fn of_this_machine() -> Self {
         let var = |name: &str| std::env::var(name).ok().filter(|v| !v.is_empty());
@@ -58,6 +73,10 @@ impl Identity {
         roots.extend(homes.iter().map(|home| (home.clone(), "~".to_string())));
         roots.sort_by(|a, b| b.0.len().cmp(&a.0.len()).then_with(|| a.0.cmp(&b.0)));
         roots.dedup_by(|a, b| a.0 == b.0);
+        let roots = roots
+            .into_iter()
+            .map(|(root, stand_in)| PathRoot { root, stand_in })
+            .collect();
         Self { roots, user }
     }
 
@@ -67,7 +86,7 @@ impl Identity {
     #[must_use]
     pub fn hide(&self, text: &str) -> String {
         let mut out = text.to_string();
-        for (root, stand_in) in &self.roots {
+        for PathRoot { root, stand_in } in &self.roots {
             out = replace_whole(&out, root, stand_in, |_| true);
         }
         if let Some(user) = &self.user {
@@ -117,10 +136,10 @@ fn replace_whole(
 /// Replace every identifying string in the report.
 #[must_use]
 pub fn redacted(d: Diagnostics) -> Diagnostics {
-    redacted_as(d, &Identity::of_this_machine())
+    redacted_as(d, &PathIdentity::of_this_machine())
 }
 
-fn redacted_as(mut d: Diagnostics, identity: &Identity) -> Diagnostics {
+fn redacted_as(mut d: Diagnostics, identity: &PathIdentity) -> Diagnostics {
     // Longest first: a context named `prod` is a substring of `prod-eu`, and
     // replacing the short one first would leave `context-1-eu` behind.
     let mut names: Vec<String> = d.contexts.iter().map(|c| c.context.clone()).collect();
@@ -354,15 +373,15 @@ mod tests {
 
     /// Marco's machine: `$HOME` is `/home/marco`, and his search path, his
     /// config file and his log all live under it.
-    fn marco() -> Identity {
-        Identity::new(Some("/home/marco".into()), Some("marco".into()), Vec::new())
+    fn marco() -> PathIdentity {
+        PathIdentity::new(Some("/home/marco".into()), Some("marco".into()), Vec::new())
     }
 
     /// Lena's run: `$HOME` and the XDG bases point into a sandbox while the
     /// search path still names the login's real home. Each printed path
     /// stayed raw on screen and in the copied report.
-    fn sandboxed() -> Identity {
-        Identity::new(
+    fn sandboxed() -> PathIdentity {
+        PathIdentity::new(
             Some("/tmp/rubick-fix/live/lena/home".into()),
             Some("belliel".into()),
             vec![
@@ -446,11 +465,29 @@ mod tests {
         );
     }
 
+    /// Would let the Helm page or Settings print a path the copied report
+    /// hides: both sides answer the shared corpus.
+    #[test]
+    fn a_path_hides_as_the_shared_corpus_says() {
+        const CORPUS: &str = include_str!("../../../contracts/path-redaction-conformance.json");
+        let corpus: serde_json::Value = serde_json::from_str(CORPUS).expect("corpus parses");
+        for case in corpus["cases"].as_array().expect("cases") {
+            let identity: PathIdentity =
+                serde_json::from_value(case["identity"].clone()).expect("identity");
+            let text = case["text"].as_str().expect("text");
+            assert_eq!(
+                identity.hide(text),
+                case["hidden"].as_str().unwrap(),
+                "{text}"
+            );
+        }
+    }
+
     /// The login is hidden as a path segment, never inside a longer name or
     /// in prose: a user `dev` must leave "dev cluster" and `devbox` alone.
     #[test]
     fn the_login_is_hidden_only_where_it_names_a_directory() {
-        let dev = Identity::new(Some("/home/dev".into()), Some("dev".into()), Vec::new());
+        let dev = PathIdentity::new(Some("/home/dev".into()), Some("dev".into()), Vec::new());
         assert_eq!(
             dev.hide("/data/dev/.kube/config"),
             "/data/<user>/.kube/config"

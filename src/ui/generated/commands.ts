@@ -90,6 +90,7 @@ import type {
   NodeMetricsResponse,
   ObjectMetadata,
   OwnRules,
+  PathIdentity,
   PerfSnapshot,
   PersistentVolumeClaimInfo,
   PersistentVolumeInfo,
@@ -745,6 +746,10 @@ export async function collectDiagnostics(
   redact: boolean
 ): Promise<Diagnostics> {
   return invoke<Diagnostics>("collect_diagnostics", { redact });
+}
+
+export async function pathIdentity(): Promise<PathIdentity> {
+  return invoke<PathIdentity>("path_identity");
 }
 
 export async function listPods(filters: PodFilters | null): Promise<PodInfo[]> {

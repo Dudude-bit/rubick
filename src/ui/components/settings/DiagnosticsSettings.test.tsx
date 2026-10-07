@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { Diagnostics } from "@/generated/types";
+import { usePrivacyStore } from "@/stores/privacyStore";
 
 const collectDiagnostics = vi.fn();
 vi.mock("@/lib/commands", () => ({
@@ -18,6 +19,8 @@ vi.mock("@tauri-apps/plugin-clipboard-manager", () => ({
 }));
 
 const { DiagnosticsSettings } = await import("./DiagnosticsSettings");
+
+beforeEach(() => usePrivacyStore.setState({ hidePaths: true }));
 
 const empty: Diagnostics = {
   shell: { outcome: "imported", shell: "/bin/zsh", adopted: 3, removed: 0 },
@@ -73,6 +76,21 @@ describe("DiagnosticsSettings", () => {
 
     await user.click(screen.getByRole("checkbox", { name: /redact/i }));
     await waitFor(() => expect(collectDiagnostics).toHaveBeenCalledWith(false));
+  });
+
+  /**
+   * The box hid paths in this report only, so the Helm page beside it still
+   * printed Lena's home. Fails if the box stops being the one every other
+   * screen reads.
+   */
+  it("is the box every screen that prints a path follows", async () => {
+    const user = userEvent.setup();
+    renderPane();
+    expect(
+      screen.getByText(/Applies to every path from this computer/)
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: /redact/i }));
+    expect(usePrivacyStore.getState().hidePaths).toBe(false);
   });
 
   it("copies a report that names the version", async () => {

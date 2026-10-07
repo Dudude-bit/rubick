@@ -4542,6 +4542,8 @@ export const en = {
     diagnosticsCopied: "Diagnostics copied",
     copyDiagnostics: "Copy diagnostics",
     redactNamesAndPaths: "Redact names and paths",
+    redactEverywhere:
+      "Applies to every path from this computer the app shows, not only this report: your home folder reads ~ and your login name <user>.",
     diagnosticsAllClear:
       "No problems found with the kubeconfig, the settings or the plugins your contexts need. A tool or directory shown as not found below is only absent, not a fault. The environment below is what this app sees when it spawns a credential plugin, which is not always what your shell sees.",
     searchPathBlock: {

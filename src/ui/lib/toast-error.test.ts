@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 const { toast } = vi.hoisted(() => ({ toast: vi.fn() }));
 vi.mock("@/components/ui/use-toast", () => ({ toast }));
 
+import { usePrivacyStore } from "@/stores/privacyStore";
 import { toastError } from "./toast-error";
 
 const SOURCES = import.meta.glob<string>(
@@ -76,6 +77,31 @@ describe("a failure shown to the reader", () => {
       title: "Could not delete",
       description:
         'pods "web" is forbidden: User "kirya" cannot delete resource "pods"',
+      variant: "destructive",
+    });
+  });
+
+  /**
+   * Pinning a kubeconfig that would not parse toasted the backend's words
+   * with the whole home path in them. Fails if an error toast skips the
+   * Redact names and paths box every other screen follows.
+   */
+  it("hides the home in the server's words while Redact names and paths is on", () => {
+    usePrivacyStore.setState({
+      hidePaths: true,
+      identity: {
+        roots: [{ root: "/home/marco", standIn: "~" }],
+        user: "marco",
+      },
+    });
+    toastError(
+      "Could not use that kubeconfig",
+      "Failed to read kubeconfig from /home/marco/work/.kube/config: line 6"
+    );
+    usePrivacyStore.setState({ identity: null });
+    expect(toast).toHaveBeenCalledWith({
+      title: "Could not use that kubeconfig",
+      description: "Failed to read kubeconfig from ~/work/.kube/config: line 6",
       variant: "destructive",
     });
   });

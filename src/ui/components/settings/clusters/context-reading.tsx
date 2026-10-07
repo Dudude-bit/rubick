@@ -5,6 +5,7 @@ import type { en } from "@/i18n/catalogue";
 import { T } from "@/i18n/T";
 import type { T as Translate } from "@/i18n/useT";
 import { useT } from "@/i18n/useT";
+import { useShownPath } from "@/lib/hide-paths";
 
 /**
  * What a context row is allowed to claim, read from the file and from PATH.
@@ -97,6 +98,27 @@ function Sentence({
   );
 }
 
+// oxlint-disable-next-line react-refresh/only-export-components
+function LocalPath({ path }: { path: string }) {
+  return <span className={MONO}>{useShownPath()(path)}</span>;
+}
+
+// oxlint-disable-next-line react-refresh/only-export-components
+function Titled({
+  command,
+  children,
+}: {
+  command: string | null;
+  children: ReactNode;
+}) {
+  const show = useShownPath();
+  return (
+    <span className={MONO} title={command ? show(command) : undefined}>
+      {children}
+    </span>
+  );
+}
+
 /**
  * How this context proves who it is, in one sentence.
  *
@@ -112,20 +134,20 @@ export function describeAuth(context: ContextInfo): ReactNode {
       const binary = execBinary(context.exec_command);
       return (
         <Sentence k="authRunsPlugin" token="{plugin}">
-          <span className={MONO} title={context.exec_command ?? undefined}>
+          <Titled command={context.exec_command}>
             {binary ? (
               binaryLabel(binary)
             ) : (
               <T section="settings" k="aCredentialPlugin" />
             )}
-          </span>
+          </Titled>
         </Sentence>
       );
     }
     case "clientCertificate":
       return auth.source ? (
         <Sentence k="authClientCertFrom" token="{source}">
-          <span className={MONO}>{auth.source}</span>
+          <LocalPath path={auth.source} />
         </Sentence>
       ) : (
         <T section="settings" k="authClientCertEmbedded" />
@@ -133,7 +155,7 @@ export function describeAuth(context: ContextInfo): ReactNode {
     case "token":
       return auth.source ? (
         <Sentence k="authTokenFrom" token="{source}">
-          <span className={MONO}>{auth.source}</span>
+          <LocalPath path={auth.source} />
         </Sentence>
       ) : (
         <T section="settings" k="authTokenInFile" />

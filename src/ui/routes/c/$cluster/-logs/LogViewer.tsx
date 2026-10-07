@@ -6,6 +6,7 @@ import { useCapabilityState } from "@/integrations";
 import type { LogScope, UsageRange } from "@/integrations";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
+import { shownPath } from "@/lib/hide-paths";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 
 import { initialFocus, type FocusReason } from "./focus";
@@ -785,7 +786,8 @@ export function LogViewer({
       }
     }
     const notice = downloadNotice(saved, refused, t);
-    if (notice) toast(notice);
+    if (notice)
+      toast({ ...notice, description: shownPath(notice.description) });
   }, [
     containers,
     lanes,

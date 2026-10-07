@@ -25,6 +25,7 @@ import { hostOsFromUserAgent, setHostOs } from "@/lib/platform";
 import { markStartup } from "@/lib/startup";
 import { loadLocale } from "@/i18n";
 import { currentLocale, useLocaleStore } from "@/stores/localeStore";
+import { loadPathIdentity } from "@/stores/privacyStore";
 import { applyTheme, cachedTheme } from "@/lib/theme";
 import { shareStructure } from "@/lib/watched-rows";
 
@@ -110,4 +111,7 @@ const speak = () => {
 speak();
 useLocaleStore.subscribe(speak);
 
-loadLocale(currentLocale()).then(render, render);
+Promise.all([loadLocale(currentLocale()), loadPathIdentity()]).then(
+  render,
+  render
+);

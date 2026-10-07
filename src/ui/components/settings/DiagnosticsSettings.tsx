@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { keepPreviousData } from "@tanstack/react-query";
 import { copyText } from "@/lib/host";
 import { ClipboardCopy } from "lucide-react";
@@ -13,6 +12,7 @@ import { FindingsList } from "./diagnostics/FindingsList";
 import { PerformancePanel } from "./diagnostics/PerformancePanel";
 import { asMarkdown } from "./diagnostics/report";
 import { useT } from "@/i18n/useT";
+import { usePrivacyStore } from "@/stores/privacyStore";
 
 /**
  * What the app can see of this machine.
@@ -24,7 +24,8 @@ import { useT } from "@/i18n/useT";
  */
 export function DiagnosticsSettings() {
   const t = useT();
-  const [redact, setRedact] = useState(true);
+  const redact = usePrivacyStore((state) => state.hidePaths);
+  const setRedact = usePrivacyStore((state) => state.setHidePaths);
   const { toast } = useToast();
 
   // The other read stays on screen while this one loads, so the sections
@@ -67,6 +68,9 @@ export function DiagnosticsSettings() {
           {t("settings", "redactNamesAndPaths")}
         </label>
       </div>
+      <p className="mt-1.5 text-[11px] text-fg-fnt">
+        {t("settings", "redactEverywhere")}
+      </p>
 
       <PerformancePanel />
     </div>

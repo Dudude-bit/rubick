@@ -9,6 +9,7 @@ import {
 import { Terminal } from "./Terminal";
 import { commands } from "@/lib/commands";
 import { useT } from "@/i18n/useT";
+import { useShownPath } from "@/lib/hide-paths";
 
 export interface AuthTerminalProps {
   open: boolean;
@@ -35,6 +36,7 @@ export function AuthTerminal({
   replay,
 }: AuthTerminalProps) {
   const t = useT();
+  const show = useShownPath();
   const handleClose = useCallback(() => {
     // Cancel the auth session when user closes the dialog
     commands.cancelAuthSession(authSessionId).catch((e) => {
@@ -61,7 +63,7 @@ export function AuthTerminal({
               <>
                 <br />
                 {t("action", "commandLabel")}{" "}
-                <span className="font-mono text-xs">{command}</span>
+                <span className="font-mono text-xs">{show(command)}</span>
               </>
             )}
           </DialogDescription>

@@ -1424,6 +1424,16 @@ export type PodFilters = {
   nodeName: string | null;
 } & ResourceFilters;
 
+export interface PathIdentity {
+  roots: PathRoot[];
+  user: string | null;
+}
+
+export interface PathRoot {
+  root: string;
+  standIn: string;
+}
+
 export interface Diagnostics {
   shell: ShellEnvReport;
   searchPathIsReal: boolean;

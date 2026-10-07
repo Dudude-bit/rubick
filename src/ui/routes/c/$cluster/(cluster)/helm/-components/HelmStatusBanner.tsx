@@ -1,6 +1,7 @@
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { useShownPath } from "@/lib/hide-paths";
 import { cn } from "@/lib/utils";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -24,6 +25,7 @@ export function HelmStatusBanner({
   const t = useT();
   const openSettings = useSettingsStore((state) => state.openSettings);
   const { helm, isChecking, checkHelmAvailability } = useDependenciesStore();
+  const show = useShownPath();
 
   if (!helm || helm.available) {
     return null;
@@ -65,11 +67,11 @@ export function HelmStatusBanner({
         {helm.searchedPaths.length > 0 ? (
           <p className="text-fg-fnt">
             {t("empty", "helmLookedIn", {
-              paths: helm.searchedPaths.join(", "),
+              paths: show(helm.searchedPaths.join(", ")),
             })}
           </p>
         ) : (
-          helm.error && <p className="text-fg-fnt">{helm.error}</p>
+          helm.error && <p className="text-fg-fnt">{show(helm.error)}</p>
         )}
         <p className="flex items-center gap-3 pt-0.5">
           <button

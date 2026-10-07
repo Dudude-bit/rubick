@@ -202,6 +202,7 @@ fn main() {
             commands::rbac::list_cluster_role_bindings,
             commands::binaries::locate_binaries,
             commands::diagnostics::collect_diagnostics,
+            commands::diagnostics::path_identity,
             commands::app_events::app_event_types,
             commands::perf::perf_set_recording,
             commands::perf::perf_counters,

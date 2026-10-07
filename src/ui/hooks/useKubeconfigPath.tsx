@@ -17,6 +17,7 @@ import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/components/ui/use-toast";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
+import { shownPath } from "@/lib/hide-paths";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import { toastError } from "@/lib/toast-error";
@@ -76,7 +77,7 @@ export function useKubeconfigPath() {
         title: t("settings", "kubeconfigRestored"),
         description:
           list.length > 0
-            ? list.join(", ")
+            ? shownPath(list.join(", "))
             : t("settings", "backToDefaultLookup"),
       });
     } catch (error) {
@@ -103,7 +104,7 @@ export function useKubeconfigPath() {
       toast({
         title: t("settings", "kubeconfigUpdated"),
         description: context.previous
-          ? t("settings", "wasPath", { path: context.previous })
+          ? t("settings", "wasPath", { path: shownPath(context.previous) })
           : t("settings", "wasDefaultLookup"),
         action: undo(context.previous),
       });
@@ -124,7 +125,9 @@ export function useKubeconfigPath() {
         title: t("settings", "kubeconfigUpdated"),
         description:
           context.previous.length > 0
-            ? t("settings", "wasPath", { path: context.previous.join(", ") })
+            ? t("settings", "wasPath", {
+                path: shownPath(context.previous.join(", ")),
+              })
             : t("settings", "wasDefaultLookup"),
         action: undo(paths.length === 0 ? null : context.previous),
       });

@@ -4,6 +4,7 @@ import { FileText, FolderOpen, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import type { KubeconfigSource } from "@/generated/types";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
+import { useShownPath } from "@/lib/hide-paths";
 import { useSettingSearchMatch } from "../settings-search";
 import { cn } from "@/lib/utils";
 import { useT, type T } from "@/i18n/useT";
@@ -39,6 +40,7 @@ export function SourceLine() {
   // of the two knobs put it there. Only a pinned file can be un-pinned
   // here; the app cannot unset somebody's environment variable.
   const files = source?.candidates ?? [];
+  const show = useShownPath();
 
   const provenance = describeProvenance(source, t);
   const visible = useSettingSearchMatch(
@@ -75,7 +77,7 @@ export function SourceLine() {
           <Input
             autoFocus
             aria-label={t("settings", "kubeconfigFile")}
-            placeholder={primary?.path ?? "/path/to/kubeconfig"}
+            placeholder={show(primary?.path ?? "/path/to/kubeconfig")}
             value={typed}
             disabled={busy}
             // Pre-filled with the path in force so it can be corrected,
@@ -110,7 +112,7 @@ export function SourceLine() {
       ) : (
         <>
           <span className="font-mono text-xs text-fg-mid">
-            {primary?.path ?? t("settings", "noKubeconfig")}
+            {primary ? show(primary.path) : t("settings", "noKubeconfig")}
           </span>
           <span className="text-[11px] text-fg-fnt">
             {contexts != null && (
@@ -124,7 +126,7 @@ export function SourceLine() {
             </span>
           )}
           {source?.error && (
-            <span className="text-[11px] text-err">{source.error}</span>
+            <span className="text-[11px] text-err">{show(source.error)}</span>
           )}
           <span className="ml-auto flex items-baseline gap-3 text-[11px]">
             {kubeconfig.overridePath && (
@@ -169,7 +171,7 @@ export function SourceLine() {
                 className="group flex items-baseline gap-2 rounded px-1 py-0.5 hover:bg-hover"
               >
                 <span className="font-mono text-[11px] text-fg-mid">
-                  {path}
+                  {show(path)}
                 </span>
                 <span className="text-[11px] text-fg-fnt">
                   {file && file.contexts.length > 0

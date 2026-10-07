@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
+import { shownPath } from "@/lib/hide-paths";
 import { useT } from "@/i18n/useT";
 import {
   errorToShow,
@@ -81,7 +82,7 @@ export function ErrorProvider({ children }: Props) {
       }
 
       // The log keeps the command's name; the reader gets the server's words.
-      emitToast(title, errorToShow(error));
+      emitToast(title, shownPath(errorToShow(error)));
 
       return normalized;
     },

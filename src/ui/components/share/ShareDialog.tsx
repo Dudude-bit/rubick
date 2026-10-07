@@ -24,6 +24,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { errorToShow } from "@/lib/error-utils";
+import { shownPath } from "@/lib/hide-paths";
 import {
   carriesLogLines,
   renderReport,
@@ -259,7 +260,7 @@ export function ShareDialog({
       await commands.writeTextFile(destination, html);
       onOpenChange(false);
       toast({
-        title: t("share", "saved", { path: destination }),
+        title: t("share", "saved", { path: shownPath(destination) }),
       });
     } catch (error) {
       toastError(t("share", "saveFailed"), error);

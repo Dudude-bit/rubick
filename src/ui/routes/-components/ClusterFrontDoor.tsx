@@ -16,6 +16,7 @@ import {
 import { useClusterFilter, type ClusterFilter } from "@/hooks/useClusterFilter";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
 import { useOpenCluster } from "@/hooks/useOpenCluster";
+import { useShownPath } from "@/lib/hide-paths";
 import { commands } from "@/lib/commands";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { connectingTo, failedAt, useClusterStore } from "@/stores/clusterStore";
@@ -257,13 +258,14 @@ function SourceLine({
   kubeconfig: ReturnType<typeof useKubeconfigPath>;
 }) {
   const t = useT();
+  const show = useShownPath();
   const read = readFile(kubeconfig.source);
 
   return (
     <div className="mt-5 flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-hair pt-2.5 text-[11px] text-fg-fnt">
       <span>{t("cluster", "readFrom")}</span>
       <span className="break-all font-mono text-fg-mut">
-        {read ?? t("cluster", "defaultLookup")}
+        {read ? show(read) : t("cluster", "defaultLookup")}
       </span>
       <Act
         onClick={() => void kubeconfig.choose()}
@@ -306,6 +308,7 @@ function NoClusters({
   const counts = source?.counts;
   // A file that did not parse was never read, whatever is on disk.
   const unreadable = Boolean(source?.error);
+  const show = useShownPath();
 
   if (found) {
     return (
@@ -330,7 +333,7 @@ function NoClusters({
         </div>
         <Machine>
           <span>{t("cluster", "wasRead")}</span>
-          <Mono>{readFile(source)}</Mono>
+          <Mono>{show(readFile(source) ?? "")}</Mono>
           {counts && (
             <span>
               · {t("count", "contexts", { n: counts.contexts })},{" "}
@@ -338,7 +341,7 @@ function NoClusters({
               {t("count", "users", { n: counts.users })}
             </span>
           )}
-          {source?.error && <Mono>{source.error}</Mono>}
+          {source?.error && <Mono>{show(source.error)}</Mono>}
         </Machine>
       </>
     );
@@ -373,7 +376,7 @@ function NoClusters({
       <Machine>
         <span>{t("empty", "lookedAt")}</span>
         {source?.candidates.map((candidate) => (
-          <Mono key={candidate.path}>{candidate.path}</Mono>
+          <Mono key={candidate.path}>{show(candidate.path)}</Mono>
         ))}
         {/* Which of the three lookups produced that list is the fact
             that explains it — an unset $KUBECONFIG is why there is only
@@ -423,6 +426,7 @@ function Connecting({
   onCancel: () => void;
 }) {
   const t = useT();
+  const show = useShownPath();
   const elapsed = useRealtimeAge(
     startedAt ? new Date(startedAt).toISOString() : null
   );
@@ -456,7 +460,7 @@ function Connecting({
           {info.exec_command ? (
             <>
               <span>{t("cluster", "runningCommand")}</span>
-              <Mono>{info.exec_command}</Mono>
+              <Mono>{show(info.exec_command)}</Mono>
             </>
           ) : (
             <>

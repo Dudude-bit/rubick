@@ -2,6 +2,7 @@ import type { ContextBindingInfo, ContextInfo } from "@/generated/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { clusterColor, clusterNameParts } from "@/lib/cluster-identity";
 import { criticalityOf } from "@/lib/critical";
+import { useShownPath } from "@/lib/hide-paths";
 import { cn } from "@/lib/utils";
 import {
   useClusterIdentityStore,
@@ -55,6 +56,7 @@ export function ContextRow({
 }) {
   const t = useT();
   const reading = readContext(context, { binaries, binding, connected }, t);
+  const show = useShownPath();
   const visible = useSettingSearchMatch(reading.searchText);
   const mark = useClusterMark(context.name);
   const setCritical = useClusterIdentityStore((s) => s.setCritical);
@@ -102,7 +104,7 @@ export function ContextRow({
         </div>
         {fromFile && (
           <div className="truncate font-mono text-[11px] text-fg-fnt">
-            {fromFile}
+            {show(fromFile)}
           </div>
         )}
         {context.server && (

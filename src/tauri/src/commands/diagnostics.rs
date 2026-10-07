@@ -3,6 +3,7 @@
 //! One command rather than one per block: the blocks are one snapshot of one
 //! machine, and six round trips could disagree with each other about it.
 
+use crate::diagnostics::redact::PathIdentity;
 use crate::diagnostics::{collect, redacted, Diagnostics};
 use crate::error::Result;
 use crate::state::AppState;
@@ -24,6 +25,12 @@ pub async fn collect_diagnostics(
     state: tauri::State<'_, AppState>,
 ) -> Result<Diagnostics> {
     Ok(gather(&state.client_manager, redact).await)
+}
+
+/// What a redacted report hides, for every other screen that prints a path.
+#[tauri::command]
+pub async fn path_identity() -> PathIdentity {
+    PathIdentity::of_this_machine()
 }
 
 #[cfg(test)]

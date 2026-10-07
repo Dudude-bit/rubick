@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { CliAvailability } from "@/generated/types";
 import { commands } from "@/lib/commands";
+import { useShownPath } from "@/lib/hide-paths";
 import { useDependenciesStore } from "@/stores/dependenciesStore";
 import { SettingRow } from "../settings-row";
 import { useT, type T } from "@/i18n/useT";
@@ -16,6 +17,7 @@ import { toastError } from "@/lib/toast-error";
 /** What the row's hint says depends entirely on whether we found the tool. */
 function availabilityHint(
   tool: CliAvailability | null,
+  show: (path: string) => string,
   isChecking: boolean,
   label: string,
   t: T
@@ -28,7 +30,7 @@ function availabilityHint(
         {tool.path && (
           <>
             {" · "}
-            <span className="font-mono">{tool.path}</span>
+            <span className="font-mono">{show(tool.path)}</span>
           </>
         )}
       </>
@@ -65,6 +67,7 @@ export function ToolPathsPanel() {
   // has been edited, so a re-check that changes the stored path is
   // reflected instead of being pinned to whatever was on screen.
   const [typed, setTyped] = useState<Record<string, string | undefined>>({});
+  const show = useShownPath();
 
   const { data: cliPaths } = useQuery({
     queryKey: ["cli-paths"],
@@ -149,7 +152,7 @@ export function ToolPathsPanel() {
             key={tool.id}
             label={tool.label}
             htmlFor={`${tool.id}-path`}
-            hint={availabilityHint(tool.state, isChecking, tool.label, t)}
+            hint={availabilityHint(tool.state, show, isChecking, tool.label, t)}
             control={
               <>
                 <StatusBadge

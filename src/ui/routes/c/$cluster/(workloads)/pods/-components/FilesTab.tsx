@@ -49,6 +49,7 @@ import { offeredContainers } from "@/lib/container-sequence";
 import { useT } from "@/i18n/useT";
 import { useContainerFiles, type ListingState } from "./useContainerFiles";
 import { toastError } from "@/lib/toast-error";
+import { shownPath } from "@/lib/hide-paths";
 import { TONE_TEXT } from "@/lib/tone";
 
 const ROW_PX = 26;
@@ -244,8 +245,8 @@ export function FilesTab({
             title: t("files", "downloaded", { name: selectedEntry.name }),
             description:
               result.state === "written"
-                ? `${destination} · ${formatBytes(result.bytes)}`
-                : destination,
+                ? `${shownPath(destination)} · ${formatBytes(result.bytes)}`
+                : shownPath(destination),
           });
         }
       } catch (error) {

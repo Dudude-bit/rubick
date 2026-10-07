@@ -2,6 +2,7 @@ import { ClusterList } from "@/components/cluster/ClusterList";
 import { EmptyPage } from "../../../-components/NotFound";
 import { useClusterFilter } from "@/hooks/useClusterFilter";
 import { useOpenCluster } from "@/hooks/useOpenCluster";
+import { useShownPath } from "@/lib/hide-paths";
 import { useT } from "@/i18n/useT";
 
 /** The address names a cluster the kubeconfig was read and does not list. */
@@ -39,10 +40,11 @@ export function KubeconfigUnread({
   error: string;
 }) {
   const t = useT();
+  const show = useShownPath();
   return (
     <EmptyPage
       title={t("empty", "kubeconfigUnread")}
-      body={t("empty", "kubeconfigUnreadBody", { cluster, error })}
+      body={t("empty", "kubeconfigUnreadBody", { cluster, error: show(error) })}
     />
   );
 }

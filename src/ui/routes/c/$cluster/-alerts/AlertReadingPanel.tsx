@@ -12,6 +12,7 @@ import {
 import { hasChangesTab } from "@/lib/changes";
 import { SEVERITY_CHIP } from "./severity-tone";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useShownPath } from "@/lib/hide-paths";
 import { useT, type T } from "@/i18n/useT";
 
 export interface AlertTarget {
@@ -48,6 +49,7 @@ export function AlertReadingPanel({
   // unread kubeconfig.
   const contextsReading = useClusterStore((s) => s.isLoading);
   const contextsError = useClusterStore((s) => s.error);
+  const show = useShownPath();
   const names = useMemo(() => contexts.map((c) => c.name), [contexts]);
 
   const cluster = useMemo(
@@ -150,7 +152,9 @@ export function AlertReadingPanel({
           ) : contexts.length === 0 && (contextsReading || contextsError) ? (
             <span className="text-warn">
               {contextsError !== null
-                ? t("alerts", "clustersUnread", { reason: contextsError })
+                ? t("alerts", "clustersUnread", {
+                    reason: show(contextsError),
+                  })
                 : t("alerts", "clustersReading")}
             </span>
           ) : (

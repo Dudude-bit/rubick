@@ -2,6 +2,7 @@ import { ChevronRight } from "lucide-react";
 
 import { CopyButton } from "@/components/ui/copyable-value";
 import { useT } from "@/i18n/useT";
+import { useShownPath } from "@/lib/hide-paths";
 import { cn } from "@/lib/utils";
 
 /**
@@ -16,6 +17,7 @@ export function ErrorDetails({
   className?: string;
 }) {
   const t = useT();
+  const shown = useShownPath()(text);
   return (
     <details className={cn("group text-[11px]", className)}>
       <summary className="inline-flex cursor-pointer select-none list-none items-center gap-1 rounded-sm text-fg-fnt transition-colors hover:text-fg-mut focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info [&::-webkit-details-marker]:hidden">
@@ -27,10 +29,10 @@ export function ErrorDetails({
       </summary>
       <div className="mt-1 flex items-start gap-2 rounded-md border border-hair px-2 py-1.5">
         <pre className="max-h-48 min-w-0 flex-1 select-text overflow-auto whitespace-pre-wrap break-all font-mono text-fg-mut">
-          {text}
+          {shown}
         </pre>
         <CopyButton
-          value={text}
+          value={shown}
           label={t("action", "copyDetails")}
           className="opacity-100"
         />

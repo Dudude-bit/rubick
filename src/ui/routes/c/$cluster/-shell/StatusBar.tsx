@@ -20,6 +20,7 @@ import type { Renewal } from "@/generated/types";
 import { scopeLabel } from "@/lib/namespace-scope";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
+import { useShownPath } from "@/lib/hide-paths";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { ActivityPanel } from "./ActivityPanel";
@@ -66,6 +67,7 @@ const SIGN_IN_HINT: Record<
  */
 export function StatusBar() {
   const t = useT();
+  const show = useShownPath();
   const currentContext = useClusterStore((s) => s.currentContext);
   const isConnected = useClusterStore((s) => s.isConnected);
   const connectedThrough = useClusterStore((s) => s.connectedThrough);
@@ -134,7 +136,7 @@ export function StatusBar() {
             </button>
           </TooltipTrigger>
           <TooltipContent side="top" align="end" className="max-w-[420px]">
-            {error}
+            {show(error)}
           </TooltipContent>
         </Tooltip>
       ) : isConnected ? (

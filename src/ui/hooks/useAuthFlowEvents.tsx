@@ -5,12 +5,13 @@ import { useT, type T } from "@/i18n/useT";
 import { ToastAction } from "@/components/ui/toast";
 import { commands } from "@/lib/commands";
 import { listenEvent } from "@/lib/events";
+import { shownPath } from "@/lib/hide-paths";
 import type { AuthOutcome } from "@/generated/types";
 
 function outcomeWords(why: AuthOutcome, t: T): string {
   switch (why.says) {
     case "said":
-      return why.text;
+      return shownPath(why.text);
     case "timedOut":
       return t("readings", "authTimedOut");
     case "noTokenInCredential":

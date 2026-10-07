@@ -22,6 +22,7 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
+import { shownPath } from "@/lib/hide-paths";
 
 const EMPTY_PROFILE: GcpProfile = {
   description: undefined,
@@ -87,7 +88,7 @@ export function GcpProfilesSection() {
         title: result.includes("successful")
           ? t("settings", "success")
           : t("settings", "failed"),
-        description: result,
+        description: shownPath(result),
         variant: result.includes("successful") ? "default" : "destructive",
       });
     },
