@@ -4,7 +4,7 @@ import { actionsColumnSize, tableLayout } from "@/components/ui/column-shares";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { columnFloor } from "@/lib/column-label";
-import { cronStatusWord } from "@/lib/status-words";
+import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
 
 import { AGE_CELL_PX, NAME_CELL_PX, NODE_CELL_PX } from "./columns";
 
@@ -323,6 +323,53 @@ describe("the CronJobs Suspend column", () => {
       word.length * 6.6 + 14 + 20
     );
   });
+});
+
+describe("the status column of a workload and a Job", () => {
+  const ROLLOUT_CODES = [
+    "Ready",
+    "Progressing",
+    "Idle",
+    "Stalled",
+    "Unavailable",
+    "Paused",
+    "Waiting",
+    "Degraded",
+  ];
+  const JOB_CODES = [
+    "Complete",
+    "Failed",
+    "Suspended",
+    "Retrying",
+    "Running",
+    "Pending",
+  ];
+  const widest = (codes: string[], t: T) =>
+    Math.max(...codes.map((code) => (ownStatusWord(code, t) ?? code).length));
+
+  /**
+   * "Повторяет попытку" and "Деградировал" are longer than the English words
+   * the columns were sized for. Fails if a status column can be drawn narrower
+   * than its widest word, the mark and the padding in either language.
+   */
+  it.each([
+    ["Deployments", deployments(), ROLLOUT_CODES],
+    ["DaemonSets", daemonSets(), ROLLOUT_CODES],
+    ["StatefulSets", statefulSets(), ROLLOUT_CODES],
+    ["Jobs", jobs(), JOB_CODES],
+  ] as [string, Column[], string[]][])(
+    "fits the widest word of %s in both languages",
+    (_page, columns, codes) => {
+      const status = columns.findIndex((c) => c.id === "status");
+      for (const t of [en, ru]) {
+        for (const port of PORTS) {
+          expect(laidOut(columns, port, t).px[status]).toBeGreaterThanOrEqual(
+            widest(codes, t) * 6.6 + 14 + 20
+          );
+        }
+      }
+    }
+  );
 });
 
 describe("the Pods table", () => {

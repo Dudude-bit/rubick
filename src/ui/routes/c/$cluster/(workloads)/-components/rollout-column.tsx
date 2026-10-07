@@ -5,6 +5,7 @@ import { ownStatusWord } from "@/lib/status-words";
 import { workloadStatus } from "@/lib/workload-status";
 import type { Rollout } from "@/generated/types";
 import { RolloutBadge } from "../../-object/RolloutSummary";
+import { statusCellPx } from "../../-list/columns";
 
 /** Where each row's rollout stands, in the word the page and the peek print. */
 export function createRolloutColumn<
@@ -15,6 +16,7 @@ export function createRolloutColumn<
     id: "status",
     header: columnHeader("columns", "status"),
     meta: {
+      floor: statusCellPx(12),
       share: (row: Row, t) => {
         const code = workloadStatus(row.rollout);
         return { text: ownStatusWord(code, t) ?? code, role: statusRole(code) };

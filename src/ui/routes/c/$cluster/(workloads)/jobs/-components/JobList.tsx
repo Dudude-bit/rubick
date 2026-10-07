@@ -11,6 +11,7 @@ import {
   createAgeColumn,
   createCpuColumn,
   createMemoryColumn,
+  statusCellPx,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
 import { ownStatusWord } from "@/lib/status-words";
@@ -40,6 +41,7 @@ export const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
     id: "status",
     header: columnHeader("columns", "status"),
     meta: {
+      floor: statusCellPx(17),
       share: (row: JobInfoWithMetrics, t) => {
         const word = ownStatusWord(row.status, t) ?? row.status;
         return row.failure?.reason ? `${word} ${row.failure.reason}` : word;
