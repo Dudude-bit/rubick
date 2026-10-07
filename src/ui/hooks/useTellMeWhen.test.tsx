@@ -1,4 +1,6 @@
+import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
 import { act, renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import {
   afterEach,
   beforeEach,
@@ -9,7 +11,9 @@ import {
 } from "vite-plus/test";
 
 import type { DeploymentInfo } from "@/generated/types";
+import { queryKeys } from "@/lib/query-keys";
 import { LOST_SIGHT_MS, type Watch } from "@/lib/tell-me-when";
+import { testQueryClient } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useTellMeWhenStore } from "@/stores/tellMeWhenStore";
 
@@ -50,6 +54,13 @@ vi.mock("@/components/ui/use-toast", () => ({
 
 import { commands } from "@/lib/commands";
 import { useTellMeWhen } from "./useTellMeWhen";
+
+function mount(client: QueryClient = testQueryClient()) {
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  return renderHook(() => useTellMeWhen(), { wrapper });
+}
 
 function emit(event: string, payload: unknown) {
   for (const handler of listeners[event] ?? []) handler({ payload });
@@ -103,8 +114,8 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-async function armed() {
-  const hook = renderHook(() => useTellMeWhen());
+async function armed(client?: QueryClient) {
+  const hook = mount(client);
   await act(async () => {
     await vi.advanceTimersByTimeAsync(0);
   });
@@ -146,6 +157,41 @@ describe("a rollout being watched", () => {
     const watch = useTellMeWhenStore.getState().watches[0];
     expect(watch.status.state).toBe("done");
     expect(commands.unsubscribeResourceWatch).toHaveBeenCalledWith("stream-1");
+    hook.unmount();
+  });
+
+  /** The button went back to "Tell me when" ten seconds before anything said why, while the peek beside it still read Progressing: a stall looked like a dropped watch. Fails with the old ten-second window, or without the invalidation. */
+  it("says a stalled rollout within a second of the watch ending, and has the peek read it again", async () => {
+    const client = testQueryClient();
+    const key = queryKeys.detail("Deployment", "shop", "payments");
+    client.setQueryData(key, deployment(1));
+    useTellMeWhenStore.setState({ watches: [rollout()] });
+    const hook = await armed(client);
+
+    const message = 'ReplicaSet "payments-7c" has timed out progressing.';
+    const stalled = {
+      ...deployment(1),
+      rollout: { state: "stalled", message, serving: 2 },
+    } as DeploymentInfo;
+    for (const look of [deployment(1), stalled]) {
+      act(() =>
+        emit("resource-event", {
+          stream_id: "stream-1",
+          changes: [{ op: "applied", resource: look }],
+          error: null,
+        })
+      );
+    }
+
+    expect(useTellMeWhenStore.getState().watches[0].status.state).toBe("done");
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+    expect(notifyMock).toHaveBeenCalledWith({
+      title: "payments rollout failed",
+      body: `ProgressDeadlineExceeded: ${message}`,
+    });
     hook.unmount();
   });
 
@@ -214,7 +260,7 @@ describe("a rollout being watched", () => {
       new Error("watch: forbidden")
     );
     useTellMeWhenStore.setState({ watches: [rollout()] });
-    const hook = renderHook(() => useTellMeWhen());
+    const hook = mount();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -405,7 +451,7 @@ const forwardWatch = (): Watch => ({
 });
 
 async function mounted() {
-  const hook = renderHook(() => useTellMeWhen());
+  const hook = mount();
   await act(async () => {
     await vi.advanceTimersByTimeAsync(0);
   });
@@ -504,7 +550,7 @@ describe("questions the cluster does not answer through a watch", () => {
         },
       ],
     });
-    const hook = renderHook(() => useTellMeWhen());
+    const hook = mount();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -551,7 +597,7 @@ describe("questions the cluster does not answer through a watch", () => {
           },
         ],
       });
-      const hook = renderHook(() => useTellMeWhen());
+      const hook = mount();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
       });
@@ -595,7 +641,7 @@ describe("questions the cluster does not answer through a watch", () => {
         },
       ],
     });
-    const hook = renderHook(() => useTellMeWhen());
+    const hook = mount();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
@@ -630,7 +676,7 @@ describe("questions the cluster does not answer through a watch", () => {
         },
       ],
     });
-    const hook = renderHook(() => useTellMeWhen());
+    const hook = mount();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });

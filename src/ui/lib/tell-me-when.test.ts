@@ -354,19 +354,36 @@ describe("coalescing", () => {
   /** Three pods coming up in the same second are one event to the person, not three notifications. */
   it("sends what arrived within the window as one batch", () => {
     const flush = vi.fn();
-    const c = new Coalescer<string>(flush, 10_000);
+    const c = new Coalescer<string>(flush, 1_000, 10_000);
     c.push("a");
-    vi.advanceTimersByTime(4_000);
+    vi.advanceTimersByTime(500);
     c.push("b");
-    vi.advanceTimersByTime(5_000);
+    vi.advanceTimersByTime(400);
     c.push("c");
     expect(flush).not.toHaveBeenCalled();
-    vi.advanceTimersByTime(1_000);
+    vi.advanceTimersByTime(100);
     expect(flush).toHaveBeenCalledTimes(1);
     expect(flush).toHaveBeenCalledWith(["a", "b", "c"]);
-    c.push("d");
+  });
+
+  /** A stream of answers is a stream of notifications without the quiet after each one. */
+  it("holds what arrives in the quiet after a notification for its end", () => {
+    const flush = vi.fn();
+    const c = new Coalescer<string>(flush, 1_000, 10_000);
+    c.push("a");
+    vi.advanceTimersByTime(1_000);
+    c.push("b");
+    vi.advanceTimersByTime(4_000);
+    c.push("c");
+    vi.advanceTimersByTime(5_999);
+    expect(flush).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(1);
+    expect(flush).toHaveBeenLastCalledWith(["b", "c"]);
     vi.advanceTimersByTime(10_000);
+    c.push("d");
+    vi.advanceTimersByTime(1_000);
     expect(flush).toHaveBeenLastCalledWith(["d"]);
+    expect(flush).toHaveBeenCalledTimes(3);
   });
 });
 

@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
 import { ToastAction } from "@/components/ui/toast";
@@ -10,6 +11,7 @@ import {
 } from "@/lib/events";
 import { notify } from "@/lib/notify";
 import { forwardNoteSaying } from "@/lib/port-forward";
+import { queryKeys } from "@/lib/query-keys";
 import {
   Coalescer,
   isOpen,
@@ -123,6 +125,17 @@ function settle(
   coalescer?.push({ watch: current, verdict });
 }
 
+/** Where the panels showing the watched object cache it. */
+function objectKey(watch: Watch) {
+  return watch.crd
+    ? queryKeys.customResource(
+        `${watch.crd.plural}.${watch.crd.group}`,
+        watch.namespace,
+        watch.name
+      )
+    : queryKeys.detail(watch.kind, watch.namespace, watch.name);
+}
+
 /**
  * Marks the watch lost, and reports it after `LOST_SIGHT_MS` unless something
  * answers first.
@@ -173,6 +186,7 @@ function regainSight(watchId: string, sight: Sight | undefined) {
 export function useTellMeWhen() {
   const t = useT();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const openActivityOn = useActivityPanelStore((s) => s.openOn);
   const context = useClusterStore((s) => s.currentContext);
   const connected = useClusterStore((s) => s.isConnected);
@@ -377,6 +391,8 @@ export function useTellMeWhen() {
         if (verdict) {
           settle(watchId, verdict, coalescer.current);
           close(watchId);
+          // The stream saw this before any poll did; the peek beside the button says it too.
+          void queryClient.invalidateQueries({ queryKey: objectKey(current) });
           return;
         }
         if (baseline !== current.baseline) {
@@ -388,7 +404,7 @@ export function useTellMeWhen() {
 
     // No cleanup here on purpose: this effect re-runs on every list change,
     // and the streams it did not touch have to outlive the run.
-  }, [openIds, connected]);
+  }, [openIds, connected, queryClient]);
 
   useEffect(() => {
     const kept = aside.current;

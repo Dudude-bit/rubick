@@ -25,7 +25,9 @@ export const MAX_WATCHES_PER_CLUSTER = 12;
 /** A question nobody has answered in a day is no longer being waited on. */
 export const WATCH_TTL_MS = 24 * 60 * 60 * 1000;
 /** Answers arriving this close together go out as one notification. */
-export const COALESCE_MS = 10_000;
+export const COALESCE_MS = 1_000;
+/** After one goes out, the next waits this long: a stream of answers is not a stream of notifications. */
+export const QUIET_MS = 10_000;
 /** A stream down this long is a fact worth reporting, not a hiccup. */
 export const LOST_SIGHT_MS = 2 * 60 * 1000;
 
@@ -554,25 +556,35 @@ function judgeCertificate(cert: CustomResourceInfo, was: Baseline): Judgement {
   return { verdict: null, baseline: was };
 }
 
-/** Answers that landed inside one `COALESCE_MS` window go out together. */
+/**
+ * Answers inside one `COALESCE_MS` window go out together, soon enough to
+ * arrive with the control that stopped watching. Whatever lands in the
+ * `QUIET_MS` after a notification waits for the end of it.
+ */
 export class Coalescer<A> {
   private pending: A[] = [];
   private timer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly flush: (answers: A[]) => void,
-    private readonly windowMs: number = COALESCE_MS
+    private readonly windowMs: number = COALESCE_MS,
+    private readonly quietMs: number = QUIET_MS
   ) {}
 
   push(answer: A): void {
     this.pending.push(answer);
-    if (this.timer !== null) return;
-    this.timer = setTimeout(() => {
-      this.timer = null;
-      const batch = this.pending;
-      this.pending = [];
-      this.flush(batch);
-    }, this.windowMs);
+    if (this.timer === null) {
+      this.timer = setTimeout(() => this.send(), this.windowMs);
+    }
+  }
+
+  private send(): void {
+    this.timer = null;
+    if (this.pending.length === 0) return;
+    const batch = this.pending;
+    this.pending = [];
+    this.flush(batch);
+    this.timer = setTimeout(() => this.send(), this.quietMs);
   }
 
   dispose(): void {
