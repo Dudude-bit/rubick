@@ -640,3 +640,44 @@ describe("size", () => {
     expect(nameClass()).not.toBe(row);
   });
 });
+
+/** Clipped, or not, as a layout engine would measure it; jsdom measures nothing. */
+function measure(element: Element, scrollWidth: number, clientWidth: number) {
+  Object.defineProperty(element, "scrollWidth", { value: scrollWidth });
+  Object.defineProperty(element, "clientWidth", { value: clientWidth });
+}
+
+describe("a name cut short", () => {
+  /** A ClusterRoleBinding's roleRef and subject ended in an ellipsis in the peek, and the whole name was on the full page only. */
+  it("says the whole name on hover", async () => {
+    await wrap(
+      <ResourceName
+        kind="ServiceAccount"
+        name="clusterrole-aggregation-controller"
+        namespace="kube-system"
+        showKind={false}
+      />
+    );
+    const box = screen.getByTestId("resource-ref-name");
+    const [stem, tail] = [...box.children];
+    measure(stem, 320, 140);
+    measure(tail, 0, 0);
+
+    fireEvent.mouseEnter(box);
+
+    expect(box.getAttribute("title")).toBe(
+      "kube-system/clusterrole-aggregation-controller"
+    );
+  });
+
+  /** A tooltip repeating a name that is already whole is noise on every row of every list. */
+  it("says nothing extra over a name drawn whole", async () => {
+    await wrap(<ResourceName kind="ClusterRole" name="cluster-admin" />);
+    const box = screen.getByTestId("resource-ref-name");
+    for (const part of box.children) measure(part, 90, 90);
+
+    fireEvent.mouseEnter(box);
+
+    expect(box.getAttribute("title") ?? "").toBe("");
+  });
+});

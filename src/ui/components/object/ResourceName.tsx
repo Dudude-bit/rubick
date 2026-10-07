@@ -141,6 +141,14 @@ export function ResourceName({
           RESOURCE_NAME_SIZE[size]
         )}
         data-testid="resource-ref-name"
+        onMouseEnter={(event) => {
+          const box = event.currentTarget;
+          box.title = [...box.children].some(
+            (part) => part.scrollWidth > part.clientWidth
+          )
+            ? `${namespace ? `${namespace}/` : ""}${showKind ? `${kind}/` : ""}${name}`
+            : "";
+        }}
       >
         <span className="truncate">
           {namespace && (
