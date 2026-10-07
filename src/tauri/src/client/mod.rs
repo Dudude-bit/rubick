@@ -16,6 +16,7 @@ use tokio::sync::RwLock;
 
 mod context;
 pub mod proxy;
+mod send_again;
 pub mod served;
 pub use context::{ContextAuth, ContextInfo};
 pub use proxy::{KubectlProxy, ProxyFailure};
@@ -263,6 +264,11 @@ fn client_with_deadline(config: Config, deadline: std::time::Duration) -> Result
     let builder = kube::client::ClientBuilder::try_from(config)
         .map_err(|e| Error::Connection(format!("Failed to create client: {e}")))?;
     Ok(builder
+        // The retry clones the service under it, and kube's boxed stack cannot be cloned.
+        .with_layer(&tower::buffer::BufferLayer::new(1024))
+        .with_layer(&tower::retry::RetryLayer::new(
+            send_again::SendAgain::default(),
+        ))
         .with_layer(&tower::timeout::TimeoutLayer::new(deadline))
         .build())
 }

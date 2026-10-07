@@ -1,7 +1,6 @@
 //! The app's own log: where it is written and how tracing is set up.
 
 use std::path::{Path, PathBuf};
-use std::time::{Duration, Instant};
 
 use tracing::field::{Field, Visit};
 use tracing::{Event, Metadata, Subscriber};
@@ -56,23 +55,16 @@ impl std::io::Write for Capped {
     }
 }
 
-/// One line for a burst of requests that a closed keep-alive connection failed.
-///
-/// kube logs every attempt that fails on the wire at ERROR, from inside its
-/// client and whether or not the caller then recovers. Keep-alive connections
-/// the far end had closed fail every request sent on them, each with the same
-/// line in the same millisecond. The first of a burst stays, and so does every
-/// failure a caller reports in its own words.
-#[derive(Default)]
-struct OncePerBurst {
-    said: parking_lot::Mutex<Option<Instant>>,
-}
+/// kube logs every attempt that fails on the wire at ERROR, below the retry
+/// that decides whether it failed at all: `client::send_again` sends a read on
+/// a closed keep-alive connection again and says when it gives up, and a
+/// write's failure reaches its caller.
+struct LeftToTheRetry;
 
 const KUBE_CLIENT: &str = "kube_client::client::builder";
 const CLOSED_UNDER_REQUEST: &str = "(SendRequest)";
-const BURST: Duration = Duration::from_secs(10);
 
-impl<S> Filter<S> for OncePerBurst {
+impl<S> Filter<S> for LeftToTheRetry {
     fn enabled(&self, _: &Metadata<'_>, _: &Context<'_, S>) -> bool {
         true
     }
@@ -83,16 +75,7 @@ impl<S> Filter<S> for OncePerBurst {
         }
         let mut message = Message::default();
         event.record(&mut message);
-        if !message.0.contains(CLOSED_UNDER_REQUEST) {
-            return true;
-        }
-        let now = Instant::now();
-        let mut said = self.said.lock();
-        if said.is_some_and(|at| now.duration_since(at) < BURST) {
-            return false;
-        }
-        *said = Some(now);
-        true
+        !message.0.contains(CLOSED_UNDER_REQUEST)
     }
 }
 
@@ -107,9 +90,9 @@ impl Visit for Message {
     }
 }
 
-/// What each output lets through: the level asked for, and a burst once.
+/// What each output lets through: the level asked for, less what the retry reports.
 fn filter<S: Subscriber>(level: EnvFilter) -> impl Filter<S> {
-    level.and(OncePerBurst::default())
+    level.and(LeftToTheRetry)
 }
 
 /// Initialize tracing subscriber with default configuration
@@ -292,14 +275,14 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Three requests failing on closed keep-alive connections in one breath
-    /// were three ERROR lines, every few minutes. One stays; a server's 500
-    /// and a refused connect are other causes and keep every line.
+    /// A read on a closed keep-alive connection that the retry then answered
+    /// was an ERROR line every few minutes. A server's 500 and a refused
+    /// connect are other causes and keep every line.
     #[test]
-    fn a_burst_of_requests_on_closed_connections_is_one_line() {
+    fn a_request_on_a_closed_connection_is_left_to_the_retry_to_report() {
         use tracing_subscriber::layer::SubscriberExt;
 
-        let dir = std::env::temp_dir().join(format!("rubick-log-burst-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("rubick-log-retry-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let file = open_log(&dir).expect("a log file");
 
@@ -323,7 +306,7 @@ mod tests {
         });
 
         let written = std::fs::read_to_string(dir.join(LOG_FILE)).expect("the file is readable");
-        assert_eq!(written.matches("(SendRequest)").count(), 1, "{written}");
+        assert_eq!(written.matches("(SendRequest)").count(), 0, "{written}");
         assert_eq!(
             written.matches("failed with status 500").count(),
             1,

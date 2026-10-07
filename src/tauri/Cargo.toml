@@ -37,7 +37,13 @@ futures = "0.3"
 async-trait = "0.1"
 
 # Kubernetes
-tower = { version = "0.5", features = ["timeout"] }
+tower = { version = "0.5", features = ["timeout", "buffer", "retry"] }
+# The error kube's HTTP client raises, read to tell a closed keep-alive connection
+# from a refused one; the version kube itself resolves.
+hyper-util = { version = "0.1", default-features = false, features = [
+  "client-legacy",
+  "http1",
+] }
 kube = { version = "4.2", default-features = false, features = [
   "client",
   "config",
