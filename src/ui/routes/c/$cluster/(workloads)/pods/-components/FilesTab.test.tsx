@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -95,6 +95,7 @@ function pod(over: Partial<PodInfo> = {}): PodInfo {
         mounts: [
           { container: "app", path: "/etc/app", readOnly: true, subPath: null },
         ],
+        projections: [],
       },
     ],
     serviceAccountName: null,
@@ -189,6 +190,73 @@ describe("FilesTab", () => {
     expect(
       screen.getByText(/read via find \(GNU\) · 2 entries/)
     ).toBeInTheDocument();
+  });
+
+  /**
+   * Lena's pod, Files at /var/run/secrets/kubernetes.io/serviceaccount: every
+   * row said "from kube-root-ca.crt", the token and the namespace included,
+   * though the volume projects a token, that ConfigMap's ca.crt only, and the
+   * namespace from the downward API. Fails if a file is tagged with a source
+   * the spec says did not write it, or `..data`, which holds them all, is
+   * tagged with one.
+   */
+  it("tags each file in the service account volume with the source that wrote it", () => {
+    const at = "/var/run/secrets/kubernetes.io/serviceaccount";
+    listing.mockReturnValue(
+      done([
+        file("..2026_10_06_21_20_13.2911439", { kind: "dir", size: 100 }),
+        file("..data", {
+          kind: "symlink",
+          target: "..2026_10_06_21_20_13.2911439",
+        }),
+        file("ca.crt", { kind: "symlink", target: "..data/ca.crt" }),
+        file("namespace", { kind: "symlink", target: "..data/namespace" }),
+        file("token", { kind: "symlink", target: "..data/token" }),
+      ])
+    );
+    wrap(
+      <FilesTab
+        pod={pod({
+          volumes: [
+            {
+              name: "kube-api-access-6xk2p",
+              source: "projected",
+              refs: [{ kind: "ConfigMap", name: "kube-root-ca.crt" }],
+              mounts: [
+                { container: "app", path: at, readOnly: true, subPath: null },
+              ],
+              projections: [
+                {
+                  source: "serviceAccountToken",
+                  object: null,
+                  paths: ["token"],
+                },
+                {
+                  source: "configMap",
+                  object: { kind: "ConfigMap", name: "kube-root-ca.crt" },
+                  paths: ["ca.crt"],
+                },
+                { source: "downwardAPI", object: null, paths: ["namespace"] },
+              ],
+            },
+          ],
+        })}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    const tagOf = (name: string) =>
+      within(
+        screen
+          .getAllByRole("row")
+          .find((row) => row.textContent?.startsWith(name))!
+      ).getByText(/^from /).textContent;
+
+    expect(tagOf("token")).toBe("from serviceAccountToken");
+    expect(tagOf("ca.crt")).toBe("from kube-root-ca.crt");
+    expect(tagOf("namespace")).toBe("from downwardAPI");
+    expect(tagOf("..data")).toBe("from kube-api-access-6xk2p");
   });
 
   /** A tool that is not there is never an empty folder. */

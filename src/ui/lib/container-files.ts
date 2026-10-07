@@ -1,20 +1,25 @@
-import type { FileEntry, PodVolumeInfo } from "@/generated/types";
+import type {
+  FileEntry,
+  PodVolumeInfo,
+  VolumeProjectionInfo,
+} from "@/generated/types";
 
 export type { FileEntry, FileKind, ListedWith } from "@/generated/types";
 
 /** The mount a path sits in, for the tag beside the row. */
 export interface MountTag {
-  /** `ConfigMap`, `Secret`, `PersistentVolumeClaim`, … or the volume's source word. */
+  /** `ConfigMap`, `Secret`, … the volume's source word, or a projected source's (`serviceAccountToken`). */
   kind: string;
-  name: string;
+  /** The object's name, or the volume's; `null` for a projected source that names no object. */
+  name: string | null;
+  /** The volume the path is in. */
+  volume: string;
   /** The mount point the path is under. */
   at: string;
   /**
-   * Every source the volume declares, which for a `projected` volume is
-   * several — a ConfigMap, a Secret and a token in one directory. Naming
-   * `refs[0]` said a file had come from the ConfigMap when the pod does not
-   * say which of the three it came from, and the Connections tab the footer
-   * points at lists them all.
+   * Every source the tag may stand for: one where the spec says which wrote
+   * the file, all of a `projected` volume's where it does not (its `..data`
+   * link and the directory behind it hold every source's files).
    */
   sources: ReadonlyArray<{ kind: string; name: string }>;
 }
@@ -22,6 +27,69 @@ export interface MountTag {
 function under(path: string, mount: string): boolean {
   const base = mount.endsWith("/") ? mount.slice(0, -1) : mount;
   return path === base || path.startsWith(`${base}/`);
+}
+
+/**
+ * The projected source that wrote `relative`, where the spec says. The
+ * kubelet writes the files into a timestamped directory behind a `..data`
+ * link and links each at the top, so a path inside either is the file's own
+ * path one level down. A source with no `items` writes a file per key it
+ * holds: the file is its when no source names it and it is the only one.
+ */
+function writerOf(
+  projections: readonly VolumeProjectionInfo[],
+  relative: string
+): VolumeProjectionInfo | null {
+  const inner = relative.startsWith("..")
+    ? relative.split("/").slice(1).join("/")
+    : relative;
+  if (inner === "") return null;
+  const named = projections.filter((projection) =>
+    projection.paths.some(
+      (path) =>
+        path === inner ||
+        inner.startsWith(`${path}/`) ||
+        path.startsWith(`${inner}/`)
+    )
+  );
+  if (named.length > 0) return named.length === 1 ? named[0] : null;
+  const everyKey = projections.filter(
+    (projection) => projection.paths.length === 0
+  );
+  return everyKey.length === 1 ? everyKey[0] : null;
+}
+
+const sourceOf = (projection: VolumeProjectionInfo) => ({
+  kind: projection.object?.kind ?? projection.source,
+  name: projection.object?.name ?? "",
+});
+
+function tagOf(volume: PodVolumeInfo, at: string, path: string): MountTag {
+  const base = at.endsWith("/") ? at.slice(0, -1) : at;
+  const writer = writerOf(volume.projections, path.slice(base.length + 1));
+  if (writer) {
+    return {
+      ...sourceOf(writer),
+      name: writer.object?.name ?? null,
+      volume: volume.name,
+      at,
+      sources: [sourceOf(writer)],
+    };
+  }
+  const sources =
+    volume.projections.length > 0
+      ? volume.projections.map(sourceOf)
+      : volume.refs.map((r) => ({ kind: r.kind, name: r.name }));
+  const only = sources.length === 1 ? sources[0] : null;
+  return {
+    // With one source the tag can name it. With several, what is certain
+    // is the volume.
+    kind: only?.kind ?? volume.source,
+    name: only ? only.name || null : volume.name,
+    volume: volume.name,
+    at,
+    sources,
+  };
 }
 
 /**
@@ -34,29 +102,16 @@ export function mountFor(
   container: string,
   volumes: readonly PodVolumeInfo[]
 ): MountTag | null {
-  let best: { depth: number; tag: MountTag } | null = null;
+  let best: { depth: number; volume: PodVolumeInfo; at: string } | null = null;
   for (const volume of volumes) {
     for (const mount of volume.mounts) {
       if (mount.container !== container || !under(path, mount.path)) continue;
       const depth = mount.path.split("/").filter(Boolean).length;
       if (best !== null && depth <= best.depth) continue;
-      const sources = volume.refs.map((r) => ({ kind: r.kind, name: r.name }));
-      const only = sources.length === 1 ? sources[0] : null;
-      best = {
-        depth,
-        tag: {
-          // With one source the tag can name it. With several, what is
-          // certain is the volume; which of its sources wrote this file is
-          // not something the pod says.
-          kind: only?.kind ?? volume.source,
-          name: only?.name ?? volume.name,
-          at: mount.path,
-          sources,
-        },
-      };
+      best = { depth, volume, at: mount.path };
     }
   }
-  return best?.tag ?? null;
+  return best && tagOf(best.volume, best.at, path);
 }
 
 /**

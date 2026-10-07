@@ -23,6 +23,7 @@ const volumes: PodVolumeInfo[] = [
     name: "config",
     source: "ConfigMap",
     refs: [{ kind: "ConfigMap", name: "demo-config" }],
+    projections: [],
     mounts: [
       { container: "app", path: "/etc/app", readOnly: true, subPath: null },
     ],
@@ -31,6 +32,7 @@ const volumes: PodVolumeInfo[] = [
     name: "secret",
     source: "Secret",
     refs: [{ kind: "Secret", name: "demo-secret" }],
+    projections: [],
     mounts: [
       {
         container: "app",
@@ -44,6 +46,7 @@ const volumes: PodVolumeInfo[] = [
     name: "scratch",
     source: "EmptyDir",
     refs: [],
+    projections: [],
     mounts: [
       {
         container: "sidecar",
@@ -73,20 +76,23 @@ describe("mountFor", () => {
     expect(mountFor("/etc/app/app.conf", "app", volumes)).toEqual({
       kind: "ConfigMap",
       name: "demo-config",
+      volume: "config",
       at: "/etc/app",
       sources: [{ kind: "ConfigMap", name: "demo-config" }],
     });
     expect(mountFor("/etc/app/password", "app", volumes)).toEqual({
       kind: "Secret",
       name: "demo-secret",
+      volume: "secret",
       at: "/etc/app/password",
       sources: [{ kind: "Secret", name: "demo-secret" }],
     });
   });
 
   /**
-   * A `projected` volume puts several sources in one directory, and the pod
-   * does not record which of them any given file came from. Naming
+   * A `projected` volume puts several sources in one directory, and where
+   * they write every key they hold the pod does not say which wrote a file.
+   * Naming
    * `refs[0]` labelled a token from the serviceaccount as coming from the
    * ConfigMap next to it — and the Connections tab, which the tab's own
    * footer points the reader at for the same fact, lists all three.
@@ -99,6 +105,18 @@ describe("mountFor", () => {
         refs: [
           { kind: "ConfigMap", name: "ca-bundle" },
           { kind: "Secret", name: "client-cert" },
+        ],
+        projections: [
+          {
+            source: "configMap",
+            object: { kind: "ConfigMap", name: "ca-bundle" },
+            paths: [],
+          },
+          {
+            source: "secret",
+            object: { kind: "Secret", name: "client-cert" },
+            paths: [],
+          },
         ],
         mounts: [
           {
@@ -133,6 +151,7 @@ describe("startPath", () => {
       name: "config",
       source: "configMap",
       refs: [{ kind: "ConfigMap", name: "app-config" }],
+      projections: [],
       mounts: [
         {
           container: "app",

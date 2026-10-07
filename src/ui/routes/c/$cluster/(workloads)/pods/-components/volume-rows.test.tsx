@@ -19,6 +19,7 @@ const volume = (overrides: Partial<PodVolumeInfo>): PodVolumeInfo => ({
   mounts: [
     { container: "app", path: "/etc/config", readOnly: false, subPath: null },
   ],
+  projections: [],
   ...overrides,
 });
 

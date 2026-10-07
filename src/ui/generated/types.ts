@@ -2085,6 +2085,13 @@ export interface PodVolumeInfo {
   source: string;
   refs: VolumeObjectRef[];
   mounts: VolumeMountInfo[];
+  projections: VolumeProjectionInfo[];
+}
+
+export interface VolumeProjectionInfo {
+  source: string;
+  object: VolumeObjectRef | null;
+  paths: string[];
 }
 
 export interface VolumeMountInfo {

@@ -784,10 +784,10 @@ function Rows({
                     // Every source, because with more than one the badge
                     // deliberately names none of them.
                     title={`${tag.sources
-                      .map((r) => `${r.kind} ${r.name}`)
+                      .map((r) => `${r.kind} ${r.name}`.trim())
                       .join(" · ")} ${tag.at}`.trim()}
                   >
-                    {t("files", "fromMount", { name: tag.name })}
+                    {t("files", "fromMount", { name: tag.name ?? tag.kind })}
                   </span>
                 )}
               </span>
@@ -927,7 +927,7 @@ function MountsOnly({
           <li key={`${volume.name}:${mount.path}`}>
             {mount.path}
             <span className="ml-2 text-fg-fnt">
-              {volume.refs[0]
+              {volume.refs.length === 1 && volume.projections.length <= 1
                 ? `${volume.refs[0].kind} ${volume.refs[0].name}`
                 : volume.source}
               {mount.readOnly ? " · ro" : ""}
@@ -1019,10 +1019,18 @@ function Preview({
             ` · ${
               tag.sources.length > 1
                 ? t("files", "mountedFromSeveral", {
-                    name: tag.name,
+                    name: tag.volume,
                     n: tag.sources.length,
                   })
-                : t("files", "mountedFrom", { kind: tag.kind, name: tag.name })
+                : tag.name === null
+                  ? t("files", "mountedFromSource", {
+                      source: tag.kind,
+                      volume: tag.volume,
+                    })
+                  : t("files", "mountedFrom", {
+                      kind: tag.kind,
+                      name: tag.name,
+                    })
             }`}
         </p>
         <p className="mt-1 flex gap-3">

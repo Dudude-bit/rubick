@@ -83,6 +83,24 @@ pub struct PodVolumeInfo {
     /// interesting one: a volume declared and mounted by nothing is a silent
     /// mistake the YAML does not point at.
     pub mounts: Vec<VolumeMountInfo>,
+    /// A `projected` volume's sources in spec order, with the files each
+    /// writes; empty for every other volume. The token, the CA bundle and the
+    /// namespace share one directory, and only these say which wrote which.
+    pub projections: Vec<VolumeProjectionInfo>,
+}
+
+/// One source of a `projected` volume.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VolumeProjectionInfo {
+    /// The spec's word: `serviceAccountToken`, `configMap`, `secret`,
+    /// `downwardAPI`, `clusterTrustBundle`.
+    pub source: String,
+    /// The object it reads, where it names one.
+    pub object: Option<VolumeObjectRef>,
+    /// The paths it writes, relative to the mount. Empty for a `ConfigMap` or
+    /// `Secret` with no `items`, which writes a file per key it holds.
+    pub paths: Vec<String>,
 }
 
 /// One object a volume names. Namespace is the pod's — a volume cannot reach
@@ -193,6 +211,56 @@ pub fn mounts_of(spec: &PodSpec, volume_name: &str) -> Vec<VolumeMountInfo> {
     init.iter().chain(&spec.containers).flat_map(each).collect()
 }
 
+fn projections_of(volume: &Volume) -> Vec<VolumeProjectionInfo> {
+    let object = |kind: &str, name: &str| {
+        Some(VolumeObjectRef {
+            kind: kind.to_string(),
+            name: name.to_string(),
+        })
+    };
+    let keyed = |items: Option<&Vec<k8s_openapi::api::core::v1::KeyToPath>>| {
+        items
+            .into_iter()
+            .flatten()
+            .map(|item| item.path.clone())
+            .collect()
+    };
+    let sources = volume
+        .projected
+        .iter()
+        .flat_map(|p| p.sources.iter().flatten());
+    sources
+        .filter_map(|source| {
+            let (word, object, paths) = if let Some(token) = &source.service_account_token {
+                ("serviceAccountToken", None, vec![token.path.clone()])
+            } else if let Some(config_map) = &source.config_map {
+                (
+                    "configMap",
+                    object("ConfigMap", &config_map.name),
+                    keyed(config_map.items.as_ref()),
+                )
+            } else if let Some(secret) = &source.secret {
+                (
+                    "secret",
+                    object("Secret", &secret.name),
+                    keyed(secret.items.as_ref()),
+                )
+            } else if let Some(downward) = &source.downward_api {
+                let paths = downward.items.iter().flatten().map(|i| i.path.clone());
+                ("downwardAPI", None, paths.collect())
+            } else {
+                let bundle = source.cluster_trust_bundle.as_ref()?;
+                ("clusterTrustBundle", None, vec![bundle.path.clone()])
+            };
+            Some(VolumeProjectionInfo {
+                source: word.to_string(),
+                object,
+                paths,
+            })
+        })
+        .collect()
+}
+
 fn pod_volumes(spec: &PodSpec) -> Vec<PodVolumeInfo> {
     spec.volumes
         .iter()
@@ -204,6 +272,7 @@ fn pod_volumes(spec: &PodSpec) -> Vec<PodVolumeInfo> {
                 source,
                 refs,
                 mounts: mounts_of(spec, &volume.name),
+                projections: projections_of(volume),
             }
         })
         .collect()
@@ -717,6 +786,74 @@ mod tests {
             "the kind and name are what make a volume somewhere you can go; \
              flattening them into one display string is what kept every pod's \
              ConfigMap and claim unreachable"
+        );
+    }
+
+    /// The `kube-api-access-*` volume the API server writes into every pod,
+    /// as Lena's cluster had it: a token, the CA bundle from a `ConfigMap`,
+    /// and the namespace from the downward API, in one directory. Her Files
+    /// tab tagged all three "from kube-root-ca.crt". Fails if a source loses
+    /// the path it writes, or one without an object borrows another's.
+    #[test]
+    fn a_projected_volume_says_which_source_writes_which_file() {
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "hello-web-5bc6cfc846-62q6q", "namespace": "lena-sandbox" },
+            "spec": {
+                "containers": [{
+                    "name": "web",
+                    "image": "nginx:1.27-alpine",
+                    "volumeMounts": [{
+                        "name": "kube-api-access-6xk2p",
+                        "readOnly": true,
+                        "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                    }],
+                }],
+                "volumes": [{
+                    "name": "kube-api-access-6xk2p",
+                    "projected": {
+                        "defaultMode": 420,
+                        "sources": [
+                            { "serviceAccountToken": { "expirationSeconds": 3607, "path": "token" } },
+                            { "configMap": {
+                                "name": "kube-root-ca.crt",
+                                "items": [{ "key": "ca.crt", "path": "ca.crt" }],
+                            } },
+                            { "downwardAPI": { "items": [{
+                                "path": "namespace",
+                                "fieldRef": { "apiVersion": "v1", "fieldPath": "metadata.namespace" },
+                            }] } },
+                        ],
+                    },
+                }],
+            },
+        }))
+        .expect("a pod the API server wrote");
+
+        let info = PodInfo::from(&pod);
+        let projections: Vec<_> = info.volumes[0]
+            .projections
+            .iter()
+            .map(|p| {
+                (
+                    p.source.as_str(),
+                    p.object
+                        .as_ref()
+                        .map(|o| (o.kind.as_str(), o.name.as_str())),
+                    p.paths.clone(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            projections,
+            [
+                ("serviceAccountToken", None, vec!["token".to_string()]),
+                (
+                    "configMap",
+                    Some(("ConfigMap", "kube-root-ca.crt")),
+                    vec!["ca.crt".to_string()]
+                ),
+                ("downwardAPI", None, vec!["namespace".to_string()]),
+            ]
         );
     }
 

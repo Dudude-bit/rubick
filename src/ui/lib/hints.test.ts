@@ -281,6 +281,7 @@ describe("troubleOf", () => {
           name: "kube-api-access-7x2kq",
           source: "projected",
           refs: [{ kind: "ConfigMap", name: "kube-root-ca.crt" }],
+          projections: [],
           mounts: [
             {
               container: "app",

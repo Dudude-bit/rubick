@@ -2262,6 +2262,7 @@ export const ru: Catalogue = {
       other: "прочитано {n} строк, дальше есть ещё",
     },
     mountedFrom: "смонтирован из {kind} {name}",
+    mountedFromSource: "смонтирован из источника {source} тома {volume}",
     mountedFromSeveral: {
       one: "смонтирован из тома {name}, в него проецируется {n} источник",
       few: "смонтирован из тома {name}, в него проецируются {n} источника; под не говорит, из какого именно этот файл",

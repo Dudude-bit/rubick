@@ -2154,6 +2154,7 @@ export const en = {
       other: "{n} lines read of more",
     },
     mountedFrom: "mounted from {kind} {name}",
+    mountedFromSource: "mounted from the {source} source of volume {volume}",
     mountedFromSeveral: {
       one: "mounted from volume {name}, which projects {n} source",
       other:
