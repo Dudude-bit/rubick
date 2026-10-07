@@ -28,8 +28,20 @@ vi.mock("./useResourceYaml", () => ({
   }),
 }));
 
+const logged = vi.hoisted(() => ({ lines: [] as string[] }));
+vi.mock("@/lib/logger", () => ({
+  logError: (message: string) => logged.lines.push(`ERROR ${message}`),
+  logWarn: (message: string) => logged.lines.push(`WARN ${message}`),
+  logInfo: (message: string) => logged.lines.push(`INFO ${message}`),
+  logDebug: () => {},
+}));
+
+import { QueryCache, QueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/query-keys";
+import { logQueryFailure } from "@/lib/query-log";
+import { shareStructure } from "@/lib/watched-rows";
 import { renderWithRouter, testQueryClient } from "@/test/render";
+import { useLiveQuery } from "./useLiveQuery";
 import {
   useResourceDetail,
   type UseResourceDetailResult,
@@ -186,6 +198,73 @@ describe("a detail page whose object is deleted", () => {
     expect(result.current.name).toBe("web-0");
     expect(result.owners).toBeUndefined();
   });
+});
+
+describe("a page left open on a pod a restart replaced", () => {
+  /**
+   * Lena's app.log: the deleted pod's page and its Connections each logged
+   * an ERROR, and the page came back to log its lineage too. Fails if the
+   * page keeps asking about a pod that is gone, or if the log says it in
+   * more than one line, or as an error.
+   */
+  it("says gone, stops asking, and logs one line for the page and its readers", async () => {
+    logged.lines.length = 0;
+    const client = new QueryClient({
+      queryCache: new QueryCache({ onError: logQueryFailure }),
+      defaultOptions: {
+        queries: { retry: false, structuralSharing: shareStructure },
+      },
+    });
+    const pod = "api-7bcd";
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockResolvedValueOnce({ name: pod })
+      .mockRejectedValue(
+        Object.assign(
+          new Error(
+            `Tauri command 'getPod' failed: Kubernetes API error: pods "${pod}" not found`
+          ),
+          { code: "NOT_FOUND" }
+        )
+      );
+    const connections = vi.fn(async () => {
+      throw Object.assign(
+        new Error(
+          `Tauri command 'getResourceConnections' failed: Resource not found: Pod/${pod} in namespace default`
+        ),
+        { code: "NOT_FOUND" }
+      );
+    });
+    const result = {} as { current: UseResourceDetailResult<Pod> };
+    function Page() {
+      result.current = useResourceDetail<Pod>({
+        resourceKind: "Pod",
+        fetchResource: (name) => fetch(name),
+        refresh: "fast",
+      });
+      useLiveQuery({
+        queryKey: ["connections", "Pod", "default", pod, null],
+        queryFn: connections,
+        refresh: "fast",
+      });
+      return null;
+    }
+    await renderWithRouter(<Page />, {
+      client,
+      at: PATH,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+
+    await waitFor(
+      () => expect(result.current.error?.message ?? "").toMatch(/not found/),
+      { timeout: 4000 }
+    );
+    const asked = fetch.mock.calls.length;
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+    expect(fetch).toHaveBeenCalledTimes(asked);
+    expect(connections).toHaveBeenCalledTimes(1);
+    expect(logged.lines).toEqual(["INFO Query found the object gone"]);
+  }, 10_000);
 });
 
 describe("the tab a detail page is open on", () => {

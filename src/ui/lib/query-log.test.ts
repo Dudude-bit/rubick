@@ -4,6 +4,7 @@ const logged = vi.hoisted(() => ({ lines: [] as string[] }));
 vi.mock("@/lib/logger", () => ({
   logError: (message: string) => logged.lines.push(`ERROR ${message}`),
   logWarn: (message: string) => logged.lines.push(`WARN ${message}`),
+  logInfo: (message: string) => logged.lines.push(`INFO ${message}`),
 }));
 
 import { useClusterStore } from "@/stores/clusterStore";
@@ -70,6 +71,55 @@ describe("a failed read in the log", () => {
       query("service-health", "all")
     );
     expect(logged.lines).toEqual(["WARN Query refused"]);
+  });
+
+  /**
+   * Lena kept a pod's page open after a restart replaced the pod: the page,
+   * its Connections and its lineage each logged an ERROR for the same gone
+   * pod, and Dana's page logged getPod twice in 300 ms. Fails if an object
+   * found gone is an error, or takes more than one line however many of its
+   * readers find it gone.
+   */
+  it("logs an object found gone once, whichever of its readers found it", () => {
+    const pod = "hello-web-5bc6cfc846-9qqvr";
+    const gone = (command: string, said: string) =>
+      Object.assign(new Error(`Tauri command '${command}' failed: ${said}`), {
+        code: "NOT_FOUND",
+      });
+    const page = query("pod", "lena-sandbox", pod);
+    logQueryFailure(
+      gone("getPod", `Kubernetes API error: pods "${pod}" not found`),
+      page
+    );
+    logQueryFailure(
+      gone("getPod", `Kubernetes API error: pods "${pod}" not found`),
+      page
+    );
+    logQueryFailure(
+      gone(
+        "getResourceConnections",
+        `Resource not found: Pod/${pod} in namespace lena-sandbox`
+      ),
+      query("connections", "Pod", "lena-sandbox", pod, null)
+    );
+    logQueryFailure(
+      gone("objectLineage", `Kubernetes API error: pods "${pod}" not found`),
+      query("lineage", "", "pods", "lena-sandbox", pod)
+    );
+    expect(logged.lines).toEqual(["INFO Query found the object gone"]);
+
+    logQueryFailure(
+      gone("getPod", `Kubernetes API error: pods "${pod}" not found`),
+      query("pod", "staging", pod)
+    );
+    expect(logged.lines).toHaveLength(2);
+
+    reconnect();
+    logQueryFailure(
+      gone("getPod", `Kubernetes API error: pods "${pod}" not found`),
+      page
+    );
+    expect(logged.lines).toHaveLength(3);
   });
 
   /** Fails if the once-only rule swallows a read that broke, which the log is for. */
