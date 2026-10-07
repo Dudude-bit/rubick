@@ -7,12 +7,13 @@ import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { changesScreenSection, watchedSection } from "./changes-share";
 import {
+  earlierRowsWords,
   spansCovering,
   spansWatching,
   timelineOf,
   unwatchedWords,
 } from "@/lib/changes";
-import { Lock } from "lucide-react";
+import { History, Lock } from "lucide-react";
 import { cn, formatTimeUnit, formatWhen } from "@/lib/utils";
 import { useNow } from "@/hooks/useNow";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -25,6 +26,8 @@ const WINDOWS = {
   "7d": 7 * 24 * 60 * 60_000,
 } as const;
 type Window = keyof typeof WINDOWS;
+
+const moment = (ms: number) => formatWhen(ms, "moment");
 
 /** What this app saw change across the cluster's workloads, and when it was not looking. */
 export function Changes() {
@@ -45,6 +48,14 @@ export function Changes() {
       ),
     [entries, currentContext, scope.scope]
   );
+  const ours = useMemo(
+    () => (currentContext ? (spans[currentContext] ?? []) : []),
+    [spans, currentContext]
+  );
+  const covering = useMemo(
+    () => spansCovering(ours, { kinds: [], namespaces: scope.scope }),
+    [ours, scope.scope]
+  );
   const items = useMemo(
     () =>
       timelineOf({
@@ -52,30 +63,20 @@ export function Changes() {
         deliveries: [],
         helm: [],
         journal: mine,
-        spans: spansCovering(
-          currentContext ? (spans[currentContext] ?? []) : [],
-          { kinds: [], namespaces: scope.scope }
-        ),
-        watching: spansWatching(
-          currentContext ? (spans[currentContext] ?? []) : [],
-          []
-        ),
+        spans: covering,
+        watching: spansWatching(ours, []),
         window: { from: now - WINDOWS[window], to: now },
       }).filter((item) => item.at !== null && item.at >= now - WINDOWS[window]),
-    [mine, spans, currentContext, now, window, scope.scope]
+    [mine, ours, covering, now, window]
   );
-  const watching = currentContext
-    ? (spans[currentContext] ?? []).find((span) => span.to === null)
-    : undefined;
+  const watching = ours.find((span) => span.to === null);
   const refused = watching && unwatchedWords(watching, t);
+  const earlier =
+    watching && earlierRowsWords(covering, items, watching.from, t, moment);
 
   useShareSection("changes", () => [
     changesScreenSection(items, t),
-    watchedSection(
-      watching,
-      items.filter((item) => item.kind === "gap").length,
-      t
-    ),
+    watchedSection(watching, covering, items, t),
   ]);
 
   if (!isConnected) {
@@ -101,6 +102,14 @@ export function Changes() {
             </>
           ) : (
             t("changes", "notWatchingNow")
+          )
+        }
+        description={
+          earlier && (
+            <span className="inline-flex items-center gap-1">
+              <History className="h-3 w-3 flex-none" aria-hidden="true" />
+              {earlier}
+            </span>
           )
         }
         actions={

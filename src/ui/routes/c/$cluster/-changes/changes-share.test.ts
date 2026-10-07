@@ -33,7 +33,8 @@ describe("the times a shared Changes report prints", () => {
   });
 
   it("prints when watching started in UTC", () => {
-    const section = watchedSection({ from, seenAt: to, to: null }, 0, t);
+    const span = { from, seenAt: to, to: null };
+    const section = watchedSection(span, [span], [], t);
     if (section.body.type !== "text") throw new Error("expected text");
     expect(section.body.text).toMatch(/\b0?3:07\b.* UTC/);
   });

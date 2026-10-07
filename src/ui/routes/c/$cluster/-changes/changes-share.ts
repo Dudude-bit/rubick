@@ -1,7 +1,7 @@
 import { Eye, History } from "lucide-react";
 
 import type { ChangeItem, ObservedSpan } from "@/lib/changes";
-import { journalWords, unwatchedWords } from "@/lib/changes";
+import { earlierRowsWords, journalWords, unwatchedWords } from "@/lib/changes";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportChange } from "@/lib/report";
 import {
@@ -84,14 +84,18 @@ export function changesScreenSection(
  */
 export function watchedSection(
   watching: ObservedSpan | undefined,
-  gaps: number,
+  covering: readonly ObservedSpan[],
+  items: readonly ChangeItem[],
   t: T
 ): PlacedSection {
+  const gaps = items.filter((item) => item.kind === "gap").length;
   const refused = watching && unwatchedWords(watching, t);
+  const earlier =
+    watching && earlierRowsWords(covering, items, watching.from, t, clock);
   const since = watching
     ? t("changes", "watchingNow", { since: clock(watching.from) })
     : t("changes", "notWatchingNow");
-  const base = refused ? `${since} · ${refused}` : since;
+  const base = [since, refused, earlier].filter(Boolean).join(" · ");
   const warn = !watching || gaps > 0 || Boolean(refused);
   return {
     id: "changes-watched",

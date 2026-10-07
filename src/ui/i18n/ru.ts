@@ -1720,6 +1720,8 @@ export const ru: Catalogue = {
     nothingInWindow: "На этой шкале в окне ничего нет.",
     notWatchingNow: "Сейчас за нагрузками этого кластера не следим.",
     watchingNow: "Наблюдаем с {since}",
+    earlierRows:
+      "Строки до {since} приложение записало, когда наблюдало с {from} по {to}",
     unwatchedRefused: "{kinds} не отслеживаются: кластер отказал",
     deliveriesUnread: "Не удалось прочитать, кто это доставляет: {reason}",
     claimedOwner:

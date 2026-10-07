@@ -594,6 +594,37 @@ export function gapWords(
     : t("changes", long, { from: clock(gap.from), to: clock(gap.to) });
 }
 
+/**
+ * Where the rows older than the running watch came from: this app recorded
+ * them while it watched earlier, first start to last end. `null` when every
+ * row is the running watch's own.
+ */
+export function earlierRowsWords(
+  spans: readonly ObservedSpan[],
+  items: readonly ChangeItem[],
+  since: number,
+  t: T,
+  clock: (ms: number) => string
+): string | null {
+  const older = items.flatMap((item) =>
+    item.kind === "journal" && item.at < since ? [item.at] : []
+  );
+  if (older.length === 0) return null;
+  const held = spans
+    .filter(
+      (span) =>
+        span.from < since &&
+        older.some((at) => at >= span.from && at <= (span.to ?? span.seenAt))
+    )
+    .flatMap((span) => [span.from, Math.min(span.to ?? span.seenAt, since)]);
+  const ends = held.length > 0 ? held : older;
+  return t("changes", "earlierRows", {
+    since: clock(since),
+    from: clock(Math.min(...ends)),
+    to: clock(Math.max(...ends)),
+  });
+}
+
 export interface Gap {
   from: number;
   to: number;

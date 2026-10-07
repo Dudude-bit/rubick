@@ -141,6 +141,81 @@ describe("what the Changes page offers Share", () => {
   });
 });
 
+describe("rows older than the running watch", () => {
+  const MIN = 60_000;
+  const lenaRow = (id: string, ago: number) => ({
+    id,
+    context: "prod",
+    kind: "Deployment",
+    namespace: "lena-sandbox",
+    name: "hello-web",
+    at: NOW - ago * MIN,
+    field: "replicas" as const,
+    key: null,
+    from: "1",
+    to: "2",
+  });
+  const allNamespaces = {
+    from: NOW - 25 * MIN,
+    seenAt: NOW - MIN,
+    to: NOW - MIN,
+  };
+  const lenaSandbox = {
+    from: NOW - MIN,
+    seenAt: NOW,
+    to: null,
+    scope: ["lena-sandbox"],
+  };
+
+  /**
+   * Lena's lena-sandbox Changes read "Watching since 09:50:01" above rows
+   * from 09:34 to 09:46, recorded while the app watched all namespaces.
+   * Fails if the page or Share leaves those rows' source unsaid.
+   */
+  it("says the app recorded them while it watched earlier, on the page and in Share", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["lena-sandbox"],
+    });
+    useChangeJournalStore.setState({
+      entries: [lenaRow("a", 16), lenaRow("b", 6), lenaRow("c", 5)],
+      spans: { prod: [allNamespaces, lenaSandbox] },
+    });
+
+    const collect = await mount();
+    const said = screen.getByText(
+      /^Rows before .+ were recorded by this app while it watched from .+ to .+$/
+    );
+    expect(said).toBeInTheDocument();
+    const watched = collect().find(
+      (section) => section.id === "changes-watched"
+    );
+    expect(watched?.body).toMatchObject({
+      text: expect.stringMatching(
+        /Watching since .+ · Rows before .+ were recorded by this app while it watched from .+ to .+/
+      ),
+    });
+  });
+
+  /** Fails if the line is said where every row is the running watch's own. */
+  it("says nothing about an earlier watch when every row is the running watch's own", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["lena-sandbox"],
+    });
+    useChangeJournalStore.setState({
+      entries: [lenaRow("now", 0.5)],
+      spans: { prod: [allNamespaces, lenaSandbox] },
+    });
+
+    await mount();
+    expect(screen.getByText(/^Watching since/)).toBeInTheDocument();
+    expect(screen.queryByText(/were recorded by this app/)).toBeNull();
+  });
+});
+
 describe("the Changes window toggle", () => {
   /** Russian read "24ч" and "7д" here and "24 ч" on every age beside it. Fails if the toggle stops using the locale's own units. */
   it("names its windows the way every age in the reader's language is written", async () => {
