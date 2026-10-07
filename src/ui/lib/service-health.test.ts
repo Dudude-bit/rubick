@@ -119,8 +119,8 @@ describe("one verdict for a Service on every surface", () => {
   });
 
   /**
-   * Lena read "2 пода несут app=unready-demo, и ни один не готов: ни один не
-   * готов" in the Services tooltip and on the Overview. Fails if the clause
+   * Lena read "2 пода несут app=unready-demo" in the Services tooltip and on
+   * the Overview, where a native says "у 2 подов метка app=unready-demo". Fails if the clause
    * after the colon repeats the verdict instead of naming a cause, or the
    * place that knows one.
    */
@@ -147,10 +147,29 @@ describe("one verdict for a Service on every surface", () => {
         null
       );
       expect(serviceHealthWords(health, ru).reason).toBe(
-        `2 пода несут app=unready-demo, и ни один не готов: ${cause}`
+        `У 2 подов метка app=unready-demo, и ни один не готов: ${cause}`
       );
     }
   );
+
+  /**
+   * The same sentence at every count: "у 21 пода" and "у 5 подов" take
+   * different forms, and "несут" for a label read as machine Russian at all
+   * of them.
+   */
+  it.each([
+    [1, "У 1 пода метка app=web, и он не готов"],
+    [2, "У 2 подов метка app=web, и ни один не готов"],
+    [5, "У 5 подов метка app=web, и ни один не готов"],
+    [21, "У 21 пода метка app=web, и он не готов"],
+  ])("says who has the label with %i pods in Russian", (n, sentence) => {
+    expect(
+      translate("ru", "count", "podsCarryNotReady", {
+        n,
+        selector: "app=web",
+      })
+    ).toBe(sentence);
+  });
 
   /** "За app=tls-demo пока ничего не опубликовано" read as machine Russian on the Overview. */
   it("says in plain Russian that nothing is published for the selector yet", () => {
