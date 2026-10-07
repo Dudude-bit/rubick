@@ -56,11 +56,16 @@ import { useConnections } from "@/hooks/useConnections";
 import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
-import { podsOnNode } from "@/lib/connections";
 import { mergeNodesWithMetrics } from "@/lib/metrics";
 import { ResourceType } from "@/lib/resource-registry";
 import { objectLink } from "@/lib/links";
-import type { NodeInfo, DebugResult, TaintInfo } from "@/generated/types";
+import type {
+  NodeInfo,
+  DebugResult,
+  PodInfo,
+  TaintInfo,
+} from "@/generated/types";
+import { hasTerminated } from "@/lib/pod-status";
 import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
 
@@ -72,6 +77,39 @@ function taintKeyValues(taints: TaintInfo[]): KeyValue[] {
     mono: true,
     tone: taint.effect === "PreferNoSchedule" ? undefined : ("warn" as const),
   }));
+}
+
+const holdsPlace = (pod: PodInfo) => !hasTerminated(pod);
+
+/** The pods holding a place here, then apart the finished ones a Job left. */
+function NodePods({
+  pods,
+  error,
+}: {
+  pods: PodInfo[] | undefined;
+  error: Error | null;
+}) {
+  const t = useT();
+  const finished = (pods ?? []).filter(hasTerminated);
+  return (
+    <>
+      <PodListCard
+        pods={(pods ?? []).filter(holdsPlace)}
+        error={error}
+        emptyMessage={t("empty", "noPodsOnNode")}
+      />
+      {finished.length > 0 && (
+        <Section className="mt-4">
+          <SectionHeader
+            title={t("cluster", "finishedOnNode")}
+            count={finished.length}
+            description={t("cluster", "finishedOnNodeNote")}
+          />
+          <PodListCard pods={finished} />
+        </Section>
+      )}
+    </>
+  );
 }
 
 export function NodeDetail() {
@@ -100,7 +138,6 @@ export function NodeDetail() {
   // A Node is cluster-scoped, so its neighbourhood is read with no namespace
   // at all — the same query the drain dialog opens, and the same answer.
   const connections = useConnections(ResourceType.Node, name, null);
-  const podCount = podsOnNode(connections.data);
 
   const { nodeMetrics, nodeStatus, nodeSampledAt } = useMetrics({
     includePods: false,
@@ -120,6 +157,10 @@ export function NodeDetail() {
     staleTime: STALE_TIMES.resourceDetail,
     refresh: "resourceDetail",
   });
+  // The pods holding a place here, as `kubectl describe node` counts them:
+  // not the Succeeded and Failed ones a finished Job leaves behind. `null`
+  // where a namespace refused its pods.
+  const podCount = budget.data ? budget.data.pods : undefined;
 
   // The real pod rows, filtered by `spec.nodeName` on the server. Asked for
   // only while the tab is open: a node can carry a hundred of them.
@@ -168,7 +209,7 @@ export function NodeDetail() {
                 memoryBytes: nodeWithMetrics.memoryBytes ?? null,
               }
             : null,
-          podCount,
+          podCount ?? undefined,
           t
         ),
         sections,
@@ -341,7 +382,6 @@ export function NodeDetail() {
                   }
                 : null
             }
-            podsRunning={podCount ?? null}
           />
 
           <div className="grid gap-x-8 gap-y-[22px] md:grid-cols-2">
@@ -370,20 +410,15 @@ export function NodeDetail() {
       glyph: kindGlyph(ResourceType.Pod),
       // The pod list is fetched only while this tab is open, so before then
       // its `data` is undefined — `?? []` would badge a confident "0" on a
-      // node full of pods and disagree with the Overview's own count. Fall
-      // back to that same count (from connections, always loaded), and show
-      // nothing rather than a false zero when neither source has looked yet.
+      // node full of pods. Fall back to the budget's count, the same pods,
+      // and show nothing rather than a false zero when neither has looked.
       mark: podsOnThisNode.data
-        ? podsMark(podsOnThisNode.data, t)
-        : podCount !== undefined
+        ? podsMark(podsOnThisNode.data.filter(holdsPlace), t)
+        : podCount != null
           ? countMark(podCount)
           : undefined,
       content: (
-        <PodListCard
-          pods={podsOnThisNode.data ?? []}
-          error={podsOnThisNode.error}
-          emptyMessage={t("empty", "noPodsOnNode")}
-        />
+        <NodePods pods={podsOnThisNode.data} error={podsOnThisNode.error} />
       ),
     },
     {

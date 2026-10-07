@@ -14,6 +14,7 @@
 use crate::commands::helpers::{api_in, reaches, scope_of};
 use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
+use crate::resources::node_budget::holds_reservation;
 use crate::resources::{condition_is_true, crash_looping, job_state, JobState, Rollout};
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
@@ -378,15 +379,6 @@ impl OverviewUnread {
 pub enum OverviewSource {
     Watch,
     List,
-}
-
-/// Pods in these phases hold no scheduler reservation, so they are excluded
-/// from resource accounting. They are still examined for problems.
-fn is_terminal(pod: &Pod) -> bool {
-    pod.status
-        .as_ref()
-        .and_then(|s| s.phase.as_deref())
-        .is_some_and(|p| p == "Succeeded" || p == "Failed")
 }
 
 /// What the scheduler holds for this pod, by the one rule in
@@ -953,7 +945,7 @@ struct NodeAccounting {
 fn account_by_node<'a>(pods: impl IntoIterator<Item = &'a Pod>) -> NodeAccounting {
     let mut accounting = NodeAccounting::default();
     for pod in pods {
-        if is_terminal(pod) {
+        if !holds_reservation(pod) {
             continue;
         }
         let Some(node_name) = pod.spec.as_ref().and_then(|s| s.node_name.clone()) else {
@@ -2691,7 +2683,7 @@ mod tests {
             crate::resources::restarts(&stripped),
             crate::resources::restarts(&pod)
         );
-        assert_eq!(is_terminal(&stripped), is_terminal(&pod));
+        assert_eq!(holds_reservation(&stripped), holds_reservation(&pod));
         // The one pod field the store path needs that no assertion above
         // reads: the scheduler view accounts by node and silently skips a
         // pod without one, so a strip that took it would quietly empty the
@@ -3162,6 +3154,50 @@ mod tests {
         assert_eq!(row.status.display, composition.stuck[0].reason);
         let problems = pod_problems([&pod], now);
         assert_eq!(problems[0].reason, composition.stuck[0].reason);
+    }
+
+    /// Sam's controlplane: Headroom and Used said 51 pods, Requested and
+    /// `kubectl describe node` 39, the Overview 40. The Succeeded and Failed
+    /// pods of finished Jobs hold no place. Fails if the Overview's count of
+    /// the pods on a node and the node page's budget count them differently.
+    #[test]
+    fn the_overview_and_the_node_page_count_only_the_pods_holding_a_place() {
+        let node: Node = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "controlplane", "labels": { "kubernetes.io/hostname": "controlplane" } },
+            "status": {
+                "capacity": { "cpu": "1", "memory": "2300140Ki", "pods": "110", "ephemeral-storage": "19221248Ki" },
+                "allocatable": { "cpu": "1", "memory": "2197740Ki", "pods": "110", "ephemeral-storage": "18233108Ki" },
+            },
+        }))
+        .expect("a node the kubelet wrote");
+        let on_node = |name: &str, phase: &str| -> Pod {
+            serde_json::from_value(serde_json::json!({
+                "metadata": { "name": name, "namespace": "shop" },
+                "spec": {
+                    "nodeName": "controlplane",
+                    "containers": [{
+                        "name": "app",
+                        "image": "busybox:1.36",
+                        "resources": { "requests": { "cpu": "10m", "memory": "16Mi" } },
+                    }],
+                },
+                "status": { "phase": phase },
+            }))
+            .expect("a pod the kubelet wrote")
+        };
+        let pods = vec![
+            on_node("cart-9df89489c-jhgk9", "Running"),
+            on_node("search-77fbd8f66-52kp8", "Running"),
+            on_node("payments-6c9b8d7f5-x2k4q", "Pending"),
+            on_node("reports-29855392-7m2qd", "Succeeded"),
+            on_node("reports-29855390-h8z4w", "Failed"),
+        ];
+
+        let page = crate::resources::node_budget::budget(&node, Some(&pods), Vec::new(), None);
+        let overview = account_by_node(&pods);
+
+        assert_eq!(page.pods, Some(3));
+        assert_eq!(overview.pods.get("controlplane").copied(), page.pods);
     }
 
     #[test]

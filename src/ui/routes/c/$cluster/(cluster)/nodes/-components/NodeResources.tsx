@@ -26,8 +26,6 @@ interface NodeResourcesProps {
   error: string | null;
   onRetry: () => void;
   usage: NodeUsage | null;
-  /** Pods on the node as counted, for the row the budget cannot fill alone. */
-  podsRunning: number | null;
 }
 
 function amount(
@@ -63,7 +61,6 @@ export function NodeResources({
   error,
   onRetry,
   usage,
-  podsRunning,
 }: NodeResourcesProps) {
   const t = useT();
 
@@ -140,7 +137,7 @@ export function NodeResources({
         </TableHeader>
         <TableBody>
           {rows.map((row) => {
-            const used = usedOf(row, usage, podsRunning);
+            const used = usedOf(row, usage);
             const cores =
               row.unit === "cpu" &&
               [
@@ -192,6 +189,7 @@ export function NodeResources({
                   cores={cores}
                   value={used}
                   of={row.allocatable}
+                  unknown={!budget?.known && row.name === "pods"}
                   noSource={used === null}
                 />
               </TableRow>
@@ -209,18 +207,15 @@ export function NodeResources({
 }
 
 /** What is in use, from the only sources that exist for it. */
-function usedOf(
-  row: ResourceBudget,
-  usage: NodeUsage | null,
-  podsRunning: number | null
-): number | null {
+function usedOf(row: ResourceBudget, usage: NodeUsage | null): number | null {
   switch (row.name) {
     case "cpu":
       return usage?.cpuMillicores ?? null;
     case "memory":
       return usage?.memoryBytes ?? null;
     case "pods":
-      return podsRunning;
+      // A pod's place is its use: the ones holding one are the requested count.
+      return row.requested;
     default:
       return null;
   }

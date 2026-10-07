@@ -1622,20 +1622,6 @@ function deliveredRows(delivery: Delivery[], t: T): ConnRow[] {
 }
 
 /**
- * How many pods a node is carrying: the `runsOn` edges, counted.
- *
- * The node page fills the Pods row of its Headroom block from here rather
- * than asking again — both reads are `spec.nodeName=<node>` across every
- * namespace, and one of them is enough.
- */
-export function podsOnNode(
-  conns: ResourceConnections | undefined
-): number | undefined {
-  if (!conns || conns.subject.kind !== "Node") return undefined;
-  return unique(verb(conns.edges, "runsOn").map((edge) => edge.from)).length;
-}
-
-/**
  * A translator for the one caller that provably throws every word away.
  *
  * {@link connectionCount} reads `row.object` and nothing else, so the number

@@ -34,7 +34,6 @@ function cpuRow() {
       error={null}
       onRetry={() => {}}
       usage={null}
-      podsRunning={null}
     />
   );
   return screen.getByRole("row", { name: /^cpu/ });
@@ -70,7 +69,6 @@ describe("the node's CPU row", () => {
         error={null}
         onRetry={() => {}}
         usage={null}
-        podsRunning={null}
       />
     );
     expect(screen.getByRole("row", { name: /^cpu/ }).textContent).toContain(

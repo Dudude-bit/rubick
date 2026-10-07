@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
 import { screen, within } from "@testing-library/react";
-import type { NodeBudget, NodeInfo } from "@/generated/types";
+import type { NodeBudget, NodeInfo, PodInfo } from "@/generated/types";
 
 // ----- Mocks -----
 //
@@ -22,11 +22,20 @@ vi.mock("@/hooks/useMetrics", () => ({
 }));
 
 const budgetMock = vi.fn(async (_name: string) => buildBudget());
+/** What the node's pods and its neighbourhood read, per test. */
+const onNode = vi.hoisted(() => ({
+  pods: [] as unknown[],
+  connections: undefined as unknown,
+}));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     getNode: vi.fn(async () => buildNode()),
-    listPods: vi.fn(async () => []),
+    listPods: vi.fn(async () => onNode.pods),
+    getResourceConnections: vi.fn(async () => {
+      if (!onNode.connections) throw new Error("not read in this test");
+      return onNode.connections;
+    }),
     nodeResourceBudget: (name: string) => budgetMock(name),
     cordonNode: vi.fn(async () => undefined),
     uncordonNode: vi.fn(async () => undefined),
@@ -317,8 +326,9 @@ describe("the resources table", () => {
     await renderPage();
     const notice = await screen.findByText(/kube-system, monitoring/);
     expect(notice).toHaveTextContent("2 namespaces");
-    // One "unknown" per resource for requested, and one for limited on all but pods.
-    expect(screen.getAllByText("unknown").length).toBe(5 + 4);
+    // One "unknown" per resource for requested, one for limited on all but
+    // pods, and the pods in use, which are the pods requested.
+    expect(screen.getAllByText("unknown").length).toBe(5 + 4 + 1);
   });
 
   /** The other side of unknown: a non-refusal read error carries the cluster's words, not a partial sum. Fails if the nodeBudgetFailed branch is dropped. */
@@ -358,6 +368,113 @@ describe("the resources table", () => {
     budgetMock.mockImplementation(() => new Promise<never>(() => {}));
     await renderPage();
     expect(await screen.findByText("Reading…")).toBeInTheDocument();
+  });
+});
+
+describe("the pods on the node", () => {
+  /** Sam's controlplane: 39 pods holding a place, 7 Succeeded and 4 Failed. */
+  const pod = (name: string, phase: string, display: string) =>
+    ({
+      name,
+      namespace: "shop",
+      uid: name,
+      status: { phase, display, message: null, reason: null },
+      containers: [],
+      initContainers: [],
+      nodeName: "test-node-1",
+      restartCount: 0,
+      createdAt: "2026-10-06T21:00:00Z",
+    }) as unknown as PodInfo;
+  const placed = Array.from({ length: 39 }, (_, i) =>
+    pod(`app-${i}`, "Running", "Running")
+  );
+  const finished = [
+    ...Array.from({ length: 7 }, (_, i) =>
+      pod(`reports-2985539${i}-done`, "Succeeded", "Completed")
+    ),
+    ...Array.from({ length: 4 }, (_, i) =>
+      pod(`reports-2985538${i}-fail`, "Failed", "Error")
+    ),
+  ];
+  const budget = buildBudget({
+    pods: 39,
+    resources: buildBudget().resources.map((r) =>
+      r.name === "pods" ? { ...r, requested: 39 } : r
+    ),
+  });
+
+  beforeEach(() => {
+    budgetMock.mockReset();
+    budgetMock.mockImplementation(async () => budget);
+    onNode.pods = [...placed, ...finished];
+    onNode.connections = {
+      subject: {
+        kind: "Node",
+        name: "test-node-1",
+        namespace: null,
+        existence: "present",
+        facts: null,
+      },
+      edges: [...placed, ...finished].map((p) => ({
+        from: {
+          kind: "Pod",
+          name: p.name,
+          namespace: p.namespace,
+          existence: "present",
+          facts: null,
+        },
+        to: {
+          kind: "Node",
+          name: "test-node-1",
+          namespace: null,
+          existence: "present",
+          facts: null,
+        },
+        relation: { verb: "runsOn" },
+      })),
+      stops: [],
+      published: [],
+      notLookedAt: [],
+    };
+  });
+
+  /**
+   * Headroom said "Pods 51/110" and Resources Used 51 beside Requested 39,
+   * which `kubectl describe node` agrees with: the 51 counted the pods
+   * finished Jobs left. Fails if any pod count on the page takes in a pod
+   * that holds no place, or two of them disagree.
+   */
+  it("counts only the pods holding a place, in the headroom and the table alike", async () => {
+    vi.mocked(useResourceDetail).mockReturnValue(
+      defaultUseResourceDetailReturn(buildNode()) as never
+    );
+    await renderPage();
+
+    const whole = (text: string) => (_: string, el: Element | null) =>
+      el?.tagName === "SPAN" && el.textContent === text;
+    expect(await screen.findByText(whole("39/110 · 35%"))).toBeInTheDocument();
+    const row = screen
+      .getAllByRole("row")
+      .find((tr) => tr.firstElementChild?.textContent === "pods")!;
+    const [, , , requested, , used] = within(row).getAllByRole("cell");
+    expect(requested).toHaveTextContent("39");
+    expect(used).toHaveTextContent("39");
+  });
+
+  /** The tab's count is the same pods; the finished ones are listed apart, under their own heading. */
+  it("lists the finished pods apart and counts the tab by the ones holding a place", async () => {
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...defaultUseResourceDetailReturn(buildNode()),
+      activeTab: "pods",
+    } as never);
+    await renderPage();
+
+    const finishedHeading = await screen.findByText("Finished here");
+    expect(finishedHeading).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Pods/ })).toHaveTextContent("39");
+    expect(screen.getByRole("tab", { name: /Pods/ })).not.toHaveTextContent(
+      "50"
+    );
   });
 });
 

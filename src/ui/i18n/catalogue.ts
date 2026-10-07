@@ -4261,6 +4261,9 @@ export const en = {
     },
     problemCountAtLeast: { one: "{n}+ problem", other: "{n}+ problems" },
     problemsNotAllChecked: "not all checked",
+    finishedOnNode: "Finished here",
+    finishedOnNodeNote:
+      "Succeeded and Failed pods hold no place on the node, so the pod counts on this page leave them out, as kubectl describe node does.",
     attentionNothing: "nothing needs attention",
     attentionNoneFound: "nothing found in what could be checked",
     attentionNotChecked: "Not checked",

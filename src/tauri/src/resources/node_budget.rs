@@ -79,8 +79,11 @@ pub(super) fn parse(name: &str, quantity: &str) -> Option<f64> {
     }
 }
 
-/// Pods in these phases hold no reservation and are not counted.
-fn holds_reservation(pod: &Pod) -> bool {
+/// Whether a pod holds a place on its node: not `Succeeded` or `Failed`,
+/// the pods `kubectl describe node` counts as "Non-terminated". Every count
+/// of the pods on a node reads this, or the page and the Overview disagree.
+#[must_use]
+pub fn holds_reservation(pod: &Pod) -> bool {
     !pod.status
         .as_ref()
         .and_then(|s| s.phase.as_deref())

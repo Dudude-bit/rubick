@@ -4745,6 +4745,9 @@ export const ru: Catalogue = {
       other: "{n}+ проблемы",
     },
     problemsNotAllChecked: "проверено не всё",
+    finishedOnNode: "Завершились здесь",
+    finishedOnNodeNote:
+      "Поды в фазе Succeeded и Failed не занимают места на узле, поэтому счётчики подов на этой странице их не учитывают, как и kubectl describe node.",
     attentionNothing: "ничего не требует внимания",
     attentionNoneFound: "в проверенном ничего не найдено",
     attentionNotChecked: "Не проверено",
