@@ -98,9 +98,57 @@ describe("a printer column's JSONPath, as the API server reads it", () => {
       ".spec.dnsNames[",
       "spec.secretName",
       ".metadata.resourceVersion",
-      ".metadata.ownerReferences[0].name",
+      ".metadata.ownerReferences[0].blockOwnerDeletion",
+      ".metadata..name",
       "..status",
     ])
       expect(value(path)).toEqual({ evaluated: false });
+  });
+});
+
+describe("a printer column that reads the owner", () => {
+  /** widget-demo as `list_custom_resources_in` returns it, owned by a ConfigMap. */
+  const widget: CustomResourceInfo = {
+    name: "widget-demo",
+    namespace: "k8s-gui-test",
+    uid: "uid-w",
+    apiVersion: "demo.k8s-gui.io/v1",
+    kind: "Widget",
+    spec: { tier: "gold" },
+    status: null,
+    labels: {},
+    annotations: {},
+    createdAt: "2026-10-06T17:40:00Z",
+    ownerReferences: [
+      {
+        apiVersion: "v1",
+        kind: "ConfigMap",
+        name: "widget-owner",
+        uid: "uid-cm",
+        controller: null,
+      },
+    ],
+    generation: 1,
+  };
+
+  /**
+   * The Owner column read "not evaluated" though the row carries every
+   * ownerReference. Fails if a carried owner field stops evaluating, or an
+   * owner nobody listed reads as "not evaluated" instead of absent.
+   */
+  it("evaluates what the row carries, as kubectl prints it", () => {
+    expect(printerCell(widget, ".metadata.ownerReferences[0].name")).toEqual({
+      evaluated: true,
+      value: "widget-owner",
+    });
+    expect(
+      printerCell(widget, ".metadata.ownerReferences[0].controller")
+    ).toEqual({ evaluated: true, value: undefined });
+    expect(
+      printerCell(
+        { ...widget, ownerReferences: [] },
+        ".metadata.ownerReferences[0].name"
+      )
+    ).toEqual({ evaluated: true, value: undefined });
   });
 });

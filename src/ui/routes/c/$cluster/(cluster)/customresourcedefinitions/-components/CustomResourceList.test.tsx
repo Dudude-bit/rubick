@@ -122,7 +122,7 @@ describe("a CRD's printer columns in its instance list", () => {
     await draw(
       [node("controlplane", "172.30.1.2", "192.168.0.69")],
       [
-        column("Owner", ".metadata.ownerReferences[0].name"),
+        column("Finalizer", ".metadata.finalizers[0]"),
         column("Encryption", ".spec.encryption.key"),
       ]
     );
@@ -131,7 +131,7 @@ describe("a CRD's printer columns in its instance list", () => {
     const unread = row.getByText("not evaluated");
     expect(unread.closest("[title]")).toHaveAttribute(
       "title",
-      expect.stringContaining(".metadata.ownerReferences[0].name")
+      expect.stringContaining(".metadata.finalizers[0]")
     );
     expect(row.getAllByText("none")).toHaveLength(1);
   });

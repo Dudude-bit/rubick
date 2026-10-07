@@ -269,7 +269,30 @@ const CARRIED_METADATA = [
   "annotations",
   "creationTimestamp",
   "generation",
+  "ownerReferences",
 ];
+
+/** The owner fields a row carries; `blockOwnerDeletion` is not one of them. */
+const CARRIED_OWNER = ["apiVersion", "kind", "name", "uid", "controller"];
+
+/** Whether the steps past `ownerReferences` read only fields the row carries. */
+function readsCarriedOwner(steps: Step[]): boolean {
+  return steps.every((at) => {
+    switch (at.op) {
+      case "keys":
+        return at.keys.every((key) => CARRIED_OWNER.includes(key));
+      case "descend":
+        return false;
+      case "filter":
+        return (
+          readsCarriedOwner(at.test.left) &&
+          (!Array.isArray(at.test.right) || readsCarriedOwner(at.test.right))
+        );
+      default:
+        return true;
+    }
+  });
+}
 
 export type PrinterCell =
   | { evaluated: true; value: unknown }
@@ -292,7 +315,9 @@ export function printerCell(
     first?.op !== "keys" ||
     (first.keys.includes("metadata") &&
       (second?.op !== "keys" ||
-        !second.keys.every((key) => CARRIED_METADATA.includes(key))))
+        !second.keys.every((key) => CARRIED_METADATA.includes(key)) ||
+        (second.keys.includes("ownerReferences") &&
+          !readsCarriedOwner(steps.slice(2)))))
   )
     return { evaluated: false };
   const document = {
@@ -306,6 +331,11 @@ export function printerCell(
       annotations: row.annotations,
       creationTimestamp: row.createdAt,
       generation: row.generation,
+      ...(row.ownerReferences.length > 0 && {
+        ownerReferences: row.ownerReferences.map(({ controller, ...ref }) =>
+          controller === null ? ref : { ...ref, controller }
+        ),
+      }),
     },
     spec: row.spec,
     ...(row.status === null ? {} : { status: row.status }),
