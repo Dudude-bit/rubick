@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Play } from "lucide-react";
 
+import { ReasonTip } from "@/components/object/detail-blocks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -12,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Section, SectionHeader } from "@/components/ui/section";
+import { noteDenied, usePodDenied } from "@/lib/access";
 import { commands } from "@/lib/commands";
 import {
   DEFAULT_CHECK_IMAGE,
@@ -21,6 +23,7 @@ import {
 } from "@/lib/checks";
 import { offeredContainers, whyNoShell } from "@/lib/container-sequence";
 import { errorToShow } from "@/lib/error-utils";
+import { cn } from "@/lib/utils";
 import type { Check, CheckOutcome, PodInfo } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
 
@@ -56,6 +59,10 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
   const [address, setAddress] = useState("");
   const [image, setImage] = useState(DEFAULT_CHECK_IMAGE);
   const [runs, setRuns] = useState<Run[]>([]);
+  const denied = usePodDenied(pod.namespace);
+  // A copy is a new pod and then an exec into it; the pod's own container is
+  // only the exec.
+  const copyDenied = denied.copy ?? denied.shell;
 
   const run = useMutation({
     mutationFn: async ({
@@ -77,6 +84,19 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
       return { kind, check, outcome };
     },
     onSuccess: (done) => setRuns((previous) => [done, ...previous].slice(0, 8)),
+    onError: (error, { copy }) => {
+      if (!copy)
+        noteDenied(
+          "create",
+          {
+            group: "",
+            resource: "pods",
+            namespace: pod.namespace,
+            subresource: "exec",
+          },
+          error
+        );
+    },
   });
 
   const hostPort = parseHostPort(address);
@@ -92,6 +112,7 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
     t
   );
   const fromCopy = why !== null;
+  const runDenied = fromCopy ? copyDenied : denied.shell;
 
   return (
     <div className="flex flex-col gap-[22px]">
@@ -136,7 +157,7 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
           className="flex items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!name.trim()) return;
+            if (!name.trim() || runDenied) return;
             run.mutate({
               kind: "dns",
               check: { kind: "dns", name: name.trim() },
@@ -157,16 +178,13 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
             placeholder="postgres.shop.svc.cluster.local"
             className="h-7 max-w-md font-mono text-xs"
           />
-          <Button size="sm" type="submit" disabled={busy || !name.trim()}>
-            <Play aria-hidden="true" className="mr-1.5 h-3 w-3" />
-            {t("checks", "run")}
-          </Button>
+          <RunButton reason={runDenied} disabled={busy || !name.trim()} />
         </form>
         <form
           className="flex items-center gap-2"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!hostPort) return;
+            if (!hostPort || runDenied) return;
             run.mutate({
               kind: "tcp",
               check: { kind: "tcp", host: hostPort.host, port: hostPort.port },
@@ -187,10 +205,7 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
             placeholder="postgres:5432"
             className="h-7 max-w-md font-mono text-xs"
           />
-          <Button size="sm" type="submit" disabled={busy || !hostPort}>
-            <Play aria-hidden="true" className="mr-1.5 h-3 w-3" />
-            {t("checks", "run")}
-          </Button>
+          <RunButton reason={runDenied} disabled={busy || !hostPort} />
         </form>
         {why !== null ? (
           <div className="flex items-center gap-2">
@@ -231,6 +246,7 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
                 image={image}
                 onImage={setImage}
                 busy={busy}
+                copyDenied={copyDenied}
                 onCopy={() =>
                   run.mutate({ kind: done.kind, check: done.check, copy: true })
                 }
@@ -243,6 +259,31 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
   );
 }
 
+/** Run, greyed with the can-i question where the route it takes is refused. */
+function RunButton({
+  reason,
+  disabled,
+}: {
+  reason: string | undefined;
+  disabled: boolean;
+}) {
+  const t = useT();
+  return (
+    <ReasonTip reason={reason}>
+      <Button
+        size="sm"
+        type="submit"
+        disabled={!reason && disabled}
+        aria-disabled={reason ? true : undefined}
+        className={cn(reason && "cursor-default opacity-40")}
+      >
+        <Play aria-hidden="true" className="mr-1.5 h-3 w-3" />
+        {t("checks", "run")}
+      </Button>
+    </ReasonTip>
+  );
+}
+
 function subjectOf(check: Check): string {
   return check.kind === "dns" ? check.name : `${check.host}:${check.port}`;
 }
@@ -252,12 +293,14 @@ function Answer({
   image,
   onImage,
   busy,
+  copyDenied,
   onCopy,
 }: {
   run: Run;
   image: string;
   onImage: (image: string) => void;
   busy: boolean;
+  copyDenied: string | undefined;
   onCopy: () => void;
 }) {
   const t = useT();
@@ -306,9 +349,18 @@ function Answer({
             onChange={(event) => onImage(event.target.value)}
             className="h-7 w-56 font-mono text-xs"
           />
-          <Button size="sm" variant="outline" onClick={onCopy} disabled={busy}>
-            {t("checks", "runFromCopy")}
-          </Button>
+          <ReasonTip reason={copyDenied}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => !copyDenied && onCopy()}
+              disabled={!copyDenied && busy}
+              aria-disabled={copyDenied ? true : undefined}
+              className={cn(copyDenied && "cursor-default opacity-40")}
+            >
+              {t("checks", "runFromCopy")}
+            </Button>
+          </ReasonTip>
           <span className="text-[11px] text-fg-fnt">
             {t("checks", "copyNote")}
           </span>

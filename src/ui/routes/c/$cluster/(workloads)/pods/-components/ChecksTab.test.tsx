@@ -10,13 +10,15 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/lib/commands", () => ({
-  commands: { runPodCheck: vi.fn() },
+  commands: { runPodCheck: vi.fn(), checkAccess: vi.fn() },
 }));
 
 import { commands } from "@/lib/commands";
 import { renderWithProviders } from "@/test/render";
 import type { CheckOutcome, PodInfo } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
+import { useClusterStore } from "@/stores/clusterStore";
+import { marcoReview } from "@/test/marco";
 import { ChecksTab } from "./ChecksTab";
 
 const pod = {
@@ -272,5 +274,62 @@ describe("testing a hypothesis from the pod", () => {
     const said = await screen.findByText(/ended without saying/);
     expect(said.className).toContain("text-fg-mut");
     expect(said.className).not.toContain("text-warn");
+  });
+});
+
+describe("Checks for Marco, who may exec into team-checkout's pods and not create one", () => {
+  beforeEach(() => {
+    vi.mocked(commands.checkAccess).mockImplementation(marcoReview);
+    useClusterStore.setState((s) => ({
+      currentContext: "acme-staging",
+      isConnected: true,
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+  });
+
+  const inCheckout = (subject: PodInfo) =>
+    ({ ...subject, namespace: "team-checkout" }) as PodInfo;
+
+  /**
+   * A container that cannot take an exec sends Run to a copy of the pod,
+   * which is a new pod, and Run stayed live with no reason. Fails if Run is
+   * offered, or runs, while can-i create pods says no.
+   */
+  it("greys Run with the can-i question where the check would run from a copy", async () => {
+    mount(inCheckout(crashing));
+    const runs = () => screen.getAllByRole("button", { name: /Run/ });
+    await waitFor(() =>
+      expect(runs()[0]).toHaveAttribute("aria-disabled", "true")
+    );
+    expect(runs()[1]).toHaveAttribute("aria-disabled", "true");
+    await userEvent.hover(runs()[1]);
+    expect(
+      (await screen.findAllByText(/can-i create pods -n team-checkout/))[0]
+    ).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText(/Connect to/), "postgres:5432");
+    await userEvent.keyboard("{Enter}");
+    await userEvent.click(runs()[1]);
+    expect(commands.runPodCheck).not.toHaveBeenCalled();
+  });
+
+  /**
+   * In a running container the check is an exec, which Marco may do, so Run
+   * stays offered; the copy a missing tool offers next is a new pod and is
+   * greyed. Fails if the guard shuts the exec or leaves the copy live.
+   */
+  it("keeps Run for an exec and greys Run from a copy", async () => {
+    vi.mocked(commands.runPodCheck).mockResolvedValue(
+      outcome({ answer: "noTool", answeredWith: null, tried: ["nc", "bash"] })
+    );
+    mount(inCheckout(pod));
+    await waitFor(() => expect(commands.checkAccess).toHaveBeenCalled());
+    await userEvent.type(screen.getByLabelText(/Connect to/), "postgres:5432");
+    const run = screen.getAllByRole("button", { name: /Run/ })[1];
+    expect(run).not.toHaveAttribute("aria-disabled");
+    await userEvent.click(run);
+    const copy = await screen.findByRole("button", { name: "Run from a copy" });
+    await waitFor(() => expect(copy).toHaveAttribute("aria-disabled", "true"));
+    await userEvent.click(copy);
+    expect(commands.runPodCheck).toHaveBeenCalledTimes(1);
   });
 });
