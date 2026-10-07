@@ -345,6 +345,22 @@ export interface KindNoun {
   plural: string;
 }
 
+/**
+ * A custom kind's plural as a noun, spelled the way the kind is: the API's
+ * lowercase plural read back over the kind's own capitals, so `CiliumNode`
+ * and `ciliumnodes` count as "2 CiliumNodes" beside "1 CiliumNode", and
+ * `ciliumnetworkpolicies` as "CiliumNetworkPolicies". A plural that does not
+ * grow out of the kind's name stays as the cluster spells it.
+ */
+export function kindPlural(kind: string, plural: string): string {
+  const lower = kind.toLowerCase();
+  let shared = 0;
+  while (shared < lower.length && lower[shared] === plural[shared]) shared++;
+  return shared < lower.length - 1
+    ? plural
+    : kind.slice(0, shared) + plural.slice(shared);
+}
+
 export function kindNoun(label: string): KindNoun {
   const lower = label.toLowerCase();
   const def =

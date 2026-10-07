@@ -6,6 +6,7 @@ import {
   RESOURCE_REGISTRY,
   ResourceType,
   kindFacts,
+  kindPlural,
   listQueryFor,
   narrowingHelps,
   toPlural,
@@ -149,5 +150,17 @@ describe("the facts the registry takes from src/contracts/kinds.json", () => {
     expect(apiVersion("Deployment")).toBe("apps/v1");
     expect(apiVersion("HorizontalPodAutoscaler")).toBe("autoscaling/v2");
     expect(kindFacts("Pod")?.group).toBe("");
+  });
+});
+
+describe("a custom kind's plural noun", () => {
+  /** "2 ciliumnodes" beside "1 CiliumNode". Fails if the plural loses the kind's capitals, or invents a plural the API does not use. */
+  it("reads the API's plural over the kind's own capitals", () => {
+    expect(kindPlural("CiliumNode", "ciliumnodes")).toBe("CiliumNodes");
+    expect(kindPlural("CiliumNetworkPolicy", "ciliumnetworkpolicies")).toBe(
+      "CiliumNetworkPolicies"
+    );
+    expect(kindPlural("Widget", "widgets")).toBe("Widgets");
+    expect(kindPlural("Database", "dbs")).toBe("dbs");
   });
 });

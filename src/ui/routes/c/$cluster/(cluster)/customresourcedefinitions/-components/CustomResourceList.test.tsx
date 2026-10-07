@@ -182,3 +182,22 @@ describe("a custom resource list's count", () => {
     expect(screen.queryByText("1 widgets")).toBeNull();
   });
 });
+
+describe("a custom resource list's count of several", () => {
+  /**
+   * Sam's lists ended "1 Widget" but "2 ciliumnodes": the kind for one, the
+   * API's lowercase resource plural for many. Fails if a count of several
+   * stops naming them by the kind's own noun.
+   */
+  it("counts CiliumNodes as CiliumNodes", async () => {
+    await draw(
+      [
+        node("controlplane", "172.30.1.2", "192.168.0.69"),
+        node("node01", "172.30.2.2", "192.168.1.25"),
+      ],
+      CILIUM_NODE_COLUMNS
+    );
+    expect(await screen.findByText("2 CiliumNodes")).toBeInTheDocument();
+    expect(screen.queryByText("2 ciliumnodes")).toBeNull();
+  });
+});

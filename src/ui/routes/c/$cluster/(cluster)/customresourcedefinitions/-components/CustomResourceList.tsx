@@ -20,6 +20,7 @@ import { ResourceList } from "../../../-list/ResourceList";
 import type { CustomResourceInfo, PrinterColumn } from "@/generated/types";
 import { STALE_TIMES } from "@/lib/refresh";
 import { crdWidthsKey } from "@/lib/resource-identity";
+import { kindPlural } from "@/lib/resource-registry";
 import { getResourceRowId } from "@/lib/table-utils";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { useT } from "@/i18n/useT";
@@ -217,7 +218,7 @@ export function CustomResourceList({
   });
 
   const noun = useMemo(
-    () => ({ kind: crdKind, plural: crdPlural }),
+    () => ({ kind: crdKind, plural: kindPlural(crdKind, crdPlural) }),
     [crdKind, crdPlural]
   );
 
