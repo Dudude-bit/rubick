@@ -135,6 +135,7 @@ function servedRow(entry: AccessKind): NavItem {
     label: entry.displayPlural,
     path: servedListLink(entry),
     icon: entry.icon,
+    count: entry.count,
     query: {
       group: entry.group,
       resource: entry.plural,
@@ -195,8 +196,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
       // Services name the endpoints behind each one; this is the only place
       // that answers "what is behind everything at once" — which is the
       // question asked when it is not yet known which Service is wrong.
-      // No count: `ResourceCounts` has no endpoints field to read.
-      resource(ResourceType.Endpoints),
+      resource(ResourceType.Endpoints, "endpoints"),
       resource(ResourceType.Ingress, "ingresses"),
       resource(ResourceType.NetworkPolicy),
     ],
@@ -204,7 +204,7 @@ const GROUPS: { caption?: NavKey; items: NavItem[] }[] = [
   {
     caption: "storage",
     items: [
-      resource(ResourceType.PersistentVolumeClaim),
+      resource(ResourceType.PersistentVolumeClaim, "persistentVolumeClaims"),
       resource(ResourceType.PersistentVolume),
       resource(ResourceType.StorageClass),
     ],

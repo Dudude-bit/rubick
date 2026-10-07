@@ -1870,6 +1870,9 @@ export interface ResourceCounts {
   ingresses: number | null;
   configMaps: number | null;
   secrets: number | null;
+  endpoints: number | null;
+  persistentVolumeClaims: number | null;
+  serviceAccounts: number | null;
   events: number | null;
 }
 

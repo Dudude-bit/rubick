@@ -7,6 +7,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import type { ResourceCounts } from "@/generated/types";
+
 export const RBAC_GROUP = "rbac.authorization.k8s.io";
 
 /** A built-in kind with no page of its own, opened on the generic one. */
@@ -17,6 +19,8 @@ export interface AccessKind {
   plural: string;
   namespaced: boolean;
   icon: LucideIcon;
+  /** The overview count that belongs beside its row in the sidebar, where the backend counts the kind. */
+  count?: keyof ResourceCounts;
 }
 
 /** Who a request is made as, and what it may do: the kinds RBAC is read from. */
@@ -28,6 +32,7 @@ export const ACCESS_KINDS: readonly AccessKind[] = [
     plural: "serviceaccounts",
     namespaced: true,
     icon: IdCard,
+    count: "serviceAccounts",
   },
   {
     kind: "Role",

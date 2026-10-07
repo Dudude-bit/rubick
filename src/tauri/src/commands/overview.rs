@@ -22,7 +22,10 @@ use chrono::{DateTime, Utc};
 use futures::future::join_all;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
-use k8s_openapi::api::core::v1::{ConfigMap, Event, Namespace, Node, Pod, Secret, Service};
+use k8s_openapi::api::core::v1::{
+    ConfigMap, Endpoints, Event, Namespace, Node, PersistentVolumeClaim, Pod, Secret, Service,
+    ServiceAccount,
+};
 use k8s_openapi::api::networking::v1::Ingress;
 use kube::api::ListParams;
 use kube::{Api, Client, Resource};
@@ -246,6 +249,9 @@ pub struct ResourceCounts {
     pub ingresses: Option<usize>,
     pub config_maps: Option<usize>,
     pub secrets: Option<usize>,
+    pub endpoints: Option<usize>,
+    pub persistent_volume_claims: Option<usize>,
+    pub service_accounts: Option<usize>,
     /// Events the apiserver still holds. Events expire on the cluster's own
     /// TTL — an hour on most installs — so this is a recent-activity count,
     /// not a lifetime total.
@@ -1284,7 +1290,7 @@ struct Sides {
     usage_by_node: Option<BTreeMap<String, (f64, u64)>>,
 }
 
-/// Six bounded metadata pages, for one namespace or the whole cluster.
+/// Nine bounded metadata pages, for one namespace or the whole cluster.
 async fn namespaced_counts(
     client: &Client,
     reach: Option<&str>,
@@ -1295,13 +1301,29 @@ async fn namespaced_counts(
     let ingresses_api: Api<Ingress> = api_in(client, reach);
     let config_maps_api: Api<ConfigMap> = api_in(client, reach);
     let secrets_api: Api<Secret> = api_in(client, reach);
+    let endpoints_api: Api<Endpoints> = api_in(client, reach);
+    let claims_api: Api<PersistentVolumeClaim> = api_in(client, reach);
+    let accounts_api: Api<ServiceAccount> = api_in(client, reach);
     let events_api: Api<Event> = api_in(client, reach);
-    let (cron_jobs, services, ingresses, config_maps, secrets, events) = tokio::join!(
+    let (
+        cron_jobs,
+        services,
+        ingresses,
+        config_maps,
+        secrets,
+        endpoints,
+        persistent_volume_claims,
+        service_accounts,
+        events,
+    ) = tokio::join!(
         count_of(&cron_jobs_api, reach, refused),
         count_of(&services_api, reach, refused),
         count_of(&ingresses_api, reach, refused),
         count_of(&config_maps_api, reach, refused),
         count_of(&secrets_api, reach, refused),
+        count_of(&endpoints_api, reach, refused),
+        count_of(&claims_api, reach, refused),
+        count_of(&accounts_api, reach, refused),
         count_of(&events_api, reach, refused),
     );
     ResourceCounts {
@@ -1310,6 +1332,9 @@ async fn namespaced_counts(
         ingresses,
         config_maps,
         secrets,
+        endpoints,
+        persistent_volume_claims,
+        service_accounts,
         events,
         ..Default::default()
     }
@@ -1330,6 +1355,9 @@ fn add_counts(parts: &[ResourceCounts]) -> ResourceCounts {
         ingresses: sum(|c| c.ingresses),
         config_maps: sum(|c| c.config_maps),
         secrets: sum(|c| c.secrets),
+        endpoints: sum(|c| c.endpoints),
+        persistent_volume_claims: sum(|c| c.persistent_volume_claims),
+        service_accounts: sum(|c| c.service_accounts),
         events: sum(|c| c.events),
         ..Default::default()
     }
@@ -3395,6 +3423,12 @@ mod across_namespaces {
                 "/api/v1/namespaces/staging/configmaps",
                 "/api/v1/namespaces/prod/secrets",
                 "/api/v1/namespaces/staging/secrets",
+                "/api/v1/namespaces/prod/endpoints",
+                "/api/v1/namespaces/staging/endpoints",
+                "/api/v1/namespaces/prod/persistentvolumeclaims",
+                "/api/v1/namespaces/staging/persistentvolumeclaims",
+                "/api/v1/namespaces/prod/serviceaccounts",
+                "/api/v1/namespaces/staging/serviceaccounts",
             ];
             Self(
                 paths
@@ -3611,6 +3645,25 @@ mod across_namespaces {
 
         assert_eq!(overview.counts.pods, Some(11));
         assert_eq!(overview.counts.services, Some(3));
+    }
+
+    /// The sidebar showed no number beside Endpoints, PVCs or service accounts
+    /// for a token that can list all three. Fails if any of them stops being
+    /// counted across the scope, or a refusal of one reads as a number.
+    #[tokio::test]
+    async fn endpoints_claims_and_service_accounts_are_counted_across_the_scope() {
+        let overview = Cluster::new()
+            .items("/api/v1/namespaces/prod/endpoints", named(2))
+            .items("/api/v1/namespaces/staging/endpoints", named(1))
+            .items("/api/v1/namespaces/prod/persistentvolumeclaims", named(4))
+            .items("/api/v1/namespaces/prod/serviceaccounts", named(3))
+            .refuse("/api/v1/namespaces/staging/serviceaccounts")
+            .listed()
+            .await;
+
+        assert_eq!(overview.counts.endpoints, Some(3));
+        assert_eq!(overview.counts.persistent_volume_claims, Some(4));
+        assert_eq!(overview.counts.service_accounts, None);
     }
 
     /// Would break the app's one rule about numbers. Two namespaces

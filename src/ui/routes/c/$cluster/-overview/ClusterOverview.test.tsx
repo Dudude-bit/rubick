@@ -216,6 +216,9 @@ const FULL_OVERVIEW: ClusterOverviewData = {
     ingresses: 0,
     configMaps: 0,
     secrets: 0,
+    endpoints: 0,
+    persistentVolumeClaims: 0,
+    serviceAccounts: 0,
     events: 0,
   },
   pods: {
