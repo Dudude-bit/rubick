@@ -12,6 +12,7 @@ import {
 
 import type { DeploymentInfo } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
+import { workloadStatus } from "@/lib/workload-status";
 import { LOST_SIGHT_MS, type Watch } from "@/lib/tell-me-when";
 import { testQueryClient } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -160,7 +161,7 @@ describe("a rollout being watched", () => {
     hook.unmount();
   });
 
-  /** The button went back to "Tell me when" ten seconds before anything said why, while the peek beside it still read Progressing: a stall looked like a dropped watch. Fails with the old ten-second window, or without the invalidation. */
+  /** The button went back to "Tell me when" ten seconds before anything said why, while the peek beside it still read Progressing: a stall looked like a dropped watch. Dana then read "rollout failed" in the toast beside "Stalled" in the peek. Fails with the old ten-second window, without the invalidation, or with a second word for the state. */
   it("says a stalled rollout within a second of the watch ending, and has the peek read it again", async () => {
     const client = testQueryClient();
     const key = queryKeys.detail("Deployment", "shop", "payments");
@@ -188,8 +189,9 @@ describe("a rollout being watched", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_000);
     });
+    expect(workloadStatus(stalled.rollout)).toBe("Stalled");
     expect(notifyMock).toHaveBeenCalledWith({
-      title: "payments rollout failed",
+      title: "payments rollout stalled",
       body: `ProgressDeadlineExceeded: ${message}`,
     });
     hook.unmount();

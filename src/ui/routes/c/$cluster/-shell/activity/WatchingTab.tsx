@@ -10,7 +10,7 @@ import {
   type After,
   type Watch,
 } from "@/lib/tell-me-when";
-import { SAYS_KEY } from "@/hooks/useTellMeWhen";
+import { answerLine } from "@/hooks/useTellMeWhen";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useTellMeWhenStore, useWatchesFor } from "@/stores/tellMeWhenStore";
 import { useT } from "@/i18n/useT";
@@ -88,7 +88,7 @@ function Row({
       case "lost":
         return t("tell", "lostSince", { ago: formatSince(status.since, now) });
       case "done":
-        return `${t("tell", SAYS_KEY[status.verdict.says], { name: watch.name })} · ${t("action", "agoSuffix", { age: formatSince(status.at, now) })}`;
+        return `${answerLine({ watch, verdict: status.verdict }, t)} · ${t("action", "agoSuffix", { age: formatSince(status.at, now) })}`;
       case "expired":
         return t("tell", "expired");
     }

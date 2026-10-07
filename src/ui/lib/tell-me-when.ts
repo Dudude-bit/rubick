@@ -63,6 +63,7 @@ export const ASK_OF: Record<WatchKind, Ask> = {
 
 export type Says =
   | "rolledOut"
+  // Said as "stalled"; answered watches are persisted under this name.
   | "rolloutFailed"
   | "rolloutPaused"
   | "ready"

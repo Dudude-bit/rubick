@@ -38,7 +38,7 @@ export interface Answer {
 /** One catalogue line per answer, the object's name filled in. */
 export const SAYS_KEY: Record<Says, keyof typeof en.tell> = {
   rolledOut: "saysRolledOut",
-  rolloutFailed: "saysRolloutFailed",
+  rolloutFailed: "saysRolloutStalled",
   rolloutPaused: "saysRolloutPaused",
   ready: "saysReady",
   crashedAgain: "saysCrashedAgain",
