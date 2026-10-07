@@ -120,6 +120,13 @@ export function useDenied(
   );
 }
 
+/** Why the cluster will not take an edited manifest of this object from this user. */
+export function useEditDenied(
+  key: { kind: string; namespace?: string | null } | null
+): string | undefined {
+  return useDenied(key && guardedOf(key.kind, key.namespace ?? null)).patch;
+}
+
 /**
  * Why a list row may not be deleted, for the namespaces the reader chose:
  * those are asked. A row elsewhere, or a review that would not answer, gets

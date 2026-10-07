@@ -8,7 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCopyToClipboard } from "@/hooks";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
-import { DetailAction } from "@/components/object/detail-blocks";
+import {
+  DetailAction,
+  ReasonedAction,
+} from "@/components/object/detail-blocks";
 import type { BinaryValue, Withheld } from "@/generated/types";
 import { withheldWords } from "@/lib/certificates";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
@@ -64,6 +67,8 @@ export interface DataSectionProps {
    * not the way to edit bytes; a withheld one is not ours to write.
    */
   onEditKey?: (key: string, value: string) => Promise<void>;
+  /** Why the cluster will not take an edit from this user; each Edit stays, greyed, and says so. */
+  editDenied?: string;
 }
 
 export function DataSection({
@@ -76,6 +81,7 @@ export function DataSection({
   isLoading = false,
   emptyMessage,
   onEditKey,
+  editDenied,
 }: DataSectionProps) {
   const t = useT();
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
@@ -242,13 +248,14 @@ export function DataSection({
                       />
                     )}
                     {onEditKey && value !== undefined && !blob && !refusal && (
-                      <DetailAction
+                      <ReasonedAction
                         label={t("action", "edit")}
                         // Named by its key, or a list of ten offers ten
                         // identical "Edit" buttons and nothing but position
                         // says which is which.
                         aria-label={t("action", "editKeyLabel", { key })}
                         icon={Pencil}
+                        reason={editDenied}
                         onClick={() => {
                           setEditing(key);
                           setDraft(value);

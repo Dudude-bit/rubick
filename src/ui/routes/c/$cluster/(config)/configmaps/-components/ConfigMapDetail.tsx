@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
+import { guardedOf, noteDenied, useDenied } from "../../../-object/access";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Table2, Tag } from "lucide-react";
 
@@ -64,6 +65,8 @@ export function ConfigMapDetail() {
   // got in the way (#107).
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const guarded = guardedOf(ResourceType.ConfigMap, namespace || null);
+  const editDenied = useDenied(guarded).patch;
   const writeKey = async (key: string, value: string) => {
     try {
       await commands.setConfigmapKey(name!, key, value, namespace!);
@@ -72,6 +75,7 @@ export function ConfigMapDetail() {
       });
       toast({ title: t("action", "keyUpdated", { key }) });
     } catch (error) {
+      noteDenied("patch", guarded, error);
       toast({
         title: t("action", "keyUpdateFailed", { key }),
         description: errorWords(error, t),
@@ -119,6 +123,7 @@ export function ConfigMapDetail() {
           binary={configMapData?.binary}
           keys={dataKeys}
           onEditKey={writeKey}
+          editDenied={editDenied}
           isLoading={isDataLoading}
           emptyMessage={t("empty", "kindHoldsNoKeys", { kind: "ConfigMap" })}
         />

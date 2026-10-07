@@ -7,7 +7,8 @@
 import { FileJson } from "lucide-react";
 
 import { useToast } from "@/components/ui/use-toast";
-import { DetailAction } from "@/components/object/detail-blocks";
+import { ReasonedAction } from "@/components/object/detail-blocks";
+import { useEditDenied } from "../-object/access";
 import { errorToShow } from "@/lib/error-utils";
 import { useYamlEditorStore, type ResourceKey } from "@/stores/yamlEditorStore";
 import { useT } from "@/i18n/useT";
@@ -54,12 +55,14 @@ const editorLabel = (
 export function YamlEditorAction(props: YamlEditorActionProps) {
   const t = useT();
   const open = useOpenEditor(props);
+  const denied = useEditDenied(props.readOnly ? null : props.resourceKey);
   return (
-    <DetailAction
+    <ReasonedAction
       label={editorLabel(t, props)}
       icon={FileJson}
       onClick={open}
       className={props.className}
+      reason={denied}
     />
   );
 }

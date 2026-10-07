@@ -23,6 +23,8 @@ vi.mock("@/lib/commands", () => ({
 import { useResourceDetail } from "@/hooks";
 import { queryKeys } from "@/lib/query-keys";
 import { renderWithRouter } from "@/test/render";
+import { marcoReview } from "@/test/marco";
+import { useClusterStore } from "@/stores/clusterStore";
 import { ConfigMapDetail } from "./ConfigMapDetail";
 
 /**
@@ -81,6 +83,80 @@ describe("a ConfigMap's values on its page", () => {
 
     await waitFor(() =>
       expect(command("getConfigmapData")).toHaveBeenCalledTimes(2)
+    );
+  });
+});
+
+function marcosPage(activeTab: string) {
+  vi.mocked(useResourceDetail).mockReturnValue({
+    name: "checkout-config",
+    namespace: "team-checkout",
+    resource: {
+      name: "checkout-config",
+      namespace: "team-checkout",
+      dataKeys: ["LOG_LEVEL"],
+      labels: {},
+      annotations: {},
+    },
+    isLoading: false,
+    error: null,
+    yaml: undefined,
+    copyYaml: vi.fn(),
+    activeTab,
+    setActiveTab: vi.fn(),
+    goBack: vi.fn(),
+    refetch: vi.fn(),
+    deleteMutation: { mutate: vi.fn(), isPending: false },
+  } as unknown as ReturnType<typeof useResourceDetail>);
+  command("getConfigmapData").mockResolvedValue({
+    values: { LOG_LEVEL: "info" },
+    withheld: {},
+    binary: {},
+  });
+  command("checkAccess").mockImplementation(marcoReview);
+  useClusterStore.setState((s) => ({
+    currentContext: "acme-staging",
+    isConnected: true,
+    connectionAttemptId: s.connectionAttemptId + 1,
+  }));
+  return renderWithRouter(<ConfigMapDetail />, {
+    at: "/c/acme-staging/configmaps/team-checkout/checkout-config",
+    route: "/c/$cluster/configmaps/$namespace/$name",
+  });
+}
+
+describe("Marco's ConfigMap, which his Role lets him read and not change", () => {
+  /**
+   * Marco opened checkout-config and every key offered an Edit whose Save
+   * the cluster refuses. Fails if a key's Edit is runnable or opens the
+   * editor while can-i patch configmaps says no.
+   */
+  it("greys each key's Edit with the can-i question and opens no editor", async () => {
+    await marcosPage("data");
+    const edit = () =>
+      screen.getByRole("button", { name: "Value of LOG_LEVEL" });
+    await waitFor(() =>
+      expect(edit()).toHaveAttribute("aria-disabled", "true")
+    );
+
+    const user = userEvent.setup();
+    await user.hover(edit());
+    expect(
+      (await screen.findAllByText(/can-i patch configmaps -n team-checkout/))
+        .length
+    ).toBeGreaterThan(0);
+    await user.click(edit());
+    expect(screen.queryByRole("textbox")).toBeNull();
+  });
+
+  /** Fails if the YAML tab offers Edit YAML, whose Apply the cluster refuses. */
+  it("greys Edit YAML with the same question", async () => {
+    await marcosPage("yaml");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Edit YAML" })).toHaveAttribute(
+        "aria-disabled",
+        "true"
+      )
     );
   });
 });

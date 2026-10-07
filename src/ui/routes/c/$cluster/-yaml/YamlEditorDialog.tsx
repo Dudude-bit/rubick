@@ -53,6 +53,9 @@ import { errorToShow } from "@/lib/error-utils";
 
 import { YamlEditor } from "./YamlEditor";
 import { YamlEditorToolbar } from "./YamlEditorToolbar";
+import { guardedOf, noteDenied, useEditDenied } from "../-object/access";
+import { ReasonTip } from "@/components/object/detail-blocks";
+import { cn } from "@/lib/utils";
 import { YamlDiffViewer } from "./YamlDiffViewer";
 import { YamlResultDisplay } from "./YamlResultDisplay";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
@@ -100,6 +103,7 @@ export function YamlEditorDialog() {
   } = useYamlEditorStore();
 
   const [showApplyConfirm, setShowApplyConfirm] = useState(false);
+  const applyDenied = useEditDenied(readOnly ? null : resourceKey);
 
   const history = getResourceHistory();
   const hasChanges = originalContent !== editedContent;
@@ -257,6 +261,12 @@ export function YamlEditorDialog() {
         });
       }
     } catch (error) {
+      if (resourceKey)
+        noteDenied(
+          "patch",
+          guardedOf(resourceKey.kind, resourceKey.namespace ?? null),
+          error
+        );
       const errorMessage = errorToShow(error);
       // A deadline is not a refusal. The layer that fires it drops our
       // request; it does not undo what the apiserver may already have
@@ -379,19 +389,25 @@ export function YamlEditorDialog() {
                   {t("action", "validate")}
                 </Button>
 
-                <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => setShowApplyConfirm(true)}
-                  disabled={isLoading || isValidating || isApplying}
-                >
-                  {isApplying ? (
-                    <Spinner size="sm" className="mr-2" />
-                  ) : (
-                    <Play className="mr-2 h-4 w-4" />
-                  )}
-                  {t("action", "apply")}
-                </Button>
+                <ReasonTip reason={applyDenied}>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => !applyDenied && setShowApplyConfirm(true)}
+                    disabled={
+                      !applyDenied && (isLoading || isValidating || isApplying)
+                    }
+                    aria-disabled={applyDenied ? true : undefined}
+                    className={cn(applyDenied && "cursor-default opacity-40")}
+                  >
+                    {isApplying ? (
+                      <Spinner size="sm" className="mr-2" />
+                    ) : (
+                      <Play className="mr-2 h-4 w-4" />
+                    )}
+                    {t("action", "apply")}
+                  </Button>
+                </ReasonTip>
               </div>
             )}
           </div>

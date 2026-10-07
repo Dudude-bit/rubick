@@ -26,11 +26,13 @@ import userEvent from "@testing-library/user-event";
 import { renderWithRouter } from "@/test/render";
 import { useYamlEditorStore } from "@/stores/yamlEditorStore";
 import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
+import { marcoReview } from "@/test/marco";
 
 const detectInClusterExtensions = vi.fn();
 const listCustomResources = vi.fn();
 const applyManifest = vi.fn();
 const dryRunManifest = vi.fn();
+const checkAccess = vi.fn();
 /** The neighbourhood the dialog asks about, per test. */
 let connections: () => { object: null; edges: unknown[] } = () => ({
   object: null,
@@ -43,6 +45,7 @@ vi.mock("@/lib/commands", () => ({
     listCustomResources: (...args: unknown[]) => listCustomResources(...args),
     applyManifest: (...args: unknown[]) => applyManifest(...args),
     dryRunManifest: (...args: unknown[]) => dryRunManifest(...args),
+    checkAccess: (...args: unknown[]) => checkAccess(...args),
     getResourceConnections: async () => connections(),
     getYamlHistory: async () => [],
     addYamlHistoryEntry: async () => {},
@@ -502,5 +505,49 @@ describe("what the dry run is asked, and what it draws", () => {
     await user.click(screen.getByRole("button", { name: /^Apply$/ }));
 
     await waitFor(() => expect(screen.getByTestId("diff")).toBeInTheDocument());
+  });
+});
+
+describe("applying where the cluster says this user may not", () => {
+  /**
+   * Marco opened Edit YAML on checkout-config and the editor offered a live
+   * Apply that his Role refuses. Fails if Apply opens its confirmation or
+   * reaches the cluster while can-i patch configmaps says no.
+   */
+  it("greys Apply with the can-i question and applies nothing", async () => {
+    checkAccess.mockImplementation(marcoReview);
+    useClusterStore.setState((s) => ({
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+    await renderWithRouter(<YamlEditorDialog />, {
+      at: "/c/test",
+      route: "/c/$cluster",
+    });
+    await useYamlEditorStore.getState().openEditor({
+      title: "Edit ConfigMap: checkout-config",
+      resourceKey: {
+        kind: "ConfigMap",
+        name: "checkout-config",
+        namespace: "team-checkout",
+      },
+      fetchYaml: async () => "data:\n  LOG_LEVEL: info\n",
+    });
+    useYamlEditorStore
+      .getState()
+      .setEditedContent("data:\n  LOG_LEVEL: debug\n");
+    const user = userEvent.setup();
+
+    const apply = () => screen.getByRole("button", { name: /^Apply$/ });
+    await waitFor(() =>
+      expect(apply()).toHaveAttribute("aria-disabled", "true")
+    );
+    await user.hover(apply());
+    expect(
+      (await screen.findAllByText(/can-i patch configmaps -n team-checkout/))
+        .length
+    ).toBeGreaterThan(0);
+    await user.click(apply());
+    expect(screen.queryByText("Apply Changes?")).toBeNull();
+    expect(applyManifest).not.toHaveBeenCalled();
   });
 });

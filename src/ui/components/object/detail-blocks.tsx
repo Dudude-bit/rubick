@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactElement, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
@@ -100,18 +100,31 @@ export function DetailAction({
   );
 }
 
-/** A header action that, when it cannot run, says why on hover and focus. */
-export function ReasonedAction(props: DetailActionProps) {
-  if (!props.reason) return <DetailAction {...props} />;
+/** Says why the control it wraps cannot run, on hover and focus. */
+export function ReasonTip({
+  reason,
+  children,
+}: {
+  reason?: string | null;
+  children: ReactElement;
+}) {
+  if (!reason) return children;
   return (
     // Faster than the default second: this is not a hint about a control, it
     // is the answer to why the control did nothing.
     <Tooltip delayDuration={200}>
-      <TooltipTrigger asChild>
-        <DetailAction {...props} />
-      </TooltipTrigger>
-      <TooltipContent className="max-w-[260px]">{props.reason}</TooltipContent>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent className="max-w-[260px]">{reason}</TooltipContent>
     </Tooltip>
+  );
+}
+
+/** A header action that, when it cannot run, says why on hover and focus. */
+export function ReasonedAction(props: DetailActionProps) {
+  return (
+    <ReasonTip reason={props.reason}>
+      <DetailAction {...props} />
+    </ReasonTip>
   );
 }
 
