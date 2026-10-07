@@ -11,7 +11,7 @@ import { errorToShow } from "@/lib/error-utils";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { cn } from "@/lib/utils";
 import { segmentOf } from "@/lib/access-kinds";
-import { listing, useDependents } from "./ownership";
+import { listing, readWhereTheyLive, useDependents } from "./ownership";
 import { ReadingChips, ReadingProgress } from "./ReadingChips";
 
 /**
@@ -64,7 +64,7 @@ export function OwnsPanel({
       {reading ? (
         <ReadingProgress notRead={notRead} />
       ) : (
-        <NotReadSummary notRead={notRead} />
+        <NotReadSummary notRead={notRead} namespace={namespace ?? null} />
       )}
     </div>
   );
@@ -161,9 +161,18 @@ function Children({
 }
 
 /** Every kind the index could not vouch for, folded behind a count. */
-function NotReadSummary({ notRead }: { notRead: NotRead }) {
+function NotReadSummary({
+  notRead,
+  namespace,
+}: {
+  notRead: NotRead;
+  namespace: string | null;
+}) {
   const t = useT();
-  if (notRead.kinds.length === 0 && notRead.groups.length === 0) return null;
+  const kinds = notRead.kinds.filter(
+    (reading) => !readWhereTheyLive(reading, namespace)
+  );
+  if (kinds.length === 0 && notRead.groups.length === 0) return null;
   return (
     <details className="group text-xs">
       <summary className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-md px-1 py-0.5 text-fg-mut hover:bg-hover hover:text-fg">
@@ -173,11 +182,11 @@ function NotReadSummary({ notRead }: { notRead: NotRead }) {
         />
         <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
         {t("count", "kindsNotRead", {
-          n: notRead.kinds.length + notRead.groups.length,
+          n: kinds.length + notRead.groups.length,
         })}
       </summary>
       <div className="mt-2 pl-1">
-        <ReadingChips kinds={notRead.kinds} groups={notRead.groups} />
+        <ReadingChips kinds={kinds} groups={notRead.groups} />
       </div>
     </details>
   );

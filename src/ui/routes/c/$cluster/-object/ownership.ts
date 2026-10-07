@@ -69,13 +69,31 @@ export function useCascade(uid: string | null, enabled: boolean) {
 }
 
 /**
+ * A namespaced owner's dependents live in its own namespace, so a kind read
+ * there is read wherever they could be.
+ */
+export const readWhereTheyLive = (
+  { reading }: KindReading,
+  namespace: string | null
+): boolean =>
+  reading.says === "partial" &&
+  namespace !== null &&
+  reading.namespaces.includes(namespace);
+
+/**
  * Kinds whose dependents could still be there unseen. A kind that cannot be
  * listed stores no objects, and events are left out because nothing owns
  * them; both are still named wherever every unread kind is listed.
  */
-export function mightHold(reading: KindReading): boolean {
+export function mightHold(
+  reading: KindReading,
+  namespace: string | null = null
+): boolean {
+  const { says } = reading.reading;
   return (
-    reading.reading.says !== "unlistable" && reading.reading.says !== "skipped"
+    says !== "unlistable" &&
+    says !== "skipped" &&
+    !readWhereTheyLive(reading, namespace)
   );
 }
 
@@ -93,6 +111,12 @@ export const listing = (notRead: NotRead): number =>
   notRead.kinds.filter((reading) => reading.reading.says === "syncing").length;
 
 /** Whether nothing could still be hiding: every listable kind read live. */
-export function readAll(notRead: NotRead): boolean {
-  return notRead.groups.length === 0 && !notRead.kinds.some(mightHold);
+export function readAll(
+  notRead: NotRead,
+  namespace: string | null = null
+): boolean {
+  return (
+    notRead.groups.length === 0 &&
+    !notRead.kinds.some((reading) => mightHold(reading, namespace))
+  );
 }

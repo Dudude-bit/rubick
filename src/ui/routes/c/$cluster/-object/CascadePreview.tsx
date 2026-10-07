@@ -9,7 +9,7 @@ import {
   XCircle,
 } from "lucide-react";
 
-import type { Cascade, Holds, KindCount, NotRead } from "@/generated/types";
+import type { Cascade, Holds, KindCount } from "@/generated/types";
 import { KindIcon } from "@/components/object/KindIcon";
 import { RouteLink } from "@/components/ui/route-link";
 import { useT } from "@/i18n/useT";
@@ -79,6 +79,7 @@ export function CascadePreview({
         <Answer
           cascade={cascade.data}
           holder={holdsContents(subject) ? subject : null}
+          namespace={namespace ?? null}
         />
       )}
       {!served && CONNECTED_KINDS.has(kind) && (
@@ -179,16 +180,22 @@ function Working() {
 function Answer({
   cascade: { takes, notRead, holds },
   holder,
+  namespace,
 }: {
   cascade: Cascade;
   holder: ServedResource | null;
+  namespace: string | null;
 }) {
   const t = useT();
   const defined = holds?.says === "objects" ? holds : null;
   const rest = takes.filter((count) => !sameKind(count, defined));
   const unread = notRead.kinds
-    .filter(mightHold)
+    .filter((reading) => mightHold(reading, namespace))
     .filter((reading) => !sameKind(reading, defined));
+  const inPart = unread.filter(({ reading }) => reading.says === "partial");
+  const notReadAtAll = unread.filter(
+    ({ reading }) => reading.says !== "partial"
+  );
   const holderReading = holder
     ? notRead.kinds.find((reading) => sameKind(reading, holder))
     : undefined;
@@ -216,7 +223,7 @@ function Answer({
         />
       ) : defined || (holder && !holds) ? null : (
         <Nothing
-          notRead={notRead}
+          read={readAll(notRead, namespace)}
           words={
             holds?.says === "namespace"
               ? t("cascade", "insideNothing")
@@ -224,13 +231,22 @@ function Answer({
           }
         />
       )}
-      {(unread.length > 0 || notRead.groups.length > 0) && (
+      {(notReadAtAll.length > 0 || notRead.groups.length > 0) && (
         <div className="flex flex-col gap-2">
           <p className="flex items-center gap-2 text-warn">
             <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
             {t("cascade", "possibly")}
           </p>
-          <ReadingChips kinds={unread} groups={notRead.groups} />
+          <ReadingChips kinds={notReadAtAll} groups={notRead.groups} />
+        </div>
+      )}
+      {inPart.length > 0 && (
+        <div className="flex flex-col gap-2" data-testid="read-in-part">
+          <p className="flex items-center gap-2 text-warn">
+            <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("cascade", "possiblyInPart")}
+          </p>
+          <ReadingChips kinds={inPart} />
         </div>
       )}
     </>
@@ -238,8 +254,8 @@ function Answer({
 }
 
 /** Green only when every kind was read; otherwise it is a hedge, said plainly. */
-function Nothing({ notRead, words }: { notRead: NotRead; words: string }) {
-  return readAll(notRead) ? (
+function Nothing({ read, words }: { read: boolean; words: string }) {
+  return read ? (
     <p className="flex items-center gap-2 text-ok">
       <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
       {words}

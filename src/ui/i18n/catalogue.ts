@@ -4711,6 +4711,8 @@ export const en = {
     takes: "Also deletes:",
     nothing: "Nothing else goes with it, among the kinds read.",
     possibly: "And possibly objects of the kinds it could not read:",
+    possiblyInPart:
+      "And possibly objects of the kinds it could read only in part:",
     failed: "Could not work out what goes with it. {error}",
     objectsGo: "Every {kind} in the cluster goes with it:",
     objectsNone: "No {kind} exists, so none goes with it.",
@@ -6852,7 +6854,10 @@ export const en = {
     secondsShort: "{n} s",
     pods: { one: "{n} pod", other: "{n} pods" },
     dependents: { one: "owns {n}", other: "owns {n}" },
-    kindsNotRead: { one: "{n} kind not read", other: "{n} kinds not read" },
+    kindsNotRead: {
+      one: "{n} kind not read in full",
+      other: "{n} kinds not read in full",
+    },
     readSoFar: { one: "{n} read so far", other: "{n} read so far" },
     servedKinds: { one: "{n} kind", other: "{n} kinds" },
     kindsReadOf: {

@@ -2,23 +2,29 @@ import type { UseMutationResult } from "@tanstack/react-query";
 import { fireEvent, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
-import type { ObjectRef, ResourceConnections } from "@/generated/types";
+import type {
+  Cascade,
+  KindReading,
+  ObjectRef,
+  ResourceConnections,
+} from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 
 const getResourceConnections = vi.hoisted(() => vi.fn());
+const THREE_PODS: Cascade = {
+  takes: [{ kind: "Pod", group: "", plural: "pods", count: 3 }],
+  notRead: { kinds: [], groups: [], watched: 40 },
+  holds: null,
+};
+const cascade = vi.hoisted(() => ({ now: null as unknown as Cascade }));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     getResourceConnections,
     objectLineage: () =>
       Promise.resolve({ uid: "d", ancestors: [], others: [], stop: null }),
-    previewCascade: () =>
-      Promise.resolve({
-        takes: [{ kind: "Pod", group: "", plural: "pods", count: 3 }],
-        notRead: { kinds: [], groups: [], watched: 40 },
-        holds: null,
-      }),
+    previewCascade: () => Promise.resolve(cascade.now),
   },
 }));
 
@@ -33,6 +39,7 @@ const mutation = {
 beforeEach(() => {
   mutate.mockReset();
   getResourceConnections.mockReset();
+  cascade.now = THREE_PODS;
   useClusterStore.setState({ currentContext: "test", isConnected: true });
 });
 
@@ -245,5 +252,99 @@ describe("Delete on a Service that Ingresses route to", () => {
         "Not checked for references to it: Ingress."
       )
     ).toBeInTheDocument();
+  });
+});
+
+describe("a Delete whose ownership read covered only some namespaces", () => {
+  const partial = (kind: string, plural: string): KindReading => ({
+    kind,
+    group: "",
+    plural,
+    reading: { says: "partial", namespaces: ["team-checkout"] },
+  });
+
+  /**
+   * Marco's pod Delete listed ConfigMap, Pod and Secret "read only in
+   * team-checkout" under "the kinds it could not read". A pod's dependents
+   * live in its own namespace, which was read. Fails if any of them is still
+   * listed as unread, or if DaemonSet, refused outright, is not.
+   */
+  it("does not count a kind read in the object's own namespace as unread", async () => {
+    cascade.now = {
+      takes: [],
+      notRead: {
+        kinds: [
+          partial("ConfigMap", "configmaps"),
+          partial("Pod", "pods"),
+          partial("Secret", "secrets"),
+          {
+            kind: "DaemonSet",
+            group: "apps",
+            plural: "daemonsets",
+            reading: { says: "refused", message: "forbidden" },
+          },
+        ],
+        groups: [],
+        watched: 72,
+      },
+      holds: null,
+    };
+    await renderWithRouter(
+      <DeleteAction
+        kind="Pod"
+        name="checkout-api-xwg4j"
+        namespace="team-checkout"
+        intercept={null}
+        mutation={mutation}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    const unread = (
+      await within(dialog).findByText(
+        "And possibly objects of the kinds it could not read:"
+      )
+    ).parentElement!;
+    expect(unread).toHaveTextContent("DaemonSet");
+    expect(dialog).not.toHaveTextContent("ConfigMap");
+    expect(dialog).not.toHaveTextContent("read only in team-checkout");
+  });
+
+  /**
+   * A cluster-scoped object's dependents may live in any namespace, so a
+   * kind read in one is read in part. Fails if it is filed under the kinds
+   * that could not be read.
+   */
+  it("files a kind read in part under its own heading", async () => {
+    cascade.now = {
+      takes: [],
+      notRead: {
+        kinds: [partial("ConfigMap", "configmaps")],
+        groups: [],
+        watched: 72,
+      },
+      holds: null,
+    };
+    await renderWithRouter(
+      <DeleteAction
+        kind="PersistentVolume"
+        name="pv-1"
+        namespace={null}
+        intercept={null}
+        mutation={mutation}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    const inPart = await within(dialog).findByTestId("read-in-part");
+    expect(inPart).toHaveTextContent(
+      "And possibly objects of the kinds it could read only in part:"
+    );
+    expect(inPart).toHaveTextContent("ConfigMapread only in team-checkout");
+    expect(
+      within(dialog).queryByText(
+        "And possibly objects of the kinds it could not read:"
+      )
+    ).toBeNull();
   });
 });

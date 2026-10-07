@@ -233,6 +233,37 @@ describe("what an object owns", () => {
     expect(chipOf("Secret")).toHaveTextContent("refused");
   });
 
+  /**
+   * The Owns tab reads the same index as Delete, where Marco saw kinds read in
+   * the pod's own namespace counted as unread. Fails if the ConfigMap read
+   * there is still counted, or if the refused Secret is not.
+   */
+  it("does not count a kind read in the owner's namespace among those not read", async () => {
+    answers.dependents = () =>
+      Promise.resolve({
+        dependents: [],
+        notRead: {
+          kinds: [
+            {
+              kind: "ConfigMap",
+              group: "",
+              plural: "configmaps",
+              reading: { says: "partial", namespaces: ["team-checkout"] },
+            },
+            SECRETS_REFUSED,
+          ],
+          groups: [],
+          watched: 72,
+        },
+      });
+    await renderWithRouter(<OwnsPanel uid="d" namespace="team-checkout" />);
+    expect(
+      await screen.findByText("1 kind not read in full")
+    ).toBeInTheDocument();
+    expect(chipOf("Secret")).toHaveTextContent("refused");
+    expect(screen.queryByText("ConfigMap")).toBeNull();
+  });
+
   /** Asking starts a cluster-wide index; a tab nobody opened must not. */
   it("asks nothing while its tab is off screen", async () => {
     answers.dependents = () =>
