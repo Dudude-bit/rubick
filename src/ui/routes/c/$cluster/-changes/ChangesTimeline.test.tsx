@@ -6,6 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ChangeItem, Revision } from "@/lib/changes";
 import type { AccessQuery } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
 import { useRollback } from "../-object/useRollback";
 import { ChangesTimeline } from "./ChangesTimeline";
@@ -49,6 +50,33 @@ describe("ChangesTimeline", () => {
     const note = screen.getByRole("note");
     expect(note.textContent).toMatch(/^Not observed /);
     expect(document.body.textContent).toContain("image app:1 → app:2");
+  });
+
+  /**
+   * Lena switched the scope to another namespace for 57 seconds and came
+   * back to "Вне наблюдаемых пространств имён 57 секунд в 7 окт., 09:32",
+   * which says where the app was not and nothing of where it was. Fails if
+   * the quiet row stops saying what the app watched, or goes amber.
+   */
+  it("says in Russian that the app watched other namespaces for that stretch, in a quiet row", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      await mount([
+        {
+          kind: "gap",
+          at: T0,
+          gap: { from: T0, to: T0 + 57_000, elsewhere: true },
+        },
+      ]);
+      const note = screen.getByRole("note");
+      expect(note.textContent).toMatch(
+        /^В течение 57 секунд \(.+\) следили за другими пространствами имён, а за этим нет$/
+      );
+      expect(note).toHaveClass("text-fg-mut");
+      expect(note).not.toHaveClass("text-warn");
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 
   it("marks what happened after the moment the reader came from", async () => {

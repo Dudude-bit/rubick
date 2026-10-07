@@ -867,13 +867,47 @@ describe("a gap in words", () => {
   it("says the namespaces were outside the scope when the app was watching elsewhere", () => {
     const gap = { from: T0, to: T0 + 17_000, elsewhere: true };
     expect(gapWords(gap, t, clock)).toBe(
-      "Outside the watched namespaces for 17 seconds at 00:00"
+      "Watching other namespaces, not this one, for 17 seconds at 00:00"
     );
     expect(gapWords(gap, r, clock)).toBe(
-      "Вне наблюдаемых пространств имён 17 секунд в 00:00"
+      "В течение 17 секунд (00:00) следили за другими пространствами имён, а за этим нет"
     );
     expect(
       gapWords({ from: T0, to: T0 + HOUR, elsewhere: true }, r, clock)
-    ).toBe("Вне наблюдаемых пространств имён с 00:00 по 01:00");
+    ).toBe(
+      "С 00:00 по 01:00 следили за другими пространствами имён, а за этим нет"
+    );
   });
+
+  /**
+   * Lena read "Вне наблюдаемых пространств имён 57 секунд в 7 окт., 09:32" and
+   * could not tell what the app had done for those 57 seconds. Fails if the
+   * row stops saying it was watching elsewhere, or loses the number's form.
+   */
+  it.each([
+    [1, "В течение 1 секунды (00:00) следили"],
+    [2, "В течение 2 секунд (00:00) следили"],
+    [21, "В течение 21 секунды (00:00) следили"],
+    [57, "В течение 57 секунд (00:00) следили"],
+  ])(
+    "words a %i s stretch spent in another namespace in the form its number takes",
+    (seconds, start) => {
+      const span = (from: number, to: number | null): ObservedSpan => ({
+        from,
+        to,
+        seenAt: to ?? from,
+      });
+      const [hole] = gapsOf(
+        [span(T0 - HOUR, T0), span(T0 + seconds * 1000, T0 + HOUR)],
+        T0 - HOUR,
+        T0 + HOUR,
+        [span(T0 - HOUR, T0 + HOUR)]
+      );
+      expect(hole.elsewhere).toBe(true);
+      expect(gapWords(hole, r, clock)).toMatch(
+        new RegExp(`^${start.replace(/[()]/g, "\\$&")}`)
+      );
+      expect(gapWords(hole, r, clock)).not.toMatch(/Вне наблюдаемых/);
+    }
+  );
 });

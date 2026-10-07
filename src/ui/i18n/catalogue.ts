@@ -1634,10 +1634,10 @@ export const en = {
       one: "Not observed for {n} second at {at}",
       other: "Not observed for {n} seconds at {at}",
     },
-    outsideScope: "Outside the watched namespaces, {from} to {to}",
+    outsideScope: "Watching other namespaces, not this one, {from} to {to}",
     outsideScopeBrief: {
-      one: "Outside the watched namespaces for {n} second at {at}",
-      other: "Outside the watched namespaces for {n} seconds at {at}",
+      one: "Watching other namespaces, not this one, for {n} second at {at}",
+      other: "Watching other namespaces, not this one, for {n} seconds at {at}",
     },
     revisionNumber: "revision {n}",
     revisionCurrent: "current",
