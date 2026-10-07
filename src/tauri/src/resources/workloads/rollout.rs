@@ -22,8 +22,8 @@ pub enum Rollout {
         message: Option<String>,
         serving: i32,
     },
-    /// `Available=False`, or nothing available on a kind with no condition
-    /// to say so.
+    /// Nothing available, or `Available=False` while pods of an older
+    /// template are still being replaced.
     Unavailable {
         reason: Option<String>,
         message: Option<String>,
@@ -34,6 +34,12 @@ pub enum Rollout {
     Unobserved,
     RollingOut {
         updated: i32,
+        desired: i32,
+    },
+    /// Every pod is on the current template and some serve, while more are
+    /// still coming: a scale, a replaced pod, or a rollout's last pods.
+    ComingUp {
+        available: i32,
         desired: i32,
     },
     /// Rolled out, and fewer available than wanted.
@@ -55,7 +61,7 @@ impl Rollout {
             Self::Unavailable { .. } => "Unavailable",
             Self::Paused => "Paused",
             Self::Unobserved => "Waiting",
-            Self::RollingOut { .. } => "Progressing",
+            Self::RollingOut { .. } | Self::ComingUp { .. } => "Progressing",
             Self::Short { .. } => "Degraded",
             Self::Ready => "Ready",
         }
@@ -92,6 +98,9 @@ pub fn deployment_rollout(deployment: &Deployment) -> Rollout {
         .unwrap_or_default();
     let progressing = conditions.iter().find(|c| c.type_ == "Progressing");
     let available = status.and_then(|s| s.available_replicas).unwrap_or(0);
+    let updated = status.and_then(|s| s.updated_replicas).unwrap_or(0);
+    let existing = status.and_then(|s| s.replicas).unwrap_or(0);
+    let older_template = existing > updated;
 
     if let Some(stalled) = progressing
         .filter(|c| c.status == "False" && c.reason.as_deref() == Some(DEADLINE_EXCEEDED))
@@ -104,6 +113,7 @@ pub fn deployment_rollout(deployment: &Deployment) -> Rollout {
     if let Some(down) = conditions
         .iter()
         .find(|c| c.type_ == "Available" && c.status == "False")
+        .filter(|_| available == 0 || older_template)
     {
         return Rollout::Unavailable {
             reason: down.reason.clone(),
@@ -116,18 +126,15 @@ pub fn deployment_rollout(deployment: &Deployment) -> Rollout {
     if behind(deployment.metadata.generation, observed) {
         return Rollout::Unobserved;
     }
-    let updated = status.and_then(|s| s.updated_replicas).unwrap_or(0);
-    let existing = status.and_then(|s| s.replicas).unwrap_or(0);
-    if updated < desired || existing > updated {
+    if older_template {
         return Rollout::RollingOut { updated, desired };
     }
+    let finished = progressing.is_none_or(|c| c.reason.as_deref() == Some(ROLLED_OUT));
+    if updated < desired || (available < desired && !finished) {
+        return Rollout::ComingUp { available, desired };
+    }
     if available < desired {
-        let finished = progressing.is_none_or(|c| c.reason.as_deref() == Some(ROLLED_OUT));
-        return if finished {
-            Rollout::Short { available, desired }
-        } else {
-            Rollout::RollingOut { updated, desired }
-        };
+        return Rollout::Short { available, desired };
     }
     Rollout::Ready
 }
@@ -261,6 +268,10 @@ mod tests {
             Rollout::Unobserved,
             Rollout::RollingOut {
                 updated: 0,
+                desired: 0,
+            },
+            Rollout::ComingUp {
+                available: 0,
                 desired: 0,
             },
             Rollout::Short {
@@ -407,6 +418,81 @@ mod tests {
         assert!(matches!(
             deployment_rollout(&checkout),
             Rollout::Unavailable { reason: Some(r), .. } if r == "MinimumReplicasUnavailable"
+        ));
+    }
+
+    /// Lena scaled `hello-web` from 1 to 2 and the header went red
+    /// "Unavailable" for the seconds the second pod took, while the first
+    /// served throughout: with maxUnavailable rounding to 0 the controller
+    /// writes `Available=False`. Fails if a scale with a pod serving reads as
+    /// a fault again, at the first write or after the pod exists.
+    #[test]
+    fn a_scale_up_with_a_pod_serving_is_coming_up_not_unavailable() {
+        let down = || {
+            condition(
+                "Available",
+                "False",
+                "MinimumReplicasUnavailable",
+                "Deployment does not have minimum availability.",
+            )
+        };
+        let asked = deployment(
+            &Counts {
+                desired: 2,
+                existing: 1,
+                updated: 1,
+                available: 1,
+            },
+            vec![down(), rolled_out()],
+        );
+        let starting = deployment(
+            &Counts {
+                desired: 2,
+                existing: 2,
+                updated: 2,
+                available: 1,
+            },
+            vec![
+                down(),
+                condition(
+                    "Progressing",
+                    "True",
+                    "ReplicaSetUpdated",
+                    "ReplicaSet \"hello-web-584d68fccc\" is progressing.",
+                ),
+            ],
+        );
+        for scaling in [asked, starting] {
+            assert_eq!(
+                deployment_rollout(&scaling),
+                Rollout::ComingUp {
+                    available: 1,
+                    desired: 2
+                }
+            );
+        }
+    }
+
+    /// Pods of the old template still being replaced while the controller
+    /// says too few are up is a rollout losing pods, not a scale. Fails if
+    /// any pod serving is enough to drop the fault.
+    #[test]
+    fn too_few_up_while_an_older_template_is_replaced_stays_unavailable() {
+        let replacing = deployment(
+            &Counts {
+                desired: 3,
+                existing: 4,
+                updated: 1,
+                available: 1,
+            },
+            vec![
+                condition("Available", "False", "MinimumReplicasUnavailable", ""),
+                condition("Progressing", "True", "ReplicaSetUpdated", ""),
+            ],
+        );
+        assert!(matches!(
+            deployment_rollout(&replacing),
+            Rollout::Unavailable { .. }
         ));
     }
 

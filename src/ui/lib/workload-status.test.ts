@@ -22,6 +22,7 @@ const EVERY: Rollout[] = [
   { state: "paused" },
   { state: "unobserved" },
   { state: "rollingOut", updated: 1, desired: 3 },
+  { state: "comingUp", available: 1, desired: 2 },
   { state: "short", available: 2, desired: 3 },
   { state: "ready" },
 ];
@@ -62,9 +63,26 @@ describe("the word a workload's rollout comes to", () => {
       "warn",
       "pending",
       "pending",
+      "pending",
       "warn",
       "ok",
     ]);
+  });
+
+  /**
+   * Lena's scale from 1 to 2 drew a red "Unavailable" while a pod served.
+   * Fails if pods coming up wear a fault's colour or go without a sentence.
+   */
+  it("draws pods coming up as progress, with a sentence, never as a fault", () => {
+    const comingUp: Rollout = { state: "comingUp", available: 1, desired: 2 };
+    expect(workloadStatus(comingUp)).toBe("Progressing");
+    expect(statusRole(workloadStatus(comingUp))).toBe("pending");
+    expect(NEEDS_ATTENTION.has("comingUp")).toBe(false);
+    expect(rolloutLine(comingUp, t)).toEqual({
+      tone: "info",
+      text: "readings.rolloutComingUp",
+      said: null,
+    });
   });
 
   /** Ready and Idle are the whole story; every other state owes a sentence. */

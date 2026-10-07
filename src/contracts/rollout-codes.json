@@ -6,6 +6,7 @@
     "paused": "Paused",
     "unobserved": "Waiting",
     "rollingOut": "Progressing",
+    "comingUp": "Progressing",
     "short": "Degraded",
     "ready": "Ready"
   },

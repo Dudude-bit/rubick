@@ -32,6 +32,7 @@ export const ROLLOUT_CODES: Record<Rollout["state"], WorkloadStatus> = {
   paused: "Paused",
   unobserved: "Waiting",
   rollingOut: "Progressing",
+  comingUp: "Progressing",
   short: "Degraded",
   ready: "Ready",
 };
@@ -92,6 +93,15 @@ export function rolloutLine(rollout: Rollout, t: T): RolloutLine | null {
         tone: "info",
         text: t("readings", "rolloutMoving", {
           updated: rollout.updated,
+          n: rollout.desired,
+        }),
+        said: null,
+      };
+    case "comingUp":
+      return {
+        tone: "info",
+        text: t("readings", "rolloutComingUp", {
+          available: rollout.available,
           n: rollout.desired,
         }),
         said: null,

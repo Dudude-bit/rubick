@@ -2361,6 +2361,7 @@ export type Rollout =
   | { state: "paused" }
   | { state: "unobserved" }
   | { state: "rollingOut"; updated: number; desired: number }
+  | { state: "comingUp"; available: number; desired: number }
   | { state: "short"; available: number; desired: number }
   | { state: "ready" };
 

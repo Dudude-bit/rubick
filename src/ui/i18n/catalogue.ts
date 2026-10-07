@@ -3687,6 +3687,10 @@ export const en = {
       one: "Rolling out: {updated} of {n} pod on the new template",
       other: "Rolling out: {updated} of {n} pods on the new template",
     },
+    rolloutComingUp: {
+      one: "Pods coming up: {available} of {n} pod is available",
+      other: "Pods coming up: {available} of {n} pods are available",
+    },
     rolloutShort: {
       one: "Rolled out, and only {available} of {n} pod is available",
       other: "Rolled out, and only {available} of {n} pods are available",
