@@ -979,17 +979,38 @@ export function LogViewer({
         .filter((failure) => !gone.has(failure.pod))
         .map((failure) => failure.pod)
     ).size;
-    const streaming = pods.filter(
-      (pod) => !unreadable.some((failure) => failure.pod === pod.name)
+    // A pod is streaming while one of its streams is still attached; one
+    // whose every stream ended with its container was read to the end.
+    const attached = new Set(
+      (sources ?? [])
+        .filter(
+          (source) =>
+            !failures.some(
+              (failure) =>
+                failure.pod === source.pod &&
+                failure.container === source.container
+            )
+        )
+        .map((source) => source.pod)
+    );
+    const streaming = pods.filter((pod) => attached.has(pod.name)).length;
+    const finished = pods.filter(
+      (pod) =>
+        !attached.has(pod.name) &&
+        !unreadable.some((failure) => failure.pod === pod.name) &&
+        failures.some(
+          (failure) => failure.pod === pod.name && failure.kind === "gone"
+        )
     ).length;
     return {
       podsRead: !podsError,
       total: pods.length,
       streaming,
+      finished,
       refused,
       gone: gone.size,
     };
-  }, [lanes, pods, podsError, failures, gone]);
+  }, [lanes, pods, podsError, failures, gone, sources]);
 
   return (
     <div ref={rootRef} className="flex h-full flex-col">

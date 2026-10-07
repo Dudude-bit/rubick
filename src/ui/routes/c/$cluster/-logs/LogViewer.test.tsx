@@ -1237,6 +1237,70 @@ describe("a workload pane", () => {
     );
   });
 
+  /**
+   * Marco's migrate-db Job: its one pod finished, the stream read it to the
+   * end, the toolbar said Stopped and the chip "ended", and the header
+   * still said "1 of 1 pod streaming". Fails if a pod whose every stream
+   * ended with its container is counted as streaming.
+   */
+  it("counts a finished Job's pod as read to the end, not as streaming", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(
+      async (config: { podName: string }) => `stream-${config.podName}`
+    );
+    const completed = container("migrate", {
+      ready: false,
+      state: {
+        type: "terminated",
+        termination: {
+          exitCode: 0,
+          signal: null,
+          reason: "Completed",
+          message: null,
+          startedAt: null,
+          finishedAt: null,
+        },
+      },
+    });
+    renderWithProviders(
+      <LogViewer
+        namespace="team-checkout"
+        pods={[{ ...pod("migrate-db-8hblx", [completed]) }]}
+        laneRule="pod"
+        workload={{ owner: "migrate-db", ownerKind: "Job" }}
+      />
+    );
+    await waitFor(() =>
+      expect(commands.logStreamSubscribed).toHaveBeenCalledTimes(1)
+    );
+    act(() => {
+      listeners["log-batch"]!({
+        payload: {
+          stream_id: "stream-migrate-db-8hblx",
+          lines: [
+            line("applying migration 0042_add_promo_codes"),
+            line("done"),
+          ],
+        },
+      });
+      listeners["stream-failed"]!({
+        payload: {
+          stream_id: "stream-migrate-db-8hblx",
+          kind: "gone",
+          message:
+            "team-checkout/migrate-db-8hblx stopped streaming: container migrate is no longer running.",
+        },
+      });
+    });
+
+    const coverage = screen.getByTestId("log-lane-coverage");
+    await waitFor(() =>
+      expect(coverage.textContent).toContain("1 finished, read to the end")
+    );
+    expect(coverage.textContent).toContain("0 of 1 pod streaming");
+    expect(coverage.textContent).not.toContain("1 of 1 pod streaming");
+    expect(screen.getByRole("button", { name: /Stopped/ })).toBeInTheDocument();
+  });
+
   it("does not call a pod list it could not read an empty one", async () => {
     renderWithProviders(
       pane([], new Error("pods is forbidden: User cannot list pods"))

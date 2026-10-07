@@ -6893,6 +6893,10 @@ export const en = {
       one: "{n} pod could not be read",
       other: "{n} pods could not be read",
     },
+    podsFinished: {
+      one: "{n} finished, read to the end",
+      other: "{n} finished, read to the end",
+    },
     podsGoneKept: {
       one: "{n} gone, lines kept",
       other: "{n} gone, lines kept",

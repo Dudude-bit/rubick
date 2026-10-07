@@ -9,6 +9,7 @@ const coverage = (
   podsRead: true,
   total: 1,
   streaming: 1,
+  finished: 0,
   refused: 0,
   gone: 0,
   ...overrides,

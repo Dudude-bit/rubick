@@ -3,8 +3,8 @@ import type { LaneLabelMode, LaneRule } from "./lanes";
 
 /**
  * How much of the workload the pane is reading, in numbers the lanes
- * alone cannot say: streams attached, streams refused, pods gone whose
- * lines are kept. Beside it, what a lane stands for and how a line
+ * alone cannot say: streams attached, pods read to the end, streams
+ * refused, pods gone whose lines are kept. Beside it, what a lane stands for and how a line
  * names its pod.
  */
 export function LaneCoverage({
@@ -19,6 +19,8 @@ export function LaneCoverage({
     podsRead: boolean;
     total: number;
     streaming: number;
+    /** Every stream ended with its container: read to the end, not cut off. */
+    finished: number;
     refused: number;
     gone: number;
   };
@@ -55,6 +57,9 @@ export function LaneCoverage({
               }),
               false,
             ],
+      coverage.finished > 0
+        ? [t("count", "podsFinished", { n: coverage.finished }), false]
+        : null,
       coverage.refused > 0
         ? [t("count", "podsUnreadable", { n: coverage.refused }), true]
         : null,
