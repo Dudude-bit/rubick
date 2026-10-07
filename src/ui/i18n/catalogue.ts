@@ -5916,6 +5916,9 @@ export const en = {
     healthySigningNothing:
       "It is healthy and no Certificate names it, so it is signing nothing.",
     noneLower: "none",
+    clusterIpHeadless: "None (headless)",
+    clusterIpHeadlessWhy:
+      "clusterIP: None. A headless Service has no virtual IP: its DNS name answers with the addresses of the pods themselves.",
     notEvaluatedLower: "not evaluated",
     shellEndedPodGone:
       "The shell session ended: its pod was deleted, and the terminal went with it.",

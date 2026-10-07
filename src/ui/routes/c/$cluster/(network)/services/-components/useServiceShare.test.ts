@@ -204,3 +204,14 @@ describe("what the Service actually publishes", () => {
     });
   });
 });
+
+describe("the shared file's Cluster IP", () => {
+  /** It printed "None" for an ExternalName Service, the headless literal for an address it does not have. */
+  it("says none for an alias and labels the headless literal", () => {
+    const of = (clusterIp: string | null, type: string) =>
+      serviceStats({ ...service, type, clusterIp }, undefined, t)[1].value;
+    expect(of(null, "ExternalName")).toBe("none");
+    expect(of("None", "ClusterIP")).toBe("None (headless)");
+    expect(of("10.0.0.5", "ClusterIP")).toBe("10.0.0.5");
+  });
+});

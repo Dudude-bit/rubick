@@ -6496,6 +6496,9 @@ export const ru: Catalogue = {
     healthySigningNothing:
       "Он в порядке, но его не называет ни один Certificate, поэтому он ничего не подписывает.",
     noneLower: "нет",
+    clusterIpHeadless: "None (headless)",
+    clusterIpHeadlessWhy:
+      "clusterIP: None. У headless-сервиса нет виртуального IP: его DNS-имя отвечает адресами самих подов.",
     notEvaluatedLower: "не вычислено",
     shellEndedPodGone:
       "Сеанс оболочки завершён: Pod удалён, а вместе с ним закрылся и терминал.",

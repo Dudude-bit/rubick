@@ -33,6 +33,7 @@ import { recordToKeyValues } from "@/components/object/key-values";
 import { ServiceAccessInfo } from "../../-components";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { BalancerAddress } from "../../../-object/BalancerAddress";
+import { ClusterIpValue } from "../../../-object/ClusterIpValue";
 import { ServiceHealthView } from "../../../-object/health-views";
 import { PublishedEndpoints } from "./PublishedEndpoints";
 import { connectionsTab } from "../../../-object/connections-tab";
@@ -107,17 +108,9 @@ export function ServiceDetail() {
           },
         ]
       : []),
-    // A headless service has no cluster IP at all; "None" is the API's own
-    // word for it and means something different from "not assigned yet".
     {
       label: t("columns", "clusterIp"),
-      value: (
-        <CopyableAddress
-          value={service?.clusterIp}
-          label={t("columns", "clusterIp")}
-          fallback="None"
-        />
-      ),
+      value: service ? <ClusterIpValue clusterIp={service.clusterIp} /> : null,
     },
     {
       label: t("columns", "externalIps"),

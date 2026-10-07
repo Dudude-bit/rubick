@@ -5,6 +5,7 @@ import {
 import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { commands } from "@/lib/commands";
 import { BalancerAddress } from "../-object/BalancerAddress";
+import { ClusterIpValue } from "../-object/ClusterIpValue";
 import { IngressHealthView, ServiceHealthView } from "../-object/health-views";
 import { ReachCell, ResolvedPeers } from "../-object/network-policy-cells";
 import { notGovernedSentence, portText, reachOf } from "@/lib/network-policy";
@@ -137,12 +138,7 @@ export const NETWORK_SOURCES: PeekSources = {
             : []),
           {
             label: t("columns", "clusterIp"),
-            value: (
-              <CopyableAddress
-                value={service.clusterIp}
-                label={t("columns", "clusterIp")}
-              />
-            ),
+            value: <ClusterIpValue clusterIp={service.clusterIp} />,
           },
           {
             label: t("columns", "ports"),

@@ -21,6 +21,7 @@ import { rolloutLine, workloadStatus } from "./workload-status";
 import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
 import { ingressAddressOf, type IngressAddress } from "./ingress-health";
+import { clusterIpText } from "./cluster-ip";
 import {
   autoscalerRange,
   autoscalerReplicas,
@@ -252,7 +253,7 @@ function serviceVia(
   const address =
     facts.externalName !== null
       ? `ExternalName → ${facts.externalName}`
-      : join(facts.type, facts.clusterIp);
+      : join(facts.type, facts.clusterIp && clusterIpText(facts.clusterIp, t));
   return join(
     address,
     facts.selector

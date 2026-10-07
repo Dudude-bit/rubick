@@ -7,6 +7,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { PortsDisplay } from "../../-components";
 import { AddressCell, IPV4_CELL_PX } from "@/components/ui/copyable-value";
 import { BalancerAddress } from "../../../-object/BalancerAddress";
+import { ClusterIpValue } from "../../../-object/ClusterIpValue";
 import { BackingAround, HealthCell } from "./ServiceHealthCell";
 import {
   createNameColumn,
@@ -56,9 +57,7 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     accessorKey: "clusterIp",
     header: columnHeader("columns", "clusterIp"),
     meta: { floor: IPV4_CELL_PX },
-    cell: ({ row }) => (
-      <AddressCell value={row.original.clusterIp} labelKey="clusterIp" />
-    ),
+    cell: ({ row }) => <ClusterIpValue clusterIp={row.original.clusterIp} />,
   },
   {
     // An address per line, each behind an icon; "nothing assigns it" whole.

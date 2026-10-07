@@ -3,6 +3,7 @@ import { Filter, Plug, Waypoints } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
+import { clusterIpText } from "@/lib/cluster-ip";
 import { iconSvg } from "@/lib/icon-svg";
 import {
   endpointAddress,
@@ -26,7 +27,10 @@ export function serviceStats(
 ): ReportStat[] {
   const stats: ReportStat[] = [
     { label: t("columns", "type"), value: service.type },
-    { label: t("columns", "clusterIp"), value: service.clusterIp ?? "None" },
+    {
+      label: t("columns", "clusterIp"),
+      value: clusterIpText(service.clusterIp, t),
+    },
     { label: t("columns", "ports"), value: String(service.ports.length) },
   ];
   if (published) {
