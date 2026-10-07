@@ -210,6 +210,8 @@ const NODES_SCREEN = { title: NODES_TITLE, kind: ResourceType.Node };
 const linkOf = (node: NodeInfo) =>
   objectLink({ kind: ResourceType.Node, name: node.name })!;
 
+const NODE_DETAIL = queryKeys.rowDetail(ResourceType.Node);
+
 export function NodeList() {
   const t = useT();
   const grouping = useMemo(() => poolGrouping(t), [t]);
@@ -226,6 +228,7 @@ export function NodeList() {
     enabled: isConnected,
     subscribe: subscribeNodes,
     queryKey,
+    detail: NODE_DETAIL,
     reportFailure: toPlural(ResourceType.Node),
   });
 

@@ -79,6 +79,14 @@ export const queryKeys = {
   ],
   /** Every object of one kind: the prefix a mutation of that kind marks stale. */
   details: (kind: string): string[] => [kind.toLowerCase()],
+  /** A listed row's own {@link queryKeys.detail} entry, for the watch feeding the list. */
+  rowDetail:
+    (kind: string) =>
+    (row: {
+      name: string;
+      namespace?: string | null;
+    }): (string | null | undefined)[] =>
+      queryKeys.detail(kind, row.namespace, row.name),
 
   /** One object's manifest as YAML, from `get_manifest`. */
   manifest: (
@@ -165,6 +173,7 @@ export const queryKeys = {
     context,
     scopeCacheKey(namespaces) ?? EVERY_NAMESPACE,
   ],
+  everyOverview: (): string[] => ["cluster-overview"],
 
   appInfo: (): string[] => ["app-info"],
 

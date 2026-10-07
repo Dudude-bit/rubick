@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
 import { renderHook, waitFor } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  QueryClient,
+  QueryClientProvider,
+  useQuery,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { createElement, type ReactNode } from "react";
 
 // ----- Mocks -----
@@ -41,6 +46,8 @@ vi.mock("@/lib/commands", () => ({
 import { commands } from "@/lib/commands";
 import { useResourceWatch } from "./useResourceWatch";
 import { testQueryClient } from "@/test/render";
+import { queryKeys } from "@/lib/query-keys";
+import { useWindowActivity } from "@/lib/window-activity";
 import type { Scoped } from "@/generated/types";
 
 // ----- Test harness -----
@@ -911,5 +918,190 @@ describe("useResourceWatch", () => {
         "stream-cm-1"
       );
     });
+  });
+});
+
+describe("the readers beside a watched list", () => {
+  beforeEach(() => {
+    subscribedCalls.length = 0;
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+    useWindowActivity.setState({ visible: true });
+  });
+
+  const DEPLOYMENTS = ["deployments", "shop"];
+  const PODS = ["pods", "shop"];
+  const PEEK = queryKeys.detail("Deployment", "shop", "search");
+  const SIDEBAR = queryKeys.clusterOverview("acme-staging", ["shop"]);
+
+  /** A poll that never fires on its own, so only the watch can move it. */
+  function useReader<A>(queryKey: QueryKey, read: () => Promise<A>) {
+    return useQuery({ queryKey, queryFn: read, staleTime: Infinity }).data;
+  }
+
+  async function watching<A>(
+    client: QueryClient,
+    listKey: string[],
+    readerKey: QueryKey,
+    read: () => Promise<A>
+  ) {
+    const detail = queryKeys.rowDetail(listKey === PODS ? "Pod" : "Deployment");
+    const hook = renderHook(
+      () => {
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: listKey,
+          detail,
+        });
+        return useReader(readerKey, read);
+      },
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    await waitFor(() => expect(hook.result.current).toBeDefined());
+    return hook;
+  }
+
+  /**
+   * Dana scaled search to 3: the Deployments row said 3/3 while the open
+   * peek said "Stalled, 2 of 3 ready" for five seconds, until its own poll.
+   * Fails if the watch's change does not make the peek's entry read again.
+   */
+  it("has the peek read a Deployment again when the list's watch sees it change", async () => {
+    const client = testQueryClient();
+    const getDeployment = vi
+      .fn()
+      .mockResolvedValueOnce({ name: "search", ready: 2 })
+      .mockResolvedValue({ name: "search", ready: 3 });
+    client.setQueryData<Scoped<Item>>(DEPLOYMENTS, {
+      rows: [{ name: "search", namespace: "shop", data: 2 }],
+      unread: [],
+    });
+    const hook = await watching(client, DEPLOYMENTS, PEEK, getDeployment);
+    expect(hook.result.current).toEqual({ name: "search", ready: 2 });
+
+    emit("stream-cm-1", "applied", {
+      name: "search",
+      namespace: "shop",
+      data: 3,
+    });
+    await waitFor(() =>
+      expect(hook.result.current).toEqual({ name: "search", ready: 3 })
+    );
+    expect(getDeployment).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * Scale 2 to 4: the Pods header said 16 while the sidebar and the status
+   * bar said 14 until the overview's next ten-second read. Fails if a pod
+   * the watch added leaves the counts to that poll, or if two pods landing
+   * together cost two overview reads.
+   */
+  it("reads the overview's counts once again when the watch adds pods", async () => {
+    const client = testQueryClient();
+    const overview = vi
+      .fn()
+      .mockResolvedValueOnce({ pods: 14 })
+      .mockResolvedValue({ pods: 16 });
+    client.setQueryData<Scoped<Item>>(PODS, {
+      rows: Array.from({ length: 14 }, (_, i) => ({
+        name: `pod-${i}`,
+        namespace: "shop",
+      })),
+      unread: [],
+    });
+    const hook = await watching(client, PODS, SIDEBAR, overview);
+
+    emit("stream-cm-1", "applied", { name: "search-2cw59", namespace: "shop" });
+    emit("stream-cm-1", "applied", { name: "search-4bmgj", namespace: "shop" });
+    await waitFor(() => expect(hook.result.current).toEqual({ pods: 16 }), {
+      timeout: 3000,
+    });
+    expect(overview).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * A watch that was down comes back with a resync, and pods that came or
+   * went meanwhile arrive in it rather than as changes. Fails if a resync
+   * that changes the count leaves the sidebar on the old one.
+   */
+  it("reads the overview again when a resync brings a different count", async () => {
+    const client = testQueryClient();
+    const overview = vi
+      .fn()
+      .mockResolvedValueOnce({ pods: 1 })
+      .mockResolvedValue({ pods: 2 });
+    client.setQueryData<Scoped<Item>>(PODS, {
+      rows: [{ name: "pod-0", namespace: "shop" }],
+      unread: [],
+    });
+    const hook = await watching(client, PODS, SIDEBAR, overview);
+
+    emit("stream-cm-1", "restarted", null);
+    emit("stream-cm-1", "applied", { name: "pod-0", namespace: "shop" });
+    emit("stream-cm-1", "applied", { name: "pod-1", namespace: "shop" });
+    emit("stream-cm-1", "synced", null);
+    await waitFor(() => expect(hook.result.current).toEqual({ pods: 2 }), {
+      timeout: 3000,
+    });
+  });
+
+  /**
+   * A read already in flight may have left before the pod arrived. Fails if
+   * the watch's re-read joins it instead of following it, which leaves the
+   * sidebar on the count from before the change.
+   */
+  it("reads the overview after a read that was already in flight", async () => {
+    const client = testQueryClient();
+    let release: (value: { pods: number }) => void = () => {};
+    const overview = vi
+      .fn()
+      .mockResolvedValueOnce({ pods: 14 })
+      .mockImplementationOnce(
+        () => new Promise<{ pods: number }>((resolve) => (release = resolve))
+      )
+      .mockResolvedValue({ pods: 15 });
+    client.setQueryData<Scoped<Item>>(PODS, {
+      rows: [{ name: "pod-0", namespace: "shop" }],
+      unread: [],
+    });
+    const hook = await watching(client, PODS, SIDEBAR, overview);
+    void client.refetchQueries({ queryKey: SIDEBAR });
+
+    emit("stream-cm-1", "applied", { name: "search-2cw59", namespace: "shop" });
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    release({ pods: 14 });
+    await waitFor(() => expect(hook.result.current).toEqual({ pods: 15 }), {
+      timeout: 3000,
+    });
+    expect(overview).toHaveBeenCalledTimes(3);
+  });
+
+  /**
+   * A minimised window stops polling; a watch still writing rows must not
+   * start reading on its behalf. Fails if a hidden window re-reads at once.
+   */
+  it("leaves a hidden window's peek stale for its return rather than reading it", async () => {
+    const client = testQueryClient();
+    const getDeployment = vi
+      .fn()
+      .mockResolvedValue({ name: "search", ready: 2 });
+    client.setQueryData<Scoped<Item>>(DEPLOYMENTS, {
+      rows: [{ name: "search", namespace: "shop", data: 2 }],
+      unread: [],
+    });
+    await watching(client, DEPLOYMENTS, PEEK, getDeployment);
+    useWindowActivity.setState({ visible: false });
+
+    emit("stream-cm-1", "applied", {
+      name: "search",
+      namespace: "shop",
+      data: 3,
+    });
+    await waitFor(() =>
+      expect(client.getQueryState(PEEK)?.isInvalidated).toBe(true)
+    );
+    expect(getDeployment).toHaveBeenCalledTimes(1);
   });
 });

@@ -90,6 +90,7 @@ export function createResourceListPage<T extends ListableResource>(
       name: row.name,
       namespace: row.namespace,
     })!;
+  const detail = queryKeys.rowDetail(config.resourceType);
 
   const ListPage = function ResourceListPage() {
     const t = useT();
@@ -146,6 +147,7 @@ export function createResourceListPage<T extends ListableResource>(
       enabled: !!watchFactory,
       subscribe,
       queryKey,
+      detail,
       reportFailure: config.title,
     });
 

@@ -16,8 +16,11 @@ vi.mock("@/hooks/useResourceWatch", () => ({
   },
 }));
 
+import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useWatchedList } from "./useWatchedList";
+
+const POD_DETAIL = queryKeys.rowDetail("Pod");
 
 const watched = (
   enabled = true,
@@ -28,6 +31,7 @@ const watched = (
       enabled,
       subscribe: () => Promise.resolve("stream"),
       queryKey: ["pods"],
+      detail: POD_DETAIL,
       reportFailure,
     })
   );
@@ -154,6 +158,7 @@ describe("a list kept current by a watch", () => {
           enabled: true,
           subscribe: () => Promise.resolve("stream"),
           queryKey,
+          detail: POD_DETAIL,
           reportFailure: "Pods",
         }),
       { initialProps: { queryKey: ["pods", "a,b"] } }

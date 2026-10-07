@@ -78,6 +78,8 @@ const pvcLink = (pvc: PersistentVolumeClaimInfo) =>
     namespace: pvc.namespace,
   })!;
 
+const PVC_DETAIL = queryKeys.rowDetail(ResourceType.PersistentVolumeClaim);
+
 export function PersistentVolumeClaimList() {
   const t = useT();
   const scope = useNamespaceScope();
@@ -99,6 +101,7 @@ export function PersistentVolumeClaimList() {
       enabled: true,
       subscribe,
       queryKey,
+      detail: PVC_DETAIL,
       reportFailure: toPlural(ResourceType.PersistentVolumeClaim),
     });
 

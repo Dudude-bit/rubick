@@ -215,6 +215,11 @@ export function CustomResourceList({
     // in its dependencies, and a fresh array on every render tore the subscription
     // down and opened another one on every single render.
     queryKey,
+    detail: useCallback(
+      (row: CustomResourceListItem) =>
+        queryKeys.customResource(crdName, row.namespace, row.name),
+      [crdName]
+    ),
     reportFailure: crdKind,
   });
 

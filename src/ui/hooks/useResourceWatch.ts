@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { useQueryClient, type QueryKey } from "@tanstack/react-query";
+import {
+  hashKey,
+  useQueryClient,
+  type QueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
 import {
@@ -11,8 +16,10 @@ import { useRenewals } from "@/hooks/useCredentialRenewal";
 import { useT } from "@/i18n/useT";
 import type { Scoped } from "@/generated/types";
 import { watched } from "@/lib/watched-rows";
+import { queryKeys } from "@/lib/query-keys";
+import { useWindowActivity } from "@/lib/window-activity";
 
-interface UseResourceWatchOptions {
+interface UseResourceWatchOptions<T> {
   /**
    * `true` once dependencies are ready (current namespace, etc.).
    * The hook short-circuits and does nothing while `false`.
@@ -25,6 +32,11 @@ interface UseResourceWatchOptions {
   subscribe: () => Promise<string>;
   /** The cache entry the watch keeps up to date: a list's `Scoped` answer. */
   queryKey: QueryKey;
+  /**
+   * Where a row's own object is cached. The peek, the page and the row menu
+   * poll it, and read it again when the watch has seen the row change.
+   */
+  detail?: (row: T) => QueryKey;
   /**
    * Called on a backend `failed` event — typically RBAC `watch` denial or a
    * persistent network problem. The cache is NOT mutated for those; the
@@ -64,9 +76,10 @@ export function useResourceWatch<
   enabled,
   subscribe,
   queryKey,
+  detail,
   onError,
   onRecovered,
-}: UseResourceWatchOptions): ResourceWatchState {
+}: UseResourceWatchOptions<T>): ResourceWatchState {
   const t = useT();
   const queryClient = useQueryClient();
   const renewals = useRenewals();
@@ -78,12 +91,14 @@ export function useResourceWatch<
   // either callback doesn't tear down the subscription.
   const onErrorRef = useRef(onError);
   const onRecoveredRef = useRef(onRecovered);
+  const detailRef = useRef(detail);
   const tRef = useRef(t);
   useEffect(() => {
     onErrorRef.current = onError;
     onRecoveredRef.current = onRecovered;
+    detailRef.current = detail;
     tRef.current = t;
-  }, [onError, onRecovered, t]);
+  }, [onError, onRecovered, detail, t]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -192,6 +207,10 @@ export function useResourceWatch<
               staged = null;
               setResyncing(false);
               if (rows) {
+                const before =
+                  queryClient.getQueryData<Scoped<T>>(queryKey)?.rows.length;
+                if (before !== undefined && before !== rows.size)
+                  readSoon(queryClient, queryKeys.everyOverview(), COUNTS_MS);
                 // Synced is every namespace of the stream answering, so
                 // nothing in the scope is unread any more.
                 queryClient.setQueryData<Scoped<T>>(queryKey, {
@@ -212,6 +231,7 @@ export function useResourceWatch<
 
           if (live.length > 0) {
             const changes = live;
+            let recounted = false;
             const stored = queryClient.setQueryData<Scoped<T>>(
               queryKey,
               (prev) => {
@@ -223,10 +243,12 @@ export function useResourceWatch<
                 }
                 const rows = applyChanges(prev?.rows ?? [], changes, positions);
                 if (prev && rows === prev.rows) return prev;
+                recounted = rows.length !== (prev?.rows.length ?? 0);
                 return watched({ rows, unread: prev?.unread ?? [] });
               }
             );
             indexedList = stored?.rows;
+            readAgain(queryClient, changes, detailRef.current, recounted);
           }
         });
 
@@ -286,6 +308,57 @@ export function useResourceWatch<
   }, [enabled, subscribe, queryClient, queryKey, renewals]);
 
   return { resyncing };
+}
+
+const DETAIL_MS = 250;
+/** The overview is the costliest read in the app: twice a second at most. */
+const COUNTS_MS = 500;
+
+const due = new WeakMap<QueryClient, Set<string>>();
+
+/**
+ * Reads `queryKey` again once a burst of changes settles. A read in flight
+ * may have left before the change, so it is waited for rather than cut
+ * short, which under steady churn would never let one finish.
+ */
+function readSoon(client: QueryClient, queryKey: QueryKey, settleMs: number) {
+  const pending = due.get(client) ?? new Set<string>();
+  due.set(client, pending);
+  const id = hashKey(queryKey);
+  if (pending.has(id)) return;
+  pending.add(id);
+  setTimeout(() => {
+    pending.delete(id);
+    if (client.isFetching({ queryKey }) > 0) {
+      readSoon(client, queryKey, settleMs);
+      return;
+    }
+    // A hidden window re-reads on its way back; until then it is only stale.
+    const visible = useWindowActivity.getState().visible;
+    void client.invalidateQueries(
+      { queryKey, refetchType: visible ? "active" : "none" },
+      { cancelRefetch: false }
+    );
+  }, settleMs);
+}
+
+/**
+ * The panels polling a row the watch saw change, and the overview's counts
+ * beside a list that grew or shrank: both lagged the list by a poll.
+ */
+function readAgain<T>(
+  client: QueryClient,
+  changes: Array<ResourceChange<T>>,
+  detail: ((row: T) => QueryKey) | undefined,
+  recounted: boolean
+) {
+  if (detail)
+    for (const { resource } of changes) {
+      if (!resource) continue;
+      const key = detail(resource);
+      if (client.getQueryState(key)) readSoon(client, key, DETAIL_MS);
+    }
+  if (recounted) readSoon(client, queryKeys.everyOverview(), COUNTS_MS);
 }
 
 /** Name plus namespace, which is what identifies a row in a list. */

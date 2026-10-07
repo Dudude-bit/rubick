@@ -39,11 +39,14 @@ export function useWatchedList<
   enabled,
   subscribe,
   queryKey,
+  detail,
   reportFailure,
 }: {
   enabled: boolean;
   subscribe: () => Promise<string>;
   queryKey: QueryKey;
+  /** Where a row's own object is cached; see `useResourceWatch`. */
+  detail: (row: T) => QueryKey;
   reportFailure: string | ((message: string) => void);
 }): WatchedList {
   const t = useT();
@@ -93,6 +96,7 @@ export function useWatchedList<
     enabled: enabled && !refusedBefore,
     subscribe,
     queryKey,
+    detail,
     onError,
     onRecovered,
   });

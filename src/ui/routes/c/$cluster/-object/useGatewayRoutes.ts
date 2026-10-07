@@ -66,6 +66,7 @@ function useRouteKind(
       [kind, wire]
     ),
     queryKey,
+    detail: useMemo(() => queryKeys.rowDetail(kind), [kind]),
     reportFailure: useCallback(
       (message: string) => report(kind, message),
       [kind, report]

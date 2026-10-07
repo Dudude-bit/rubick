@@ -226,6 +226,7 @@ export const baseColumns: ColumnDef<IngressInfo>[] = [
   createAgeColumn<IngressInfo>(),
 ];
 
+const INGRESS_DETAIL = queryKeys.rowDetail(ResourceType.Ingress);
 const linkOf = (ingress: IngressInfo) =>
   objectLink({
     kind: ResourceType.Ingress,
@@ -254,6 +255,7 @@ export function IngressList() {
     enabled: true,
     subscribe,
     queryKey,
+    detail: INGRESS_DETAIL,
     reportFailure: toPlural(ResourceType.Ingress),
   });
 

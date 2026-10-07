@@ -78,6 +78,7 @@ export function createWorkloadListPage<T extends Workload>(
       name: row.name,
       namespace: row.namespace,
     })!;
+  const detail = queryKeys.rowDetail(config.resourceType);
 
   const ListPage = function WorkloadListPage() {
     const t = useT();
@@ -110,6 +111,7 @@ export function createWorkloadListPage<T extends Workload>(
       enabled: !!watchFactory,
       subscribe,
       queryKey,
+      detail,
       reportFailure: config.title,
     });
 

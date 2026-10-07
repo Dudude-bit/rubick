@@ -20,6 +20,7 @@ import type { UnreadNamespace } from "@/generated/types";
 export type { PodWithMetrics } from "@/lib/metrics";
 
 const EMPTY_PODS: PodRow[] = [];
+const POD_DETAIL = queryKeys.rowDetail(ResourceType.Pod);
 const NOTHING_UNREAD: UnreadNamespace[] = [];
 
 interface UsePodsWithMetricsOptions {
@@ -56,6 +57,7 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     enabled,
     subscribe: subscribePods,
     queryKey,
+    detail: POD_DETAIL,
     reportFailure: toPlural(ResourceType.Pod),
   });
 

@@ -91,6 +91,8 @@ export const columns: ColumnDef<NamespaceInfo>[] = [
  * takes everything inside it with it, which is not a hover-target decision.
  * The row's useful verb is "point this window at it", so that is the action.
  */
+const NAMESPACE_DETAIL = queryKeys.rowDetail(ResourceType.Namespace);
+
 export function NamespaceList() {
   const t = useT();
   const switchNamespace = useClusterStore((s) => s.switchNamespace);
@@ -116,6 +118,7 @@ export function NamespaceList() {
     enabled: isConnected,
     subscribe: subscribeNamespaces,
     queryKey,
+    detail: NAMESPACE_DETAIL,
     reportFailure: toPlural(ResourceType.Namespace),
   });
 

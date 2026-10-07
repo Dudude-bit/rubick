@@ -51,6 +51,18 @@ function detailGetters(): Array<[string, string, string | null]> {
   );
 }
 
+/** The kinds whose lists a watch keeps, read off the code that wires one. */
+function watchedKinds(): string[] {
+  const kinds = CODE_FILES.flatMap((file) => {
+    const code = readFileSync(file, "utf8");
+    if (!/useWatchedList|^\s+watch: /m.test(code)) return [];
+    return [
+      ...code.matchAll(/(?:rowDetail\(|resourceType: )ResourceType\.(\w+)/g),
+    ].map((found) => found[1]);
+  });
+  return [...new Set(kinds)];
+}
+
 /**
  * The peek's Overview is the detail page's own cache entry, so the two must
  * ask the same `get_*`: two commands under one key hand one screen the
@@ -246,6 +258,21 @@ describe("the peek's Overview against the detail pages", () => {
         said("OverlappingTLSConfig", "True", "OverlappingHostnames"),
       ])
     ).toBe("warn");
+  });
+
+  /**
+   * A list's watch reads a changed row's entry again, so the peek open on it
+   * follows the row. Fails if a watched kind's peek keeps another entry,
+   * which leaves it on its own poll: "3/3" in the list, "2 of 3" beside it.
+   */
+  it("is the entry a watched list reads again when its row changes", () => {
+    const kinds = watchedKinds();
+    expect(kinds.length).toBeGreaterThanOrEqual(15);
+    const row = { name: "x", namespace: "ns" };
+    for (const kind of kinds)
+      expect(peekQueryKey({ kind, ...row })).toEqual(
+        queryKeys.rowDetail(kind)(row)
+      );
   });
 
   it("reads a CRD where the CRD page does", async () => {
