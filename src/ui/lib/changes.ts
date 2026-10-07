@@ -566,6 +566,16 @@ export function spansCovering(
   );
 }
 
+/** The spans that watched every one of `kinds` somewhere, whatever namespaces they were on. */
+export function spansWatching(
+  spans: readonly ObservedSpan[],
+  kinds: readonly string[]
+): ObservedSpan[] {
+  return spans.filter(
+    (span) => !kinds.some((kind) => span.unwatched?.includes(kind))
+  );
+}
+
 /** A gap in words; one under a minute by its length, which minutes would draw as 20:23 to 20:23. */
 export function gapWords(
   gap: Gap,
@@ -573,17 +583,22 @@ export function gapWords(
   clock: (ms: number) => string
 ): string {
   const ms = gap.to - gap.from;
+  const [brief, long] = gap.elsewhere
+    ? (["outsideScopeBrief", "outsideScope"] as const)
+    : (["notObservedBrief", "notObserved"] as const);
   return ms < 60_000
-    ? t("changes", "notObservedBrief", {
+    ? t("changes", brief, {
         n: Math.max(1, Math.round(ms / 1000)),
         at: clock(gap.from),
       })
-    : t("changes", "notObserved", { from: clock(gap.from), to: clock(gap.to) });
+    : t("changes", long, { from: clock(gap.from), to: clock(gap.to) });
 }
 
 export interface Gap {
   from: number;
   to: number;
+  /** The app was watching these kinds the whole time, in other namespaces: the object was outside the scope, not unwatched. */
+  elsewhere?: boolean;
 }
 
 /**
@@ -595,8 +610,17 @@ export interface Gap {
  * end of the window. Ending it at `seenAt` instead drew a "Not observed" box
  * for the seconds since the last heartbeat, on a cluster being watched
  * perfectly.
+ *
+ * `watching` is every span that watched the kinds, in any namespace: a gap
+ * that lies wholly inside those is the scope having been elsewhere, and says
+ * so rather than claiming the app was not looking.
  */
-export function gapsOf(spans: ObservedSpan[], from: number, to: number): Gap[] {
+export function gapsOf(
+  spans: ObservedSpan[],
+  from: number,
+  to: number,
+  watching?: readonly ObservedSpan[]
+): Gap[] {
   const covered = spans
     .map((span) => ({
       from: span.from,
@@ -611,7 +635,13 @@ export function gapsOf(spans: ObservedSpan[], from: number, to: number): Gap[] {
     cursor = Math.max(cursor, span.to);
   }
   if (cursor < to) gaps.push({ from: cursor, to });
-  return gaps;
+  if (!watching) return gaps;
+  const dark = gapsOf([...watching], from, to);
+  return gaps.map((gap) =>
+    dark.some((hole) => hole.from < gap.to && hole.to > gap.from)
+      ? gap
+      : { ...gap, elsewhere: true }
+  );
 }
 
 /** What a revision could be said about, against the revision before it. */
@@ -662,6 +692,8 @@ export interface TimelineInput {
   helm: HelmRevision[];
   journal: JournalEntry[];
   spans: ObservedSpan[];
+  /** Every span that watched these kinds in any namespace; see {@link gapsOf}. */
+  watching?: ObservedSpan[];
   window: { from: number; to: number };
   /** The object's `creationTimestamp`, where the timeline is one object's. */
   createdAt?: string | null;
@@ -722,7 +754,7 @@ export function timelineOf(input: TimelineInput): ChangeItem[] {
     );
     if (!watchedBirth) items.push({ kind: "created", at: born });
   }
-  for (const gap of gapsOf(input.spans, from, input.window.to))
+  for (const gap of gapsOf(input.spans, from, input.window.to, input.watching))
     items.push({ kind: "gap", at: gap.to, gap });
   return items.sort((a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity));
 }

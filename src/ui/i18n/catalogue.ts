@@ -1625,6 +1625,11 @@ export const en = {
       one: "Not observed for {n} second at {at}",
       other: "Not observed for {n} seconds at {at}",
     },
+    outsideScope: "Outside the watched namespaces, {from} to {to}",
+    outsideScopeBrief: {
+      one: "Outside the watched namespaces for {n} second at {at}",
+      other: "Outside the watched namespaces for {n} seconds at {at}",
+    },
     revisionNumber: "revision {n}",
     revisionCurrent: "current",
     revisionOldest: "oldest known; nothing earlier to compare with",

@@ -17,6 +17,7 @@ import {
   gapsOf,
   gapWords,
   spansCovering,
+  spansWatching,
   hasChangesTab,
   journalWords,
   type Gap,
@@ -357,7 +358,17 @@ export function changesSection(
   const now = Date.parse(capturedAt);
   // As far back as the journal keeps, or as the oldest row shown.
   const from = Math.min(now - JOURNAL_WINDOW_MS, ...out.map((row) => row.ms));
-  const gaps = watched ? gapsOf(spans, from, now) : [];
+  const gaps = watched
+    ? gapsOf(
+        spans,
+        from,
+        now,
+        spansWatching(
+          journal.spans,
+          targets.map((target) => target.kind)
+        )
+      )
+    : [];
   const rows: (ReportChange & { ms: number })[] = [
     ...out.map(({ ms, at, ref, parts }) => ({
       ms,

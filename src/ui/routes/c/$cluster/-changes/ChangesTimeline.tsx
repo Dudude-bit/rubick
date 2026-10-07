@@ -91,7 +91,12 @@ function Row({
       return (
         <div
           role="note"
-          className="rounded border border-dashed border-warn/60 bg-warn/5 px-2 py-1 text-[11px] text-warn"
+          className={cn(
+            "rounded border border-dashed px-2 py-1 text-[11px]",
+            item.gap.elsewhere
+              ? "border-hair text-fg-mut"
+              : "border-warn/60 bg-warn/5 text-warn"
+          )}
         >
           {gapWords(item.gap, t, clock)}
         </div>

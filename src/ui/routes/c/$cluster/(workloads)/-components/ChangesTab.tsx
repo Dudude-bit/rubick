@@ -12,6 +12,7 @@ import {
   revisionOfController,
   revisionOfReplicaSet,
   spansCovering,
+  spansWatching,
   timelineOf,
   type Revision,
   CHANGES_KINDS,
@@ -187,6 +188,9 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
           kinds: [subject.kind],
           namespaces: [subject.namespace],
         }),
+        watching: spansWatching(context ? (spans[context] ?? []) : [], [
+          subject.kind,
+        ]),
         window: { from: now - WINDOW_MS, to: now },
         createdAt: subject.createdAt,
       }),

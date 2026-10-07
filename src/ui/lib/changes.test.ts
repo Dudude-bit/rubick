@@ -533,6 +533,31 @@ describe("gapsOf", () => {
   it("is the whole window when nothing was ever watched", () => {
     expect(gapsOf([], T0, T0 + HOUR)).toEqual([{ from: T0, to: T0 + HOUR }]);
   });
+
+  /**
+   * Every scope switch away and back left "Не наблюдали 17 секунд": true of
+   * this object, read as the app being down. Fails if a stretch some other
+   * span covered is not told apart from one nobody watched.
+   */
+  it("marks a stretch the app spent watching other namespaces as the scope being elsewhere", () => {
+    const mine = span(T0, T0 + HOUR);
+    const other = span(T0 + HOUR, T0 + 2 * HOUR);
+    expect(gapsOf([mine], T0, T0 + 2 * HOUR, [mine, other])).toEqual([
+      { from: T0 + HOUR, to: T0 + 2 * HOUR, elsewhere: true },
+    ]);
+  });
+
+  /** Deleting the check for a dark hole makes a closed laptop read as a scope switch. */
+  it("keeps a stretch no span covered, or only partly covered, as not observed", () => {
+    const mine = span(T0, T0 + HOUR);
+    const other = span(T0 + HOUR, T0 + 2 * HOUR);
+    expect(gapsOf([mine], T0, T0 + 3 * HOUR, [mine])).toEqual([
+      { from: T0 + HOUR, to: T0 + 3 * HOUR },
+    ]);
+    expect(gapsOf([mine], T0, T0 + 3 * HOUR, [mine, other])).toEqual([
+      { from: T0 + HOUR, to: T0 + 3 * HOUR },
+    ]);
+  });
 });
 
 describe("timelineOf", () => {
@@ -836,5 +861,19 @@ describe("a gap in words", () => {
     expect(gapWords({ from: T0, to: T0 + HOUR }, t, clock)).toBe(
       "Not observed 00:00 to 01:00"
     );
+  });
+
+  /** A pill click is not the app going dark; fails if the scope's absence is worded as not observing. */
+  it("says the namespaces were outside the scope when the app was watching elsewhere", () => {
+    const gap = { from: T0, to: T0 + 17_000, elsewhere: true };
+    expect(gapWords(gap, t, clock)).toBe(
+      "Outside the watched namespaces for 17 seconds at 00:00"
+    );
+    expect(gapWords(gap, r, clock)).toBe(
+      "Вне наблюдаемых пространств имён 17 секунд в 00:00"
+    );
+    expect(
+      gapWords({ from: T0, to: T0 + HOUR, elsewhere: true }, r, clock)
+    ).toBe("Вне наблюдаемых пространств имён с 00:00 по 01:00");
   });
 });
