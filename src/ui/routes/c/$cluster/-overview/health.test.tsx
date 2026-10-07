@@ -425,7 +425,8 @@ describe("what Needs attention says it checked", () => {
           {
             namespace: "net",
             code: "PERMISSION_DENIED",
-            message: 'services is forbidden: User "sam" cannot list services',
+            message:
+              'services is forbidden: User "sam" cannot list resource "services" in API group "" in the namespace "net"',
           },
         ],
       },
@@ -440,11 +441,63 @@ describe("what Needs attention says it checked", () => {
     );
     const unchecked = screen.getByTestId("attention-unchecked");
     expect(unchecked).toHaveTextContent("Services");
-    expect(unchecked).toHaveTextContent("refused in net");
-    expect(unchecked).toHaveTextContent('User "sam" cannot list services');
+    expect(unchecked).toHaveTextContent("may not list in net");
+    expect(unchecked.querySelector("[title]")?.getAttribute("title")).toBe(
+      'services is forbidden: User "sam" cannot list resource "services" in API group "" in the namespace "net"'
+    );
     expect(screen.getByTestId("attention-summary")).not.toHaveTextContent(
       "Healthy"
     );
+  });
+
+  /**
+   * Marco's Overview: `refused in team-checkout: Kubernetes API error:
+   * ApiError: daemonsets.apps is forbidden: User "system:serviceaccount:…`,
+   * cut mid-word. A refusal reads as the verb and the scope refused; the
+   * server's sentence is on hover. Fails if the sentence is printed in the
+   * row again, or a cluster-wide refusal loses its scope.
+   */
+  it("says what was refused and where, with the server's sentence on hover", async () => {
+    const said = (resource: string, where: string) =>
+      `${resource} is forbidden: User "system:serviceaccount:team-checkout:marco" cannot list resource "${resource.split(".")[0]}" in API group "${resource.split(".").slice(1).join(".")}" ${where}`;
+    const daemonsets = said(
+      "daemonsets.apps",
+      'in the namespace "team-checkout"'
+    );
+    const nodes = said("nodes", "at the cluster scope");
+    await panel(
+      attentionFrom([], {
+        overview: {
+          problems: [],
+          problemsTruncated: 0,
+          unread: [
+            {
+              kind: "DaemonSet",
+              namespace: "team-checkout",
+              code: "PERMISSION_DENIED",
+              message: daemonsets,
+            },
+            {
+              kind: "Node",
+              namespace: null,
+              code: "PERMISSION_DENIED",
+              message: nodes,
+            },
+          ],
+        } as unknown as ClusterOverview,
+      })
+    );
+
+    const unchecked = screen.getByTestId("attention-unchecked");
+    expect(unchecked).toHaveTextContent("may not list in team-checkout");
+    expect(unchecked).toHaveTextContent("may not list across the cluster");
+    expect(unchecked).not.toHaveTextContent(
+      /forbidden|ApiError|Kubernetes API error/
+    );
+    const hovers = [...unchecked.querySelectorAll("[title]")].map((at) =>
+      at.getAttribute("title")
+    );
+    expect(hovers).toEqual(expect.arrayContaining([daemonsets, nodes]));
   });
 
   /** Still reading is its own state: not refused, and not a clean answer either. */

@@ -131,7 +131,7 @@ fn above<K: kube::Resource>(got: kube::Result<K>, kind: &str, version: &str) -> 
             other => Ok(Above::Unread(UnexploredKind::unanswered(
                 kind,
                 version,
-                &other.to_string(),
+                &other.said(),
             ))),
         },
     }

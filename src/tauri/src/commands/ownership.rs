@@ -65,7 +65,7 @@ pub async fn preview_cascade(
             }
             Ok(None) => Some(Reading::Unlistable),
             Err(error) => Some(Reading::Failed {
-                message: error.to_string(),
+                message: error.said(),
             }),
         },
     };
@@ -233,7 +233,7 @@ async fn lineage_of(
             kind: owner.kind.clone(),
             name: owner.name.clone(),
             code: error.code().to_string(),
-            message: error.to_string(),
+            message: error.said(),
         };
         let kinds = match state.served_kinds(&group).await {
             Ok(kinds) => kinds.unwrap_or_default(),

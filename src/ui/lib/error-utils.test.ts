@@ -34,6 +34,31 @@ describe("what a failure says on screen", () => {
     expect(errorToShow("plain string")).toBe("plain string");
   });
 
+  /**
+   * The payments card read "Log streaming error: Failed to get logs:
+   * ApiError: ... BadRequest", Marco's Overview "Kubernetes API error:
+   * ApiError: daemonsets.apps is forbidden". The backend sends the server's
+   * sentence as `said` beside its code; that is what is shown, through the
+   * Error `wrapCommand` throws. Fails if the Rust chain reaches the screen.
+   */
+  it("shows the server's sentence the backend sent, not the chain around it", () => {
+    const said =
+      'container "app" in pod "payments-6d9d7d9db4-jflp4" is waiting to start: trying and failing to pull image';
+    const wire = {
+      code: "LOG_STREAM_ERROR",
+      message: `Log streaming error: Failed to get logs: ${said}`,
+      said,
+    };
+    const thrown = new Error(
+      `Tauri command 'getPodLogs' failed: ${wire.message}`,
+      { cause: wire }
+    );
+    expect(errorToShow(thrown)).toBe(said);
+    expect(errorToShow(new Error(errorToShow(thrown), { cause: thrown }))).toBe(
+      said
+    );
+  });
+
   /** Only at the front, and only ours: a quoted one in the body is content. */
   it("strips nothing from the middle of a message", () => {
     const message = "kubectl said: Tauri command 'x' failed: nope";

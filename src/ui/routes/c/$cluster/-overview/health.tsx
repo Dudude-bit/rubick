@@ -33,6 +33,7 @@ import {
   type AttentionItem,
 } from "@/lib/attention";
 import { ERROR_CODES } from "@/lib/error-utils";
+import { parseRefusal } from "@/lib/refusal";
 import { listLink, objectLink } from "@/lib/links";
 import {
   ROLE_DOT,
@@ -302,6 +303,9 @@ function CheckRow({ check }: { check: AttentionCheck }) {
   const Icon = reading ? Loader2 : refused ? Lock : TriangleAlert;
   const said = check.unread.find((entry) => entry.message)?.message ?? null;
   const where = scopeOf(check.unread, t);
+  // A refusal reads as what was refused and where; the server's sentence is
+  // on hover, where kubectl's words can be checked against it.
+  const verb = refused && said ? parseRefusal(said)?.verb : undefined;
   return (
     <li className="grid grid-cols-[10px_150px_minmax(0,1fr)] items-baseline gap-2.5 px-1.5 py-[3px] text-xs">
       <Icon
@@ -323,16 +327,20 @@ function CheckRow({ check }: { check: AttentionCheck }) {
         <span className="truncate">{getDisplayPlural(check.kind)}</span>
       </span>
       <span className="min-w-0 truncate text-fg-mut" title={said ?? undefined}>
-        {t(
-          "cluster",
-          reading
-            ? "attentionStillReading"
-            : refused
-              ? "attentionRefused"
-              : "attentionFailed"
+        {reading
+          ? t("cluster", "attentionStillReading")
+          : refused
+            ? verb
+              ? t("cluster", "attentionMayNot", { verb })
+              : t("cluster", "attentionRefused")
+            : t("cluster", "attentionFailed")}
+        {(where || refused) && (
+          <span className="text-fg-fnt">
+            {" "}
+            {where ?? t("cluster", "attentionClusterWide")}
+          </span>
         )}
-        {where && <span className="text-fg-fnt"> {where}</span>}
-        {said && (
+        {said && !refused && (
           <span className="font-mono text-[11px] text-fg-fnt">
             {": "}
             {said}

@@ -195,7 +195,7 @@ pub(super) fn read<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> R
     // into the cluster's own sentence rather than kube 4's `Status` struct
     // printed at the reader.
     list.map(|list| list.items)
-        .map_err(|err| Error::from(err).to_string())
+        .map_err(|err| Error::from(err).said())
 }
 
 /// [`read`], except for a session the cluster no longer accepts. That is not
@@ -208,7 +208,7 @@ pub(super) fn read_live<K: Clone>(
         Ok(list) => Ok(Ok(list.items)),
         Err(err) => match Error::from(err) {
             expired @ Error::CredentialsExpired(_) => Err(expired),
-            other => Ok(Err(other.to_string())),
+            other => Ok(Err(other.said())),
         },
     }
 }

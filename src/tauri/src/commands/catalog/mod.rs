@@ -105,7 +105,7 @@ pub(crate) async fn catalog(state: &AppState) -> Result<ApiCatalog> {
             Err(failed) => catalog.unread.push(UnreadGroup {
                 group,
                 code: failed.code().to_string(),
-                message: failed.to_string(),
+                message: failed.said(),
             }),
         }
     }

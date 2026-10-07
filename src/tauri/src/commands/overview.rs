@@ -345,7 +345,7 @@ impl OverviewUnread {
             kind: kind.to_string(),
             namespace: namespace.map(str::to_string),
             code: error.code().to_string(),
-            message: error.to_string(),
+            message: error.said(),
         }
     }
 }

@@ -255,7 +255,7 @@ pub async fn list_pod_rows(
             }
             Err(error) => AppEvent::PodRowsFailed {
                 stream_id: id.clone(),
-                message: error.to_string(),
+                message: error.said(),
             },
         };
         let _ = event_tx.send(terminal);

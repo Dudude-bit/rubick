@@ -32,7 +32,7 @@ impl UnreadNamespace {
         Self {
             namespace,
             code: error.code().to_string(),
-            message: error.to_string(),
+            message: error.said(),
         }
     }
 }

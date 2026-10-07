@@ -4258,6 +4258,8 @@ export const en = {
     attentionNotChecked: "Not checked",
     attentionStillReading: "still reading",
     attentionRefused: "refused",
+    attentionMayNot: "may not {verb}",
+    attentionClusterWide: "across the cluster",
     attentionFailed: "could not be read",
     attentionInNamespace: "in {namespace}",
     attentionInNamespaces: {

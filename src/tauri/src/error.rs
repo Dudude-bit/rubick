@@ -193,18 +193,20 @@ pub enum PluginError {
     ExecutionFailed(String),
 }
 
-/// `{ code, message }`: the variant as a code the frontend switches on,
-/// and the `Display` string unchanged — the `CREDENTIALS_EXPIRED:` and
-/// `READ_DEADLINE:` prefixes in it are still a wire format.
+/// `{ code, message, said }`: the variant as a code the frontend switches on,
+/// the `Display` string unchanged — the `CREDENTIALS_EXPIRED:` and
+/// `READ_DEADLINE:` prefixes in it are still a wire format — and [`Error::said`],
+/// what goes on screen.
 impl Serialize for Error {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
         use serde::ser::SerializeStruct;
-        let mut wire = serializer.serialize_struct("Error", 2)?;
+        let mut wire = serializer.serialize_struct("Error", 3)?;
         wire.serialize_field("code", self.code())?;
         wire.serialize_field("message", &self.to_string())?;
+        wire.serialize_field("said", &self.said())?;
         wire.end()
     }
 }
@@ -247,6 +249,14 @@ impl Error {
             Error::LocalPortInUse { .. } => "LOCAL_PORT_IN_USE",
             Error::NoReadyPod { .. } => "NO_READY_POD",
         }
+    }
+
+    /// The sentence a person reads: the API server's own message where it
+    /// wrote one, with this app's variant labels and call-site context peeled
+    /// off. `message` keeps them, for logs and for the prefixes matched on.
+    #[must_use]
+    pub fn said(&self) -> String {
+        crate::state::readable_cause(self)
     }
 
     /// Create a not found error
@@ -309,8 +319,10 @@ fn ran_out_of_time(err: &(dyn std::error::Error + 'static)) -> bool {
 /// with that struct's `Debug` — `pods is forbidden: … Forbidden (Status {
 /// status: Some(Failure), metadata: Some(ListMeta { … }), details: … })`. The
 /// tail is a wall of `None`s no reader wants, and it crosses the IPC boundary
-/// onto the screen. Rebuild the message from the status; leave every other
-/// kube error exactly as it displays.
+/// onto the screen. The server's own message is what kubectl prints; kube's
+/// `ApiError:` and the bare reason (`BadRequest`) are the client's words, and
+/// the reason travels as the error's code. Every other kube error is left
+/// exactly as it displays.
 pub(crate) trait KubeErrorExt {
     fn display_clean(&self) -> String;
 }
@@ -318,10 +330,9 @@ pub(crate) trait KubeErrorExt {
 impl KubeErrorExt for kube::Error {
     fn display_clean(&self) -> String {
         match self {
-            kube::Error::Api(status) if !status.reason.is_empty() => {
-                format!("ApiError: {}: {}", status.message, status.reason)
-            }
-            kube::Error::Api(status) => format!("ApiError: {}", status.message),
+            kube::Error::Api(status) if !status.message.is_empty() => status.message.clone(),
+            kube::Error::Api(status) if !status.reason.is_empty() => status.reason.clone(),
+            kube::Error::Api(status) => format!("HTTP {}", status.code),
             other => other.to_string(),
         }
     }
@@ -452,6 +463,45 @@ mod tests {
         let wire = serde_json::to_value(&err).unwrap();
         assert_eq!(wire["code"], "NOT_FOUND");
         assert_eq!(wire["message"], err.to_string());
+    }
+
+    /// Marco's Overview printed `refused in team-checkout: Kubernetes API
+    /// error: ApiError: daemonsets.apps is forbidden: …`, and the payments
+    /// card `ApiError: … BadRequest`. What a screen shows is `said`: the API
+    /// server's own sentence, as kubectl prints it. Fails if the Rust chain
+    /// or kube's words cross with it.
+    #[test]
+    fn a_refusal_crosses_with_the_servers_own_sentence_to_show() {
+        const SAID: &str = "daemonsets.apps is forbidden: User \"system:serviceaccount:team-checkout:marco\" \
+                            cannot list resource \"daemonsets\" in API group \"apps\" in the namespace \"team-checkout\"";
+        let err = Error::from(kube::Error::Api(Box::new(kube::core::Status {
+            status: Some(kube::core::response::StatusSummary::Failure),
+            message: SAID.to_string(),
+            reason: "Forbidden".to_string(),
+            code: 403,
+            metadata: Some(kube::core::ListMeta::default()),
+            details: None,
+        })));
+        let wire = serde_json::to_value(&err).unwrap();
+        assert_eq!(wire["code"], "PERMISSION_DENIED");
+        assert_eq!(wire["said"], SAID);
+
+        let log = Error::LogStream(format!(
+            "Failed to get logs: {}",
+            kube::Error::Api(Box::new(kube::core::Status {
+                status: Some(kube::core::response::StatusSummary::Failure),
+                message: "container \"app\" in pod \"payments-6d9d7d9db4-jflp4\" is waiting to start: trying and failing to pull image".to_string(),
+                reason: "BadRequest".to_string(),
+                code: 400,
+                metadata: None,
+                details: None,
+            }))
+            .display_clean()
+        ));
+        assert_eq!(
+            log.said(),
+            "container \"app\" in pod \"payments-6d9d7d9db4-jflp4\" is waiting to start: trying and failing to pull image"
+        );
     }
 
     /// A refused list is not a missing object, and a previous run that never
@@ -607,8 +657,9 @@ mod tests {
 
     /// kube 4 ends an API error's `Display` with the whole `Status` struct's
     /// `Debug`, and that string is what crosses to the screen. The reader gets
-    /// the sentence and the reason; the struct dump — `Status { … }`,
-    /// `ListMeta { … }` — is gone.
+    /// the server's sentence; the struct dump — `Status { … }`, `ListMeta
+    /// { … }` — is gone, and so are kube's `ApiError:` and the bare reason,
+    /// which the code carries.
     #[test]
     fn a_kube_api_error_is_shown_without_the_status_struct_dump() {
         let err: Error = api_error(403, "Forbidden").into();
@@ -617,7 +668,12 @@ mod tests {
             shown.contains("the server has asked for the client to provide credentials"),
             "the message a reader acts on is lost: {shown}"
         );
-        assert!(shown.contains("Forbidden"), "the reason is lost: {shown}");
+        assert!(!shown.contains("ApiError"), "kube's label leaked: {shown}");
+        assert!(
+            !shown.contains(": Forbidden"),
+            "the bare reason leaked: {shown}"
+        );
+        assert_eq!(err.code(), "PERMISSION_DENIED");
         assert!(
             !shown.contains("Status {"),
             "the Status struct dump leaked onto the screen: {shown}"
@@ -635,7 +691,10 @@ mod tests {
         let err = kube::runtime::watcher::Error::InitialListFailed(api_error(403, "Forbidden"));
         let shown = watch_failure(&err);
         assert!(shown.starts_with("failed to perform initial object list: "));
-        assert!(shown.contains("Forbidden"), "the reason is lost: {shown}");
+        assert!(
+            shown.ends_with("the server has asked for the client to provide credentials"),
+            "the server's sentence is lost: {shown}"
+        );
         assert!(!shown.contains("Status {"), "the dump leaked: {shown}");
     }
 

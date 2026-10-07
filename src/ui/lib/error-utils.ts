@@ -274,7 +274,26 @@ export function verbatim(message: string): string {
   return message.replace(/^Tauri command '[^']*' failed: /, "");
 }
 
-/** {@link normalizeTauriError} for something about to be put on screen. */
+/**
+ * The API server's own sentence, where the backend sent one: `said` beside
+ * `code` on its error, read through `cause` as {@link errorCode} reads it.
+ */
+function saidOf(error: unknown): string | null {
+  for (
+    let at: unknown = error, depth = 0;
+    at && typeof at === "object" && depth < 5;
+    at = (at as { cause?: unknown }).cause, depth++
+  ) {
+    const said = (at as Record<string, unknown>).said;
+    if (typeof said === "string" && said) return said;
+  }
+  return null;
+}
+
+/**
+ * What goes on screen: the server's sentence, never the Rust chain around it
+ * ("Kubernetes API error: …", "Log streaming error: Failed to get logs: …").
+ */
 export function errorToShow(error: unknown): string {
-  return verbatim(normalizeTauriError(error));
+  return saidOf(error) ?? verbatim(normalizeTauriError(error));
 }

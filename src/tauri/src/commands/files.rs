@@ -193,7 +193,7 @@ async fn run_listing(
         Err(error) => AppEvent::FilesFailed {
             stream_id: id.clone(),
             reason: failure_reason(&error),
-            message: error.to_string(),
+            message: error.said(),
             exit_code: None,
             stderr: String::new(),
             tried: Vec::new(),

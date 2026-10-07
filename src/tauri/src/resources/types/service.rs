@@ -111,7 +111,7 @@ impl From<&Service> for ServiceInfo {
 mod tests {
     use super::*;
 
-    /// The Access tab printed "N/A" for the one thing an ExternalName Service
+    /// The Access tab printed "N/A" for the one thing an `ExternalName` Service
     /// has, because the row never carried `spec.externalName`.
     #[test]
     fn an_external_name_service_carries_the_name_it_resolves_to() {
