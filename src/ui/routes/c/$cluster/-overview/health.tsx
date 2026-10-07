@@ -17,6 +17,7 @@ import {
   nodeSegments,
   nodesShare,
   podSegments,
+  podsServing,
   podTotal,
   PRESSURE_WARN,
   attentionShare,
@@ -393,7 +394,7 @@ export function AttentionPanel({
   const hidden = expanded ? [] : items.slice(VISIBLE);
   const cut = total - items.length;
   const unchecked = attention.checks.filter((check) => check.state !== "read");
-  const serving = pods.running - pods.crashLooping;
+  const serving = podsServing(pods);
   const readyNodes = nodes.filter((n) => n.ready).length;
   const down = notRunning(pods);
   const summaryRole: StatusRole = worst ?? (complete ? "ok" : "neutral");
@@ -436,7 +437,7 @@ export function AttentionPanel({
             {t("cluster", SUMMARY_LABEL[summaryRole])}
           </span>
           <span className="truncate text-fg-fnt">
-            {t("count", "podsRunning", {
+            {t("count", "podsReady", {
               n: formatCount(serving),
               of: t("count", "ofPods", { n: podTotal(pods) }),
             })}

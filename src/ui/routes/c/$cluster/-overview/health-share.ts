@@ -153,18 +153,24 @@ export function podTotal(pods: PodComposition): number {
 
 type Segment = CompositionSegment;
 
+/** Pods up and ready: Running, minus the crash-looping and the not ready. */
+export function podsServing(pods: PodComposition): number {
+  return pods.running - pods.crashLooping - pods.notReady;
+}
+
 /**
  * Pods by phase.
  *
  * Phase separates a replica that is serving from a Job pod that ran and
  * finished; one "Healthy" bar over both overstates the running workload of
- * anyone with a nightly CronJob. Crash-loopers are carved back out of
- * Running: the phase says Running while the container is in a back-off loop
- * serving nothing.
+ * anyone with a nightly CronJob. Crash-loopers and pods failing readiness
+ * are carved back out of Running: the phase says Running while they serve
+ * nothing.
  */
 export function podSegments(pods: PodComposition): Segment[] {
   return [
-    { label: "Running", count: pods.running - pods.crashLooping, tone: "ok" },
+    { label: "Running", count: podsServing(pods), tone: "ok" },
+    { label: "NotReady", count: pods.notReady, tone: "warn" },
     { label: "CrashLoop", count: pods.crashLooping, tone: "err" },
     { label: "Pending", count: pods.pending, tone: "warn" },
     { label: "Failed", count: pods.failed, tone: "err" },

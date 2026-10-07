@@ -22,7 +22,7 @@ import {
   WarningsPanel,
   WorkloadsPanel,
 } from "./health";
-import { podTotal } from "./health-share";
+import { podTotal, podsServing } from "./health-share";
 import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
 import type { ReportStat } from "@/lib/report";
 import { useT, type T } from "@/i18n/useT";
@@ -39,7 +39,7 @@ function overviewStats(
   t: T
 ): ReportStat[] {
   const pods = podTotal(overview.pods);
-  const serving = overview.pods.running - overview.pods.crashLooping;
+  const serving = podsServing(overview.pods);
   const stats: ReportStat[] = [
     {
       label: t("action", "needsAttention"),

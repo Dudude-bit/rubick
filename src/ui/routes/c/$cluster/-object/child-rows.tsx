@@ -43,6 +43,8 @@ export interface ChildRow {
    * have always dropped the colour for it; the rows drawn here had not.
    */
   unverified?: boolean;
+  /** The colour, where the word alone does not decide it. */
+  role?: StatusRole;
   /** Right-aligned facts: readiness, restarts, completions. */
   detail?: ReactNode;
   timestamp?: string | null;
@@ -129,7 +131,9 @@ export function ChildRows({
 function ChildRowItem({ row }: { row: ChildRow }) {
   const navigate = useNavigate();
   const link = objectLink(row);
-  const role = row.unverified ? "neutral" : statusRole(row.status);
+  const role = row.unverified
+    ? "neutral"
+    : (row.role ?? statusRole(row.status));
   const age = useRealtimeAge(row.timestamp ?? null);
 
   return (

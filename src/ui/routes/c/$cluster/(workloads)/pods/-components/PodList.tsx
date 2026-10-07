@@ -10,8 +10,7 @@ import {
   usePodsWithMetrics,
   type PodWithMetrics,
 } from "@/hooks/usePodsWithMetrics";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { silenceNote, type WithNodeSilence } from "@/lib/node-reporting";
+import type { WithNodeSilence } from "@/lib/node-reporting";
 import { CopyableAddress, IPV4_CELL_PX } from "@/components/ui/copyable-value";
 import {
   createNameColumn,
@@ -32,12 +31,12 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { formatAge } from "@/lib/utils";
 import { refOf } from "@/lib/report-parts";
 import { podStatusValue } from "@/lib/share/pod-status";
-import { podStatusMeaning } from "@/lib/status-meaning";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useT } from "@/i18n/useT";
 import { narrowPods } from "@/lib/pod-filter";
 import { usePodFilter } from "@/hooks/usePodFilter";
 import { PodSelectorBanner } from "./PodSelectorBanner";
+import { PodStatusBadge } from "./PodStatusBadge";
 
 /** A pod row that also knows whether its node is still reporting. */
 type PodRow = WithNodeSilence<PodWithMetrics>;
@@ -65,28 +64,6 @@ function RestartsCell({ pod }: { pod: PodRow }) {
       {pod.restartCount}
       {last && <span className="text-fg-fnt"> ({last})</span>}
     </span>
-  );
-}
-
-/**
- * A pod on a node that stopped reporting keeps whatever the kubelet last
- * wrote. The label stays kubectl's — this is what the cluster holds — but
- * the colour drops to neutral, because confident green about a machine
- * nobody can reach is a lie.
- */
-function PodStatusCell({ pod }: { pod: PodRow }) {
-  const t = useT();
-  const silence = pod.nodeSilence;
-  return (
-    <StatusBadge
-      status={pod.status.display}
-      roleOverride={silence ? "neutral" : undefined}
-      title={
-        silence
-          ? silenceNote(silence, t)
-          : podStatusMeaning(pod.status.display, pod.status.phase, t)
-      }
-    />
   );
 }
 
@@ -128,7 +105,12 @@ export const columns: ColumnDef<PodRow>[] = [
     // The derived status, not the phase: a pod that has crashed 653
     // times is in phase `Running` and nobody means that by "how is
     // it". The phase rides along in the tooltip so it is not lost.
-    cell: ({ row }) => <PodStatusCell pod={row.original} />,
+    cell: ({ row }) => (
+      <PodStatusBadge
+        pod={row.original}
+        silence={row.original.nodeSilence ?? null}
+      />
+    ),
   },
   createCpuColumn<PodRow>(),
   createMemoryColumn<PodRow>(),

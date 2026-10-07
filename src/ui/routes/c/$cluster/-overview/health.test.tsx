@@ -79,6 +79,7 @@ const RUNNING: PodComposition = {
   failed: 0,
   unknown: 0,
   crashLooping: 0,
+  notReady: 0,
 };
 
 const problem: ClusterProblem = {
@@ -220,6 +221,7 @@ describe("the healthy line when the node read was refused", () => {
     failed: 0,
     unknown: 0,
     crashLooping: 0,
+    notReady: 0,
   };
 
   /**
@@ -338,6 +340,7 @@ describe("what the panels offer Share", () => {
         failed: 0,
         unknown: 0,
         crashLooping: 0,
+        notReady: 0,
       },
       jobs: null,
       nodes: [],
@@ -541,16 +544,40 @@ describe("what Needs attention says it checked", () => {
       failed: 2,
       unknown: 0,
       crashLooping: 1,
+      notReady: 0,
     });
 
     const summary = screen.getByTestId("attention-summary");
     expect(summary).not.toHaveTextContent("Healthy");
-    expect(summary).toHaveTextContent("5 of 13 pods running");
+    expect(summary).toHaveTextContent("5 of 13 pods ready");
     expect(summary).toHaveTextContent(
       "(1 CrashLoop, 3 Pending, 2 Failed, 2 Completed)"
     );
     expect(summary.querySelector(".bg-err")).not.toBeNull();
     expect(summary.querySelector(".bg-ok")).toBeNull();
+  });
+
+  /**
+   * Dana's shop: "6 of 14 pods running" while kubectl had 5 ready, the
+   * sixth a search pod `Running` and `0/1`, its readiness probe failing.
+   * Fails if a pod up and not ready is counted with the ones serving.
+   */
+  it("counts a pod up and not ready apart from the ones serving", async () => {
+    await panel(attentionFrom([{ ...problem, severity: "critical" }]), {
+      running: 9,
+      pending: 1,
+      succeeded: 0,
+      failed: 4,
+      unknown: 0,
+      crashLooping: 3,
+      notReady: 1,
+    });
+
+    const summary = screen.getByTestId("attention-summary");
+    expect(summary).toHaveTextContent("5 of 14 pods ready");
+    expect(summary).toHaveTextContent(
+      "(1 NotReady, 3 CrashLoop, 1 Pending, 4 Failed)"
+    );
   });
 
   /**

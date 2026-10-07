@@ -49,11 +49,11 @@ describe("counts in the catalogue", () => {
       "1 of 1 node ready"
     );
     expect(
-      ru("count", "podsRunning", {
+      ru("count", "podsReady", {
         n: 3,
         of: ru("count", "ofPods", { n: 5 }),
       })
-    ).toBe("работает 3 из 5 подов");
+    ).toBe("готово 3 из 5 подов");
     expect(ru("readings", "warnUndoThis", { n: 5, count: "5" })).toBe(
       "5 вещей отменят это."
     );

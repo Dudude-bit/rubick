@@ -1855,6 +1855,7 @@ export interface PodComposition {
   failed: number;
   unknown: number;
   crashLooping: number;
+  notReady: number;
 }
 
 export interface ResourceCounts {

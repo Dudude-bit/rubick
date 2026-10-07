@@ -1,5 +1,6 @@
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
+import type { PodReadiness } from "@/lib/container-sequence";
 import { toKind } from "@/lib/resource-registry";
 import type { WorkloadStatus } from "@/lib/workload-status";
 
@@ -99,8 +100,26 @@ function reasonMeaning(code: string, t: T): string | null {
   return null;
 }
 
-/** A pod's badge reads kubectl's word; its phase is the fallback. */
+/**
+ * A pod's badge reads kubectl's word; its phase is the fallback. With its
+ * readiness, a `Running` pod short of ready says what that costs it.
+ */
 export function podStatusMeaning(
+  display: string,
+  phase: string | null | undefined,
+  t: T,
+  readiness?: PodReadiness
+): string | undefined {
+  const meaning = wordMeaning(display, phase, t);
+  if (!readiness || readiness.allReady || display !== "Running") return meaning;
+  const short = line(
+    `${t("columns", "ready")} ${readiness.ready}/${readiness.total}`,
+    t("statusMeaning", "notReady")
+  );
+  return meaning ? `${meaning}\n${short}` : short;
+}
+
+function wordMeaning(
   display: string,
   phase: string | null | undefined,
   t: T

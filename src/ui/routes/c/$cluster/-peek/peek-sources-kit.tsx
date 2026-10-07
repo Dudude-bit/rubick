@@ -49,6 +49,10 @@ export interface PeekSummary {
    * confident green.
    */
   statusFrom?: string | null;
+  /** Where the word alone does not decide the colour: a `Running` pod not ready. */
+  statusRole?: StatusRole;
+  /** What the badge means, where the word alone does not say it all. */
+  statusTitle?: string;
   createdAt?: string | null;
   /** For the kinds whose API hands back a rendered age instead of a stamp. */
   groups: PeekGroup[];

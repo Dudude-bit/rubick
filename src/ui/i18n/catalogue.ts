@@ -7336,7 +7336,7 @@ export const en = {
     certificates: { one: "{n} certificate", other: "{n} certificates" },
     annotations: { one: "{n} annotation", other: "{n} annotations" },
     clustersAnswered: "{n} of {total} clusters answered",
-    podsRunning: "{n} {of} running",
+    podsReady: "{n} {of} ready",
     nodesReady: "{n} {of} ready",
     ofPods: { one: "of {n} pod", other: "of {n} pods" },
     ofNodes: { one: "of {n} node", other: "of {n} nodes" },

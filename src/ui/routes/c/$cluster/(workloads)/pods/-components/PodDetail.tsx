@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
-import { podStatusMeaning } from "@/lib/status-meaning";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -17,7 +16,6 @@ import {
 } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
-import { StatusBadge } from "@/components/ui/status-badge";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 import { CopyableAddress } from "@/components/ui/copyable-value";
@@ -58,6 +56,7 @@ import { ImageRef } from "@/components/object/ImageRef";
 import { ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { MostLikelyPanel } from "./MostLikelyPanel";
+import { PodStatusBadge } from "./PodStatusBadge";
 import { usePodShare } from "./usePodShare";
 import { VolumeRows } from "./volume-rows";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
@@ -69,7 +68,7 @@ import { usePodReplacementSearch } from "./usePodReplacementSearch";
 import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
-import { silenceNote, silenceOf } from "@/lib/node-reporting";
+import { silenceOf } from "@/lib/node-reporting";
 import { useConnections } from "@/hooks/useConnections";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNodePlacement } from "./useNodePlacement";
@@ -617,15 +616,7 @@ export function PodDetail() {
         onTabChange={setActiveTab}
         statusBadge={
           pod?.status.display ? (
-            <StatusBadge
-              status={pod.status.display}
-              roleOverride={silence ? "neutral" : undefined}
-              title={
-                silence
-                  ? silenceNote(silence, t)
-                  : podStatusMeaning(pod.status.display, pod.status.phase, t)
-              }
-            />
+            <PodStatusBadge pod={pod} silence={silence} />
           ) : null
         }
         // The kubelet's word for the trouble, on every tab — but only when

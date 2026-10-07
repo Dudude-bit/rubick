@@ -228,6 +228,7 @@ const FULL_OVERVIEW: ClusterOverviewData = {
     failed: 0,
     unknown: 0,
     crashLooping: 0,
+    notReady: 0,
   },
   jobs: null,
   metricsAvailable: false,

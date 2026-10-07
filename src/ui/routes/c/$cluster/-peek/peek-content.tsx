@@ -251,11 +251,12 @@ export function PeekContent({
           ) : summary?.status ? (
             <StatusBadge
               status={summary.status}
-              roleOverride={silence ? "neutral" : undefined}
+              roleOverride={silence ? "neutral" : summary.statusRole}
               title={
                 silence
                   ? silenceNote(silence, t)
-                  : statusMeaning(target.kind, summary.status, t)
+                  : (summary.statusTitle ??
+                    statusMeaning(target.kind, summary.status, t))
               }
             >
               {summary.statusLabel}

@@ -98,6 +98,8 @@ describe("the pods-on-node table", () => {
         message: null,
         reason: null,
       },
+      containers: [],
+      initContainers: [],
       restartCount: 0,
       createdAt: null,
     } as unknown as PodInfo;

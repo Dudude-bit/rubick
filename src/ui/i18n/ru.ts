@@ -8373,7 +8373,7 @@ export const ru: Catalogue = {
       other: "{n} аннотации",
     },
     clustersAnswered: "ответили {n} из {total}",
-    podsRunning: "работает {n} {of}",
+    podsReady: "готово {n} {of}",
     nodesReady: "готово {n} {of}",
     ofPods: {
       one: "из {n} пода",

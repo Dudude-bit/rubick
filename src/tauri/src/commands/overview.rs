@@ -14,7 +14,7 @@
 use crate::commands::helpers::{api_in, reaches, scope_of};
 use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
-use crate::resources::{crash_looping, job_state, JobState, Rollout};
+use crate::resources::{condition_is_true, crash_looping, job_state, JobState, Rollout};
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
 use crate::utils::Moment;
@@ -277,6 +277,10 @@ pub struct PodComposition {
     /// are looping in a back-off reports phase Running while serving nothing,
     /// and a composition bar that hides that is the bar's whole failure mode.
     pub crash_looping: usize,
+    /// Also a subset of `running`, apart from `crash_looping`: up, and not
+    /// `Ready`, so no Service sends it traffic. kubectl prints `Running` and
+    /// `0/1` for it; counted as running, the Overview called it fine.
+    pub not_ready: usize,
 }
 
 /// Jobs by outcome. `active` covers both running and not-yet-started Jobs:
@@ -970,6 +974,8 @@ fn pod_composition<'a>(
                 composition.running += 1;
                 if crash_looping(pod, now) || stuck_reason(pod).is_some() {
                     composition.crash_looping += 1;
+                } else if !condition_is_true(pod.status.as_ref(), "Ready") {
+                    composition.not_ready += 1;
                 }
             }
             "Pending" => composition.pending += 1,
@@ -2983,6 +2989,80 @@ mod tests {
         let composition = pod_composition(&[looping], Utc::now());
         assert_eq!(composition.running, 1);
         assert_eq!(composition.crash_looping, 1);
+    }
+
+    /// Search pod `shop/search-77fbd8f66-52kp8` as the kubelet wrote it: up,
+    /// its readiness probe answering 404, so `Ready` is False.
+    fn search_pod(ready: bool) -> Pod {
+        let condition = |type_: &str| {
+            if ready {
+                serde_json::json!({ "type": type_, "status": "True" })
+            } else {
+                serde_json::json!({
+                    "type": type_,
+                    "status": "False",
+                    "reason": "ContainersNotReady",
+                    "message": "containers with unready status: [search]",
+                })
+            }
+        };
+        serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "search-77fbd8f66-52kp8",
+                "namespace": "shop",
+                "creationTimestamp": "2026-10-06T21:20:11Z",
+            },
+            "spec": {
+                "nodeName": "node01",
+                "containers": [{ "name": "search", "image": "nginx:1.27-alpine" }],
+            },
+            "status": {
+                "phase": "Running",
+                "conditions": [
+                    { "type": "PodReadyToStartContainers", "status": "True" },
+                    { "type": "Initialized", "status": "True" },
+                    condition("Ready"),
+                    condition("ContainersReady"),
+                    { "type": "PodScheduled", "status": "True" },
+                ],
+                "containerStatuses": [{
+                    "name": "search",
+                    "ready": ready,
+                    "started": true,
+                    "restartCount": 0,
+                    "image": "docker.io/library/nginx:1.27-alpine",
+                    "imageID": "docker.io/library/nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10",
+                    "state": { "running": { "startedAt": "2026-10-06T21:20:13Z" } },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote")
+    }
+
+    /// Dana's shop Overview said "6 of 14 pods running" while kubectl had 5
+    /// ready: the search pod was `Running`, `0/1`, its readiness probe
+    /// failing. Fails if a pod up and not Ready is counted as serving, or if
+    /// the count and the Pods list's Ready column disagree about it.
+    #[test]
+    fn a_running_pod_failing_its_readiness_probe_is_counted_not_ready() {
+        let pods = [search_pod(false), search_pod(true)];
+
+        let composition = pod_composition(&pods, Utc::now());
+
+        assert_eq!(
+            (
+                composition.running,
+                composition.crash_looping,
+                composition.not_ready
+            ),
+            (2, 0, 1)
+        );
+        let unready_rows = pods
+            .iter()
+            .map(crate::resources::PodRow::from)
+            .filter(|row| row.containers.iter().any(|c| !c.ready))
+            .count();
+        assert_eq!(composition.not_ready, unready_rows);
     }
 
     #[test]
