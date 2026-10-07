@@ -481,6 +481,7 @@ pub(super) async fn ingress_connections(
             },
         );
     }
+    check_named(ctx, out).await?;
 
     let mut reached = HashSet::new();
     for (backend, relation) in ingress_backends(ing) {
@@ -1258,5 +1259,60 @@ mod ingress_tests {
         let unread: Vec<&str> = page.not_looked_at.iter().map(|e| e.kind.as_str()).collect();
         assert!(unread.contains(&"ReplicaSet"), "{unread:?}");
         assert!(unread.contains(&"HorizontalPodAutoscaler"), "{unread:?}");
+    }
+
+    fn tls_ingress() -> String {
+        listing(&[json!({
+            "metadata": { "name": "shop", "namespace": "shop" },
+            "spec": { "tls": [{ "hosts": ["shop.k8s-gui.test"], "secretName": "shop-tls" }] },
+        })])
+    }
+
+    /// Sam's Ingress said shop-tls "not checked" on Connections while its TLS
+    /// tab said no Secret of that name exists. Both read the same answer here;
+    /// fails if the Connections reader stops asking or reads a refusal as gone.
+    #[tokio::test]
+    async fn the_tls_secret_reads_the_same_on_connections_as_on_the_tls_tab() {
+        for (status, reason, existence, problem_says_gone) in [
+            (404, "NotFound", Existence::Missing, true),
+            (403, "Forbidden", Existence::NotChecked, false),
+        ] {
+            let answer = failure(status, reason);
+            let (client, _) = server(vec![
+                (
+                    "/apis/networking.k8s.io/v1/namespaces/shop/ingresses",
+                    200,
+                    tls_ingress(),
+                ),
+                (
+                    "/api/v1/namespaces/shop/secrets/shop-tls",
+                    answer.0,
+                    answer.1,
+                ),
+            ])
+            .await;
+            let ctx = ResourceContext::from_client(client, "shop".to_string());
+
+            let page = connections_of(&ctx, "Ingress", "shop", None)
+                .await
+                .expect("a page");
+            let row = page
+                .edges
+                .iter()
+                .find(|edge| edge.to.kind == "Secret")
+                .expect("the TLS Secret");
+            assert_eq!(row.to.existence, existence, "{status}");
+
+            let tab = crate::commands::certificates::certificate_in(
+                &ctx.namespaced_api(),
+                "shop-tls".to_string(),
+            )
+            .await;
+            assert_eq!(
+                tab.problem == Some(crate::resources::CertificateProblem::NoSecret),
+                problem_says_gone,
+                "{status}"
+            );
+        }
     }
 }

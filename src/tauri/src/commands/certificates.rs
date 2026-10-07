@@ -46,23 +46,27 @@ pub async fn get_tls_certificates(
     let mut out = Vec::with_capacity(secret_names.len());
     for name in secret_names {
         crate::validation::validate_dns_subdomain(&name)?;
-        out.push(match api.get(&name).await {
-            Ok(secret) => read_tls_certificate(&name, &secret),
-            Err(kube::Error::Api(err)) if err.code == 404 => TlsCertificate {
-                secret_name: name,
-                certificate: None,
-                problem: Some(CertificateProblem::NoSecret),
-            },
-            Err(err) => TlsCertificate {
-                secret_name: name,
-                certificate: None,
-                problem: Some(CertificateProblem::SecretUnreadable {
-                    said: err.display_clean(),
-                }),
-            },
-        });
+        out.push(certificate_in(&api, name).await);
     }
     Ok(out)
+}
+
+pub(crate) async fn certificate_in(api: &kube::Api<Secret>, name: String) -> TlsCertificate {
+    match api.get(&name).await {
+        Ok(secret) => read_tls_certificate(&name, &secret),
+        Err(kube::Error::Api(err)) if err.code == 404 => TlsCertificate {
+            secret_name: name,
+            certificate: None,
+            problem: Some(CertificateProblem::NoSecret),
+        },
+        Err(err) => TlsCertificate {
+            secret_name: name,
+            certificate: None,
+            problem: Some(CertificateProblem::SecretUnreadable {
+                said: err.display_clean(),
+            }),
+        },
+    }
 }
 
 fn read_tls_certificate(name: &str, secret: &Secret) -> TlsCertificate {
