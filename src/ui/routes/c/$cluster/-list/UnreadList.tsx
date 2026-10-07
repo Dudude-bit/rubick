@@ -18,7 +18,7 @@ export function UnreadList({
   children?: ReactNode;
 }) {
   return (
-    <div className="max-w-[68ch] py-8" data-testid="unread-list">
+    <div className="max-w-[68ch] pb-8" data-testid="unread-list">
       <p className="flex items-center gap-1.5 text-xs text-err">
         {isRefusal(error) && (
           <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
