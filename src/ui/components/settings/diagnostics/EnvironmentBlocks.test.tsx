@@ -262,3 +262,25 @@ describe("the second way in", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("the time of a connection attempt", () => {
+  /**
+   * Lena read "2026-10-06T22:01:25.123456789Z" among dates drawn in her own
+   * language and zone. Fails if the raw timestamp reaches the screen.
+   */
+  it("is drawn as every other date is, not as the backend wrote it", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(
+      <EnvironmentBlocks
+        diagnostics={{
+          ...sample,
+          connections: [
+            { ...sample.connections[0], at: "2026-10-06T22:01:25.123456789Z" },
+          ],
+        }}
+      />
+    );
+    expect(document.body).toHaveTextContent(/2026 г\./);
+    expect(document.body).not.toHaveTextContent(/T\d\d:\d\d|123456789|\dZ\b/);
+  });
+});

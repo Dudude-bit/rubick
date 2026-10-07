@@ -3,7 +3,11 @@ import type { ReactNode } from "react";
 import type { Diagnostics } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
+import { formatDate } from "@/lib/utils";
 import { shellEnvSentence, shellEnvTone } from "./shell-env";
+
+const moment = (at: string) =>
+  formatDate(at.replace(/(\.\d{3})\d+/, "$1")) ?? at;
 
 function Block({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -200,7 +204,7 @@ export function EnvironmentBlocks({
             {connections.map((attempt) => (
               <li key={attempt.context}>
                 <span className="font-mono text-fg">{attempt.context}</span>
-                <span className="ml-2 text-fg-fnt">{attempt.at}</span>
+                <span className="ml-2 text-fg-fnt">{moment(attempt.at)}</span>
                 <div className="mt-0.5">
                   {t("settings", "pathDirect")}:{" "}
                   {attempt.direct.state === "ok" ? (
