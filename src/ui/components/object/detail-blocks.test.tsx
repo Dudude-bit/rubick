@@ -1,10 +1,11 @@
 import type { ReactElement } from "react";
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { render, screen } from "@testing-library/react";
 
 import { renderWithRouter } from "@/test/render";
 import { ConditionRows, EventRows, UsageRow } from "./detail-blocks";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
+import * as eventReason from "@/lib/event-reason";
 
 const wrap = (ui: ReactElement) =>
   renderWithRouter(ui, {
@@ -191,5 +192,47 @@ describe("an event row at drawer width", () => {
     expect(
       screen.getByText("FailedCreatePodSandBox").parentElement
     ).toHaveAttribute("title", "FailedCreatePodSandBox");
+  });
+});
+
+describe("an event feed polled again", () => {
+  const feed = Array.from(
+    { length: 60 },
+    (_, index) =>
+      ({
+        uid: `e${index}`,
+        type: "Normal",
+        reason: "Pulled",
+        message: "Container image already present on machine",
+        namespace: "shop",
+        involvedObject: {
+          kind: "Pod",
+          name: `web-${index}`,
+          namespace: "shop",
+        },
+        count: 1,
+        lastTimestamp: THREE_HOURS_AGO,
+      }) as unknown as EventInfo
+  );
+
+  /**
+   * The Events page polls every second and drew all five hundred rows for
+   * each answer, the same ones included: the stall climb on All events.
+   */
+  it("draws again only the event that changed", async () => {
+    const { rerender } = await wrap(<EventRows events={feed} showObject />);
+    const marked = vi.spyOn(eventReason, "eventReasonMark");
+
+    rerender(
+      <EventRows
+        events={feed.map((event, index) =>
+          index === 7 ? { ...event, count: 2 } : event
+        )}
+        showObject
+      />
+    );
+
+    expect(marked).toHaveBeenCalledTimes(1);
+    marked.mockRestore();
   });
 });

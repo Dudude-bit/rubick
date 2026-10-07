@@ -188,6 +188,131 @@ const OVERSCAN = 12;
 const SCROLLBAR_REACH = 24;
 const ACTIONS_CELL_GUTTER = { paddingRight: SCROLLBAR_REACH };
 
+/** Read off the table's attribute, so a density switch restyles rows instead of drawing them. */
+const CELL_PADDING = "px-2.5 py-2 group-data-[density=compact]/table:py-[3px]";
+
+/**
+ * Text cells clip, because the table is fixed-layout; the actions cell does
+ * not, or its buttons lose the hit area that hangs over the padding.
+ */
+const CLIP_TEXT =
+  "overflow-hidden text-ellipsis whitespace-nowrap [&>a]:max-w-full";
+
+/** What a row does when it is used, read at that moment from the table. */
+interface RowEvents<TData extends RowData> {
+  gesture: (row: TData, event: React.MouseEvent) => void;
+  openPage: (row: TData, event: React.MouseEvent) => void;
+  menu: (row: TData, index: number, event: React.MouseEvent) => void;
+  key: (event: React.KeyboardEvent, index: number, row: TData) => void;
+  focus: (id: string, index: number) => void;
+}
+
+interface BodyRowProps<TData extends RowData> {
+  row: Row<TData>;
+  index: number;
+  line: number;
+  selected: boolean;
+  tabStop: boolean;
+  keyboard: boolean;
+  clickable: boolean;
+  menu: boolean;
+  measure: ((node: Element | null) => void) | undefined;
+  /** Held only to compare: a new set of columns draws every row again. */
+  columns: ColumnDef<TData>[];
+  visibility: ColumnVisibilityState;
+  events: React.RefObject<RowEvents<TData> | null>;
+}
+
+function BodyRowView<TData extends RowData>({
+  row,
+  index,
+  line,
+  selected,
+  tabStop,
+  keyboard,
+  clickable,
+  menu,
+  measure,
+  events,
+}: BodyRowProps<TData>) {
+  const act = clickable
+    ? (event: React.MouseEvent) => events.current?.gesture(row.original, event)
+    : undefined;
+  return (
+    <TableRow
+      data-index={line}
+      data-row-index={index}
+      ref={measure}
+      // `aria-selected` is also what reveals the row's actions, read by CSS
+      // rather than by React: hover state rebuilt every column definition
+      // and re-rendered every cell in the table under the pointer.
+      aria-selected={keyboard ? selected : undefined}
+      tabIndex={keyboard ? (tabStop ? 0 : -1) : undefined}
+      className={cn(
+        clickable && "cursor-pointer",
+        selected && "bg-hover ring-1 ring-inset ring-info",
+        "relative group"
+      )}
+      onFocus={
+        keyboard ? () => events.current?.focus(row.id, index) : undefined
+      }
+      onClick={act}
+      onDoubleClick={(event) => events.current?.openPage(row.original, event)}
+      onAuxClick={act}
+      // Capture, so the row's own name opens this rather than the bare link
+      // menu; a link to somewhere else keeps its own.
+      onContextMenuCapture={
+        menu
+          ? (event) => events.current?.menu(row.original, index, event)
+          : undefined
+      }
+      onKeyDown={
+        keyboard
+          ? (event) => events.current?.key(event, index, row.original)
+          : undefined
+      }
+    >
+      {row.getVisibleCells().map((cell) => (
+        <TableCell
+          key={cell.id}
+          className={cn(
+            CELL_PADDING,
+            !CONTROL_COLUMNS.has(cell.column.id) && CLIP_TEXT
+          )}
+          style={
+            cell.column.id === ACTIONS_COLUMN_ID
+              ? ACTIONS_CELL_GUTTER
+              : undefined
+          }
+        >
+          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+        </TableCell>
+      ))}
+    </TableRow>
+  );
+}
+
+/**
+ * A row draws again when its object, its place or its columns changed, and
+ * not because the table did. A list re-reads itself every few seconds and a
+ * watch replaces one row at a time; drawing all of them for each was the
+ * stall on every list of a few dozen rows, and with every read failing the
+ * whole table again every two seconds.
+ */
+function sameRow<TData extends RowData>(
+  before: BodyRowProps<TData>,
+  after: BodyRowProps<TData>
+): boolean {
+  for (const key of Object.keys(after) as Array<keyof BodyRowProps<TData>>) {
+    if (key !== "row" && before[key] !== after[key]) return false;
+  }
+  return (
+    before.row.id === after.row.id && before.row.original === after.row.original
+  );
+}
+
+const BodyRow = React.memo(BodyRowView, sameRow) as typeof BodyRowView;
+
 /**
  * The width the actions cell needs, from what it actually holds: a 20px icon
  * and a 2px gap each, the cell's own 10px padding on the left and the
@@ -384,19 +509,6 @@ function DataTableInner<TData extends RowData>({
   // 23px pitch: nothing in a cell may be taller than that line box or it, not
   // the padding, becomes the row height.
   const isCompact = tableDensity === "compact";
-  const cellPadding = isCompact ? "py-[3px] px-2.5" : "py-2 px-2.5";
-
-  // Clipped, because the table is fixed-layout: a name longer than its column
-  // has nowhere to go and would otherwise paint over the namespace beside it.
-  // Every density, not just compact — a column dragged to its floor bleeds
-  // the same either way. Text cells only: the actions cell holds 20px buttons
-  // whose pointer target is pushed back out to 24px by a pseudo-element
-  // hanging over the cell's padding, and clipping it clips the hit area.
-  // A link straight in the cell (a node, a storage class) is bounded by it,
-  // so its name ends in its own ellipsis; overflowing, the cell clipped it
-  // and drew a stray "." after it.
-  const clipText =
-    "overflow-hidden text-ellipsis whitespace-nowrap [&>a]:max-w-full";
 
   // Grouping only switches on once the data has enough groups to be worth
   // captioning at all — which is also what keeps an unmanaged cluster's Nodes
@@ -873,108 +985,66 @@ function DataTableInner<TData extends RowData>({
     [pageKeys, keyboardNavEnabled, surfaceVisible]
   );
 
-  const renderRow = (row: Row<TData>, index: number, line: number) => {
-    const isSelected = selectedIndex === index;
-    const act = isClickable
-      ? (event: React.MouseEvent) => handleRowGesture(row.original, event)
-      : undefined;
-    const href = getRowHref?.(row.original);
-    const openPage =
-      href && peekOfRow(row.original, getRowHref, getRowPeek)
-        ? (event: React.MouseEvent) => {
-            // The same places a single click keeps its hands off, so the
-            // two gestures agree about what belongs to the row and what
-            // belongs to the controls sitting in it. A link to somewhere
-            // else (a row's node, its owner) keeps the double click; the
-            // row's own name is where the eye goes when told "double click
-            // the row", so it must not be the one spot where nothing happens.
-            const control = controlAt(event.target as HTMLElement);
-            if (
-              control &&
-              !(
-                control.tagName === "A" && control.getAttribute("href") === href
-              )
-            ) {
-              return;
-            }
-            navigate({ href });
-          }
-        : undefined;
+  const rowEvents = React.useRef<RowEvents<TData> | null>(null);
+  React.useLayoutEffect(() => {
+    rowEvents.current = {
+      gesture: handleRowGesture,
+      openPage: (row, event) => {
+        const href = getRowHref?.(row);
+        if (!href || !peekOfRow(row, getRowHref, getRowPeek)) return;
+        // The same places a single click keeps its hands off, so the two
+        // gestures agree about what belongs to the row and what belongs to
+        // the controls sitting in it. A link to somewhere else (a row's node,
+        // its owner) keeps the double click; the row's own name is where the
+        // eye goes when told "double click the row", so it must not be the
+        // one spot where nothing happens.
+        const control = controlAt(event.target as HTMLElement);
+        if (
+          control &&
+          !(control.tagName === "A" && control.getAttribute("href") === href)
+        ) {
+          return;
+        }
+        navigate({ href });
+      },
+      menu: (row, index, event) => {
+        const link = (event.target as HTMLElement).closest("a");
+        if (link && link.getAttribute("href") !== getRowHref?.(row)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const keyboard = event.clientX === 0 && event.clientY === 0;
+        openMenu(
+          index,
+          keyboard ? undefined : { x: event.clientX, y: event.clientY }
+        );
+      },
+      key: onRowKey,
+      focus: (id, index) =>
+        setSelection((current) =>
+          current?.id === id && current.index === index
+            ? current
+            : { id, index }
+        ),
+    };
+  });
 
-    return (
-      <TableRow
-        key={row.id}
-        data-index={line}
-        data-row-index={index}
-        ref={shouldVirtualScroll ? virtualizer.measureElement : undefined}
-        // `aria-selected` is also what reveals the row's actions, read by CSS
-        // rather than by React: hover state rebuilt every column definition
-        // and re-rendered every cell in the table under the pointer.
-        aria-selected={keyboardNavEnabled ? isSelected : undefined}
-        tabIndex={
-          keyboardNavEnabled ? (index === tabStopRow ? 0 : -1) : undefined
-        }
-        className={cn(
-          isClickable && "cursor-pointer",
-          isSelected && "bg-hover ring-1 ring-inset ring-info",
-          "relative group"
-        )}
-        onFocus={
-          keyboardNavEnabled
-            ? () =>
-                setSelection((current) =>
-                  current?.id === row.id && current.index === index
-                    ? current
-                    : { id: row.id, index }
-                )
-            : undefined
-        }
-        onClick={act}
-        onDoubleClick={openPage}
-        onAuxClick={act}
-        // Capture, so the row's own name opens this rather than the bare link
-        // menu; a link to somewhere else keeps its own.
-        onContextMenuCapture={
-          onRowMenu
-            ? (event: React.MouseEvent) => {
-                const link = (event.target as HTMLElement).closest("a");
-                if (link && link.getAttribute("href") !== href) return;
-                event.preventDefault();
-                event.stopPropagation();
-                const keyboard = event.clientX === 0 && event.clientY === 0;
-                openMenu(
-                  index,
-                  keyboard ? undefined : { x: event.clientX, y: event.clientY }
-                );
-              }
-            : undefined
-        }
-        onKeyDown={
-          keyboardNavEnabled
-            ? (event: React.KeyboardEvent) =>
-                onRowKey(event, index, row.original)
-            : undefined
-        }
-      >
-        {row.getVisibleCells().map((cell) => (
-          <TableCell
-            key={cell.id}
-            className={cn(
-              cellPadding,
-              !CONTROL_COLUMNS.has(cell.column.id) && clipText
-            )}
-            style={
-              cell.column.id === ACTIONS_COLUMN_ID
-                ? ACTIONS_CELL_GUTTER
-                : undefined
-            }
-          >
-            {flexRender(cell.column.columnDef.cell, cell.getContext())}
-          </TableCell>
-        ))}
-      </TableRow>
-    );
-  };
+  const renderRow = (row: Row<TData>, index: number, line: number) => (
+    <BodyRow<TData>
+      key={row.id}
+      row={row}
+      index={index}
+      line={line}
+      selected={selectedIndex === index}
+      tabStop={index === tabStopRow}
+      keyboard={keyboardNavEnabled}
+      clickable={isClickable}
+      menu={!!onRowMenu}
+      measure={shouldVirtualScroll ? virtualizer.measureElement : undefined}
+      columns={columnsWithActions}
+      visibility={columnVisibility}
+      events={rowEvents}
+    />
+  );
 
   const renderItem = (item: BodyItem<TData>, line: number) =>
     item.row ? (
@@ -1113,7 +1183,8 @@ function DataTableInner<TData extends RowData>({
             // Every column here declares a width, which is what makes fixed
             // layout safe: it stops the browser re-measuring columns from
             // content that changes on every watch tick.
-            className="table-fixed"
+            className="group/table table-fixed"
+            data-density={tableDensity}
             containerClassName={cn(
               shouldVirtualScroll && "scrollbar-thin",
               fill && "min-h-0"

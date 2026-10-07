@@ -1527,6 +1527,59 @@ describe("the row's quick actions", () => {
   });
 });
 
+describe("what a re-render costs", () => {
+  let drawn = 0;
+  function CountedName({ row }: { row: { original: Item } }) {
+    drawn += 1;
+    return <span>{row.original.name}</span>;
+  }
+  const counted: ColumnDef<Item>[] = [
+    { id: "name", header: "Name", cell: CountedName },
+  ];
+  const items = Array.from({ length: 40 }, (_, index) => ({
+    name: `pod-${index}`,
+    namespace: "ns",
+  }));
+  const table = (data: Item[]) => (
+    <DataTable<Item> columns={counted} data={data} getRowHref={href} />
+  );
+
+  beforeEach(() => {
+    drawn = 0;
+  });
+
+  /**
+   * Every list re-reads itself on a timer, and during an outage each failed
+   * read re-renders the page with the same rows. Drawing all of them again
+   * for each was the climb in UI stalls on a 73-row Pods list with no input.
+   */
+  it("draws only the row whose object changed when the table renders again", async () => {
+    const { rerender } = await wrapRerenderable(table(items));
+    drawn = 0;
+
+    rerender(table([...items]));
+    expect(drawn).toBe(0);
+
+    rerender(table(items.map((item, i) => (i === 3 ? { ...item } : item))));
+    expect(drawn).toBe(1);
+  });
+
+  /** The density toggle restyled the rows by drawing every one of them again. */
+  it("restyles the rows on a density switch without drawing them again", async () => {
+    await wrap(table(items));
+    drawn = 0;
+
+    act(() =>
+      useDisplaySettingsStore.setState({ tableDensity: "comfortable" })
+    );
+
+    expect(drawn).toBe(0);
+    expect(document.querySelector("table")?.dataset.density).toBe(
+      "comfortable"
+    );
+  });
+});
+
 describe("a list past the virtualisation threshold", () => {
   const many = pods(500);
 

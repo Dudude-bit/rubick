@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { ButtonHTMLAttributes, ReactElement, ReactNode } from "react";
 import type { LucideIcon } from "lucide-react";
 
@@ -579,7 +580,8 @@ export function EventRows({
   );
 }
 
-function EventRow({
+/** Drawn again only when its event changed: a poll answers with the same objects for the rows that did not. */
+const EventRow = memo(function EventRow({
   event,
   showObject,
   showNamespace,
@@ -670,4 +672,4 @@ function EventRow({
       </span>
     </div>
   );
-}
+});
