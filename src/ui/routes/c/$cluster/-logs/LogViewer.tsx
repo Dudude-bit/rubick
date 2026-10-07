@@ -812,9 +812,9 @@ export function LogViewer({
   // Offered where it can answer. The kubelet sets `lastTerminated` for
   // exactly the container instances whose logs `--previous` still
   // fetches, so this is knowable before asking rather than from an error.
-  const offerPreviousRun = containerInfos.some(
-    (info) => info.lastTerminated !== null
-  );
+  const offerPreviousRun = (
+    lanes ? pods.flatMap((pod) => pod.containers) : containerInfos
+  ).some((info) => info.lastTerminated !== null);
 
   // A container reading alone, finished, from a phase of the pod's life
   // that is over. Derived from the current view rather than from the

@@ -1179,6 +1179,43 @@ describe("a workload pane", () => {
   });
 
   /**
+   * One replica crash-looping beside a healthy one, the shape a bad rollout
+   * leaves. Fails if Previous run is read off the first pod's containers alone.
+   */
+  it("offers the previous run when a container restarted in any pod, not only the first", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(
+      async (config: { podName: string }) => `stream-${config.podName}`
+    );
+    const crashing = container("app", {
+      ready: false,
+      state: { type: "waiting", reason: "CrashLoopBackOff" },
+      lastTerminated: {
+        exitCode: 1,
+        signal: null,
+        reason: "Error",
+        message: null,
+        startedAt: null,
+        finishedAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+      restartCount: 9,
+    });
+    renderWithProviders(pane([pod("api-a"), pod("api-b", [crashing])]));
+    await waitFor(() =>
+      expect(commands.streamPodLogs).toHaveBeenCalledTimes(2)
+    );
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Previous run/ })
+    );
+
+    await waitFor(() =>
+      expect(commands.streamPodLogs).toHaveBeenCalledWith(
+        expect.objectContaining({ podName: "api-b", previous: true })
+      )
+    );
+  });
+
+  /**
    * A stream that would not open is a pod nothing was read from, and the
    * sentence says that rather than "refused": nothing inspected the reason,
    * and `broken` is the could-not-look state. Counted over pods, because
