@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PodInfo } from "@/generated/types";
 import type { FileEntry } from "@/lib/container-files";
 import type { ListingState } from "./useContainerFiles";
+import { useLocaleStore } from "@/stores/localeStore";
 
 const listing = vi.fn<() => ListingState>();
 const stop = vi.fn();
@@ -257,6 +258,28 @@ describe("FilesTab", () => {
     expect(tagOf("ca.crt")).toBe("from kube-root-ca.crt");
     expect(tagOf("namespace")).toBe("from downwardAPI");
     expect(tagOf("..data")).toBe("from kube-api-access-6xk2p");
+  });
+
+  /**
+   * Lena's Files tab read "5 записей · 0.2 с": a decimal point in Russian.
+   * Fails if the seconds skip the reader's decimal mark.
+   */
+  it("writes the seconds a listing took in the reader's decimal mark", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      listing.mockReturnValue(done([file("app.conf")], { elapsedMs: 240 }));
+      wrap(
+        <FilesTab
+          pod={pod()}
+          via={null}
+          onDebug={() => {}}
+          onStopVia={() => {}}
+        />
+      );
+      expect(screen.getByText(/· 1 запись · 0,2 с/)).toBeInTheDocument();
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 
   /** A tool that is not there is never an empty folder. */

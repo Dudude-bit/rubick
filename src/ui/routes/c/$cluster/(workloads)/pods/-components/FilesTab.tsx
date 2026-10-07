@@ -41,7 +41,7 @@ import {
 import { errorToShow } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { formatShortcut } from "@/lib/platform";
-import { cn, formatSince, formatWhen } from "@/lib/utils";
+import { cn, formatDecimal, formatSince, formatWhen } from "@/lib/utils";
 import type { PodInfo, Via } from "@/generated/types";
 import { offeredContainers } from "@/lib/container-sequence";
 import { useT } from "@/i18n/useT";
@@ -561,7 +561,9 @@ function Reading({
   // A listing whose start nobody recorded is timed by nobody: the sentence
   // without the seconds, rather than a confident "0.0 s".
   const seconds =
-    startedAt === 0 ? null : (Math.max(0, now - startedAt) / 1000).toFixed(1);
+    startedAt === 0
+      ? null
+      : formatDecimal(Math.max(0, now - startedAt) / 1000, 1);
   return (
     <span className="flex items-center gap-2 text-fg-fnt">
       {seconds === null
@@ -611,7 +613,7 @@ function Status({
                 state.with === "gnuFind" ? "gnuFind" : "busyboxStat"
               ),
               n: state.entries.length,
-              seconds: (state.elapsedMs / 1000).toFixed(1),
+              seconds: formatDecimal(state.elapsedMs / 1000, 1),
             })}
         {/* The count is what was seen, and says so when that is not the
          *  whole: cut off at the row cap, or with lines nobody could read. */}
