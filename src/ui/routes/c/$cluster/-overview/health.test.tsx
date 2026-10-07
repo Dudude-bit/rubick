@@ -728,6 +728,29 @@ describe("what Needs attention says it checked", () => {
   });
 
   /**
+   * Dana read "CreateContainerCon…" in the reason column of Needs attention,
+   * the one word she matches against kubectl. jsdom lays nothing out, so this
+   * asserts the column's pixels: fails if the grid stops giving the longest
+   * waiting reason, Init:CreateContainerConfigError, its whole width.
+   */
+  it("gives a reason the room of the longest waiting status", async () => {
+    await panel(
+      attentionFrom([
+        { ...problem, kind: "Pod", reason: "CreateContainerConfigError" },
+      ])
+    );
+    const row = screen
+      .getByText("CreateContainerConfigError")
+      .closest('[role="link"]')!;
+    const reasonPx = Number(
+      /grid-cols-\[10px_(\d+)px_/.exec(row.className)?.[1]
+    );
+    expect(reasonPx).toBeGreaterThanOrEqual(
+      "Init:CreateContainerConfigError".length * 7.2 + 14
+    );
+  });
+
+  /**
    * "FailedGetResourceM..." in a 150px column, with no way to read the
    * rest. Fails if the cut reason stops carrying its whole word on hover.
    */

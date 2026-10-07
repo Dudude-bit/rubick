@@ -63,8 +63,9 @@ function Unit({ children }: { children: React.ReactNode }) {
   return <span className="text-[0.85em] text-fg-fnt">{children}</span>;
 }
 
+// The 240px reason track holds Init:CreateContainerConfigError, mark and gap.
 const ROW =
-  "grid grid-cols-[10px_150px_minmax(0,1fr)_60px_74px_46px] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs";
+  "grid grid-cols-[10px_240px_minmax(0,1fr)_60px_74px_46px] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs";
 
 /**
  * A 60x14 trend line for one problem row.
