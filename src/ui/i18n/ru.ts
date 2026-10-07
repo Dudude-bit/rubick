@@ -5641,6 +5641,8 @@ export const ru: Catalogue = {
     accessExternalNodePortHint: "Доступ по IP-адресу любого узла кластера",
     accessExternalName: "Внешнее имя",
     accessExternalNameHint: "DNS-псевдоним для внешнего сервиса",
+    accessExternalIpHint:
+      "kube-proxy отвечает на нём там, где сеть направляет его на узел",
     accessInternalFullDns: "Внутри (полное DNS-имя)",
     accessInternalFullDnsHint: "Из любого пространства имён кластера",
     accessInternalShort: "Внутри (короткое имя)",

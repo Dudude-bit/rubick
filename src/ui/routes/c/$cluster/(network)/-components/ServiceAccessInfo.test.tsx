@@ -48,3 +48,41 @@ describe("an ExternalName Service's Access tab", () => {
     expect(screen.queryByText("N/A")).toBeNull();
   });
 });
+
+/** public-api as `get_service` returns it on a cluster with no load balancer implementation. */
+const publicApi: ServiceInfo = {
+  name: "public-api",
+  namespace: "net",
+  uid: "2",
+  type: "LoadBalancer",
+  sessionAffinity: "None",
+  clusterIp: "10.101.40.12",
+  externalName: null,
+  externalIps: [],
+  loadBalancerIps: [],
+  ports: [
+    {
+      name: "http",
+      port: 80,
+      targetPort: "http",
+      nodePort: 31827,
+      protocol: "TCP",
+    },
+  ],
+  selector: { app: "api" },
+  labels: {},
+  annotations: {},
+  createdAt: null,
+};
+
+describe("a LoadBalancer Service's Access tab", () => {
+  /** It listed only the two in-cluster names, as if the Service were internal, while its Overview said the NodePort answers on every node. Fails if the NodePort or the missing address's verdict is dropped. */
+  it("lists its NodePort and says why it has no balancer address", async () => {
+    wrap(<ServiceAccessInfo service={publicApi} onForward={() => {}} />);
+    expect(screen.getByText("<any-node-ip>:31827")).toBeTruthy();
+    expect(await screen.findByText("nothing assigns it")).toBeTruthy();
+    expect(
+      screen.getByText("public-api.net.svc.cluster.local:80")
+    ).toBeTruthy();
+  });
+});

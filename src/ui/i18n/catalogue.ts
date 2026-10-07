@@ -5121,6 +5121,8 @@ export const en = {
     accessExternalNodePortHint: "Access via any cluster node IP",
     accessExternalName: "External Name",
     accessExternalNameHint: "DNS alias to external service",
+    accessExternalIpHint:
+      "kube-proxy answers on it wherever the network routes it to a node",
     accessInternalFullDns: "Internal (full DNS)",
     accessInternalFullDnsHint: "From any namespace in cluster",
     accessInternalShort: "Internal (short)",
