@@ -129,6 +129,7 @@ import {
   useDisplaySettingsStore,
 } from "@/stores/displaySettingsStore";
 import { PeekPanel } from "./PeekPanel";
+import { Toaster } from "@/components/ui/toaster";
 import { forgetLastOwners } from "@/hooks/useLastOwners";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { preloadPeekContent } from "./peek-loader";
@@ -1681,6 +1682,51 @@ describe("PeekPanel actions", () => {
     await waitFor(() =>
       expect(commands.restartDeployment).toHaveBeenCalledWith("cart", "shop")
     );
+  });
+
+  /**
+   * Lena restarted hello-web from the peek and nothing said it had landed,
+   * while the page's Restart says "Deployment restarted". Fails unless the
+   * peek confirms in the page's words.
+   */
+  it("confirms a restart the way the page does", async () => {
+    vi.mocked(commands.getDeployment).mockResolvedValue({
+      name: "hello-web",
+      namespace: "lena-sandbox",
+      generation: 2,
+      replicas: { desired: 1, ready: 1, updated: 1, available: 1 },
+      rollout: { state: "ready" },
+      rolloutPlan: {
+        strategy: "rolling",
+        replicas: 1,
+        surge: 1,
+        unavailable: 0,
+      },
+      containers: [],
+      initContainers: [],
+      ownerReferences: [],
+      createdAt: null,
+    } as never);
+    vi.mocked(commands.restartDeployment).mockReset().mockResolvedValue();
+    await wrap(
+      "/c/prod/events?peek=deployments/lena-sandbox/hello-web",
+      <>
+        <PeekPanel />
+        <Toaster />
+      </>
+    );
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Restart/ })
+    );
+    await userEvent.click(
+      within(
+        (await screen.findByTestId("restart-plan")).closest("form")!
+      ).getByRole("button", { name: "Restart" })
+    );
+    expect(await screen.findByText("Deployment restarted")).toBeInTheDocument();
+    expect(
+      screen.getByText("Deployment hello-web is being restarted.")
+    ).toBeInTheDocument();
   });
 
   it("gives a ConfigMap the one action it has", async () => {

@@ -75,6 +75,7 @@ import { guardedOf, noteDenied, useDenied, usePodDenied } from "@/lib/access";
 import { askableKind } from "@/lib/tell-me-when";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
+import { toast } from "@/components/ui/use-toast";
 
 /** Whatever the surface fetched, seen only as the count the dialog seeds from. */
 type ScalableInfo = DeploymentInfo | StatefulSetDetailInfo;
@@ -213,11 +214,13 @@ export function useObjectActions({
       if (!roll) return;
       await roll(name, namespace);
     },
-    // No success toast: the surface stays on the object and the list moves. A
-    // banner saying what already happened on screen is noise.
     onSuccess: () => {
       invalidate();
       setConfirming(null);
+      toast({
+        title: t("action", "kindRestarted", { kind }),
+        description: t("action", "kindRestartingDetail", { kind, name }),
+      });
       // Every rolled workload is followed to its answer, not just the one
       // kind that could be rolled when this was written — the detail pages
       // follow all three, and a peek that did not would answer differently
@@ -248,6 +251,10 @@ export function useObjectActions({
     onSuccess: () => {
       invalidate();
       setConfirming(null);
+      toast({
+        title: t("action", "kindDeleted", { kind }),
+        description: t("action", "kindDeletedDetail", { kind, name }),
+      });
       onGone?.();
     },
     onError: failed("delete"),
@@ -260,9 +267,17 @@ export function useObjectActions({
       if (!scaleCommand) throw new Error(`No scale command for ${kind}`);
       return scaleCommand(name, replicas, namespace);
     },
-    onSuccess: () => {
+    onSuccess: (_, replicas) => {
       invalidate();
       setDialog(null);
+      toast({
+        title: t("action", "kindScaled", { kind }),
+        description: t("action", "kindScaledDetail", {
+          kind,
+          name,
+          n: replicas,
+        }),
+      });
     },
     onError: failed("scale"),
   });

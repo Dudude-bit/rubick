@@ -31,6 +31,8 @@ vi.mock("@/lib/commands", async (original) => {
         createdAt: null,
       })),
       restartDeployment,
+      scaleDeployment: vi.fn(async () => undefined),
+      getResourceConnections: vi.fn(() => new Promise(() => {})),
       getConfigmap: vi.fn(async () => ({
         name: "kube-root-ca.crt",
         namespace: "shop",
@@ -88,6 +90,7 @@ vi.mock("./useResourceSearch", async (importOriginal) => ({
 }));
 
 import { CommandPalette } from "./CommandPalette";
+import { Toaster } from "@/components/ui/toaster";
 import { renderWithRouter } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 
@@ -158,5 +161,38 @@ describe("a dialog the palette opens", () => {
       expect(screen.queryByTestId("restart-plan")).toBeNull()
     );
     expect(restartDeployment).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Lena scaled hello-web from Ctrl+K and nothing said it had landed, while
+   * the page's Scale says "Deployment scaled". Fails unless the palette's
+   * Scale confirms in the page's words.
+   */
+  it("confirms a Scale the way the page does", async () => {
+    search.hit = deploymentHit;
+    const user = userEvent.setup();
+    await renderWithRouter(
+      <>
+        <CommandPalette />
+        <Toaster />
+      </>,
+      { at: "/c/k3d-dev", route: "/c/$cluster/$" }
+    );
+    window.dispatchEvent(new Event("command-palette-open"));
+    await user.type(await screen.findByRole("combobox"), "checkout");
+    await screen.findByText("checkout");
+    await user.keyboard("{Tab}");
+    await screen.findByText("Scale");
+    await user.keyboard("scale{Enter}");
+
+    const count = await screen.findByLabelText("Number of replicas");
+    await vi.waitFor(() => expect(count).toHaveValue(2));
+    await user.clear(count);
+    await user.type(count, "3{Enter}");
+
+    expect(await screen.findByText("Deployment scaled")).toBeInTheDocument();
+    expect(
+      screen.getByText("Deployment checkout scaled to 3 replicas.")
+    ).toBeInTheDocument();
   });
 });
