@@ -6,7 +6,7 @@ import type {
 } from "@/components/share/contribution";
 import { useAppInfo } from "@/hooks/useAppInfo";
 import { useConnections } from "@/hooks/useConnections";
-import { useObjectEvents } from "@/hooks/useObjectEvents";
+import { eventsOfEveryObject, useObjectEvents } from "@/hooks/useObjectEvents";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { useLocationHref } from "@/hooks/useLocationHref";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
@@ -152,7 +152,8 @@ export function useObjectReport(
           ? errorToShow(events.error)
           : events.isPending && !events.data
             ? t("share", "stillReading")
-            : null
+            : null,
+        eventsOfEveryObject(subject.kind)
       )
     );
     const changes = changesSection(

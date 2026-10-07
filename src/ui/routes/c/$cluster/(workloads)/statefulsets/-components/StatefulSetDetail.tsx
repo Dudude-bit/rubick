@@ -17,6 +17,8 @@ import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { RolloutBadge, RolloutSummary } from "../../../-object/RolloutSummary";
 import { yamlTab } from "../../../-object/yaml-tab";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { connectionsTab } from "../../../-object/connections-tab";
@@ -202,6 +204,10 @@ export function StatefulSetDetail() {
   const current = replicas?.current ?? 0;
   const ready = replicas?.ready ?? 0;
 
+  const events = useObjectEvents(ResourceType.StatefulSet, name, namespace, {
+    refresh: "slow",
+  });
+
   const share = useStatefulSetShare(statefulSet, pods, podsError);
 
   const tabs = useMemo(
@@ -385,6 +391,10 @@ export function StatefulSetDetail() {
           </Section>
         ),
       },
+      eventsTab(events, t, {
+        kind: ResourceType.StatefulSet,
+        name: name ?? "",
+      }),
       yamlTab({
         yaml,
         onCopy: copyYaml,
@@ -395,6 +405,7 @@ export function StatefulSetDetail() {
       }),
     ],
     [
+      events,
       t,
       statefulSet,
       pods,

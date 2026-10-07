@@ -15,6 +15,8 @@ import {
   namespaceStatusOf,
 } from "@/lib/share/namespace-share";
 import { yamlTab } from "../../../-object/yaml-tab";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { viewGlyph } from "@/components/object/detail-tab";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
@@ -56,6 +58,10 @@ export function NamespaceDetail() {
     },
   ];
 
+  const events = useObjectEvents(ResourceType.Namespace, name, null, {
+    refresh: "slow",
+  });
+
   const share = useCallback((): ShareContribution => {
     if (!ns) return {};
     return {
@@ -85,6 +91,7 @@ export function NamespaceDetail() {
         </>
       ),
     },
+    eventsTab(events, t, { kind: ResourceType.Namespace, name: name ?? "" }),
     yamlTab({
       title: "Namespace YAML",
       yaml,

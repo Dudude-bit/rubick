@@ -18,6 +18,8 @@ import { CopyableAddress } from "@/components/ui/copyable-value";
 import { MetricsStatusBanner } from "../../../-metrics";
 import { DebugNodeDialog } from "../../../-debug";
 import { yamlTab } from "../../../-object/yaml-tab";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { conditionsMark, viewGlyph } from "@/components/object/detail-tab";
@@ -183,6 +185,10 @@ export function NodeDetail() {
   });
 
   const actions = useNodeActions();
+
+  const events = useObjectEvents(ResourceType.Node, name, null, {
+    refresh: "slow",
+  });
 
   const share = useCallback(
     (frame: ShareFrame): ShareContribution => {
@@ -457,6 +463,7 @@ export function NodeDetail() {
       ),
     },
     connectionsTab(connections, t),
+    eventsTab(events, t, { kind: ResourceType.Node, name: name ?? "" }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "Node" }),
       yaml: nodeYaml,

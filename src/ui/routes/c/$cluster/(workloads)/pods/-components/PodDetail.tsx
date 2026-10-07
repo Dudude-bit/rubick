@@ -934,7 +934,7 @@ export function PodDetail() {
               </Section>
             ),
           },
-          eventsTab(podEvents, t),
+          eventsTab(podEvents, t, { kind: ResourceType.Pod, name: name ?? "" }),
           yamlTab({
             yaml,
             onCopy: copyYaml,

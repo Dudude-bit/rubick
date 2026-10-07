@@ -9,6 +9,8 @@ import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "../../../-object/yaml-tab";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { PodListCard } from "../../../-object/PodListCard";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
@@ -99,6 +101,10 @@ export function JobDetail() {
   const succeeded = job?.succeeded ?? 0;
   const failed = job?.failed ?? 0;
   const active = job?.active ?? 0;
+
+  const events = useObjectEvents(ResourceType.Job, name, namespace, {
+    refresh: "slow",
+  });
 
   const share = useJobShare(job, pods, podsError);
 
@@ -267,6 +273,7 @@ export function JobDetail() {
           </Section>
         ),
       },
+      eventsTab(events, t, { kind: ResourceType.Job, name: name ?? "" }),
       yamlTab({
         yaml,
         onCopy: copyYaml,
@@ -277,6 +284,7 @@ export function JobDetail() {
       }),
     ],
     [
+      events,
       t,
       job,
       pods,

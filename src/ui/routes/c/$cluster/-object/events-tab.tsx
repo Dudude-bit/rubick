@@ -7,12 +7,21 @@ import {
 } from "@/components/object/detail-tab";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton } from "@/components/ui/skeleton";
-import { eventTotal, type ObjectEventsQuery } from "@/hooks/useObjectEvents";
+import {
+  eventsOfEveryObject,
+  eventTotal,
+  type ObjectEventsQuery,
+} from "@/hooks/useObjectEvents";
 import { ResourceType } from "@/lib/resource-registry";
 
 /** One object's events, read by {@link useObjectEvents}: what the peek's latest twenty are out of. */
-export function eventsTab(query: ObjectEventsQuery, t: T): DetailTab {
+export function eventsTab(
+  query: ObjectEventsQuery,
+  t: T,
+  subject: { kind: string; name: string }
+): DetailTab {
   const { data, error } = query;
+  const everyObject = eventsOfEveryObject(subject.kind);
   return {
     id: "events",
     label: "Events",
@@ -20,13 +29,17 @@ export function eventsTab(query: ObjectEventsQuery, t: T): DetailTab {
     mark: error
       ? { shows: "unchecked", says: t("empty", "couldNotReadEvents") }
       : data
-        ? countMark(data.length)
+        ? countMark(eventTotal(data))
         : undefined,
     content: (
       <Section>
         <SectionHeader
           title="Events"
           count={data && data.length > 0 ? eventTotal(data) : undefined}
+          description={
+            everyObject &&
+            t("empty", "eventsOfEveryObjectIn", { namespace: subject.name })
+          }
           actions={
             error && (
               <DetailAction
@@ -48,7 +61,11 @@ export function eventsTab(query: ObjectEventsQuery, t: T): DetailTab {
         ) : (
           <EventRows
             events={data}
-            emptyMessage={t("empty", "noEventsForObject")}
+            showObject={everyObject}
+            emptyMessage={t(
+              "empty",
+              everyObject ? "noEventsInNamespace" : "noEventsForObject"
+            )}
           />
         )}
       </Section>

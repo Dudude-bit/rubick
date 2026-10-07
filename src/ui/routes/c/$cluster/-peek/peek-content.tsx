@@ -12,7 +12,11 @@ import {
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import { latestOf, useObjectEvents } from "@/hooks/useObjectEvents";
+import {
+  eventsOfEveryObject,
+  latestOf,
+  useObjectEvents,
+} from "@/hooks/useObjectEvents";
 
 import { SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -770,11 +774,15 @@ function PeekEvents({ target }: { target: PeekTarget }) {
     { refresh: "overview" }
   );
   const latest = events ? latestOf(events, PEEK_EVENTS) : null;
+  const everyObject = eventsOfEveryObject(target.kind);
 
   return (
     <>
       <PeekHeading
-        title={t("nav", "recentEvents")}
+        title={t(
+          "nav",
+          everyObject ? "recentEventsInNamespace" : "recentEvents"
+        )}
         count={
           latest?.of
             ? t("count", "shownOfTotal", {
@@ -793,7 +801,11 @@ function PeekEvents({ target }: { target: PeekTarget }) {
       ) : (
         <EventRows
           events={latest.rows}
-          emptyMessage={t("empty", "noEventsForObject")}
+          showObject={everyObject}
+          emptyMessage={t(
+            "empty",
+            everyObject ? "noEventsInNamespace" : "noEventsForObject"
+          )}
           compact
         />
       )}

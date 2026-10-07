@@ -29,6 +29,8 @@ import type { After } from "@/lib/tell-me-when";
 import { lanePodOf } from "../../../-logs/lanes";
 import { MetricsStatusBanner } from "../../../-metrics";
 import { yamlTab } from "../../../-object/yaml-tab";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { connectionsTab } from "../../../-object/connections-tab";
@@ -286,6 +288,10 @@ export function DeploymentDetail() {
     intercept: intercept(t("action", "rollBack")),
   });
 
+  const events = useObjectEvents(ResourceType.Deployment, name, namespace, {
+    refresh: "slow",
+  });
+
   const share = useDeploymentShare(deployment, revisions, pods, podsError);
 
   if (!deployment && !isLoading && !error) {
@@ -493,6 +499,7 @@ export function DeploymentDetail() {
         </Section>
       ),
     },
+    eventsTab(events, t, { kind: ResourceType.Deployment, name: name ?? "" }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "Deployment" }),
       yaml: deploymentYaml,

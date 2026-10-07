@@ -183,6 +183,7 @@ export const en = {
     matchesSelectorNotPublished: "Matches the selector, not published",
     portsNotExposed: "Ports the Service does not expose",
     recentEvents: "Recent events",
+    recentEventsInNamespace: "Recent events in this namespace",
     globalSettings: "Global settings",
     template: "Template",
     revisions: "Revisions",
@@ -6276,6 +6277,9 @@ export const en = {
     noOwner: "Nothing owns this object; it was created directly.",
     noConditions: "No conditions reported",
     noEventsForObject: "No events for this object",
+    noEventsInNamespace: "No events in this namespace",
+    eventsOfEveryObjectIn:
+      "The events of every object in {namespace}, not only those about the Namespace itself.",
     noEventsUnprovisioned:
       "No events yet: no provisioner has picked this claim up.",
     nothingScheduled: "nothing scheduled",

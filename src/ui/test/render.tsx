@@ -43,6 +43,8 @@ export interface TestRouterOptions {
    * address inside a cluster, which is what links need to resolve.
    */
   route?: string;
+  /** Other routes, by pattern, mounted beside it: where a navigation away from `ui` lands. */
+  beside?: Record<string, ReactNode>;
 }
 
 /**
@@ -77,17 +79,21 @@ export function testRouter(
 
 function testRouterWith(
   Page: () => ReactNode,
-  { at = "/c/test", route = "/c/$cluster/$" }: TestRouterOptions
+  { at = "/c/test", route = "/c/$cluster/$", beside = {} }: TestRouterOptions
 ): AnyRouter {
   const root = createRootRoute({ component: Outlet });
-  const page = createRoute({
-    getParentRoute: () => root,
-    path: route,
-    validateSearch: appSearch,
-    component: Page,
-  });
+  const mount = (path: string, component: () => ReactNode) =>
+    createRoute({
+      getParentRoute: () => root,
+      path,
+      validateSearch: appSearch,
+      component,
+    });
   const router = createRouter({
-    routeTree: root.addChildren([page]),
+    routeTree: root.addChildren([
+      mount(route, Page),
+      ...Object.entries(beside).map(([path, ui]) => mount(path, () => ui)),
+    ]),
     history: createMemoryHistory({ initialEntries: [at] }),
     defaultPendingMinMs: 0,
   });
@@ -133,11 +139,12 @@ export async function renderWithRouter(
     client = testQueryClient(),
     at,
     route,
+    beside,
     ...options
   }: ProviderOptions & TestRouterOptions = {}
 ) {
   const page = swappable(ui);
-  const router = testRouterWith(page.Current, { at, route });
+  const router = testRouterWith(page.Current, { at, route, beside });
   await act(() => router.load());
   const rendered = render(<RouterProvider router={router} />, {
     wrapper: providers(client),

@@ -161,6 +161,7 @@ export const ru: Catalogue = {
     matchesSelectorNotPublished: "Подходит под селектор, но не публикуется",
     portsNotExposed: "Порты, которые Service не публикует",
     recentEvents: "Последние события",
+    recentEventsInNamespace: "Последние события в этом пространстве имён",
     globalSettings: "Общие настройки",
     template: "Шаблон",
     revisions: "Ревизии",
@@ -6879,6 +6880,9 @@ export const ru: Catalogue = {
     noOwner: "У объекта нет владельца: он создан напрямую.",
     noConditions: "Условий нет",
     noEventsForObject: "Событий для этого объекта нет",
+    noEventsInNamespace: "В этом пространстве имён событий нет",
+    eventsOfEveryObjectIn:
+      "События всех объектов в пространстве имён {namespace}, а не только о самом Namespace.",
     noEventsUnprovisioned:
       "Событий пока нет: ни один provisioner не взял этот claim в работу.",
     nothingScheduled: "ничего не запланировано",

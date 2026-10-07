@@ -9,6 +9,8 @@ import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { RolloutBadge, RolloutSummary } from "../../../-object/RolloutSummary";
 import { yamlTab } from "../../../-object/yaml-tab";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { connectionsTab } from "../../../-object/connections-tab";
@@ -158,6 +160,10 @@ export function DaemonSetDetail() {
   const ready = daemonSet?.ready ?? 0;
   const upToDate = daemonSet?.upToDate ?? 0;
   const available = daemonSet?.available ?? 0;
+
+  const events = useObjectEvents(ResourceType.DaemonSet, name, namespace, {
+    refresh: "slow",
+  });
 
   const share = useDaemonSetShare(daemonSet, pods, podsError);
 
@@ -364,6 +370,7 @@ export function DaemonSetDetail() {
           </Section>
         ),
       },
+      eventsTab(events, t, { kind: ResourceType.DaemonSet, name: name ?? "" }),
       yamlTab({
         yaml,
         onCopy: copyYaml,
@@ -374,6 +381,7 @@ export function DaemonSetDetail() {
       }),
     ],
     [
+      events,
       daemonSet,
       pods,
       podsError,

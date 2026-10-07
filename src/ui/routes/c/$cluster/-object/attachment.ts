@@ -156,6 +156,15 @@ async function revision(object: Json, read: Reader): Promise<Attachment> {
 
 /** By `<group>/<kind>`: the kinds whose page has an events tab an event can open on. */
 const EVENTS_TAB = new Set([
+  "/Pod",
+  "apps/Deployment",
+  "apps/StatefulSet",
+  "apps/DaemonSet",
+  "apps/ReplicaSet",
+  "batch/Job",
+  "batch/CronJob",
+  "/Node",
+  "/Namespace",
   "networking.k8s.io/Ingress",
   "gateway.networking.k8s.io/Gateway",
   "gateway.networking.k8s.io/HTTPRoute",

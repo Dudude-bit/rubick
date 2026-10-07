@@ -665,6 +665,29 @@ describe("PeekPanel", () => {
     expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
     expect(commands.getManifest).not.toHaveBeenCalled();
   });
+
+  /**
+   * The namespace's page lists the events of every object in it, and its
+   * peek read only those about the Namespace object, almost always none.
+   * Fails if the two read different events or the peek does not say whose.
+   */
+  it("lists a namespace's events of every object, as its page does, and names each object", async () => {
+    await wrap("/c/prod/events?peek=namespaces/kube-system");
+
+    expect(
+      await screen.findByText("Recent events in this namespace")
+    ).toBeInTheDocument();
+    expect(commands.listEvents).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespace: "kube-system",
+        involved_object_kind: null,
+        involved_object_name: null,
+      })
+    );
+    expect(
+      screen.getAllByTestId("resource-ref-name").map((name) => name.textContent)
+    ).toContain("Pod/crash-demo-56588f6b8c-8bj9v");
+  });
 });
 
 const CONFIGMAP_PEEK = "/c/prod/events?peek=configmaps/k8s-gui-test/app-config";

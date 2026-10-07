@@ -7,6 +7,8 @@ import { lanePodOf } from "../../../-logs/lanes";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "../../../-object/yaml-tab";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { PodListCard } from "../../../-object/PodListCard";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
@@ -111,6 +113,10 @@ export function ReplicaSetDetail() {
   const retired = siblings.filter(
     (rs) => rs.replicas.desired === 0 && rs.name !== replicaSet?.name
   ).length;
+
+  const events = useObjectEvents(ResourceType.ReplicaSet, name, namespace, {
+    refresh: "slow",
+  });
 
   const share = useReplicaSetShare(
     replicaSet,
@@ -296,6 +302,7 @@ export function ReplicaSetDetail() {
         </Section>
       ),
     },
+    eventsTab(events, t, { kind: ResourceType.ReplicaSet, name: name ?? "" }),
     yamlTab({
       yaml,
       onCopy: copyYaml,

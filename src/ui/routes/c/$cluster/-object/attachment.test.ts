@@ -168,7 +168,7 @@ describe("the other attached kinds", () => {
     ).toEqual({ state: "stay", stay: { says: "noOwner" } });
   });
 
-  /** A Pod's page has no events tab to open on, so its event is not moved. */
+  /** A Service's page has no events tab to open on, so its event is not moved. */
   it("open an event only on a page that has an events tab", async () => {
     const about = (kind: string, apiVersion: string) => ({
       metadata: { name: "e", namespace: "shop" },
@@ -182,7 +182,11 @@ describe("the other attached kinds", () => {
       )
     ).toMatchObject({ state: "parent", tab: "events" });
     expect(
-      await decide("events", about("Pod", "v1"), reader({ "Pod/x": "present" }))
+      await decide(
+        "events",
+        about("Service", "v1"),
+        reader({ "Service/x": "present" })
+      )
     ).toEqual({ state: "free" });
   });
 

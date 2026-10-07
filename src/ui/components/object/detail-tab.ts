@@ -40,7 +40,7 @@ export type DetailTabGlyph =
  */
 export type DetailTabMark =
   /** The tab is a collection, and its size decides whether it is worth opening. */
-  | { shows: "count"; of: number }
+  | { shows: "count"; of: number | string }
   /** Something inside is failing — `says` is what the tab tells a reader who cannot see the colour. */
   | { shows: "severity"; tone: "err" | "warn"; says: string }
   /**
@@ -93,7 +93,7 @@ export const viewGlyph = (icon: LucideIcon): DetailTabGlyph => ({
 
 /** Narrower than its siblings, so a strip that only allows counts can say so. */
 export const countMark = (
-  of: number
+  of: number | string
 ): Extract<DetailTabMark, { shows: "count" }> => ({
   shows: "count",
   of,

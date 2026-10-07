@@ -17,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Unknown } from "@/components/ui/unknown";
 import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "../../../-object/yaml-tab";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
@@ -247,6 +249,10 @@ export function CronJobDetail() {
   const deliveryQuery = deliveryOfKind(ResourceType.CronJob, cronJob);
   const intercept = useDeliveryIntercept(deliveryQuery);
 
+  const events = useObjectEvents(ResourceType.CronJob, name, namespace, {
+    refresh: "slow",
+  });
+
   const share = useCronJobShare(cronJob, jobs, jobsError);
 
   const tabs = useMemo(
@@ -430,6 +436,7 @@ export function CronJobDetail() {
           </div>
         ),
       },
+      eventsTab(events, t, { kind: ResourceType.CronJob, name: name ?? "" }),
       yamlTab({
         yaml,
         onCopy: copyYaml,
@@ -440,6 +447,7 @@ export function CronJobDetail() {
       }),
     ],
     [
+      events,
       cronJob,
       jobs,
       jobsError,
