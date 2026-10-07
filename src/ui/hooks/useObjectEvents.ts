@@ -6,6 +6,8 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 /** Enough of one object's events that a short list shown from them has a true total behind it. */
 export const OBJECT_EVENTS_READ = 200;
 
+export type ObjectEventsQuery = ReturnType<typeof useObjectEvents>;
+
 /** One object's events, newest first: the peek, the pod page and Share read the same answer. */
 export function useObjectEvents(
   kind: string,
@@ -35,17 +37,18 @@ export function useObjectEvents(
   });
 }
 
+/** How many events were read, marked a floor where the read itself was cut. */
+export const eventTotal = (events: unknown[]): string =>
+  events.length >= OBJECT_EVENTS_READ
+    ? `${OBJECT_EVENTS_READ}+`
+    : String(events.length);
+
 /** The newest `shown` of what was read, and the total they are out of where they are not all of it. */
 export function latestOf<E>(
   events: E[],
   shown: number
 ): { rows: E[]; of: string | null } {
-  if (events.length <= shown) return { rows: events, of: null };
-  return {
-    rows: events.slice(0, shown),
-    of:
-      events.length >= OBJECT_EVENTS_READ
-        ? `${OBJECT_EVENTS_READ}+`
-        : String(events.length),
-  };
+  return events.length > shown
+    ? { rows: events.slice(0, shown), of: eventTotal(events) }
+    : { rows: events, of: null };
 }

@@ -9,7 +9,7 @@ import {
 import { act, screen } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 
-import type { PodInfo, ReplicaSetInfo } from "@/generated/types";
+import type { EventInfo, PodInfo, ReplicaSetInfo } from "@/generated/types";
 import { REFRESH_INTERVALS } from "@/lib/refresh";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useWindowActivity } from "@/lib/window-activity";
@@ -244,5 +244,96 @@ describe("Marco's pod page, in a namespace where he may exec and forward but not
       expect(screen.getByRole("button", { name: offered })).not.toHaveAttribute(
         "aria-disabled"
       );
+  });
+});
+
+const podEvent = (
+  reason: string,
+  type: "Normal" | "Warning",
+  count: number
+): EventInfo => ({
+  name: `${NAME}.${reason}`,
+  namespace: "shop",
+  uid: `event-${reason}`,
+  type,
+  reason,
+  message: `${reason} message`,
+  source: "kubelet",
+  involvedObject: {
+    kind: "Pod",
+    name: NAME,
+    namespace: "shop",
+    uid: "pod-uid",
+  },
+  count,
+  firstTimestamp: "2026-10-07T06:00:00Z",
+  lastTimestamp: "2026-10-07T06:30:00Z",
+});
+
+const KUBECTL_EVENTS = [
+  podEvent("BackOff", "Warning", 29),
+  podEvent("Pulled", "Normal", 11),
+  podEvent("Created", "Normal", 11),
+  podEvent("Started", "Normal", 11),
+  podEvent("Scheduled", "Normal", 1),
+];
+
+async function openEvents(events: () => Promise<EventInfo[]>) {
+  vi.mocked(invoke).mockImplementation(async (command: string, args) => {
+    if (command === "get_pod") return POD;
+    if (command === "get_replicaset") return REPLICA_SET;
+    if (command === "list_events") return events();
+    if (command === "check_access")
+      return (args as { queries: AccessQuery[] }).queries.map((query) => ({
+        ...query,
+        allowed: true,
+      }));
+    return undefined;
+  });
+  await renderWithRouter(<PodDetail />, {
+    at: `/c/prod/pods/shop/${NAME}?tab=events`,
+    route: "/c/$cluster/pods/$namespace/$name",
+  });
+  await advance(0);
+  await advance(0);
+}
+
+describe("the pod page's Events", () => {
+  /**
+   * Sam found no Events on checkout-55cbfdc66-bp2q6 while kubectl had five
+   * (BackOff x29), though the peek and every other page with events show
+   * them. Fails if the pod page has no Events tab or lists fewer than read.
+   */
+  it("lists the five events kubectl has for the pod, BackOff first", async () => {
+    await openEvents(async () => KUBECTL_EVENTS);
+
+    expect(screen.getByRole("tab", { name: /^Events/ })).toHaveAttribute(
+      "title",
+      "Events: 5"
+    );
+    for (const reason of ["BackOff", "Pulled", "Created", "Started"])
+      expect(screen.getByText(reason)).toBeInTheDocument();
+    expect(screen.getByText("Scheduled")).toBeInTheDocument();
+  });
+
+  /**
+   * A refused read drew as "No events for this object" on the pages that
+   * swallowed it. Fails if the tab or its mark reads a 403 as none.
+   */
+  it("says it could not read the events where the cluster refused, and marks the tab unchecked", async () => {
+    await openEvents(async () => {
+      throw {
+        code: "KUBE_API_ERROR",
+        message: 'events is forbidden: User "marco" cannot list events',
+      };
+    });
+
+    expect(
+      screen.getAllByText("Could not read events.").length
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("No events for this object")).toBeNull();
+    expect(
+      screen.getByRole("tab", { name: "Events: Could not read events." })
+    ).toBeInTheDocument();
   });
 });

@@ -73,6 +73,7 @@ import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { silenceOf } from "@/lib/node-reporting";
 import { useConnections } from "@/hooks/useConnections";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
+import { eventsTab } from "../../../-object/events-tab";
 import { useNodePlacement } from "./useNodePlacement";
 import { SpotMark } from "../../../-object/spot-mark";
 import { commands } from "@/lib/commands";
@@ -933,6 +934,7 @@ export function PodDetail() {
               </Section>
             ),
           },
+          eventsTab(podEvents, t),
           yamlTab({
             yaml,
             onCopy: copyYaml,
