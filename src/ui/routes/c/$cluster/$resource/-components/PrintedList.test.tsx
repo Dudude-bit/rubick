@@ -315,6 +315,34 @@ describe("an access kind on the generic list", () => {
   });
 });
 
+describe("a registry kind on the generic list", () => {
+  const HPA: CatalogEntry = {
+    ...LEASES,
+    group: "autoscaling",
+    kind: "HorizontalPodAutoscaler",
+    plural: "horizontalpodautoscalers",
+  };
+
+  /**
+   * Sam read "horizontalpodautoscalers" under the title, over each namespace
+   * and in the footer, beside the kind's own capitals. Fails if the list goes
+   * back to the API's lowercase plural or the raw resource as its description.
+   */
+  it("counts several by the kind's own plural and explains the kind", async () => {
+    answers.catalog = () => Promise.resolve({ entries: [HPA], unread: [] });
+    answers.table = () =>
+      Promise.resolve(table([lease("hpa-a"), lease("hpa-b")]) as ResourceTable);
+    await renderWithRouter(
+      <PrintedList resource="horizontalpodautoscalers.autoscaling" />
+    );
+    expect(await screen.findByText("2 HorizontalPodAutoscalers")).toBeVisible();
+    expect(screen.queryByText(/horizontalpodautoscalers/)).toBeNull();
+    expect(
+      screen.getByText(/changes how many replicas a workload runs/)
+    ).toBeVisible();
+  });
+});
+
 describe("a ClusterRoleBinding row", () => {
   const BINDINGS: CatalogEntry = {
     ...LEASES,
