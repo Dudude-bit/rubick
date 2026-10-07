@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
 import { useNavigate, useRouterState } from "@tanstack/react-router";
@@ -154,6 +155,7 @@ export function CommandPalette() {
 
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const pointer = useRef<string | null>(null);
   const listId = useId();
 
   const contexts = useClusterStore((s) => s.contexts);
@@ -672,7 +674,11 @@ export function CommandPalette() {
           event.preventDefault();
           return;
         }
-      } else if (event.key === "Tab" && !bang && !event.shiftKey) {
+      } else if (
+        !bang &&
+        ((event.key === "Tab" && !event.shiftKey) ||
+          (event.key === "ArrowRight" && caretAtEnd(event.currentTarget)))
+      ) {
         const target = actionTargetOf(entry);
         if (target && entry) {
           event.preventDefault();
@@ -764,6 +770,7 @@ export function CommandPalette() {
         .then(setRecentItems)
         .catch(() => setRecentItems([]));
     } else {
+      pointer.current = null;
       setText("");
       setScope({ kind: "current" });
       setWake(null);
@@ -918,7 +925,15 @@ export function CommandPalette() {
                   entry={entry}
                   selected={entry.id === activeId}
                   actionable={actionable && entry.id === activeId}
-                  onHover={() => isSelectable(entry) && setSelectedId(entry.id)}
+                  onHover={(event) => {
+                    // A row that slid under a resting pointer, as results
+                    // arrive, is not one the reader pointed at.
+                    const at = `${event.clientX},${event.clientY}`;
+                    const moved =
+                      pointer.current !== null && pointer.current !== at;
+                    pointer.current = at;
+                    if (moved && isSelectable(entry)) setSelectedId(entry.id);
+                  }}
                   onPick={(event) =>
                     activate(
                       entry,
@@ -946,7 +961,7 @@ export function CommandPalette() {
             ) : bang ? (
               <>
                 <FootKey shortcut="↵">{t("action", "hintScopeToIt")}</FootKey>
-                <FootKey shortcut="⇥">{t("action", "hintComplete")}</FootKey>
+                <FootKey shortcut="tab">{t("action", "hintComplete")}</FootKey>
                 <span className="ml-auto">
                   {t("action", "hintTypeAllPrefix")}{" "}
                   <span className="font-mono text-fg-mut">!*</span>{" "}
@@ -959,7 +974,7 @@ export function CommandPalette() {
                 <FootKey shortcut="↵">{t("action", "hintOpen")}</FootKey>
                 <FootKey shortcut="mod+↵">{t("action", "hintNewTab")}</FootKey>
                 {actionable && (
-                  <FootKey shortcut="⇥">{t("action", "hintActions")}</FootKey>
+                  <FootKey shortcut="tab">{t("action", "hintActions")}</FootKey>
                 )}
                 {scoped ? (
                   <FootKey shortcut="⌫">
@@ -1009,6 +1024,12 @@ function alertKey(reading: AlertReading): string {
     reading.objects.map((o) => [o.kind, o.name]),
     reading.unkeyed,
   ]);
+}
+
+/** Right at the end of what was typed has nowhere left to move the caret. */
+function caretAtEnd(input: HTMLInputElement): boolean {
+  const end = input.value.length;
+  return input.selectionStart === end && input.selectionEnd === end;
 }
 
 function FootKey({
@@ -1074,7 +1095,7 @@ function EntryRow({
   selected: boolean;
   /** Tab opens this row's actions. */
   actionable: boolean;
-  onHover: () => void;
+  onHover: (event: ReactPointerEvent) => void;
   onPick: (event: ReactMouseEvent) => void;
 }) {
   const t = useT();
@@ -1247,7 +1268,7 @@ function EntryRow({
             </span>
           )}
           <span className="ml-auto flex flex-none items-center gap-1.5 text-[11px] text-fg-fnt">
-            {actionable && <Kbd shortcut="⇥" />}
+            {actionable && <Kbd shortcut="tab" />}
             {entry.hit.kind}
           </span>
         </Row>
@@ -1264,7 +1285,7 @@ function EntryRow({
               showKind={false}
             />
           </span>
-          <Kbd shortcut="⇥" className="ml-auto flex-none" />
+          <Kbd shortcut="tab" className="ml-auto flex-none" />
         </Row>
       );
     case "action":
@@ -1496,7 +1517,7 @@ function ClusterGroup({
   domId: string;
   entry: Extract<Entry, { kind: "group" }>;
   selected: boolean;
-  onHover: () => void;
+  onHover: (event: ReactPointerEvent) => void;
   onPick: (event: ReactMouseEvent) => void;
 }) {
   const t = useT();
@@ -1567,7 +1588,7 @@ function ClusterGroup({
             role: "option",
             "aria-selected": selected,
             onClick: onPick,
-            onMouseEnter: onHover,
+            onPointerMove: onHover,
           })}
       id={domId}
       className={cn(
@@ -1611,7 +1632,7 @@ function Row({
 }: {
   domId: string;
   selected: boolean;
-  onHover: () => void;
+  onHover: (event: ReactPointerEvent) => void;
   onPick: (event: ReactMouseEvent) => void;
   children: ReactNode;
 }) {
@@ -1625,7 +1646,7 @@ function Row({
       aria-selected={selected}
       onClick={onPick}
       onAuxClick={(event) => event.button === 1 && onPick(event)}
-      onMouseEnter={onHover}
+      onPointerMove={onHover}
       className={cn(
         "flex w-full cursor-pointer items-center gap-2 rounded-[5px] px-2 py-[5px] text-left text-xs transition-colors hover:bg-hover",
         selected ? "bg-sel text-fg" : "text-fg-mid"

@@ -415,6 +415,54 @@ describe("the command palette's object actions", () => {
   });
 
   /**
+   * The footer drew a "⇥" that read as an arrow, and Right did nothing on a
+   * Secret row three times out of three. Fails unless the footer names the
+   * key in words and Right at the end of the query opens the actions too.
+   */
+  it("names Tab in the footer and opens actions with Right at the end of the query", async () => {
+    search.hits = [hit()];
+    await open("burst");
+    await screen.findByText("burst-demo");
+    expect(screen.getAllByText("Tab").length).toBeGreaterThan(0);
+    expect(screen.queryByText("⇥")).toBeNull();
+
+    const field = screen.getByRole("combobox") as HTMLInputElement;
+    field.setSelectionRange(2, 2);
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    expect(screen.queryByText("Restart")).toBeNull();
+
+    field.setSelectionRange(5, 5);
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    expect(await screen.findByText("Restart")).toBeInTheDocument();
+  });
+
+  /**
+   * Rows that arrive or reflow under a resting pointer took the selection
+   * from the keyboard. Fails if a row the pointer did not move over becomes
+   * the selected one, or if a real move over a row does not select it.
+   */
+  it("moves the selection only when the pointer really moves", async () => {
+    search.hits = [hit(), hit({ name: "burst-two" })];
+    await open("burst");
+    const first = (await screen.findByText("burst-demo")).closest(
+      "[role=option]"
+    ) as HTMLElement;
+    const second = screen
+      .getByText("burst-two")
+      .closest("[role=option]") as HTMLElement;
+    await userEvent.keyboard("{ArrowDown}");
+    expect(second).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.mouseEnter(first);
+    fireEvent.mouseOver(first);
+    fireEvent.pointerMove(first, { clientX: 40, clientY: 60 });
+    expect(second).toHaveAttribute("aria-selected", "true");
+
+    fireEvent.pointerMove(first, { clientX: 42, clientY: 61 });
+    expect(first).toHaveAttribute("aria-selected", "true");
+  });
+
+  /**
    * An action runs through the registry and its dialog outlives the
    * palette: closing the palette must not take the confirmation with it.
    */
