@@ -12,12 +12,25 @@ import {
 
 import type { FocusReason } from "./focus";
 import type { ContainerFailure } from "./hooks/useLogStream";
+import type { StreamFailureKind } from "@/lib/stream-failure";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { useLocale } from "@/stores/localeStore";
 import type { LostLines } from "./hooks/log-buffer";
 import { formatSpan, termLabel, type QueryTerm } from "./types";
 import { formatCount } from "@/lib/count";
+
+/**
+ * The tone each way a stream stops is said in. Total over the kinds, so a new
+ * one is a compile error here rather than another kind's colour.
+ */
+const FAILURE_TONE: Record<StreamFailureKind, "text-warn" | "text-err"> = {
+  gone: "text-warn",
+  broken: "text-err",
+  "no-previous-run": "text-warn",
+  "log-not-kept": "text-warn",
+  "follow-stopped": "text-warn",
+};
 
 /**
  * A stream that stopped on its own, said out loud.
@@ -50,11 +63,15 @@ export function StreamFailureNotice({
 }) {
   const t = useT();
   const gone = failure.kind === "gone";
+  // The container runs on; the node let go of it. Its earlier exits are not
+  // this run's, so they are not drawn beside it.
+  const unfollowed = failure.kind === "follow-stopped";
   // A container that has never started has no log, and the apiserver
   // says so in 300 characters of `BadRequest (ErrorResponse { ... })`.
   // The pod's own status has the reason in one word, and a stream that
   // could never have attached is not a stream that was lost.
   const unstarted =
+    !unfollowed &&
     info !== undefined &&
     info.state.type === "waiting" &&
     info.lastTerminated === null &&
@@ -69,11 +86,20 @@ export function StreamFailureNotice({
   // asked for is known to be gone, so the way out exists only when the read
   // that failed was the earlier one.
   const offerCurrent = notKept && previousRun;
+  const notStarted = unstarted && !notKept && !absent;
   const container = failure.container;
   // Why it is gone, which the stream error never says: it reports that
   // the container is no longer running, and the exit code, the reason
   // and the time are sitting in the pod's own status the whole while.
-  const termination = info ? lastTermination(info) : null;
+  const termination = info && !unfollowed ? lastTermination(info) : null;
+  const headline: Record<StreamFailureKind, () => string> = {
+    gone: () => t("empty", "streamEndedGone", { pod: podName, container }),
+    broken: () => t("empty", "streamLost", { pod: podName, container }),
+    "no-previous-run": () => t("empty", "noPreviousRunOf", { container }),
+    "log-not-kept": () => t("empty", "logNotKept", { container }),
+    "follow-stopped": () =>
+      t("empty", "nodeStoppedFollowing", { pod: podName, container }),
+  };
   const when = termination ? terminationWhen(termination, t) : null;
 
   return (
@@ -84,19 +110,11 @@ export function StreamFailureNotice({
     >
       <div className="min-w-0">
         <p
-          className={`text-xs ${
-            gone || absent || unstarted || notKept ? "text-warn" : "text-err"
-          }`}
+          className={`text-xs ${notStarted ? "text-warn" : FAILURE_TONE[failure.kind]}`}
         >
-          {notKept
-            ? t("empty", "logNotKept", { container })
-            : absent
-              ? t("empty", "noPreviousRunOf", { container })
-              : unstarted
-                ? t("empty", "containerNotStarted", { container })
-                : gone
-                  ? t("empty", "streamEndedGone", { pod: podName, container })
-                  : t("empty", "streamLost", { pod: podName, container })}
+          {notStarted
+            ? t("empty", "containerNotStarted", { container })
+            : headline[failure.kind]()}
         </p>
         {unstarted && info.state.type === "waiting" && info.state.reason && (
           <p className="mt-0.5 text-[11px] text-fg-mut">
@@ -118,10 +136,25 @@ export function StreamFailureNotice({
             .
           </p>
         )}
-        {!unstarted && (
-          <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
-            {failure.message}
-          </p>
+        {unfollowed ? (
+          <>
+            <p className="mt-0.5 text-[11px] text-fg-mut">
+              {t("empty", "stillRunningUnfollowed", { container })}
+            </p>
+            {failure.message && (
+              <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
+                {parts(t("empty", "nodeSaid"), {
+                  said: <span className="font-mono">{failure.message}</span>,
+                })}
+              </p>
+            )}
+          </>
+        ) : (
+          !unstarted && (
+            <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
+              {failure.message}
+            </p>
+          )
         )}
         {/* A stream that died under intake leaves two gaps, not one: the
             minutes it was down, and everything intake dropped before
@@ -152,6 +185,16 @@ export function StreamFailureNotice({
         <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
           {t("empty", "nothingToReconnectTo")}
         </span>
+      ) : unfollowed ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          onClick={onRetry}
+        >
+          <RefreshCw aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
+          {t("action", "followAgain")}
+        </Button>
       ) : (
         <Button
           variant="outline"

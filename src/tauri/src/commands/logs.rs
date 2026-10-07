@@ -82,7 +82,14 @@ pub async fn stream_pod_logs(
     let stream_id = crate::utils::generate_id("log");
     let event_tx = state.event_tx.clone();
 
-    let streamer = LogStreamer::new(Arc::new((*client).clone()), event_tx);
+    let clients = state.client_manager.clone();
+    let context = state.get_current_context().unwrap_or_default();
+    let streamer =
+        LogStreamer::new(Arc::new((*client).clone()), event_tx).with_fresh_client(move || {
+            clients
+                .get_client(&context)
+                .ok_or_else(|| crate::error::Error::NotConnected(context.clone()))
+        });
 
     let mut opened = state.log_streams.open(stream_id.clone());
 

@@ -262,6 +262,71 @@ describe("LogViewer when a live stream dies", () => {
     expect(screen.getByTestId("log-legend")).toHaveTextContent("log not kept");
   });
 
+  /**
+   * Sam's log-demo: five containers running and writing, and the node gave
+   * up following two of them. The pane said "ended", "no longer running"
+   * and "Nothing left to reconnect to", and sent the reader to a Loki for
+   * lines kubectl was still printing. Fails if a stopped follow is drawn as
+   * an end, or offers no way to follow again.
+   */
+  it("says the node stopped following a running container, and offers to follow it again", async () => {
+    const names = [
+      "json-logger",
+      "logfmt-logger",
+      "klog-logger",
+      "logback-logger",
+      "web",
+    ];
+    await mount(
+      <LogViewer
+        {...props}
+        podName="log-demo-84c4d9749c-c7s72"
+        containers={names.map((name) => container(name))}
+      />
+    );
+    await waitFor(() => expect(listeners["stream-failed"]).toBeDefined());
+    await waitFor(() =>
+      expect(commands.logStreamSubscribed).toHaveBeenCalledTimes(5)
+    );
+    const opened = vi.mocked(commands.streamPodLogs).mock.calls.length;
+
+    fireFailure(
+      "follow-stopped",
+      "failed to create fsnotify watcher: too many open files",
+      "stream-web"
+    );
+
+    const notice = await screen.findByTestId("log-stream-failure");
+    expect(notice).toHaveTextContent(
+      "The node stopped following log-demo-84c4d9749c-c7s72/web."
+    );
+    expect(notice).toHaveTextContent("web is still running");
+    expect(notice).toHaveTextContent(
+      "The node said: failed to create fsnotify watcher: too many open files"
+    );
+    expect(notice).not.toHaveTextContent("Nothing left to reconnect to");
+    expect(notice).not.toHaveTextContent("is gone");
+    expect(screen.getByTestId("log-legend")).toHaveTextContent(
+      "web0· not followed"
+    );
+    expect(screen.getByTestId("log-legend")).not.toHaveTextContent("ended");
+    expect(
+      screen.queryByText(/Reading past a pod's own lifetime/)
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(
+      within(notice).getByRole("button", { name: /Follow again/ })
+    );
+    await waitFor(() =>
+      expect(
+        vi
+          .mocked(commands.streamPodLogs)
+          .mock.calls.slice(opened)
+          .map(([config]) => (config as StreamLogConfig).container)
+      ).toContain("web")
+    );
+  });
+
   it("marks the dead container in the legend, not just above the list", async () => {
     await renderStreaming();
 

@@ -2829,7 +2829,8 @@ export type StreamFailureKind =
   | "gone"
   | "broken"
   | "no-previous-run"
-  | "log-not-kept";
+  | "log-not-kept"
+  | "follow-stopped";
 
 export type WatchOp = "applied" | "deleted" | "restarted" | "synced" | "failed";
 

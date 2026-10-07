@@ -940,8 +940,8 @@ export function LogViewer({
   /**
    * What is actually attached, counted over pods.
    *
-   * `gone` is not a refusal. The streamer emits it whenever a followed
-   * stream reaches EOF, which is the ordinary end of every init container
+   * `gone` is not a refusal. The streamer emits it when a followed run
+   * ends by the pod's own status, which is the ordinary end of every init container
    * and of every pod of a finished Job — so counting any failure as
    * not-streaming made a Deployment with one migration init container read
    * "0 of 3 pods streaming" while all three were writing into the pane.

@@ -1451,6 +1451,7 @@ export const ru: Catalogue = {
     downloadFullLog: "Скачать полный лог",
     clearBuffered: "Очистить буфер",
     reconnect: "Переподключиться",
+    followAgain: "Следовать снова",
     showCurrentRun: "Показать текущий запуск",
     showFewer: "Показать меньше",
     showAll: "Показать все {n}",
@@ -6790,6 +6791,10 @@ export const ru: Catalogue = {
     intakeStillSet:
       "Приём всё ещё включён: переподключение продолжит с этого момента, и пропущенное потоком назад не подтянется.",
     nothingToReconnectTo: "Переподключаться уже не к чему",
+    nodeStoppedFollowing: "Узел перестал следить за логом {pod}/{container}.",
+    stillRunningUnfollowed:
+      "{container} по-прежнему работает, но новые строки сюда не попадут, пока вы снова не начнёте следовать за логом.",
+    nodeSaid: "Узел сообщил: {said}",
     installedByRelease: "Установлено релизом Helm {name}",
     conditionIs: "{type}: {status}",
     releaseNotRead: "не удалось прочитать",
@@ -6830,6 +6835,7 @@ export const ru: Catalogue = {
     chipEnded: "закончился",
     chipNotStarted: "не стартовал",
     chipLost: "потерян",
+    chipNotFollowed: "не отслеживается",
     noneHasRestarted:
       ": ни один из них не перезапускался, значит, до текущего запуска ничего нет.",
     everyContainerHidden: "Все контейнеры скрыты.",

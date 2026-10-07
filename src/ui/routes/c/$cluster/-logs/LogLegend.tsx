@@ -4,6 +4,26 @@ import { PHASE_LABEL } from "@/lib/container-sequence";
 import type { ContainerFailure } from "./hooks/useLogStream";
 import { formatCount } from "@/lib/count";
 import { useT } from "@/i18n/useT";
+import type { en } from "@/i18n/catalogue";
+import type { StreamFailureKind } from "@/lib/stream-failure";
+
+/**
+ * The word a chip carries for how its stream stopped, total over the kinds
+ * so a new one cannot borrow another's. A stream that could never attach
+ * was not lost: the apiserver refuses one for a container that has not
+ * started, which is a fact about the pod rather than about the connection.
+ */
+const CHIP: Record<
+  StreamFailureKind,
+  (state: ContainerInfo["state"] | undefined) => keyof typeof en.empty
+> = {
+  gone: () => "chipEnded",
+  broken: (state) =>
+    state?.type === "waiting" ? "chipNotStarted" : "chipLost",
+  "no-previous-run": () => "chipNoEarlierRun",
+  "log-not-kept": () => "chipLogNotKept",
+  "follow-stopped": () => "chipNotFollowed",
+};
 
 export type LegendContainer = Pick<ContainerInfo, "name" | "phase" | "state">;
 
@@ -129,19 +149,7 @@ export function LogLegend({
                   title={failure.message}
                 >
                   {"\u00b7 "}
-                  {failure.kind === "log-not-kept"
-                    ? t("empty", "chipLogNotKept")
-                    : failure.kind === "no-previous-run"
-                      ? t("empty", "chipNoEarlierRun")
-                      : failure.kind === "gone"
-                        ? t("empty", "chipEnded")
-                        : // A stream that could never attach was not lost.
-                          // The apiserver refuses one for a container that
-                          // has not started, and that is a fact about the
-                          // pod rather than about the connection.
-                          state?.type === "waiting"
-                          ? t("empty", "chipNotStarted")
-                          : t("empty", "chipLost")}
+                  {t("empty", CHIP[failure.kind](state))}
                 </span>
               )}
             </button>

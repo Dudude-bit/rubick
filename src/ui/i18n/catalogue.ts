@@ -1444,6 +1444,7 @@ export const en = {
     downloadFullLog: "Download the full log",
     clearBuffered: "Clear what is buffered",
     reconnect: "Reconnect",
+    followAgain: "Follow again",
     showCurrentRun: "Show the current run",
     showFewer: "Show fewer",
     showAll: "Show all {n}",
@@ -6182,6 +6183,10 @@ export const en = {
     intakeStillSet:
       "Intake is still set: reconnecting resumes from now, and what the stream missed is not fetched back.",
     nothingToReconnectTo: "Nothing left to reconnect to",
+    nodeStoppedFollowing: "The node stopped following {pod}/{container}.",
+    stillRunningUnfollowed:
+      "{container} is still running, but its new lines will not reach this pane until it is followed again.",
+    nodeSaid: "The node said: {said}",
     // Beside the status on every page and peek: what the object's own Helm
     // annotation says, which is a claim and not a read.
     installedByRelease: "Installed by the Helm release {name}",
@@ -6230,6 +6235,7 @@ export const en = {
     chipEnded: "ended",
     chipNotStarted: "not started",
     chipLost: "lost",
+    chipNotFollowed: "not followed",
     noneHasRestarted:
       ": none of them has restarted, so there is nothing before the run they are on.",
     everyContainerHidden: "Every container is hidden.",

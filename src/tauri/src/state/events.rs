@@ -95,6 +95,12 @@ pub enum StreamFailureKind {
     /// The run happened and the node dropped its log. Not a transport
     /// failure: retrying reaches the same node, which still does not have it.
     LogNotKept,
+    /// The node stopped following a container the pod's status still shows
+    /// on the same run: it closed the body, or gave up with its own words
+    /// (`failed to create fsnotify watcher: too many open files`), which the
+    /// message carries. The container did not end, so following again is
+    /// worth offering.
+    FollowStopped,
 }
 
 /// The kubelet's answer, with a 200 and `text/plain`, when the node no longer

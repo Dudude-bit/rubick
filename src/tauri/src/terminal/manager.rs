@@ -190,7 +190,8 @@ impl TerminalManager {
                             // either kind here still means the shell did not open.
                             StreamFailureKind::Broken
                             | StreamFailureKind::NoPreviousRun
-                            | StreamFailureKind::LogNotKept => {
+                            | StreamFailureKind::LogNotKept
+                            | StreamFailureKind::FollowStopped => {
                                 format!("Could not open the shell: {cause}.")
                             }
                         },

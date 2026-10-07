@@ -16,6 +16,10 @@ export type { StreamFailureKind };
  * its log, said by the kubelet with a 200 and the sentence in the body.
  * Retrying reaches the same node, which still does not have it.
  *
+ * `follow-stopped` is the node letting go of a container whose run the
+ * pod's status still shows going, sometimes with its own words in the
+ * message. Nothing ended, so following again is the way back.
+ *
  * `noPreviousRun` is neither: the run asked for does not exist because
  * the container has never restarted. Its own kind because the apiserver
  * phrases it as a 400 ending in "not found", which would otherwise read
