@@ -5,6 +5,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import type { ServiceInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
+import { None } from "@/components/ui/none";
 
 interface ServiceAccessInfoProps {
   service: ServiceInfo;
@@ -25,7 +26,7 @@ export function ServiceAccessInfo({
   // Build access URLs based on service type
   const accessItems: Array<{
     label: string;
-    url: string;
+    url: string | null;
     canOpen: boolean;
     description: string;
   }> = [];
@@ -54,7 +55,7 @@ export function ServiceAccessInfo({
   if (service.type === "ExternalName") {
     accessItems.push({
       label: t("empty", "accessExternalName"),
-      url: service.clusterIp || "N/A",
+      url: service.externalName,
       canOpen: false,
       description: t("empty", "accessExternalNameHint"),
     });
@@ -88,25 +89,33 @@ export function ServiceAccessInfo({
           <div key={idx} className="flex items-center justify-between py-3">
             <div className="flex-1 min-w-0 flex flex-col gap-1">
               <span className="text-sm font-medium">{item.label}</span>
-              <code className="text-sm font-mono text-fg-mid break-all">
-                {item.url}
-              </code>
+              {item.url === null ? (
+                <None className="text-sm" />
+              ) : (
+                <code className="text-sm font-mono text-fg-mid break-all">
+                  {item.url}
+                </code>
+              )}
               <p className="text-xs text-fg-mut">{item.description}</p>
             </div>
             <div className="flex items-center gap-2 ml-3">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => copyToClipboard(item.url)}
-                title={t("action", "copy")}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
-              {item.canOpen && (
+              {item.url !== null && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => window.open(item.url, "_blank", "noreferrer")}
+                  onClick={() => copyToClipboard(item.url ?? "")}
+                  title={t("action", "copy")}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              )}
+              {item.canOpen && item.url !== null && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    window.open(item.url ?? "", "_blank", "noreferrer")
+                  }
                   title={t("action", "openInBrowser")}
                 >
                   <ExternalLink className="h-4 w-4" />

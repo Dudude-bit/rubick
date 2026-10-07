@@ -379,6 +379,7 @@ describe("a Service's port forward", () => {
       type: "ClusterIP",
       sessionAffinity: "None",
       clusterIp: "10.43.0.7",
+      externalName: null,
       externalIps: [],
       loadBalancerIps: [],
       ports: ports.map((port) => ({

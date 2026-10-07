@@ -162,6 +162,7 @@ const service = (name: string, ports: number[] = [8080]): ServiceInfo => ({
   type: "ClusterIP",
   sessionAffinity: "None",
   clusterIp: "10.0.0.1",
+  externalName: null,
   externalIps: [],
   loadBalancerIps: [],
   ports: ports.map((port) => ({

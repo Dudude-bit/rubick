@@ -122,6 +122,19 @@ export const NETWORK_SOURCES: PeekSources = {
             ),
           },
           { label: t("columns", "type"), value: service.type },
+          ...(service.type === "ExternalName"
+            ? [
+                {
+                  label: t("columns", "externalName"),
+                  value: (
+                    <CopyableAddress
+                      value={service.externalName}
+                      label={t("columns", "externalName")}
+                    />
+                  ),
+                },
+              ]
+            : []),
           {
             label: t("columns", "clusterIp"),
             value: (

@@ -459,6 +459,7 @@ export interface ServiceInfo {
   type: string;
   sessionAffinity: string;
   clusterIp: string | null;
+  externalName: string | null;
   externalIps: string[];
   loadBalancerIps: string[];
   ports: ServicePortInfo[];

@@ -270,6 +270,7 @@ function buildServiceInfo(): ServiceInfo {
     type: "ClusterIP",
     sessionAffinity: "None",
     clusterIp: "10.10.19.25",
+    externalName: null,
     externalIps: [],
     loadBalancerIps: [],
     ports: [

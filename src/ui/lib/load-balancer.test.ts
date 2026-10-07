@@ -23,6 +23,7 @@ function service(
     type,
     sessionAffinity: "None",
     clusterIp: "10.0.0.1",
+    externalName: null,
     externalIps: [],
     loadBalancerIps,
     ports: [],

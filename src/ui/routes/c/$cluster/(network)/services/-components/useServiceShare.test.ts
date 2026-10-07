@@ -24,6 +24,7 @@ const service: ServiceInfo = {
   type: "ClusterIP",
   sessionAffinity: "None",
   clusterIp: "10.0.0.5",
+  externalName: null,
   externalIps: [],
   loadBalancerIps: [],
   ports: [

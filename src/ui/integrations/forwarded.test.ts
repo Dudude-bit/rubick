@@ -56,6 +56,7 @@ const service = (
       protocol: "TCP",
     })),
     clusterIp: "10.0.0.1",
+    externalName: null,
     externalIps: [],
     loadBalancerIps: [],
     sessionAffinity: "None",

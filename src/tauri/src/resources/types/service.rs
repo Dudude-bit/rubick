@@ -17,6 +17,7 @@ pub struct ServiceInfo {
     pub type_: String,
     pub session_affinity: String,
     pub cluster_ip: Option<String>,
+    pub external_name: Option<String>,
     pub external_ips: Vec<String>,
     pub load_balancer_ips: Vec<String>,
     pub ports: Vec<ServicePortInfo>,
@@ -90,6 +91,9 @@ impl From<&Service> for ServiceInfo {
                 .and_then(|s| s.session_affinity.clone())
                 .unwrap_or_else(|| "None".to_string()),
             cluster_ip: spec.and_then(|s| s.cluster_ip.clone()),
+            external_name: spec
+                .and_then(|s| s.external_name.clone())
+                .filter(|name| !name.is_empty()),
             external_ips: spec
                 .and_then(|s| s.external_ips.clone())
                 .unwrap_or_default(),
@@ -100,5 +104,31 @@ impl From<&Service> for ServiceInfo {
             annotations: service.annotations().clone(),
             created_at: service.creation_timestamp().map(|t| t.moment()),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The Access tab printed "N/A" for the one thing an ExternalName Service
+    /// has, because the row never carried `spec.externalName`.
+    #[test]
+    fn an_external_name_service_carries_the_name_it_resolves_to() {
+        let service: Service = serde_json::from_value(serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "Service",
+            "metadata": { "name": "external-demo", "namespace": "k8s-gui-test" },
+            "spec": {
+                "type": "ExternalName",
+                "externalName": "example.com",
+                "sessionAffinity": "None"
+            },
+            "status": { "loadBalancer": {} }
+        }))
+        .unwrap();
+        let info = ServiceInfo::from(&service);
+        assert_eq!(info.external_name.as_deref(), Some("example.com"));
+        assert_eq!(info.cluster_ip, None);
     }
 }

@@ -319,6 +319,7 @@ export const ru: Catalogue = {
     powers: "Даёт",
     scrapedFrom: "Источник",
     externalIp: "Внешний IP",
+    externalName: "Внешнее имя",
     environment: "Окружение",
     says: "Указывает",
     assumedBy: "Кто принимает",

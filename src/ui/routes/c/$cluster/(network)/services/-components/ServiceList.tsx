@@ -69,6 +69,11 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     meta: { floor: IPV4_CELL_PX + 16 },
     cell: ({ row }) => {
       const service = row.original;
+      // kubectl prints an ExternalName Service's alias in this column.
+      if (service.type === "ExternalName")
+        return (
+          <AddressCell value={service.externalName} labelKey="externalName" />
+        );
       if (service.externalIps.length === 0 && service.type !== "LoadBalancer")
         return <None />;
       return (

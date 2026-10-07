@@ -224,7 +224,7 @@ export function AddressCell({
   labelKey,
 }: {
   value: string | null;
-  labelKey: "clusterIp" | "externalIp";
+  labelKey: "clusterIp" | "externalIp" | "externalName";
 }) {
   const t = useT();
   return <CopyableAddress value={value} label={t("columns", labelKey)} />;

@@ -348,6 +348,7 @@ export const en = {
     powers: "Powers",
     scrapedFrom: "Scraped from",
     externalIp: "External IP",
+    externalName: "External name",
     environment: "Environment",
     says: "Says",
     assumedBy: "Assumed by",

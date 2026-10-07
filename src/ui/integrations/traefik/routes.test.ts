@@ -228,6 +228,7 @@ describe("which hosts reach a Service", () => {
         type: "LoadBalancer",
         sessionAffinity: "None",
         clusterIp: "10.0.0.9",
+        externalName: null,
         externalIps: [],
         loadBalancerIps: [],
         ports: [],

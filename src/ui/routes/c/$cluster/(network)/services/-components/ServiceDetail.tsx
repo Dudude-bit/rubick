@@ -94,6 +94,19 @@ export function ServiceDetail() {
       ) : null,
     },
     { label: t("columns", "type"), value: service?.type },
+    ...(service?.type === "ExternalName"
+      ? [
+          {
+            label: t("columns", "externalName"),
+            value: (
+              <CopyableAddress
+                value={service.externalName}
+                label={t("columns", "externalName")}
+              />
+            ),
+          },
+        ]
+      : []),
     // A headless service has no cluster IP at all; "None" is the API's own
     // word for it and means something different from "not assigned yet".
     {
