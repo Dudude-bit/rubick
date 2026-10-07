@@ -1600,7 +1600,7 @@ function ClusterGroup({
       id={domId}
       className={cn(
         "mt-1 flex items-center gap-2 rounded-[5px] px-2 py-1 text-[11px] first:mt-0",
-        action !== "none" && "cursor-pointer hover:bg-hover",
+        action !== "none" && "cursor-pointer",
         selected && action !== "none" && "bg-sel"
       )}
     >
@@ -1655,7 +1655,7 @@ function Row({
       onAuxClick={(event) => event.button === 1 && onPick(event)}
       onPointerMove={onHover}
       className={cn(
-        "flex w-full cursor-pointer items-center gap-2 rounded-[5px] px-2 py-[5px] text-left text-xs transition-colors hover:bg-hover",
+        "flex w-full cursor-pointer items-center gap-2 rounded-[5px] px-2 py-[5px] text-left text-xs transition-colors",
         selected ? "bg-sel text-fg" : "text-fg-mid"
       )}
     >

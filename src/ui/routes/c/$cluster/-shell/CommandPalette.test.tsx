@@ -494,6 +494,20 @@ describe("the command palette's object actions", () => {
   });
 
   /**
+   * Marco's pointer rested on one row while the keyboard selected another and
+   * both were lit, so Enter's target was a guess. The selection is the only
+   * highlight; fails if a row paints its own hover tint again.
+   */
+  it("lights one row, the selected one, and leaves hover to the selection", async () => {
+    search.hits = [hit(), hit({ name: "burst-two" })];
+    await open("burst");
+    await screen.findByText("burst-demo");
+    const rows = screen.getAllByRole("option");
+    expect(rows.length).toBeGreaterThan(1);
+    for (const row of rows) expect(row.className).not.toMatch(/hover:bg-/);
+  });
+
+  /**
    * An action runs through the registry and its dialog outlives the
    * palette: closing the palette must not take the confirmation with it.
    */
