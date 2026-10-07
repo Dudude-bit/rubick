@@ -119,7 +119,9 @@ describe("the legacy object", () => {
       published({ ready: 1240, slices: 12 }),
       t
     );
-    expect(note).toContain("This object lists 1000 of 1240 addresses");
+    expect(note).toContain(
+      "This object lists 1\u202f000 of 1\u202f240 addresses"
+    );
     expect(note).toContain("12 EndpointSlices");
     expect(note).toContain("endpoints.kubernetes.io/over-capacity");
   });

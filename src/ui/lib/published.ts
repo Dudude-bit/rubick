@@ -7,6 +7,7 @@
  * puts them into a sentence, and refuses to invent the ones that are absent.
  */
 
+import { formatCount } from "@/lib/count";
 import type { T } from "@/i18n/useT";
 import type {
   ObjectRef,
@@ -215,15 +216,19 @@ export function legacyNote(
   }
   if (listed < real) {
     return t("readings", "epListsOf", {
-      listed,
-      real,
+      listed: formatCount(listed),
+      real: formatCount(real),
       from,
       why: overCapacity
         ? t("readings", "epOverCapacity")
         : t("readings", "epCannotExpress"),
     });
   }
-  return t("readings", "epDisagree", { listed, real, from });
+  return t("readings", "epDisagree", {
+    listed: formatCount(listed),
+    real: formatCount(real),
+    from,
+  });
 }
 
 /** `10.42.1.51:8080`, the bare address where the slice publishes no port, or `null` for a pod with no IP yet. */
