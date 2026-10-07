@@ -6,10 +6,12 @@ import type { ActionWarning } from "@/lib/governance";
 import { renderWithRouter } from "@/test/render";
 
 vi.mock("@/lib/commands", () => ({
-  commands: { setAutoscalerBounds: vi.fn() },
+  commands: { setAutoscalerBounds: vi.fn(), checkAccess: vi.fn() },
 }));
 
 import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
+import type { AccessQuery } from "@/generated/types";
 import { ScaleDialog } from "./ScaleDialog";
 
 const stuck: ActionWarning = {
@@ -129,5 +131,42 @@ describe("the keyboard in a Scale dialog with an autoscaler's bounds", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "cart already has minReplicas 2 and maxReplicas 5."
     );
+  });
+});
+
+describe("the autoscaler's bounds for a reader who may not change it", () => {
+  /**
+   * The Scale dialog offered new bounds to a reader whose Role reads
+   * autoscalers and patches none. Fails if Change bounds stays live, or
+   * reaches its confirmation, while can-i patch horizontalpodautoscalers
+   * says no.
+   */
+  it("greys Change bounds with the can-i question and patches nothing", async () => {
+    vi.mocked(commands.checkAccess).mockImplementation(
+      async (queries: AccessQuery[]) =>
+        queries.map((query) => ({ ...query, allowed: false }))
+    );
+    useClusterStore.setState((s) => ({
+      currentContext: "prod",
+      isConnected: true,
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+    await open();
+    const change = () => screen.getByRole("button", { name: "Change bounds" });
+    await waitFor(() =>
+      expect(change()).toHaveAttribute("aria-disabled", "true")
+    );
+    await userEvent.hover(change());
+    expect(
+      (
+        await screen.findAllByText(
+          /can-i patch horizontalpodautoscalers.autoscaling -n shop/
+        )
+      ).length
+    ).toBeGreaterThan(0);
+    await setBounds("3", "6");
+    await userEvent.click(change());
+    expect(screen.queryByText(/Set cart to minReplicas/)).toBeNull();
+    expect(commands.setAutoscalerBounds).not.toHaveBeenCalled();
   });
 });

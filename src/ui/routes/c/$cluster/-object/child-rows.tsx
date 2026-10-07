@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Undo2 } from "lucide-react";
 
 import { ROLE_DOT, statusRole, type StatusRole } from "@/lib/status-role";
 import { objectLink } from "@/lib/links";
@@ -16,6 +15,7 @@ import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 import { None } from "@/components/ui/none";
 import { ownStatusWord } from "@/lib/status-words";
+import { RollBackLink } from "../-changes/RollBackLink";
 
 /**
  * The objects a workload owns, listed on its detail page.
@@ -190,11 +190,14 @@ export function RevisionRows({
   revisions,
   emptyMessage,
   onRollback,
+  rollbackDenied,
 }: {
   revisions: ReplicaSetInfo[];
   emptyMessage?: string;
   /** Offered on every older revision. */
   onRollback?: (rs: ReplicaSetInfo) => void;
+  /** Why the cluster will not take a rollback from this user. */
+  rollbackDenied?: string;
 }) {
   const t = useT();
   return (
@@ -227,14 +230,11 @@ export function RevisionRows({
                     })}
               </span>
               {onRollback && !live && rs.revision !== null && (
-                <button
-                  type="button"
+                <RollBackLink
                   onClick={() => onRollback(rs)}
-                  className="ml-2 inline-flex items-center gap-1 rounded text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
-                >
-                  <Undo2 className="h-3 w-3" aria-hidden="true" />
-                  {t("action", "rollBackToThis")}
-                </button>
+                  denied={rollbackDenied}
+                  className="ml-2"
+                />
               )}
             </>
           ),

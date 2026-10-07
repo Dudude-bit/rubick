@@ -24,6 +24,7 @@ import { conditionsMark, viewGlyph } from "@/components/object/detail-tab";
 import {
   ConditionRows,
   DetailAction,
+  ReasonedAction,
   UsageRow,
 } from "@/components/object/detail-blocks";
 import { UsageBlock } from "../../../-usage/usage-block";
@@ -493,26 +494,29 @@ export function NodeDetail() {
         actions={
           <>
             {node?.unschedulable ? (
-              <DetailAction
+              <ReasonedAction
                 label={t("action", "uncordon")}
                 icon={Shield}
                 onClick={() => node && actions.uncordon(node.name)}
                 disabled={!node}
+                reason={actions.denied}
               />
             ) : (
-              <DetailAction
+              <ReasonedAction
                 label={t("action", "cordon")}
                 icon={ShieldOff}
                 onClick={() => node && actions.cordon(node.name)}
                 disabled={!node}
+                reason={actions.denied}
               />
             )}
-            <DetailAction
+            <ReasonedAction
               label={t("action", "drain")}
               icon={AlertTriangle}
               onClick={() => node && actions.drain(node.name)}
               disabled={!node}
               danger
+              reason={actions.denied}
             />
             <DetailAction
               label={t("action", "debugNode")}

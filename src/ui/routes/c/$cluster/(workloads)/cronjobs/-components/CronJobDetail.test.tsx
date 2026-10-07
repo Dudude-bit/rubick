@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import type { CronJobDetailInfo } from "@/generated/types";
 
 vi.mock("@/hooks", () => ({
@@ -11,6 +11,7 @@ vi.mock("@/lib/commands", () => ({
     getCronjob: vi.fn(async () => buildCronJob()),
     deleteCronjob: vi.fn(),
     listJobs: vi.fn(async () => []),
+    checkAccess: vi.fn(),
   },
 }));
 
@@ -18,6 +19,8 @@ import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { renderWithRouter } from "@/test/render";
 import { CronJobDetail } from "./CronJobDetail";
+import { useClusterStore } from "@/stores/clusterStore";
+import { marcoReview } from "@/test/marco";
 
 function buildCronJob(
   overrides: Partial<CronJobDetailInfo> = {}
@@ -217,5 +220,40 @@ describe("CronJobDetail", () => {
       await screen.findByText(/keeps the last 2 succeeded and 2 failed runs/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/succeeded · /)).toBeNull();
+  });
+});
+
+describe("Run now and the access review", () => {
+  beforeEach(() =>
+    useClusterStore.setState((s) => ({
+      currentContext: "prod",
+      isConnected: true,
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }))
+  );
+  const runNow = () => screen.getByRole("button", { name: "Run now" });
+
+  /**
+   * A run is a new Job. Fails if Run now stays live for a reader the cluster
+   * refuses create jobs, or if it opens the run dialog anyway.
+   */
+  it("is greyed with the can-i question where jobs may not be created", async () => {
+    mockDetail(buildCronJob());
+    vi.mocked(commands.checkAccess).mockImplementation(marcoReview);
+    await renderPage();
+    await waitFor(() =>
+      expect(runNow()).toHaveAttribute("aria-disabled", "true")
+    );
+    fireEvent.click(runNow());
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  /** Marco's Role grants create on jobs in team-checkout. Fails if the guard shuts it. */
+  it("stays offered where the review allows it", async () => {
+    mockDetail(buildCronJob({ namespace: "team-checkout" }));
+    vi.mocked(commands.checkAccess).mockImplementation(marcoReview);
+    await renderPage();
+    await waitFor(() => expect(commands.checkAccess).toHaveBeenCalled());
+    expect(runNow()).not.toHaveAttribute("aria-disabled");
   });
 });

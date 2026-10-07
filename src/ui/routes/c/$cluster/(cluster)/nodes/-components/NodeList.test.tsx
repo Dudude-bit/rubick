@@ -30,8 +30,11 @@ vi.mock("@tauri-apps/api/event", () => ({
 vi.mock("@/hooks/useMetrics", () => ({
   useMetrics: () => ({ nodeMetrics: [], nodeStatus: null }),
 }));
+const nodeActions = vi.hoisted(() => ({
+  value: { dialogs: null } as Record<string, unknown>,
+}));
 vi.mock("./useNodeActions", () => ({
-  useNodeActions: () => ({ dialogs: null }),
+  useNodeActions: () => nodeActions.value,
 }));
 
 const drawn = vi.hoisted(() => ({ nodes: [] as unknown[] }));
@@ -131,5 +134,66 @@ describe("NodeList", () => {
 
     fireEvent.click(screen.getByRole("tab", { name: "Table" }));
     await waitFor(() => expect(router.state.location.search).toEqual({}));
+  });
+});
+
+describe("NodeList for a reader who may not patch nodes", () => {
+  /**
+   * The row's Cordon, Uncordon and Drain were live for a reader the cluster
+   * refuses a patch on nodes. Fails if any of them runs.
+   */
+  it("greys the row's Cordon, Uncordon and Drain with the reason", async () => {
+    const cordon = vi.fn();
+    const uncordon = vi.fn();
+    const drain = vi.fn();
+    nodeActions.value = {
+      dialogs: null,
+      cordon,
+      uncordon,
+      drain,
+      denied:
+        "Your access does not allow this: the cluster answers no to kubectl auth can-i patch nodes.",
+    };
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    });
+    const quantities = {
+      cpu: "2",
+      memory: "4Gi",
+      pods: "110",
+      ephemeralStorage: null,
+    };
+    client.setQueryData(queryKeys.resources(ResourceType.Node, null), {
+      rows: [
+        {
+          name: "node01",
+          uid: "n1",
+          status: { ready: true, conditions: [], addresses: [] },
+          roles: [],
+          version: "v1.33.0",
+          os: "linux",
+          arch: "amd64",
+          containerRuntime: "containerd://2.0.0",
+          labels: {},
+          taints: [],
+          unschedulable: false,
+          capacity: quantities,
+          allocatable: quantities,
+          providerId: null,
+          createdAt: "2026-10-01T00:00:00Z",
+        },
+      ],
+      unread: [],
+    });
+    await open(client);
+    for (const name of ["Cordon", "Uncordon", "Drain"]) {
+      const button = await screen.findByRole("button", { name });
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      fireEvent.click(button);
+    }
+    expect(cordon).not.toHaveBeenCalled();
+    expect(uncordon).not.toHaveBeenCalled();
+    expect(drain).not.toHaveBeenCalled();
+    nodeActions.value = { dialogs: null };
   });
 });

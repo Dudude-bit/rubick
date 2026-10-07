@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { ChevronDown, ChevronRight, CirclePlus, Undo2 } from "lucide-react";
+import { ChevronDown, ChevronRight, CirclePlus } from "lucide-react";
+import { RollBackLink } from "./RollBackLink";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
 import {
@@ -25,6 +26,7 @@ export function ChangesTimeline({
   since,
   showObject = false,
   onRollback,
+  rollbackDenied,
 }: {
   items: ChangeItem[];
   /** A moment the reader came from; everything after it is marked. */
@@ -33,6 +35,8 @@ export function ChangesTimeline({
   showObject?: boolean;
   /** Offered on every older revision whose template was read. */
   onRollback?: (revision: Revision) => void;
+  /** Why the cluster will not take a rollback from this user. */
+  rollbackDenied?: string;
 }) {
   const t = useT();
   if (items.length === 0) {
@@ -63,7 +67,12 @@ export function ChangesTimeline({
                   ? "?"
                   : clock(item.at)}
             </span>
-            <Row item={item} showObject={showObject} onRollback={onRollback} />
+            <Row
+              item={item}
+              showObject={showObject}
+              onRollback={onRollback}
+              rollbackDenied={rollbackDenied}
+            />
           </li>
         );
       })}
@@ -80,10 +89,12 @@ function Row({
   item,
   showObject,
   onRollback,
+  rollbackDenied,
 }: {
   item: ChangeItem;
   showObject: boolean;
   onRollback?: (revision: Revision) => void;
+  rollbackDenied?: string;
 }) {
   const t = useT();
   switch (item.kind) {
@@ -127,14 +138,11 @@ function Row({
               {revision.name}
             </span>
             {onRollback && canRollBackTo(revision) && (
-              <button
-                type="button"
+              <RollBackLink
                 onClick={() => onRollback(revision)}
-                className="ml-auto inline-flex items-center gap-1 rounded text-[11px] text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
-              >
-                <Undo2 className="h-3 w-3" aria-hidden="true" />
-                {t("action", "rollBackToThis")}
-              </button>
+                denied={rollbackDenied}
+                className="ml-auto text-[11px]"
+              />
             )}
           </div>
           {revision.changeCause ? (

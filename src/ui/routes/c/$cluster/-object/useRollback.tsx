@@ -7,6 +7,7 @@ import type { Revision } from "@/lib/changes";
 import { commands } from "@/lib/commands";
 import type { DeliveryIntercept } from "@/lib/delivery";
 import { queryKeys } from "@/lib/query-keys";
+import { guardedOf, noteDenied, useDenied } from "@/lib/access";
 import type { ResourceKind } from "@/lib/resource-registry";
 import { RollbackDialog, type RollbackSubject } from "./RollbackDialog";
 
@@ -23,11 +24,18 @@ export function useRollback({
   subject: RollbackSubject;
   revisions: Revision[];
   intercept: DeliveryIntercept | null;
-}): { offer: (revision: Revision) => void; dialog: ReactNode } {
+}): {
+  offer: (revision: Revision) => void;
+  /** Why the cluster will not take a rollback from this user. */
+  denied: string | undefined;
+  dialog: ReactNode;
+} {
   const t = useT();
   const queryClient = useQueryClient();
   const [target, setTarget] = useState<Revision | null>(null);
   const { kind, name, namespace } = subject;
+  const guarded = guardedOf(kind, namespace);
+  const denied = useDenied(guarded).patch;
 
   const rollback = useResourceMutation(
     (revision: number) =>
@@ -50,6 +58,7 @@ export function useRollback({
         queryKeys.lists(kind as ResourceKind),
         queryKeys.deploymentReplicaSets(namespace, name),
       ],
+      onError: (error) => noteDenied("patch", guarded, error),
       onSuccess: () => {
         setTarget(null);
         queryClient.invalidateQueries({
@@ -71,5 +80,5 @@ export function useRollback({
       onConfirm={() => rollback.mutate(target.number!)}
     />
   );
-  return { offer: setTarget, dialog };
+  return { offer: setTarget, denied, dialog };
 }

@@ -189,3 +189,27 @@ describe("a running container for a reader who may neither exec nor forward", ()
     vi.mocked(invoke).mockImplementation(async () => undefined);
   });
 });
+
+describe("a Deployment's template for a reader who may not patch it", () => {
+  /** Fails if Update image stays live while can-i patch deployments says no. */
+  it("greys Update image with the reason", async () => {
+    const onUpdateImage = vi.fn();
+    await renderWithRouter(
+      <ContainerRows
+        template={{
+          containers: [
+            declared({ readiness: null, liveness: null, startup: null }),
+          ],
+          initContainers: [],
+        }}
+        namespace="shop"
+        onUpdateImage={onUpdateImage}
+        imageDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch deployments.apps -n shop."
+      />
+    );
+    const update = screen.getByRole("button", { name: "Update image" });
+    expect(update).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(update);
+    expect(onUpdateImage).not.toHaveBeenCalled();
+  });
+});

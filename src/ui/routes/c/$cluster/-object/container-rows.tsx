@@ -127,6 +127,8 @@ interface ContainerRowsCommon {
   /** Why the cluster will not open a shell for this user; Shell stays, greyed, and says so. */
   shellDenied?: string;
   onUpdateImage?: (containerName: string, currentImage: string) => void;
+  /** Why the cluster will not take a new image from this user. */
+  imageDenied?: string;
   /** Opens the log viewer soloed on this container. */
   onOpenLogs?: (containerName: string) => void;
 }
@@ -159,6 +161,7 @@ export function ContainerRows(props: ContainerRowsProps) {
     onOpenShell,
     shellDenied,
     onUpdateImage,
+    imageDenied,
     onOpenLogs,
   } = props;
 
@@ -237,6 +240,7 @@ export function ContainerRows(props: ContainerRowsProps) {
                   onOpenShell={onOpenShell}
                   shellDenied={shellDenied}
                   onUpdateImage={onUpdateImage}
+                  imageDenied={imageDenied}
                   onOpenLogs={onOpenLogs}
                 />
               </div>
@@ -289,6 +293,7 @@ function ContainerBlock({
   onOpenShell,
   shellDenied,
   onUpdateImage,
+  imageDenied,
   onOpenLogs,
 }: {
   container: ContainerInfo | DeploymentContainerInfo;
@@ -299,6 +304,7 @@ function ContainerBlock({
   onOpenShell?: (containerName: string) => void;
   shellDenied?: string;
   onUpdateImage?: (containerName: string, currentImage: string) => void;
+  imageDenied?: string;
   onOpenLogs?: (containerName: string) => void;
 }) {
   const t = useT();
@@ -427,10 +433,11 @@ function ContainerBlock({
               />
             )}
             {!runtime && onUpdateImage && (
-              <DetailAction
+              <ReasonedAction
                 label={t("action", "updateImage")}
                 icon={ImageIcon}
                 onClick={() => onUpdateImage(container.name, container.image)}
+                reason={imageDenied}
               />
             )}
           </>

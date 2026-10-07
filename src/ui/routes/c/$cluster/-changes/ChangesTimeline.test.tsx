@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { invoke } from "@tauri-apps/api/core";
 
-import type { ChangeItem } from "@/lib/changes";
+import type { ChangeItem, Revision } from "@/lib/changes";
+import type { AccessQuery } from "@/generated/types";
+import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
+import { useRollback } from "../-object/useRollback";
 import { ChangesTimeline } from "./ChangesTimeline";
 
 const T0 = Date.parse("2026-09-08T02:10:00Z");
@@ -256,5 +260,78 @@ describe("ChangesTimeline", () => {
     expect(document.body.textContent).toContain(
       "created; nothing before this belongs to it"
     );
+  });
+});
+
+describe("a rollback the cluster will not take from this reader", () => {
+  const revision = (number: number, current: boolean): Revision => ({
+    changeCause: null,
+    containers: [],
+    initContainers: [],
+    templateAnnotations: {},
+    templateKnown: true,
+    template: null,
+    at: new Date(T0 + number * HOUR).toISOString(),
+    id: `r${number}`,
+    number,
+    name: `api-${number}`,
+    current,
+  });
+  const revisions = [revision(2, true), revision(1, false)];
+
+  function Timeline() {
+    const rollback = useRollback({
+      subject: { kind: "Deployment", name: "api", namespace: "shop" },
+      revisions,
+      intercept: null,
+    });
+    return (
+      <>
+        <ChangesTimeline
+          items={revisions.map((r) => ({
+            kind: "revision",
+            at: Date.parse(r.at!),
+            readopted: false,
+            against: { state: "oldest" },
+            revision: r,
+          }))}
+          onRollback={rollback.offer}
+          rollbackDenied={rollback.denied}
+        />
+        {rollback.dialog}
+      </>
+    );
+  }
+
+  /**
+   * "Roll back to this" opened a confirmation whose rollback the cluster
+   * refuses. Fails if it stays live while can-i patch deployments says no.
+   */
+  it("greys Roll back to this with the can-i question and opens nothing", async () => {
+    useClusterStore.setState((s) => ({
+      currentContext: "dev",
+      isConnected: true,
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+    vi.mocked(invoke).mockImplementation(async (command: string, args) =>
+      command === "check_access"
+        ? (args as { queries: AccessQuery[] }).queries.map((query) => ({
+            ...query,
+            allowed: false,
+          }))
+        : undefined
+    );
+    await renderWithRouter(<Timeline />, {
+      at: "/c/dev",
+      route: "/c/$cluster",
+    });
+    const back = () =>
+      screen.getByRole("button", { name: /Roll back to this revision/ });
+    await waitFor(() =>
+      expect(back()).toHaveAttribute("aria-disabled", "true")
+    );
+    fireEvent.click(back());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    vi.mocked(invoke).mockImplementation(async () => undefined);
   });
 });

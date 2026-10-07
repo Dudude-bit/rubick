@@ -27,6 +27,7 @@ import {
 import { ContainerRows } from "../../../-object/container-rows";
 import { deliveryOfKind } from "@/lib/delivery";
 import { InterceptedAction } from "../../../-delivery/delivery-intercept";
+import { guardedOf, noteDenied, useDeniedOf } from "@/lib/access";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { JobRows } from "../../../-object/child-rows";
 import { describeCron, nextCronRun } from "./cron-schedule";
@@ -164,6 +165,8 @@ export function CronJobDetail() {
   // this weekly wants to find their run again in a list of forty.
   const [runOpen, setRunOpen] = useState(false);
   const [runName, setRunName] = useState("");
+  const runs = guardedOf(ResourceType.Job, namespace || null);
+  const [runDenied] = useDeniedOf([runs && { ...runs, verb: "create" }]);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const runMutation = useMutation({
@@ -180,6 +183,7 @@ export function CronJobDetail() {
       setRunOpen(false);
     },
     onError: (error: Error) => {
+      noteDenied("create", runs, error);
       toastError(t("action", "cronRunFailed"), error);
     },
   });
@@ -483,6 +487,7 @@ export function CronJobDetail() {
                 setRunOpen(true);
               }}
               busy={runMutation.isPending}
+              reason={runDenied}
             />
             <DeleteAction
               kind={ResourceType.CronJob}

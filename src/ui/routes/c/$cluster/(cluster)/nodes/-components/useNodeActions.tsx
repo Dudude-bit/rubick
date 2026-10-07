@@ -12,6 +12,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
+import { guardedOf, noteDenied, useDenied } from "@/lib/access";
 
 export interface NodeActions {
   cordon: (node: string) => void;
@@ -20,6 +21,8 @@ export interface NodeActions {
   drain: (node: string) => void;
   /** The node a drain is running on, if one is. */
   draining: string | null;
+  /** Why the cluster will not let this user cordon, uncordon or drain a node. */
+  denied: string | undefined;
   /** Mount once beside the surface; the dialog outlives any row. */
   dialogs: ReactNode;
 }
@@ -36,6 +39,8 @@ export function useNodeActions(): NodeActions {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const asking = useAsk();
+  const nodes = guardedOf(ResourceType.Node, null);
+  const denied = useDenied(nodes).patch;
 
   const invalidate = () => {
     void queryClient.invalidateQueries({
@@ -56,6 +61,7 @@ export function useNodeActions(): NodeActions {
       });
     },
     onError: (error) => {
+      noteDenied("patch", nodes, error);
       toast({
         title: t("action", "error"),
         description: t("action", "cordonFailed", { error: errorToShow(error) }),
@@ -74,6 +80,7 @@ export function useNodeActions(): NodeActions {
       });
     },
     onError: (error) => {
+      noteDenied("patch", nodes, error);
       toast({
         title: t("action", "error"),
         description: t("action", "uncordonFailed", {
@@ -192,6 +199,7 @@ export function useNodeActions(): NodeActions {
       setOpen(node);
     },
     draining: drainingNode(drain.state),
+    denied,
     dialogs,
   };
 }

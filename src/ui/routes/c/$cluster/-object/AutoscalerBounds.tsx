@@ -8,6 +8,9 @@ import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { boundsProblem, type ActionWarning } from "@/lib/governance";
 import { queryKeys } from "@/lib/query-keys";
+import { guardedOf, noteDenied, useDenied } from "@/lib/access";
+import { ReasonTip } from "@/components/object/detail-blocks";
+import { cn } from "@/lib/utils";
 
 /**
  * The way out the Scale dialog's autoscaler warning offers: the autoscaler's
@@ -32,6 +35,8 @@ export function AutoscalerBounds({
   const unchanged =
     bounds.min === autoscaler.minReplicas &&
     bounds.max === autoscaler.maxReplicas;
+  const guarded = guardedOf("HorizontalPodAutoscaler", autoscaler.namespace);
+  const denied = useDenied(guarded).patch;
 
   const save = useResourceMutation(
     () =>
@@ -55,6 +60,7 @@ export function AutoscalerBounds({
         queryKeys.details("HorizontalPodAutoscaler"),
       ],
       onSuccess: () => setConfirming(false),
+      onError: (error) => noteDenied("patch", guarded, error),
     }
   );
 
@@ -93,7 +99,7 @@ export function AutoscalerBounds({
             className="flex flex-wrap items-end gap-2"
             onSubmit={(event) => {
               event.preventDefault();
-              if (problem) return;
+              if (problem || denied) return;
               if (unchanged) setTried(true);
               else setConfirming(true);
             }}
@@ -132,9 +138,17 @@ export function AutoscalerBounds({
                 aria-invalid={problem === "hpaMinAboveMax"}
               />
             </div>
-            <Button type="submit" variant="outline" disabled={problem !== null}>
-              {t("action", "hpaBoundsChange")}
-            </Button>
+            <ReasonTip reason={denied}>
+              <Button
+                type="submit"
+                variant="outline"
+                disabled={!denied && problem !== null}
+                aria-disabled={denied ? true : undefined}
+                className={cn(denied && "cursor-default opacity-40")}
+              >
+                {t("action", "hpaBoundsChange")}
+              </Button>
+            </ReasonTip>
           </form>
           {problem ? (
             <p className="text-[11px] text-err" role="alert">

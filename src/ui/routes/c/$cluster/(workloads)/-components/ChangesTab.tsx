@@ -265,6 +265,7 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
           items={items}
           since={Number.isFinite(sinceMs) ? sinceMs : null}
           onRollback={rollback.offer}
+          rollbackDenied={rollback.denied}
         />
         {rollback.dialog}
         <p className="px-1.5 pt-2 text-[11px] text-fg-fnt">

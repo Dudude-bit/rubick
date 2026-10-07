@@ -59,12 +59,14 @@ import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { RestartAction } from "../../../-object/RestartDialog";
 import { readinessOf } from "@/lib/restart-plan";
 import { guardedOf, useDenied } from "@/lib/access";
+import { cn } from "@/lib/utils";
 import { useCriticalGate } from "@/hooks/useCriticalGate";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import {
   Composition,
   ConditionRows,
   ReasonedAction,
+  ReasonTip,
 } from "@/components/object/detail-blocks";
 import { WorkloadUsage } from "../../-components/workload-usage";
 import { serviceAccountRow } from "../../-components/identity-rows";
@@ -115,7 +117,7 @@ export function DeploymentDetail() {
     deleteResource: (name, ns) => commands.deleteDeployment(name, ns),
     defaultTab: "overview",
   });
-  const scaleDenied = useDenied(
+  const patchDenied = useDenied(
     guardedOf(ResourceType.Deployment, namespace || null)
   ).patch;
 
@@ -410,6 +412,7 @@ export function DeploymentDetail() {
           template={deployment}
           namespace={namespace}
           onUpdateImage={openImageDialog}
+          imageDenied={patchDenied}
         />
       ),
     },
@@ -431,6 +434,7 @@ export function DeploymentDetail() {
         <RevisionRows
           revisions={revisions}
           onRollback={(rs) => rollback.offer(revisionOfReplicaSet(rs))}
+          rollbackDenied={rollback.denied}
         />
       ),
     },
@@ -531,7 +535,7 @@ export function DeploymentDetail() {
             <PinAction kind="Deployment" namespace={namespace} name={name} />
             <ReasonedAction
               label={t("action", "scale")}
-              reason={scaleDenied}
+              reason={patchDenied}
               icon={Scale}
               onClick={openScaleDialog}
             />
@@ -608,14 +612,21 @@ export function DeploymentDetail() {
             <Button variant="outline" onClick={() => setImageDialogOpen(false)}>
               {t("action", "cancel")}
             </Button>
-            <Button
-              onClick={() => updateImageMutation.mutate()}
-              disabled={
-                updateImageMutation.isPending || !newImage || imageGate.blocked
-              }
-            >
-              {t("action", "update")}
-            </Button>
+            <ReasonTip reason={patchDenied}>
+              <Button
+                onClick={() => !patchDenied && updateImageMutation.mutate()}
+                disabled={
+                  !patchDenied &&
+                  (updateImageMutation.isPending ||
+                    !newImage ||
+                    imageGate.blocked)
+                }
+                aria-disabled={patchDenied ? true : undefined}
+                className={cn(patchDenied && "cursor-default opacity-40")}
+              >
+                {t("action", "update")}
+              </Button>
+            </ReasonTip>
           </DialogFooter>
         </DialogContent>
       </Dialog>

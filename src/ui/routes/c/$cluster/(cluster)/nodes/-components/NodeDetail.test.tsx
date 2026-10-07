@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import type { NodeBudget, NodeInfo, PodInfo } from "@/generated/types";
 
 // ----- Mocks -----
@@ -39,6 +39,7 @@ vi.mock("@/lib/commands", () => ({
     nodeResourceBudget: (name: string) => budgetMock(name),
     cordonNode: vi.fn(async () => undefined),
     uncordonNode: vi.fn(async () => undefined),
+    checkAccess: vi.fn(),
   },
 }));
 
@@ -48,8 +49,11 @@ vi.mock("../../../-debug", () => ({
 }));
 
 import { useResourceDetail } from "@/hooks";
+import { commands } from "@/lib/commands";
+import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { NodeDetail } from "./NodeDetail";
+import type { AccessQuery } from "@/generated/types";
 
 // ----- Fixtures -----
 
@@ -500,5 +504,39 @@ describe("the header actions", () => {
     );
     await renderPage();
     expect(screen.getByRole("button", { name: /uncordon/i })).toBeEnabled();
+  });
+});
+
+describe("NodeDetail for a reader who may read nodes and not change them", () => {
+  /**
+   * Cordon and Drain were live for a reader the cluster refuses a patch on
+   * nodes; the click was answered by a 403 toast. Fails if either stays
+   * runnable while can-i patch nodes says no.
+   */
+  it("greys Cordon and Drain with the can-i question", async () => {
+    vi.mocked(useResourceDetail).mockReturnValue(
+      defaultUseResourceDetailReturn(buildNode()) as unknown as ReturnType<
+        typeof useResourceDetail
+      >
+    );
+    vi.mocked(commands.checkAccess).mockImplementation(
+      async (queries: AccessQuery[]) =>
+        queries.map((query) => ({ ...query, allowed: false }))
+    );
+    useClusterStore.setState((s) => ({
+      currentContext: "prod",
+      isConnected: true,
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+    await renderPage();
+    for (const name of ["Cordon", "Drain"])
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name })).toHaveAttribute(
+          "aria-disabled",
+          "true"
+        )
+      );
+    fireEvent.click(screen.getByRole("button", { name: "Cordon" }));
+    expect(commands.cordonNode).not.toHaveBeenCalled();
   });
 });

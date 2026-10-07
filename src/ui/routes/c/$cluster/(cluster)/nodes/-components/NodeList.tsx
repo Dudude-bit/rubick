@@ -313,11 +313,13 @@ export function NodeList() {
         icon: ShieldOff,
         label: t("action", "cordon"),
         onClick: (item) => actions.cordon(item.name),
+        reason: () => actions.denied,
       },
       {
         icon: Shield,
         label: t("action", "uncordon"),
         onClick: (item) => actions.uncordon(item.name),
+        reason: () => actions.denied,
       },
       {
         icon: AlertTriangle,
@@ -326,6 +328,7 @@ export function NodeList() {
         // one action here that can be refused by something the reader cannot
         // see from this row.
         onClick: (item) => actions.drain(item.name),
+        reason: () => actions.denied,
         variant: "destructive",
       },
     ],
