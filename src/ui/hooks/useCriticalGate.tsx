@@ -65,6 +65,7 @@ export function useCriticalGate(): {
           onChange={(e) => setTyped(e.target.value)}
           placeholder={gate}
           autoComplete="off"
+          data-autofocus
         />
       </div>
     ) : null,

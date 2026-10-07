@@ -105,7 +105,7 @@ export function DangerousConfirmDialog({
             onChange={(e) => setInputValue(e.target.value)}
             placeholder={confirmationPlaceholder ?? expected}
             autoComplete="off"
-            autoFocus
+            data-autofocus
           />
         </div>
 

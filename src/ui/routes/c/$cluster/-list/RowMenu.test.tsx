@@ -34,6 +34,7 @@ import { hrefOf, objectLink } from "@/lib/links";
 import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
 import { planPeekActions } from "../-peek/peek-actions";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { renderWithRouter } from "@/test/render";
 
 interface Deployment {
@@ -283,6 +284,51 @@ describe("a list row's right-click menu", () => {
     answerSearch({ ...governedByAutoscaler, edges: [] });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(within(second).getByLabelText("Number of replicas")).toHaveFocus();
+  });
+
+  /**
+   * Dana chose Delete from a row's menu and typed the name: the letters went
+   * nowhere and the ring sat on Cancel, because the menu's focus trap took
+   * the field's focus back while the dialog mounted. Fails unless every
+   * opening puts the cursor in the type-the-name field.
+   */
+  it("puts the cursor in Delete's type-the-name field on every opening", async () => {
+    getDeployment.mockResolvedValue({ ...WEB, generation: 1 });
+    const user = userEvent.setup();
+    await draw();
+    for (const opening of [1, 2]) {
+      openMenu();
+      await user.click(screen.getByRole("menuitem", { name: /^Delete/ }));
+      const dialog = await screen.findByRole("alertdialog");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      const field = within(dialog).getByRole("textbox");
+      expect(field, `opening ${opening}`).toHaveFocus();
+      await user.keyboard("w");
+      expect(field).toHaveValue("w");
+      await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+      await vi.waitFor(() =>
+        expect(screen.queryByRole("alertdialog")).toBeNull()
+      );
+    }
+  });
+
+  /**
+   * On a cluster marked critical a rolling Restart asks for the cluster's
+   * name. Fails if the cursor is not in that field, the one the reader must
+   * fill, when the dialog opens from the menu.
+   */
+  it("puts the cursor in the cluster-name field of Restart on a critical cluster", async () => {
+    useClusterIdentityStore.getState().setCritical("prod", true);
+    useClusterStore.setState({ currentContext: "prod" });
+    getDeployment.mockResolvedValue({ ...WEB, generation: 1 });
+    const user = userEvent.setup();
+    await draw();
+    openMenu();
+    await user.click(screen.getByRole("menuitem", { name: /^Restart/ }));
+    const dialog = await screen.findByRole("dialog");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(within(dialog).getByPlaceholderText("prod")).toHaveFocus();
+    useClusterIdentityStore.setState({ marks: {} });
   });
 
   it("copies the kubectl command that reads this object", async () => {
