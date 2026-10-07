@@ -193,10 +193,10 @@ pub enum PluginError {
     ExecutionFailed(String),
 }
 
-/// `{ code, message, said }`: the variant as a code the frontend switches on,
-/// the `Display` string unchanged — the `CREDENTIALS_EXPIRED:` and
-/// `READ_DEADLINE:` prefixes in it are still a wire format — and [`Error::said`],
-/// what goes on screen.
+/// `{ code, message, said }`: the variant as a code the frontend switches on;
+/// the `Display` string unchanged, since the `CREDENTIALS_EXPIRED:` and
+/// `READ_DEADLINE:` prefixes in it are still a wire format; and
+/// [`Error::said`], what goes on screen.
 impl Serialize for Error {
     fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
     where
@@ -657,8 +657,8 @@ mod tests {
 
     /// kube 4 ends an API error's `Display` with the whole `Status` struct's
     /// `Debug`, and that string is what crosses to the screen. The reader gets
-    /// the server's sentence; the struct dump — `Status { … }`, `ListMeta
-    /// { … }` — is gone, and so are kube's `ApiError:` and the bare reason,
+    /// the server's sentence. The struct dump (`Status { … }`, `ListMeta
+    /// { … }`) is gone, and so are kube's `ApiError:` and the bare reason,
     /// which the code carries.
     #[test]
     fn a_kube_api_error_is_shown_without_the_status_struct_dump() {

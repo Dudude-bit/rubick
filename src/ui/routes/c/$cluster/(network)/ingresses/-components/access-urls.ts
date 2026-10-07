@@ -23,8 +23,8 @@ export function generateAccessUrls(
   allHosts: string,
   /**
    * What a cloud controller says about a host `spec.tls` is silent on. All
-   * three managed clouds keep the certificate off the Ingress — an ACM ARN,
-   * a `ManagedCertificate`, one installed on an Application Gateway — so
+   * three managed clouds keep the certificate off the Ingress (an ACM ARN,
+   * a `ManagedCertificate`, one installed on an Application Gateway), so
    * without this every HTTPS site on a managed cluster was offered as
    * `http://`. `null` where it could not tell.
    */
