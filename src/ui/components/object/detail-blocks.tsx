@@ -16,6 +16,7 @@ import { formatQuantity, usageRole } from "@/lib/metric-format";
 import { ROLE_ICON, ROLE_TEXT } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
+import { RealtimeAge } from "@/components/ui/realtime/realtime-age";
 import { ResourceMessage } from "./ResourceMessage";
 import { ResourceRef } from "./ResourceRef";
 import { TONE_CLASS, type KeyValueTone } from "./key-values";
@@ -593,7 +594,6 @@ const EventRow = memo(function EventRow({
   compact: boolean;
 }) {
   const isWarning = event.type === "Warning";
-  const age = useRealtimeAge(event.lastTimestamp ?? null);
   const count = event.count ?? 0;
   const { family, Icon, color } = eventReasonMark(event.reason ?? null);
   // Almost every name a controller writes is in its own namespace and it
@@ -668,7 +668,11 @@ const EventRow = memo(function EventRow({
         className="whitespace-nowrap text-right text-[11px] text-fg-fnt"
         title={formatDate(event.lastTimestamp) ?? undefined}
       >
-        {event.lastTimestamp ? age : <None />}
+        {event.lastTimestamp ? (
+          <RealtimeAge timestamp={event.lastTimestamp} />
+        ) : (
+          <None />
+        )}
       </span>
     </div>
   );

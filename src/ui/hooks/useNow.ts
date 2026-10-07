@@ -96,3 +96,21 @@ export function useNowSeconds(live = true): number {
 export function useNowEvery(every: Every, live = true): number {
   return useClock(EVERY[every], live);
 }
+
+/**
+ * What `read` makes of the clock at `every`, which wakes the component only
+ * when that changes: a 500-row feed redrew every row on each ten-second tick
+ * to print the same "12m" again.
+ */
+export function useNowReading<T extends string | number>(
+  every: Every,
+  read: (now: number) => T
+): T {
+  const surfaceVisible = useSurfaceVisible();
+  const windowVisible = useWindowActivity((state) => state.visible);
+  const rate = EVERY[every];
+  return useSyncExternalStore(
+    surfaceVisible && windowVisible ? rate.subscribe : stopped,
+    () => read(Date.now())
+  );
+}

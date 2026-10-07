@@ -7,8 +7,8 @@
  * @module hooks/useRealtimeAge
  */
 
-import { useNowEvery, type Every } from "@/hooks/useNow";
-import { formatAge, formatDuration } from "@/lib/utils";
+import { useNowEvery, useNowReading, type Every } from "@/hooks/useNow";
+import { formatDuration, formatSince } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 
 function everyForAge(ageSeconds: number): Every {
@@ -38,12 +38,11 @@ function getAgeSeconds(timestamp: string | null): number {
  */
 export function useRealtimeAge(timestamp: string | null): string {
   const t = useT();
-
-  // Result unused: each tick re-renders, and that render is what recomputes
-  // the age.
-  useNowEvery(everyForAge(getAgeSeconds(timestamp)));
-
-  return formatAge(timestamp, t);
+  const at = timestamp ? new Date(timestamp).getTime() : Number.NaN;
+  const age = useNowReading(everyForAge(getAgeSeconds(timestamp)), (now) =>
+    Number.isNaN(at) ? "" : formatSince(at, now)
+  );
+  return age || t("cluster", "unknownAge");
 }
 
 function formatCountdown(seconds: number): string {

@@ -62,20 +62,21 @@ describe("an age cell's clock", () => {
   });
 
   /**
-   * Past a minute the label reads in minutes, so it is woken every ten
-   * seconds rather than every second. Waking it by the second would redraw
-   * every age column in every list sixty times a minute for a digit that
-   * moves once.
+   * Past a minute the label reads in minutes, so it is drawn again when the
+   * minute turns and on no tick before. Drawing it by the tick redrew every
+   * age column, and every row of a 500-event feed, for a digit that moves once.
    */
-  it("wakes an age of minutes every ten seconds, not every second", () => {
+  it("draws an age of minutes again when its minute turns, not on every tick", () => {
     render(cell(secondsAgo(120)));
     expect(commits).toBe(1);
 
-    seconds(9);
+    seconds(50);
     expect(commits).toBe(1);
+    expect(screen.getByText("2m")).toBeInTheDocument();
 
-    seconds(1);
+    seconds(10);
     expect(commits).toBe(2);
+    expect(screen.getByText("3m")).toBeInTheDocument();
   });
 
   /**

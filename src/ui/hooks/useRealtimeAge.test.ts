@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
-import { useRealtimeCountdown } from "./useRealtimeAge";
+import { useRealtimeAge, useRealtimeCountdown } from "./useRealtimeAge";
 
 /**
  * What a countdown says when there is no time left.
@@ -60,5 +60,41 @@ describe("what a countdown says when the moment has passed", () => {
     expect(gone.result.current.display).toBe("");
     expect(gone.result.current.isExpired).toBe(true);
     expect(gone.result.current.warningLevel).toBe("critical");
+  });
+});
+
+describe("an age between the moments its text changes", () => {
+  /**
+   * Every row of the 500-event feed redrew on each ten-second tick to print
+   * the same "12m" again, about 275 ms of main thread every ten seconds.
+   * Fails if a tick that leaves the text as it was draws the age again.
+   */
+  it("draws again only when the text it shows changes", () => {
+    const now = new Date("2026-10-07T09:45:00Z").getTime();
+    vi.useFakeTimers({ now });
+    let renders = 0;
+    const { result } = renderHook(() => {
+      renders += 1;
+      return useRealtimeAge(new Date(now - 12 * 60_000 - 5_000).toISOString());
+    });
+    expect(result.current).toBe("12m");
+    const drawn = renders;
+
+    act(() => {
+      vi.advanceTimersByTime(40_000);
+    });
+    expect(renders).toBe(drawn);
+
+    act(() => {
+      vi.advanceTimersByTime(20_000);
+    });
+    expect(result.current).toBe("13m");
+    expect(renders).toBe(drawn + 1);
+  });
+
+  /** Fails if a missing or unreadable stamp prints an empty age. */
+  it("says the age is unknown where there is no stamp to read", () => {
+    const { result } = renderHook(() => useRealtimeAge(null));
+    expect(result.current).not.toBe("");
   });
 });
