@@ -313,6 +313,37 @@ describe("an access kind on the generic list", () => {
       parseFloat(screen.getByText(header).closest("th")!.style.width);
     expect(width("Роль")).toBeGreaterThan(2 * width("Возраст"));
   });
+
+  /**
+   * The server prints Age as kubectl's duration, a string that sorts "10m"
+   * before "2h"; the header sorts by the creation stamp instead. Fails if the
+   * Age header is not a sort control or sorts the words.
+   */
+  it("sorts the Age column by when the object was created, youngest first", async () => {
+    const at = (minutes: number) =>
+      new Date(Date.now() - minutes * 60_000).toISOString();
+    await inRussian(
+      ROLE_BINDINGS,
+      printed(
+        [column("Name"), AGE],
+        [
+          { ...row("old", "shop", ["old", "2d"]), createdAt: at(2880) },
+          { ...row("new", "shop", ["new", "9m"]), createdAt: at(9) },
+          { ...row("mid", "shop", ["mid", "10m"]), createdAt: at(600) },
+        ]
+      )
+    );
+    await screen.findByText("old");
+    const names = () =>
+      screen
+        .getAllByRole("row")
+        .map((tr) => tr.textContent ?? "")
+        .filter((text) => /^(old|new|mid)/.test(text))
+        .map((text) => text.slice(0, 3));
+    expect(names()).toEqual(["old", "new", "mid"]);
+    fireEvent.click(screen.getByRole("button", { name: /Возраст/ }));
+    expect(names()).toEqual(["new", "mid", "old"]);
+  });
 });
 
 describe("a registry kind on the generic list", () => {

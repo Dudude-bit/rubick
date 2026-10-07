@@ -5,6 +5,7 @@
  */
 
 import type { ColumnDef } from "@/components/ui/table-features";
+import { AgeHeader } from "@/components/ui/sortable-header";
 import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
 import { RealtimeAge } from "@/components/ui/realtime";
@@ -109,6 +110,14 @@ export function createNamespaceColumn<
   };
 }
 
+/** The distance from now, so the youngest object sorts first and one with no stamp sorts nowhere. */
+export function ageOrder(createdAt: string | null | undefined) {
+  const at = createdAt ? Date.parse(createdAt) : NaN;
+  return Number.isNaN(at) ? undefined : -at;
+}
+
+export const AGE_LABEL = { section: "columns", key: "age" } as const;
+
 /**
  * Creates an age column from created_at timestamp
  * Uses RealtimeAge for auto-updating display
@@ -117,8 +126,12 @@ export function createAgeColumn<Row extends WithCreatedAt>(): ColumnDef<Row> {
   return {
     size: 80,
     id: "age",
-    meta: { floor: AGE_CELL_PX },
-    header: columnHeader("columns", "age"),
+    accessorFn: (row) => ageOrder(row.createdAt),
+    sortUndefined: "last",
+    sortDescFirst: false,
+    enableGlobalFilter: false,
+    meta: { floor: AGE_CELL_PX, label: AGE_LABEL },
+    header: AgeHeader,
     cell: ({ row }) => (
       <span className="text-fg-fnt">
         <RealtimeAge timestamp={row.original.createdAt} />

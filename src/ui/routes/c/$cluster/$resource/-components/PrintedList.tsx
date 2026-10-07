@@ -2,7 +2,12 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { EmptyPage } from "../../../../-components/NotFound";
-import { createNamespaceColumn } from "../../-list/columns";
+import { AgeHeader } from "@/components/ui/sortable-header";
+import {
+  AGE_LABEL,
+  ageOrder,
+  createNamespaceColumn,
+} from "../../-list/columns";
 import { ResourceList } from "../../-list/ResourceList";
 import { servedOf, useServed } from "../../-object/served";
 import { Button } from "@/components/ui/button";
@@ -250,11 +255,23 @@ function columnsOf(
   printed.forEach((column, index) => {
     if (column.priority > DEFAULT_PRIORITY) return;
     const standard = STANDARD_HEADERS[column.name];
+    const byAge = standard === "age" && CREATION.test(column.description);
     columns.push({
       id: `printed-${index}`,
       size: sizeOf(column),
-      header: standard ? columnHeader("columns", standard) : column.name,
-      accessorFn: (row) => row.cells[index],
+      ...(byAge
+        ? {
+            header: AgeHeader,
+            accessorFn: (row: PrintedRow) => ageOrder(row.createdAt),
+            sortUndefined: "last" as const,
+            sortDescFirst: false,
+            enableGlobalFilter: false,
+            meta: { label: AGE_LABEL },
+          }
+        : {
+            header: standard ? columnHeader("columns", standard) : column.name,
+            accessorFn: (row: PrintedRow) => row.cells[index],
+          }),
       cell: ({ row }) => (
         <Cell
           value={row.original.cells[index]}

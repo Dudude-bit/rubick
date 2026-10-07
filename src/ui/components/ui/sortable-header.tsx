@@ -65,3 +65,7 @@ export function SortableHeader({
     </button>
   );
 }
+
+export const AgeHeader = ({ column }: { column: SortableColumn }) => (
+  <SortableHeader column={column} k="age" />
+);

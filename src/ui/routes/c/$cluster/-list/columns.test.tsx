@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vite-plus/test";
 
 import { columns as persistentVolumeColumns } from "../(storage)/persistentvolumes/-components/PersistentVolumeList";
@@ -6,7 +7,8 @@ import { columns as persistentVolumeClaimColumns } from "../(storage)/persistent
 import { columns as storageClassColumns } from "../(storage)/storageclasses/-components/StorageClassList";
 import { columns as namespaceColumns } from "../(cluster)/namespaces/-components/NamespaceList";
 import { columns as nodeColumns } from "../(cluster)/nodes/-components/NodeList";
-import { createDataKeysColumn } from "./columns";
+import { DataTable } from "@/components/ui/data-table";
+import { createAgeColumn, createDataKeysColumn } from "./columns";
 import { PortsDisplay } from "../(network)/-components/PortsDisplay";
 import { renderWithProviders, renderWithRouter } from "@/test/render";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -145,5 +147,50 @@ describe("list markers on a Russian screen", () => {
     } finally {
       useLocaleStore.setState({ choice: null });
     }
+  });
+});
+
+describe("sorting a list by age", () => {
+  interface Aged {
+    name: string;
+    createdAt: string | null;
+  }
+  const minutesAgo = (n: number) =>
+    new Date(Date.now() - n * 60_000).toISOString();
+  const rows: Aged[] = [
+    { name: "old", createdAt: minutesAgo(2880) },
+    { name: "unstamped", createdAt: null },
+    { name: "new", createdAt: minutesAgo(5) },
+  ];
+  const columns: ColumnDef<Aged>[] = [
+    {
+      id: "name",
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => row.original.name,
+    },
+    createAgeColumn<Aged>(),
+  ];
+  const order = () =>
+    screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).getAllByRole("cell")[0].textContent);
+
+  /**
+   * Dana looked for the youngest pod and the Age header did nothing. Fails if
+   * the header stops sorting, if the first press is not youngest first, if
+   * the second does not reverse it, or if an object with no stamp is ever
+   * sorted in among the others.
+   */
+  it("sorts youngest first, then oldest first, and keeps an unstamped object last", async () => {
+    await renderWithRouter(<DataTable<Aged> columns={columns} data={rows} />);
+    expect(order()).toEqual(["old", "unstamped", "new"]);
+
+    await userEvent.click(screen.getByRole("button", { name: /Age/ }));
+    expect(order()).toEqual(["new", "old", "unstamped"]);
+
+    await userEvent.click(screen.getByRole("button", { name: /Age/ }));
+    expect(order()).toEqual(["old", "new", "unstamped"]);
   });
 });
