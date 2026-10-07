@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { screen, waitFor, within } from "@testing-library/react";
 
 const command = vi.hoisted(() => {
   const made = new Map<string, ReturnType<typeof vi.fn>>();
@@ -65,7 +65,7 @@ describe("a CRD's page", () => {
     expect(asked).not.toContain("Widget");
     expect(asked).toContain(NAME);
     expect(
-      screen.getByRole("heading", { name: (name) => name.includes(NAME) })
+      within(screen.getByRole("heading", { level: 1 })).getByText(NAME)
     ).toBeInTheDocument();
   });
 });
