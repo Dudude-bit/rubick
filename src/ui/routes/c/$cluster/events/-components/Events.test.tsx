@@ -403,6 +403,57 @@ describe("a feed whose re-read fails", () => {
   });
 });
 
+describe("a feed across namespaces whose re-read fails", () => {
+  /**
+   * The lists keep their rows through a failed re-read and say since when;
+   * the feed across two namespaces dropped all of them for one namespace's
+   * 502. Fails if the fan-out drops the rows it had, or keeps them under
+   * "polling".
+   */
+  it("keeps the events every namespace gave, marked as from the last read that answered", async () => {
+    useClusterStore.setState({ namespaceScope: ["prod", "staging"] });
+    listEvents.mockImplementation(async (filters) =>
+      feed(filters?.namespace ?? "", 2)
+    );
+    const { client } = await mount();
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("staging-pod-1")
+    );
+
+    listEvents.mockImplementation(async (filters) => {
+      if (filters?.namespace === "staging") throw new Error("502 Bad Gateway");
+      return feed("prod", 2);
+    });
+    await act(() => client.refetchQueries());
+
+    expect(
+      await screen.findByText(/Could not read events just now/)
+    ).toBeInTheDocument();
+    expect(document.body.textContent).toContain("staging-pod-1");
+    expect(document.body.textContent).toContain("prod-pod-1");
+    expect(screen.getByText("read failing")).toBeInTheDocument();
+  });
+
+  /**
+   * A namespace that never answered has no old rows to keep: what the
+   * others gave is not the scope's feed. Fails if a namespace refused from
+   * the start is drawn as rows from an earlier read.
+   */
+  it("says a namespace that never answered was not read, rather than calling the rest old", async () => {
+    useClusterStore.setState({ namespaceScope: ["prod", "staging"] });
+    listEvents.mockImplementation(async (filters) => {
+      if (filters?.namespace === "staging") throw new Error("502 Bad Gateway");
+      return feed("prod", 2);
+    });
+    await mount();
+
+    expect(
+      await screen.findByText(/Could not read the events in/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Could not read events just now/)).toBeNull();
+  });
+});
+
 describe("what the limit is counted against", () => {
   /**
    * Would put the bug back: one cluster-wide read for 500 events, narrowed

@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { ApiCatalog, CatalogEntry } from "@/generated/types";
@@ -10,13 +10,14 @@ const answers = vi.hoisted(() => ({
     Promise.resolve({ entries: [], unread: [] }),
   object: (_group?: string, _plural?: string): Promise<unknown> =>
     Promise.reject(new Error("unset")),
+  yaml: (): Promise<string> =>
+    Promise.reject({ code: "NOT_FOUND", message: 'leases "x" not found' }),
 }));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     listApiCatalog: () => answers.catalog(),
-    getServedObjectYaml: () =>
-      Promise.reject({ code: "NOT_FOUND", message: 'leases "x" not found' }),
+    getServedObjectYaml: () => answers.yaml(),
     getServedObject: (group: string, plural: string) =>
       answers.object(group, plural),
     objectLineage: () =>
@@ -201,5 +202,56 @@ describe("an object addressed by a bare plural", () => {
       await screen.findByRole("link", { name: "ClusterRoles" })
     ).toBeVisible();
     expect(screen.queryByRole("link", { name: "clusterroles" })).toBeNull();
+  });
+});
+
+describe("an object of a kind no screen draws, read again", () => {
+  /**
+   * The lists say "read failing" over rows a failed read left; this page's
+   * header said "polling" over an object it could no longer refresh. Fails
+   * if the header does not say the read is failing.
+   */
+  it("says in its header that the read is failing, over the object it keeps", async () => {
+    answers.catalog = () => Promise.resolve({ entries: [LEASES], unread: [] });
+    answers.object = () =>
+      Promise.resolve({
+        metadata: { name: "x" },
+        spec: { holderIdentity: "node-1" },
+      });
+    answers.yaml = () => Promise.resolve("metadata:\n  name: x\n");
+    const { client } = await open();
+    expect(await screen.findByText("holderIdentity")).toBeInTheDocument();
+    expect(await screen.findByText("polling")).toBeInTheDocument();
+
+    answers.yaml = () => Promise.reject(new Error("502 Bad Gateway"));
+    answers.object = () => Promise.reject(new Error("502 Bad Gateway"));
+    await act(() => client.refetchQueries());
+
+    expect(await screen.findByText("read failing")).toBeInTheDocument();
+    expect(screen.getByText("holderIdentity")).toBeInTheDocument();
+  });
+
+  /** Fails if an object deleted while its page is open is kept as though only the read had failed. */
+  it("says an object deleted while its page is open is gone", async () => {
+    answers.catalog = () => Promise.resolve({ entries: [LEASES], unread: [] });
+    answers.object = () =>
+      Promise.resolve({
+        metadata: { name: "x" },
+        spec: { holderIdentity: "node-1" },
+      });
+    answers.yaml = () => Promise.resolve("metadata:\n  name: x\n");
+    const { client } = await open();
+    expect(await screen.findByText("holderIdentity")).toBeInTheDocument();
+
+    const gone = () =>
+      Promise.reject({ code: "NOT_FOUND", message: 'leases "x" not found' });
+    answers.yaml = gone;
+    answers.object = gone;
+    await act(() => client.refetchQueries());
+
+    expect(
+      await screen.findByText("There is no Lease named x")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("holderIdentity")).toBeNull();
   });
 });

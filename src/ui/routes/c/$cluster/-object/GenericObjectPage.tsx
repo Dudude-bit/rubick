@@ -186,8 +186,13 @@ export function GenericObjectPage({
         onBack={() => router.history.back()}
         dataUpdatedAt={yaml.dataUpdatedAt}
         slowed={yaml.freshness.slowed}
+        stale={yaml.freshness.stale || object.freshness.stale}
       />
-      {object.isError && yaml.isError ? (
+      {object.isError &&
+      yaml.isError &&
+      // A failed re-read keeps the object it had, as the lists keep rows.
+      ((object.data === undefined && yaml.data === undefined) ||
+        errorCode(object.error) === "NOT_FOUND") ? (
         <Unread
           error={object.error}
           served={served}

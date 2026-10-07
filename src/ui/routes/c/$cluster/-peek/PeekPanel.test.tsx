@@ -595,6 +595,27 @@ describe("PeekPanel", () => {
     ).toBeInTheDocument();
   });
 
+  /**
+   * During the 502 outage a pod's page kept the pod and the peek beside it
+   * replaced the pod with the error. Fails if a failed re-read drops the
+   * object the peek was showing, or keeps it with nothing saying it is old.
+   */
+  it("keeps the object a failed re-read left, said to be from the last read that answered", async () => {
+    await wrap(POD_PEEK);
+    expect(await screen.findByText("10.42.0.46")).toBeInTheDocument();
+
+    vi.mocked(commands.getPod).mockRejectedValue(new Error("502 Bad Gateway"));
+    await act(() => wrap.client.refetchQueries());
+
+    expect(
+      await screen.findByText(
+        /Could not read Pod crash-demo-56588f6b8c-8bj9v just now/
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText("10.42.0.46")).toBeInTheDocument();
+    expect(screen.getByText(/502 Bad Gateway/)).toBeInTheDocument();
+  });
+
   it("leaves for the full page and closes behind itself", async () => {
     await wrap(POD_PEEK);
     await userEvent.click(

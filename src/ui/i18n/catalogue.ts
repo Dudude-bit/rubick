@@ -6169,6 +6169,8 @@ export const en = {
     couldNotReadInScope: "Could not read {label} in this scope.",
     staleRows:
       "Could not read {label} just now. The rows below are from {time}, the last read that answered.",
+    staleObject:
+      "Could not read {label} just now. What is below is from {time}, the last read that answered.",
     couldNotReadInNamespace: "Could not read {label} in {namespace}.",
     noneWhereAnswered: "No {label} in {namespaces}.",
     gwNoRoutesOfKindsRead: "No routes of the kinds that could be read.",

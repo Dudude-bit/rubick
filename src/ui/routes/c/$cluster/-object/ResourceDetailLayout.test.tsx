@@ -1,6 +1,6 @@
 import { useEffect, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { fireEvent, screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useLocation } from "@tanstack/react-router";
 import { Info } from "lucide-react";
@@ -9,6 +9,7 @@ import { SectionHeader } from "@/components/ui/section";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { DetailError, ResourceDetailLayout } from "./ResourceDetailLayout";
+import { useResourceDetail } from "@/hooks/useResourceDetail";
 import { renderWithRouter } from "@/test/render";
 import { parseAlert } from "@/lib/alerts";
 import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
@@ -812,5 +813,62 @@ Started: 2026-09-10 03:14:22 UTC`;
   it("shows it while the object is still being read", async () => {
     await wrap(<ResourceDetailLayout {...props} resource={null} isLoading />);
     expect(screen.getByText(/KubePodCrashLooping/)).toBeVisible();
+  });
+});
+
+describe("a detail page whose re-read fails", () => {
+  /**
+   * During the 502 outage the lists said "read failing" over the rows they
+   * kept, while a pod's page kept its pod under "polling" as if every read
+   * answered. Fails if the header of a page holding an object its last read
+   * could not refresh says anything but that the read is failing, or the
+   * page leaves out since when and why, as the peek and the lists say it.
+   */
+  it("keeps the object and its header says the read is failing", async () => {
+    useClusterStore.setState({ isConnected: true });
+    const fetch = vi
+      .fn<() => Promise<{ name: string }>>()
+      .mockResolvedValueOnce({ name: "api-7bcd" })
+      .mockRejectedValue(new Error("502 Bad Gateway"));
+    let refetch = () => {};
+    function Page() {
+      const detail = useResourceDetail<{ name: string }>({
+        resourceKind: "Pod",
+        fetchResource: () => fetch(),
+        refresh: false,
+      });
+      refetch = detail.refetch;
+      return (
+        <ResourceDetailLayout
+          {...base}
+          resource={detail.resource}
+          isLoading={detail.isLoading}
+          error={detail.error}
+          resourceKind="Pod"
+          title="api-7bcd"
+          namespace="shop"
+          freshness={detail.freshness}
+          tabs={[]}
+          activeTab="overview"
+        />
+      );
+    }
+    await renderWithRouter(<Page />, {
+      at: "/c/prod/pods/shop/api-7bcd",
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    expect(await screen.findByText("polling")).toBeInTheDocument();
+
+    await act(async () => refetch());
+
+    expect(await screen.findByText("read failing")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Could not read Pod api-7bcd just now/)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/502 Bad Gateway/)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "api-7bcd"
+    );
+    expect(screen.queryByText("polling")).toBeNull();
   });
 });

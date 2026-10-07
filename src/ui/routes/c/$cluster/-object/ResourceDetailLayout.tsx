@@ -39,6 +39,7 @@ import {
   type DetailTab,
 } from "@/components/object/detail-tab";
 import { OwnsPanel } from "./Owns";
+import { StaleRows } from "../-list/StaleRows";
 import { servedOfKind, useLineage } from "./ownership";
 import { useOwnershipKeys } from "./ownership-keys";
 import type { ServedResource } from "./served";
@@ -391,6 +392,7 @@ export function ResourceDetailLayout({
           onBack={onBack}
           dataUpdatedAt={freshness?.dataUpdatedAt}
           slowed={freshness?.slowed}
+          stale={freshness?.stale}
         />
 
         {/* Above the strip, and so on every tab: both say something about the
@@ -403,6 +405,14 @@ export function ResourceDetailLayout({
             copied into each is how five of them come to say something the
             sixth does not. */}
         {banner}
+        {freshness?.stale && (
+          <StaleRows
+            object
+            label={`${resourceKind} ${title}`}
+            since={freshness.dataUpdatedAt}
+            error={freshness.failure}
+          />
+        )}
         {summary}
 
         <DetailTabs

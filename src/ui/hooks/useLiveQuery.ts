@@ -79,6 +79,10 @@ export interface Freshness {
   paused: boolean;
   /** What it is actually re-reading at, for anything that wants to say so. */
   everyMs: number | false;
+  /** The last read failed, and what is on screen is from the one before it. */
+  stale: boolean;
+  /** Why the last read failed, or `null` where it answered. */
+  failure: unknown;
   /**
    * When a read with nothing yet to show began, or `null` once something is
    * on screen. A skeleton that knows how long it has been one can say so,
@@ -354,6 +358,9 @@ export function useLiveQueries<T>(options: {
       paused: base !== false && everyMs === false,
       everyMs,
       waitingSince,
+      // A part that never answered is unread, not old.
+      stale: failed.some(Boolean) && data.every((part) => part !== undefined),
+      failure: error,
     },
   };
 }
@@ -530,6 +537,8 @@ export function useLiveQuery<
     paused: base !== false && everyMs === false,
     everyMs,
     waitingSince,
+    stale: failed && data !== undefined,
+    failure: failed ? error : null,
   };
 
   // Neither spread nor assigned. React Query hands back a proxy that records

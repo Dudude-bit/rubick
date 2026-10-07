@@ -73,6 +73,7 @@ import { parts } from "@/i18n/parts";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { Ghost } from "lucide-react";
 import { GoneNotice } from "../-object/gone";
+import { StaleRows } from "../-list/StaleRows";
 import {
   ownersOf,
   useLastOwners,
@@ -99,7 +100,7 @@ export function PeekContent({
 
   const source = useMemo(() => resolveSource(target), [target]);
 
-  const { data, error, isLoading } = useLiveQuery({
+  const { data, error, isLoading, dataUpdatedAt } = useLiveQuery({
     queryKey: peekQueryKey(target),
     queryFn: () => source.fetch(target.name, namespace),
     staleTime: STALE_TIMES.resourceDetail,
@@ -336,6 +337,7 @@ export function PeekContent({
                 error={error}
                 gone={gone ? (ownersOf(data) ?? lastOwners) : false}
                 isLoading={isLoading}
+                readAt={dataUpdatedAt}
               />
             ) : (
               <PeekTabBody
@@ -432,6 +434,7 @@ function PeekOverview({
   error,
   gone,
   isLoading,
+  readAt,
 }: {
   target: PeekTarget;
   summary: PeekSummary | null;
@@ -439,6 +442,8 @@ function PeekOverview({
   /** The owners its last read named, `undefined` when it was never read; `false` while it exists. */
   gone: Owner[] | undefined | false;
   isLoading: boolean;
+  /** When the object on screen was read. */
+  readAt: number;
 }) {
   const t = useT();
   return (
@@ -451,7 +456,7 @@ function PeekOverview({
           owners={gone}
           error={error}
         />
-      ) : error ? (
+      ) : error && !summary ? (
         <p className="pt-4 text-xs text-warn">
           {t("empty", "couldNotReadKind", {
             kind: target.kind,
@@ -462,6 +467,15 @@ function PeekOverview({
         <PeekSkeleton />
       ) : (
         <>
+          {error && (
+            <StaleRows
+              object
+              className="mt-4 mb-2"
+              label={`${target.kind} ${target.name}`}
+              since={readAt}
+              error={error}
+            />
+          )}
           {summary.lead}
           {summary.groups.map((group) => (
             <div key={group.title}>

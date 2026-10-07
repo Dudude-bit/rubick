@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
 import { SectionHeader } from "@/components/ui/section";
+import { DataFreshness } from "@/components/ui/realtime";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { ShareScreenAction } from "@/components/share/ShareAction";
@@ -109,6 +110,7 @@ export function Helm() {
     isLoading,
     error: releasesError,
     refetch,
+    freshness,
   } = useLiveQuery({
     queryKey: queryKeys.helm.releases(scopeCacheKey(scope.scope)),
     // The `commands` wrapper already throws a normalised Error; a second
@@ -352,6 +354,11 @@ export function Helm() {
                   {t("nav", "repositories")}
                 </TabsTrigger>
               </TabsList>
+              <DataFreshness
+                dataUpdatedAt={freshness.dataUpdatedAt}
+                slowed={freshness.slowed}
+                stale={freshness.stale}
+              />
               <ShareScreenAction screen={{ title: "Helm" }} />
             </>
           }
@@ -363,6 +370,7 @@ export function Helm() {
             unread={unread}
             isLoading={isLoading}
             error={releasesError ?? null}
+            readAt={freshness.stale ? freshness.dataUpdatedAt : null}
             helmCliAvailable={helmCliAvailable}
             onRefetch={() => refetch()}
             onShowHistory={setHistoryDialog}

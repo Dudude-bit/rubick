@@ -53,6 +53,8 @@ export interface ResourceDetailHeaderProps {
   dataUpdatedAt?: number;
   /** Polled, and backed off past its rate because nothing is changing. */
   slowed?: boolean;
+  /** The last read failed, and the object on screen is from the one before it. */
+  stale?: boolean;
   /** Where a kind the registry does not hold is served, for its owners. */
   served?: ServedResource | null;
 }
@@ -169,6 +171,7 @@ export function ResourceDetailHeader({
   onBack,
   dataUpdatedAt,
   slowed,
+  stale,
   served,
 }: ResourceDetailHeaderProps) {
   const t = useT();
@@ -252,7 +255,11 @@ export function ResourceDetailHeader({
         </span>
       )}
       <div className="ml-auto flex flex-none items-center">
-        <DataFreshness dataUpdatedAt={dataUpdatedAt} slowed={slowed} />
+        <DataFreshness
+          dataUpdatedAt={dataUpdatedAt}
+          slowed={slowed}
+          stale={stale}
+        />
       </div>
     </div>
   );

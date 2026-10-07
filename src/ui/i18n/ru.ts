@@ -6776,6 +6776,8 @@ export const ru: Catalogue = {
     couldNotReadInScope: "Не удалось прочитать {label} в текущей области.",
     staleRows:
       "Сейчас не удаётся прочитать {label}. Строки ниже получены в {time}, при последнем успешном чтении.",
+    staleObject:
+      "Сейчас не удаётся прочитать {label}. Ниже показано то, что получено в {time}, при последнем успешном чтении.",
     couldNotReadInNamespace: "Не удалось прочитать {label} в {namespace}.",
     noneWhereAnswered: "В {namespaces} ничего не найдено: {label}.",
     gwNoRoutesOfKindsRead:

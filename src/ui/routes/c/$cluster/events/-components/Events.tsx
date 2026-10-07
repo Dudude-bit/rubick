@@ -314,9 +314,12 @@ export function Events() {
   // came back 403. In a fan-out one refused namespace is enough: the rest may
   // have answered, but what is on screen is no longer the scope's whole story.
   const failed = watching ? null : several ? parts.error : single.error;
-  // One read that failed over rows it had: they stay, said to be old. A
-  // fan-out's error is one namespace's, so its rows are not the scope's.
-  const stale = !several && failed !== null && pool.length > 0;
+  // A read that failed over rows it had: they stay, said to be old. A
+  // namespace of the fan-out that never answered is unread, not old.
+  const stale =
+    failed !== null &&
+    pool.length > 0 &&
+    (fromWatch || (several ? parts.freshness.stale : single.freshness.stale));
 
   // Two ceilings, and a filter makes them diverge. `windowFull` is about
   // the pool the limit bought — cut by the apiserver per namespace and by
@@ -538,7 +541,9 @@ export function Events() {
               label="events"
               since={freshness.dataUpdatedAt}
               error={failed}
-              onRetry={() => void single.refetch()}
+              onRetry={() =>
+                several ? parts.refetch() : void single.refetch()
+              }
             />
           )}
           {showSkeleton ? (

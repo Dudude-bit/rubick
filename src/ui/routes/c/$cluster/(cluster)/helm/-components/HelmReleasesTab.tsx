@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/tooltip";
 import { DetailAction } from "@/components/object/detail-blocks";
 import type { HelmRelease, UnreadNamespace } from "@/generated/types";
+import { StaleRows } from "../../../-list/StaleRows";
 import { UnreadNamespaces } from "../../../-list/UnreadNamespaces";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { helmReleaseLink, hrefOf } from "@/lib/links";
@@ -54,6 +55,8 @@ export interface HelmReleasesTabProps {
   /** `unknown`, not `Error`: the query's thrown value is not guaranteed to be
    *  an Error, and `errorToShow`/`isRefusal` both take it as-is. */
   error: unknown;
+  /** When the releases on screen were read, where a later read failed over them. */
+  readAt?: number | null;
   helmCliAvailable: boolean;
   onRefetch: () => void;
   onShowHistory: (release: HelmRelease) => void;
@@ -67,6 +70,7 @@ export function HelmReleasesTab({
   unread = [],
   isLoading,
   error,
+  readAt = null,
   helmCliAvailable,
   onRefetch,
   onShowHistory,
@@ -298,6 +302,14 @@ export function HelmReleasesTab({
         </div>
       </div>
 
+      {readAt !== null && releases.length > 0 && (
+        <StaleRows
+          label={t("empty", "helmReleases")}
+          since={readAt}
+          error={error}
+          onRetry={onRefetch}
+        />
+      )}
       <UnreadNamespaces
         unread={unread}
         label={t("empty", "helmReleases")}
