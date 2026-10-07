@@ -12,6 +12,7 @@ import {
 } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { latestOf, useObjectEvents } from "@/hooks/useObjectEvents";
 
 import { SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -758,45 +759,40 @@ const TRAFFIC_KINDS = new Set([
   "CronJob",
 ]);
 
+const PEEK_EVENTS = 20;
+
 function PeekEvents({ target }: { target: PeekTarget }) {
   const t = useT();
-  const { data: events, error } = useLiveQuery({
-    queryKey: [
-      "peek-events",
-      target.kind,
-      target.namespace ?? null,
-      target.name,
-    ],
-    queryFn: () =>
-      commands.listEvents({
-        namespace: target.namespace ?? null,
-        involved_object_name: target.name,
-        involved_object_kind: target.kind,
-        event_type: null,
-        field_selector: null,
-        limit: 20,
-      }),
-    staleTime: STALE_TIMES.fast,
-    refresh: "overview",
-    refetchOnWindowFocus: false,
-    retry: false,
-  });
+  const { data: events, error } = useObjectEvents(
+    target.kind,
+    target.name,
+    target.namespace,
+    { refresh: "overview" }
+  );
+  const latest = events ? latestOf(events, PEEK_EVENTS) : null;
 
   return (
     <>
       <PeekHeading
         title={t("nav", "recentEvents")}
-        count={events?.length || undefined}
+        count={
+          latest?.of
+            ? t("count", "shownOfTotal", {
+                n: latest.rows.length,
+                total: latest.of,
+              })
+            : latest?.rows.length || undefined
+        }
       />
       {error ? (
         <p className="py-1 text-xs text-warn">
           {t("empty", "couldNotReadEvents")}
         </p>
-      ) : !events ? (
+      ) : !latest ? (
         <Skeleton className="h-3 w-2/3" />
       ) : (
         <EventRows
-          events={events}
+          events={latest.rows}
           emptyMessage={t("empty", "noEventsForObject")}
           compact
         />

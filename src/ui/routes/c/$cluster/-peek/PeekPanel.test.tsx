@@ -544,6 +544,27 @@ describe("PeekPanel", () => {
   });
 
   /**
+   * Sam's node peek said "Recent events 20" where kubectl had 32: the read
+   * asked for 20 and the heading called them all. The backend answers at
+   * most the limit it is given, as the mock does. Fails if the peek asks
+   * for only what it shows again, or prints the shown count as the total.
+   */
+  it("says how many events the latest twenty are out of", async () => {
+    const all = Array.from({ length: 32 }, (_, at) => ({
+      ...buildEvent(),
+      name: `crash-demo.${at}`,
+      uid: `event-${at}`,
+    }));
+    vi.mocked(commands.listEvents).mockImplementation(async (filters) =>
+      all.slice(0, filters?.limit ?? all.length)
+    );
+    await wrap(POD_PEEK);
+
+    expect(await screen.findByText("20 of 32")).toBeInTheDocument();
+    expect(screen.getAllByText("BackOff")).toHaveLength(20);
+  });
+
+  /**
    * "268435456" is a manifest's spelling; "256Mi" is an answer. The peek
    * prints whatever unit the author used unless it can say it better.
    */

@@ -72,7 +72,7 @@ import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { silenceOf } from "@/lib/node-reporting";
 import { useConnections } from "@/hooks/useConnections";
-import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { useNodePlacement } from "./useNodePlacement";
 import { SpotMark } from "../../../-object/spot-mark";
 import { commands } from "@/lib/commands";
@@ -343,20 +343,9 @@ export function PodDetail() {
   const connections = useConnections(ResourceType.Pod, name, namespace, !gone);
   // The pod's own events, for the "most likely" sentence: read here rather
   // than inside the panel so a refusal reaches it as a line, not a crash.
-  const podEvents = useLiveQuery({
-    queryKey: [...queryKeys.events(namespace), "pod", name],
-    queryFn: () =>
-      commands.listEvents({
-        namespace: namespace || null,
-        involved_object_name: name ?? null,
-        involved_object_kind: "Pod",
-        event_type: null,
-        field_selector: null,
-        limit: 200,
-      }),
-    enabled: !!name && !gone,
+  const podEvents = useObjectEvents("Pod", name, namespace, {
+    enabled: !gone,
     refresh: "slow",
-    retry: false,
   });
 
   const share = usePodShare(pod, podEvents.data ?? [], podEvents.error);

@@ -6,17 +6,15 @@ import type {
 } from "@/components/share/contribution";
 import { useAppInfo } from "@/hooks/useAppInfo";
 import { useConnections } from "@/hooks/useConnections";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
-import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useLocationHref } from "@/hooks/useLocationHref";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { useCapabilities } from "@/integrations";
 import { useT } from "@/i18n/useT";
-import { commands } from "@/lib/commands";
 import { buildDeepLink } from "@/lib/deep-link";
 import { errorToShow } from "@/lib/error-utils";
 import { iconSvg } from "@/lib/icon-svg";
-import { queryKeys } from "@/lib/query-keys";
 import type { Report } from "@/lib/report";
 import {
   CONNECTED_KINDS,
@@ -121,26 +119,12 @@ export function useObjectReport(
   // The certificates and controllers in front of the object, as the page's
   // chain reads them; nothing until Share is pressed, like the graph itself.
   const routed = useIngressRouting(capturing ? connections.data : undefined);
-  const events = useLiveQuery({
-    queryKey: [
-      ...queryKeys.events(subject?.namespace ?? null),
-      "object",
-      subject?.kind ?? "",
-      subject?.name ?? "",
-    ],
-    queryFn: () =>
-      commands.listEvents({
-        namespace: subject?.namespace ?? null,
-        involved_object_name: subject?.name ?? null,
-        involved_object_kind: subject?.kind ?? null,
-        event_type: null,
-        field_selector: null,
-        limit: 200,
-      }),
-    enabled: capturing && !!subject,
-    refresh: "slow",
-    retry: false,
-  });
+  const events = useObjectEvents(
+    subject?.kind ?? "",
+    subject?.name,
+    subject?.namespace,
+    { enabled: capturing && !!subject, refresh: "slow" }
+  );
 
   const capturedAt = useMemo(() => {
     void subject?.name;
