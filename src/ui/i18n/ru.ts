@@ -4433,7 +4433,7 @@ export const ru: Catalogue = {
     healthByHand: "вручную",
     healthStillReading: "ещё читается",
     healthNothingServesClass:
-      "IngressClass {name} не обслуживается ни одним контроллером, и этот Ingress никто не обрабатывает",
+      "В этом кластере нет IngressClass с именем {name}, поэтому этот Ingress никто не обрабатывает",
     healthNoClassNoDefault:
       "IngressClass не указан, а класса по умолчанию в кластере нет, и этот Ingress никто не обрабатывает",
     healthNoTlsSecret: "Нет Secret с именем {name} для его TLS",
@@ -5576,8 +5576,8 @@ export const ru: Catalogue = {
     fluxNoControllersPost:
       ", поэтому собственные нагрузки Flux найти не удалось. Его объекты по-прежнему читаются из API-сервера, но раз ни один контроллер не запущен, ни с одним из них ничего не происходит.",
     allHosts: "Все хосты",
-    noClassNamed: "класс не указан",
-    nothingServesClass: "{name}, его никто не обслуживает",
+    noClassNoDefault: "не указан, а класса по умолчанию нет",
+    nothingServesClass: "{name}: IngressClass с таким именем нет",
     noneTrafficUnencrypted: "нет: трафик не шифруется",
     catchAllCertificate: "универсальный сертификат",
     ingressDefaultBackendOnly:

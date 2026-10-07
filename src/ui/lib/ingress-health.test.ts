@@ -87,7 +87,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
     });
     expect(said.code).toBe("noController");
     expect(said.role).toBe("err");
-    expect(said.reason).toContain("IngressClass nginx");
+    expect(said.reason).toContain("No IngressClass named nginx");
   });
 
   /**
@@ -95,7 +95,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
    * подхватывает" as machine Russian, then "IngressClass nginx не обслуживает
    * ни один контроллер" as the class serving no controller.
    */
-  it("says in plain Russian that no controller serves the class", () => {
+  it("says in plain Russian that the cluster has no IngressClass by that name", () => {
     const ru: T = (section, key, values) =>
       translate("ru", section, key, values);
     const said = ingressHealthWords(
@@ -108,7 +108,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
       ru
     );
     expect(said.reason).toBe(
-      "IngressClass nginx не обслуживается ни одним контроллером, и этот Ingress никто не обрабатывает."
+      "В этом кластере нет IngressClass с именем nginx, поэтому этот Ingress никто не обрабатывает."
     );
   });
 
@@ -135,7 +135,7 @@ describe("one verdict for an Ingress on its page, its peek and the list", () => 
       ru
     );
     expect(said.reason).toBe(
-      "IngressClass nginx не обслуживается ни одним контроллером, и этот Ingress никто не обрабатывает. Нет Secret с именем checkout-tls для его TLS."
+      "В этом кластере нет IngressClass с именем nginx, поэтому этот Ingress никто не обрабатывает. Нет Secret с именем checkout-tls для его TLS."
     );
   });
 

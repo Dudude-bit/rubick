@@ -7,7 +7,11 @@ import type { ReportStat } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { useT, type T } from "@/i18n/useT";
 import { ResourceType } from "@/lib/resource-registry";
-import { ingressAddressOf, INGRESS_ADDRESS_WORDS } from "@/lib/ingress-health";
+import {
+  ingressAddressOf,
+  ingressClassWords,
+  INGRESS_ADDRESS_WORDS,
+} from "@/lib/ingress-health";
 import type {
   IngressClassBinding,
   IngressInfo,
@@ -29,13 +33,12 @@ export function ingressStats(
 ): ReportStat[] {
   const loadBalancerIps = ingress.loadBalancerIps;
   const address = ingressAddressOf(ingress, controller);
+  const classWords = ingressClassWords(ingress.className, controller, t);
   return [
     {
       label: t("columns", "class"),
-      value: controller?.resolved
-        ? controller.resolved
-        : ingress.className || t("empty", "clusterDefault"),
-      role: controller && !controller.resolved ? "err" : undefined,
+      value: classWords.text,
+      role: classWords.tone ?? undefined,
     },
     {
       label: t("columns", "hostnames"),

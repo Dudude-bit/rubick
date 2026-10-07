@@ -3977,7 +3977,7 @@ export const en = {
     healthByHand: "by hand",
     healthStillReading: "still reading",
     healthNothingServesClass:
-      "Nothing in this cluster serves IngressClass {name}, so nothing picks this Ingress up",
+      "No IngressClass named {name} in this cluster, so nothing picks this Ingress up",
     healthNoClassNoDefault:
       "It names no IngressClass and the cluster has no default, so nothing picks it up",
     healthNoTlsSecret: "No Secret named {name} for its TLS",
@@ -5060,8 +5060,8 @@ export const en = {
     fluxNoControllersPost:
       ", so Flux’s own workloads could not be found. Its objects are still read from the API server, but with no controller running, none of them is being acted on.",
     allHosts: "All hosts",
-    noClassNamed: "no class",
-    nothingServesClass: "{name}, which nothing serves",
+    noClassNoDefault: "none named, and no cluster default",
+    nothingServesClass: "{name}: no IngressClass by that name",
     noneTrafficUnencrypted: "none: traffic is unencrypted",
     catchAllCertificate: "catch-all certificate",
     ingressDefaultBackendOnly:

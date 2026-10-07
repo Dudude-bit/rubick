@@ -55,7 +55,7 @@ describe("what the Ingress report leads with", () => {
   it("names the class, the host count and TLS, and warns while a served class's address is pending", () => {
     const stats = ingressStats(ingress, served, tls, t);
     expect(stats).toMatchObject([
-      { value: "nginx" },
+      { value: "nginx · k8s.io/ingress-nginx" },
       { value: "1" },
       { value: "expires in 4 days", role: "warn" },
       { value: "pending", role: "warn" },
@@ -82,6 +82,26 @@ describe("what the Ingress report leads with", () => {
     );
     expect(stat).toMatchObject({
       value: "none: nothing serves its class to assign one",
+      role: "err",
+    });
+  });
+
+  /** The shared file named the class bare, in red, with no word for why; the page said it does not exist. Fails if the two part. */
+  it("says the class does not exist, in the page's words", () => {
+    const [stat] = ingressStats(
+      { ...ingress, className: "traefik" },
+      {
+        requested: "traefik",
+        resolved: null,
+        controller: null,
+        viaDefault: false,
+        available: [],
+      },
+      tls,
+      t
+    );
+    expect(stat).toMatchObject({
+      value: "traefik: no IngressClass by that name",
       role: "err",
     });
   });

@@ -329,3 +329,68 @@ describe("the Access tab of an Ingress the page calls unserved", () => {
     expect(screen.queryByLabelText("Open in Browser")).toBeNull();
   });
 });
+
+describe("an Ingress whose class does not exist, on its Overview", () => {
+  /**
+   * Lena read "IngressClass traefik is served by no controller" in the state
+   * row and "There is no IngressClass named traefik in this cluster" in the
+   * traffic section: one fact, two sentences, the first implying the class
+   * exists. Fails if any reader on the page says the class exists.
+   */
+  it("says the class does not exist in the state row, the class row and the chain", async () => {
+    shopCluster(null);
+    answers.getResourceConnections = {
+      subject: {
+        kind: "Ingress",
+        name: "shop",
+        namespace: "k8s-gui-test",
+        existence: "present",
+        facts: { kind: "ingress", className: "traefik" },
+      },
+      edges: [
+        {
+          from: {
+            kind: "Ingress",
+            name: "shop",
+            namespace: "k8s-gui-test",
+            existence: "present",
+            facts: null,
+          },
+          to: {
+            kind: "Service",
+            name: "log-demo",
+            namespace: "k8s-gui-test",
+            existence: "present",
+            facts: null,
+          },
+          relation: {
+            verb: "routes",
+            host: "shop.k8s-gui.test",
+            path: "/",
+            pathType: "Prefix",
+            port: "80",
+            tls: false,
+          },
+        },
+      ],
+      stops: [],
+      published: [],
+      notLookedAt: [],
+    };
+    await open("overview", { ...shopTls, tlsHosts: [], tlsConfigs: [] });
+
+    expect(
+      await screen.findByText(
+        "No IngressClass named traefik in this cluster, so nothing picks this Ingress up."
+      )
+    ).toBeTruthy();
+    expect(
+      screen.getByText("traefik: no IngressClass by that name")
+    ).toBeTruthy();
+    expect(
+      await screen.findByText("No IngressClass named traefik in this cluster")
+    ).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/serves IngressClass/);
+    expect(screen.getByRole("tab", { name: /Access/ })).toBeTruthy();
+  });
+});

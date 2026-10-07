@@ -133,6 +133,34 @@ export function ingressAddressOf(
   return binding.resolved ? "pending" : "noController";
 }
 
+/**
+ * The class row, on the page and in the shared file: the class is a request
+ * and the controller is who answers it, including "nobody does".
+ */
+export function ingressClassWords(
+  className: string | null,
+  binding: IngressClassBinding | undefined,
+  t: T
+): { text: string; tone: "err" | null } {
+  if (!binding) {
+    return { text: className || t("empty", "clusterDefault"), tone: null };
+  }
+  if (binding.resolved) {
+    return {
+      text: binding.controller
+        ? `${binding.resolved} · ${binding.controller}`
+        : binding.resolved,
+      tone: null,
+    };
+  }
+  return {
+    text: className
+      ? t("empty", "nothingServesClass", { name: className })
+      : t("empty", "noClassNoDefault"),
+    tone: "err",
+  };
+}
+
 /** The words and tone of each state without an address. */
 export const INGRESS_ADDRESS_WORDS: Record<
   Exclude<IngressAddress, "assigned">,

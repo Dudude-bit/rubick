@@ -50,7 +50,11 @@ import { covers, expiryOf, expiryText } from "@/lib/certificates";
 import { useIngressTls } from "@/hooks/useIngressTls";
 import { TLS_NOT_CHECKED_TONE } from "../../-components";
 import { deliveryOfKind } from "@/lib/delivery";
-import { ingressAddressOf, INGRESS_ADDRESS_WORDS } from "@/lib/ingress-health";
+import {
+  ingressAddressOf,
+  ingressClassWords,
+  INGRESS_ADDRESS_WORDS,
+} from "@/lib/ingress-health";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
@@ -233,6 +237,11 @@ export function IngressDetail() {
     refresh: "overview",
   });
 
+  const classWords = ingressClassWords(
+    ingress?.className ?? null,
+    controller,
+    t
+  );
   const facts: KeyValue[] = [
     {
       label: t("columns", "status"),
@@ -242,15 +251,9 @@ export function IngressDetail() {
       // The class is a request; the controller is who answers it. Naming
       // only the request is how an Ingress nothing serves reads as fine.
       label: t("columns", "class"),
-      value: controller
-        ? controller.resolved
-          ? `${controller.resolved}${controller.controller ? ` · ${controller.controller}` : ""}`
-          : t("empty", "nothingServesClass", {
-              name: ingress?.className ?? t("empty", "noClassNamed"),
-            })
-        : ingress?.className || t("empty", "clusterDefault"),
+      value: classWords.text,
       mono: !!ingress?.className,
-      tone: controller && !controller.resolved ? ("err" as const) : undefined,
+      tone: classWords.tone ?? undefined,
     },
     {
       label: t("columns", "loadBalancer"),
@@ -308,7 +311,7 @@ export function IngressDetail() {
     },
     {
       id: "access",
-      label: "Access",
+      label: t("nav", "access"),
       glyph: viewGlyph(ExternalLink),
       content: (
         <IngressAccess ingress={ingress} urls={accessUrls} health={health} />

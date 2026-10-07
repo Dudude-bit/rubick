@@ -101,7 +101,7 @@ it("refuses to open an Ingress no controller serves, and says why", async () => 
   });
   await waitFor(() =>
     expect(openAction().reason?.(plain)).toBe(
-      "Nothing in this cluster serves IngressClass nginx, so nothing picks this Ingress up."
+      "No IngressClass named nginx in this cluster, so nothing picks this Ingress up."
     )
   );
 });
