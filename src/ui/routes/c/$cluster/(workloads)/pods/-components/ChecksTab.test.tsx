@@ -1,4 +1,11 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -9,6 +16,7 @@ vi.mock("@/lib/commands", () => ({
 import { commands } from "@/lib/commands";
 import { renderWithProviders } from "@/test/render";
 import type { CheckOutcome, PodInfo } from "@/generated/types";
+import { useLocaleStore } from "@/stores/localeStore";
 import { ChecksTab } from "./ChecksTab";
 
 const pod = {
@@ -59,6 +67,24 @@ const crashing = {
 
 beforeEach(() => {
   vi.mocked(commands.runPodCheck).mockReset();
+});
+
+afterEach(() => useLocaleStore.setState({ choice: "en" }));
+
+describe("the check labels in Russian", () => {
+  /**
+   * "Разрешить имя" read as "allow the name" and "Подключиться к" wrapped its
+   * "к" under the label. Fails if either label goes back, or can wrap again.
+   */
+  it("names the name check by what it returns and keeps each label on one line", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    mount();
+    const dns = screen.getByText("Адрес по имени");
+    const tcp = screen.getByText("Подключиться к");
+    expect(screen.queryByText("Разрешить имя")).toBeNull();
+    expect(dns).toHaveClass("whitespace-nowrap");
+    expect(tcp).toHaveClass("whitespace-nowrap");
+  });
 });
 
 describe("testing a hypothesis from the pod", () => {

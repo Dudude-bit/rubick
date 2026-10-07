@@ -265,9 +265,7 @@ export function Crds() {
           fill
           pageKeys
           isLoading={isLoading}
-          searchPlaceholder={t("action", "searchKindPlaceholder", {
-            kind: "CRDs",
-          })}
+          searchPlaceholder={t("action", "searchCrdsPlaceholder")}
           searchParam="q"
           getRowId={getCrdRowId}
           getRowHref={(row) => hrefOf(crdLink(row.name))}

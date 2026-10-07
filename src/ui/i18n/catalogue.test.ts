@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { RESOURCE_REGISTRY, toPlural } from "@/lib/resource-registry";
 import { en } from "./catalogue";
+import { translate } from "./index";
 import { ru } from "./ru";
 
 /**
@@ -153,4 +154,29 @@ describe("the Watching tab's empty hint", () => {
       expect(emptyHint).toMatch(new RegExp(`[“«]${lead}`));
     }
   );
+});
+
+describe("Russian copy that read wrong to a Russian reader", () => {
+  const say = (section: keyof typeof ru, key: string, values = {}) =>
+    translate("ru", section as never, key as never, values);
+
+  /** "Service типа ClusterIP доступны" disagreed in number with the one Service it is about. */
+  it("agrees a Service with its verb", () => {
+    expect(say("empty", "clusterIpOnlyInside", { type: "ClusterIP" })).toMatch(
+      /^Service типа ClusterIP доступен только изнутри кластера\./
+    );
+  });
+
+  /** "Показать все" next to "Копировать всё" for one pair of buttons. */
+  it("words the reveal and copy buttons as a pair", () => {
+    expect(say("action", "revealAll")).toBe("Показать всё");
+    expect(say("action", "copyAll")).toBe("Копировать всё");
+  });
+
+  /** "Поиск CRDs…" put an English plural s on an acronym; the column heads were abbreviations. */
+  it("searches CRDs without an English plural and spells out the plural column", () => {
+    expect(say("action", "searchCrdsPlaceholder")).toBe("Поиск по CRD…");
+    expect(say("columns", "plural")).toBe("Множественное число");
+    expect(say("columns", "singular")).toBe("Единственное число");
+  });
 });

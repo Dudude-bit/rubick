@@ -144,7 +144,10 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
             });
           }}
         >
-          <label className="w-24 text-xs text-fg-mut" htmlFor="check-dns">
+          <label
+            className="w-36 shrink-0 whitespace-nowrap text-xs text-fg-mut"
+            htmlFor="check-dns"
+          >
             {t("checks", "dns")}
           </label>
           <Input
@@ -171,7 +174,10 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
             });
           }}
         >
-          <label className="w-24 text-xs text-fg-mut" htmlFor="check-tcp">
+          <label
+            className="w-36 shrink-0 whitespace-nowrap text-xs text-fg-mut"
+            htmlFor="check-tcp"
+          >
             {t("checks", "tcp")}
           </label>
           <Input

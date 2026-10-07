@@ -935,6 +935,7 @@ export const en = {
     recentChanges: "Recent Changes",
     nativeHelmRelease: "Native Helm release",
     searchKindPlaceholder: "Search {kind}...",
+    searchCrdsPlaceholder: "Search CRDs...",
     rollBackReleaseQuestion: "Roll back release?",
     rollBackReleaseDetail:
       '"{name}" will be rolled back to revision {revision}.',
