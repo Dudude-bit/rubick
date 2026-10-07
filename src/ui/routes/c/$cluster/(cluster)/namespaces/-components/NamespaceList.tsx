@@ -7,7 +7,7 @@ import { Crosshair } from "lucide-react";
 import { ResourceList } from "../../../-list/ResourceList";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { createAgeColumn } from "../../../-list/columns";
+import { NAME_CELL_PX, createAgeColumn } from "../../../-list/columns";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { commands } from "@/lib/commands";
@@ -67,6 +67,7 @@ export const columns: ColumnDef<NamespaceInfo>[] = [
   {
     size: 420,
     accessorKey: "name",
+    meta: { floor: NAME_CELL_PX },
     header: columnHeader("columns", "name"),
     cell: NameCell,
   },

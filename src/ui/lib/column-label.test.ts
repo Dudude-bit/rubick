@@ -15,7 +15,7 @@ describe("the room a header needs", () => {
    */
   it("covers the whole label, and the sort mark of a sortable one", () => {
     expect(headerFloor({ header: columnHeader("columns", "age") }, ru)).toBe(
-      Math.ceil("Возраст".length * 6.8 + 20)
+      Math.ceil("Возраст".length * 7 + 20)
     );
     expect(
       headerFloor(
@@ -25,7 +25,7 @@ describe("the room a header needs", () => {
         },
         ru
       )
-    ).toBe(Math.ceil("Перезапуски".length * 6.8 + 18 + 20));
+    ).toBe(Math.ceil("Перезапуски".length * 7 + 24 + 20));
   });
 
   /** Fails if a column with no words in its header claims room for some. */

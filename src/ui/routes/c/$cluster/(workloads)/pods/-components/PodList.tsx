@@ -170,6 +170,8 @@ export const columns: ColumnDef<PodRow>[] = [
     accessorFn: (pod) => pod.restartCount,
     enableSorting: true,
     meta: {
+      // "7 (59 мин назад)" at 7.2px a glyph and a cell's padding.
+      floor: 136,
       label: { section: "columns", key: "restarts" },
       share: (pod: PodRow) => ({
         text: String(pod.restartCount),

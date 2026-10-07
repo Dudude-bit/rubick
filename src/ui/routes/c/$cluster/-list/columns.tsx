@@ -45,6 +45,14 @@ interface WithMemoryLimits {
 }
 
 /**
+ * `checkout-api-6767fbfdb7-blpfk` (29 glyphs at 7.2px), the kind's icon and the
+ * copy mark with a 4px gap each, and a cell's 20px of padding. The narrowest a
+ * Name column is drawn: it is the cell a reader aims at, so every other column
+ * gives up its room before this one does.
+ */
+export const NAME_CELL_PX = Math.ceil(29 * 7.2 + 2 * (14 + 4) + 20);
+
+/**
  * The name cell.
  *
  * `showKind` is off because the column header already says the kind: repeating
@@ -56,6 +64,7 @@ export function createNameColumn<
   return {
     size: 320,
     accessorKey: "name",
+    meta: { floor: NAME_CELL_PX },
     header: columnHeader("columns", "name"),
     cell: ({ row }) => (
       <span className="group/name inline-flex min-w-0 max-w-full items-center gap-1">

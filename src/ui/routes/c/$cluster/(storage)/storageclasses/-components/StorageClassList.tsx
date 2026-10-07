@@ -4,7 +4,7 @@ import { columnHeader } from "@/i18n/column-header";
 import type { StorageClassInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { whole } from "@/lib/namespace-scope";
-import { createAgeColumn } from "../../../-list/columns";
+import { NAME_CELL_PX, createAgeColumn } from "../../../-list/columns";
 import { ResourceType } from "@/lib/resource-registry";
 import {
   Tooltip,
@@ -20,6 +20,7 @@ export const columns = (): ColumnDef<StorageClassInfo>[] => [
     // The name plus the "default" marker that sits beside it.
     size: 300,
     accessorKey: "name",
+    meta: { floor: NAME_CELL_PX },
     header: columnHeader("columns", "name"),
     cell: ({ row }) => (
       <span className="flex items-baseline gap-2">

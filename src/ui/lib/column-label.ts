@@ -24,9 +24,9 @@ export function columnLabel(column: LabelledColumn, t: T): string | null {
 }
 
 /** 11px medium glyphs, generously, so a label is never measured short. */
-const GLYPH_PX = 6.8;
-/** The sort mark and its gap, on a header that is a sort control. */
-const SORT_MARK_PX = 18;
+const GLYPH_PX = 7;
+/** A sort control's 12px mark, its 4px gap and the button's own 8px of padding. */
+const SORT_MARK_PX = 24;
 /** The header cell's own padding. */
 const PADDING_PX = 20;
 

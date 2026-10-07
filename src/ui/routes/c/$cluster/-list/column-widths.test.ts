@@ -5,6 +5,8 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { headerFloor } from "@/lib/column-label";
 
+import { NAME_CELL_PX } from "./columns";
+
 import { configMapColumns } from "../(config)/configmaps/-components/ConfigMapList";
 import { columns as cronJobs } from "../(workloads)/cronjobs/-components/CronJobList";
 import { columns as daemonSets } from "../(workloads)/daemonsets/-components/DaemonSetList";
@@ -156,17 +158,18 @@ describe("what a list page declares about its columns", () => {
 });
 
 const en: T = (section, key, values) => translate("en", section, key, values);
+const ru: T = (section, key, values) => translate("ru", section, key, values);
 
 /** Four quick actions, the most a list carries. */
 const ACTIONS = { size: 20 + 4 * 22 };
 
 /** What `DataTable` lays a list out by: its sizes, and the floors under them. */
-const drawn = (columns: Column[]) =>
+const drawn = (columns: Column[], t: T = en) =>
   [...columns, ACTIONS].map((c) => ({
     size: c.size ?? 150,
     floor: Math.max(
       "meta" in c ? (c.meta?.floor ?? 0) : 0,
-      "header" in c ? headerFloor(c, en) : 0
+      "header" in c ? headerFloor(c, t) : 0
     ),
   }));
 
@@ -220,5 +223,58 @@ describe("the Pods status column", () => {
     expect((shares[status] / 100) * 1160).toBeGreaterThanOrEqual(
       "CreateContainerConfigError".length * 7.2 + 14 + 20
     );
+  });
+});
+
+describe("the Name column", () => {
+  /** The name is what a reader aims at; fails if a list's Name column can be drawn narrower than a pod's name. */
+  it.each(PAGES)(
+    "%s never draws its Name under the shared floor",
+    (_page, columns) => {
+      const name = columns.find((c) => c.accessorKey === "name");
+      expect(name?.meta?.floor).toBeGreaterThanOrEqual(NAME_CELL_PX);
+    }
+  );
+});
+
+describe("the Pods table at a 1440px window", () => {
+  /** The scope is one namespace, or grouped by namespace: no Namespace column either way. */
+  const shown: Column[] = (pods as Column[]).filter(
+    (c) => nameOf(c) !== "namespace"
+  );
+  const WIDTH = 1160;
+
+  /**
+   * Marco read "checko…" for three different pods and Lena "Перезапус…" on a
+   * table with room: the floors are pixels, so fails if Name is drawn under
+   * its floor, or a header under its own words, in either language.
+   */
+  it.each([
+    ["English", en],
+    ["Russian", ru],
+  ] as const)(
+    "draws Name and every header whole, without a scrollbar, in %s",
+    (_language, t) => {
+      const specs = drawn(shown, t);
+      const shares = columnShares(specs, WIDTH);
+      const px = shares.map((share) => (share / 100) * WIDTH);
+      const name = shown.findIndex((c) => c.accessorKey === "name");
+      expect(px[name]).toBeGreaterThanOrEqual(NAME_CELL_PX);
+      shown.forEach((column, index) => {
+        expect(px[index], nameOf(column)).toBeGreaterThanOrEqual(
+          headerFloor(column, t)
+        );
+      });
+      expect(shares.reduce((sum, share) => sum + share, 0)).toBeLessThanOrEqual(
+        100.0001
+      );
+    }
+  );
+
+  /** "7 (59 мин назад)" was cut to "7 (4 мин на…" beside a free strip of row actions. */
+  it("keeps the whole restart count and its age in Russian", () => {
+    const restarts = shown.findIndex((c) => c.id === "restarts");
+    const px = (columnShares(drawn(shown, ru), WIDTH)[restarts] / 100) * WIDTH;
+    expect(px).toBeGreaterThanOrEqual("7 (59 мин назад)".length * 7.2 + 20);
   });
 });
