@@ -184,13 +184,17 @@ const ESTIMATED_ROW_PX = { compact: 23, comfortable: 33 } as const;
 /** How many rows either side of the viewport stay mounted. */
 const OVERSCAN = 12;
 
+/** WebKitGTK's overlay scrollbar takes the pointer over a port's last 21px. */
+const SCROLLBAR_REACH = 24;
+const ACTIONS_CELL_GUTTER = { paddingRight: SCROLLBAR_REACH };
+
 /**
  * The width the actions cell needs, from what it actually holds: a 20px icon
- * and a 2px gap each, inside the cell's own 10px padding on both sides.
- * TanStack's default is 150 — a name column's worth of the table reserved for
- * two buttons, on every list in the app.
+ * and a 2px gap each, the cell's own 10px padding on the left and the
+ * scrollbar's reach on the right. TanStack's default is 150, a name column's
+ * worth of the table reserved for two buttons, on every list in the app.
  */
-const actionsColumnSize = (count: number) => 20 + count * 22;
+const actionsColumnSize = (count: number) => 10 + SCROLLBAR_REACH + count * 22;
 
 /**
  * What the row's buttons do, handed to the cell through a context rather than
@@ -959,6 +963,11 @@ function DataTableInner<TData extends RowData>({
               cellPadding,
               !CONTROL_COLUMNS.has(cell.column.id) && clipText
             )}
+            style={
+              cell.column.id === ACTIONS_COLUMN_ID
+                ? ACTIONS_CELL_GUTTER
+                : undefined
+            }
           >
             {flexRender(cell.column.columnDef.cell, cell.getContext())}
           </TableCell>

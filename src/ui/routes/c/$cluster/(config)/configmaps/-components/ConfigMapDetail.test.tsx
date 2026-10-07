@@ -149,6 +149,28 @@ describe("Marco's ConfigMap, which his Role lets him read and not change", () =>
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
+  /**
+   * The header's greyed Delete said why in a tooltip drawn inside the page,
+   * whose transformed, scrolling box cut its first line under the tab strip.
+   * Fails if the reason is drawn anywhere inside the page.
+   */
+  it("says why Delete is greyed in a tooltip outside the page's box", async () => {
+    const { container } = await marcosPage("data");
+    const remove = () => screen.getByRole("button", { name: "Delete" });
+    await waitFor(() =>
+      expect(remove()).toHaveAttribute("aria-disabled", "true")
+    );
+
+    await userEvent.setup().hover(remove());
+    const reasons = await screen.findAllByText(
+      /can-i delete configmaps -n team-checkout/
+    );
+    for (const reason of reasons) {
+      expect(container.contains(reason)).toBe(false);
+      expect(document.body.contains(reason)).toBe(true);
+    }
+  });
+
   /** Fails if the YAML tab offers Edit YAML, whose Apply the cluster refuses. */
   it("greys Edit YAML with the same question", async () => {
     await marcosPage("yaml");

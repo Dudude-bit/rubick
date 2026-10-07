@@ -272,6 +272,20 @@ describe("DataTable rows", () => {
   });
 
   /**
+   * Marco's greyed trash said why only over the left of its glyph: WebKitGTK's
+   * overlay scrollbar takes a scrolling port's last 21px, and a pixel of hit
+   * area hung below the last row made even a two-row list scroll. Fails if the
+   * last button's cell gives up its gutter or the hit area outgrows the row.
+   */
+  it("keeps a row's last button clear of the scrollbar and its hit area inside the row", async () => {
+    await renderTable({ quickAction: vi.fn() });
+    const button = screen.getAllByRole("button", { name: "View" })[0];
+    expect(button.closest("td")).toHaveStyle({ paddingRight: "24px" });
+    expect(button.className).toContain("before:-inset-y-px");
+    expect(button.className).not.toContain("before:-inset-0.5");
+  });
+
+  /**
    * The PVs list drew "k8s-gui-hostpath." with a stray dot: the storage
    * class link took its name's whole width, the cell clipped it, and the
    * cell's own ellipsis drew after it. Fails if a link that is a text cell's

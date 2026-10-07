@@ -71,12 +71,9 @@ export function QuickActions<T>({
                 variant="ghost"
                 size="icon"
                 className={cn(
-                  // The row's height is whatever the tallest cell is, and
-                  // an icon button is usually it. The visual target is 20px
-                  // so it fits a compact row's line box; the pseudo-element
-                  // pushes the pointer target back out to 24px, because a
-                  // 20px click target is hostile even when it looks tidy.
-                  "relative h-5 w-5 before:absolute before:-inset-0.5 before:content-['']",
+                  // A 24px wide target, no taller than the row: a pixel below
+                  // the last row made a two-row list scroll.
+                  "relative h-5 w-5 before:absolute before:-inset-x-0.5 before:-inset-y-px before:content-['']",
                   action.variant === "destructive" &&
                     "text-err hover:bg-err/16 hover:text-err",
                   reason && "cursor-default opacity-40 hover:bg-transparent"
