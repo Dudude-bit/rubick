@@ -97,7 +97,7 @@ function FoldedDocument({ label, text }: { label: string; text: string }) {
     <div className="flex min-w-0 flex-col">
       <div className="flex items-baseline gap-2">
         <span className="text-[11px] text-fg-fnt">
-          {describeDocument(text)}
+          {describeDocument(text, t)}
         </span>
         <div className="-my-0.5 ml-auto flex items-center gap-1">
           <DetailAction

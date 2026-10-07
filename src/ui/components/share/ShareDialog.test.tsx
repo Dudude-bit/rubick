@@ -1,4 +1,5 @@
 import {
+  afterEach,
   beforeAll,
   beforeEach,
   describe,
@@ -41,6 +42,7 @@ const targets = vi.hoisted(() => ({
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { useLocaleStore } from "@/stores/localeStore";
 import { commands } from "@/lib/commands";
 import type { Report } from "@/lib/report";
 import { ShareDialog } from "./ShareDialog";
@@ -155,6 +157,8 @@ beforeAll(() => {
   proto.releasePointerCapture ??= () => {};
 });
 
+afterEach(() => useLocaleStore.setState({ choice: null }));
+
 beforeEach(() => {
   vi.clearAllMocks();
   save.mockResolvedValue("/home/me/report.html");
@@ -162,6 +166,18 @@ beforeEach(() => {
 });
 
 describe("ShareDialog", () => {
+  /**
+   * Lena read "31450 символов" in the Share dialog of a Deployment. Fails if
+   * the dialog's size line stops being a counted string the translator
+   * groups, which is how a page-sized report prints.
+   */
+  it("groups the thousands of the file's size in Russian", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    mount({ ...report, notRead: ["x".repeat(31000)] });
+    const line = screen.getByText(/символ/).textContent ?? "";
+    expect(line).toMatch(/^\d{2}\s\d{3} символ/);
+  });
+
   /** Saving is the whole of it: one file, named after the object, with the rendered report inside. */
   it("writes the rendered file to the path the reader picked", async () => {
     mount();

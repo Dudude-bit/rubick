@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { T } from "@/i18n/useT";
 import { TONE_TEXT, type Tone } from "@/lib/tone";
 
 /**
@@ -111,9 +112,10 @@ export function expandDocument(text: string): string {
 }
 
 /** What the reader is being offered before they open it. */
-export function describeDocument(text: string): string {
-  const shape = parseJsonDocument(text) === undefined ? "text" : "JSON";
-  return `${shape} · ${text.length} chars`;
+export function describeDocument(text: string, t: T): string {
+  const shape =
+    parseJsonDocument(text) === undefined ? t("files", "text") : "JSON";
+  return `${shape} · ${t("count", "chars", { n: text.length })}`;
 }
 
 /**
