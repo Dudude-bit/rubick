@@ -27,6 +27,10 @@ import { JobDetail } from "../(workloads)/jobs/-components/JobDetail";
 import { CronJobDetail } from "../(workloads)/cronjobs/-components/CronJobDetail";
 import { NodeDetail } from "../(cluster)/nodes/-components/NodeDetail";
 import { NamespaceDetail } from "../(cluster)/namespaces/-components/NamespaceDetail";
+import { IngressDetail } from "../(network)/ingresses/-components/IngressDetail";
+import { GatewayDetail } from "../(network)/(gateway-api)/gateways/-components/GatewayDetail";
+import { GatewayRouteDetail } from "../(network)/(gateway-api)/-components/GatewayRouteDetail";
+import { PersistentVolumeClaimDetail } from "../(storage)/persistentvolumeclaims/-components/PersistentVolumeClaimDetail";
 
 const NS = "shop";
 
@@ -239,6 +243,99 @@ const KINDS: Kind[] = [
   },
 ];
 
+const BESIDE = {
+  labels: {},
+  annotations: {},
+  createdAt: "2026-10-01T00:00:00Z",
+};
+
+/** The kinds whose page had an Events tab of its own read, with a cap and a refusal unlike the peek's. */
+const OWN_READ: Kind[] = [
+  {
+    kind: "Ingress",
+    group: "networking.k8s.io",
+    plural: "ingresses",
+    name: "shop",
+    namespaced: true,
+    get: "get_ingress",
+    object: {
+      ...BESIDE,
+      name: "shop",
+      namespace: NS,
+      className: null,
+      rules: [],
+      defaultBackend: null,
+      loadBalancerIps: [],
+      tlsHosts: [],
+      tlsConfigs: [],
+      hasCatchAllTls: false,
+    },
+    page: <IngressDetail />,
+  },
+  {
+    kind: "Gateway",
+    group: "gateway.networking.k8s.io",
+    plural: "gateways",
+    name: "edge",
+    namespaced: true,
+    get: "get_gateway",
+    object: {
+      ...BESIDE,
+      name: "edge",
+      namespace: NS,
+      apiVersion: "gateway.networking.k8s.io/v1",
+      className: "cilium",
+      listeners: [],
+      listenerSets: [],
+      listenerSetsKnown: true,
+      addresses: [],
+      conditions: [],
+      generation: 1,
+    },
+    page: <GatewayDetail />,
+  },
+  {
+    kind: "HTTPRoute",
+    group: "gateway.networking.k8s.io",
+    plural: "httproutes",
+    name: "store",
+    namespaced: true,
+    get: "get_gateway_route",
+    object: {
+      ...BESIDE,
+      kind: "HTTPRoute",
+      apiVersion: "gateway.networking.k8s.io/v1",
+      name: "store",
+      namespace: NS,
+      hostnames: [],
+      parentRefs: [],
+      rules: [],
+      parents: [],
+      generation: 1,
+    },
+    page: <GatewayRouteDetail kind="HTTPRoute" />,
+  },
+  {
+    kind: "PersistentVolumeClaim",
+    group: "",
+    plural: "persistentvolumeclaims",
+    name: "data-db-0",
+    namespaced: true,
+    get: "get_persistent_volume_claim",
+    object: {
+      ...BESIDE,
+      name: "data-db-0",
+      namespace: NS,
+      status: "Bound",
+      volume: "pvc-1",
+      capacity: "1Gi",
+      accessModes: ["ReadWriteOnce"],
+      storageClass: "standard",
+    },
+    page: <PersistentVolumeClaimDetail />,
+  },
+];
+
 const NAMESPACE: Kind = {
   kind: "Namespace",
   group: "",
@@ -352,6 +449,11 @@ async function openEventAbout(
         ...query,
         allowed: true,
       }));
+    if (
+      command === "list_service_health_inputs" ||
+      (command.startsWith("list_") && command.endsWith("_in"))
+    )
+      return { rows: [], unread: [] };
     if (command.startsWith("list_") || command.endsWith("_pods")) return [];
     return undefined;
   });
@@ -382,67 +484,70 @@ beforeEach(() => {
   useClusterStore.setState({ currentContext: "prod", isConnected: true });
 });
 
-describe.each(KINDS)("an Event about a $kind, opened", (target) => {
-  const about = {
-    kind: target.kind,
-    name: target.name,
-    namespace: target.namespaced ? NS : null,
-  };
-  const KUBECTL = [
-    event(about, "BackOff", "Warning", 29, eventNamespace(target)),
-    event(about, "Scheduled", "Normal", 1, eventNamespace(target)),
-    event(about, "Created", "Normal", 3, eventNamespace(target)),
-  ];
+describe.each([...KINDS, ...OWN_READ])(
+  "an Event about a $kind, opened",
+  (target) => {
+    const about = {
+      kind: target.kind,
+      name: target.name,
+      namespace: target.namespaced ? NS : null,
+    };
+    const KUBECTL = [
+      event(about, "BackOff", "Warning", 29, eventNamespace(target)),
+      event(about, "Scheduled", "Normal", 1, eventNamespace(target)),
+      event(about, "Created", "Normal", 3, eventNamespace(target)),
+    ];
 
-  /**
-   * Opening an Event about a workload, a node or a Job kept the reader on
-   * the Event's bare page, and a link naming tab=events opened Overview,
-   * because only the Pod page had the tab. Fails if the event does not land
-   * on its object's Events tab with the events its peek reads.
-   */
-  it("lands on the object's Events tab, listing what the peek reads", async () => {
-    const { router } = await openEventAbout(target, async () => KUBECTL);
+    /**
+     * Opening an Event about a workload, a node or a Job kept the reader on
+     * the Event's bare page, and a link naming tab=events opened Overview,
+     * because only the Pod page had the tab. Fails if the event does not land
+     * on its object's Events tab with the events its peek reads.
+     */
+    it("lands on the object's Events tab, listing what the peek reads", async () => {
+      const { router } = await openEventAbout(target, async () => KUBECTL);
 
-    await waitFor(() =>
-      expect(router.state.location.search).toMatchObject({ tab: "events" })
-    );
-    expect(router.state.location.pathname).toBe(
-      target.namespaced
-        ? `/c/prod/${target.plural}/${NS}/${target.name}`
-        : `/c/prod/${target.plural}/${target.name}`
-    );
-    await waitFor(() => expect(selectedTab()).toHaveTextContent(/^Events/));
-    expect(selectedTab()).toHaveAttribute("title", "Events: 3");
-    for (const reason of ["BackOff", "Scheduled", "Created"])
-      expect(await screen.findByText(reason)).toBeInTheDocument();
-    expect(listed.at(-1)).toMatchObject({
-      involved_object_kind: target.kind,
-      involved_object_name: target.name,
-      limit: 200,
-    });
-  });
-
-  /**
-   * A refused read drew "No events for this object" on the pages that
-   * swallowed it. Fails if the tab or its mark reads a 403 as none.
-   */
-  it("says it could not read the events where the cluster refused, with a hollow mark", async () => {
-    await openEventAbout(target, async () => {
-      throw {
-        code: "KUBE_API_ERROR",
-        message: 'events is forbidden: User "marco" cannot list events',
-      };
+      await waitFor(() =>
+        expect(router.state.location.search).toMatchObject({ tab: "events" })
+      );
+      expect(router.state.location.pathname).toBe(
+        target.namespaced
+          ? `/c/prod/${target.plural}/${NS}/${target.name}`
+          : `/c/prod/${target.plural}/${target.name}`
+      );
+      await waitFor(() => expect(selectedTab()).toHaveTextContent(/^Events/));
+      expect(selectedTab()).toHaveAttribute("title", "Events: 3");
+      for (const reason of ["BackOff", "Scheduled", "Created"])
+        expect(await screen.findByText(reason)).toBeInTheDocument();
+      expect(listed.at(-1)).toMatchObject({
+        involved_object_kind: target.kind,
+        involved_object_name: target.name,
+        limit: 200,
+      });
     });
 
-    expect(
-      await screen.findByRole("tab", {
-        name: "Events: Could not read events.",
-      })
-    ).toBeInTheDocument();
-    expect(screen.getByText("Could not read events.")).toBeInTheDocument();
-    expect(screen.queryByText("No events for this object")).toBeNull();
-  });
-});
+    /**
+     * A refused read drew "No events for this object" on the pages that
+     * swallowed it. Fails if the tab or its mark reads a 403 as none.
+     */
+    it("says it could not read the events where the cluster refused, with a hollow mark", async () => {
+      await openEventAbout(target, async () => {
+        throw {
+          code: "KUBE_API_ERROR",
+          message: 'events is forbidden: User "marco" cannot list events',
+        };
+      });
+
+      expect(
+        await screen.findByRole("tab", {
+          name: "Events: Could not read events.",
+        })
+      ).toBeInTheDocument();
+      expect(screen.getByText("Could not read events.")).toBeInTheDocument();
+      expect(screen.queryByText("No events for this object")).toBeNull();
+    });
+  }
+);
 
 describe("an Event about a Namespace, opened", () => {
   const IN_SHOP = [
@@ -490,5 +595,32 @@ describe("an Event about a Namespace, opened", () => {
       involved_object_kind: null,
       involved_object_name: null,
     });
+  });
+});
+
+describe("the Events tab of a claim no provisioner has picked up", () => {
+  /**
+   * An unbound claim with no events is waiting on a provisioner, which the
+   * claim page said before its tab moved onto the shared read. Fails if the
+   * tab falls back to the plain "No events" a bound claim gets.
+   */
+  it("says nobody has picked it up, not only that it has no events", async () => {
+    const claim = OWN_READ.find(
+      (kind) => kind.kind === "PersistentVolumeClaim"
+    )!;
+    await openEventAbout(
+      {
+        ...claim,
+        object: { ...claim.object, status: "Pending", volume: null },
+      },
+      async () => []
+    );
+
+    expect(
+      await screen.findByText(
+        "No events yet: no provisioner has picked this claim up."
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No events for this object")).toBeNull();
   });
 });

@@ -1,21 +1,15 @@
 import { useCallback } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
-import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { Info } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
 import { pvcFactsSection, pvcStatusOf } from "@/lib/share/pvc-share";
-import { Section, SectionHeader } from "@/components/ui/section";
-import { Skeleton } from "@/components/ui/skeleton";
 import { PhaseBadge } from "@/components/ui/status-badge";
 import { yamlTab } from "../../../-object/yaml-tab";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
-import {
-  countMark,
-  kindGlyph,
-  viewGlyph,
-} from "@/components/object/detail-tab";
-import { DetailAction, EventRows } from "@/components/object/detail-blocks";
+import { viewGlyph } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { connectionsTab } from "../../../-object/connections-tab";
@@ -25,10 +19,7 @@ import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
-import type {
-  EventFilters,
-  PersistentVolumeClaimInfo,
-} from "@/generated/types";
+import type { PersistentVolumeClaimInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 
 export function PersistentVolumeClaimDetail() {
@@ -64,27 +55,12 @@ export function PersistentVolumeClaimDetail() {
   // provisioner says why in the events rather than on the object.
   const pending = !!pvc && !pvc.volume;
 
-  const {
-    data: events = [],
-    isLoading: eventsLoading,
-    error: eventsError,
-    refetch: refetchEvents,
-  } = useLiveQuery({
-    queryKey: ["pvc-events", namespace, name],
-    queryFn: async () => {
-      const filters: EventFilters = {
-        namespace: namespace || null,
-        involved_object_name: name || null,
-        involved_object_kind: ResourceType.PersistentVolumeClaim,
-        event_type: null,
-        field_selector: null,
-        limit: 100,
-      };
-      return await commands.listEvents(filters);
-    },
-    enabled: !!name && !!namespace,
-    refresh: "overview",
-  });
+  const events = useObjectEvents(
+    ResourceType.PersistentVolumeClaim,
+    name,
+    namespace,
+    { refresh: "overview" }
+  );
 
   const facts: KeyValue[] = [
     {
@@ -148,47 +124,13 @@ export function PersistentVolumeClaimDetail() {
       ),
     },
     connectionsTab(connections, t, deliveryQuery),
-    {
-      id: "events",
-      label: "Events",
-      glyph: kindGlyph(ResourceType.Event),
-      mark: countMark(events.length),
-      content: (
-        <Section>
-          <SectionHeader
-            title="Events"
-            count={events.length || undefined}
-            actions={
-              eventsError && (
-                <DetailAction
-                  label={t("action", "retry")}
-                  onClick={() => refetchEvents()}
-                />
-              )
-            }
-          />
-          {eventsError ? (
-            <p className="text-xs text-warn">
-              {t("empty", "couldNotReadClaimEvents")}
-            </p>
-          ) : eventsLoading ? (
-            <div className="flex flex-col gap-1.5">
-              <Skeleton className="h-3 w-full" />
-              <Skeleton className="h-3 w-3/4" />
-            </div>
-          ) : (
-            <EventRows
-              events={events}
-              emptyMessage={
-                pending
-                  ? t("empty", "noEventsUnprovisioned")
-                  : t("empty", "noEventsForClaim")
-              }
-            />
-          )}
-        </Section>
-      ),
-    },
+    eventsTab(events, t, {
+      kind: ResourceType.PersistentVolumeClaim,
+      name: name ?? "",
+      none: pending
+        ? t("empty", "noEventsUnprovisioned")
+        : t("empty", "noEventsForClaim"),
+    }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "PersistentVolumeClaim" }),
       yaml: pvcYaml,

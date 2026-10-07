@@ -28,13 +28,10 @@ import {
 } from "@/components/ui/copyable-value";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { yamlTab } from "../../../../-object/yaml-tab";
+import { eventsTab } from "../../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { ResourceDetailLayout } from "../../../../-object/ResourceDetailLayout";
-import {
-  countMark,
-  kindGlyph,
-  viewGlyph,
-} from "@/components/object/detail-tab";
-import { EventRows } from "@/components/object/detail-blocks";
+import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
@@ -45,7 +42,6 @@ import { verdictOf } from "@/lib/route-verdict";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useGatewayShare } from "./useGatewayShare";
 import { GATEWAY_ROUTE_KINDS } from "../../../../-object/useGatewayRoutes";
-import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
@@ -55,12 +51,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { cautioningCondition, failingCondition } from "@/lib/condition-health";
 import { gatewayProgrammed, parentIsGateway } from "@/lib/route-trace";
 import { ROUTING_STALE } from "@/integrations";
-import type {
-  EventFilters,
-  GatewayInfo,
-  ListenerInfo,
-  RouteInfo,
-} from "@/generated/types";
+import type { GatewayInfo, ListenerInfo, RouteInfo } from "@/generated/types";
 import { None } from "@/components/ui/none";
 
 const ROUTE_KINDS = new Set<string>(GATEWAY_ROUTE_KINDS);
@@ -328,20 +319,7 @@ export function GatewayDetail() {
     [routes.data, gateway]
   );
 
-  const { data: events = [] } = useLiveQuery({
-    queryKey: ["gateway-events", namespace, name],
-    queryFn: async () => {
-      const filters: EventFilters = {
-        namespace: namespace || null,
-        involved_object_name: name || null,
-        involved_object_kind: ResourceType.Gateway,
-        event_type: null,
-        field_selector: null,
-        limit: 100,
-      };
-      return await commands.listEvents(filters);
-    },
-    enabled: !!name && !!namespace,
+  const events = useObjectEvents(ResourceType.Gateway, name, namespace, {
     refresh: "overview",
   });
 
@@ -582,13 +560,7 @@ export function GatewayDetail() {
         </>
       ),
     },
-    {
-      id: "events",
-      label: "Events",
-      glyph: kindGlyph(ResourceType.Event),
-      mark: countMark(events.length),
-      content: <EventRows events={events} />,
-    },
+    eventsTab(events, t, { kind: ResourceType.Gateway, name: name ?? "" }),
     yamlTab({
       title: "Gateway YAML",
       yaml,

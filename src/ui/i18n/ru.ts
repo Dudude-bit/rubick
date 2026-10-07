@@ -6669,7 +6669,6 @@ export const ru: Catalogue = {
     notProvisionedYet: "ещё не выделен",
     notBoundNothingSatisfied: "не привязана: заявку никто не удовлетворил",
     clusterDefault: "по умолчанию для кластера",
-    couldNotReadClaimEvents: "Не удалось прочитать события для этой заявки.",
     noAccessModes: "режимов доступа нет",
     noVolumeBound: "том не привязан",
     defaultClassBadge: "класс по умолчанию",

@@ -18,7 +18,7 @@ import { ResourceType } from "@/lib/resource-registry";
 export function eventsTab(
   query: ObjectEventsQuery,
   t: T,
-  subject: { kind: string; name: string }
+  subject: { kind: string; name: string; none?: string }
 ): DetailTab {
   const { data, error } = query;
   const everyObject = eventsOfEveryObject(subject.kind);
@@ -62,10 +62,13 @@ export function eventsTab(
           <EventRows
             events={data}
             showObject={everyObject}
-            emptyMessage={t(
-              "empty",
-              everyObject ? "noEventsInNamespace" : "noEventsForObject"
-            )}
+            emptyMessage={
+              subject.none ??
+              t(
+                "empty",
+                everyObject ? "noEventsInNamespace" : "noEventsForObject"
+              )
+            }
           />
         )}
       </Section>

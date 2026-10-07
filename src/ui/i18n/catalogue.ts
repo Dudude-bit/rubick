@@ -6063,7 +6063,6 @@ export const en = {
     notProvisionedYet: "not provisioned yet",
     notBoundNothingSatisfied: "not bound: nothing has satisfied this claim",
     clusterDefault: "cluster default",
-    couldNotReadClaimEvents: "Could not read events for this claim.",
     noAccessModes: "no access modes",
     noVolumeBound: "no volume bound",
     defaultClassBadge: "default class",

@@ -23,13 +23,10 @@ import {
 } from "@/components/ui/table";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { yamlTab } from "../../../-object/yaml-tab";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
-import {
-  countMark,
-  kindGlyph,
-  viewGlyph,
-} from "@/components/object/detail-tab";
-import { EventRows } from "@/components/object/detail-blocks";
+import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -40,14 +37,13 @@ import { useResourceDetail } from "@/hooks";
 import { useT } from "@/i18n/useT";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { useGatewayRouteShare } from "./useGatewayRouteShare";
-import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { backingFrom, backingOf, useBackingLists } from "@/integrations";
 import { describeStop } from "@/lib/connections";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
 import { sayMatch } from "@/lib/route-match";
 import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
-import type { EventFilters, RouteInfo, RouteRuleInfo } from "@/generated/types";
+import type { RouteInfo, RouteRuleInfo } from "@/generated/types";
 import { None } from "@/components/ui/none";
 
 function RuleRows({ route }: { route: RouteInfo }) {
@@ -239,20 +235,7 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
   const intercept = useDeliveryIntercept(deliveryQuery);
   const share = useGatewayRouteShare(route);
 
-  const { data: events = [] } = useLiveQuery({
-    queryKey: ["gateway-route-events", kind, namespace, name],
-    queryFn: async () => {
-      const filters: EventFilters = {
-        namespace: namespace || null,
-        involved_object_name: name || null,
-        involved_object_kind: kind,
-        event_type: null,
-        field_selector: null,
-        limit: 100,
-      };
-      return await commands.listEvents(filters);
-    },
-    enabled: !!name && !!namespace,
+  const events = useObjectEvents(kind, name, namespace, {
     refresh: "overview",
   });
 
@@ -322,13 +305,7 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
         </>
       ),
     },
-    {
-      id: "events",
-      label: "Events",
-      glyph: kindGlyph(ResourceType.Event),
-      mark: countMark(events.length),
-      content: <EventRows events={events} />,
-    },
+    eventsTab(events, t, { kind, name: name ?? "" }),
     yamlTab({
       title: `${kind} YAML`,
       yaml,

@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { ExternalLink, Info, Lock, Route, Tag } from "lucide-react";
 
 import {
@@ -12,18 +11,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Section, SectionHeader } from "@/components/ui/section";
-import { Skeleton } from "@/components/ui/skeleton";
 import { CopyableAddresses } from "@/components/ui/copyable-value";
 import { yamlTab } from "../../../-object/yaml-tab";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
-import {
-  countMark,
-  kindGlyph,
-  viewGlyph,
-} from "@/components/object/detail-tab";
-import { DetailAction, EventRows } from "@/components/object/detail-blocks";
+import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import {
   KeyValueList,
@@ -60,7 +55,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ResourceType } from "@/lib/resource-registry";
 import { cn } from "@/lib/utils";
-import type { EventFilters, IngressInfo } from "@/generated/types";
+import type { IngressInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 
 export function IngressDetail() {
@@ -215,25 +210,7 @@ export function IngressDetail() {
     certificates,
   });
 
-  const {
-    data: events = [],
-    isLoading: eventsLoading,
-    error: eventsError,
-    refetch: refetchEvents,
-  } = useLiveQuery({
-    queryKey: ["ingress-events", namespace, name],
-    queryFn: async () => {
-      const filters: EventFilters = {
-        namespace: namespace || null,
-        involved_object_name: name || null,
-        involved_object_kind: ResourceType.Ingress,
-        event_type: null,
-        field_selector: null,
-        limit: 100,
-      };
-      return await commands.listEvents(filters);
-    },
-    enabled: !!name && !!namespace,
+  const events = useObjectEvents(ResourceType.Ingress, name, namespace, {
     refresh: "overview",
   });
 
@@ -533,40 +510,7 @@ export function IngressDetail() {
         </>
       ),
     },
-    {
-      id: "events",
-      label: "Events",
-      glyph: kindGlyph(ResourceType.Event),
-      mark: countMark(events.length),
-      content: (
-        <Section>
-          <SectionHeader
-            title="Events"
-            count={events.length || undefined}
-            actions={
-              eventsError && (
-                <DetailAction
-                  label={t("action", "retry")}
-                  onClick={() => refetchEvents()}
-                />
-              )
-            }
-          />
-          {eventsError ? (
-            <p className="text-xs text-warn">
-              {t("empty", "couldNotReadEvents")}
-            </p>
-          ) : eventsLoading ? (
-            <div className="flex flex-col gap-1.5">
-              <Skeleton className="h-3 w-full" />
-              <Skeleton className="h-3 w-3/4" />
-            </div>
-          ) : (
-            <EventRows events={events} />
-          )}
-        </Section>
-      ),
-    },
+    eventsTab(events, t, { kind: ResourceType.Ingress, name: name ?? "" }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "Ingress" }),
       yaml: ingressYaml,
