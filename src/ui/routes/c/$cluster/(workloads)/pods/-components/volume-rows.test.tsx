@@ -5,6 +5,7 @@ import { screen } from "@testing-library/react";
 import { VolumeRows } from "./volume-rows";
 import type { PodVolumeInfo, VolumeMountInfo } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
+import { mountFor } from "@/lib/container-files";
 
 const wrap = (ui: ReactNode) =>
   renderWithRouter(<>{ui}</>, {
@@ -46,6 +47,34 @@ const mount = (
 });
 
 describe("VolumeRows", () => {
+  it("names every source of the token volume, as the Files tab does", async () => {
+    /** Lena's pod page named only kube-root-ca.crt for kube-api-access while
+     *  the Files tab and kubectl named three sources. Fails if the row reads
+     *  the objects alone again. */
+    const apiAccess = volume({
+      name: "kube-api-access-552dj",
+      source: "projected",
+      refs: [{ kind: "ConfigMap", name: "kube-root-ca.crt" }],
+      mounts: [mount("hello-web")],
+      projections: [
+        { source: "serviceAccountToken", object: null, paths: ["token"] },
+        {
+          source: "configMap",
+          object: { kind: "ConfigMap", name: "kube-root-ca.crt" },
+          paths: ["ca.crt"],
+        },
+        { source: "downwardAPI", object: null, paths: ["namespace"] },
+      ],
+    });
+    await show([apiAccess]);
+
+    const files = mountFor(SA, "hello-web", [apiAccess])!.sources;
+    expect(files).toHaveLength(3);
+    for (const source of files)
+      expect(
+        screen.getByText(source.name || source.kind, { exact: true })
+      ).toBeInTheDocument();
+  });
   it("makes the object a volume draws from somewhere you can go", async () => {
     /** The whole point of the block: `cfg` told the reader nothing about
      *  which ConfigMap it was, and the only way to find out was the YAML. */

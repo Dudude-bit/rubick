@@ -38,12 +38,13 @@ import {
   sortEntries,
   type FileEntry,
   type SortKey,
+  volumeSources,
 } from "@/lib/container-files";
 import { errorToShow } from "@/lib/error-utils";
 import { formatBytes } from "@/lib/k8s-quantity";
 import { formatShortcut } from "@/lib/platform";
 import { cn, formatDecimal, formatSince, formatWhen } from "@/lib/utils";
-import type { PodInfo, Via } from "@/generated/types";
+import type { PodInfo, PodVolumeInfo, Via } from "@/generated/types";
 import { offeredContainers } from "@/lib/container-sequence";
 import { useT } from "@/i18n/useT";
 import { useContainerFiles, type ListingState } from "./useContainerFiles";
@@ -941,9 +942,7 @@ function MountsOnly({
           <li key={`${volume.name}:${mount.path}`}>
             {mount.path}
             <span className="ml-2 text-fg-fnt">
-              {volume.refs.length === 1 && volume.projections.length <= 1
-                ? `${volume.refs[0].kind} ${volume.refs[0].name}`
-                : volume.source}
+              {sourceWords(volume)}
               {mount.readOnly ? " · ro" : ""}
             </span>
           </li>
@@ -1117,4 +1116,11 @@ function Preview({
       </div>
     </div>
   );
+}
+
+function sourceWords(volume: PodVolumeInfo): string {
+  const [only, ...more] = volumeSources(volume);
+  return only && more.length === 0
+    ? `${only.kind} ${only.name}`.trim()
+    : volume.source;
 }

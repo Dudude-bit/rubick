@@ -64,6 +64,15 @@ const sourceOf = (projection: VolumeProjectionInfo) => ({
   name: projection.object?.name ?? "",
 });
 
+/** What a volume draws from: an object by name, or a projected source's word with an empty name. */
+export function volumeSources(
+  volume: PodVolumeInfo
+): { kind: string; name: string }[] {
+  return volume.projections.length > 0
+    ? volume.projections.map(sourceOf)
+    : volume.refs.map((r) => ({ kind: r.kind, name: r.name }));
+}
+
 function tagOf(volume: PodVolumeInfo, at: string, path: string): MountTag {
   const base = at.endsWith("/") ? at.slice(0, -1) : at;
   const writer = writerOf(volume.projections, path.slice(base.length + 1));
@@ -76,10 +85,7 @@ function tagOf(volume: PodVolumeInfo, at: string, path: string): MountTag {
       sources: [sourceOf(writer)],
     };
   }
-  const sources =
-    volume.projections.length > 0
-      ? volume.projections.map(sourceOf)
-      : volume.refs.map((r) => ({ kind: r.kind, name: r.name }));
+  const sources = volumeSources(volume);
   const only = sources.length === 1 ? sources[0] : null;
   return {
     // With one source the tag can name it. With several, what is certain

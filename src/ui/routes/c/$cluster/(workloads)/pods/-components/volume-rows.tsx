@@ -1,6 +1,7 @@
 import { Section, SectionHeader } from "@/components/ui/section";
 import { groupMounts, mountedBy } from "@/lib/mounts";
 import { ResourceRef } from "@/components/object/ResourceRef";
+import { volumeSources } from "@/lib/container-files";
 import type { PodVolumeInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
@@ -57,22 +58,26 @@ export function VolumeRows({
             >
               {volume.name}
             </span>
-            <span className="min-w-0 truncate">
+            <span className="flex min-w-0 flex-wrap items-baseline gap-x-1.5">
               {/* The source word already says the kind, so the reference
                   does not repeat it: `configMap app-config`, not
                   `configMap ConfigMap/app-config`. */}
               <span className="text-[11px] text-fg-fnt">{volume.source}</span>
-              {volume.refs.map((ref) => (
-                <span key={`${ref.kind}/${ref.name}`}>
-                  {" "}
+              {volumeSources(volume).map((source, at) =>
+                source.name ? (
                   <ResourceRef
-                    kind={ref.kind}
-                    name={ref.name}
+                    key={at}
+                    kind={source.kind}
+                    name={source.name}
                     namespace={namespace}
                     showKind={false}
                   />
-                </span>
-              ))}
+                ) : (
+                  <span key={at} className="font-mono text-[11px] text-fg-mut">
+                    {source.kind}
+                  </span>
+                )
+              )}
             </span>
             <Mounts volume={volume} containerCount={containerCount} />
           </div>
