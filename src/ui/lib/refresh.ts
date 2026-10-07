@@ -50,6 +50,8 @@ export const REFRESH_INTERVALS = {
    */
   overview: 10_000,
   metrics: 2000,
+  /** The metrics API answering with an error: the same rate, backing off like any read. */
+  metricsFailing: 2000,
   fast: 1000,
   slow: 8000,
   /**

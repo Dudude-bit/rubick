@@ -668,3 +668,74 @@ describe("a read with nothing yet to show", () => {
     expect(screen.getByTestId("since")).toHaveTextContent("none");
   });
 });
+
+describe("a cluster that is down while the reader is still at the screen", () => {
+  let renders = 0;
+  function Down() {
+    renders++;
+    useLiveQuery<string>({
+      queryKey: ["down"],
+      queryFn: async () => {
+        reads++;
+        throw new Error(
+          "Kubernetes API error: <html><title>502 Bad Gateway</title></html>"
+        );
+      },
+      refresh: "resourceList",
+      staleTime: 0,
+    });
+    return null;
+  }
+
+  function Steady() {
+    renders++;
+    useLiveQuery<string>({
+      queryKey: ["steady"],
+      queryFn: async () => {
+        reads++;
+        return "same";
+      },
+      refresh: "resourceList",
+      staleTime: 0,
+    });
+    return null;
+  }
+
+  beforeEach(() => {
+    renders = 0;
+  });
+
+  /**
+   * Every touch woke a failing read back to the two-second rate and asked
+   * again: the API answered 502 for minutes and the Pods list was asked,
+   * and drawn, every two seconds while the pointer moved. That was the stall
+   * count climbing to 143 with no click.
+   */
+  it("keeps backing off a failing read while the pointer moves", async () => {
+    wrap(<Down />);
+    await settle();
+    for (let second = 0; second < 60; second++) {
+      act(() => useWindowActivity.setState({ interactionAt: Date.now() }));
+      await advance(1000);
+    }
+
+    expect(reads).toBeGreaterThan(BACKOFF.steadyAfter);
+    expect(reads).toBeLessThan(60_000 / RATE / 2);
+  });
+
+  /**
+   * A poll drew its page when it started, when it answered, and once more to
+   * count the answer as unchanged: three renders of a whole list for nothing.
+   */
+  it("draws its screen once for a poll that answered the same", async () => {
+    wrap(<Steady />);
+    await settle();
+    await advance(5 * 60_000);
+    const before = { reads, renders };
+
+    await advance(BACKOFF.cap);
+
+    expect(reads - before.reads).toBe(1);
+    expect(renders - before.renders).toBe(1);
+  });
+});

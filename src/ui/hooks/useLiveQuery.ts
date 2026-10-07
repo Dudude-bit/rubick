@@ -21,7 +21,7 @@
  * @module hooks/useLiveQuery
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   useQueries,
   useQuery,
@@ -32,6 +32,7 @@ import {
 } from "@tanstack/react-query";
 
 import {
+  BACKOFF,
   RECORDED,
   REFRESH_INTERVALS,
   effectiveInterval,
@@ -40,6 +41,31 @@ import {
 import { ERROR_CODES, errorCode, isRefusal } from "@/lib/error-utils";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { useWindowActivity } from "@/lib/window-activity";
+
+/** Past this many identical answers the interval is at its cap, so counting on only draws again. */
+const MAX_RUNS = BACKOFF.steadyAfter + 6;
+
+/**
+ * Identical answers in a row. The ref runs ahead of the state, so a touch and
+ * an answer landing in one render count from the same number, and the state
+ * is written only on a change, so a poll that answers the same at the cap
+ * draws nothing.
+ */
+function useSteadyRuns() {
+  const [steadyRuns, setSteadyRuns] = useState(0);
+  const runs = useRef(0);
+  const countRuns = useCallback((next: number) => {
+    if (next === runs.current) return;
+    runs.current = next;
+    setSteadyRuns(next);
+  }, []);
+  const countAnswer = useCallback(
+    (identical: boolean) =>
+      countRuns(identical ? Math.min(runs.current + 1, MAX_RUNS) : 0),
+    [countRuns]
+  );
+  return { steadyRuns, runs, countRuns, countAnswer };
+}
 
 export interface Freshness {
   /** React Query's own stamp: when the cluster last answered. */
@@ -119,8 +145,6 @@ interface JoinedParts<T> {
   /** Which parts the cluster refused. */
   refused: boolean[];
   isLoading: boolean;
-  /** Some part is in flight right now. */
-  fetching: boolean;
   error: Error | null;
   refetchers: Array<(options?: RefetchOptions) => Promise<unknown>>;
 }
@@ -144,7 +168,6 @@ function joinParts<T>(parts: Array<UseQueryResult<T, Error>>): JoinedParts<T> {
     failed: parts.map((part) => part.status === "error"),
     refused: parts.map((part) => isRefusal(part.error)),
     isLoading: parts.some((part) => part.isLoading),
-    fetching: parts.some((part) => part.fetchStatus === "fetching"),
     error: parts.find((part) => part.error)?.error ?? null,
     refetchers: parts.map((part) => part.refetch),
   };
@@ -194,7 +217,7 @@ export function useLiveQueries<T>(options: {
 
   const base =
     options.refresh === false ? false : REFRESH_INTERVALS[options.refresh];
-  const [steadyRuns, setSteadyRuns] = useState(0);
+  const { steadyRuns, runs, countRuns, countAnswer } = useSteadyRuns();
   const everyMs = effectiveInterval(base, {
     visible,
     focused,
@@ -209,7 +232,6 @@ export function useLiveQueries<T>(options: {
     failed,
     refused,
     isLoading,
-    fetching,
     error,
     refetchers,
   } = useQueries({
@@ -220,7 +242,7 @@ export function useLiveQueries<T>(options: {
     })),
     combine: joinParts,
   });
-  const waitingSince = useWaitingSince(isLoading && fetching);
+  const waitingSince = useWaitingSince(isLoading);
 
   // The join is only as fresh as its stalest part: reporting the newest would
   // put a time on screen that one of the numbers under it predates. A part
@@ -253,8 +275,8 @@ export function useLiveQueries<T>(options: {
       data === last.data &&
       failed.every((part, index) => part === last.failed[index]);
     round.current = { settled, data, failed };
-    setSteadyRuns((runs) => (identical ? runs + 1 : 0));
-  }, [settled, data, failed]);
+    countAnswer(identical);
+  }, [settled, data, failed, countAnswer]);
 
   // Coming back. Both transitions refetch, and they are separate transitions:
   // a window can become visible without taking focus, and can take focus
@@ -267,7 +289,7 @@ export function useLiveQueries<T>(options: {
     wasVisible.current = visible;
     wasFocused.current = focused;
     if (!returned) return;
-    setSteadyRuns(0);
+    countRuns(0);
     // Nothing has ever been read here, so there is nothing stale to correct,
     // and a group held back by `enabled` has nothing to correct either —
     // `refetch` would go around the gate that is holding it.
@@ -278,47 +300,45 @@ export function useLiveQueries<T>(options: {
     refetchers.forEach((refetch, index) => {
       if (!refused[index]) void refetch({ cancelRefetch: false });
     });
-  }, [visible, focused, enabled, oldest, refetchers, refused]);
+  }, [visible, focused, enabled, oldest, refetchers, refused, countRuns]);
 
   // The reader touching the window retires whatever a still screen had
   // concluded. Subscribed imperatively rather than selected: an interaction
   // must not re-render every query in the app, only wake the ones that had
   // gone quiet.
   const group = useRef<{
-    steadyRuns: number;
     base: number | false;
     enabled: boolean;
     oldest: number;
     refetchers: Array<(options?: RefetchOptions) => Promise<unknown>>;
-    refused: boolean[];
-  }>({ steadyRuns, base, enabled, oldest, refetchers, refused });
+    failed: boolean[];
+  }>({ base, enabled, oldest, refetchers, failed });
   useEffect(() => {
     group.current = {
-      steadyRuns,
       base,
       enabled: enabled && surfaceVisible,
       oldest,
       refetchers,
-      refused,
+      failed,
     };
-  }, [steadyRuns, base, enabled, surfaceVisible, oldest, refetchers, refused]);
+  }, [base, enabled, surfaceVisible, oldest, refetchers, failed]);
   useEffect(
     () =>
       useWindowActivity.subscribe((state, previous) => {
         if (state.interactionAt === previous.interactionAt) return;
         const woken = group.current;
-        if (woken.steadyRuns === 0) return;
-        setSteadyRuns(0);
+        if (runs.current === 0 || woken.failed.every(Boolean)) return;
+        countRuns(0);
         if (!woken.enabled || woken.base === false) return;
         // Only if the answer on screen is already older than the rate the
         // reader would expect of it. Otherwise a reader scrolling a page would
         // refetch every query on it once a second.
         if (Date.now() - woken.oldest <= woken.base) return;
         woken.refetchers.forEach((refetch, index) => {
-          if (!woken.refused[index]) void refetch({ cancelRefetch: false });
+          if (!woken.failed[index]) void refetch({ cancelRefetch: false });
         });
       }),
-    []
+    [runs, countRuns]
   );
 
   return {
@@ -376,8 +396,14 @@ export function useLiveQuery<
   const visible = surfaceVisible && windowVisible;
 
   const recording = refresh !== false && RECORDED.has(refresh);
-  const [steadyRuns, setSteadyRuns] = useState(0);
+  const { steadyRuns, runs, countRuns, countAnswer } = useSteadyRuns();
   const [gone, setGone] = useState(false);
+  const goneRef = useRef(false);
+  const markGone = useCallback((now: boolean) => {
+    if (now === goneRef.current) return;
+    goneRef.current = now;
+    setGone(now);
+  }, []);
   const everyMs = gone
     ? false
     : effectiveInterval(base, {
@@ -403,14 +429,15 @@ export function useLiveQuery<
     error,
     refetch,
     isLoading,
-    fetchStatus,
     status,
   } = query;
   // A failure is an answer too. Counting only `dataUpdatedAt` kept a refused
   // read at full rate for as long as its page stayed open, one 403 every
   // two seconds; `useLiveQueries` already counts it the same way.
   const settledAt = Math.max(dataUpdatedAt, errorUpdatedAt);
-  const waitingSince = useWaitingSince(isLoading && fetchStatus === "fetching");
+  // `isLoading` is already "fetching with nothing to show". Reading
+  // `fetchStatus` as well drew every page once more at the start of each poll.
+  const waitingSince = useWaitingSince(isLoading);
 
   // How many answers in a row came back identical.
   //
@@ -440,9 +467,9 @@ export function useLiveQuery<
     seenAt.current = settledAt;
     seenData.current = data;
     seenFailed.current = failed;
-    setSteadyRuns((runs) => (identical ? runs + 1 : 0));
-    setGone(notFound);
-  }, [settledAt, data, failed, notFound]);
+    countAnswer(identical);
+    markGone(notFound);
+  }, [settledAt, data, failed, notFound, countAnswer, markGone]);
 
   // Coming back. Both transitions refetch, and they are separate transitions:
   // a window can become visible without taking focus, and can take focus
@@ -455,7 +482,7 @@ export function useLiveQuery<
     wasVisible.current = visible;
     wasFocused.current = focused;
     if (!returned) return;
-    setSteadyRuns(0);
+    countRuns(0);
     // Nothing has ever been read here, so there is nothing stale to correct
     // and the query's own mount fetch is already on its way. A query held back
     // by `enabled` has nothing to correct either, and `refetch` would go around
@@ -463,26 +490,29 @@ export function useLiveQuery<
     if (seenAt.current === 0 || !enabled || gone || refused) return;
     // Joins the read a re-enabled observer has already started.
     void refetch({ cancelRefetch: false });
-  }, [visible, focused, enabled, gone, refused, refetch]);
+  }, [visible, focused, enabled, gone, refused, refetch, countRuns]);
 
   // The reader touching the window retires whatever a still screen had
   // concluded. Subscribed imperatively rather than selected: an interaction
   // must not re-render every query in the app, only wake the ones that had
   // gone quiet.
-  const steadyRef = useRef(steadyRuns);
   const baseRef = useRef<number | false>(base);
   const enabledRef = useRef(enabled);
+  const failedRef = useRef(failed);
   useEffect(() => {
-    steadyRef.current = steadyRuns;
     baseRef.current = base;
+    failedRef.current = failed;
     enabledRef.current = enabled && surfaceVisible && !gone && !refused;
-  }, [steadyRuns, base, enabled, surfaceVisible, gone, refused]);
+  }, [base, failed, enabled, surfaceVisible, gone, refused]);
   useEffect(
     () =>
       useWindowActivity.subscribe((state, previous) => {
         if (state.interactionAt === previous.interactionAt) return;
-        if (steadyRef.current === 0) return;
-        setSteadyRuns(0);
+        // A read that keeps failing is not a still screen: waking it on every
+        // touch asked a cluster that was down every two seconds for as long
+        // as the pointer moved. The timer and Retry still ask.
+        if (runs.current === 0 || failedRef.current) return;
+        countRuns(0);
         if (!enabledRef.current) return;
         const rate = baseRef.current;
         // Only if the answer on screen is already older than the rate the
@@ -491,7 +521,7 @@ export function useLiveQuery<
         if (rate !== false && Date.now() - seenAt.current > rate)
           void refetch();
       }),
-    [refetch]
+    [refetch, runs, countRuns]
   );
 
   const freshness: Freshness = {

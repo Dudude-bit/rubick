@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("@/lib/commands", () => ({
@@ -129,6 +129,26 @@ describe("how often an unserved metrics API is asked", () => {
     await open(5.5);
     await waitFor(() =>
       expect(commands.getNodesMetrics).toHaveBeenCalledTimes(2)
+    );
+  });
+
+  /**
+   * The rate is a recording's cadence, and an error records nothing: during
+   * a 502 outage the metrics API was asked every two seconds for as long as
+   * the Pods list stayed open, each answer redrawing the page.
+   */
+  it("backs off a failing API that keeps saying the same", async () => {
+    vi.useFakeTimers();
+    vi.mocked(commands.getPodsMetrics)
+      .mockClear()
+      .mockResolvedValue(answer("error"));
+    renderHook(() => useMetrics({ includeNodes: false }), { wrapper });
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+
+    const atFullRate = 60_000 / REFRESH_INTERVALS.metrics;
+    expect(commands.getPodsMetrics).toHaveBeenCalled();
+    expect(vi.mocked(commands.getPodsMetrics).mock.calls.length).toBeLessThan(
+      atFullRate / 2
     );
   });
 

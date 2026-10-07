@@ -3,17 +3,34 @@ import { keepPreviousData } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import type {
   MetricsStatus,
+  NodeMetrics,
+  PodMetrics,
   PodMetricsResponse,
   NodeMetricsResponse,
   UnreadNamespace,
 } from "@/generated/types";
-import { REFRESH_INTERVALS, STALE_TIMES } from "@/lib/refresh";
-import { isUnserved } from "@/lib/metrics-absence";
+import {
+  REFRESH_INTERVALS,
+  STALE_TIMES,
+  type RefreshRate,
+} from "@/lib/refresh";
+import { absenceOf, isUnserved } from "@/lib/metrics-absence";
 import { queryKeys } from "@/lib/query-keys";
 import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
 import { useLiveQuery, type LiveQueryOptions } from "@/hooks/useLiveQuery";
 
 const NOTHING_UNREAD: UnreadNamespace[] = [];
+const NO_POD_METRICS: PodMetrics[] = [];
+const NO_NODE_METRICS: NodeMetrics[] = [];
+
+/**
+ * An error is not a sample, so it is not held to the recording's cadence:
+ * a cluster answering 502 was asked every two seconds for as long as it was down.
+ */
+function rateFor(status: MetricsStatus | null | undefined): RefreshRate {
+  if (isUnserved(status)) return "unserved";
+  return absenceOf(status) === "error" ? "metricsFailing" : "metrics";
+}
 
 type MetricsQueryOptions<T> = Omit<
   LiveQueryOptions<T, Error, T, string[]>,
@@ -48,8 +65,8 @@ export function useMetrics(options?: UseMetricsOptions) {
   const includeNodes = options?.includeNodes ?? true;
 
   const scope = options?.scope;
-  const [podsUnserved, setPodsUnserved] = useState(false);
-  const [nodesUnserved, setNodesUnserved] = useState(false);
+  const [podsRate, setPodsRate] = useState<RefreshRate>("metrics");
+  const [nodesRate, setNodesRate] = useState<RefreshRate>("metrics");
   const podMetricsQuery = useLiveQuery({
     queryKey: queryKeys.metrics.pods(
       scope ? scopeCacheKey(scope) : options?.namespace
@@ -61,7 +78,7 @@ export function useMetrics(options?: UseMetricsOptions) {
     enabled: enabled && includePods,
     placeholderData: keepPreviousData,
     staleTime: staleFor,
-    refresh: podsUnserved ? "unserved" : "metrics",
+    refresh: podsRate,
     ...options?.podQueryOptions,
   });
 
@@ -73,26 +90,26 @@ export function useMetrics(options?: UseMetricsOptions) {
     enabled: enabled && includeNodes,
     placeholderData: keepPreviousData,
     staleTime: staleFor,
-    refresh: nodesUnserved ? "unserved" : "metrics",
+    refresh: nodesRate,
     ...options?.nodeQueryOptions,
   });
 
   // The rate is chosen before the answer it depends on is read, so a changed
   // answer re-renders once with the rate that fits it.
-  const podsNow = isUnserved(podMetricsQuery.data?.status);
-  const nodesNow = isUnserved(nodeMetricsQuery.data?.status);
-  if (podsNow !== podsUnserved) setPodsUnserved(podsNow);
-  if (nodesNow !== nodesUnserved) setNodesUnserved(nodesNow);
+  const podsNow = rateFor(podMetricsQuery.data?.status);
+  const nodesNow = rateFor(nodeMetricsQuery.data?.status);
+  if (podsNow !== podsRate) setPodsRate(podsNow);
+  if (nodesNow !== nodesRate) setNodesRate(nodesNow);
 
   return {
-    podMetrics: podMetricsQuery.data?.data ?? [],
+    podMetrics: podMetricsQuery.data?.data ?? NO_POD_METRICS,
     podStatus: podMetricsQuery.data?.status ?? null,
     // The last scope's unread namespaces are not this one's.
     podUnread: podMetricsQuery.isPlaceholderData
       ? NOTHING_UNREAD
       : (podMetricsQuery.data?.unread ?? NOTHING_UNREAD),
     refetchPodMetrics: podMetricsQuery.refetch,
-    nodeMetrics: nodeMetricsQuery.data?.data ?? [],
+    nodeMetrics: nodeMetricsQuery.data?.data ?? NO_NODE_METRICS,
     nodeStatus: nodeMetricsQuery.data?.status ?? null,
     // When the cluster last answered. The usage history stamps its samples
     // with this rather than with `Date.now()`, so one poll reaching several
@@ -103,9 +120,5 @@ export function useMetrics(options?: UseMetricsOptions) {
     nodeFreshness: nodeMetricsQuery.freshness,
     podMetricsQuery,
     nodeMetricsQuery,
-    // Combined loading states for easier consumption
-    isLoading: podMetricsQuery.isLoading || nodeMetricsQuery.isLoading,
-    isFetching: podMetricsQuery.isFetching || nodeMetricsQuery.isFetching,
-    isError: podMetricsQuery.isError || nodeMetricsQuery.isError,
   };
 }
