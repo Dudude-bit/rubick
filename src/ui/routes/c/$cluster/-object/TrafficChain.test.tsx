@@ -240,7 +240,9 @@ describe("TrafficChain", () => {
       />
     );
     expect(withCert.container.textContent).toContain("shop-tls");
-    expect(withCert.container.textContent).toMatch(/valid for \d+ days/);
+    expect(withCert.container.textContent).toMatch(
+      /valid for [\d\u202f]+ days/
+    );
     withCert.unmount();
 
     const bare = await wrap(<TrafficChain query={query(conns)} />);
