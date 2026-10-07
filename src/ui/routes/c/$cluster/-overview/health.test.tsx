@@ -9,6 +9,7 @@ import {
   attentionShare,
   deploymentSegments,
   nodesShare,
+  podSegments,
   warningsShare,
   workloadsShare,
 } from "./health-share";
@@ -80,6 +81,7 @@ const RUNNING: PodComposition = {
   unknown: 0,
   crashLooping: 0,
   notReady: 0,
+  stuck: [],
 };
 
 const problem: ClusterProblem = {
@@ -222,6 +224,7 @@ describe("the healthy line when the node read was refused", () => {
     unknown: 0,
     crashLooping: 0,
     notReady: 0,
+    stuck: [],
   };
 
   /**
@@ -341,6 +344,7 @@ describe("what the panels offer Share", () => {
         unknown: 0,
         crashLooping: 0,
         notReady: 0,
+        stuck: [],
       },
       jobs: null,
       nodes: [],
@@ -545,6 +549,7 @@ describe("what Needs attention says it checked", () => {
       unknown: 0,
       crashLooping: 1,
       notReady: 0,
+      stuck: [],
     });
 
     const summary = screen.getByTestId("attention-summary");
@@ -571,6 +576,7 @@ describe("what Needs attention says it checked", () => {
       unknown: 0,
       crashLooping: 3,
       notReady: 1,
+      stuck: [],
     });
 
     const summary = screen.getByTestId("attention-summary");
@@ -578,6 +584,41 @@ describe("what Needs attention says it checked", () => {
     expect(summary).toHaveTextContent(
       "(1 NotReady, 3 CrashLoop, 1 Pending, 4 Failed)"
     );
+  });
+
+  /**
+   * Sam's team-checkout: "1 Pending" on the Overview for the pod its Pods
+   * list and its Needs attention row call `CreateContainerConfigError`.
+   * Fails if the line or the Pods tile files it under the phase.
+   */
+  it("names a pod held in an error by that error, not by its phase", async () => {
+    const pods: PodComposition = {
+      running: 2,
+      pending: 1,
+      succeeded: 1,
+      failed: 0,
+      unknown: 0,
+      crashLooping: 0,
+      notReady: 0,
+      stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
+    };
+    await panel(attentionFrom([{ ...problem, severity: "critical" }]), pods);
+
+    const summary = screen.getByTestId("attention-summary");
+    expect(summary).toHaveTextContent("2 of 4 pods ready");
+    expect(summary).toHaveTextContent(
+      "(1 CreateContainerConfigError, 1 Completed)"
+    );
+    expect(summary).not.toHaveTextContent("Pending");
+    expect(
+      podSegments(pods)
+        .filter((segment) => segment.count > 0)
+        .map(({ label, count, tone }) => [label, count, tone])
+    ).toEqual([
+      ["Running", 2, "ok"],
+      ["CreateContainerConfigError", 1, "err"],
+      ["Completed", 1, "neutral"],
+    ]);
   });
 
   /**

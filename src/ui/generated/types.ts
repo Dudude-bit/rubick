@@ -1856,6 +1856,12 @@ export interface PodComposition {
   unknown: number;
   crashLooping: number;
   notReady: number;
+  stuck: ReasonCount[];
+}
+
+export interface ReasonCount {
+  reason: string;
+  count: number;
 }
 
 export interface ResourceCounts {

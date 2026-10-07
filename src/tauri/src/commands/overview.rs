@@ -281,6 +281,19 @@ pub struct PodComposition {
     /// `Ready`, so no Service sends it traffic. kubectl prints `Running` and
     /// `0/1` for it; counted as running, the Overview called it fine.
     pub not_ready: usize,
+    /// A subset of `pending`: pods whose container the kubelet holds in a
+    /// reason that waiting will not clear, under the reason the Pods list and
+    /// Needs attention print. Counted as Pending, a pod the list calls
+    /// `CreateContainerConfigError` read as merely slow to start.
+    pub stuck: Vec<ReasonCount>,
+}
+
+/// How many pods one reason holds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReasonCount {
+    pub reason: String,
+    pub count: usize,
 }
 
 /// Jobs by outcome. `active` covers both running and not-yet-started Jobs:
@@ -963,6 +976,7 @@ fn pod_composition<'a>(
     now: DateTime<Utc>,
 ) -> PodComposition {
     let mut composition = PodComposition::default();
+    let mut stuck: BTreeMap<String, usize> = BTreeMap::new();
     for pod in pods {
         match pod
             .status
@@ -978,12 +992,21 @@ fn pod_composition<'a>(
                     composition.not_ready += 1;
                 }
             }
-            "Pending" => composition.pending += 1,
+            "Pending" => {
+                composition.pending += 1;
+                if let Some((reason, _)) = stuck_reason(pod) {
+                    *stuck.entry(reason).or_default() += 1;
+                }
+            }
             "Succeeded" => composition.succeeded += 1,
             "Failed" => composition.failed += 1,
             _ => composition.unknown += 1,
         }
     }
+    composition.stuck = stuck
+        .into_iter()
+        .map(|(reason, count)| ReasonCount { reason, count })
+        .collect();
     composition
 }
 
@@ -3063,6 +3086,82 @@ mod tests {
             .filter(|row| row.containers.iter().any(|c| !c.ready))
             .count();
         assert_eq!(composition.not_ready, unready_rows);
+    }
+
+    /// `team-checkout/checkout-worker` as the kubelet wrote it: scheduled,
+    /// its container never created because a Secret it reads is missing.
+    fn config_error_pod() -> Pod {
+        serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "checkout-worker-6d9f7b8c4-q2x7m",
+                "namespace": "team-checkout",
+                "creationTimestamp": "2026-10-06T20:02:41Z",
+            },
+            "spec": {
+                "nodeName": "node01",
+                "containers": [{ "name": "worker", "image": "busybox:1.36" }],
+            },
+            "status": {
+                "phase": "Pending",
+                "conditions": [
+                    { "type": "PodReadyToStartContainers", "status": "True" },
+                    { "type": "Initialized", "status": "True" },
+                    {
+                        "type": "Ready",
+                        "status": "False",
+                        "reason": "ContainersNotReady",
+                        "message": "containers with unready status: [worker]",
+                    },
+                    {
+                        "type": "ContainersReady",
+                        "status": "False",
+                        "reason": "ContainersNotReady",
+                        "message": "containers with unready status: [worker]",
+                    },
+                    { "type": "PodScheduled", "status": "True" },
+                ],
+                "containerStatuses": [{
+                    "name": "worker",
+                    "ready": false,
+                    "started": false,
+                    "restartCount": 0,
+                    "image": "busybox:1.36",
+                    "imageID": "",
+                    "state": {
+                        "waiting": {
+                            "reason": "CreateContainerConfigError",
+                            "message": "secret \"checkout-db\" not found",
+                        },
+                    },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote")
+    }
+
+    /// Sam's team-checkout Overview read "1 Pending" for the pod its Pods
+    /// list and its Needs attention row both called
+    /// `CreateContainerConfigError`. Fails if the composition files it under
+    /// the phase, or under a word the other two do not print.
+    #[test]
+    fn a_pending_pod_held_in_a_config_error_is_counted_under_that_error() {
+        let pod = config_error_pod();
+        let now = Utc::now();
+
+        let composition = pod_composition([&pod], now);
+
+        assert_eq!(composition.pending, 1);
+        assert_eq!(
+            composition.stuck,
+            vec![ReasonCount {
+                reason: "CreateContainerConfigError".to_string(),
+                count: 1,
+            }]
+        );
+        let row = crate::resources::PodRow::from(&pod);
+        assert_eq!(row.status.display, composition.stuck[0].reason);
+        let problems = pod_problems([&pod], now);
+        assert_eq!(problems[0].reason, composition.stuck[0].reason);
     }
 
     #[test]
