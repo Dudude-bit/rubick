@@ -603,7 +603,8 @@ export const ru: Catalogue = {
     localPort: "Локальный порт",
     remotePort: "Удалённый порт",
     autoReconnect: "Переподключаться автоматически",
-    autoReconnectHint: "Повторять попытки, когда под или соединение падает",
+    autoReconnectHint:
+      "Повторять попытки, когда соединение обрывается или пропадает сам под",
     saveAsConfig: "Сохранить проброс",
     saveAsConfigHint:
       "Он останется на панели активности, и его можно будет запускать снова в одно нажатие",
@@ -1042,7 +1043,7 @@ export const ru: Catalogue = {
       "Удалите его, когда закончите, чтобы освободить ресурсы кластера",
     deleteNow: "Удалить сейчас",
     failedToDelete: "Не удалось удалить",
-    foundReplacementPod: "Найден под на замену",
+    foundReplacementPod: "Замена найдена",
     switchingTo: "Переходим к {name}",
     noReplacementFound: "Замена не найдена",
     seeContainers: "Перейти к контейнерам",
@@ -1543,7 +1544,8 @@ export const ru: Catalogue = {
     localPort: "Локальный порт",
     remotePort: "Удалённый порт",
     autoReconnect: "Переподключаться автоматически",
-    autoReconnectHint: "Повторять попытки, когда пропадает под или соединение.",
+    autoReconnectHint:
+      "Повторять попытки, когда соединение обрывается или пропадает сам под.",
     autoStartLabel: "Запускать автоматически",
     autoStartHint: "Запускать сразу после подключения к этому кластеру.",
     panel: "Панель активности",
@@ -2763,7 +2765,7 @@ export const ru: Catalogue = {
       "NetworkPolicy между Prometheus и подом или эндпоинт, который отдаёт метрики дольше scrapeTimeout.",
     hintDnsWhy: "Имя в адресе сбора метрик не разрешается.",
     hintDnsHow:
-      "Service или под за монитором исчез, или эндпоинт называет хост, который Prometheus не может найти.",
+      "Исчез Service или под, на который указывал монитор, или эндпоинт называет хост, который Prometheus не может найти.",
     hintSelectsNothingWhy: "Ни один Service в {namespace} не несёт {selector}.",
     hintSelectsNothingHow:
       "Сравните селектор с метками Service, для которого писали монитор. Метка, которую ставит приложение, обычно та, что выбрал Helm-чарт, а не та, что вы помните.",
@@ -7102,7 +7104,7 @@ export const ru: Catalogue = {
     gwProgrammedWord: "запрограммирован",
     gwNotProgrammedWord: "не запрограммирован",
     gwNoReadyPodBehind: "За {name} сейчас не стоит ни одного готового пода.",
-    gwForwardThrough: "Пробросить этот порт через под за {name}",
+    gwForwardThrough: "Пробросить этот порт через под, стоящий за {name}",
     gwNoListeners:
       "Слушателей нет: этот Gateway не принимает трафик, и ни один маршрут к нему не привяжется.",
     fromListenerSet: "из {name}",

@@ -114,6 +114,23 @@ describe("the Russian word for a pod", () => {
     );
     expect(found).toEqual([]);
   });
+
+  /**
+   * "Найден под на замену" and "когда пропадает под или соединение" made
+   * Lena read "under" and stumble: a bare "под" before "или", "за" or "на
+   * замену" has no word to be the noun. Fails if one comes back.
+   */
+  it("is never left bare before a word that makes it read as 'under'", () => {
+    const bare = /(^|[^А-Яа-яЁё])[Пп]од (или|за|на замену)([^А-Яа-яЁё]|$)/;
+    const found = Object.entries(ru).flatMap(([section, keys]) =>
+      Object.entries(keys as Record<string, unknown>).flatMap(([key, value]) =>
+        Object.values(typeof value === "string" ? { value } : (value as object))
+          .filter((text) => bare.test(String(text)))
+          .map(() => `${section}.${key}`)
+      )
+    );
+    expect(found).toEqual([]);
+  });
 });
 
 describe("the Watching tab's empty hint", () => {
