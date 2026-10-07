@@ -39,7 +39,7 @@ export function RollbackDialog({
 }) {
   const t = useT();
   const gate = useCriticalGate();
-  const label = `${subject.kind.toLowerCase()} ${subject.namespace}/${subject.name}`;
+  const label = `${subject.kind} ${subject.namespace}/${subject.name}`;
 
   const close = (next: boolean) => {
     if (!next) gate.reset();

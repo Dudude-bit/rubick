@@ -83,7 +83,6 @@ export function DetailError({
 }: DetailErrorProps) {
   const t = useT();
   const isNotFound = isResourceNotFoundError(error);
-  const kind = resourceKind.toLowerCase();
 
   return (
     <Section className="max-w-lg">
@@ -99,7 +98,7 @@ export function DetailError({
         <div className="flex items-center gap-2">
           <AlertCircle className="h-4 w-4 text-err" aria-hidden="true" />
           <h2 className="text-[13px] font-semibold tracking-tight text-err">
-            {t("empty", "kindCouldNotRead", { kind })}
+            {t("empty", "kindCouldNotRead", { kind: resourceKind })}
           </h2>
         </div>
       )}
@@ -107,7 +106,7 @@ export function DetailError({
         <Unknown
           // The heading already says "could not read this kind"; the box asks
           // the question the read was, so the same sentence is not stacked twice.
-          question={t("empty", "whatIsThisKind", { kind })}
+          question={t("empty", "whatIsThisKind", { kind: resourceKind })}
           error={error ?? t("empty", "clusterDidNotAnswer")}
         />
       )}

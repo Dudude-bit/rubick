@@ -436,9 +436,24 @@ describe("describeDeletion", () => {
     expect(
       describeDeletion("Pod", "log-demo-1", "k8s-gui-test", pod(), t)
     ).toMatchObject({
-      title: "Delete pod k8s-gui-test/log-demo-1?",
+      title: "Delete Pod k8s-gui-test/log-demo-1?",
       description: expect.stringContaining("ReplicaSet log-demo-6cf"),
     });
+  });
+
+  /**
+   * Lena read "Удалить pod lena-sandbox/…?" and "Удаление pod …" while Restart
+   * said "Pod". Fails if the kind is lowercased again in either language.
+   */
+  it("writes the kind as Kubernetes does, in a Russian sentence too", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const copy = describeDeletion("Pod", "web-1", "shop", pod(), ru);
+    expect(copy.title).toBe("Удалить Pod shop/web-1?");
+    expect(copy.description).toMatch(/^Удаление Pod shop\/web-1 /);
+    expect(
+      describeDeletion("PersistentVolume", "pv-1", null, {}, ru).title
+    ).toBe("Удалить PersistentVolume pv-1?");
   });
 
   it("warns that a pod nobody owns does not come back", () => {
@@ -552,7 +567,7 @@ describe("describeDeletion", () => {
   it("drops the namespace for a cluster-scoped object", () => {
     expect(
       describeDeletion("PersistentVolume", "pv-1", null, {}, t).title
-    ).toBe("Delete persistentvolume pv-1?");
+    ).toBe("Delete PersistentVolume pv-1?");
   });
 });
 

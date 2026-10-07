@@ -97,4 +97,13 @@ describe("rolling a workload back to a revision", () => {
       )
     );
   });
+
+  /** Lena read "deployment" lowercased in a Russian sentence while Restart said "Deployment". Fails if the dialog lowercases the kind again. */
+  it("titles the dialog with the kind as Kubernetes spells it", async () => {
+    await renderWithRouter(<Harness />);
+    await userEvent.click(screen.getByRole("button", { name: "offer" }));
+    expect(
+      await screen.findByText("Roll back Deployment shop/search to revision 1?")
+    ).toBeInTheDocument();
+  });
 });

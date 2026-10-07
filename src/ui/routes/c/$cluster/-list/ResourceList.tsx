@@ -406,9 +406,7 @@ export function ResourceList<
       toast({
         title: t("action", "error"),
         description: t("action", "deleteFailed", {
-          kind:
-            deleteConfig?.resourceType?.toLowerCase() ??
-            t("action", "resourceNoun"),
+          kind: deleteConfig?.resourceType ?? t("action", "resourceNoun"),
           name: item.name,
           error: errorToShow(error),
         }),
@@ -732,7 +730,7 @@ export function ResourceList<
             }
           }}
           title={t("action", "deleteKindQuestion", {
-            kind: deleteConfig.resourceType.toLowerCase(),
+            kind: deleteConfig.resourceType,
           })}
           description={
             deleteTarget

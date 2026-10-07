@@ -755,10 +755,10 @@ describe("DetailError does not stack the same sentence twice", () => {
       />
     );
 
-    expect(screen.getAllByText(/could not read this deployment/i)).toHaveLength(
+    expect(screen.getAllByText("Could not read this Deployment")).toHaveLength(
       1
     );
-    expect(screen.getByText(/what is this deployment/i)).toBeInTheDocument();
+    expect(screen.getByText("What is this Deployment?")).toBeInTheDocument();
   });
 });
 

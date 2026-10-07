@@ -513,7 +513,7 @@ export function describeDeletion(
   const resolved = toKind(kind) ?? kind;
   // The kind stays as Kubernetes spells it — see the kind-names trap in
   // `src/ui/i18n/`. Only the sentence around it is translated.
-  const subject = `${resolved.toLowerCase()} ${qualified(name, namespace)}`;
+  const subject = `${resolved} ${qualified(name, namespace)}`;
   return {
     title: t("action", "deleteSubjectTitle", { subject }),
     description: t("action", "deleteSubjectBody", {

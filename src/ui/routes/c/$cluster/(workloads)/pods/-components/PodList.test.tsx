@@ -145,7 +145,7 @@ describe("the row's delete button", () => {
 
     const confirm = await screen.findByRole("alertdialog");
     expect(
-      within(confirm).getByText("Delete pod prod/api-0?")
+      within(confirm).getByText("Delete Pod prod/api-0?")
     ).toBeInTheDocument();
     expect(within(confirm).getByLabelText(/to confirm/)).toBeInTheDocument();
     expect(

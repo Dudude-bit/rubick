@@ -218,7 +218,7 @@ export function useResourceDetail<T>(
       toast({
         title: t("action", "error"),
         description: t("action", "deleteFailed", {
-          kind: resourceKind.toLowerCase(),
+          kind: resourceKind,
           name: name ?? "",
           error: errorToShow(err),
         }),

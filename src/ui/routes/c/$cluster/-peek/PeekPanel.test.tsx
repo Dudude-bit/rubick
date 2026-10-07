@@ -1527,7 +1527,7 @@ describe("PeekPanel actions", () => {
     await userEvent.click(screen.getByRole("menuitem", { name: /Delete/ }));
 
     expect(
-      await screen.findByText("Delete pod k8s-gui-test/log-demo-1?")
+      await screen.findByText("Delete Pod k8s-gui-test/log-demo-1?")
     ).toBeInTheDocument();
     expect(screen.getByText(/will start a replacement/)).toBeInTheDocument();
 

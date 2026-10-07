@@ -450,7 +450,7 @@ function PeekOverview({
       ) : error ? (
         <p className="pt-4 text-xs text-warn">
           {t("empty", "couldNotReadKind", {
-            kind: target.kind.toLowerCase(),
+            kind: target.kind,
             error: errorToShow(error),
           })}
         </p>
