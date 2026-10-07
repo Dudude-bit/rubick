@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 
 // ----- Mocks -----
 
@@ -30,13 +30,6 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-vi.mock("@/stores/terminalSessionStore", () => ({
-  useTerminalSessionStore: () => ({
-    addSession: vi.fn(),
-    removeSession: vi.fn(),
-  }),
-}));
-
 vi.mock("@/stores/clusterStore", () => ({
   useClusterStore: () => "k3d-k8s-gui-dev",
 }));
@@ -49,6 +42,9 @@ vi.mock("@/components/terminal/Terminal", () => ({
 }));
 
 import { commands } from "@/lib/commands";
+import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
+import { renderWithRouter } from "@/test/render";
+import { TerminalsTab } from "../../../-shell/activity/TerminalsTab";
 import { PodTerminal } from "./PodTerminal";
 
 const props = {
@@ -81,6 +77,7 @@ describe("PodTerminal when the session dies after openPodShell returned", () => 
   beforeEach(() => {
     for (const k of Object.keys(listeners)) delete listeners[k];
     vi.clearAllMocks();
+    useTerminalSessionStore.getState().clearAll();
   });
 
   it("falls into the reconnect banner when the upgrade is rejected", async () => {
@@ -151,5 +148,66 @@ describe("PodTerminal when the session dies after openPodShell returned", () => 
       );
     });
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+});
+
+/** What the backend sends when the shell's process exits. */
+function closed(sessionId: string) {
+  act(() =>
+    listeners["terminal-closed"]?.({
+      payload: { session_id: sessionId, status: null },
+    })
+  );
+}
+
+describe("a shell the reader exited", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+    useTerminalSessionStore.getState().clearAll();
+  });
+
+  /**
+   * Marco typed `exit`: the Shell tab said Ended while Activity > Terminals
+   * listed the session "connected", the footer kept "1 terminal" and the
+   * tab dot stayed green until the tab's ×. Fails if the session the
+   * backend closed stays in the store every one of those reads.
+   */
+  it("leaves Activity, the footer count and the tab mark the moment it ends", async () => {
+    await renderWithRouter(
+      <>
+        <PodTerminal {...props} />
+        <TerminalsTab />
+      </>
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("terminal-stub")).toHaveAttribute(
+        "data-session-id",
+        "term-1"
+      );
+    });
+    expect(screen.getByText(/app · connected/)).toBeInTheDocument();
+
+    closed("term-1");
+
+    await waitFor(() =>
+      expect(screen.queryByText(/app · connected/)).not.toBeInTheDocument()
+    );
+    expect(useTerminalSessionStore.getState().sessions).toEqual([]);
+  });
+
+  /** Another pane's session closing is not this one's. */
+  it("keeps its session when another one closes", async () => {
+    await renderWithRouter(<PodTerminal {...props} />);
+    await waitFor(() =>
+      expect(useTerminalSessionStore.getState().sessions).toHaveLength(1)
+    );
+
+    closed("term-2");
+
+    expect(useTerminalSessionStore.getState().sessions[0]).toMatchObject({
+      id: "term-1",
+      status: "connected",
+    });
   });
 });

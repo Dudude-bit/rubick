@@ -7,6 +7,7 @@ import { podContainers } from "@/lib/container-sequence";
 import { normalizeTauriError, ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { describeTermination } from "@/lib/pod-status";
 import { listenForStreamFailure } from "@/lib/stream-failure";
+import { listenEvent } from "@/lib/events";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
@@ -36,6 +37,7 @@ export function PodTerminal({
     null
   );
   const [isConnecting, setIsConnecting] = useState(false);
+  const [ended, setEnded] = useState(false);
   const connectAttemptRef = useRef(0);
   const sessionIdRef = useRef<string | null>(null);
 
@@ -77,6 +79,7 @@ export function PodTerminal({
 
       sessionIdRef.current = sid;
       setSessionId(sid);
+      setEnded(false);
       setIsConnecting(false);
 
       // Add to activity tracking
@@ -117,7 +120,20 @@ export function PodTerminal({
   // only calls after this component has already stored the id.
   useEffect(() => {
     let disposed = false;
-    let unlisten: (() => void) | null = null;
+    const unlistens: Array<() => void> = [];
+    const keep = (fn: () => void) => {
+      if (disposed) fn();
+      else unlistens.push(fn);
+    };
+
+    // The shell exiting ends the session for Activity, the footer and the
+    // tab mark too; the pane keeps its scrollback under "Ended".
+    void listenEvent("terminal-closed", (event) => {
+      const sid = sessionIdRef.current;
+      if (!sid || event.payload.session_id !== sid) return;
+      removeSession(sid);
+      setEnded(true);
+    }).then(keep);
 
     listenForStreamFailure(
       () => sessionIdRef.current,
@@ -136,14 +152,11 @@ export function PodTerminal({
           setError(failure.message);
         }
       }
-    ).then((fn) => {
-      if (disposed) fn();
-      else unlisten = fn;
-    });
+    ).then(keep);
 
     return () => {
       disposed = true;
-      unlisten?.();
+      unlistens.forEach((fn) => fn());
     };
   }, [removeSession]);
 
@@ -166,7 +179,7 @@ export function PodTerminal({
 
   // Poll for pod status while connected
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || ended) return;
 
     let cancelled = false;
 
@@ -228,7 +241,7 @@ export function PodTerminal({
       cancelled = true;
       window.clearInterval(intervalId);
     };
-  }, [sessionId, podName, namespace, containerName, disconnect, t]);
+  }, [sessionId, ended, podName, namespace, containerName, disconnect, t]);
 
   const handleClose = useCallback(() => {
     disconnect();
