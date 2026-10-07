@@ -96,14 +96,20 @@ export function budgets(conns: ResourceConnections): Budget[] {
   );
 }
 
-const condition = (
-  conditions: ConditionInfo[],
+type Stated = Pick<ConditionInfo, "type" | "status">;
+
+const condition = <C extends Stated>(
+  conditions: C[],
   type: string
-): ConditionInfo | undefined =>
+): C | undefined =>
   conditions.find((c) => c.type.toLowerCase() === type.toLowerCase());
 
-const isTrue = (c: ConditionInfo | undefined) => c?.status === "True";
-const isFalse = (c: ConditionInfo | undefined) => c?.status === "False";
+const isTrue = (c: Stated | undefined) => c?.status === "True";
+const isFalse = (c: Stated | undefined) => c?.status === "False";
+
+/** Whether `desiredReplicas` is a count the autoscaler computed, not the zero a failed computation leaves. */
+export const desiredComputed = (conditions: Stated[]): boolean =>
+  !isFalse(condition(conditions, "ScalingActive"));
 
 /**
  * A controller's message, made into a sentence that another can follow.
@@ -275,10 +281,9 @@ export function autoscalerFinding(auto: Autoscaler, t: T): Finding | null {
  * autoscaler about to delete everything, and it is the field being unset.
  */
 export function autoscalerReplicas(facts: AutoscalerFacts, t: T): string {
-  const computed = !isFalse(condition(facts.conditions, "ScalingActive"));
   const parts = [
     t("readings", "hpaRunning", { n: facts.currentReplicas }),
-    computed
+    desiredComputed(facts.conditions)
       ? t("readings", "hpaWanted", { n: facts.desiredReplicas })
       : t("readings", "hpaNothingComputed"),
   ];

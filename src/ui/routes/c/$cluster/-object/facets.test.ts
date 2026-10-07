@@ -2,6 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
+import { autoscalerReplicas, type AutoscalerFacts } from "@/lib/governance";
 import { objectFacets } from "./facets";
 
 /** The key itself, so a group is found by the catalogue key it is titled with. */
@@ -324,5 +325,80 @@ describe("roles and bindings", () => {
       namespace: "tools",
       showNamespace: true,
     });
+  });
+});
+
+describe("an autoscaler that cannot read its metrics", () => {
+  const conditions = [
+    { type: "AbleToScale", status: "True", reason: "SucceededGetScale" },
+    {
+      type: "ScalingActive",
+      status: "False",
+      reason: "FailedGetResourceMetric",
+      message: "the HPA was unable to compute the replica count",
+    },
+  ];
+  const hpaBlind = {
+    apiVersion: "autoscaling/v2",
+    kind: "HorizontalPodAutoscaler",
+    metadata: { name: "hpa-blind", namespace: "k8s-gui-test" },
+    spec: {
+      minReplicas: 2,
+      maxReplicas: 5,
+      scaleTargetRef: {
+        apiVersion: "apps/v1",
+        kind: "Deployment",
+        name: "log-demo",
+      },
+    },
+    status: { currentReplicas: 2, desiredReplicas: 0, conditions },
+  };
+
+  /**
+   * Sam's peek printed desiredReplicas 0 for hpa-blind while the Deployment's
+   * row said nothing computed. Fails if the peek or the page prints the zero
+   * a failed computation leaves, or the two readers word it apart.
+   */
+  it("says nothing computed where the Deployment's row does", () => {
+    const en = ((section: string, key: string, values?: never) =>
+      translate("en", section as never, key as never, values)) as T;
+    const row = objectFacets(hpaBlind, en)
+      .groups.find((g) => g.title === "Status")
+      ?.items.find((item) => item.label === "desiredReplicas");
+    const deployment = autoscalerReplicas(
+      {
+        kind: "autoscaler",
+        minReplicas: 2,
+        maxReplicas: 5,
+        currentReplicas: 2,
+        desiredReplicas: 0,
+        metrics: [],
+        conditions: conditions.map((c) => ({
+          ...c,
+          message: c.message ?? null,
+          lastTransitionTime: null,
+        })),
+        lastScaleTime: null,
+      } as AutoscalerFacts,
+      en
+    );
+    expect(row?.value).toBe("nothing computed");
+    expect(deployment).toContain(row?.value);
+  });
+
+  /** A computed zero stays the number; fails if every autoscaler loses it. */
+  it("keeps a computed count as written", () => {
+    const fine = {
+      ...hpaBlind,
+      status: {
+        ...hpaBlind.status,
+        desiredReplicas: 3,
+        conditions: [{ type: "ScalingActive", status: "True" }],
+      },
+    };
+    const row = group(fine, "status")?.items.find(
+      (item) => item.label === "desiredReplicas"
+    );
+    expect(row?.value).toBe("3");
   });
 });

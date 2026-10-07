@@ -5,6 +5,7 @@ import {
 import type { ConditionInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { segmentOf } from "@/lib/access-kinds";
+import { desiredComputed } from "@/lib/governance";
 import { formatDate } from "@/lib/utils";
 import {
   conditionItem,
@@ -293,6 +294,25 @@ function writers(metadata: Json): KeyValue[] {
     }));
 }
 
+/** An autoscaler that never computed a count leaves `desiredReplicas` at 0, which is not a wish for none. */
+function readStatus(fields: Json, rows: KeyValue[], t: T): KeyValue[] {
+  if (fields.kind !== "HorizontalPodAutoscaler") return rows;
+  const listed = record(fields.status).conditions;
+  const conditions = (Array.isArray(listed) ? listed : [])
+    .map(record)
+    .flatMap(({ type, status }) =>
+      typeof type === "string" && typeof status === "string"
+        ? [{ type, status }]
+        : []
+    );
+  if (desiredComputed(conditions)) return rows;
+  return rows.map((row) =>
+    row.label === "desiredReplicas"
+      ? { label: row.label, value: t("readings", "hpaNothingComputed") }
+      : row
+  );
+}
+
 /**
  * What any object says about itself, read without knowing its kind: its
  * status and spec as dotted rows, every other field it carries, who writes
@@ -317,7 +337,7 @@ export function objectFacets(
   const sorted = (map: Record<string, string>) =>
     Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
 
-  const status = capped(fields.status, t);
+  const status = readStatus(fields, capped(fields.status, t), t);
   const spec = capped(fields.spec, t);
   const payload = payloadGroups(fields, t);
   const enveloped = payload.length === 0 || spec.length > 0;
