@@ -11,6 +11,7 @@ import {
   transport,
   type EventChannel,
   type EventPayload,
+  type Transport,
   type Unlisten,
 } from "@/lib/transport";
 
@@ -19,12 +20,67 @@ export type { EventChannel, EventPayload };
 /** What a listener is handed: the payload, under the name every listener here reads. */
 export type AppEventHandler<P> = (event: { payload: P }) => void;
 
-/** `listen` on one of the backend's channels, with its payload's type. */
+type Heard = (payload: unknown) => void;
+type Channels = WeakMap<
+  Transport,
+  Map<EventChannel, { heard: Set<Heard>; ready: Promise<Unlisten> }>
+>;
+let channels: Channels = new WeakMap();
+
+/** For tests, whose mocked `listen` starts each test with nobody registered. */
+export function forgetChannels(): void {
+  channels = new WeakMap();
+}
+
+/**
+ * `listen` on one of the backend's channels, with its payload's type.
+ *
+ * One Tauri listener per channel for the window's life, shared by every
+ * caller: Tauri forgets an unlistened callback a round trip before the
+ * backend stops sending to it, so leaving while an event was in flight
+ * logged "Couldn't find callback id". Leaving only leaves the set.
+ */
 export function listenEvent<C extends EventChannel>(
   channel: C,
   handler: AppEventHandler<EventPayload<C>>
 ): Promise<Unlisten> {
-  return transport().listen(channel, (payload) => handler({ payload }));
+  const via = transport();
+  let open = channels.get(via);
+  if (!open) channels.set(via, (open = new Map()));
+  let shared = open.get(channel);
+  if (!shared) {
+    const heard = new Set<Heard>();
+    const ready = via.listen(channel, (payload) => {
+      for (const each of heard) {
+        try {
+          each(payload);
+        } catch (error) {
+          queueMicrotask(() => {
+            throw error;
+          });
+        }
+      }
+    });
+    const registering = { heard, ready };
+    const table = open;
+    ready.catch(() => {
+      if (table.get(channel) === registering) table.delete(channel);
+    });
+    open.set(channel, (shared = registering));
+  }
+  const { heard, ready } = shared;
+  const mine: Heard = (payload) =>
+    handler({ payload: payload as EventPayload<C> });
+  heard.add(mine);
+  return ready.then(
+    () => () => {
+      heard.delete(mine);
+    },
+    (error: unknown) => {
+      heard.delete(mine);
+      throw error;
+    }
+  );
 }
 
 /**
@@ -44,40 +100,12 @@ export interface ResourceChange<T> {
   resource: T | null;
 }
 
-type Watcher = (payload: EventPayload<"resource-event">) => void;
-const watchers = new Set<Watcher>();
-let shared: Promise<Unlisten> | null = null;
-
-/**
- * Every watch hears one shared listener. Tauri forgets an unlistened
- * callback a round trip before the backend stops sending to it, so a watch
- * with its own listener that left while another's batch was in flight logged
- * "Couldn't find callback id". Leaving the set never reaches Tauri.
- */
+/** Every watch's batches, from the one shared `resource-event` listener. */
 export function listenResourceEvents<T>(
   handler: AppEventHandler<ResourceEvent<T>>
 ): Promise<Unlisten> {
-  const watcher: Watcher = (payload) =>
-    handler({ payload: payload as unknown as ResourceEvent<T> });
-  watchers.add(watcher);
-  const registering = (shared ??= transport().listen(
+  return listenEvent(
     "resource-event",
-    (payload) => {
-      for (const each of watchers) each(payload);
-    }
-  ));
-  const release = () => {
-    watchers.delete(watcher);
-    if (watchers.size > 0 || shared !== registering) return;
-    shared = null;
-    void registering.then((off) => off());
-  };
-  return registering.then(
-    () => release,
-    (error: unknown) => {
-      watchers.delete(watcher);
-      if (shared === registering) shared = null;
-      throw error;
-    }
+    handler as unknown as AppEventHandler<EventPayload<"resource-event">>
   );
 }

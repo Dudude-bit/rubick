@@ -1,7 +1,7 @@
 // Vitest global setup file, run before every test file under jsdom or node.
 // Stubs the @tauri-apps/api surface; the DOM half loads only under jsdom.
 
-import { vi } from "vite-plus/test";
+import { afterEach, vi } from "vite-plus/test";
 import { loadLocale } from "@/i18n";
 
 // Loaded as the window loads it before its first render; the one test of the
@@ -83,6 +83,17 @@ vi.mock("@tauri-apps/api/event", () => ({
   emit: vi.fn(async () => {}),
   once: vi.fn(async () => () => {}),
 }));
+
+// The app keeps one listener per channel for the window's life; a test's
+// mocked registry does not, so each test starts with none.
+afterEach(async () => {
+  const events = await import("@/lib/events");
+  try {
+    events.forgetChannels();
+  } catch {
+    // A test that mocked the module has no channels to forget.
+  }
+});
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({

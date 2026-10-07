@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { listenResourceEvents, type EventPayload } from "./events";
+import { listenEvent, listenResourceEvents, type EventPayload } from "./events";
 import { setTransport, transport, type Transport } from "./transport";
 
 const SOURCES = import.meta.glob<string>(
@@ -67,7 +67,7 @@ function tauriLike() {
     status: () => "open",
     onStatus: () => () => {},
   };
-  const emit = (payload: EventPayload<"resource-event">) => {
+  const emit = (payload: EventPayload<"resource-event" | "log-batch">) => {
     for (const id of backend) {
       const callback = callbacks.get(id);
       if (callback) callback(payload);
@@ -114,8 +114,41 @@ describe("watches coming and going on the shared channel", () => {
       expect(heardB).toEqual(["b", "b"]);
 
       offB();
+      emit(batch("c"));
       await new Promise((resolve) => setTimeout(resolve, 0));
-      expect(backend.size).toBe(0);
+      emit(batch("c"));
+      expect(missing).toEqual([]);
+      expect(heardB).toEqual(["b", "b"]);
+      expect(backend.size).toBe(1);
+    } finally {
+      setTransport(real);
+    }
+  });
+
+  /**
+   * Marco's log had one "Couldn't find callback id" after leaving a pod page
+   * whose last listener on a channel went while a batch was in flight. Fails
+   * if any channel gives its Tauri listener up when its last caller leaves.
+   */
+  it("keeps every channel's one listener when its last caller leaves", async () => {
+    const real = transport();
+    const { fake, emit, missing, backend } = tauriLike();
+    setTransport(fake);
+    try {
+      const lines: string[] = [];
+      const off = await listenEvent("log-batch", (event) =>
+        lines.push(event.payload.stream_id)
+      );
+      const again = await listenEvent("log-batch", () => {});
+      again();
+      off();
+      emit({ channel: "log-batch", stream_id: "log-1", lines: [] });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      emit({ channel: "log-batch", stream_id: "log-1", lines: [] });
+
+      expect(missing).toEqual([]);
+      expect(lines).toEqual([]);
+      expect(backend.size).toBe(1);
     } finally {
       setTransport(real);
     }

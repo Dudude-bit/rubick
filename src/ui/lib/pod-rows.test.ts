@@ -100,7 +100,6 @@ describe("listPodRows", () => {
     });
     const { rows } = await answer;
     expect(rows.map((r) => r.name)).toEqual(["a", "b", "c"]);
-    expect(calls.listeners["pod-rows-batch"]).toBeUndefined();
   });
 
   /**
