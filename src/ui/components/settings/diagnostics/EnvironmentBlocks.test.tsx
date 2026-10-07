@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { Diagnostics } from "@/generated/types";
+import { useLocaleStore } from "@/stores/localeStore";
 import { EnvironmentBlocks } from "./EnvironmentBlocks";
 
 const sample: Diagnostics = {
@@ -119,10 +120,20 @@ describe("EnvironmentBlocks", () => {
    * missing `az`, and an absent-means-red rule would open this pane on four
    * red rows and hide the one that matters underneath them.
    */
+  /** Settings said "helm не найден" and Diagnostics "не установлен" for one fact; fails if the two words part again. */
+  it("says an absent tool is not found, in the words Settings uses", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(<EnvironmentBlocks diagnostics={sample} />);
+    const row = screen.getByText("az").closest("li");
+    expect(row).toHaveTextContent("не найден");
+    expect(row).not.toHaveTextContent("не установлен");
+    useLocaleStore.setState({ choice: "en" });
+  });
+
   it("does not call an absent tool a fault", () => {
     render(<EnvironmentBlocks diagnostics={sample} />);
     const row = screen.getByText("az").closest("li");
-    expect(row).toHaveTextContent(/not installed/i);
+    expect(row).toHaveTextContent(/not found/i);
     expect(row?.querySelector(".text-err")).toBeNull();
   });
 
@@ -162,7 +173,7 @@ describe("EnvironmentBlocks", () => {
   /**
    * Would break if the caveat stopped reaching the tools.
    *
-   * Every "not installed" below rests on the search path above, and without
+   * Every "not found" below rests on the search path above, and without
    * the shell's answer that path is the well-known directories and nothing a
    * profile adds. Stated over the tool list as well as over the search path,
    * because a reader scanning tools does not scroll up for it — and stated in

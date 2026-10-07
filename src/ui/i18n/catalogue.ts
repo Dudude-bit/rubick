@@ -4517,7 +4517,7 @@ export const en = {
     copyDiagnostics: "Copy diagnostics",
     redactNamesAndPaths: "Redact names and paths",
     diagnosticsAllClear:
-      "Nothing here needs attention. The environment below is what this app sees when it spawns a credential plugin, which is not always what your shell sees.",
+      "No problems found with the kubeconfig, the settings or the plugins your contexts need. A tool or directory shown as not found below is only absent, not a fault. The environment below is what this app sees when it spawns a credential plugin, which is not always what your shell sees.",
     searchPathBlock: {
       one: "Search path · {n} directory",
       other: "Search path · {n} directories",
@@ -4543,7 +4543,6 @@ export const en = {
       "Not asked on this platform: Windows hands an app the environment from the system settings. Anything set only in a PowerShell profile is not in it.",
     notThere: "not there",
     toolsBlock: "Tools · {found} of {total}",
-    notInstalledInline: "not installed",
     answeredNothing: "found, but would not say its version",
     pluginsBlock: "Plugins · {n}",
     notFoundInline: "not found",

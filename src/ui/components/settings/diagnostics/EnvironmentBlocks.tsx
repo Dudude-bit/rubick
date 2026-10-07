@@ -76,7 +76,7 @@ export function EnvironmentBlocks({
         })}
       >
         {/* The same sentence the search-path block above puts over its own
-            list, for the same reason: every "not installed" below rests on
+            list, for the same reason: every "not found" below rests on
             that path, and without the shell's answer it is the well-known
             directories and nothing a profile adds. The same words, not a
             second phrasing of them — a reader scanning tools will not scroll
@@ -99,9 +99,7 @@ export function EnvironmentBlocks({
                 // Muted, not red. Nothing here is required: somebody who never
                 // touches Azure is not missing `az`, and painting six absent
                 // cloud CLIs as faults would bury the one that matters.
-                <span className="ml-2">
-                  {t("settings", "notInstalledInline")}
-                </span>
+                <span className="ml-2">{t("settings", "notFoundInline")}</span>
               )}
               {tool.version && (
                 <span className="ml-2 font-mono text-fg">{tool.version}</span>

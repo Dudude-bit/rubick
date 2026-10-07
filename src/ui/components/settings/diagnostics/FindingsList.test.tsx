@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 
 import type { Finding } from "@/generated/types";
+import { useLocaleStore } from "@/stores/localeStore";
 import { FindingsList } from "./FindingsList";
 
 const blocking: Finding = {
@@ -43,11 +44,23 @@ describe("FindingsList", () => {
     expect(titles).toEqual(["a is missing", "b is missing"]);
   });
 
-  it("says nothing needs attention rather than rendering blank", () => {
+  it("says what it found no problem with rather than rendering blank", () => {
     render(<FindingsList findings={[]} />);
-    expect(
-      screen.getByText(/nothing here needs attention/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/no problems found with/i)).toBeInTheDocument();
+  });
+
+  /**
+   * "Здесь всё в порядке" sat above "Инструменты · 1 из 6" and six absent
+   * directories. Fails if the all-clear stops naming what it covers, or stops
+   * saying an absent tool is not a fault.
+   */
+  it("scopes the all-clear in Russian instead of claiming everything is fine", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(<FindingsList findings={[]} />);
+    const text = screen.getByText(/Проблем с kubeconfig/).textContent;
+    expect(text).not.toMatch(/всё в порядке/);
+    expect(text).toMatch(/это не неисправность/);
+    useLocaleStore.setState({ choice: "en" });
   });
 
   /**

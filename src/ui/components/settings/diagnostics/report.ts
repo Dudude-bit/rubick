@@ -51,7 +51,7 @@ export function asMarkdown(d: Diagnostics): string {
     "### Tools",
     // The caveat first, for the same reason the screen puts it first: a
     // maintainer reading a pasted report cannot see the machine, and
-    // "not installed" from a search path nobody filled in would send them
+    // "not found" from a search path nobody filled in would send them
     // looking for a missing binary that is sitting on the reader's PATH.
     ...(d.searchPathIsReal ? [] : [shellEnvLine(d.shell), ""]),
     // The version too: half the reports that lead somewhere turn on which
@@ -61,7 +61,7 @@ export function asMarkdown(d: Diagnostics): string {
         ? `- \`${tool.name}\`: ${tool.path}${
             tool.version ? ` · ${tool.version}` : " · no version reported"
           }`
-        : `- \`${tool.name}\`: not installed`
+        : `- \`${tool.name}\`: not found`
     ),
     "",
     "### Plugins",
