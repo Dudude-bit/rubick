@@ -87,7 +87,10 @@ export function asMarkdown(d: Diagnostics): string {
     "### Kubeconfig",
     d.kubeconfig
       ? `\`${d.kubeconfig.path}\`: ${
-          d.kubeconfig.parseError ?? `${d.kubeconfig.contextCount} contexts`
+          d.kubeconfig.parseError ??
+          english("settings", "contextCount", {
+            n: d.kubeconfig.contextCount,
+          })
         }`
       : "None loaded.",
     "",

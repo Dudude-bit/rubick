@@ -68,6 +68,17 @@ describe("asMarkdown", () => {
     expect(out).toContain("Nothing needs attention.");
   });
 
+  /** Lena's paste said "1 contexts". Fails if the count is spelled by hand again. */
+  it("counts a kubeconfig's contexts in the singular and the plural", () => {
+    const counted = (contextCount: number) =>
+      asMarkdown({
+        ...base,
+        kubeconfig: { ...base.kubeconfig!, contextCount },
+      });
+    expect(counted(1)).toContain("`~/.kube/config`: 1 context\n");
+    expect(counted(2)).toContain("`~/.kube/config`: 2 contexts\n");
+  });
+
   it("says a kubeconfig was never loaded", () => {
     const out = asMarkdown({ ...base, kubeconfig: null });
     expect(out).toContain("None loaded.");
