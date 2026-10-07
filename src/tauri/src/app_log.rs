@@ -57,11 +57,14 @@ impl std::io::Write for Capped {
 
 /// kube's own lines for what the code above it reports in its own words:
 /// a read on a closed keep-alive connection, which `client::send_again` sends
-/// again, and a refused watch, which every watcher here says once.
+/// again; an error body that is not a `Status`, whole nginx pages at WARN,
+/// which the caller gets as its error; and a refused watch, which every
+/// watcher here says once.
 struct SaidAbove;
 
-const SAID_ABOVE: [(&str, &str); 2] = [
+const SAID_ABOVE: [(&str, &str); 3] = [
     ("kube_client::client::builder", "(SendRequest)"),
+    ("kube_client::client", "Unsuccessful data error parse"),
     ("kube_runtime::watcher", "403"),
 ];
 
@@ -318,8 +321,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// Marco's Delete dialog logged ninety "watch list error with 403" dumps
-    /// in 0.3 s. Fails if kube's line comes back; its other lines stay.
+    /// Dana's outage logged nginx's 502 page, eight lines a request, and
+    /// Marco's Delete dialog ninety "watch list error with 403" dumps in
+    /// 0.3 s. Fails if kube's line for either comes back; its other lines stay.
     #[test]
     fn kube_does_not_repeat_what_the_caller_reports() {
         use tracing_subscriber::layer::SubscriberExt;
@@ -339,6 +343,7 @@ mod tests {
                 .with_filter(filter(EnvFilter::new("info"))),
         );
         tracing::subscriber::with_default(subscriber, || {
+            tracing::warn!(target: "kube_client::client", "Unsuccessful data error parse: {}", "<html><title>502 Bad Gateway</title></html>");
             tracing::warn!(target: "kube_runtime::watcher", "watch list error with 403: {}", "Api(Status { .. })");
             tracing::warn!(target: "kube_runtime::watcher", "watcher error 403: {}", "Api(Status { .. })");
             tracing::warn!(target: "kube_client::client", "eof in poll: {}", "reset");
@@ -346,6 +351,7 @@ mod tests {
         });
 
         let written = std::fs::read_to_string(dir.join(LOG_FILE)).expect("the file is readable");
+        assert!(!written.contains("<html>"), "{written}");
         assert!(!written.contains("403"), "{written}");
         assert!(written.contains("eof in poll"), "{written}");
         assert!(written.contains("this is a bug"), "{written}");

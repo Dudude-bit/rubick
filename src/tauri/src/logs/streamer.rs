@@ -21,6 +21,7 @@ use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader};
 use tokio::sync::broadcast;
 use tokio::time::{interval, MissedTickBehavior};
 use tokio_util::compat::FuturesAsyncReadCompatExt;
+use tracing::Level;
 
 use super::config::LogConfig;
 use super::filter::IntakeFilter;
@@ -157,6 +158,11 @@ impl LogStreamer {
             Ok(stream) => stream,
             Err(e) => {
                 let error = log_error(&e, &container, "Failed to start log stream");
+                match start_failure_level(&e) {
+                    Level::INFO => tracing::info!("Log stream {stream_id} not started: {error}"),
+                    Level::WARN => tracing::warn!("Log stream {stream_id} not started: {error}"),
+                    _ => tracing::error!("Log stream {stream_id} not started: {error}"),
+                }
                 let cause = readable_cause(&error);
                 let kind = StreamFailureKind::classify(&error);
                 emit_failure(
@@ -580,6 +586,19 @@ fn take_line(
 /// the first ends in "not found", so flattening them into one
 /// `LogStream` string is what made a container that has simply never
 /// restarted indistinguishable from a pod that has been deleted.
+/// The server's answer about the container (waiting, gone, no previous run)
+/// is a state the panel shows calmly, so the log does too; a refusal is a
+/// warning, and only a stream that could not be asked is an error.
+fn start_failure_level(error: &kube::Error) -> Level {
+    match error {
+        kube::Error::Api(status) if status.code == 403 || status.reason == "Forbidden" => {
+            Level::WARN
+        }
+        kube::Error::Api(status) if (400..500).contains(&status.code) => Level::INFO,
+        _ => Level::ERROR,
+    }
+}
+
 fn log_error(error: &kube::Error, container: &str, context: &str) -> Error {
     let cause = error.display_clean();
     if is_missing_previous_run(&cause) {
@@ -657,6 +676,33 @@ impl LineBatch {
 #[cfg(test)]
 mod log_error_tests {
     use super::*;
+
+    /// Marco's log took an ERROR for the worker's logs while the container
+    /// sat in `CreateContainerConfigError`, which the panel says calmly. Fails
+    /// if the server's answer about the container is logged as an error.
+    #[test]
+    fn a_container_still_waiting_is_not_an_error_in_the_log() {
+        let answer = |code: u16, reason: &str| {
+            kube::Error::Api(Box::new(
+                kube::core::Status::failure(
+                    "container \"worker\" is waiting to start: CreateContainerConfigError",
+                    reason,
+                )
+                .with_code(code),
+            ))
+        };
+        assert_eq!(start_failure_level(&answer(400, "BadRequest")), Level::INFO);
+        assert_eq!(start_failure_level(&answer(404, "NotFound")), Level::INFO);
+        assert_eq!(start_failure_level(&answer(403, "Forbidden")), Level::WARN);
+        assert_eq!(
+            start_failure_level(&answer(502, "Failed to parse error data")),
+            Level::ERROR
+        );
+        assert_eq!(
+            start_failure_level(&kube::Error::Service("connection refused".into())),
+            Level::ERROR
+        );
+    }
 
     /// The body the apiserver sends for the logs of a container stuck in
     /// `ImagePullBackOff`.

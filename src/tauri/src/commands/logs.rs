@@ -104,9 +104,7 @@ pub async fn stream_pod_logs(
         }
         let id = opened.id.clone();
         let (cancel, _held) = opened.split();
-        if let Err(e) = streamer.stream_logs(id.clone(), log_config, cancel).await {
-            tracing::error!("Log stream {} error: {}", id, e);
-        }
+        let _said_by_the_streamer = streamer.stream_logs(id, log_config, cancel).await;
     });
 
     Ok(stream_id)

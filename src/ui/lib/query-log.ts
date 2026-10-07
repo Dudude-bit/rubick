@@ -1,6 +1,6 @@
 import type { Query } from "@tanstack/react-query";
 
-import { isRefusal } from "@/lib/error-utils";
+import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { logError, logWarn } from "@/lib/logger";
 import { firstTelling } from "@/lib/refusals";
 
@@ -17,7 +17,8 @@ export const formatError = (error: unknown) =>
 
 /**
  * A failed read, in the log. A refusal is said on screen in the page's own
- * words, so it is a warning, and once per connection rather than per poll.
+ * words, so it is a warning, once per connection rather than per poll, and
+ * once for every read the server refused in the same sentence.
  */
 export function logQueryFailure(
   error: unknown,
@@ -31,6 +32,6 @@ export function logQueryFailure(
     logError("Query error", { context: "react-query", data });
     return;
   }
-  if (firstTelling(query.queryHash))
+  if (firstTelling(errorToShow(error) || query.queryHash))
     logWarn("Query refused", { context: "react-query", data });
 }
