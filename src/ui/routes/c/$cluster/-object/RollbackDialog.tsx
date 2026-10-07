@@ -1,5 +1,3 @@
-import { useRef } from "react";
-
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -41,7 +39,6 @@ export function RollbackDialog({
 }) {
   const t = useT();
   const gate = useCriticalGate();
-  const confirm = useRef<HTMLButtonElement>(null);
   const label = `${subject.kind.toLowerCase()} ${subject.namespace}/${subject.name}`;
 
   const close = (next: boolean) => {
@@ -51,13 +48,7 @@ export function RollbackDialog({
 
   return (
     <Dialog open onOpenChange={close}>
-      <DialogContent
-        onOpenAutoFocus={(event) => {
-          if (gate.active) return;
-          event.preventDefault();
-          confirm.current?.focus();
-        }}
-      >
+      <DialogContent>
         <form
           className="contents"
           onSubmit={(event) => {
@@ -97,10 +88,11 @@ export function RollbackDialog({
               type="button"
               variant="outline"
               onClick={() => close(false)}
+              data-autofocus
             >
               {t("action", "cancel")}
             </Button>
-            <Button ref={confirm} type="submit" disabled={busy || gate.blocked}>
+            <Button type="submit" disabled={busy || gate.blocked}>
               {intercept?.confirmLabel ?? t("action", "rollBack")}
             </Button>
           </DialogFooter>

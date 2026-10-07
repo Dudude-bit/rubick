@@ -240,7 +240,7 @@ function DrainConfirm({
       </div>
       {gate.input}
       <DialogFooter>
-        <Button variant="outline" onClick={onCancel}>
+        <Button variant="outline" onClick={onCancel} data-autofocus>
           {t("action", "cancel")}
         </Button>
         <Button

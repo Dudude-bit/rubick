@@ -1630,8 +1630,12 @@ describe("PeekPanel actions", () => {
     expect(commands.restartPod).not.toHaveBeenCalled();
   });
 
-  /** Dana restarted `cart` from the peek by accident: one click must restart nothing. */
-  it("asks before a Deployment's rolling restart, with what it will do", async () => {
+  /**
+   * Dana restarted `cart` from the peek by accident: one click must restart
+   * nothing, and the Restart button held focus, so a stray Enter did. Fails
+   * if Cancel is not focused on opening or Enter restarts.
+   */
+  it("asks before a Deployment's rolling restart, with the cursor on Cancel", async () => {
     vi.mocked(commands.getDeployment).mockResolvedValue({
       name: "cart",
       namespace: "shop",
@@ -1657,7 +1661,23 @@ describe("PeekPanel actions", () => {
       "Replaces 3 pods: at most 1 unavailable and 1 extra at a time."
     );
     expect(commands.restartDeployment).not.toHaveBeenCalled();
+    const confirm = screen.getByTestId("restart-plan").closest("form")!;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      within(confirm).getByRole("button", { name: "Cancel" })
+    ).toHaveFocus();
     await userEvent.keyboard("{Enter}");
+    await waitFor(() =>
+      expect(screen.queryByTestId("restart-plan")).toBeNull()
+    );
+    expect(commands.restartDeployment).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: /Restart/ }));
+    await userEvent.click(
+      within(
+        (await screen.findByTestId("restart-plan")).closest("form")!
+      ).getByRole("button", { name: "Restart" })
+    );
     await waitFor(() =>
       expect(commands.restartDeployment).toHaveBeenCalledWith("cart", "shop")
     );

@@ -1,5 +1,6 @@
 /**
- * Puts the cursor in the dialog's `data-autofocus` field as it opens.
+ * Puts the cursor in the dialog's `data-autofocus` element as it opens: the
+ * field the reader must fill or, in a confirmation with none, its Cancel.
  *
  * React's `autoFocus` is not enough: Radix runs a menu item's select inside
  * `flushSync`, so a dialog opened from a row menu mounts while the menu's

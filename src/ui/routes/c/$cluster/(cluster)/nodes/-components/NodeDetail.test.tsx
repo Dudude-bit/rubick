@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { NodeBudget, NodeInfo, PodInfo } from "@/generated/types";
 
 // ----- Mocks -----
@@ -39,6 +40,7 @@ vi.mock("@/lib/commands", () => ({
     nodeResourceBudget: (name: string) => budgetMock(name),
     cordonNode: vi.fn(async () => undefined),
     uncordonNode: vi.fn(async () => undefined),
+    startNodeDrain: vi.fn(async () => "drain-1"),
     checkAccess: vi.fn(),
   },
 }));
@@ -504,6 +506,25 @@ describe("the header actions", () => {
     );
     await renderPage();
     expect(screen.getByRole("button", { name: /uncordon/i })).toBeEnabled();
+  });
+
+  /**
+   * A drain evicts every pod on the node. Fails if its confirmation opens
+   * with the focus anywhere but Cancel, or if a stray Enter starts it.
+   */
+  it("opens Drain with the cursor on Cancel, so Enter drains nothing", async () => {
+    vi.mocked(useResourceDetail).mockReturnValue(
+      defaultUseResourceDetailReturn(buildNode()) as never
+    );
+    await renderPage();
+    fireEvent.click(screen.getByRole("button", { name: /^drain$/i }));
+    const dialog = await screen.findByRole("dialog");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const cancel = within(dialog).getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(commands.startNodeDrain).not.toHaveBeenCalled();
   });
 });
 

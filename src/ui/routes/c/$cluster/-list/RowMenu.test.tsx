@@ -15,6 +15,7 @@ import type { ObjectRef, ResourceConnections } from "@/generated/types";
 const getStatefulset = vi.hoisted(() => vi.fn());
 const getDeployment = vi.hoisted(() => vi.fn());
 const getResourceConnections = vi.hoisted(() => vi.fn());
+const restartDeployment = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/commands", async (original) => {
   const real = await original<typeof import("@/lib/commands")>();
   return {
@@ -23,6 +24,7 @@ vi.mock("@/lib/commands", async (original) => {
       getStatefulset,
       getDeployment,
       getResourceConnections,
+      restartDeployment,
     },
   };
 });
@@ -129,6 +131,7 @@ afterEach(() => {
   getDeployment.mockReset();
   getStatefulset.mockReset();
   getResourceConnections.mockReset();
+  restartDeployment.mockReset();
 });
 
 describe("a list row's right-click menu", () => {
@@ -310,6 +313,30 @@ describe("a list row's right-click menu", () => {
         expect(screen.queryByRole("alertdialog")).toBeNull()
       );
     }
+  });
+
+  /**
+   * Dana chose Restart from a row's menu and the ring sat on Restart, so a
+   * stray Enter would have rolled a Deployment that was 0 of 2 ready. Fails
+   * if any opening focuses anything but Cancel, or if Enter restarts.
+   */
+  it("opens Restart with the cursor on Cancel, so Enter restarts nothing", async () => {
+    getDeployment.mockResolvedValue({ ...WEB, generation: 1 });
+    const user = userEvent.setup();
+    await draw();
+    for (const opening of [1, 2]) {
+      openMenu();
+      await user.click(screen.getByRole("menuitem", { name: /^Restart/ }));
+      const dialog = await screen.findByRole("dialog");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(
+        within(dialog).getByRole("button", { name: "Cancel" }),
+        `opening ${opening}`
+      ).toHaveFocus();
+      await user.keyboard("{Enter}");
+      await vi.waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    }
+    expect(restartDeployment).not.toHaveBeenCalled();
   });
 
   /**

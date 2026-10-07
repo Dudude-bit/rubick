@@ -87,7 +87,7 @@ describe("rolling a workload back to a revision", () => {
     expect(changes).toHaveTextContent("readinessProbe.httpGet.path");
     expect(changes).toHaveTextContent("/healthz → /");
     expect(commands.rollbackWorkload).not.toHaveBeenCalled();
-    await userEvent.keyboard("{Enter}");
+    await userEvent.click(screen.getByRole("button", { name: "Roll back" }));
     await waitFor(() =>
       expect(commands.rollbackWorkload).toHaveBeenCalledWith(
         "Deployment",

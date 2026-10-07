@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { invoke } from "@tauri-apps/api/core";
 
 import type { ChangeItem, Revision } from "@/lib/changes";
@@ -332,6 +333,46 @@ describe("a rollback the cluster will not take from this reader", () => {
     );
     fireEvent.click(back());
     expect(screen.queryByRole("dialog")).toBeNull();
+    vi.mocked(invoke).mockImplementation(async () => undefined);
+  });
+
+  /**
+   * Roll back to this opened its confirmation with the Roll back button
+   * focused, so a stray Enter rolled the workload back. Fails if Cancel is
+   * not focused on opening, or if Enter sends the rollback.
+   */
+  it("opens with the cursor on Cancel, so Enter rolls nothing back", async () => {
+    useClusterStore.setState((s) => ({
+      currentContext: "dev",
+      isConnected: true,
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+    vi.mocked(invoke).mockImplementation(async (command: string, args) =>
+      command === "check_access"
+        ? (args as { queries: AccessQuery[] }).queries.map((query) => ({
+            ...query,
+            allowed: true,
+          }))
+        : undefined
+    );
+    const user = userEvent.setup();
+    await renderWithRouter(<Timeline />, {
+      at: "/c/dev",
+      route: "/c/$cluster",
+    });
+    await user.click(
+      screen.getByRole("button", { name: /Roll back to this revision/ })
+    );
+    const dialog = await screen.findByRole("dialog");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" })
+    ).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(
+      vi.mocked(invoke).mock.calls.map(([command]) => command)
+    ).not.toContain("rollback_workload");
     vi.mocked(invoke).mockImplementation(async () => undefined);
   });
 });

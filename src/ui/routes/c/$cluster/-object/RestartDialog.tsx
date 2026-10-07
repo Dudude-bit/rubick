@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { UseMutationResult } from "@tanstack/react-query";
 import { RefreshCw, TriangleAlert } from "lucide-react";
 
@@ -44,8 +44,8 @@ export interface RestartDialogProps {
 
 /**
  * A rolling restart, asked once with what it will do in numbers. No typed
- * name: that is Delete's, and a restart is undone by the next one. The
- * confirm button holds focus so Enter restarts and Escape does not.
+ * name: that is Delete's, and a restart is undone by the next one. Cancel
+ * holds focus, so a stray Enter restarts nothing.
  */
 export function RestartDialog({
   open,
@@ -61,7 +61,6 @@ export function RestartDialog({
 }: RestartDialogProps) {
   const t = useT();
   const gate = useCriticalGate();
-  const confirm = useRef<HTMLButtonElement>(null);
   const words = restartWords(plan, name, t);
   const subject = `${kind} ${qualified(name, namespace)}`;
 
@@ -72,13 +71,7 @@ export function RestartDialog({
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent
-        onOpenAutoFocus={(event) => {
-          if (gate.active) return;
-          event.preventDefault();
-          confirm.current?.focus();
-        }}
-      >
+      <DialogContent>
         <form
           className="contents"
           onSubmit={(event) => {
@@ -142,10 +135,11 @@ export function RestartDialog({
               type="button"
               variant="outline"
               onClick={() => close(false)}
+              data-autofocus
             >
               {t("action", "cancel")}
             </Button>
-            <Button ref={confirm} type="submit" disabled={busy || gate.blocked}>
+            <Button type="submit" disabled={busy || gate.blocked}>
               {intercept?.confirmLabel ?? t("action", "restart")}
             </Button>
           </DialogFooter>

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { CronJobDetailInfo } from "@/generated/types";
 
 vi.mock("@/hooks", () => ({
@@ -11,6 +12,7 @@ vi.mock("@/lib/commands", () => ({
     getCronjob: vi.fn(async () => buildCronJob()),
     deleteCronjob: vi.fn(),
     listJobs: vi.fn(async () => []),
+    triggerCronjob: vi.fn(async () => "nightly-backup-1"),
     checkAccess: vi.fn(),
   },
 }));
@@ -246,6 +248,26 @@ describe("Run now and the access review", () => {
     );
     fireEvent.click(runNow());
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  /**
+   * Run now starts a Job, and its name field is already filled. Fails if
+   * the confirmation opens with the focus anywhere but Cancel, or if a stray
+   * Enter starts the run.
+   */
+  it("opens with the cursor on Cancel, so Enter starts no run", async () => {
+    mockDetail(buildCronJob({ namespace: "team-checkout" }));
+    vi.mocked(commands.checkAccess).mockImplementation(marcoReview);
+    await renderPage();
+    fireEvent.click(runNow());
+    const dialog = await screen.findByRole("alertdialog");
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(
+      within(dialog).getByRole("button", { name: "Cancel" })
+    ).toHaveFocus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    expect(commands.triggerCronjob).not.toHaveBeenCalled();
   });
 
   /** Marco's Role grants create on jobs in team-checkout. Fails if the guard shuts it. */

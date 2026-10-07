@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { UseMutationResult } from "@tanstack/react-query";
 
@@ -39,11 +39,26 @@ describe("a detail page's Restart", () => {
     );
   });
 
-  /** The confirm button holds focus, so Enter is the confirmation and nothing else is needed. */
-  it("restarts on Enter once it is open", async () => {
+  /**
+   * The Restart button held focus, so a stray Enter restarted. Fails if
+   * Cancel is not focused when the dialog opens, or if Enter restarts.
+   */
+  it("opens with the cursor on Cancel, so Enter restarts nothing", async () => {
     const restart = await openRestart();
     await screen.findByTestId("restart-plan");
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
     await userEvent.keyboard("{Enter}");
+    expect(restart.mutate).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("restart-plan")).toBeNull();
+  });
+
+  /** Confirming is a deliberate click on Restart, which still restarts. */
+  it("restarts on a click on Restart", async () => {
+    const restart = await openRestart();
+    const dialog = await screen.findByRole("dialog");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Restart" })
+    );
     expect(restart.mutate).toHaveBeenCalledTimes(1);
   });
 
