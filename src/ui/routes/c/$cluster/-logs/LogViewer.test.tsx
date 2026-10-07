@@ -394,6 +394,47 @@ function fireBatch(
 
 const START = Date.parse("2026-08-06T12:00:00.000Z");
 
+describe("a text query", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+  });
+
+  /**
+   * Marco searched checkout-api's log for 503 and got "payments slow" too:
+   * its raw line begins `2026-10-07T06:41:09.603166503Z`, and Compact shows
+   * nothing that matched. Fails if a text term reads the kubelet's stamp.
+   */
+  it("finds what the container wrote, not digits of the timestamp before it", async () => {
+    await renderStreaming();
+    act(() => {
+      listeners["log-batch"]!({
+        payload: {
+          stream_id: "stream-id-1",
+          lines: [
+            "2026-10-07T06:41:08.112000000Z GET /checkout 503 upstream=payments",
+            "2026-10-07T06:41:09.603166503Z payments slow latency_ms=2300",
+          ].map((raw) => ({
+            message: raw.slice(raw.indexOf(" ") + 1),
+            timestamp: raw.slice(0, raw.indexOf(" ")),
+            level: null,
+            format: "plain",
+            fields: null,
+            raw,
+          })),
+        },
+      });
+    });
+    const shown = () =>
+      Number(/(\d[\d\s]*) shown/.exec(document.body.textContent ?? "")?.[1]);
+    await waitFor(() => expect(shown()).toBe(2));
+
+    await userEvent.type(screen.getByLabelText("Filter the log"), "503{Enter}");
+
+    await waitFor(() => expect(shown()).toBe(1));
+  });
+});
+
 describe("a chip promoted to intake", () => {
   beforeEach(() => {
     for (const k of Object.keys(listeners)) delete listeners[k];

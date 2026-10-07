@@ -168,7 +168,28 @@ impl IntakeFilter {
 /// log's fields are not in its message, the message because a JSON log's
 /// message is not what its raw line looks like.
 fn matches_text(line: &LogLine, needle_lower: &str) -> bool {
-    contains_lowered(&line.message, needle_lower) || contains_lowered(&line.raw, needle_lower)
+    contains_lowered(&line.message, needle_lower) || contains_lowered(written(line), needle_lower)
+}
+
+/// The raw line without the timestamp the kubelet put before it: "503"
+/// matched inside `...603166503Z` on a line that says nothing of 503.
+fn written(line: &LogLine) -> &str {
+    match line.raw.split_once(' ') {
+        Some((head, rest)) if line.timestamp.is_some() && stamp_shaped(head) => rest,
+        _ => &line.raw,
+    }
+}
+
+fn stamp_shaped(head: &str) -> bool {
+    let b = head.as_bytes();
+    let digits = |range: std::ops::Range<usize>| b[range].iter().all(u8::is_ascii_digit);
+    b.len() > 10
+        && digits(0..4)
+        && b[4] == b'-'
+        && digits(5..7)
+        && b[7] == b'-'
+        && digits(8..10)
+        && b[10] == b'T'
 }
 
 /// Case-insensitive `contains`, agreeing with `haystack.toLowerCase().includes(needle)`.
@@ -227,6 +248,8 @@ mod tests {
         #[serde(default)]
         raw: String,
         #[serde(default)]
+        timestamp: Option<DateTime<Utc>>,
+        #[serde(default)]
         level: Option<LogLevel>,
         #[serde(default)]
         fields: Option<BTreeMap<String, String>>,
@@ -247,7 +270,7 @@ mod tests {
     impl CaseLine {
         fn build(&self) -> LogLine {
             LogLine {
-                timestamp: None,
+                timestamp: self.timestamp,
                 message: self.message.clone(),
                 level: self.level,
                 format: LogFormat::Plain,
@@ -269,6 +292,7 @@ mod tests {
         CaseLine {
             message: message.to_string(),
             raw: message.to_string(),
+            timestamp: None,
             level: None,
             fields: None,
             container: default_container(),

@@ -32,6 +32,7 @@ const corpus = JSON.parse(
     line: {
       message?: string;
       raw?: string;
+      timestamp?: string;
       level?: LogLevel;
       fields?: Record<string, string>;
       container?: string;
@@ -51,7 +52,7 @@ function build(
     id: 0,
     epoch,
     groupKey: "",
-    timestamp: null,
+    timestamp: partial.timestamp ?? null,
     message: partial.message ?? "",
     raw: partial.raw ?? "",
     level: partial.level ?? null,

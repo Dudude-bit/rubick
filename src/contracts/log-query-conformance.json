@@ -11,7 +11,7 @@
     "",
     "A case's line is a partial log line. Both readers fill the same gaps:",
     "message and raw default to empty, level to absent, fields to none,",
-    "container to 'app', pod to 'pod', and epoch to 0."
+    "timestamp to absent, container to 'app', pod to 'pod', and epoch to 0."
   ],
   "levelOrder": ["unknown", "debug", "info", "warn", "error", "fatal"],
   "cases": [
@@ -27,6 +27,35 @@
       "line": {
         "message": "batch accepted",
         "raw": "{\"msg\":\"batch accepted\",\"component\":\"ingest\"}"
+      },
+      "expect": true
+    },
+    {
+      "name": "text does not hit the timestamp the kubelet put before the line",
+      "term": { "kind": "text", "value": "503" },
+      "line": {
+        "message": "payments slow",
+        "raw": "2026-10-07T06:41:09.603166503Z payments slow latency_ms=2300",
+        "timestamp": "2026-10-07T06:41:09.603166503Z"
+      },
+      "expect": false
+    },
+    {
+      "name": "text hits the raw line after the timestamp",
+      "term": { "kind": "text", "value": "LATENCY_MS=2300" },
+      "line": {
+        "message": "payments slow",
+        "raw": "2026-10-07T06:41:09.603166503Z payments slow latency_ms=2300",
+        "timestamp": "2026-10-07T06:41:09.603166503Z"
+      },
+      "expect": true
+    },
+    {
+      "name": "a raw line with no timestamp read off it is searched whole",
+      "term": { "kind": "text", "value": "503" },
+      "line": {
+        "message": "x",
+        "raw": "2026-10-07T06:41:09.603166503Z the app's own stamp"
       },
       "expect": true
     },

@@ -264,12 +264,26 @@ export function termLabel(term: QueryTerm): string {
   return `${term.key}${term.op}${term.value}`;
 }
 
+const STAMP_SHAPED = /^\d{4}-\d\d-\d\dT/;
+
+/**
+ * The raw line without the timestamp the kubelet put before it: "503"
+ * matched inside `...603166503Z` on a line that says nothing of 503.
+ */
+function written(log: StreamedLogLine): string {
+  if (log.timestamp === null) return log.raw;
+  const space = log.raw.indexOf(" ");
+  return space > 10 && STAMP_SHAPED.test(log.raw)
+    ? log.raw.slice(space + 1)
+    : log.raw;
+}
+
 function matchesTerm(log: StreamedLogLine, term: QueryTerm): boolean {
   if (term.kind === "text") {
     const needle = term.value.toLowerCase();
     return (
       log.message.toLowerCase().includes(needle) ||
-      log.raw.toLowerCase().includes(needle)
+      written(log).toLowerCase().includes(needle)
     );
   }
   if (term.kind === "level") {
