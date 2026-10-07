@@ -120,7 +120,9 @@ describe("the word a workload's rollout comes to", () => {
       text: "Застрял · 0/2 готовы",
       role: "err",
     });
-    expect(rolloutWord(EVERY[6], ru)).toBe("Деградировал");
+    expect(rolloutWord({ state: "short", available: 2, desired: 3 }, ru)).toBe(
+      "Деградировал"
+    );
     expect(rolloutWord(EVERY[0], ru)).toBe("Простаивает");
     expect(rolloutWord(EVERY[2], ru)).toBe("Unavailable");
   });
