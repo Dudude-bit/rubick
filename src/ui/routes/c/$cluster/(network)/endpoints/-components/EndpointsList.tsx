@@ -20,6 +20,14 @@ import {
 } from "../../../-list/columns";
 import { createResourceListPage } from "../../../-list/createResourceListPage";
 import { None } from "@/components/ui/none";
+import { AddressesCell } from "./EndpointAddresses";
+
+/** Every address the object holds: an unready one is still an address. */
+const addressesOf = (endpoints: EndpointsInfo) =>
+  endpoints.subsets.flatMap((subset) => [
+    ...subset.addresses.map((address) => ({ address, ready: true })),
+    ...subset.notReadyAddresses.map((address) => ({ address, ready: false })),
+  ]);
 
 export const columns = (): ColumnDef<EndpointsInfo>[] => [
   createNameColumn<EndpointsInfo>(ResourceType.Endpoints),
@@ -170,36 +178,17 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
     meta: {
       share: (row: EndpointsInfo, t) => ({
         text:
-          row.subsets
-            .flatMap((s) => s.addresses.map((address) => address.ip))
+          addressesOf(row)
+            .map(({ address, ready }) =>
+              ready
+                ? address.ip
+                : `${address.ip} (${t("count", "notReadyWord")})`
+            )
             .join(", ") || t("empty", "noneLower"),
         mono: true,
       }),
     },
-    cell: ({ row }) => {
-      const addresses = row.original.subsets.flatMap((s) => s.addresses);
-      if (addresses.length === 0) {
-        return <None />;
-      }
-      return (
-        <Tooltip>
-          <TooltipTrigger>
-            <span className="font-mono text-fg-mut underline decoration-dotted underline-offset-2">
-              {addresses.length}
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>
-            <div className="space-y-1 text-xs">
-              {addresses.map((addr, i) => (
-                <div key={i}>
-                  <CopyableAddress value={addr.ip} label="Address" />
-                </div>
-              ))}
-            </div>
-          </TooltipContent>
-        </Tooltip>
-      );
-    },
+    cell: ({ row }) => <AddressesCell addresses={addressesOf(row.original)} />,
   },
   createAgeColumn<EndpointsInfo>(),
 ];
