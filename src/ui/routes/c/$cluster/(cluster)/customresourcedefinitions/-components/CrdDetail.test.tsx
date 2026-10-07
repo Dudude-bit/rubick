@@ -65,7 +65,7 @@ describe("a CRD's page", () => {
     expect(asked).not.toContain("Widget");
     expect(asked).toContain(NAME);
     expect(
-      screen.getByRole("heading", { name: new RegExp(NAME) })
+      screen.getByRole("heading", { name: (name) => name.includes(NAME) })
     ).toBeInTheDocument();
   });
 });
