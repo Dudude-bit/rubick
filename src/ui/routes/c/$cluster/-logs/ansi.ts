@@ -144,6 +144,19 @@ export function messageSegments(log: LogLine): StyledSegment[] | null {
   return tailSegments(log.segments, log.message.length);
 }
 
+/** How many of each run's first characters fall inside the first `skip` of the whole line. */
+export function skipsOf(
+  segments: readonly StyledSegment[],
+  skip: number
+): number[] {
+  let left = skip;
+  return segments.map(({ text }) => {
+    const own = Math.min(left, text.length);
+    left -= own;
+    return own;
+  });
+}
+
 /**
  * `text` cut at every case-insensitive occurrence of `query`; the odd
  * indices are the matches. A query that is not a valid pattern after

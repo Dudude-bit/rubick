@@ -14,6 +14,7 @@ import {
   formatSpan,
   formatTimestamp,
   formatTimestampPrecise,
+  stampLength,
 } from "./types";
 import { formatCount } from "@/lib/count";
 
@@ -142,13 +143,14 @@ export const LogLineComponent = memo(function LogLineComponent({
   const messageColor = LEVEL_MESSAGE_COLORS[level];
 
   if (viewMode === "raw") {
+    const skip = stampLength(log);
     return (
       <div className="px-1.5 py-px hover:bg-hover">
         <span className="whitespace-pre-wrap break-all text-fg-mid">
           {log.segments ? (
-            <AnsiText segments={log.segments} query={searchQuery} />
+            <AnsiText segments={log.segments} query={searchQuery} skip={skip} />
           ) : (
-            <Marked text={log.raw} query={searchQuery} />
+            <Marked text={log.raw} query={searchQuery} skip={skip} />
           )}
         </span>
       </div>

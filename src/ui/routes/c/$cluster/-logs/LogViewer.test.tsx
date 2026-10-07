@@ -433,6 +433,55 @@ describe("a text query", () => {
 
     await waitFor(() => expect(shown()).toBe(1));
   });
+
+  /**
+   * The same search in Raw: the line the search kept is drawn with its
+   * stamp, and lit "503" inside `...603166503Z` as well as where the
+   * container wrote it. Fails if the highlight reads the timestamp.
+   */
+  it("lights what the container wrote in Raw, not digits of the timestamp", async () => {
+    // jsdom lays nothing out, and a virtualiser in a zero-high port draws no rows.
+    const spies = (
+      [
+        ["offsetHeight", 600],
+        ["offsetWidth", 900],
+        ["clientHeight", 600],
+      ] as const
+    ).map(([name, px]) =>
+      vi.spyOn(HTMLElement.prototype, name, "get").mockReturnValue(px)
+    );
+    try {
+      await renderStreaming();
+      act(() => {
+        listeners["log-batch"]!({
+          payload: {
+            stream_id: "stream-id-1",
+            lines: [
+              "2026-10-07T06:41:09.603166503Z GET /checkout 503 upstream=payments",
+            ].map((raw) => ({
+              message: raw.slice(raw.indexOf(" ") + 1),
+              timestamp: raw.slice(0, raw.indexOf(" ")),
+              level: null,
+              format: "plain",
+              fields: null,
+              raw,
+            })),
+          },
+        });
+      });
+      await userEvent.click(screen.getByRole("button", { name: /^Raw/ }));
+      await userEvent.type(screen.getByLabelText("Filter the log"), "503");
+
+      await waitFor(() =>
+        expect(document.querySelector("mark")).not.toBeNull()
+      );
+      expect(
+        [...document.querySelectorAll("mark")].map((mark) => mark.textContent)
+      ).toEqual(["503"]);
+    } finally {
+      spies.forEach((spy) => spy.mockRestore());
+    }
+  });
 });
 
 describe("a chip promoted to intake", () => {

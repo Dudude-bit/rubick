@@ -267,15 +267,18 @@ export function termLabel(term: QueryTerm): string {
 const STAMP_SHAPED = /^\d{4}-\d\d-\d\dT/;
 
 /**
- * The raw line without the timestamp the kubelet put before it: "503"
- * matched inside `...603166503Z` on a line that says nothing of 503.
+ * How much of the raw line is the timestamp the kubelet put before it and the
+ * space after: "503" matched inside `...603166503Z` on a line that says
+ * nothing of 503. The search skips it and so does the highlight.
  */
-function written(log: StreamedLogLine): string {
-  if (log.timestamp === null) return log.raw;
+export function stampLength(log: Pick<LogLine, "timestamp" | "raw">): number {
+  if (log.timestamp === null) return 0;
   const space = log.raw.indexOf(" ");
-  return space > 10 && STAMP_SHAPED.test(log.raw)
-    ? log.raw.slice(space + 1)
-    : log.raw;
+  return space > 10 && STAMP_SHAPED.test(log.raw) ? space + 1 : 0;
+}
+
+function written(log: StreamedLogLine): string {
+  return log.raw.slice(stampLength(log));
 }
 
 function matchesTerm(log: StreamedLogLine, term: QueryTerm): boolean {
