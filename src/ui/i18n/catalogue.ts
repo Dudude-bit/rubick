@@ -7365,6 +7365,9 @@ export const en = {
     hosts: { one: "{n} host", other: "{n} hosts" },
     resources: { one: "{n} resource", other: "{n} resources" },
     releases: { one: "{n} release", other: "{n} releases" },
+    changesSeen: { one: "{n} change seen", other: "{n} changes seen" },
+    revisionCount: { one: "{n} revision", other: "{n} revisions" },
+    deliveryCount: { one: "{n} delivery", other: "{n} deliveries" },
     contexts: { one: "{n} context", other: "{n} contexts" },
     // `n` is the total, not the number shown: "1 of 42 context" is what
     // happens when the count that picks the form is the filtered one.

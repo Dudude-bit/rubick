@@ -727,6 +727,25 @@ export function timelineOf(input: TimelineInput): ChangeItem[] {
   return items.sort((a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity));
 }
 
+/**
+ * What the Changes tab holds, each kind of row counted in its own words: the
+ * changes this app saw are the number the shared file's "What changed" gives.
+ */
+export function changesCount(items: readonly ChangeItem[], t: T): string {
+  const n = (kind: ChangeItem["kind"]) =>
+    items.filter((item) => item.kind === kind).length;
+  const parts = [
+    [n("journal"), "changesSeen"],
+    [n("revision"), "revisionCount"],
+    [n("delivery"), "deliveryCount"],
+    [n("helm"), "releases"],
+  ] as const;
+  return parts
+    .filter(([count]) => count > 0)
+    .map(([count, key]) => t("count", key, { n: count }))
+    .join(" · ");
+}
+
 /** Where a workload says plain Helm installed it. */
 export function helmReleaseOf(
   annotations: Record<string, string>,

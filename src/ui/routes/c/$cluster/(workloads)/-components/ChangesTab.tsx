@@ -7,6 +7,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
 import { formatWhen } from "@/lib/utils";
 import {
+  changesCount,
   helmReleaseOf,
   revisionOfController,
   revisionOfReplicaSet,
@@ -239,9 +240,7 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
     <Section>
       <SectionHeader
         title={t("changes", "title")}
-        count={
-          items.filter((i) => i.kind !== "gap" && i.kind !== "created").length
-        }
+        count={changesCount(items, t) || undefined}
       />
       <SectionBody>
         {unread.map((line) => (

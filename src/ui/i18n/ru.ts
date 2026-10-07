@@ -8489,6 +8489,24 @@ export const ru: Catalogue = {
       many: "{n} релизов",
       other: "{n} релиза",
     },
+    changesSeen: {
+      one: "{n} замеченное изменение",
+      few: "{n} замеченных изменения",
+      many: "{n} замеченных изменений",
+      other: "{n} замеченного изменения",
+    },
+    revisionCount: {
+      one: "{n} ревизия",
+      few: "{n} ревизии",
+      many: "{n} ревизий",
+      other: "{n} ревизии",
+    },
+    deliveryCount: {
+      one: "{n} доставка",
+      few: "{n} доставки",
+      many: "{n} доставок",
+      other: "{n} доставки",
+    },
     contexts: {
       one: "{n} контекст",
       few: "{n} контекста",

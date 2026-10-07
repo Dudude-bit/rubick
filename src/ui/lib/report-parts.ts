@@ -325,16 +325,15 @@ export function changesSection(
     kinds: targets.map((target) => target.kind),
     namespaces: subject.namespace ? [subject.namespace] : [],
   });
-  const mine = journal.entries
-    .filter(
-      (entry) =>
-        entry.context === context &&
-        entry.namespace === (subject.namespace ?? "") &&
-        targets.some(
-          (target) => target.kind === entry.kind && target.name === entry.name
-        )
-    )
-    .slice(-MAX_CHANGES);
+  const all = journal.entries.filter(
+    (entry) =>
+      entry.context === context &&
+      entry.namespace === (subject.namespace ?? "") &&
+      targets.some(
+        (target) => target.kind === entry.kind && target.name === entry.name
+      )
+  );
+  const mine = all.slice(-MAX_CHANGES);
   const watched =
     spans.length > 0 ||
     journal.entries.some((entry) => entry.context === context);
@@ -382,7 +381,8 @@ export function changesSection(
     order: ORDER.changes,
     title: t("share", "sectionChanges"),
     icon: iconSvg(History),
-    count: out.length,
+    // Changes, as the Changes tab counts them; a row holds every change of one moment.
+    count: all.length,
     body: { type: "changes", changes },
   };
 }

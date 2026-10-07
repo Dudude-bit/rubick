@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { ResourceConnections } from "@/generated/types";
 import type { T } from "@/i18n/useT";
-import type { JournalEntry } from "./changes";
+import { changesCount, timelineOf, type JournalEntry } from "./changes";
 import { VALUE_CLOSE, VALUE_OPEN } from "./report";
 import {
   changesSection,
@@ -17,6 +17,7 @@ import {
   type PlacedSection,
 } from "./report-parts";
 import { graphSections } from "./report-graph";
+import { connectionCount } from "./connections";
 
 const t = ((section: string, key: string, values?: Record<string, unknown>) =>
   values
@@ -54,6 +55,52 @@ const values = (text: string) =>
   text.replaceAll(VALUE_OPEN, "[").replaceAll(VALUE_CLOSE, "]");
 
 describe("graphSections", () => {
+  /**
+   * hello-web's Share dialog said "Connections 6" beside the page's tab
+   * "Connections 5": the file counted rows, the tab objects, and the row
+   * that says nothing owns the Deployment is not an object. Fails if the two
+   * stop counting the same thing.
+   */
+  it("counts what the Connections tab counts: the objects, not the rows", () => {
+    const deployment = {
+      kind: "Deployment",
+      name: "hello-web",
+      namespace: "lena-sandbox",
+      existence: "present",
+      facts: null,
+    } as const;
+    const replicaSet = {
+      kind: "ReplicaSet",
+      name: "hello-web-5d8f7b9c6",
+      namespace: "lena-sandbox",
+      existence: "present",
+      facts: null,
+    } as const;
+    const data = {
+      subject: deployment,
+      edges: [
+        {
+          from: deployment,
+          to: replicaSet,
+          relation: { verb: "owns", controller: true },
+        },
+      ],
+      stops: [],
+      published: [],
+      notLookedAt: [],
+    } as unknown as ResourceConnections;
+    const connections = graphSections(
+      { data, error: null, isPending: false },
+      t,
+      false
+    ).sections.find((section) => section.id === "connections")!;
+    const body = connections.body as { groups: { rows: unknown[] }[] };
+    expect(
+      body.groups.reduce((sum, group) => sum + group.rows.length, 0)
+    ).toBeGreaterThan(connectionCount(data));
+    expect(connections.count).toBe(connectionCount(data));
+  });
+
   /**
    * An empty chain and a chain nobody could read are opposite answers. The
    * file printed "Nothing here." for both, so a colleague concluded nothing
@@ -474,6 +521,59 @@ describe("changesSection", () => {
       "changes.journalImage(container=app,from=[2.19.0],to=[2.21.0])",
       "changes.journalGeneration(from=[84],to=[86])",
     ]);
+  });
+
+  /**
+   * Lena's hello-web: the Changes tab said 15 and the Share dialog "What
+   * changed 7": the dialog counted rows, each of which holds every change of
+   * one moment, while the tab counts changes. Fails if the file's count
+   * stops being the number of changes the tab says it saw.
+   */
+  it("counts the changes the Changes tab saw, not the moments they fell in", () => {
+    const entries = [
+      entry({ field: "generation", key: null, from: "1", to: "2" }),
+      entry({ field: "replicas", key: null, from: "1", to: "2" }),
+      entry({
+        at: at + 60_000,
+        field: "generation",
+        key: null,
+        from: "2",
+        to: "3",
+      }),
+      entry({
+        at: at + 60_000,
+        field: "replicas",
+        key: null,
+        from: "2",
+        to: "1",
+      }),
+      entry({ at: at + 120_000, field: "image" }),
+    ];
+    const section = changesSection(
+      { entries, spans: WATCHED },
+      "prod-eu",
+      { kind: "Deployment", name: "payments", namespace: "shop", owners: [] },
+      AT,
+      t
+    );
+    const tab = timelineOf({
+      revisions: [],
+      deliveries: [],
+      helm: [],
+      journal: entries,
+      spans: WATCHED,
+      window: {
+        from: Date.parse(AT) - 7 * 24 * 60 * 60_000,
+        to: Date.parse(AT),
+      },
+      createdAt: null,
+    });
+    const rows = section?.body.type === "changes" ? section.body.changes : [];
+    expect(rows).toHaveLength(3);
+    expect(section?.count).toBe(5);
+    expect(changesCount(tab, t)).toBe(
+      "count.changesSeen(n=" + String(section?.count) + ")"
+    );
   });
 
   /** The object itself, not only what owns it: a Deployment's page shares its own journal. */

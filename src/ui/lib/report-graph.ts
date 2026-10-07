@@ -5,6 +5,7 @@ import type { T } from "@/i18n/useT";
 import { expiryOf, expiryText, problemWords } from "./certificates";
 import {
   chainSilence,
+  connectionCount,
   connectionGroups,
   describeExistence,
   describeStop,
@@ -228,7 +229,7 @@ export function graphSections(
         order: ORDER.connections,
         title: t("share", "sectionConnections"),
         icon: iconSvg(Link2),
-        count: groups.reduce((sum, group) => sum + group.rows.length, 0),
+        count: data ? connectionCount(data) : null,
         unread,
         body: { type: "connections", groups },
       },
