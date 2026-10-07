@@ -121,6 +121,14 @@ export function formatCPU(
   return formatDecimal(millicores / 1000, 1, locale);
 }
 
+/** Whole cores to the millicore, so 465m reads 0,465 beside a 1,2 instead of changing unit. */
+export function formatCores(
+  millicores: number,
+  locale: Locale = currentLocale()
+): string {
+  return formatDecimal(millicores / 1000, 3, locale, true);
+}
+
 const SIZE_KEYS = [
   "sizeB",
   "sizeKi",

@@ -6,6 +6,7 @@ import {
   parseCPU,
   parseMemory,
   formatCPU,
+  formatCores,
   formatBytes,
 } from "./k8s-quantity";
 
@@ -131,6 +132,15 @@ describe("formatCPU in the reader's language", () => {
   it("writes cores with the reader's decimal mark", () => {
     expect(formatCPU(2500, "ru")).toBe("2,5");
     expect(formatCPU(250, "ru")).toBe("250m");
+  });
+});
+
+describe("formatCores", () => {
+  /** A row that mixes 465m with 1,2 reads in cores; fails if the millicore is lost or a zero trails. */
+  it("keeps the millicore and drops trailing zeros, in the reader's decimal mark", () => {
+    expect(formatCores(465, "en")).toBe("0.465");
+    expect(formatCores(1200, "ru")).toBe("1,2");
+    expect(formatCores(1000, "ru")).toBe("1");
   });
 });
 

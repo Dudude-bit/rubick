@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatBytes, formatCPU } from "@/lib/k8s-quantity";
+import { formatBytes, formatCPU, formatCores } from "@/lib/k8s-quantity";
 import { cn } from "@/lib/utils";
 import type { NodeBudget, ResourceBudget } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -30,10 +30,14 @@ interface NodeResourcesProps {
   podsRunning: number | null;
 }
 
-function amount(unit: ResourceBudget["unit"], value: number): string {
+function amount(
+  unit: ResourceBudget["unit"],
+  value: number,
+  cores: boolean
+): string {
   switch (unit) {
     case "cpu":
-      return formatCPU(value);
+      return cores ? formatCores(value) : formatCPU(value);
     case "memory":
       return formatBytes(value, { trim: true });
     case "count":
@@ -137,6 +141,15 @@ export function NodeResources({
         <TableBody>
           {rows.map((row) => {
             const used = usedOf(row, usage, podsRunning);
+            const cores =
+              row.unit === "cpu" &&
+              [
+                row.capacity,
+                row.allocatable,
+                row.requested,
+                row.limited,
+                used,
+              ].some((value) => value !== null && value >= 1000);
             return (
               <TableRow key={row.name} data-quiet>
                 <TableCell className="font-mono text-xs">
@@ -147,16 +160,28 @@ export function NodeResources({
                     </span>
                   )}
                 </TableCell>
-                <Figure unit={row.unit} value={row.capacity} of={null} />
-                <Figure unit={row.unit} value={row.allocatable} of={null} />
                 <Figure
                   unit={row.unit}
+                  cores={cores}
+                  value={row.capacity}
+                  of={null}
+                />
+                <Figure
+                  unit={row.unit}
+                  cores={cores}
+                  value={row.allocatable}
+                  of={null}
+                />
+                <Figure
+                  unit={row.unit}
+                  cores={cores}
                   value={row.requested}
                   of={row.allocatable}
                   unknown={!budget?.known}
                 />
                 <Figure
                   unit={row.unit}
+                  cores={cores}
                   value={row.limited}
                   of={row.allocatable}
                   unknown={!budget?.known && row.name !== "pods"}
@@ -164,6 +189,7 @@ export function NodeResources({
                 />
                 <Figure
                   unit={row.unit}
+                  cores={cores}
                   value={used}
                   of={row.allocatable}
                   noSource={used === null}
@@ -202,6 +228,7 @@ function usedOf(
 
 function Figure({
   unit,
+  cores,
   value,
   of,
   unknown = false,
@@ -209,6 +236,7 @@ function Figure({
   noSource = false,
 }: {
   unit: ResourceBudget["unit"];
+  cores: boolean;
   value: number | null;
   of: number | null;
   unknown?: boolean;
@@ -248,7 +276,7 @@ function Figure({
   const pct = share(value, of);
   return (
     <TableCell className="text-right font-mono tabular-nums">
-      {amount(unit, value)}
+      {amount(unit, value, cores)}
       {pct && (
         <span
           className={cn(
