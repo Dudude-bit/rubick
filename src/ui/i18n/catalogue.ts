@@ -5684,7 +5684,8 @@ export const en = {
       "A failed query is not an absence. Nothing is claimed about these namespaces either way.",
     integrationsNoCluster:
       "Connect a cluster and this will say what it has. Every extension here is detected by asking the API server for its CRDs, and there is no API server to ask.",
-    yamlNoteDefault: "the object as the API server has it",
+    yamlNoteDefault:
+      "the object as you would apply it: without status, ownerReferences, finalizers and the fields the server sets",
     diffComputing: "Comparing…",
     diffUnavailable:
       "Could not compare these two. What Apply would do is unchanged; the comparison is what failed.",
