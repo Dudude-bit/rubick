@@ -7130,7 +7130,6 @@ export const ru: Catalogue = {
     noControllerClaimed: "ни один контроллер не заявил этот класс",
     meshGamma: "меш (GAMMA)",
     backendWeight: "вес {n}",
-    workerRole: "рабочий",
     storedVersion: "{version} (хранимая)",
     couldNotAskRoutes:
       "Не удалось спросить интеграции, какие их маршруты ведут к этим Service, так что ниже может не хватать входа.",

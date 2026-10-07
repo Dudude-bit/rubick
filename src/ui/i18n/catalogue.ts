@@ -6541,7 +6541,6 @@ export const en = {
     noControllerClaimed: "no controller has claimed this class",
     meshGamma: "mesh (GAMMA)",
     backendWeight: "weight {n}",
-    workerRole: "worker",
     storedVersion: "{version} (stored)",
     couldNotAskRoutes:
       "Could not ask the integrations which of their routes reach these Services, so a way in may be missing below.",

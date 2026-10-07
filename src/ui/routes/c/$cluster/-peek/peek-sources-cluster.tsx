@@ -111,10 +111,7 @@ export const CLUSTER_SOURCES: PeekSources = {
         {
           title: t("columns", "machine"),
           items: [
-            {
-              label: t("columns", "roles"),
-              value: list(node.roles, t("empty", "workerRole")),
-            },
+            { label: t("columns", "roles"), value: list(node.roles) },
             { label: t("columns", "kubelet"), value: node.version, mono: true },
             {
               label: t("columns", "platform"),
