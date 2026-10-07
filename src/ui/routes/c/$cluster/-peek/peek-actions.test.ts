@@ -318,7 +318,7 @@ describe("restarting a pod nothing owns", () => {
     expect(
       describePodRestart("bare-demo", "k8s-gui-test", bare, t)
     ).toMatchObject({
-      title: "Restart pod k8s-gui-test/bare-demo?",
+      title: "Restart Pod k8s-gui-test/bare-demo?",
       description: expect.stringContaining("nothing will bring it back"),
     });
   });
@@ -339,9 +339,9 @@ describe("restarting a pod an owner replaces", () => {
     expect(
       describePodRestart("log-demo-1", "k8s-gui-test", pod(), t)
     ).toMatchObject({
-      title: "Restart pod k8s-gui-test/log-demo-1?",
+      title: "Restart Pod k8s-gui-test/log-demo-1?",
       description:
-        "Restarting a pod means deleting it. Deleting pod k8s-gui-test/log-demo-1 removes it now. Its ReplicaSet log-demo-6cf will start a replacement.",
+        "Restarting a pod means deleting it. Deleting Pod k8s-gui-test/log-demo-1 removes it now. Its ReplicaSet log-demo-6cf will start a replacement.",
     });
   });
 

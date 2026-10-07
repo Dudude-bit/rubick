@@ -1355,7 +1355,7 @@ export const en = {
         "Replaces the pod on each of {nodes}, starting the new pod before stopping the old one on {n} nodes at a time.",
     },
     restartPodBody:
-      "Restarting a pod means deleting it. Deleting pod {name} {effect}",
+      "Restarting a pod means deleting it. Deleting Pod {name} {effect}",
     effectPodUnread:
       "removes it now. Whether anything starts a replacement depends on its owner, which has not been read yet.",
     effectPodOwned:
@@ -1389,7 +1389,7 @@ export const en = {
     effectCrd:
       "removes the kind it defines and every object of that kind, in every namespace. It cannot be undone.",
     effectPermanent: "is permanent and cannot be undone.",
-    podSubject: "pod {name}",
+    podSubject: "Pod {name}",
     validate: "Validate",
     apply: "Apply",
     applyAnyway: "Apply anyway",

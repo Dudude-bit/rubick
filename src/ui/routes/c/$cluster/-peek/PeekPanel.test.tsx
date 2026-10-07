@@ -1574,7 +1574,7 @@ describe("PeekPanel actions", () => {
 
     const confirm = await screen.findByRole("alertdialog");
     expect(
-      within(confirm).getByText("Restart pod k8s-gui-test/log-demo-1?")
+      within(confirm).getByText("Restart Pod k8s-gui-test/log-demo-1?")
     ).toBeInTheDocument();
     expect(
       within(confirm).getByText(

@@ -56,7 +56,7 @@ describe("the right-click menu of a pod in a workload's Pods tab", () => {
     await user.click(await screen.findByRole("menuitem", { name: "Restart" }));
     const dialog = await screen.findByRole("alertdialog");
     expect(
-      within(dialog).getByText("Restart pod shop/cart-6dc786ff6d-rh8q5?")
+      within(dialog).getByText("Restart Pod shop/cart-6dc786ff6d-rh8q5?")
     ).toBeInTheDocument();
   });
 });

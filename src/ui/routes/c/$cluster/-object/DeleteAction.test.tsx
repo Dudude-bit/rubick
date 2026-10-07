@@ -122,7 +122,7 @@ describe("Restart on a pod's page", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Restart" }));
     const dialog = await screen.findByRole("alertdialog");
-    expect(dialog).toHaveTextContent("Restart pod shop/cart-1?");
+    expect(dialog).toHaveTextContent("Restart Pod shop/cart-1?");
     expect(dialog).toHaveTextContent(
       "Its ReplicaSet cart-75 will start a replacement."
     );
