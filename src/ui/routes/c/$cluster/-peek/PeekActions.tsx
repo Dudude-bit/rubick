@@ -145,7 +145,10 @@ function PeekActionMenu({
           aria-label={t("action", "moreActions")}
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="min-w-[180px]">
+      <DropdownMenuContent
+        align="start"
+        className="min-w-[180px] max-w-[320px]"
+      >
         {actions.map((action) => (
           <DropdownMenuItem
             key={action.id}
