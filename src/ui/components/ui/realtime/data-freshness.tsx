@@ -26,7 +26,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn, formatTimeUnit } from "@/lib/utils";
 import { useClusterStore } from "@/stores/clusterStore";
 import { RealtimeAge } from "./realtime-age";
 import { useT } from "@/i18n/useT";
@@ -90,6 +90,33 @@ function AgeOnFace({ stamp }: { stamp: string }) {
   );
 }
 
+/** Text drawn by CSS, so a reserve takes room without being read or found. */
+function Ghost({ text }: { text: string }) {
+  return <span data-text={text} className="before:content-[attr(data-text)]" />;
+}
+
+/** Every reading the face can take, hidden in one cell: a flip never moves its neighbours. */
+function Reserve() {
+  const t = useT();
+  const age = t("action", "agoSuffix", { age: formatTimeUnit(59, "minute") });
+  return Object.values(STATES).map(({ label }) => (
+    <span
+      key={label}
+      aria-hidden="true"
+      className="invisible col-start-1 row-start-1 inline-flex items-center gap-1.5"
+    >
+      <span className="w-1.5 shrink-0" />
+      <Ghost text={t("cluster", label)} />
+      {(label === "freshSlowed" || label === "freshOffline") && (
+        <>
+          <Ghost text="·" />
+          <Ghost text={age} />
+        </>
+      )}
+    </span>
+  ));
+}
+
 export const DataFreshness = memo(function DataFreshness({
   dataUpdatedAt,
   live = false,
@@ -118,21 +145,24 @@ export const DataFreshness = memo(function DataFreshness({
       <TooltipTrigger asChild>
         <div
           className={cn(
-            "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap text-[11px] text-fg-fnt",
+            "inline-grid shrink-0 justify-items-end whitespace-nowrap text-[11px] text-fg-fnt",
             className
           )}
         >
-          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
-          <span>{t("cluster", label)}</span>
-          {/* The two readings that need an age on the face of them: they are
-              the states where how old the data is changes what the reader
-              should do with it. */}
-          {(state === "offline" || state === "slowed") && (
-            <>
-              <span aria-hidden="true">·</span>
-              <AgeOnFace stamp={stamp} />
-            </>
-          )}
+          <Reserve />
+          <span className="col-start-1 row-start-1 inline-flex items-center gap-1.5">
+            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
+            <span>{t("cluster", label)}</span>
+            {/* The two readings that need an age on the face of them: they
+                are the states where how old the data is changes what the
+                reader should do with it. */}
+            {(state === "offline" || state === "slowed") && (
+              <>
+                <span aria-hidden="true">·</span>
+                <AgeOnFace stamp={stamp} />
+              </>
+            )}
+          </span>
         </div>
       </TooltipTrigger>
       <TooltipContent side="bottom">

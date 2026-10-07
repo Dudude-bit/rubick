@@ -85,3 +85,24 @@ describe("what the freshness reading claims", () => {
     unmount();
   });
 });
+
+describe("the room the reading takes", () => {
+  /**
+   * The Events toolbar is right-aligned, so the label growing from "polling"
+   * to "polled less often · 3s ago" pushed every control left of it by about
+   * 100px each time the poll backed off, and clicks aimed at Warnings landed
+   * on the limit menu. Fails if the box sizes to the current word alone.
+   */
+  it("keeps the width of its widest reading whatever it says now", () => {
+    const { container } = wrap(<DataFreshness dataUpdatedAt={UPDATED} />);
+    const reserved = [
+      ...container.querySelectorAll<HTMLElement>("[data-text]"),
+    ].map((ghost) => ghost.dataset.text);
+
+    expect(screen.getByText("polling")).toBeInTheDocument();
+    expect(reserved).toEqual(
+      expect.arrayContaining(["polled less often", "offline", "59m ago"])
+    );
+    expect(container.textContent).not.toContain("polled less often");
+  });
+});
