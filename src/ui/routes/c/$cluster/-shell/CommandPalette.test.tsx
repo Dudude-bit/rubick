@@ -241,7 +241,7 @@ describe("the command palette's hits", () => {
     ];
     await open("burst-demo");
     expect(
-      await screen.findByText(/could not read Service/)
+      await screen.findByText(/could not read 1 kind: Service/)
     ).toBeInTheDocument();
   });
 
@@ -284,7 +284,7 @@ describe("the command palette's hits", () => {
       message: `${kind.toLowerCase()}s is forbidden`,
     }));
     await open("access");
-    const line = await screen.findByText(/could not read DaemonSet/);
+    const line = await screen.findByText(/could not read 7 kinds: DaemonSet/);
     expect(line).toHaveClass("truncate");
     expect(line).toHaveAttribute(
       "title",
@@ -319,7 +319,7 @@ describe("the command palette's hits", () => {
       },
     ];
     await open("access");
-    const line = await screen.findByText(/could not read DaemonSet/);
+    const line = await screen.findByText(/could not read 5 kinds: DaemonSet/);
     expect(line.getAttribute("title")?.split("\n")).toEqual([
       "The cluster refused: DaemonSet, Role, Lease, Node",
       "Widget: request timed out",
@@ -344,7 +344,9 @@ describe("the command palette's hits", () => {
       { kind: "Widget", group: "demo.example.com", plural: "widgets" },
     ];
     await open("marco");
-    const refused = await screen.findByText(/could not read ServiceAccount/);
+    const refused = await screen.findByText(
+      /could not read 1 kind: ServiceAccount/
+    );
     expect(refused.parentElement).toHaveClass("text-warn");
     expect(refused).toHaveAttribute(
       "title",
@@ -353,7 +355,36 @@ describe("the command palette's hits", () => {
     expect(
       screen.getByText("1 kind still loading").closest("span")
     ).toHaveClass("text-info");
-    expect(screen.getByText("Names searched in 1 kind")).toBeInTheDocument();
+    expect(
+      screen.getByText("Names searched in 1 of 2 kinds served")
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * Marco's Ctrl+K said "Names searched in 15 kinds", "47 kinds not
+   * searched" and "7 kinds cannot be listed", 69 kinds beside API resources'
+   * 82, and named the refused ones without a count. Fails unless the
+   * searched count names the kinds served and the refused line counts its
+   * kinds, so the parts add up to the whole.
+   */
+  it("says what each kind total counts, so the parts add up to the kinds served", async () => {
+    search.searched = [{ kind: "Pod", group: "", plural: "pods" }];
+    search.unreadable = [
+      {
+        kind: "PriorityClass",
+        group: "scheduling.k8s.io",
+        plural: "priorityclasses",
+        reason: "forbidden",
+        message: "priorityclasses is forbidden",
+      },
+    ];
+    await open("checkout");
+    expect(
+      await screen.findByText("Names searched in 1 of 2 kinds served")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/could not read 1 kind: PriorityClass/)
+    ).toBeInTheDocument();
   });
 
   /**

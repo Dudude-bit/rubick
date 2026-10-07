@@ -202,7 +202,7 @@ describe("what an object owns", () => {
       });
     await renderWithRouter(<OwnsPanel uid="d" />);
     expect(
-      await screen.findByText("Reading kinds: 39 of 40 read")
+      await screen.findByText("Reading the kinds that can be watched: 39 of 40")
     ).toBeInTheDocument();
     expect(screen.queryByText("Owns nothing among the kinds read.")).toBeNull();
     expect(chipOf("Pod")).toHaveTextContent("still listing");
@@ -371,10 +371,54 @@ describe("what deleting an object takes with it", () => {
     await renderWithRouter(
       <CascadePreview kind="Deployment" name="api" namespace="shop" />
     );
-    const line = await screen.findByText("Reading kinds: 2 of 50 read");
+    const line = await screen.findByText(
+      "Reading the kinds that can be watched: 2 of 50"
+    );
     expect(line.closest("details")).not.toHaveAttribute("open");
     expect(screen.queryByText("Also deletes:")).toBeNull();
     expect(screen.queryByText(/Nothing else goes with it/)).toBeNull();
+  });
+
+  /**
+   * Marco's Delete said "Reading kinds: 0 of 72 read" beside API resources'
+   * 82, and nothing said why ten were missing. Fails unless the line says
+   * the total is the kinds that can be watched, and names the kinds served
+   * and what is left out.
+   */
+  it("says what its total counts and how it stands to the kinds served", async () => {
+    const unwatched = (kind: string, says: "unlistable" | "skipped") => ({
+      kind,
+      group: "",
+      plural: `${kind.toLowerCase()}s`,
+      reading: { says },
+    });
+    answers.cascade = () =>
+      Promise.resolve({
+        takes: [],
+        notRead: {
+          kinds: [
+            ...syncing(72),
+            ...["Binding", "TokenReview", "ComponentStatus"].map((kind) =>
+              unwatched(kind, "unlistable")
+            ),
+            unwatched("Event", "skipped"),
+          ],
+          groups: [],
+          watched: 72,
+        },
+        holds: null,
+      });
+    await renderWithRouter(
+      <CascadePreview kind="Pod" name="api-1" namespace="shop" />
+    );
+    expect(
+      await screen.findByText("Reading the kinds that can be watched: 0 of 72")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "76 kinds served; Events and kinds that cannot be watched are left out"
+      )
+    ).toBeInTheDocument();
   });
 
   /** Once listed, what failed stays named: reading ending is not reading all. */
@@ -394,7 +438,7 @@ describe("what deleting an object takes with it", () => {
       )
     ).toBeInTheDocument();
     expect(chipOf("Secret")).toHaveTextContent("refused");
-    expect(screen.queryByText(/Reading kinds/)).toBeNull();
+    expect(screen.queryByText(/Reading the kinds/)).toBeNull();
   });
 
   /** Before a delete, a count it could not work out is said, never skipped. */

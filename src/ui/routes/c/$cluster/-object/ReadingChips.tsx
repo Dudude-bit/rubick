@@ -113,6 +113,9 @@ export function ReadingChips({
   );
 }
 
+const unwatched = ({ reading }: KindReading) =>
+  reading.says === "unlistable" || reading.says === "skipped";
+
 /**
  * While the index is still listing: one line with how far it got, folded
  * over the per-kind chips, so a dialog does not open as a wall of spinners.
@@ -120,9 +123,10 @@ export function ReadingChips({
 export function ReadingProgress({ notRead }: { notRead: NotRead }) {
   const t = useT();
   const total = Math.max(notRead.watched, listing(notRead));
+  const served = total + notRead.kinds.filter(unwatched).length;
   return (
     <details className="group text-xs">
-      <summary className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-md px-1 py-0.5 text-info hover:bg-hover">
+      <summary className="inline-flex cursor-pointer select-none flex-wrap items-center gap-x-1.5 rounded-md px-1 py-0.5 text-info hover:bg-hover">
         <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
         <span className="tabular-nums">
           {t("count", "kindsReadOf", {
@@ -134,6 +138,11 @@ export function ReadingProgress({ notRead }: { notRead: NotRead }) {
           className="h-3 w-3 text-fg-mut transition-transform duration-200 group-open:rotate-90 motion-reduce:transition-none"
           aria-hidden="true"
         />
+        {served > total && (
+          <span className="basis-full pl-5 tabular-nums text-fg-mut">
+            {t("count", "kindsServedLeftOut", { n: served })}
+          </span>
+        )}
       </summary>
       <div className="mt-2 pl-1">
         <ReadingChips kinds={notRead.kinds} groups={notRead.groups} />

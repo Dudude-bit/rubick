@@ -261,6 +261,8 @@ export type Entry =
       notSearched: CatalogEntry[] | null;
       /** Served kinds no list can read (`TokenReview`, `Binding`): the rest of API resources' count. */
       unlistable: CatalogEntry[] | null;
+      /** Every kind this cluster serves, API resources' count; null where it was not read. */
+      served: number | null;
       /** API groups discovery did not answer, whose kinds nobody could name. */
       unreadGroups: number;
     }
@@ -833,6 +835,7 @@ export function buildPaletteEntries({
       unlistable: counted
         ? kinds.filter((entry) => !entry.verbs.includes("list"))
         : null,
+      served: counted ? kinds.length : null,
       unreadGroups: own ? unreadGroups : 0,
     });
     const more = notSearched?.length ?? 0;

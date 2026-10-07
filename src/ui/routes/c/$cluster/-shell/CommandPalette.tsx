@@ -1416,7 +1416,8 @@ const kindNames = (kinds: readonly { kind: string }[]) =>
  */
 function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
   const t = useT();
-  const { cluster, scope, notSearched, unlistable, unreadGroups } = entry;
+  const { cluster, scope, notSearched, unlistable, unreadGroups, served } =
+    entry;
   return (
     <div
       role="presentation"
@@ -1427,7 +1428,12 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
         title={kindNames(cluster.searched)}
       >
         <ScanSearch className="h-3 w-3 flex-none" aria-hidden />
-        {t("count", "kindsSearchedByName", { n: cluster.searched.length })}
+        {served === null
+          ? t("count", "kindsSearchedByName", { n: cluster.searched.length })
+          : t("count", "kindsSearchedOfServed", {
+              n: served,
+              searched: cluster.searched.length,
+            })}
       </span>
       {scope !== null && (
         <span className="flex items-center gap-1">
@@ -1571,6 +1577,7 @@ function ClusterGroup({
         <span className="min-w-0 truncate" title={unreadHover(cluster, t)}>
           {state} · <Mark className="inline h-3 w-3 align-[-2px]" aria-hidden />{" "}
           {t("cluster", "kindsUnreadInline", {
+            n: cluster.unreadable.length,
             kinds: cluster.unreadable.map((unread) => unread.kind).join(", "),
           })}
         </span>

@@ -4258,7 +4258,10 @@ export const en = {
     connectingInline: "connecting…",
     searchingInline: "searching…",
     failedInline: "failed",
-    kindsUnreadInline: "could not read {kinds}",
+    kindsUnreadInline: {
+      one: "could not read {n} kind: {kinds}",
+      other: "could not read {n} kinds: {kinds}",
+    },
     kindsRefusedHover: "The cluster refused: {kinds}",
     otherKindsNotSearched: "kinds outside the app's own are not searched",
     lastUsedAgo: "last used {age} ago",
@@ -6863,8 +6866,13 @@ export const en = {
     readSoFar: { one: "{n} read so far", other: "{n} read so far" },
     servedKinds: { one: "{n} kind", other: "{n} kinds" },
     kindsReadOf: {
-      one: "Reading kinds: {n} of {total} read",
-      other: "Reading kinds: {n} of {total} read",
+      one: "Reading the kinds that can be watched: {n} of {total}",
+      other: "Reading the kinds that can be watched: {n} of {total}",
+    },
+    kindsServedLeftOut: {
+      one: "{n} kind served; Events and kinds that cannot be watched are left out",
+      other:
+        "{n} kinds served; Events and kinds that cannot be watched are left out",
     },
     notReadList: "Not read: {list}",
     podsStreaming: {
@@ -7323,6 +7331,10 @@ export const en = {
     kindsSearchedByName: {
       one: "Names searched in {n} kind",
       other: "Names searched in {n} kinds",
+    },
+    kindsSearchedOfServed: {
+      one: "Names searched in {searched} of {n} kind served",
+      other: "Names searched in {searched} of {n} kinds served",
     },
     kindsStillLoading: {
       one: "{n} kind still loading",
