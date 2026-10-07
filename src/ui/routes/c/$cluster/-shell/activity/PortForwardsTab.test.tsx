@@ -100,6 +100,21 @@ describe("PortForwardsTab", () => {
     ).toBeInTheDocument();
   });
 
+  /**
+   * Lena hovered the bell and the square on a running forward and nothing
+   * said what either did. Fails if an icon-only action in the panel goes back
+   * to carrying its words for the screen reader alone.
+   */
+  it.each(["Tell me if it dies", "Stop forwarding api-7f9"])(
+    "says in a tooltip what the icon-only action %s does",
+    async (name) => {
+      const user = userEvent.setup();
+      await mount();
+      await user.hover(screen.getByRole("button", { name }));
+      expect(await screen.findAllByText(name)).not.toHaveLength(0);
+    }
+  );
+
   // Settings used to be the only place a saved forward could be created,
   // renamed, repointed or deleted. Deleting that page without these would
   // have stranded every saved config the app already holds.

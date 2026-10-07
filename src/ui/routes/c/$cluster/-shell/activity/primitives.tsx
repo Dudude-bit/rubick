@@ -1,5 +1,10 @@
 import type { LucideIcon } from "lucide-react";
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 /**
@@ -55,7 +60,7 @@ export function ActivityAction({
   className,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
+  const button = (
     <button
       type="button"
       className={cn(
@@ -64,5 +69,13 @@ export function ActivityAction({
       )}
       {...props}
     />
+  );
+  const label = props["aria-label"];
+  if (!label) return button;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{button}</TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
