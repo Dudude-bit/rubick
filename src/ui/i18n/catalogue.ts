@@ -6627,7 +6627,7 @@ export const en = {
     error: "a container exited with a non-zero code.",
     completed: "every container finished successfully.",
     terminating:
-      "the pod was told to stop and is shutting down; it goes away once its containers exit.",
+      "the pod was deleted and is shutting down; it goes away once its containers have stopped and the kubelet has said so. Its logs stay readable until then.",
     evicted:
       "the node removed this pod, usually because it ran short of memory or disk.",
     nodeLost: "the node this pod runs on stopped answering.",

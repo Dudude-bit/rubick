@@ -45,6 +45,13 @@ fn is_terminal(phase: &str) -> bool {
     phase == "Succeeded" || phase == "Failed"
 }
 
+fn restarts_always(pod: &Pod) -> bool {
+    pod.spec
+        .as_ref()
+        .and_then(|s| s.restart_policy.as_deref())
+        .is_none_or(|policy| policy == ALWAYS)
+}
+
 /// Whether a pod condition is asserted true.
 ///
 /// `Ready` is the one that decides whether a Service puts the pod in its
@@ -183,7 +190,10 @@ pub fn display_status(pod: &Pod) -> String {
         if status.and_then(|s| s.reason.as_deref()) == Some(NODE_UNREACHABLE) {
             return "Unknown".to_string();
         }
-        if !is_terminal(&phase) {
+        // kubectl prints `Completed` once the kubelet marks a deleted pod
+        // Succeeded, which reads as a finished run for a Deployment's pod.
+        // One that restarts its containers is terminal only on its way out.
+        if !is_terminal(&phase) || restarts_always(pod) {
             return "Terminating".to_string();
         }
     }
@@ -434,6 +444,62 @@ mod tests {
         assert_eq!(display_status(&p), "Terminating");
     }
 
+    /// Dana deleted `shop/cart-9df89489c-nrql9` and its peek said `Completed`
+    /// for three seconds before it was gone: nginx exits 0 on SIGTERM and the
+    /// kubelet marks the deleted pod Succeeded. Fails if a Deployment's pod
+    /// on its way out reads as a finished run on the list, page or peek.
+    #[test]
+    fn a_deployment_pod_deleted_and_stopped_reads_terminating_not_completed() {
+        let deleted: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "cart-9df89489c-nrql9",
+                "namespace": "shop",
+                "deletionTimestamp": "2026-10-06T21:37:28Z",
+                "deletionGracePeriodSeconds": 30,
+                "ownerReferences": [{
+                    "apiVersion": "apps/v1",
+                    "kind": "ReplicaSet",
+                    "name": "cart-9df89489c",
+                    "uid": "5b0e7c1a-3f43-4d0b-9f0e-2a1c9f6d7e10",
+                    "controller": true,
+                }],
+            },
+            "spec": {
+                "nodeName": "node01",
+                "restartPolicy": "Always",
+                "containers": [{ "name": "cart", "image": "nginx:1.27-alpine" }],
+            },
+            "status": {
+                "phase": "Succeeded",
+                "conditions": [
+                    { "type": "Ready", "status": "False", "reason": "PodCompleted" },
+                    { "type": "ContainersReady", "status": "False", "reason": "PodCompleted" },
+                ],
+                "containerStatuses": [{
+                    "name": "cart",
+                    "ready": false,
+                    "started": false,
+                    "restartCount": 0,
+                    "image": "docker.io/library/nginx:1.27-alpine",
+                    "imageID": "",
+                    "state": { "terminated": {
+                        "exitCode": 0,
+                        "reason": "Completed",
+                        "startedAt": "2026-10-06T21:20:13Z",
+                        "finishedAt": "2026-10-06T21:37:28Z",
+                    } },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote");
+
+        assert_eq!(display_status(&deleted), "Terminating");
+        assert_eq!(
+            super::super::PodRow::from(&deleted).status.display,
+            super::super::PodInfo::from(&deleted).status.display
+        );
+    }
+
     #[test]
     fn a_deleted_pod_on_a_lost_node_reads_unknown() {
         let mut p = pod("Running");
@@ -448,6 +514,7 @@ mod tests {
     #[test]
     fn a_finished_pod_keeps_its_completion_through_deletion() {
         let mut p = pod("Succeeded");
+        p.spec.as_mut().unwrap().restart_policy = Some("Never".to_string());
         p.metadata.deletion_timestamp = Some(Time(
             crate::utils::moment::as_cluster_time(Utc::now())
                 .expect("an instant this test wrote itself"),
