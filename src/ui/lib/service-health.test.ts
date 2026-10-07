@@ -103,8 +103,19 @@ describe("one verdict for a Service on every surface", () => {
     expect(serviceHealthWords(health, t)).toMatchObject({
       label: "no endpoints",
       reason:
-        "No container declares the port it asks for (targetPort: web), so nothing is published",
+        "No container declares the port the Service asks for (targetPort: web), so nothing is published",
     });
+  });
+
+  /** Lena could not tell whom "он запрашивает" meant; fails if the Service stops being the asker. */
+  it("names the Service as the one that asks for the port, in Russian", () => {
+    expect(
+      translate("ru", "nav", "stopUnnamedPortCause", {
+        asked: "targetPort: web",
+      })
+    ).toBe(
+      "Ни один контейнер не объявляет порт, который запрашивает Service (targetPort: web), поэтому ничего не публикуется"
+    );
   });
 
   /**

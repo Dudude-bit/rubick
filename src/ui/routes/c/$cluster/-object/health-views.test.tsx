@@ -10,7 +10,7 @@ const NO_ENDPOINTS = {
   label: "no endpoints",
   role: "err" as const,
   reason:
-    "No container declares the port it asks for (targetPort: web), so nothing is published",
+    "No container declares the port the Service asks for (targetPort: web), so nothing is published",
 };
 
 describe("a verdict badge in a row", () => {

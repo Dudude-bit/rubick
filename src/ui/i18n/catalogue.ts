@@ -144,7 +144,7 @@ export const en = {
       "{route} attaches to {gateway}, which the API server does not have. No controller will ever write status for that parent, so this is the one refusal the cluster cannot state itself.",
     targetPortNamed: "targetPort: {name}",
     stopUnnamedPortCause:
-      "No container declares the port it asks for ({asked}), so nothing is published",
+      "No container declares the port the Service asks for ({asked}), so nothing is published",
     listAndLast: "{list}, and {last}",
     twoAnd: "{a} and {b}",
     backendNeverCreated:
