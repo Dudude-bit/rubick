@@ -56,6 +56,7 @@ import {
 } from "@/lib/namespace-scope";
 import type { ListQuery, Scoped, UnreadNamespace } from "@/generated/types";
 import { UnreadNamespaces } from "./UnreadNamespaces";
+import { StaleRows } from "./StaleRows";
 import { RefusalWayOut, UnreadList } from "./UnreadList";
 import { useListRefusal } from "./useListRefusal";
 import { useRowDeleteDenial } from "@/lib/access";
@@ -347,6 +348,8 @@ export function ResourceList<
   // exactly when their read failed, and that error is the caller's.
   const failed = (shouldUseQuery ? queryResult.error : externalError) ?? null;
   const dataUpdatedAt = externalDataUpdatedAt ?? queryResult.dataUpdatedAt;
+  // Every list, whatever feeds it: rows a failed read kept are said to be old.
+  const stale = failed !== null && resources.length > 0;
 
   const [deliveryFilter, setDeliveryFilter] = useState<DeliveryFilter>("all");
   const queries = useMemo(
@@ -555,9 +558,21 @@ export function ResourceList<
           // would otherwise still claim they are current.
           live={live && !resyncing}
           slowed={externalSlowed ?? (!live && queryResult.freshness.slowed)}
+          stale={stale}
         />
       )}
       {headerContent}
+      {stale && (
+        <StaleRows
+          label={emptyStateLabel.toLowerCase()}
+          since={dataUpdatedAt}
+          error={failed}
+          onRetry={
+            onRetry ??
+            (data === undefined ? () => void queryResult.refetch() : undefined)
+          }
+        />
+      )}
       <UnreadNamespaces
         unread={unread}
         label={emptyStateLabel.toLowerCase()}

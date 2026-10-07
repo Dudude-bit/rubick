@@ -14,6 +14,8 @@ interface ResourceListHeaderProps {
   live?: boolean;
   /** Polled, and backed off past its rate because nothing is changing. */
   slowed?: boolean;
+  /** The last read failed and the rows are from the one before it. */
+  stale?: boolean;
 }
 
 /**
@@ -29,6 +31,7 @@ export function ResourceListHeader({
   dataUpdatedAt,
   live,
   slowed,
+  stale,
 }: ResourceListHeaderProps) {
   return (
     <SectionHeader
@@ -42,6 +45,7 @@ export function ResourceListHeader({
             dataUpdatedAt={dataUpdatedAt}
             live={live}
             slowed={slowed}
+            stale={stale}
           />
         </>
       }

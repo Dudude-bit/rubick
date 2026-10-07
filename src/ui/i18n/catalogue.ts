@@ -4105,11 +4105,14 @@ export const en = {
     freshLive: "live",
     freshSlowed: "polled less often",
     freshOffline: "offline",
+    freshStale: "read failing",
     freshLiveNote:
       "The cluster is pushing changes to this view as they happen.",
     freshSlowedNote:
       "Nothing here has changed for a while, so it is being re-read less often. Anything you do on this page brings it back up to rate.",
     freshOfflineNote: "Not connected. Nothing on this screen is updating.",
+    freshStaleNote:
+      "The last read failed, so what is on screen is from the last read that answered.",
     lastRead: "Last read",
     justNow: "just now",
     agoSuffix: "ago.",
@@ -6163,6 +6166,8 @@ export const en = {
     readDeadlineHint:
       "The cluster did not answer in time. That is what a large cluster looks like from here, and it is not a fault to retry into: a narrower question is the way through.",
     couldNotReadInScope: "Could not read {label} in this scope.",
+    staleRows:
+      "Could not read {label} just now. The rows below are from {time}, the last read that answered.",
     couldNotReadInNamespace: "Could not read {label} in {namespace}.",
     noneWhereAnswered: "No {label} in {namespaces}.",
     gwNoRoutesOfKindsRead: "No routes of the kinds that could be read.",

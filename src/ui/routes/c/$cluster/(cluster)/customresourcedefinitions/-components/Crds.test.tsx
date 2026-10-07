@@ -8,7 +8,13 @@
 
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -101,6 +107,45 @@ describe("the CRD list when the read did not answer", () => {
       within(heading.parentElement!).queryByTestId("section-count")
     ).toBeNull();
     expect(screen.queryByText(/\b0 CRDs\b/)).toBeNull();
+  });
+
+  /**
+   * The lists' rule for a re-read that fails over rows it had: they stay,
+   * said to be from the last read that answered. Fails if the CRDs are
+   * dropped for the error, or kept with nothing saying they are old.
+   */
+  it("keeps the CRDs it had when a re-read fails, marked as old", async () => {
+    listCrds.mockResolvedValue([
+      {
+        group: "cert-manager.io",
+        crds: [
+          {
+            name: "certificates.cert-manager.io",
+            group: "cert-manager.io",
+            kind: "Certificate",
+            plural: "certificates",
+            scope: "Namespaced",
+            version: "v1",
+            shortNames: [],
+            categories: [],
+            createdAt: null,
+          },
+        ],
+      },
+    ]);
+    const { client } = await draw();
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("Certificate")
+    );
+
+    listCrds.mockRejectedValue(new Error("502 Bad Gateway"));
+    await act(() => client.refetchQueries());
+
+    expect(
+      await screen.findByText(/Could not read CRDs just now/)
+    ).toBeInTheDocument();
+    expect(document.body.textContent).toContain("Certificate");
+    expect(screen.getByText("read failing")).toBeInTheDocument();
   });
 
   it("still says the cluster has none when that is the answer", async () => {

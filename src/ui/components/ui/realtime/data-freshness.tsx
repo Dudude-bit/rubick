@@ -4,7 +4,7 @@
  * This used to render a green "Live" the moment any data existed, which
  * made it a decoration rather than a reading: it said "Live" over a
  * disconnected cluster and over screens that have no watch at all and
- * merely re-read on a timer. Four states, four words, and a shape as
+ * merely re-read on a timer. Five states, five words, and a shape as
  * well as a colour — a reader who cannot see the hue still gets the
  * answer from the ring and the label.
  *
@@ -52,6 +52,8 @@ export interface DataFreshnessProps {
    * a poll beside it is doing, so there is nothing slowed about it.
    */
   slowed?: boolean;
+  /** The last read failed, and what is on screen is from the one before it. Wins over live. */
+  stale?: boolean;
   className?: string;
 }
 
@@ -80,7 +82,14 @@ const STATES = {
     dot: "border border-fg-fnt",
     note: "freshOfflineNote",
   },
+  stale: {
+    label: "freshStale",
+    dot: "border border-warn",
+    note: "freshStaleNote",
+  },
 } as const;
+
+const AGED = new Set<string>(["freshSlowed", "freshOffline", "freshStale"]);
 
 /** "5 с назад", not a bare "5 с" a reader has to guess the meaning of. */
 function AgeOnFace({ stamp }: { stamp: string }) {
@@ -107,7 +116,7 @@ function Reserve() {
     >
       <span className="w-1.5 shrink-0" />
       <Ghost text={t("cluster", label)} />
-      {(label === "freshSlowed" || label === "freshOffline") && (
+      {AGED.has(label) && (
         <>
           <Ghost text="·" />
           <Ghost text={age} />
@@ -121,6 +130,7 @@ export const DataFreshness = memo(function DataFreshness({
   dataUpdatedAt,
   live = false,
   slowed = false,
+  stale = false,
   className,
 }: DataFreshnessProps) {
   const t = useT();
@@ -132,11 +142,13 @@ export const DataFreshness = memo(function DataFreshness({
 
   const state = !isConnected
     ? "offline"
-    : live
-      ? "live"
-      : slowed
-        ? "slowed"
-        : "polling";
+    : stale
+      ? "stale"
+      : live
+        ? "live"
+        : slowed
+          ? "slowed"
+          : "polling";
   const { label, dot, note } = STATES[state];
   const stamp = new Date(dataUpdatedAt).toISOString();
 
@@ -152,11 +164,12 @@ export const DataFreshness = memo(function DataFreshness({
           <Reserve />
           <span className="col-start-1 row-start-1 inline-flex items-center gap-1.5">
             <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
-            <span>{t("cluster", label)}</span>
-            {/* The two readings that need an age on the face of them: they
-                are the states where how old the data is changes what the
-                reader should do with it. */}
-            {(state === "offline" || state === "slowed") && (
+            <span className={cn(state === "stale" && "text-warn")}>
+              {t("cluster", label)}
+            </span>
+            {/* The readings where how old the data is changes what the
+                reader should do with it carry the age on their face. */}
+            {AGED.has(label) && (
               <>
                 <span aria-hidden="true">·</span>
                 <AgeOnFace stamp={stamp} />

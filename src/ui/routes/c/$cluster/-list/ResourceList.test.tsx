@@ -62,6 +62,8 @@ const list = (props: {
   unread?: UnreadNamespace[];
   queryKey?: string[];
   queryFn?: () => Promise<Scoped<Item>>;
+  dataUpdatedAt?: number;
+  live?: boolean;
 }) =>
   draw(
     <ResourceList<Item>
@@ -246,17 +248,31 @@ describe("a list whose rows come from outside", () => {
   });
 
   /**
-   * The same rule the internal query already followed: a failed re-read over
-   * rows that are still on screen is not worth throwing the page away for.
+   * During the 502 outage the Pods list kept its 73 rows under "polling" with
+   * nothing saying they were old, while Deployments showed only the error.
+   * Every list keeps the rows a failed re-read leaves, says they are from the
+   * last read that answered and when, and its header stops claiming live.
+   * Fails if the rows go, or stay unmarked, or the header still says live.
    */
-  it("keeps the rows it has when a re-read fails", async () => {
+  it("keeps the rows a failed re-read leaves, marked as from the last read that answered", async () => {
+    const answered = new Date(2026, 9, 7, 9, 55, 10).getTime();
     await list({
       data: [{ name: "api-7bcd", namespace: "default" }],
-      error: new Error("connection reset"),
+      error: new Error("502 Bad Gateway"),
+      dataUpdatedAt: answered,
+      live: true,
     });
 
     expect(screen.getByText("api-7bcd")).toBeVisible();
-    expect(screen.queryByText(/Could not read/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Could not read pods just now\. The rows below are from 09:55:10/
+      )
+    ).toBeVisible();
+    expect(screen.getByText(/502 Bad Gateway/)).toBeVisible();
+    expect(screen.getByText("read failing")).toBeVisible();
+    expect(screen.queryByText("live")).not.toBeInTheDocument();
+    expect(screen.queryByText(/in this scope/)).not.toBeInTheDocument();
   });
 });
 

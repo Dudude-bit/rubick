@@ -18,6 +18,7 @@ import { describeDeletion } from "../../../-peek/peek-actions";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
 import { ResourceListHeader } from "../../../-list/ResourceListHeader";
+import { StaleRows } from "../../../-list/StaleRows";
 import { UnreadList } from "../../../-list/UnreadList";
 import { KindAbout } from "@/components/object/KindAbout";
 import { ShareScreenAction } from "@/components/share/ShareAction";
@@ -70,6 +71,7 @@ export function Crds() {
     error: crdsError,
     dataUpdatedAt,
     freshness,
+    refetch,
   } = useLiveQuery({
     queryKey: queryKeys.crds(),
     queryFn: async () => {
@@ -244,7 +246,16 @@ export function Crds() {
         }
         dataUpdatedAt={dataUpdatedAt}
         slowed={freshness.slowed}
+        stale={!!crdsError && crds.length > 0}
       />
+      {crdsError && crds.length > 0 && (
+        <StaleRows
+          label="CRDs"
+          since={dataUpdatedAt}
+          error={crdsError}
+          onRetry={() => void refetch()}
+        />
+      )}
       {/* One table, one search field. The previous page nested a full
           DataTable — search, density toggle, pagination — inside every
           collapsible API group, so the same chrome appeared a dozen times

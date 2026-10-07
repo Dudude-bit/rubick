@@ -105,6 +105,32 @@ beforeEach(() => {
   });
 });
 
+describe("a feed whose re-read fails", () => {
+  /**
+   * During the 502 outage one list kept its rows under "polling" and another
+   * dropped them for the error. The feed follows the lists' rule: the events
+   * it had stay, said to be from the last read that answered. Fails if they
+   * are dropped for the error, or kept with the header still claiming a poll.
+   */
+  it("keeps the events it had, marked as from the last read that answered", async () => {
+    listEvents.mockResolvedValue(feed("prod", 3));
+    const { client } = await mount();
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("prod-pod-0")
+    );
+
+    listEvents.mockRejectedValue(new Error("502 Bad Gateway"));
+    await act(() => client.refetchQueries());
+
+    expect(
+      await screen.findByText(/Could not read events just now/)
+    ).toBeInTheDocument();
+    expect(document.body.textContent).toContain("prod-pod-0");
+    expect(screen.getByText("read failing")).toBeInTheDocument();
+    expect(screen.queryByText("polling")).not.toBeInTheDocument();
+  });
+});
+
 describe("what the limit is counted against", () => {
   /**
    * Would put the bug back: one cluster-wide read for 500 events, narrowed
