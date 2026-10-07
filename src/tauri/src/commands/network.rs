@@ -7,8 +7,8 @@ use std::collections::{BTreeMap, HashMap};
 use crate::error::Result;
 use crate::resources::{
     published, selected_count, ChainStop, EndpointsInfo, Existence, IngressDefaultBackend,
-    IngressInfo, IngressRule, IngressTlsConfig, NetworkPolicyInfo, ObjectRef, ServiceInfo,
-    ServicePublished,
+    IngressInfo, IngressRule, IngressTlsConfig, NetworkPolicyInfo, NotServing, ObjectRef, Selector,
+    ServiceInfo, ServicePublished,
 };
 use crate::state::AppState;
 use k8s_openapi::api::core::v1::{Endpoints, Pod, Service};
@@ -247,6 +247,48 @@ async fn health_inputs_in(
     Ok(health_inputs_of(&services, published))
 }
 
+/// The slices say that no address of a Service is ready, never why; the
+/// pods it selects do, and its page reads them. Asked only for those
+/// Services, so a scope of healthy ones costs no more than before. A pod list
+/// that fails leaves the slices' answer as it was.
+async fn with_unready_cause(
+    client: &kube::Client,
+    services: &[Service],
+    published: Vec<ServicePublished>,
+) -> Vec<ServicePublished> {
+    let asks = services
+        .iter()
+        .zip(published)
+        .map(|(svc, published)| async move {
+            let unexplained = matches!(
+                published.stop,
+                Some(ChainStop::NoneReady {
+                    why: NotServing::InSlices,
+                    ..
+                })
+            );
+            let selector = svc
+                .spec
+                .as_ref()
+                .and_then(|s| s.selector.clone())
+                .unwrap_or_default();
+            let query = Selector::Equality(&selector).query_text();
+            let (true, Some(query)) = (unexplained, query) else {
+                return published;
+            };
+            let pods: kube::Api<Pod> =
+                kube::Api::namespaced(client.clone(), &svc.namespace().unwrap_or_default());
+            match pods.list(&ListParams::default().labels(&query)).await {
+                Ok(list) => {
+                    let selected: Vec<&Pod> = list.items.iter().collect();
+                    published.with_stop(svc, Some(&selected))
+                }
+                Err(_) => published,
+            }
+        });
+    futures::future::join_all(asks).await
+}
+
 fn health_inputs_of(
     services: &[Service],
     published: Vec<ServicePublished>,
@@ -311,10 +353,12 @@ async fn published_in(ctx: &ResourceContext) -> Result<(Vec<Service>, Vec<Servic
                 .summary()
             })
             .collect();
+        let published = with_unready_cause(&ctx.client, &services, published).await;
         return Ok((services, published));
     };
 
     let published = published_from_slices(&services, &slices.items);
+    let published = with_unready_cause(&ctx.client, &services, published).await;
     Ok((services, published))
 }
 
@@ -784,5 +828,137 @@ mod tests {
         assert_eq!(parameters.kind, "IngressClassParams");
         assert_eq!(parameters.name, "internet-facing");
         assert_eq!(parameters.api_group.as_deref(), Some("elbv2.k8s.aws"));
+    }
+
+    /// unready-demo as the cluster serves it: one `ClusterIP` Service, a slice
+    /// holding two addresses that are not ready, and two Running pods failing
+    /// their readiness probe.
+    fn unready_demo(pods: (u16, String)) -> impl Fn(&str, usize) -> (u16, String) {
+        let service = serde_json::json!({
+            "apiVersion": "v1", "kind": "ServiceList", "metadata": {},
+            "items": [{
+                "metadata": { "name": "unready-demo", "namespace": "k8s-gui-test" },
+                "spec": {
+                    "type": "ClusterIP",
+                    "clusterIP": "10.104.33.201",
+                    "selector": { "app": "unready-demo" },
+                    "ports": [{ "name": "http", "port": 80, "targetPort": 8080, "protocol": "TCP" }]
+                }
+            }]
+        });
+        let endpoint = |ip: &str, node: &str, pod: &str| {
+            serde_json::json!({
+                "addresses": [ip],
+                "conditions": { "ready": false, "serving": false, "terminating": false },
+                "nodeName": node,
+                "targetRef": { "kind": "Pod", "name": pod, "namespace": "k8s-gui-test" }
+            })
+        };
+        let slices = serde_json::json!({
+            "apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSliceList", "metadata": {},
+            "items": [{
+                "metadata": {
+                    "name": "unready-demo-7xk2p",
+                    "namespace": "k8s-gui-test",
+                    "labels": { "kubernetes.io/service-name": "unready-demo" }
+                },
+                "addressType": "IPv4",
+                "endpoints": [
+                    endpoint("192.168.0.100", "controlplane", "unready-demo-6d4f8b7c9-2xkqp"),
+                    endpoint("192.168.1.187", "node01", "unready-demo-6d4f8b7c9-9mzrt")
+                ],
+                "ports": [{ "name": "http", "port": 8080, "protocol": "TCP" }]
+            }]
+        });
+        move |path, _| match path {
+            "/api/v1/namespaces/k8s-gui-test/services" => (200, service.to_string()),
+            "/apis/discovery.k8s.io/v1/namespaces/k8s-gui-test/endpointslices" => {
+                (200, slices.to_string())
+            }
+            "/api/v1/namespaces/k8s-gui-test/pods" => pods.clone(),
+            _ => (404, "{}".to_string()),
+        }
+    }
+
+    fn failing_readiness() -> String {
+        let pod = |name: &str, node: &str| {
+            serde_json::json!({
+                "metadata": {
+                    "name": name,
+                    "namespace": "k8s-gui-test",
+                    "labels": { "app": "unready-demo" }
+                },
+                "spec": {
+                    "nodeName": node,
+                    "containers": [{ "name": "app", "image": "busybox:1.36" }]
+                },
+                "status": {
+                    "phase": "Running",
+                    "conditions": [
+                        { "type": "Ready", "status": "False" },
+                        { "type": "ContainersReady", "status": "False" }
+                    ],
+                    "containerStatuses": [{
+                        "name": "app", "ready": false, "restartCount": 0,
+                        "image": "busybox:1.36", "imageID": "",
+                        "state": { "running": { "startedAt": "2026-10-06T21:00:00Z" } }
+                    }]
+                }
+            })
+        };
+        serde_json::json!({
+            "apiVersion": "v1", "kind": "PodList", "metadata": {},
+            "items": [
+                pod("unready-demo-6d4f8b7c9-2xkqp", "controlplane"),
+                pod("unready-demo-6d4f8b7c9-9mzrt", "node01")
+            ]
+        })
+        .to_string()
+    }
+
+    /// The Services list and the Overview ended unready-demo's reason with
+    /// "the Service page will show the cause", while that page and the peek
+    /// said its pods fail their readiness probe. Fails if the list reader
+    /// stops asking the pods why.
+    #[tokio::test]
+    async fn a_service_with_only_unready_addresses_says_why_from_its_pods() {
+        use crate::client::served::test_server::answering;
+        let (client, _) = answering(unready_demo((200, failing_readiness()))).await;
+        let inputs = health_inputs_in(client, Some("k8s-gui-test".to_string()))
+            .await
+            .expect("inputs");
+        let stop = inputs[0].groups[0].stop.as_ref().expect("a stop");
+        assert!(
+            matches!(
+                stop,
+                ChainStop::NoneReady {
+                    why: NotServing::FailingReadiness,
+                    pods: 2,
+                    ..
+                }
+            ),
+            "{stop:?}"
+        );
+    }
+
+    /// Pods nobody may list leave the slices' own answer, never a guess.
+    #[tokio::test]
+    async fn a_refused_pod_list_leaves_the_cause_to_the_service_page() {
+        use crate::client::served::test_server::{answering, failure};
+        let (client, _) = answering(unready_demo(failure(403, "Forbidden"))).await;
+        let inputs = health_inputs_in(client, Some("k8s-gui-test".to_string()))
+            .await
+            .expect("inputs");
+        let stop = inputs[0].groups[0].stop.as_ref().expect("a stop");
+        assert!(
+            matches!(
+                stop,
+                ChainStop::NoneReady {
+                    why: NotServing::InSlices,
+                    ..
+                }
+            ),
+            "{stop:?}"
+        );
     }
 }
