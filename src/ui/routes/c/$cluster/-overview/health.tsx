@@ -531,7 +531,7 @@ export function WorkloadsPanel({
           total={counts.deployments}
           label={counts.deployments === 1 ? "Deployment" : "Deployments"}
           emptyMessage={t("empty", "noneInScope")}
-          segments={deploymentSegments(problems, counts.deployments)}
+          segments={deploymentSegments(problems, counts.deployments, t)}
         />
         <Composition
           // `counts.nodes` is null when the node read was refused, so the bar

@@ -4,7 +4,7 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter } from "@/test/render";
-import { AttentionPanel, WarningsPanel } from "./health";
+import { AttentionPanel, WarningsPanel, WorkloadsPanel } from "./health";
 import {
   attentionShare,
   deploymentSegments,
@@ -19,6 +19,8 @@ import {
   type AttentionInputs,
 } from "@/lib/attention";
 import { translate } from "@/i18n";
+import { ownCountedWord, ownStatusWord } from "@/lib/status-words";
+import { NEEDS_ATTENTION, ROLLOUT_CODES } from "@/lib/workload-status";
 import type { T } from "@/i18n/useT";
 import type {
   ClusterOverview,
@@ -322,7 +324,8 @@ describe("the Deployments tile", () => {
         flagged("Degraded"),
         { ...problem, kind: "Pod" },
       ],
-      5
+      5,
+      t
     );
 
     expect(segments.filter((segment) => segment.count > 0)).toEqual([
@@ -331,6 +334,94 @@ describe("the Deployments tile", () => {
       { label: "Unavailable", count: 2, tone: "err" },
       { label: "Degraded", count: 1, tone: "warn" },
     ]);
+  });
+});
+
+describe("the census legend in Russian", () => {
+  const flagged = (reason: string): ClusterProblem => ({
+    ...problem,
+    kind: "Deployment",
+    reason,
+    severity: "critical",
+  });
+  const overview = {
+    counts: { deployments: 6, nodes: 1, jobs: 0 },
+    pods: RUNNING,
+    jobs: null,
+    nodes: [],
+    problems: [
+      flagged("Stalled"),
+      flagged("Degraded"),
+      flagged("Degraded"),
+      flagged("Unavailable"),
+    ],
+    problemsTruncated: 0,
+  } as unknown as ClusterOverview;
+  const ru: T = (section, key, values) => translate("ru", section, key, values);
+
+  /**
+   * Lena switched to Russian and the Overview census still read "1 Stalled"
+   * and "2 Degraded" under a list that said Застрял and Деградировал. Fails
+   * if the legend goes back to the English code, or words a status the
+   * cluster owns (Unavailable, Available).
+   */
+  it("words the app's own verdicts and leaves the cluster's statuses as written", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      await wrap(<WorkloadsPanel overview={overview} scope="prod" />);
+      const legend = screen.getByText("2 деградировали").parentElement;
+      expect(
+        Array.from(legend?.children ?? []).map((item) => item.textContent)
+      ).toEqual([
+        "2 Available",
+        "1 застрял",
+        "1 Unavailable",
+        "2 деградировали",
+      ]);
+      expect(screen.queryByText(/Stalled|Degraded/)).toBeNull();
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
+  });
+
+  /** Share draws the same segments, so it must not keep the English the screen lost. */
+  it("hands Share the same words the legend draws", () => {
+    const section = workloadsShare(overview, ru);
+    const rows = section.body.type === "facts" ? section.body.rows : [];
+    const deployments = rows.find((row) => row.label === "Deployments");
+    expect(deployments?.values.map((value) => value.text)).toEqual([
+      "2 Available",
+      "1 застрял",
+      "1 Unavailable",
+      "2 деградировали",
+    ]);
+  });
+
+  /**
+   * A verdict added to the flagged set is worded by `ownStatusWord` for the
+   * badge; without a counted form the legend would print its English code
+   * beside Russian ones. Fails the day that happens.
+   */
+  it("has a counted word for every flagged verdict the app words", () => {
+    const flaggedCodes = [...NEEDS_ATTENTION].map(
+      (state) => ROLLOUT_CODES[state]
+    );
+    const unworded = flaggedCodes.filter(
+      (code) =>
+        ownStatusWord(code, ru) !== undefined &&
+        ownCountedWord(code, 2, ru) === undefined
+    );
+    expect(unworded).toEqual([]);
+  });
+
+  /** Russian counts take three forms; one form for all would print "5 застрял". */
+  it.each([
+    [1, "застрял"],
+    [2, "застряли"],
+    [5, "застряли"],
+    [21, "застрял"],
+  ])("agrees with %i in number", (n, word) => {
+    expect(ownCountedWord("Stalled", n, ru)).toBe(word);
   });
 });
 

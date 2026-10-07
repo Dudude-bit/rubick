@@ -30,6 +30,22 @@ export function ownStatusWord(code: string, t: T): string | undefined {
   }
 }
 
+/** The same words for a legend that counts, which agrees with the number: "2 застряли" where a badge says "Застрял". */
+export function ownCountedWord(
+  code: string,
+  n: number,
+  t: T
+): string | undefined {
+  switch (code) {
+    case "Stalled":
+      return t("statusWords", "stalledCounted", { n });
+    case "Degraded":
+      return t("statusWords", "degradedCounted", { n });
+    default:
+      return undefined;
+  }
+}
+
 /** A CronJob's `Active` is ours as well: it is the absence of `spec.suspend`. */
 export function cronStatusWord(suspend: boolean, t: T): string {
   return t("statusWords", suspend ? "suspended" : "active");

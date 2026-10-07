@@ -7254,6 +7254,18 @@ export const ru: Catalogue = {
     stalled: "Застрял",
     degraded: "Деградировал",
     retrying: "Повторяет попытку",
+    stalledCounted: {
+      one: "застрял",
+      few: "застряли",
+      many: "застряли",
+      other: "застряли",
+    },
+    degradedCounted: {
+      one: "деградировал",
+      few: "деградировали",
+      many: "деградировали",
+      other: "деградировали",
+    },
   },
   statusMeaning: {
     phasePending:

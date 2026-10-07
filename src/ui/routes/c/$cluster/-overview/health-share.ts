@@ -5,6 +5,7 @@ import { iconSvg } from "@/lib/icon-svg";
 import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { statusRole, type StatusRole } from "@/lib/status-role";
+import { ownCountedWord } from "@/lib/status-words";
 import { NEEDS_ATTENTION, ROLLOUT_CODES } from "@/lib/workload-status";
 import {
   foldedWords,
@@ -209,7 +210,8 @@ const SEGMENT_TONE: Record<StatusRole, Segment["tone"]> = {
  */
 export function deploymentSegments(
   problems: ClusterProblem[],
-  total: number | null
+  total: number | null,
+  t: T
 ): Segment[] {
   const flagged = problems.filter((p) => p.kind === "Deployment");
   return [
@@ -218,11 +220,14 @@ export function deploymentSegments(
       count: Math.max(0, (total ?? 0) - flagged.length),
       tone: "ok",
     },
-    ...FLAGGED_ROLLOUTS.map((code) => ({
-      label: code,
-      count: flagged.filter((p) => p.reason === code).length,
-      tone: SEGMENT_TONE[statusRole(code)],
-    })),
+    ...FLAGGED_ROLLOUTS.map((code) => {
+      const count = flagged.filter((p) => p.reason === code).length;
+      return {
+        label: ownCountedWord(code, count, t) ?? code,
+        count,
+        tone: SEGMENT_TONE[statusRole(code)],
+      };
+    }),
   ];
 }
 
@@ -292,7 +297,7 @@ export function workloadsShare(overview: ClusterOverview, t: T): PlacedSection {
         compositionRow(
           "Deployments",
           counts.deployments,
-          deploymentSegments(problems, counts.deployments),
+          deploymentSegments(problems, counts.deployments, t),
           t
         ),
         compositionRow("Nodes", counts.nodes, nodeSegments(nodes), t),

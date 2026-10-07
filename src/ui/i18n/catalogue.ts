@@ -6650,6 +6650,8 @@ export const en = {
     stalled: "Stalled",
     degraded: "Degraded",
     retrying: "Retrying",
+    stalledCounted: { other: "Stalled" },
+    degradedCounted: { other: "Degraded" },
   },
   statusMeaning: {
     phasePending:
