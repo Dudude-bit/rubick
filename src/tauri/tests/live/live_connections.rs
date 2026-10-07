@@ -556,14 +556,14 @@ async fn mounts_demo_says_how_each_thing_is_used() {
 
     assert!(
         !usages("ServiceAccount", "k8s-gui-test").is_empty(),
-        "the identity is stated by the spec, and left unchecked"
+        "the identity is stated by the spec"
     );
     assert_eq!(
         edges_to(&answer, "ServiceAccount", "k8s-gui-test")[0]
             .to
             .existence,
-        Existence::NotChecked,
-        "the app never read a ServiceAccount, and says so rather than claiming it exists"
+        Existence::Present,
+        "the identity is looked up by name, and this one the cluster has"
     );
 }
 

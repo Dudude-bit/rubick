@@ -278,9 +278,9 @@ function servicePorts(ref: ObjectRef): string | null {
  * What was left unverified, and never silently.
  *
  * `notChecked` is the whole reason `Existence` is three-valued: a ConfigMap
- * named by a pod spec was read off that spec, not looked up, so a typo'd name
- * and a real one arrive here looking identical. Saying so is cheap; implying
- * the app checked is not.
+ * whose lookup the cluster refused was only read off the pod spec, so a
+ * typo'd name and a real one arrive here looking identical. Saying so is
+ * cheap; implying the app checked is not.
  */
 export function describeExistence(
   ref: ObjectRef,

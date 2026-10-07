@@ -2,6 +2,7 @@
 //! spec names.
 
 use super::*;
+use k8s_openapi::api::core::v1::ServiceAccount;
 
 /// The `ConfigMaps`, Secrets, claims and identity a pod spec names, with how
 /// each one is used.
@@ -68,12 +69,65 @@ pub(super) fn uses_from_spec(
     }
 }
 
+/// Asks for each `ConfigMap`, Secret and `ServiceAccount` the spec named, by
+/// name and for its metadata alone. A reader who may get them sees present or
+/// missing; a refusal leaves the row `notChecked`, never missing, and an
+/// expired session ends the call as every other read here does.
+pub(super) async fn check_named(ctx: &ResourceContext, out: &mut Neighbourhood) -> Result<()> {
+    let at: Vec<usize> = out
+        .edges
+        .iter()
+        .enumerate()
+        .filter(|(_, edge)| {
+            matches!(edge.relation, Relation::Uses { .. })
+                && edge.to.existence == Existence::NotChecked
+        })
+        .map(|(at, _)| at)
+        .collect();
+    let answers = futures::future::join_all(at.iter().map(|&i| {
+        let to = &out.edges[i].to;
+        look_up(ctx, &to.kind, &to.name)
+    }))
+    .await;
+    for (i, existence) in at.into_iter().zip(answers) {
+        out.edges[i].to.existence = existence?;
+    }
+    Ok(())
+}
+
+async fn look_up(ctx: &ResourceContext, kind: &str, name: &str) -> Result<Existence> {
+    let found = match kind {
+        "ConfigMap" => is_there(ctx.namespaced_api::<ConfigMap>(), name).await,
+        "Secret" => is_there(ctx.namespaced_api::<Secret>(), name).await,
+        "ServiceAccount" => is_there(ctx.namespaced_api::<ServiceAccount>(), name).await,
+        _ => return Ok(Existence::NotChecked),
+    };
+    match found {
+        Ok(true) => Ok(Existence::Present),
+        Ok(false) => Ok(Existence::Missing),
+        Err(err) => match Error::from(err) {
+            expired @ Error::CredentialsExpired(_) => Err(expired),
+            _ => Ok(Existence::NotChecked),
+        },
+    }
+}
+
+async fn is_there<K>(api: Api<K>, name: &str) -> kube::Result<bool>
+where
+    K: kube::Resource + Clone + serde::de::DeserializeOwned + std::fmt::Debug,
+{
+    api.get_metadata_opt(name)
+        .await
+        .map(|found| found.is_some())
+}
+
 /// A name a pod spec states, resolved as far as this call actually looked.
 ///
 /// Claims that were listed carry their phase and size and can be called
-/// present or missing. `ConfigMaps`, Secrets and `ServiceAccounts` were never
-/// listed, and saying `notChecked` is the difference between "the app did not
-/// ask" and "the cluster does not have it".
+/// present or missing. `ConfigMaps`, Secrets and `ServiceAccounts` are not
+/// listed here; `check_named` looks each one up afterwards, and until it has,
+/// `notChecked` is the difference between "the app did not ask" and "the
+/// cluster does not have it".
 ///
 /// A claim list the cluster **refused** belongs with the second group, not
 /// the first. Reading `Err` as "no claims came back" is how a 403 became
@@ -110,4 +164,203 @@ pub(super) fn claim_ref(claim: &PersistentVolumeClaim, ns: &str) -> ObjectRef {
         capacity: info.capacity,
         storage_class: info.storage_class,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::client::served::test_server::{failure, server};
+
+    const NS: &str = "team-checkout";
+
+    /// checkout-api's pod spec as the cluster stores it: the token volume's
+    /// projected kube-root-ca.crt, `envFrom` checkout-config, the default
+    /// identity, a password from Secret checkout-db and a flag from a
+    /// `ConfigMap` that is not there.
+    fn checkout_api_spec() -> serde_json::Value {
+        serde_json::json!({
+            "serviceAccountName": "default",
+            "containers": [{
+                "name": "api",
+                "image": "ghcr.io/acme/checkout-api:1.4.2",
+                "envFrom": [{ "configMapRef": { "name": "checkout-config" } }],
+                "env": [
+                    {
+                        "name": "DB_PASSWORD",
+                        "valueFrom": { "secretKeyRef": { "name": "checkout-db", "key": "password" } }
+                    },
+                    {
+                        "name": "FLAGS",
+                        "valueFrom": { "configMapKeyRef": { "name": "feature-flags", "key": "all" } }
+                    }
+                ],
+                "volumeMounts": [{
+                    "name": "kube-api-access",
+                    "mountPath": "/var/run/secrets/kubernetes.io/serviceaccount",
+                    "readOnly": true
+                }]
+            }],
+            "volumes": [{
+                "name": "kube-api-access",
+                "projected": { "sources": [
+                    { "serviceAccountToken": { "path": "token" } },
+                    { "configMap": { "name": "kube-root-ca.crt", "items": [{ "key": "ca.crt", "path": "ca.crt" }] } }
+                ] }
+            }]
+        })
+    }
+
+    fn metadata(name: &str) -> (u16, String) {
+        let body = serde_json::json!({
+            "apiVersion": "meta.k8s.io/v1",
+            "kind": "PartialObjectMetadata",
+            "metadata": { "name": name, "namespace": NS },
+        });
+        (200, body.to_string())
+    }
+
+    /// What Marco's Role answers for each name the spec states: get on
+    /// `ConfigMaps` and `ServiceAccounts`, nothing on Secrets.
+    fn marco(subject: (&'static str, u16, String)) -> Vec<(&'static str, u16, String)> {
+        let named = |path, (status, body): (u16, String)| (path, status, body);
+        vec![
+            subject,
+            named(
+                "/api/v1/namespaces/team-checkout/configmaps/kube-root-ca.crt",
+                metadata("kube-root-ca.crt"),
+            ),
+            named(
+                "/api/v1/namespaces/team-checkout/configmaps/checkout-config",
+                metadata("checkout-config"),
+            ),
+            named(
+                "/api/v1/namespaces/team-checkout/configmaps/feature-flags",
+                failure(404, "NotFound"),
+            ),
+            named(
+                "/api/v1/namespaces/team-checkout/serviceaccounts/default",
+                metadata("default"),
+            ),
+            named(
+                "/api/v1/namespaces/team-checkout/secrets/checkout-db",
+                failure(403, "Forbidden"),
+            ),
+        ]
+    }
+
+    fn pod_list() -> (&'static str, u16, String) {
+        let pod = serde_json::json!({
+            "metadata": { "name": "checkout-api-6767fbfdb7-blpfk", "namespace": NS },
+            "spec": checkout_api_spec(),
+        });
+        let list = serde_json::json!({ "apiVersion": "v1", "kind": "List", "metadata": {}, "items": [pod] });
+        (
+            "/api/v1/namespaces/team-checkout/pods",
+            200,
+            list.to_string(),
+        )
+    }
+
+    fn deployment() -> (&'static str, u16, String) {
+        let deployment = serde_json::json!({
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": { "name": "checkout-api", "namespace": NS },
+            "spec": {
+                "selector": { "matchLabels": { "app": "checkout-api" } },
+                "template": {
+                    "metadata": { "labels": { "app": "checkout-api" } },
+                    "spec": checkout_api_spec(),
+                },
+            },
+        });
+        (
+            "/apis/apps/v1/namespaces/team-checkout/deployments/checkout-api",
+            200,
+            deployment.to_string(),
+        )
+    }
+
+    async fn page(
+        routes: Vec<(&'static str, u16, String)>,
+        kind: &str,
+        name: &str,
+    ) -> Result<ResourceConnections> {
+        let (client, _) = server(routes).await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+        connections_of(&ctx, kind, name, None).await
+    }
+
+    fn existence(page: &ResourceConnections, kind: &str, name: &str) -> Existence {
+        page.edges
+            .iter()
+            .find(|edge| edge.to.kind == kind && edge.to.name == name)
+            .unwrap_or_else(|| panic!("no edge to {kind} {name}"))
+            .to
+            .existence
+    }
+
+    fn assert_marco_sees(page: &ResourceConnections) {
+        for (kind, name) in [
+            ("ConfigMap", "kube-root-ca.crt"),
+            ("ConfigMap", "checkout-config"),
+            ("ServiceAccount", "default"),
+        ] {
+            assert_eq!(
+                existence(page, kind, name),
+                Existence::Present,
+                "{kind} {name}"
+            );
+        }
+        assert_eq!(
+            existence(page, "ConfigMap", "feature-flags"),
+            Existence::Missing
+        );
+        assert_eq!(
+            existence(page, "Secret", "checkout-db"),
+            Existence::NotChecked,
+            "a refused lookup is not a missing Secret"
+        );
+    }
+
+    /// Marco's pod Connections said "not checked" beside kube-root-ca.crt,
+    /// checkout-config and the default `ServiceAccount`, all of which his
+    /// Role may get. Fails if a name the cluster answered for stays
+    /// unchecked, if a 404 is not missing, or if a 403 is called missing.
+    #[tokio::test]
+    async fn a_pod_s_named_objects_are_looked_up_and_only_a_refusal_stays_unchecked() {
+        let page = page(marco(pod_list()), "Pod", "checkout-api-6767fbfdb7-blpfk")
+            .await
+            .expect("a page");
+        assert_marco_sees(&page);
+    }
+
+    /// The Deployment's Connections draw the same template, so they read the
+    /// same answers; fails if only the pod's page looks the names up.
+    #[tokio::test]
+    async fn a_workload_s_named_objects_are_looked_up_the_same_way() {
+        let page = page(marco(deployment()), "Deployment", "checkout-api")
+            .await
+            .expect("a page");
+        assert_marco_sees(&page);
+    }
+
+    /// Would leave an expired session as three rows "not checked", with no
+    /// sign-in asked for.
+    #[tokio::test]
+    async fn an_expired_session_on_a_named_lookup_ends_the_call() {
+        let mut routes = marco(pod_list());
+        routes.retain(|(path, _, _)| !path.ends_with("/serviceaccounts/default"));
+        let (status, body) = failure(401, "Unauthorized");
+        routes.push((
+            "/api/v1/namespaces/team-checkout/serviceaccounts/default",
+            status,
+            body,
+        ));
+        let page = page(routes, "Pod", "checkout-api-6767fbfdb7-blpfk").await;
+        assert!(
+            matches!(page, Err(Error::CredentialsExpired(_))),
+            "{page:?}"
+        );
+    }
 }

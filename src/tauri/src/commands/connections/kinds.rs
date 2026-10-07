@@ -21,6 +21,7 @@ pub(super) async fn pod_connections(
 
     if let Some(spec) = pod.spec.as_ref() {
         uses_from_spec(ns, &subject, spec, &snapshot.claims, out);
+        check_named(ctx, out).await?;
         if let Some(node) = &spec.node_name {
             out.edge(
                 subject.clone(),
@@ -234,6 +235,7 @@ pub(super) async fn workload_connections(
 
     if let Some(spec) = template.spec.as_ref() {
         uses_from_spec(ns, &subject, spec, &snapshot.claims, out);
+        check_named(ctx, out).await?;
     }
 
     let selector = Selector::Query(template.selector.as_ref());
