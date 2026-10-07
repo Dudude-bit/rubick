@@ -1038,6 +1038,37 @@ describe("the groups", () => {
     expect(usedByOf(null)?.missingKeys).toBeUndefined();
     expect(usedByOf(true)?.missingKeys).toBeUndefined();
   });
+
+  const needsOf = (keyPresent: boolean | null) => {
+    const secret = ref("Secret", "checkout-db");
+    const worker = ref("Pod", "checkout-worker-7db8bc9ffd-km5ft");
+    const groups = connectionGroups(
+      connections(worker, [
+        {
+          from: worker,
+          to: secret,
+          relation: {
+            verb: "uses",
+            usages: [
+              { ...env, name: "DB_PASSWORD", key: "DB_PASSWORD", keyPresent },
+            ],
+          },
+        },
+      ]),
+      t
+    );
+    return groups.find((group) => group.key === "needs")?.rows[0];
+  };
+
+  /** The worker pod's and Deployment's Connections drew checkout-db as fine
+   *  while the Secret's own tab said the key is not there. */
+  it("marks a needed object that lacks the key on the user's side as on the object's", () => {
+    expect(needsOf(false)?.missingKeys).toEqual([
+      { key: "DB_PASSWORD", optional: false, from: "Secret" },
+    ]);
+    expect(needsOf(false)?.missingKeys).toEqual(usedByOf(false)?.missingKeys);
+    expect(needsOf(null)?.missingKeys).toBeUndefined();
+  });
 });
 
 describe("a governing edge says which query reached it", () => {

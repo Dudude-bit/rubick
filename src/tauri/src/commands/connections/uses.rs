@@ -72,7 +72,9 @@ pub(super) fn uses_from_spec(
 /// Asks for each `ConfigMap`, Secret and `ServiceAccount` the spec named, by
 /// name and for its metadata alone. A reader who may get them sees present or
 /// missing; a refusal leaves the row `notChecked`, never missing, and an
-/// expired session ends the call as every other read here does.
+/// expired session ends the call as every other read here does. One whose key
+/// a variable reads is read whole, so the key is checked as the Containers tab
+/// checks it.
 pub(super) async fn check_named(ctx: &ResourceContext, out: &mut Neighbourhood) -> Result<()> {
     let at: Vec<usize> = out
         .edges
@@ -85,29 +87,57 @@ pub(super) async fn check_named(ctx: &ResourceContext, out: &mut Neighbourhood) 
         .map(|(at, _)| at)
         .collect();
     let answers = futures::future::join_all(at.iter().map(|&i| {
-        let to = &out.edges[i].to;
-        look_up(ctx, &to.kind, &to.name)
+        let edge = &out.edges[i];
+        look_up(
+            ctx,
+            &edge.to.kind,
+            &edge.to.name,
+            reads_a_key(&edge.relation),
+        )
     }))
     .await;
-    for (i, existence) in at.into_iter().zip(answers) {
-        out.edges[i].to.existence = existence?;
+    for (i, answer) in at.into_iter().zip(answers) {
+        let (existence, keys) = answer?;
+        let to = out.edges[i].to.clone();
+        out.edges[i].to.existence = existence;
+        if keys.is_some() {
+            mark_keys(std::slice::from_mut(&mut out.edges[i]), &to, keys.as_ref());
+        }
     }
     Ok(())
 }
 
-async fn look_up(ctx: &ResourceContext, kind: &str, name: &str) -> Result<Existence> {
+fn reads_a_key(relation: &Relation) -> bool {
+    matches!(relation, Relation::Uses { usages } if usages.iter().any(|use_| matches!(use_, Usage::Env { .. })))
+}
+
+async fn look_up(
+    ctx: &ResourceContext,
+    kind: &str,
+    name: &str,
+    keyed: bool,
+) -> Result<(Existence, Option<BTreeSet<String>>)> {
     let found = match kind {
-        "ConfigMap" => is_there(ctx.namespaced_api::<ConfigMap>(), name).await,
-        "Secret" => is_there(ctx.namespaced_api::<Secret>(), name).await,
-        "ServiceAccount" => is_there(ctx.namespaced_api::<ServiceAccount>(), name).await,
-        _ => return Ok(Existence::NotChecked),
+        "ConfigMap" | "Secret" if keyed => read_keys(ctx, kind, name)
+            .await
+            .map(|keys| (keys.is_some(), keys)),
+        "ConfigMap" => is_there(ctx.namespaced_api::<ConfigMap>(), name)
+            .await
+            .map(|f| (f, None)),
+        "Secret" => is_there(ctx.namespaced_api::<Secret>(), name)
+            .await
+            .map(|f| (f, None)),
+        "ServiceAccount" => is_there(ctx.namespaced_api::<ServiceAccount>(), name)
+            .await
+            .map(|f| (f, None)),
+        _ => return Ok((Existence::NotChecked, None)),
     };
     match found {
-        Ok(true) => Ok(Existence::Present),
-        Ok(false) => Ok(Existence::Missing),
+        Ok((true, keys)) => Ok((Existence::Present, keys)),
+        Ok((false, _)) => Ok((Existence::Missing, None)),
         Err(err) => match Error::from(err) {
             expired @ Error::CredentialsExpired(_) => Err(expired),
-            _ => Ok(Existence::NotChecked),
+            _ => Ok((Existence::NotChecked, None)),
         },
     }
 }
@@ -362,5 +392,101 @@ mod tests {
             matches!(page, Err(Error::CredentialsExpired(_))),
             "{page:?}"
         );
+    }
+
+    /// checkout-worker's pod as Marco's cluster has it: `DB_PASSWORD` from
+    /// Secret checkout-db, which holds only password and username.
+    fn worker(key: &str) -> Vec<(&'static str, u16, String)> {
+        let spec = serde_json::json!({
+            "containers": [{
+                "name": "worker",
+                "image": "ghcr.io/acme/checkout-worker:1.4.2",
+                "env": [{
+                    "name": "DB_PASSWORD",
+                    "valueFrom": { "secretKeyRef": { "name": "checkout-db", "key": key } }
+                }]
+            }]
+        });
+        let pod = serde_json::json!({
+            "metadata": { "name": "checkout-worker-7db8bc9ffd-km5ft", "namespace": NS },
+            "spec": spec,
+        });
+        let deployment = serde_json::json!({
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": { "name": "checkout-worker", "namespace": NS },
+            "spec": {
+                "selector": { "matchLabels": { "app": "checkout-worker" } },
+                "template": { "metadata": { "labels": { "app": "checkout-worker" } }, "spec": spec },
+            },
+        });
+        let secret = serde_json::json!({
+            "apiVersion": "v1", "kind": "Secret",
+            "metadata": { "name": "checkout-db", "namespace": NS },
+            "data": { "password": "cA==", "username": "dQ==" },
+        });
+        let pods = serde_json::json!({ "apiVersion": "v1", "kind": "List", "metadata": {}, "items": [pod] });
+        vec![
+            (
+                "/api/v1/namespaces/team-checkout/pods",
+                200,
+                pods.to_string(),
+            ),
+            (
+                "/apis/apps/v1/namespaces/team-checkout/deployments/checkout-worker",
+                200,
+                deployment.to_string(),
+            ),
+            (
+                "/api/v1/namespaces/team-checkout/secrets/checkout-db",
+                200,
+                secret.to_string(),
+            ),
+        ]
+    }
+
+    fn key_present(page: &ResourceConnections) -> Option<bool> {
+        let edge = page
+            .edges
+            .iter()
+            .find(|edge| edge.to.kind == "Secret" && edge.to.name == "checkout-db")
+            .expect("an edge to checkout-db");
+        assert_eq!(edge.to.existence, Existence::Present);
+        let Relation::Uses { usages } = &edge.relation else {
+            panic!("{:?}", edge.relation)
+        };
+        let [Usage::Env { key_present, .. }] = usages.as_slice() else {
+            panic!("{usages:?}")
+        };
+        *key_present
+    }
+
+    /// Marco's worker pod and Deployment listed checkout-db's `DB_PASSWORD` as
+    /// fine while the Secret's own page said the key is not there. Fails if
+    /// the pod's or the workload's lookup stops reading keys.
+    #[tokio::test]
+    async fn a_key_the_secret_lacks_is_missing_on_the_pod_and_its_deployment() {
+        for (kind, name) in [
+            ("Pod", "checkout-worker-7db8bc9ffd-km5ft"),
+            ("Deployment", "checkout-worker"),
+        ] {
+            let page = page(worker("DB_PASSWORD"), kind, name)
+                .await
+                .expect("a page");
+            assert_eq!(key_present(&page), Some(false), "{kind}");
+        }
+    }
+
+    /// The same read finds a key that is there; fails if every key is called missing.
+    #[tokio::test]
+    async fn a_key_the_secret_holds_is_present_on_the_pod() {
+        let page = page(
+            worker("password"),
+            "Pod",
+            "checkout-worker-7db8bc9ffd-km5ft",
+        )
+        .await
+        .expect("a page");
+        assert_eq!(key_present(&page), Some(true));
     }
 }

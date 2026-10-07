@@ -599,31 +599,31 @@ pub(super) async fn config_connections(
 /// The keys a `ConfigMap` or Secret holds: none for one that is not there,
 /// `None` for one this session could not read.
 async fn keys_of(ctx: &ResourceContext, kind: &str, name: &str) -> Option<BTreeSet<String>> {
-    let read = if kind == "Secret" {
+    read_keys(ctx, kind, name)
+        .await
+        .ok()
+        .map(Option::unwrap_or_default)
+}
+
+/// The key names a `ConfigMap` or Secret holds, `None` where it is not there,
+/// counted as the Containers tab counts them.
+pub(super) async fn read_keys(
+    ctx: &ResourceContext,
+    kind: &str,
+    name: &str,
+) -> kube::Result<Option<BTreeSet<String>>> {
+    let keys = if kind == "Secret" {
         ctx.namespaced_api::<Secret>()
             .get_opt(name)
-            .await
-            .map(|secret| {
-                secret.map(|secret| secret.data.unwrap_or_default().into_keys().collect())
-            })
+            .await?
+            .map(|secret| crate::resources::SecretInfo::from(&secret).data_keys)
     } else {
         ctx.namespaced_api::<ConfigMap>()
             .get_opt(name)
-            .await
-            .map(|map| {
-                map.map(|map| {
-                    map.data
-                        .unwrap_or_default()
-                        .into_keys()
-                        .chain(map.binary_data.unwrap_or_default().into_keys())
-                        .collect()
-                })
-            })
+            .await?
+            .map(|map| crate::resources::ConfigMapInfo::from(&map).data_keys)
     };
-    match read {
-        Ok(keys) => Some(keys.unwrap_or_default()),
-        Err(_) => None,
-    }
+    Ok(keys.map(|keys| keys.into_iter().collect()))
 }
 
 /// Every environment variable reading the subject learns whether its key is there.

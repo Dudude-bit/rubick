@@ -1211,6 +1211,7 @@ function needsToRun(conns: ResourceConnections, t: T): ConnRow[] {
     .map((edge) => ({
       ...rowFor(needLabel(edge, t), edge.to, t),
       ways: describeUsages(edge.relation.usages, t),
+      missingKeys: missingKeysOf(edge.relation.usages, edge.to.kind),
       verifiable: true,
       rank: needRank(edge),
     }));
