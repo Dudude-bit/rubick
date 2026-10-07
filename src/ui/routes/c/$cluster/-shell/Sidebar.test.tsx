@@ -8,6 +8,11 @@ import { listSegment } from "@/lib/resource-registry";
 import { renderWithRouter } from "@/test/render";
 
 import type { ClusterOverview, DetectedExtension } from "@/generated/types";
+import {
+  attentionFigure,
+  namespaceAttention,
+  type Attention,
+} from "@/lib/attention";
 
 const detectInClusterExtensions = vi.fn<() => Promise<DetectedExtension[]>>();
 const listIngresses = vi.fn().mockResolvedValue([]);
@@ -92,7 +97,7 @@ vi.mock("@/hooks/useClusterOverview", () => ({
   useScopedOverview: () => ({ data: overview }),
 }));
 
-let attention: { total: number; worst: "err" | "warn" | null } | null = null;
+let attention: Pick<Attention, "total" | "worst" | "complete"> | null = null;
 vi.mock("@/hooks/useAttention", () => ({
   useAttention: () => attention,
 }));
@@ -234,12 +239,46 @@ describe("the counts at the end of each row", () => {
    */
   it("badges the Overview row with the attention total in its worst tone", async () => {
     overview = overviewWithPods(41);
-    attention = { total: 3, worst: "warn" };
+    attention = { total: 3, worst: "warn", complete: true };
 
     await wrap(<Sidebar />);
 
     const badge = await screen.findByText("3");
     expect(badge).toHaveClass("text-warn");
+    attention = null;
+  });
+
+  /**
+   * Marco's picker said "team-checkout 3+ problems" while this badge said a
+   * plain 3, with DaemonSets and Nodes unread. Fails if the badge drops the
+   * floor mark the picker derives from the same Attention.
+   */
+  it("marks the count a floor where a kind went unread, as the picker does", async () => {
+    overview = overviewWithPods(4);
+    const whole: Attention = {
+      items: [],
+      total: 3,
+      complete: false,
+      worst: "err",
+      checks: [
+        {
+          kind: "DaemonSet",
+          state: "unread",
+          unread: [
+            { namespace: "team-checkout", code: "PERMISSION", message: "" },
+          ],
+        },
+      ],
+      byNamespace: new Map([["team-checkout", 3]]),
+    };
+    attention = whole;
+
+    await wrap(<Sidebar />);
+
+    const picker = namespaceAttention(whole, "team-checkout");
+    const badge = await screen.findByText(attentionFigure(picker));
+    expect(badge).toHaveTextContent("3+");
+    expect(badge).toHaveAccessibleName("3 problems, not all checked");
     attention = null;
   });
 });

@@ -366,6 +366,18 @@ function countByNamespace(
   return counts;
 }
 
+/** A count some kind went unread for is a floor, and every badge marks it so. */
+export const attentionFigure = ({
+  total,
+  complete,
+}: Pick<Attention, "total" | "complete">): string =>
+  complete ? String(total) : `${total}+`;
+
+export const ATTENTION_TEXT = {
+  err: "text-err",
+  warn: "text-warn",
+} as const satisfies Record<AttentionTone, string>;
+
 /**
  * The share of `attention` the Overview scoped to `namespace` would count:
  * complete only where no kind went unread across it or in it.

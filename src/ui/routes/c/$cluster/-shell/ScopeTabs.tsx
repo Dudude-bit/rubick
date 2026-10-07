@@ -32,7 +32,7 @@ import {
   type NamespaceListState,
   type NamespaceScope,
 } from "@/hooks/useClusterSummary";
-import type { AttentionTone, NamespaceAttention } from "@/lib/attention";
+import { ATTENTION_TEXT, type NamespaceAttention } from "@/lib/attention";
 import { useNamespaceAccess } from "./useNamespaceAccess";
 import { useOpenCluster } from "@/hooks/useOpenCluster";
 import {
@@ -1129,11 +1129,6 @@ function NamespaceRow({
   );
 }
 
-const PROBLEM_TONE = {
-  err: "text-err",
-  warn: "text-warn",
-} as const satisfies Record<AttentionTone, string>;
-
 /**
  * A namespace's Needs attention count as its own Overview states it; a
  * count some kind was not read for says so rather than passing for whole.
@@ -1150,7 +1145,7 @@ function problemWords(problems: NamespaceAttention | null, t: T) {
     spoken: t("cluster", complete ? "problemCount" : "problemCountPartial", {
       n,
     }),
-    tone: worst ? PROBLEM_TONE[worst] : "text-fg-mut",
+    tone: worst ? ATTENTION_TEXT[worst] : "text-fg-mut",
   };
 }
 

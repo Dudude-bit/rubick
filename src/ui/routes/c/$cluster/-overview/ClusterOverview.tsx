@@ -7,7 +7,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useAttention } from "@/hooks/useAttention";
-import type { Attention } from "@/lib/attention";
+import { attentionFigure, type Attention } from "@/lib/attention";
 import { ClusterFrontDoor } from "../../../-components/ClusterFrontDoor";
 import { MyServices } from "./MyServices";
 import { ShareScreenAction } from "@/components/share/ShareAction";
@@ -43,7 +43,7 @@ function overviewStats(
   const stats: ReportStat[] = [
     {
       label: t("action", "needsAttention"),
-      value: String(attention.total),
+      value: attentionFigure(attention),
       role: attention.worst ?? (attention.complete ? "ok" : "neutral"),
     },
     { label: "Pods", value: `${serving}/${pods}` },

@@ -21,6 +21,7 @@ import { ProviderMark } from "@/components/ui/provider-mark";
 import { Spinner } from "@/components/ui/spinner";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useAttention } from "@/hooks/useAttention";
+import { ATTENTION_TEXT, attentionFigure } from "@/lib/attention";
 import {
   oneLock,
   refusedEverywhereAsked,
@@ -981,16 +982,24 @@ function NavRow({
  * backend's ranked list overflowed would be the one number nobody can use.
  */
 function AttentionCount() {
+  const t = useT();
   const attention = useAttention();
-  if (!attention || attention.total === 0) return null;
+  if (!attention || (attention.complete && attention.total === 0)) return null;
+  const { total: n, complete, worst } = attention;
   return (
     <span
       className={cn(
         "ml-auto text-[11px]",
-        attention.worst === "warn" ? "text-warn" : "text-err"
+        worst ? ATTENTION_TEXT[worst] : "text-fg-fnt"
+      )}
+      title={complete ? undefined : t("cluster", "problemsNotAllChecked")}
+      aria-label={t(
+        "cluster",
+        complete ? "problemCount" : "problemCountPartial",
+        { n }
       )}
     >
-      {attention.total}
+      {attentionFigure(attention)}
     </span>
   );
 }
