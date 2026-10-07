@@ -23,10 +23,13 @@ const summary = vi.hoisted(() => ({
   namespaces: [] as Array<{
     name: string;
     podCount: number;
-    problemCount: number;
+    problems: {
+      total: number;
+      complete: boolean;
+      worst: "err" | "warn" | null;
+    } | null;
   }>,
   podCount: 0 as number | null,
-  problemCount: 0,
   namespaceList: "listed" as "listed" | "refused" | "failed" | "pending",
 }));
 
@@ -36,7 +39,7 @@ const counted = vi.hoisted(() => ({
 }));
 
 vi.mock("@/hooks/useClusterSummary", () => ({
-  useClusterSummary: (enabled?: boolean) => {
+  useClusterSummary: ({ enabled }: { enabled?: boolean } = {}) => {
     counted.enabled.push(enabled);
     return summary;
   },
@@ -177,7 +180,7 @@ describe("watching several namespaces at once", () => {
     summary.namespaces = Array.from({ length: SCOPE_LIMIT + 2 }, (_, i) => ({
       name: `ns-${i}`,
       podCount: 1,
-      problemCount: 0,
+      problems: null,
     }));
     // The pair the store itself keeps: `tabScope` reads a tab whose two
     // fields disagree as one an older build parked, and hands back the older
@@ -684,14 +687,7 @@ describe("a token that may not list namespaces", () => {
 });
 
 describe("the count beside a namespace", () => {
-  /**
-   * Dana's picker said "shop 14 · 10 bad" beside 9 pods not ready: the
-   * number is the namespace's Needs attention rows, Deployments and Jobs
-   * included, and "bad" read it as pods. Fails if it is called anything but
-   * the problems the Overview lists.
-   */
-  it("calls the namespace's problems problems, as Needs attention counts them", async () => {
-    summary.namespaces = [{ name: "shop", podCount: 14, problemCount: 10 }];
+  const open = async () => {
     useScopeTabStore.setState({
       tabs: [tab({ id: "a" })],
       activeId: "a",
@@ -700,9 +696,70 @@ describe("the count beside a namespace", () => {
     const user = userEvent.setup();
     await mount();
     await user.click(within(tabs()[0]).getByText("All namespaces"));
-    const list = screen.getByRole("listbox", { name: "Namespaces" });
+    return screen.getByRole("listbox", { name: "Namespaces" });
+  };
 
-    expect(within(list).getByText("14 · 10 problems")).toBeInTheDocument();
+  /**
+   * Dana's picker said "shop 14 · 10 bad" beside 9 pods not ready: the
+   * number is the namespace's Needs attention rows, Deployments and Jobs
+   * included, and "bad" read it as pods. Fails if it is called anything but
+   * the problems the Overview lists.
+   */
+  it("calls the namespace's problems problems, as Needs attention counts them", async () => {
+    summary.namespaces = [
+      {
+        name: "shop",
+        podCount: 14,
+        problems: { total: 10, complete: true, worst: "err" },
+      },
+    ];
+    const list = await open();
+
+    expect(within(list).getByText("14 · 10 problems")).toHaveClass("text-err");
     expect(within(list).queryByText(/bad/)).toBeNull();
+  });
+
+  /**
+   * A namespace whose only trouble is an autoscaler that cannot read its
+   * metrics is amber on its Overview. Fails if the picker paints it red.
+   */
+  it("takes the tone of the namespace's worst problem", async () => {
+    summary.namespaces = [
+      {
+        name: "shop",
+        podCount: 14,
+        problems: { total: 1, complete: true, worst: "warn" },
+      },
+    ];
+    const list = await open();
+
+    expect(within(list).getByText("14 · 1 problem")).toHaveClass("text-warn");
+  });
+
+  /**
+   * A kind the cluster would not list leaves the count short. Fails if a
+   * short count reads as the whole count, or a namespace nobody could
+   * check reads as one with no problems.
+   */
+  it("says the count is a floor when a kind was not checked there", async () => {
+    summary.namespaces = [
+      {
+        name: "shop",
+        podCount: 14,
+        problems: { total: 3, complete: false, worst: "err" },
+      },
+      {
+        name: "team-checkout",
+        podCount: 4,
+        problems: { total: 0, complete: false, worst: null },
+      },
+    ];
+    const list = await open();
+
+    expect(within(list).getByText("14 · 3+ problems")).toBeInTheDocument();
+    expect(
+      within(list).getByRole("option", { name: /^shop,/ })
+    ).toHaveAccessibleName("shop, 14 pods, 3 problems, not all checked");
+    expect(within(list).getByText("4 · not all checked")).toBeInTheDocument();
   });
 });

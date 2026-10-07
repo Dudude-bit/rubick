@@ -32,6 +32,7 @@ import {
   type NamespaceListState,
   type NamespaceScope,
 } from "@/hooks/useClusterSummary";
+import type { AttentionTone, NamespaceAttention } from "@/lib/attention";
 import { useNamespaceAccess } from "./useNamespaceAccess";
 import { useOpenCluster } from "@/hooks/useOpenCluster";
 import {
@@ -55,7 +56,7 @@ import {
 } from "@/stores/clusterRecencyStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 import {
   tabRouteLabel,
   tabScope,
@@ -623,7 +624,7 @@ interface NamespaceOption {
   mono: boolean;
   /** `null` when the cluster-wide overview was refused — unknown, drawn "—". */
   podCount: number | null;
-  problemCount: number | null;
+  problems: NamespaceAttention | null;
   selected: boolean;
   /** The selection is full, so this row can only be opened on its own. */
   closed: boolean;
@@ -694,7 +695,10 @@ function NamespacePopover({
   onSelect: (namespaces: string[], keepOpen: boolean) => void;
 }) {
   const t = useT();
-  const { namespaces, podCount, namespaceList } = useClusterSummary(open);
+  const { namespaces, podCount, namespaceList } = useClusterSummary({
+    enabled: open,
+    problems: true,
+  });
   const contextNamespace = useClusterStore(
     (s) => s.contexts.find((c) => c.name === s.currentContext)?.namespace
   );
@@ -727,7 +731,7 @@ function NamespacePopover({
   ];
   const offer = (name: string, source?: NamespaceSource) => {
     if (offered.some((ns) => ns.name === name)) return;
-    offered.push({ name, podCount: null, problemCount: null, source });
+    offered.push({ name, podCount: null, problems: null, source });
   };
   if (!listed) {
     for (const name of seedScope(contextNamespace)) offer(name, "kubeconfig");
@@ -778,7 +782,7 @@ function NamespacePopover({
       label: t("cluster", "allNamespaces"),
       mono: false,
       podCount,
-      problemCount: 0,
+      problems: null,
       selected: scope.length === 0,
       closed: false,
     },
@@ -787,7 +791,7 @@ function NamespacePopover({
       label: ns.name,
       mono: true,
       podCount: ns.podCount,
-      problemCount: ns.problemCount,
+      problems: ns.problems,
       selected: scope.includes(ns.name),
       closed: full && !scope.includes(ns.name),
       source: ns.source,
@@ -800,7 +804,7 @@ function NamespacePopover({
             label: typed,
             mono: true,
             podCount: null,
-            problemCount: null,
+            problems: null,
             selected: false,
             closed: full,
             source: listed ? ("unlisted" as const) : ("typed" as const),
@@ -1054,19 +1058,14 @@ function NamespaceRow({
     row.podCount === null
       ? t("empty", "unknownLower")
       : t("cluster", "podCount", { n: row.podCount });
+  const problems = problemWords(row.problems, t);
   return (
     <div
       id={id}
       role="option"
       aria-selected={row.selected}
       // Spelled out, because an option's own text reads as "prod 12 · 3 bad".
-      aria-label={[
-        row.label,
-        note ?? pods,
-        (row.problemCount ?? 0) > 0
-          ? t("count", "withAProblem", { n: row.problemCount ?? 0 })
-          : null,
-      ]
+      aria-label={[row.label, note ?? pods, problems?.spoken]
         .filter(Boolean)
         .join(", ")}
       // The one thing about the row that cannot be read off the row itself:
@@ -1116,18 +1115,43 @@ function NamespaceRow({
       <span
         className={cn(
           "font-mono text-[11px]",
-          (row.problemCount ?? 0) > 0 ? "text-err" : "text-fg-fnt",
+          row.podCount !== null && problems ? problems.tone : "text-fg-fnt",
           note !== null && "hidden"
         )}
       >
         {row.podCount === null
           ? t("empty", "unknownLower")
-          : (row.problemCount ?? 0) > 0
-            ? `${row.podCount} · ${t("cluster", "problemCount", { n: row.problemCount ?? 0 })}`
+          : problems
+            ? `${row.podCount} · ${problems.shown}`
             : row.podCount}
       </span>
     </div>
   );
+}
+
+const PROBLEM_TONE = {
+  err: "text-err",
+  warn: "text-warn",
+} as const satisfies Record<AttentionTone, string>;
+
+/**
+ * A namespace's Needs attention count as its own Overview states it; a
+ * count some kind was not read for says so rather than passing for whole.
+ */
+function problemWords(problems: NamespaceAttention | null, t: T) {
+  if (!problems || (problems.complete && problems.total === 0)) return null;
+  const { total: n, complete, worst } = problems;
+  return {
+    shown: complete
+      ? t("cluster", "problemCount", { n })
+      : n > 0
+        ? t("cluster", "problemCountAtLeast", { n })
+        : t("cluster", "problemsNotAllChecked"),
+    spoken: t("cluster", complete ? "problemCount" : "problemCountPartial", {
+      n,
+    }),
+    tone: worst ? PROBLEM_TONE[worst] : "text-fg-mut",
+  };
 }
 
 /** Why the rows are what they are, when the cluster would not list them. */

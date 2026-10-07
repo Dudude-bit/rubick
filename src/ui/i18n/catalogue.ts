@@ -4259,6 +4259,8 @@ export const en = {
       one: "{n} problem, not all checked",
       other: "{n} problems, not all checked",
     },
+    problemCountAtLeast: { one: "{n}+ problem", other: "{n}+ problems" },
+    problemsNotAllChecked: "not all checked",
     attentionNothing: "nothing needs attention",
     attentionNoneFound: "nothing found in what could be checked",
     attentionNotChecked: "Not checked",
@@ -7271,7 +7273,6 @@ export const en = {
     nodes: { one: "{n} node", other: "{n} nodes" },
     clusters: { one: "{n} cluster", other: "{n} clusters" },
     users: { one: "{n} user", other: "{n} users" },
-    withAProblem: { one: "{n} with a problem", other: "{n} with a problem" },
     typeAtLeastChars: {
       one: "Type at least {n} character to search resources.",
       other: "Type at least {n} characters to search resources.",

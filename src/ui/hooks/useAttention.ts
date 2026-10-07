@@ -40,9 +40,11 @@ const late = (
 export function useAttention({
   scope,
   refresh = "shell",
+  enabled = true,
 }: {
   scope?: readonly string[];
   refresh?: RefreshRate;
+  enabled?: boolean;
 } = {}): Attention | null {
   const t = useT();
   const windowScope = useClusterStore((s) => s.namespaceScope);
@@ -50,38 +52,39 @@ export function useAttention({
   const asked = scope ?? windowScope;
   const wire = useMemo(() => wireScope(asked), [asked]);
   const cacheKey = scopeCacheKey(asked);
+  const reading = isConnected && enabled;
 
-  const overview = useClusterOverview(asked);
+  const overview = useClusterOverview(asked, enabled);
   const services = useServiceHealthInputs(wire, {
-    enabled: isConnected,
+    enabled: reading,
     refresh,
   });
   const ingresses = useLiveQuery({
     queryKey: queryKeys.ingressHealthInputs(cacheKey),
     queryFn: () => commands.listIngressHealthInputs(wire),
-    enabled: isConnected,
+    enabled: reading,
     refresh,
   });
   const ingressHealth = useIngressHealth(
     ingresses.data?.rows,
     services,
-    isConnected
+    reading
   );
   const autoscalers = useLiveQuery({
     queryKey: queryKeys.autoscalers(cacheKey),
     queryFn: () => commands.listAutoscalersIn(wire),
-    enabled: isConnected,
+    enabled: reading,
     refresh,
   });
   const claims = useLiveQuery({
     queryKey: queryKeys.resources(ResourceType.PersistentVolumeClaim, cacheKey),
     queryFn: () => commands.listPersistentVolumeClaimsIn(wire),
-    enabled: isConnected,
+    enabled: reading,
     refresh,
   });
 
   const answered =
-    overview.data !== undefined && !overview.isPlaceholderData
+    enabled && overview.data !== undefined && !overview.isPlaceholderData
       ? overview.data
       : null;
   // A clock that moves in steps, so the cached answer holds between them.

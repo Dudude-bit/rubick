@@ -67,6 +67,15 @@ export interface Attention {
   /** Every kind in `checks` was read: only then is an empty list "nothing". */
   complete: boolean;
   worst: AttentionTone | null;
+  /** Each namespace's problems, counting the rows the backend's cut dropped. */
+  byNamespace: ReadonlyMap<string, number>;
+}
+
+/** One namespace's share of an attention read across several. */
+export interface NamespaceAttention {
+  total: number;
+  complete: boolean;
+  worst: AttentionTone | null;
 }
 
 /** A query's answer as these readers take it. */
@@ -341,6 +350,46 @@ export const foldedWords = (item: AttentionItem, t: T): string | null =>
     ? t("count", "failedPodsFolded", { n: item.foldedPods })
     : null;
 
+function countByNamespace(
+  overview: ClusterOverview,
+  backend: AttentionItem[],
+  ours: AttentionItem[]
+): Map<string, number> {
+  const loads = overview.namespaces ?? [];
+  const counts = new Map(
+    loads.map((load) => [load.name, load.problemCount] as const)
+  );
+  for (const item of loads.length > 0 ? ours : [...backend, ...ours]) {
+    if (item.namespace === null) continue;
+    counts.set(item.namespace, (counts.get(item.namespace) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * The share of `attention` the Overview scoped to `namespace` would count:
+ * complete only where no kind went unread across it or in it.
+ */
+export function namespaceAttention(
+  attention: Attention,
+  namespace: string
+): NamespaceAttention {
+  return {
+    total: attention.byNamespace.get(namespace) ?? 0,
+    complete: attention.checks.every(
+      (check) =>
+        check.state === "read" ||
+        (check.state === "unread" &&
+          check.unread.every(
+            (entry) => entry.namespace !== null && entry.namespace !== namespace
+          ))
+    ),
+    worst:
+      attention.items.find((item) => item.namespace === namespace)?.tone ??
+      null,
+  };
+}
+
 export function attentionOf(input: AttentionInputs, t: T): Attention {
   const { overview, services } = input;
   const ingress = ingressItems(
@@ -348,13 +397,14 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
     input.ingressHealth,
     t
   );
-  const items = ranked([
-    ...problemItems(overview.problems),
+  const backend = problemItems(overview.problems);
+  const ours = [
     ...serviceItems(services.answered, t),
     ...ingress.items,
     ...autoscalerItems(input.autoscalers.data?.rows ?? []),
     ...claimItems(input.claims.data?.rows ?? [], input.now, t),
-  ]);
+  ];
+  const items = ranked([...backend, ...ours]);
 
   const checks: AttentionCheck[] = [
     ...BACKEND_KINDS.map((kind): AttentionCheck => {
@@ -384,5 +434,6 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
     checks,
     complete: checks.every((check) => check.state === "read"),
     worst: items[0]?.tone ?? null,
+    byNamespace: countByNamespace(overview, backend, ours),
   };
 }

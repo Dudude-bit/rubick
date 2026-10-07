@@ -1,10 +1,12 @@
 import { useMemo } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 
+import { useAttention } from "@/hooks/useAttention";
 import {
   useClusterOverview,
   useWholeClusterRefused,
 } from "@/hooks/useClusterOverview";
+import { namespaceAttention, type NamespaceAttention } from "@/lib/attention";
 import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
@@ -16,9 +18,9 @@ export interface NamespaceScope {
   /** `null` when the cluster-wide overview was refused or failed — the count
    *  is unknown, not zero. */
   podCount: number | null;
-  /** Problems the backend attributed to this namespace, counted before its
-   *  list was capped. `null` when the overview could not be read. */
-  problemCount: number | null;
+  /** What this namespace's Overview counts under Needs attention. `null`
+   *  when it was not asked, or could not be read. */
+  problems: NamespaceAttention | null;
 }
 
 /** Whether the namespace list was read, and if not, why not. */
@@ -70,11 +72,15 @@ export function useNamespaceList() {
  * for the whole cluster every ten seconds, and was refused every time.
  * Nor is the whole cluster asked once it refused this connection, or once
  * the namespace list did; the window's own namespace is counted from its
- * own overview instead.
+ * own overview instead. `problems` asks for Needs attention as well, which
+ * reads four more lists across the cluster: only the picker shows it.
  */
 const WHOLE_CLUSTER: readonly string[] = [];
 
-export function useClusterSummary(enabled = true): ClusterSummary {
+export function useClusterSummary({
+  enabled = true,
+  problems = false,
+}: { enabled?: boolean; problems?: boolean } = {}): ClusterSummary {
   const {
     data: namespaceInfos,
     state: namespaceList,
@@ -94,40 +100,48 @@ export function useClusterSummary(enabled = true): ClusterSummary {
     alone ?? WHOLE_CLUSTER,
     enabled && alone !== null
   );
+  const wholeAttention = useAttention({
+    scope: WHOLE_CLUSTER,
+    enabled: problems && enabled && namespaceList !== "pending" && !refused,
+  });
+  const ownAttention = useAttention({
+    enabled: problems && enabled && alone !== null,
+  });
 
   return useMemo(() => {
     // The overview carries the counts; when it was refused or failed there is
     // no count to state, and a `0` there would tell a namespace-scoped user
     // their cluster is empty and healthy. `known` is what keeps that honest.
     const known = overview !== undefined;
-    // Counted in Rust before the problem list is cut to fifty; counting the
-    // list here read "0" for any namespace whose problems the cut dropped.
-    const loads = new Map(
-      (overview?.namespaces ?? []).map((ns) => [ns.name, ns])
+    const pods = new Map(
+      (overview?.namespaces ?? []).map((ns) => [ns.name, ns.podCount])
     );
-    const counted = new Map(loads);
     if (!known && alone && own?.counts.pods != null)
-      counted.set(alone[0], {
-        name: alone[0],
-        podCount: own.counts.pods,
-        problemCount: own.problems.length + own.problemsTruncated,
-      });
+      pods.set(alone[0], own.counts.pods);
+    // The Overview's own count, so the picker never says a third number.
+    const problemsOf = (name: string): NamespaceAttention | null => {
+      if (known)
+        return wholeAttention && namespaceAttention(wholeAttention, name);
+      if (alone?.[0] !== name || !ownAttention) return null;
+      const { total, complete, worst } = ownAttention;
+      return { total, complete, worst };
+    };
 
     // listNamespaces is the authority on what exists — the overview only
     // reports namespaces that hold pods. It can still fail on a token
     // without cluster-wide list rights, hence the fallback.
     const names =
-      namespaceInfos?.map((ns) => ns.name) ?? [...loads.keys()].sort();
+      namespaceInfos?.map((ns) => ns.name) ?? [...pods.keys()].sort();
 
     const namespaces = names
       .map((name) => ({
         name,
-        podCount: counted.get(name)?.podCount ?? (known ? 0 : null),
-        problemCount: counted.get(name)?.problemCount ?? (known ? 0 : null),
+        podCount: pods.get(name) ?? (known ? 0 : null),
+        problems: problemsOf(name),
       }))
       .sort(
         (a, b) =>
-          (b.problemCount ?? 0) - (a.problemCount ?? 0) ||
+          (b.problems?.total ?? 0) - (a.problems?.total ?? 0) ||
           (b.podCount ?? 0) - (a.podCount ?? 0) ||
           a.name.localeCompare(b.name)
       );
@@ -143,6 +157,8 @@ export function useClusterSummary(enabled = true): ClusterSummary {
     overview,
     alone,
     own,
+    wholeAttention,
+    ownAttention,
     namespaceInfos,
     namespaceList,
     refused,

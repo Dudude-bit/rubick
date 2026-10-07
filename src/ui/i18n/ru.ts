@@ -4738,6 +4738,13 @@ export const ru: Catalogue = {
       many: "{n} проблем, проверено не всё",
       other: "{n} проблемы, проверено не всё",
     },
+    problemCountAtLeast: {
+      one: "{n}+ проблема",
+      few: "{n}+ проблемы",
+      many: "{n}+ проблем",
+      other: "{n}+ проблемы",
+    },
+    problemsNotAllChecked: "проверено не всё",
     attentionNothing: "ничего не требует внимания",
     attentionNoneFound: "в проверенном ничего не найдено",
     attentionNotChecked: "Не проверено",
@@ -8249,12 +8256,6 @@ export const ru: Catalogue = {
       few: "{n} пользователя",
       many: "{n} пользователей",
       other: "{n} пользователя",
-    },
-    withAProblem: {
-      one: "{n} с проблемой",
-      few: "{n} с проблемами",
-      many: "{n} с проблемами",
-      other: "{n} с проблемами",
     },
     typeAtLeastChars: {
       one: "Введите хотя бы {n} символ, чтобы искать ресурсы.",

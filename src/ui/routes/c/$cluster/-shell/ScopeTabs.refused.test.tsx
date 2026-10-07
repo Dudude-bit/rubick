@@ -50,9 +50,14 @@ setTransport(
         namespaces: [],
         problems: [{ namespace: "team-checkout" }],
         problemsTruncated: 0,
+        unread: [],
         counts: { pods: 4 },
       };
     },
+    list_service_health_inputs: () => ({ rows: [], unread: [] }),
+    list_ingress_health_inputs: () => ({ rows: [], unread: [] }),
+    list_autoscalers_in: () => ({ rows: [], unread: [] }),
+    list_persistent_volume_claims_in: () => ({ rows: [], unread: [] }),
   }).transport
 );
 afterAll(() => setTransport(real));

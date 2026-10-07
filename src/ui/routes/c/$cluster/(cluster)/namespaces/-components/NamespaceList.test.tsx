@@ -27,7 +27,7 @@ const namespaces: NamespaceInfo[] = [
 
 function counts(podCount: number | null) {
   vi.mocked(useClusterSummary).mockReturnValue({
-    namespaces: [{ name: "prod", podCount, problemCount: 0 }],
+    namespaces: [{ name: "prod", podCount, problems: null }],
     podCount,
     namespaceList: "listed",
     refused: false,
