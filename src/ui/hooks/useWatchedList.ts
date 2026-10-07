@@ -41,6 +41,8 @@ export function useWatchedList<
   queryKey,
   detail,
   reportFailure,
+  order,
+  recount,
 }: {
   enabled: boolean;
   subscribe: () => Promise<string>;
@@ -48,6 +50,8 @@ export function useWatchedList<
   /** Where a row's own object is cached; see `useResourceWatch`. */
   detail: (row: T) => readonly QueryKey[];
   reportFailure: string | ((message: string) => void);
+  order?: (a: T, b: T) => boolean;
+  recount?: boolean;
 }): WatchedList {
   const t = useT();
   const { toast } = useToast();
@@ -99,6 +103,8 @@ export function useWatchedList<
     detail,
     onError,
     onRecovered,
+    order,
+    recount,
   });
 
   const watchFailed = refusedBefore || failedFor === subscription;

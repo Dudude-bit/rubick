@@ -6,13 +6,34 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { Profiler, useState } from "react";
+
+const listeners = vi.hoisted(
+  () => ({}) as Record<string, Array<(event: { payload: unknown }) => void>>
+);
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(
+    async (event: string, handler: (event: { payload: unknown }) => void) => {
+      (listeners[event] ??= []).push(handler);
+      return () => {
+        listeners[event] = (listeners[event] ?? []).filter(
+          (h) => h !== handler
+        );
+      };
+    }
+  ),
+  emit: vi.fn(async () => {}),
+  once: vi.fn(async () => () => {}),
+}));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     listEvents: vi.fn(async () => []),
     getPod: vi.fn(async () => ({ containers: [] })),
     checkListAccess: vi.fn(async () => []),
+    subscribeEventWatch: vi.fn(async () => "events-1"),
+    resourceWatchSubscribed: vi.fn(async () => undefined),
+    unsubscribeResourceWatch: vi.fn(async () => undefined),
   },
 }));
 
@@ -31,6 +52,13 @@ import { renderWithRouter } from "@/test/render";
 import { Events } from "./Events";
 
 const listEvents = vi.mocked(commands.listEvents);
+const subscribeEventWatch = vi.mocked(commands.subscribeEventWatch);
+
+/** A cluster that lets this user list events and not watch them. */
+const WATCH_REFUSED = Object.assign(
+  new Error('events is forbidden: User "alice" cannot watch resource "events"'),
+  { code: "PERMISSION_DENIED" }
+);
 
 const event = (namespace: string, index: number): EventInfo => ({
   name: `${namespace}-${index}`,
@@ -98,10 +126,254 @@ const asked = () =>
 beforeEach(() => {
   listEvents.mockReset();
   listEvents.mockResolvedValue([]);
-  useClusterStore.setState({
+  // The feed as it was read before the watch, and still is where none runs.
+  subscribeEventWatch.mockReset();
+  subscribeEventWatch.mockRejectedValue(WATCH_REFUSED);
+  vi.mocked(commands.resourceWatchSubscribed).mockClear();
+  useClusterStore.setState((s) => ({
     isConnected: true,
     currentNamespace: "",
     namespaceScope: [],
+    connectionAttemptId: s.connectionAttemptId + 1,
+  }));
+});
+
+type Change = { op: string; resource: EventInfo | null };
+
+function send(changes: Change[], error: string | null = null) {
+  act(() => {
+    for (const heard of listeners["resource-event"] ?? [])
+      heard({ payload: { stream_id: "events-1", changes, error } });
+  });
+}
+
+/** A watch's first read as the backend sends it: two hundred to a batch. */
+function burst(rows: EventInfo[]) {
+  const changes: Change[] = [
+    { op: "restarted", resource: null },
+    ...rows.map((resource) => ({ op: "applied", resource })),
+    { op: "synced", resource: null },
+  ];
+  for (let at = 0; at < changes.length; at += 200)
+    send(changes.slice(at, at + 200));
+}
+
+const BASE = Date.UTC(2026, 7, 5, 10, 0, 0);
+/** `index` seconds before the newest, named so the API's order is not time order. */
+const dated = (namespace: string, index: number): EventInfo => ({
+  ...event(namespace, index),
+  lastTimestamp: new Date(BASE - index * 1000).toISOString(),
+});
+
+describe("a feed a watch keeps", () => {
+  const WATCH_KEY = [...queryKeys.events(null), "watch"];
+  const rowsOf = (client: { getQueryData: (key: unknown[]) => unknown }) =>
+    (client.getQueryData(WATCH_KEY) as { rows: EventInfo[] } | undefined)
+      ?.rows ?? [];
+
+  beforeEach(() => {
+    subscribeEventWatch.mockReset();
+    subscribeEventWatch.mockResolvedValue("events-1");
+  });
+
+  async function watched(view: "list" | "stories" = "list") {
+    const mounted = await mount(view);
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("events-1")
+    );
+    return mounted;
+  }
+
+  /**
+   * Dana's All events re-read the latest 500 every second, 350 KB each
+   * time. Fails if the feed is polled while its watch runs, if the first
+   * read is anything but the watch's batches, if the newest are not on top
+   * of a burst that arrived in the API's order, or if the cut stops saying
+   * which 500 these are.
+   */
+  it("reads the feed from the watch's batches and asks nothing again while it runs", async () => {
+    await watched();
+    expect(subscribeEventWatch).toHaveBeenCalledWith(null);
+    const rows = Array.from({ length: 600 }, (_, index) =>
+      dated("prod", index)
+    ).sort((a, b) => (a.name < b.name ? -1 : 1));
+    burst(rows);
+
+    expect(
+      await screen.findByText("500 normal events · of the latest 500")
+    ).toBeInTheDocument();
+    const text = document.body.textContent ?? "";
+    expect(text).toContain("prod-pod-0");
+    expect(text).toContain("prod-pod-499");
+    expect(text).not.toContain("prod-pod-500");
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    expect(listEvents).not.toHaveBeenCalled();
+    expect(screen.getByText("live")).toBeInTheDocument();
+  }, 30_000);
+
+  /**
+   * One event changing is one row's work: no row it did not touch is a new
+   * object, nothing is sorted again, and the one that happened again stands
+   * on top. Fails if a batch rebuilds the feed, or if an event that happened
+   * again stays where it was.
+   */
+  it("puts an event that happened again on top and leaves every other row as it was", async () => {
+    const { client } = await watched();
+    burst(Array.from({ length: 50 }, (_, index) => dated("prod", index)));
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("prod-pod-49")
+    );
+    const before = rowsOf(client);
+    const again = {
+      ...before[40],
+      count: 2,
+      lastTimestamp: new Date(BASE + 5000).toISOString(),
+    };
+
+    const sort = vi.spyOn(Array.prototype, "sort");
+    send([{ op: "applied", resource: again }]);
+    expect(sort).not.toHaveBeenCalled();
+    sort.mockRestore();
+
+    const after = rowsOf(client);
+    expect(after[0]).toBe(again);
+    expect(after.filter((row) => !before.includes(row))).toEqual([again]);
+    await waitFor(() => {
+      const text = document.body.textContent ?? "";
+      expect(text.indexOf("prod-pod-40")).toBeLessThan(
+        text.indexOf("prod-pod-0")
+      );
+    });
+  });
+
+  /**
+   * Stories fold the whole feed: redrawn on every batch, a busy cluster
+   * redraws every card twenty times a second where the poll redrew them
+   * once. Fails if the stories follow each batch, or stop following.
+   */
+  it("redraws the stories at most once a second however often the watch changes", async () => {
+    let commits = 0;
+    await renderWithRouter(
+      <Profiler id="events" onRender={() => commits++}>
+        <Events />
+      </Profiler>,
+      eventsAt("stories")
+    );
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalled()
+    );
+    const now = Date.now();
+    const failing = (index: number): EventInfo => ({
+      ...event("prod", index),
+      type: "Warning",
+      reason: "BackOff",
+      message: "Back-off restarting failed container app",
+      involvedObject: {
+        kind: "Pod",
+        name: `worker-${index}`,
+        namespace: "prod",
+        uid: null,
+      },
+      lastTimestamp: new Date(now - 60_000 + index * 1000).toISOString(),
+    });
+    burst([failing(0)]);
+    await screen.findByRole("article", { name: /worker-0/ });
+
+    commits = 0;
+    for (let index = 1; index <= 12; index++) {
+      send([{ op: "applied", resource: failing(index) }]);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    expect(commits).toBeLessThanOrEqual(2);
+    expect(
+      await screen.findByRole(
+        "article",
+        { name: /worker-12/ },
+        { timeout: 2000 }
+      )
+    ).toBeInTheDocument();
+  });
+
+  /** Fails if choosing Warnings asks the cluster again rather than cutting what the watch holds. */
+  it("narrows to warnings without asking the cluster again", async () => {
+    await watched();
+    burst([
+      { ...dated("prod", 0), type: "Warning", reason: "BackOff" },
+      dated("prod", 1),
+      dated("prod", 2),
+    ]);
+    await screen.findByText("1 warning event · 2 normal events");
+
+    await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
+    expect(await screen.findByText("1 warning event")).toBeInTheDocument();
+    expect(subscribeEventWatch).toHaveBeenCalledTimes(1);
+    expect(listEvents).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Several namespaces are one stream, watched a namespace each by the
+   * backend. Fails if the scope is narrowed to one or read cluster-wide.
+   */
+  it("watches the namespaces the reader chose as one stream", async () => {
+    useClusterStore.setState({ namespaceScope: ["prod", "staging"] });
+    await watched();
+    expect(subscribeEventWatch).toHaveBeenCalledWith(["prod", "staging"]);
+    burst([dated("prod", 1), dated("staging", 0)]);
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("staging-pod-0")
+    );
+    expect(document.body.textContent).toContain("prod-pod-1");
+    expect(listEvents).not.toHaveBeenCalled();
+  });
+
+  /**
+   * The watch broke and the cluster then stopped answering: the events it
+   * had stay, said to be from the last moment the cluster answered. Fails if
+   * they are dropped for the error, or drawn under "live".
+   */
+  it("keeps the watch's events, marked old, when the watch fails and the poll that replaces it fails too", async () => {
+    await watched();
+    burst([dated("prod", 0), dated("prod", 1)]);
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("prod-pod-1")
+    );
+    listEvents.mockRejectedValue(new Error("502 Bad Gateway"));
+
+    send([{ op: "failed", resource: null }], "connection reset by peer");
+
+    expect(
+      await screen.findByText(/Could not read events just now/)
+    ).toBeInTheDocument();
+    expect(listEvents).toHaveBeenCalled();
+    expect(document.body.textContent).toContain("prod-pod-1");
+    expect(screen.getByText("read failing")).toBeInTheDocument();
+    expect(screen.queryByText("live")).not.toBeInTheDocument();
+  });
+
+  /**
+   * Marco's token may list events in team-checkout only. The watch is
+   * refused across the cluster, and the page then says what the list said
+   * before the watch existed. Fails if a refused watch reads as no events.
+   */
+  it("says a refused watch's feed was refused, not that the scope is quiet", async () => {
+    listEvents.mockRejectedValue(
+      Object.assign(
+        new Error(
+          'events is forbidden: User "marco" cannot list resource "events" at the cluster scope'
+        ),
+        { code: "PERMISSION_DENIED" }
+      )
+    );
+    await watched("stories");
+    send(
+      [{ op: "failed", resource: null }],
+      'events is forbidden: User "marco" cannot watch resource "events" at the cluster scope'
+    );
+
+    expect(
+      await screen.findByText(/across the whole cluster was refused/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing happened in/)).not.toBeInTheDocument();
   });
 });
 

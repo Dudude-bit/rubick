@@ -2017,6 +2017,12 @@ export async function subscribeCronjobWatch(
   return invoke<string>("subscribe_cronjob_watch", { scope });
 }
 
+export async function subscribeEventWatch(
+  scope: string[] | null
+): Promise<string> {
+  return invoke<string>("subscribe_event_watch", { scope });
+}
+
 export async function subscribeNamespaceWatch(): Promise<string> {
   return invoke<string>("subscribe_namespace_watch");
 }

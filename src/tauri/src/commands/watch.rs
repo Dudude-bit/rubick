@@ -19,16 +19,16 @@
 
 use crate::error::{Error, Result};
 use crate::resources::{
-    ConfigMapInfo, CronJobInfo, DaemonSetInfo, DeploymentInfo, EndpointsInfo, IngressInfo, JobInfo,
-    NamespaceInfo, NodeInfo, PersistentVolumeClaimInfo, PersistentVolumeInfo, PodInfo, PodRow,
-    SecretInfo, ServiceInfo, StatefulSetInfo, StorageClassInfo,
+    ConfigMapInfo, CronJobInfo, DaemonSetInfo, DeploymentInfo, EndpointsInfo, EventInfo,
+    IngressInfo, JobInfo, NamespaceInfo, NodeInfo, PersistentVolumeClaimInfo, PersistentVolumeInfo,
+    PodInfo, PodRow, SecretInfo, ServiceInfo, StatefulSetInfo, StorageClassInfo,
 };
 use crate::state::AppState;
 use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{
-    ConfigMap, Endpoints, Namespace, Node, PersistentVolume, PersistentVolumeClaim, Pod, Secret,
-    Service,
+    ConfigMap, Endpoints, Event, Namespace, Node, PersistentVolume, PersistentVolumeClaim, Pod,
+    Secret, Service,
 };
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::api::storage::v1::StorageClass;
@@ -139,6 +139,7 @@ subscribe_namespaced!(
 );
 subscribe_namespaced!(subscribe_job_watch, Job, JobInfo, "Job");
 subscribe_namespaced!(subscribe_cronjob_watch, CronJob, CronJobInfo, "CronJob");
+subscribe_namespaced!(subscribe_event_watch, Event, EventInfo, "Event");
 
 // ----- Cluster-scoped -----
 

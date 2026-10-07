@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
 import {
   listenEvent,
   listenResourceEvents,
@@ -50,6 +51,14 @@ interface UseResourceWatchOptions<T> {
    * stops the polling fallback and reverts to pure-watch updates.
    */
   onRecovered?: () => void;
+  /**
+   * Whether `a` stands before `b`, for a list kept in an order of its own. A
+   * row whose change moves it is moved, and a resync is put in this order.
+   * Without one, rows keep the API's order, namespace then name.
+   */
+  order?: (a: T, b: T) => boolean;
+  /** Whether a list growing or shrinking re-reads the overview's counts. */
+  recount?: boolean;
 }
 
 export interface ResourceWatchState {
@@ -80,6 +89,8 @@ export function useResourceWatch<
   detail,
   onError,
   onRecovered,
+  order,
+  recount = true,
 }: UseResourceWatchOptions<T>): ResourceWatchState {
   const t = useT();
   const queryClient = useQueryClient();
@@ -94,12 +105,16 @@ export function useResourceWatch<
   const onRecoveredRef = useRef(onRecovered);
   const detailRef = useRef(detail);
   const tRef = useRef(t);
+  const orderRef = useRef(order);
+  const recountRef = useRef(recount);
   useEffect(() => {
     onErrorRef.current = onError;
     onRecoveredRef.current = onRecovered;
     detailRef.current = detail;
     tRef.current = t;
-  }, [onError, onRecovered, detail, t]);
+    orderRef.current = order;
+    recountRef.current = recount;
+  }, [onError, onRecovered, detail, t, order, recount]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -210,12 +225,19 @@ export function useResourceWatch<
               if (rows) {
                 const before =
                   queryClient.getQueryData<Scoped<T>>(queryKey)?.rows.length;
-                if (before !== undefined && before !== rows.size)
+                if (
+                  recountRef.current &&
+                  before !== undefined &&
+                  before !== rows.size
+                )
                   readSoon(queryClient, queryKeys.everyOverview(), COUNTS_MS);
+                const ranked = orderRef.current;
                 // Synced is every namespace of the stream answering, so
                 // nothing in the scope is unread any more.
                 queryClient.setQueryData<Scoped<T>>(queryKey, {
-                  rows: [...rows.values()],
+                  rows: ranked
+                    ? [...rows.values()].sort(compareBy(ranked))
+                    : [...rows.values()],
                   unread: [],
                 });
                 positions.clear();
@@ -242,14 +264,24 @@ export function useResourceWatch<
                     positions.set(identify(item), index)
                   );
                 }
-                const rows = applyChanges(prev?.rows ?? [], changes, positions);
+                const rows = applyChanges(
+                  prev?.rows ?? [],
+                  changes,
+                  positions,
+                  orderRef.current
+                );
                 if (prev && rows === prev.rows) return prev;
                 recounted = rows.length !== (prev?.rows.length ?? 0);
                 return watched({ rows, unread: prev?.unread ?? [] });
               }
             );
             indexedList = stored?.rows;
-            readAgain(queryClient, changes, detailRef.current, recounted);
+            readAgain(
+              queryClient,
+              changes,
+              detailRef.current,
+              recounted && recountRef.current
+            );
           }
         });
 
@@ -293,6 +325,11 @@ export function useResourceWatch<
       } catch (err) {
         if (active) {
           console.error("Failed to start resource watch:", err);
+          // No stream is coming, so whoever waits on one has to be told.
+          fail();
+          onErrorRef.current?.(
+            errorToShow(err) || tRef.current("action", "resourceWatchFailed")
+          );
         }
       }
     })();
@@ -389,16 +426,21 @@ function before<T extends { name: string; namespace?: string | null }>(
   return left === right ? a.name < b.name : left < right;
 }
 
-/** Where a new row goes in a list in arrival order, found in O(log N) reads. */
-function sortedIndex<T extends { name: string; namespace?: string | null }>(
+function compareBy<T>(order: (a: T, b: T) => boolean) {
+  return (a: T, b: T) => (order(a, b) ? -1 : order(b, a) ? 1 : 0);
+}
+
+/** Where a new row goes in a list kept in `order`, found in O(log N) reads. */
+function sortedIndex<T>(
   rows: T[],
-  row: T
+  row: T,
+  order: (a: T, b: T) => boolean
 ): number {
   let low = 0;
   let high = rows.length;
   while (low < high) {
     const middle = (low + high) >>> 1;
-    if (before(rows[middle], row)) low = middle + 1;
+    if (order(rows[middle], row)) low = middle + 1;
     else high = middle;
   }
   return low;
@@ -406,11 +448,13 @@ function sortedIndex<T extends { name: string; namespace?: string | null }>(
 
 // Lookup and replacement touch only changes; immutable publication, an
 // insert's shift and ordered deletion still copy O(N) array slots. A new row
-// goes where the list would have put it, not at the end.
+// goes where the list would have put it, not at the end, and a row whose
+// change moves it in a list of its own order leaves its old place for that.
 function applyChanges<T extends { name: string; namespace?: string | null }>(
   list: T[],
   changes: Array<ResourceChange<T>>,
-  positions: Map<string, number>
+  positions: Map<string, number>,
+  order?: (a: T, b: T) => boolean
 ): T[] {
   let next: T[] | undefined;
   let deleted = false;
@@ -418,16 +462,26 @@ function applyChanges<T extends { name: string; namespace?: string | null }>(
     const incoming = change.resource;
     if (!incoming) continue;
     const key = identify(incoming);
-    const index = positions.get(key);
+    let index = positions.get(key);
     if (change.op === "deleted") {
       if (index === undefined) continue;
       positions.delete(key);
       deleted = true;
     } else {
-      if (index !== undefined && (next ?? list)[index] === incoming) continue;
+      const held = index === undefined ? undefined : (next ?? list)[index];
+      if (held === incoming) continue;
+      if (
+        order &&
+        held !== undefined &&
+        (order(held, incoming) || order(incoming, held))
+      ) {
+        positions.delete(key);
+        deleted = true;
+        index = undefined;
+      }
       next ??= list.slice();
       if (index === undefined) {
-        const at = sortedIndex(next, incoming);
+        const at = sortedIndex(next, incoming, order ?? before);
         next.splice(at, 0, incoming);
         for (const [other, position] of positions)
           if (position >= at) positions.set(other, position + 1);

@@ -1,6 +1,13 @@
-import { useMemo, useState } from "react";
-import { keepPreviousData } from "@tanstack/react-query";
+import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import {
+  hashKey,
+  keepPreviousData,
+  skipToken,
+  useQueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
+import { useWatchedList } from "@/hooks/useWatchedList";
 
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
@@ -30,6 +37,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { errorToShow, isRefusal, normalizeTauriError } from "@/lib/error-utils";
 import { spanWords } from "@/i18n/say";
 import { filterEvents } from "@/lib/event-filter";
+import { byNewest, newerEvent } from "@/lib/event-order";
+import { scopeCacheKey } from "@/lib/namespace-scope";
 import {
   sortStories,
   storiesOf,
@@ -45,7 +54,7 @@ import { listQueryFor, ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn, formatTimeUnit } from "@/lib/utils";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
-import type { EventFilters, EventInfo } from "@/generated/types";
+import type { EventFilters, EventInfo, Scoped } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
 import { formatCount } from "@/lib/count";
@@ -81,6 +90,36 @@ async function read(filters: EventFilters) {
 }
 
 const EVENTS = listQueryFor(ResourceType.Event);
+const NO_DETAIL = () => [];
+const STORIES_FOLLOW_MS = 1000;
+
+/** Draws the page again when the entry under `queryKey` changes, at most once per `everyMs`. */
+function useWakeOnChange(queryKey: QueryKey, everyMs: number | null) {
+  const client = useQueryClient();
+  const [, wake] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    if (everyMs === null) return;
+    const hash = hashKey(queryKey);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let last = 0;
+    const off = client.getQueryCache().subscribe((event) => {
+      if (event.type !== "updated" || event.query.queryHash !== hash) return;
+      if (timer !== undefined) return;
+      timer = setTimeout(
+        () => {
+          timer = undefined;
+          last = Date.now();
+          wake();
+        },
+        Math.max(0, last + everyMs - Date.now())
+      );
+    });
+    return () => {
+      off();
+      clearTimeout(timer);
+    };
+  }, [client, queryKey, everyMs]);
+}
 
 function filtersFor(
   namespace: string,
@@ -117,10 +156,50 @@ export function Events() {
   const limit = eventLimit === "all" ? null : Number(eventLimit);
   const several = scope.several;
 
+  // Every event of the scope, kept by a watch: the first read arrives in the
+  // watch's own batches, each under the IPC target, and after that only what
+  // changed crosses. The type and the limit cut it here, so changing either
+  // asks the cluster nothing.
+  const cacheKey = useMemo(() => scopeCacheKey(scope.scope), [scope.scope]);
+  const watchKey = useMemo(
+    () => [...queryKeys.events(cacheKey), "watch"],
+    [cacheKey]
+  );
+  const subscribe = useCallback(
+    () => commands.subscribeEventWatch(scope.wire),
+    [scope.wire]
+  );
+  const watch = useWatchedList<EventInfo>({
+    enabled: isConnected,
+    subscribe,
+    queryKey: watchKey,
+    detail: NO_DETAIL,
+    reportFailure: toPlural(ResourceType.Event),
+    order: newerEvent,
+    // The overview counts events too, and re-reading it on every one of them
+    // would cost more than the feed saves.
+    recount: false,
+  });
+  // Stories fold the whole feed, so they follow the watch once a second, as
+  // they followed the poll; the list follows every batch.
+  const client = useQueryClient();
+  const sampled =
+    view === "stories" && client.getQueryData(watchKey) !== undefined;
+  const streamed = useLiveQuery<Scoped<EventInfo>>({
+    queryKey: watchKey,
+    queryFn: skipToken,
+    enabled: false,
+    refresh: false,
+    notifyOnChangeProps: sampled ? [] : undefined,
+  });
+  useWakeOnChange(watchKey, sampled ? STORIES_FOLLOW_MS : null);
+  const watching = watch.live;
+
+  // Where no watch runs, the feed is polled as it always was.
   const single = useLiveQuery({
     queryKey: [...queryKeys.events(currentNamespace), eventType, eventLimit],
     queryFn: () => read(filtersFor(currentNamespace, eventType, limit)),
-    enabled: isConnected && !several,
+    enabled: isConnected && !several && !watching,
     refresh: "fast",
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.fast,
@@ -147,7 +226,7 @@ export function Events() {
     // and the previous data it would keep lives on the observer that was just
     // replaced. The feed draws its skeleton until every namespace has answered
     // the question actually being asked, which is one fast read away.
-    queries: (several ? scope.scope : []).map((namespace) => ({
+    queries: (several && !watching ? scope.scope : []).map((namespace) => ({
       queryKey: [...queryKeys.events(namespace), eventType, eventLimit],
       queryFn: () => read(filtersFor(namespace, eventType, limit)),
       enabled: isConnected,
@@ -161,23 +240,34 @@ export function Events() {
   });
 
   const answers = parts.data;
-  const pool = useMemo(
+  const polled = useMemo(
     () =>
-      several
-        ? // Newest first, the order each part arrived in and the one the cut
-          // below depends on. The timestamps are UTC RFC3339 from the same
-          // backend, so string order is time order — and an undated event
-          // sorts last rather than jumping the queue.
-          answers
-            .flatMap((part) => part ?? [])
-            .sort((a, b) => {
-              const mine = a.lastTimestamp ?? "";
-              const theirs = b.lastTimestamp ?? "";
-              return mine < theirs ? 1 : mine > theirs ? -1 : 0;
-            })
-        : (single.data ?? []),
-    [several, answers, single.data]
+      watching
+        ? undefined
+        : several
+          ? answers.some((part) => part !== undefined)
+            ? // Newest first, the order each part arrived in and the one the
+              // cut below depends on.
+              answers.flatMap((part) => part ?? []).sort(byNewest)
+            : undefined
+          : single.data,
+    [watching, several, answers, single.data]
   );
+  const kept = streamed.data?.rows;
+  // A watch that failed leaves its rows on screen until a poll answers.
+  const fromWatch = watching || (polled === undefined && kept !== undefined);
+  const { pool, windowFull } = useMemo(() => {
+    if (!fromWatch) {
+      const rows = polled ?? [];
+      return { pool: rows, windowFull: limit !== null && rows.length >= limit };
+    }
+    const all = kept ?? [];
+    const typed =
+      eventType === "all" ? all : all.filter((e) => e.type === eventType);
+    return limit !== null && typed.length > limit
+      ? { pool: typed.slice(0, limit), windowFull: true }
+      : { pool: typed, windowFull: false };
+  }, [fromWatch, polled, kept, eventType, limit]);
 
   // Narrowed before the cut, not after it. The limit buys a pool of the
   // latest N; searching what is left after the cut would search the newest
@@ -193,11 +283,11 @@ export function Events() {
   // only the latest N, so anything older than its last row was never read —
   // and an empty slice of the strip there means nobody looked.
   const readFrom = useMemo(() => {
-    if (limit === null || pool.length < limit) return null;
+    if (!windowFull) return null;
     const oldest = pool.at(-1)?.lastTimestamp;
     const parsed = oldest ? Date.parse(oldest) : Number.NaN;
     return Number.isNaN(parsed) ? null : parsed;
-  }, [limit, pool]);
+  }, [windowFull, pool]);
   const storyOptions = useMemo(
     () => ({ now, windowMs: WINDOW_MS[window], narrowed, readFrom }),
     [now, window, narrowed, readFrom]
@@ -210,14 +300,20 @@ export function Events() {
     [view, matching, storyOptions, order]
   );
 
-  const isLoading = several ? parts.isLoading : single.isLoading;
-  const freshness = several ? parts.freshness : single.freshness;
+  const isLoading = watching
+    ? kept === undefined
+    : !fromWatch && (several ? parts.isLoading : single.isLoading);
+  const freshness = fromWatch
+    ? streamed.freshness
+    : several
+      ? parts.freshness
+      : single.freshness;
   // The read can fail, and until now nothing here asked. An empty feed then
   // drew the quiet-scope sentence — which for the stories tab went as far as
   // "the read succeeded and returned no events", a claim about a request that
   // came back 403. In a fan-out one refused namespace is enough: the rest may
   // have answered, but what is on screen is no longer the scope's whole story.
-  const failed = several ? parts.error : single.error;
+  const failed = watching ? null : several ? parts.error : single.error;
   // One read that failed over rows it had: they stay, said to be old. A
   // fan-out's error is one namespace's, so its rows are not the scope's.
   const stale = !several && failed !== null && pool.length > 0;
@@ -229,7 +325,6 @@ export function Events() {
   // the same number; filtered, `matching` can be three rows out of a pool
   // that stopped at five hundred, and reporting *that* as uncapped tells
   // the reader the search was exhaustive when it was not.
-  const windowFull = limit !== null && pool.length >= limit;
   const capped = limit !== null && matching.length >= limit;
   const events = capped ? matching.slice(0, limit) : matching;
   const filtering = query.trim() !== "";
@@ -426,7 +521,8 @@ export function Events() {
             )}
             <DataFreshness
               dataUpdatedAt={freshness.dataUpdatedAt}
-              slowed={freshness.slowed}
+              live={watching && !watch.resyncing}
+              slowed={!fromWatch && freshness.slowed}
               stale={stale}
             />
             <ShareScreenAction

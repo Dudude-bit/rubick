@@ -366,6 +366,7 @@ fn main() {
             commands::watch::subscribe_daemonset_watch,
             commands::watch::subscribe_job_watch,
             commands::watch::subscribe_cronjob_watch,
+            commands::watch::subscribe_event_watch,
             commands::watch::subscribe_namespace_watch,
             commands::watch::subscribe_node_watch,
             commands::watch::subscribe_persistentvolume_watch,

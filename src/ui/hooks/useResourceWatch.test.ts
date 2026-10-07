@@ -311,6 +311,100 @@ describe("useResourceWatch", () => {
     ]);
   });
 
+  /** Newest first by `data`, the shape the events feed keeps. */
+  const newest = (a: Item, b: Item) =>
+    (a.data ?? 0) !== (b.data ?? 0)
+      ? (a.data ?? 0) > (b.data ?? 0)
+      : a.name < b.name;
+
+  async function startOrdered(
+    client: QueryClient,
+    order: (a: Item, b: Item) => boolean
+  ) {
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: KEY,
+          order,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+  }
+
+  /**
+   * An event that happens again keeps its name and gets a newer time, and
+   * the feed is newest first. Fails if the change is written where the row
+   * was, which leaves the newest event at the bottom, or if any row it
+   * passes is replaced.
+   */
+  it("moves a row its change moves in a list of its own order and leaves the others as they were", async () => {
+    const client = testQueryClient();
+    seed(client, [
+      { name: "c", data: 3 },
+      { name: "b", data: 2 },
+      { name: "a", data: 1 },
+    ]);
+    await startOrdered(client, newest);
+    const before = rowsIn(client)!;
+
+    emit("stream-cm-1", "applied", { name: "a", data: 4 });
+    const after = rowsIn(client)!;
+    expect(after.map((row) => row.name)).toEqual(["a", "c", "b"]);
+    expect(after[1]).toBe(before[0]);
+    expect(after[2]).toBe(before[1]);
+
+    emitBatch("stream-cm-1", [
+      { op: "applied", resource: { name: "b", data: 5 } },
+      { op: "applied", resource: { name: "d", data: 0 } },
+      { op: "deleted", resource: { name: "c", data: 3 } },
+    ]);
+    expect(rowsIn(client)!.map((row) => row.name)).toEqual(["b", "a", "d"]);
+  });
+
+  /** Fails if a resync of a list kept in its own order lands in the API's order. */
+  it("puts a resync in the list's own order", async () => {
+    const client = new QueryClient();
+    seed(client, []);
+    await startOrdered(client, newest);
+
+    emitBatch("stream-cm-1", [
+      { op: "restarted", resource: null },
+      { op: "applied", resource: { name: "a", data: 1 } },
+      { op: "applied", resource: { name: "b", data: 3 } },
+      { op: "applied", resource: { name: "c", data: 2 } },
+      { op: "synced", resource: null },
+    ]);
+    expect(rowsIn(client)!.map((row) => row.name)).toEqual(["b", "c", "a"]);
+  });
+
+  /**
+   * A watch that never started sent nothing, and a list that waits on it
+   * waits for ever under "live". Fails if a subscribe that throws is only
+   * logged.
+   */
+  it("tells the caller when no watch could be started", async () => {
+    const client = new QueryClient();
+    const onError = vi.fn();
+    renderHook(
+      () =>
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: () => Promise.reject(new Error("no client for prod")),
+          queryKey: KEY,
+          onError,
+        }),
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() =>
+      expect(onError).toHaveBeenCalledWith(
+        expect.stringContaining("no client for prod")
+      )
+    );
+  });
+
   /** Polling or another observer can replace the array and invalidate every cached position. */
   it("rebuilds positions after another writer replaces the cached list", async () => {
     const client = new QueryClient();
@@ -1049,6 +1143,43 @@ describe("the readers beside a watched list", () => {
       timeout: 3000,
     });
     expect(overview).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * The events feed changes several times a second on a busy cluster, and
+   * the overview is the costliest read in the app. Fails if a list that
+   * asks not to recount still re-reads it on every new row.
+   */
+  it("leaves the overview to its own poll for a list that asks not to recount", async () => {
+    const client = testQueryClient();
+    const overview = vi.fn().mockResolvedValue({ events: 1 });
+    client.setQueryData<Scoped<Item>>(PODS, {
+      rows: [{ name: "pod-0", namespace: "shop" }],
+      unread: [],
+    });
+    const hook = renderHook(
+      () => {
+        useResourceWatch<Item>({
+          enabled: true,
+          subscribe: subscribeMock,
+          queryKey: PODS,
+          recount: false,
+        });
+        return useReader(SIDEBAR, overview);
+      },
+      { wrapper: makeWrapper(client) }
+    );
+    await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+    await waitFor(() => expect(hook.result.current).toBeDefined());
+
+    emit("stream-cm-1", "applied", { name: "event-1", namespace: "shop" });
+    emitBatch("stream-cm-1", [
+      { op: "restarted", resource: null },
+      { op: "applied", resource: { name: "pod-0", namespace: "shop" } },
+      { op: "synced", resource: null },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 900));
+    expect(overview).toHaveBeenCalledTimes(1);
   });
 
   /**
