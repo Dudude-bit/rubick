@@ -993,12 +993,19 @@ function AttentionCount() {
   return (
     <span
       className={cn(
-        "ml-auto text-[11px]",
+        "ml-auto flex items-center gap-1 text-[11px]",
         worst ? ATTENTION_TEXT[worst] : "text-fg-fnt"
       )}
       title={complete ? undefined : t("cluster", "problemsNotAllChecked")}
       aria-label={attentionWords({ total: n, complete }, t)}
     >
+      {!complete && (
+        <span
+          aria-hidden="true"
+          data-testid="attention-unchecked-ring"
+          className="h-1.5 w-1.5 flex-none rounded-full border border-fg-fnt"
+        />
+      )}
       {attentionFigure(attention)}
     </span>
   );
