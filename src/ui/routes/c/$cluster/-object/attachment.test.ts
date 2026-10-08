@@ -4,6 +4,7 @@ import type { ApiCatalog, CatalogEntry } from "@/generated/types";
 import { crdFor, resourceSegment } from "@/lib/links";
 import {
   decide,
+  eventLanding,
   readerOver,
   type Exists,
   type Reader,
@@ -283,5 +284,17 @@ describe("the parent an attached object opens on", () => {
       "gateways.networking.istio.io"
     );
     expect(segmentOfParent("gateway.networking.k8s.io/v1")).toBe("gateways");
+  });
+});
+
+describe("where an Event about an object opens", () => {
+  /** A Lease's page has no Events tab; fails if an Event about one is sent to a tab that is not there. */
+  it("lands on the Events tab only where the kind's page has one", () => {
+    const event = { namespace: "shop", name: "web.17f3" };
+    expect(eventLanding("Service", event)).toEqual({
+      tab: "events",
+      via: "events/shop/web.17f3",
+    });
+    expect(eventLanding("Lease", event)).toBeUndefined();
   });
 });

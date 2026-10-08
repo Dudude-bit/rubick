@@ -287,7 +287,7 @@ describe("a feed a watch keeps", () => {
    * Dana found no gesture on an Events row that reached the object's Events
    * tab, and rows that answered neither a click nor a right click. Fails if
    * the row's click, its object link, its double click or its menu forgets
-   * the Event, or if a kind with no Events tab is sent to one.
+   * the Event.
    */
   it("opens an Event's object on its Events tab from every gesture on the row", async () => {
     const { router } = await watched();
@@ -312,7 +312,10 @@ describe("a feed a watch keeps", () => {
     );
     expect(
       within(rowAt(1)!).getByRole("link", { name: "Service web" })
-    ).toHaveAttribute("href", "/c/prod/services/shop/web");
+    ).toHaveAttribute(
+      "href",
+      "/c/prod/services/shop/web?tab=events&via=events%2Fshop%2Fweb.17f3"
+    );
 
     await userEvent.pointer({ keys: "[MouseRight]", target: rowAt(1)! });
     expect(await screen.findByRole("menu")).toBeInTheDocument();
