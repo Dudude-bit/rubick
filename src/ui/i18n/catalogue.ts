@@ -1684,6 +1684,8 @@ export const en = {
       "Seen at a relist after a break: it changed sometime in the gap before this.",
     sinceMarker: "since the link was made",
     sinceNothing: "Nothing on this clock since {when}.",
+    nothingRecordedSince:
+      "No change recorded since {since}: no workload here was created, deleted, scaled or edited.",
     revisionsUnread: "The revisions could not be read: {reason}",
     historyUnread: "{owner}'s history could not be read: {reason}",
     helmUnread: "Helm's history for {release} could not be read: {reason}",

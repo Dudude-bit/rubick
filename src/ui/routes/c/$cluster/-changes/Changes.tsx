@@ -8,12 +8,13 @@ import { useShareSection } from "@/components/share/screen-share";
 import { changesScreenSection, watchedSection } from "./changes-share";
 import {
   earlierRowsWords,
+  quietSince,
   spansCovering,
   spansWatching,
   timelineOf,
   unwatchedWords,
 } from "@/lib/changes";
-import { History, Lock } from "lucide-react";
+import { Eye, History, Lock } from "lucide-react";
 import { cn, formatTimeUnit, formatWhen } from "@/lib/utils";
 import { useNow } from "@/hooks/useNow";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
@@ -70,6 +71,7 @@ export function Changes() {
     [mine, ours, covering, now, window]
   );
   const watching = ours.find((span) => span.to === null);
+  const quiet = quietSince(watching, items);
   const refused = watching && unwatchedWords(watching, t);
   const earlier =
     watching && earlierRowsWords(covering, items, watching.from, t, moment);
@@ -138,7 +140,23 @@ export function Changes() {
       />
       <Section>
         <SectionBody>
-          <ChangesTimeline items={items} showObject />
+          {quiet !== null && (
+            <p
+              className="flex items-center gap-1.5 px-1.5 pb-1 text-xs text-fg-mut"
+              data-testid="changes-quiet"
+            >
+              <Eye
+                className="h-3.5 w-3.5 flex-none text-fg-fnt"
+                aria-hidden="true"
+              />
+              {t("changes", "nothingRecordedSince", {
+                since: formatWhen(quiet, "clock"),
+              })}
+            </p>
+          )}
+          {(items.length > 0 || quiet === null) && (
+            <ChangesTimeline items={items} showObject />
+          )}
           <p className="px-1.5 pt-2 text-[11px] text-fg-fnt">
             {t("changes", "clusterExplained")}
           </p>

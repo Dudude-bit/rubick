@@ -625,6 +625,20 @@ export function earlierRowsWords(
   });
 }
 
+/** When the running watch began, if it has recorded no row since; `null` otherwise. */
+export function quietSince(
+  watching: ObservedSpan | undefined,
+  items: readonly ChangeItem[]
+): number | null {
+  if (!watching) return null;
+  return items.some(
+    (item) =>
+      item.kind !== "gap" && item.at !== null && item.at >= watching.from
+  )
+    ? null
+    : watching.from;
+}
+
 export interface Gap {
   from: number;
   to: number;
