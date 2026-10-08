@@ -54,6 +54,7 @@ describe("the Endpoints list's empty row", () => {
       reason: "selectsNothing",
       service: at("Service"),
       selector: "app=hello-web",
+      near: null,
     });
     expect(screen.getByText("no endpoints")).toHaveClass("text-err");
   });

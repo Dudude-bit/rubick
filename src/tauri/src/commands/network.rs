@@ -292,10 +292,19 @@ async fn with_unready_cause(
             }
         });
     let published = futures::future::join_all(asks).await;
-    with_idle_workloads(client, services, published).await
+    explain_empty_selectors(client, services, published).await
 }
 
-async fn with_idle_workloads(
+type Behind = (Vec<Deployment>, Vec<StatefulSet>, Vec<Pod>);
+
+fn items<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> Vec<K> {
+    list.map(|list| list.items).unwrap_or_default()
+}
+
+/// What the pods cannot say about a Service whose selector matches none of
+/// them: whether the workloads behind it are scaled to zero, and which pods
+/// carry the most of it. One read of each kind per namespace that has one.
+async fn explain_empty_selectors(
     client: &kube::Client,
     services: &[Service],
     published: Vec<ServicePublished>,
@@ -313,25 +322,24 @@ async fn with_idle_workloads(
         let params = ListParams::default();
         let deployments: kube::Api<Deployment> = kube::Api::namespaced(client.clone(), &ns);
         let sets: kube::Api<StatefulSet> = kube::Api::namespaced(client.clone(), &ns);
-        let (deployments, sets) = tokio::join!(deployments.list(&params), sets.list(&params));
-        (
-            ns,
-            (
-                deployments.map(|list| list.items).unwrap_or_default(),
-                sets.map(|list| list.items).unwrap_or_default(),
-            ),
-        )
+        let pods: kube::Api<Pod> = kube::Api::namespaced(client.clone(), &ns);
+        let (deployments, sets, pods) = tokio::join!(
+            deployments.list(&params),
+            sets.list(&params),
+            pods.list(&params)
+        );
+        (ns, (items(deployments), items(sets), items(pods)))
     });
-    let read: HashMap<String, (Vec<Deployment>, Vec<StatefulSet>)> =
+    let read: HashMap<String, Behind> =
         futures::future::join_all(reads).await.into_iter().collect();
     services
         .iter()
         .zip(published)
         .map(
             |(svc, published)| match read.get(&svc.namespace().unwrap_or_default()) {
-                Some((deployments, sets)) => {
-                    published.with_makers(svc, &published::makers(deployments, sets))
-                }
+                Some((deployments, sets, pods)) => published
+                    .with_makers(svc, &published::makers(deployments, sets))
+                    .with_near_miss(svc, pods),
                 None => published,
             },
         )
@@ -1085,5 +1093,71 @@ mod tests {
             matches!(refused, Some(ChainStop::SelectsNothing { .. })),
             "{refused:?}"
         );
+    }
+
+    /// The Overview's row for Marco's checkout-api said only that no pod
+    /// carries app=checkout-api,track=stable. Fails if the shell's read stops
+    /// naming the pods one label short, which the Service page names.
+    #[tokio::test]
+    async fn a_selector_one_label_short_names_its_closest_pods_in_the_shells_count() {
+        use crate::client::served::test_server::answering;
+        let list = |kind: &str, items: serde_json::Value| {
+            serde_json::json!({ "apiVersion": "v1", "kind": kind, "metadata": {}, "items": items })
+                .to_string()
+        };
+        let services = list(
+            "ServiceList",
+            serde_json::json!([{
+                "metadata": { "name": "checkout-api", "namespace": "team-checkout" },
+                "spec": {
+                    "type": "ClusterIP",
+                    "selector": { "app": "checkout-api", "track": "stable" },
+                    "ports": [{ "port": 80, "targetPort": 8080, "protocol": "TCP" }]
+                }
+            }]),
+        );
+        let canary = |name: &str| {
+            serde_json::json!({
+                "metadata": {
+                    "name": name,
+                    "namespace": "team-checkout",
+                    "labels": { "app": "checkout-api", "track": "canary" }
+                }
+            })
+        };
+        let none = list("PodList", serde_json::json!([]));
+        let pods = list(
+            "PodList",
+            serde_json::json!([canary("checkout-api-a"), canary("checkout-api-b")]),
+        );
+        let empty = |kind: &str| list(kind, serde_json::json!([]));
+        let (slices, deployments, sets) = (
+            empty("EndpointSliceList"),
+            empty("DeploymentList"),
+            empty("StatefulSetList"),
+        );
+        let (client, _) = answering(move |path, nth| match path {
+            "/api/v1/namespaces/team-checkout/services" => (200, services.clone()),
+            "/apis/discovery.k8s.io/v1/namespaces/team-checkout/endpointslices" => {
+                (200, slices.clone())
+            }
+            "/api/v1/namespaces/team-checkout/pods" if nth == 1 => (200, none.clone()),
+            "/api/v1/namespaces/team-checkout/pods" => (200, pods.clone()),
+            "/apis/apps/v1/namespaces/team-checkout/deployments" => (200, deployments.clone()),
+            "/apis/apps/v1/namespaces/team-checkout/statefulsets" => (200, sets.clone()),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let inputs = health_inputs_in(client, Some("team-checkout".to_string()))
+            .await
+            .expect("inputs");
+        let stop = inputs[0].groups[0].stop.clone();
+        let Some(ChainStop::SelectsNothing {
+            near: Some(near), ..
+        }) = stop
+        else {
+            panic!("the closest pods are named, got {stop:?}");
+        };
+        assert_eq!((near.pods.len(), near.lacks.as_str()), (2, "track=stable"));
     }
 }

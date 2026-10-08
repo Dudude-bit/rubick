@@ -118,6 +118,8 @@ export const en = {
     stopNoPodCarries: "No pod carries {selector}",
     stopScaledToZero: "No pods by intent: {name} is scaled to zero",
     stopScaledToZeroSeveral: "No pods by intent: {names} are scaled to zero",
+    stopNearMissNote:
+      "Closest: {pods}. Connections to this address are refused until a pod carries the whole selector: add {lacks} to their template, or drop it from the selector.",
     stopScaledToZeroNote:
       "Connections to this address are refused until it is scaled up again. The labels are not at fault.",
     stopNotScheduledNote:
@@ -7060,6 +7062,10 @@ export const en = {
     podsCarryNotReady: {
       one: "{n} pod carries {selector}, and it is not ready",
       other: "{n} pods carry {selector}, and none of them is ready",
+    },
+    podsCarryPartOf: {
+      one: "{n} pod carries {carries} but not {lacks}",
+      other: "{n} pods carry {carries} but not {lacks}",
     },
     reconcilersFromSources: {
       one: "{n} reconciler from {sources}",

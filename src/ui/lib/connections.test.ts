@@ -763,7 +763,12 @@ describe("the traffic chain", () => {
           ingress: ref("Ingress", "ghost-demo"),
           service: svc,
         },
-        { reason: "selectsNothing", service: svc, selector: "app=tls-demo" },
+        {
+          reason: "selectsNothing",
+          service: svc,
+          selector: "app=tls-demo",
+          near: null,
+        },
         {
           reason: "noneReady",
           service: svc,
@@ -777,6 +782,36 @@ describe("the traffic chain", () => {
     expect(new Set(titles).size).toBe(3);
     expect(titles[0]).toContain("No Service named demo");
     expect(titles[1]).toBe("No pod carries app=tls-demo");
+  });
+
+  /**
+   * Marco's checkout-api: two pods carry app=checkout-api with track=canary,
+   * and the page said only that no pod carries the selector. Fails if the
+   * pods one label short go unnamed, or the label they lack is not said.
+   */
+  it("names the pods one label short of a selector that matches none", () => {
+    const svc = service("checkout-api", "app=checkout-api,track=stable");
+    const pods = ["a", "b", "c", "d"].map((x) =>
+      ref("Pod", `checkout-api-${x}`)
+    );
+    const said = describeStop(
+      {
+        reason: "selectsNothing",
+        service: svc,
+        selector: "app=checkout-api,track=stable",
+        near: { pods, carries: "app=checkout-api", lacks: "track=stable" },
+      },
+      t
+    );
+    expect(said.title).toBe(
+      "4 pods carry app=checkout-api but not track=stable"
+    );
+    expect(
+      said.note.startsWith(
+        "Closest: checkout-api-a, checkout-api-b, checkout-api-c, and 1 more. "
+      )
+    ).toBe(true);
+    expect(said.note).toContain("add track=stable to their template");
   });
 
   /**
@@ -810,6 +845,7 @@ describe("the traffic chain", () => {
               reason: "selectsNothing",
               service: front,
               selector: "app=hello-web",
+              near: null,
             },
           ]
         ),

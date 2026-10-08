@@ -148,6 +148,7 @@ describe("one verdict for a Service on every surface", () => {
           reason: "selectsNothing",
           service: SERVICE,
           selector: "app=hello-web",
+          near: null,
         },
       }),
       null

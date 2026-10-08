@@ -411,10 +411,22 @@ export function describeStop(
         note: t("nav", "backendNeverCreated", { kind: stop.ingress.kind }),
       };
     case "selectsNothing":
-      return {
-        title: t("nav", "stopNoPodCarries", { selector: stop.selector }),
-        note: t("nav", "connectionRefusedNothingBehind"),
-      };
+      return stop.near
+        ? {
+            title: t("count", "podsCarryPartOf", {
+              n: stop.near.pods.length,
+              carries: stop.near.carries,
+              lacks: stop.near.lacks,
+            }),
+            note: t("nav", "stopNearMissNote", {
+              pods: namesOf(stop.near.pods, t),
+              lacks: stop.near.lacks,
+            }),
+          }
+        : {
+            title: t("nav", "stopNoPodCarries", { selector: stop.selector }),
+            note: t("nav", "connectionRefusedNothingBehind"),
+          };
     case "scaledToZero":
       return scaledToZeroWords(
         stop.workloads.map((workload) => workload.name),
@@ -538,6 +550,17 @@ export interface ChainHopStop {
   note: string;
   /** Nothing runs here by intent: the subject is scaled to zero. */
   idle: boolean;
+}
+
+/** Three names at most, and how many more. */
+function namesOf(objects: ObjectRef[], t: T): string {
+  const shown = objects
+    .slice(0, 3)
+    .map((object) => object.name)
+    .join(", ");
+  return objects.length > 3
+    ? shown + t("count", "andNMore", { n: objects.length - 3 })
+    : shown;
 }
 
 function scaledToZeroWords(

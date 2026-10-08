@@ -390,7 +390,9 @@ async fn the_three_stops_are_different_stops() {
     describe("tls-demo Ingress", &tls);
     assert_eq!(tls.stops.len(), 1);
     match &tls.stops[0] {
-        ChainStop::SelectsNothing { service, selector } => {
+        ChainStop::SelectsNothing {
+            service, selector, ..
+        } => {
             assert_eq!(service.name, "tls-demo");
             assert_eq!(service.existence, Existence::Present);
             assert_eq!(selector, "app=tls-demo");

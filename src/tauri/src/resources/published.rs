@@ -24,7 +24,7 @@ use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::ResourceExt;
 use serde::{Deserialize, Serialize};
 
-use super::connections::{ChainStop, Existence, NotServing, ObjectFacts, ObjectRef};
+use super::connections::{ChainStop, Existence, NearMiss, NotServing, ObjectFacts, ObjectRef};
 use super::selector::Selector;
 use super::types::pod_display::display_status;
 use super::types::{condition_is_true, crash_looping};
@@ -190,6 +190,7 @@ impl ServicePublished {
         if let Some(ChainStop::SelectsNothing {
             service: at,
             selector,
+            ..
         }) = &self.stop
         {
             if let Some(workloads) = scaled_to_zero(service, makers) {
@@ -199,6 +200,16 @@ impl ServicePublished {
                     workloads,
                 });
             }
+        }
+        self
+    }
+
+    /// A selector matching no pod, with the pods in its namespace that carry
+    /// the most of it named beside it.
+    #[must_use]
+    pub fn with_near_miss(mut self, service: &Service, pods: &[Pod]) -> Self {
+        if let Some(ChainStop::SelectsNothing { near, .. }) = self.stop.as_mut() {
+            *near = near_miss(service, pods);
         }
         self
     }
@@ -652,6 +663,7 @@ pub fn service_stop(
         return Some(ChainStop::SelectsNothing {
             service: at,
             selector: text,
+            near: None,
         });
     }
     let ready_pods = selected
@@ -766,6 +778,48 @@ pub fn scaled_to_zero(service: &Service, makers: &[PodMaker<'_>]) -> Option<Vec<
         return None;
     }
     Some(picked.iter().map(|maker| maker.workload.clone()).collect())
+}
+
+/// The pods that carry the most of a Service's selector without carrying all
+/// of it: one label short is the commonest way a selector matches nothing.
+#[must_use]
+pub fn near_miss(service: &Service, pods: &[Pod]) -> Option<NearMiss> {
+    let selector = service
+        .spec
+        .as_ref()
+        .and_then(|s| s.selector.clone())
+        .unwrap_or_default();
+    let mut groups: BTreeMap<Vec<&String>, Vec<&Pod>> = BTreeMap::new();
+    for pod in pods {
+        let labels = pod.labels();
+        let carried: Vec<&String> = selector
+            .iter()
+            .filter(|(key, value)| labels.get(*key) == Some(*value))
+            .map(|(key, _)| key)
+            .collect();
+        if !carried.is_empty() && carried.len() < selector.len() {
+            groups.entry(carried).or_default().push(pod);
+        }
+    }
+    let (carried, closest) = groups
+        .into_iter()
+        .max_by_key(|(carried, pods)| (carried.len(), pods.len()))?;
+    let part = |carries: bool| {
+        selector
+            .iter()
+            .filter(|(key, _)| carried.contains(key) == carries)
+            .map(|(key, value)| format!("{key}={value}"))
+            .collect::<Vec<_>>()
+            .join(",")
+    };
+    Some(NearMiss {
+        pods: closest
+            .iter()
+            .map(|pod| pod_ref(pod, &pod.namespace().unwrap_or_default()))
+            .collect(),
+        carries: part(true),
+        lacks: part(false),
+    })
 }
 
 /// Why one pod that is not Ready is not, in the terms of [`NotServing`].
@@ -1436,6 +1490,66 @@ mod tests {
             .with_makers(&svc, &makers)
             .stop;
         assert!(matches!(stop, Some(ChainStop::PublishesNothingYet { .. })));
+    }
+
+    fn labelled(name: &str, labels: &[(&str, &str)]) -> Pod {
+        let mut pod = pod(name, None);
+        pod.metadata.labels = Some(
+            labels
+                .iter()
+                .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+                .collect(),
+        );
+        pod
+    }
+
+    /// Marco's checkout-api selects app=checkout-api,track=stable and its two
+    /// pods carry track=canary: the page said only that no pod carries the
+    /// selector. Fails if the pods carrying the most of it go unnamed, or a
+    /// pod carrying none of it is offered as close.
+    #[test]
+    fn a_selector_one_label_short_names_the_pods_that_carry_the_rest() {
+        let mut svc = selecting("checkout-api");
+        if let Some(spec) = svc.spec.as_mut() {
+            spec.selector = Some(
+                [("app", "checkout-api"), ("track", "stable")]
+                    .map(|(k, v)| (k.to_string(), v.to_string()))
+                    .into(),
+            );
+        }
+        let pods = [
+            labelled(
+                "checkout-api-a",
+                &[("app", "checkout-api"), ("track", "canary")],
+            ),
+            labelled(
+                "checkout-api-b",
+                &[("app", "checkout-api"), ("track", "canary")],
+            ),
+            labelled("worker", &[("app", "checkout-worker")]),
+        ];
+        let stop = from_slices(&svc, svc_ref("checkout-api"), &[], &[])
+            .with_stop(&svc, Some(&[]))
+            .with_near_miss(&svc, &pods)
+            .stop;
+        let Some(ChainStop::SelectsNothing {
+            near: Some(near), ..
+        }) = stop
+        else {
+            panic!("the closest pods are named, got {stop:?}");
+        };
+        assert_eq!(near.carries, "app=checkout-api");
+        assert_eq!(near.lacks, "track=stable");
+        assert_eq!(
+            near.pods
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect::<Vec<_>>(),
+            ["checkout-api-a", "checkout-api-b"]
+        );
+
+        assert!(near_miss(&svc, &pods[2..]).is_none());
+        assert!(near_miss(&selecting("web"), &[labelled("web-1", &[("app", "api")])]).is_none());
     }
 
     /// With neither the endpoints nor the pods read, the zeros come from

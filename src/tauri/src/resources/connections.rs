@@ -402,6 +402,9 @@ pub enum ChainStop {
     SelectsNothing {
         service: ObjectRef,
         selector: String,
+        /// The pods that carry the most of it, where any carries a part.
+        #[serde(default)]
+        near: Option<NearMiss>,
     },
     /// The selector matches no pod because every Deployment and `StatefulSet`
     /// whose pods it would pick is scaled to zero. Nothing runs here by
@@ -448,6 +451,16 @@ pub enum ChainStop {
         #[serde(rename = "unnamedPorts")]
         unnamed_ports: Vec<String>,
     },
+}
+
+/// Pods that carry part of a selector matching none, and the part they lack.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NearMiss {
+    pub pods: Vec<ObjectRef>,
+    /// The part they carry, as the selector writes it.
+    pub carries: String,
+    pub lacks: String,
 }
 
 /// Why the pods behind a [`ChainStop::NoneReady`] are not taking traffic,

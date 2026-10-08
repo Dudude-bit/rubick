@@ -265,6 +265,7 @@ describe("what Needs attention lists beyond pods", () => {
       reason: "selectsNothing",
       service: at("web"),
       selector: "app=web",
+      near: null,
     });
     const healthOf = (row: IngressHealthInput) =>
       ingressHealthOf({

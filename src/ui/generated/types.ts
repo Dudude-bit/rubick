@@ -267,6 +267,12 @@ export interface IngressClassParameters {
   namespace: string | null;
 }
 
+export interface NearMiss {
+  pods: ObjectRef[];
+  carries: string;
+  lacks: string;
+}
+
 export interface ServiceBacking {
   services: ServiceInfo[];
   published: ServicePublished[];
@@ -2283,7 +2289,12 @@ export type ChainStop =
       message: string | null;
     }
   | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
-  | { reason: "selectsNothing"; service: ObjectRef; selector: string }
+  | {
+      reason: "selectsNothing";
+      service: ObjectRef;
+      selector: string;
+      near: NearMiss | null;
+    }
   | {
       reason: "scaledToZero";
       service: ObjectRef;

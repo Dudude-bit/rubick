@@ -109,6 +109,7 @@ describe("TrafficChain", () => {
       reason: "selectsNothing",
       service,
       selector: "app=tls-demo",
+      near: null,
     });
     const unready = await said({
       reason: "noneReady",
@@ -319,7 +320,12 @@ describe("TrafficChain", () => {
       <TrafficChain
         query={query(
           answered([
-            { reason: "selectsNothing", service, selector: "app=demo" },
+            {
+              reason: "selectsNothing",
+              service,
+              selector: "app=demo",
+              near: null,
+            },
           ])
         )}
       />
@@ -336,7 +342,7 @@ describe("TrafficChain", () => {
 
   describe("which hostnames reach the Service through a vendor's objects", () => {
     const chain = answered([
-      { reason: "selectsNothing", service, selector: "app=demo" },
+      { reason: "selectsNothing", service, selector: "app=demo", near: null },
     ]);
 
     const drawWithRoutes = (value: {
@@ -472,7 +478,7 @@ describe("TrafficChain", () => {
     // Two hops, because a path of one is not a path and is collapsed to a
     // single line: the Service and the stop below it.
     const chain = answered([
-      { reason: "selectsNothing", service, selector: "app=demo" },
+      { reason: "selectsNothing", service, selector: "app=demo", near: null },
     ]);
 
     const drawWith = (edge: ServiceEdges) => {

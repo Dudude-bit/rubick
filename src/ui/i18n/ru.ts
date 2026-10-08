@@ -97,6 +97,8 @@ export const ru: Catalogue = {
     stopScaledToZero: "Подов нет намеренно: {name} масштабирован до нуля",
     stopScaledToZeroSeveral:
       "Подов нет намеренно: {names} масштабированы до нуля",
+    stopNearMissNote:
+      "Ближе всех: {pods}. Подключения к этому адресу отклоняются, пока ни один под не подходит под весь селектор: добавьте метку {lacks} в их шаблон или уберите её из селектора.",
     stopScaledToZeroNote:
       "Подключения к этому адресу отклоняются, пока нагрузку не масштабируют обратно. Метки здесь ни при чём.",
     stopNotScheduledNote:
@@ -7818,6 +7820,12 @@ export const ru: Catalogue = {
       few: "У {n} подов метка {selector}, и ни один не готов",
       many: "У {n} подов метка {selector}, и ни один не готов",
       other: "У {n} пода метка {selector}, и ни один не готов",
+    },
+    podsCarryPartOf: {
+      one: "У {n} пода метка {carries}, но нет {lacks}",
+      few: "У {n} подов метка {carries}, но нет {lacks}",
+      many: "У {n} подов метка {carries}, но нет {lacks}",
+      other: "У {n} пода метка {carries}, но нет {lacks}",
     },
     reconcilersFromSources: {
       one: "{n} реконсилятор из {sources}",
