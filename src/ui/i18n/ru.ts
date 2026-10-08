@@ -4753,7 +4753,9 @@ export const ru: Catalogue = {
       many: "не удалось прочитать {n} видов: {kinds}",
       other: "не удалось прочитать {n} вида: {kinds}",
     },
-    kindsRefusedHover: "Кластер отказал: {kinds}",
+    kindsRefusedHover: "Кластер отказал вашей учётной записи: {kinds}",
+    kindsNotListableHover:
+      "Кластер отдаёт эти виды без глагола list, поэтому их не может найти ни одна учётная запись: {kinds}",
     otherKindsNotSearched: "в видах ресурсов вне приложения не искали",
     lastUsedAgo: "открывался {age} назад",
     retryInline: "повторить",
@@ -8434,10 +8436,10 @@ export const ru: Catalogue = {
       other: "в {n} вида не искали",
     },
     kindsNotListable: {
-      one: "{n} вид нельзя получить списком",
-      few: "{n} вида нельзя получить списком",
-      many: "{n} видов нельзя получить списком",
-      other: "{n} вида нельзя получить списком",
+      one: "{n} вид не отдаётся списком никому",
+      few: "{n} вида не отдаются списком никому",
+      many: "{n} видов не отдаются списком никому",
+      other: "{n} вида не отдаются списком никому",
     },
     apiGroupsNotDiscovered: {
       one: "{n} группа API не ответила на discovery",

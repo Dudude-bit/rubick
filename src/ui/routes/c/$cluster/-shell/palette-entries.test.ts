@@ -18,6 +18,8 @@ import {
   ROWS_PER_CLUSTER,
   type Entry,
   type PaletteState,
+  byKindName,
+  orderHits,
 } from "./palette-entries";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -492,10 +494,10 @@ describe("the palette's resource rows", () => {
       entry.kind === "hit" ? [[entry.hit.kind, where(entry.path)]] : []
     );
     expect(paths).toEqual([
-      ["Pod", "/c/k3d-dev/pods/default/api-0"],
       ["Namespace", null],
-      ["ServiceAccount", "/c/k3d-dev/serviceaccounts/default/api"],
       ["Lease", "/c/k3d-dev/leases.coordination.k8s.io/kube-system/api"],
+      ["ServiceAccount", "/c/k3d-dev/serviceaccounts/default/api"],
+      ["Pod", "/c/k3d-dev/pods/default/api-0"],
     ]);
   });
 
@@ -1344,5 +1346,65 @@ describe("the words pages and kinds answer to", () => {
     expect(kindsOf(offered("cm", { kinds: renamed }))).not.toContain(
       "ConfigMap"
     );
+  });
+});
+
+describe("the order the palette draws hits in", () => {
+  const hit = (kind: string, name: string, namespace: string | null) => ({
+    hit: {
+      context: "acme",
+      kind,
+      group: "",
+      plural: `${kind.toLowerCase()}s`,
+      name,
+      namespace,
+    },
+  });
+  const hits = [
+    hit("ReplicaSet", "cart-9df89489c", "shop"),
+    hit("Pod", "cart-9df89489c-f76qh", "shop"),
+    hit("Service", "cart", "shop"),
+    hit("Deployment", "cart", "shop"),
+    hit("ConfigMap", "kube-root-ca.crt", "shop"),
+    hit("Pod", "cart-9df89489c-a1b2c", "shop"),
+  ];
+  const drawn = (found: typeof hits) =>
+    orderHits(found, "cart").map(({ hit }) => `${hit.kind}/${hit.name}`);
+
+  /**
+   * Dana's "cart": the Deployment was third on one search and eighth on the
+   * next, because hits were drawn in the order the kinds answered, and Down
+   * Down copied a ReplicaSet name instead of scaling. Fails if the order
+   * depends on arrival.
+   */
+  it("draws the same hits in one order whatever order they arrived in", () => {
+    const first = drawn(hits);
+    expect(drawn([...hits].reverse())).toEqual(first);
+    expect(
+      drawn([hits[3], hits[0], hits[5], hits[2], hits[4], hits[1]])
+    ).toEqual(first);
+  });
+
+  /** Fails if a pod whose name only starts with the query pushes the object named exactly that down. */
+  it("puts an exact name first, then names that start with the query, then the namespace-only matches", () => {
+    const order = drawn(hits);
+    expect(order.slice(0, 2).sort()).toEqual([
+      "Deployment/cart",
+      "Service/cart",
+    ]);
+    expect(order.at(-1)).toBe("ConfigMap/kube-root-ca.crt");
+  });
+
+  /** Marco's "could not read 13 kinds" list was in a new order on every open. */
+  it("names kinds in one order whatever order the cluster listed them in", () => {
+    const kinds = ["Role", "DaemonSet", "ClusterRole"].map((kind) => ({
+      kind,
+    }));
+    expect(byKindName(kinds).map(({ kind }) => kind)).toEqual([
+      "ClusterRole",
+      "DaemonSet",
+      "Role",
+    ]);
+    expect(byKindName([...kinds].reverse())).toEqual(byKindName(kinds));
   });
 });

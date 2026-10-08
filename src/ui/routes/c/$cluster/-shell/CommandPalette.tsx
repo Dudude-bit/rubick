@@ -79,6 +79,7 @@ import {
   buildPaletteEntries,
   english,
   hasAnswered,
+  byKindName,
   hitKey,
   isCold,
   isSelectable,
@@ -1405,7 +1406,9 @@ const HINT_MARK: Record<HintTone, ReactNode> = {
 };
 
 const kindNames = (kinds: readonly { kind: string }[]) =>
-  kinds.map((kind) => kind.kind).join(", ");
+  byKindName(kinds)
+    .map((kind) => kind.kind)
+    .join(", ");
 
 /**
  * What a name search read in one cluster, and what it did not: the kinds it
@@ -1469,7 +1472,9 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
       {unlistable !== null && unlistable.length > 0 && (
         <span
           className="flex items-center gap-1 text-fg-fnt"
-          title={kindNames(unlistable)}
+          title={t("cluster", "kindsNotListableHover", {
+            kinds: kindNames(unlistable),
+          })}
         >
           <Ban className="h-3 w-3 flex-none" aria-hidden />
           {t("count", "kindsNotListable", { n: unlistable.length })}
@@ -1487,12 +1492,9 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
 
 /** Every refused kind on one line, and any other failure with its own words. */
 function unreadHover(cluster: ClusterSearchState, t: T): string {
-  const refused = cluster.unreadable.filter(
-    (unread) => unread.reason === "forbidden"
-  );
-  const failed = cluster.unreadable.filter(
-    (unread) => unread.reason !== "forbidden"
-  );
+  const unreadable = byKindName(cluster.unreadable);
+  const refused = unreadable.filter((unread) => unread.reason === "forbidden");
+  const failed = unreadable.filter((unread) => unread.reason !== "forbidden");
   return [
     ...(refused.length > 0
       ? [
@@ -1578,7 +1580,7 @@ function ClusterGroup({
           {state} · <Mark className="inline h-3 w-3 align-[-2px]" aria-hidden />{" "}
           {t("cluster", "kindsUnreadInline", {
             n: cluster.unreadable.length,
-            kinds: cluster.unreadable.map((unread) => unread.kind).join(", "),
+            kinds: kindNames(cluster.unreadable),
           })}
         </span>
       );

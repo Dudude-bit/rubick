@@ -4268,7 +4268,9 @@ export const en = {
       one: "could not read {n} kind: {kinds}",
       other: "could not read {n} kinds: {kinds}",
     },
-    kindsRefusedHover: "The cluster refused: {kinds}",
+    kindsRefusedHover: "The cluster refused your account: {kinds}",
+    kindsNotListableHover:
+      "The cluster serves these without a list verb, so no account can search them: {kinds}",
     otherKindsNotSearched: "kinds outside the app's own are not searched",
     lastUsedAgo: "last used {age} ago",
     retryInline: "retry",
@@ -7391,8 +7393,8 @@ export const en = {
       other: "{n} kinds not searched",
     },
     kindsNotListable: {
-      one: "{n} kind cannot be listed",
-      other: "{n} kinds cannot be listed",
+      one: "{n} kind cannot be listed by anyone",
+      other: "{n} kinds cannot be listed by anyone",
     },
     apiGroupsNotDiscovered: {
       one: "{n} API group did not answer discovery",
