@@ -243,6 +243,20 @@ describe("watching several namespaces at once", () => {
     expect(counted.enabled.at(-1)).toBe(true);
   });
 
+  /** Lena reopened the picker to find "lena" still typed and offered as a name not in the list; fails if a pick leaves its filter for the next open. */
+  it("opens with an empty filter after a pick shut it", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-0"]);
+    await openPicker(user);
+    await user.keyboard("ns-3{Enter}");
+    expect(scope()).toEqual(["ns-3"]);
+
+    await openPicker(user);
+    expect(
+      screen.getByRole("combobox", { name: t("action", "filterNamespaces") })
+    ).toHaveValue("");
+  });
+
   it("replaces the selection on a plain click and shuts the list", async () => {
     const user = userEvent.setup();
     await draw(["ns-0", "ns-1"]);

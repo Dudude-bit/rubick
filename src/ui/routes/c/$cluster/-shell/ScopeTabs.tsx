@@ -719,6 +719,20 @@ function NamespacePopover({
   /** Whether the namespaces the reader has no access to are being shown
    *  anyway — a per-open escape hatch, off again on close. */
   const [showBlocked, setShowBlocked] = useState(false);
+  // On the prop, not on the popover's own close: a pick closes it from the
+  // parent, which kept the last filter for the next open.
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) {
+      setPinned(scope);
+    } else {
+      setFilter("");
+      setCursor(-1);
+      setRefused(null);
+      setShowBlocked(false);
+    }
+  }
   const listId = useId();
   const noteId = `${listId}-note`;
 
@@ -874,21 +888,7 @@ function NamespacePopover({
           });
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        if (next) {
-          // Freeze the selection to the top for as long as the list is open.
-          setPinned(scope);
-        } else {
-          setFilter("");
-          setCursor(-1);
-          setRefused(null);
-          setShowBlocked(false);
-        }
-        onOpenChange(next);
-      }}
-    >
+    <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent className="w-[268px] p-0">
         <div className="flex items-center gap-[7px] border-b border-hair px-2.5 py-2 text-fg-fnt">
