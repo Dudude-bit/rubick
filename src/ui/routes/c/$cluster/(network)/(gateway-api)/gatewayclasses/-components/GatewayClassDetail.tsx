@@ -30,6 +30,8 @@ import { ResourceType } from "@/lib/resource-registry";
 import type { GatewayClassInfo } from "@/generated/types";
 import { ROUTING_STALE } from "@/integrations";
 import { None } from "@/components/ui/none";
+import { eventsTab } from "../../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 
 function GatewayRows({ className }: { className: string }) {
   const t = useT();
@@ -113,6 +115,10 @@ export function GatewayClassDetail() {
     fetchResource: (name) => commands.getGatewayClass(name),
     deleteResource: (name) => commands.deleteGatewayClass(name),
     defaultTab: "overview",
+  });
+
+  const events = useObjectEvents(ResourceType.GatewayClass, name, null, {
+    refresh: "slow",
   });
 
   const claim: KeyValue =
@@ -206,6 +212,7 @@ export function GatewayClassDetail() {
         </>
       ),
     },
+    eventsTab(events, t, { kind: ResourceType.GatewayClass, name: name ?? "" }),
     yamlTab({
       title: "GatewayClass YAML",
       yaml,

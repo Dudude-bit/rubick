@@ -17,6 +17,8 @@ import { ResourceType } from "@/lib/resource-registry";
 import type { StorageClassInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 
 export function StorageClassDetail() {
   const t = useT();
@@ -38,6 +40,10 @@ export function StorageClassDetail() {
     fetchResource: (name) => commands.getStorageClass(name),
     deleteResource: (name) => commands.deleteStorageClass(name),
     defaultTab: "overview",
+  });
+
+  const events = useObjectEvents(ResourceType.StorageClass, name, null, {
+    refresh: "slow",
   });
 
   const parameters = sc?.parameters ?? {};
@@ -105,6 +111,7 @@ export function StorageClassDetail() {
         />
       ),
     },
+    eventsTab(events, t, { kind: ResourceType.StorageClass, name: name ?? "" }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "StorageClass" }),
       yaml: scYaml,

@@ -15,6 +15,8 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useToast } from "@/components/ui/use-toast";
 import { yamlTab } from "../yaml-tab";
+import { eventsTab } from "../events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { ResourceDetailLayout } from "../ResourceDetailLayout";
 import { servedOf } from "../served";
 import { noteDenied, useDenied } from "@/lib/access";
@@ -231,6 +233,11 @@ export function CustomResourceDetail({
     staleTime: STALE_TIMES.resourceDetail,
   });
 
+  const events = useObjectEvents(crdInfo?.kind ?? "", name, namespace, {
+    enabled: !!crdInfo?.kind,
+    refresh: "slow",
+  });
+
   const served = servedOf(crdName);
   const guarded = {
     group: served.group,
@@ -440,6 +447,7 @@ export function CustomResourceDetail({
         : undefined,
       content: <RelatedPanel query={related} kind={crdInfo?.kind ?? "these"} />,
     },
+    eventsTab(events, t, { kind: crdInfo?.kind ?? "", name }),
     yamlTab({
       title: `${resource?.kind || "Resource"} YAML`,
       yaml,

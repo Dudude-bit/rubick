@@ -24,6 +24,8 @@ import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { ConfigMapInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 
 export function ConfigMapDetail() {
   const t = useT();
@@ -45,6 +47,10 @@ export function ConfigMapDetail() {
     fetchResource: (name, ns) => commands.getConfigmap(name, ns),
     deleteResource: (name, ns) => commands.deleteConfigmap(name, ns),
     defaultTab: "data",
+  });
+
+  const events = useObjectEvents(ResourceType.ConfigMap, name, namespace, {
+    refresh: "slow",
   });
 
   const connections = useConnections(ResourceType.ConfigMap, name, namespace);
@@ -151,6 +157,7 @@ export function ConfigMapDetail() {
         </>
       ),
     },
+    eventsTab(events, t, { kind: ResourceType.ConfigMap, name: name ?? "" }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "ConfigMap" }),
       yaml: configMapYaml,

@@ -168,7 +168,10 @@ describe("the other attached kinds", () => {
     ).toEqual({ state: "stay", stay: { says: "noOwner" } });
   });
 
-  /** A Service's page has no events tab to open on, so its event is not moved. */
+  /**
+   * A Service's event moves to its page's Events tab; a custom resource's
+   * stays, as its namesakes share a kind. Fails if either side changes.
+   */
   it("open an event only on a page that has an events tab", async () => {
     const about = (kind: string, apiVersion: string) => ({
       metadata: { name: "e", namespace: "shop" },
@@ -186,6 +189,20 @@ describe("the other attached kinds", () => {
         "events",
         about("Service", "v1"),
         reader({ "Service/x": "present" })
+      )
+    ).toMatchObject({ state: "parent", tab: "events" });
+    expect(
+      await decide(
+        "events",
+        about("HorizontalPodAutoscaler", "autoscaling/v2"),
+        reader({ "HorizontalPodAutoscaler/x": "present" })
+      )
+    ).toMatchObject({ state: "parent", tab: "events" });
+    expect(
+      await decide(
+        "events",
+        about("Widget", "example.com/v1"),
+        reader({ "Widget/x": "present" })
       )
     ).toEqual({ state: "free" });
   });

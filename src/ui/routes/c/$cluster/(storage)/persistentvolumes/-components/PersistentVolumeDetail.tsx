@@ -21,6 +21,8 @@ import { ResourceType } from "@/lib/resource-registry";
 import type { PersistentVolumeInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 
 export function PersistentVolumeDetail() {
   const t = useT();
@@ -42,6 +44,10 @@ export function PersistentVolumeDetail() {
     fetchResource: (name) => commands.getPersistentVolume(name),
     deleteResource: (name) => commands.deletePersistentVolume(name),
     defaultTab: "overview",
+  });
+
+  const events = useObjectEvents(ResourceType.PersistentVolume, name, null, {
+    refresh: "slow",
   });
 
   const facts: KeyValue[] = [
@@ -113,6 +119,10 @@ export function PersistentVolumeDetail() {
       ),
     },
     connectionsTab(connections, t, deliveryQuery),
+    eventsTab(events, t, {
+      kind: ResourceType.PersistentVolume,
+      name: name ?? "",
+    }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "PersistentVolume" }),
       yaml: pvYaml,

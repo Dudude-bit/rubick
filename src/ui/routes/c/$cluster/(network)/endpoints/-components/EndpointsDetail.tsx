@@ -26,6 +26,8 @@ import { legacyNote, publishedSummary } from "@/lib/published";
 import type { EndpointAddress, EndpointsInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 
 /** Every address in the object, flattened, carrying its readiness. */
 type Backend = {
@@ -55,6 +57,10 @@ export function EndpointsDetail() {
     fetchResource: (name, ns) => commands.getEndpoints(name, ns),
     deleteResource: (name, ns) => commands.deleteEndpoints(name, ns),
     defaultTab: "addresses",
+  });
+
+  const events = useObjectEvents(ResourceType.Endpoints, name, namespace, {
+    refresh: "slow",
   });
 
   // What the Service really publishes. This object is the compatibility copy
@@ -288,6 +294,7 @@ export function EndpointsDetail() {
         </Section>
       ),
     },
+    eventsTab(events, t, { kind: ResourceType.Endpoints, name: name ?? "" }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "Endpoints" }),
       yaml: endpointsYaml,

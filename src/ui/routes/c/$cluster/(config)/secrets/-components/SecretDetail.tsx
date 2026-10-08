@@ -26,6 +26,8 @@ import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { SecretInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 
 export function SecretDetail() {
   const t = useT();
@@ -47,6 +49,10 @@ export function SecretDetail() {
     fetchResource: (name, ns) => commands.getSecret(name, ns),
     deleteResource: (name, ns) => commands.deleteSecret(name, ns),
     defaultTab: "data",
+  });
+
+  const events = useObjectEvents(ResourceType.Secret, name, namespace, {
+    refresh: "slow",
   });
 
   const connections = useConnections(ResourceType.Secret, name, namespace);
@@ -139,6 +145,7 @@ export function SecretDetail() {
         </>
       ),
     },
+    eventsTab(events, t, { kind: ResourceType.Secret, name: name ?? "" }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "Secret" }),
       yaml: secretYaml,

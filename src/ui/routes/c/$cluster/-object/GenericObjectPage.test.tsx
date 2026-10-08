@@ -12,6 +12,7 @@ const answers = vi.hoisted(() => ({
     Promise.reject(new Error("unset")),
   yaml: (): Promise<string> =>
     Promise.reject({ code: "NOT_FOUND", message: 'leases "x" not found' }),
+  events: vi.fn((_filter: unknown): Promise<unknown[]> => Promise.resolve([])),
 }));
 
 vi.mock("@/lib/commands", () => ({
@@ -20,6 +21,7 @@ vi.mock("@/lib/commands", () => ({
     getServedObjectYaml: () => answers.yaml(),
     getServedObject: (group: string, plural: string) =>
       answers.object(group, plural),
+    listEvents: (filter: unknown) => answers.events(filter),
     objectLineage: () =>
       Promise.reject({ code: "NOT_FOUND", message: 'leases "x" not found' }),
   },
@@ -253,5 +255,47 @@ describe("an object of a kind no screen draws, read again", () => {
       await screen.findByText("There is no Lease named x")
     ).toBeInTheDocument();
     expect(screen.queryByText("holderIdentity")).toBeNull();
+  });
+});
+
+describe("the events of an object no screen draws", () => {
+  /**
+   * Sam's HPA cart had 61 FailedGetResourceMetric events and its page had no
+   * Events tab to show them. Fails if the generic page drops the tab or asks
+   * about another object.
+   */
+  it("has an Events tab reading this object's own events", async () => {
+    answers.catalog = () =>
+      Promise.resolve({
+        entries: [
+          {
+            group: "autoscaling",
+            version: "v2",
+            kind: "HorizontalPodAutoscaler",
+            plural: "horizontalpodautoscalers",
+            namespaced: true,
+            verbs: ["get", "list"],
+            shortNames: ["hpa"],
+          },
+        ],
+        unread: [],
+      });
+    answers.object = () => Promise.resolve({ metadata: { name: "cart" } });
+    answers.yaml = () => Promise.resolve("metadata:\n  name: cart\n");
+    await renderWithRouter(
+      <GenericObjectPage
+        resource="horizontalpodautoscalers.autoscaling"
+        namespace="shop"
+        name="cart"
+      />
+    );
+    expect(await screen.findByRole("tab", { name: /Events/ })).toBeVisible();
+    expect(answers.events).toHaveBeenCalledWith(
+      expect.objectContaining({
+        namespace: "shop",
+        involved_object_kind: "HorizontalPodAutoscaler",
+        involved_object_name: "cart",
+      })
+    );
   });
 });

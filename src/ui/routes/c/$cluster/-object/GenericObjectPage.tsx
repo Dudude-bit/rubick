@@ -9,6 +9,8 @@ import { useLineage } from "./ownership";
 import { useOwnershipKeys } from "./ownership-keys";
 import { ResourceDetailHeader } from "./ResourceDetailHeader";
 import { yamlTab } from "./yaml-tab";
+import { eventsTab } from "./events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { readTarget, servedOf, useServed, type Served } from "./served";
 import { WordTable } from "./WordTable";
 import { AccessPanel } from "./AccessPanel";
@@ -100,6 +102,10 @@ export function GenericObjectPage({
     served.state === "served" ? served.entry.kind : (registryKind ?? resource);
   const uid = useLineage(read, name, namespace).data?.uid ?? null;
   useOwnershipKeys(read, name, namespace);
+  const events = useObjectEvents(kind, name, namespace, {
+    enabled: read !== null,
+    refresh: "slow",
+  });
   const activeTab = useAppSearch().tab ?? "overview";
   const setSearch = useSetSearch();
 
@@ -155,18 +161,21 @@ export function GenericObjectPage({
       <DetailSkeleton />
     ),
   };
-  const tabs: DetailTab[] = uid
-    ? [
-        overview,
-        {
-          id: "owns",
-          label: t("owns", "tab"),
-          glyph: viewGlyph(Network),
-          content: <OwnsPanel uid={uid} namespace={namespace} />,
-        },
-        manifest,
-      ]
-    : [overview, manifest];
+  const tabs: DetailTab[] = [
+    overview,
+    ...(uid
+      ? [
+          {
+            id: "owns",
+            label: t("owns", "tab"),
+            glyph: viewGlyph(Network),
+            content: <OwnsPanel uid={uid} namespace={namespace} />,
+          },
+        ]
+      : []),
+    eventsTab(events, t, { kind, name }),
+    manifest,
+  ];
 
   return (
     <div className="flex h-full flex-col gap-4">

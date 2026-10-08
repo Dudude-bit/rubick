@@ -50,10 +50,20 @@ import { useT } from "@/i18n/useT";
 import { scopeKey } from "./crd-scope";
 import { toastError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 
 export function CrdDetail() {
   const t = useT();
   const { name } = useParams({ strict: false });
+  const events = useObjectEvents(
+    ResourceType.CustomResourceDefinition,
+    name,
+    null,
+    {
+      refresh: "slow",
+    }
+  );
   const navigate = useNavigate();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -378,6 +388,10 @@ export function CrdDetail() {
         </>
       ),
     },
+    eventsTab(events, t, {
+      kind: ResourceType.CustomResourceDefinition,
+      name: name ?? "",
+    }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "CustomResourceDefinition" }),
       yaml,

@@ -48,6 +48,8 @@ import { commands } from "@/lib/commands";
 import type { ServiceInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 
 export function ServiceDetail() {
   const t = useT();
@@ -69,6 +71,10 @@ export function ServiceDetail() {
     fetchResource: (name, ns) => commands.getService(name, ns),
     deleteResource: (name, ns) => commands.deleteService(name, ns),
     defaultTab: "overview",
+  });
+
+  const events = useObjectEvents(ResourceType.Service, name, namespace, {
+    refresh: "slow",
   });
 
   const connections = useConnections(ResourceType.Service, name, namespace);
@@ -265,6 +271,7 @@ export function ServiceDetail() {
         </>
       ),
     },
+    eventsTab(events, t, { kind: ResourceType.Service, name: name ?? "" }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "Service" }),
       yaml: serviceYaml,

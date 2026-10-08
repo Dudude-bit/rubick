@@ -173,6 +173,18 @@ const EVENTS_TAB = new Set([
   "gateway.networking.k8s.io/TLSRoute",
   "gateway.networking.k8s.io/UDPRoute",
   "/PersistentVolumeClaim",
+  "/Service",
+  "/Endpoints",
+  "/ConfigMap",
+  "/Secret",
+  "/PersistentVolume",
+  "/ServiceAccount",
+  "autoscaling/HorizontalPodAutoscaler",
+  "policy/PodDisruptionBudget",
+  "networking.k8s.io/NetworkPolicy",
+  "storage.k8s.io/StorageClass",
+  "gateway.networking.k8s.io/GatewayClass",
+  "apiextensions.k8s.io/CustomResourceDefinition",
 ]);
 
 const event =

@@ -32,6 +32,8 @@ import type {
   PolicyDirection,
   PolicyRule,
 } from "@/generated/types";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
 
 interface Resolving {
   home: string;
@@ -135,6 +137,10 @@ export function NetworkPolicyDetail() {
       await commands.deleteNetworkPolicy(name, namespace);
     },
     defaultTab: "overview",
+  });
+
+  const events = useObjectEvents(ResourceType.NetworkPolicy, name, namespace, {
+    refresh: "slow",
   });
 
   const reach = policy ? reachOf(policy.selected) : null;
@@ -241,6 +247,10 @@ export function NetworkPolicyDetail() {
         </div>
       ),
     },
+    eventsTab(events, t, {
+      kind: ResourceType.NetworkPolicy,
+      name: name ?? "",
+    }),
     yamlTab({
       title: t("action", "kindYaml", { kind: "NetworkPolicy" }),
       yaml,
