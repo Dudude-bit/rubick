@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { useAttachment, type Stay } from "./attachment";
+import { ownView, useAttachment, type Stay } from "./attachment";
 import { servedOf, useServed } from "./served";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { Alert } from "@/components/ui/alert";
@@ -48,6 +48,7 @@ export function AttachedGate({
     const link = objectLink(attachment.parent, {
       tab: attachment.tab,
       via: viaOf(resource, namespace, name),
+      view: ownView(attachment.parent),
     });
     if (link) return <Navigate {...link} replace />;
   }

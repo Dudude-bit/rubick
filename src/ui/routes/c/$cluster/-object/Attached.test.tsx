@@ -22,6 +22,16 @@ const HPA = {
   },
 };
 
+const EVENT = {
+  metadata: { name: "api.18dc", namespace: "shop" },
+  involvedObject: {
+    apiVersion: "autoscaling/v2",
+    kind: "HorizontalPodAutoscaler",
+    name: "api",
+    namespace: "shop",
+  },
+};
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     listApiCatalog: () =>
@@ -36,7 +46,8 @@ vi.mock("@/lib/commands", () => ({
         ],
         unread: [],
       }),
-    getServedObject: () => Promise.resolve(HPA),
+    getServedObject: (_group: string, plural: string) =>
+      Promise.resolve(plural === "events" ? EVENT : HPA),
     listServedObjects: () =>
       Promise.resolve({ items: [HPA], truncated: false }),
   },
@@ -82,6 +93,30 @@ describe("an attached object's address", () => {
     expect(router.state.location.pathname).toBe(
       "/c/test/horizontalpodautoscalers/shop/api"
     );
+  });
+
+  /**
+   * A deep link to an Event about an HPA went on through the HPA to its
+   * Deployment, whose Events tab has none of the HPA's events. Fails if the
+   * Event's redirect lets the HPA redirect again.
+   */
+  it("opens an Event about an attached object on that object's own Events tab", async () => {
+    const { router } = await renderWithRouter(
+      <AttachedGate resource="events" namespace="shop" name="api.18dc">
+        <p>the event</p>
+      </AttachedGate>,
+      { at: "/c/test/events/shop/api.18dc" }
+    );
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        "/c/test/horizontalpodautoscalers/shop/api"
+      )
+    );
+    expect(router.state.location.search).toEqual({
+      tab: "events",
+      via: "events/shop/api.18dc",
+      view: "own",
+    });
   });
 
   it("leads back from the parent to the object on its own page", async () => {

@@ -331,6 +331,36 @@ describe("a feed a watch keeps", () => {
     expect(search().via).toBe("events/shop/cart.17f3");
   });
 
+  /**
+   * Sam's Event about the HPA cart ended on the Deployment cart, with none of
+   * the HPA's events. Fails if the row's link lets an attached kind go on to
+   * its parent.
+   */
+  it("opens an Event about an HPA on the HPA's own Events tab", async () => {
+    await watched();
+    burst([
+      {
+        ...dated("shop", 0),
+        name: "cart.18dc",
+        involvedObject: {
+          kind: "HorizontalPodAutoscaler",
+          name: "cart",
+          namespace: "shop",
+          uid: null,
+        },
+      },
+    ]);
+    await waitFor(() => expect(drawnRows()).toBe(1));
+    expect(
+      within(rowAt(0)!).getByRole("link", {
+        name: "HorizontalPodAutoscaler cart",
+      })
+    ).toHaveAttribute(
+      "href",
+      "/c/prod/horizontalpodautoscalers/shop/cart?tab=events&via=events%2Fshop%2Fcart.18dc&view=own"
+    );
+  });
+
   /** Dana's story title opened a peek that knew nothing of the Event. Fails if the card's link drops it. */
   it("links a story's object to its Events tab, noting the latest Event about it", async () => {
     await watched("stories");

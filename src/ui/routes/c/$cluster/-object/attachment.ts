@@ -194,7 +194,11 @@ const EVENTS_TAB = new Set([
 
 const EVENTS_VIA = "events/";
 
-/** Where an Event about `kind` opens: that object's Events tab, noting the Event, if its page has one. */
+/**
+ * Where an Event about `kind` opens: that object's own Events tab, noting the
+ * Event, if its page has one. Own, so an attached kind does not go on to its
+ * parent, whose Events tab has none of this object's events.
+ */
 export function eventLanding(
   kind: string,
   event: { namespace: string; name: string }
@@ -204,6 +208,7 @@ export function eventLanding(
   return {
     tab: "events",
     via: `${EVENTS_VIA}${event.namespace}/${event.name}`,
+    view: ownView({ kind }),
   };
 }
 
@@ -297,7 +302,7 @@ export function peekLanding(
   target: Pick<ObjectRef, "kind" | "crd"> & { via?: string }
 ): ObjectLinkOptions {
   return target.via
-    ? { tab: landingTab(target.via), via: target.via }
+    ? { tab: landingTab(target.via), via: target.via, view: ownView(target) }
     : { view: ownView(target) };
 }
 
