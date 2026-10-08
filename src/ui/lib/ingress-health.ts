@@ -44,7 +44,9 @@ export type IngressProblem =
   | { kind: "noController"; className: string | null }
   | { kind: "backendMissing"; service: string }
   | { kind: "tlsSecretMissing"; secret: string }
-  | { kind: "backendDown"; service: string };
+  | { kind: "backendDown"; service: string }
+  /** Every workload behind the backend is scaled to zero, on purpose. */
+  | { kind: "backendIdle"; service: string };
 
 export interface IngressHealth {
   problems: IngressProblem[];
@@ -87,6 +89,8 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
       const health = serviceHealthOf(service, service, null);
       if (health.state === "noEndpoints" || health.state === "noneReady") {
         problems.push({ kind: "backendDown", service: name });
+      } else if (health.state === "idle") {
+        problems.push({ kind: "backendIdle", service: name });
       }
     }
   }
@@ -179,6 +183,7 @@ const ORDER: IngressProblem["kind"][] = [
   "backendMissing",
   "tlsSecretMissing",
   "backendDown",
+  "backendIdle",
 ];
 
 function problemSentence(problem: IngressProblem, t: T): string {
@@ -193,6 +198,8 @@ function problemSentence(problem: IngressProblem, t: T): string {
       return t("readings", "healthNoTlsSecret", { name: problem.secret });
     case "backendDown":
       return t("readings", "healthBackendDown", { name: problem.service });
+    case "backendIdle":
+      return t("readings", "healthBackendIdle", { name: problem.service });
   }
 }
 
@@ -202,11 +209,13 @@ const PROBLEM_LABEL: Record<
   | "healthMissingBackend"
   | "healthMissingTlsSecret"
   | "healthBackendDownShort"
+  | "healthBackendIdleShort"
 > = {
   noController: "healthNoController",
   backendMissing: "healthMissingBackend",
   tlsSecretMissing: "healthMissingTlsSecret",
   backendDown: "healthBackendDownShort",
+  backendIdle: "healthBackendIdleShort",
 };
 
 export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
@@ -223,7 +232,7 @@ export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
     return {
       code: worst.kind,
       label: t("readings", PROBLEM_LABEL[worst.kind]),
-      role: partial ? "warn" : "err",
+      role: worst.kind === "backendIdle" ? "neutral" : partial ? "warn" : "err",
       reason: `${problems.map((problem) => problemSentence(problem, t)).join(". ")}.`,
     };
   }

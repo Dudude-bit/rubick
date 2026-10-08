@@ -340,6 +340,8 @@ export function stopUnder(
       return "stopNoServiceToSendTo";
     case "selectsNothing":
       return "stopSelectorMatchesNothing";
+    case "scaledToZero":
+      return "stopScaledToZeroUnder";
     case "publishesNothingYet":
       return "stopNothingPublishedYet";
     case "noneReady":
@@ -413,6 +415,11 @@ export function describeStop(
         title: t("nav", "stopNoPodCarries", { selector: stop.selector }),
         note: t("nav", "connectionRefusedNothingBehind"),
       };
+    case "scaledToZero":
+      return scaledToZeroWords(
+        stop.workloads.map((workload) => workload.name),
+        t
+      );
     // Said by a reader holding the endpoints and no pod list: it knows
     // nothing arrives and cannot say whether that is a selector matching
     // nothing or pods that have no address yet.
@@ -533,23 +540,33 @@ export interface ChainHopStop {
   idle: boolean;
 }
 
+function scaledToZeroWords(
+  names: string[],
+  t: T
+): { title: string; note: string } {
+  return {
+    title:
+      names.length === 1
+        ? t("nav", "stopScaledToZero", { name: names[0] })
+        : t("nav", "stopScaledToZeroSeveral", { names: names.join(", ") }),
+    note: t("nav", "stopScaledToZeroNote"),
+  };
+}
+
 /** A stop as the chain says it about `subject`. */
 export function chainStopHop(
   stop: ChainStop,
   subject: ObjectRef,
   t: T
 ): ChainHopStop {
+  if (stop.reason === "scaledToZero")
+    return { at: "stop", idle: true, ...describeStop(stop, t) };
   if (
     stop.reason === "selectsNothing" &&
     subject.facts?.kind === "workload" &&
     subject.facts.rollout?.state === "idle"
   ) {
-    return {
-      at: "stop",
-      idle: true,
-      title: t("nav", "stopScaledToZero", { name: subject.name }),
-      note: t("nav", "stopScaledToZeroNote"),
-    };
+    return { at: "stop", idle: true, ...scaledToZeroWords([subject.name], t) };
   }
   return { at: "stop", idle: false, ...describeStop(stop, t) };
 }
@@ -1313,14 +1330,21 @@ function missingKeysOf(usages: Usage[], from: string): ConnRow["missingKeys"] {
 function answersHere(conns: ResourceConnections, t: T): ConnRow[] {
   const owns = verb(conns.edges, "owns");
   const owned = new Set(owns.map((edge) => refKey(edge.to)));
+  // A workload scaled to zero owns no pod, so the backend names it outright.
+  const idle = verb(conns.edges, "selects")
+    .filter(
+      (edge) => sameObject(edge.from, conns.subject) && edge.to.kind !== "Pod"
+    )
+    .map((edge) => edge.to);
   return labelled(
-    unique(
-      owns
+    unique([
+      ...owns
         .map((edge) => edge.from)
         .filter(
           (from) => !owned.has(refKey(from)) && !sameObject(from, conns.subject)
-        )
-    ).map((object) => rowFor(object.kind, object, t))
+        ),
+      ...idle,
+    ]).map((object) => rowFor(object.kind, object, t))
   );
 }
 

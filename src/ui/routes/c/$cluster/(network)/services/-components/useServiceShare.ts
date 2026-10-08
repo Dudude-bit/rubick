@@ -4,6 +4,7 @@ import { Filter, Plug, Waypoints } from "lucide-react";
 import type { ShareContribution } from "@/components/share/contribution";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import { clusterIpText } from "@/lib/cluster-ip";
+import { describeStop } from "@/lib/connections";
 import { iconSvg } from "@/lib/icon-svg";
 import {
   endpointAddress,
@@ -35,14 +36,16 @@ export function serviceStats(
   ];
   if (published) {
     const total = endpointCount(published);
+    const idle = published.stop?.reason === "scaledToZero";
     stats.push({
       label: t("nav", "published"),
       value: `${published.ready}/${total}`,
-      // Nothing published is the page's red stop, not 0 of 0 done; and a
-      // count deduced from pods, because neither list could be read, is not
-      // one the controller wrote.
-      role:
-        total === 0
+      // Nothing published is the page's red stop, not 0 of 0 done, unless
+      // nothing runs behind it by intent; and a count deduced from pods,
+      // because neither list could be read, is not one the controller wrote.
+      role: idle
+        ? "neutral"
+        : total === 0
           ? "warn"
           : published.source === "podReadiness"
             ? "neutral"
@@ -50,9 +53,11 @@ export function serviceStats(
               ? "ok"
               : "warn",
       note:
-        total === 0
-          ? t("empty", "servicePublishesNothing")
-          : sourceNote(published, t),
+        idle && published.stop
+          ? describeStop(published.stop, t).title
+          : total === 0
+            ? t("empty", "servicePublishesNothing")
+            : sourceNote(published, t),
     });
   }
   return stats;

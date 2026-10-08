@@ -2284,6 +2284,12 @@ export type ChainStop =
     }
   | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
   | { reason: "selectsNothing"; service: ObjectRef; selector: string }
+  | {
+      reason: "scaledToZero";
+      service: ObjectRef;
+      selector: string;
+      workloads: ObjectRef[];
+    }
   | { reason: "publishesNothingYet"; service: ObjectRef; selector: string }
   | {
       reason: "noneReady";

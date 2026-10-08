@@ -2,7 +2,7 @@
 //!
 //! Commands for managing Ingresses and Endpoints.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::error::Result;
 use crate::resources::{
@@ -11,6 +11,7 @@ use crate::resources::{
     ServiceInfo, ServicePublished,
 };
 use crate::state::AppState;
+use k8s_openapi::api::apps::v1::{Deployment, StatefulSet};
 use k8s_openapi::api::core::v1::{Endpoints, Pod, Service};
 use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::api::networking::v1::{Ingress, NetworkPolicy};
@@ -247,10 +248,12 @@ async fn health_inputs_in(
     Ok(health_inputs_of(&services, published))
 }
 
-/// The slices say that no address of a Service is ready, never why; the
-/// pods it selects do, and its page reads them. Asked only for those
-/// Services, so a scope of healthy ones costs no more than before. A pod list
-/// that fails leaves the slices' answer as it was.
+/// The slices say that no address of a Service is ready, or that it has
+/// none, never why; the pods it selects do, and its page reads them. Asked
+/// only for those Services, so a scope of healthy ones costs no more than
+/// before. One whose selector then matches no pod is asked, once per
+/// namespace, whether the workloads behind it are scaled to zero. A list that
+/// fails leaves the answer it would have sharpened as it was.
 async fn with_unready_cause(
     client: &kube::Client,
     services: &[Service],
@@ -262,10 +265,12 @@ async fn with_unready_cause(
         .map(|(svc, published)| async move {
             let unexplained = matches!(
                 published.stop,
-                Some(ChainStop::NoneReady {
-                    why: NotServing::InSlices,
-                    ..
-                })
+                Some(
+                    ChainStop::NoneReady {
+                        why: NotServing::InSlices,
+                        ..
+                    } | ChainStop::PublishesNothingYet { .. }
+                )
             );
             let selector = svc
                 .spec
@@ -286,7 +291,51 @@ async fn with_unready_cause(
                 Err(_) => published,
             }
         });
-    futures::future::join_all(asks).await
+    let published = futures::future::join_all(asks).await;
+    with_idle_workloads(client, services, published).await
+}
+
+async fn with_idle_workloads(
+    client: &kube::Client,
+    services: &[Service],
+    published: Vec<ServicePublished>,
+) -> Vec<ServicePublished> {
+    let empty: BTreeSet<String> = services
+        .iter()
+        .zip(&published)
+        .filter(|(_, published)| matches!(published.stop, Some(ChainStop::SelectsNothing { .. })))
+        .map(|(svc, _)| svc.namespace().unwrap_or_default())
+        .collect();
+    if empty.is_empty() {
+        return published;
+    }
+    let reads = empty.into_iter().map(|ns| async move {
+        let params = ListParams::default();
+        let deployments: kube::Api<Deployment> = kube::Api::namespaced(client.clone(), &ns);
+        let sets: kube::Api<StatefulSet> = kube::Api::namespaced(client.clone(), &ns);
+        let (deployments, sets) = tokio::join!(deployments.list(&params), sets.list(&params));
+        (
+            ns,
+            (
+                deployments.map(|list| list.items).unwrap_or_default(),
+                sets.map(|list| list.items).unwrap_or_default(),
+            ),
+        )
+    });
+    let read: HashMap<String, (Vec<Deployment>, Vec<StatefulSet>)> =
+        futures::future::join_all(reads).await.into_iter().collect();
+    services
+        .iter()
+        .zip(published)
+        .map(
+            |(svc, published)| match read.get(&svc.namespace().unwrap_or_default()) {
+                Some((deployments, sets)) => {
+                    published.with_makers(svc, &published::makers(deployments, sets))
+                }
+                None => published,
+            },
+        )
+        .collect()
 }
 
 fn health_inputs_of(
@@ -959,6 +1008,82 @@ mod tests {
                 }
             ),
             "{stop:?}"
+        );
+    }
+
+    /// hello-web as Lena left it: scaled to zero, so its Service has no slice
+    /// endpoint and no pod carries app=hello-web.
+    fn hello_web_at_zero(deployments: (u16, String)) -> impl Fn(&str, usize) -> (u16, String) {
+        let list = |kind: &str, items: serde_json::Value| {
+            serde_json::json!({ "apiVersion": "v1", "kind": kind, "metadata": {}, "items": items })
+                .to_string()
+        };
+        let services = list(
+            "ServiceList",
+            serde_json::json!([{
+                "metadata": { "name": "hello-web", "namespace": "lena-sandbox" },
+                "spec": {
+                    "type": "ClusterIP",
+                    "selector": { "app": "hello-web" },
+                    "ports": [{ "name": "http", "port": 80, "targetPort": 8080, "protocol": "TCP" }]
+                }
+            }]),
+        );
+        let slices = list("EndpointSliceList", serde_json::json!([]));
+        let pods = list("PodList", serde_json::json!([]));
+        let sets = list("StatefulSetList", serde_json::json!([]));
+        move |path, _| match path {
+            "/api/v1/namespaces/lena-sandbox/services" => (200, services.clone()),
+            "/apis/discovery.k8s.io/v1/namespaces/lena-sandbox/endpointslices" => {
+                (200, slices.clone())
+            }
+            "/api/v1/namespaces/lena-sandbox/pods" => (200, pods.clone()),
+            "/apis/apps/v1/namespaces/lena-sandbox/deployments" => deployments.clone(),
+            "/apis/apps/v1/namespaces/lena-sandbox/statefulsets" => (200, sets.clone()),
+            _ => (404, "{}".to_string()),
+        }
+    }
+
+    /// The Overview, the sidebar badge and the status bar counted hello-web
+    /// at zero as a Service with no endpoints. Fails if the list reader stops
+    /// asking the workloads behind an empty selector, or calls one idle whose
+    /// Deployments it could not read.
+    #[tokio::test]
+    async fn a_service_behind_a_workload_scaled_to_zero_reads_idle_in_the_shells_count() {
+        use crate::client::served::test_server::{answering, failure};
+        let deployments = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "DeploymentList", "metadata": {},
+            "items": [{
+                "metadata": { "name": "hello-web", "namespace": "lena-sandbox" },
+                "spec": {
+                    "replicas": 0,
+                    "selector": { "matchLabels": { "app": "hello-web" } },
+                    "template": {
+                        "metadata": { "labels": { "app": "hello-web" } },
+                        "spec": { "containers": [] }
+                    }
+                }
+            }]
+        });
+        let stop_with = |answer: (u16, String)| async move {
+            let (client, _) = answering(hello_web_at_zero(answer)).await;
+            health_inputs_in(client, Some("lena-sandbox".to_string()))
+                .await
+                .expect("inputs")[0]
+                .groups[0]
+                .stop
+                .clone()
+        };
+
+        let idle = stop_with((200, deployments.to_string())).await;
+        assert!(
+            matches!(&idle, Some(ChainStop::ScaledToZero { workloads, .. }) if workloads[0].name == "hello-web"),
+            "{idle:?}"
+        );
+        let refused = stop_with(failure(403, "Forbidden")).await;
+        assert!(
+            matches!(refused, Some(ChainStop::SelectsNothing { .. })),
+            "{refused:?}"
         );
     }
 }

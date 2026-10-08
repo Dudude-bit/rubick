@@ -24,6 +24,10 @@ pub(super) struct Snapshot {
     /// connects to, and "nothing scales this" is not what a 404 means.
     pub(super) autoscalers: Read<HorizontalPodAutoscaler>,
     pub(super) budgets: Read<PodDisruptionBudget>,
+    /// Read for one question: whether a Service matching no pod is behind
+    /// workloads scaled to zero. A refusal leaves that unsaid and nothing else.
+    pub(super) deployments: Read<Deployment>,
+    pub(super) stateful_sets: Read<StatefulSet>,
     /// What every Service in the namespace publishes, in one list keyed by
     /// the `kubernetes.io/service-name` label — the same shape the Services
     /// and the Ingresses are read under.
@@ -270,6 +274,13 @@ impl Snapshot {
         ctx: &ResourceContext,
         gateway: Option<&crate::resources::GatewayApiDetection>,
     ) -> Result<Self> {
+        Box::pin(Self::read(ctx, gateway)).await
+    }
+
+    async fn read(
+        ctx: &ResourceContext,
+        gateway: Option<&crate::resources::GatewayApiDetection>,
+    ) -> Result<Self> {
         let params = ListParams::default();
         let pods_api = ctx.namespaced_api::<Pod>();
         let services_api = ctx.namespaced_api::<Service>();
@@ -278,7 +289,19 @@ impl Snapshot {
         let autoscalers_api = ctx.namespaced_api::<HorizontalPodAutoscaler>();
         let budgets_api = ctx.namespaced_api::<PodDisruptionBudget>();
         let slices_api = ctx.namespaced_api::<EndpointSlice>();
-        let (pods, services, ingresses, claims, autoscalers, budgets, slices) = tokio::join!(
+        let deployments_api = ctx.namespaced_api::<Deployment>();
+        let sets_api = ctx.namespaced_api::<StatefulSet>();
+        let (
+            pods,
+            services,
+            ingresses,
+            claims,
+            autoscalers,
+            budgets,
+            slices,
+            deployments,
+            stateful_sets,
+        ) = tokio::join!(
             pods_api.list(&params),
             services_api.list(&params),
             ingresses_api.list(&params),
@@ -286,6 +309,8 @@ impl Snapshot {
             autoscalers_api.list(&params),
             budgets_api.list(&params),
             slices_api.list(&params),
+            deployments_api.list(&params),
+            sets_api.list(&params),
         );
         let slices = read_live(slices)?;
         // The one read that is not in the join, and deliberately: it is the
@@ -304,6 +329,8 @@ impl Snapshot {
             claims: read_live(claims)?,
             autoscalers: read_live(autoscalers)?,
             budgets: read_live(budgets)?,
+            deployments: read_live(deployments)?,
+            stateful_sets: read_live(stateful_sets)?,
             slices,
             legacy,
             gateway_routes,
@@ -341,6 +368,15 @@ impl Snapshot {
 
     pub(super) fn ingresses(&self) -> &[Ingress] {
         self.ingresses.as_deref().unwrap_or_default()
+    }
+
+    /// The namespace's Deployments and `StatefulSets`, as the scaled-to-zero
+    /// rule reads them.
+    pub(super) fn makers(&self) -> Vec<published::PodMaker<'_>> {
+        published::makers(
+            self.deployments.as_deref().unwrap_or_default(),
+            self.stateful_sets.as_deref().unwrap_or_default(),
+        )
     }
 
     /// What one Service publishes, from whichever object answered.
@@ -609,6 +645,8 @@ mod refused_list_tests {
             claims: Err(REFUSED.to_string()),
             autoscalers: Err(REFUSED.to_string()),
             budgets: Err(REFUSED.to_string()),
+            deployments: Err(REFUSED.to_string()),
+            stateful_sets: Err(REFUSED.to_string()),
             slices: Err(REFUSED.to_string()),
             legacy: Err(REFUSED.to_string()),
             gateways: None,
@@ -681,6 +719,52 @@ mod refused_list_tests {
         );
     }
 
+    /// Lena's hello-web at zero: the Service page said in red that no pod
+    /// carries app=hello-web and listed nothing it connects to, while the
+    /// Deployment named the Service. Fails if the snapshot's Deployments stop
+    /// reaching the stop, or the idle workload loses its edge.
+    #[test]
+    fn a_service_behind_a_deployment_at_zero_stops_by_intent_and_names_it() {
+        let svc = selecting("hello-web", &[("app", "hello-web")]);
+        let svc_ref = service_ref(&svc, "shop");
+        let parked: Deployment = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "hello-web", "namespace": "shop" },
+            "spec": {
+                "replicas": 0,
+                "selector": { "matchLabels": { "app": "hello-web" } },
+                "template": { "metadata": { "labels": { "app": "hello-web" } } }
+            }
+        }))
+        .expect("a Deployment");
+        let snapshot = Snapshot {
+            pods: Ok(Vec::new()),
+            deployments: Ok(vec![parked]),
+            ..all_refused()
+        };
+        let mut out = Neighbourhood::new();
+
+        note_reach(&svc, &svc_ref, &snapshot, &mut out, true);
+        idle_behind(&svc_ref, &mut out);
+
+        assert!(
+            matches!(out.stops.as_slice(), [ChainStop::ScaledToZero { .. }]),
+            "{:?}",
+            out.stops
+        );
+        let named: Vec<_> = out
+            .edges
+            .iter()
+            .map(|edge| {
+                (
+                    edge.from.name.as_str(),
+                    edge.to.kind.as_str(),
+                    edge.to.name.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(named, [("hello-web", "Deployment", "hello-web")]);
+    }
+
     /// The other half, and why the first is not "always say unknown": a list
     /// that really answered and really lacks the name is the object being
     /// gone, which is worth saying plainly.
@@ -720,6 +804,8 @@ mod refused_list_tests {
             claims: Err("persistentvolumeclaims is forbidden".to_string()),
             autoscalers: Ok(Vec::new()),
             budgets: Ok(Vec::new()),
+            deployments: Ok(Vec::new()),
+            stateful_sets: Ok(Vec::new()),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
             gateway_routes: Vec::new(),

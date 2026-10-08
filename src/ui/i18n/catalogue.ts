@@ -117,6 +117,7 @@ export const en = {
     stopPublishesNothingYet: "Nothing is published behind {selector} yet",
     stopNoPodCarries: "No pod carries {selector}",
     stopScaledToZero: "No pods by intent: {name} is scaled to zero",
+    stopScaledToZeroSeveral: "No pods by intent: {names} are scaled to zero",
     stopScaledToZeroNote:
       "Connections to this address are refused until it is scaled up again. The labels are not at fault.",
     stopNotScheduledNote:
@@ -4021,6 +4022,10 @@ export const en = {
     healthBackendDown: "{name} takes no traffic",
     healthNoController: "no controller",
     healthNoEndpoints: "no endpoints",
+    healthIdle: "idle",
+    healthBackendIdle:
+      "{name} has no pods by intent: what runs behind it is scaled to zero",
+    healthBackendIdleShort: "backend idle",
     healthMissingBackend: "missing backend",
     healthMissingTlsSecret: "missing TLS Secret",
     healthBackendDownShort: "backend down",
@@ -5335,6 +5340,7 @@ export const en = {
       "An integration that reads {kind} objects could not answer, so what is below is short by an unknown amount.",
     stopNoServiceToSendTo: "no service to send to",
     stopSelectorMatchesNothing: "selector matches nothing",
+    stopScaledToZeroUnder: "scaled to zero",
     stopNothingPublishedYet: "nothing published yet",
     stopRunningNoneReady: "running, none ready",
     stopNotScheduled: "not scheduled",

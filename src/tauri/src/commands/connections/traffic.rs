@@ -287,7 +287,8 @@ pub(super) fn note_reach(
     let pods = snapshot.pods.is_ok().then_some(selected.as_slice());
     let published = snapshot
         .published_of(svc, svc_ref.clone(), &selected)
-        .with_stop(svc, pods);
+        .with_stop(svc, pods)
+        .with_makers(svc, &snapshot.makers());
     let stop = published.stop.clone();
     out.published.push(if detail {
         published

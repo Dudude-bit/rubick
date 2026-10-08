@@ -21,6 +21,8 @@ import {
 import { createResourceListPage } from "../../../-list/createResourceListPage";
 import { None } from "@/components/ui/none";
 import { AddressesCell } from "./EndpointAddresses";
+import { NoEndpoints } from "./NoEndpoints";
+import { BackingAround } from "../../-components/ServiceBacking";
 
 /** Every address the object holds: an unready one is still an address. */
 const addressesOf = (endpoints: EndpointsInfo) =>
@@ -66,15 +68,8 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
         0
       );
 
-      if (readyCount === 0 && notReadyCount === 0) {
-        // No backing pods at all is the failure this column exists to
-        // surface — it is the one state here that earns a colour.
-        return (
-          <span className="text-err">
-            <T section="readings" k="healthNoEndpoints" />
-          </span>
-        );
-      }
+      if (readyCount === 0 && notReadyCount === 0)
+        return <NoEndpoints endpoints={row.original} />;
 
       return (
         <div className="flex items-center gap-2">
@@ -200,4 +195,5 @@ export const EndpointsList = createResourceListPage<EndpointsInfo>({
   watch: ({ scope }) => commands.subscribeEndpointsWatch(scope),
   // No deleter — read-only resource
   columns,
+  around: BackingAround,
 });

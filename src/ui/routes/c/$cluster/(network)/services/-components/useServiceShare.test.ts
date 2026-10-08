@@ -102,6 +102,33 @@ describe("what the Service report leads with", () => {
   });
 
   /**
+   * hello-web at zero: the page says no pods by intent, and the file must
+   * not lead with the amber "publishes nothing". Fails if the idle stop is
+   * read as an empty Service.
+   */
+  it("says a Service whose workloads are scaled to zero has no pods by intent, without colour", () => {
+    const last = serviceStats(
+      service,
+      published({
+        ready: 0,
+        slices: 0,
+        stop: {
+          reason: "scaledToZero",
+          service: published().service,
+          selector: "app=checkout",
+          workloads: [{ ...published().service, kind: "Deployment" }],
+        },
+      }),
+      t
+    ).at(-1);
+    expect(last).toMatchObject({
+      value: "0/0",
+      role: "neutral",
+      note: "No pods by intent: checkout is scaled to zero",
+    });
+  });
+
+  /**
    * With neither EndpointSlices nor Endpoints readable, the count is
    * deduced from pods; it is not the controller's word, and says so.
    */

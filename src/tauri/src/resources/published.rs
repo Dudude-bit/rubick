@@ -17,6 +17,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use k8s_openapi::api::apps::v1::{Deployment, StatefulSet};
 use k8s_openapi::api::core::v1::{Endpoints, Pod, Service, ServicePort};
 use k8s_openapi::api::discovery::v1::{Endpoint, EndpointSlice};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
@@ -179,6 +180,26 @@ impl ServicePublished {
     #[must_use]
     pub fn with_stop(mut self, service: &Service, pods: Option<&[&Pod]>) -> Self {
         self.stop = service_stop(service, &self, pods);
+        self
+    }
+
+    /// A selector matching no pod, said as [`ChainStop::ScaledToZero`] where
+    /// [`scaled_to_zero`] finds every workload behind it asking for none.
+    #[must_use]
+    pub fn with_makers(mut self, service: &Service, makers: &[PodMaker<'_>]) -> Self {
+        if let Some(ChainStop::SelectsNothing {
+            service: at,
+            selector,
+        }) = &self.stop
+        {
+            if let Some(workloads) = scaled_to_zero(service, makers) {
+                self.stop = Some(ChainStop::ScaledToZero {
+                    service: at.clone(),
+                    selector: selector.clone(),
+                    workloads,
+                });
+            }
+        }
         self
     }
 
@@ -652,6 +673,99 @@ pub fn service_stop(
         ready_pods: count(ready_pods),
         unnamed_ports: unresolved_target_ports(service, selected),
     })
+}
+
+/// A Deployment or `StatefulSet` as the scaled-to-zero rule reads it: the
+/// labels its pods are made with, and how many it asks for.
+pub struct PodMaker<'a> {
+    pub workload: ObjectRef,
+    pub labels: &'a BTreeMap<String, String>,
+    pub replicas: i32,
+}
+
+impl<'a> PodMaker<'a> {
+    #[must_use]
+    pub fn deployment(deployment: &'a Deployment) -> Option<Self> {
+        let spec = deployment.spec.as_ref()?;
+        let status = deployment.status.as_ref();
+        Some(Self {
+            workload: maker_ref(
+                "Deployment",
+                &deployment.name_any(),
+                deployment.namespace(),
+                status.and_then(|s| s.replicas).unwrap_or(0),
+                status.and_then(|s| s.ready_replicas).unwrap_or(0),
+                super::deployment_rollout(deployment),
+            ),
+            labels: spec.template.metadata.as_ref()?.labels.as_ref()?,
+            replicas: spec.replicas.unwrap_or(1),
+        })
+    }
+
+    #[must_use]
+    pub fn stateful_set(set: &'a StatefulSet) -> Option<Self> {
+        let spec = set.spec.as_ref()?;
+        let status = set.status.as_ref();
+        Some(Self {
+            workload: maker_ref(
+                "StatefulSet",
+                &set.name_any(),
+                set.namespace(),
+                status.map_or(0, |s| s.replicas),
+                status.and_then(|s| s.ready_replicas).unwrap_or(0),
+                super::statefulset_rollout(set),
+            ),
+            labels: spec.template.metadata.as_ref()?.labels.as_ref()?,
+            replicas: spec.replicas.unwrap_or(1),
+        })
+    }
+}
+
+/// Every Deployment and `StatefulSet` here, as the rule reads them.
+#[must_use]
+pub fn makers<'a>(deployments: &'a [Deployment], sets: &'a [StatefulSet]) -> Vec<PodMaker<'a>> {
+    deployments
+        .iter()
+        .filter_map(PodMaker::deployment)
+        .chain(sets.iter().filter_map(PodMaker::stateful_set))
+        .collect()
+}
+
+fn maker_ref(
+    kind: &str,
+    name: &str,
+    namespace: Option<String>,
+    replicas: i32,
+    ready_replicas: i32,
+    rollout: super::Rollout,
+) -> ObjectRef {
+    ObjectRef::new(kind, name, namespace, Existence::Present).with_facts(ObjectFacts::Workload {
+        replicas,
+        ready_replicas,
+        rollout: Some(rollout),
+        revision: None,
+        current: None,
+    })
+}
+
+/// The workloads whose pods a Service's selector picks, where there are some
+/// and every one asks for none; `None` where any still asks for pods.
+#[must_use]
+pub fn scaled_to_zero(service: &Service, makers: &[PodMaker<'_>]) -> Option<Vec<ObjectRef>> {
+    let selector = service
+        .spec
+        .as_ref()
+        .and_then(|s| s.selector.clone())
+        .unwrap_or_default();
+    let query = Selector::Equality(&selector);
+    let picked: Vec<&PodMaker> = makers
+        .iter()
+        .filter(|maker| query.matches(maker.labels) == Some(true))
+        .collect();
+    if picked.is_empty() || picked.iter().any(|maker| maker.replicas > 0) {
+        return None;
+    }
+    Some(picked.iter().map(|maker| maker.workload.clone()).collect())
 }
 
 /// Why one pod that is not Ready is not, in the terms of [`NotServing`].
@@ -1249,6 +1363,79 @@ mod tests {
             stop_of(&svc, &[], Some(&[])),
             Some(ChainStop::SelectsNothing { .. })
         ));
+    }
+
+    fn deployment(name: &str, app: &str, replicas: i32) -> Deployment {
+        serde_json::from_value(serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": {"name": name, "namespace": "k8s-gui-test"},
+            "spec": {
+                "replicas": replicas,
+                "selector": {"matchLabels": {"app": app}},
+                "template": {"metadata": {"labels": {"app": app}}, "spec": {"containers": []}}
+            }
+        }))
+        .expect("deployment parses")
+    }
+
+    /// Lena scaled hello-web to zero and its Service read red "no pod carries
+    /// app=hello-web" on every screen. Fails if a workload at zero leaves the
+    /// labels blamed, or if one still asking for pods is called idle.
+    #[test]
+    fn a_service_whose_only_workload_is_scaled_to_zero_stops_by_intent() {
+        let svc = selecting("web");
+        let said = |deployments: &[Deployment]| {
+            let makers: Vec<PodMaker> = deployments
+                .iter()
+                .filter_map(PodMaker::deployment)
+                .collect();
+            from_slices(&svc, svc_ref("web"), &[], &[])
+                .with_stop(&svc, Some(&[]))
+                .with_makers(&svc, &makers)
+                .stop
+        };
+
+        let idle = said(&[deployment("web", "web", 0), deployment("other", "other", 3)]);
+        let Some(ChainStop::ScaledToZero {
+            workloads,
+            selector,
+            ..
+        }) = idle
+        else {
+            panic!("a selector behind a workload at zero is idle, got {idle:?}");
+        };
+        assert_eq!(selector, "app=web");
+        assert_eq!(
+            workloads
+                .iter()
+                .map(|w| (w.kind.as_str(), w.name.as_str()))
+                .collect::<Vec<_>>(),
+            [("Deployment", "web")]
+        );
+
+        assert!(matches!(
+            said(&[
+                deployment("web", "web", 0),
+                deployment("web-canary", "web", 1)
+            ]),
+            Some(ChainStop::SelectsNothing { .. })
+        ));
+        assert!(matches!(said(&[]), Some(ChainStop::SelectsNothing { .. })));
+    }
+
+    /// Only a selector that matched no pod is turned idle: endpoints alone
+    /// cannot say no pod carries it, so nor can they say why. Fails if the
+    /// rule reaches past `SelectsNothing`.
+    #[test]
+    fn a_service_read_from_its_endpoints_alone_is_not_called_idle() {
+        let svc = selecting("web");
+        let parked = [deployment("web", "web", 0)];
+        let makers: Vec<PodMaker> = parked.iter().filter_map(PodMaker::deployment).collect();
+        let stop = from_slices(&svc, svc_ref("web"), &[], &[])
+            .with_stop(&svc, None)
+            .with_makers(&svc, &makers)
+            .stop;
+        assert!(matches!(stop, Some(ChainStop::PublishesNothingYet { .. })));
     }
 
     /// With neither the endpoints nor the pods read, the zeros come from

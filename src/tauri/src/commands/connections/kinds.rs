@@ -417,6 +417,7 @@ pub(super) async fn service_connections(
     out.subject = Some(subject.clone());
 
     note_reach(svc, &subject, &snapshot, out, true);
+    idle_behind(&subject, out);
     routes_into(ns, &subject, &snapshot, out);
     gateway_traffic_into(
         ns,
@@ -433,6 +434,34 @@ pub(super) async fn service_connections(
     out.not_looked_at.extend(unanswered(&snapshot));
 
     Ok(())
+}
+
+/// The workloads a Service would reach if they ran: scaled to zero, they
+/// own no pod, so no owner chain names them.
+pub(super) fn idle_behind(subject: &ObjectRef, out: &mut Neighbourhood) {
+    let idle: Vec<(String, Vec<ObjectRef>)> = out
+        .stops
+        .iter()
+        .filter_map(|stop| match stop {
+            ChainStop::ScaledToZero {
+                service,
+                selector,
+                workloads,
+            } if service.same_object(subject) => Some((selector.clone(), workloads.clone())),
+            _ => None,
+        })
+        .collect();
+    for (selector, workloads) in idle {
+        for workload in workloads {
+            out.edge(
+                subject.clone(),
+                workload,
+                Relation::Selects {
+                    selector: selector.clone(),
+                },
+            );
+        }
+    }
 }
 
 /// What made the pods a Service reaches.

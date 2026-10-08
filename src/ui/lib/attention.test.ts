@@ -11,7 +11,11 @@ import type {
   ServiceHealthGroup,
 } from "@/generated/types";
 import { attentionOf, reasonWord, type AttentionInputs } from "./attention";
-import { ingressHealthOf, type NamespaceBacking } from "./ingress-health";
+import {
+  ingressHealthOf,
+  ingressHealthWords,
+  type NamespaceBacking,
+} from "./ingress-health";
 import { serviceHealthOf, serviceHealthWords } from "./service-health";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -225,6 +229,76 @@ describe("what Needs attention lists beyond pods", () => {
     const said = serviceHealthWords(serviceHealthOf(web, web, null), t).reason;
     expect(said).toBeTruthy();
     expect(listed.items[0].detail).toEqual({ says: "ours", text: said });
+  });
+
+  /**
+   * Lena's hello-web at zero: Needs attention, the sidebar badge and the
+   * status bar each counted its Service as one problem while the Deployment
+   * read Idle. Fails if an idle Service, or an Ingress whose only backend is
+   * idle, is counted, or if an empty selector stops being one.
+   */
+  it("counts no problem for a Service, or an Ingress, in front of a workload scaled to zero", () => {
+    const at = (name: string) => ({
+      kind: "Service",
+      name,
+      namespace: "net",
+      existence: "present" as const,
+      facts: null,
+    });
+    const group = (name: string, stop: ServiceHealthGroup["stop"]) => ({
+      names: [name],
+      type: "ClusterIP",
+      selectorless: false,
+      ready: 0,
+      draining: 0,
+      notReady: 0,
+      unrouted: 0,
+      stop,
+    });
+    const idle = group("hello-web", {
+      reason: "scaledToZero",
+      service: at("hello-web"),
+      selector: "app=hello-web",
+      workloads: [{ ...at("hello-web"), kind: "Deployment" }],
+    });
+    const empty = group("web", {
+      reason: "selectsNothing",
+      service: at("web"),
+      selector: "app=web",
+    });
+    const healthOf = (row: IngressHealthInput) =>
+      ingressHealthOf({
+        ingress: row,
+        binding: {
+          known: true,
+          value: {
+            requested: "nginx",
+            resolved: "nginx",
+            controller: null,
+            viaDefault: false,
+            available: [],
+          },
+        },
+        backing: { known: true, value: new Map([["hello-web", idle]]) },
+        certificates: new Map(),
+      });
+    const listed = attention({
+      services: {
+        answered: [{ namespace: "net", groups: [idle, empty] }],
+        unread: [],
+      },
+      ingresses: {
+        data: { rows: [ingress("hello", "hello-web")], unread: [] },
+        error: null,
+      },
+      ingressHealth: healthOf,
+    });
+
+    expect(listed.items.map((item) => item.name)).toEqual(["web"]);
+    expect(listed.total).toBe(1);
+    expect(
+      ingressHealthWords(healthOf(ingress("hello", "hello-web")), t)
+    ).toMatchObject({ label: "backend idle", role: "neutral" });
   });
 
   /** An Ingress whose class nothing serves, read by the Ingresses list's own reader. */

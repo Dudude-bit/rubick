@@ -26,6 +26,8 @@ export type ServiceHealth =
   | { state: "partly"; serving: number; total: number }
   | { state: "noneReady"; published: PublishedCounts }
   | { state: "noEndpoints"; published: PublishedCounts }
+  /** No pods by intent: every workload behind it is scaled to zero. */
+  | { state: "idle"; stop: Extract<ChainStop, { reason: "scaledToZero" }> }
   /** A DNS alias: no endpoints, by design. */
   | { state: "externalName" }
   /** No selector, and nobody wrote an endpoint by hand. */
@@ -63,8 +65,9 @@ export function serviceHealthOf(
       ? { state: "ready", serving }
       : { state: "partly", serving, total };
   }
-  return listed > 0
-    ? { state: "noneReady", published }
+  if (listed > 0) return { state: "noneReady", published };
+  return published.stop?.reason === "scaledToZero"
+    ? { state: "idle", stop: published.stop }
     : { state: "noEndpoints", published };
 }
 
@@ -139,6 +142,13 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
         role: "err",
         reason: stopReason(health.published, t),
       };
+    case "idle":
+      return {
+        code: health.state,
+        label: t("readings", "healthIdle"),
+        role: "neutral",
+        reason: describeStop(health.stop, t).title,
+      };
     case "externalName":
       return {
         code: health.state,
@@ -177,6 +187,7 @@ export const serviceVerdictLabels = (t: T) => [
   t("count", "readyOfTotal", { ready: 99, total: 99 }),
   t("empty", "stopNoneReady"),
   t("readings", "healthNoEndpoints"),
+  t("readings", "healthIdle"),
   t("readings", "healthDnsAlias"),
   t("readings", "healthByHand"),
   t("readings", "healthStillReading"),

@@ -7,6 +7,7 @@ const t: T = (section, key, values) => translate("en", section, key, values);
 
 import {
   chainSilence,
+  connectionCount,
   connectionGroups,
   dependentsOf,
   describeStop,
@@ -833,6 +834,58 @@ describe("the traffic chain", () => {
     });
     expect(hopTone(short.stop)).toBe("bad");
     expect(short.path.broken).toBe(true);
+  });
+
+  /**
+   * The Service page of hello-web at zero said in red that no pod carries
+   * app=hello-web and counted Connections 0, while the Deployment named the
+   * Service. Fails if the backend's idle stop is drawn as a fault, or the
+   * idle workload drops out of what answers here.
+   */
+  it("draws a Service in front of a workload scaled to zero calmly and names the workload", () => {
+    const front = service("hello-web", "app=hello-web");
+    const deployment = ref("Deployment", "hello-web", {
+      kind: "workload",
+      replicas: 0,
+      readyReplicas: 0,
+      rollout: { state: "idle" },
+      revision: null,
+      current: null,
+    });
+    const conns = connections(
+      front,
+      [
+        {
+          from: front,
+          to: deployment,
+          relation: { verb: "selects", selector: "app=hello-web" },
+        },
+      ],
+      [
+        {
+          reason: "scaledToZero",
+          service: front,
+          selector: "app=hello-web",
+          workloads: [deployment],
+        },
+      ]
+    );
+
+    const [path] = trafficChains(conns, t);
+    const stop = path.hops.at(-1)!;
+    expect(stop).toMatchObject({
+      at: "stop",
+      idle: true,
+      title: "No pods by intent: hello-web is scaled to zero",
+    });
+    expect(hopTone(stop)).toBe("on");
+    expect(path.broken).toBe(false);
+
+    const answers = connectionGroups(conns, t).find(
+      (group) => group.key === "answers"
+    );
+    expect(answers?.rows.map((row) => row.object?.name)).toEqual(["hello-web"]);
+    expect(connectionCount(conns)).toBe(1);
   });
 
   it("costs one line when nothing fronts the workload", () => {

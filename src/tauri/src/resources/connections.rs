@@ -403,6 +403,14 @@ pub enum ChainStop {
         service: ObjectRef,
         selector: String,
     },
+    /// The selector matches no pod because every Deployment and `StatefulSet`
+    /// whose pods it would pick is scaled to zero. Nothing runs here by
+    /// intent: the address refuses connections, and the labels are fine.
+    ScaledToZero {
+        service: ObjectRef,
+        selector: String,
+        workloads: Vec<ObjectRef>,
+    },
     /// The Service publishes no endpoint, and this reader cannot say why.
     ///
     /// The honest stop for a surface built from the endpoints alone. It knows

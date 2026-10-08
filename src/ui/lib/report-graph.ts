@@ -97,6 +97,7 @@ function stopSubject(stop: ChainStop) {
     case "gatewayMissing":
       return stop.gateway;
     case "selectsNothing":
+    case "scaledToZero":
     case "publishesNothingYet":
     case "noneReady":
     case "publishesNothing":

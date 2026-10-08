@@ -95,6 +95,8 @@ export const ru: Catalogue = {
       "По селектору {selector} пока ничего не опубликовано",
     stopNoPodCarries: "Ни у одного пода нет метки {selector}",
     stopScaledToZero: "Подов нет намеренно: {name} масштабирован до нуля",
+    stopScaledToZeroSeveral:
+      "Подов нет намеренно: {names} масштабированы до нуля",
     stopScaledToZeroNote:
       "Подключения к этому адресу отклоняются, пока нагрузку не масштабируют обратно. Метки здесь ни при чём.",
     stopNotScheduledNote:
@@ -4498,6 +4500,10 @@ export const ru: Catalogue = {
     healthBackendDown: "{name} не принимает трафик",
     healthNoController: "нет контроллера",
     healthNoEndpoints: "нет эндпоинтов",
+    healthIdle: "простаивает",
+    healthBackendIdle:
+      "У {name} нет подов намеренно: нагрузка за ним масштабирована до нуля",
+    healthBackendIdleShort: "бэкенд простаивает",
     healthMissingBackend: "нет бэкенда",
     healthMissingTlsSecret: "нет Secret для TLS",
     healthBackendDownShort: "бэкенд недоступен",
@@ -5901,6 +5907,7 @@ export const ru: Catalogue = {
       "Интеграция, которая читает объекты {kind}, не ответила, поэтому ниже не хватает неизвестно скольких.",
     stopNoServiceToSendTo: "нет service, куда отправлять",
     stopSelectorMatchesNothing: "селектор ничего не находит",
+    stopScaledToZeroUnder: "масштабирован до нуля",
     stopNothingPublishedYet: "пока ничего не опубликовано",
     stopRunningNoneReady: "работают, но ни один не готов",
     stopNotScheduled: "не размещены на узле",

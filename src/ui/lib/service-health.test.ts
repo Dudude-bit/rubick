@@ -107,6 +107,54 @@ describe("one verdict for a Service on every surface", () => {
     });
   });
 
+  /**
+   * Lena scaled hello-web to zero and its Service read red "no endpoints" on
+   * the page, the list and the Overview. Fails if a selector behind workloads
+   * at zero is drawn as a fault, or one that matches nothing stops being one.
+   */
+  it("calls a Service whose workloads are scaled to zero idle, calmly", () => {
+    const deployment: ObjectRef = {
+      kind: "Deployment",
+      name: "hello-web",
+      namespace: "lena-sandbox",
+      existence: "present",
+      facts: null,
+    };
+    const idle = serviceHealthOf(
+      SELECTING,
+      published({
+        slices: 0,
+        stop: {
+          reason: "scaledToZero",
+          service: SERVICE,
+          selector: "app=hello-web",
+          workloads: [deployment],
+        },
+      }),
+      null
+    );
+    expect(idle.state).toBe("idle");
+    expect(serviceHealthWords(idle, t)).toMatchObject({
+      label: "idle",
+      role: "neutral",
+      reason: "No pods by intent: hello-web is scaled to zero",
+    });
+
+    const empty = serviceHealthOf(
+      SELECTING,
+      published({
+        slices: 0,
+        stop: {
+          reason: "selectsNothing",
+          service: SERVICE,
+          selector: "app=hello-web",
+        },
+      }),
+      null
+    );
+    expect(serviceHealthWords(empty, t).role).toBe("err");
+  });
+
   /** Lena could not tell whom "он запрашивает" meant; fails if the Service stops being the asker. */
   it("names the Service as the one that asks for the port, in Russian", () => {
     expect(
