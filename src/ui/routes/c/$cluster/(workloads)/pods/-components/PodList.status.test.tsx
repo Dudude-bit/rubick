@@ -199,3 +199,45 @@ describe("a pod up and failing its readiness probe", () => {
     ).toEqual({ label: "NotReady", count: 1, tone: "warn" });
   });
 });
+
+describe("a pod up between the crashes of a loop", () => {
+  const checkout = (secondsAgo: number) => ({
+    name: "checkout-55cbfdc66-msfk6",
+    namespace: "shop",
+    status: {
+      display: "Running",
+      phase: "Running",
+      loopingExitAt: new Date(Date.now() - secondsAgo * 1000).toISOString(),
+    },
+    containers: [
+      {
+        name: "app",
+        ready: true,
+        started: true,
+        phase: "app" as const,
+        state: { type: "running" as const },
+      },
+    ],
+    initContainers: [],
+  });
+
+  /**
+   * Sam's checkout pod read green Running on its Logs tab while its
+   * Overview said CrashLoopBackOff a moment before. Fails if the list, the
+   * peek or the header badge paint the running instant of a loop green, or
+   * if a pod whose last crash is past the window stays red.
+   */
+  it("keeps kubectl's word and is red on every surface while the loop is recent", () => {
+    const pod = checkout(20);
+    render(<>{statusCell(pod)}</>);
+    expect(screen.getByText("Running").className).toContain("text-err");
+    expect(screen.getByTitle(/Up between crashes/)).toBeInTheDocument();
+    const peek = WORKLOAD_SOURCES.Pod!.summarise(
+      pod as unknown as PodInfo,
+      { kind: "Pod", name: pod.name, namespace: pod.namespace },
+      t
+    );
+    expect(peek.statusRole).toBe("err");
+    expect(podRole(checkout(20 * 60), null)).toBe("ok");
+  });
+});

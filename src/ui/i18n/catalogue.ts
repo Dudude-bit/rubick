@@ -166,6 +166,10 @@ export const en = {
       "This Ingress states no backend, so it routes nothing.",
     noServiceSelectsPod:
       "No Service in this namespace selects this pod, so nothing in the cluster routes traffic to it.",
+    noServiceSelectsPodNear:
+      "No Service in this namespace selects this pod. Closest is {service}{more}: the pod carries {carries} but not {lacks}, so nothing in the cluster routes traffic to it.",
+    noServiceSelectsTheseNear:
+      "No Service in this namespace selects these pods. Closest is {service}{more}: they carry {carries} but not {lacks}, so nothing in the cluster routes traffic to this {kind}.",
     trafficPath: "Traffic path",
     releases: "Releases",
     charts: "Charts",
@@ -3712,6 +3716,10 @@ export const en = {
       one: "Pods coming up: {available} of {n} pod is available",
       other: "Pods coming up: {available} of {n} pods are available",
     },
+    rolloutScalingDown: {
+      one: "Scaling down: {current} pods still exist, {n} is wanted",
+      other: "Scaling down: {current} pods still exist, {n} are wanted",
+    },
     rolloutShort: {
       one: "Rolled out, and only {available} of {n} pod is available",
       other: "Rolled out, and only {available} of {n} pods are available",
@@ -6005,6 +6013,9 @@ export const en = {
     clusterIpHeadlessWhy:
       "clusterIP: None. A headless Service has no virtual IP: its DNS name answers with the addresses of the pods themselves.",
     notEvaluatedLower: "not evaluated",
+    notReportedLower: "not reported",
+    printerNotReported:
+      "The object has no status yet, so its controller has not reported {column}.",
     shellEndedPodGone:
       "The shell session ended: its pod was deleted, and the terminal went with it.",
     printerNotEvaluated:
@@ -6739,6 +6750,8 @@ export const en = {
       "the pod is held back from scheduling until its scheduling gates are removed.",
     notReady:
       "the containers run, but the pod fails its readiness check, so Services send it no traffic.",
+    betweenCrashes:
+      "Up between crashes: a container keeps exiting, and the kubelet keeps starting it again.",
     containerStatusUnknown:
       "the container's state was lost, usually after the node restarted.",
     deadlineExceeded:

@@ -1396,6 +1396,13 @@ export interface ResourceConnections {
   stops: ChainStop[];
   published: ServicePublished[];
   notLookedAt: UnexploredKind[];
+  nearlySelectedBy?: NearSelector[];
+}
+
+export interface NearSelector {
+  service: ObjectRef;
+  carries: string;
+  lacks: string;
 }
 
 export interface UnexploredKind {
@@ -2008,6 +2015,7 @@ export interface TerminationInfo {
 export interface PodRowStatus {
   phase: string;
   display: string;
+  loopingExitAt?: string;
 }
 
 export interface FileEntry {
@@ -2155,6 +2163,7 @@ export interface PodStatusInfo {
   conditions: ConditionInfo[];
   message: string | null;
   reason: string | null;
+  loopingExitAt?: string;
 }
 
 export interface DeploymentInfo {
@@ -2399,6 +2408,7 @@ export type Rollout =
   | { state: "unobserved"; available: number; desired: number }
   | { state: "rollingOut"; updated: number; desired: number }
   | { state: "comingUp"; available: number; desired: number }
+  | { state: "scalingDown"; current: number; desired: number }
   | { state: "short"; available: number; desired: number }
   | { state: "ready" };
 

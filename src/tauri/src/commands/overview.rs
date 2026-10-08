@@ -2870,6 +2870,8 @@ mod tests {
             }),
             status: Some(k8s_openapi::api::apps::v1::DeploymentStatus {
                 observed_generation: Some(1),
+                replicas: Some(3),
+                updated_replicas: Some(3),
                 ready_replicas: Some(1),
                 conditions: Some(vec![k8s_openapi::api::apps::v1::DeploymentCondition {
                     type_: "Available".to_string(),
@@ -3883,6 +3885,8 @@ mod across_namespaces {
             "spec": { "replicas": 2, "selector": {}, "template": {} },
             "status": {
                 "observedGeneration": 1,
+                "replicas": 2,
+                "updatedReplicas": 2,
                 "readyReplicas": 0,
                 "conditions": [{ "type": "Available", "status": "False" }],
             },

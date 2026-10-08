@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react";
 import { columnHeader } from "@/i18n/column-header";
 import { useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
-import { CircleHelp, Eye, Trash2 } from "lucide-react";
+import { CircleDashed, CircleHelp, Eye, Trash2 } from "lucide-react";
 import { ObjectLink } from "@/components/object/ResourceRef";
 import { StatusBadge } from "@/components/ui/status-badge";
 import type { QuickAction } from "@/components/ui/quick-actions";
@@ -170,10 +170,12 @@ export function CustomResourceList({
           header: pc.name,
           cell: ({ row }) => {
             const cell = printerCell(row.original, pc.jsonPath);
-            return cell.evaluated ? (
-              formatColumnValue(cell.value, pc.columnType)
+            if (!cell.evaluated)
+              return <NotEvaluated expression={pc.jsonPath} />;
+            return cell.unreported ? (
+              <NotReported column={pc.name} />
             ) : (
-              <NotEvaluated expression={pc.jsonPath} />
+              formatColumnValue(cell.value, pc.columnType)
             );
           },
         });
@@ -301,6 +303,23 @@ function NotEvaluated({ expression }: { expression: string }) {
     >
       <CircleHelp className="h-3 w-3 flex-none text-warn" aria-hidden="true" />
       {t("empty", "notEvaluatedLower")}
+    </span>
+  );
+}
+
+/** A column read from a status the object does not have: nobody answered yet. */
+function NotReported({ column }: { column: string }) {
+  const t = useT();
+  return (
+    <span
+      className="inline-flex items-center gap-1 text-fg-mut"
+      title={t("empty", "printerNotReported", { column })}
+    >
+      <CircleDashed
+        className="h-3 w-3 flex-none text-fg-fnt"
+        aria-hidden="true"
+      />
+      {t("empty", "notReportedLower")}
     </span>
   );
 }

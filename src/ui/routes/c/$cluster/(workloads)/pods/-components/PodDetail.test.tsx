@@ -247,6 +247,60 @@ describe("Marco's pod page, in a namespace where he may exec and forward but not
   });
 });
 
+describe("a crash-looping pod caught while its container is up", () => {
+  /**
+   * Sam's checkout pod read green Running and no trouble on its Logs tab
+   * while its Overview said CrashLoopBackOff a moment before. Fails if the
+   * header drops the loop at the running instant, or paints it green.
+   */
+  it("keeps the crash loop in the header and the badge red", async () => {
+    const finishedAt = new Date(Date.now() - 30_000).toISOString();
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod")
+        return {
+          ...POD,
+          status: { ...POD.status, loopingExitAt: finishedAt },
+          containers: [
+            {
+              name: "app",
+              image: "busybox:1.36",
+              ready: true,
+              started: true,
+              phase: "app",
+              state: { type: "running" },
+              lastTerminated: {
+                exitCode: 1,
+                signal: null,
+                reason: "Error",
+                message: null,
+                startedAt: null,
+                finishedAt,
+              },
+              restartCount: 6,
+              ports: [],
+              resources: { requests: {}, limits: {} },
+              env: [],
+              envFrom: [],
+            },
+          ],
+        };
+      if (command === "get_replicaset") return REPLICA_SET;
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+
+    expect(
+      screen.getAllByText("app starts and then exits, over and over").length
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("Running").className).toContain("text-err");
+  });
+});
+
 const podEvent = (
   reason: string,
   type: "Normal" | "Warning",

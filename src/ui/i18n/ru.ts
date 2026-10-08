@@ -145,6 +145,10 @@ export const ru: Catalogue = {
       "Этот Ingress не называет бэкенда, поэтому ничего не маршрутизирует.",
     noServiceSelectsPod:
       "Ни один Service в этом пространстве имён не выбирает этот под, поэтому трафик до него ниоткуда в кластере не доходит.",
+    noServiceSelectsPodNear:
+      "Ни один Service в этом пространстве имён не выбирает этот под. Ближе всех {service}{more}: у пода есть {carries}, но нет {lacks}, поэтому трафик до него ниоткуда в кластере не доходит.",
+    noServiceSelectsTheseNear:
+      "Ни один Service в этом пространстве имён не выбирает эти поды. Ближе всех {service}{more}: у них есть {carries}, но нет {lacks}, поэтому внутри кластера трафик до этого объекта ({kind}) не доходит.",
     trafficPath: "Путь трафика",
     releases: "Релизы",
     charts: "Чарты",
@@ -4146,6 +4150,12 @@ export const ru: Catalogue = {
       many: "Поды поднимаются: из {n} подов доступно {available}",
       other: "Поды поднимаются: из {n} пода доступно {available}",
     },
+    rolloutScalingDown: {
+      one: "Лишние поды удаляются: сейчас их {current}, нужен {n}",
+      few: "Лишние поды удаляются: сейчас их {current}, нужно {n}",
+      many: "Лишние поды удаляются: сейчас их {current}, нужно {n}",
+      other: "Лишние поды удаляются: сейчас их {current}, нужно {n}",
+    },
     rolloutShort: {
       one: "Развёртывание завершено, но из {n} пода доступно только {available}",
       few: "Развёртывание завершено, но из {n} подов доступно только {available}",
@@ -6614,6 +6624,9 @@ export const ru: Catalogue = {
     clusterIpHeadlessWhy:
       "clusterIP: None. У headless-сервиса нет виртуального IP: его DNS-имя отвечает адресами самих подов.",
     notEvaluatedLower: "не вычислено",
+    notReportedLower: "не сообщено",
+    printerNotReported:
+      "У объекта ещё нет status, поэтому контроллер не сообщил {column}.",
     shellEndedPodGone:
       "Сеанс оболочки завершён: Pod удалён, а вместе с ним закрылся и терминал.",
     printerNotEvaluated:
@@ -7378,6 +7391,8 @@ export const ru: Catalogue = {
       "под не назначается на узел, пока с него не снимут scheduling gates.",
     notReady:
       "контейнеры работают, но под не проходит проверку готовности, поэтому Service не отправляют ему трафик.",
+    betweenCrashes:
+      "Запущен между падениями: контейнер раз за разом завершается, и kubelet снова его запускает.",
     containerStatusUnknown:
       "состояние контейнера потеряно, обычно после перезапуска узла.",
     deadlineExceeded:

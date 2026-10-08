@@ -54,6 +54,12 @@ pub enum Rollout {
         available: i32,
         desired: i32,
     },
+    /// More pods than wanted still exist: a `StatefulSet` removes the extra
+    /// ones one at a time, each only once the one before it is gone.
+    ScalingDown {
+        current: i32,
+        desired: i32,
+    },
     /// Rolled out, and fewer available than wanted.
     Short {
         available: i32,
@@ -73,7 +79,9 @@ impl Rollout {
             Self::Unavailable { .. } => "Unavailable",
             Self::Paused => "Paused",
             Self::Unobserved { .. } => "Waiting",
-            Self::RollingOut { .. } | Self::ComingUp { .. } => "Progressing",
+            Self::RollingOut { .. } | Self::ComingUp { .. } | Self::ScalingDown { .. } => {
+                "Progressing"
+            }
             Self::Short { .. } => "Degraded",
             Self::Ready => "Ready",
         }
@@ -138,10 +146,16 @@ pub fn deployment_rollout(deployment: &Deployment) -> Rollout {
             serving: available,
         };
     }
+    let refused = conditions
+        .iter()
+        .any(|c| c.type_ == "ReplicaFailure" && c.status == "True");
+    // From zero the condition flips before the ReplicaSet has made a pod,
+    // so there is no pod yet to say it is starting.
+    let creating = !older_template && updated < desired && !refused;
     if let Some(down) = conditions
         .iter()
         .find(|c| c.type_ == "Available" && c.status == "False")
-        .filter(|_| available == 0 || older_template)
+        .filter(|_| (available == 0 && !creating) || older_template)
     {
         return Rollout::Unavailable {
             reason: down.reason.clone(),
@@ -161,9 +175,6 @@ pub fn deployment_rollout(deployment: &Deployment) -> Rollout {
     }
     // A scale never moves the Progressing reason off NewReplicaSetAvailable,
     // so whether a short count is still coming up is for the pods to say.
-    let refused = conditions
-        .iter()
-        .any(|c| c.type_ == "ReplicaFailure" && c.status == "True");
     let ready = status.and_then(|s| s.ready_replicas).unwrap_or(0);
     let min_ready = spec.and_then(|s| s.min_ready_seconds).unwrap_or(0);
     if (updated < desired && !refused) || settling(min_ready, ready, available, desired) {
@@ -226,6 +237,10 @@ pub fn statefulset_rollout(set: &StatefulSet) -> Rollout {
                 return Rollout::RollingOut { updated, desired };
             }
         }
+    }
+    let current = status.map_or(0, |s| s.replicas);
+    if current > desired {
+        return Rollout::ScalingDown { current, desired };
     }
     if settling {
         return Rollout::ComingUp { available, desired };
@@ -490,6 +505,10 @@ mod tests {
                 available: 0,
                 desired: 0,
             },
+            Rollout::ScalingDown {
+                current: 0,
+                desired: 0,
+            },
             Rollout::Short {
                 available: 0,
                 desired: 0,
@@ -684,6 +703,47 @@ mod tests {
             ),
             coming
         );
+    }
+
+    /// Sam scaled `recommendations` from 0 to 1 and the header read red
+    /// "Unavailable 0/1" before its `ReplicaSet` had made the pod. Fails if a
+    /// Deployment from zero reads as a fault before its pod exists, or if one
+    /// the controller was refused pods for stops reading as one.
+    #[test]
+    fn a_deployment_scaled_up_from_zero_is_coming_up_before_its_pod_exists() {
+        let down = || {
+            condition(
+                "Available",
+                "False",
+                "MinimumReplicasUnavailable",
+                "Deployment does not have minimum availability.",
+            )
+        };
+        let from_zero = Counts {
+            desired: 1,
+            existing: 0,
+            updated: 0,
+            available: 0,
+        };
+        assert_eq!(
+            deployment_rollout(&deployment(&from_zero, vec![down(), rolled_out()])),
+            Rollout::ComingUp {
+                available: 0,
+                desired: 1
+            }
+        );
+        let refused = deployment(
+            &from_zero,
+            vec![
+                down(),
+                rolled_out(),
+                condition("ReplicaFailure", "True", "FailedCreate", "quota"),
+            ],
+        );
+        assert!(matches!(
+            deployment_rollout(&refused),
+            Rollout::Unavailable { .. }
+        ));
     }
 
     /// Dana scaled `cart` from 3 to 4 and kubectl printed Progressing
@@ -985,6 +1045,38 @@ mod tests {
         ));
         let ready = statefulset(3, sts_status(3, 3, "db-2", "db-2"), None);
         assert_eq!(statefulset_rollout(&ready), Rollout::Ready);
+    }
+
+    /// Sam's orders-db scaled 2 to 1 read green Ready at 2/1 on the list, the
+    /// page and the peek while orders-db-1 was still terminating. Fails if a
+    /// set with more pods than wanted reads Ready, or one at its count does not.
+    #[test]
+    fn a_statefulset_with_more_pods_than_wanted_is_scaling_down_not_ready() {
+        let down = statefulset(
+            1,
+            StatefulSetStatus {
+                replicas: 2,
+                ..sts_status(2, 2, "db-1", "db-1")
+            },
+            None,
+        );
+        assert_eq!(
+            statefulset_rollout(&down),
+            Rollout::ScalingDown {
+                current: 2,
+                desired: 1
+            }
+        );
+        assert_eq!(statefulset_rollout(&down).code(), "Progressing");
+        let done = statefulset(
+            1,
+            StatefulSetStatus {
+                replicas: 1,
+                ..sts_status(1, 1, "db-1", "db-1")
+            },
+            None,
+        );
+        assert_eq!(statefulset_rollout(&done), Rollout::Ready);
     }
 
     /// A partition holds the low ordinals back on purpose, so the rollout is

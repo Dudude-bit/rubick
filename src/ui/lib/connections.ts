@@ -43,6 +43,7 @@ import type {
   ObjectRef,
   Relation,
   IngressClassBinding,
+  NearSelector,
   ResourceConnections,
   ServicePublished,
   TlsCertificate,
@@ -1092,10 +1093,48 @@ export function chainSilence(conns: ResourceConnections, t: T): string | null {
   if (subject.kind === "Ingress") {
     return t("nav", "ingressStatesNoBackend");
   }
+  const closest = closestSelector(conns);
+  if (closest) return nearMissWords(conns.subject, closest, t);
   if (subject.kind === "Pod") {
     return t("nav", "noServiceSelectsPod");
   }
   return t("nav", "noServiceSelectsThese", { kind: subject.kind });
+}
+
+export interface ClosestSelector {
+  near: NearSelector;
+  more: number;
+}
+
+/** The Service one label short of selecting a subject that none selects. */
+export function closestSelector(
+  conns: ResourceConnections
+): ClosestSelector | null {
+  if (conns.notLookedAt.some((entry) => entry.kind === "Service")) return null;
+  const [near, ...rest] = conns.nearlySelectedBy ?? [];
+  return near ? { near, more: rest.length } : null;
+}
+
+/**
+ * The sentence naming that Service. `service` stays a placeholder for a
+ * caller that draws the name as a link through `parts`.
+ */
+export function nearMissWords(
+  subject: ObjectRef,
+  { near, more }: ClosestSelector,
+  t: T,
+  service: string = near.service.name
+): string {
+  const values = {
+    service,
+    more: more > 0 ? t("count", "andNMore", { n: more }) : "",
+    carries: near.carries,
+    lacks: near.lacks,
+    kind: subject.kind,
+  };
+  return subject.kind === "Pod"
+    ? t("nav", "noServiceSelectsPodNear", values)
+    : t("nav", "noServiceSelectsTheseNear", values);
 }
 
 // --- the tab -----------------------------------------------------------

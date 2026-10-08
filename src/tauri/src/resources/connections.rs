@@ -507,6 +507,19 @@ pub struct ResourceConnections {
     /// because a chain hop elsewhere needs a count and one name.
     pub published: Vec<ServicePublished>,
     pub not_looked_at: Vec<UnexploredKind>,
+    /// Services in the namespace one or more labels short of selecting the
+    /// subject, where none selects it and some come that close.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub nearly_selected_by: Option<Vec<NearSelector>>,
+}
+
+/// A Service whose selector the subject carries part of, and the part it lacks.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NearSelector {
+    pub service: ObjectRef,
+    pub carries: String,
+    pub lacks: String,
 }
 
 /// A kind the app never queried, and what asking would have added.

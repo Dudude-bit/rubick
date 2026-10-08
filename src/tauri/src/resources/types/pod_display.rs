@@ -217,32 +217,47 @@ pub const CRASH_LOOP_WINDOW_SECONDS: i64 = 15 * 60;
 /// inside the back-off window, is crash-looping whichever instant this is.
 #[must_use]
 pub fn crash_looping(pod: &Pod, now: DateTime<Utc>) -> bool {
-    let Some(status) = pod.status.as_ref() else {
+    let Some(status) = running_status(pod) else {
         return false;
     };
-    if status.phase.as_deref() != Some("Running") || pod.metadata.deletion_timestamp.is_some() {
-        return false;
-    }
-    status.container_statuses.iter().flatten().any(|cs| {
-        let state = cs.state.as_ref();
-        let waiting = state
+    let waiting = status.container_statuses.iter().flatten().any(|cs| {
+        cs.state
+            .as_ref()
             .and_then(|s| s.waiting.as_ref())
-            .and_then(|w| w.reason.as_deref());
-        if waiting == Some("CrashLoopBackOff") {
-            return true;
-        }
-        if cs.restart_count < 2 {
-            return false;
-        }
-        state
-            .and_then(|s| s.terminated.as_ref())
-            .or_else(|| last_terminated(cs))
-            .is_some_and(|exit| {
-                exit.finished_at.as_ref().is_none_or(|at| {
-                    now - at.moment() < chrono::Duration::seconds(CRASH_LOOP_WINDOW_SECONDS)
-                })
-            })
-    })
+            .and_then(|w| w.reason.as_deref())
+            == Some("CrashLoopBackOff")
+    });
+    waiting
+        || looping_exit(pod)
+            .is_some_and(|at| now - at < chrono::Duration::seconds(CRASH_LOOP_WINDOW_SECONDS))
+}
+
+/// When the latest exit of a container that has restarted twice or more
+/// ended, on a running pod: what [`crash_looping`] measures its window from,
+/// shipped so a reader with its own clock measures the same window.
+#[must_use]
+pub fn looping_exit(pod: &Pod) -> Option<DateTime<Utc>> {
+    running_status(pod)?
+        .container_statuses
+        .iter()
+        .flatten()
+        .filter(|cs| cs.restart_count >= 2)
+        .filter_map(|cs| {
+            cs.state
+                .as_ref()
+                .and_then(|s| s.terminated.as_ref())
+                .or_else(|| last_terminated(cs))?
+                .finished_at
+                .as_ref()
+                .map(Moment::moment)
+        })
+        .max()
+}
+
+fn running_status(pod: &Pod) -> Option<&k8s_openapi::api::core::v1::PodStatus> {
+    let status = pod.status.as_ref()?;
+    (status.phase.as_deref() == Some("Running") && pod.metadata.deletion_timestamp.is_none())
+        .then_some(status)
 }
 
 /// Longest a pod may sit Pending before it counts as a problem. Scheduling
@@ -705,6 +720,36 @@ mod tests {
             );
         }
         assert_eq!(display_status(&up_for_seconds), "Running");
+    }
+
+    /// Sam's checkout pod read green Running in its header between crashes
+    /// while the Overview said `CrashLoopBackOff`. The page and the list
+    /// measure the window from what the row ships; fails if the running
+    /// instant ships no exit, or a pod restarted once ships one.
+    #[test]
+    fn a_running_crash_looper_ships_the_exit_its_window_is_measured_from() {
+        let now = Utc::now();
+        let up = looping(running(), exited(now, 20, "Error", 1), 9);
+        let at = looping_exit(&up).expect("the last exit is shipped");
+        assert_eq!(
+            at.timestamp(),
+            (now - chrono::Duration::seconds(20)).timestamp()
+        );
+        assert_eq!(
+            crate::resources::PodRow::from(&up).status.looping_exit_at,
+            Some(at)
+        );
+        let rebooted = looping(running(), exited(now, 30, "Unknown", 255), 1);
+        assert_eq!(looping_exit(&rebooted), None);
+    }
+
+    /// The frontend measures the same window from the same file; fails if one
+    /// side's number moves alone.
+    #[test]
+    fn the_crash_loop_window_matches_the_shared_file() {
+        const FILE: &str = include_str!("../../../../contracts/crash-loop.json");
+        let file: serde_json::Value = serde_json::from_str(FILE).expect("json");
+        assert_eq!(file["windowSeconds"], CRASH_LOOP_WINDOW_SECONDS);
     }
 
     /// Fails if a pod that crashed long ago, or restarted once with its

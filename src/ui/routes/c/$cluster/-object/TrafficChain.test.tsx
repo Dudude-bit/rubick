@@ -83,6 +83,37 @@ const unreadBackend: ObjectRef = {
 } as unknown as ObjectRef;
 
 describe("TrafficChain", () => {
+  /** The pod page said only that no Service selects the pod while one was a
+   *  label short. Fails if the near Service is not drawn as a link with the
+   *  label it lacks. */
+  it("links the Service one label short of a pod none selects", async () => {
+    const pod = {
+      kind: "Pod",
+      name: "checkout-api-a",
+      namespace: "k8s-gui-test",
+      existence: "present",
+      facts: null,
+    } as unknown as ObjectRef;
+    const view = await wrap(
+      <TrafficChain
+        query={query({
+          subject: pod,
+          edges: [],
+          stops: [],
+          published: [],
+          notLookedAt: [],
+          nearlySelectedBy: [
+            { service, carries: "app=demo", lacks: "track=stable" },
+          ],
+        })}
+      />
+    );
+    expect(view.container.textContent).toContain(
+      "the pod carries app=demo but not track=stable"
+    );
+    expect(screen.getByRole("link", { name: /demo/ })).toBeInTheDocument();
+  });
+
   it("gives each stop its own answer", async () => {
     /** A view that draws all three the same way is a red dot. Each of these
      *  is a different repair — a name to fix, a selector to fix, a probe to
