@@ -386,7 +386,7 @@ impl WatchManager {
                                     "Resource watch {} error ({} in a row): {}",
                                     label,
                                     latch.consecutive_errors(),
-                                    e
+                                    watch_failure(&e)
                                 );
                                 if step == Step::Tell {
                                     // Whatever is buffered was still true when
@@ -514,7 +514,7 @@ impl WatchManager {
                                     label,
                                     sync.namespace(at),
                                     sync.streak(at) + 1,
-                                    e
+                                    watch_failure(e)
                                 );
                             }
                         }

@@ -114,9 +114,15 @@ impl ConnectFailure {
 /// stops at "client error (Connect)", and the reason is two sources down.
 pub(crate) fn with_causes(error: &(dyn std::error::Error + 'static)) -> String {
     let clean = |error: &(dyn std::error::Error + 'static)| {
+        if let Some(kube) = error.downcast_ref::<kube::Error>() {
+            return kube.display_clean();
+        }
+        // The cause under `kube::Error::Api` is the `Status`, whose Display is nginx's whole page.
         error
-            .downcast_ref::<kube::Error>()
-            .map_or_else(|| error.to_string(), KubeErrorExt::display_clean)
+            .downcast_ref::<Box<kube::core::Status>>()
+            .map(|status| &**status)
+            .or_else(|| error.downcast_ref::<kube::core::Status>())
+            .map_or_else(|| error.to_string(), crate::error::server_words)
     };
     let mut text = clean(error);
     let mut cursor = error.source();
@@ -970,6 +976,20 @@ mod tests {
         let shown = with_causes(&kube::Error::Api(Box::new(status)));
         assert!(shown.contains("cannot get path"), "{shown}");
         assert!(!shown.contains("Status {"), "{shown}");
+    }
+
+    /// Dana's app log held nginx's whole 502 page under "Failed to get server
+    /// version: 502 Bad Gateway". Fails if the `Status` under the error is
+    /// said again with its body.
+    #[test]
+    fn an_html_page_in_the_chain_is_said_as_its_status_line() {
+        let status = kube::core::Status::failure(
+            "<html>\r\n<head><title>502 Bad Gateway</title></head>\r\n<body>\r\n<center><h1>502 Bad Gateway</h1></center>\r\n<hr><center>nginx</center>\r\n</body>\r\n</html>\r\n",
+            "Failed to parse error data",
+        )
+        .with_code(502);
+        let shown = with_causes(&kube::Error::Api(Box::new(status)));
+        assert_eq!(shown, "502 Bad Gateway");
     }
 
     #[tokio::test]
