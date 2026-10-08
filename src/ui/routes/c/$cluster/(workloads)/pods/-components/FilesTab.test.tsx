@@ -202,6 +202,28 @@ describe("FilesTab", () => {
    * the spec says did not write it, or `..data`, which holds them all, is
    * tagged with one.
    */
+  /**
+   * Marco's breadcrumb read "/ / var / run": the root crumb is a slash and a
+   * separator followed it. Fails if a separator comes back after the root.
+   */
+  it("draws the path from the root with one slash between names", () => {
+    listing.mockReturnValue(done([file("..data", { kind: "dir" })]));
+    wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(
+      screen
+        .getAllByTestId("files-crumb")
+        .map((crumb) => crumb.textContent)
+        .join("")
+    ).toBe("/etc/app");
+  });
+
   it("tags each file in the service account volume with the source that wrote it", () => {
     const at = "/var/run/secrets/kubernetes.io/serviceaccount";
     listing.mockReturnValue(
