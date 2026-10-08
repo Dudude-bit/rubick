@@ -52,6 +52,20 @@ describe("a detail page's Restart", () => {
     expect(screen.queryByTestId("restart-plan")).toBeNull();
   });
 
+  /** Dana saw no ring on the focused Cancel: a dialog opened by a click focuses it from code, which is never `:focus-visible`. Fails if the ring hangs on that alone. */
+  it("rings the focused Cancel on plain focus, however the dialog was opened", async () => {
+    await openRestart();
+    await screen.findByTestId("restart-plan");
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveFocus();
+    expect(cancel.className.split(" ")).toEqual(
+      expect.arrayContaining([
+        "data-autofocus:focus:ring-1",
+        "data-autofocus:focus:ring-info",
+      ])
+    );
+  });
+
   /** Confirming is a deliberate click on Restart, which still restarts. */
   it("restarts on a click on Restart", async () => {
     const restart = await openRestart();

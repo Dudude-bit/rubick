@@ -10,7 +10,9 @@ import { cn } from "@/lib/utils";
  * the button" — hue stays reserved for state.
  */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info disabled:pointer-events-none disabled:opacity-50",
+  // A dialog that hands its Cancel focus as it opens rings it however it was
+  // opened: after a click, focus moved from code is not `:focus-visible`.
+  "inline-flex items-center justify-center whitespace-nowrap rounded-md text-xs font-medium transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info data-autofocus:focus:outline-hidden data-autofocus:focus:ring-1 data-autofocus:focus:ring-info disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
