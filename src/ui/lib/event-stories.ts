@@ -148,6 +148,8 @@ interface Scaling {
   from: number | null;
   to: number | null;
   at: number;
+  /** When the last of its `n` occurrences happened. */
+  last: number;
   n: number;
 }
 
@@ -166,6 +168,7 @@ function scalingOf(event: EventInfo): Scaling | null {
     from: number(said[4] ?? said[7]),
     to: number(said[5] ?? said[6]),
     at: at(event.firstTimestamp) ?? at(event.lastTimestamp) ?? 0,
+    last: at(event.lastTimestamp) ?? at(event.firstTimestamp) ?? 0,
     n: occurrencesOf(event),
   };
 }
@@ -219,7 +222,14 @@ export function rolloutsAndScales(events: EventInfo[]): {
       current = step.rs;
       scales += step.n;
     } else {
-      rollouts += step.n;
+      // One event counts every rise its message repeats: past the first,
+      // the same ReplicaSet back from zero with no other between is a scale.
+      const others = steps.some(
+        (other) =>
+          other.rs !== step.rs && other.at > step.at && other.at <= step.last
+      );
+      rollouts += others ? step.n : 1;
+      if (!others) scales += step.n - 1;
       if (current !== null && last.get(current) !== 0) draining.add(current);
       current = step.rs;
     }

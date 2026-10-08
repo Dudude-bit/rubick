@@ -678,6 +678,41 @@ describe("what a Deployment's story says it did", () => {
     );
   });
 
+  /**
+   * Lena's hello-web in round 8: created, then scaled to zero and back twice,
+   * one ReplicaSet throughout. The controller folds the three rises into one
+   * event counted 3, and the story said "3 rollouts and 2 scales". Fails if
+   * a repeat of the same ReplicaSet back from zero is called a rollout.
+   */
+  it("counts a ReplicaSet raised from zero again as a scale, not another rollout", () => {
+    const events = [
+      scaled(
+        "Scaled up replica set hello-web-5bc6cfc846 from 0 to 1",
+        17,
+        3,
+        2
+      ),
+      scaled(
+        "Scaled down replica set hello-web-5bc6cfc846 from 1 to 0",
+        12,
+        2,
+        4
+      ),
+    ];
+    expect(rolloutsAndScales(events)).toEqual({ rollouts: 1, scales: 4 });
+  });
+
+  /** A rollback raises the old ReplicaSet again past the new one: each rise there is a rollout. */
+  it("still counts a ReplicaSet raised again after another rose between as a rollout", () => {
+    const events = [
+      scaled("Scaled up replica set web-a from 0 to 1", 30, 2, 5),
+      scaled("Scaled up replica set web-b from 0 to 1", 20),
+      scaled("Scaled down replica set web-a from 1 to 0", 20, 2, 5),
+      scaled("Scaled down replica set web-b from 1 to 0", 5),
+    ];
+    expect(rolloutsAndScales(events).rollouts).toBe(3);
+  });
+
   /** A rolling restart of three replicas steps both ReplicaSets six times. Fails if a step of it is counted as a scale. */
   it("reads every step of a three-replica rolling restart as one rollout", () => {
     const steps = [
