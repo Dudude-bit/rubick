@@ -29,12 +29,13 @@ const run = (spanMs: number): LogRun => ({
   tail: line(3, 1_700_000_000_000 + spanMs),
 });
 
-const draw = (spanMs: number) =>
+const draw = (spanMs: number, searchQuery = "") =>
   render(
     <LogRunRow
       run={run(spanMs)}
       expanded={false}
       containerColor={undefined}
+      searchQuery={searchQuery}
       onToggle={() => {}}
     />
   );
@@ -71,6 +72,19 @@ describe("how a collapsed run of repeats says how long it took", () => {
     useLocaleStore.setState({ choice: "en" });
     draw(span);
     expect(screen.getByTestId("log-run")).toHaveTextContent(words);
+  });
+});
+
+describe("what a collapsed run marks for a search", () => {
+  /**
+   * Marco's "payments": the single lines lit the word and the collapsed
+   * "payments slow" rows matched without it. Fails if a run row stops
+   * drawing the search.
+   */
+  it("marks the match in a collapsed run's message like a single line", () => {
+    draw(1_200, "retry");
+    const marks = screen.getByTestId("log-run").querySelectorAll("mark");
+    expect([...marks].map((mark) => mark.textContent)).toEqual(["retry"]);
   });
 });
 
