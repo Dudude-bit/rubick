@@ -9,6 +9,10 @@ export type PodBadgeInput = ReadinessLists & {
   status: { display: string; loopingExitAt?: string };
 };
 
+/** A word that would read healthy, said in the seconds a crash-looping container is up. */
+export const upBetweenCrashes = (pod: PodBadgeInput) =>
+  statusRole(pod.status.display) === "ok" && loopingNow(pod.status);
+
 /**
  * The colour of a pod's word on every screen. kubectl prints `Running` for a
  * pod whose readiness probe fails, and no Service sends it traffic, so that
@@ -21,8 +25,8 @@ export function podRole(
   silence: NodeSilence | null
 ): StatusRole {
   if (silence) return "neutral";
+  if (upBetweenCrashes(pod)) return "err";
   const role = statusRole(pod.status.display);
-  if (role === "ok" && loopingNow(pod.status)) return "err";
   return role === "ok" && !podReadiness(pod).allReady ? "warn" : role;
 }
 

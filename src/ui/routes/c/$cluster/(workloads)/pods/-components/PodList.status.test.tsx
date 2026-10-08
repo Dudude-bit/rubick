@@ -240,4 +240,23 @@ describe("a pod up between the crashes of a loop", () => {
     expect(peek.statusRole).toBe("err");
     expect(podRole(checkout(20 * 60), null)).toBe("ok");
   });
+
+  /**
+   * Sam's recommendations row read OOMKilled with "Up between crashes"
+   * under it. Fails if the between-crashes words reach a word that is not
+   * the running instant of the loop.
+   */
+  it.each(["OOMKilled", "Error", "CrashLoopBackOff", "Completed"])(
+    "says nothing about being up between crashes on a %s row",
+    (display) => {
+      const pod = checkout(20);
+      const { container } = render(
+        <>{statusCell({ ...pod, status: { ...pod.status, display } })}</>
+      );
+      const titles = [...container.querySelectorAll("[title]")].map((el) =>
+        el.getAttribute("title")
+      );
+      expect(titles.join("\n")).not.toMatch(/between crashes/);
+    }
+  );
 });
