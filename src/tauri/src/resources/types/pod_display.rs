@@ -265,6 +265,23 @@ fn running_status(pod: &Pod) -> Option<&k8s_openapi::api::core::v1::PodStatus> {
 /// paints the panel red and the signal is gone.
 pub const PENDING_GRACE_SECONDS: i64 = 60;
 
+/// How long a pod may stay not ready with no fault showing before the wait is
+/// its fault: the progress deadline a Deployment gets when it names none.
+pub const START_GRACE_SECONDS: i64 = 600;
+
+/// How long a Pending pod may wait before the wait is a problem. One the
+/// scheduler has placed is pulling images or running init containers, which
+/// a fresh cluster takes minutes over, and a fault there shows as a stuck
+/// reason or a restart long before this runs out.
+#[must_use]
+pub fn pending_grace(pod: &Pod) -> i64 {
+    if condition_is_true(pod.status.as_ref(), "PodScheduled") {
+        START_GRACE_SECONDS
+    } else {
+        PENDING_GRACE_SECONDS
+    }
+}
+
 /// Waiting-state reasons that mean the pod is stuck, not starting up.
 pub const STUCK_WAITING_REASONS: &[&str] = &[
     "CrashLoopBackOff",
