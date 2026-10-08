@@ -6,6 +6,7 @@ import { ScopeTabs } from "./ScopeTabs";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
 import { PeekPanel } from "../-peek/PeekPanel";
+import { usePeekDock } from "../-peek/peek-dock";
 import { useYamlEditorStore } from "@/stores/yamlEditorStore";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { clusterColor } from "@/lib/cluster-identity";
@@ -48,6 +49,7 @@ export function Layout({ page }: { page?: React.ReactNode } = {}) {
   const currentContext = useClusterStore((s) => s.currentContext);
   const { hue } = useClusterMark(currentContext);
   const { critical } = useCritical();
+  const dock = usePeekDock();
   useScopeTabs();
   useCopyLink();
   useShortcuts();
@@ -90,7 +92,10 @@ export function Layout({ page }: { page?: React.ReactNode } = {}) {
         <Sidebar />
         <div className="flex flex-1 flex-col overflow-hidden">
           <ScopeTabs />
-          <main className="flex-1 overflow-auto scrollbar-thin p-4">
+          <main
+            className="flex-1 overflow-auto scrollbar-thin p-4"
+            style={dock}
+          >
             {/* `h-full` is what lets a page opt out of the page scroll: a page
                 that sizes itself to this box exactly fills it and this
                 container never gets anything to scroll. Pages taller than it

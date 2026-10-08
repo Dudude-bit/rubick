@@ -154,6 +154,32 @@
   }
 }
 
+@utility scrollbar-lane {
+  /* A scrollbar-width or scrollbar-color, inherited ones included, hands
+   * WebKit back its overlay scrollbar, which lies over the last row and eats
+   * its clicks; these styles alone draw one in a lane of its own. */
+  scrollbar-color: auto;
+
+  &::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  &::-webkit-scrollbar-track,
+  &::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: hsl(var(--sel));
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--fg-fnt));
+  }
+}
+
 @utility scrollbar-none {
   /* A 38px strip has no room to spend 8px on a scrollbar, and it does not
    * need one: a tab clipped by the edge is the overflow signal, and the

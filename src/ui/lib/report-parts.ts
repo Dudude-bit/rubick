@@ -200,7 +200,8 @@ export function conditionsSection(
 export function eventsSection(
   events: readonly EventInfo[] | undefined,
   unread: string | null,
-  withObject = false
+  withObject = false,
+  title = "Events"
 ): PlacedSection {
   const sorted = [...(events ?? [])].sort(
     (a, b) =>
@@ -210,7 +211,7 @@ export function eventsSection(
   return {
     id: "events",
     order: ORDER.events,
-    title: "Events",
+    title,
     icon: iconSvg(Bell),
     count: sorted.length,
     unread,

@@ -386,6 +386,18 @@ describe("an autoscaler that cannot read its metrics", () => {
     expect(deployment).toContain(row?.value);
   });
 
+  /** Sam read a blank beside currentMetrics.0.type, where the controller wrote an empty type; fails if an empty string draws as nothing. */
+  it("draws a field written empty as the empty string it is", () => {
+    const empty = {
+      ...hpaBlind,
+      status: { ...hpaBlind.status, currentMetrics: [{ type: "" }] },
+    };
+    const row = group(empty, "status")?.items.find(
+      (item) => item.label === "currentMetrics.0.type"
+    );
+    expect(row?.value).toBe('""');
+  });
+
   /** A computed zero stays the number; fails if every autoscaler loses it. */
   it("keeps a computed count as written", () => {
     const fine = {

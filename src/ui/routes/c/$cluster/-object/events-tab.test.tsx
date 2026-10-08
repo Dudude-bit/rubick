@@ -16,8 +16,12 @@ import type {
   EventInfo,
   RolloutPlan,
 } from "@/generated/types";
+import type { ObjectEventsQuery } from "@/hooks/useObjectEvents";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
+import { eventsTab } from "./events-tab";
 import { AnyObject } from "./AnyObject";
 import { DeploymentDetail } from "../(workloads)/deployments/-components/DeploymentDetail";
 import { StatefulSetDetail } from "../(workloads)/statefulsets/-components/StatefulSetDetail";
@@ -642,5 +646,24 @@ describe("the Events tab of a claim no provisioner has picked up", () => {
       )
     ).toBeInTheDocument();
     expect(screen.queryByText("No events for this object")).toBeNull();
+  });
+});
+
+describe("the Events tab's own words", () => {
+  /** Lena read "Events 0" and "Events: 0" in a Russian strip beside "Поды" and "Контейнеры"; fails if the tab or its heading stops taking the reader's language. */
+  it("names the tab and its heading in the reader's language, as the tabs beside it are", async () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const query = {
+      data: [],
+      error: null,
+      refetch: vi.fn(),
+    } as unknown as ObjectEventsQuery;
+    const tab = eventsTab(query, ru, { kind: "Service", name: "web" });
+    expect(tab.label).toBe("События");
+    await renderWithRouter(<>{tab.content}</>);
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(
+      "События"
+    );
   });
 });

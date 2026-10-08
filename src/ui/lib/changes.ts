@@ -639,6 +639,20 @@ export function quietSince(
     : watching.from;
 }
 
+/** Where the watch running at `now` began to see these spans' scope without a break, by the rule `gapsOf` draws gaps with; `null` when nothing watches at `now`. */
+export function watchedSince(
+  spans: readonly ObservedSpan[],
+  now: number
+): number | null {
+  let start: number | null = null;
+  let end = Number.NEGATIVE_INFINITY;
+  for (const span of [...spans].sort((a, b) => a.from - b.from)) {
+    if (start === null || span.from > end) start = span.from;
+    end = Math.max(end, span.to ?? Math.max(span.seenAt, now));
+  }
+  return start !== null && end >= now ? start : null;
+}
+
 export interface Gap {
   from: number;
   to: number;

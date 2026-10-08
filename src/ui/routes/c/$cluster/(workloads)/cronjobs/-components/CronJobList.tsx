@@ -10,6 +10,7 @@ import { ResourceType } from "@/lib/resource-registry";
 import { cronStatusWord } from "@/lib/status-words";
 import { matchCronJobPods, type ResourceMetrics } from "@/lib/metrics";
 import { RealtimeAge } from "@/components/ui/realtime/realtime-age";
+import { widestText } from "@/lib/text-width";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -33,6 +34,7 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     size: 150,
     accessorKey: "schedule",
     header: columnHeader("columns", "schedule"),
+    meta: { floor: () => widestText(["*/15 * * * *"], "mono", 7.2) + 20 },
     cell: ({ row }) => (
       <span className="font-mono text-fg-mid">{row.original.schedule}</span>
     ),

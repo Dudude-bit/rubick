@@ -257,6 +257,7 @@ export const en = {
     setBy: "Set by",
     cpu: "CPU",
     pods: "Pods",
+    events: "Events",
     ip: "IP",
     routing: "Routing",
     priority: "Priority",

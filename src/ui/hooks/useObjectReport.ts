@@ -153,7 +153,8 @@ export function useObjectReport(
           : events.isPending && !events.data
             ? t("share", "stillReading")
             : null,
-        eventsOfEveryObject(subject.kind)
+        eventsOfEveryObject(subject.kind),
+        t("columns", "events")
       )
     );
     const changes = changesSection(

@@ -184,7 +184,11 @@ export function GenericObjectPage({
         name={name}
         namespace={namespace}
         listLink={resourceListLink(resource)}
-        listLabel={listTitleOf({ kind, group: target.group })}
+        listLabel={listTitleOf({
+          kind,
+          group: target.group,
+          plural: target.plural,
+        })}
         served={target}
         status={
           facets?.status ? (

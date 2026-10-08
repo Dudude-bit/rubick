@@ -16,6 +16,7 @@ import { hrefOf, objectLink } from "@/lib/links";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { MetricValue } from "@/components/ui/metric-value";
 import { CopyableAddress, IPV4_CELL_PX } from "@/components/ui/copyable-value";
+import { widestText } from "@/lib/text-width";
 import { useCallback, useMemo } from "react";
 import { commands } from "@/lib/commands";
 import { whole } from "@/lib/namespace-scope";
@@ -28,6 +29,7 @@ import { ResourceList } from "../../../-list/ResourceList";
 import { ResourceListHeader } from "../../../-list/ResourceListHeader";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import {
+  badgeCellPx,
   createAgeColumn,
   createNameColumn,
   metricCellFloor,
@@ -85,7 +87,10 @@ export const columns = (
     size: 110,
     id: "status",
     header: columnHeader("columns", "status"),
-    meta: { share: (row: NodeInfo) => nodeReadyWord(row) },
+    meta: {
+      floor: () => badgeCellPx(["NotReady"]),
+      share: (row: NodeInfo) => nodeReadyWord(row),
+    },
     cell: ({ row }) => {
       // A cordoned node keeps `Ready: True`, so judging it by conditions
       // alone called it healthy full stop — the overview said "Cordoned"
@@ -99,6 +104,7 @@ export const columns = (
     size: 170,
     accessorKey: "roles",
     header: columnHeader("columns", "roles"),
+    meta: { floor: () => widestText(["control-plane"], "sans", 6.6) + 20 },
     cell: ({ row }) => (
       <span className="flex flex-wrap items-baseline gap-x-2 text-fg-mut">
         {row.original.roles.length === 0 ? (
@@ -114,6 +120,7 @@ export const columns = (
     size: 120,
     accessorKey: "version",
     header: columnHeader("columns", "version"),
+    meta: { floor: () => widestText(["v1.37.10"], "sans", 6.6) + 20 },
   },
   {
     size: 130,

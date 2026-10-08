@@ -311,6 +311,40 @@ describe("every list at the windows it is drawn in", () => {
   );
 });
 
+describe("the cells a narrow port draws at their floors", () => {
+  /**
+   * Beside a docked peek a 1440px window leaves a list about 720px, so every
+   * column is drawn at its floor. Fails if Nodes stops fitting NotReady,
+   * control-plane and a kubelet version there, or CronJobs a five-field
+   * schedule, in either language: they read "Re…", "control-pl…" and "v1.37…".
+   */
+  it.each([
+    ["English", en],
+    ["Russian", ru],
+  ] as const)(
+    "Nodes and CronJobs keep their short values whole in %s",
+    (_language, t) => {
+      const nodeColumns = nodes(new Map());
+      const node = laidOut(nodeColumns, 640, t).px;
+      const at = (id: string) => nodeColumns.findIndex((c) => nameOf(c) === id);
+      expect(node[at("status")]).toBeGreaterThanOrEqual(
+        "NotReady".length * 6.6 + 14 + 20
+      );
+      expect(node[at("roles")]).toBeGreaterThanOrEqual(
+        "control-plane".length * 6.6 + 20
+      );
+      expect(node[at("version")]).toBeGreaterThanOrEqual(
+        "v1.37.10".length * 6.6 + 20
+      );
+      const cronColumns = cronJobs();
+      const schedule = cronColumns.findIndex((c) => nameOf(c) === "schedule");
+      expect(laidOut(cronColumns, 640, t).px[schedule]).toBeGreaterThanOrEqual(
+        "*/15 * * * *".length * 7.2 + 20
+      );
+    }
+  );
+});
+
 describe("the CronJobs Suspend column", () => {
   /**
    * Lena read "Приостан…" in a column sized for "Suspended". Fails if the

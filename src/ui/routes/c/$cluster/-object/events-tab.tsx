@@ -31,7 +31,7 @@ export function eventsTab(
   const everyObject = eventsOfEveryObject(subject.kind);
   return {
     id: "events",
-    label: "Events",
+    label: t("columns", "events"),
     glyph: kindGlyph(ResourceType.Event),
     mark: error
       ? { shows: "unchecked", says: t("empty", "couldNotReadEvents") }
@@ -41,7 +41,7 @@ export function eventsTab(
     content: (
       <Section>
         <SectionHeader
-          title="Events"
+          title={t("columns", "events")}
           count={
             data && data.length > 0 ? eventCount(data.length, t) : undefined
           }

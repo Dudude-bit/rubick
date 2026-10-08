@@ -57,7 +57,6 @@ import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { buildTableRows, type BodyItem } from "./data-table-rows";
 import {
   ACTIONS_CELL_GUTTER,
-  SIDEWAYS_SCROLLBAR_GUTTER,
   actionsColumnSize,
   tableLayout,
 } from "./column-shares";
@@ -202,6 +201,15 @@ const CELL_PADDING = "px-2.5 py-2 group-data-[density=compact]/table:py-[3px]";
 const CLIP_TEXT =
   "overflow-hidden text-ellipsis whitespace-nowrap [&>a]:max-w-full";
 
+/** Held open: a lane that appears mid-layout is left out of a flex item's height, and covers its last row. */
+const SIDEWAYS_LANE = { overflowX: "scroll" } as const;
+
+/** The first column stays put while a wide table scrolls under it, so every row still says which object it is. */
+const PINNED = "sticky left-0 z-[1] bg-canvas";
+/** Opaque, so the row's own tint and selection ring are drawn again on top of it. */
+const PINNED_ROW_TINT =
+  "group-hover:bg-[image:linear-gradient(var(--color-hover),var(--color-hover))] group-aria-selected:bg-[image:linear-gradient(var(--color-hover),var(--color-hover))] group-aria-selected:shadow-[inset_1px_0_var(--color-info),inset_0_1px_var(--color-info),inset_0_-1px_var(--color-info)]";
+
 /** What a row does when it is used, read at that moment from the table. */
 interface RowEvents<TData extends RowData> {
   gesture: (row: TData, event: React.MouseEvent) => void;
@@ -224,6 +232,7 @@ interface BodyRowProps<TData extends RowData> {
   /** Held only to compare: a new set of columns draws every row again. */
   columns: ColumnDef<TData>[];
   visibility: ColumnVisibilityState;
+  pinned: boolean;
   events: React.RefObject<RowEvents<TData> | null>;
 }
 
@@ -231,17 +240,22 @@ interface RowCellsProps<TData extends RowData> {
   row: Row<TData>;
   columns: ColumnDef<TData>[];
   visibility: ColumnVisibilityState;
+  pinned: boolean;
 }
 
-function RowCellsView<TData extends RowData>({ row }: RowCellsProps<TData>) {
+function RowCellsView<TData extends RowData>({
+  row,
+  pinned,
+}: RowCellsProps<TData>) {
   return (
     <>
-      {row.getVisibleCells().map((cell) => (
+      {row.getVisibleCells().map((cell, index) => (
         <TableCell
           key={cell.id}
           className={cn(
             CELL_PADDING,
-            !CONTROL_COLUMNS.has(cell.column.id) && CLIP_TEXT
+            !CONTROL_COLUMNS.has(cell.column.id) && CLIP_TEXT,
+            pinned && index === 0 && [PINNED, PINNED_ROW_TINT]
           )}
           style={
             cell.column.id === ACTIONS_COLUMN_ID
@@ -262,6 +276,7 @@ const RowCells = React.memo(
   (before, after) =>
     before.columns === after.columns &&
     before.visibility === after.visibility &&
+    before.pinned === after.pinned &&
     before.row.id === after.row.id &&
     before.row.original === after.row.original
 ) as typeof RowCellsView;
@@ -278,6 +293,7 @@ function BodyRowView<TData extends RowData>({
   measure,
   columns,
   visibility,
+  pinned,
   events,
 }: BodyRowProps<TData>) {
   const act = clickable
@@ -317,7 +333,12 @@ function BodyRowView<TData extends RowData>({
           : undefined
       }
     >
-      <RowCells row={row} columns={columns} visibility={visibility} />
+      <RowCells
+        row={row}
+        columns={columns}
+        visibility={visibility}
+        pinned={pinned}
+      />
     </TableRow>
   );
 }
@@ -418,11 +439,17 @@ function createActionsColumn<TData extends RowData>(
  */
 function usePortWidth(
   ref: React.RefObject<HTMLDivElement | null>
-): [number, (node: HTMLDivElement | null) => () => void] {
+): [
+  number,
+  (node: HTMLDivElement | null) => () => void,
+  HTMLDivElement | null,
+] {
   const [width, setWidth] = React.useState(0);
+  const [port, setPort] = React.useState<HTMLDivElement | null>(null);
   const attach = React.useCallback(
     (node: HTMLDivElement | null) => {
       ref.current = node;
+      setPort(node);
       let frame = 0;
       let observer: ResizeObserver | undefined;
       if (node) {
@@ -439,13 +466,78 @@ function usePortWidth(
       }
       return () => {
         ref.current = null;
+        setPort(null);
         cancelAnimationFrame(frame);
         observer?.disconnect();
       };
     },
     [ref]
   );
-  return [width, attach];
+  return [width, attach, port];
+}
+
+/** Whether a sideways-scrolling port hides columns on either side, and where its shades go. */
+interface SidewaysEdges {
+  before: boolean;
+  after: boolean;
+  pinned: number;
+  right: number;
+  bottom: number;
+}
+
+const FLUSH: SidewaysEdges = {
+  before: false,
+  after: false,
+  pinned: 0,
+  right: 0,
+  bottom: 0,
+};
+
+function readEdges(port: HTMLElement): SidewaysEdges {
+  return {
+    before: port.scrollLeft > 0,
+    after: port.scrollLeft + port.clientWidth < port.scrollWidth - 1,
+    pinned: port.querySelector("th")?.offsetWidth ?? 0,
+    right: port.offsetWidth - port.clientWidth,
+    bottom: port.offsetHeight - port.clientHeight,
+  };
+}
+
+const sameEdges = (a: SidewaysEdges, b: SidewaysEdges) =>
+  (Object.keys(a) as Array<keyof SidewaysEdges>).every(
+    (key) => a[key] === b[key]
+  );
+
+function useSidewaysEdges(
+  port: HTMLDivElement | null,
+  scrolls: boolean,
+  shape: string
+): SidewaysEdges {
+  const [edges, setEdges] = React.useState(FLUSH);
+  React.useEffect(() => {
+    if (!port || !scrolls) return;
+    let frame = 0;
+    const read = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const next = readEdges(port);
+        setEdges((current) => (sameEdges(current, next) ? current : next));
+      });
+    };
+    read();
+    port.addEventListener("scroll", read, { passive: true });
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(read);
+    observer?.observe(port);
+    return () => {
+      cancelAnimationFrame(frame);
+      port.removeEventListener("scroll", read);
+      observer?.disconnect();
+    };
+  }, [port, scrolls, shape]);
+  return port && scrolls ? edges : FLUSH;
 }
 
 /** Where a nav key wants to go, or null if it is not a nav key. */
@@ -777,7 +869,7 @@ function DataTableInner<TData extends RowData>({
   }, [ordered, selection]);
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
-  const [portWidth, attachPort] = usePortWidth(scrollRef);
+  const [portWidth, attachPort, port] = usePortWidth(scrollRef);
   // Floors are measured text: drawn again once the fonts they are measured in arrive.
   const [, fontsArrived] = React.useReducer((n: number) => n + 1, 0);
   React.useEffect(() => {
@@ -788,6 +880,21 @@ function DataTableInner<TData extends RowData>({
       live = false;
     };
   }, []);
+
+  // Only the columns actually on screen count, so hiding one hands its room
+  // to the rest instead of leaving a gap.
+  const specs = table.getVisibleFlatColumns().map((column) => ({
+    size: column.getSize(),
+    floor: columnFloor(column.columnDef, t),
+  }));
+  const layout = tableLayout(specs, portWidth);
+
+  const pinned = layout.scrolls;
+  const edges = useSidewaysEdges(
+    port,
+    layout.scrolls,
+    `${layout.span} ${layout.shares[0]}`
+  );
 
   // The window is spliced into the table with spacer rows rather than
   // absolutely positioned ones: an out-of-flow `tr` leaves the fixed-layout
@@ -1094,6 +1201,7 @@ function DataTableInner<TData extends RowData>({
       measure={shouldVirtualScroll ? virtualizer.measureElement : undefined}
       columns={columnsWithActions}
       visibility={columnVisibility}
+      pinned={pinned}
       events={rowEvents}
     />
   );
@@ -1113,7 +1221,11 @@ function DataTableInner<TData extends RowData>({
           colSpan={visibleColumnCount}
           className="px-2.5 pb-1 pt-3 text-[11px] text-fg-fnt"
         >
-          {item.caption}
+          {pinned ? (
+            <span className="sticky left-2.5 inline-block">{item.caption}</span>
+          ) : (
+            item.caption
+          )}
         </TableCell>
       </TableRow>
     );
@@ -1145,14 +1257,6 @@ function DataTableInner<TData extends RowData>({
       />
     );
   }
-
-  // Only the columns actually on screen count, so hiding one hands its room
-  // to the rest instead of leaving a gap.
-  const specs = table.getVisibleFlatColumns().map((column) => ({
-    size: column.getSize(),
-    floor: columnFloor(column.columnDef, t),
-  }));
-  const layout = tableLayout(specs, portWidth);
 
   // `min-h-0` and nothing else, at every level down to the port: a flex item
   // is `flex: 0 1 auto` by default — as tall as its content, shrinking only
@@ -1240,7 +1344,7 @@ function DataTableInner<TData extends RowData>({
         </div>
         <div
           ref={containerRef}
-          className={cn(fill && "flex min-h-0 flex-col")}
+          className={cn("relative", fill && "flex min-h-0 flex-col")}
           role={keyboardNavEnabled ? "grid" : undefined}
           aria-label={keyboardNavEnabled ? t("nav", "dataTable") : undefined}
         >
@@ -1255,17 +1359,14 @@ function DataTableInner<TData extends RowData>({
             className="group/table table-fixed"
             data-density={tableDensity}
             style={layout.scrolls ? { minWidth: layout.span } : undefined}
-            containerClassName={cn(
-              shouldVirtualScroll && "scrollbar-thin",
-              fill && "min-h-0"
-            )}
+            containerClassName={cn("scrollbar-lane", fill && "min-h-0")}
             // A filled table takes its bound from the flex row above; only an
             // unfilled one falls back to the fixed port.
             containerStyle={{
               ...(shouldVirtualScroll && !fill
                 ? { maxHeight: virtualScrollHeight }
                 : undefined),
-              ...(layout.scrolls ? SIDEWAYS_SCROLLBAR_GUTTER : undefined),
+              ...(layout.scrolls ? SIDEWAYS_LANE : undefined),
             }}
           >
             <TableHeader
@@ -1298,6 +1399,7 @@ function DataTableInner<TData extends RowData>({
                           // numbers keep their proportions and sum to the table
                           // at any width.
                           style={{ width: `${layout.shares[index]}%` }}
+                          className={cn(pinned && index === 0 && PINNED)}
                         >
                           {header.isPlaceholder
                             ? null
@@ -1416,6 +1518,22 @@ function DataTableInner<TData extends RowData>({
               )}
             </TableBody>
           </Table>
+          {edges.before && (
+            <div
+              aria-hidden="true"
+              data-edge="before"
+              className="pointer-events-none absolute top-0 z-20 w-3 border-l border-hair bg-linear-to-r from-canvas"
+              style={{ left: edges.pinned, bottom: edges.bottom }}
+            />
+          )}
+          {edges.after && (
+            <div
+              aria-hidden="true"
+              data-edge="after"
+              className="pointer-events-none absolute top-0 z-20 w-10 bg-linear-to-l from-canvas"
+              style={{ right: edges.right, bottom: edges.bottom }}
+            />
+          )}
         </div>
         {/* What the table holds, and nothing about pages: a live list has no
           stable page 2 — objects appear and vanish under the reader, so a row
