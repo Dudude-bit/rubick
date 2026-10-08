@@ -93,6 +93,7 @@ import {
   podReadiness,
 } from "@/lib/container-sequence";
 import { statusRole } from "@/lib/status-role";
+import { loopingContainer, loopingNow } from "@/lib/crash-loop";
 import {
   describeRestarts,
   describeTermination,
@@ -142,20 +143,7 @@ function describeWaiting(
     };
   }
   if (reason.toLowerCase() === "crashloopbackoff") {
-    const last = container.lastTerminated;
-    return {
-      reason,
-      headline: t("empty", "startsAndExits", { container: container.name }),
-      detail: last
-        ? t("empty", "crashRestartsWithLastRun", {
-            n: container.restartCount,
-            how: `${describeTermination(last)}${
-              terminationWhen(last, t) ? `, ${terminationWhen(last, t)}` : ""
-            }`,
-          })
-        : t("empty", "crashRestartsNoLastRun", { n: container.restartCount }),
-      tone: "err",
-    };
+    return crashLoop(container, reason, t);
   }
   if (/^CreateContainer(Config)?Error$/i.test(reason)) {
     return {
@@ -170,6 +158,28 @@ function describeWaiting(
     headline: t("empty", "waitingToStart", { container: container.name }),
     detail: reason,
     tone: statusRole(reason) === "err" ? "err" : "warn",
+  };
+}
+
+/** The same loop whichever instant of the back-off the read caught. */
+function crashLoop(
+  container: ContainerInfo,
+  reason: string,
+  t: ReturnType<typeof useT>
+): Omit<PodProblem, "tab"> {
+  const last = container.lastTerminated;
+  return {
+    reason,
+    headline: t("empty", "startsAndExits", { container: container.name }),
+    detail: last
+      ? t("empty", "crashRestartsWithLastRun", {
+          n: container.restartCount,
+          how: `${describeTermination(last)}${
+            terminationWhen(last, t) ? `, ${terminationWhen(last, t)}` : ""
+          }`,
+        })
+      : t("empty", "crashRestartsNoLastRun", { n: container.restartCount }),
+    tone: "err",
   };
 }
 
@@ -219,6 +229,16 @@ function podProblem(
         tab: "containers",
       };
     }
+  }
+
+  const looping = loopingNow(pod.status)
+    ? loopingContainer(podContainers(pod))
+    : null;
+  if (looping) {
+    return {
+      ...crashLoop(looping, pod.status.display, t),
+      tab: "containers",
+    };
   }
 
   const condition = failingCondition(pod.status.conditions, [

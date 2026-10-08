@@ -4,6 +4,7 @@ import { podReadiness } from "@/lib/container-sequence";
 import { silenceNote, type NodeSilence } from "@/lib/node-reporting";
 import { podRole, type PodBadgeInput } from "@/lib/share/pod-status";
 import { podStatusMeaning } from "@/lib/status-meaning";
+import { loopingNow } from "@/lib/crash-loop";
 
 /** kubectl's word for the pod, in the colour and with the meaning every pod surface gives it. */
 export function PodStatusBadge({
@@ -21,12 +22,17 @@ export function PodStatusBadge({
       title={
         silence
           ? silenceNote(silence, t)
-          : podStatusMeaning(
-              pod.status.display,
-              pod.status.phase,
-              t,
-              podReadiness(pod)
-            )
+          : [
+              podStatusMeaning(
+                pod.status.display,
+                pod.status.phase,
+                t,
+                podReadiness(pod)
+              ),
+              loopingNow(pod.status) && t("statusMeaning", "betweenCrashes"),
+            ]
+              .filter(Boolean)
+              .join("\n")
       }
     />
   );

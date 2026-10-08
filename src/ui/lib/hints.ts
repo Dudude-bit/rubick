@@ -9,6 +9,7 @@
  * test on the catalogue holds it to that.
  */
 
+import { loopingContainer, loopingNow } from "@/lib/crash-loop";
 import type {
   ContainerInfo,
   EventInfo,
@@ -173,9 +174,10 @@ export function troubleOf(pod: PodInfo, events: EventInfo[]): Trouble | null {
       saidOom: oom.lastTerminated?.reason === "OOMKilled",
     };
   }
-  const crashing = all.find(
-    (c) => c.state.type === "waiting" && c.state.reason === "CrashLoopBackOff"
-  );
+  const crashing =
+    all.find(
+      (c) => c.state.type === "waiting" && c.state.reason === "CrashLoopBackOff"
+    ) ?? (loopingNow(pod.status) ? loopingContainer(all) : null);
   if (crashing) {
     return {
       reason: "crashLoop",

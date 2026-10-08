@@ -2015,6 +2015,7 @@ export interface TerminationInfo {
 export interface PodRowStatus {
   phase: string;
   display: string;
+  loopingExitAt?: string;
 }
 
 export interface FileEntry {
@@ -2162,6 +2163,7 @@ export interface PodStatusInfo {
   conditions: ConditionInfo[];
   message: string | null;
   reason: string | null;
+  loopingExitAt?: string;
 }
 
 export interface DeploymentInfo {

@@ -6744,6 +6744,8 @@ export const en = {
       "the pod is held back from scheduling until its scheduling gates are removed.",
     notReady:
       "the containers run, but the pod fails its readiness check, so Services send it no traffic.",
+    betweenCrashes:
+      "Up between crashes: a container keeps exiting, and the kubelet keeps starting it again.",
     containerStatusUnknown:
       "the container's state was lost, usually after the node restarted.",
     deadlineExceeded:

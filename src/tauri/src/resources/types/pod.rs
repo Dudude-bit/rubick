@@ -10,7 +10,7 @@ use crate::resources::serialization::OwnerReference;
 use crate::utils::format_cpu;
 
 use super::common::{extract_owner_references, ConditionInfo, ContainerInfo};
-use super::pod_display::{display_status, restarts};
+use super::pod_display::{display_status, looping_exit, restarts};
 use crate::utils::Moment;
 
 /// Simplified pod information for frontend
@@ -393,6 +393,9 @@ pub struct PodStatusInfo {
     pub conditions: Vec<ConditionInfo>,
     pub message: Option<String>,
     pub reason: Option<String>,
+    /// See [`looping_exit`]; the reader measures the crash-loop window from it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub looping_exit_at: Option<DateTime<Utc>>,
 }
 
 impl PodStatusInfo {
@@ -406,6 +409,7 @@ impl PodStatusInfo {
                 conditions: vec![],
                 message: None,
                 reason: None,
+                looping_exit_at: None,
             };
         };
 
@@ -428,6 +432,7 @@ impl PodStatusInfo {
             conditions,
             message: status.message.clone(),
             reason: status.reason.clone(),
+            looping_exit_at: looping_exit(pod),
         }
     }
 }

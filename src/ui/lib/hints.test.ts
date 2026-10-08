@@ -169,6 +169,30 @@ describe("troubleOf", () => {
     });
   });
 
+  /** Sam's checkout pod lost its "Most likely" crash loop whenever the read
+   *  caught it up between crashes. Fails if the running instant of a recent
+   *  loop is not the same trouble as the waiting one. */
+  it("names a crash loop caught while its container is up", () => {
+    const exit = {
+      exitCode: 1,
+      signal: null,
+      reason: "Error",
+      message: null,
+      startedAt: null,
+      finishedAt: new Date(Date.now() - 30_000).toISOString(),
+    };
+    const up = pod({
+      containers: [container("app", { lastTerminated: exit, restartCount: 6 })],
+    });
+    expect(troubleOf(up, [])).toBeNull();
+    expect(
+      troubleOf(
+        { ...up, status: { ...up.status, loopingExitAt: exit.finishedAt } },
+        []
+      )
+    ).toMatchObject({ reason: "crashLoop", container: "app", restarts: 6 });
+  });
+
   it("reads OOMKilled off the last termination", () => {
     const trouble = troubleOf(
       pod({
