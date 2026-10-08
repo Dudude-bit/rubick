@@ -254,6 +254,7 @@ describe("what the problem count counts", () => {
     bar();
 
     const counts = screen.getByTestId("scope-counts");
-    expect(counts).toHaveTextContent("0 problems, not all checked");
+    expect(counts).toHaveTextContent("not all checked");
+    expect(counts).not.toHaveTextContent("0 problems");
   });
 });

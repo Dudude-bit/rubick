@@ -759,7 +759,7 @@ describe("the count beside a namespace", () => {
     expect(within(list).getByText("14 · 3+ problems")).toBeInTheDocument();
     expect(
       within(list).getByRole("option", { name: /^shop,/ })
-    ).toHaveAccessibleName("shop, 14 pods, 3 problems, not all checked");
+    ).toHaveAccessibleName("shop, 14 pods, 3+ problems, not all checked");
     expect(within(list).getByText("4 · not all checked")).toBeInTheDocument();
   });
 });

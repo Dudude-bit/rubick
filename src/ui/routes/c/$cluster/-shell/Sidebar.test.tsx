@@ -278,7 +278,7 @@ describe("the counts at the end of each row", () => {
     const picker = namespaceAttention(whole, "team-checkout");
     const badge = await screen.findByText(attentionFigure(picker));
     expect(badge).toHaveTextContent("3+");
-    expect(badge).toHaveAccessibleName("3 problems, not all checked");
+    expect(badge).toHaveAccessibleName("3+ problems, not all checked");
     attention = null;
   });
 });

@@ -261,6 +261,38 @@ describe("the reason on a problem row", () => {
   });
 });
 
+describe("the Needs attention heading", () => {
+  /**
+   * Marco's team-checkout: the heading said "3" while the sidebar badge
+   * said "3+" and the status bar "3 problems, not all checked" over the
+   * same count. Fails if a count some kind went unread for heads the panel
+   * without its "+" and the words the other surfaces use.
+   */
+  it("marks a count some kind went unread for as the floor it is", async () => {
+    const attention = attentionFrom([problem, { ...problem, name: "cart" }], {
+      services: {
+        answered: [],
+        unread: [
+          { namespace: "team-checkout", code: "", message: "forbidden" },
+        ],
+      },
+    });
+    expect(attention.complete).toBe(false);
+    const { unmount } = await wrap(
+      <AttentionPanel
+        attention={attention}
+        pods={RUNNING}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+    expect(
+      screen.getByText("2+ · worst first · not all checked")
+    ).toBeInTheDocument();
+    unmount();
+  });
+});
+
 describe("the healthy line when the node read was refused", () => {
   const pods = {
     running: 1,

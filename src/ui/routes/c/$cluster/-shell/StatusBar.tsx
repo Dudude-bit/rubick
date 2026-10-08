@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useAttention } from "@/hooks/useAttention";
-import type { Attention } from "@/lib/attention";
+import { attentionWords, type Attention } from "@/lib/attention";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useRenewal } from "@/hooks/useCredentialRenewal";
 import type { Renewal } from "@/generated/types";
@@ -239,9 +239,7 @@ function ProblemCount({ attention }: { attention: Attention }) {
         worst === "warn" && "text-warn"
       )}
     >
-      {t("cluster", complete ? "problemCount" : "problemCountPartial", {
-        n: total,
-      })}
+      {attentionWords({ total, complete }, t)}
     </span>
   );
 }
@@ -269,11 +267,7 @@ function ClusterWideCounts({ podCount }: { podCount: number }) {
       {t("cluster", "clusterWideCounts", {
         pods: t("cluster", "podCount", { n: podCount }),
         problems: attention
-          ? t(
-              "cluster",
-              attention.complete ? "problemCount" : "problemCountPartial",
-              { n: attention.total }
-            )
+          ? attentionWords(attention, t)
           : t("cluster", "countsUnread"),
       })}
     </>

@@ -32,7 +32,11 @@ import {
   type NamespaceListState,
   type NamespaceScope,
 } from "@/hooks/useClusterSummary";
-import { ATTENTION_TEXT, type NamespaceAttention } from "@/lib/attention";
+import {
+  ATTENTION_TEXT,
+  attentionWords,
+  type NamespaceAttention,
+} from "@/lib/attention";
 import { useNamespaceAccess } from "./useNamespaceAccess";
 import { useOpenCluster } from "@/hooks/useOpenCluster";
 import {
@@ -1142,9 +1146,7 @@ function problemWords(problems: NamespaceAttention | null, t: T) {
       : n > 0
         ? t("cluster", "problemCountAtLeast", { n })
         : t("cluster", "problemsNotAllChecked"),
-    spoken: t("cluster", complete ? "problemCount" : "problemCountPartial", {
-      n,
-    }),
+    spoken: attentionWords({ total: n, complete }, t),
     tone: worst ? ATTENTION_TEXT[worst] : "text-fg-mut",
   };
 }

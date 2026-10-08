@@ -391,6 +391,17 @@ export const attentionFigure = ({
 }: Pick<Attention, "total" | "complete">): string =>
   complete ? String(total) : `${total}+`;
 
+/** The same count in words, alike on every surface that has room for them. */
+export function attentionWords(
+  { total, complete }: Pick<Attention, "total" | "complete">,
+  t: T
+): string {
+  if (complete) return t("cluster", "problemCount", { n: total });
+  return total > 0
+    ? t("cluster", "problemCountPartial", { n: total })
+    : t("cluster", "problemsNotAllChecked");
+}
+
 export const ATTENTION_TEXT = {
   err: "text-err",
   warn: "text-warn",

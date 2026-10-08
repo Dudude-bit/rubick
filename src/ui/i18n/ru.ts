@@ -4796,10 +4796,10 @@ export const ru: Catalogue = {
       other: "{n} проблемы",
     },
     problemCountPartial: {
-      one: "{n} проблема, проверено не всё",
-      few: "{n} проблемы, проверено не всё",
-      many: "{n} проблем, проверено не всё",
-      other: "{n} проблемы, проверено не всё",
+      one: "{n}+ проблема, проверено не всё",
+      few: "{n}+ проблемы, проверено не всё",
+      many: "{n}+ проблем, проверено не всё",
+      other: "{n}+ проблемы, проверено не всё",
     },
     problemCountAtLeast: {
       one: "{n}+ проблема",
@@ -8439,6 +8439,7 @@ export const ru: Catalogue = {
     },
     podNoun: { one: "под", few: "пода", many: "подов", other: "пода" },
     worstFirst: "{n} · сначала худшие",
+    worstFirstPartial: "{n}+ · сначала худшие · проверено не всё",
     moreMostSevere: "ещё {n}; показаны {shown} самых серьёзных",
     unrankedProblems: {
       one: "{n} проблема вне списка",

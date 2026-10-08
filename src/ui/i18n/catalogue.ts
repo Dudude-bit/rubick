@@ -4300,8 +4300,8 @@ export const en = {
     podCount: { one: "{n} pod", other: "{n} pods" },
     problemCount: { one: "{n} problem", other: "{n} problems" },
     problemCountPartial: {
-      one: "{n} problem, not all checked",
-      other: "{n} problems, not all checked",
+      one: "{n}+ problem, not all checked",
+      other: "{n}+ problems, not all checked",
     },
     problemCountAtLeast: { one: "{n}+ problem", other: "{n}+ problems" },
     problemsNotAllChecked: "not all checked",
@@ -7391,6 +7391,7 @@ export const en = {
     failedPodsFolded: { one: "{n} failed pod", other: "{n} failed pods" },
     podNoun: { one: "pod", other: "pods" },
     worstFirst: "{n} · worst first",
+    worstFirstPartial: "{n}+ · worst first · not all checked",
     moreMostSevere: "+{n} more; showing the {shown} most severe",
     unrankedProblems: {
       one: "{n} unranked problem",

@@ -21,7 +21,11 @@ import { ProviderMark } from "@/components/ui/provider-mark";
 import { Spinner } from "@/components/ui/spinner";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useAttention } from "@/hooks/useAttention";
-import { ATTENTION_TEXT, attentionFigure } from "@/lib/attention";
+import {
+  ATTENTION_TEXT,
+  attentionFigure,
+  attentionWords,
+} from "@/lib/attention";
 import {
   oneLock,
   refusedEverywhereAsked,
@@ -993,11 +997,7 @@ function AttentionCount() {
         worst ? ATTENTION_TEXT[worst] : "text-fg-fnt"
       )}
       title={complete ? undefined : t("cluster", "problemsNotAllChecked")}
-      aria-label={t(
-        "cluster",
-        complete ? "problemCount" : "problemCountPartial",
-        { n }
-      )}
+      aria-label={attentionWords({ total: n, complete }, t)}
     >
       {attentionFigure(attention)}
     </span>

@@ -408,7 +408,9 @@ export function AttentionPanel({
         title={t("action", "needsAttention")}
         count={
           total > 0
-            ? t("count", "worstFirst", { n: formatCount(total) })
+            ? t("count", complete ? "worstFirst" : "worstFirstPartial", {
+                n: formatCount(total),
+              })
             : complete
               ? t("cluster", "attentionNothing")
               : t("cluster", "attentionNoneFound")
