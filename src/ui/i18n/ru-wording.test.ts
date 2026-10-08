@@ -40,4 +40,12 @@ describe("Russian written as a person says it", () => {
       "В срезе порты привязаны к портам Service по имени. Имена этих портов не совпадают ни с одним из объявленных в срезе, поэтому к ним ничего не маршрутизируется."
     );
   });
+
+  /** Lena read the Owns tab as "Owner", the opposite of what it lists; fails if the tab is a word for an owner or a verb again. */
+  it("names the Owns tab for what it lists, a noun beside its Owners counterpart", () => {
+    const tab = translate("ru", "owns", "tab");
+    expect(tab).toBe("Зависимые");
+    expect(tab).not.toMatch(/владе/i);
+    expect(translate("ru", "lineage", "label")).toBe("Владельцы");
+  });
 });

@@ -1,7 +1,12 @@
-import { useEffect } from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { Link2, TriangleAlert, X } from "lucide-react";
+
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import { Button } from "@/components/ui/button";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -30,11 +35,7 @@ export function DeepLinkBanner() {
   const arrival = useDeepLinkStore((s) => s.arrival);
   const dismiss = useDeepLinkStore((s) => s.dismiss);
   const openSettings = useSettingsStore((s) => s.openSettings);
-  // "Live" is a claim about the connection, and the route makes it: until
-  // the link's own cluster has connected, there is nothing live to say.
-  const live = useClusterStore(
-    (s) => s.isConnected && s.currentContext === arrival?.link.context
-  );
+  const live = useLiveArrival();
 
   // Leaving the page the link opened is reading the banner; it should not
   // follow the reader around the app.
@@ -55,40 +56,7 @@ export function DeepLinkBanner() {
 
   if (!arrival) return null;
 
-  const when = arrival.link.capturedAt
-    ? formatWhen(arrival.link.capturedAt)
-    : null;
-
-  if (arrival.status === "live") {
-    if (!live) return null;
-    // Floats over the page: in the flow it pushed everything down until dismissed.
-    return createPortal(
-      <div
-        role="status"
-        data-testid="link-opened"
-        className="fixed right-4 bottom-9 z-50 flex max-w-sm items-start gap-2 rounded-md border border-hair bg-raise px-3 py-2 text-xs text-fg-mid shadow-pop"
-      >
-        <Link2
-          className="mt-0.5 h-3.5 w-3.5 flex-none text-info"
-          aria-hidden="true"
-        />
-        <p className="min-w-0 flex-1">
-          {when
-            ? t("cluster", "linkOpenedAt", { when })
-            : t("cluster", "linkOpened")}
-        </p>
-        <button
-          type="button"
-          onClick={dismiss}
-          aria-label={t("cluster", "linkDismiss")}
-          className="rounded p-1 text-fg-fnt hover:text-fg"
-        >
-          <X className="h-3.5 w-3.5" aria-hidden="true" />
-        </button>
-      </div>,
-      document.body
-    );
-  }
+  if (arrival.status === "live") return null;
 
   return (
     <div
@@ -129,5 +97,78 @@ export function DeepLinkBanner() {
         </div>
       </div>
     </div>
+  );
+}
+
+/** How long the note stays once nobody is pointing at it. */
+export const LINK_NOTE_MS = 12_000;
+
+/** The live link's arrival, once its own cluster has connected. */
+function useLiveArrival() {
+  const arrival = useDeepLinkStore((s) => s.arrival);
+  // "Live" is a claim about the connection: until the link's own cluster has
+  // connected, there is nothing live to say.
+  return useClusterStore(
+    (s) =>
+      arrival?.status === "live" &&
+      s.isConnected &&
+      s.currentContext === arrival.link.context
+  );
+}
+
+/**
+ * The live link's note, in the status bar so it covers no page, log footer
+ * or toast, gone on its own a few seconds after it was last pointed at.
+ */
+export function LinkOpenedNote() {
+  const arrival = useDeepLinkStore((s) => s.arrival);
+  const live = useLiveArrival();
+  if (!live || arrival?.status !== "live") return null;
+  return (
+    <LiveNote key={arrival.link.path} capturedAt={arrival.link.capturedAt} />
+  );
+}
+
+function LiveNote({ capturedAt }: { capturedAt: Date | null }) {
+  const t = useT();
+  const dismiss = useDeepLinkStore((s) => s.dismiss);
+  const [held, setHeld] = useState(false);
+  useEffect(() => {
+    if (held) return;
+    const timer = setTimeout(dismiss, LINK_NOTE_MS);
+    return () => clearTimeout(timer);
+  }, [held, dismiss]);
+
+  const text = capturedAt
+    ? t("cluster", "linkOpenedAt", { when: formatWhen(capturedAt) })
+    : t("cluster", "linkOpened");
+  return (
+    <span
+      role="status"
+      data-testid="link-opened"
+      onMouseEnter={() => setHeld(true)}
+      onMouseLeave={() => setHeld(false)}
+      onFocus={() => setHeld(true)}
+      onBlur={() => setHeld(false)}
+      className="flex min-w-0 items-center gap-1.5 text-fg-mid"
+    >
+      <Link2 className="h-3 w-3 flex-none text-info" aria-hidden="true" />
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span className="min-w-0 truncate">{text}</span>
+        </TooltipTrigger>
+        <TooltipContent side="top" align="start" className="max-w-[420px]">
+          {text}
+        </TooltipContent>
+      </Tooltip>
+      <button
+        type="button"
+        onClick={dismiss}
+        aria-label={t("cluster", "linkDismiss")}
+        className="flex-none rounded p-0.5 text-fg-fnt hover:text-fg"
+      >
+        <X className="h-3 w-3" aria-hidden="true" />
+      </button>
+    </span>
   );
 }

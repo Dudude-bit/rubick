@@ -6,6 +6,7 @@ import { renderWithRouter } from "@/test/render";
 import { ConditionRows, EventRows, UsageRow } from "./detail-blocks";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
 import * as eventReason from "@/lib/event-reason";
+import { MetricsAbsenceContext } from "@/lib/metrics-absence";
 
 const wrap = (ui: ReactElement) =>
   renderWithRouter(ui, {
@@ -157,6 +158,20 @@ describe("UsageRow without a denominator", () => {
   it("says a count it could not take is not counted", () => {
     render(<UsageRow label="Pods" used={null} total={110} type="count" />);
     expect(screen.getByText("not counted")).toBeInTheDocument();
+  });
+
+  /** In Russian "metrics-server не установлен" broke over two lines in a fixed 150px column; fails if the reason may wrap or its column stops growing to fit it. */
+  it("keeps the reason on one line, widening its column instead", () => {
+    const { container } = render(
+      <MetricsAbsenceContext.Provider value="notInstalled">
+        <UsageRow label="CPU" used={null} total={200} type="cpu" />
+      </MetricsAbsenceContext.Provider>
+    );
+    const reason = screen.getByText("metrics-server not installed");
+    expect(reason.closest(".whitespace-nowrap")).not.toBeNull();
+    expect(container.firstElementChild?.className).toContain(
+      "minmax(150px,max-content)"
+    );
   });
 
   it("still draws the fill when both numbers are real", () => {

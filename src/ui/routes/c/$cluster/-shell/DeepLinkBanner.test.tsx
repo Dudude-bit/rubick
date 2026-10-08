@@ -1,10 +1,25 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDeepLinkStore } from "@/stores/deepLinkStore";
 import { renderWithRouter } from "@/test/render";
-import { DeepLinkBanner } from "./DeepLinkBanner";
+import { DeepLinkBanner, LINK_NOTE_MS, LinkOpenedNote } from "./DeepLinkBanner";
 
 const PATH = "/c/acme/deployments/lena-sandbox/hello-web";
 const setNamespaceScope = vi.fn(async () => {});
@@ -26,7 +41,6 @@ async function arrive(scope: string[]) {
     at: PATH,
     route: "/c/$cluster/deployments/$namespace/$name",
   });
-  await screen.findByRole("status");
 }
 
 beforeEach(() => setNamespaceScope.mockClear());
@@ -51,8 +65,7 @@ describe("a link that opens an object in another namespace", () => {
 });
 
 describe("the note a live link leaves", () => {
-  /** Lena's page sat 40px lower until she closed the note, then jumped; fails if the note goes back into the page's flow. */
-  it("floats over the page instead of pushing it down", async () => {
+  function arriveLive() {
     useClusterStore.setState({
       currentContext: "acme",
       isConnected: true,
@@ -65,12 +78,60 @@ describe("the note a live link leaves", () => {
         link: { context: "acme", path: PATH, capturedAt: null },
       },
     });
-    const { container } = await renderWithRouter(<DeepLinkBanner />, {
+  }
+
+  function renderNote() {
+    return render(
+      <TooltipProvider>
+        <footer>
+          <LinkOpenedNote />
+        </footer>
+      </TooltipProvider>
+    );
+  }
+
+  afterEach(() => vi.useRealTimers());
+
+  /** Floating bottom right, it covered the log viewer's "shown / Streaming" footer and toasts; fails if it leaves the status strip again. */
+  it("sits in the status strip instead of floating over the page", () => {
+    arriveLive();
+    const { container } = renderNote();
+    const note = screen.getByRole("status");
+    expect(container.querySelector("footer")?.contains(note)).toBe(true);
+    expect(note.className).not.toContain("fixed");
+  });
+
+  /** Lena had it on screen for ten minutes; fails if the timer is removed. */
+  it("leaves on its own a few seconds after it appears", () => {
+    vi.useFakeTimers();
+    arriveLive();
+    renderNote();
+    expect(screen.getByRole("status")).toBeTruthy();
+    act(() => vi.advanceTimersByTime(LINK_NOTE_MS));
+    expect(useDeepLinkStore.getState().arrival).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  /** A reader halfway through the sentence would lose it; fails if pointing at it no longer holds it. */
+  it("stays while the pointer rests on it", () => {
+    vi.useFakeTimers();
+    arriveLive();
+    renderNote();
+    fireEvent.mouseEnter(screen.getByRole("status"));
+    act(() => vi.advanceTimersByTime(LINK_NOTE_MS * 3));
+    expect(useDeepLinkStore.getState().arrival).not.toBeNull();
+    fireEvent.mouseLeave(screen.getByRole("status"));
+    act(() => vi.advanceTimersByTime(LINK_NOTE_MS));
+    expect(useDeepLinkStore.getState().arrival).toBeNull();
+  });
+
+  /** The page area must not draw a second copy over the page. */
+  it("is not drawn by the page area", async () => {
+    arriveLive();
+    await renderWithRouter(<DeepLinkBanner />, {
       at: PATH,
       route: "/c/$cluster/deployments/$namespace/$name",
     });
-    const note = await screen.findByRole("status");
-    expect(container.contains(note)).toBe(false);
-    expect(note.className).toContain("fixed");
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });
