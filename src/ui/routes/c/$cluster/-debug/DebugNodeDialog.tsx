@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,11 @@ import { useDebugOperation } from "@/hooks";
 import { Progress } from "@/components/ui/progress";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
+import { ReasonTip } from "@/components/object/detail-blocks";
+import { useNodeDebugDenied, useNodeDebugNamespace } from "@/lib/access";
+import { isNamespaceName } from "@/lib/namespace-scope";
+import { cn } from "@/lib/utils";
+import { Refusal } from "./DebugPodDialog";
 
 export interface DebugNodeDialogProps {
   open: boolean;
@@ -50,7 +55,18 @@ export function DebugNodeDialog({
   const { toast } = useToast();
   const [selectedImage, setSelectedImage] = useState("busybox:latest");
   const [customImage, setCustomImage] = useState("");
-  const [namespace, setNamespace] = useState("default");
+  const fallback = useNodeDebugNamespace();
+  const [typed, setTyped] = useState<string | null>(null);
+  const namespace = typed ?? fallback;
+  // Asked once the typing stops, not for every prefix on the way there.
+  const [settled, setSettled] = useState(namespace);
+  useEffect(() => {
+    const timer = setTimeout(() => setSettled(namespace), 400);
+    return () => clearTimeout(timer);
+  }, [namespace]);
+  const startDenied = useNodeDebugDenied(
+    settled === namespace && isNamespaceName(namespace) ? namespace : null
+  );
 
   const image = selectedImage === "custom" ? customImage : selectedImage;
   const isImageValid = image.trim().length > 0;
@@ -137,6 +153,7 @@ export function DebugNodeDialog({
       // Don't close during polling - user must explicitly cancel
       return;
     }
+    if (!newOpen) setTyped(null);
     onOpenChange(newOpen);
   };
 
@@ -303,13 +320,13 @@ export function DebugNodeDialog({
           <div className="space-y-2">
             <Label htmlFor="debug-image">{t("action", "debugImage")}</Label>
             <Select value={selectedImage} onValueChange={setSelectedImage}>
-              <SelectTrigger>
+              <SelectTrigger id="debug-image">
                 <SelectValue placeholder={t("action", "selectDebugImage")} />
               </SelectTrigger>
               <SelectContent>
                 {DEBUG_IMAGES.map((img) => (
                   <SelectItem key={img.value} value={img.value}>
-                    {img.label}
+                    {t("action", img.label)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -332,11 +349,12 @@ export function DebugNodeDialog({
               id="namespace"
               placeholder="default"
               value={namespace}
-              onChange={(e) => setNamespace(e.target.value)}
+              onChange={(e) => setTyped(e.target.value)}
             />
             <p className="text-xs text-fg-mut">
               {t("action", "debugPodNamespaceHint")}
             </p>
+            <Refusal reason={startDenied} />
           </div>
 
           {/* Warning about privileged access */}
@@ -352,16 +370,23 @@ export function DebugNodeDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button
+            variant="outline"
+            onClick={() => handleDialogOpenChange(false)}
+          >
             {t("action", "cancel")}
           </Button>
-          <Button
-            onClick={handleDebug}
-            disabled={!isImageValid}
-            variant="destructive"
-          >
-            {t("action", "startDebug")}
-          </Button>
+          <ReasonTip reason={startDenied}>
+            <Button
+              onClick={() => !startDenied && handleDebug()}
+              disabled={!startDenied && !isImageValid}
+              aria-disabled={startDenied ? true : undefined}
+              variant="destructive"
+              className={cn(startDenied && "cursor-default opacity-40")}
+            >
+              {t("action", "startDebug")}
+            </Button>
+          </ReasonTip>
         </DialogFooter>
       </DialogContent>
     </Dialog>
