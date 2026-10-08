@@ -277,7 +277,7 @@ export function stampLength(log: Pick<LogLine, "timestamp" | "raw">): number {
   return space > 10 && STAMP_SHAPED.test(log.raw) ? space + 1 : 0;
 }
 
-function written(log: StreamedLogLine): string {
+function written(log: Pick<StreamedLogLine, "raw" | "timestamp">): string {
   return log.raw.slice(stampLength(log));
 }
 
@@ -313,6 +313,32 @@ function matchesTerm(log: StreamedLogLine, term: QueryTerm): boolean {
   return term.op === "="
     ? actual === term.value
     : actual !== undefined && actual !== term.value;
+}
+
+/**
+ * Where a text query found a line outside the message it shows: the fields
+ * that hold it, or none when only the raw line does. `null` when the message
+ * holds it or the line does not.
+ */
+export function matchedOutsideMessage(
+  log: Pick<StreamedLogLine, "message" | "fields" | "raw" | "timestamp">,
+  query: string
+): string[] | null {
+  const needle = query.toLowerCase();
+  if (
+    needle === "" ||
+    log.message.toLowerCase().includes(needle) ||
+    !written(log).toLowerCase().includes(needle)
+  ) {
+    return null;
+  }
+  return Object.entries(log.fields ?? {})
+    .filter(
+      ([key, value]) =>
+        key.toLowerCase().includes(needle) ||
+        value.toLowerCase().includes(needle)
+    )
+    .map(([key]) => key);
 }
 
 /** Every term has to hold: chips narrow, they do not widen. */

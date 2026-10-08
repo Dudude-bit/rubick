@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vite-plus/test";
 import {
   formatTimestamp,
+  matchedOutsideMessage,
   matchesQuery,
   parseQueryTerm,
   termLabel,
@@ -110,5 +111,42 @@ describe("formatting", () => {
     const stamp = new Date(2026, 7, 6, 14, 4, 31).toISOString();
     expect(formatTimestamp(stamp)).toBe("14:04:31");
     expect(formatTimestamp(null)).toBe("--:--:--");
+  });
+});
+
+describe("where a text query found a line it matched", () => {
+  const served = line({
+    message: "request served",
+    fields: { path: "/api/cart", status: "200" },
+    raw: '{"msg":"request served","path":"/api/cart","status":"200"}',
+  });
+
+  /** Marco's "cart": the row matched on a field and nothing said so. Fails if the field holding it is not named. */
+  it("names the fields that hold it when the message does not", () => {
+    expect(matchedOutsideMessage(served, "CART")).toEqual(["path"]);
+  });
+
+  /** Fails if a match the message already shows is said a second time. */
+  it("says nothing when the message holds it", () => {
+    expect(matchedOutsideMessage(served, "served")).toBeNull();
+  });
+
+  /** A klog header the parser took off: only Raw draws it. Fails if that reads as a field. */
+  it("answers no fields when only the raw line holds it", () => {
+    expect(
+      matchedOutsideMessage(
+        line({
+          message: "request served",
+          fields: null,
+          raw: "I1007 06:41:09.603166 1 server.go:42] request served",
+        }),
+        "server.go"
+      )
+    ).toEqual([]);
+  });
+
+  /** A row drawn before the filter caught up must not claim a match it does not have. */
+  it("says nothing about a line that does not hold it at all", () => {
+    expect(matchedOutsideMessage(served, "checkout")).toBeNull();
   });
 });

@@ -6239,6 +6239,8 @@ export const en = {
       "Lines have been dropped around the frozen interval, so the strip has a gap beside it.",
     repeatsOnNote:
       "Repeats is on, so a line that says what the one above it said is folded into it.",
+    matchedIn: "matched in {fields}",
+    matchedOutsideMessage: "matched outside the message: Raw shows it",
     nothingMatchedFor: "Nothing has matched {terms} for {span}.",
     intakeNarrowNote:
       "The stream is attached and reading. This is intake being narrow, not the log stopping.",
