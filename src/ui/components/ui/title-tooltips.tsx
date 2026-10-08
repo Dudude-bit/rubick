@@ -9,11 +9,14 @@ const OPEN_DELAY_MS = 700;
 const SKIP_DELAY_MS = 300;
 const GAP_PX = 4;
 const EDGE_PX = 8;
+/** The arrow pointer's height below its hot spot, which the card must not sit under. */
+const CURSOR_PX = 20;
 
 interface ShownTitle {
   text: string;
   anchor: DOMRect;
   x: number;
+  y: number;
 }
 
 /**
@@ -37,7 +40,7 @@ function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
   const reveal = () => {
     if (!owner || quiet || !held || !owner.isConnected) return;
     visible = true;
-    show({ text: held, anchor: owner.getBoundingClientRect(), x });
+    show({ text: held, anchor: owner.getBoundingClientRect(), x, y });
   };
   const hide = () => {
     window.clearTimeout(timer);
@@ -149,23 +152,30 @@ function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
   };
 }
 
-/** Above the element, under the pointer's x; below it where there is no room above. */
-function TitleCard({ text, anchor, x }: ShownTitle) {
+/**
+ * Below the element and the pointer, under the pointer's x; above it where
+ * there is no room below. Above, a cell's card covered the row over the one
+ * being read.
+ */
+function TitleCard({ text, anchor, x, y }: ShownTitle) {
   const ref = React.useRef<HTMLDivElement>(null);
   React.useLayoutEffect(() => {
     const card = ref.current;
     if (!card) return;
     const box = card.getBoundingClientRect();
-    const above = anchor.top - GAP_PX - box.height;
-    const side = above >= EDGE_PX ? "top" : "bottom";
+    const below = Math.max(anchor.bottom + GAP_PX, y + CURSOR_PX);
+    const fits = below + box.height <= window.innerHeight - EDGE_PX;
+    const side = fits ? "bottom" : "top";
     const left = Math.min(
       Math.max(x - box.width / 2, EDGE_PX),
       window.innerWidth - box.width - EDGE_PX
     );
     card.dataset.side = side;
     card.style.left = `${Math.max(left, EDGE_PX)}px`;
-    card.style.top = `${side === "top" ? above : anchor.bottom + GAP_PX}px`;
-  }, [text, anchor, x]);
+    card.style.top = `${
+      fits ? below : Math.max(anchor.top - GAP_PX - box.height, EDGE_PX)
+    }px`;
+  }, [text, anchor, x, y]);
   return (
     <div
       ref={ref}

@@ -99,3 +99,55 @@ describe("a native title", () => {
     expect(card()?.textContent).toBe("Events: 5");
   });
 });
+
+describe("where the card sits", () => {
+  const rect = (top: number, height: number, width = 80) =>
+    ({
+      top,
+      bottom: top + height,
+      left: 0,
+      right: width,
+      width,
+      height,
+      x: 0,
+      y: top,
+      toJSON: () => ({}),
+    }) as DOMRect;
+
+  const placed = async (rowTop: number, pointerY: number) => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: HTMLElement) {
+        return this.getAttribute("role") === "tooltip"
+          ? rect(0, 22)
+          : rect(rowTop, 24);
+      }
+    );
+    fireEvent.pointerOver(tab(), { clientX: 40, clientY: pointerY });
+    await wait(700);
+    const shown = card() as HTMLElement;
+    return { top: parseFloat(shown.style.top), side: shown.dataset.side };
+  };
+
+  afterEach(() => vi.restoreAllMocks());
+
+  /**
+   * Dana's Restarts card sat over the row above the hovered one and hid its
+   * cell. Fails if the card is drawn above a row that has room below it.
+   */
+  it("goes below the hovered row and the pointer, not over the row above", async () => {
+    const { top, side } = await placed(300, 316);
+    expect(side).toBe("bottom");
+    expect(top).toBeGreaterThanOrEqual(324);
+    expect(top).toBeGreaterThanOrEqual(316 + 20);
+  });
+
+  /** Fails if a row at the window's foot pushes its card off screen instead of flipping it above. */
+  it("flips above a row with no room left below it", async () => {
+    const { top, side } = await placed(
+      window.innerHeight - 30,
+      window.innerHeight - 20
+    );
+    expect(side).toBe("top");
+    expect(top + 22).toBeLessThanOrEqual(window.innerHeight - 30);
+  });
+});
