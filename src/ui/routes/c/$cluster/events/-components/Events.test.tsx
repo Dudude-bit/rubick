@@ -332,6 +332,40 @@ describe("a feed a watch keeps", () => {
   });
 
   /**
+   * Dana clicked the link "Deployment/cart" on an Event row and got the peek,
+   * though the link is the way to the page. Fails if a plain click on the
+   * object link opens anything but the object's Events tab with the Event.
+   */
+  it("opens the page from a plain click on the row's object link", async () => {
+    const { router } = await watched();
+    burst([
+      {
+        ...dated("shop", 0),
+        name: "cart.17f3",
+        involvedObject: {
+          kind: "Deployment",
+          name: "cart",
+          namespace: "shop",
+          uid: null,
+        },
+      },
+    ]);
+    await waitFor(() => expect(drawnRows()).toBe(1));
+    await userEvent.click(
+      within(rowAt(0)!).getByRole("link", { name: "Deployment cart" })
+    );
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        "/c/prod/deployments/shop/cart"
+      )
+    );
+    expect(router.state.location.search).toEqual({
+      tab: "events",
+      via: "events/shop/cart.17f3",
+    });
+  });
+
+  /**
    * Sam's Event about the HPA cart ended on the Deployment cart, with none of
    * the HPA's events. Fails if the row's link lets an attached kind go on to
    * its parent.
@@ -389,6 +423,41 @@ describe("a feed a watch keeps", () => {
       "href",
       "/c/prod/deployments/shop/cart?tab=events&via=events%2Fshop%2Fcart.17f3"
     );
+  });
+
+  /** The story's title is the same link as the list's; fails if one opens the page and the other a peek. */
+  it("opens the page from a plain click on a story's object link", async () => {
+    const { router } = await watched("stories");
+    burst([
+      {
+        ...event("shop", 0),
+        name: "cart.17f3",
+        type: "Warning",
+        reason: "ProgressDeadlineExceeded",
+        involvedObject: {
+          kind: "Deployment",
+          name: "cart",
+          namespace: "shop",
+          uid: null,
+        },
+        lastTimestamp: new Date(Date.now() - 60_000).toISOString(),
+      },
+    ]);
+    const card = await screen.findByRole("article", {
+      name: "Deployment cart",
+    });
+    await userEvent.click(
+      within(card).getByRole("link", { name: "Deployment cart" })
+    );
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        "/c/prod/deployments/shop/cart"
+      )
+    );
+    expect(router.state.location.search).toMatchObject({
+      tab: "events",
+      via: "events/shop/cart.17f3",
+    });
   });
 
   /** Dana could not sort the feed by Age as every list sorts. Fails if the header stops sorting. */

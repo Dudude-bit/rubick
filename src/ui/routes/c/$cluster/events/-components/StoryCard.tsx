@@ -101,6 +101,7 @@ export function StoryCard({
       ? spanWords(story.lastAt - story.firstAt, t, "alone")
       : null;
   const { subject } = story;
+  const landing = landingOfStory(story);
 
   return (
     <article
@@ -124,7 +125,8 @@ export function StoryCard({
             name={subject.name}
             namespace={subject.namespace ?? undefined}
             showNamespace={showNamespace}
-            linkOptions={landingOfStory(story)}
+            linkOptions={landing}
+            opens={landing ? "page" : "peek"}
           />
         ) : (
           <span className="font-mono text-fg">

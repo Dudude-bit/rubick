@@ -1,5 +1,5 @@
 import type { CSSProperties, MouseEvent, ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
 import {
   crdFor,
@@ -50,6 +50,8 @@ export interface ResourceRefProps {
   size?: ResourceNameSize;
   /** Where the anchor goes, for a reference to the object being looked at. */
   linkOptions?: ObjectLinkOptions;
+  /** What a plain click opens: the peek beside the page, or the page itself. */
+  opens?: "peek" | "page";
 }
 
 /**
@@ -79,6 +81,7 @@ export function ObjectLink({
   style,
   title,
   linkOptions,
+  opens = "peek",
   children,
 }: Omit<ResourceRefProps, "showKind" | "size"> & {
   children: ReactNode;
@@ -88,6 +91,7 @@ export function ObjectLink({
 }) {
   const gesture = useLinkGesture();
   const { open } = usePeek();
+  const navigate = useNavigate();
 
   const link = objectLink({ kind, name, namespace, crd }, linkOptions);
   if (link === null) return null;
@@ -102,13 +106,15 @@ export function ObjectLink({
     onClick?.(event);
     if (event.defaultPrevented) return;
     gesture(event, hrefOf(link), () =>
-      open({
-        kind,
-        name,
-        namespace,
-        crd: crdFor({ kind, name, crd }),
-        via: linkOptions?.via,
-      })
+      opens === "page"
+        ? navigate(link)
+        : open({
+            kind,
+            name,
+            namespace,
+            crd: crdFor({ kind, name, crd }),
+            via: linkOptions?.via,
+          })
     );
   };
 
@@ -151,6 +157,7 @@ export function ResourceRef({
   className,
   size,
   linkOptions,
+  opens,
 }: ResourceRefProps) {
   const body = (
     <ResourceName
@@ -194,6 +201,7 @@ export function ResourceRef({
       crd={crd}
       onClick={onClick}
       linkOptions={linkOptions}
+      opens={opens}
       className={cn(shell, "hover:bg-hover", className)}
     >
       {body}
