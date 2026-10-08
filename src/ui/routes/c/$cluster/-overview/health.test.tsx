@@ -8,6 +8,7 @@ import { AttentionPanel, WarningsPanel, WorkloadsPanel } from "./health";
 import {
   attentionShare,
   deploymentSegments,
+  jobSegments,
   nodesShare,
   podSegments,
   warningsShare,
@@ -20,7 +21,8 @@ import {
 } from "@/lib/attention";
 import { translate } from "@/i18n";
 import { ownCountedWord, ownStatusWord } from "@/lib/status-words";
-import { NEEDS_ATTENTION, ROLLOUT_CODES } from "@/lib/workload-status";
+import { ROLLOUT_CODES } from "@/lib/workload-status";
+import { JOB } from "@/lib/status-meaning";
 import type { T } from "@/i18n/useT";
 import type {
   ClusterOverview,
@@ -304,36 +306,51 @@ describe("the healthy line when the node read was refused", () => {
 
 describe("the Deployments tile", () => {
   /**
-   * Dana: the tile said "4 Unavailable" beside a list and a Needs attention
-   * that called one of them Stalled, old pods still serving. Each flagged
-   * Deployment is counted under the verdict word the list prints, in the
-   * list's colour. Fails if Stalled or Degraded is folded into Unavailable.
+   * Dana: the tile said "4 Unavailable" beside a list that called one of
+   * them Stalled; then everything not flagged, Progressing, Idle and Paused
+   * too, sat under "Available". Fails if two words the list prints share a
+   * segment, or a segment leaves the list's colour.
    */
-  it("counts flagged Deployments under the verdict the list prints", () => {
-    const flagged = (reason: string): ClusterProblem => ({
-      ...problem,
-      kind: "Deployment",
-      reason,
-      severity: "critical",
-    });
+  it("counts every Deployment under the word the list prints", () => {
     const segments = deploymentSegments(
       [
-        flagged("Stalled"),
-        flagged("Unavailable"),
-        flagged("Unavailable"),
-        flagged("Degraded"),
-        { ...problem, kind: "Pod" },
+        { reason: "Idle", count: 2 },
+        { reason: "Stalled", count: 1 },
+        { reason: "Ready", count: 4 },
+        { reason: "Progressing", count: 1 },
+        { reason: "Paused", count: 1 },
+        { reason: "Unavailable", count: 2 },
+        { reason: "Degraded", count: 1 },
       ],
-      5,
       t
     );
 
-    expect(segments.filter((segment) => segment.count > 0)).toEqual([
-      { label: "Available", count: 1, tone: "ok" },
-      { label: "Stalled", count: 1, tone: "err" },
-      { label: "Unavailable", count: 2, tone: "err" },
+    expect(segments).toEqual([
+      { label: "Ready", count: 4, tone: "ok" },
+      { label: "Progressing", count: 1, tone: "neutral" },
+      { label: "Paused", count: 1, tone: "warn" },
+      { label: "Idle", count: 2, tone: "neutral" },
       { label: "Degraded", count: 1, tone: "warn" },
+      { label: "Unavailable", count: 2, tone: "err" },
+      { label: "Stalled", count: 1, tone: "err" },
     ]);
+  });
+
+  /**
+   * The Jobs tile said Active where the Jobs list says Running, and folded
+   * Retrying, Suspended and Pending into it. Fails if a list word is lost.
+   */
+  it("counts Jobs under the words the Jobs list prints", () => {
+    expect(
+      jobSegments(
+        [
+          { reason: "Complete", count: 3 },
+          { reason: "Retrying", count: 1 },
+          { reason: "Running", count: 2 },
+        ],
+        t
+      ).map(({ label, count }) => `${count} ${label}`)
+    ).toEqual(["2 Running", "1 Retrying", "3 Complete"]);
   });
 });
 
@@ -345,9 +362,16 @@ describe("the census legend in Russian", () => {
     severity: "critical",
   });
   const overview = {
-    counts: { deployments: 6, nodes: 1, jobs: 0 },
+    counts: { deployments: 8, nodes: 1, jobs: 0 },
     pods: RUNNING,
     jobs: null,
+    deployments: [
+      { reason: "Ready", count: 2 },
+      { reason: "Idle", count: 2 },
+      { reason: "Stalled", count: 1 },
+      { reason: "Degraded", count: 2 },
+      { reason: "Unavailable", count: 1 },
+    ],
     nodes: [],
     problems: [
       flagged("Stalled"),
@@ -373,10 +397,11 @@ describe("the census legend in Russian", () => {
       expect(
         Array.from(legend?.children ?? []).map((item) => item.textContent)
       ).toEqual([
-        "2 Available",
-        "1 застрял",
-        "1 Unavailable",
+        "2 Ready",
+        "2 простаивают",
         "2 деградировали",
+        "1 Unavailable",
+        "1 застрял",
       ]);
       expect(screen.queryByText(/Stalled|Degraded/)).toBeNull();
     } finally {
@@ -390,10 +415,11 @@ describe("the census legend in Russian", () => {
     const rows = section.body.type === "facts" ? section.body.rows : [];
     const deployments = rows.find((row) => row.label === "Deployments");
     expect(deployments?.values.map((value) => value.text)).toEqual([
-      "2 Available",
-      "1 застрял",
-      "1 Unavailable",
+      "2 Ready",
+      "2 простаивают",
       "2 деградировали",
+      "1 Unavailable",
+      "1 застрял",
     ]);
   });
 
@@ -402,11 +428,9 @@ describe("the census legend in Russian", () => {
    * badge; without a counted form the legend would print its English code
    * beside Russian ones. Fails the day that happens.
    */
-  it("has a counted word for every flagged verdict the app words", () => {
-    const flaggedCodes = [...NEEDS_ATTENTION].map(
-      (state) => ROLLOUT_CODES[state]
-    );
-    const unworded = flaggedCodes.filter(
+  it("has a counted word for every verdict the app words", () => {
+    const codes = [...Object.values(ROLLOUT_CODES), ...Object.keys(JOB)];
+    const unworded = codes.filter(
       (code) =>
         ownStatusWord(code, ru) !== undefined &&
         ownCountedWord(code, 2, ru) === undefined

@@ -16,7 +16,7 @@ use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::resources::node_budget::holds_reservation;
 use crate::resources::{
-    condition_is_true, crash_looping, job_state, pending_since, stuck_reason, JobState, Rollout,
+    condition_is_true, crash_looping, job_state, pending_since, stuck_reason, Rollout,
     PENDING_GRACE_SECONDS,
 };
 use crate::state::AppState;
@@ -285,17 +285,6 @@ pub struct ReasonCount {
     pub count: usize,
 }
 
-/// Jobs by outcome. `active` covers both running and not-yet-started Jobs:
-/// neither has an outcome yet, and splitting them would put a Job that is
-/// one second from starting in a different bucket from one mid-run.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct JobComposition {
-    pub completed: usize,
-    pub active: usize,
-    pub failed: usize,
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClusterOverview {
@@ -326,9 +315,11 @@ pub struct ClusterOverview {
     pub counts: ResourceCounts,
     /// Phase breakdown of the pods in the requested scope.
     pub pods: PodComposition,
-    /// `None` when the Job list was refused — the same distinction
-    /// `ResourceCounts` makes, for the one kind whose bar needs status.
-    pub jobs: Option<JobComposition>,
+    /// Jobs per word the Jobs list prints; `None` when the list was refused.
+    pub jobs: Option<Vec<ReasonCount>>,
+    /// Deployments per rollout word the Deployments list prints; `None` when
+    /// the list was refused.
+    pub deployments: Option<Vec<ReasonCount>>,
     /// False when the metrics API is unavailable, so the UI can say so
     /// instead of rendering an empty usage bar that reads as "idle".
     pub metrics_available: bool,
@@ -555,6 +546,23 @@ fn pods_by_deployment<'a>(
     owned
 }
 
+/// A Deployment's rollout as its list and page read it, its own pods included.
+fn rollout_with_pods(
+    d: &Deployment,
+    owned: &HashMap<(&str, &str), Vec<&Pod>>,
+    now: DateTime<Utc>,
+) -> Rollout {
+    let key = (
+        d.metadata.namespace.as_deref().unwrap_or_default(),
+        d.metadata.name.as_deref().unwrap_or_default(),
+    );
+    crate::resources::with_pods(
+        crate::resources::deployment_rollout(d),
+        owned.get(&key).into_iter().flatten().copied(),
+        now,
+    )
+}
+
 fn deployment_problems<'a>(
     deployments: impl IntoIterator<Item = &'a Deployment>,
     owned: &HashMap<(&str, &str), Vec<&Pod>>,
@@ -563,15 +571,7 @@ fn deployment_problems<'a>(
     deployments
         .into_iter()
         .filter_map(|d| {
-            let key = (
-                d.metadata.namespace.as_deref().unwrap_or_default(),
-                d.metadata.name.as_deref().unwrap_or_default(),
-            );
-            let rollout = crate::resources::with_pods(
-                crate::resources::deployment_rollout(d),
-                owned.get(&key).into_iter().flatten().copied(),
-                now,
-            );
+            let rollout = rollout_with_pods(d, owned, now);
             if !rollout.is_problem() {
                 return None;
             }
@@ -1039,16 +1039,23 @@ fn pod_composition<'a>(
     composition
 }
 
-fn job_composition<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> JobComposition {
-    let mut composition = JobComposition::default();
-    for job in jobs {
-        match job_state(job) {
-            JobState::Complete => composition.completed += 1,
-            JobState::Failed(_) => composition.failed += 1,
-            _ => composition.active += 1,
+/// How many objects each word covers, in the order the words first appear.
+fn count_codes<'a>(codes: impl IntoIterator<Item = &'a str>) -> Vec<ReasonCount> {
+    let mut counts: Vec<ReasonCount> = Vec::new();
+    for code in codes {
+        match counts.iter_mut().find(|entry| entry.reason == code) {
+            Some(entry) => entry.count += 1,
+            None => counts.push(ReasonCount {
+                reason: code.to_string(),
+                count: 1,
+            }),
         }
     }
-    composition
+    counts
+}
+
+fn job_composition<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> Vec<ReasonCount> {
+    count_codes(jobs.into_iter().map(|job| job_state(job).code()))
 }
 
 /// What one page of a limited list says about the size of the whole
@@ -1282,11 +1289,17 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     );
 
     let mut problems = pod_problems(refs(input.scoped_pods), input.now);
+    let by_deployment = pods_by_deployment(refs(input.scoped_pods));
     problems.extend(deployment_problems(
         refs(input.deployments),
-        &pods_by_deployment(refs(input.scoped_pods)),
+        &by_deployment,
         input.now,
     ));
+    let rollouts: Vec<Rollout> = input
+        .deployments
+        .iter()
+        .map(|d| rollout_with_pods(d, &by_deployment, input.now))
+        .collect();
     let owned = pods_by_controller(refs(input.scoped_pods));
     problems.extend(stateful_set_problems(
         refs(input.stateful_sets),
@@ -1334,6 +1347,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         counts,
         pods: pod_composition(refs(input.scoped_pods), input.now),
         jobs: input.jobs.map(|jobs| job_composition(refs(jobs))),
+        deployments: read("Deployment").then(|| count_codes(rollouts.iter().map(Rollout::code))),
         namespaces,
         metrics_available,
         served_from: input.served_from,
@@ -3687,6 +3701,49 @@ mod tests {
         );
     }
 
+    /// The census filed every Deployment Needs attention left out under
+    /// "Available", Idle and Paused ones included. Fails if two rollout words
+    /// share a count again.
+    #[test]
+    fn deployment_census_counts_each_rollout_word_apart() {
+        use k8s_openapi::api::apps::v1::{DeploymentSpec, DeploymentStatus};
+        let deployment = |replicas: i32, paused: bool| Deployment {
+            spec: Some(DeploymentSpec {
+                replicas: Some(replicas),
+                paused: Some(paused),
+                ..Default::default()
+            }),
+            status: Some(DeploymentStatus {
+                observed_generation: Some(1),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let owned = HashMap::new();
+        let rollouts: Vec<Rollout> = [
+            deployment(0, false),
+            deployment(2, true),
+            deployment(0, false),
+        ]
+        .iter()
+        .map(|d| rollout_with_pods(d, &owned, Utc::now()))
+        .collect();
+
+        assert_eq!(
+            count_codes(rollouts.iter().map(Rollout::code)),
+            vec![
+                ReasonCount {
+                    reason: "Idle".to_string(),
+                    count: 2
+                },
+                ReasonCount {
+                    reason: "Paused".to_string(),
+                    count: 1
+                },
+            ]
+        );
+    }
+
     /// A pod failure inside a Job that still has retries left is a retry.
     /// Only the controller's own `Failed` condition means the Job lost.
     #[test]
@@ -3713,9 +3770,19 @@ mod tests {
             job(None),
         ]);
 
-        assert_eq!(composition.completed, 1);
-        assert_eq!(composition.failed, 1);
-        assert_eq!(composition.active, 2);
+        let count = |code: &str| {
+            composition
+                .iter()
+                .find(|entry| entry.reason == code)
+                .map_or(0, |entry| entry.count)
+        };
+        assert_eq!(count("Complete"), 1);
+        assert_eq!(count("Failed"), 1);
+        assert_eq!(count("Running") + count("Pending"), 2);
+        assert_eq!(
+            composition.iter().map(|entry| entry.count).sum::<usize>(),
+            4
+        );
     }
 }
 
@@ -4310,7 +4377,14 @@ mod across_namespaces {
         assert_eq!(overview.pods.succeeded, 1);
         assert_eq!(overview.pods.failed, 1);
         let jobs = overview.jobs.expect("both namespaces answered");
-        assert_eq!((jobs.completed, jobs.active, jobs.failed), (2, 1, 0));
+        let count = |code: &str| {
+            jobs.iter()
+                .find(|e| e.reason == code)
+                .map_or(0, |e| e.count)
+        };
+        assert_eq!(count("Complete"), 2);
+        assert_eq!(count("Failed"), 0);
+        assert_eq!(jobs.iter().map(|e| e.count).sum::<usize>(), 3);
     }
 
     /// The node list and the cluster-wide pods behind the capacity view are

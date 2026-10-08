@@ -1840,7 +1840,8 @@ export interface ClusterOverview {
   namespaces: NamespaceLoad[];
   counts: ResourceCounts;
   pods: PodComposition;
-  jobs: JobComposition | null;
+  jobs: ReasonCount[] | null;
+  deployments: ReasonCount[] | null;
   metricsAvailable: boolean;
   servedFrom: OverviewSource;
   unread: OverviewUnread[];
@@ -1851,12 +1852,6 @@ export interface OverviewUnread {
   namespace: string | null;
   code: string;
   message: string;
-}
-
-export interface JobComposition {
-  completed: number;
-  active: number;
-  failed: number;
 }
 
 export interface PodComposition {

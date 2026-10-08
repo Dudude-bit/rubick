@@ -41,6 +41,14 @@ export function ownCountedWord(
       return t("statusWords", "stalledCounted", { n });
     case "Degraded":
       return t("statusWords", "degradedCounted", { n });
+    case "Idle":
+      return t("statusWords", "idleCounted", { n });
+    case "Retrying":
+      return t("statusWords", "retryingCounted", { n });
+    case "Suspended":
+      return t("statusWords", "suspendedCounted", { n });
+    case "Waiting":
+      return t("statusWords", "waitingCounted", { n });
     default:
       return undefined;
   }

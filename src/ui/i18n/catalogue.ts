@@ -6663,6 +6663,10 @@ export const en = {
     retrying: "Retrying",
     stalledCounted: { other: "Stalled" },
     degradedCounted: { other: "Degraded" },
+    idleCounted: { other: "Idle" },
+    retryingCounted: { other: "Retrying" },
+    suspendedCounted: { other: "Suspended" },
+    waitingCounted: { other: "Waiting" },
   },
   statusMeaning: {
     phasePending:

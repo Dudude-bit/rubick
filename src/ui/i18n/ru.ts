@@ -7282,6 +7282,30 @@ export const ru: Catalogue = {
       many: "деградировали",
       other: "деградировали",
     },
+    idleCounted: {
+      one: "простаивает",
+      few: "простаивают",
+      many: "простаивают",
+      other: "простаивают",
+    },
+    retryingCounted: {
+      one: "повторяет попытку",
+      few: "повторяют попытку",
+      many: "повторяют попытку",
+      other: "повторяют попытку",
+    },
+    suspendedCounted: {
+      one: "приостановлен",
+      few: "приостановлены",
+      many: "приостановлены",
+      other: "приостановлены",
+    },
+    waitingCounted: {
+      one: "ожидает",
+      few: "ожидают",
+      many: "ожидают",
+      other: "ожидают",
+    },
   },
   statusMeaning: {
     phasePending:

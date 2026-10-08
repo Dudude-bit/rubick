@@ -13,6 +13,7 @@ import {
   detailWords,
   cpuRatio,
   deploymentSegments,
+  jobSegments,
   memoryRatio,
   nodeSegments,
   nodesShare,
@@ -504,7 +505,7 @@ export function WorkloadsPanel({
   scope: string;
 }) {
   const t = useT();
-  const { counts, pods, jobs, nodes, problems, problemsTruncated } = overview;
+  const { counts, pods, jobs, nodes, problemsTruncated } = overview;
   const podCount = podTotal(pods);
   useShareSection("overview-workloads", () => workloadsShare(overview, t));
 
@@ -531,7 +532,7 @@ export function WorkloadsPanel({
           total={counts.deployments}
           label={counts.deployments === 1 ? "Deployment" : "Deployments"}
           emptyMessage={t("empty", "noneInScope")}
-          segments={deploymentSegments(problems, counts.deployments, t)}
+          segments={deploymentSegments(overview.deployments, t)}
         />
         <Composition
           // `counts.nodes` is null when the node read was refused, so the bar
@@ -546,19 +547,7 @@ export function WorkloadsPanel({
           total={counts.jobs}
           label={counts.jobs === 1 ? "Job" : "Jobs"}
           emptyMessage={t("empty", "noneInScope")}
-          segments={
-            jobs
-              ? [
-                  {
-                    label: "Completed",
-                    count: jobs.completed,
-                    tone: "neutral",
-                  },
-                  { label: "Active", count: jobs.active, tone: "ok" },
-                  { label: "Failed", count: jobs.failed, tone: "err" },
-                ]
-              : []
-          }
+          segments={jobSegments(jobs, t)}
         />
       </div>
     </Section>

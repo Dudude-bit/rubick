@@ -92,12 +92,16 @@ fn differences(whole: &ClusterOverview, parts: &[ClusterOverview]) -> Vec<String
     }
     let jobs: Option<usize> = parts
         .iter()
-        .map(|p| p.jobs.as_ref().map(|j| j.completed + j.active + j.failed))
+        .map(|p| {
+            p.jobs
+                .as_ref()
+                .map(|j| j.iter().map(|e| e.count).sum::<usize>())
+        })
         .sum();
     if whole
         .jobs
         .as_ref()
-        .map(|j| j.completed + j.active + j.failed)
+        .map(|j| j.iter().map(|e| e.count).sum::<usize>())
         != jobs
     {
         wrong.push("jobs are not the parts' sum".to_string());

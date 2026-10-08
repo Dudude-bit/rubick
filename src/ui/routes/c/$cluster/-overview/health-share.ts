@@ -6,7 +6,8 @@ import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { ownCountedWord } from "@/lib/status-words";
-import { NEEDS_ATTENTION, ROLLOUT_CODES } from "@/lib/workload-status";
+import type { WorkloadStatus } from "@/lib/workload-status";
+import type { JobStatus } from "@/lib/status-meaning";
 import {
   foldedWords,
   reasonWord,
@@ -16,10 +17,10 @@ import {
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
   ClusterOverview,
-  ClusterProblem,
   NodeSummary,
   ProblemDetail,
   PodComposition,
+  ReasonCount,
   ResourcePressure,
   SchedulerPressure,
   WarningGroup,
@@ -188,10 +189,6 @@ export function podSegments(pods: PodComposition): Segment[] {
   ];
 }
 
-const FLAGGED_ROLLOUTS = [...NEEDS_ATTENTION].map(
-  (state) => ROLLOUT_CODES[state]
-);
-
 const SEGMENT_TONE: Record<StatusRole, Segment["tone"]> = {
   ok: "ok",
   warn: "warn",
@@ -200,35 +197,53 @@ const SEGMENT_TONE: Record<StatusRole, Segment["tone"]> = {
   neutral: "neutral",
 };
 
-/**
- * Deployments by the rollout verdict the list and Needs attention print.
- *
- * The flagged ones are the problem list, which the backend already ranked,
- * one segment per verdict word in the list's own colour: a Stalled rollout
- * whose old pods still serve is not Unavailable. The rest is the total minus
- * them, so the two agree by construction.
- */
-export function deploymentSegments(
-  problems: ClusterProblem[],
-  total: number | null,
+const DEPLOYMENT_ORDER: Record<WorkloadStatus, number> = {
+  Ready: 0,
+  Progressing: 1,
+  Paused: 2,
+  Idle: 3,
+  Waiting: 4,
+  Degraded: 5,
+  Unavailable: 6,
+  Stalled: 7,
+};
+
+const JOB_ORDER: Record<JobStatus, number> = {
+  Running: 0,
+  Pending: 1,
+  Retrying: 2,
+  Suspended: 3,
+  Complete: 4,
+  Failed: 5,
+};
+
+/** One segment per word the kind's list prints, in the list's colour and in `order`. */
+function wordSegments(
+  counts: ReasonCount[] | null,
+  order: Record<string, number>,
   t: T
 ): Segment[] {
-  const flagged = problems.filter((p) => p.kind === "Deployment");
-  return [
-    {
-      label: "Available",
-      count: Math.max(0, (total ?? 0) - flagged.length),
-      tone: "ok",
-    },
-    ...FLAGGED_ROLLOUTS.map((code) => {
-      const count = flagged.filter((p) => p.reason === code).length;
-      return {
-        label: ownCountedWord(code, count, t) ?? code,
-        count,
-        tone: SEGMENT_TONE[statusRole(code)],
-      };
-    }),
-  ];
+  const rank = (code: string) => order[code] ?? Number.MAX_SAFE_INTEGER;
+  return [...(counts ?? [])]
+    .sort((a, b) => rank(a.reason) - rank(b.reason))
+    .map(({ reason, count }) => ({
+      label: ownCountedWord(reason, count, t) ?? reason,
+      count,
+      tone: SEGMENT_TONE[statusRole(reason)],
+    }));
+}
+
+/** Deployments by the rollout word the list and Needs attention print, each counted apart. */
+export function deploymentSegments(
+  deployments: ReasonCount[] | null,
+  t: T
+): Segment[] {
+  return wordSegments(deployments, DEPLOYMENT_ORDER, t);
+}
+
+/** Jobs by the word the Jobs list prints. */
+export function jobSegments(jobs: ReasonCount[] | null, t: T): Segment[] {
+  return wordSegments(jobs, JOB_ORDER, t);
 }
 
 export function nodeSegments(nodes: NodeSummary[]): Segment[] {
@@ -249,16 +264,6 @@ export function nodeSegments(nodes: NodeSummary[]): Segment[] {
       tone: "err",
     },
   ];
-}
-
-function jobSegments(jobs: ClusterOverview["jobs"]): Segment[] {
-  return jobs
-    ? [
-        { label: "Completed", count: jobs.completed, tone: "neutral" },
-        { label: "Active", count: jobs.active, tone: "ok" },
-        { label: "Failed", count: jobs.failed, tone: "err" },
-      ]
-    : [];
 }
 
 /** One composition row: what this scope has of one kind, or that the count could not be read. */
@@ -284,7 +289,7 @@ function compositionRow(
 
 /** What the workload composition grid draws, as one row per kind. */
 export function workloadsShare(overview: ClusterOverview, t: T): PlacedSection {
-  const { counts, pods, jobs, nodes, problems } = overview;
+  const { counts, pods, jobs, nodes } = overview;
   return {
     id: "overview-workloads",
     order: ORDER.own,
@@ -297,11 +302,11 @@ export function workloadsShare(overview: ClusterOverview, t: T): PlacedSection {
         compositionRow(
           "Deployments",
           counts.deployments,
-          deploymentSegments(problems, counts.deployments, t),
+          deploymentSegments(overview.deployments, t),
           t
         ),
         compositionRow("Nodes", counts.nodes, nodeSegments(nodes), t),
-        compositionRow("Jobs", counts.jobs, jobSegments(jobs), t),
+        compositionRow("Jobs", counts.jobs, jobSegments(jobs, t), t),
       ],
     },
   };

@@ -232,6 +232,7 @@ const FULL_OVERVIEW: ClusterOverviewData = {
     stuck: [],
   },
   jobs: null,
+  deployments: null,
   metricsAvailable: false,
   unread: [],
 };
