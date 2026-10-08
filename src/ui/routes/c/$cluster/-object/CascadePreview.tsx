@@ -2,6 +2,8 @@ import {
   AlertTriangle,
   ArrowUpRight,
   CheckCircle2,
+  Filter,
+  Hourglass,
   Inbox,
   Loader2,
   Trash2,
@@ -23,11 +25,12 @@ import {
   listing,
   mightHold,
   readAll,
+  readWhereTheyLive,
   servedOfKind,
   useCascade,
   useLineage,
 } from "./ownership";
-import { ReadingChips, ReadingProgress } from "./ReadingChips";
+import { ReadingChips, ReadingProgress, ReadTotals } from "./ReadingChips";
 import type { ServedResource } from "./served";
 
 type Defined = Extract<Holds, { says: "objects" }>;
@@ -74,7 +77,13 @@ export function CascadePreview({
       ) : !cascade.data ? (
         <Working />
       ) : listing(cascade.data.notRead) > 0 ? (
-        <ReadingProgress notRead={cascade.data.notRead} />
+        <>
+          <p className="flex items-center gap-2 font-medium text-warn">
+            <Hourglass className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("cascade", "notKnownYet")}
+          </p>
+          <ReadingProgress notRead={cascade.data.notRead} />
+        </>
       ) : (
         <Answer
           cascade={cascade.data}
@@ -189,9 +198,13 @@ function Answer({
   const t = useT();
   const defined = holds?.says === "objects" ? holds : null;
   const rest = takes.filter((count) => !sameKind(count, defined));
-  const unread = notRead.kinds
-    .filter((reading) => mightHold(reading, namespace))
-    .filter((reading) => !sameKind(reading, defined));
+  const mayHold = notRead.kinds.filter((reading) =>
+    mightHold(reading, namespace)
+  );
+  const unread = mayHold.filter((reading) => !sameKind(reading, defined));
+  const readHere = notRead.kinds.filter((reading) =>
+    readWhereTheyLive(reading, namespace)
+  );
   const inPart = unread.filter(({ reading }) => reading.says === "partial");
   const notReadAtAll = unread.filter(
     ({ reading }) => reading.says !== "partial"
@@ -202,6 +215,7 @@ function Answer({
 
   return (
     <>
+      <ReadTotals notRead={notRead} unread={mayHold.length} />
       {holder && !holds && (
         <div className="flex flex-col gap-2">
           <p className="flex items-center gap-2 text-warn">
@@ -247,6 +261,25 @@ function Answer({
             {t("cascade", "possiblyInPart")}
           </p>
           <ReadingChips kinds={inPart} />
+        </div>
+      )}
+      {namespace && readHere.length > 0 && (
+        <div className="flex flex-col gap-2" data-testid="read-here">
+          <p className="flex items-center gap-2 text-fg-mut">
+            <Filter className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("cascade", "readHere", { namespace })}
+          </p>
+          <ul className="flex flex-wrap gap-1.5">
+            {readHere.map((reading) => (
+              <li
+                key={`${reading.group}/${reading.plural}`}
+                className="inline-flex items-center gap-1.5 rounded-md border border-hair bg-canvas px-2 py-1 text-[11px]"
+              >
+                <KindIcon kind={reading.kind} className="h-3 w-3" />
+                <span className="font-mono text-fg">{reading.kind}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </>

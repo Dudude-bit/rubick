@@ -4,6 +4,7 @@ import {
   ChevronRight,
   Clock,
   Filter,
+  ListChecks,
   Loader2,
   MinusCircle,
   ShieldOff,
@@ -116,14 +117,49 @@ export function ReadingChips({
 const unwatched = ({ reading }: KindReading) =>
   reading.says === "unlistable" || reading.says === "skipped";
 
+function totalsOf(notRead: NotRead) {
+  const total = Math.max(notRead.watched, listing(notRead));
+  return { total, served: total + notRead.kinds.filter(unwatched).length };
+}
+
+/** Once settled, how many of the watched kinds were read where they count. */
+export function ReadTotals({
+  notRead,
+  unread,
+}: {
+  notRead: NotRead;
+  unread: number;
+}) {
+  const t = useT();
+  const { total, served } = totalsOf(notRead);
+  return (
+    <p
+      className="flex flex-wrap items-center gap-x-1.5 text-fg-mut"
+      data-testid="read-totals"
+    >
+      <ListChecks className="h-3.5 w-3.5" aria-hidden="true" />
+      <span className="tabular-nums">
+        {t("count", "kindsReadSettled", {
+          n: Math.max(0, total - unread),
+          total,
+        })}
+      </span>
+      {served > total && (
+        <span className="basis-full pl-5 tabular-nums text-fg-fnt">
+          {t("count", "kindsServedLeftOut", { n: served })}
+        </span>
+      )}
+    </p>
+  );
+}
+
 /**
  * While the index is still listing: one line with how far it got, folded
  * over the per-kind chips, so a dialog does not open as a wall of spinners.
  */
 export function ReadingProgress({ notRead }: { notRead: NotRead }) {
   const t = useT();
-  const total = Math.max(notRead.watched, listing(notRead));
-  const served = total + notRead.kinds.filter(unwatched).length;
+  const { total, served } = totalsOf(notRead);
   return (
     <details className="group text-xs">
       <summary className="inline-flex cursor-pointer select-none flex-wrap items-center gap-x-1.5 rounded-md px-1 py-0.5 text-info hover:bg-hover">

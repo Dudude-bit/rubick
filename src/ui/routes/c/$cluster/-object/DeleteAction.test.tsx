@@ -265,11 +265,12 @@ describe("a Delete whose ownership read covered only some namespaces", () => {
 
   /**
    * Marco's pod Delete listed ConfigMap, Pod and Secret "read only in
-   * team-checkout" under "the kinds it could not read". A pod's dependents
-   * live in its own namespace, which was read. Fails if any of them is still
-   * listed as unread, or if DaemonSet, refused outright, is not.
+   * team-checkout" under "the kinds it could not read", and once that was
+   * fixed the settled dialog named neither them nor any total. Fails if any
+   * of them is listed as unread, leaves its own heading, if DaemonSet,
+   * refused outright, is not unread, or if the total is dropped.
    */
-  it("does not count a kind read in the object's own namespace as unread", async () => {
+  it("files kinds read in the object's own namespace under their own heading, with the total read", async () => {
     cascade.now = {
       takes: [],
       notRead: {
@@ -306,8 +307,60 @@ describe("a Delete whose ownership read covered only some namespaces", () => {
       )
     ).parentElement!;
     expect(unread).toHaveTextContent("DaemonSet");
-    expect(dialog).not.toHaveTextContent("ConfigMap");
+    expect(unread).not.toHaveTextContent("ConfigMap");
     expect(dialog).not.toHaveTextContent("read only in team-checkout");
+    const here = within(dialog).getByTestId("read-here");
+    expect(here).toHaveTextContent(
+      "Read only in team-checkout, where anything it owns lives:"
+    );
+    expect(here).toHaveTextContent("ConfigMap");
+    expect(here).toHaveTextContent("Secret");
+    expect(here).not.toHaveTextContent("DaemonSet");
+    expect(within(dialog).getByTestId("read-totals")).toHaveTextContent(
+      "Read 71 of 72 kinds that can be watched"
+    );
+  });
+
+  /**
+   * Dana typed the name and confirmed while the box still read "0 of 72".
+   * Fails if a dialog still reading says anything but that the impact is not
+   * known yet.
+   */
+  it("says the impact is not known yet while kinds are still being read", async () => {
+    cascade.now = {
+      takes: [],
+      notRead: {
+        kinds: [
+          {
+            kind: "Pod",
+            group: "",
+            plural: "pods",
+            reading: { says: "syncing" },
+          },
+        ],
+        groups: [],
+        watched: 72,
+      },
+      holds: null,
+    };
+    await renderWithRouter(
+      <DeleteAction
+        kind="Pod"
+        name="cart-9df89489c-f76qh"
+        namespace="shop"
+        intercept={null}
+        mutation={mutation}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const dialog = await screen.findByRole("alertdialog");
+    expect(
+      await within(dialog).findByText(
+        "What goes with it is not known yet: the app is still reading the cluster."
+      )
+    ).toBeVisible();
+    expect(within(dialog).queryByTestId("read-totals")).toBeNull();
+    expect(dialog).not.toHaveTextContent("Nothing else goes with it");
   });
 
   /**

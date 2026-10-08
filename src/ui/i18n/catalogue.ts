@@ -4725,6 +4725,9 @@ export const en = {
   // What deleting an object takes with it.
   cascade: {
     working: "Working out what goes with it…",
+    notKnownYet:
+      "What goes with it is not known yet: the app is still reading the cluster.",
+    readHere: "Read only in {namespace}, where anything it owns lives:",
     takes: "Also deletes:",
     nothing: "Nothing else goes with it, among the kinds read.",
     possibly: "And possibly objects of the kinds it could not read:",
@@ -6898,6 +6901,10 @@ export const en = {
     kindsReadOf: {
       one: "Reading the kinds that can be watched: {n} of {total}",
       other: "Reading the kinds that can be watched: {n} of {total}",
+    },
+    kindsReadSettled: {
+      one: "Read {n} of {total} kinds that can be watched",
+      other: "Read {n} of {total} kinds that can be watched",
     },
     kindsServedLeftOut: {
       one: "{n} kind served; Events and kinds that cannot be watched are left out",
