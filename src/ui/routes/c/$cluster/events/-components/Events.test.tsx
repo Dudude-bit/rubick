@@ -11,7 +11,13 @@ import {
   it,
   vi,
 } from "vite-plus/test";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Profiler, useState } from "react";
 
@@ -329,6 +335,25 @@ describe("a feed a watch keeps", () => {
     );
     expect(search().tab).toBe("events");
     expect(search().via).toBe("events/shop/cart.17f3");
+  });
+
+  /**
+   * Dana right-clicked an Event row and the message's tooltip sat over the
+   * menu's title and its Open item. Fails if the row keeps its titles while
+   * the menu opened at a pointer that has not moved, or loses them for good.
+   */
+  it("holds the row's tooltip back while its menu opens under a still pointer", async () => {
+    await watched();
+    burst([{ ...dated("shop", 0), message: "Synthetic event about cart" }]);
+    await waitFor(() => expect(drawnRows()).toBe(1));
+    const message = within(rowAt(0)!).getByTitle("Synthetic event about cart");
+
+    fireEvent.contextMenu(message, { clientX: 900, clientY: 194 });
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    expect(message).not.toHaveAttribute("title");
+
+    fireEvent.pointerMove(document, { clientX: 910, clientY: 240 });
+    expect(message).toHaveAttribute("title", "Synthetic event about cart");
   });
 
   /**
