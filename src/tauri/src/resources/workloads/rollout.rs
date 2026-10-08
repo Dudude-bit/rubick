@@ -146,10 +146,16 @@ pub fn deployment_rollout(deployment: &Deployment) -> Rollout {
             serving: available,
         };
     }
+    let refused = conditions
+        .iter()
+        .any(|c| c.type_ == "ReplicaFailure" && c.status == "True");
+    // From zero the condition flips before the ReplicaSet has made a pod,
+    // so there is no pod yet to say it is starting.
+    let creating = !older_template && updated < desired && !refused;
     if let Some(down) = conditions
         .iter()
         .find(|c| c.type_ == "Available" && c.status == "False")
-        .filter(|_| available == 0 || older_template)
+        .filter(|_| (available == 0 && !creating) || older_template)
     {
         return Rollout::Unavailable {
             reason: down.reason.clone(),
@@ -169,9 +175,6 @@ pub fn deployment_rollout(deployment: &Deployment) -> Rollout {
     }
     // A scale never moves the Progressing reason off NewReplicaSetAvailable,
     // so whether a short count is still coming up is for the pods to say.
-    let refused = conditions
-        .iter()
-        .any(|c| c.type_ == "ReplicaFailure" && c.status == "True");
     let ready = status.and_then(|s| s.ready_replicas).unwrap_or(0);
     let min_ready = spec.and_then(|s| s.min_ready_seconds).unwrap_or(0);
     if (updated < desired && !refused) || settling(min_ready, ready, available, desired) {
@@ -700,6 +703,47 @@ mod tests {
             ),
             coming
         );
+    }
+
+    /// Sam scaled `recommendations` from 0 to 1 and the header read red
+    /// "Unavailable 0/1" before its `ReplicaSet` had made the pod. Fails if a
+    /// Deployment from zero reads as a fault before its pod exists, or if one
+    /// the controller was refused pods for stops reading as one.
+    #[test]
+    fn a_deployment_scaled_up_from_zero_is_coming_up_before_its_pod_exists() {
+        let down = || {
+            condition(
+                "Available",
+                "False",
+                "MinimumReplicasUnavailable",
+                "Deployment does not have minimum availability.",
+            )
+        };
+        let from_zero = Counts {
+            desired: 1,
+            existing: 0,
+            updated: 0,
+            available: 0,
+        };
+        assert_eq!(
+            deployment_rollout(&deployment(&from_zero, vec![down(), rolled_out()])),
+            Rollout::ComingUp {
+                available: 0,
+                desired: 1
+            }
+        );
+        let refused = deployment(
+            &from_zero,
+            vec![
+                down(),
+                rolled_out(),
+                condition("ReplicaFailure", "True", "FailedCreate", "quota"),
+            ],
+        );
+        assert!(matches!(
+            deployment_rollout(&refused),
+            Rollout::Unavailable { .. }
+        ));
     }
 
     /// Dana scaled `cart` from 3 to 4 and kubectl printed Progressing
