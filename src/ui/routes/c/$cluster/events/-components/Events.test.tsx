@@ -498,6 +498,45 @@ describe("a feed a watch keeps", () => {
   });
 
   /**
+   * On Dana's failing cluster each retry flipped the header to "polling" and
+   * hid the banner over the same old rows for as long as the attempt took.
+   * Fails if a retry of a poll that never answered clears the failure
+   * before a read does.
+   */
+  it("keeps saying the read is failing while a retry is out, until a read answers", async () => {
+    await watched();
+    burst([dated("prod", 0), dated("prod", 1)]);
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("prod-pod-1")
+    );
+    listEvents.mockRejectedValue(new Error("502 Bad Gateway"));
+    send([{ op: "failed", resource: null }], "connection reset by peer");
+    await screen.findByText(/Could not read events just now/);
+
+    let answer: (rows: EventInfo[]) => void = () => {};
+    listEvents.mockImplementation(
+      () => new Promise((resolve) => (answer = resolve))
+    );
+    const before = listEvents.mock.calls.length;
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    await waitFor(() =>
+      expect(listEvents.mock.calls.length).toBeGreaterThan(before)
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByText("read failing")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Could not read events just now/)
+    ).toBeInTheDocument();
+
+    await act(async () => answer([dated("prod", 0)]));
+    await waitFor(() =>
+      expect(screen.queryByText("read failing")).not.toBeInTheDocument()
+    );
+  });
+
+  /**
    * Marco's token may list events in team-checkout only. The watch is
    * refused across the cluster, and the page then says what the list said
    * before the watch existed. Fails if a refused watch reads as no events.

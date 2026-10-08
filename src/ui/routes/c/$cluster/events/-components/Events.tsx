@@ -122,6 +122,18 @@ function useWakeOnChange(queryKey: QueryKey, everyMs: number | null) {
   }, [client, queryKey, everyMs]);
 }
 
+/**
+ * The last failure, kept while a retry is out. A poll that never answered
+ * has no data, so React Query clears its error for each retry, and the page
+ * read as fine for the length of every attempt.
+ */
+function useFailureUntilAnswered(error: Error | null, retrying: boolean) {
+  const [last, setLast] = useState<Error | null>(error);
+  if (error !== null && error !== last) setLast(error);
+  if (error === null && !retrying && last !== null) setLast(null);
+  return error ?? (retrying ? last : null);
+}
+
 function filtersFor(
   namespace: string,
   eventType: string,
@@ -314,7 +326,10 @@ export function Events() {
   // "the read succeeded and returned no events", a claim about a request that
   // came back 403. In a fan-out one refused namespace is enough: the rest may
   // have answered, but what is on screen is no longer the scope's whole story.
-  const failed = watching ? null : several ? parts.error : single.error;
+  const failed = useFailureUntilAnswered(
+    watching ? null : several ? parts.error : single.error,
+    !watching && (several ? parts.isLoading : single.isLoading)
+  );
   // A read that failed over rows it had: they stay, said to be old. A
   // namespace of the fan-out that never answered is unread, not old.
   const stale =
