@@ -1396,6 +1396,13 @@ export interface ResourceConnections {
   stops: ChainStop[];
   published: ServicePublished[];
   notLookedAt: UnexploredKind[];
+  nearlySelectedBy?: NearSelector[];
+}
+
+export interface NearSelector {
+  service: ObjectRef;
+  carries: string;
+  lacks: string;
 }
 
 export interface UnexploredKind {

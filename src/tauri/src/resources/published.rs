@@ -791,19 +791,49 @@ pub fn near_miss(service: &Service, pods: &[Pod]) -> Option<NearMiss> {
         .unwrap_or_default();
     let mut groups: BTreeMap<Vec<&String>, Vec<&Pod>> = BTreeMap::new();
     for pod in pods {
-        let labels = pod.labels();
-        let carried: Vec<&String> = selector
-            .iter()
-            .filter(|(key, value)| labels.get(*key) == Some(*value))
-            .map(|(key, _)| key)
-            .collect();
+        let carried = carried_of(&selector, pod.labels());
         if !carried.is_empty() && carried.len() < selector.len() {
             groups.entry(carried).or_default().push(pod);
         }
     }
-    let (carried, closest) = groups
+    let (held, closest) = groups
         .into_iter()
-        .max_by_key(|(carried, pods)| (carried.len(), pods.len()))?;
+        .max_by_key(|(held, pods)| (held.len(), pods.len()))?;
+    let (carries, lacks) = split_selector(&selector, &held);
+    Some(NearMiss {
+        pods: closest
+            .iter()
+            .map(|pod| pod_ref(pod, &pod.namespace().unwrap_or_default()))
+            .collect(),
+        carries,
+        lacks,
+    })
+}
+
+/// The part of `selector` that `labels` carries and the part it lacks, where
+/// it carries some of it and not all.
+#[must_use]
+pub fn partly_carried(
+    selector: &BTreeMap<String, String>,
+    labels: &BTreeMap<String, String>,
+) -> Option<(String, String)> {
+    let carried = carried_of(selector, labels);
+    (!carried.is_empty() && carried.len() < selector.len())
+        .then(|| split_selector(selector, &carried))
+}
+
+fn carried_of<'a>(
+    selector: &'a BTreeMap<String, String>,
+    labels: &BTreeMap<String, String>,
+) -> Vec<&'a String> {
+    selector
+        .iter()
+        .filter(|(key, value)| labels.get(*key) == Some(*value))
+        .map(|(key, _)| key)
+        .collect()
+}
+
+fn split_selector(selector: &BTreeMap<String, String>, carried: &[&String]) -> (String, String) {
     let part = |carries: bool| {
         selector
             .iter()
@@ -812,14 +842,7 @@ pub fn near_miss(service: &Service, pods: &[Pod]) -> Option<NearMiss> {
             .collect::<Vec<_>>()
             .join(",")
     };
-    Some(NearMiss {
-        pods: closest
-            .iter()
-            .map(|pod| pod_ref(pod, &pod.namespace().unwrap_or_default()))
-            .collect(),
-        carries: part(true),
-        lacks: part(false),
-    })
+    (part(true), part(false))
 }
 
 /// Why one pod that is not Ready is not, in the terms of [`NotServing`].

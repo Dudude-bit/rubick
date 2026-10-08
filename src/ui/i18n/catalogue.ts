@@ -166,6 +166,10 @@ export const en = {
       "This Ingress states no backend, so it routes nothing.",
     noServiceSelectsPod:
       "No Service in this namespace selects this pod, so nothing in the cluster routes traffic to it.",
+    noServiceSelectsPodNear:
+      "No Service in this namespace selects this pod. Closest is {service}{more}: the pod carries {carries} but not {lacks}, so nothing in the cluster routes traffic to it.",
+    noServiceSelectsTheseNear:
+      "No Service in this namespace selects these pods. Closest is {service}{more}: they carry {carries} but not {lacks}, so nothing in the cluster routes traffic to this {kind}.",
     trafficPath: "Traffic path",
     releases: "Releases",
     charts: "Charts",

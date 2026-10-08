@@ -5,7 +5,16 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useConnections } from "@/hooks/useConnections";
 import { useProxyBehind, useServicesRoutes } from "@/hooks/useServiceRoutes";
 import { CopyableAddress, CopyableValue } from "@/components/ui/copyable-value";
-import { Rail, routeAddress, RouteSource } from "../-object/TrafficChain";
+import {
+  NearMissLine,
+  Rail,
+  routeAddress,
+  RouteSource,
+} from "../-object/TrafficChain";
+import { closestSelector } from "@/lib/connections";
+import { publishedFor } from "@/lib/published";
+import { parts } from "@/i18n/parts";
+import type { NearMiss } from "@/generated/types";
 import type { PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import { cn } from "@/lib/utils";
@@ -141,6 +150,12 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
         ]
       : []),
   ];
+
+  const stop =
+    target.kind === "Service" && conns.data
+      ? publishedFor(conns.data, conns.data.subject)?.stop
+      : null;
+  const nearMiss = stop?.reason === "selectsNothing" ? stop.near : null;
 
   const levels: { key: string; entries: ReactNode[] }[] = [];
   // Each entry — a Gateway with its address, an Ingress — is a level of its
@@ -321,6 +336,7 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
           />{" "}
           ({t("empty", "addressesAnswering")})
         </p>,
+        ...(nearMiss ? [<ClosestPods key="near" near={nearMiss} />] : []),
         ...(behind
           ? [
               <p key="proxy" className="text-[11px] text-fg-fnt">
@@ -345,7 +361,14 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
   // unless nobody could look, which is not the same as nothing routing it.
   // A refused vendor read is the same "nobody could look": the Service would
   // otherwise draw as the top of the world.
-  if (levels.length === 1 && !conns.error && !routed.error) return null;
+  if (levels.length === 1 && !conns.error && !routed.error) {
+    return conns.data && closestSelector(conns.data) ? (
+      <div>
+        <PeekHeading title={t("nav", "trafficPath")} />
+        <NearMissLine conns={conns.data} />
+      </div>
+    ) : null;
+  }
 
   return (
     <div>
@@ -425,5 +448,34 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
         </p>
       )}
     </div>
+  );
+}
+
+/** The pods one label short of the peeked Service, each a peek of its own. */
+function ClosestPods({ near }: { near: NearMiss }) {
+  const t = useT();
+  const shown = near.pods.slice(0, 3);
+  return (
+    <p className="text-[11px] text-fg-mut">
+      {parts(t("nav", "stopNearMissNote", { lacks: near.lacks }), {
+        pods: (
+          <>
+            {shown.map((pod, index) => (
+              <span key={pod.name}>
+                {index > 0 && ", "}
+                <ResourceRef
+                  kind="Pod"
+                  name={pod.name}
+                  namespace={pod.namespace}
+                  showKind={false}
+                />
+              </span>
+            ))}
+            {near.pods.length > shown.length &&
+              t("count", "andNMore", { n: near.pods.length - shown.length })}
+          </>
+        ),
+      })}
+    </p>
   );
 }

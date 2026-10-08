@@ -958,6 +958,47 @@ describe("the traffic chain", () => {
     expect(chainSilence(conns, t)).toContain("example.com");
   });
 
+  /** Marco's checkout-api pod said no Service selects it while the Service
+   *  checkout-api was one label short. Fails if the near Service goes
+   *  unnamed on a pod or on a workload, or is named beside an unread list. */
+  it("names the Service one label short of a subject no Service selects", () => {
+    const near = [
+      {
+        service: ref("Service", "checkout-api"),
+        carries: "app=checkout-api",
+        lacks: "track=stable",
+      },
+    ];
+    const p = pod("checkout-api-a", true);
+    const onPod = chainSilence(
+      { ...connections(p, []), nearlySelectedBy: near },
+      t
+    );
+    expect(onPod).toContain("Closest is checkout-api");
+    expect(onPod).toContain("carries app=checkout-api but not track=stable");
+
+    const deployment = ref("Deployment", "checkout-api");
+    expect(
+      chainSilence(
+        { ...connections(deployment, []), nearlySelectedBy: near },
+        t
+      )
+    ).toContain("they carry app=checkout-api but not track=stable");
+
+    const unread = [
+      {
+        kind: "Service",
+        why: { says: "unanswered", version: "v1", said: "forbidden" },
+      },
+    ] as unknown as ResourceConnections["notLookedAt"];
+    expect(
+      chainSilence(
+        { ...connections(p, [], [], unread), nearlySelectedBy: near },
+        t
+      )
+    ).toBeNull();
+  });
+
   /**
    * Every sentence this returns states a negative, and a negative is only
    * ours to state about a list that answered. The guard was tested for a

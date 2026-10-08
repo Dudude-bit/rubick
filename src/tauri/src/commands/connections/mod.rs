@@ -39,8 +39,8 @@ use crate::commands::helpers::ResourceContext;
 use crate::error::{Error, Result};
 use crate::resources::{
     facts_of, published, usages_in_pod_spec, AutoscalerMetric, ChainStop, ConditionInfo,
-    ConnectionEdge, Existence, KindScope, ObjectFacts, ObjectRef, Relation, ResourceConnections,
-    Selector, ServicePublished, UnexploredKind, Usage, REVISION_ANNOTATION,
+    ConnectionEdge, Existence, KindScope, NearSelector, ObjectFacts, ObjectRef, Relation,
+    ResourceConnections, Selector, ServicePublished, UnexploredKind, Usage, REVISION_ANNOTATION,
 };
 use crate::state::AppState;
 use crate::utils::Moment;
@@ -192,6 +192,7 @@ struct Neighbourhood {
     stops: Vec<ChainStop>,
     published: Vec<ServicePublished>,
     not_looked_at: Vec<UnexploredKind>,
+    nearly_selected_by: Option<Vec<NearSelector>>,
 }
 
 impl Neighbourhood {
@@ -202,6 +203,7 @@ impl Neighbourhood {
             stops: Vec::new(),
             published: Vec::new(),
             not_looked_at: Vec::new(),
+            nearly_selected_by: None,
         }
     }
 
@@ -230,6 +232,7 @@ impl Neighbourhood {
             stops: self.stops,
             published: self.published,
             not_looked_at: self.not_looked_at,
+            nearly_selected_by: self.nearly_selected_by,
         })
     }
 }

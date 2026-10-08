@@ -14,7 +14,7 @@
 
 import { joinSayings, sayWords } from "@/i18n/say";
 import { Link } from "@tanstack/react-router";
-import { CircleSlash, PauseCircle } from "lucide-react";
+import { CircleSlash, PauseCircle, Unplug } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
@@ -26,6 +26,8 @@ import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { cn } from "@/lib/utils";
 import {
   chainSilence,
+  closestSelector,
+  nearMissWords,
   describeExistence,
   hopTone,
   trafficChains,
@@ -51,9 +53,11 @@ import {
 import type {
   IngressClassBinding,
   ObjectRef,
+  ResourceConnections,
   TlsCertificate,
 } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 import { TONE_TEXT } from "@/lib/tone";
 import { errorToShow } from "@/lib/error-utils";
 
@@ -585,6 +589,7 @@ export function TrafficChain({
   }
 
   if (paths.length === 0) {
+    if (closestSelector(data)) return <NearMissLine conns={data} />;
     const silence = chainSilence(data, t);
     // A quiet single line, and no heading over it: a heading plus one
     // sentence is two lines spent saying that nothing is there.
@@ -674,5 +679,33 @@ export function TrafficChain({
         ))}
       </div>
     </Section>
+  );
+}
+
+/** A subject no Service selects, with the Service one label short of it named as a link. */
+export function NearMissLine({ conns }: { conns: ResourceConnections }) {
+  const t = useT();
+  const closest = closestSelector(conns);
+  if (!closest) return null;
+  const service = closest.near.service;
+  return (
+    <p className="flex max-w-[92ch] items-baseline gap-1.5 text-xs text-fg-mut">
+      <Unplug
+        className="relative top-0.5 size-3 flex-none text-warn"
+        aria-hidden
+      />
+      <span>
+        {parts(nearMissWords(conns.subject, closest, t, "{service}"), {
+          service: (
+            <ResourceRef
+              kind="Service"
+              name={service.name}
+              namespace={service.namespace}
+              showKind={false}
+            />
+          ),
+        })}
+      </span>
+    </p>
   );
 }

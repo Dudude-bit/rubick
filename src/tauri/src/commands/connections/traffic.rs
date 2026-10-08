@@ -45,14 +45,28 @@ pub(super) fn traffic_into(
     snapshot: &Snapshot,
     out: &mut Neighbourhood,
 ) {
+    let mut near: Vec<(usize, NearSelector)> = Vec::new();
+    let mut selected = false;
     for svc in snapshot.services() {
         let selector = service_selector(svc);
         let Some(text) = Selector::Equality(&selector).says() else {
             continue;
         };
         if Selector::Equality(&selector).matches(labels) != Some(true) {
+            if let Some((carries, lacks)) = published::partly_carried(&selector, labels) {
+                let short = lacks.split(',').count();
+                near.push((
+                    short,
+                    NearSelector {
+                        service: service_ref(svc, ns),
+                        carries,
+                        lacks,
+                    },
+                ));
+            }
             continue;
         }
+        selected = true;
         let svc_ref = service_ref(svc, ns);
         out.edge(
             svc_ref.clone(),
@@ -68,6 +82,15 @@ pub(super) fn traffic_into(
             snapshot.gateways.as_deref(),
             out,
         );
+    }
+    if !selected {
+        let fewest = near.iter().map(|(short, _)| *short).min();
+        let closest: Vec<NearSelector> = near
+            .into_iter()
+            .filter(|(short, _)| Some(*short) == fewest)
+            .map(|(_, near)| near)
+            .collect();
+        out.nearly_selected_by = (!closest.is_empty()).then_some(closest);
     }
 }
 
@@ -826,5 +849,98 @@ spec:
         // neither a Gateway edge nor a "gateway missing" lie.
         assert!(out.edges.iter().all(|e| e.to.kind != "Gateway"));
         assert!(out.stops.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(services: Vec<Service>) -> Snapshot {
+        Snapshot {
+            pods: Ok(Vec::new()),
+            services: Ok(services),
+            ingresses: Ok(Vec::new()),
+            claims: Ok(Vec::new()),
+            autoscalers: Ok(Vec::new()),
+            budgets: Ok(Vec::new()),
+            deployments: Ok(Vec::new()),
+            stateful_sets: Ok(Vec::new()),
+            slices: Ok(Vec::new()),
+            legacy: Err("the slices answered".to_string()),
+            gateway_routes: Vec::new(),
+            gateways: None,
+            gateway_unread: Vec::new(),
+        }
+    }
+
+    fn service(name: &str, selector: &[(&str, &str)]) -> Service {
+        serde_json::from_value(serde_json::json!({
+            "metadata": { "name": name, "namespace": "team-checkout" },
+            "spec": { "selector": selector.iter().copied().collect::<BTreeMap<_, _>>() }
+        }))
+        .expect("a Service")
+    }
+
+    fn near_of(services: Vec<Service>, labels: &[(&str, &str)]) -> Vec<(String, String)> {
+        let labels: BTreeMap<String, String> = labels
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+            .collect();
+        let mut out = Neighbourhood::new();
+        let pod = ObjectRef::new(
+            "Pod",
+            "checkout-api-a",
+            Some("team-checkout".into()),
+            Existence::Present,
+        );
+        traffic_into(
+            "team-checkout",
+            &pod,
+            &labels,
+            &snapshot(services),
+            &mut out,
+        );
+        out.nearly_selected_by
+            .into_iter()
+            .flatten()
+            .map(|near| (near.service.name, near.lacks))
+            .collect()
+    }
+
+    /// Marco's checkout-api pod page said no Service selects it while the
+    /// Service checkout-api is one label short. Fails if the near Service
+    /// goes unnamed, if a farther or unrelated one is offered beside it, or
+    /// if a pod some Service does select is told about near misses.
+    #[test]
+    fn a_pod_no_service_selects_names_the_service_one_label_short() {
+        let canary = [("app", "checkout-api"), ("track", "canary")];
+        let services = || {
+            vec![
+                service(
+                    "checkout-api",
+                    &[("app", "checkout-api"), ("track", "stable")],
+                ),
+                service(
+                    "checkout-api-eu",
+                    &[
+                        ("app", "checkout-api"),
+                        ("track", "stable"),
+                        ("region", "eu"),
+                    ],
+                ),
+                service("worker", &[("app", "checkout-worker")]),
+            ]
+        };
+        assert_eq!(
+            near_of(services(), &canary),
+            [("checkout-api".to_string(), "track=stable".to_string())]
+        );
+
+        let mut selecting = services();
+        selecting.push(service("canary", &[("track", "canary")]));
+        assert!(near_of(selecting, &canary).is_empty());
+
+        assert!(near_of(services(), &[("app", "other")]).is_empty());
     }
 }
