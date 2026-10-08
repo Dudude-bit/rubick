@@ -1,9 +1,10 @@
 import type { ReactElement } from "react";
 import { describe, expect, it, vi, beforeEach } from "vite-plus/test";
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { useSettingsStore } from "@/stores/settingsStore";
+import { forgetRefusals } from "@/lib/refusals";
 import { listSegment } from "@/lib/resource-registry";
 import { renderWithRouter } from "@/test/render";
 
@@ -427,6 +428,28 @@ describe("the Access group", () => {
       resource: "clusterroles",
       namespaced: false,
     });
+  });
+
+  /**
+   * Read again on a refused page asks the cluster anew; a sidebar that kept
+   * its five-minute review held the lock beside a list that now reads.
+   */
+  it("lifts a lock once the reader asks a refused read again and the authorizer now allows it", async () => {
+    checkListAccess.mockResolvedValue([
+      { resource: "clusterroles", allowed: false },
+    ]);
+    await wrap(<Sidebar />);
+    const row = await screen.findByRole("link", { name: /ClusterRoles/ });
+    await waitFor(() =>
+      expect(within(row).getByLabelText(/permission to list/)).toBeVisible()
+    );
+    checkListAccess.mockResolvedValue([
+      { resource: "clusterroles", allowed: true },
+    ]);
+    act(() => forgetRefusals());
+    await waitFor(() =>
+      expect(within(row).queryByLabelText(/permission to list/)).toBeNull()
+    );
   });
 });
 
