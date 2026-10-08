@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Loader2, Lock, TriangleAlert } from "lucide-react";
+import { CircleSlash, Loader2, Lock, TriangleAlert } from "lucide-react";
 
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Composition } from "@/components/object/detail-blocks";
@@ -29,9 +29,11 @@ import {
 } from "./health-share";
 import { eventReasonMark } from "@/lib/event-reason";
 import {
+  attentionLines,
   foldedWords,
   reasonWord,
   type Attention,
+  type AttentionLine,
   type AttentionCheck,
   type AttentionItem,
 } from "@/lib/attention";
@@ -128,7 +130,64 @@ function AttentionDetailText({ item }: { item: AttentionItem }) {
   return <>{composedDetail(detail, t)}</>;
 }
 
-function AttentionRow({ item }: { item: AttentionItem }) {
+/** The class an Ingress under the missing-class line lacks, in place of the line's sentence. */
+function ClassMarker({ name }: { name: string }) {
+  const t = useT();
+  return (
+    <span
+      role="img"
+      aria-label={t("empty", "noIngressClassNamed", { name })}
+      className="inline-flex min-w-0 items-center gap-1 pl-3 font-mono text-err"
+    >
+      <CircleSlash className="h-2.5 w-2.5 flex-none" aria-hidden="true" />
+      <span className="truncate">{name}</span>
+    </span>
+  );
+}
+
+/** One line for every Ingress asking for a class this cluster does not have. */
+function UnservedRow({
+  className,
+  members,
+}: {
+  className: string;
+  members: number;
+}) {
+  const t = useT();
+  const SeverityIcon = ROLE_ICON.err;
+  return (
+    <div className={ROW} data-testid="attention-unserved">
+      <SeverityIcon
+        className={cn("h-3 w-3 justify-self-center", ROLE_TEXT.err)}
+        aria-hidden="true"
+      />
+      <span className="inline-flex min-w-0 items-baseline gap-1 font-mono font-medium text-err">
+        <CircleSlash
+          className="h-2.5 w-2.5 flex-none self-center"
+          aria-hidden="true"
+        />
+        <span className="truncate">{t("readings", "healthNoController")}</span>
+      </span>
+      <span
+        className="truncate text-fg-mid"
+        title={t("empty", "nothingPickedThemUp")}
+      >
+        {t("count", "ingressesUnserved", { n: members, classes: className })}
+      </span>
+      <span />
+      <span />
+      <span />
+    </div>
+  );
+}
+
+function AttentionRow({
+  item,
+  grouped = false,
+}: {
+  item: AttentionItem;
+  grouped?: boolean;
+}) {
   const t = useT();
   const navigate = useNavigate();
   const tone = ROLE_TEXT[item.tone];
@@ -138,6 +197,12 @@ function AttentionRow({ item }: { item: AttentionItem }) {
   const { Icon: ReasonIcon } = eventReasonMark(item.reason);
   const elsewhere =
     item.opens.kind !== item.kind || item.opens.name !== item.name;
+  const marked = grouped ? item.unservedClass : undefined;
+  const detail: AttentionItem["detail"] = !marked
+    ? item.detail
+    : marked.rest
+      ? { says: "ours", text: marked.rest }
+      : null;
 
   const body = (
     <>
@@ -147,20 +212,24 @@ function AttentionRow({ item }: { item: AttentionItem }) {
         className={cn("h-3 w-3 justify-self-center", tone)}
         aria-hidden="true"
       />
-      <span
-        className={cn(
-          "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
-          tone
-        )}
-      >
-        <ReasonIcon
-          className="h-2.5 w-2.5 flex-none self-center"
-          aria-hidden="true"
-        />
-        <span className="truncate" title={reasonWord(item, t)}>
-          {reasonWord(item, t)}
+      {marked ? (
+        <ClassMarker name={marked.name} />
+      ) : (
+        <span
+          className={cn(
+            "inline-flex min-w-0 items-baseline gap-1 font-mono font-medium",
+            tone
+          )}
+        >
+          <ReasonIcon
+            className="h-2.5 w-2.5 flex-none self-center"
+            aria-hidden="true"
+          />
+          <span className="truncate" title={reasonWord(item, t)}>
+            {reasonWord(item, t)}
+          </span>
         </span>
-      </span>
+      )}
       <span className="truncate text-fg-mid">
         <ResourceRef
           kind={item.kind}
@@ -185,14 +254,14 @@ function AttentionRow({ item }: { item: AttentionItem }) {
         {item.foldedPods !== null && (
           <span className="text-fg-mut"> · {foldedWords(item, t)}</span>
         )}
-        {item.detail && (
+        {detail && (
           // The row cuts a long sentence; hovering it has the whole one.
           <span
             className="text-fg-fnt"
-            title={detailWords(item.detail, t) ?? undefined}
+            title={detailWords(detail, t) ?? undefined}
           >
             {": "}
-            <AttentionDetailText item={item} />
+            <AttentionDetailText item={{ ...item, detail }} />
           </span>
         )}
       </span>
@@ -368,6 +437,12 @@ const SUMMARY_LABEL: Record<
   err: "attentionOverall",
 };
 
+/** The first rows, never ending on a missing-class line with none of its Ingresses under it. */
+function capped(lines: AttentionLine[]): AttentionLine[] {
+  const head = lines.slice(0, VISIBLE);
+  return head.at(-1)?.at === "unserved" ? head.slice(0, -1) : head;
+}
+
 /** Not-running pods by phase, in the words the composition bar uses. */
 function notRunning(pods: PodComposition): string {
   return podSegments(pods)
@@ -393,8 +468,11 @@ export function AttentionPanel({
   useShareSection("overview-problems", () => attentionShare(attention, t));
   const { items, total, complete, worst } = attention;
   const [expanded, setExpanded] = useState(false);
-  const shown = expanded ? items : items.slice(0, VISIBLE);
-  const hidden = expanded ? [] : items.slice(VISIBLE);
+  const lines = attentionLines(items);
+  const shown = expanded ? lines : capped(lines);
+  const hidden = lines
+    .slice(shown.length)
+    .flatMap((line) => (line.at === "item" ? [line.item] : []));
   const cut = total - items.length;
   const unchecked = attention.checks.filter((check) => check.state !== "read");
   const serving = podsServing(pods);
@@ -417,9 +495,21 @@ export function AttentionPanel({
         }
       />
       <div>
-        {shown.map((item) => (
-          <AttentionRow key={item.key} item={item} />
-        ))}
+        {shown.map((line) =>
+          line.at === "item" ? (
+            <AttentionRow
+              key={line.item.key}
+              item={line.item}
+              grouped={line.grouped}
+            />
+          ) : (
+            <UnservedRow
+              key={`unserved/${line.className}`}
+              className={line.className}
+              members={line.members}
+            />
+          )
+        )}
         {hidden.length + cut > 0 && (
           <MoreRows
             hidden={hidden}
