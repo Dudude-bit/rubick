@@ -24,6 +24,7 @@ import { useShownPath } from "@/lib/hide-paths";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { ActivityPanel } from "./ActivityPanel";
+import { LinkOpenedNote } from "./DeepLinkBanner";
 import { StallIndicator } from "./StallIndicator";
 import { useT } from "@/i18n/useT";
 
@@ -106,7 +107,9 @@ export function StatusBar() {
         {formatShortcut("mod+K")} {t("action", "hintSearch")}
       </span>
 
-      <div className="flex-1" />
+      <div className="flex min-w-0 flex-1">
+        <LinkOpenedNote />
+      </div>
 
       <StallIndicator />
       <ActivityPanel />

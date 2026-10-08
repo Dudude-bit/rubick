@@ -63,6 +63,7 @@ vi.mock("@/hooks/useCredentialRenewal", () => ({
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useDeepLinkStore } from "@/stores/deepLinkStore";
 import { StatusBar } from "./StatusBar";
 
 beforeEach(() => {
@@ -84,6 +85,26 @@ beforeEach(() => {
     error: null,
     errorContext: null,
     pendingContext: null,
+  });
+});
+
+describe("the link the window was opened from", () => {
+  /** Floating over the page it hid the log footer and toasts; fails if the strip stops carrying the note. */
+  it("is noted in the strip, not over the page", () => {
+    useDeepLinkStore.setState({
+      arrival: {
+        status: "live",
+        link: { context: "prod", path: "/c/prod/pods", capturedAt: null },
+      },
+    });
+    const { container } = render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    const note = screen.getByRole("status");
+    expect(container.querySelector("footer")?.contains(note)).toBe(true);
+    useDeepLinkStore.setState({ arrival: null });
   });
 });
 
