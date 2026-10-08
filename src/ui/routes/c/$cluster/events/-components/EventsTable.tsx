@@ -17,7 +17,8 @@ import type { PeekTarget } from "@/hooks/usePeek";
 import { eventLanding } from "../../-object/attachment";
 import { useRowMenu } from "../../-list/useRowMenu";
 import { useHeldRows } from "./held-rows";
-import { AGE_CELL_PX } from "../../-list/columns";
+import { AGE_CELL_PX, AGE_LABEL, ageOrder } from "../../-list/columns";
+import { AgeHeader } from "@/components/ui/sortable-header";
 
 const subjectOf = (event: EventInfo) => ({
   kind: event.involvedObject.kind,
@@ -155,10 +156,12 @@ const COUNT: ColumnDef<EventInfo> = {
 const AGE: ColumnDef<EventInfo> = {
   id: "age",
   size: 80,
-  enableSorting: false,
+  accessorFn: (event) => ageOrder(event.lastTimestamp),
+  sortUndefined: "last",
+  sortDescFirst: false,
   enableGlobalFilter: false,
-  meta: { floor: AGE_CELL_PX },
-  header: columnHeader("columns", "age"),
+  meta: { floor: AGE_CELL_PX, label: AGE_LABEL },
+  header: AgeHeader,
   cell: AgeCell,
 };
 

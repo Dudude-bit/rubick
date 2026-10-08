@@ -358,6 +358,21 @@ describe("a feed a watch keeps", () => {
     );
   });
 
+  /** Dana could not sort the feed by Age as every list sorts. Fails if the header stops sorting. */
+  it("sorts the list by Age, oldest first on the second click", async () => {
+    await watched();
+    burst([dated("prod", 0), dated("prod", 2), dated("prod", 1)]);
+    await waitFor(() => expect(rowAt(0)?.textContent).toContain("prod-pod-0"));
+
+    const age = screen.getByRole("button", {
+      name: "Age: Sort by this column",
+    });
+    await userEvent.click(age);
+    expect(rowAt(0)?.textContent).toContain("prod-pod-0");
+    await userEvent.click(age);
+    expect(rowAt(0)?.textContent).toContain("prod-pod-2");
+  });
+
   /**
    * One event changing is one row's work: no row it did not touch is a new
    * object, nothing is sorted again, and the one that happened again stands
