@@ -37,6 +37,17 @@ describe("finding events in a feed", () => {
     expect(eventMatches(event(), "node-1")).toBe(true);
   });
 
+  /**
+   * Sam typed `Deployment/search`, exactly what the row shows, and matched
+   * nothing. Fails if the object is searched as loose words rather than as
+   * it is drawn.
+   */
+  it("matches the object as the row and the story card draw it", () => {
+    expect(eventMatches(event(), "Pod/web-7f9")).toBe(true);
+    expect(eventMatches(event(), "prod/Pod/web")).toBe(true);
+    expect(eventMatches(event(), "Pod/api")).toBe(false);
+  });
+
   it("ignores case, the way the lists' search box does", () => {
     expect(eventMatches(event(), "WEB-7F9")).toBe(true);
   });
