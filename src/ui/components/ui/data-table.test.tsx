@@ -1284,6 +1284,42 @@ describe("column widths", () => {
     }
   });
 
+  /** Lena's light list faded grey text into a near-white canvas and the edge all but vanished; fails if either theme drops the shade the edges cast, or an edge stops casting it. */
+  it("casts the same shade on the continuing side in the light theme as in the dark", async () => {
+    const css = readFileSync("src/ui/index.css", "utf8");
+    const folds = [...css.matchAll(/--fold: [^;]+\/ ([\d.]+);/g)].map((match) =>
+      Number(match[1])
+    );
+    expect(folds).toHaveLength(2);
+    for (const alpha of folds) expect(alpha).toBeGreaterThanOrEqual(0.1);
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    const content = vi
+      .spyOn(Element.prototype, "scrollWidth", "get")
+      .mockReturnValue(600);
+    try {
+      await wrap(
+        <DataTable<Item>
+          columns={[
+            { ...columns[0], size: 300, meta: { floor: 300 } },
+            { ...columns[1], size: 100, meta: { floor: 300 } },
+          ]}
+          data={DATA}
+        />
+      );
+      await waitFor(() =>
+        expect(document.querySelector('[data-edge="after"]')).not.toBeNull()
+      );
+      expect(
+        document.querySelector('[data-edge="after"]')!.className
+      ).toContain("var(--color-fold)");
+    } finally {
+      width.mockRestore();
+      content.mockRestore();
+    }
+  });
+
   /** Fails if the lane's scrollbar takes a scrollbar-width or keeps the page's inherited scrollbar-color, which in WebKit both bring the overlay back. */
   it("styles the lane's scrollbar so WebKit draws it beside the rows, not over them", () => {
     const css = readFileSync("src/ui/index.css", "utf8");

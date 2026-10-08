@@ -1522,7 +1522,7 @@ function DataTableInner<TData extends RowData>({
             <div
               aria-hidden="true"
               data-edge="before"
-              className="pointer-events-none absolute top-0 z-20 w-3 border-l border-hair bg-linear-to-r from-canvas"
+              className="pointer-events-none absolute top-0 z-20 w-3 border-l border-hair bg-[linear-gradient(to_right,var(--color-fold),transparent),linear-gradient(to_right,var(--color-canvas),transparent)]"
               style={{ left: edges.pinned, bottom: edges.bottom }}
             />
           )}
@@ -1530,7 +1530,7 @@ function DataTableInner<TData extends RowData>({
             <div
               aria-hidden="true"
               data-edge="after"
-              className="pointer-events-none absolute top-0 z-20 w-10 bg-linear-to-l from-canvas"
+              className="pointer-events-none absolute top-0 z-20 w-10 bg-[linear-gradient(to_left,var(--color-fold),transparent),linear-gradient(to_left,var(--color-canvas),transparent)]"
               style={{ right: edges.right, bottom: edges.bottom }}
             />
           )}
