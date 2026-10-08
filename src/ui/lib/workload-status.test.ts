@@ -35,6 +35,7 @@ const EVERY: Rollout[] = [
   { state: "comingUp", available: 1, desired: 2 },
   { state: "short", available: 2, desired: 3 },
   { state: "ready" },
+  { state: "scalingDown", current: 2, desired: 1 },
 ];
 
 describe("the word a workload's rollout comes to", () => {
@@ -76,6 +77,7 @@ describe("the word a workload's rollout comes to", () => {
       "pending",
       "warn",
       "ok",
+      "pending",
     ]);
   });
 
@@ -91,6 +93,21 @@ describe("the word a workload's rollout comes to", () => {
     expect(rolloutLine(comingUp, t)).toEqual({
       tone: "info",
       text: "readings.rolloutComingUp",
+      said: null,
+    });
+  });
+
+  /** orders-db scaled 2 to 1 read green Ready at 2/1. Fails if a set with
+   *  pods still to remove reads settled, or wears a fault's colour. */
+  it("draws a scale-down still under way as progress with its counts", () => {
+    const down: Rollout = { state: "scalingDown", current: 2, desired: 1 };
+    expect(workloadStatus(down)).toBe("Progressing");
+    expect(NEEDS_ATTENTION.has("scalingDown")).toBe(false);
+    const en: T = (section, key, values) =>
+      translate("en", section, key, values);
+    expect(rolloutLine(down, en)).toEqual({
+      tone: "info",
+      text: "Scaling down: 2 pods still exist, 1 is wanted",
       said: null,
     });
   });

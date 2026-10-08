@@ -3716,6 +3716,10 @@ export const en = {
       one: "Pods coming up: {available} of {n} pod is available",
       other: "Pods coming up: {available} of {n} pods are available",
     },
+    rolloutScalingDown: {
+      one: "Scaling down: {current} pods still exist, {n} is wanted",
+      other: "Scaling down: {current} pods still exist, {n} are wanted",
+    },
     rolloutShort: {
       one: "Rolled out, and only {available} of {n} pod is available",
       other: "Rolled out, and only {available} of {n} pods are available",

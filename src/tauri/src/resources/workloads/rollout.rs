@@ -54,6 +54,12 @@ pub enum Rollout {
         available: i32,
         desired: i32,
     },
+    /// More pods than wanted still exist: a `StatefulSet` removes the extra
+    /// ones one at a time, each only once the one before it is gone.
+    ScalingDown {
+        current: i32,
+        desired: i32,
+    },
     /// Rolled out, and fewer available than wanted.
     Short {
         available: i32,
@@ -73,7 +79,9 @@ impl Rollout {
             Self::Unavailable { .. } => "Unavailable",
             Self::Paused => "Paused",
             Self::Unobserved { .. } => "Waiting",
-            Self::RollingOut { .. } | Self::ComingUp { .. } => "Progressing",
+            Self::RollingOut { .. } | Self::ComingUp { .. } | Self::ScalingDown { .. } => {
+                "Progressing"
+            }
             Self::Short { .. } => "Degraded",
             Self::Ready => "Ready",
         }
@@ -226,6 +234,10 @@ pub fn statefulset_rollout(set: &StatefulSet) -> Rollout {
                 return Rollout::RollingOut { updated, desired };
             }
         }
+    }
+    let current = status.map_or(0, |s| s.replicas);
+    if current > desired {
+        return Rollout::ScalingDown { current, desired };
     }
     if settling {
         return Rollout::ComingUp { available, desired };
@@ -488,6 +500,10 @@ mod tests {
             },
             Rollout::ComingUp {
                 available: 0,
+                desired: 0,
+            },
+            Rollout::ScalingDown {
+                current: 0,
                 desired: 0,
             },
             Rollout::Short {
@@ -985,6 +1001,38 @@ mod tests {
         ));
         let ready = statefulset(3, sts_status(3, 3, "db-2", "db-2"), None);
         assert_eq!(statefulset_rollout(&ready), Rollout::Ready);
+    }
+
+    /// Sam's orders-db scaled 2 to 1 read green Ready at 2/1 on the list, the
+    /// page and the peek while orders-db-1 was still terminating. Fails if a
+    /// set with more pods than wanted reads Ready, or one at its count does not.
+    #[test]
+    fn a_statefulset_with_more_pods_than_wanted_is_scaling_down_not_ready() {
+        let down = statefulset(
+            1,
+            StatefulSetStatus {
+                replicas: 2,
+                ..sts_status(2, 2, "db-1", "db-1")
+            },
+            None,
+        );
+        assert_eq!(
+            statefulset_rollout(&down),
+            Rollout::ScalingDown {
+                current: 2,
+                desired: 1
+            }
+        );
+        assert_eq!(statefulset_rollout(&down).code(), "Progressing");
+        let done = statefulset(
+            1,
+            StatefulSetStatus {
+                replicas: 1,
+                ..sts_status(1, 1, "db-1", "db-1")
+            },
+            None,
+        );
+        assert_eq!(statefulset_rollout(&done), Rollout::Ready);
     }
 
     /// A partition holds the low ordinals back on purpose, so the rollout is

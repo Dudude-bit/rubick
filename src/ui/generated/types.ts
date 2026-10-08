@@ -2406,6 +2406,7 @@ export type Rollout =
   | { state: "unobserved"; available: number; desired: number }
   | { state: "rollingOut"; updated: number; desired: number }
   | { state: "comingUp"; available: number; desired: number }
+  | { state: "scalingDown"; current: number; desired: number }
   | { state: "short"; available: number; desired: number }
   | { state: "ready" };
 
