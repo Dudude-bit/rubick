@@ -154,10 +154,25 @@ describe("many Ingresses asking for one class nothing serves", () => {
         "2 Ingresses here ask for an IngressClass this cluster does not have: nginx"
       )
     ).toBeInTheDocument();
-    expect(
-      screen.getAllByText("No IngressClass named nginx in this cluster")
-    ).toHaveLength(2);
     expect(screen.getAllByText(/Nothing has picked/)).toHaveLength(1);
     expect(screen.queryByText(/Nothing has picked this Ingress up/)).toBeNull();
+  });
+
+  /**
+   * The same pod still printed "No IngressClass named nginx in this cluster"
+   * above each of its 13 Ingresses under the summary that already said it.
+   * Fails if a row says the sentence again, or stops marking which class it
+   * lacks.
+   */
+  it("marks each Ingress with the class it lacks, not the summary's sentence again", async () => {
+    await renderWithRouter(<TrafficChain query={query(both)} />);
+    const markers = await screen.findAllByRole("img", {
+      name: "No IngressClass named nginx in this cluster",
+    });
+    expect(markers).toHaveLength(2);
+    for (const marker of markers) expect(marker.textContent).toBe("nginx");
+    expect(
+      screen.queryByText("No IngressClass named nginx in this cluster")
+    ).toBeNull();
   });
 });

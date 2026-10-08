@@ -1455,6 +1455,7 @@ export const en = {
     clearBuffered: "Clear what is buffered",
     reconnect: "Reconnect",
     followAgain: "Follow again",
+    followNewRun: "Follow the new run",
     showCurrentRun: "Show the current run",
     showFewer: "Show fewer",
     showAll: "Show all {n}",
@@ -1686,6 +1687,8 @@ export const en = {
       "Seen at a relist after a break: it changed sometime in the gap before this.",
     sinceMarker: "since the link was made",
     sinceNothing: "Nothing on this clock since {when}.",
+    nothingRecordedSince:
+      "No change recorded since {since}: no workload here was created, deleted, scaled or edited.",
     revisionsUnread: "The revisions could not be read: {reason}",
     historyUnread: "{owner}'s history could not be read: {reason}",
     helmUnread: "Helm's history for {release} could not be read: {reason}",
@@ -4925,6 +4928,7 @@ export const en = {
       "This policy names neither direction, so it applies to nothing.",
     podsUnread:
       "This workload's pods could not be read, so nothing here says whether it has any: {reason}",
+    idleNothingToRead: "No pod runs, so there is no log to read.",
     noPodsToStream: "No pods to read from yet.",
     podListUnread: "pod list not read",
     everyLaneHidden: "Every pod is hidden.",
@@ -6214,6 +6218,8 @@ export const en = {
     containerNotStarted:
       "{container} has not started, so it has nothing to say yet.",
     streamEndedGone: "Stream ended: {pod}/{container} is gone.",
+    streamEndedRestarting:
+      "Stream ended: {pod}/{container} is restarting, and its new run is not followed.",
     streamLost: "Lost the log stream from {pod}/{container}.",
     kubeletHoldingAt: "The kubelet is holding it at",
     itExited: "It exited",
@@ -6248,6 +6254,8 @@ export const en = {
       "Lines have been dropped around the frozen interval, so the strip has a gap beside it.",
     repeatsOnNote:
       "Repeats is on, so a line that says what the one above it said is folded into it.",
+    matchedIn: "matched in {fields}",
+    matchedOutsideMessage: "matched outside the message: Raw shows it",
     nothingMatchedFor: "Nothing has matched {terms} for {span}.",
     intakeNarrowNote:
       "The stream is attached and reading. This is intake being narrow, not the log stopping.",

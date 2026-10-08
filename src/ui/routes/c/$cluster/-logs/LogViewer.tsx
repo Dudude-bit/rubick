@@ -48,7 +48,12 @@ import {
   StreamFailureNotice,
 } from "./LogNotices";
 import { LaneCoverage } from "./LaneCoverage";
-import { countReadings, readLanes, type ReadSource } from "./readings";
+import {
+  countReadings,
+  readingOf,
+  readLanes,
+  type ReadSource,
+} from "./readings";
 import { downloadNotice } from "./download-notice";
 import { EmptyState } from "./LogEmptyState";
 import { containerColors as buildContainerColors } from "./container-colors";
@@ -176,6 +181,8 @@ interface LogViewerProps {
    * pod's streams, because that is the only thing the API server will follow.
    */
   workload?: { owner: string; ownerKind: string } | null;
+  /** Why the workload runs no pods on purpose, as its page says it; absent while it should have some. */
+  idle?: string | null;
 }
 
 export function LogViewer({
@@ -185,6 +192,7 @@ export function LogViewer({
   pods,
   podsError,
   laneRule = "pod",
+  idle = null,
   soloContainer,
   workload,
 }: LogViewerProps) {
@@ -840,6 +848,29 @@ export function LogViewer({
 
   const laneOfFailure = (failure: ContainerFailure) =>
     lanes ? failure.pod : failure.container;
+  // The first container of that name across every pod is another pod's
+  // status: on a workload pane the failure names which pod it is about.
+  const infoOfFailure = useCallback(
+    (failure: ContainerFailure) =>
+      lanes
+        ? podByName
+            .get(failure.pod)
+            ?.containers.find((info) => info.name === failure.container)
+        : containerInfos.find((info) => info.name === failure.container),
+    [lanes, podByName, containerInfos]
+  );
+  const restartsAlways =
+    workload !== null &&
+    workload !== undefined &&
+    RESTARTS_ALWAYS.has(workload.ownerKind);
+  const readingOfFailure = useCallback(
+    (failure: ContainerFailure) =>
+      readingOf(failure, infoOfFailure(failure), {
+        previous: previousRun,
+        restartsAlways,
+      }),
+    [infoOfFailure, previousRun, restartsAlways]
+  );
   const streamsInView = lanes
     ? (sources ?? []).filter((source) => !hidden.has(source.pod)).length
     : shownContainers.length;
@@ -894,7 +925,9 @@ export function LogViewer({
     // that can still produce it.
     const gone = bannered
       .filter(
-        (failure) => failure.kind === "gone" || failure.kind === "log-not-kept"
+        (failure) =>
+          failure.kind === "log-not-kept" ||
+          (failure.kind === "gone" && readingOfFailure(failure) === "ended")
       )
       .map((failure) => failure.container);
     if (gone.length > 0) return `${podName}/${gone.join(", ")}`;
@@ -909,12 +942,7 @@ export function LogViewer({
       return `${podName}/${unstarted.map((info) => info.name).join(", ")}`;
     }
     return null;
-  }, [lanes, bannered, containerInfos, hidden, podName]);
-
-  const restartsAlways =
-    workload !== null &&
-    workload !== undefined &&
-    RESTARTS_ALWAYS.has(workload.ownerKind);
+  }, [lanes, bannered, containerInfos, hidden, podName, readingOfFailure]);
   const readings = useMemo(() => {
     const readSources: ReadSource[] = lanes
       ? pods.flatMap((pod) =>
@@ -1121,17 +1149,9 @@ export function LogViewer({
         <StreamFailureNotice
           key={`${failure.pod}/${failure.container}`}
           failure={failure}
+          reading={readingOfFailure(failure)}
           podName={lanes ? failure.pod : podName}
-          container={
-            // The first container of that name across every pod is another
-            // pod's status: its exit code, its restart count, its reason.
-            // On a workload pane the failure names which pod it is about.
-            lanes
-              ? podByName
-                  .get(failure.pod)
-                  ?.containers.find((info) => info.name === failure.container)
-              : containerInfos.find((info) => info.name === failure.container)
-          }
+          container={infoOfFailure(failure)}
           intake={intake.length > 0}
           previousRun={previousRun}
           onRetry={
@@ -1211,6 +1231,7 @@ export function LogViewer({
           intake={intake.length > 0}
           allHidden={shownLanes.length === 0 && laneKeys.length > 0}
           noPods={lanes && pods.length === 0 && laneKeys.length === 0}
+          idle={idle}
           podsUnread={podsError}
           lanes={lanes}
           previous={previousRun}

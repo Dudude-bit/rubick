@@ -20,6 +20,9 @@ vi.mock("@/lib/commands", () => ({
     // Read at call time so a test can put this workload in a different
     // neighbourhood before it renders.
     getResourceConnections: vi.fn(async () => connections),
+    detectInClusterExtensions: vi.fn(async () => []),
+    getPrometheusConnection: vi.fn(async () => null),
+    getLokiConnection: vi.fn(async () => null),
   },
 }));
 
@@ -128,7 +131,10 @@ const ungoverned: ResourceConnections = {
   edges: [],
 };
 
-function mockDetail(set: StatefulSetDetailInfo | undefined) {
+function mockDetail(
+  set: StatefulSetDetailInfo | undefined,
+  activeTab = "overview"
+) {
   vi.mocked(useResourceDetail).mockReturnValue({
     name: set?.name ?? "stateful-demo",
     namespace: set?.namespace ?? "k8s-gui-test",
@@ -137,7 +143,7 @@ function mockDetail(set: StatefulSetDetailInfo | undefined) {
     error: null,
     yaml: "kind: StatefulSet\n",
     copyYaml: vi.fn(),
-    activeTab: "overview",
+    activeTab,
     setActiveTab: vi.fn(),
     goBack: vi.fn(),
     refetch: vi.fn(),
@@ -198,6 +204,22 @@ describe("StatefulSetDetail", () => {
           queryKeys.ownedPods("StatefulSet", "k8s-gui-test", "stateful-demo")
         )
       ).toEqual([pod("stateful-demo-0")])
+    );
+  });
+
+  /**
+   * The Logs tab of a set scaled to 0 said "No pods to read from yet." beside
+   * an Overview saying scaled to zero. Fails if the page stops handing the
+   * pane the reason its Usage block gives.
+   */
+  it("says on its Logs tab that it is scaled to zero, as its Overview does", async () => {
+    mockDetail(
+      buildSet({ replicas: { desired: 0, ready: 0, current: 0, updated: 0 } }),
+      "logs"
+    );
+    await renderPage();
+    expect((await screen.findByTestId("log-idle")).textContent).toBe(
+      "This StatefulSet is scaled to zero."
     );
   });
 

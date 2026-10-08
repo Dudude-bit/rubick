@@ -354,6 +354,13 @@ export function StatefulSetDetail() {
                 workload={
                   name ? { owner: name, ownerKind: "StatefulSet" } : null
                 }
+                idle={
+                  statefulSet && desired === 0
+                    ? t("empty", "kindScaledToZero", {
+                        kind: ResourceType.StatefulSet,
+                      })
+                    : null
+                }
               />
             </div>
           </div>

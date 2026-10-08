@@ -9,6 +9,7 @@ import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
+import { formatWhen } from "@/lib/utils";
 import { Changes } from "./Changes";
 
 const NOW = Date.now();
@@ -213,6 +214,79 @@ describe("rows older than the running watch", () => {
     await mount();
     expect(screen.getByText(/^Watching since/)).toBeInTheDocument();
     expect(screen.queryByText(/were recorded by this app/)).toBeNull();
+  });
+});
+
+describe("a watch that has recorded nothing", () => {
+  const MIN = 60_000;
+  const watchingSince = NOW - 10 * MIN;
+  const yesterday = {
+    from: NOW - 30 * 60 * MIN,
+    seenAt: NOW - 20 * 60 * MIN,
+    to: NOW - 20 * 60 * MIN,
+  };
+  const running = { from: watchingSince, seenAt: NOW, to: null };
+  const quiet = `No change recorded since ${formatWhen(watchingSince, "clock")}: no workload here was created, deleted, scaled or edited.`;
+
+  /**
+   * Marco's Changes page showed only the "Not observed" box, never whether
+   * the watch since 06:37 had seen nothing or was still loading. Fails if a
+   * quiet watch is left unsaid, on the page or in Share.
+   */
+  it("says no change was recorded since the watch began, beside the gap before it", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    useChangeJournalStore.setState({
+      entries: [],
+      spans: { prod: [yesterday, running] },
+    });
+
+    const collect = await mount();
+    expect(screen.getByTestId("changes-quiet").textContent).toBe(quiet);
+    expect(screen.getByText(/^Not observed /)).toBeInTheDocument();
+    const watched = collect().find(
+      (section) => section.id === "changes-watched"
+    );
+    expect(watched?.body).toMatchObject({
+      text: expect.stringContaining("No change recorded since"),
+    });
+  });
+
+  /** Fails if a change the running watch recorded is denied, or one recorded before it counts as its own. */
+  it("counts only the running watch's own rows", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    const row = (id: string, at: number) => ({
+      id,
+      context: "prod",
+      kind: "Deployment",
+      namespace: "team-checkout",
+      name: "worker",
+      at,
+      field: "replicas" as const,
+      key: null,
+      from: "1",
+      to: "0",
+    });
+    useChangeJournalStore.setState({
+      entries: [row("before", NOW - 21 * 60 * MIN)],
+      spans: { prod: [yesterday, running] },
+    });
+    await mount();
+    expect(screen.getByTestId("changes-quiet").textContent).toBe(quiet);
+
+    useChangeJournalStore.setState({
+      entries: [row("before", NOW - 21 * 60 * MIN), row("now", NOW - MIN)],
+    });
+    await waitFor(() =>
+      expect(screen.queryByTestId("changes-quiet")).toBeNull()
+    );
   });
 });
 

@@ -250,6 +250,7 @@ export function JobDetail() {
                 podsError={podsError}
                 laneRule="pod"
                 workload={name ? { owner: name, ownerKind: "Job" } : null}
+                idle={job?.completionTime ? t("empty", "jobFinished") : null}
               />
             </div>
           </div>

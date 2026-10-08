@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { PauseCircle } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { errorToShow } from "@/lib/error-utils";
 
@@ -42,6 +43,7 @@ export function EmptyState({
   intake,
   allHidden,
   noPods = false,
+  idle = null,
   podsUnread,
   lanes = false,
   previous = false,
@@ -60,6 +62,8 @@ export function EmptyState({
   allHidden: boolean;
   /** A workload pane with nothing to read from yet. */
   noPods?: boolean;
+  /** Why `noPods` is on purpose, which makes it no longer a "yet". */
+  idle?: string | null;
   /** The pod list failed to read, so `noPods` says nothing about the cluster. */
   podsUnread?: unknown;
   /** A workload pane: what is hidden is a pod, not a container. */
@@ -77,6 +81,23 @@ export function EmptyState({
         {t("empty", "podsUnread", { reason: errorToShow(podsUnread) })}
       </Note>
     );
+
+  if (noPods && idle) {
+    return (
+      <Note>
+        <span
+          className="inline-flex items-center gap-1.5 text-fg-mid"
+          data-testid="log-idle"
+        >
+          <PauseCircle className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+          {idle}
+        </span>
+        <span className="block text-fg-fnt">
+          {t("empty", "idleNothingToRead")}
+        </span>
+      </Note>
+    );
+  }
 
   if (noPods) return <Note>{t("empty", "noPodsToStream")}</Note>;
 

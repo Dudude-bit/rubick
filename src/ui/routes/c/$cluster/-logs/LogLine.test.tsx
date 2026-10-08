@@ -88,6 +88,76 @@ describe("what a collapsed run marks for a search", () => {
   });
 });
 
+describe("where a search found a line the row does not show it in", () => {
+  afterEach(() => useLocaleStore.setState({ choice: null }));
+
+  const served = (id: number): StreamedLogLine => ({
+    ...line(id, 1_700_000_000_000 + id),
+    format: "json",
+    message: "request served",
+    raw: '{"msg":"request served","path":"/api/cart"}',
+    fields: { path: "/api/cart" },
+  });
+
+  /**
+   * Marco's "cart": the collapsed "request served × 155" run matched through
+   * its lines' path and lit nothing. Fails if the run stops naming the field.
+   */
+  it("names the field a collapsed run matched in", () => {
+    useLocaleStore.setState({ choice: "en" });
+    render(
+      <LogRunRow
+        run={{ id: 1, start: 0, count: 2, head: served(1), tail: served(2) }}
+        expanded={false}
+        containerColor={undefined}
+        searchQuery="cart"
+        onToggle={() => {}}
+      />
+    );
+    const where = screen.getByTestId("log-matched-in");
+    expect(where.textContent).toBe("matched in path");
+    expect(where.querySelector("mark")?.textContent).toBe("path");
+  });
+
+  const drawLine = (log: StreamedLogLine, query: string) =>
+    render(
+      <LogLineComponent
+        log={log}
+        viewMode="compact"
+        searchQuery={query}
+        containerColor={undefined}
+        expanded={false}
+        onToggleDetail={() => {}}
+        lineId={log.id}
+      />
+    );
+
+  /** A field the row draws is lit where it stands. Fails if a drawn field's match goes unmarked. */
+  it("marks the match inside a field the row draws, and names nothing", () => {
+    useLocaleStore.setState({ choice: "en" });
+    const { container } = drawLine(served(1), "cart");
+    expect(
+      [...container.querySelectorAll("mark")].map((mark) => mark.textContent)
+    ).toEqual(["cart"]);
+    expect(screen.queryByTestId("log-matched-in")).toBeNull();
+  });
+
+  /** Fails if a match only Raw can show leaves the row silent. */
+  it("sends a match outside the message and its fields to Raw", () => {
+    useLocaleStore.setState({ choice: "en" });
+    drawLine(
+      {
+        ...line(1, 1_700_000_000_000),
+        raw: "I1007 06:41:09.603166 1 server.go:42] retrying",
+      },
+      "server.go"
+    );
+    expect(screen.getByTestId("log-matched-in").textContent).toBe(
+      "matched outside the message: Raw shows it"
+    );
+  });
+});
+
 describe("what the Raw view marks for a search", () => {
   const STAMP = "2026-10-07T06:41:09.603166503Z";
   const MESSAGE = "GET /checkout 503 upstream=payments";

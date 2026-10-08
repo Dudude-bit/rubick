@@ -1,7 +1,12 @@
 import { Eye, History } from "lucide-react";
 
 import type { ChangeItem, ObservedSpan } from "@/lib/changes";
-import { earlierRowsWords, journalWords, unwatchedWords } from "@/lib/changes";
+import {
+  earlierRowsWords,
+  journalWords,
+  quietSince,
+  unwatchedWords,
+} from "@/lib/changes";
 import { iconSvg } from "@/lib/icon-svg";
 import type { ReportChange } from "@/lib/report";
 import {
@@ -95,7 +100,11 @@ export function watchedSection(
   const since = watching
     ? t("changes", "watchingNow", { since: clock(watching.from) })
     : t("changes", "notWatchingNow");
-  const base = [since, refused, earlier].filter(Boolean).join(" · ");
+  const quiet = quietSince(watching, items);
+  const nothing =
+    quiet !== null &&
+    t("changes", "nothingRecordedSince", { since: clock(quiet) });
+  const base = [since, refused, earlier, nothing].filter(Boolean).join(" · ");
   const warn = !watching || gaps > 0 || Boolean(refused);
   return {
     id: "changes-watched",

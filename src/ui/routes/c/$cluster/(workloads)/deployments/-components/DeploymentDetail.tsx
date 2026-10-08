@@ -476,6 +476,13 @@ export function DeploymentDetail() {
               podsError={podsError}
               laneRule="pod"
               workload={name ? { owner: name, ownerKind: "Deployment" } : null}
+              idle={
+                replicas && desired === 0
+                  ? t("empty", "kindScaledToZero", {
+                      kind: ResourceType.Deployment,
+                    })
+                  : null
+              }
             />
           </div>
         </div>

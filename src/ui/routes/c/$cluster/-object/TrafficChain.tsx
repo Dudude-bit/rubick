@@ -144,8 +144,15 @@ function Controller({
   const t = useT();
   if (!binding.resolved && brief && binding.requested) {
     return (
-      <p className="text-xs text-err">
-        {t("empty", "noIngressClassNamed", { name: binding.requested })}
+      <p
+        role="img"
+        aria-label={t("empty", "noIngressClassNamed", {
+          name: binding.requested,
+        })}
+        className="flex items-center gap-1 text-xs text-err"
+      >
+        <CircleSlash className="h-3 w-3 flex-none" />
+        <span className="font-mono">{binding.requested}</span>
       </p>
     );
   }

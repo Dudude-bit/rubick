@@ -1,4 +1,5 @@
 import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 import { memo } from "react";
 import type { LogLevel, LogLine as LogLineType } from "@/generated/types";
 import { messageSegments } from "./ansi";
@@ -14,6 +15,7 @@ import {
   formatSpan,
   formatTimestamp,
   formatTimestampPrecise,
+  matchedOutsideMessage,
   stampLength,
 } from "./types";
 import { formatCount } from "@/lib/count";
@@ -67,9 +69,11 @@ function visibleFieldsOf(log: LogLineType): [string, string][] {
  */
 function Fields({
   fields,
+  query,
   onFieldClick,
 }: {
   fields: [string, string][];
+  query: string;
   onFieldClick?: (key: string, value: string) => void;
 }) {
   const t = useT();
@@ -88,12 +92,36 @@ function Fields({
               onFieldClick?.(key, value);
             }}
           >
-            {key}
+            <Marked text={key} query={query} />
           </button>
           <span aria-hidden="true">=</span>
-          {value}
+          <Marked text={value} query={query} />
         </span>
       ))}
+    </span>
+  );
+}
+
+/**
+ * The search found the line somewhere the row does not draw: the fields
+ * that hold it, named in the highlight's colour, or the raw line.
+ */
+function MatchedIn({ fields }: { fields: string[] }) {
+  const t = useT();
+  return (
+    <span className="ml-2 text-[10px] text-fg-fnt" data-testid="log-matched-in">
+      {fields.length === 0
+        ? t("empty", "matchedOutsideMessage")
+        : parts(t("empty", "matchedIn"), {
+            fields: fields.map((key, index) => (
+              <span key={key}>
+                {index > 0 && ", "}
+                <mark className="rounded bg-warn/24 px-0.5 font-mono text-fg">
+                  {key}
+                </mark>
+              </span>
+            )),
+          })}
     </span>
   );
 }
@@ -159,6 +187,11 @@ export const LogLineComponent = memo(function LogLineComponent({
 
   const fields = visibleFieldsOf(log);
   const message = <Message log={log} query={searchQuery} />;
+  const outside = matchedOutsideMessage(log, searchQuery);
+  const unshown =
+    outside !== null && !fields.some(([key]) => outside.includes(key))
+      ? outside
+      : null;
 
   return (
     <div>
@@ -202,12 +235,18 @@ export const LogLineComponent = memo(function LogLineComponent({
           >
             {message}
           </button>
-          <Fields fields={fields} onFieldClick={onFieldClick} />
+          <Fields
+            fields={fields}
+            query={searchQuery}
+            onFieldClick={onFieldClick}
+          />
+          {unshown && <MatchedIn fields={unshown} />}
         </span>
       </div>
       {expanded && (
         <LineDetail
           log={log}
+          query={searchQuery}
           fields={fields}
           containerColor={containerColor}
           onFieldClick={onFieldClick}
@@ -225,12 +264,14 @@ export const LogLineComponent = memo(function LogLineComponent({
  */
 function LineDetail({
   log,
+  query,
   fields,
   containerColor,
   onFieldClick,
   onLevelClick,
 }: {
   log: LogLineType;
+  query: string;
   fields: [string, string][];
   containerColor: string | undefined;
   onFieldClick?: (key: string, value: string) => void;
@@ -286,7 +327,7 @@ function LineDetail({
         </span>
       </div>
       <p className="mt-1 whitespace-pre-wrap wrap-break-word font-mono text-fg-mid">
-        <Message log={log} />
+        <Message log={log} query={query} />
       </p>
       {fields.length > 0 && (
         <dl className="mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5">
@@ -299,10 +340,12 @@ function LineDetail({
                   className="text-fg-mut hover:text-info hover:underline hover:decoration-dotted"
                   onClick={() => onFieldClick?.(key, value)}
                 >
-                  {key}
+                  <Marked text={key} query={query} />
                 </button>
               </dt>
-              <dd className="wrap-break-word text-fg-fnt">{value}</dd>
+              <dd className="wrap-break-word text-fg-fnt">
+                <Marked text={value} query={query} />
+              </dd>
             </div>
           ))}
         </dl>
@@ -360,6 +403,7 @@ export const LogRunRow = memo(function LogRunRow({
   onToggle: (id: number) => void;
 }) {
   const t = useT();
+  const outside = matchedOutsideMessage(run.head, searchQuery);
   return (
     <button
       type="button"
@@ -396,6 +440,7 @@ export const LogRunRow = memo(function LogRunRow({
               })
             : t("count", "runAtOnce", { count: formatCount(run.count) })}
         </span>
+        {outside && <MatchedIn fields={outside} />}
       </span>
     </button>
   );

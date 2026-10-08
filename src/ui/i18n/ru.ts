@@ -1463,6 +1463,7 @@ export const ru: Catalogue = {
     clearBuffered: "Очистить буфер",
     reconnect: "Переподключиться",
     followAgain: "Следовать снова",
+    followNewRun: "Следовать за новым запуском",
     showCurrentRun: "Показать текущий запуск",
     showFewer: "Показать меньше",
     showAll: "Показать все {n}",
@@ -1730,6 +1731,8 @@ export const ru: Catalogue = {
       "Замечено при повторном чтении после разрыва связи: изменение произошло где-то в пропуске перед этим.",
     sinceMarker: "с момента, когда сделали ссылку",
     sinceNothing: "На этой шкале ничего с {when}.",
+    nothingRecordedSince:
+      "С {since} изменений не записано: рабочие нагрузки здесь не создавали, не удаляли, не масштабировали и не правили.",
     revisionsUnread: "Ревизии не прочитаны: {reason}",
     historyUnread: "История {owner} не прочитана: {reason}",
     helmUnread: "История Helm для {release} не прочитана: {reason}",
@@ -5444,6 +5447,7 @@ export const ru: Catalogue = {
       "Политика не называет ни одного направления, поэтому ни на что не действует.",
     podsUnread:
       "Поды этой нагрузки не прочитаны, так что отсюда не видно, есть они или нет: {reason}",
+    idleNothingToRead: "Ни один под не работает, поэтому читать нечего.",
     noPodsToStream: "Пока нет подов, которые можно читать.",
     podListUnread: "список подов не прочитан",
     everyLaneHidden: "Все поды скрыты.",
@@ -6828,6 +6832,8 @@ export const ru: Catalogue = {
     containerNotStarted:
       "{container} ещё не стартовал, поэтому сказать ему пока нечего.",
     streamEndedGone: "Поток закончился: {pod}/{container} больше нет.",
+    streamEndedRestarting:
+      "Поток закончился: {pod}/{container} перезапускается, новый запуск не отслеживается.",
     streamLost: "Поток логов от {pod}/{container} потерян.",
     kubeletHoldingAt: "kubelet удерживает его в состоянии",
     itExited: "Завершился",
@@ -6855,6 +6861,9 @@ export const ru: Catalogue = {
       "Строки удалены вокруг замороженного интервала, поэтому рядом с ним у полосы разрыв.",
     repeatsOnNote:
       "Включены «Повторы»: строка, повторяющая предыдущую, сворачивается в неё.",
+    matchedIn: "совпадение в {fields}",
+    matchedOutsideMessage:
+      "совпадение вне сообщения, видно в режиме «Как есть»",
     nothingMatchedFor: "Ничего не совпало с {terms} уже {span}.",
     intakeNarrowNote:
       "Поток подключён и читает. Это узкий фильтр приёма, а не остановка лога.",

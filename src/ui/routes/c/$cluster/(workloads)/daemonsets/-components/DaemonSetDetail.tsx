@@ -347,6 +347,11 @@ export function DaemonSetDetail() {
                 podsError={podsError}
                 laneRule="node"
                 workload={name ? { owner: name, ownerKind: "DaemonSet" } : null}
+                idle={
+                  daemonSet && desired === 0
+                    ? t("empty", "daemonSetNoNodeMatches")
+                    : null
+                }
               />
             </div>
           </div>
