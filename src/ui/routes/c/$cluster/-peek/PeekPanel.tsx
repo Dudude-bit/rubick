@@ -8,7 +8,7 @@ import { PeekSkeleton } from "./peek-skeleton";
 import type { PeekTabId } from "./peek-tabs";
 import { usePeekWidth } from "./peek-width";
 import { SurfaceVisibility, useSurfaceVisible } from "@/lib/surface-visibility";
-import { ownView } from "../-object/attachment";
+import { peekLanding } from "../-object/attachment";
 
 /** The sheet's `data-[state=closed]:duration-300`, with room to finish. */
 const SLIDE_OUT_MS = 500;
@@ -102,7 +102,7 @@ function PeekLoading({ target }: { target: PeekTarget }) {
             showKind={false}
             size="title"
             className="font-semibold"
-            linkOptions={{ view: ownView(target) }}
+            linkOptions={peekLanding(target)}
           />
         </SheetTitle>
       </header>

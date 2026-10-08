@@ -10,9 +10,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   eventsOfEveryObject,
   eventTotal,
+  OBJECT_EVENTS_READ,
   type ObjectEventsQuery,
 } from "@/hooks/useObjectEvents";
 import { ResourceType } from "@/lib/resource-registry";
+
+/** What the tab's count is a count of, said: a bare "4" under the tab reads as nothing. */
+const eventCount = (n: number, t: T) =>
+  n >= OBJECT_EVENTS_READ
+    ? t("count", "eventObjectsLatest", { n: OBJECT_EVENTS_READ })
+    : t("count", "eventObjects", { n });
 
 /** One object's events, read by {@link useObjectEvents}: what the peek's latest twenty are out of. */
 export function eventsTab(
@@ -35,7 +42,9 @@ export function eventsTab(
       <Section>
         <SectionHeader
           title="Events"
-          count={data && data.length > 0 ? eventTotal(data) : undefined}
+          count={
+            data && data.length > 0 ? eventCount(data.length, t) : undefined
+          }
           description={
             everyObject &&
             t("empty", "eventsOfEveryObjectIn", { namespace: subject.name })

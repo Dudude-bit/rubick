@@ -19,6 +19,8 @@ export interface PeekTarget {
    * Application should be.
    */
   crd?: string;
+  /** The attached object it was opened for, as `via`: its full page opens where that one lives. */
+  via?: string;
 }
 
 /**
@@ -101,13 +103,14 @@ export function peekOfRow<Row>(
  * after a round trip.
  */
 export function usePeek() {
-  const raw = useAppSearch().peek ?? null;
+  const { peek, peekVia } = useAppSearch();
+  const raw = peek ?? null;
   const setSearch = useSetSearch();
 
-  const target = useMemo<PeekTarget | null>(
-    () => (raw ? parsePeekValue(raw) : null),
-    [raw]
-  );
+  const target = useMemo<PeekTarget | null>(() => {
+    const parsed = raw ? parsePeekValue(raw) : null;
+    return parsed && peekVia ? { ...parsed, via: peekVia } : parsed;
+  }, [raw, peekVia]);
 
   const open = useCallback(
     (next: PeekTarget) => {
@@ -120,14 +123,14 @@ export function usePeek() {
         if (!kind) return;
         value = [toPlural(kind), ...where].join("/");
       }
-      if (value === raw) return;
-      setSearch({ peek: value }, { replace: false });
+      if (value === raw && next.via === peekVia) return;
+      setSearch({ peek: value, peekVia: next.via }, { replace: false });
     },
-    [setSearch, raw]
+    [setSearch, raw, peekVia]
   );
 
   const close = useCallback(() => {
-    setSearch({ peek: undefined }, { replace: false });
+    setSearch({ peek: undefined, peekVia: undefined }, { replace: false });
   }, [setSearch]);
 
   return { target, open, close };

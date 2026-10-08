@@ -17,6 +17,8 @@ export interface AppSearch {
   kind?: string;
   /** The attached object a redirect came from, as `<resource>/[<namespace>/]<name>`. */
   via?: string;
+  /** The `via` the peek's object was opened with, carried to its full page. */
+  peekVia?: string;
   /** A label selector, as the API writes one, that narrows the Pods list. */
   selector?: string;
   /** The namespaces, comma-separated, that selector is read in. */
@@ -35,6 +37,7 @@ const KEYS: ReadonlyArray<keyof AppSearch> = [
   "rule",
   "monitor",
   "via",
+  "peekVia",
   "kind",
   "selector",
   "in",

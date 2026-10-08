@@ -3,7 +3,14 @@
  * *in the scope they picked*.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Profiler, useState } from "react";
@@ -165,6 +172,30 @@ const dated = (namespace: string, index: number): EventInfo => ({
   lastTimestamp: new Date(BASE - index * 1000).toISOString(),
 });
 
+const rowAt = (index: number) =>
+  document.querySelector<HTMLElement>(`tr[data-row-index="${index}"]`);
+const drawnRows = () => document.querySelectorAll("tr[data-row-index]").length;
+
+const restoreLayout: Array<() => void> = [];
+/** jsdom lays nothing out; a 600px port of 26px rows is enough for the virtualiser to draw a window. */
+function layOutRows() {
+  const stub = (proto: object, name: string, get: () => unknown) => {
+    const original = Object.getOwnPropertyDescriptor(proto, name);
+    Object.defineProperty(proto, name, { configurable: true, get });
+    restoreLayout.push(() => {
+      if (original) Object.defineProperty(proto, name, original);
+      else delete (proto as Record<string, unknown>)[name];
+    });
+  };
+  stub(HTMLElement.prototype, "offsetHeight", function (this: HTMLElement) {
+    return this.tagName === "TR" ? 26 : 600;
+  });
+  stub(Element.prototype, "clientHeight", () => 600);
+}
+afterEach(() => {
+  restoreLayout.splice(0).forEach((restore) => restore());
+});
+
 describe("a feed a watch keeps", () => {
   const WATCH_KEY = [...queryKeys.events(null), "watch"];
   const rowsOf = (client: { getQueryData: (key: unknown[]) => unknown }) =>
@@ -192,6 +223,7 @@ describe("a feed a watch keeps", () => {
    * which 500 these are.
    */
   it("reads the feed from the watch's batches and asks nothing again while it runs", async () => {
+    layOutRows();
     await watched();
     expect(subscribeEventWatch).toHaveBeenCalledWith(null);
     const rows = Array.from({ length: 600 }, (_, index) =>
@@ -202,14 +234,144 @@ describe("a feed a watch keeps", () => {
     expect(
       await screen.findByText("500 normal events · of the latest 500")
     ).toBeInTheDocument();
-    const text = document.body.textContent ?? "";
-    expect(text).toContain("prod-pod-0");
-    expect(text).toContain("prod-pod-499");
-    expect(text).not.toContain("prod-pod-500");
+    expect(rowAt(0)?.textContent).toContain("prod-pod-0");
     await new Promise((resolve) => setTimeout(resolve, 1200));
     expect(listEvents).not.toHaveBeenCalled();
     expect(screen.getByText("live")).toBeInTheDocument();
   }, 30_000);
+
+  /**
+   * Dana's idle All events list stalled the window on every batch: all 500
+   * rows were in the DOM, and a new one on top moved every one of them.
+   * Fails if the feed draws more than a screenful of its rows.
+   */
+  it("draws only the rows on screen of a feed of five hundred", async () => {
+    layOutRows();
+    await watched();
+    burst(Array.from({ length: 500 }, (_, index) => dated("prod", index)));
+    await waitFor(() => expect(rowAt(0)?.textContent).toContain("prod-pod-0"));
+    expect(drawnRows()).toBeGreaterThan(0);
+    expect(drawnRows()).toBeLessThan(60);
+  }, 30_000);
+
+  /**
+   * Rows shifted about 25 places between two looks, so a click landed on
+   * another event. Fails if a batch moves the rows while the pointer is on
+   * the list, or if what arrived meanwhile cannot be reached.
+   */
+  it("holds its rows while the pointer is on the list and offers what arrived", async () => {
+    await watched();
+    burst(Array.from({ length: 5 }, (_, index) => dated("prod", index + 1)));
+    await waitFor(() => expect(rowAt(0)?.textContent).toContain("prod-pod-1"));
+
+    await userEvent.hover(rowAt(2)!);
+    send([{ op: "applied", resource: dated("prod", 0) }]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(rowAt(0)?.textContent).toContain("prod-pod-1");
+    expect(rowAt(2)?.textContent).toContain("prod-pod-3");
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Show 1 update" })
+    );
+    expect(rowAt(0)?.textContent).toContain("prod-pod-0");
+    expect(
+      screen.queryByRole("button", { name: /Show \d+ update/ })
+    ).not.toBeInTheDocument();
+
+    send([{ op: "applied", resource: dated("prod", 6) }]);
+    await userEvent.unhover(rowAt(2)!);
+    await waitFor(() => expect(drawnRows()).toBe(7));
+  });
+
+  /**
+   * Dana found no gesture on an Events row that reached the object's Events
+   * tab, and rows that answered neither a click nor a right click. Fails if
+   * the row's click, its object link, its double click or its menu forgets
+   * the Event, or if a kind with no Events tab is sent to one.
+   */
+  it("opens an Event's object on its Events tab from every gesture on the row", async () => {
+    const { router } = await watched();
+    const about = (kind: string, name: string, index: number): EventInfo => ({
+      ...dated("shop", index),
+      name: `${name}.17f3`,
+      involvedObject: { kind, name, namespace: "shop", uid: null },
+    });
+    burst([about("Deployment", "cart", 0), about("Service", "web", 1)]);
+    await waitFor(() => expect(drawnRows()).toBe(2));
+    const search = () => router.state.location.search as Record<string, string>;
+
+    await userEvent.click(within(rowAt(0)!).getByText("Started container"));
+    expect(search().peek).toBe("deployments/shop/cart");
+    expect(search().peekVia).toBe("events/shop/cart.17f3");
+
+    expect(
+      within(rowAt(0)!).getByRole("link", { name: "Deployment cart" })
+    ).toHaveAttribute(
+      "href",
+      "/c/prod/deployments/shop/cart?tab=events&via=events%2Fshop%2Fcart.17f3"
+    );
+    expect(
+      within(rowAt(1)!).getByRole("link", { name: "Service web" })
+    ).toHaveAttribute("href", "/c/prod/services/shop/web");
+
+    await userEvent.pointer({ keys: "[MouseRight]", target: rowAt(1)! });
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+
+    await userEvent.dblClick(within(rowAt(0)!).getByText("Started container"));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        "/c/prod/deployments/shop/cart"
+      )
+    );
+    expect(search().tab).toBe("events");
+    expect(search().via).toBe("events/shop/cart.17f3");
+  });
+
+  /** Dana's story title opened a peek that knew nothing of the Event. Fails if the card's link drops it. */
+  it("links a story's object to its Events tab, noting the latest Event about it", async () => {
+    await watched("stories");
+    const now = Date.now();
+    burst([
+      {
+        ...event("shop", 0),
+        name: "cart.17f3",
+        type: "Warning",
+        reason: "ProgressDeadlineExceeded",
+        involvedObject: {
+          kind: "Deployment",
+          name: "cart",
+          namespace: "shop",
+          uid: null,
+        },
+        lastTimestamp: new Date(now - 60_000).toISOString(),
+      },
+    ]);
+    const card = await screen.findByRole("article", {
+      name: "Deployment cart",
+    });
+    expect(
+      within(card).getByRole("link", { name: "Deployment cart" })
+    ).toHaveAttribute(
+      "href",
+      "/c/prod/deployments/shop/cart?tab=events&via=events%2Fshop%2Fcart.17f3"
+    );
+  });
+
+  /** Dana could not sort the feed by Age as every list sorts. Fails if the header stops sorting. */
+  it("sorts the list by Age, oldest first on the second click", async () => {
+    await watched();
+    burst([dated("prod", 0), dated("prod", 2), dated("prod", 1)]);
+    await waitFor(() => expect(rowAt(0)?.textContent).toContain("prod-pod-0"));
+
+    const age = screen.getByRole("button", {
+      name: "Age: Sort by this column",
+    });
+    await userEvent.click(age);
+    expect(rowAt(0)?.textContent).toContain("prod-pod-0");
+    await userEvent.click(age);
+    expect(rowAt(0)?.textContent).toContain("prod-pod-2");
+  });
 
   /**
    * One event changing is one row's work: no row it did not touch is a new
@@ -348,6 +510,45 @@ describe("a feed a watch keeps", () => {
     expect(document.body.textContent).toContain("prod-pod-1");
     expect(screen.getByText("read failing")).toBeInTheDocument();
     expect(screen.queryByText("live")).not.toBeInTheDocument();
+  });
+
+  /**
+   * On Dana's failing cluster each retry flipped the header to "polling" and
+   * hid the banner over the same old rows for as long as the attempt took.
+   * Fails if a retry of a poll that never answered clears the failure
+   * before a read does.
+   */
+  it("keeps saying the read is failing while a retry is out, until a read answers", async () => {
+    await watched();
+    burst([dated("prod", 0), dated("prod", 1)]);
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("prod-pod-1")
+    );
+    listEvents.mockRejectedValue(new Error("502 Bad Gateway"));
+    send([{ op: "failed", resource: null }], "connection reset by peer");
+    await screen.findByText(/Could not read events just now/);
+
+    let answer: (rows: EventInfo[]) => void = () => {};
+    listEvents.mockImplementation(
+      () => new Promise((resolve) => (answer = resolve))
+    );
+    const before = listEvents.mock.calls.length;
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    await waitFor(() =>
+      expect(listEvents.mock.calls.length).toBeGreaterThan(before)
+    );
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(screen.getByText("read failing")).toBeInTheDocument();
+    expect(
+      screen.getByText(/Could not read events just now/)
+    ).toBeInTheDocument();
+
+    await act(async () => answer([dated("prod", 0)]));
+    await waitFor(() =>
+      expect(screen.queryByText("read failing")).not.toBeInTheDocument()
+    );
   });
 
   /**
@@ -644,7 +845,10 @@ describe("what the join costs", () => {
 
     const sort = vi.spyOn(Array.prototype, "sort");
     redraw();
-    expect(sort).not.toHaveBeenCalled();
+    const feeds = sort.mock.contexts.filter(
+      (list) => (list as unknown[]).length === 100
+    );
+    expect(feeds).toEqual([]);
     sort.mockRestore();
   });
 

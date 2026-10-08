@@ -29,7 +29,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { CopyableValue } from "@/components/ui/copyable-value";
 import { AlertsAbout } from "../-object/AlertsAbout";
-import { ownView } from "../-object/attachment";
+import { ownView, peekLanding } from "../-object/attachment";
 import { pageTab, usePeek, type PeekTarget } from "@/hooks/usePeek";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
@@ -169,6 +169,7 @@ export function PeekContent({
   // so the reader landed on Overview anyway and the address kept a
   // `?tab=children` the tab then recorded as its route.
   const view = ownView(target);
+  const landing = peekLanding(target);
   const fullPage = objectLink(
     {
       kind: target.kind,
@@ -176,7 +177,9 @@ export function PeekContent({
       namespace,
       crd: target.crd,
     },
-    { tab: pageTab(activeTab, target.kind) ?? undefined, view }
+    target.via
+      ? landing
+      : { tab: pageTab(activeTab, target.kind) ?? undefined, view }
   );
   const routable = fullPage !== null;
   const openFullPage = () => {
@@ -238,7 +241,7 @@ export function PeekContent({
               showKind={false}
               size="title"
               className="font-semibold"
-              linkOptions={{ view }}
+              linkOptions={landing}
             />
           </SheetTitle>
           <CopyName name={target.name} />

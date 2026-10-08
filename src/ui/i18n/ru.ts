@@ -390,6 +390,7 @@ export const ru: Catalogue = {
     progress: "Ход",
     message: "Сообщение",
     reason: "Причина",
+    eventCount: "Повторы",
     runtime: "Среда выполнения",
     scheduling: "Планирование",
     provisioning: "Выделение",
@@ -1872,6 +1873,8 @@ export const ru: Catalogue = {
     notReadEndpoints: "эндпоинты Service {service} ({reason})",
     notReadLogs: "последние строки {container} ({reason})",
     notReadEvents: "события этого пода ({reason})",
+    eventsHeld:
+      "Список стоит на месте, пока над ним указатель, чтобы строка не сдвинулась из-под него",
     notReadOtherNamespace:
       "объекты Service в {namespace}, где находится этот адрес: приложение прочитало только пространство имён самого пода",
     notReadPolicies: "NetworkPolicy пространства имён {namespace} ({reason})",
@@ -7651,6 +7654,24 @@ export const ru: Catalogue = {
       few: "{n} ушли, строки сохранены",
       many: "{n} ушли, строки сохранены",
       other: "{n} ушли, строки сохранены",
+    },
+    eventsWaiting: {
+      one: "Показать {n} обновление",
+      few: "Показать {n} обновления",
+      many: "Показать {n} обновлений",
+      other: "Показать {n} обновления",
+    },
+    eventObjects: {
+      one: "{n} событие",
+      few: "{n} события",
+      many: "{n} событий",
+      other: "{n} события",
+    },
+    eventObjectsLatest: {
+      one: "последнее {n} событие, остальные не прочитаны",
+      few: "последние {n} события, остальные не прочитаны",
+      many: "последние {n} событий, остальные не прочитаны",
+      other: "последние {n} события, остальные не прочитаны",
     },
     stories: {
       one: "{n} история",

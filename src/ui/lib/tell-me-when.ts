@@ -590,6 +590,13 @@ export class Coalescer<A> {
     }
   }
 
+  /** The answer to a click just made: said now, with anything waiting, whatever the windows. */
+  now(answer: A): void {
+    this.pending.push(answer);
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.send();
+  }
+
   private send(): void {
     this.timer = null;
     if (this.pending.length === 0) return;

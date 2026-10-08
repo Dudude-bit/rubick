@@ -161,6 +161,59 @@ describe("a rollout being watched", () => {
     hook.unmount();
   });
 
+  /**
+   * Dana asked about a Deployment that was already rolled out and saw
+   * nothing happen: the answer waited out the quiet window another answer
+   * had opened. Fails if an answer on the first look waits behind it.
+   */
+  it("answers a watch on a settled Deployment at once, even just after another answer", async () => {
+    useTellMeWhenStore.setState({ watches: [rollout()] });
+    const hook = await armed();
+    for (const look of [deployment(1), deployment(3, "NewReplicaSetAvailable")])
+      act(() =>
+        emit("resource-event", {
+          stream_id: "stream-1",
+          changes: [{ op: "applied", resource: look }],
+          error: null,
+        })
+      );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+    expect(notifyMock).toHaveBeenCalledTimes(1);
+
+    act(() =>
+      useTellMeWhenStore.setState((state) => ({
+        watches: [
+          ...state.watches,
+          { ...rollout(), id: "w-cart", name: "cart" },
+        ],
+      }))
+    );
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledTimes(2)
+    );
+    act(() =>
+      emit("resource-event", {
+        stream_id: "stream-1",
+        changes: [
+          { op: "applied", resource: deployment(3, "NewReplicaSetAvailable") },
+        ],
+        error: null,
+      })
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(notifyMock).toHaveBeenCalledTimes(2);
+    expect(notifyMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        title: "cart was already rolled out: no rollout is under way",
+      })
+    );
+    hook.unmount();
+  });
+
   /** The button went back to "Tell me when" ten seconds before anything said why, while the peek beside it still read Progressing: a stall looked like a dropped watch. Dana then read "rollout failed" in the toast beside "Stalled" in the peek. Fails with the old ten-second window, without the invalidation, or with a second word for the state. */
   it("says a stalled rollout within a second of the watch ending, and has the peek read it again", async () => {
     const client = testQueryClient();

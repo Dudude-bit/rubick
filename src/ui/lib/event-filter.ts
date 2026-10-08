@@ -18,15 +18,11 @@ import type { EventInfo } from "@/generated/types";
 
 /** The words one row puts on screen, in the order it puts them. */
 function haystack(event: EventInfo): string {
-  return [
-    event.reason,
-    event.involvedObject.kind,
-    event.involvedObject.name,
-    event.involvedObject.namespace ?? event.namespace,
-    event.message,
-  ]
-    .filter(Boolean)
-    .join(" ");
+  const { kind, name } = event.involvedObject;
+  const namespace = event.involvedObject.namespace ?? event.namespace;
+  // The object as the row and the story card draw it: `shop/Deployment/search`.
+  const object = [namespace, kind, name].filter(Boolean).join("/");
+  return [event.reason, object, event.message].filter(Boolean).join("\n");
 }
 
 /**

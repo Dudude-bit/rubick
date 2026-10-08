@@ -1647,6 +1647,27 @@ describe("what a re-render costs", () => {
     expect(drawn).toBe(1);
   });
 
+  /**
+   * A newest-first feed puts each new row on top and moves every other one
+   * place down. Fails if a row that only moved draws its cells again.
+   */
+  it("draws only the new row's cells when a row arrives on top", async () => {
+    const keyed = (data: Item[]) => (
+      <DataTable<Item>
+        columns={counted}
+        data={data}
+        getRowHref={href}
+        getRowId={(item) => item.name}
+      />
+    );
+    const { rerender } = await wrapRerenderable(keyed(items));
+    drawn = 0;
+
+    rerender(keyed([{ name: "pod-new", namespace: "ns" }, ...items]));
+
+    expect(drawn).toBe(1);
+  });
+
   /** The density toggle restyled the rows by drawing every one of them again. */
   it("restyles the rows on a density switch without drawing them again", async () => {
     await wrap(table(items));

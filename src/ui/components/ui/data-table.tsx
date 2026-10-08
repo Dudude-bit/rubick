@@ -138,6 +138,8 @@ interface DataTableProps<TData extends RowData> {
   pageKeys?: boolean;
   /** A right click, the Menu key or Shift+F10 on a row, and where to draw the menu. */
   onRowMenu?: (row: TData, at: { x: number; y: number }) => void;
+  /** Drawn in place of the search box, for a page that narrows its rows before they reach the table. */
+  toolbar?: React.ReactNode;
 }
 
 /**
@@ -224,6 +226,45 @@ interface BodyRowProps<TData extends RowData> {
   events: React.RefObject<RowEvents<TData> | null>;
 }
 
+interface RowCellsProps<TData extends RowData> {
+  row: Row<TData>;
+  columns: ColumnDef<TData>[];
+  visibility: ColumnVisibilityState;
+}
+
+function RowCellsView<TData extends RowData>({ row }: RowCellsProps<TData>) {
+  return (
+    <>
+      {row.getVisibleCells().map((cell) => (
+        <TableCell
+          key={cell.id}
+          className={cn(
+            CELL_PADDING,
+            !CONTROL_COLUMNS.has(cell.column.id) && CLIP_TEXT
+          )}
+          style={
+            cell.column.id === ACTIONS_COLUMN_ID
+              ? ACTIONS_CELL_GUTTER
+              : undefined
+          }
+        >
+          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+        </TableCell>
+      ))}
+    </>
+  );
+}
+
+/** A row that only moved keeps its cells: a newest-first feed moves every row on each insert. */
+const RowCells = React.memo(
+  RowCellsView,
+  (before, after) =>
+    before.columns === after.columns &&
+    before.visibility === after.visibility &&
+    before.row.id === after.row.id &&
+    before.row.original === after.row.original
+) as typeof RowCellsView;
+
 function BodyRowView<TData extends RowData>({
   row,
   index,
@@ -234,6 +275,8 @@ function BodyRowView<TData extends RowData>({
   clickable,
   menu,
   measure,
+  columns,
+  visibility,
   events,
 }: BodyRowProps<TData>) {
   const act = clickable
@@ -273,22 +316,7 @@ function BodyRowView<TData extends RowData>({
           : undefined
       }
     >
-      {row.getVisibleCells().map((cell) => (
-        <TableCell
-          key={cell.id}
-          className={cn(
-            CELL_PADDING,
-            !CONTROL_COLUMNS.has(cell.column.id) && CLIP_TEXT
-          )}
-          style={
-            cell.column.id === ACTIONS_COLUMN_ID
-              ? ACTIONS_CELL_GUTTER
-              : undefined
-          }
-        >
-          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-        </TableCell>
-      ))}
+      <RowCells row={row} columns={columns} visibility={visibility} />
     </TableRow>
   );
 }
@@ -468,6 +496,7 @@ function DataTableInner<TData extends RowData>({
   share,
   pageKeys = false,
   onRowMenu,
+  toolbar,
 }: DataTableProps<TData>) {
   const navigate = useNavigate();
   const linkGesture = useLinkGesture();
@@ -932,9 +961,9 @@ function DataTableInner<TData extends RowData>({
   const pageKey = (event: KeyboardEvent): boolean => {
     const target = event.target instanceof HTMLElement ? event.target : null;
     const inside = !!target && !!containerRef.current?.contains(target);
-    if (event.key === "/") {
+    if (event.key === "/" && filterRef.current) {
       event.preventDefault();
-      filterRef.current?.focus();
+      filterRef.current.focus();
       return true;
     }
     const key = VIM_KEYS[event.key] ?? event.key;
@@ -1110,33 +1139,37 @@ function DataTableInner<TData extends RowData>({
         <div className="flex flex-none flex-wrap items-center justify-between gap-2">
           {/* A search field is a text entry, not a panel: the box only
             appears once it has focus or a value. */}
-          <div className="flex h-7 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
-            <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            <input
-              ref={filterRef}
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              type="text"
-              aria-label={searchPlaceholder ?? t("action", "searchEllipsis")}
-              placeholder={searchPlaceholder ?? t("action", "searchEllipsis")}
-              value={searchValue}
-              onChange={(event) => changeSearch(event.target.value)}
-              // Back out to the rows without reaching for the mouse.
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  if (searchValue) changeSearch("");
-                  else event.currentTarget.blur();
-                } else if (event.key === "ArrowDown" && keyboardNavEnabled) {
-                  event.preventDefault();
-                  select(0);
-                }
-              }}
-              className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
-            />
-          </div>
+          {toolbar !== undefined ? (
+            <div className="flex h-7 min-w-0 items-center">{toolbar}</div>
+          ) : (
+            <div className="flex h-7 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
+              <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <input
+                ref={filterRef}
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                type="text"
+                aria-label={searchPlaceholder ?? t("action", "searchEllipsis")}
+                placeholder={searchPlaceholder ?? t("action", "searchEllipsis")}
+                value={searchValue}
+                onChange={(event) => changeSearch(event.target.value)}
+                // Back out to the rows without reaching for the mouse.
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    if (searchValue) changeSearch("");
+                    else event.currentTarget.blur();
+                  } else if (event.key === "ArrowDown" && keyboardNavEnabled) {
+                    event.preventDefault();
+                    select(0);
+                  }
+                }}
+                className="w-40 bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
+              />
+            </div>
+          )}
           <div className="flex items-center gap-2">
             {/* The list is whole and only a screenful of it is drawn. It
               stays because "why is this list slow" and "why is my pod not
