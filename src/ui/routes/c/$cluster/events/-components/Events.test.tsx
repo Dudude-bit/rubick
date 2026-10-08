@@ -39,6 +39,11 @@ vi.mock("@tauri-apps/api/event", () => ({
   once: vi.fn(async () => () => {}),
 }));
 
+vi.mock("@/hooks/useRealtimeAge", async (original) => {
+  const actual = await original<typeof import("@/hooks/useRealtimeAge")>();
+  return { ...actual, useRealtimeAge: vi.fn(actual.useRealtimeAge) };
+});
+
 vi.mock("@/lib/commands", () => ({
   commands: {
     listEvents: vi.fn(async () => []),
@@ -55,6 +60,7 @@ import {
   useScreenSections,
 } from "@/components/share/screen-share";
 import { commands } from "@/lib/commands";
+import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
 import { startWindowActivity } from "@/lib/window-activity";
 import { queryKeys } from "@/lib/query-keys";
@@ -653,6 +659,50 @@ describe("a feed a watch keeps", () => {
         { timeout: 2000 }
       )
     ).toBeInTheDocument();
+  });
+
+  /**
+   * Every card drawn again for one new event held the window for a tenth of
+   * a second on 99 stories. Fails if a card whose events did not change is
+   * drawn again when the stories follow the watch.
+   */
+  it("draws again only the story a new event joined", async () => {
+    // Held still, so no card's age or strip moves on its own during the wait.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      await renderWithRouter(<Events />, eventsAt("stories"));
+      await waitFor(() =>
+        expect(commands.resourceWatchSubscribed).toHaveBeenCalled()
+      );
+      const now = Date.now();
+      const about = (pod: string, index: number): EventInfo => ({
+        ...event("prod", index),
+        uid: `${pod}-${index}`,
+        type: "Warning",
+        reason: "BackOff",
+        involvedObject: {
+          kind: "Pod",
+          name: pod,
+          namespace: "prod",
+          uid: null,
+        },
+        lastTimestamp: new Date(now - 120_000 + index * 1000).toISOString(),
+      });
+      const pods = ["alpha", "bravo", "charlie", "delta", "echo"];
+      burst(pods.map((pod, index) => about(pod, index)));
+      await screen.findByRole("article", { name: /echo/ });
+      const drawn = vi.mocked(useRealtimeAge);
+      drawn.mockClear();
+
+      const joined = about("bravo", 9);
+      send([{ op: "applied", resource: joined }]);
+      await waitFor(() => expect(drawn).toHaveBeenCalled(), {
+        timeout: 2000,
+      });
+      expect(drawn.mock.calls).toEqual([[joined.lastTimestamp]]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   /** Fails if choosing Warnings asks the cluster again rather than cutting what the watch holds. */

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { controlAt } from "@/lib/row-control";
 import { readLinkIntent } from "@/hooks/useLinkGesture";
 import { usePeek } from "@/hooks/usePeek";
+import { useNow } from "@/hooks/useNow";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { sayWords, spanWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
@@ -85,15 +86,47 @@ function clockOf(ms: number, now: number): string {
   return `${day} ${time}`;
 }
 
-export function StoryCard({
-  story,
-  options,
-  showNamespace,
-}: {
+interface StoryCardProps {
   story: Story;
   options: StoryOptions;
   showNamespace: boolean;
-}) {
+}
+
+const sameStory = (a: Story, b: Story) =>
+  a.key === b.key &&
+  a.subject.kind === b.subject.kind &&
+  a.subject.name === b.subject.name &&
+  a.subject.namespace === b.subject.namespace &&
+  a.subject.byName === b.subject.byName &&
+  a.events.length === b.events.length &&
+  a.events.every((event, index) => event === b.events[index]);
+
+function sameStrip(a: StoryCardProps, b: StoryCardProps): boolean {
+  const after = densityOf(b.story, b.options);
+  return densityOf(a.story, a.options).every(
+    (bucket, index) =>
+      bucket.count === after[index].count &&
+      bucket.worst === after[index].worst &&
+      bucket.read === after[index].read
+  );
+}
+
+/**
+ * The watch refolds every story once a second and the clock moves every
+ * thirty; a card is drawn again only when what it shows changed.
+ */
+export const StoryCard = memo(
+  StoryCardView,
+  (before, after) =>
+    before.showNamespace === after.showNamespace &&
+    before.options.windowMs === after.options.windowMs &&
+    sameStory(before.story, after.story) &&
+    before.story.state === after.story.state &&
+    JSON.stringify(before.story.says) === JSON.stringify(after.story.says) &&
+    sameStrip(before, after)
+);
+
+function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const lastSeen = useRealtimeAge(
@@ -219,7 +252,7 @@ export function StoryCard({
         </p>
       ) : null}
 
-      {open ? <Timeline story={story} now={options.now} /> : null}
+      {open ? <Timeline story={story} /> : null}
     </article>
   );
 }
@@ -284,8 +317,9 @@ function podsOf(story: Story): {
 }
 
 /** The events on one clock, with the pods' remembered exits placed among them. */
-function Timeline({ story, now }: { story: Story; now: number }) {
+function Timeline({ story }: { story: Story }) {
   const t = useT();
+  const now = useNow();
   const { asked: pods, skipped } = podsOf(story);
   const statuses = useQueries({
     queries: pods.map((pod) => ({
