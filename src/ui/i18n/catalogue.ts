@@ -1452,6 +1452,7 @@ export const en = {
     clearBuffered: "Clear what is buffered",
     reconnect: "Reconnect",
     followAgain: "Follow again",
+    followNewRun: "Follow the new run",
     showCurrentRun: "Show the current run",
     showFewer: "Show fewer",
     showAll: "Show all {n}",
@@ -6202,6 +6203,8 @@ export const en = {
     containerNotStarted:
       "{container} has not started, so it has nothing to say yet.",
     streamEndedGone: "Stream ended: {pod}/{container} is gone.",
+    streamEndedRestarting:
+      "Stream ended: {pod}/{container} is restarting, and its new run is not followed.",
     streamLost: "Lost the log stream from {pod}/{container}.",
     kubeletHoldingAt: "The kubelet is holding it at",
     itExited: "It exited",

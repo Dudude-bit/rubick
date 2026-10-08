@@ -327,6 +327,75 @@ describe("LogViewer when a live stream dies", () => {
     );
   });
 
+  /**
+   * Sam's shop/recommendations on its own pod page: the chip said
+   * "restarting" while the notice above it said the container is gone, with
+   * nothing left to reconnect to and a Loki needed. Fails if the notice says
+   * anything the chip does not, or offers no way onto the new run once it runs.
+   */
+  it("says a crash-looping container is restarting, as its chip does, and offers its new run once it runs", async () => {
+    const lastRun: TerminationInfo = {
+      exitCode: 137,
+      signal: null,
+      reason: "OOMKilled",
+      message: null,
+      startedAt: null,
+      finishedAt: new Date(Date.now() - 60 * 1000).toISOString(),
+    };
+    const pod = (state: ContainerInfo["state"], restartCount: number) => (
+      <LogViewer
+        {...props}
+        podName="recommendations-5c68fb6c5c-q5gs9"
+        containers={[
+          container("app", {
+            ready: false,
+            state,
+            lastTerminated: lastRun,
+            restartCount,
+          }),
+        ]}
+      />
+    );
+    const { rerender } = await mount(
+      pod({ type: "waiting", reason: "CrashLoopBackOff" }, 7)
+    );
+    await waitFor(() => expect(listeners["stream-failed"]).toBeDefined());
+
+    fireFailure(
+      "gone",
+      "shop/recommendations-5c68fb6c5c-q5gs9 stopped streaming: container app is no longer running."
+    );
+
+    const notice = await screen.findByTestId("log-stream-failure");
+    expect(notice).toHaveTextContent(
+      "Stream ended: recommendations-5c68fb6c5c-q5gs9/app is restarting, and its new run is not followed."
+    );
+    expect(notice).toHaveTextContent(
+      "The kubelet is holding it at CrashLoopBackOff."
+    );
+    expect(notice).not.toHaveTextContent("is gone");
+    expect(notice).not.toHaveTextContent("Nothing left to reconnect to");
+    expect(notice).not.toHaveTextContent("no longer running");
+    expect(screen.getByTestId("log-legend")).toHaveTextContent("· restarting");
+    expect(
+      screen.queryByText(/Reading past a pod's own lifetime/)
+    ).not.toBeInTheDocument();
+    expect(
+      within(notice).queryByRole("button", { name: "Follow the new run" })
+    ).not.toBeInTheDocument();
+
+    const opened = vi.mocked(commands.streamPodLogs).mock.calls.length;
+    await rerender(pod({ type: "running" }, 8));
+    await userEvent.click(
+      within(notice).getByRole("button", { name: "Follow the new run" })
+    );
+    await waitFor(() =>
+      expect(vi.mocked(commands.streamPodLogs).mock.calls.length).toBe(
+        opened + 1
+      )
+    );
+  });
+
   it("marks the dead container in the legend, not just above the list", async () => {
     await renderStreaming();
 

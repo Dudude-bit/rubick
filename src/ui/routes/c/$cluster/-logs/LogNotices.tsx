@@ -17,6 +17,7 @@ import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { useLocale } from "@/stores/localeStore";
 import type { LostLines } from "./hooks/log-buffer";
+import type { StreamReading } from "./readings";
 import { formatSpan, termLabel, type QueryTerm } from "./types";
 import { formatCount } from "@/lib/count";
 
@@ -42,6 +43,7 @@ const FAILURE_TONE: Record<StreamFailureKind, "text-warn" | "text-err"> = {
  */
 export function StreamFailureNotice({
   failure,
+  reading,
   podName,
   container: info,
   intake,
@@ -50,6 +52,8 @@ export function StreamFailureNotice({
   onShowCurrentRun,
 }: {
   failure: ContainerFailure;
+  /** The same reading the container's chip and the lane header say. */
+  reading: StreamReading;
   podName: string;
   /** The container's own status, when the pod object is at hand. */
   container?: ContainerInfo;
@@ -62,6 +66,7 @@ export function StreamFailureNotice({
   onShowCurrentRun: () => void;
 }) {
   const t = useT();
+  const restarting = reading === "restarting";
   const gone = failure.kind === "gone";
   // The container runs on; the node let go of it. Its earlier exits are not
   // this run's, so they are not drawn beside it.
@@ -114,14 +119,18 @@ export function StreamFailureNotice({
         >
           {notStarted
             ? t("empty", "containerNotStarted", { container })
-            : headline[failure.kind]()}
+            : restarting
+              ? t("empty", "streamEndedRestarting", { pod: podName, container })
+              : headline[failure.kind]()}
         </p>
-        {unstarted && info.state.type === "waiting" && info.state.reason && (
-          <p className="mt-0.5 text-[11px] text-fg-mut">
-            {t("empty", "kubeletHoldingAt")}{" "}
-            <span className="font-mono">{info.state.reason}</span>.
-          </p>
-        )}
+        {(unstarted || restarting) &&
+          info?.state.type === "waiting" &&
+          info.state.reason && (
+            <p className="mt-0.5 text-[11px] text-fg-mut">
+              {t("empty", "kubeletHoldingAt")}{" "}
+              <span className="font-mono">{info.state.reason}</span>.
+            </p>
+          )}
         {termination && (
           <p
             className="mt-0.5 text-[11px] text-err"
@@ -150,7 +159,8 @@ export function StreamFailureNotice({
             )}
           </>
         ) : (
-          !unstarted && (
+          !unstarted &&
+          !restarting && (
             <p className="mt-0.5 wrap-break-word text-[11px] text-fg-mut">
               {failure.message}
             </p>
@@ -181,6 +191,18 @@ export function StreamFailureNotice({
         <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
           {t("empty", "nothingToReconnectTo")}
         </span>
+      ) : restarting ? (
+        info?.state.type === "running" && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={onRetry}
+          >
+            <RefreshCw aria-hidden="true" className="mr-2 h-3.5 w-3.5" />
+            {t("action", "followNewRun")}
+          </Button>
+        )
       ) : gone ? (
         <span className="shrink-0 whitespace-nowrap pt-0.5 text-[11px] text-fg-fnt">
           {t("empty", "nothingToReconnectTo")}

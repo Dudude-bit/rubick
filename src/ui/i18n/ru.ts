@@ -1459,6 +1459,7 @@ export const ru: Catalogue = {
     clearBuffered: "Очистить буфер",
     reconnect: "Переподключиться",
     followAgain: "Следовать снова",
+    followNewRun: "Следовать за новым запуском",
     showCurrentRun: "Показать текущий запуск",
     showFewer: "Показать меньше",
     showAll: "Показать все {n}",
@@ -6816,6 +6817,8 @@ export const ru: Catalogue = {
     containerNotStarted:
       "{container} ещё не стартовал, поэтому сказать ему пока нечего.",
     streamEndedGone: "Поток закончился: {pod}/{container} больше нет.",
+    streamEndedRestarting:
+      "Поток закончился: {pod}/{container} перезапускается, новый запуск не отслеживается.",
     streamLost: "Поток логов от {pod}/{container} потерян.",
     kubeletHoldingAt: "kubelet удерживает его в состоянии",
     itExited: "Завершился",
