@@ -340,7 +340,7 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
     usedNum !== null && totalNum !== null ? usedNum / totalNum : null;
 
   return (
-    <div className="grid grid-cols-[92px_minmax(0,1fr)_150px] items-center gap-3 px-1.5 py-1">
+    <div className="grid grid-cols-[92px_minmax(0,1fr)_minmax(150px,max-content)] items-center gap-3 px-1.5 py-1">
       <span className="text-[11px] text-fg-mut">{label}</span>
       {/* No track without a ratio to fill it. An empty full-width track
        *  reads as a bar at zero, and neither "declares no limit" nor "no
@@ -358,7 +358,7 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
           />
         </span>
       )}
-      <span className="text-right text-[11px] text-fg-mut">
+      <span className="whitespace-nowrap text-right text-[11px] text-fg-mut">
         {usedNum === null ? (
           // A blank number here is almost never "this object uses
           // nothing" — it is metrics-server not being installed, which
