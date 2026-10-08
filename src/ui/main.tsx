@@ -8,6 +8,7 @@ import {
 } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { TitleTooltips } from "@/components/ui/title-tooltips";
 import { Toaster } from "@/components/ui/toaster";
 import { makeRouter } from "./router";
 // Fonts are bundled, not fetched: the app's CSP is `style-src 'self'` /
@@ -93,6 +94,7 @@ function render() {
         <TooltipProvider>
           <RouterProvider router={router} />
           <Toaster />
+          <TitleTooltips />
         </TooltipProvider>
       </QueryClientProvider>
     </React.StrictMode>
