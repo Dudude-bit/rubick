@@ -57,6 +57,7 @@ import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { buildTableRows, type BodyItem } from "./data-table-rows";
 import {
   ACTIONS_CELL_GUTTER,
+  SIDEWAYS_SCROLLBAR_GUTTER,
   actionsColumnSize,
   tableLayout,
 } from "./column-shares";
@@ -1196,11 +1197,12 @@ function DataTableInner<TData extends RowData>({
             )}
             // A filled table takes its bound from the flex row above; only an
             // unfilled one falls back to the fixed port.
-            containerStyle={
-              shouldVirtualScroll && !fill
+            containerStyle={{
+              ...(shouldVirtualScroll && !fill
                 ? { maxHeight: virtualScrollHeight }
-                : undefined
-            }
+                : undefined),
+              ...(layout.scrolls ? SIDEWAYS_SCROLLBAR_GUTTER : undefined),
+            }}
           >
             <TableHeader
               ref={headerRef}

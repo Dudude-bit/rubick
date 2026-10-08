@@ -1,6 +1,8 @@
 /** WebKitGTK's overlay scrollbar takes the pointer over a port's last 21px. */
 export const SCROLLBAR_REACH = 24;
 export const ACTIONS_CELL_GUTTER = { paddingRight: SCROLLBAR_REACH };
+/** Under the last row of a port that scrolls sideways, where that scrollbar lies. */
+export const SIDEWAYS_SCROLLBAR_GUTTER = { paddingBottom: SCROLLBAR_REACH };
 
 /**
  * The width the actions cell needs, from what it actually holds: a 20px icon
