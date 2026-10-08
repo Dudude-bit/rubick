@@ -99,6 +99,8 @@ export function createWorkloadListPage<T extends Workload>(
     // this page's subject and do not wait on them — see `usePodsWithMetrics`.
     const {
       data: pods,
+      read: podsRead,
+      unread: podsUnread,
       podStatus,
       podUnread,
       refetchPodMetrics,
@@ -138,15 +140,16 @@ export function createWorkloadListPage<T extends Workload>(
     );
 
     const starts = useMemo(
-      () => (config.rolloutFromPods ? startsOf(pods) : null),
-      [pods]
+      () =>
+        config.rolloutFromPods && podsRead ? startsOf(pods, podsUnread) : null,
+      [pods, podsRead, podsUnread]
     );
     const ranOut = useNowReading(10_000, (now) =>
       starts ? lastRunOut(starts.deadlines, now) : 0
     );
     const rows = useMemo(() => {
       const read = listQuery.data?.rows ?? [];
-      return starts
+      return config.rolloutFromPods
         ? (rowsWithStarts(
             config.resourceType,
             read as Array<T & { rollout: Rollout }>,

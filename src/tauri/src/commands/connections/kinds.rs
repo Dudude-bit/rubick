@@ -231,8 +231,12 @@ pub(super) async fn workload_connections(
         .filter(|pod| selector.matches(pod.labels()) == Some(true))
         .collect();
     // The workload's own pods decide whether its short count is a scale
-    // coming up, as its page reads it; with none read, the count's reading stands.
+    // coming up, as its page reads it.
+    let pods_read = snapshot.pods.is_ok() && selector.query_text().is_some();
     let rollout = template.rollout.clone().map(|rollout| {
+        if !pods_read {
+            return rollout.pods_unread();
+        }
         let own = mine
             .iter()
             .copied()
@@ -1405,15 +1409,15 @@ mod set_rollout_tests {
             "apiVersion": "v1", "kind": "List", "metadata": {},
             "items": [pod("web-0", true, ""), pod("web-1", false, new_pod)],
         });
-        let (client, _) = server(vec![
-            (
-                "/apis/apps/v1/namespaces/shop/statefulsets/web",
-                200,
-                set.to_string(),
-            ),
-            ("/api/v1/namespaces/shop/pods", 200, pods.to_string()),
-        ])
-        .await;
+        let mut routes = vec![(
+            "/apis/apps/v1/namespaces/shop/statefulsets/web",
+            200,
+            set.to_string(),
+        )];
+        if !new_pod.is_empty() {
+            routes.push(("/api/v1/namespaces/shop/pods", 200, pods.to_string()));
+        }
+        let (client, _) = server(routes).await;
         let ctx = ResourceContext::from_client(client, "shop".to_string());
         let page = connections_of(&ctx, "StatefulSet", "web", None)
             .await
@@ -1517,6 +1521,22 @@ mod set_rollout_tests {
             Some(Rollout::Short {
                 available: 1,
                 desired: 2
+            })
+        );
+    }
+
+    /// With the pod list unanswered the graph drew the counts' Degraded as if
+    /// the pods had been looked at. Fails if an unread pod list is taken for
+    /// pods that were read.
+    #[tokio::test]
+    async fn a_set_whose_pods_could_not_be_read_is_the_controllers_verdict_alone() {
+        assert_eq!(
+            subject_rollout("").await,
+            Some(Rollout::PodsUnread {
+                controller: Box::new(Rollout::Short {
+                    available: 1,
+                    desired: 2
+                })
             })
         );
     }

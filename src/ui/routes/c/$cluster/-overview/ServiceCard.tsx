@@ -8,8 +8,7 @@ import { pinShare } from "./service-card-share";
 import { useConnections } from "@/hooks/useConnections";
 import { trafficChains, unreadWhy } from "@/lib/connections";
 import { cn, formatAge } from "@/lib/utils";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { ownStatusWord } from "@/lib/status-words";
+import { RolloutBadge } from "../-object/RolloutSummary";
 import {
   CARD_REFRESH,
   changesFor,
@@ -245,12 +244,10 @@ function StateWords({ state, t }: { state: ServiceState; t: T }) {
       {t("services", "readyOf", { ready: state.ready, total: state.total })}
     </span>
   );
-  if (state.state === "short" && state.status) {
+  if (state.state === "short" && state.rollout) {
     return (
       <span className="flex flex-none items-baseline gap-1.5">
-        <StatusBadge status={state.status}>
-          {ownStatusWord(state.status, t)}
-        </StatusBadge>
+        <RolloutBadge rollout={state.rollout} />
         {count}
       </span>
     );

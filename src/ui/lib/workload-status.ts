@@ -1,7 +1,7 @@
 import type { PodRow, PodStart, Rollout } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import type { Tone } from "@/lib/tone";
-import { statusRole } from "@/lib/status-role";
+import { statusRole, type StatusRole } from "@/lib/status-role";
 import { ownStatusWord } from "@/lib/status-words";
 
 /**
@@ -26,7 +26,10 @@ export type WorkloadStatus =
   | "Waiting"
   | "Degraded";
 
-export const ROLLOUT_CODES: Record<Rollout["state"], WorkloadStatus> = {
+export const ROLLOUT_CODES: Record<
+  Exclude<Rollout["state"], "podsUnread">,
+  WorkloadStatus
+> = {
   idle: "Idle",
   stalled: "Stalled",
   unavailable: "Unavailable",
@@ -40,7 +43,31 @@ export const ROLLOUT_CODES: Record<Rollout["state"], WorkloadStatus> = {
 };
 
 export function workloadStatus(rollout: Rollout): WorkloadStatus {
-  return ROLLOUT_CODES[rollout.state];
+  return rollout.state === "podsUnread"
+    ? workloadStatus(rollout.controller)
+    : ROLLOUT_CODES[rollout.state];
+}
+
+/** The verdict's colour: one its pods were not read to confirm is neither a fault nor a health. */
+export function workloadRole(rollout: Rollout): StatusRole {
+  return rollout.state === "podsUnread"
+    ? "neutral"
+    : statusRole(workloadStatus(rollout));
+}
+
+/** The verdict as one line of text and its colour, for a surface with no room for the sentence. */
+export function rolloutVerdict(
+  rollout: Rollout,
+  t: T
+): { text: string; role: StatusRole } {
+  const word = workloadWord(rollout, t);
+  return {
+    text:
+      rollout.state === "podsUnread"
+        ? `${word} · ${t("readings", "rolloutPodsUnreadShort")}`
+        : word,
+    role: workloadRole(rollout),
+  };
 }
 
 /** The verdict as the reader's language words it; `workloadStatus` stays the code `statusRole` reads. */
@@ -56,9 +83,23 @@ export const NEEDS_ATTENTION: ReadonlySet<Rollout["state"]> = new Set([
   "short",
 ]);
 
+/** How many verdicts need attention, and how many only the controller's counts stand behind. */
+export function attentionOf(rollouts: readonly Rollout[]): {
+  attention: number;
+  unconfirmed: number;
+} {
+  let attention = 0;
+  let unconfirmed = 0;
+  for (const rollout of rollouts) {
+    if (NEEDS_ATTENTION.has(rollout.state)) attention += 1;
+    else if (rollout.state === "podsUnread") unconfirmed += 1;
+  }
+  return { attention, unconfirmed };
+}
+
 /** What the verdict says beyond its word, or nothing when the word is the whole story. */
 export interface RolloutLine {
-  tone: Exclude<Tone, "ok" | "unknown">;
+  tone: Exclude<Tone, "ok">;
   text: string;
   /** The controller's own message, quoted as written. */
   said: string | null;
@@ -132,6 +173,14 @@ export function rolloutLine(rollout: Rollout, t: T): RolloutLine | null {
         }),
         said: null,
       };
+    case "podsUnread":
+      return {
+        tone: "unknown",
+        text: t("readings", "rolloutPodsUnread", {
+          word: workloadWord(rollout.controller, t),
+        }),
+        said: rolloutLine(rollout.controller, t)?.said ?? null,
+      };
   }
 }
 
@@ -154,17 +203,19 @@ function podsCanExplain(
  * A workload short of available pods, with none available yet, or whose
  * newest spec its controller has not read, is coming up while some of its
  * pods are still starting and none shows a fault; otherwise it stays as it
- * read. `with_starts` in `rollout.rs` answers the page, the peek and Needs
- * attention, and `src/contracts/set-rollout-conformance.json` holds the two
- * equal.
+ * read. Pods that were not read (`null`) leave such a verdict the
+ * controller's alone. `with_starts` in `rollout.rs` answers the page, the
+ * peek and Needs attention, and `src/contracts/set-rollout-conformance.json`
+ * holds the two equal.
  */
 export function withStarts(
   rollout: Rollout,
-  starts: readonly PodStart[],
+  starts: readonly PodStart[] | null,
   now: number
 ): Rollout {
   const counts = podsCanExplain(rollout);
   if (!counts) return rollout;
+  if (!starts) return { state: "podsUnread", controller: rollout };
   let coming = false;
   for (const start of starts) {
     if (start.state === "settled") continue;
@@ -181,10 +232,11 @@ export function withStarts(
     : rollout;
 }
 
-/** The pods of each workload, and every instant one of their starts runs out. */
+/** The pods of each workload, every instant one of their starts runs out, and the namespaces whose pods were not read. */
 export interface WorkloadStarts {
   byWorkload: ReadonlyMap<string, PodStart[]>;
   deadlines: readonly number[];
+  unread: ReadonlySet<string>;
 }
 
 const workloadKey = (kind: string, namespace: string, name: string) =>
@@ -192,7 +244,8 @@ const workloadKey = (kind: string, namespace: string, name: string) =>
 
 /** Each pod under the workload Rust read off its owner, a Deployment's through its ReplicaSet. */
 export function startsOf(
-  pods: readonly Pick<PodRow, "namespace" | "start" | "workload">[]
+  pods: readonly Pick<PodRow, "namespace" | "start" | "workload">[],
+  unread: readonly { namespace: string }[] = []
 ): WorkloadStarts {
   const byWorkload = new Map<string, PodStart[]>();
   const deadlines: number[] = [];
@@ -209,7 +262,11 @@ export function startsOf(
     if (pod.start.state === "starting")
       deadlines.push(Date.parse(pod.start.until));
   }
-  return { byWorkload, deadlines };
+  return {
+    byWorkload,
+    deadlines,
+    unread: new Set(unread.map((namespace) => namespace.namespace)),
+  };
 }
 
 /**
@@ -223,19 +280,25 @@ export const lastRunOut = (deadlines: readonly number[], now: number) =>
     Number.NEGATIVE_INFINITY
   );
 
-/** Each row's verdict with its own pods asked; a row it does not change keeps its identity. */
+/**
+ * Each row's verdict with its own pods asked, `null` when no pods were read;
+ * a row it does not change keeps its identity.
+ */
 export function rowsWithStarts<
   Row extends { name: string; namespace: string; rollout: Rollout },
 >(
   kind: string,
   rows: readonly Row[],
-  starts: WorkloadStarts,
+  starts: WorkloadStarts | null,
   now: number
 ): Row[] {
   return rows.map((row) => {
     const rollout = withStarts(
       row.rollout,
-      starts.byWorkload.get(workloadKey(kind, row.namespace, row.name)) ?? [],
+      !starts || starts.unread.has(row.namespace)
+        ? null
+        : (starts.byWorkload.get(workloadKey(kind, row.namespace, row.name)) ??
+            []),
       now
     );
     return rollout === row.rollout ? row : { ...row, rollout };
@@ -250,11 +313,9 @@ export function rolloutStatusOf(
   t: T
 ) {
   const count = t("count", "slashReady", { n: ready, total: desired });
-  const code = workloadStatus(rollout);
+  const verdict = rolloutVerdict(rollout, t);
   return {
-    text: rolloutLine(rollout, t)
-      ? `${ownStatusWord(code, t) ?? code} · ${count}`
-      : count,
-    role: statusRole(code),
+    text: rolloutLine(rollout, t) ? `${verdict.text} · ${count}` : count,
+    role: verdict.role,
   };
 }

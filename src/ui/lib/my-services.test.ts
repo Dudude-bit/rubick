@@ -128,7 +128,7 @@ describe("stateOf", () => {
       state: "short",
       ready: 1,
       total: 3,
-      status: null,
+      rollout: null,
     });
   });
 
@@ -154,7 +154,7 @@ describe("stateOf", () => {
       state: "short",
       ready: 3,
       total: 3,
-      status: "Stalled",
+      rollout: { state: "stalled", message: null, serving: 2 },
     });
   });
 

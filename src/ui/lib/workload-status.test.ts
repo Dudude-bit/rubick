@@ -9,10 +9,15 @@ import { statusRole } from "./status-role";
 import {
   NEEDS_ATTENTION,
   ROLLOUT_CODES,
+  attentionOf,
   lastRunOut,
   rolloutLine,
   rolloutStatusOf,
+  rolloutVerdict,
+  rowsWithStarts,
+  startsOf,
   withStarts,
+  workloadRole,
   workloadStatus,
   workloadWord as rolloutWord,
 } from "./workload-status";
@@ -160,7 +165,12 @@ const setCorpus = JSON.parse(
   )
 ) as {
   now: string;
-  cases: { name: string; rollout: Rollout; pods: PodStart[]; is: Rollout }[];
+  cases: {
+    name: string;
+    rollout: Rollout;
+    pods: PodStart[] | null;
+    is: Rollout;
+  }[];
 };
 
 describe("a set's verdict with its pods asked", () => {
@@ -182,7 +192,7 @@ describe("a set's verdict with its pods asked", () => {
   it("answers the same at the latest start to run out as at the clock it stands for", () => {
     const now = Date.parse(setCorpus.now);
     for (const { name, rollout, pods } of setCorpus.cases) {
-      const deadlines = pods.flatMap((pod) =>
+      const deadlines = (pods ?? []).flatMap((pod) =>
         pod.state === "starting" ? [Date.parse(pod.until)] : []
       );
       expect(
@@ -190,5 +200,97 @@ describe("a set's verdict with its pods asked", () => {
         name
       ).toEqual(withStarts(rollout, pods, now));
     }
+  });
+});
+
+describe("a verdict whose pods were not read", () => {
+  const counted: Rollout = {
+    state: "unavailable",
+    reason: "MinimumReplicasUnavailable",
+    message: "Deployment does not have minimum availability.",
+    available: 0,
+    desired: 1,
+  };
+  const unread = withStarts(counted, null, 0);
+
+  /**
+   * A refused or unloaded pod list left the controller's Unavailable red
+   * while the page said coming up. Fails if a verdict nobody checked against
+   * its pods wears a fault's colour, loses the controller's word, or is
+   * counted among what needs attention.
+   */
+  it("keeps the controller's word in a neutral colour, and is no fault", () => {
+    expect(unread).toEqual({ state: "podsUnread", controller: counted });
+    expect(workloadStatus(unread)).toBe("Unavailable");
+    expect(workloadRole(unread)).toBe("neutral");
+    expect(workloadRole(counted)).toBe("err");
+    expect(NEEDS_ATTENTION.has(unread.state)).toBe(false);
+  });
+
+  /** Fails if the sentence stops saying the pods were not read, or drops the controller's own message. */
+  it("says the pods were not read, with the controller's message after it", () => {
+    const en: T = (section, key, values) =>
+      translate("en", section, key, values);
+    expect(rolloutLine(unread, en)).toEqual({
+      tone: "unknown",
+      text: "Unavailable by the controller's counts alone: its pods could not be read, so whether they are still starting is not known",
+      said: "Deployment does not have minimum availability.",
+    });
+  });
+
+  /** A shared report and a list's share read the colour too. Fails if either paints the unchecked verdict red or drops the mark. */
+  it("is shared neutral, marked as unchecked", () => {
+    expect(rolloutVerdict(unread, t)).toEqual({
+      text: "Unavailable · readings.rolloutPodsUnreadShort",
+      role: "neutral",
+    });
+    expect(rolloutStatusOf(0, 1, unread, t)).toEqual({
+      text: "Unavailable · readings.rolloutPodsUnreadShort · count.slashReady",
+      role: "neutral",
+    });
+  });
+
+  /**
+   * The list asks each row's pods unless they were not read at all, or not
+   * in that row's namespace. Fails if an unread namespace's row is judged on
+   * the absence of its pods, or a read one is not judged at all.
+   */
+  it("leaves a row in an unread namespace the controller's alone and asks the rest", () => {
+    const short: Rollout = { state: "short", available: 1, desired: 2 };
+    const rows = [
+      { name: "web", namespace: "shop", rollout: short },
+      { name: "web", namespace: "ops", rollout: short },
+    ];
+    const starts = startsOf(
+      [
+        {
+          namespace: "shop",
+          start: { state: "starting", until: "2026-10-08T10:05:00Z" },
+          workload: { kind: "StatefulSet", name: "web" },
+        },
+      ],
+      [{ namespace: "ops" }]
+    );
+    const now = Date.parse("2026-10-08T10:00:00Z");
+    expect(
+      rowsWithStarts("StatefulSet", rows, starts, now).map((r) => r.rollout)
+    ).toEqual([
+      { state: "comingUp", available: 1, desired: 2 },
+      { state: "podsUnread", controller: short },
+    ]);
+    expect(
+      rowsWithStarts("StatefulSet", rows, null, now).map((r) => r.rollout)
+    ).toEqual([
+      { state: "podsUnread", controller: short },
+      { state: "podsUnread", controller: short },
+    ]);
+  });
+
+  /** The namespace peek counts what needs attention. Fails if an unchecked verdict is counted as a fault, or not counted at all. */
+  it("is counted apart from what needs attention", () => {
+    expect(attentionOf([counted, unread, { state: "ready" }])).toEqual({
+      attention: 1,
+      unconfirmed: 1,
+    });
   });
 });

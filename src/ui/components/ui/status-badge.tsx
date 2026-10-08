@@ -13,6 +13,7 @@
  * drowning the one row that crashed.
  */
 import * as React from "react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 import {
@@ -44,6 +45,8 @@ export interface StatusBadgeProps extends React.HTMLAttributes<HTMLSpanElement> 
    * `React.HTMLAttributes`, which is a type error, not a style choice.
    */
   roleOverride?: StatusRole;
+  /** A mark of its own in place of the role's glyph, for a verdict the role alone does not say. */
+  glyph?: LucideIcon;
   /** Off where the caller's own tooltip already carries the word, so two never open at once. */
   wordOnHover?: boolean;
 }
@@ -53,6 +56,7 @@ export function StatusBadge({
   showDot = false,
   showIcon = true,
   roleOverride,
+  glyph,
   wordOnHover = true,
   className,
   children,
@@ -60,7 +64,7 @@ export function StatusBadge({
   ...props
 }: StatusBadgeProps) {
   const resolved = roleOverride ?? statusRole(status);
-  const Icon = ROLE_ICON[resolved];
+  const Icon = glyph ?? ROLE_ICON[resolved];
   const label = children ?? status;
   // A narrow column cuts the word, so hovering always has it whole.
   const word = typeof label === "string" && label !== "" ? label : null;

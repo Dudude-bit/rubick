@@ -2410,7 +2410,8 @@ export type Rollout =
   | { state: "comingUp"; available: number; desired: number }
   | { state: "scalingDown"; current: number; desired: number }
   | { state: "short"; available: number; desired: number }
-  | { state: "ready" };
+  | { state: "ready" }
+  | { state: "podsUnread"; controller: Rollout };
 
 export type Existence = "present" | "missing" | "notChecked";
 

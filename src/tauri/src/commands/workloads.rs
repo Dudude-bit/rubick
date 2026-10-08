@@ -20,8 +20,8 @@ use crate::commands::helpers::{
 
 /// A workload's verdict with its own pods asked, where its counts alone say
 /// it is short, has none available or lag its spec: the counts cannot tell a
-/// pod still starting from one that never will. A pod list the cluster refuses leaves the verdict as the counts
-/// read it.
+/// pod still starting from one that never will. A pod list that does not
+/// answer leaves the verdict the controller's alone, and says so.
 pub(crate) async fn with_own_pods(
     ctx: &ResourceContext,
     rollout: Rollout,
@@ -33,14 +33,14 @@ pub(crate) async fn with_own_pods(
         return rollout;
     }
     let Some(query) = Selector::Query(selector).query_text() else {
-        return rollout;
+        return rollout.pods_unread();
     };
     let Ok(pods) = ctx
         .namespaced_api::<Pod>()
         .list(&ListParams::default().labels(&query))
         .await
     else {
-        return rollout;
+        return rollout.pods_unread();
     };
     let own = pods.items.iter().filter(|pod| {
         runs_for(
@@ -407,8 +407,7 @@ mod set_detail_tests {
 
     /// The page, the peek and Share read a set's verdict from here, and a
     /// scale whose new pod was being created read amber Degraded. Fails if
-    /// the set's own pods are not asked, if a stuck one is let off, or if a
-    /// refused pod list is taken for pods coming up.
+    /// the set's own pods are not asked, or if a stuck one is let off.
     #[tokio::test]
     async fn a_set_scaling_up_reads_coming_up_only_while_its_new_pod_is_starting() {
         let coming = Rollout::ComingUp {
@@ -420,11 +419,21 @@ mod set_detail_tests {
             desired: 2,
         };
         assert_eq!(read("ContainerCreating").await, (coming.clone(), coming));
-        assert_eq!(
-            read("ImagePullBackOff").await,
-            (short.clone(), short.clone())
-        );
-        assert_eq!(read("").await, (short.clone(), short));
+        assert_eq!(read("ImagePullBackOff").await, (short.clone(), short));
+    }
+
+    /// A refused pod list read as the counts alone, drawn as confidently as
+    /// a verdict the pods had confirmed. Fails if either set takes a refused
+    /// read for pods that were read.
+    #[tokio::test]
+    async fn a_refused_pod_list_leaves_each_set_the_controllers_verdict_alone() {
+        let unread = Rollout::Short {
+            available: 1,
+            desired: 2,
+        }
+        .pods_unread();
+        assert!(matches!(unread, Rollout::PodsUnread { .. }));
+        assert_eq!(read("").await, (unread.clone(), unread));
     }
 }
 

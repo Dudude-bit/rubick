@@ -18,9 +18,14 @@ import type {
   Rollout,
   StatefulSetInfo,
 } from "@/generated/types";
+import { ROLE_TEXT } from "@/lib/status-role";
 import { renderWithRouter } from "@/test/render";
 
-const pods = vi.hoisted(() => ({ rows: [] as PodRow[] }));
+const pods = vi.hoisted(() => ({
+  rows: [] as PodRow[],
+  read: true,
+  unread: [] as { namespace: string; code: string; message: string }[],
+}));
 
 vi.mock("@/stores/clusterStore", () => {
   const state = {
@@ -39,6 +44,8 @@ vi.mock("@/stores/clusterStore", () => {
 vi.mock("@/hooks/usePodsWithMetrics", () => ({
   usePodsWithMetrics: () => ({
     data: pods.rows,
+    read: pods.read,
+    unread: pods.unread,
     podStatus: null,
     podUnread: [],
     refetchPodMetrics: vi.fn(),
@@ -173,6 +180,8 @@ const SETS = [
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
+  pods.read = true;
+  pods.unread = [];
 });
 
 afterEach(() => {
@@ -230,5 +239,33 @@ describe.each(SETS)("the $kind list while one is scaled up", (set) => {
   it("reads Degraded where the new pod is stuck", async () => {
     await open(set, { state: "failing" });
     expect(status()).toBe("Degraded");
+  });
+});
+
+describe.each(SETS)("the $kind list with its pods not read", (set) => {
+  /**
+   * With the pod list still unanswered or refused, the row kept the
+   * controller's verdict in its confident colour while the page, which reads
+   * the pods itself, said coming up. Fails if a row whose pods were not read
+   * is drawn as a fault, or loses the mark that says the pods are unread.
+   */
+  it("draws the controller's word neutral, marked as not checked against the pods", async () => {
+    pods.read = false;
+    await open(set, startingFor(25_000));
+    const badge = screen.getByText("Degraded");
+    expect(badge).toHaveClass(ROLE_TEXT.neutral);
+    expect(badge).not.toHaveClass(ROLE_TEXT.warn);
+    expect(badge.getAttribute("title")).toMatch(/could not be read/);
+  });
+
+  /**
+   * One namespace refusing its pods left that namespace's rows judged as if
+   * they had been read. Fails if a row in an unread namespace takes the
+   * absence of its pods for an answer.
+   */
+  it("treats a row in a namespace whose pods were refused as not checked", async () => {
+    pods.unread = [{ namespace: "shop", code: "FORBIDDEN", message: "no" }];
+    await open(set, startingFor(25_000));
+    expect(screen.getByText("Degraded")).toHaveClass(ROLE_TEXT.neutral);
   });
 });

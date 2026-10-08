@@ -1,5 +1,5 @@
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
-import { workloadStatus } from "@/lib/workload-status";
+import { workloadRole, workloadStatus } from "@/lib/workload-status";
 import { WorkloadDiagnosis } from "./peek-workload-diagnosis";
 
 import { CopyableAddress } from "@/components/ui/copyable-value";
@@ -181,6 +181,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   Deployment: source(commands.getDeployment, (deployment, _target, t) => ({
     status: workloadStatus(deployment.rollout),
     statusLabel: ownStatusWord(workloadStatus(deployment.rollout), t),
+    statusRole: workloadRole(deployment.rollout),
     createdAt: deployment.createdAt,
     lead: (
       <WorkloadDiagnosis
@@ -229,6 +230,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   StatefulSet: source(commands.getStatefulset, (set, _target, t) => ({
     status: workloadStatus(set.rollout),
     statusLabel: ownStatusWord(workloadStatus(set.rollout), t),
+    statusRole: workloadRole(set.rollout),
     createdAt: set.createdAt,
     lead: (
       <WorkloadDiagnosis
@@ -277,6 +279,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   DaemonSet: source(commands.getDaemonset, (set, _target, t) => ({
     status: workloadStatus(set.rollout),
     statusLabel: ownStatusWord(workloadStatus(set.rollout), t),
+    statusRole: workloadRole(set.rollout),
     createdAt: set.createdAt,
     lead: (
       <WorkloadDiagnosis

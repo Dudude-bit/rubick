@@ -1,3 +1,4 @@
+import { EyeOff } from "lucide-react";
 import { ResourceMessage } from "@/components/object/ResourceMessage";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useT } from "@/i18n/useT";
@@ -9,6 +10,7 @@ import { workloadStatusMeaning } from "@/lib/status-meaning";
 import { ownStatusWord } from "@/lib/status-words";
 import {
   rolloutLine,
+  workloadRole,
   workloadStatus,
   type RolloutLine,
 } from "@/lib/workload-status";
@@ -19,6 +21,7 @@ const TONE_ICON: Record<RolloutLine["tone"], (typeof ROLE_ICON)["ok"]> = {
   err: ROLE_ICON.err,
   warn: ROLE_ICON.warn,
   info: ROLE_ICON.pending,
+  unknown: EyeOff,
 };
 
 /**
@@ -71,6 +74,8 @@ export function RolloutBadge({ rollout }: { rollout: Rollout }) {
   return (
     <StatusBadge
       status={status}
+      roleOverride={workloadRole(rollout)}
+      glyph={rollout.state === "podsUnread" ? EyeOff : undefined}
       title={
         line
           ? [

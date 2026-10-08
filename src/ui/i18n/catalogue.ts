@@ -3725,6 +3725,9 @@ export const en = {
       one: "Rolled out, and only {available} of {n} pod is available",
       other: "Rolled out, and only {available} of {n} pods are available",
     },
+    rolloutPodsUnread:
+      "{word} by the controller's counts alone: its pods could not be read, so whether they are still starting is not known",
+    rolloutPodsUnreadShort: "pods not read",
     hpaPinnedAt: "pinned at {n}",
     hpaRange: { one: "{min} to {n} replica", other: "{min} to {n} replicas" },
     hpaCannotReach: "{name} cannot reach what it scales",
@@ -7610,6 +7613,10 @@ export const en = {
     needAttention: {
       one: "{n} needs attention",
       other: "{n} need attention",
+    },
+    unconfirmedByPods: {
+      one: "{n} not checked: pods not read",
+      other: "{n} not checked: pods not read",
     },
     gwParentUnresolved: {
       one: "names a gateway parent this app could not resolve to a Gateway.",

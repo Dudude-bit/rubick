@@ -14,6 +14,7 @@
 
 import type {
   ResourceConnections,
+  Rollout,
   UnexploredKind,
   ServicePublished,
 } from "@/generated/types";
@@ -22,7 +23,6 @@ import type { JournalEntry } from "@/lib/changes";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { endpointCount, servingCount } from "@/lib/published";
 import { isOpen, type Watch } from "@/lib/tell-me-when";
-import { workloadStatus, type WorkloadStatus } from "@/lib/workload-status";
 import type { RefreshRate } from "@/lib/refresh";
 
 /**
@@ -115,8 +115,8 @@ export type ServiceState =
       state: "short";
       ready: number;
       total: number;
-      /** The rollout's word, where the workload is a kind that rolls out. */
-      status: WorkloadStatus | null;
+      /** The rollout's verdict, where the workload is a kind that rolls out. */
+      rollout: Rollout | null;
     }
   | { state: "gone" }
   /** Still being read. Not an answer, and not a refusal either. */
@@ -176,7 +176,7 @@ export function stateOf(
         state: "short",
         ready: facts.readyReplicas,
         total: facts.replicas,
-        status: facts.rollout ? workloadStatus(facts.rollout) : null,
+        rollout: facts.rollout,
       };
 }
 
