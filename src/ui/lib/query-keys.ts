@@ -334,6 +334,13 @@ export const queryKeys = {
     name,
   ],
 
+  /** Where a container's processes start; the same for every life of it. */
+  containerWorkingDir: (
+    namespace: string,
+    podUid: string,
+    container: string
+  ): string[] => ["container-working-dir", namespace, podUid, container],
+
   // What a ConfigMap or Secret holds, namespace before name like every key
   // here. The two readers once disagreed on the order, so an edit on the
   // ConfigMap's page never reached the pod's environment tab.

@@ -2176,6 +2176,8 @@ export const ru: Catalogue = {
     notRunning:
       "Контейнер {container} в состоянии {state}: exec делать некуда. Его монтирования по-прежнему в поде, а debug-контейнер может прочитать файлы остановленного контейнера.",
     listingOf: "Файлы в {path}",
+    findingWorkingDir: "Узнаём рабочий каталог {container}…",
+    workingDirPlace: "Рабочий каталог {container}",
     mode: "Режим",
     size: "Размер",
     modified: "Изменён",

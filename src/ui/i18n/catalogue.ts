@@ -2091,6 +2091,8 @@ export const en = {
     notRunning:
       "Container {container} is {state}: there is nothing to exec into. Its mounts are still on the pod, and a debug container can read a stopped container's files.",
     listingOf: "Files in {path}",
+    findingWorkingDir: "Asking {container} where it works…",
+    workingDirPlace: "Working directory of {container}",
     mode: "Mode",
     size: "Size",
     modified: "Modified",
