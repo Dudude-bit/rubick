@@ -256,8 +256,7 @@ mod detail_tests {
 
     /// Dana's scale read amber Degraded on the page while the fourth pod was
     /// being created. Fails if the Deployment's own pods are not asked, if a
-    /// stuck one is let off, if another Deployment's pod is counted, or if a
-    /// refused pod list is taken for pods coming up.
+    /// stuck one is let off, or if another Deployment's pod is counted.
     #[tokio::test]
     async fn a_deployment_scaling_up_reads_coming_up_only_while_its_new_pod_is_starting() {
         assert_eq!(
@@ -272,6 +271,21 @@ mod detail_tests {
             desired: 4,
         };
         assert_eq!(read("ImagePullBackOff").await, short);
-        assert_eq!(read("").await, short);
+    }
+
+    /// The page fell back on the counts in silence when the pod list was
+    /// refused, and drew them as confidently as a verdict its pods had
+    /// confirmed. Fails if a refused read is taken for pods that were read.
+    #[tokio::test]
+    async fn a_refused_pod_list_leaves_the_deployment_the_controllers_verdict_alone() {
+        assert_eq!(
+            read("").await,
+            Rollout::PodsUnread {
+                controller: Box::new(Rollout::Short {
+                    available: 3,
+                    desired: 4,
+                }),
+            }
+        );
     }
 }

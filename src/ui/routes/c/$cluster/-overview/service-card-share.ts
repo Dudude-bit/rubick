@@ -2,7 +2,7 @@ import { Pin } from "lucide-react";
 
 import { journalWords, type JournalEntry } from "@/lib/changes";
 import { iconSvg } from "@/lib/icon-svg";
-import { statusRole } from "@/lib/status-role";
+import { rolloutVerdict } from "@/lib/workload-status";
 import type { ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import {
@@ -30,9 +30,9 @@ function stateValue(state: ServiceState, t: T): ReportValue {
         ready: state.ready,
         total: state.total,
       });
-      return state.status
-        ? { text: `${state.status} · ${count}`, role: statusRole(state.status) }
-        : { text: count, role: "warn" };
+      if (!state.rollout) return { text: count, role: "warn" };
+      const verdict = rolloutVerdict(state.rollout, t);
+      return { text: `${verdict.text} · ${count}`, role: verdict.role };
     }
     case "gone":
       return { text: t("services", "gone"), role: "err" };

@@ -19,6 +19,7 @@ const state = vi.hoisted(() => ({
   pods: [] as PodRow[],
   unread: [] as UnreadNamespace[],
   placeholder: false,
+  answered: true,
   read: undefined as
     | ((ctx: { signal: AbortSignal }) => Promise<unknown>)
     | undefined,
@@ -48,7 +49,9 @@ vi.mock("@/hooks/useLiveQuery", () => ({
   }) => {
     state.read = options.queryFn;
     return {
-      data: { rows: state.pods, unread: state.unread },
+      data: state.answered
+        ? { rows: state.pods, unread: state.unread }
+        : undefined,
       isPlaceholderData: state.placeholder,
       isLoading: false,
       error: null,
@@ -83,6 +86,7 @@ vi.mock("@/hooks/useResourceWatch", () => ({
 beforeEach(() => {
   state.unread = [];
   state.placeholder = false;
+  state.answered = true;
   client.clear();
   state.pods = ["a", "b"].map(
     (name) => ({ name, namespace: "default", nodeName: "gone" }) as PodRow
@@ -170,6 +174,24 @@ it("does not carry the last scope's unread namespaces into the next", () => {
   state.placeholder = true;
   const { result } = renderHook(() => usePodsWithMetrics());
   expect(result.current.unread).toEqual([]);
+});
+
+/**
+ * A workload list asks each row's pods and drew the controller's verdict as
+ * confirmed when there were none to ask. Fails if a failed or unanswered
+ * read, or the last scope's answer standing in, counts as this scope read.
+ */
+it("says the pods were read only once this scope answered", () => {
+  expect(renderHook(() => usePodsWithMetrics()).result.current.read).toBe(true);
+  state.placeholder = true;
+  expect(renderHook(() => usePodsWithMetrics()).result.current.read).toBe(
+    false
+  );
+  state.placeholder = false;
+  state.answered = false;
+  expect(renderHook(() => usePodsWithMetrics()).result.current.read).toBe(
+    false
+  );
 });
 
 /**

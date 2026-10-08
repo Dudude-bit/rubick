@@ -66,6 +66,11 @@ pub enum Rollout {
         desired: i32,
     },
     Ready,
+    /// The controller's verdict alone: a gap its own pods could explain, and
+    /// they could not be read to say whether they are still starting.
+    PodsUnread {
+        controller: Box<Rollout>,
+    },
 }
 
 impl Rollout {
@@ -84,6 +89,20 @@ impl Rollout {
             }
             Self::Short { .. } => "Degraded",
             Self::Ready => "Ready",
+            Self::PodsUnread { controller } => controller.code(),
+        }
+    }
+
+    /// The verdict when its pods could not be read: one they could have
+    /// changed says it is the controller's alone, any other stands.
+    #[must_use]
+    pub fn pods_unread(self) -> Self {
+        if self.pods_can_explain().is_some() {
+            Self::PodsUnread {
+                controller: Box::new(self),
+            }
+        } else {
+            self
         }
     }
 
@@ -526,6 +545,25 @@ mod tests {
                 "{state}"
             );
         }
+    }
+
+    /// A verdict its pods could not confirm reads in the controller's word
+    /// and is not listed as a fault. Fails if the word is lost, or if an
+    /// unread wrap is counted among what needs attention.
+    #[test]
+    fn a_verdict_whose_pods_were_not_read_keeps_the_controllers_word_and_is_no_fault() {
+        let unread = Rollout::Unavailable {
+            reason: Some("MinimumReplicasUnavailable".into()),
+            message: None,
+            available: 0,
+            desired: 1,
+        }
+        .pods_unread();
+        assert!(matches!(unread, Rollout::PodsUnread { .. }));
+        assert_eq!(unread.code(), "Unavailable");
+        assert!(!unread.is_problem());
+        assert_eq!(unread.pods_can_explain(), None);
+        assert_eq!(Rollout::Ready.pods_unread(), Rollout::Ready);
     }
 
     fn condition(type_: &str, status: &str, reason: &str, message: &str) -> DeploymentCondition {
@@ -1219,7 +1257,7 @@ mod tests {
         struct Case {
             name: String,
             rollout: Rollout,
-            pods: Vec<PodStart>,
+            pods: Option<Vec<PodStart>>,
             is: Rollout,
         }
         #[derive(serde::Deserialize)]
@@ -1232,12 +1270,11 @@ mod tests {
         ))
         .expect("the corpus parses");
         for case in corpus.cases {
-            assert_eq!(
-                with_starts(case.rollout, &case.pods, corpus.now),
-                case.is,
-                "{}",
-                case.name
-            );
+            let read = match case.pods {
+                Some(pods) => with_starts(case.rollout, &pods, corpus.now),
+                None => case.rollout.pods_unread(),
+            };
+            assert_eq!(read, case.is, "{}", case.name);
         }
     }
 

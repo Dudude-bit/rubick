@@ -1,8 +1,6 @@
 import type { ColumnDef } from "@/components/ui/table-features";
 import { columnHeader } from "@/i18n/column-header";
-import { statusRole } from "@/lib/status-role";
-import { ownStatusWord } from "@/lib/status-words";
-import { workloadStatus } from "@/lib/workload-status";
+import { rolloutVerdict } from "@/lib/workload-status";
 import type { Rollout } from "@/generated/types";
 import { RolloutBadge } from "../../-object/RolloutSummary";
 import { statusCellPx } from "../../-list/columns";
@@ -17,10 +15,7 @@ export function createRolloutColumn<
     header: columnHeader("columns", "status"),
     meta: {
       floor: statusCellPx(12),
-      share: (row: Row, t) => {
-        const code = workloadStatus(row.rollout);
-        return { text: ownStatusWord(code, t) ?? code, role: statusRole(code) };
-      },
+      share: (row: Row, t) => rolloutVerdict(row.rollout, t),
     },
     cell: ({ row }) => <RolloutBadge rollout={row.original.rollout} />,
   };

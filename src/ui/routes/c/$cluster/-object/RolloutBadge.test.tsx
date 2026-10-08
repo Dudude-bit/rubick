@@ -24,3 +24,30 @@ describe("a rollout's badge in Russian", () => {
     expect(screen.getByText("Ожидает")).toHaveClass(colour);
   });
 });
+
+describe("a rollout's badge whose pods were not read", () => {
+  /**
+   * The list drew the controller's Unavailable red with no pods read to say
+   * whether they were still starting. Fails if the badge takes the fault's
+   * colour or loses the word the controller said.
+   */
+  it("keeps the controller's word in a neutral colour", () => {
+    render(
+      <RolloutBadge
+        rollout={{
+          state: "podsUnread",
+          controller: {
+            state: "unavailable",
+            reason: null,
+            message: null,
+            available: 0,
+            desired: 1,
+          },
+        }}
+      />
+    );
+    const badge = screen.getByText("Unavailable");
+    expect(badge).toHaveClass(ROLE_TEXT.neutral);
+    expect(badge).not.toHaveClass(ROLE_TEXT.err);
+  });
+});

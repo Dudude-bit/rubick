@@ -70,7 +70,7 @@ import { usePeekWidth } from "./peek-width";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
-import { Ghost } from "lucide-react";
+import { EyeOff, Ghost } from "lucide-react";
 import { GoneNotice } from "../-object/gone";
 import { StaleRows } from "../-list/StaleRows";
 import {
@@ -79,7 +79,13 @@ import {
   useRememberOwners,
   type Owner,
 } from "@/hooks/useLastOwners";
-import { NEEDS_ATTENTION } from "@/lib/workload-status";
+import {
+  attentionOf,
+  lastRunOut,
+  rowsWithStarts,
+  startsOf,
+} from "@/lib/workload-status";
+import { useNowReading } from "@/hooks/useNow";
 
 export function PeekContent({
   target,
@@ -714,14 +720,29 @@ function NamespaceContents({ namespace }: { namespace: string }) {
   });
 
   const notReady = pods.data?.filter((pod) => !pod.status.ready).length ?? 0;
-  const starving = deployments.data?.filter((deployment) =>
-    NEEDS_ATTENTION.has(deployment.rollout.state)
+  const starts = useMemo(
+    () => (pods.data ? startsOf(pods.data) : null),
+    [pods.data]
+  );
+  const ranOut = useNowReading(10_000, (now) =>
+    starts ? lastRunOut(starts.deadlines, now) : 0
+  );
+  const verdicts = useMemo(
+    () =>
+      deployments.data &&
+      attentionOf(
+        rowsWithStarts("Deployment", deployments.data, starts, ranOut).map(
+          (deployment) => deployment.rollout
+        )
+      ),
+    [deployments.data, starts, ranOut]
   );
 
   const count = (
     { data, error }: { data: unknown[] | undefined; error: Error | null },
     kind: ResourceKind,
-    trouble?: string
+    trouble?: string,
+    unchecked?: string
   ): KeyValue => ({
     label: kindDoor(kind),
     value: error ? (
@@ -737,6 +758,12 @@ function NamespaceContents({ namespace }: { namespace: string }) {
       <span className="inline-flex flex-wrap items-baseline gap-x-1 tabular-nums">
         {data.length}
         {trouble && <span className="text-err">({trouble})</span>}
+        {unchecked && (
+          <span className="inline-flex items-baseline gap-1 text-fg-mut">
+            <EyeOff className="h-2.5 w-2.5 self-center" aria-hidden="true" />
+            {unchecked}
+          </span>
+        )}
       </span>
     ),
     tone: error ? ("warn" as const) : trouble ? ("err" as const) : undefined,
@@ -755,8 +782,11 @@ function NamespaceContents({ namespace }: { namespace: string }) {
           count(
             deployments,
             "Deployment",
-            starving && starving.length > 0
-              ? t("count", "needAttention", { n: starving.length })
+            verdicts && verdicts.attention > 0
+              ? t("count", "needAttention", { n: verdicts.attention })
+              : undefined,
+            verdicts && verdicts.unconfirmed > 0
+              ? t("count", "unconfirmedByPods", { n: verdicts.unconfirmed })
               : undefined
           ),
           count(services, "Service"),

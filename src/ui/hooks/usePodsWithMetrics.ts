@@ -139,6 +139,8 @@ export function usePodsWithMetrics(options?: UsePodsWithMetricsOptions) {
     unread,
     /** The pods are the last scope's, standing in while this one is read. */
     isPlaceholderData,
+    /** This scope's pods answered, whatever came after; `unread` names the namespaces that did not. */
+    read: answer !== undefined && !isPlaceholderData,
     dataUpdatedAt,
     /** The pod watch is subscribed and has not fallen back to polling. */
     watchLive: live,
