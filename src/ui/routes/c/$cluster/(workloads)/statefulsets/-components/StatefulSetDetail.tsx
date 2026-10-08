@@ -332,7 +332,7 @@ export function StatefulSetDetail() {
       },
       {
         id: toPlural(ResourceType.Pod),
-        label: "Pods",
+        label: t("columns", "pods"),
         glyph: kindGlyph(ResourceType.Pod),
         mark: podsMark(pods, t),
         content: <PodListCard pods={pods} error={podsError} />,

@@ -414,7 +414,7 @@ export function NodeDetail() {
     },
     {
       id: "pods",
-      label: "Pods",
+      label: t("columns", "pods"),
       glyph: kindGlyph(ResourceType.Pod),
       // The pod list is fetched only while this tab is open, so before then
       // its `data` is undefined — `?? []` would badge a confident "0" on a
