@@ -64,6 +64,7 @@ const list = (props: {
   queryFn?: () => Promise<Scoped<Item>>;
   dataUpdatedAt?: number;
   live?: boolean;
+  onRetry?: () => void;
 }) =>
   draw(
     <ResourceList<Item>
@@ -273,6 +274,39 @@ describe("a list whose rows come from outside", () => {
     expect(screen.getByText("read failing")).toBeVisible();
     expect(screen.queryByText("live")).not.toBeInTheDocument();
     expect(screen.queryByText(/in this scope/)).not.toBeInTheDocument();
+  });
+});
+
+describe("a list whose first read failed", () => {
+  /**
+   * Dana's Events page after the 502 had a bare red sentence: no "read
+   * failing" in the header and nothing to press. Fails if a list that never
+   * answered says less than one whose re-read failed.
+   */
+  it("says the read is failing and offers it again", async () => {
+    const onRetry = vi.fn();
+    await list({ data: [], error: new Error("502 Bad Gateway"), onRetry });
+
+    expect(screen.getByText("read failing")).toBeVisible();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  /** A refusal is answered the same way again; fails if it is offered a retry or called failing. */
+  it("offers no retry for a refusal and does not call it failing", async () => {
+    await list({
+      data: [],
+      error: new Error("pods is forbidden: RBAC"),
+      onRetry: vi.fn(),
+    });
+
+    expect(screen.getByText(/forbidden/)).toBeVisible();
+    expect(screen.queryByText("read failing")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Try the read again" })
+    ).not.toBeInTheDocument();
   });
 });
 

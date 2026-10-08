@@ -52,7 +52,7 @@ export interface DataFreshnessProps {
    * a poll beside it is doing, so there is nothing slowed about it.
    */
   slowed?: boolean;
-  /** The last read failed, and what is on screen is from the one before it. Wins over live. */
+  /** The last read failed: what is on screen, if anything, is from one before it. Wins over live. */
   stale?: boolean;
   className?: string;
 }
@@ -137,8 +137,9 @@ export const DataFreshness = memo(function DataFreshness({
   const isConnected = useClusterStore((s) => s.isConnected);
 
   // Nothing has arrived yet, so there is no freshness to report — the
-  // screen's own loading state is saying it.
-  if (!dataUpdatedAt) return null;
+  // screen's own loading state is saying it, unless the read already failed.
+  const neverRead = !dataUpdatedAt;
+  if (neverRead && (!stale || !isConnected)) return null;
 
   const state = !isConnected
     ? "offline"
@@ -150,7 +151,7 @@ export const DataFreshness = memo(function DataFreshness({
           ? "slowed"
           : "polling";
   const { label, dot, note } = STATES[state];
-  const stamp = new Date(dataUpdatedAt).toISOString();
+  const stamp = neverRead ? "" : new Date(dataUpdatedAt).toISOString();
 
   return (
     <Tooltip>
@@ -169,7 +170,7 @@ export const DataFreshness = memo(function DataFreshness({
             </span>
             {/* The readings where how old the data is changes what the
                 reader should do with it carry the age on their face. */}
-            {AGED.has(label) && (
+            {AGED.has(label) && !neverRead && (
               <>
                 <span aria-hidden="true">·</span>
                 <AgeOnFace stamp={stamp} />
@@ -179,8 +180,8 @@ export const DataFreshness = memo(function DataFreshness({
         </div>
       </TooltipTrigger>
       <TooltipContent side="bottom">
-        {t("cluster", note)}
-        {state !== "offline" && (
+        {t("cluster", neverRead ? "freshNeverReadNote" : note)}
+        {state !== "offline" && !neverRead && (
           <>
             {" "}
             {t("cluster", "lastRead")}{" "}

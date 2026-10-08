@@ -4124,6 +4124,8 @@ export const en = {
     freshOfflineNote: "Not connected. Nothing on this screen is updating.",
     freshStaleNote:
       "The last read failed, so what is on screen is from the last read that answered.",
+    freshNeverReadNote:
+      "The read failed, and no read of this has answered yet.",
     lastRead: "Last read",
     justNow: "just now",
     agoSuffix: "ago.",

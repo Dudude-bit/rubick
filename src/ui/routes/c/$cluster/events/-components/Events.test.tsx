@@ -680,6 +680,31 @@ describe("a feed a watch keeps", () => {
   });
 });
 
+describe("a feed whose first read fails", () => {
+  /**
+   * Dana opened Events after the cluster began answering 502 and got a bare
+   * red sentence, while the Deployments list said "read failing" and offered
+   * the read again. Fails if the feed says less than the lists do.
+   */
+  it("says the read is failing and offers it again", async () => {
+    listEvents.mockRejectedValue(new Error("502 Bad Gateway"));
+    await mount();
+    expect(
+      await screen.findByText("Could not read the events in any namespace:")
+    ).toBeInTheDocument();
+    expect(screen.getByText("read failing")).toBeInTheDocument();
+
+    listEvents.mockResolvedValue(feed("prod", 1));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("prod-pod-0")
+    );
+    expect(screen.queryByText("read failing")).not.toBeInTheDocument();
+  });
+});
+
 describe("a feed whose re-read fails", () => {
   /**
    * During the 502 outage one list kept its rows under "polling" and another
@@ -1116,6 +1141,11 @@ describe("stories", () => {
     expect(
       within(heading.parentElement!).queryByTestId("section-count")
     ).toBeNull();
+    // Refused again on every retry, so neither failing nor offered again.
+    expect(screen.queryByText("read failing")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Try the read again" })
+    ).not.toBeInTheDocument();
   });
 
   /**
