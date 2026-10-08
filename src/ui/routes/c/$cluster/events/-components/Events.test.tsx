@@ -3,7 +3,14 @@
  * *in the scope they picked*.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Profiler, useState } from "react";
@@ -165,6 +172,30 @@ const dated = (namespace: string, index: number): EventInfo => ({
   lastTimestamp: new Date(BASE - index * 1000).toISOString(),
 });
 
+const rowAt = (index: number) =>
+  document.querySelector<HTMLElement>(`tr[data-row-index="${index}"]`);
+const drawnRows = () => document.querySelectorAll("tr[data-row-index]").length;
+
+const restoreLayout: Array<() => void> = [];
+/** jsdom lays nothing out; a 600px port of 26px rows is enough for the virtualiser to draw a window. */
+function layOutRows() {
+  const stub = (proto: object, name: string, get: () => unknown) => {
+    const original = Object.getOwnPropertyDescriptor(proto, name);
+    Object.defineProperty(proto, name, { configurable: true, get });
+    restoreLayout.push(() => {
+      if (original) Object.defineProperty(proto, name, original);
+      else delete (proto as Record<string, unknown>)[name];
+    });
+  };
+  stub(HTMLElement.prototype, "offsetHeight", function (this: HTMLElement) {
+    return this.tagName === "TR" ? 26 : 600;
+  });
+  stub(Element.prototype, "clientHeight", () => 600);
+}
+afterEach(() => {
+  restoreLayout.splice(0).forEach((restore) => restore());
+});
+
 describe("a feed a watch keeps", () => {
   const WATCH_KEY = [...queryKeys.events(null), "watch"];
   const rowsOf = (client: { getQueryData: (key: unknown[]) => unknown }) =>
@@ -192,6 +223,7 @@ describe("a feed a watch keeps", () => {
    * which 500 these are.
    */
   it("reads the feed from the watch's batches and asks nothing again while it runs", async () => {
+    layOutRows();
     await watched();
     expect(subscribeEventWatch).toHaveBeenCalledWith(null);
     const rows = Array.from({ length: 600 }, (_, index) =>
@@ -202,14 +234,54 @@ describe("a feed a watch keeps", () => {
     expect(
       await screen.findByText("500 normal events · of the latest 500")
     ).toBeInTheDocument();
-    const text = document.body.textContent ?? "";
-    expect(text).toContain("prod-pod-0");
-    expect(text).toContain("prod-pod-499");
-    expect(text).not.toContain("prod-pod-500");
+    expect(rowAt(0)?.textContent).toContain("prod-pod-0");
     await new Promise((resolve) => setTimeout(resolve, 1200));
     expect(listEvents).not.toHaveBeenCalled();
     expect(screen.getByText("live")).toBeInTheDocument();
   }, 30_000);
+
+  /**
+   * Dana's idle All events list stalled the window on every batch: all 500
+   * rows were in the DOM, and a new one on top moved every one of them.
+   * Fails if the feed draws more than a screenful of its rows.
+   */
+  it("draws only the rows on screen of a feed of five hundred", async () => {
+    layOutRows();
+    await watched();
+    burst(Array.from({ length: 500 }, (_, index) => dated("prod", index)));
+    await waitFor(() => expect(rowAt(0)?.textContent).toContain("prod-pod-0"));
+    expect(drawnRows()).toBeGreaterThan(0);
+    expect(drawnRows()).toBeLessThan(60);
+  }, 30_000);
+
+  /**
+   * Rows shifted about 25 places between two looks, so a click landed on
+   * another event. Fails if a batch moves the rows while the pointer is on
+   * the list, or if what arrived meanwhile cannot be reached.
+   */
+  it("holds its rows while the pointer is on the list and offers what arrived", async () => {
+    await watched();
+    burst(Array.from({ length: 5 }, (_, index) => dated("prod", index + 1)));
+    await waitFor(() => expect(rowAt(0)?.textContent).toContain("prod-pod-1"));
+
+    await userEvent.hover(rowAt(2)!);
+    send([{ op: "applied", resource: dated("prod", 0) }]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(rowAt(0)?.textContent).toContain("prod-pod-1");
+    expect(rowAt(2)?.textContent).toContain("prod-pod-3");
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Show 1 update" })
+    );
+    expect(rowAt(0)?.textContent).toContain("prod-pod-0");
+    expect(
+      screen.queryByRole("button", { name: /Show \d+ update/ })
+    ).not.toBeInTheDocument();
+
+    send([{ op: "applied", resource: dated("prod", 6) }]);
+    await userEvent.unhover(rowAt(2)!);
+    await waitFor(() => expect(drawnRows()).toBe(7));
+  });
 
   /**
    * One event changing is one row's work: no row it did not touch is a new

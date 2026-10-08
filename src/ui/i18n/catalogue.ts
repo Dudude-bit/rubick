@@ -415,6 +415,7 @@ export const en = {
     progress: "Progress",
     message: "Message",
     reason: "Reason",
+    eventCount: "Count",
     runtime: "Runtime",
     scheduling: "Scheduling",
     provisioning: "Provisioning",
@@ -1805,6 +1806,8 @@ export const en = {
     notReadEndpoints: "the endpoints of Service {service} ({reason})",
     notReadLogs: "the last lines of {container} ({reason})",
     notReadEvents: "the events of this pod ({reason})",
+    eventsHeld:
+      "Held while the pointer is on the list, so no row moves under it",
     notReadOtherNamespace:
       "the Services of {namespace}, where that address lives: this app only listed this pod's own namespace",
     notReadPolicies: "the NetworkPolicies of {namespace} ({reason})",
@@ -6920,6 +6923,7 @@ export const en = {
       other: "{n} gone, lines kept",
     },
     stories: { one: "{n} story", other: "{n} stories" },
+    eventsWaiting: { one: "Show {n} update", other: "Show {n} updates" },
     eventsSeen: { one: "happened once", other: "happened {n} times" },
     namespacesHidden: {
       one: "{n} namespace hidden: no access",

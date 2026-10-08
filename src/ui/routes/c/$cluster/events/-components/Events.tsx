@@ -22,7 +22,8 @@ import { Search } from "lucide-react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataFreshness } from "@/components/ui/realtime";
-import { EVENT_ROW, EventRows } from "@/components/object/detail-blocks";
+import { EVENT_ROW } from "@/components/object/detail-blocks";
+import { EventsTable } from "./EventsTable";
 import { StoryCard } from "./StoryCard";
 import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
 import { useListRefusal } from "../../-list/useListRefusal";
@@ -340,6 +341,7 @@ export function Events() {
   const normalCount = counted.length - warningCount;
   const showSkeleton = isLoading && events.length === 0;
   const nothingRead = failed !== null && pool.length === 0;
+  const listed = view === "list" && !showSkeleton && !(failed && !stale);
 
   useShareSection("events", () => [
     eventsSection(
@@ -367,7 +369,12 @@ export function Events() {
   }
 
   return (
-    <div className="flex flex-col gap-2 animate-in fade-in duration-200">
+    <div
+      className={cn(
+        "flex flex-col gap-2 animate-in fade-in duration-200",
+        listed && "h-full min-h-0"
+      )}
+    >
       <SectionHeader
         title="Events"
         description={<KindAbout kind={ResourceType.Event} />}
@@ -534,8 +541,8 @@ export function Events() {
           </>
         }
       />
-      <Section>
-        <SectionBody>
+      <Section className={cn(listed && "min-h-0")}>
+        <SectionBody className={cn(listed && "flex min-h-0 flex-col")}>
           {stale && (
             <StaleRows
               label="events"
@@ -596,12 +603,10 @@ export function Events() {
               </div>
             )
           ) : (
-            <EventRows
-              // Not narrowed here: every row came back from a request for a
-              // namespace in scope, so there is nothing left to filter out.
+            <EventsTable
               events={events}
-              showObject
               showNamespace={!currentNamespace}
+              question={[cacheKey, eventType, eventLimit, query].join("\n")}
               // A feed filtered down to nothing has not told the reader
               // their scope is quiet — it has told them their query missed.
               // Three states, not two: the scope is quiet, the query
