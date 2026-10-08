@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use super::replicaset::POD_TEMPLATE_HASH;
 use crate::resources::{
-    condition_is_true, pending_since, restarts, stuck_reason, PENDING_GRACE_SECONDS,
+    condition_is_true, pending_grace, pending_since, restarts, stuck_reason, START_GRACE_SECONDS,
 };
 use crate::utils::Moment;
 
@@ -309,10 +309,6 @@ pub fn daemonset_rollout(set: &DaemonSet) -> Rollout {
     Rollout::Ready
 }
 
-/// How long a running pod may stay not ready with no fault showing before the
-/// wait is its fault: the progress deadline a Deployment gets when it names none.
-pub const START_GRACE_SECONDS: i64 = 600;
-
 /// Where one pod stands in coming up, for the verdict of the set that runs it.
 ///
 /// A `StatefulSet` or `DaemonSet` writes no condition that tells a pod still
@@ -353,7 +349,7 @@ pub fn pod_start(pod: &Pod) -> PodStart {
     // The overview calls a pod Pending past this grace a problem, so the set
     // that runs it cannot call it coming up any longer than that.
     let (since, grace) = if phase.is_none_or(|p| p == "Pending") {
-        (pending_since(pod), PENDING_GRACE_SECONDS)
+        (pending_since(pod), pending_grace(pod))
     } else {
         (
             pod.metadata.creation_timestamp.as_ref().map(Moment::moment),
@@ -458,6 +454,7 @@ pub fn runs_for(pod: &Pod, kind: &str, name: &str, uid: Option<&str>) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::resources::PENDING_GRACE_SECONDS;
     use k8s_openapi::api::apps::v1::{
         DaemonSetSpec, DaemonSetStatus, DaemonSetUpdateStrategy, DeploymentCondition,
         DeploymentSpec, DeploymentStatus, RollingUpdateStatefulSetStrategy, StatefulSetSpec,
@@ -1337,23 +1334,33 @@ mod tests {
         assert_eq!(pod_start(&leaving), PodStart::Settled);
     }
 
-    /// A pod Pending past the overview's grace is already listed there as a
-    /// problem; a running one that never turns ready gets the progress
-    /// deadline. Fails if either waits longer than that.
+    /// A pod no node takes past the overview's grace is already listed there
+    /// as a problem; a placed one still creating, or a running one that never
+    /// turns ready, gets the progress deadline. Fails if any waits longer than
+    /// that, or a placed pod pulling its image runs out at the pending grace.
     #[test]
     fn a_start_lasts_the_pending_grace_or_the_progress_deadline() {
+        let scheduled_at = |pod: &mut Pod, seconds_ago: i64, status: &str| {
+            let condition = &mut pod
+                .status
+                .as_mut()
+                .expect("a status")
+                .conditions
+                .as_mut()
+                .expect("conditions")[0];
+            condition.status = status.to_string();
+            condition.last_transition_time =
+                serde_json::from_value(serde_json::json!(at(seconds_ago))).expect("a time");
+        };
         let mut stuck = creating("web-1");
-        stuck
-            .status
-            .as_mut()
-            .expect("a status")
-            .conditions
-            .as_mut()
-            .expect("conditions")[0]
-            .last_transition_time =
-            serde_json::from_value(serde_json::json!(at(PENDING_GRACE_SECONDS + 1)))
-                .expect("a time");
+        scheduled_at(&mut stuck, PENDING_GRACE_SECONDS + 1, "False");
         assert!(matches!(pod_start(&stuck), PodStart::Starting { until } if until < Utc::now()));
+
+        let mut pulling = creating("web-1");
+        scheduled_at(&mut pulling, 90, "True");
+        assert!(matches!(pod_start(&pulling), PodStart::Starting { until } if until > Utc::now()));
+        scheduled_at(&mut pulling, START_GRACE_SECONDS + 1, "True");
+        assert!(matches!(pod_start(&pulling), PodStart::Starting { until } if until < Utc::now()));
 
         let mut unready = serving("web-1");
         unready.status.as_mut().expect("a status").conditions = None;
@@ -1454,6 +1461,109 @@ mod tests {
                 now
             ),
             down
+        );
+    }
+
+    /// A fresh cluster two minutes in: pods placed and still pulling images
+    /// or running init containers for 90 s, and the overview counted 13
+    /// Deployments Unavailable and 6 Degraded. Fails if those read anything
+    /// but coming up, or if a Deployment with a pod that is actually failing
+    /// is let off as coming up.
+    #[test]
+    fn a_deployment_whose_pods_pull_images_past_a_minute_is_coming_up() {
+        let placed_ago = |mut pod: Pod, seconds: i64| {
+            let time: k8s_openapi::apimachinery::pkg::apis::meta::v1::Time =
+                serde_json::from_value(serde_json::json!(at(seconds))).expect("a time");
+            pod.metadata.creation_timestamp = Some(time.clone());
+            pod.status
+                .as_mut()
+                .expect("a status")
+                .conditions
+                .as_mut()
+                .expect("conditions")[0]
+                .last_transition_time = Some(time);
+            pod
+        };
+        let pulling = placed_ago(creating("web-1"), 90);
+        let initialising = placed_ago(
+            pod(serde_json::json!({
+                "metadata": { "name": "web-2" },
+                "status": {
+                    "phase": "Pending",
+                    "conditions": [
+                        { "type": "PodScheduled", "status": "True" },
+                        { "type": "Ready", "status": "False" },
+                    ],
+                    "initContainerStatuses": [
+                        { "name": "migrate", "image": "m", "imageID": "", "ready": false,
+                          "restartCount": 0, "state": { "running": {} } },
+                        { "name": "seed", "image": "s", "imageID": "", "ready": false,
+                          "restartCount": 0, "state": { "waiting": { "reason": "PodInitializing" } } },
+                    ],
+                    "containerStatuses": [{
+                        "name": "web", "image": "web", "imageID": "", "ready": false,
+                        "restartCount": 0, "state": { "waiting": { "reason": "PodInitializing" } },
+                    }],
+                },
+            })),
+            90,
+        );
+        let now = Utc::now();
+
+        let down = deployment_rollout(&deployment(
+            &Counts {
+                desired: 2,
+                existing: 2,
+                updated: 2,
+                available: 0,
+            },
+            vec![
+                condition("Available", "False", "MinimumReplicasUnavailable", ""),
+                condition("Progressing", "True", "ReplicaSetUpdated", ""),
+            ],
+        ));
+        assert!(matches!(down, Rollout::Unavailable { .. }), "{down:?}");
+        assert_eq!(
+            with_pods(down.clone(), &[pulling.clone(), initialising], now),
+            Rollout::ComingUp {
+                available: 0,
+                desired: 2
+            }
+        );
+
+        let short = deployment_rollout(&deployment(
+            &Counts {
+                desired: 2,
+                existing: 2,
+                updated: 2,
+                available: 1,
+            },
+            vec![
+                minimum_available(),
+                condition("Progressing", "True", "ReplicaSetUpdated", ""),
+            ],
+        ));
+        assert_eq!(
+            short,
+            Rollout::Short {
+                available: 1,
+                desired: 2
+            }
+        );
+        assert_eq!(
+            with_pods(short.clone(), &[serving("web-0"), pulling], now),
+            Rollout::ComingUp {
+                available: 1,
+                desired: 2
+            }
+        );
+        assert_eq!(
+            with_pods(
+                short.clone(),
+                &[serving("web-0"), waiting_on("web-1", "ErrImagePull")],
+                now
+            ),
+            short
         );
     }
 

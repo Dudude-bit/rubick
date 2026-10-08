@@ -16,8 +16,8 @@ use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::resources::node_budget::holds_reservation;
 use crate::resources::{
-    condition_is_true, crash_looping, job_state, pending_since, stuck_reason, Rollout,
-    PENDING_GRACE_SECONDS,
+    condition_is_true, crash_looping, job_state, pending_grace, pending_since, stuck_reason,
+    Rollout,
 };
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
@@ -487,8 +487,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
         let pending_since = pending_since(pod);
         // Undated pods fall through and get reported: an unknown age is not
         // evidence that the pod is young.
-        if pending_since.is_some_and(|t| now - t < chrono::Duration::seconds(PENDING_GRACE_SECONDS))
-        {
+        if pending_since.is_some_and(|t| now - t < chrono::Duration::seconds(pending_grace(pod))) {
             return None;
         }
         return Some(ClusterProblem {
@@ -1776,6 +1775,7 @@ mod tests {
     use super::*;
 
     use crate::metrics::{MetricsStatus, NodeMetrics};
+    use crate::resources::{PENDING_GRACE_SECONDS, START_GRACE_SECONDS};
     use k8s_openapi::api::batch::v1::{JobCondition, JobStatus};
     use k8s_openapi::api::core::v1::{
         Container, ContainerState, ContainerStateRunning, ContainerStateTerminated,
@@ -2239,6 +2239,39 @@ mod tests {
         let names: Vec<_> = problems.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, vec!["stuck"]);
         assert_eq!(problems[0].reason, "Pending");
+    }
+
+    /// A fresh cluster pulls its images for minutes: eleven pods placed and
+    /// still in `ContainerCreating` at 90 s were each listed as Pending. Fails
+    /// if a scheduled pod is reported inside the start grace, or one past it
+    /// is let off.
+    #[test]
+    fn a_scheduled_pod_still_creating_is_not_a_problem_until_the_start_grace_runs_out() {
+        let now = Utc::now();
+        let placed = |name: &str, pending_for: i64| {
+            let mut p = pending_pod(name, now, pending_for);
+            let condition = &mut p
+                .status
+                .as_mut()
+                .expect("a status")
+                .conditions
+                .as_mut()
+                .expect("conditions")[0];
+            condition.status = "True".to_string();
+            condition.message = None;
+            p
+        };
+        let problems = pod_problems(
+            &[
+                placed("pulling", 90),
+                placed("stuck", START_GRACE_SECONDS + 10),
+                pending_pod("unschedulable", now, 90),
+            ],
+            now,
+        );
+
+        let names: Vec<_> = problems.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["stuck", "unschedulable"]);
     }
 
     /// Without a `PodScheduled` condition the creation timestamp is the only
