@@ -519,6 +519,7 @@ describe.each([...KINDS, ...OWN_READ])(
       expect(selectedTab()).toHaveAttribute("title", "Events: 3");
       for (const reason of ["BackOff", "Scheduled", "Created"])
         expect(await screen.findByText(reason)).toBeInTheDocument();
+      expect(screen.getByText("3 events")).toBeInTheDocument();
       expect(listed.at(-1)).toMatchObject({
         involved_object_kind: target.kind,
         involved_object_name: target.name,
@@ -548,6 +549,25 @@ describe.each([...KINDS, ...OWN_READ])(
     });
   }
 );
+
+describe("the Events tab of an object with more events than one read holds", () => {
+  /**
+   * Marco and Lena saw a lone "4" above the rows. Fails if the count stops
+   * saying what it counts, or calls 200 rows of a longer list the whole.
+   */
+  it("says its count is of events, and only the latest where the read stopped", async () => {
+    const target = KINDS[0];
+    const about = { kind: target.kind, name: target.name, namespace: NS };
+    await openEventAbout(target, async () =>
+      Array.from({ length: 200 }, (_, index) =>
+        event(about, `Pulled${index}`, "Normal", 1, NS)
+      )
+    );
+    expect(
+      await screen.findByText("the latest 200 events, more not read")
+    ).toBeInTheDocument();
+  });
+});
 
 describe("an Event about a Namespace, opened", () => {
   const IN_SHOP = [

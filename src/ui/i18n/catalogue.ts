@@ -6924,6 +6924,11 @@ export const en = {
     },
     stories: { one: "{n} story", other: "{n} stories" },
     eventsWaiting: { one: "Show {n} update", other: "Show {n} updates" },
+    eventObjects: { one: "{n} event", other: "{n} events" },
+    eventObjectsLatest: {
+      one: "the latest {n} event, more not read",
+      other: "the latest {n} events, more not read",
+    },
     eventsSeen: { one: "happened once", other: "happened {n} times" },
     namespacesHidden: {
       one: "{n} namespace hidden: no access",
