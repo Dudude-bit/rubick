@@ -541,13 +541,37 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
     None
 }
 
+/// The pods each Deployment runs through its `ReplicaSets`, by namespace and name.
+fn pods_by_deployment<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+) -> HashMap<(&'a str, &'a str), Vec<&'a Pod>> {
+    let mut owned: HashMap<(&str, &str), Vec<&Pod>> = HashMap::new();
+    for pod in pods {
+        if let Some(deployment) = crate::resources::deployment_of(pod) {
+            let namespace = pod.metadata.namespace.as_deref().unwrap_or_default();
+            owned.entry((namespace, deployment)).or_default().push(pod);
+        }
+    }
+    owned
+}
+
 fn deployment_problems<'a>(
     deployments: impl IntoIterator<Item = &'a Deployment>,
+    owned: &HashMap<(&str, &str), Vec<&Pod>>,
+    now: DateTime<Utc>,
 ) -> Vec<ClusterProblem> {
     deployments
         .into_iter()
         .filter_map(|d| {
-            let rollout = crate::resources::deployment_rollout(d);
+            let key = (
+                d.metadata.namespace.as_deref().unwrap_or_default(),
+                d.metadata.name.as_deref().unwrap_or_default(),
+            );
+            let rollout = crate::resources::with_pods(
+                crate::resources::deployment_rollout(d),
+                owned.get(&key).into_iter().flatten().copied(),
+                now,
+            );
             if !rollout.is_problem() {
                 return None;
             }
@@ -1258,7 +1282,11 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     );
 
     let mut problems = pod_problems(refs(input.scoped_pods), input.now);
-    problems.extend(deployment_problems(refs(input.deployments)));
+    problems.extend(deployment_problems(
+        refs(input.deployments),
+        &pods_by_deployment(refs(input.scoped_pods)),
+        input.now,
+    ));
     let owned = pods_by_controller(refs(input.scoped_pods));
     problems.extend(stateful_set_problems(
         refs(input.stateful_sets),
@@ -2787,11 +2815,20 @@ mod tests {
                 ..Default::default()
             }),
         };
-        let stalled = deployment_problems([&deployment(1, ("False", "ProgressDeadlineExceeded"))]);
+        let stalled = deployment_problems(
+            [&deployment(1, ("False", "ProgressDeadlineExceeded"))],
+            &HashMap::new(),
+            Utc::now(),
+        );
         assert_eq!(stalled.len(), 1);
         assert_eq!(stalled[0].reason, "Stalled");
         assert_eq!(stalled[0].severity, ProblemSeverity::Critical);
-        assert!(deployment_problems([&deployment(1, ("True", "ReplicaSetUpdated"))]).is_empty());
+        assert!(deployment_problems(
+            [&deployment(1, ("True", "ReplicaSetUpdated"))],
+            &HashMap::new(),
+            Utc::now()
+        )
+        .is_empty());
     }
 
     /// The other four strips had no test at all: emptying `strip_node`,
@@ -2830,10 +2867,13 @@ mod tests {
         };
         let before = deployment.clone();
         crate::overview::strip_deployment(&mut deployment);
-        assert_eq!(deployment_problems([&before]).len(), 1);
         assert_eq!(
-            deployment_problems([&deployment]),
-            deployment_problems([&before]),
+            deployment_problems([&before], &HashMap::new(), Utc::now()).len(),
+            1
+        );
+        assert_eq!(
+            deployment_problems([&deployment], &HashMap::new(), Utc::now()),
+            deployment_problems([&before], &HashMap::new(), Utc::now()),
             "a Deployment strip that reached status would empty the panel"
         );
         assert!(
@@ -3396,6 +3436,88 @@ mod tests {
             let problem = listed.iter().find(|p| p.kind == kind).expect(kind);
             assert_eq!(problem.reason, "Degraded");
         }
+    }
+
+    /// Dana scaled `cart` from 3 to 4: Progressing stayed
+    /// `NewReplicaSetAvailable`, the fourth pod was being created, and Needs
+    /// attention and the census listed `cart` Degraded. Fails if a Deployment
+    /// whose missing pod is still starting is listed, or one whose new pod
+    /// cannot pull its image is not.
+    #[test]
+    fn a_deployment_scaling_up_needs_attention_only_once_its_new_pod_is_stuck() {
+        let cart: Deployment = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "cart", "namespace": "shop", "uid": "cart", "generation": 3 },
+            "spec": { "replicas": 4, "selector": {}, "template": {} },
+            "status": {
+                "observedGeneration": 3, "replicas": 4, "updatedReplicas": 4,
+                "readyReplicas": 3, "availableReplicas": 3,
+                "conditions": [
+                    { "type": "Available", "status": "True", "reason": "MinimumReplicasAvailable" },
+                    { "type": "Progressing", "status": "True", "reason": "NewReplicaSetAvailable" },
+                ],
+            },
+        }))
+        .expect("a Deployment");
+        let pod = |name: &str, ready: bool, waiting: &str| -> Pod {
+            serde_json::from_value(serde_json::json!({
+                "metadata": {
+                    "name": name,
+                    "namespace": "shop",
+                    "labels": { "pod-template-hash": "9df89489c" },
+                    "creationTimestamp": (Utc::now() - chrono::Duration::seconds(2)).to_rfc3339(),
+                    "ownerReferences": [{
+                        "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                        "name": "cart-9df89489c", "uid": "rs", "controller": true,
+                    }],
+                },
+                "status": {
+                    "phase": if ready { "Running" } else { "Pending" },
+                    "conditions": [{ "type": "Ready", "status": if ready { "True" } else { "False" } }],
+                    "containerStatuses": [{
+                        "name": "cart", "image": "cart", "imageID": "", "ready": ready,
+                        "restartCount": 0,
+                        "state": if ready { serde_json::json!({ "running": {} }) }
+                                 else { serde_json::json!({ "waiting": { "reason": waiting } }) },
+                    }],
+                },
+            }))
+            .expect("a pod")
+        };
+        let problems = |new_pod: &str| {
+            let pods = arcs(vec![
+                pod("cart-9df89489c-a1", true, ""),
+                pod("cart-9df89489c-b2", true, ""),
+                pod("cart-9df89489c-c3", true, ""),
+                pod("cart-9df89489c-d4", false, new_pod),
+            ]);
+            build_overview(&OverviewInputs {
+                scoped_pods: &pods,
+                accounting_pods: &[],
+                nodes: &[],
+                nodes_known: true,
+                deployments: &arcs(vec![cart.clone()]),
+                stateful_sets: &[],
+                daemon_sets: &[],
+                unread: &[],
+                jobs: Some(&[]),
+                events: &[],
+                events_known: true,
+                usage_by_node: None,
+                counts: ResourceCounts::default(),
+                scope: None,
+                served_from: OverviewSource::List,
+                now: Utc::now(),
+            })
+            .problems
+        };
+        let calm = problems("ContainerCreating");
+        assert!(calm.iter().all(|p| p.kind != "Deployment"), "{calm:?}");
+        let listed = problems("ImagePullBackOff");
+        let cart = listed
+            .iter()
+            .find(|p| p.kind == "Deployment")
+            .expect("cart listed");
+        assert_eq!(cart.reason, "Degraded");
     }
 
     /// A Job whose controller gave up was a red segment in the Jobs bar and

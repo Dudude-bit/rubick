@@ -154,35 +154,35 @@ export function withStarts(
     : rollout;
 }
 
-/** The pods of each StatefulSet and DaemonSet, and every instant one of their starts runs out. */
-export interface SetStarts {
-  bySet: ReadonlyMap<string, PodStart[]>;
+/** The pods of each workload, and every instant one of their starts runs out. */
+export interface WorkloadStarts {
+  byWorkload: ReadonlyMap<string, PodStart[]>;
   deadlines: readonly number[];
 }
 
-const setKey = (namespace: string, name: string) => `${namespace}\0${name}`;
+const workloadKey = (kind: string, namespace: string, name: string) =>
+  `${kind}\0${namespace}\0${name}`;
 
-/**
- * Both kinds name a pod `<set>-<suffix>` with no dash in the suffix, an
- * ordinal or five random characters, which keeps a Deployment's
- * `<name>-<hash>-<suffix>` pods off a set that shares its name.
- */
-export function setStartsOf(
-  pods: readonly Pick<PodRow, "name" | "namespace" | "start">[]
-): SetStarts {
-  const bySet = new Map<string, PodStart[]>();
+/** Each pod under the workload Rust read off its owner, a Deployment's through its ReplicaSet. */
+export function startsOf(
+  pods: readonly Pick<PodRow, "namespace" | "start" | "workload">[]
+): WorkloadStarts {
+  const byWorkload = new Map<string, PodStart[]>();
   const deadlines: number[] = [];
   for (const pod of pods) {
-    const dash = pod.name.lastIndexOf("-");
-    if (dash <= 0) continue;
-    const key = setKey(pod.namespace, pod.name.slice(0, dash));
-    const starts = bySet.get(key);
+    if (!pod.workload) continue;
+    const key = workloadKey(
+      pod.workload.kind,
+      pod.namespace,
+      pod.workload.name
+    );
+    const starts = byWorkload.get(key);
     if (starts) starts.push(pod.start);
-    else bySet.set(key, [pod.start]);
+    else byWorkload.set(key, [pod.start]);
     if (pod.start.state === "starting")
       deadlines.push(Date.parse(pod.start.until));
   }
-  return { bySet, deadlines };
+  return { byWorkload, deadlines };
 }
 
 /**
@@ -196,14 +196,19 @@ export const lastRunOut = (deadlines: readonly number[], now: number) =>
     Number.NEGATIVE_INFINITY
   );
 
-/** Each set row's verdict with its own pods asked; a row it does not change keeps its identity. */
+/** Each row's verdict with its own pods asked; a row it does not change keeps its identity. */
 export function rowsWithStarts<
   Row extends { name: string; namespace: string; rollout: Rollout },
->(rows: readonly Row[], starts: SetStarts, now: number): Row[] {
+>(
+  kind: string,
+  rows: readonly Row[],
+  starts: WorkloadStarts,
+  now: number
+): Row[] {
   return rows.map((row) => {
     const rollout = withStarts(
       row.rollout,
-      starts.bySet.get(setKey(row.namespace, row.name)) ?? [],
+      starts.byWorkload.get(workloadKey(kind, row.namespace, row.name)) ?? [],
       now
     );
     return rollout === row.rollout ? row : { ...row, rollout };

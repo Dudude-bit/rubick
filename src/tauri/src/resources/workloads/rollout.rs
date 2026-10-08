@@ -7,13 +7,13 @@ use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
 use k8s_openapi::api::core::v1::Pod;
 use serde::{Deserialize, Serialize};
 
+use super::replicaset::POD_TEMPLATE_HASH;
 use crate::resources::{
     condition_is_true, pending_since, restarts, stuck_reason, PENDING_GRACE_SECONDS,
 };
 use crate::utils::Moment;
 
 const DEADLINE_EXCEEDED: &str = "ProgressDeadlineExceeded";
-const ROLLED_OUT: &str = "NewReplicaSetAvailable";
 const ON_DELETE: &str = "OnDelete";
 
 /// Ordered by what the reader has to act on first: a fault before an
@@ -136,8 +136,12 @@ pub fn deployment_rollout(deployment: &Deployment) -> Rollout {
     if older_template {
         return Rollout::RollingOut { updated, desired };
     }
-    let finished = progressing.is_none_or(|c| c.reason.as_deref() == Some(ROLLED_OUT));
-    if updated < desired || (available < desired && !finished) {
+    // A scale never moves the Progressing reason off NewReplicaSetAvailable,
+    // so whether a short count is still coming up is for the pods to say.
+    let refused = conditions
+        .iter()
+        .any(|c| c.type_ == "ReplicaFailure" && c.status == "True");
+    if updated < desired && !refused {
         return Rollout::ComingUp { available, desired };
     }
     if available < desired {
@@ -334,6 +338,54 @@ pub fn with_pods<'a>(
     with_starts(rollout, &starts, now)
 }
 
+/// The Deployment a pod runs for: its controller is a `ReplicaSet` the
+/// Deployment named `<deployment>-<pod-template-hash>`.
+#[must_use]
+pub fn deployment_of(pod: &Pod) -> Option<&str> {
+    let hash = pod.metadata.labels.as_ref()?.get(POD_TEMPLATE_HASH)?;
+    let owner = pod
+        .metadata
+        .owner_references
+        .iter()
+        .flatten()
+        .find(|o| o.controller == Some(true) && o.kind == "ReplicaSet")?;
+    owner
+        .name
+        .strip_suffix(hash.as_str())?
+        .strip_suffix('-')
+        .filter(|name| !name.is_empty())
+}
+
+/// The workload whose verdict a pod's start counts toward, by kind and name.
+#[must_use]
+pub fn workload_of(pod: &Pod) -> Option<(&str, &str)> {
+    if let Some(deployment) = deployment_of(pod) {
+        return Some(("Deployment", deployment));
+    }
+    pod.metadata
+        .owner_references
+        .iter()
+        .flatten()
+        .find(|o| o.controller == Some(true))
+        .map(|o| (o.kind.as_str(), o.name.as_str()))
+}
+
+/// Whether a pod is one of the workload's own, as its verdict counts them:
+/// a Deployment's by name through its `ReplicaSets`, any other's by uid.
+#[must_use]
+pub fn runs_for(pod: &Pod, kind: &str, name: &str, uid: Option<&str>) -> bool {
+    if kind == "Deployment" {
+        return deployment_of(pod) == Some(name);
+    }
+    uid.is_some_and(|uid| {
+        pod.metadata
+            .owner_references
+            .iter()
+            .flatten()
+            .any(|o| o.controller == Some(true) && o.uid == uid)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,6 +395,8 @@ mod tests {
         StatefulSetStatus, StatefulSetUpdateStrategy,
     };
     use kube::core::ObjectMeta;
+
+    const ROLLED_OUT: &str = "NewReplicaSetAvailable";
 
     /// The overview prints this word and lists these states, and the screens
     /// print and count the frontend's; the shared file keeps them one answer.
@@ -527,8 +581,9 @@ mod tests {
     /// Lena scaled `hello-web` from 1 to 2 and the header went red
     /// "Unavailable" for the seconds the second pod took, while the first
     /// served throughout: with maxUnavailable rounding to 0 the controller
-    /// writes `Available=False`. Fails if a scale with a pod serving reads as
-    /// a fault again, at the first write or after the pod exists.
+    /// writes `Available=False`, and a scale leaves Progressing at
+    /// `NewReplicaSetAvailable`. Fails if a scale with a pod serving reads as
+    /// a fault before its pod exists, or as one while that pod is starting.
     #[test]
     fn a_scale_up_with_a_pod_serving_is_coming_up_not_unavailable() {
         let down = || {
@@ -548,6 +603,11 @@ mod tests {
             },
             vec![down(), rolled_out()],
         );
+        let coming = Rollout::ComingUp {
+            available: 1,
+            desired: 2,
+        };
+        assert_eq!(deployment_rollout(&asked), coming);
         let starting = deployment(
             &Counts {
                 desired: 2,
@@ -555,25 +615,125 @@ mod tests {
                 updated: 2,
                 available: 1,
             },
+            vec![down(), rolled_out()],
+        );
+        assert_eq!(
+            with_pods(
+                deployment_rollout(&starting),
+                &[serving("hello-web-0"), creating("hello-web-1")],
+                Utc::now()
+            ),
+            coming
+        );
+    }
+
+    /// Dana scaled `cart` from 3 to 4 and kubectl printed Progressing
+    /// `NewReplicaSetAvailable` throughout while the header read amber
+    /// "Degraded 3/4 ready" until the new pod was up: a scale never turns the
+    /// reason to `ReplicaSetUpdated`. Fails if the Deployment's own pods are
+    /// not what tells a pod still being created from one that will not start.
+    #[test]
+    fn a_deployment_scaling_up_reads_its_pods_as_a_set_does() {
+        let cart = deployment(
+            &Counts {
+                desired: 4,
+                existing: 4,
+                updated: 4,
+                available: 3,
+            },
+            vec![minimum_available(), rolled_out()],
+        );
+        let short = Rollout::Short {
+            available: 3,
+            desired: 4,
+        };
+        assert_eq!(deployment_rollout(&cart), short);
+        let serving_three = || ["cart-a", "cart-b", "cart-c"].map(serving);
+        let [a, b, c] = serving_three();
+        assert_eq!(
+            with_pods(
+                deployment_rollout(&cart),
+                &[a, b, c, creating("cart-d")],
+                Utc::now()
+            ),
+            Rollout::ComingUp {
+                available: 3,
+                desired: 4
+            }
+        );
+        let [a, b, c] = serving_three();
+        assert_eq!(
+            with_pods(
+                deployment_rollout(&cart),
+                &[a, b, c, waiting_on("cart-d", "ImagePullBackOff")],
+                Utc::now()
+            ),
+            short
+        );
+    }
+
+    /// A scale the `ReplicaSet` could not carry out (a quota, a webhook) keeps
+    /// the new pods uncreated for good, and the controller says so in
+    /// `ReplicaFailure`. Fails if that reads as pods still coming.
+    #[test]
+    fn a_scale_the_replica_set_cannot_create_is_short_not_coming_up() {
+        let refused = deployment(
+            &Counts {
+                desired: 4,
+                existing: 3,
+                updated: 3,
+                available: 3,
+            },
             vec![
-                down(),
+                minimum_available(),
+                rolled_out(),
                 condition(
-                    "Progressing",
+                    "ReplicaFailure",
                     "True",
-                    "ReplicaSetUpdated",
-                    "ReplicaSet \"hello-web-584d68fccc\" is progressing.",
+                    "FailedCreate",
+                    "pods \"cart-9df89489c-x2x4q\" is forbidden: exceeded quota: shop-pods",
                 ),
             ],
         );
-        for scaling in [asked, starting] {
-            assert_eq!(
-                deployment_rollout(&scaling),
-                Rollout::ComingUp {
-                    available: 1,
-                    desired: 2
-                }
-            );
-        }
+        assert_eq!(
+            deployment_rollout(&refused),
+            Rollout::Short {
+                available: 3,
+                desired: 4
+            }
+        );
+    }
+
+    /// A Deployment's pods are owned by its `ReplicaSet`, so the Deployment is
+    /// read off the `ReplicaSet`'s name. Fails if a pod of another Deployment
+    /// whose name starts the same, or of a bare `ReplicaSet`, is counted.
+    #[test]
+    fn a_pod_runs_for_the_deployment_its_replica_set_is_named_after() {
+        let owned = |owner: &str, hash: Option<&str>| -> Pod {
+            let mut labels = serde_json::json!({ "app": "cart" });
+            if let Some(hash) = hash {
+                labels[POD_TEMPLATE_HASH] = hash.into();
+            }
+            pod(serde_json::json!({
+                "metadata": {
+                    "name": format!("{owner}-x2x4q"),
+                    "labels": labels,
+                    "ownerReferences": [{
+                        "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                        "name": owner, "uid": owner, "controller": true,
+                    }],
+                },
+            }))
+        };
+        let cart = owned("cart-9df89489c", Some("9df89489c"));
+        assert_eq!(deployment_of(&cart), Some("cart"));
+        assert_eq!(workload_of(&cart), Some(("Deployment", "cart")));
+        assert!(runs_for(&cart, "Deployment", "cart", None));
+        let api = owned("cart-api-5d4c8f7b9", Some("5d4c8f7b9"));
+        assert!(!runs_for(&api, "Deployment", "cart", None));
+        let bare = owned("cart-legacy", None);
+        assert_eq!(deployment_of(&bare), None);
+        assert_eq!(workload_of(&bare), Some(("ReplicaSet", "cart-legacy")));
     }
 
     /// Pods of the old template still being replaced while the controller

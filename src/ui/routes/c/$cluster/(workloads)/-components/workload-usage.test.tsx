@@ -48,6 +48,7 @@ function pod(name: string, phase: string): PodInfo {
     volumes: [],
     serviceAccountName: null,
     start: { state: "settled" },
+    workload: null,
   };
 }
 

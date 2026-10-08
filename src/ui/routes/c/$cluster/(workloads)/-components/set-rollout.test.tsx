@@ -12,6 +12,7 @@ import {
 
 import type {
   DaemonSetInfo,
+  DeploymentInfo,
   PodRow,
   PodStart,
   Rollout,
@@ -52,12 +53,20 @@ const { StatefulSetList } =
   await import("../statefulsets/-components/StatefulSetList");
 const { DaemonSetList } =
   await import("../daemonsets/-components/DaemonSetList");
+const { DeploymentList } =
+  await import("../deployments/-components/DeploymentList");
 
 const SHORT: Rollout = { state: "short", available: 1, desired: 2 };
 
 /** A pod row as the Rust stream sends it, with only what the verdict reads filled in. */
-const row = (name: string, start: PodStart) =>
-  ({ name, namespace: "shop", labels: {}, start }) as PodRow;
+const row = (name: string, start: PodStart, kind: string, owner: string) =>
+  ({
+    name,
+    namespace: "shop",
+    labels: {},
+    start,
+    workload: { kind, name: owner },
+  }) as PodRow;
 
 const startingFor = (ms: number): PodStart => ({
   state: "starting",
@@ -65,6 +74,47 @@ const startingFor = (ms: number): PodStart => ({
 });
 
 const SETS = [
+  {
+    kind: "Deployment",
+    List: DeploymentList as ComponentType,
+    plural: "deployments",
+    list: "list_deployments_in",
+    row: {
+      name: "cart",
+      namespace: "shop",
+      uid: "cart",
+      replicas: { desired: 4, ready: 3, available: 3, updated: 4 },
+      rollout: { state: "short", available: 3, desired: 4 },
+      rolloutPlan: {
+        strategy: "rolling",
+        replicas: 4,
+        surge: 1,
+        unavailable: 1,
+      },
+      strategy: "RollingUpdate",
+      containers: [],
+      initContainers: [],
+      serviceAccountName: null,
+      podResources: { requests: {}, limits: {} },
+      replica: {
+        cpuRequests: null,
+        cpuLimits: null,
+        memoryRequests: null,
+        memoryLimits: null,
+        known: true,
+      },
+      labels: {},
+      annotations: {},
+      templateAnnotations: {},
+      generation: 3,
+      observedGeneration: 3,
+      createdAt: "2026-10-01T00:00:00Z",
+      conditions: [],
+      ownerReferences: [],
+    } satisfies DeploymentInfo,
+    serving: "cart-9df89489c-x7k2p",
+    coming: "cart-9df89489c-q9w4z",
+  },
   {
     kind: "StatefulSet",
     List: StatefulSetList as ComponentType,
@@ -131,9 +181,15 @@ afterEach(() => {
 
 async function open(set: (typeof SETS)[number], newPod: PodStart) {
   pods.rows = [
-    row(set.serving, { state: "settled" }),
-    row(set.coming, newPod),
-    row(`${set.row.name}-api-5d4c8-x9z2q`, { state: "failing" }),
+    row(set.serving, { state: "settled" }, set.kind, set.row.name),
+    row(set.coming, newPod, set.kind, set.row.name),
+    row(`${set.row.name}-x9z2q`, { state: "failing" }, "Job", set.row.name),
+    row(
+      `${set.row.name}-api-5d4c8-x9z2q`,
+      { state: "failing" },
+      set.kind,
+      `${set.row.name}-api`
+    ),
   ];
   vi.mocked(invoke).mockImplementation(async (command: string) => {
     if (command === set.list) return { rows: [set.row], unread: [] };
@@ -151,11 +207,13 @@ const status = () =>
 
 describe.each(SETS)("the $kind list while one is scaled up", (set) => {
   /**
-   * Lena scaled one up and the list read amber Degraded while the new pod
-   * was being created and the first served: the row's counts cannot tell
-   * the two apart, and only the page asked the pods. Fails if the list does
-   * not read the pods' starts as its page does, or keeps calling it coming
-   * up once the start has run out of time.
+   * Lena scaled a set up, and Dana scaled `cart` from 3 to 4 with Progressing
+   * left at NewReplicaSetAvailable, and the list read amber Degraded while
+   * the new pod was being created and the others served: the row's counts
+   * cannot tell the two apart. Fails if the list does not read its own pods'
+   * starts as its page does, counts a pod some other workload of the same
+   * name or prefix runs, or keeps calling it coming up once the start has
+   * run out of time.
    */
   it("reads Progressing while the new pod starts, and Degraded once its start runs out", async () => {
     await open(set, startingFor(25_000));

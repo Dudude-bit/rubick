@@ -49,6 +49,7 @@ export const DeploymentList = createWorkloadListPage<DeploymentInfo>({
   fetchList: ({ scope }) => commands.listDeploymentsIn(scope),
   matchPods: matchDeploymentPods,
   watch: ({ scope }) => commands.subscribeDeploymentWatch(scope),
+  rolloutFromPods: true,
   deleter: (item) => commands.deleteDeployment(item.name, item.namespace),
   columns,
 });

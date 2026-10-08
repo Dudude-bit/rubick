@@ -40,7 +40,7 @@ import { useWatchedList } from "@/hooks/useWatchedList";
 import { useNowReading } from "@/hooks/useNow";
 import { useT } from "@/i18n/useT";
 import type { Rollout } from "@/generated/types";
-import { lastRunOut, rowsWithStarts, setStartsOf } from "@/lib/workload-status";
+import { lastRunOut, rowsWithStarts, startsOf } from "@/lib/workload-status";
 
 type Workload = { name: string; namespace: string };
 
@@ -71,8 +71,9 @@ export interface WorkloadListPageConfig<T extends Workload> {
    */
   watch?: (params: { scope: string[] | null }) => Promise<string>;
   /**
-   * A StatefulSet's and a DaemonSet's verdict is finished by their pods, as
-   * on their pages: the counts alone call a scale whose pod is starting short.
+   * A Deployment's, a StatefulSet's and a DaemonSet's verdict is finished by
+   * their pods, as on their pages: the counts alone call a scale whose pod is
+   * starting short.
    */
   rolloutFromPods?: T extends { rollout: Rollout } ? true : never;
 }
@@ -137,7 +138,7 @@ export function createWorkloadListPage<T extends Workload>(
     );
 
     const starts = useMemo(
-      () => (config.rolloutFromPods ? setStartsOf(pods) : null),
+      () => (config.rolloutFromPods ? startsOf(pods) : null),
       [pods]
     );
     const ranOut = useNowReading(10_000, (now) =>
@@ -147,6 +148,7 @@ export function createWorkloadListPage<T extends Workload>(
       const read = listQuery.data?.rows ?? [];
       return starts
         ? (rowsWithStarts(
+            config.resourceType,
             read as Array<T & { rollout: Rollout }>,
             starts,
             ranOut

@@ -2,8 +2,8 @@
 
 use crate::error::Result;
 use crate::resources::{
-    with_pods, CronJobDetailInfo, CronJobInfo, DaemonSetDetailInfo, DaemonSetInfo, JobDetailInfo,
-    JobInfo, Rollout, Selector, StatefulSetDetailInfo, StatefulSetInfo,
+    runs_for, with_pods, CronJobDetailInfo, CronJobInfo, DaemonSetDetailInfo, DaemonSetInfo,
+    JobDetailInfo, JobInfo, Rollout, Selector, StatefulSetDetailInfo, StatefulSetInfo,
 };
 use crate::state::AppState;
 use k8s_openapi::api::apps::v1::{DaemonSet, StatefulSet};
@@ -11,7 +11,6 @@ use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
 use kube::api::ListParams;
-use kube::ResourceExt;
 use tauri::State;
 
 use crate::commands::filters::ResourceFilters;
@@ -19,13 +18,15 @@ use crate::commands::helpers::{
     get_resource_info, list_in_scope, list_resource_infos, ResourceContext,
 };
 
-/// A set's verdict with its own pods asked, where its counts alone say it is
-/// short: the counts cannot tell a pod still starting from one that never
-/// will. A pod list the cluster refuses leaves the verdict as the counts read it.
-async fn with_own_pods(
+/// A workload's verdict with its own pods asked, where its counts alone say
+/// it is short: the counts cannot tell a pod still starting from one that
+/// never will. A pod list the cluster refuses leaves the verdict as the counts
+/// read it.
+pub(crate) async fn with_own_pods(
     ctx: &ResourceContext,
     rollout: Rollout,
-    set: &ObjectMeta,
+    kind: &str,
+    workload: &ObjectMeta,
     selector: Option<&LabelSelector>,
 ) -> Rollout {
     if !matches!(rollout, Rollout::Short { .. }) {
@@ -42,9 +43,12 @@ async fn with_own_pods(
         return rollout;
     };
     let own = pods.items.iter().filter(|pod| {
-        pod.owner_references()
-            .iter()
-            .any(|o| o.controller == Some(true) && set.uid.as_deref() == Some(o.uid.as_str()))
+        runs_for(
+            pod,
+            kind,
+            workload.name.as_deref().unwrap_or_default(),
+            workload.uid.as_deref(),
+        )
     });
     with_pods(rollout, own, chrono::Utc::now())
 }
@@ -59,7 +63,7 @@ async fn statefulset_detail(
     let set: StatefulSet = ctx.namespaced_api().get(&name).await?;
     let mut info = StatefulSetDetailInfo::from(&set);
     let selector = set.spec.as_ref().map(|s| &s.selector);
-    info.rollout = with_own_pods(&ctx, info.rollout, &set.metadata, selector).await;
+    info.rollout = with_own_pods(&ctx, info.rollout, "StatefulSet", &set.metadata, selector).await;
     Ok(info)
 }
 
@@ -73,7 +77,7 @@ async fn daemonset_detail(
     let set: DaemonSet = ctx.namespaced_api().get(&name).await?;
     let mut info = DaemonSetDetailInfo::from(&set);
     let selector = set.spec.as_ref().map(|s| &s.selector);
-    info.rollout = with_own_pods(&ctx, info.rollout, &set.metadata, selector).await;
+    info.rollout = with_own_pods(&ctx, info.rollout, "DaemonSet", &set.metadata, selector).await;
     Ok(info)
 }
 

@@ -230,14 +230,13 @@ pub(super) async fn workload_connections(
         .iter()
         .filter(|pod| selector.matches(pod.labels()) == Some(true))
         .collect();
-    // The set's own pods decide whether its short count is a scale coming up,
-    // as its page reads it; with none read, the count's reading stands.
+    // The workload's own pods decide whether its short count is a scale
+    // coming up, as its page reads it; with none read, the count's reading stands.
     let rollout = template.rollout.clone().map(|rollout| {
-        let own = mine.iter().copied().filter(|pod| {
-            pod.owner_references()
-                .iter()
-                .any(|o| o.controller == Some(true) && uid.as_deref() == Some(o.uid.as_str()))
-        });
+        let own = mine
+            .iter()
+            .copied()
+            .filter(|pod| crate::resources::runs_for(pod, kind, name, uid.as_deref()));
         crate::resources::with_pods(rollout, own, chrono::Utc::now())
     });
 
@@ -1394,6 +1393,82 @@ mod set_rollout_tests {
             Some(ObjectFacts::Workload { rollout, .. }) => rollout,
             other => panic!("a workload's facts, not {other:?}"),
         }
+    }
+
+    /// `cart`'s Connections tab, and the Service cards built on it, read its
+    /// verdict here while Dana's scale from 3 to 4 brought up its fourth pod.
+    /// Fails if a Deployment's pods, owned by its `ReplicaSet` and not by it,
+    /// are not the ones asked.
+    #[tokio::test]
+    async fn a_deployment_scaling_up_reads_coming_up_until_its_new_pod_is_stuck() {
+        async fn read(new_pod: &str) -> Option<Rollout> {
+            let cart = serde_json::json!({
+                "apiVersion": "apps/v1", "kind": "Deployment",
+                "metadata": { "name": "cart", "namespace": "shop", "uid": "cart", "generation": 3 },
+                "spec": {
+                    "replicas": 4,
+                    "selector": { "matchLabels": { "app": "web" } },
+                    "template": { "metadata": { "labels": { "app": "web" } } },
+                },
+                "status": {
+                    "observedGeneration": 3, "replicas": 4, "updatedReplicas": 4,
+                    "readyReplicas": 3, "availableReplicas": 3,
+                    "conditions": [
+                        { "type": "Available", "status": "True", "reason": "MinimumReplicasAvailable" },
+                        { "type": "Progressing", "status": "True", "reason": "NewReplicaSetAvailable" },
+                    ],
+                },
+            });
+            let owned = |name: &str, ready: bool, waiting: &str| {
+                let mut pod = pod(name, ready, waiting);
+                pod["metadata"]["labels"]["pod-template-hash"] = "9df89489c".into();
+                pod["metadata"]["ownerReferences"] = serde_json::json!([{
+                    "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                    "name": "cart-9df89489c", "uid": "rs", "controller": true,
+                }]);
+                pod
+            };
+            let pods = serde_json::json!({
+                "apiVersion": "v1", "kind": "List", "metadata": {},
+                "items": [
+                    owned("cart-9df89489c-a1", true, ""),
+                    owned("cart-9df89489c-b2", true, ""),
+                    owned("cart-9df89489c-c3", true, ""),
+                    owned("cart-9df89489c-d4", false, new_pod),
+                ],
+            });
+            let (client, _) = server(vec![
+                (
+                    "/apis/apps/v1/namespaces/shop/deployments/cart",
+                    200,
+                    cart.to_string(),
+                ),
+                ("/api/v1/namespaces/shop/pods", 200, pods.to_string()),
+            ])
+            .await;
+            let ctx = ResourceContext::from_client(client, "shop".to_string());
+            let page = connections_of(&ctx, "Deployment", "cart", None)
+                .await
+                .expect("the neighbourhood");
+            match page.subject.facts {
+                Some(ObjectFacts::Workload { rollout, .. }) => rollout,
+                other => panic!("a workload's facts, not {other:?}"),
+            }
+        }
+        assert_eq!(
+            read("ContainerCreating").await,
+            Some(Rollout::ComingUp {
+                available: 3,
+                desired: 4
+            })
+        );
+        assert_eq!(
+            read("ImagePullBackOff").await,
+            Some(Rollout::Short {
+                available: 3,
+                desired: 4
+            })
+        );
     }
 
     /// The `StatefulSet`'s Connections tab and the services built on it read

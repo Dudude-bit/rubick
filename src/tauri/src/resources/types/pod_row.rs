@@ -38,8 +38,27 @@ pub struct PodRow {
     pub cpu_limits: Option<String>,
     pub memory_requests: Option<String>,
     pub memory_limits: Option<String>,
-    /// Where it stands in coming up, which the list of the set that runs it reads.
+    /// Where it stands in coming up, which the list of the workload that runs it reads.
     pub start: crate::resources::PodStart,
+    /// The workload whose verdict that start counts toward.
+    pub workload: Option<PodWorkload>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PodWorkload {
+    pub kind: String,
+    pub name: String,
+}
+
+impl PodWorkload {
+    #[must_use]
+    pub fn of(pod: &Pod) -> Option<Self> {
+        crate::resources::workload_of(pod).map(|(kind, name)| Self {
+            kind: kind.to_string(),
+            name: name.to_string(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -126,6 +145,7 @@ impl From<&Pod> for PodRow {
             memory_requests: totals.memory_requests,
             memory_limits: totals.memory_limits,
             start: crate::resources::pod_start(pod),
+            workload: PodWorkload::of(pod),
         }
     }
 }

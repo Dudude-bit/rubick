@@ -65,6 +65,7 @@ pub struct PodInfo {
     pub service_account_name: Option<String>,
     /// Where it stands in coming up, as its row says.
     pub start: crate::resources::PodStart,
+    pub workload: Option<super::PodWorkload>,
 }
 
 /// A volume the pod declares, and the objects it draws from.
@@ -373,6 +374,7 @@ impl From<&Pod> for PodInfo {
             volumes: spec.map(pod_volumes).unwrap_or_default(),
             service_account_name: spec.and_then(|s| s.service_account_name.clone()),
             start: crate::resources::pod_start(pod),
+            workload: super::PodWorkload::of(pod),
         }
     }
 }

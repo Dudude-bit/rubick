@@ -1,5 +1,5 @@
 {
-  "about": "A StatefulSet's or DaemonSet's verdict once its pods are asked, as both halves read it: `with_starts` in src/tauri/src/resources/workloads/rollout.rs (the page, the peek, Share, Needs attention and Connections) and `withStarts` in src/ui/lib/workload-status.ts (the list). Neither kind writes a condition that tells a pod still starting from one that never will, so a set short of available pods is coming up only while some pod is still starting and none shows a fault. Each pod arrives as `pod_start` read it in Rust: settled (ready, finished or terminating), starting until an instant, or failing. A start whose instant has passed is the fault. No pod starting means nothing explains the gap: a pod the controller could not create looks exactly like that, so the set stays short. Every state but short passes through.",
+  "about": "A Deployment's, StatefulSet's or DaemonSet's verdict once its pods are asked, as both halves read it: `with_starts` in src/tauri/src/resources/workloads/rollout.rs (the page, the peek, Share, Needs attention, the census and Connections) and `withStarts` in src/ui/lib/workload-status.ts (the lists). Neither set kind writes a condition that tells a pod still starting from one that never will, and a Deployment's scale leaves Progressing at NewReplicaSetAvailable, so a workload short of available pods is coming up only while some pod of its own is still starting and none shows a fault. A Deployment's own pods are those its ReplicaSets run. Each pod arrives as `pod_start` read it in Rust: settled (ready, finished or terminating), starting until an instant, or failing. A start whose instant has passed is the fault. No pod starting means nothing explains the gap: a pod the controller could not create looks exactly like that, so the workload stays short. Every state but short passes through.",
   "now": "2026-10-08T10:00:00Z",
   "cases": [
     {
@@ -10,6 +10,28 @@
         { "state": "starting", "until": "2026-10-08T10:05:00Z" }
       ],
       "is": { "state": "comingUp", "available": 1, "desired": 2 }
+    },
+    {
+      "name": "a Deployment scaled from 3 to 4 with its fourth pod being created is coming up",
+      "rollout": { "state": "short", "available": 3, "desired": 4 },
+      "pods": [
+        { "state": "settled" },
+        { "state": "settled" },
+        { "state": "settled" },
+        { "state": "starting", "until": "2026-10-08T10:01:00Z" }
+      ],
+      "is": { "state": "comingUp", "available": 3, "desired": 4 }
+    },
+    {
+      "name": "a Deployment scaled from 3 to 4 whose fourth pod cannot pull its image stays short",
+      "rollout": { "state": "short", "available": 3, "desired": 4 },
+      "pods": [
+        { "state": "settled" },
+        { "state": "settled" },
+        { "state": "settled" },
+        { "state": "failing" }
+      ],
+      "is": { "state": "short", "available": 3, "desired": 4 }
     },
     {
       "name": "a start that ran past its grace is the fault",

@@ -1979,6 +1979,12 @@ export interface PodRow {
   memoryRequests: string | null;
   memoryLimits: string | null;
   start: PodStart;
+  workload: PodWorkload | null;
+}
+
+export interface PodWorkload {
+  kind: string;
+  name: string;
 }
 
 export interface RowContainer {
@@ -2091,6 +2097,7 @@ export interface PodInfo {
   volumes: PodVolumeInfo[];
   serviceAccountName: string | null;
   start: PodStart;
+  workload: PodWorkload | null;
 }
 
 export interface PodVolumeInfo {

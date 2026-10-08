@@ -1,9 +1,7 @@
 //! Deployment-specific commands
 
 use crate::commands::filters::ResourceFilters;
-use crate::commands::helpers::{
-    get_resource_info, list_in_scope, list_resource_infos, ResourceContext,
-};
+use crate::commands::helpers::{list_in_scope, list_resource_infos, ResourceContext};
 use crate::error::Result;
 use crate::resources::{DeploymentInfo, PodInfo};
 use crate::state::AppState;
@@ -23,6 +21,27 @@ pub async fn list_deployments(
 
 list_in_scope!(list_deployments_in, Deployment, DeploymentInfo);
 
+async fn deployment_detail(
+    state: &AppState,
+    name: String,
+    namespace: Option<String>,
+) -> Result<DeploymentInfo> {
+    crate::validation::validate_name::<Deployment>(&name)?;
+    let ctx = ResourceContext::for_command(state, namespace)?;
+    let deployment: Deployment = ctx.namespaced_api().get(&name).await?;
+    let mut info = DeploymentInfo::from(&deployment);
+    let selector = deployment.spec.as_ref().map(|s| &s.selector);
+    info.rollout = crate::commands::workloads::with_own_pods(
+        &ctx,
+        info.rollout,
+        "Deployment",
+        &deployment.metadata,
+        selector,
+    )
+    .await;
+    Ok(info)
+}
+
 /// Get a single deployment by name
 #[tauri::command]
 pub async fn get_deployment(
@@ -30,7 +49,7 @@ pub async fn get_deployment(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<DeploymentInfo> {
-    get_resource_info::<Deployment, DeploymentInfo>(name, namespace, state).await
+    deployment_detail(&state, name, namespace).await
 }
 
 /// Delete a deployment
@@ -139,4 +158,120 @@ pub async fn get_deployment_pods(
     let pod_infos: Vec<PodInfo> = pods.items.iter().map(PodInfo::from).collect();
 
     Ok(pod_infos)
+}
+
+#[cfg(test)]
+mod detail_tests {
+    use super::*;
+    use crate::client::served::{
+        test_server::{connected, failure},
+        ServedIndex,
+    };
+    use crate::resources::Rollout;
+
+    fn pod(name: &str, replica_set: &str, ready: bool, waiting: &str) -> serde_json::Value {
+        let hash = replica_set.rsplit('-').next().unwrap_or_default();
+        serde_json::json!({
+            "metadata": {
+                "name": name,
+                "namespace": "shop",
+                "labels": { "app": "cart", "pod-template-hash": hash },
+                "creationTimestamp": (chrono::Utc::now() - chrono::Duration::seconds(2)).to_rfc3339(),
+                "ownerReferences": [{
+                    "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                    "name": replica_set, "uid": replica_set, "controller": true,
+                }],
+            },
+            "status": {
+                "phase": if ready { "Running" } else { "Pending" },
+                "conditions": [{ "type": "Ready", "status": if ready { "True" } else { "False" } }],
+                "containerStatuses": [{
+                    "name": "cart", "image": "cart", "imageID": "", "ready": ready, "restartCount": 0,
+                    "state": if ready { serde_json::json!({ "running": {} }) }
+                             else { serde_json::json!({ "waiting": { "reason": waiting } }) },
+                }],
+            },
+        })
+    }
+
+    /// `cart` the second after Dana scaled it from 3 to 4, as kubectl printed it.
+    fn cart() -> String {
+        serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": { "name": "cart", "namespace": "shop", "uid": "cart", "generation": 3 },
+            "spec": {
+                "replicas": 4,
+                "selector": { "matchLabels": { "app": "cart" } },
+                "template": { "metadata": { "labels": { "app": "cart" } } },
+            },
+            "status": {
+                "observedGeneration": 3, "replicas": 4, "updatedReplicas": 4,
+                "readyReplicas": 3, "availableReplicas": 3, "unavailableReplicas": 1,
+                "conditions": [
+                    {
+                        "type": "Available", "status": "True",
+                        "reason": "MinimumReplicasAvailable",
+                        "message": "Deployment has minimum availability.",
+                    },
+                    {
+                        "type": "Progressing", "status": "True",
+                        "reason": "NewReplicaSetAvailable",
+                        "message": "ReplicaSet \"cart-9df89489c\" has successfully progressed.",
+                    },
+                ],
+            },
+        })
+        .to_string()
+    }
+
+    /// The page, the peek and Share of `cart` with its fourth pod waiting as
+    /// `new_pod` says, or with the pod list refused when `new_pod` is empty.
+    /// A failing pod of `cart-legacy`, which shares the label, is always there.
+    async fn read(new_pod: &'static str) -> Rollout {
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/apis/apps/v1/namespaces/shop/deployments/cart" => (200, cart()),
+            "/api/v1/namespaces/shop/pods" if new_pod.is_empty() => failure(403, "Forbidden"),
+            "/api/v1/namespaces/shop/pods" => (
+                200,
+                serde_json::json!({
+                    "apiVersion": "v1", "kind": "PodList", "metadata": {},
+                    "items": [
+                        pod("cart-9df89489c-a1", "cart-9df89489c", true, ""),
+                        pod("cart-9df89489c-b2", "cart-9df89489c", true, ""),
+                        pod("cart-9df89489c-c3", "cart-9df89489c", true, ""),
+                        pod("cart-9df89489c-d4", "cart-9df89489c", false, new_pod),
+                        pod("cart-legacy-7f9c4-e5", "cart-legacy-7f9c4", false, "CrashLoopBackOff"),
+                    ],
+                })
+                .to_string(),
+            ),
+            _ => (404, "{}".into()),
+        })
+        .await;
+        deployment_detail(&state, "cart".into(), Some("shop".into()))
+            .await
+            .expect("the Deployment")
+            .rollout
+    }
+
+    /// Dana's scale read amber Degraded on the page while the fourth pod was
+    /// being created. Fails if the Deployment's own pods are not asked, if a
+    /// stuck one is let off, if another Deployment's pod is counted, or if a
+    /// refused pod list is taken for pods coming up.
+    #[tokio::test]
+    async fn a_deployment_scaling_up_reads_coming_up_only_while_its_new_pod_is_starting() {
+        assert_eq!(
+            read("ContainerCreating").await,
+            Rollout::ComingUp {
+                available: 3,
+                desired: 4
+            }
+        );
+        let short = Rollout::Short {
+            available: 3,
+            desired: 4,
+        };
+        assert_eq!(read("ImagePullBackOff").await, short);
+        assert_eq!(read("").await, short);
+    }
 }
