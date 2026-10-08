@@ -62,14 +62,17 @@ function ReasonCell({ row }: { row: { original: EventInfo } }) {
 const landingOf = (event: EventInfo) =>
   eventLanding(event.involvedObject.kind, event);
 
+/** A link to where the Event belongs; the row's whitespace is the peek. */
 function ObjectCell({ row }: { row: { original: EventInfo } }) {
   const subject = subjectOf(row.original);
+  const landing = landingOf(row.original);
   return (
     <ResourceRef
       kind={subject.kind}
       name={subject.name}
       namespace={subject.namespace}
-      linkOptions={landingOf(row.original)}
+      linkOptions={landing}
+      opens={landing ? "page" : "peek"}
     />
   );
 }

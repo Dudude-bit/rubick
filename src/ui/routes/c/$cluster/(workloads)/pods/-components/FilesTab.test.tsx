@@ -13,9 +13,13 @@ import { useLocaleStore } from "@/stores/localeStore";
 const listing = vi.fn<() => ListingState>();
 const stop = vi.fn();
 const reload = vi.fn();
+const listed = vi.fn();
 
 vi.mock("./useContainerFiles", () => ({
-  useContainerFiles: () => ({ state: listing(), stop, reload }),
+  useContainerFiles: (target: unknown) => {
+    listed(target);
+    return { state: listing(), stop, reload };
+  },
 }));
 
 vi.mock("@tauri-apps/plugin-dialog", () => ({ save: vi.fn() }));
@@ -38,9 +42,11 @@ vi.mock("@tanstack/react-virtual", () => ({
 }));
 
 const readContainerFile = vi.fn();
+const containerWorkingDir = vi.fn();
 vi.mock("@/lib/commands", () => ({
   commands: {
     readContainerFile: (...args: unknown[]) => readContainerFile(...args),
+    containerWorkingDir: (...args: unknown[]) => containerWorkingDir(...args),
     downloadContainerFile: vi.fn(),
   },
 }));
@@ -105,13 +111,24 @@ function pod(over: Partial<PodInfo> = {}): PodInfo {
   } as PodInfo;
 }
 
-function wrap(node: ReactElement) {
+/** Drawn once the tab has asked the container where it works. */
+async function wrap(node: ReactElement) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>{node}</QueryClientProvider>
   );
+  await waitFor(() =>
+    expect(screen.queryByText(/where it works/)).not.toBeInTheDocument()
+  );
+  return {
+    ...view,
+    rerender: (next: ReactElement) =>
+      view.rerender(
+        <QueryClientProvider client={client}>{next}</QueryClientProvider>
+      ),
+  };
 }
 
 const done = (
@@ -146,12 +163,15 @@ beforeEach(() => {
   listing.mockReset();
   stop.mockReset();
   reload.mockReset();
+  listed.mockReset();
   readContainerFile.mockReset();
+  containerWorkingDir.mockReset();
+  containerWorkingDir.mockResolvedValue(null);
 });
 
 describe("FilesTab", () => {
   /** The listing starts where the pod's mounts are, and a row under a mount says so. */
-  it("lists from the first mount and tags rows with the mount they come from", () => {
+  it("lists from the first mount and tags rows with the mount they come from", async () => {
     listing.mockReturnValue(
       done([
         {
@@ -176,7 +196,7 @@ describe("FilesTab", () => {
         },
       ])
     );
-    wrap(
+    await wrap(
       <FilesTab
         pod={pod()}
         via={null}
@@ -206,9 +226,9 @@ describe("FilesTab", () => {
    * Marco's breadcrumb read "/ / var / run": the root crumb is a slash and a
    * separator followed it. Fails if a separator comes back after the root.
    */
-  it("draws the path from the root with one slash between names", () => {
+  it("draws the path from the root with one slash between names", async () => {
     listing.mockReturnValue(done([file("..data", { kind: "dir" })]));
-    wrap(
+    await wrap(
       <FilesTab
         pod={pod()}
         via={null}
@@ -224,8 +244,9 @@ describe("FilesTab", () => {
     ).toBe("/etc/app");
   });
 
-  it("tags each file in the service account volume with the source that wrote it", () => {
+  it("tags each file in the service account volume with the source that wrote it", async () => {
     const at = "/var/run/secrets/kubernetes.io/serviceaccount";
+    containerWorkingDir.mockResolvedValue(at);
     listing.mockReturnValue(
       done([
         file("..2026_10_06_21_20_13.2911439", { kind: "dir", size: 100 }),
@@ -238,7 +259,7 @@ describe("FilesTab", () => {
         file("token", { kind: "symlink", target: "..data/token" }),
       ])
     );
-    wrap(
+    await wrap(
       <FilesTab
         pod={pod({
           volumes: [
@@ -284,14 +305,98 @@ describe("FilesTab", () => {
   });
 
   /**
+   * The owner's pods all opened on the service account token directory, the
+   * first mount, while the app lives in its working directory. Fails if the
+   * tab opens anywhere else, or the mounts stop being one click away.
+   */
+  it("opens where the container works, with its mounts one click away", async () => {
+    containerWorkingDir.mockResolvedValue("/srv/app");
+    listing.mockReturnValue(done([file("server.js")]));
+    await wrap(
+      <FilesTab
+        pod={pod({
+          volumes: [
+            {
+              name: "kube-api-access-6xk2p",
+              source: "projected",
+              refs: [],
+              mounts: [
+                {
+                  container: "app",
+                  path: "/var/run/secrets/kubernetes.io/serviceaccount",
+                  readOnly: true,
+                  subPath: null,
+                },
+              ],
+              projections: [],
+            },
+            ...pod().volumes,
+          ],
+        })}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(containerWorkingDir).toHaveBeenCalledWith(
+      "crash-demo",
+      "k8s-gui-test",
+      "app"
+    );
+    expect(
+      screen.getByRole("grid", { name: "Files in /srv/app" })
+    ).toBeInTheDocument();
+    expect(listed).toHaveBeenLastCalledWith(
+      expect.objectContaining({ path: "/srv/app" })
+    );
+    expect(
+      screen.queryByRole("button", {
+        name: "/var/run/secrets/kubernetes.io/serviceaccount",
+      })
+    ).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: "/etc/app" }));
+    expect(
+      screen.getByRole("grid", { name: "Files in /etc/app" })
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "/srv/app" }));
+    expect(
+      screen.getByRole("grid", { name: "Files in /srv/app" })
+    ).toBeInTheDocument();
+  });
+
+  /** Fails if a path is drawn, or a listing started, before the container has said where it works. */
+  it("says it is asking where the container works until it answers", async () => {
+    containerWorkingDir.mockReturnValue(new Promise(() => {}));
+    listing.mockReturnValue({ phase: "idle" });
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <FilesTab
+          pod={pod()}
+          via={null}
+          onDebug={() => {}}
+          onStopVia={() => {}}
+        />
+      </QueryClientProvider>
+    );
+    expect(
+      await screen.findByText("Asking app where it works…")
+    ).toBeInTheDocument();
+    expect(screen.queryAllByTestId("files-crumb")).toHaveLength(0);
+    expect(screen.queryByRole("grid")).toBeNull();
+    expect(listed).toHaveBeenCalled();
+    expect(listed.mock.calls.every(([target]) => target === null)).toBe(true);
+  });
+
+  /**
    * Lena's Files tab read "5 записей · 0.2 с": a decimal point in Russian.
    * Fails if the seconds skip the reader's decimal mark.
    */
-  it("writes the seconds a listing took in the reader's decimal mark", () => {
+  it("writes the seconds a listing took in the reader's decimal mark", async () => {
     useLocaleStore.setState({ choice: "ru" });
     try {
       listing.mockReturnValue(done([file("app.conf")], { elapsedMs: 240 }));
-      wrap(
+      await wrap(
         <FilesTab
           pod={pod()}
           via={null}
@@ -318,7 +423,7 @@ describe("FilesTab", () => {
       stderr: "",
       tried: ["find", "sh"],
     });
-    wrap(
+    await wrap(
       <FilesTab pod={pod()} via={null} onDebug={onDebug} onStopVia={() => {}} />
     );
     expect(
@@ -335,8 +440,11 @@ describe("FilesTab", () => {
     await userEvent.click(
       screen.getByRole("button", { name: "Read the pod's mounts instead" })
     );
-    expect(screen.getByText("/etc/app")).toBeInTheDocument();
-    expect(screen.getByText(/ConfigMap demo-config/)).toBeInTheDocument();
+    const mounts = screen.getByRole("list");
+    expect(within(mounts).getByText("/etc/app")).toBeInTheDocument();
+    expect(
+      within(mounts).getByText(/ConfigMap demo-config/)
+    ).toBeInTheDocument();
   });
 
   /**
@@ -354,7 +462,7 @@ describe("FilesTab", () => {
       stderr: "",
       tried: ["find", "sh"],
     });
-    wrap(
+    await wrap(
       <TooltipProvider>
         <FilesTab
           pod={pod()}
@@ -373,9 +481,9 @@ describe("FilesTab", () => {
     expect(onDebug).not.toHaveBeenCalled();
   });
 
-  it("says an empty directory is empty only once the tool has said so", () => {
+  it("says an empty directory is empty only once the tool has said so", async () => {
     listing.mockReturnValue(done([]));
-    wrap(
+    await wrap(
       <FilesTab
         pod={pod()}
         via={null}
@@ -390,14 +498,14 @@ describe("FilesTab", () => {
     ).toBeInTheDocument();
   });
 
-  it("does not exec into a container that is not running", () => {
+  it("does not exec into a container that is not running", async () => {
     listing.mockReturnValue({ phase: "idle" });
     const stopped = pod();
     stopped.containers[0].state = {
       type: "waiting",
       reason: "CrashLoopBackOff",
     };
-    wrap(
+    await wrap(
       <FilesTab
         pod={stopped}
         via={null}
@@ -408,10 +516,108 @@ describe("FilesTab", () => {
     expect(screen.getByText(/Container app is waiting/)).toBeInTheDocument();
   });
 
+  /**
+   * Marco's stopped worker showed "filter 0 names" and a full path though
+   * nothing was or would be read. Fails if either is drawn before there is
+   * a listing, or the filter before there are names to filter.
+   */
+  it("draws no path before a listing and no filter before there are names", async () => {
+    listing.mockReturnValue({ phase: "idle" });
+    const stopped = pod();
+    stopped.containers[0].state = {
+      type: "waiting",
+      reason: "CrashLoopBackOff",
+    };
+    const view = await wrap(
+      <FilesTab
+        pod={stopped}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(screen.queryAllByTestId("files-crumb")).toHaveLength(0);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    view.unmount();
+
+    listing.mockReturnValue({ phase: "reading", entries: [], startedAt: 0 });
+    const reading = await wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(screen.getAllByTestId("files-crumb").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    reading.unmount();
+
+    listing.mockReturnValue(done([file("app.conf")]));
+    await wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(
+      screen.getByRole("textbox", { name: "filter 1 name…" })
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The same tab told Marco a debug container could read the stopped
+   * container's files while Debug was greyed for his account. Fails if the
+   * way in is suggested to an account the cluster refuses it, or withheld
+   * from one it allows.
+   */
+  it("offers a debug container for a stopped container only where it may be added", async () => {
+    listing.mockReturnValue({ phase: "idle" });
+    const stopped = pod();
+    stopped.containers[0].state = {
+      type: "waiting",
+      reason: "CrashLoopBackOff",
+    };
+    const onDebug = vi.fn();
+    const refused = await wrap(
+      <FilesTab
+        pod={stopped}
+        via={null}
+        onDebug={onDebug}
+        onStopVia={() => {}}
+        debugDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods/ephemeralcontainers -n shop."
+      />
+    );
+    expect(
+      screen.queryByRole("button", { name: "Open through a debug container" })
+    ).toBeNull();
+    expect(document.body.textContent).not.toContain("debug container");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Read the pod's mounts instead" })
+    );
+    expect(screen.getByRole("list")).toHaveTextContent("/etc/app");
+    refused.unmount();
+
+    await wrap(
+      <FilesTab
+        pod={stopped}
+        via={null}
+        onDebug={onDebug}
+        onStopVia={() => {}}
+      />
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open through a debug container" })
+    );
+    expect(onDebug).toHaveBeenCalledWith("app");
+  });
+
   /** A listing through a debug container is a different reading and the tab says so. */
-  it("names the debug container it reads through", () => {
+  it("names the debug container it reads through", async () => {
     listing.mockReturnValue(done([]));
-    wrap(
+    await wrap(
       <FilesTab
         pod={pod()}
         via={{ container: "debugger-x7k2", root: "/proc/1/root" }}
@@ -451,7 +657,7 @@ describe("FilesTab", () => {
         text: null,
       },
     });
-    wrap(
+    await wrap(
       <FilesTab
         pod={pod()}
         via={null}
@@ -498,7 +704,7 @@ describe("FilesTab", () => {
       },
     });
     const { save } = await import("@tauri-apps/plugin-dialog");
-    wrap(
+    await wrap(
       <FilesTab
         pod={pod()}
         via={null}
@@ -525,13 +731,13 @@ describe("FilesTab", () => {
    * nothing" are two different answers. Only the second one is emptiness, and
    * a listing that streams its rows in spends every read in the first.
    */
-  it("does not call a directory empty while the rows are still arriving", () => {
+  it("does not call a directory empty while the rows are still arriving", async () => {
     listing.mockReturnValue({
       phase: "reading",
       entries: [],
       startedAt: Date.now(),
     });
-    wrap(
+    await wrap(
       <FilesTab
         pod={pod()}
         via={null}
@@ -548,9 +754,9 @@ describe("FilesTab", () => {
    * not empty — nobody has any idea what is in it, and saying "empty" here
    * is the same lie as answering a 403 with an empty list.
    */
-  it("says what is in a directory is unknown when no line could be read", () => {
+  it("says what is in a directory is unknown when no line could be read", async () => {
     listing.mockReturnValue(done([], { unreadable: 4 }));
-    wrap(
+    await wrap(
       <FilesTab
         pod={pod()}
         via={null}
@@ -565,9 +771,9 @@ describe("FilesTab", () => {
   });
 
   /** A batch the event bridge dropped left a short listing drawn as the whole directory, or an empty one called empty. */
-  it("says rows were lost on the way instead of calling the listing whole", () => {
+  it("says rows were lost on the way instead of calling the listing whole", async () => {
     listing.mockReturnValue(done([file("a.log")], { lost: 500 }));
-    const view = wrap(
+    const view = await wrap(
       <FilesTab
         pod={pod()}
         via={null}
@@ -581,14 +787,12 @@ describe("FilesTab", () => {
 
     listing.mockReturnValue(done([], { lost: 300 }));
     view.rerender(
-      <QueryClientProvider client={new QueryClient()}>
-        <FilesTab
-          pod={pod()}
-          via={null}
-          onDebug={() => {}}
-          onStopVia={() => {}}
-        />
-      </QueryClientProvider>
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
     );
     expect(screen.queryByText(/is empty/)).toBeNull();
     expect(
@@ -614,7 +818,7 @@ describe("FilesTab", () => {
         text: "hello\uFFFDworld",
       },
     });
-    wrap(
+    await wrap(
       <FilesTab
         pod={pod()}
         via={null}
@@ -646,7 +850,7 @@ describe("FilesTab", () => {
         text: "one\ntwo\nthree",
       },
     });
-    wrap(
+    await wrap(
       <FilesTab
         pod={pod()}
         via={null}
@@ -676,7 +880,7 @@ describe("FilesTab", () => {
       stderr: "",
       tried: [],
     });
-    wrap(
+    await wrap(
       <FilesTab pod={pod()} via={null} onDebug={onDebug} onStopVia={() => {}} />
     );
     expect(
@@ -709,7 +913,7 @@ describe("FilesTab", () => {
         text: "hi",
       },
     });
-    wrap(
+    await wrap(
       <FilesTab
         pod={pod()}
         via={null}
@@ -739,7 +943,7 @@ describe("FilesTab", () => {
       phase: "sidecar",
       restartCount: 0,
     });
-    wrap(
+    await wrap(
       <FilesTab pod={two} via={null} onDebug={() => {}} onStopVia={() => {}} />
     );
     await userEvent.click(screen.getByRole("tab", { name: "sidecar" }));

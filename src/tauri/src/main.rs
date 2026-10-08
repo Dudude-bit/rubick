@@ -338,6 +338,7 @@ fn main() {
             commands::files::files_subscribed,
             commands::files::stop_files_listing,
             commands::files::read_container_file,
+            commands::files::container_working_dir,
             commands::files::download_container_file,
             commands::files::write_text_file,
             commands::sharing::list_share_targets,

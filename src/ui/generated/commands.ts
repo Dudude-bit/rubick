@@ -164,6 +164,18 @@ export async function stopFilesListing(streamId: string): Promise<void> {
   return invoke<void>("stop_files_listing", { streamId });
 }
 
+export async function containerWorkingDir(
+  pod: string,
+  namespace: string | null,
+  container: string
+): Promise<string | null> {
+  return invoke<string | null>("container_working_dir", {
+    pod,
+    namespace,
+    container,
+  });
+}
+
 export async function readContainerFile(
   pod: string,
   namespace: string | null,

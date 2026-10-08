@@ -5,6 +5,7 @@ import { crdFor, resourceSegment } from "@/lib/links";
 import {
   decide,
   eventLanding,
+  peekLanding,
   readerOver,
   type Exists,
   type Reader,
@@ -296,5 +297,36 @@ describe("where an Event about an object opens", () => {
       via: "events/shop/web.17f3",
     });
     expect(eventLanding("Lease", event)).toBeUndefined();
+  });
+
+  /**
+   * An Event about the HPA cart opened the Deployment cart, whose Events tab
+   * has none of the HPA's events. Fails if an attached kind's landing lets
+   * it go on to its parent, or if an unattached kind is pinned to itself.
+   */
+  it("keeps an attached kind on its own page", () => {
+    const event = { namespace: "shop", name: "cart.18dc" };
+    for (const kind of ["HorizontalPodAutoscaler", "Endpoints"])
+      expect(eventLanding(kind, event)).toEqual({
+        tab: "events",
+        via: "events/shop/cart.18dc",
+        view: "own",
+      });
+    expect(eventLanding("Deployment", event)?.view).toBeUndefined();
+  });
+
+  /** The peek's Open full page went where the row's link did not; fails if they part. */
+  it("sends the peek's full page where the row's link goes", () => {
+    expect(
+      peekLanding({
+        kind: "HorizontalPodAutoscaler",
+        via: "events/shop/cart.18dc",
+      })
+    ).toEqual(
+      eventLanding("HorizontalPodAutoscaler", {
+        namespace: "shop",
+        name: "cart.18dc",
+      })
+    );
   });
 });

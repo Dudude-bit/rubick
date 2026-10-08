@@ -1,6 +1,7 @@
 import type {
   FileEntry,
   PodVolumeInfo,
+  VolumeMountInfo,
   VolumeProjectionInfo,
 } from "@/generated/types";
 
@@ -120,21 +121,45 @@ export function mountFor(
   return best && tagOf(best.volume, best.at, path);
 }
 
+/** Where the kubelet mounts the service account token nobody declared by name. */
+const SERVICE_ACCOUNT_DIR = "/var/run/secrets/kubernetes.io/serviceaccount";
+
+/** This container's mounts, without the injected service account token. */
+export function declaredMounts(
+  volumes: readonly PodVolumeInfo[],
+  container: string
+): Array<{ volume: PodVolumeInfo; mount: VolumeMountInfo }> {
+  return volumes.flatMap((volume) =>
+    volume.mounts
+      .filter(
+        (mount) =>
+          mount.container === container && mount.path !== SERVICE_ACCOUNT_DIR
+      )
+      .map((mount) => ({ volume, mount }))
+  );
+}
+
 /**
- * Where the browser opens for a container: its first mount, because that
- * is what the reader came to look at. A mount with a `subPath` is often a
+ * The directory a mount is browsed from. A mount with a `subPath` is often a
  * single file (a ConfigMap key over `/etc/app/app.conf`), and a file cannot
  * be listed; the mount's parent can, and shows the file as a row.
  */
+export function mountDir(mount: VolumeMountInfo): string {
+  return mount.subPath ? parentOf(mount.path) : mount.path;
+}
+
+/**
+ * Where the browser opens for a container: where its own processes start,
+ * else the first mount the pod declares, else the root.
+ */
 export function startPath(
   volumes: readonly PodVolumeInfo[],
-  container: string
+  container: string,
+  workingDir: string | null
 ): string {
-  const mount = volumes
-    .flatMap((volume) => volume.mounts)
-    .find((m) => m.container === container);
-  if (!mount) return "/";
-  return mount.subPath ? parentOf(mount.path) : mount.path;
+  if (workingDir) return workingDir;
+  const [first] = declaredMounts(volumes, container);
+  return first ? mountDir(first.mount) : "/";
 }
 
 export function joinPath(dir: string, name: string): string {

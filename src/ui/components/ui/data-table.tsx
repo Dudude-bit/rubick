@@ -1063,6 +1063,8 @@ function DataTableInner<TData extends RowData>({
         event.preventDefault();
         event.stopPropagation();
         const keyboard = event.clientX === 0 && event.clientY === 0;
+        if (!keyboard)
+          holdTitles(event.target as HTMLElement, event.currentTarget, event);
         openMenu(
           index,
           keyboard ? undefined : { x: event.clientX, y: event.clientY }

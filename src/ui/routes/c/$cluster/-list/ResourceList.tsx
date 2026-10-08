@@ -556,7 +556,7 @@ export function ResourceList<
           // would otherwise still claim they are current.
           live={live && !resyncing}
           slowed={externalSlowed ?? (!live && queryResult.freshness.slowed)}
-          stale={stale}
+          stale={stale || (failed !== null && !isRefusal(failed))}
         />
       )}
       {headerContent}
@@ -680,6 +680,10 @@ export function ResourceList<
             isRefusal(failed)
               ? refusalWords
               : t("empty", "couldNotReadInScope", { label: emptyStateLabel })
+          }
+          onRetry={
+            onRetry ??
+            (data === undefined ? () => void queryResult.refetch() : undefined)
           }
         >
           <RefusalWayOut refusal={refusal} />

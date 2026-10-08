@@ -11,7 +11,13 @@ import {
   it,
   vi,
 } from "vite-plus/test";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Profiler, useState } from "react";
 
@@ -331,6 +337,89 @@ describe("a feed a watch keeps", () => {
     expect(search().via).toBe("events/shop/cart.17f3");
   });
 
+  /**
+   * Dana right-clicked an Event row and the message's tooltip sat over the
+   * menu's title and its Open item. Fails if the row keeps its titles while
+   * the menu opened at a pointer that has not moved, or loses them for good.
+   */
+  it("holds the row's tooltip back while its menu opens under a still pointer", async () => {
+    await watched();
+    burst([{ ...dated("shop", 0), message: "Synthetic event about cart" }]);
+    await waitFor(() => expect(drawnRows()).toBe(1));
+    const message = within(rowAt(0)!).getByTitle("Synthetic event about cart");
+
+    fireEvent.contextMenu(message, { clientX: 900, clientY: 194 });
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    expect(message).not.toHaveAttribute("title");
+
+    fireEvent.pointerMove(document, { clientX: 910, clientY: 240 });
+    expect(message).toHaveAttribute("title", "Synthetic event about cart");
+  });
+
+  /**
+   * Dana clicked the link "Deployment/cart" on an Event row and got the peek,
+   * though the link is the way to the page. Fails if a plain click on the
+   * object link opens anything but the object's Events tab with the Event.
+   */
+  it("opens the page from a plain click on the row's object link", async () => {
+    const { router } = await watched();
+    burst([
+      {
+        ...dated("shop", 0),
+        name: "cart.17f3",
+        involvedObject: {
+          kind: "Deployment",
+          name: "cart",
+          namespace: "shop",
+          uid: null,
+        },
+      },
+    ]);
+    await waitFor(() => expect(drawnRows()).toBe(1));
+    await userEvent.click(
+      within(rowAt(0)!).getByRole("link", { name: "Deployment cart" })
+    );
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        "/c/prod/deployments/shop/cart"
+      )
+    );
+    expect(router.state.location.search).toEqual({
+      tab: "events",
+      via: "events/shop/cart.17f3",
+    });
+  });
+
+  /**
+   * Sam's Event about the HPA cart ended on the Deployment cart, with none of
+   * the HPA's events. Fails if the row's link lets an attached kind go on to
+   * its parent.
+   */
+  it("opens an Event about an HPA on the HPA's own Events tab", async () => {
+    await watched();
+    burst([
+      {
+        ...dated("shop", 0),
+        name: "cart.18dc",
+        involvedObject: {
+          kind: "HorizontalPodAutoscaler",
+          name: "cart",
+          namespace: "shop",
+          uid: null,
+        },
+      },
+    ]);
+    await waitFor(() => expect(drawnRows()).toBe(1));
+    expect(
+      within(rowAt(0)!).getByRole("link", {
+        name: "HorizontalPodAutoscaler cart",
+      })
+    ).toHaveAttribute(
+      "href",
+      "/c/prod/horizontalpodautoscalers/shop/cart?tab=events&via=events%2Fshop%2Fcart.18dc&view=own"
+    );
+  });
+
   /** Dana's story title opened a peek that knew nothing of the Event. Fails if the card's link drops it. */
   it("links a story's object to its Events tab, noting the latest Event about it", async () => {
     await watched("stories");
@@ -359,6 +448,41 @@ describe("a feed a watch keeps", () => {
       "href",
       "/c/prod/deployments/shop/cart?tab=events&via=events%2Fshop%2Fcart.17f3"
     );
+  });
+
+  /** The story's title is the same link as the list's; fails if one opens the page and the other a peek. */
+  it("opens the page from a plain click on a story's object link", async () => {
+    const { router } = await watched("stories");
+    burst([
+      {
+        ...event("shop", 0),
+        name: "cart.17f3",
+        type: "Warning",
+        reason: "ProgressDeadlineExceeded",
+        involvedObject: {
+          kind: "Deployment",
+          name: "cart",
+          namespace: "shop",
+          uid: null,
+        },
+        lastTimestamp: new Date(Date.now() - 60_000).toISOString(),
+      },
+    ]);
+    const card = await screen.findByRole("article", {
+      name: "Deployment cart",
+    });
+    await userEvent.click(
+      within(card).getByRole("link", { name: "Deployment cart" })
+    );
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        "/c/prod/deployments/shop/cart"
+      )
+    );
+    expect(router.state.location.search).toMatchObject({
+      tab: "events",
+      via: "events/shop/cart.17f3",
+    });
   });
 
   /** Dana could not sort the feed by Age as every list sorts. Fails if the header stops sorting. */
@@ -578,6 +702,31 @@ describe("a feed a watch keeps", () => {
       await screen.findByText(/across the whole cluster was refused/)
     ).toBeInTheDocument();
     expect(screen.queryByText(/Nothing happened in/)).not.toBeInTheDocument();
+  });
+});
+
+describe("a feed whose first read fails", () => {
+  /**
+   * Dana opened Events after the cluster began answering 502 and got a bare
+   * red sentence, while the Deployments list said "read failing" and offered
+   * the read again. Fails if the feed says less than the lists do.
+   */
+  it("says the read is failing and offers it again", async () => {
+    listEvents.mockRejectedValue(new Error("502 Bad Gateway"));
+    await mount();
+    expect(
+      await screen.findByText("Could not read the events in any namespace:")
+    ).toBeInTheDocument();
+    expect(screen.getByText("read failing")).toBeInTheDocument();
+
+    listEvents.mockResolvedValue(feed("prod", 1));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("prod-pod-0")
+    );
+    expect(screen.queryByText("read failing")).not.toBeInTheDocument();
   });
 });
 
@@ -1017,6 +1166,11 @@ describe("stories", () => {
     expect(
       within(heading.parentElement!).queryByTestId("section-count")
     ).toBeNull();
+    // Refused again on every retry, so neither failing nor offered again.
+    expect(screen.queryByText("read failing")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Try the read again" })
+    ).not.toBeInTheDocument();
   });
 
   /**

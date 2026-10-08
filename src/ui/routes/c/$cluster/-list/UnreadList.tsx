@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { FolderOpen, Lock } from "lucide-react";
+import { FolderOpen, Lock, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/useT";
@@ -11,12 +11,16 @@ import type { ListRefusal } from "./useListRefusal";
 export function UnreadList({
   error,
   words,
+  onRetry,
   children,
 }: {
   error: Error;
   words: string;
+  /** Ask again; not offered for a refusal, which would be refused the same way. */
+  onRetry?: () => void;
   children?: ReactNode;
 }) {
+  const t = useT();
   return (
     <div className="max-w-[68ch] pb-8" data-testid="unread-list">
       <p className="flex items-center gap-1.5 text-xs text-err">
@@ -28,6 +32,12 @@ export function UnreadList({
       <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
         {errorToShow(error)}
       </p>
+      {onRetry && !isRefusal(error) && (
+        <Button size="sm" variant="outline" className="mt-2" onClick={onRetry}>
+          <RefreshCw className="mr-1.5 h-3 w-3" aria-hidden="true" />
+          {t("empty", "unknownRetry")}
+        </Button>
+      )}
       {children}
     </div>
   );

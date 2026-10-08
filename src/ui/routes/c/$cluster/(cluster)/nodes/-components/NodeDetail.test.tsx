@@ -560,4 +560,38 @@ describe("NodeDetail for a reader who may read nodes and not change them", () =>
     fireEvent.click(screen.getByRole("button", { name: "Cordon" }));
     expect(commands.cordonNode).not.toHaveBeenCalled();
   });
+
+  /**
+   * Debug node creates a pod, which this reader may not do in the namespace
+   * it would go into. Fails if the page offers it as runnable or opens the
+   * dialog with a live Start.
+   */
+  it("greys Debug node with the can-i question for the pod it creates", async () => {
+    vi.mocked(useResourceDetail).mockReturnValue(
+      defaultUseResourceDetailReturn(buildNode()) as unknown as ReturnType<
+        typeof useResourceDetail
+      >
+    );
+    vi.mocked(commands.checkAccess).mockImplementation(
+      async (queries: AccessQuery[]) =>
+        queries.map((query) => ({ ...query, allowed: false }))
+    );
+    useClusterStore.setState((s) => ({
+      currentContext: "prod",
+      namespaceScope: ["shop"],
+      isConnected: true,
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+    await renderPage();
+    const debug = () => screen.getByRole("button", { name: "Debug node" });
+    await waitFor(() =>
+      expect(debug()).toHaveAttribute("aria-disabled", "true")
+    );
+    fireEvent.focus(debug());
+    expect(
+      (await screen.findAllByText(/can-i create pods -n shop\./)).length
+    ).toBeGreaterThan(0);
+    fireEvent.click(debug());
+    expect(screen.queryByTestId("debug-dialog")).toBeNull();
+  });
 });

@@ -548,7 +548,7 @@ export function Events() {
               dataUpdatedAt={freshness.dataUpdatedAt}
               live={watching && !watch.resyncing}
               slowed={!fromWatch && freshness.slowed}
-              stale={stale}
+              stale={stale || (nothingRead && !isRefusal(failed))}
             />
             <ShareScreenAction
               screen={{ title: "Events", namespace: currentNamespace }}
@@ -578,6 +578,9 @@ export function Events() {
               failed={failed}
               everyNamespace={scope.isAll}
               scopeWords={scope.inWords}
+              onRetry={() =>
+                several ? parts.refetch() : void single.refetch()
+              }
             />
           ) : view === "stories" ? (
             stories.length === 0 ? (
@@ -656,10 +659,12 @@ function UnreadFeed({
   failed,
   everyNamespace,
   scopeWords,
+  onRetry,
 }: {
   failed: Error;
   everyNamespace: boolean;
   scopeWords: string;
+  onRetry: () => void;
 }) {
   const t = useT();
   const refusal = useListRefusal(failed, everyNamespace, EVENTS);
@@ -672,6 +677,7 @@ function UnreadFeed({
             ? refusal.words
             : t("empty", "eventsRefused", { scope: scopeWords })
         }
+        onRetry={onRetry}
       >
         <RefusalWayOut refusal={refusal} />
       </UnreadList>

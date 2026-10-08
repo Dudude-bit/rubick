@@ -246,7 +246,7 @@ export function Crds() {
         }
         dataUpdatedAt={dataUpdatedAt}
         slowed={freshness.slowed}
-        stale={!!crdsError && crds.length > 0}
+        stale={!!crdsError && (crds.length > 0 || !isRefusal(crdsError))}
       />
       {crdsError && crds.length > 0 && (
         <StaleRows
@@ -268,6 +268,7 @@ export function Crds() {
               ? t("nav", "noListAccess")
               : t("empty", "couldNotReadInScope", { label: "CRDs" })
           }
+          onRetry={() => void refetch()}
         />
       ) : (
         <DataTable

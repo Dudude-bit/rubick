@@ -169,9 +169,36 @@ describe("startPath", () => {
    * back to opening on the mount path whatever the mount is.
    */
   it("opens a single-file mount at its parent, a directory mount at itself", () => {
-    expect(startPath(volumes("app.conf"), "app")).toBe("/etc/app");
-    expect(startPath(volumes(null), "app")).toBe("/etc/app/app.conf");
-    expect(startPath(volumes("app.conf"), "sidecar")).toBe("/");
+    expect(startPath(volumes("app.conf"), "app", null)).toBe("/etc/app");
+    expect(startPath(volumes(null), "app", null)).toBe("/etc/app/app.conf");
+    expect(startPath(volumes("app.conf"), "sidecar", null)).toBe("/");
+  });
+
+  /**
+   * Every pod opened on /var/run/secrets/kubernetes.io/serviceaccount, the
+   * token the kubelet injects. Fails if the working directory loses to a
+   * mount, or the injected token wins over a mount the pod declared.
+   */
+  it("opens where the container works, else on a mount the pod declared", () => {
+    const token: PodVolumeInfo = {
+      name: "kube-api-access-5dxdq",
+      source: "projected",
+      refs: [],
+      projections: [],
+      mounts: [
+        {
+          container: "app",
+          path: "/var/run/secrets/kubernetes.io/serviceaccount",
+          readOnly: true,
+          subPath: null,
+        },
+      ],
+    };
+    expect(startPath([token, ...volumes(null)], "app", "/srv")).toBe("/srv");
+    expect(startPath([token, ...volumes(null)], "app", null)).toBe(
+      "/etc/app/app.conf"
+    );
+    expect(startPath([token], "app", null)).toBe("/");
   });
 });
 

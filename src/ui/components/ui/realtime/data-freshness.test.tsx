@@ -24,6 +24,13 @@ describe("what the freshness reading claims", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
+  /** Fails if a read that failed before anything arrived says nothing in the header. */
+  it("says the read is failing, with no age, when nothing was ever read", () => {
+    wrap(<DataFreshness stale />);
+    expect(screen.getByText("read failing")).toBeInTheDocument();
+    expect(screen.queryByText(/ago/)).not.toBeInTheDocument();
+  });
+
   it("only says live when a watch is actually feeding the view", () => {
     wrap(<DataFreshness dataUpdatedAt={UPDATED} live />);
     expect(screen.getByText("live")).toBeInTheDocument();

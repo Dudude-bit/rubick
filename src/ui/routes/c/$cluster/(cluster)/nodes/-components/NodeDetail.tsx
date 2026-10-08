@@ -25,7 +25,6 @@ import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { conditionsMark, viewGlyph } from "@/components/object/detail-tab";
 import {
   ConditionRows,
-  DetailAction,
   ReasonedAction,
   UsageRow,
 } from "@/components/object/detail-blocks";
@@ -35,6 +34,7 @@ import { PodListCard } from "../../../-object/PodListCard";
 import { countMark, kindGlyph, podsMark } from "@/components/object/detail-tab";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNodeActions } from "./useNodeActions";
+import { useNodeDebugDenied, useNodeDebugNamespace } from "@/lib/access";
 import { errorToShow } from "@/lib/error-utils";
 import { formatWhen } from "@/lib/utils";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -185,6 +185,7 @@ export function NodeDetail() {
   });
 
   const actions = useNodeActions();
+  const debugDenied = useNodeDebugDenied(useNodeDebugNamespace());
 
   const events = useObjectEvents(ResourceType.Node, name, null, {
     refresh: "slow",
@@ -525,11 +526,12 @@ export function NodeDetail() {
               danger
               reason={actions.denied}
             />
-            <DetailAction
+            <ReasonedAction
               label={t("action", "debugNode")}
               icon={Bug}
               onClick={() => setDebugDialogOpen(true)}
               disabled={!node}
+              reason={debugDenied}
             />
           </>
         }

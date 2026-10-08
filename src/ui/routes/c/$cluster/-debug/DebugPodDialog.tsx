@@ -404,7 +404,7 @@ export function DebugPodDialog({
                   <p className="mt-0.5 text-[11px] text-fg-mut">
                     {t("action", "ephemeralModeHint")}
                   </p>
-                  <ModeRefusal reason={denied.ephemeral} />
+                  <Refusal reason={denied.ephemeral} />
                 </Label>
               </div>
               <div
@@ -436,7 +436,7 @@ export function DebugPodDialog({
                   <p className="mt-0.5 text-[11px] text-fg-mut">
                     {t("action", "copyPodModeHint")}
                   </p>
-                  <ModeRefusal reason={denied.copy} />
+                  <Refusal reason={denied.copy} />
                 </Label>
               </div>
             </RadioGroup>
@@ -543,7 +543,7 @@ export function DebugPodDialog({
 }
 
 /** A way in the cluster refuses this user, said under the way itself. */
-function ModeRefusal({ reason }: { reason?: string }) {
+export function Refusal({ reason }: { reason?: string }) {
   if (!reason) return null;
   return (
     <p className="mt-1 flex items-start gap-1.5 text-[11px] text-err">

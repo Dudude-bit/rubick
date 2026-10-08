@@ -15,6 +15,7 @@ vi.mock("@/lib/commands", async (original) => {
       getSecret: vi.fn(async () => SECRET),
       getDeployment: vi.fn(async () => WORKER),
       getPod: vi.fn(async () => API_POD),
+      getNode: vi.fn(async () => ({ name: "node01" })),
     },
   };
 });
@@ -418,5 +419,113 @@ describe("Debug for Marco, whose Role allows exec and port-forward and neither w
         actions.find((action) => action.id === "shell")?.reason
       ).toBeUndefined();
     });
+  });
+});
+
+describe("Debug node for Marco, who may create pods in no namespace", () => {
+  beforeEach(() => {
+    checkAccess.mockImplementation(marcoReview);
+  });
+
+  const debugNode = () => screen.getByRole("button", { name: /^Debug node$/ });
+
+  /**
+   * The Node peek offered Debug node at full brightness and its dialog a live
+   * red Start Debug, while the pod's own Debug was greyed. Fails if the peek
+   * offers it as runnable or without the can-i question.
+   */
+  it("is greyed in the Node peek with the can-i question", async () => {
+    await renderWithRouter(
+      <PeekActions
+        target={{ kind: "Node", name: "node01", namespace: null }}
+        detail={undefined}
+        onClose={vi.fn()}
+      />
+    );
+    await waitFor(() =>
+      expect(debugNode()).toHaveAttribute("aria-disabled", "true")
+    );
+    fireEvent.focus(debugNode());
+    expect(
+      (await screen.findAllByText(/can-i create pods -n team-checkout\./))
+        .length
+    ).toBeGreaterThan(0);
+    fireEvent.click(debugNode());
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  /** Fails if the Nodes list's row menu still offers it. */
+  it("is greyed in the Node row's menu", async () => {
+    await renderWithRouter(
+      <ResourceList
+        title="Nodes"
+        emptyStateLabel="nodes"
+        data={[{ name: "node01" }]}
+        columns={[
+          {
+            accessorKey: "name",
+            header: "Name",
+            cell: ({ row }) => (
+              <span data-testid="cell">{row.original.name}</span>
+            ),
+          },
+        ]}
+        getRowHref={(row) =>
+          hrefOf(objectLink({ kind: "Node", name: row.name })!)
+        }
+      />,
+      { at: "/c/acme-staging/nodes", route: "/c/$cluster/$" }
+    );
+    fireEvent.contextMenu(screen.getByTestId("cell"), {
+      clientX: 30,
+      clientY: 40,
+    });
+    const item = await screen.findByRole("menuitem", { name: /^Debug node/ });
+    await waitFor(() => expect(item).toHaveAttribute("data-disabled"));
+    expect(item.textContent).toContain("can-i create pods -n team-checkout");
+  });
+
+  /** Fails if Ctrl+K offers the Debug node the peek has greyed. */
+  it("comes to the palette with its reason", async () => {
+    const reports: ActionsReport[] = [];
+    await renderWithRouter(
+      <PaletteActionsHost
+        target={{
+          context: "acme-staging",
+          kind: "Node",
+          group: "",
+          plural: "nodes",
+          name: "node01",
+          namespace: null,
+        }}
+        onReport={(report) => {
+          reports.push(report);
+        }}
+        ref={{ current: null }}
+      />
+    );
+    await waitFor(() => {
+      const last = reports.at(-1);
+      const actions = last?.reading === "ready" ? last.actions : [];
+      expect(actions.find((action) => action.id === "debug")?.reason).toMatch(
+        /can-i create pods -n team-checkout\./
+      );
+    });
+  });
+
+  /** Fails if the guard shuts Debug node for a reader the review allows. */
+  it("stays offered where the review allows creating and entering a pod", async () => {
+    checkAccess.mockImplementation(async (queries: AccessQuery[]) =>
+      queries.map((query) => ({ ...query, allowed: true }))
+    );
+    await renderWithRouter(
+      <PeekActions
+        target={{ kind: "Node", name: "node01", namespace: null }}
+        detail={undefined}
+        onClose={vi.fn()}
+      />
+    );
+    await waitFor(() => expect(checkAccess).toHaveBeenCalled());
+    expect(debugNode()).not.toHaveAttribute("aria-disabled");
   });
 });

@@ -10,6 +10,7 @@ import {
   readOf,
   useRefusedAmong,
 } from "@/lib/refusals";
+import { seedScope } from "@/lib/namespace-scope";
 import { listQueryFor, toKind } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import type { ListQuery } from "@/generated/types";
@@ -202,6 +203,38 @@ export function usePodDenied(namespace: string | null): PodDenied {
         })
       : undefined;
   return { ephemeral, copy, debug, shell, portForward };
+}
+
+/**
+ * The namespace a node's debug pod goes into unless the reader types another:
+ * the one in view, else the kubeconfig context's, else `default`, as
+ * `kubectl debug node` picks.
+ */
+export function useNodeDebugNamespace(): string {
+  const scope = useClusterStore((s) => s.namespaceScope);
+  const configured = useClusterStore(
+    (s) => s.contexts.find((c) => c.name === s.currentContext)?.namespace
+  );
+  return scope[0] ?? seedScope(configured)[0] ?? "default";
+}
+
+/**
+ * Why a node's debug pod is not this user's to start in `namespace`: it is a
+ * new pod there, and the app's way into it afterwards is an exec.
+ */
+export function useNodeDebugDenied(
+  namespace: string | null
+): string | undefined {
+  const pods = namespace ? { group: "", resource: "pods", namespace } : null;
+  const [create, exec] = useDeniedOf(
+    pods
+      ? [
+          { ...pods, verb: "create" },
+          { ...pods, verb: "create", subresource: "exec" },
+        ]
+      : [null, null]
+  );
+  return create ?? exec;
 }
 
 /** Why the cluster will not take an edited manifest of this object from this user. */

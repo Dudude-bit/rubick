@@ -2178,8 +2178,10 @@ export const ru: Catalogue = {
       other: "фильтр по {n} именам…",
     },
     notRunning:
-      "Контейнер {container} в состоянии {state}: exec делать некуда. Его монтирования по-прежнему в поде, а debug-контейнер может прочитать файлы остановленного контейнера.",
+      "Контейнер {container} в состоянии {state}: exec делать некуда.",
     listingOf: "Файлы в {path}",
+    findingWorkingDir: "Узнаём рабочий каталог {container}…",
+    workingDirPlace: "Рабочий каталог {container}",
     mode: "Режим",
     size: "Размер",
     modified: "Изменён",
@@ -4610,6 +4612,7 @@ export const ru: Catalogue = {
     freshOfflineNote: "Нет подключения. Ничто на этом экране не обновляется.",
     freshStaleNote:
       "Последнее чтение не удалось, поэтому на экране данные последнего успешного чтения.",
+    freshNeverReadNote: "Чтение не удалось, а успешных чтений ещё не было.",
     lastRead: "Прочитано",
     justNow: "только что",
     agoSuffix: "назад.",

@@ -2092,8 +2092,10 @@ export const en = {
       other: "filter {n} names…",
     },
     notRunning:
-      "Container {container} is {state}: there is nothing to exec into. Its mounts are still on the pod, and a debug container can read a stopped container's files.",
+      "Container {container} is {state}: there is nothing to exec into.",
     listingOf: "Files in {path}",
+    findingWorkingDir: "Asking {container} where it works…",
+    workingDirPlace: "Working directory of {container}",
     mode: "Mode",
     size: "Size",
     modified: "Modified",
@@ -4131,6 +4133,8 @@ export const en = {
     freshOfflineNote: "Not connected. Nothing on this screen is updating.",
     freshStaleNote:
       "The last read failed, so what is on screen is from the last read that answered.",
+    freshNeverReadNote:
+      "The read failed, and no read of this has answered yet.",
     lastRead: "Last read",
     justNow: "just now",
     agoSuffix: "ago.",

@@ -15,6 +15,8 @@ import {
   File,
   FileSymlink,
   Folder,
+  HardDrive,
+  House,
   Square,
 } from "lucide-react";
 
@@ -24,14 +26,17 @@ import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useNow, useNowTenths } from "@/hooks/useNow";
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import {
   DOWNLOAD_CONFIRM_BYTES,
   DOWNLOAD_MAX_BYTES,
   PREVIEW_MAX_BYTES,
   crumbs,
+  declaredMounts,
   joinPath,
   matches,
   modeText,
+  mountDir,
   mountFor,
   startPath,
   parentOf,
@@ -103,9 +108,6 @@ export function FilesTab({
       ""
   );
   const container = containers.find((c) => c.name === containerName) ?? null;
-  const [path, setPath] = useState<string>(() =>
-    startPath(pod.volumes, containerName)
-  );
   const [sort, setSort] = useState<{ key: SortKey; descending: boolean }>({
     key: "name",
     descending: false,
@@ -128,9 +130,39 @@ export function FilesTab({
   const restartedSinceRead = sameContainer && life !== currentLife;
   const running = via !== null || container?.state.type === "running";
 
+  // Where the container's own processes start is where its files make
+  // sense; the first mount is usually the injected token directory.
+  const asksWorkingDir = running && via === null && container !== null;
+  const workingDir = useQuery({
+    queryKey: queryKeys.containerWorkingDir(
+      pod.namespace,
+      pod.uid,
+      containerName
+    ),
+    queryFn: () =>
+      commands.containerWorkingDir(pod.name, pod.namespace, containerName),
+    enabled: asksWorkingDir,
+    staleTime: Infinity,
+    retry: false,
+  });
+  const start =
+    asksWorkingDir && workingDir.isPending
+      ? null
+      : startPath(pod.volumes, containerName, workingDir.data ?? null);
+  const [picked, setPicked] = useState<{
+    container: string;
+    path: string;
+  } | null>(null);
+  const path = picked?.container === containerName ? picked.path : start;
+  const setPath = useCallback(
+    (next: string) => setPicked({ container: containerName, path: next }),
+    [containerName]
+  );
+  const mounts = declaredMounts(pod.volumes, containerName);
+
   const target = useMemo(
     () =>
-      container && running && !mountsOnly
+      container && running && !mountsOnly && path !== null
         ? {
             pod: pod.name,
             namespace: pod.namespace,
@@ -179,6 +211,7 @@ export function FilesTab({
 
   const open = useCallback(
     (entry: FileEntry) => {
+      if (path === null) return;
       if (entry.kind === "dir") {
         setPath(joinPath(path, entry.name));
         setSelected(null);
@@ -187,20 +220,21 @@ export function FilesTab({
         setSelected(entry.name);
       }
     },
-    [path]
+    [path, setPath]
   );
   const up = useCallback(() => {
+    if (path === null) return;
     setPath(parentOf(path));
     setSelected(null);
     setFilter("");
-  }, [path]);
+  }, [path, setPath]);
 
   const { toast } = useToast();
   const selectedEntry = rows.find((r) => r.name === selected) ?? null;
   const [bigDownload, setBigDownload] = useState(false);
   const download = useCallback(
     async (confirmed = false) => {
-      if (!selectedEntry || !container) return;
+      if (!selectedEntry || !container || path === null) return;
       // The button is disabled past the cap; ⌘S reached the same command with
       // nothing in its way, and the reader got a refusal from the backend
       // instead of the sentence the button's tooltip had been showing.
@@ -379,56 +413,76 @@ export function FilesTab({
         </Notice>
       )}
 
-      <div className="flex items-center gap-1 border-b border-hair px-3 py-1.5 font-mono text-[11px]">
-        {crumbs(path).map((crumb, i) => (
-          <span
-            key={crumb.path}
-            data-testid="files-crumb"
-            className="flex items-center gap-1"
-          >
-            {i > 1 && <span className="text-fg-fnt">/</span>}
-            <button
-              type="button"
-              onClick={() => {
-                setPath(crumb.path);
-                setSelected(null);
-              }}
-              className={cn(
-                "rounded px-1 hover:bg-hover",
-                crumb.path === path ? "text-fg" : "text-fg-mut"
-              )}
+      {target !== null && (
+        <div className="flex flex-wrap items-center gap-1 border-b border-hair px-3 py-1.5 font-mono text-[11px]">
+          {crumbs(target.path).map((crumb, i) => (
+            <span
+              key={crumb.path}
+              data-testid="files-crumb"
+              className="flex items-center gap-1"
             >
-              {crumb.name === "/" ? "/" : crumb.name}
-            </button>
-          </span>
-        ))}
-        <input
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder={t("files", "filterNames", {
-            n: state.phase === "idle" ? 0 : state.entries.length,
-          })}
-          className="ml-auto w-48 rounded border border-hair bg-canvas px-1.5 py-0.5 text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
-        />
-      </div>
+              {i > 1 && <span className="text-fg-fnt">/</span>}
+              <button
+                type="button"
+                onClick={() => {
+                  setPath(crumb.path);
+                  setSelected(null);
+                  setFilter("");
+                }}
+                className={cn(
+                  "rounded px-1 hover:bg-hover",
+                  crumb.path === path ? "text-fg" : "text-fg-mut"
+                )}
+              >
+                {crumb.name === "/" ? "/" : crumb.name}
+              </button>
+            </span>
+          ))}
+          <Places
+            container={containerName}
+            workingDir={workingDir.data ?? null}
+            mounts={mounts}
+            path={path}
+            onGo={(next) => {
+              setPath(next);
+              setSelected(null);
+              setFilter("");
+            }}
+          />
+          {entries.length > 0 && (
+            <input
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              aria-label={t("files", "filterNames", { n: entries.length })}
+              placeholder={t("files", "filterNames", { n: entries.length })}
+              className="ml-auto w-48 rounded border border-hair bg-canvas px-1.5 py-0.5 text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+            />
+          )}
+        </div>
+      )}
 
       {!running && !mountsOnly ? (
-        <Sentence>
-          {t("files", "notRunning", {
-            container: container.name,
-            state: container.state.type,
-          })}
-        </Sentence>
+        <NotRunning
+          container={container.name}
+          state={container.state.type}
+          onDebug={onDebug}
+          debugDenied={debugDenied}
+          onMounts={() => setMountsOnly(true)}
+        />
       ) : mountsOnly ? (
         <MountsOnly
           pod={pod}
           container={container.name}
           onBack={() => setMountsOnly(false)}
         />
+      ) : path === null ? (
+        <Sentence>
+          {t("files", "findingWorkingDir", { container: container.name })}
+        </Sentence>
       ) : state.phase === "failed" ? (
         <Failure
           state={state}
@@ -919,6 +973,107 @@ function Failure({
         {t("action", "retry")}
       </button>
     </div>
+  );
+}
+
+/**
+ * A container with nothing to exec into. A debug container is offered only
+ * to an account the cluster lets add one; a sentence pointing at a way in
+ * that is shut is advice nobody can follow.
+ */
+function NotRunning({
+  container,
+  state,
+  onDebug,
+  debugDenied,
+  onMounts,
+}: {
+  container: string;
+  state: string;
+  onDebug: (container: string) => void;
+  debugDenied?: string;
+  onMounts: () => void;
+}) {
+  const t = useT();
+  const link = "text-info hover:underline";
+  return (
+    <div className="px-3 py-6 text-xs">
+      <p className="text-fg-mut">
+        {t("files", "notRunning", { container, state })}
+      </p>
+      <p className="mt-3 flex gap-4">
+        <button type="button" onClick={onMounts} className={link}>
+          {t("files", "readMountsInstead")}
+        </button>
+        {!debugDenied && (
+          <button
+            type="button"
+            onClick={() => onDebug(container)}
+            className={link}
+          >
+            {t("files", "openViaDebug")}
+          </button>
+        )}
+      </p>
+    </div>
+  );
+}
+
+/** Where the reader can jump to: the working directory and each declared mount. */
+function Places({
+  container,
+  workingDir,
+  mounts,
+  path,
+  onGo,
+}: {
+  container: string;
+  workingDir: string | null;
+  mounts: ReturnType<typeof declaredMounts>;
+  path: string | null;
+  onGo: (path: string) => void;
+}) {
+  const t = useT();
+  const places = [
+    ...(workingDir
+      ? [
+          {
+            at: workingDir,
+            icon: House,
+            title: t("files", "workingDirPlace", { container }),
+          },
+        ]
+      : []),
+    ...mounts.map(({ volume, mount }) => ({
+      at: mountDir(mount),
+      icon: HardDrive,
+      title: `${mount.path} · ${sourceWords(volume)}${mount.readOnly ? " · ro" : ""}`,
+    })),
+  ].filter(
+    (place, index, all) => all.findIndex((p) => p.at === place.at) === index
+  );
+  if (places.length === 0) return null;
+  return (
+    <span className="ml-2 flex flex-wrap items-center gap-1">
+      {places.map(({ at, icon: Icon, title }) => (
+        <button
+          key={at}
+          type="button"
+          title={title}
+          aria-pressed={at === path}
+          onClick={() => onGo(at)}
+          className={cn(
+            "flex max-w-[220px] items-center gap-1 rounded border border-hair px-1.5 py-px",
+            at === path
+              ? "bg-sel text-fg"
+              : "text-fg-mut hover:bg-hover hover:text-fg"
+          )}
+        >
+          <Icon className="h-3 w-3 flex-none" aria-hidden="true" />
+          <span className="truncate">{at}</span>
+        </button>
+      ))}
+    </span>
   );
 }
 

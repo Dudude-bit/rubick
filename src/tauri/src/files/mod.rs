@@ -534,6 +534,28 @@ pub fn looks_binary(sample: &[u8]) -> bool {
     sample.contains(&0) || non_text_share(sample) > 0.3
 }
 
+/// The directory a process started in this container begins in: the spec's
+/// `workingDir`, else the image's `WORKDIR`. `None` with no shell to ask.
+pub async fn working_dir(
+    client: Client,
+    namespace: &str,
+    pod: &str,
+    container: &str,
+) -> Result<Option<String>> {
+    let command = ["sh", "-c", "pwd"].map(String::from);
+    let captured = exec_capture(client, namespace, pod, container, &command).await?;
+    Ok(working_dir_of(&captured))
+}
+
+fn working_dir_of(captured: &Captured) -> Option<String> {
+    if !captured.exit.ok() {
+        return None;
+    }
+    let said = std::str::from_utf8(&captured.stdout).ok()?;
+    let path = said.strip_suffix('\n').unwrap_or(said);
+    (path.starts_with('/') && !path.contains('\n')).then(|| path.to_string())
+}
+
 /// The first megabyte, and whether there is more.
 pub async fn read_preview(
     client: Client,
@@ -734,6 +756,32 @@ mod tests {
             }),
             ..Default::default()
         }
+    }
+
+    fn said(stdout: &str, code: Option<i32>) -> Captured {
+        Captured {
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: String::new(),
+            exit: Exit {
+                code,
+                missing_binary: false,
+                message: None,
+            },
+        }
+    }
+
+    /// The Files tab opens where this answer points; a path made of a
+    /// failed shell's output would open somewhere nobody chose.
+    #[test]
+    fn a_working_directory_is_one_absolute_line_from_a_shell_that_exited_0() {
+        assert_eq!(
+            working_dir_of(&said("/app\n", Some(0))).as_deref(),
+            Some("/app")
+        );
+        assert_eq!(working_dir_of(&said("/app\n", Some(127))), None);
+        assert_eq!(working_dir_of(&said("app\n", Some(0))), None);
+        assert_eq!(working_dir_of(&said("/a\n/b\n", Some(0))), None);
+        assert_eq!(working_dir_of(&said("", Some(0))), None);
     }
 
     /// A missing tool answered as "empty directory" is the one lie this
