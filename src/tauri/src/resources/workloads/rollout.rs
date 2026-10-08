@@ -34,11 +34,16 @@ pub enum Rollout {
     Unavailable {
         reason: Option<String>,
         message: Option<String>,
+        available: i32,
+        desired: i32,
     },
     Paused,
     /// The controller has not read the newest spec, so every count below
     /// describes the one before it.
-    Unobserved,
+    Unobserved {
+        available: i32,
+        desired: i32,
+    },
     RollingOut {
         updated: i32,
         desired: i32,
@@ -67,10 +72,26 @@ impl Rollout {
             Self::Stalled { .. } => "Stalled",
             Self::Unavailable { .. } => "Unavailable",
             Self::Paused => "Paused",
-            Self::Unobserved => "Waiting",
+            Self::Unobserved { .. } => "Waiting",
             Self::RollingOut { .. } | Self::ComingUp { .. } => "Progressing",
             Self::Short { .. } => "Degraded",
             Self::Ready => "Ready",
+        }
+    }
+
+    /// The available and wanted counts of a state whose gap its own pods can
+    /// explain as coming up, read by [`with_starts`].
+    #[must_use]
+    pub fn pods_can_explain(&self) -> Option<(i32, i32)> {
+        match *self {
+            Self::Short { available, desired }
+            | Self::Unobserved { available, desired }
+            | Self::Unavailable {
+                available: available @ 0,
+                desired,
+                ..
+            } if available < desired => Some((available, desired)),
+            _ => None,
         }
     }
 
@@ -96,15 +117,15 @@ pub fn deployment_rollout(deployment: &Deployment) -> Rollout {
     if desired <= 0 {
         return Rollout::Idle;
     }
+    let available = status.and_then(|s| s.available_replicas).unwrap_or(0);
     let observed = status.and_then(|s| s.observed_generation);
     if observed.is_none() {
-        return Rollout::Unobserved;
+        return Rollout::Unobserved { available, desired };
     }
     let conditions = status
         .and_then(|s| s.conditions.as_deref())
         .unwrap_or_default();
     let progressing = conditions.iter().find(|c| c.type_ == "Progressing");
-    let available = status.and_then(|s| s.available_replicas).unwrap_or(0);
     let updated = status.and_then(|s| s.updated_replicas).unwrap_or(0);
     let existing = status.and_then(|s| s.replicas).unwrap_or(0);
     let older_template = existing > updated;
@@ -125,13 +146,15 @@ pub fn deployment_rollout(deployment: &Deployment) -> Rollout {
         return Rollout::Unavailable {
             reason: down.reason.clone(),
             message: down.message.clone(),
+            available,
+            desired,
         };
     }
     if spec.and_then(|s| s.paused).unwrap_or(false) {
         return Rollout::Paused;
     }
     if behind(deployment.metadata.generation, observed) {
-        return Rollout::Unobserved;
+        return Rollout::Unobserved { available, desired };
     }
     if older_template {
         return Rollout::RollingOut { updated, desired };
@@ -160,23 +183,25 @@ pub fn statefulset_rollout(set: &StatefulSet) -> Rollout {
     if desired <= 0 {
         return Rollout::Idle;
     }
-    let observed = status.and_then(|s| s.observed_generation);
-    if observed.is_none() {
-        return Rollout::Unobserved;
-    }
     let ready = status.and_then(|s| s.ready_replicas).unwrap_or(0);
     // Clusters before 1.25 never write `availableReplicas`.
     let available = status.and_then(|s| s.available_replicas).unwrap_or(ready);
+    let observed = status.and_then(|s| s.observed_generation);
+    if observed.is_none() {
+        return Rollout::Unobserved { available, desired };
+    }
     let min_ready = spec.and_then(|s| s.min_ready_seconds).unwrap_or(0);
     let settling = settling(min_ready, ready, available, desired);
     if available == 0 && !settling {
         return Rollout::Unavailable {
             reason: None,
             message: None,
+            available,
+            desired,
         };
     }
     if behind(set.metadata.generation, observed) {
-        return Rollout::Unobserved;
+        return Rollout::Unobserved { available, desired };
     }
     let updated = status.and_then(|s| s.updated_replicas).unwrap_or(0);
     let strategy = spec.and_then(|s| s.update_strategy.as_ref());
@@ -220,16 +245,19 @@ fn settling(min_ready: i32, ready: i32, available: i32, desired: i32) -> bool {
 #[must_use]
 pub fn daemonset_rollout(set: &DaemonSet) -> Rollout {
     let Some(status) = set.status.as_ref() else {
-        return Rollout::Unobserved;
+        return Rollout::Unobserved {
+            available: 0,
+            desired: 0,
+        };
     };
-    if status.observed_generation.is_none() {
-        return Rollout::Unobserved;
-    }
     let desired = status.desired_number_scheduled;
+    let available = status.number_available.unwrap_or(0);
+    if status.observed_generation.is_none() {
+        return Rollout::Unobserved { available, desired };
+    }
     if desired <= 0 {
         return Rollout::Idle;
     }
-    let available = status.number_available.unwrap_or(0);
     let min_ready = set
         .spec
         .as_ref()
@@ -240,10 +268,12 @@ pub fn daemonset_rollout(set: &DaemonSet) -> Rollout {
         return Rollout::Unavailable {
             reason: None,
             message: None,
+            available,
+            desired,
         };
     }
     if behind(set.metadata.generation, status.observed_generation) {
-        return Rollout::Unobserved;
+        return Rollout::Unobserved { available, desired };
     }
     let updated = status.updated_number_scheduled.unwrap_or(0);
     let on_delete = set
@@ -320,8 +350,10 @@ pub fn pod_start(pod: &Pod) -> PodStart {
     })
 }
 
-/// A set short of available pods is coming up while some of its pods are
-/// still starting and none shows a fault; otherwise it stays as it read.
+/// A workload short of available pods, with none available yet, or whose
+/// newest spec its controller has not read, is coming up while some of its
+/// pods are still starting and none shows a fault; otherwise it stays as it
+/// read.
 ///
 /// `src/contracts/set-rollout-conformance.json` holds the answers, and
 /// `withStarts` in `src/ui/lib/workload-status.ts` owes the same ones.
@@ -331,7 +363,7 @@ pub fn with_starts<'a>(
     starts: impl IntoIterator<Item = &'a PodStart>,
     now: DateTime<Utc>,
 ) -> Rollout {
-    let Rollout::Short { available, desired } = rollout else {
+    let Some((available, desired)) = rollout.pods_can_explain() else {
         return rollout;
     };
     let mut coming = false;
@@ -442,9 +474,14 @@ mod tests {
             Rollout::Unavailable {
                 reason: None,
                 message: None,
+                available: 0,
+                desired: 0,
             },
             Rollout::Paused,
-            Rollout::Unobserved,
+            Rollout::Unobserved {
+                available: 0,
+                desired: 0,
+            },
             Rollout::RollingOut {
                 updated: 0,
                 desired: 0,
@@ -823,9 +860,15 @@ mod tests {
     fn a_spec_the_controller_has_not_read_is_unobserved() {
         let mut fresh = deployment(&settled(2), vec![minimum_available(), rolled_out()]);
         fresh.metadata.generation = Some(3);
-        assert_eq!(deployment_rollout(&fresh), Rollout::Unobserved);
+        assert!(matches!(
+            deployment_rollout(&fresh),
+            Rollout::Unobserved { .. }
+        ));
         fresh.status = None;
-        assert_eq!(deployment_rollout(&fresh), Rollout::Unobserved);
+        assert!(matches!(
+            deployment_rollout(&fresh),
+            Rollout::Unobserved { .. }
+        ));
     }
 
     #[test]
@@ -1277,5 +1320,98 @@ mod tests {
                 short
             );
         }
+    }
+
+    /// Dana's dana-slow, fresh at 0/1 with its only pod Running and waiting
+    /// out a readiness delay, read red Unavailable for four minutes while
+    /// Progressing was True. Fails if a pod inside its start window leaves it
+    /// Unavailable, or a stuck one is let off as coming up.
+    #[test]
+    fn a_fresh_deployment_whose_only_pod_is_starting_is_coming_up() {
+        let fresh = deployment(
+            &Counts {
+                desired: 1,
+                existing: 1,
+                updated: 1,
+                available: 0,
+            },
+            vec![
+                condition("Available", "False", "MinimumReplicasUnavailable", ""),
+                condition("Progressing", "True", "ReplicaSetUpdated", ""),
+            ],
+        );
+        let down = deployment_rollout(&fresh);
+        assert!(matches!(down, Rollout::Unavailable { .. }), "{down:?}");
+        let mut waiting = serving("dana-slow-1");
+        waiting.status.as_mut().expect("a status").conditions = None;
+        waiting.metadata.creation_timestamp =
+            serde_json::from_value(serde_json::json!(at(240))).expect("a time");
+        let now = Utc::now();
+
+        assert_eq!(
+            with_pods(down.clone(), &[waiting], now),
+            Rollout::ComingUp {
+                available: 0,
+                desired: 1
+            }
+        );
+        assert_eq!(
+            with_pods(
+                down.clone(),
+                &[waiting_on("dana-slow-1", "ImagePullBackOff")],
+                now
+            ),
+            down
+        );
+    }
+
+    /// Dana scaled orders-db from 1 to 2: for two seconds the header said
+    /// Waiting while kubectl already had orders-db-1 Pending on its claim.
+    /// Fails if a spec the controller has not read stays waiting with its new
+    /// pod already starting.
+    #[test]
+    fn a_set_whose_scale_is_not_yet_observed_is_coming_up_once_its_new_pod_exists() {
+        let mut scaled = statefulset(
+            2,
+            StatefulSetStatus {
+                replicas: 1,
+                ready_replicas: Some(1),
+                available_replicas: Some(1),
+                updated_replicas: Some(1),
+                current_revision: Some("db-1".to_string()),
+                update_revision: Some("db-1".to_string()),
+                ..Default::default()
+            },
+            None,
+        );
+        scaled.metadata.generation = Some(2);
+        let waiting = statefulset_rollout(&scaled);
+        assert_eq!(
+            waiting,
+            Rollout::Unobserved {
+                available: 1,
+                desired: 2
+            }
+        );
+        let mut claim = creating("orders-db-1");
+        let status = claim.status.as_mut().expect("a status");
+        status.container_statuses = None;
+        status.conditions.as_mut().expect("conditions")[0].status = "False".to_string();
+
+        assert_eq!(
+            with_pods(
+                waiting.clone(),
+                &[serving("orders-db-0"), claim],
+                Utc::now()
+            ),
+            Rollout::ComingUp {
+                available: 1,
+                desired: 2
+            }
+        );
+        assert_eq!(
+            with_pods(waiting.clone(), &[serving("orders-db-0")], Utc::now()),
+            waiting
+        );
     }
 }

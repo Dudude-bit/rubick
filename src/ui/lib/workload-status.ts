@@ -125,10 +125,26 @@ export function rolloutLine(rollout: Rollout, t: T): RolloutLine | null {
   }
 }
 
+/** The counts of a state whose gap the workload's own pods can explain as coming up. */
+function podsCanExplain(
+  rollout: Rollout
+): { available: number; desired: number } | null {
+  switch (rollout.state) {
+    case "short":
+    case "unobserved":
+      return rollout.available < rollout.desired ? rollout : null;
+    case "unavailable":
+      return rollout.available === 0 && rollout.desired > 0 ? rollout : null;
+    default:
+      return null;
+  }
+}
+
 /**
- * A set short of available pods is coming up while some of its pods are
- * still starting and none shows a fault; otherwise it stays as it read.
- * `with_starts` in `rollout.rs` answers the page, the peek and Needs
+ * A workload short of available pods, with none available yet, or whose
+ * newest spec its controller has not read, is coming up while some of its
+ * pods are still starting and none shows a fault; otherwise it stays as it
+ * read. `with_starts` in `rollout.rs` answers the page, the peek and Needs
  * attention, and `src/contracts/set-rollout-conformance.json` holds the two
  * equal.
  */
@@ -137,7 +153,8 @@ export function withStarts(
   starts: readonly PodStart[],
   now: number
 ): Rollout {
-  if (rollout.state !== "short") return rollout;
+  const counts = podsCanExplain(rollout);
+  if (!counts) return rollout;
   let coming = false;
   for (const start of starts) {
     if (start.state === "settled") continue;
@@ -148,8 +165,8 @@ export function withStarts(
   return coming
     ? {
         state: "comingUp",
-        available: rollout.available,
-        desired: rollout.desired,
+        available: counts.available,
+        desired: counts.desired,
       }
     : rollout;
 }

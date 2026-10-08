@@ -22,9 +22,15 @@ const t = ((section: string, key: string) => `${section}.${key}`) as T;
 const EVERY: Rollout[] = [
   { state: "idle" },
   { state: "stalled", message: "timed out", serving: 2 },
-  { state: "unavailable", reason: "MinimumReplicasUnavailable", message: null },
+  {
+    state: "unavailable",
+    reason: "MinimumReplicasUnavailable",
+    message: null,
+    available: 0,
+    desired: 2,
+  },
   { state: "paused" },
-  { state: "unobserved" },
+  { state: "unobserved", available: 1, desired: 2 },
   { state: "rollingOut", updated: 1, desired: 3 },
   { state: "comingUp", available: 1, desired: 2 },
   { state: "short", available: 2, desired: 3 },

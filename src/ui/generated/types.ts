@@ -2377,9 +2377,15 @@ export type ObjectFacts =
 export type Rollout =
   | { state: "idle" }
   | { state: "stalled"; message: string | null; serving: number }
-  | { state: "unavailable"; reason: string | null; message: string | null }
+  | {
+      state: "unavailable";
+      reason: string | null;
+      message: string | null;
+      available: number;
+      desired: number;
+    }
   | { state: "paused" }
-  | { state: "unobserved" }
+  | { state: "unobserved"; available: number; desired: number }
   | { state: "rollingOut"; updated: number; desired: number }
   | { state: "comingUp"; available: number; desired: number }
   | { state: "short"; available: number; desired: number }

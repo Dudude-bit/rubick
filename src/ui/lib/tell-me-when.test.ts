@@ -182,6 +182,8 @@ describe("a rollout", () => {
       state: "unavailable",
       reason: "MinimumReplicasUnavailable",
       message: null,
+      available: 0,
+      desired: 3,
     };
     const short: Rollout = { state: "short", available: 2, desired: 3 };
     expect(
@@ -509,7 +511,11 @@ describe("an action being followed", () => {
     expect(
       walk(after("restart"), [
         look(4, 4),
-        look(5, 4, { updated: 1, ready: 2 }, "8", { state: "unobserved" }),
+        look(5, 4, { updated: 1, ready: 2 }, "8", {
+          state: "unobserved",
+          available: 2,
+          desired: 5,
+        }),
         look(5, 5, { updated: 3, ready: 3 }, "9"),
       ])
     ).toEqual([

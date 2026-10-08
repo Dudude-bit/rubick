@@ -51,6 +51,7 @@ import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { useResourceDetail, useResourceMutation } from "@/hooks";
 import { useStatefulSetShare } from "./useStatefulSetShare";
+import { setReplicaSegments } from "./set-replicas";
 import { useConnections } from "@/hooks/useConnections";
 import {
   CountBlock,
@@ -240,27 +241,12 @@ export function StatefulSetDetail() {
                   <Composition
                     total={desired}
                     label={t("count", "replicasWanted", { n: desired })}
-                    segments={[
-                      {
-                        label: t("count", "readySegment", { n: ready }),
-                        count: ready,
-                        tone: "ok",
-                      },
-                      {
-                        label: t("count", "startingSegment", {
-                          n: Math.max(0, current - ready),
-                        }),
-                        count: Math.max(0, current - ready),
-                        tone: "warn",
-                      },
-                      {
-                        label: t("count", "notCreatedSegment", {
-                          n: Math.max(0, desired - current),
-                        }),
-                        count: Math.max(0, desired - current),
-                        tone: "err",
-                      },
-                    ]}
+                    segments={setReplicaSegments(
+                      { desired, current, ready },
+                      pods.length,
+                      statefulSet?.rollout,
+                      t
+                    )}
                     note={
                       statefulSet?.podManagementPolicy === "Parallel"
                         ? t("empty", "startedInParallel")

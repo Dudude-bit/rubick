@@ -19,8 +19,8 @@ use crate::commands::helpers::{
 };
 
 /// A workload's verdict with its own pods asked, where its counts alone say
-/// it is short: the counts cannot tell a pod still starting from one that
-/// never will. A pod list the cluster refuses leaves the verdict as the counts
+/// it is short, has none available or lag its spec: the counts cannot tell a
+/// pod still starting from one that never will. A pod list the cluster refuses leaves the verdict as the counts
 /// read it.
 pub(crate) async fn with_own_pods(
     ctx: &ResourceContext,
@@ -29,7 +29,7 @@ pub(crate) async fn with_own_pods(
     workload: &ObjectMeta,
     selector: Option<&LabelSelector>,
 ) -> Rollout {
-    if !matches!(rollout, Rollout::Short { .. }) {
+    if rollout.pods_can_explain().is_none() {
         return rollout;
     }
     let Some(query) = Selector::Query(selector).query_text() else {
