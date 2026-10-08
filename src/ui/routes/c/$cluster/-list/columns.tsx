@@ -8,6 +8,8 @@ import type { ColumnDef } from "@/components/ui/table-features";
 import { AgeHeader } from "@/components/ui/sortable-header";
 import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
+import type { T as Translate } from "@/i18n/useT";
+import { widestText } from "@/lib/text-width";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { MetricValue, UnitValue } from "@/components/ui/metric-value";
 import {
@@ -53,15 +55,33 @@ interface WithMemoryLimits {
  */
 export const NAME_CELL_PX = Math.ceil(31 * 7.2 + 2 * (14 + 4) + 20);
 
-/** `controlplane` (12 glyphs at 7.2px), the node's icon with its 4px gap, and a cell's padding; a longer name ends in an ellipsis, whole on hover. */
-export const NODE_CELL_PX = Math.ceil(12 * 7.2 + 14 + 20);
+/** `controlplane` (12 glyphs at 7.2px), the node's 10px icon, its 4px gap and the link's 4px of padding, and a cell's padding; a longer name ends in an ellipsis, whole on hover. */
+export const NODE_CELL_PX = Math.ceil(12 * 7.2 + 18 + 20);
+
+/** `ingress-nginx` and `cert-manager` whole: 14 glyphs at 7.2px and a cell's padding. */
+export const NAMESPACE_CELL_PX = Math.ceil(14 * 7.2 + 20);
 
 /** A status badge: its word in 11px mono at 6.6px a glyph, the 10px mark with its 4px gap, and a cell's padding. */
 export const statusCellPx = (glyphs: number) =>
   Math.ceil(glyphs * 6.6 + 14 + 20);
 
+/** The same badge around the widest of `words`, as they are drawn. */
+export const badgeCellPx = (words: readonly string[]) =>
+  widestText(words, "badge", 6.6) + 14 + 20;
+
 /** `1.81Gi` (6 glyphs at 7.2px) and a cell's padding; the bar beside a limit is the part that goes first. */
 export const METRIC_CELL_PX = Math.ceil(6 * 7.2 + 20);
+
+/** A metric cell, or the words it says when there is no value, whichever is wider. */
+export const metricCellFloor = (t: Translate) =>
+  Math.max(
+    METRIC_CELL_PX,
+    widestText(
+      [t("cluster", "metricNoSample"), t("cluster", "metricNotAvailable")],
+      "sans",
+      7.2
+    ) + 20
+  );
 
 /** "59 мин" and "999 д." are the widest ages, 41px of 12px Inter, and a cell's 20px of padding. */
 export const AGE_CELL_PX = 62;
@@ -104,6 +124,7 @@ export function createNamespaceColumn<
     size: 190,
     accessorKey: "namespace",
     header: columnHeader("columns", "namespace"),
+    meta: { floor: NAMESPACE_CELL_PX },
     cell: ({ row }) => (
       <span className="font-mono text-fg-mut">{row.original.namespace}</span>
     ),
@@ -152,7 +173,7 @@ export function createCpuColumn<
     id: "cpu",
     header: columnHeader("columns", "cpu"),
     meta: {
-      floor: METRIC_CELL_PX,
+      floor: metricCellFloor,
       share: (row: Row, t) =>
         typeof row.cpuMillicores === "number"
           ? formatUsage(row.cpuMillicores, "cpu")
@@ -185,7 +206,7 @@ export function createMemoryColumn<
     id: "memory",
     header: columnHeader("columns", "memory"),
     meta: {
-      floor: METRIC_CELL_PX,
+      floor: metricCellFloor,
       share: (row: Row, t) =>
         typeof row.memoryBytes === "number"
           ? formatUsage(row.memoryBytes, "memory")

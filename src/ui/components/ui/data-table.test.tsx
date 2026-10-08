@@ -19,6 +19,7 @@ import type { AnyRouter } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye } from "lucide-react";
 
+import { SCROLLBAR_REACH } from "./column-shares";
 import { buildTableRows } from "./data-table-rows";
 import { DataTable } from "./data-table";
 import type { RowGrouping } from "./row-grouping";
@@ -1147,6 +1148,56 @@ describe("column widths", () => {
         />
       );
       expect(screen.getByRole("table").style.minWidth).toBe("");
+    } finally {
+      roomy.mockRestore();
+    }
+  });
+
+  /** Fails if the port is only measured on first render, which on every list that loads first left the floors unapplied and its headers cut. */
+  it("applies its floors when the table arrives after the loading skeleton", async () => {
+    const columnsOf = [
+      { ...columns[0], size: 300, meta: { floor: 300 } },
+      { ...columns[1], size: 100, meta: { floor: 300 } },
+    ];
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    try {
+      const { rerender } = await wrapRerenderable(
+        <DataTable<Item> columns={columnsOf} data={[]} isLoading />
+      );
+      await act(async () => {
+        rerender(<DataTable<Item> columns={columnsOf} data={DATA} />);
+      });
+      expect(screen.getByRole("table").style.minWidth).toBe("600px");
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  /** Fails if a port that scrolls sideways lets its scrollbar lie over the last row, which ate every click on a one-row list. */
+  it("keeps the sideways scrollbar under the last row, only when the table scrolls", async () => {
+    const columnsOf = [
+      { ...columns[0], size: 300, meta: { floor: 300 } },
+      { ...columns[1], size: 100, meta: { floor: 300 } },
+    ];
+    const port = () => screen.getByRole("table").parentElement!;
+    const narrow = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    try {
+      await wrap(<DataTable<Item> columns={columnsOf} data={DATA} />);
+      expect(port().style.paddingBottom).toBe(`${SCROLLBAR_REACH}px`);
+    } finally {
+      narrow.mockRestore();
+    }
+    const roomy = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(900);
+    try {
+      cleanup();
+      await wrap(<DataTable<Item> columns={columnsOf} data={DATA} />);
+      expect(port().style.paddingBottom).toBe("");
     } finally {
       roomy.mockRestore();
     }

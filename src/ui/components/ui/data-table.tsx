@@ -57,6 +57,7 @@ import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { buildTableRows, type BodyItem } from "./data-table-rows";
 import {
   ACTIONS_CELL_GUTTER,
+  SIDEWAYS_SCROLLBAR_GUTTER,
   actionsColumnSize,
   tableLayout,
 } from "./column-shares";
@@ -410,27 +411,41 @@ function createActionsColumn<TData extends RowData>(
   };
 }
 
-/** The scroll port's width, which the column floors are pixels of. */
-function usePortWidth(ref: React.RefObject<HTMLElement | null>): number {
+/**
+ * The scroll port's width, which the column floors are pixels of, and the ref
+ * that attaches the port. A ref callback, because the port mounts after the
+ * loading skeleton, where an effect reading `ref.current` never saw it.
+ */
+function usePortWidth(
+  ref: React.RefObject<HTMLDivElement | null>
+): [number, (node: HTMLDivElement | null) => () => void] {
   const [width, setWidth] = React.useState(0);
-  React.useLayoutEffect(() => {
-    const node = ref.current;
-    if (!node) return;
-    setWidth(node.clientWidth);
-    if (typeof ResizeObserver === "undefined") return;
-    let frame = 0;
-    // A frame later, for the reason the virtualiser below measures in one.
-    const observer = new ResizeObserver(() => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => setWidth(node.clientWidth));
-    });
-    observer.observe(node);
-    return () => {
-      cancelAnimationFrame(frame);
-      observer.disconnect();
-    };
-  }, [ref]);
-  return width;
+  const attach = React.useCallback(
+    (node: HTMLDivElement | null) => {
+      ref.current = node;
+      let frame = 0;
+      let observer: ResizeObserver | undefined;
+      if (node) {
+        setWidth(node.clientWidth);
+        // A frame later, for the reason the virtualiser below measures in one.
+        observer =
+          typeof ResizeObserver === "undefined"
+            ? undefined
+            : new ResizeObserver(() => {
+                cancelAnimationFrame(frame);
+                frame = requestAnimationFrame(() => setWidth(node.clientWidth));
+              });
+        observer?.observe(node);
+      }
+      return () => {
+        ref.current = null;
+        cancelAnimationFrame(frame);
+        observer?.disconnect();
+      };
+    },
+    [ref]
+  );
+  return [width, attach];
 }
 
 /** Where a nav key wants to go, or null if it is not a nav key. */
@@ -762,7 +777,17 @@ function DataTableInner<TData extends RowData>({
   }, [ordered, selection]);
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
-  const portWidth = usePortWidth(scrollRef);
+  const [portWidth, attachPort] = usePortWidth(scrollRef);
+  // Floors are measured text: drawn again once the fonts they are measured in arrive.
+  const [, fontsArrived] = React.useReducer((n: number) => n + 1, 0);
+  React.useEffect(() => {
+    if (document.fonts?.status !== "loading") return;
+    let live = true;
+    void document.fonts.ready.then(() => live && fontsArrived());
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // The window is spliced into the table with spacer rows rather than
   // absolutely positioned ones: an out-of-flow `tr` leaves the fixed-layout
@@ -1216,7 +1241,7 @@ function DataTableInner<TData extends RowData>({
             // The scroll port has to be the element the header sticks to and
             // the element the virtualiser measures. Wrapping another div around
             // the table's own container gave it neither.
-            containerRef={scrollRef}
+            containerRef={attachPort}
             // Every column here declares a width, which is what makes fixed
             // layout safe: it stops the browser re-measuring columns from
             // content that changes on every watch tick.
@@ -1229,11 +1254,12 @@ function DataTableInner<TData extends RowData>({
             )}
             // A filled table takes its bound from the flex row above; only an
             // unfilled one falls back to the fixed port.
-            containerStyle={
-              shouldVirtualScroll && !fill
+            containerStyle={{
+              ...(shouldVirtualScroll && !fill
                 ? { maxHeight: virtualScrollHeight }
-                : undefined
-            }
+                : undefined),
+              ...(layout.scrolls ? SIDEWAYS_SCROLLBAR_GUTTER : undefined),
+            }}
           >
             <TableHeader
               ref={headerRef}

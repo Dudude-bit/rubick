@@ -13,7 +13,10 @@ import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
+  badgeCellPx,
 } from "../../../-list/columns";
+import { serviceVerdictLabels } from "@/lib/service-health";
+import { widestText } from "@/lib/text-width";
 import { createResourceListPage } from "../../../-list/createResourceListPage";
 import { None } from "@/components/ui/none";
 
@@ -29,10 +32,12 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
   createNameColumn<ServiceInfo>(ResourceType.Service),
   createNamespaceColumn<ServiceInfo>(),
   {
-    // "ExternalName" is the longest word this column ever holds.
     size: 120,
     accessorKey: "type",
     header: columnHeader("columns", "type"),
+    meta: {
+      floor: () => widestText(["ExternalName", "LoadBalancer"], "sans", 7) + 20,
+    },
     cell: ({ row }) => (
       <div className="flex min-w-0 flex-col">
         <span
@@ -54,10 +59,10 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     ),
   },
   {
-    // "ни один не готов" is the widest verdict here, whole at 1440px.
     size: 165,
     id: "health",
     header: columnHeader("columns", "endpoints"),
+    meta: { floor: (t) => badgeCellPx(serviceVerdictLabels(t)) },
     cell: ({ row }) => <HealthCell service={row.original} />,
   },
   {
@@ -92,10 +97,17 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     },
   },
   {
-    // Two `80:30080/TCP` mappings and a "+3" after them; a named port that
-    // still does not fit ends in an ellipsis, whole in its tooltip.
+    // Two mappings and a "+3" after them; a name longer than Cilium's
+    // `envoy-metrics` ends in an ellipsis, whole in its tooltip.
     size: 200,
     id: "ports",
+    meta: {
+      floor: () =>
+        widestText(["9964→9964"], "mono", 7.2) +
+        4 +
+        widestText(["envoy-metrics · TCP"], "caption", 6.2) +
+        20,
+    },
     accessorFn: (row) =>
       row.ports
         .map((port) =>
