@@ -157,6 +157,10 @@ function walk(value: unknown, path: string, out: Walked): void {
     return;
   }
   const said = String(value);
+  if (said === "") {
+    keep(out, { label: path, value: '""', mono: true });
+    return;
+  }
   keep(
     out,
     said.includes("\n") || said.length > DOCUMENT_CHARS
