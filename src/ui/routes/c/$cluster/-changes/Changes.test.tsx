@@ -8,6 +8,7 @@ import {
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useLocaleStore } from "@/stores/localeStore";
+import { formatWhen } from "@/lib/utils";
 import { renderWithRouter } from "@/test/render";
 import { Changes } from "./Changes";
 
@@ -168,11 +169,12 @@ describe("rows older than the running watch", () => {
   };
 
   /**
-   * Lena's lena-sandbox Changes read "Watching since 09:50:01" above rows
-   * from 09:34 to 09:46, recorded while the app watched all namespaces.
-   * Fails if the page or Share leaves those rows' source unsaid.
+   * Lena's lena-sandbox Changes read "Watching since 06:55:06" over a line
+   * saying it watched from 06:37: a scope change had retired one span and
+   * opened the next at the same moment. Fails if the page or Share dates the
+   * watch from the span instead of from where the unbroken watch began.
    */
-  it("says the app recorded them while it watched earlier, on the page and in Share", async () => {
+  it("dates an unbroken watch from where it began, on the page and in Share", async () => {
     useClusterStore.setState({
       isConnected: true,
       currentContext: "prod",
@@ -184,18 +186,48 @@ describe("rows older than the running watch", () => {
     });
 
     const collect = await mount();
-    const said = screen.getByText(
-      /^Rows before .+ were recorded by this app while it watched from .+ to .+$/
-    );
-    expect(said).toBeInTheDocument();
-    const watched = collect().find(
-      (section) => section.id === "changes-watched"
-    );
-    expect(watched?.body).toMatchObject({
-      text: expect.stringMatching(
-        /Watching since .+ · Rows before .+ were recorded by this app while it watched from .+ to .+/
-      ),
+    const since = `Watching since ${formatWhen(allNamespaces.from, "clock")}`;
+    expect(screen.getByText(since)).toBeInTheDocument();
+    expect(screen.queryByText(/were recorded by this app/)).toBeNull();
+    const utc = new Intl.DateTimeFormat("en", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone: "UTC",
+    }).format(allNamespaces.from);
+    const shared = collect().find((section) => section.id === "changes-watched")
+      ?.body as { text: string };
+    const sharedSince = `Watching since ${utc} UTC`;
+    expect(shared.text.slice(0, sharedSince.length)).toBe(sharedSince);
+    expect(shared.text.includes("were recorded")).toBe(false);
+  });
+
+  /** Fails if rows from a watch the app broke off are left without saying where they came from. */
+  it("says the app recorded them while it watched earlier, across a gap", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["lena-sandbox"],
     });
+    useChangeJournalStore.setState({
+      entries: [lenaRow("a", 50), lenaRow("b", 5)],
+      spans: {
+        prod: [
+          { from: NOW - 60 * MIN, seenAt: NOW - 40 * MIN, to: NOW - 40 * MIN },
+          { ...lenaSandbox, from: NOW - 30 * MIN },
+        ],
+      },
+    });
+
+    await mount();
+    expect(
+      screen.getByText(`Watching since ${formatWhen(NOW - 30 * MIN, "clock")}`)
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /^Rows before .+ were recorded by this app while it watched from .+ to .+$/
+      )
+    ).toBeInTheDocument();
   });
 
   /** Fails if the line is said where every row is the running watch's own. */

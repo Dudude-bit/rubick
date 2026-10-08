@@ -12,6 +12,7 @@ import {
   spansWatching,
   timelineOf,
   unwatchedWords,
+  watchedSince,
 } from "@/lib/changes";
 import { History, Lock } from "lucide-react";
 import { cn, formatTimeUnit, formatWhen } from "@/lib/utils";
@@ -69,7 +70,13 @@ export function Changes() {
       }).filter((item) => item.at !== null && item.at >= now - WINDOWS[window]),
     [mine, ours, covering, now, window]
   );
-  const watching = ours.find((span) => span.to === null);
+  const open = ours.find((span) => span.to === null);
+  // From the start of the unbroken watch, not of the span: a scope change
+  // retires one span and opens the next at the same moment.
+  const watching = open && {
+    ...open,
+    from: watchedSince(covering, now) ?? open.from,
+  };
   const refused = watching && unwatchedWords(watching, t);
   const earlier =
     watching && earlierRowsWords(covering, items, watching.from, t, moment);
