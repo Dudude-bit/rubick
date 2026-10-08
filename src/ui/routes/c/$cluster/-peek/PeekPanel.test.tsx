@@ -642,6 +642,23 @@ describe("PeekPanel", () => {
     );
   });
 
+  /**
+   * Dana opened a Deployment from an Event and the full page landed on
+   * Overview with no note. Fails if a peek opened for an Event forgets it
+   * on the way to the page.
+   */
+  it("opens a peek opened from an Event on the object's Events tab, noting the Event", async () => {
+    await wrap(`${POD_PEEK}&peekVia=events/k8s-gui-test/crash-demo.17f3`);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Open full page/ })
+    );
+    await waitFor(() =>
+      expect(location()).toBe(
+        "/c/prod/pods/k8s-gui-test/crash-demo-56588f6b8c-8bj9v?tab=events&via=events%2Fk8s-gui-test%2Fcrash-demo.17f3"
+      )
+    );
+  });
+
   // Radix owns Escape; a second listener here would close it twice.
   it("closes on Escape by dropping the parameter", async () => {
     await wrap(POD_PEEK);

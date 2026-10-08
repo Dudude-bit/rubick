@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
+import { eventLanding } from "../../-object/attachment";
 import { commands } from "@/lib/commands";
 import {
   densityOf,
@@ -123,6 +124,7 @@ export function StoryCard({
             name={subject.name}
             namespace={subject.namespace ?? undefined}
             showNamespace={showNamespace}
+            linkOptions={landingOfStory(story)}
           />
         ) : (
           <span className="font-mono text-fg">
@@ -386,4 +388,17 @@ function TimelineRow({
       </span>
     </li>
   );
+}
+
+/** The subject's Events tab, noting the latest Event written about the subject itself. */
+function landingOfStory(story: Story) {
+  const { kind, name } = story.subject;
+  if (!kind) return undefined;
+  const own = [...story.events]
+    .reverse()
+    .find(
+      (event) =>
+        event.involvedObject.kind === kind && event.involvedObject.name === name
+    );
+  return own ? eventLanding(kind, own) : undefined;
 }

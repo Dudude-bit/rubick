@@ -284,6 +284,81 @@ describe("a feed a watch keeps", () => {
   });
 
   /**
+   * Dana found no gesture on an Events row that reached the object's Events
+   * tab, and rows that answered neither a click nor a right click. Fails if
+   * the row's click, its object link, its double click or its menu forgets
+   * the Event, or if a kind with no Events tab is sent to one.
+   */
+  it("opens an Event's object on its Events tab from every gesture on the row", async () => {
+    const { router } = await watched();
+    const about = (kind: string, name: string, index: number): EventInfo => ({
+      ...dated("shop", index),
+      name: `${name}.17f3`,
+      involvedObject: { kind, name, namespace: "shop", uid: null },
+    });
+    burst([about("Deployment", "cart", 0), about("Service", "web", 1)]);
+    await waitFor(() => expect(drawnRows()).toBe(2));
+    const search = () => router.state.location.search as Record<string, string>;
+
+    await userEvent.click(within(rowAt(0)!).getByText("Started container"));
+    expect(search().peek).toBe("deployments/shop/cart");
+    expect(search().peekVia).toBe("events/shop/cart.17f3");
+
+    expect(
+      within(rowAt(0)!).getByRole("link", { name: "Deployment cart" })
+    ).toHaveAttribute(
+      "href",
+      "/c/prod/deployments/shop/cart?tab=events&via=events%2Fshop%2Fcart.17f3"
+    );
+    expect(
+      within(rowAt(1)!).getByRole("link", { name: "Service web" })
+    ).toHaveAttribute("href", "/c/prod/services/shop/web");
+
+    await userEvent.pointer({ keys: "[MouseRight]", target: rowAt(1)! });
+    expect(await screen.findByRole("menu")).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+
+    await userEvent.dblClick(within(rowAt(0)!).getByText("Started container"));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        "/c/prod/deployments/shop/cart"
+      )
+    );
+    expect(search().tab).toBe("events");
+    expect(search().via).toBe("events/shop/cart.17f3");
+  });
+
+  /** Dana's story title opened a peek that knew nothing of the Event. Fails if the card's link drops it. */
+  it("links a story's object to its Events tab, noting the latest Event about it", async () => {
+    await watched("stories");
+    const now = Date.now();
+    burst([
+      {
+        ...event("shop", 0),
+        name: "cart.17f3",
+        type: "Warning",
+        reason: "ProgressDeadlineExceeded",
+        involvedObject: {
+          kind: "Deployment",
+          name: "cart",
+          namespace: "shop",
+          uid: null,
+        },
+        lastTimestamp: new Date(now - 60_000).toISOString(),
+      },
+    ]);
+    const card = await screen.findByRole("article", {
+      name: "Deployment cart",
+    });
+    expect(
+      within(card).getByRole("link", { name: "Deployment cart" })
+    ).toHaveAttribute(
+      "href",
+      "/c/prod/deployments/shop/cart?tab=events&via=events%2Fshop%2Fcart.17f3"
+    );
+  });
+
+  /**
    * One event changing is one row's work: no row it did not touch is a new
    * object, nothing is sorted again, and the one that happened again stands
    * on top. Fails if a batch rebuilds the feed, or if an event that happened
@@ -716,7 +791,10 @@ describe("what the join costs", () => {
 
     const sort = vi.spyOn(Array.prototype, "sort");
     redraw();
-    expect(sort).not.toHaveBeenCalled();
+    const feeds = sort.mock.contexts.filter(
+      (list) => (list as unknown[]).length === 100
+    );
+    expect(feeds).toEqual([]);
     sort.mockRestore();
   });
 

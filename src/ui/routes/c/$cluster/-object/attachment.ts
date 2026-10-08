@@ -4,7 +4,12 @@ import type { ApiCatalog } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { errorCode, errorToShow } from "@/lib/error-utils";
 import { segmentOf } from "@/lib/access-kinds";
-import { resourceSegment, type ObjectRef } from "@/lib/links";
+import {
+  resourceSegment,
+  type ObjectLinkOptions,
+  type ObjectRef,
+} from "@/lib/links";
+import { getApiVersion } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 import { catalogQuery, servedOf } from "./served";
 
@@ -175,6 +180,25 @@ const EVENTS_TAB = new Set([
   "/PersistentVolumeClaim",
 ]);
 
+const EVENTS_VIA = "events/";
+
+/** Where an Event about `kind` opens: that object's Events tab, noting the Event, if its page has one. */
+export function eventLanding(
+  kind: string,
+  event: { namespace: string; name: string }
+): ObjectLinkOptions | undefined {
+  if (!EVENTS_TAB.has(`${groupOf(getApiVersion(kind))}/${kind}`))
+    return undefined;
+  return {
+    tab: "events",
+    via: `${EVENTS_VIA}${event.namespace}/${event.name}`,
+  };
+}
+
+/** The tab a page opened with `via` lands on. */
+const landingTab = (via: string) =>
+  via.startsWith(EVENTS_VIA) ? "events" : undefined;
+
 const event =
   (refPath: string) =>
   async (object: Json, read: Reader): Promise<Attachment> => {
@@ -254,6 +278,15 @@ export function isAttached(resource: string): boolean {
 export function ownView(ref: Pick<ObjectRef, "kind" | "crd">) {
   const segment = resourceSegment(ref);
   return segment && isAttached(segment) ? "own" : undefined;
+}
+
+/** Where a peek's full page opens: where the object it was opened for lives, else the object itself. */
+export function peekLanding(
+  target: Pick<ObjectRef, "kind" | "crd"> & { via?: string }
+): ObjectLinkOptions {
+  return target.via
+    ? { tab: landingTab(target.via), via: target.via }
+    : { view: ownView(target) };
 }
 
 /** Where `object`, named by `resource`, belongs; `free` for unattached kinds. */

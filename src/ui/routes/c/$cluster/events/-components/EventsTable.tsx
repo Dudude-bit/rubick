@@ -12,6 +12,10 @@ import { columnHeader } from "@/i18n/column-header";
 import { eventReasonMark } from "@/lib/event-reason";
 import { cn, formatDate } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
+import { hrefOf, objectLink } from "@/lib/links";
+import type { PeekTarget } from "@/hooks/usePeek";
+import { eventLanding } from "../../-object/attachment";
+import { useRowMenu } from "../../-list/useRowMenu";
 import { useHeldRows } from "./held-rows";
 import { AGE_CELL_PX } from "../../-list/columns";
 
@@ -54,6 +58,9 @@ function ReasonCell({ row }: { row: { original: EventInfo } }) {
   );
 }
 
+const landingOf = (event: EventInfo) =>
+  eventLanding(event.involvedObject.kind, event);
+
 function ObjectCell({ row }: { row: { original: EventInfo } }) {
   const subject = subjectOf(row.original);
   return (
@@ -61,6 +68,7 @@ function ObjectCell({ row }: { row: { original: EventInfo } }) {
       kind={subject.kind}
       name={subject.name}
       namespace={subject.namespace}
+      linkOptions={landingOf(row.original)}
     />
   );
 }
@@ -159,6 +167,24 @@ const ONE_NAMESPACE = [REASON, OBJECT, MESSAGE, COUNT, AGE];
 
 const uidOf = (event: EventInfo) => event.uid;
 
+/** The object's Events tab where its page has one, the Event's own page otherwise. */
+function hrefOfEvent(event: EventInfo): string {
+  const landing = landingOf(event);
+  const link = landing
+    ? objectLink(subjectOf(event), landing)
+    : objectLink({
+        kind: "Event",
+        name: event.name,
+        namespace: event.namespace,
+      });
+  return link ? hrefOf(link) : "";
+}
+
+const peekOfEvent = (event: EventInfo): PeekTarget => ({
+  ...subjectOf(event),
+  via: landingOf(event)?.via,
+});
+
 const Waiting = createContext<{ n: number; show: () => void }>({
   n: 0,
   show: () => {},
@@ -183,6 +209,7 @@ function ShowWaiting() {
 }
 
 const SHOW_WAITING = <ShowWaiting />;
+const NO_QUICK_ACTIONS: never[] = [];
 
 /**
  * The All events view: a table that draws only the rows on screen, and holds
@@ -202,6 +229,11 @@ export function EventsTable({
 }) {
   const [pointed, setPointed] = useState(false);
   const { shown, waiting, show } = useHeldRows(events, pointed, question);
+  const rowMenu = useRowMenu<EventInfo>({
+    kind: "Event",
+    getRowHref: hrefOfEvent,
+    getRowPeek: peekOfEvent,
+  });
   const waitingValue = useMemo(() => ({ n: waiting, show }), [waiting, show]);
   const table = useMemo(
     () => (
@@ -210,13 +242,17 @@ export function EventsTable({
         data={shown}
         fill
         getRowId={uidOf}
+        getRowHref={hrefOfEvent}
+        getRowPeek={peekOfEvent}
+        onRowMenu={rowMenu.open}
+        pageKeys
         rowLabel="events"
         widthsKey="events-feed"
         emptyMessage={emptyMessage}
         toolbar={SHOW_WAITING}
       />
     ),
-    [showNamespace, shown, emptyMessage]
+    [showNamespace, shown, emptyMessage, rowMenu.open]
   );
   return (
     <div
@@ -225,6 +261,7 @@ export function EventsTable({
       onPointerLeave={() => setPointed(false)}
     >
       <Waiting.Provider value={waitingValue}>{table}</Waiting.Provider>
+      {rowMenu.element(NO_QUICK_ACTIONS)}
     </div>
   );
 }

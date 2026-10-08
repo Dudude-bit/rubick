@@ -102,7 +102,13 @@ export function ObjectLink({
     onClick?.(event);
     if (event.defaultPrevented) return;
     gesture(event, hrefOf(link), () =>
-      open({ kind, name, namespace, crd: crdFor({ kind, name, crd }) })
+      open({
+        kind,
+        name,
+        namespace,
+        crd: crdFor({ kind, name, crd }),
+        via: linkOptions?.via,
+      })
     );
   };
 
