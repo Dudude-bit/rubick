@@ -77,6 +77,7 @@ export const en = {
     whatAnswersHereNote: "what made the pods behind this address",
     reachedThrough: "Traffic comes through",
     reachedThroughNote: "what sends traffic to these pods",
+    routedHereNote: "what sends traffic to this address",
     boundTo: "Bound to",
     governedBy: "Governed by",
     governedByNote:

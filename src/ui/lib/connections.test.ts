@@ -1671,6 +1671,42 @@ describe("connections read the same from both ends", () => {
     ]);
   });
 
+  /**
+   * Sam's Service log-demo Connections listed only its Deployment while its
+   * Delete dialog named the Ingresses routing to it. Fails if the tab drops them.
+   */
+  it("names on a Service every Ingress and route its Delete dialog leaves behind", () => {
+    const canary = ref("Ingress", "promo-nginx-canary");
+    const http = ref("HTTPRoute", "log-demo");
+    const fromService = connections(front, [
+      { from: front, to: running, relation: selects },
+      { from: ingress, to: front, relation: routes },
+      { from: canary, to: front, relation: routes },
+      {
+        from: http,
+        to: front,
+        relation: {
+          verb: "ruleRoutes",
+          hostnames: ["logs.k8s-gui.test"],
+          port: null,
+          weight: null,
+        },
+      },
+    ]);
+
+    const routed = [
+      "Ingress/log-demo",
+      "Ingress/promo-nginx-canary",
+      "HTTPRoute/log-demo",
+    ];
+    expect(names(fromService, "routed")).toEqual(routed);
+    expect(
+      dependentsOf(fromService, t).map(
+        ({ object }) => `${object.kind}/${object.name}`
+      )
+    ).toEqual(routed);
+  });
+
   /** A Service with no pods behind it says nothing on a workload it does not select. */
   it("leaves the group out where no Service selects the workload", () => {
     expect(names(connections(deployment, []), "reached")).toBeUndefined();

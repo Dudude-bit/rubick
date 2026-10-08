@@ -1265,6 +1265,23 @@ function answersHere(conns: ResourceConnections, t: T): ConnRow[] {
   );
 }
 
+/** Whether an edge sends traffic to `target`, as an Ingress rule or a Gateway API route. */
+const routesInto = (edge: ConnectionEdge, target: ObjectRef) =>
+  (edge.relation.verb === "routes" || edge.relation.verb === "ruleRoutes") &&
+  sameObject(edge.to, target);
+
+/** Every Ingress and route sending traffic to any of `targets`. */
+function routedFrom(
+  conns: ResourceConnections,
+  targets: ObjectRef[]
+): ObjectRef[] {
+  return unique(
+    conns.edges
+      .filter((edge) => targets.some((target) => routesInto(edge, target)))
+      .map((edge) => edge.from)
+  );
+}
+
 /** The mirror of {@link answersHere}: the Services that select the subject, and what routes to them. */
 function reachedThrough(conns: ResourceConnections, t: T): ConnRow[] {
   const services = verb(conns.edges, "selects")
@@ -1273,16 +1290,17 @@ function reachedThrough(conns: ResourceConnections, t: T): ConnRow[] {
         edge.from.kind === "Service" && sameObject(edge.to, conns.subject)
     )
     .map((edge) => edge.from);
-  const routes = conns.edges
-    .filter(
-      (edge) =>
-        (edge.relation.verb === "routes" ||
-          edge.relation.verb === "ruleRoutes") &&
-        services.some((service) => sameObject(edge.to, service))
-    )
-    .map((edge) => edge.from);
   return labelled(
-    unique([...services, ...routes]).map((object) =>
+    unique([...services, ...routedFrom(conns, services)]).map((object) =>
+      rowFor(object.kind, object, t)
+    )
+  );
+}
+
+/** What sends traffic to the subject Service, as its Overview and its Delete dialog name it. */
+function routedHere(conns: ResourceConnections, t: T): ConnRow[] {
+  return labelled(
+    routedFrom(conns, [conns.subject]).map((object) =>
       rowFor(object.kind, object, t)
     )
   );
@@ -1517,10 +1535,6 @@ function bindings(conns: ResourceConnections, t: T): ConnRow[] {
 
 /**
  * Every group this object has, in the order the questions get asked.
- *
- * The traffic edges are deliberately absent: the chain on the Overview draws
- * them, and a tab that repeated them would be a second answer to a question
- * already answered one scroll up.
  */
 export function connectionGroups(
   conns: ResourceConnections,
@@ -1549,6 +1563,14 @@ export function connectionGroups(
       caption: t("nav", "usedByNote"),
       rows: usedBy(conns, t),
     },
+    conns.subject.kind === "Service"
+      ? {
+          key: "routed",
+          title: t("nav", "reachedThrough"),
+          caption: t("nav", "routedHereNote"),
+          rows: routedHere(conns, t),
+        }
+      : null,
     conns.subject.kind === "Service" || conns.subject.kind === "Ingress"
       ? {
           key: "answers",
