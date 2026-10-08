@@ -31,6 +31,8 @@ function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
   let hiddenAt = Number.NEGATIVE_INFINITY;
   let timer = 0;
   let x = 0;
+  let y = 0;
+  let parkedAt: { x: number; y: number } | null = null;
 
   const reveal = () => {
     if (!owner || quiet || !held || !owner.isConnected) return;
@@ -80,12 +82,19 @@ function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
     const target = event.target instanceof Element ? event.target : null;
     if (owner && target && owner.contains(target)) return;
     release();
+    if (event instanceof MouseEvent) {
+      x = event.clientX;
+      y = event.clientY;
+    }
+    // WebKit sends a pointerover with no movement when the row under a parked
+    // pointer is redrawn; a title put away by a press stays away until it moves.
+    if (parkedAt && (parkedAt.x !== x || parkedAt.y !== y)) parkedAt = null;
+    quiet = parkedAt !== null;
     const found = target?.closest("[title]");
     const text = found?.getAttribute("title") ?? "";
     if (!found || !text.trim()) return;
     owner = found;
     held = text;
-    x = event instanceof MouseEvent ? event.clientX : 0;
     found.removeAttribute("title");
     // An icon with nothing else naming it keeps its name while the title is held.
     if (
@@ -110,8 +119,12 @@ function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
     if (to && owner.contains(to)) return;
     release();
   };
-  const hush = () => {
+  const hush = (event: Event) => {
     quiet = true;
+    parkedAt =
+      event instanceof MouseEvent
+        ? { x: event.clientX, y: event.clientY }
+        : { x, y };
     hide();
   };
 
