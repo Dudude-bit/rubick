@@ -141,7 +141,9 @@ pub fn deployment_rollout(deployment: &Deployment) -> Rollout {
     let refused = conditions
         .iter()
         .any(|c| c.type_ == "ReplicaFailure" && c.status == "True");
-    if updated < desired && !refused {
+    let ready = status.and_then(|s| s.ready_replicas).unwrap_or(0);
+    let min_ready = spec.and_then(|s| s.min_ready_seconds).unwrap_or(0);
+    if (updated < desired && !refused) || settling(min_ready, ready, available, desired) {
         return Rollout::ComingUp { available, desired };
     }
     if available < desired {
@@ -165,7 +167,9 @@ pub fn statefulset_rollout(set: &StatefulSet) -> Rollout {
     let ready = status.and_then(|s| s.ready_replicas).unwrap_or(0);
     // Clusters before 1.25 never write `availableReplicas`.
     let available = status.and_then(|s| s.available_replicas).unwrap_or(ready);
-    if available == 0 {
+    let min_ready = spec.and_then(|s| s.min_ready_seconds).unwrap_or(0);
+    let settling = settling(min_ready, ready, available, desired);
+    if available == 0 && !settling {
         return Rollout::Unavailable {
             reason: None,
             message: None,
@@ -198,10 +202,19 @@ pub fn statefulset_rollout(set: &StatefulSet) -> Rollout {
             }
         }
     }
+    if settling {
+        return Rollout::ComingUp { available, desired };
+    }
     if available < desired {
         return Rollout::Short { available, desired };
     }
     Rollout::Ready
+}
+
+/// Every pod wanted is ready and some are still inside `minReadySeconds`,
+/// which is the controller's wait and not a fault.
+fn settling(min_ready: i32, ready: i32, available: i32, desired: i32) -> bool {
+    min_ready > 0 && ready >= desired && available < desired
 }
 
 #[must_use]
@@ -217,7 +230,13 @@ pub fn daemonset_rollout(set: &DaemonSet) -> Rollout {
         return Rollout::Idle;
     }
     let available = status.number_available.unwrap_or(0);
-    if available == 0 {
+    let min_ready = set
+        .spec
+        .as_ref()
+        .and_then(|s| s.min_ready_seconds)
+        .unwrap_or(0);
+    let settling = settling(min_ready, status.number_ready, available, desired);
+    if available == 0 && !settling {
         return Rollout::Unavailable {
             reason: None,
             message: None,
@@ -235,6 +254,9 @@ pub fn daemonset_rollout(set: &DaemonSet) -> Rollout {
         == Some(ON_DELETE);
     if !on_delete && updated < desired {
         return Rollout::RollingOut { updated, desired };
+    }
+    if settling {
+        return Rollout::ComingUp { available, desired };
     }
     if available < desired {
         return Rollout::Short { available, desired };
@@ -995,6 +1017,66 @@ mod tests {
         ));
         assert_eq!(daemonset_rollout(&daemonset(0, 0, 0)), Rollout::Idle);
         assert_eq!(daemonset_rollout(&daemonset(3, 3, 3)), Rollout::Ready);
+    }
+
+    /// A set whose pods are all ready and some still inside `minReadySeconds`
+    /// read Degraded, and with none available yet Unavailable, while the
+    /// controller was only waiting. Fails if either comes back, or if a set
+    /// with a pod not ready stops reading short.
+    #[test]
+    fn a_set_waiting_out_min_ready_seconds_is_coming_up() {
+        let waiting = |ready: i32, available: i32| {
+            let mut set = statefulset(
+                3,
+                StatefulSetStatus {
+                    available_replicas: Some(available),
+                    ..sts_status(ready, 3, "db-2", "db-2")
+                },
+                None,
+            );
+            set.spec.as_mut().unwrap().min_ready_seconds = Some(30);
+            statefulset_rollout(&set)
+        };
+        assert_eq!(
+            waiting(3, 2),
+            Rollout::ComingUp {
+                available: 2,
+                desired: 3
+            }
+        );
+        assert_eq!(
+            waiting(3, 0),
+            Rollout::ComingUp {
+                available: 0,
+                desired: 3
+            }
+        );
+        assert_eq!(
+            waiting(2, 2),
+            Rollout::Short {
+                available: 2,
+                desired: 3
+            }
+        );
+
+        let mut daemon = daemonset(3, 1, 3);
+        daemon.spec.as_mut().unwrap().min_ready_seconds = Some(30);
+        daemon.status.as_mut().unwrap().number_ready = 3;
+        assert_eq!(
+            daemonset_rollout(&daemon),
+            Rollout::ComingUp {
+                available: 1,
+                desired: 3
+            }
+        );
+        daemon.spec.as_mut().unwrap().min_ready_seconds = None;
+        assert_eq!(
+            daemonset_rollout(&daemon),
+            Rollout::Short {
+                available: 1,
+                desired: 3
+            }
+        );
     }
 
     /// Both halves read a set's pods through one table; fails if this side
