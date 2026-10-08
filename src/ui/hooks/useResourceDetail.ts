@@ -22,6 +22,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useLiveQuery, type Freshness } from "@/hooks/useLiveQuery";
 import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { useResourceYaml } from "./useResourceYaml";
+import { useRereadWith } from "./useRereadWith";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useT } from "@/i18n/useT";
@@ -175,7 +176,10 @@ export function useResourceDetail<T>(
     holdsThisObject ? resource : undefined
   );
 
-  // Always use useResourceYaml for YAML fetching
+  useRereadWith(
+    queryKeys.detail(resourceKind, namespace, name),
+    queryKeys.manifest(resourceKind, namespace, name)
+  );
   const {
     data: yaml,
     isLoading: isLoadingYaml,
