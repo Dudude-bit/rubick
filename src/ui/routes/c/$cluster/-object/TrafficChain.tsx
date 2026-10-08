@@ -14,7 +14,7 @@
 
 import { joinSayings, sayWords } from "@/i18n/say";
 import { Link } from "@tanstack/react-router";
-import { PauseCircle } from "lucide-react";
+import { CircleSlash, PauseCircle } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
@@ -29,6 +29,7 @@ import {
   describeExistence,
   hopTone,
   trafficChains,
+  unservedIngresses,
   type ChainHop,
   type HopTone,
 } from "@/lib/connections";
@@ -133,8 +134,21 @@ export function Rail({
  * no error, and nothing serving it. Naming the classes that do exist turns
  * "it does not work" into a one-word fix.
  */
-function Controller({ binding }: { binding: IngressClassBinding }) {
+function Controller({
+  binding,
+  brief,
+}: {
+  binding: IngressClassBinding;
+  brief: boolean;
+}) {
   const t = useT();
+  if (!binding.resolved && brief && binding.requested) {
+    return (
+      <p className="text-xs text-err">
+        {t("empty", "noIngressClassNamed", { name: binding.requested })}
+      </p>
+    );
+  }
   if (!binding.resolved) {
     return (
       <>
@@ -332,12 +346,15 @@ function Hop({
   issuance,
   edge,
   routed,
+  brief,
 }: {
   hop: ChainHop;
   next: ChainHop | undefined;
   issuance: Issuance | undefined;
   edge: ServiceEdges | undefined;
   routed: ServicesRoutes | undefined;
+  /** The class repair is said once above the paths. */
+  brief: boolean;
 }) {
   const t = useT();
   const last = next === undefined;
@@ -459,7 +476,9 @@ function Hop({
             )}
           </>
         )}
-        {hop.at === "controller" && <Controller binding={hop.binding} />}
+        {hop.at === "controller" && (
+          <Controller binding={hop.binding} brief={brief} />
+        )}
         {hop.at === "stop" && (
           <>
             <p
@@ -535,6 +554,7 @@ export function TrafficChain({
         : []
     )
   );
+  const unserved = unservedIngresses(paths);
   const edge = useServiceEdge(serviceHops);
   // The ways in a vendor's objects state — see `service.routes`.
   const routed2 = useServicesRoutes(serviceHops);
@@ -607,6 +627,28 @@ export function TrafficChain({
           </span>
         </p>
       )}
+      {unserved && (
+        <div
+          className="flex max-w-[92ch] flex-col gap-0.5"
+          data-testid="unserved-ingresses"
+        >
+          <p className="flex items-center gap-1.5 text-xs text-err">
+            <CircleSlash className="h-3 w-3 flex-none" aria-hidden="true" />
+            {t("count", "ingressesUnserved", {
+              n: unserved.ingresses,
+              classes: unserved.classes.join(", "),
+            })}
+          </p>
+          <p className="pl-[18px] text-[11px] text-err/85">
+            {t("empty", "nothingPickedThemUp")}{" "}
+            {unserved.available.length > 0
+              ? t("empty", "clusterHasClasses", {
+                  list: unserved.available.join(", "),
+                })
+              : t("empty", "clusterHasNoIngressClass")}
+          </p>
+        </div>
+      )}
       <div className="flex flex-col gap-4">
         {paths.map((path) => (
           <div key={path.key} className="flex flex-col">
@@ -618,6 +660,7 @@ export function TrafficChain({
                 issuance={issuance ?? routed.issuance}
                 edge={edge}
                 routed={routed2}
+                brief={unserved !== null}
               />
             ))}
           </div>

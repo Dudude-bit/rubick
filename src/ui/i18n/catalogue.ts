@@ -5843,6 +5843,8 @@ export const en = {
       "Nothing has picked this Ingress up, so it has no address and never will until a controller for that class exists.",
     clusterHasClasses: "This cluster has {list}.",
     clusterHasNoIngressClass: "This cluster has no IngressClass at all.",
+    nothingPickedThemUp:
+      "Nothing has picked them up, so they have no address and never will until a controller for that class exists.",
     noAddressYet:
       "No address yet: the controller has published none, so nothing reaches this Ingress however its rules read.",
     followingPathIn: "Following the path in…",
@@ -6901,6 +6903,11 @@ export const en = {
     kindsReadOf: {
       one: "Reading the kinds that can be watched: {n} of {total}",
       other: "Reading the kinds that can be watched: {n} of {total}",
+    },
+    ingressesUnserved: {
+      one: "{n} Ingress here asks for an IngressClass this cluster does not have: {classes}",
+      other:
+        "{n} Ingresses here ask for an IngressClass this cluster does not have: {classes}",
     },
     kindsReadSettled: {
       one: "Read {n} of {total} kinds that can be watched",

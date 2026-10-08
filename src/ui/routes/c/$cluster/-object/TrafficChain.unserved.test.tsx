@@ -136,3 +136,28 @@ describe("an Ingress no controller serves, seen from what it routes to", () => {
     }
   );
 });
+
+describe("many Ingresses asking for one class nothing serves", () => {
+  const canary: ObjectRef = { ...ingress, name: "shop-canary" };
+  const both = around(pod);
+  both.edges.push({ ...both.edges[1], from: canary });
+
+  /**
+   * Sam's log-demo pod repeated the whole "Nothing has picked this Ingress
+   * up" paragraph under each of its 13 Ingresses. Fails if the repair is said
+   * more than once, or the count and the class stop being named.
+   */
+  it("says the repair once, naming how many ask and for which class", async () => {
+    await renderWithRouter(<TrafficChain query={query(both)} />);
+    expect(
+      await screen.findByText(
+        "2 Ingresses here ask for an IngressClass this cluster does not have: nginx"
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getAllByText("No IngressClass named nginx in this cluster")
+    ).toHaveLength(2);
+    expect(screen.getAllByText(/Nothing has picked/)).toHaveLength(1);
+    expect(screen.queryByText(/Nothing has picked this Ingress up/)).toBeNull();
+  });
+});

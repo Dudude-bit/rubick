@@ -596,6 +596,37 @@ export interface ChainPath {
   broken: boolean;
 }
 
+export interface UnservedIngresses {
+  ingresses: number;
+  classes: string[];
+  available: string[];
+}
+
+/** The Ingresses on these paths asking for a class nothing serves, so the repair is said once. */
+export function unservedIngresses(
+  paths: ChainPath[]
+): UnservedIngresses | null {
+  const ingresses = new Set<string>();
+  const classes = new Set<string>();
+  let available: string[] = [];
+  for (const path of paths) {
+    path.hops.forEach((hop, index) => {
+      if (hop.at !== "controller") return;
+      const { resolved, requested } = hop.binding;
+      if (resolved || !requested) return;
+      const next = path.hops[index + 1];
+      ingresses.add(
+        next?.at === "object" ? refKey(next.object) : `${path.key}#${index}`
+      );
+      classes.add(requested);
+      available = hop.binding.available.map((entry) => entry.name);
+    });
+  }
+  return ingresses.size > 1
+    ? { ingresses: ingresses.size, classes: [...classes].sort(), available }
+    : null;
+}
+
 /**
  * What one Ingress in front of the subject says about itself, read from the
  * Ingress rather than deduced from the edge that names it.

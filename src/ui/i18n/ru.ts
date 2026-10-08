@@ -6450,6 +6450,8 @@ export const ru: Catalogue = {
       "Этот Ingress никто не подхватил, поэтому у него нет адреса, и не будет, пока не появится контроллер этого класса.",
     clusterHasClasses: "В кластере есть {list}.",
     clusterHasNoIngressClass: "В кластере нет ни одного IngressClass.",
+    nothingPickedThemUp:
+      "Их никто не подхватил, поэтому адреса у них нет, и не будет, пока не появится контроллер нужного класса.",
     noAddressYet:
       "Адреса пока нет: контроллер ничего не опубликовал, поэтому до этого Ingress ничего не доходит, как бы ни были написаны его правила.",
     followingPathIn: "Прослеживаем путь внутрь…",
@@ -7533,6 +7535,13 @@ export const ru: Catalogue = {
       many: "Читаем виды ресурсов, за которыми можно следить: прочитано {n} из {total}",
       other:
         "Читаем виды ресурсов, за которыми можно следить: прочитано {n} из {total}",
+    },
+    ingressesUnserved: {
+      one: "{n} Ingress здесь запрашивает IngressClass, которого в кластере нет: {classes}",
+      few: "{n} Ingress здесь запрашивают IngressClass, которого в кластере нет: {classes}",
+      many: "{n} Ingress здесь запрашивают IngressClass, которого в кластере нет: {classes}",
+      other:
+        "{n} Ingress здесь запрашивают IngressClass, которого в кластере нет: {classes}",
     },
     kindsReadSettled: {
       one: "Прочитан {n} из {total} видов ресурсов, за которыми можно следить",
