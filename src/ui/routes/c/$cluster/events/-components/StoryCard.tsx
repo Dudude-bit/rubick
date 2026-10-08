@@ -16,6 +16,9 @@ import {
   type TimelineEntry,
 } from "@/lib/event-stories";
 import { cn } from "@/lib/utils";
+import { controlAt } from "@/lib/row-control";
+import { readLinkIntent } from "@/hooks/useLinkGesture";
+import { usePeek } from "@/hooks/usePeek";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { sayWords, spanWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
@@ -102,11 +105,27 @@ export function StoryCard({
       : null;
   const { subject } = story;
   const landing = landingOfStory(story);
+  const { open: openPeek } = usePeek();
+  const peek = subject.kind
+    ? {
+        kind: subject.kind,
+        name: subject.name,
+        namespace: subject.namespace,
+        via: landing?.via,
+      }
+    : null;
 
   return (
     <article
+      onClick={(event) => {
+        if (!peek || controlAt(event.target as HTMLElement)) return;
+        if (readLinkIntent(event) !== "activate") return;
+        if (window.getSelection()?.toString()) return;
+        openPeek(peek);
+      }}
       className={cn(
         "rounded border bg-canvas px-3 py-2",
+        peek && "cursor-pointer hover:bg-hover/40",
         STATE_EDGE[story.state]
       )}
       // The same sentence the header draws. A hard-coded "Pods" here read

@@ -450,6 +450,78 @@ describe("a feed a watch keeps", () => {
     );
   });
 
+  /**
+   * Dana clicked a story's body, message and timeline and nothing opened,
+   * while a list row opens its object's peek. Fails if a click on the card
+   * outside its link and buttons opens no peek, or a peek without the Event.
+   */
+  it("opens a story's object in the peek from a click anywhere on its card", async () => {
+    const { router } = await watched("stories");
+    burst([
+      {
+        ...event("shop", 0),
+        name: "cart.17f3",
+        type: "Warning",
+        reason: "ProgressDeadlineExceeded",
+        message: "cart has timed out progressing",
+        involvedObject: {
+          kind: "Deployment",
+          name: "cart",
+          namespace: "shop",
+          uid: null,
+        },
+        lastTimestamp: new Date(Date.now() - 60_000).toISOString(),
+      },
+    ]);
+    const card = await screen.findByRole("article", {
+      name: "Deployment cart",
+    });
+    await userEvent.click(within(card).getAllByText(/timed out/)[0]);
+    const search = router.state.location.search as Record<string, string>;
+    expect(search.peek).toBe("deployments/shop/cart");
+    expect(search.peekVia).toBe("events/shop/cart.17f3");
+    expect(router.state.location.pathname).toBe("/c/prod/events");
+  });
+
+  /**
+   * Live stories re-sorted every few seconds, so a click landed on another
+   * card. Fails if the cards move while the pointer is on them, or stay out
+   * of order once it leaves.
+   */
+  it("holds the stories' order while the pointer is on them", async () => {
+    await watched("stories");
+    const about = (name: string, ago: number): EventInfo => ({
+      ...event("shop", 0),
+      name: `${name}.17f3`,
+      uid: name,
+      involvedObject: {
+        kind: "Deployment",
+        name,
+        namespace: "shop",
+        uid: null,
+      },
+      lastTimestamp: new Date(Date.now() - ago).toISOString(),
+    });
+    burst([about("alpha", 60_000), about("beta", 120_000)]);
+    const order = () =>
+      screen
+        .getAllByRole("article")
+        .map((card) => card.getAttribute("aria-label"));
+    await waitFor(() =>
+      expect(order()).toEqual(["Deployment alpha", "Deployment beta"])
+    );
+
+    await userEvent.hover(screen.getAllByRole("article")[1]);
+    send([{ op: "applied", resource: about("beta", 1_000) }]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(order()).toEqual(["Deployment alpha", "Deployment beta"]);
+
+    await userEvent.unhover(screen.getAllByRole("article")[1]);
+    await waitFor(() =>
+      expect(order()).toEqual(["Deployment beta", "Deployment alpha"])
+    );
+  });
+
   /** The story's title is the same link as the list's; fails if one opens the page and the other a peek. */
   it("opens the page from a plain click on a story's object link", async () => {
     const { router } = await watched("stories");

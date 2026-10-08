@@ -25,6 +25,7 @@ import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW } from "@/components/object/detail-blocks";
 import { EventsTable } from "./EventsTable";
 import { StoryCard } from "./StoryCard";
+import { useHeldOrder } from "./held-rows";
 import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
 import { useListRefusal } from "../../-list/useListRefusal";
 import { StaleRows } from "../../-list/StaleRows";
@@ -45,6 +46,7 @@ import {
   storiesOf,
   STORY_WINDOWS,
   WINDOW_MS,
+  type Story,
   type StoryOrder,
   type StoryWindow,
 } from "@/lib/event-stories";
@@ -148,6 +150,8 @@ function filtersFor(
     field_selector: null,
   };
 }
+
+const keyOfStory = (story: Story) => story.key;
 
 export function Events() {
   const t = useT();
@@ -311,6 +315,13 @@ export function Events() {
         ? sortStories(storiesOf(matching, storyOptions), order)
         : [],
     [view, matching, storyOptions, order]
+  );
+  const [pointed, setPointed] = useState(false);
+  const shownStories = useHeldOrder(
+    stories,
+    pointed,
+    [cacheKey, eventType, eventLimit, query, window, order].join("\n"),
+    keyOfStory
   );
 
   const isLoading = watching
@@ -606,8 +617,12 @@ export function Events() {
                       })}
               </p>
             ) : (
-              <div className="flex flex-col gap-2 p-1.5">
-                {stories.map((story) => (
+              <div
+                className="flex flex-col gap-2 p-1.5"
+                onPointerEnter={() => setPointed(true)}
+                onPointerLeave={() => setPointed(false)}
+              >
+                {shownStories.map((story) => (
                   <StoryCard
                     key={story.key}
                     story={story}
