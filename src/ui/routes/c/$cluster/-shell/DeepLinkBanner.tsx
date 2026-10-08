@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useRouterState } from "@tanstack/react-router";
 import { Link2, TriangleAlert, X } from "lucide-react";
 
@@ -60,10 +61,12 @@ export function DeepLinkBanner() {
 
   if (arrival.status === "live") {
     if (!live) return null;
-    return (
+    // Floats over the page: in the flow it pushed everything down until dismissed.
+    return createPortal(
       <div
         role="status"
-        className="flex items-start gap-2 border-b border-hair bg-hover px-4 py-2 text-xs text-fg-mid"
+        data-testid="link-opened"
+        className="fixed right-4 bottom-9 z-50 flex max-w-sm items-start gap-2 rounded-md border border-hair bg-raise px-3 py-2 text-xs text-fg-mid shadow-pop"
       >
         <Link2
           className="mt-0.5 h-3.5 w-3.5 flex-none text-info"
@@ -82,7 +85,8 @@ export function DeepLinkBanner() {
         >
           <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
-      </div>
+      </div>,
+      document.body
     );
   }
 
