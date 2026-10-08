@@ -413,61 +413,66 @@ export function FilesTab({
         </Notice>
       )}
 
-      <div className="flex flex-wrap items-center gap-1 border-b border-hair px-3 py-1.5 font-mono text-[11px]">
-        {(path === null ? [] : crumbs(path)).map((crumb, i) => (
-          <span
-            key={crumb.path}
-            data-testid="files-crumb"
-            className="flex items-center gap-1"
-          >
-            {i > 1 && <span className="text-fg-fnt">/</span>}
-            <button
-              type="button"
-              onClick={() => {
-                setPath(crumb.path);
-                setSelected(null);
-              }}
-              className={cn(
-                "rounded px-1 hover:bg-hover",
-                crumb.path === path ? "text-fg" : "text-fg-mut"
-              )}
+      {target !== null && (
+        <div className="flex flex-wrap items-center gap-1 border-b border-hair px-3 py-1.5 font-mono text-[11px]">
+          {crumbs(target.path).map((crumb, i) => (
+            <span
+              key={crumb.path}
+              data-testid="files-crumb"
+              className="flex items-center gap-1"
             >
-              {crumb.name === "/" ? "/" : crumb.name}
-            </button>
-          </span>
-        ))}
-        <Places
-          container={containerName}
-          workingDir={workingDir.data ?? null}
-          mounts={mounts}
-          path={path}
-          onGo={(next) => {
-            setPath(next);
-            setSelected(null);
-            setFilter("");
-          }}
-        />
-        <input
-          autoComplete="off"
-          autoCorrect="off"
-          autoCapitalize="off"
-          spellCheck={false}
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          placeholder={t("files", "filterNames", {
-            n: state.phase === "idle" ? 0 : state.entries.length,
-          })}
-          className="ml-auto w-48 rounded border border-hair bg-canvas px-1.5 py-0.5 text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
-        />
-      </div>
+              {i > 1 && <span className="text-fg-fnt">/</span>}
+              <button
+                type="button"
+                onClick={() => {
+                  setPath(crumb.path);
+                  setSelected(null);
+                  setFilter("");
+                }}
+                className={cn(
+                  "rounded px-1 hover:bg-hover",
+                  crumb.path === path ? "text-fg" : "text-fg-mut"
+                )}
+              >
+                {crumb.name === "/" ? "/" : crumb.name}
+              </button>
+            </span>
+          ))}
+          <Places
+            container={containerName}
+            workingDir={workingDir.data ?? null}
+            mounts={mounts}
+            path={path}
+            onGo={(next) => {
+              setPath(next);
+              setSelected(null);
+              setFilter("");
+            }}
+          />
+          {entries.length > 0 && (
+            <input
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              aria-label={t("files", "filterNames", { n: entries.length })}
+              placeholder={t("files", "filterNames", { n: entries.length })}
+              className="ml-auto w-48 rounded border border-hair bg-canvas px-1.5 py-0.5 text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+            />
+          )}
+        </div>
+      )}
 
       {!running && !mountsOnly ? (
-        <Sentence>
-          {t("files", "notRunning", {
-            container: container.name,
-            state: container.state.type,
-          })}
-        </Sentence>
+        <NotRunning
+          container={container.name}
+          state={container.state.type}
+          onDebug={onDebug}
+          debugDenied={debugDenied}
+          onMounts={() => setMountsOnly(true)}
+        />
       ) : mountsOnly ? (
         <MountsOnly
           pod={pod}
@@ -967,6 +972,49 @@ function Failure({
       <button type="button" onClick={onRetry} className={cn("mt-3", link)}>
         {t("action", "retry")}
       </button>
+    </div>
+  );
+}
+
+/**
+ * A container with nothing to exec into. A debug container is offered only
+ * to an account the cluster lets add one; a sentence pointing at a way in
+ * that is shut is advice nobody can follow.
+ */
+function NotRunning({
+  container,
+  state,
+  onDebug,
+  debugDenied,
+  onMounts,
+}: {
+  container: string;
+  state: string;
+  onDebug: (container: string) => void;
+  debugDenied?: string;
+  onMounts: () => void;
+}) {
+  const t = useT();
+  const link = "text-info hover:underline";
+  return (
+    <div className="px-3 py-6 text-xs">
+      <p className="text-fg-mut">
+        {t("files", "notRunning", { container, state })}
+      </p>
+      <p className="mt-3 flex gap-4">
+        <button type="button" onClick={onMounts} className={link}>
+          {t("files", "readMountsInstead")}
+        </button>
+        {!debugDenied && (
+          <button
+            type="button"
+            onClick={() => onDebug(container)}
+            className={link}
+          >
+            {t("files", "openViaDebug")}
+          </button>
+        )}
+      </p>
     </div>
   );
 }

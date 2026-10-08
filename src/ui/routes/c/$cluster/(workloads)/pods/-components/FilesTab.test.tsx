@@ -516,6 +516,104 @@ describe("FilesTab", () => {
     expect(screen.getByText(/Container app is waiting/)).toBeInTheDocument();
   });
 
+  /**
+   * Marco's stopped worker showed "filter 0 names" and a full path though
+   * nothing was or would be read. Fails if either is drawn before there is
+   * a listing, or the filter before there are names to filter.
+   */
+  it("draws no path before a listing and no filter before there are names", async () => {
+    listing.mockReturnValue({ phase: "idle" });
+    const stopped = pod();
+    stopped.containers[0].state = {
+      type: "waiting",
+      reason: "CrashLoopBackOff",
+    };
+    const view = await wrap(
+      <FilesTab
+        pod={stopped}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(screen.queryAllByTestId("files-crumb")).toHaveLength(0);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    view.unmount();
+
+    listing.mockReturnValue({ phase: "reading", entries: [], startedAt: 0 });
+    const reading = await wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(screen.getAllByTestId("files-crumb").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("textbox")).toBeNull();
+    reading.unmount();
+
+    listing.mockReturnValue(done([file("app.conf")]));
+    await wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    expect(
+      screen.getByRole("textbox", { name: "filter 1 name…" })
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The same tab told Marco a debug container could read the stopped
+   * container's files while Debug was greyed for his account. Fails if the
+   * way in is suggested to an account the cluster refuses it, or withheld
+   * from one it allows.
+   */
+  it("offers a debug container for a stopped container only where it may be added", async () => {
+    listing.mockReturnValue({ phase: "idle" });
+    const stopped = pod();
+    stopped.containers[0].state = {
+      type: "waiting",
+      reason: "CrashLoopBackOff",
+    };
+    const onDebug = vi.fn();
+    const refused = await wrap(
+      <FilesTab
+        pod={stopped}
+        via={null}
+        onDebug={onDebug}
+        onStopVia={() => {}}
+        debugDenied="Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods/ephemeralcontainers -n shop."
+      />
+    );
+    expect(
+      screen.queryByRole("button", { name: "Open through a debug container" })
+    ).toBeNull();
+    expect(document.body.textContent).not.toContain("debug container");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Read the pod's mounts instead" })
+    );
+    expect(screen.getByRole("list")).toHaveTextContent("/etc/app");
+    refused.unmount();
+
+    await wrap(
+      <FilesTab
+        pod={stopped}
+        via={null}
+        onDebug={onDebug}
+        onStopVia={() => {}}
+      />
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Open through a debug container" })
+    );
+    expect(onDebug).toHaveBeenCalledWith("app");
+  });
+
   /** A listing through a debug container is a different reading and the tab says so. */
   it("names the debug container it reads through", async () => {
     listing.mockReturnValue(done([]));
