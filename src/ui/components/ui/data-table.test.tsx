@@ -1213,6 +1213,77 @@ describe("column widths", () => {
     }
   });
 
+  /** Fails if a table that scrolls sideways lets its first column or group captions scroll away, which left no row saying which pod it was. */
+  it("pins the first column and the group captions only while the table scrolls sideways", async () => {
+    const columnsOf = [
+      { ...columns[0], size: 300, meta: { floor: 300 } },
+      { ...columns[1], size: 100, meta: { floor: 300 } },
+    ];
+    const grouping: RowGrouping<Item> = {
+      keyOf: (item) => item.namespace,
+      caption: (key) => `in ${key}`,
+    };
+    const pinned = () =>
+      [...document.querySelectorAll("th, td")]
+        .filter((cell) => cell.classList.contains("sticky"))
+        .map((cell) => cell.textContent);
+    const table = (
+      <DataTable<Item> columns={columnsOf} data={DATA} grouping={grouping} />
+    );
+    const narrow = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    try {
+      await wrap(table);
+      expect(pinned()).toEqual(["Name", "a-1", "b-2"]);
+      expect(screen.getByText("in ns").classList.contains("sticky")).toBe(true);
+    } finally {
+      narrow.mockRestore();
+    }
+    const roomy = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(900);
+    try {
+      cleanup();
+      await wrap(table);
+      expect(pinned()).toEqual([]);
+      expect(screen.getByText("in ns").classList.contains("sticky")).toBe(
+        false
+      );
+    } finally {
+      roomy.mockRestore();
+    }
+  });
+
+  /** Fails if a table cut at the port's edge gives no sign that columns continue, which left a header sliced to "A" unexplained. */
+  it("shades the side where columns continue, and the pinned edge once scrolled", async () => {
+    const columnsOf = [
+      { ...columns[0], size: 300, meta: { floor: 300 } },
+      { ...columns[1], size: 100, meta: { floor: 300 } },
+    ];
+    const edge = (side: string) =>
+      document.querySelector(`[data-edge="${side}"]`);
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    const content = vi
+      .spyOn(Element.prototype, "scrollWidth", "get")
+      .mockReturnValue(600);
+    try {
+      await wrap(<DataTable<Item> columns={columnsOf} data={DATA} />);
+      await waitFor(() => expect(edge("after")).not.toBeNull());
+      expect(edge("before")).toBeNull();
+      const port = screen.getByRole("table").parentElement!;
+      port.scrollLeft = 100;
+      fireEvent.scroll(port);
+      await waitFor(() => expect(edge("before")).not.toBeNull());
+      expect(edge("after")).toBeNull();
+    } finally {
+      width.mockRestore();
+      content.mockRestore();
+    }
+  });
+
   /** Fails if the lane's scrollbar takes a scrollbar-width or keeps the page's inherited scrollbar-color, which in WebKit both bring the overlay back. */
   it("styles the lane's scrollbar so WebKit draws it beside the rows, not over them", () => {
     const css = readFileSync("src/ui/index.css", "utf8");
