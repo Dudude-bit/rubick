@@ -1153,6 +1153,28 @@ describe("column widths", () => {
     }
   });
 
+  /** Fails if the port is only measured on first render, which on every list that loads first left the floors unapplied and its headers cut. */
+  it("applies its floors when the table arrives after the loading skeleton", async () => {
+    const columnsOf = [
+      { ...columns[0], size: 300, meta: { floor: 300 } },
+      { ...columns[1], size: 100, meta: { floor: 300 } },
+    ];
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    try {
+      const { rerender } = await wrapRerenderable(
+        <DataTable<Item> columns={columnsOf} data={[]} isLoading />
+      );
+      await act(async () => {
+        rerender(<DataTable<Item> columns={columnsOf} data={DATA} />);
+      });
+      expect(screen.getByRole("table").style.minWidth).toBe("600px");
+    } finally {
+      width.mockRestore();
+    }
+  });
+
   /** Fails if a port that scrolls sideways lets its scrollbar lie over the last row, which ate every click on a one-row list. */
   it("keeps the sideways scrollbar under the last row, only when the table scrolls", async () => {
     const columnsOf = [
