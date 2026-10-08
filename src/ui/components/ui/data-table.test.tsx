@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { type ReactNode } from "react";
 import {
   afterEach,
@@ -19,7 +20,6 @@ import type { AnyRouter } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye } from "lucide-react";
 
-import { SCROLLBAR_REACH } from "./column-shares";
 import { buildTableRows } from "./data-table-rows";
 import { DataTable } from "./data-table";
 import type { RowGrouping } from "./row-grouping";
@@ -1183,8 +1183,8 @@ describe("column widths", () => {
     }
   });
 
-  /** Fails if a port that scrolls sideways lets its scrollbar lie over the last row, which ate every click on a one-row list. */
-  it("keeps the sideways scrollbar under the last row, only when the table scrolls", async () => {
+  /** Fails if the port's sideways scrollbar goes back to WebKit's overlay or opens mid-layout: either lies over the last visible row and eats its clicks. */
+  it("holds the sideways scrollbar in a lane of its own, only when the table scrolls", async () => {
     const columnsOf = [
       { ...columns[0], size: 300, meta: { floor: 300 } },
       { ...columns[1], size: 100, meta: { floor: 300 } },
@@ -1195,7 +1195,8 @@ describe("column widths", () => {
       .mockReturnValue(500);
     try {
       await wrap(<DataTable<Item> columns={columnsOf} data={DATA} />);
-      expect(port().style.paddingBottom).toBe(`${SCROLLBAR_REACH}px`);
+      expect(port().classList.contains("scrollbar-lane")).toBe(true);
+      expect(port().style.overflowX).toBe("scroll");
     } finally {
       narrow.mockRestore();
     }
@@ -1205,10 +1206,23 @@ describe("column widths", () => {
     try {
       cleanup();
       await wrap(<DataTable<Item> columns={columnsOf} data={DATA} />);
-      expect(port().style.paddingBottom).toBe("");
+      expect(port().classList.contains("scrollbar-lane")).toBe(true);
+      expect(port().style.overflowX).toBe("");
     } finally {
       roomy.mockRestore();
     }
+  });
+
+  /** Fails if the lane's scrollbar takes a scrollbar-width or keeps the page's inherited scrollbar-color, which in WebKit both bring the overlay back. */
+  it("styles the lane's scrollbar so WebKit draws it beside the rows, not over them", () => {
+    const css = readFileSync("src/ui/index.css", "utf8");
+    const start = css.indexOf("@utility scrollbar-lane {");
+    const lane = css.slice(start, css.indexOf("\n}\n", start));
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(lane).toContain("scrollbar-color: auto;");
+    expect(lane).not.toContain("scrollbar-width:");
+    expect(lane).toContain("&::-webkit-scrollbar {");
+    expect(lane).toContain("height: 8px;");
   });
 
   /**

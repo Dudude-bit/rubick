@@ -57,7 +57,6 @@ import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { buildTableRows, type BodyItem } from "./data-table-rows";
 import {
   ACTIONS_CELL_GUTTER,
-  SIDEWAYS_SCROLLBAR_GUTTER,
   actionsColumnSize,
   tableLayout,
 } from "./column-shares";
@@ -201,6 +200,9 @@ const CELL_PADDING = "px-2.5 py-2 group-data-[density=compact]/table:py-[3px]";
  */
 const CLIP_TEXT =
   "overflow-hidden text-ellipsis whitespace-nowrap [&>a]:max-w-full";
+
+/** Held open: a lane that appears mid-layout is left out of a flex item's height, and covers its last row. */
+const SIDEWAYS_LANE = { overflowX: "scroll" } as const;
 
 /** What a row does when it is used, read at that moment from the table. */
 interface RowEvents<TData extends RowData> {
@@ -1253,17 +1255,14 @@ function DataTableInner<TData extends RowData>({
             className="group/table table-fixed"
             data-density={tableDensity}
             style={layout.scrolls ? { minWidth: layout.span } : undefined}
-            containerClassName={cn(
-              shouldVirtualScroll && "scrollbar-thin",
-              fill && "min-h-0"
-            )}
+            containerClassName={cn("scrollbar-lane", fill && "min-h-0")}
             // A filled table takes its bound from the flex row above; only an
             // unfilled one falls back to the fixed port.
             containerStyle={{
               ...(shouldVirtualScroll && !fill
                 ? { maxHeight: virtualScrollHeight }
                 : undefined),
-              ...(layout.scrolls ? SIDEWAYS_SCROLLBAR_GUTTER : undefined),
+              ...(layout.scrolls ? SIDEWAYS_LANE : undefined),
             }}
           >
             <TableHeader
