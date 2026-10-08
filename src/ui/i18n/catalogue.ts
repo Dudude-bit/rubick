@@ -5949,6 +5949,9 @@ export const en = {
       "Every pod, Deployment, StatefulSet, DaemonSet, Job, CronJob and Ingress {where} was read; none of them names it.",
     couldNotReadKind: "Could not read this {kind}: {error}",
     couldNotReadEvents: "Could not read events.",
+    eventsRefusedHere: "You do not have permission to read these events.",
+    eventsNoneReadAt:
+      "Read at {time}: none yet. The cluster keeps events for about an hour.",
     ageOld: "{age} old",
     andMore: "and {n} more",
     theServiceInFront: "the Service in front",

@@ -1,14 +1,14 @@
 import type { T } from "@/i18n/useT";
-import { EventRows, DetailAction } from "@/components/object/detail-blocks";
+import { ObjectEventsBody } from "./ObjectEventsBody";
 import {
   countMark,
   kindGlyph,
   type DetailTab,
 } from "@/components/object/detail-tab";
 import { Section, SectionHeader } from "@/components/ui/section";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   eventsOfEveryObject,
+  eventsUnreadWords,
   eventTotal,
   OBJECT_EVENTS_READ,
   type ObjectEventsQuery,
@@ -34,7 +34,10 @@ export function eventsTab(
     label: t("columns", "events"),
     glyph: kindGlyph(ResourceType.Event),
     mark: error
-      ? { shows: "unchecked", says: t("empty", "couldNotReadEvents") }
+      ? {
+          shows: "unchecked",
+          says: t("empty", eventsUnreadWords(error)),
+        }
       : data
         ? countMark(eventTotal(data))
         : undefined,
@@ -49,37 +52,12 @@ export function eventsTab(
             everyObject &&
             t("empty", "eventsOfEveryObjectIn", { namespace: subject.name })
           }
-          actions={
-            error && (
-              <DetailAction
-                label={t("action", "retry")}
-                onClick={() => void query.refetch()}
-              />
-            )
-          }
         />
-        {error ? (
-          <p className="text-xs text-warn">
-            {t("empty", "couldNotReadEvents")}
-          </p>
-        ) : !data ? (
-          <div className="flex flex-col gap-1.5">
-            <Skeleton className="h-3 w-full" />
-            <Skeleton className="h-3 w-3/4" />
-          </div>
-        ) : (
-          <EventRows
-            events={data}
-            showObject={everyObject}
-            emptyMessage={
-              subject.none ??
-              t(
-                "empty",
-                everyObject ? "noEventsInNamespace" : "noEventsForObject"
-              )
-            }
-          />
-        )}
+        <ObjectEventsBody
+          query={query}
+          everyObject={everyObject}
+          none={subject.none}
+        />
       </Section>
     ),
   };

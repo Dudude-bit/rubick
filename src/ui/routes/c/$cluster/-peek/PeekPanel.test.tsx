@@ -566,6 +566,46 @@ describe("PeekPanel", () => {
   });
 
   /**
+   * Marco's Service peek said "No events for this object" and nothing about
+   * whether events were read. Fails if a refused or failed read reads as
+   * none, if the two look alike, or if none forgets to say a read answered.
+   */
+  it("says the events were refused, failed or read and none, each apart", async () => {
+    const refusal = Object.assign(
+      new Error('events is forbidden: User "marco" cannot list events'),
+      { code: "PERMISSION_DENIED" }
+    );
+    vi.mocked(commands.listEvents).mockRejectedValue(refusal);
+    const refused = await wrap(POD_PEEK);
+    const words = await screen.findByText(
+      "You do not have permission to read these events."
+    );
+    expect(words).toHaveAttribute("data-read", "refused");
+    expect(screen.queryByText("No events for this object")).toBeNull();
+    vi.mocked(commands.listEvents).mockResolvedValue([]);
+    await userEvent.click(
+      within(screen.getByTestId("events-unread")).getByRole("button", {
+        name: "Try the read again",
+      })
+    );
+    expect(
+      await screen.findByText("No events for this object")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/^Read at .*: none yet/)).toBeInTheDocument();
+    refused.unmount();
+
+    vi.mocked(commands.listEvents).mockRejectedValue(
+      new Error("connection refused")
+    );
+    await wrap(POD_PEEK);
+    expect(await screen.findByText("Could not read events.")).toHaveAttribute(
+      "data-read",
+      "failed"
+    );
+    expect(screen.queryByText("No events for this object")).toBeNull();
+  });
+
+  /**
    * "268435456" is a manifest's spelling; "256Mi" is an answer. The peek
    * prints whatever unit the author used unless it can say it better.
    */

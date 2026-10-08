@@ -2,6 +2,7 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import type { RefreshRate } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
+import { isRefusal } from "@/lib/error-utils";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 /** Enough of one object's events that a short list shown from them has a true total behind it. */
@@ -38,6 +39,12 @@ export function useObjectEvents(
     retry: false,
   });
 }
+
+/** Why an object's events are not on screen: refused here, or a read that failed. */
+export const eventsUnreadWords = (
+  error: unknown
+): "eventsRefusedHere" | "couldNotReadEvents" =>
+  isRefusal(error) ? "eventsRefusedHere" : "couldNotReadEvents";
 
 /** How many events were read, marked a floor where the read itself was cut. */
 export const eventTotal = (events: unknown[]): string =>
