@@ -1,12 +1,8 @@
+import type { en } from "@/i18n/catalogue";
 import { useT } from "@/i18n/useT";
 import type { LaneLabelMode, LaneRule } from "./lanes";
+import type { StreamReading } from "./readings";
 
-/**
- * How much of the workload the pane is reading, in numbers the lanes
- * alone cannot say: streams attached, pods read to the end, streams
- * refused, pods gone whose lines are kept. Beside it, what a lane stands for and how a line
- * names its pod.
- */
 export function LaneCoverage({
   coverage,
   paused,
@@ -15,16 +11,11 @@ export function LaneCoverage({
   onModeChange,
 }: {
   coverage: {
-    /** The workload's pod list answered: without it no total is known. */
     podsRead: boolean;
     total: number;
-    streaming: number;
-    /** Every stream ended with its container: read to the end, not cut off. */
-    finished: number;
-    refused: number;
+    counts: Record<StreamReading, number>;
     gone: number;
   };
-  /** Nothing is attached because the reader stopped it, which is not a gap. */
   paused: boolean;
   rule: LaneRule;
   mode: LaneLabelMode;
@@ -42,32 +33,29 @@ export function LaneCoverage({
     ["short", "laneLabelShort"],
     ["full", "laneLabelFull"],
   ] as const;
-  // Each clause carries whether it is something the pane could not read,
-  // so the tone follows that and not only the words.
-  const clauses = (
-    [
-      !coverage.podsRead
-        ? [t("empty", "podListUnread"), true]
-        : paused
-          ? [t("count", "podsPaused", { n: coverage.total }), false]
-          : [
-              t("count", "podsStreaming", {
-                streaming: coverage.streaming,
-                n: coverage.total,
-              }),
-              false,
-            ],
-      coverage.finished > 0
-        ? [t("count", "podsFinished", { n: coverage.finished }), false]
-        : null,
-      coverage.refused > 0
-        ? [t("count", "podsUnreadable", { n: coverage.refused }), true]
-        : null,
-      coverage.gone > 0
-        ? [t("count", "podsGoneKept", { n: coverage.gone }), false]
-        : null,
-    ] satisfies ([string, boolean] | null)[]
-  ).filter((clause) => clause !== null);
+  const { counts } = coverage;
+  const of = (clause: keyof typeof en.count, n: number, warn: boolean) =>
+    n > 0 ? ([t("count", clause, { n }), warn] as const) : null;
+  const clauses = [
+    !coverage.podsRead
+      ? ([t("empty", "podListUnread"), true] as const)
+      : paused
+        ? ([t("count", "podsPaused", { n: coverage.total }), false] as const)
+        : ([
+            t("count", "podsStreaming", {
+              streaming: counts.streaming,
+              n: coverage.total,
+            }),
+            false,
+          ] as const),
+    of("podsFinished", counts.ended + counts.read, false),
+    of("podsRestarting", counts.restarting, true),
+    of("podsNotFollowed", counts.notFollowed, true),
+    of("podsNotStarted", counts.notStarted, true),
+    of("podsUnreadable", counts.lost + counts.notKept, true),
+    of("podsNoEarlierRun", counts.absent, false),
+    of("podsGoneKept", coverage.gone, false),
+  ].filter((clause) => clause !== null);
   return (
     <span
       className="ml-auto flex flex-wrap items-center gap-x-2 text-fg-fnt"

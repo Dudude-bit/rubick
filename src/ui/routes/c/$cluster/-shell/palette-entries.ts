@@ -34,7 +34,12 @@ import {
   servedObjectLink,
   type AppLink,
 } from "@/lib/links";
-import { isResourceType, ResourceType, toKind } from "@/lib/resource-registry";
+import {
+  isResourceType,
+  RESOURCE_REGISTRY,
+  ResourceType,
+  toKind,
+} from "@/lib/resource-registry";
 import { aliasOf, type ClusterMark } from "@/stores/clusterIdentityStore";
 import type { CatalogEntry, RecentItem } from "@/generated/types";
 import type { T } from "@/i18n/useT";
@@ -480,6 +485,47 @@ export interface PaletteState {
   t: T;
 }
 
+const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** Kinds in one order, whatever order the cluster listed them in. */
+export function byKindName<Kind extends { kind: string; group?: string }>(
+  kinds: readonly Kind[]
+): Kind[] {
+  return [...kinds].sort(
+    (a, b) => byText(a.kind, b.kind) || byText(a.group ?? "", b.group ?? "")
+  );
+}
+
+const KIND_ORDER = new Map<string, number>(
+  RESOURCE_REGISTRY.map((entry, at) => [entry.kind, at])
+);
+
+/**
+ * Hits arrive in whatever order the kinds answered, so two identical
+ * searches must be put in one order here or Down lands on another object.
+ */
+export function orderHits<Found extends { hit: SearchHit }>(
+  found: readonly Found[],
+  needle: string
+): Found[] {
+  const tier = ({ name }: SearchHit) => {
+    const lower = name.toLowerCase();
+    if (lower === needle) return 0;
+    if (lower.startsWith(needle)) return 1;
+    return lower.includes(needle) ? 2 : 3;
+  };
+  const kindAt = (kind: string) => KIND_ORDER.get(kind) ?? KIND_ORDER.size;
+  return [...found].sort(
+    ({ hit: a }, { hit: b }) =>
+      tier(a) - tier(b) ||
+      kindAt(a.kind) - kindAt(b.kind) ||
+      byText(a.kind, b.kind) ||
+      byText(a.group, b.group) ||
+      byText(a.namespace ?? "", b.namespace ?? "") ||
+      byText(a.name, b.name)
+  );
+}
+
 export interface PageActions {
   target: ActionTarget;
   actions: PaletteAction[] | null;
@@ -805,10 +851,7 @@ export function buildPaletteEntries({
       return path ? [{ hit, path }] : [];
     });
     const named = (hit: SearchHit) => hit.name.toLowerCase().includes(needle);
-    const ranked = [
-      ...found.filter(({ hit }) => named(hit)),
-      ...found.filter(({ hit }) => !named(hit)),
-    ];
+    const ranked = orderHits(found, needle);
     const cap = shownClusters.length > 1 ? ROWS_PER_CLUSTER : found.length;
     let viaNamespace = false;
     for (const { hit, path } of ranked.slice(0, cap)) {

@@ -284,11 +284,13 @@ describe("the command palette's hits", () => {
       message: `${kind.toLowerCase()}s is forbidden`,
     }));
     await open("access");
-    const line = await screen.findByText(/could not read 7 kinds: DaemonSet/);
+    const line = await screen.findByText(
+      /could not read 7 kinds: ClusterRole, ClusterRoleBinding, DaemonSet/
+    );
     expect(line).toHaveClass("truncate");
     expect(line).toHaveAttribute(
       "title",
-      `The cluster refused: ${refused.join(", ")}`
+      `The cluster refused your account: ${[...refused].sort().join(", ")}`
     );
     expect(document.body.textContent?.split("PodDisruptionBudget").length).toBe(
       2
@@ -321,7 +323,7 @@ describe("the command palette's hits", () => {
     await open("access");
     const line = await screen.findByText(/could not read 5 kinds: DaemonSet/);
     expect(line.getAttribute("title")?.split("\n")).toEqual([
-      "The cluster refused: DaemonSet, Role, Lease, Node",
+      "The cluster refused your account: DaemonSet, Lease, Node, Role",
       "Widget: request timed out",
     ]);
   });
@@ -350,7 +352,7 @@ describe("the command palette's hits", () => {
     expect(refused.parentElement).toHaveClass("text-warn");
     expect(refused).toHaveAttribute(
       "title",
-      "The cluster refused: ServiceAccount"
+      "The cluster refused your account: ServiceAccount"
     );
     expect(
       screen.getByText("1 kind still loading").closest("span")

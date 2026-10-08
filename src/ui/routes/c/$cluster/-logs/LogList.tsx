@@ -378,6 +378,7 @@ function LogListInner({
                       expanded={expandedRuns.has(run.id)}
                       containerColor={containerColors.get(laneOf(run.head))}
                       laneLabel={laneLabelOf(run.head)}
+                      searchQuery={searchQuery}
                       onToggle={onToggleRun}
                     />
                   ) : (

@@ -3,14 +3,18 @@ import { podContainers } from "@/lib/container-sequence";
 
 import { containerColor } from "./container-colors";
 import type { LogSource } from "./hooks/useLogStream";
-import type { LegendContainer, LegendEntry } from "./LogLegend";
+import type { LegendEntry } from "./LogLegend";
+import { hasStarted, type LaneReading } from "./readings";
 
-export function containerEntries(containers: LegendContainer[]): LegendEntry[] {
-  return containers.map(({ name, phase, state }) => ({
+export function containerEntries(
+  containers: Pick<ContainerInfo, "name" | "phase">[],
+  readings: ReadonlyMap<string, LaneReading>
+): LegendEntry[] {
+  return containers.map(({ name, phase }) => ({
     key: name,
     label: name,
     phase,
-    state,
+    reading: readings.get(name),
   }));
 }
 
@@ -109,7 +113,7 @@ export function sourcesOf(pods: LanePod[]): LogSource[] {
       // and nothing else about the source changes when it does. Without
       // this the refusal is permanent for the life of the pane, sitting
       // beside a pod list that has been showing it Running for ten minutes.
-      started: container.state.type !== "waiting",
+      started: hasStarted(container),
     }))
   );
 }

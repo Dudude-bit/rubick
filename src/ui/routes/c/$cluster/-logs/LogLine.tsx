@@ -349,10 +349,12 @@ export const LogRunRow = memo(function LogRunRow({
   expanded,
   containerColor,
   laneLabel = null,
+  searchQuery,
   onToggle,
 }: {
   run: LogRun;
   expanded: boolean;
+  searchQuery: string;
   containerColor: string | undefined;
   laneLabel?: string | null;
   onToggle: (id: number) => void;
@@ -385,7 +387,7 @@ export const LogRunRow = memo(function LogRunRow({
         <span aria-hidden="true" className="mr-1 text-fg-fnt">
           {expanded ? "▾" : "▸"}
         </span>
-        <Message log={run.head} />{" "}
+        <Message log={run.head} query={searchQuery} />{" "}
         <span className="text-fg-fnt">
           {runSpanMs(run) > 0
             ? t("count", "runOverSpan", {

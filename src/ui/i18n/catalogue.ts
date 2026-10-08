@@ -4274,7 +4274,9 @@ export const en = {
       one: "could not read {n} kind: {kinds}",
       other: "could not read {n} kinds: {kinds}",
     },
-    kindsRefusedHover: "The cluster refused: {kinds}",
+    kindsRefusedHover: "The cluster refused your account: {kinds}",
+    kindsNotListableHover:
+      "The cluster serves these without a list verb, so no account can search them: {kinds}",
     otherKindsNotSearched: "kinds outside the app's own are not searched",
     lastUsedAgo: "last used {age} ago",
     retryInline: "retry",
@@ -6256,6 +6258,7 @@ export const en = {
     chipNotStarted: "not started",
     chipLost: "lost",
     chipNotFollowed: "not followed",
+    chipRestarting: "restarting",
     noneHasRestarted:
       ": none of them has restarted, so there is nothing before the run they are on.",
     everyContainerHidden: "Every container is hidden.",
@@ -6266,6 +6269,7 @@ export const en = {
     },
     nothingLeftToShow: "Nothing left to show.",
     noOutputYet: "No output yet.",
+    previousRunWroteNothing: "The previous run wrote nothing.",
     streamAttachedNothingWritten:
       "The stream is attached; nothing has been written since these containers started.",
     notStreaming: "Not streaming.",
@@ -6939,6 +6943,22 @@ export const en = {
       one: "{n} finished, read to the end",
       other: "{n} finished, read to the end",
     },
+    podsRestarting: {
+      one: "{n} restarting, new run not followed",
+      other: "{n} restarting, new run not followed",
+    },
+    podsNotFollowed: {
+      one: "{n} not followed",
+      other: "{n} not followed",
+    },
+    podsNotStarted: {
+      one: "{n} not started",
+      other: "{n} not started",
+    },
+    podsNoEarlierRun: {
+      one: "{n} with no earlier run",
+      other: "{n} with no earlier run",
+    },
     podsGoneKept: {
       one: "{n} gone, lines kept",
       other: "{n} gone, lines kept",
@@ -7397,8 +7417,8 @@ export const en = {
       other: "{n} kinds not searched",
     },
     kindsNotListable: {
-      one: "{n} kind cannot be listed",
-      other: "{n} kinds cannot be listed",
+      one: "{n} kind cannot be listed by anyone",
+      other: "{n} kinds cannot be listed by anyone",
     },
     apiGroupsNotDiscovered: {
       one: "{n} API group did not answer discovery",

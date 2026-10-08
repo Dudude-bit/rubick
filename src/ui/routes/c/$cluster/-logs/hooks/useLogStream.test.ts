@@ -769,6 +769,54 @@ describe("useLogStream on a workload whose pods are replaced", () => {
     expect(listenCalls.filter((c) => c.event === "log-batch")).toHaveLength(1);
   });
 
+  /**
+   * Sam's log-demo Deployment, opened again from another tab: its pod list
+   * answered after the pane was listening, every stream opened as a pod
+   * joining later, and the pane held 4 lines where the pod's held 1806.
+   * Fails if the first streams of a session go without the backfill
+   * because the pod list was late.
+   */
+  it("backfills the first pods of a workload pane even when its pod list arrives after the pane opened", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
+      streamConfigs.push(config);
+      return `stream-${config.podName}-${config.container}`;
+    });
+    const sources = ["a", "b"].map((pod) => ({
+      pod,
+      namespace: "n",
+      container: "app",
+    }));
+    const { rerender } = renderHook(
+      ({ sources }) =>
+        useLogStream({
+          namespace: "n",
+          sources,
+          paneKey: "Deployment:log-demo",
+          limit: DEFAULT_LOG_LIMIT,
+        }),
+      { initialProps: { sources: [] as typeof sources } }
+    );
+    await waitFor(() =>
+      expect(listenCalls.some((c) => c.event === "log-batch")).toBe(true)
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    rerender({ sources });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(2));
+    expect(streamConfigs.map((c) => c.tailLines)).toEqual([
+      backfillPerContainer(DEFAULT_LOG_LIMIT, 2),
+      backfillPerContainer(DEFAULT_LOG_LIMIT, 2),
+    ]);
+
+    rerender({
+      sources: [...sources, { pod: "c", namespace: "n", container: "app" }],
+    });
+    await waitFor(() => expect(subscribedCalls).toHaveLength(3));
+    expect(streamConfigs[2].tailLines).toBe(0);
+  });
+
   it("names the pod as well as the container when a stream is refused", async () => {
     vi.mocked(commands.streamPodLogs).mockImplementation(async (config) => {
       if (config.podName === "api-b") throw new Error("forbidden");

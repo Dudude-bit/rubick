@@ -42,6 +42,7 @@ import type { CustomResourceDetailInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
+import { useRereadWith } from "@/hooks/useRereadWith";
 
 /**
  * A custom resource is whatever its author decided it is, so nothing on this
@@ -225,6 +226,10 @@ export function CustomResourceDetail({
     refresh: "resourceDetail",
   });
 
+  useRereadWith(
+    queryKeys.customResource(crdName, namespace, name),
+    queryKeys.customResourceYaml(crdName, namespace, name)
+  );
   const { data: yaml = "" } = useQuery({
     queryKey: queryKeys.customResourceYaml(crdName, namespace, name),
     queryFn: () =>

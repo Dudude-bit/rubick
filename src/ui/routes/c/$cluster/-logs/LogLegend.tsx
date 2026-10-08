@@ -1,43 +1,17 @@
 import type { ContainerInfo } from "@/generated/types";
 import { PHASE_LABEL } from "@/lib/container-sequence";
 
-import type { ContainerFailure } from "./hooks/useLogStream";
 import { formatCount } from "@/lib/count";
 import { useT } from "@/i18n/useT";
-import type { en } from "@/i18n/catalogue";
-import type { StreamFailureKind } from "@/lib/stream-failure";
+import { CHIP_WORD, type LaneReading } from "./readings";
 
-/**
- * The word a chip carries for how its stream stopped, total over the kinds
- * so a new one cannot borrow another's. A stream that could never attach
- * was not lost: the apiserver refuses one for a container that has not
- * started, which is a fact about the pod rather than about the connection.
- */
-const CHIP: Record<
-  StreamFailureKind,
-  (state: ContainerInfo["state"] | undefined) => keyof typeof en.empty
-> = {
-  gone: () => "chipEnded",
-  broken: (state) =>
-    state?.type === "waiting" ? "chipNotStarted" : "chipLost",
-  "no-previous-run": () => "chipNoEarlierRun",
-  "log-not-kept": () => "chipLogNotKept",
-  "follow-stopped": () => "chipNotFollowed",
-};
-
-export type LegendContainer = Pick<ContainerInfo, "name" | "phase" | "state">;
-
-/**
- * One chip of the legend: a container of one pod, or a pod of a workload.
- * A container brings its phase and state, which decide the divider and
- * the wording of a failure; a pod brings only whether it is still there.
- */
+/** One chip of the legend: a container of one pod, or a pod of a workload. */
 export interface LegendEntry {
   key: string;
   label: string;
   phase?: ContainerInfo["phase"];
-  state?: ContainerInfo["state"];
   gone?: boolean;
+  reading?: LaneReading;
 }
 
 interface LogLegendProps {
@@ -46,9 +20,6 @@ interface LogLegendProps {
   /** Lines received per entry, by key. */
   counts: Map<string, number>;
   hidden: ReadonlySet<string>;
-  failures: ContainerFailure[];
-  /** Which entry a failure belongs to: the container, or the pod. */
-  failureKey: (failure: ContainerFailure) => string;
   onToggle: (key: string) => void;
   /** Everything else off, or everything back on when it is already alone. */
   onSolo: (key: string) => void;
@@ -62,8 +33,6 @@ export function LogLegend({
   colors,
   counts,
   hidden,
-  failures,
-  failureKey,
   onToggle,
   onSolo,
   onShowAll,
@@ -80,10 +49,10 @@ export function LogLegend({
       className="flex flex-wrap items-center gap-x-1 gap-y-0.5 border-b border-hair px-2 py-1 text-[11px]"
       data-testid="log-legend"
     >
-      {entries.map(({ key, label, phase, state, gone }, index) => {
+      {entries.map(({ key, label, phase, gone, reading }, index) => {
         const off = hidden.has(key);
         const solo = soloed === key;
-        const failure = failures.find((f) => failureKey(f) === key);
+        const word = reading ? CHIP_WORD[reading.reading] : null;
         const count = counts.get(key) ?? 0;
         // A hairline where the phase changes: an init container and an
         // app container are not two entries in one list, they are two
@@ -136,20 +105,18 @@ export function LogLegend({
               <span className="font-mono text-[10px] text-fg-fnt">
                 {formatCount(count)}
               </span>
-              {gone && !failure && (
+              {gone && !word && (
                 <span className="text-fg-fnt">{t("action", "legendGone")}</span>
               )}
-              {failure && (
+              {reading && word && (
                 <span
                   className={
-                    failure.kind === "broken" && state?.type !== "waiting"
-                      ? "text-err"
-                      : "text-warn"
+                    reading.reading === "lost" ? "text-err" : "text-warn"
                   }
-                  title={failure.message}
+                  title={reading.note ?? undefined}
                 >
                   {"\u00b7 "}
-                  {t("empty", CHIP[failure.kind](state))}
+                  {t("empty", word)}
                 </span>
               )}
             </button>

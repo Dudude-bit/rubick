@@ -162,7 +162,7 @@ interface UseLogStreamResult {
   lastBatchAt: number;
   intakeFrom: number;
   unfilteredFrom: number;
-  /** True while at least one container's stream is attached. */
+  /** True while at least one container's followed stream is attached; a previous run is read, not followed. */
   isStreaming: boolean;
   isConnecting: boolean;
   /**
@@ -226,6 +226,8 @@ interface Session {
   listening: boolean;
   /** Whether the first set of streams opens without a backfill. */
   resuming: boolean;
+  /** The backfill is spent, whether the sources came with the mount or after it. */
+  seeded: boolean;
   /** stream id -> what it reads. */
   sourceOf: Map<string, LogSource>;
   /** source key -> stream id, or `""` while the open is in flight. */
@@ -431,8 +433,10 @@ export function useLogStream({
       // buffer is append-only: a backfill committed now would put minutes of
       // old lines after the live tail and drag a following reader down into
       // them. It streams from here, like the pod it replaced did.
-      const tail = initial ? backfillPerContainer(limit, wanted.length) : 0;
-      const started = await Promise.all(
+      const first = !s.seeded;
+      s.seeded = true;
+      const tail = first ? backfillPerContainer(limit, wanted.length) : 0;
+      await Promise.all(
         added.map(async (source) => {
           const key = sourceKey(source);
           s.opened.set(key, "");
@@ -440,7 +444,7 @@ export function useLogStream({
             podName: source.pod,
             namespace: source.namespace,
             container: source.container,
-            tailLines: initial && s.resuming ? 0 : tail,
+            tailLines: first && s.resuming ? 0 : tail,
             follow: true,
             timestamps: true,
             previous,
@@ -456,7 +460,7 @@ export function useLogStream({
             }
             s.opened.set(key, streamId);
             s.sourceOf.set(streamId, source);
-            s.live.add(streamId);
+            if (!previous) s.live.add(streamId);
             // It answered: whatever it said last time is no longer true.
             setFailures((prev) =>
               prev.filter(
@@ -498,7 +502,7 @@ export function useLogStream({
       );
       if (!s.active) return;
       setIsConnecting(false);
-      setIsStreaming(started.some(Boolean) || s.live.size > 0);
+      setIsStreaming(s.live.size > 0);
     },
     [limit, previous, intakeTerms, namespace]
   );
@@ -535,6 +539,7 @@ export function useLogStream({
       active: true,
       listening: false,
       resuming: false,
+      seeded: false,
       sourceOf: new Map(),
       opened: new Map(),
       live: new Set(),

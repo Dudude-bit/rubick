@@ -22,7 +22,8 @@ import { DetailAction } from "@/components/object/detail-blocks";
 import { JobRows } from "../-object/child-rows";
 import { PodListCard } from "../-object/PodListCard";
 import type { PeekTabId } from "./peek-tabs";
-import { peekManifestKey } from "./peek-sources";
+import { peekManifestKey, peekQueryKey } from "./peek-sources";
+import { useRereadWith } from "@/hooks/useRereadWith";
 import { RelatedPanel } from "../-object/RelatedPanel";
 import { useRelatedObjects } from "../-object/useRelatedObjects";
 import { servedOf } from "../-object/served";
@@ -578,6 +579,7 @@ function PeekYamlTab({ target }: { target: PeekTarget }) {
   const t = useT();
   const copy = useCopyToClipboard();
   const namespace = target.namespace ?? null;
+  useRereadWith(peekQueryKey(target), peekManifestKey(target));
 
   const { data, error, isPending, isFetching, refetch } = useLiveQuery({
     queryKey: peekManifestKey(target),

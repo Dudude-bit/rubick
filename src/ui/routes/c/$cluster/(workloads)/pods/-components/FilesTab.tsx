@@ -381,8 +381,12 @@ export function FilesTab({
 
       <div className="flex items-center gap-1 border-b border-hair px-3 py-1.5 font-mono text-[11px]">
         {crumbs(path).map((crumb, i) => (
-          <span key={crumb.path} className="flex items-center gap-1">
-            {i > 0 && <span className="text-fg-fnt">/</span>}
+          <span
+            key={crumb.path}
+            data-testid="files-crumb"
+            className="flex items-center gap-1"
+          >
+            {i > 1 && <span className="text-fg-fnt">/</span>}
             <button
               type="button"
               onClick={() => {
