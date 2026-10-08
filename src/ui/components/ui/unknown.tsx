@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
-import { ClipboardCopy, RefreshCw, TriangleAlert } from "lucide-react";
+import { ClipboardCopy, TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { parseRefusal, rbacRule } from "@/lib/refusal";
-import { forgetRefusals } from "@/lib/refusals";
+import { ReadAgain } from "@/components/ui/read-again";
 import { cn } from "@/lib/utils";
 import { useT } from "@/i18n/useT";
 
@@ -55,25 +55,7 @@ export function Unknown({ question, error, onRetry, className }: UnknownProps) {
           : t("empty", "unknownFault", { message })}
       </p>
       <div className="flex flex-wrap gap-1.5 pl-[22px] pt-0.5">
-        {onRetry && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (refused) forgetRefusals();
-              onRetry();
-            }}
-            // A long label (Russian runs longer than English) must wrap inside
-            // the button rather than run past the box's edge.
-            className="h-auto min-h-6 items-start whitespace-normal py-0.5 text-left"
-          >
-            <RefreshCw
-              className="mr-1.5 mt-0.5 h-3 w-3 flex-none"
-              aria-hidden="true"
-            />
-            {t("empty", "unknownRetry")}
-          </Button>
-        )}
+        {onRetry && <ReadAgain error={error} onRetry={onRetry} />}
         {refusal && (
           <Button
             variant="outline"

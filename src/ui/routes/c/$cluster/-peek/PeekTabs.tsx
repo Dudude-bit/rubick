@@ -1,6 +1,6 @@
 import { useCallback, type ReactNode } from "react";
 import { useQuery, keepPreviousData } from "@tanstack/react-query";
-import { Copy, RefreshCw } from "lucide-react";
+import { Copy } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Skeleton, TextSkeleton } from "@/components/ui/skeleton";
@@ -11,6 +11,7 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
+import { ReadAgain } from "@/components/ui/read-again";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { toKind } from "@/lib/resource-registry";
@@ -137,20 +138,13 @@ function TabError({
   error: Error;
   onRetry: () => void;
 }) {
-  const t = useT();
   return (
     <div className="px-3.5 py-4">
       <p className="text-xs text-warn">{what}</p>
       <p className="mt-1 wrap-break-word text-[11px] text-fg-mut">
         {errorToShow(error)}
       </p>
-      <div className="mt-2">
-        <DetailAction
-          label={t("action", "retry")}
-          icon={RefreshCw}
-          onClick={onRetry}
-        />
-      </div>
+      <ReadAgain error={error} onRetry={onRetry} className="mt-2" />
     </div>
   );
 }

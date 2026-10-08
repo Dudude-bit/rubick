@@ -46,7 +46,8 @@ beforeEach(() => {
 });
 
 describe("what the overview does when the read is refused", () => {
-  it("names the refusal and offers no retry when the cluster forbids the read", async () => {
+  /** Fails if a refusal is called a fault, or offered no read again after rights change. */
+  it("names the refusal and still offers the read again when the cluster forbids it", async () => {
     getClusterOverview.mockRejectedValue(
       'Tauri command \'getClusterOverview\' failed: pods is forbidden: User "kc" cannot list resource "pods" in API group "" at the cluster scope: Forbidden (code: 403)'
     );
@@ -58,11 +59,9 @@ describe("what the overview does when the read is refused", () => {
         screen.getByText(/do not have permission to read the whole cluster/i)
       ).toBeInTheDocument()
     );
-    // A refusal will not change on a retry, so the button that invites one is
-    // gone.
     expect(
-      screen.queryByRole("button", { name: /retry/i })
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeInTheDocument();
     // The fault headline is the wrong words for a refusal.
     expect(
       screen.queryByText("Could not read cluster state")
@@ -135,7 +134,9 @@ describe("what the overview does when the read is refused", () => {
         screen.getByText("Could not read cluster state")
       ).toBeInTheDocument()
     );
-    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeInTheDocument();
     expect(
       screen.queryByText(/do not have permission to read the whole cluster/i)
     ).not.toBeInTheDocument();

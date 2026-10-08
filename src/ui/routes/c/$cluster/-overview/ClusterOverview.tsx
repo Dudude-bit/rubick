@@ -13,6 +13,7 @@ import { MyServices } from "./MyServices";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Button } from "@/components/ui/button";
+import { ReadAgain } from "@/components/ui/read-again";
 import { HeaderSkeleton, StatsSkeleton } from "@/components/ui/skeleton";
 import {
   AttentionPanel,
@@ -107,10 +108,8 @@ export function ClusterOverview() {
   }
 
   if (error && !overview) {
-    // A refusal is not a failure: the cluster-wide read this page needs was
-    // declined, and retrying it spends requests to be declined again. Say so,
-    // and point at the fix — the scoped overview reads each namespace on its
-    // own, so a user with rights in some can see those by picking them.
+    // A refusal is not a failure: point at the fix, since the scoped overview
+    // reads each namespace on its own. Rights change, so it may be asked again.
     const refused = isRefusal(error);
     return (
       <div className="flex flex-col gap-[22px]">
@@ -148,15 +147,12 @@ export function ClusterOverview() {
             {errorToShow(error)}
           </p>
           <div className="flex items-center gap-2 pt-2">
-            {refused ? (
+            {refused && (
               <Button variant="outline" size="sm" onClick={openNamespacePicker}>
                 {t("action", "chooseNamespace")}
               </Button>
-            ) : (
-              <Button variant="outline" size="sm" onClick={() => refetch()}>
-                {t("action", "retry")}
-              </Button>
             )}
+            <ReadAgain error={error} onRetry={() => void refetch()} />
           </div>
         </Section>
       </div>

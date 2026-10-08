@@ -123,7 +123,11 @@ export function DaemonSetDetail() {
   // array, which the card then reported as "no pods for this workload" — a
   // claim about the cluster made from a question nobody answered, and the
   // reading somebody takes to mean their DaemonSet is down.
-  const { data: pods = [], error: podsError } = useLiveQuery({
+  const {
+    data: pods = [],
+    error: podsError,
+    refetch: refetchPods,
+  } = useLiveQuery({
     queryKey: queryKeys.ownedPods(
       ResourceType.DaemonSet,
       namespace,
@@ -330,7 +334,13 @@ export function DaemonSetDetail() {
         label: "Pods",
         glyph: kindGlyph(ResourceType.Pod),
         mark: podsMark(pods, t),
-        content: <PodListCard pods={pods} error={podsError} />,
+        content: (
+          <PodListCard
+            pods={pods}
+            error={podsError}
+            onRetry={() => void refetchPods()}
+          />
+        ),
       },
       {
         id: "logs",
@@ -390,6 +400,7 @@ export function DaemonSetDetail() {
       daemonSet,
       pods,
       podsError,
+      refetchPods,
       yaml,
       copyYaml,
       namespace,

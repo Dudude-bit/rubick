@@ -901,7 +901,9 @@ describe("PeekPanel tabs", () => {
     expect(await screen.findByText(/manifest denied/)).toBeInTheDocument();
 
     vi.mocked(commands.getManifest).mockResolvedValue("kind: Pod\n");
-    await userEvent.click(screen.getByRole("button", { name: /Retry/ }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
     expect(await screen.findByTestId("yaml-editor")).toBeInTheDocument();
   });
 
@@ -981,7 +983,9 @@ describe("PeekPanel tabs", () => {
     expect(
       await screen.findByText(/configmaps is forbidden/)
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Retry/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeInTheDocument();
   });
 });
 

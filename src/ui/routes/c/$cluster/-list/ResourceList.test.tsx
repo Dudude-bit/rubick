@@ -294,19 +294,21 @@ describe("a list whose first read failed", () => {
     expect(onRetry).toHaveBeenCalledTimes(1);
   });
 
-  /** A refusal is answered the same way again; fails if it is offered a retry or called failing. */
-  it("offers no retry for a refusal and does not call it failing", async () => {
+  /** Rights change; fails if a refusal is offered no read again, or is called failing. */
+  it("offers a refusal the read again without calling it failing", async () => {
+    const onRetry = vi.fn();
     await list({
       data: [],
       error: new Error("pods is forbidden: RBAC"),
-      onRetry: vi.fn(),
+      onRetry,
     });
 
     expect(screen.getByText(/forbidden/)).toBeVisible();
     expect(screen.queryByText("read failing")).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "Try the read again" })
-    ).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    expect(onRetry).toHaveBeenCalledTimes(1);
   });
 });
 

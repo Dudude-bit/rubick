@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { CircleX, Lock } from "lucide-react";
 
 import { ROLE_DOT, statusRole, type StatusRole } from "@/lib/status-role";
 import { objectLink } from "@/lib/links";
@@ -14,6 +15,7 @@ import { parts } from "@/i18n/parts";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
 import { None } from "@/components/ui/none";
+import { ReadAgain } from "@/components/ui/read-again";
 import { ownStatusWord } from "@/lib/status-words";
 import { RollBackLink } from "../-changes/RollBackLink";
 
@@ -84,20 +86,33 @@ export function ChildRows({
   error,
   /** What was being listed, for the failure line. */
   label,
+  onRetry,
 }: {
   rows: ChildRow[];
   emptyMessage?: string;
   error?: Error | null;
   label?: string;
+  /** Ask the read again, refused or failed. */
+  onRetry?: () => void;
 }) {
   const t = useT();
   if (rows.length === 0 && error) {
+    const refused = isRefusal(error);
     return (
       <div className="px-1.5 py-1">
-        <p className="text-xs text-err">
-          {/* A refusal is not a failure: saying "could not read" about one
-              invites a retry that will be refused the same way. */}
-          {isRefusal(error)
+        <p
+          data-read={refused ? "refused" : "failed"}
+          className={cn(
+            "flex items-center gap-1.5 text-xs",
+            refused ? "text-warn" : "text-err"
+          )}
+        >
+          {refused ? (
+            <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+          ) : (
+            <CircleX className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+          )}
+          {refused
             ? t("nav", "noListAccess")
             : isReadDeadline(error)
               ? t("empty", "readDeadlineShort", {
@@ -109,6 +124,9 @@ export function ChildRows({
         <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
           {errorToShow(error)}
         </p>
+        {onRetry && (
+          <ReadAgain error={error} onRetry={onRetry} className="mt-1.5" />
+        )}
       </div>
     );
   }

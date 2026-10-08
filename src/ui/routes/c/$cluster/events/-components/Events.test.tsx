@@ -1166,11 +1166,11 @@ describe("stories", () => {
     expect(
       within(heading.parentElement!).queryByTestId("section-count")
     ).toBeNull();
-    // Refused again on every retry, so neither failing nor offered again.
+    // Not failing, but rights change, so it may be asked again.
     expect(screen.queryByText("read failing")).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Try the read again" })
-    ).not.toBeInTheDocument();
+      screen.getByRole("button", { name: "Try the read again" })
+    ).toBeInTheDocument();
   });
 
   /**

@@ -1,9 +1,11 @@
 import type { ReactNode } from "react";
-import { FolderOpen, Lock, RefreshCw } from "lucide-react";
+import { CircleX, FolderOpen, Lock } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useT } from "@/i18n/useT";
+import { ReadAgain } from "@/components/ui/read-again";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
+import { cn } from "@/lib/utils";
 import { openNamespacePicker } from "@/lib/read-deadline";
 import type { ListRefusal } from "./useListRefusal";
 
@@ -14,29 +16,34 @@ export function UnreadList({
   onRetry,
   children,
 }: {
-  error: Error;
+  error: unknown;
   words: string;
-  /** Ask again; not offered for a refusal, which would be refused the same way. */
+  /** Ask again; a refusal too, since rights change. */
   onRetry?: () => void;
   children?: ReactNode;
 }) {
-  const t = useT();
+  const refused = isRefusal(error);
   return (
     <div className="max-w-[68ch] pb-8" data-testid="unread-list">
-      <p className="flex items-center gap-1.5 text-xs text-err">
-        {isRefusal(error) && (
+      <p
+        data-read={refused ? "refused" : "failed"}
+        className={cn(
+          "flex items-center gap-1.5 text-xs",
+          refused ? "text-warn" : "text-err"
+        )}
+      >
+        {refused ? (
           <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+        ) : (
+          <CircleX className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
         )}
         {words}
       </p>
       <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
         {errorToShow(error)}
       </p>
-      {onRetry && !isRefusal(error) && (
-        <Button size="sm" variant="outline" className="mt-2" onClick={onRetry}>
-          <RefreshCw className="mr-1.5 h-3 w-3" aria-hidden="true" />
-          {t("empty", "unknownRetry")}
-        </Button>
+      {onRetry && (
+        <ReadAgain error={error} onRetry={onRetry} className="mt-2" />
       )}
       {children}
     </div>

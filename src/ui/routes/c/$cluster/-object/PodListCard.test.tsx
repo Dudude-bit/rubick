@@ -8,8 +8,9 @@
  * them by catching the failure and returning an empty array.
  */
 
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 
 import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
@@ -18,8 +19,11 @@ import type { PodInfo } from "@/generated/types";
 
 // The card asks whether any of these pods sits on a node that stopped
 // reporting, so it needs the provider the app always mounts around it.
-const card = (props: { pods: PodInfo[]; error?: Error | null }) =>
-  renderWithRouter(<PodListCard {...props} />, { at: "/c/prod" });
+const card = (props: {
+  pods: PodInfo[];
+  error?: Error | null;
+  onRetry?: () => void;
+}) => renderWithRouter(<PodListCard {...props} />, { at: "/c/prod" });
 
 const pod = (name: string): PodInfo =>
   ({
@@ -43,10 +47,7 @@ describe("a pod list that could not be read", () => {
     expect(screen.getByText(/connection refused/i)).toBeTruthy();
   });
 
-  /**
-   * A refusal is not a failure. Saying "could not read" about one invites a
-   * retry that will be refused the same way.
-   */
+  /** A refusal is not a failure, and is not called one. */
   it("names a refusal as a refusal", async () => {
     await card({
       pods: [],
@@ -54,6 +55,23 @@ describe("a pod list that could not be read", () => {
     });
     expect(screen.getByText(/permission/i)).toBeTruthy();
     expect(screen.queryByText(/could not read/i)).toBeNull();
+  });
+
+  /**
+   * Rights change, so a refused pod list is offered the read again a failed
+   * one gets. Fails if the refusal hides it.
+   */
+  it("offers a refused pod list the read again", async () => {
+    const retry = vi.fn();
+    await card({
+      pods: [],
+      error: new Error("pods is forbidden: User cannot list"),
+      onRetry: retry,
+    });
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    expect(retry).toHaveBeenCalledTimes(1);
   });
 
   /** A workload that genuinely owns none still says so. */
