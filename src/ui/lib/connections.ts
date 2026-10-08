@@ -297,7 +297,7 @@ export type HopTone = "on" | "warn" | "bad";
 
 /** How the chain draws a hop, on the page and in a shared file alike. */
 export function hopTone(hop: ChainHop): HopTone {
-  if (hop.at === "stop") return "bad";
+  if (hop.at === "stop") return hop.idle ? "on" : "bad";
   // A hop the app could not look up is not a hop it found. The Services
   // list being refused hands the chain a backend with `notChecked`, and
   // drawing it in the ordinary tone made it indistinguishable from a
@@ -529,6 +529,29 @@ export interface ChainHopStop {
   at: "stop";
   title: string;
   note: string;
+  /** Nothing runs here by intent: the subject is scaled to zero. */
+  idle: boolean;
+}
+
+/** A stop as the chain says it about `subject`. */
+export function chainStopHop(
+  stop: ChainStop,
+  subject: ObjectRef,
+  t: T
+): ChainHopStop {
+  if (
+    stop.reason === "selectsNothing" &&
+    subject.facts?.kind === "workload" &&
+    subject.facts.rollout?.state === "idle"
+  ) {
+    return {
+      at: "stop",
+      idle: true,
+      title: t("nav", "stopScaledToZero", { name: subject.name }),
+      note: t("nav", "stopScaledToZeroNote"),
+    };
+  }
+  return { at: "stop", idle: false, ...describeStop(stop, t) };
 }
 
 /**
@@ -913,7 +936,7 @@ export function trafficChains(
           hops.push(gatewayRouteHop(mine, route, t));
           for (const entry of conns.stops) {
             if ("route" in entry && sameObject(entry.route, route)) {
-              hops.push({ at: "stop", ...describeStop(entry, t) });
+              hops.push(chainStopHop(entry, subject, t));
             }
           }
         }
@@ -950,8 +973,9 @@ export function trafficChains(
       // A route-level refusal breaks the path even where the Service behind
       // it is perfectly healthy — an unaccepted route serves nothing.
       const routeBroken = hops.some((hop) => hop.at === "stop");
+      const said = stop ? chainStopHop(stop, subject, t) : null;
 
-      if (stop) hops.push({ at: "stop", ...describeStop(stop, t) });
+      if (said) hops.push(said);
       else if (
         subject.kind !== "Pod" &&
         published &&
@@ -959,7 +983,11 @@ export function trafficChains(
       )
         hops.push(publishedHop(published, t));
 
-      return { key: refKey(service), hops, broken: !!stop || routeBroken };
+      return {
+        key: refKey(service),
+        hops,
+        broken: (!!said && !said.idle) || routeBroken,
+      };
     })
     .filter((path) => path.hops.length > 1);
 }

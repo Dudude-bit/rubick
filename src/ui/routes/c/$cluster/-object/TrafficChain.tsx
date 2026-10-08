@@ -14,6 +14,7 @@
 
 import { joinSayings, sayWords } from "@/i18n/say";
 import { Link } from "@tanstack/react-router";
+import { PauseCircle } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
@@ -461,10 +462,27 @@ function Hop({
         {hop.at === "controller" && <Controller binding={hop.binding} />}
         {hop.at === "stop" && (
           <>
-            <p className="text-xs text-err">{hop.title}</p>
+            <p
+              className={cn(
+                "flex items-center gap-1.5 text-xs",
+                hop.idle ? "text-fg-mid" : "text-err"
+              )}
+            >
+              {hop.idle && (
+                <PauseCircle className="h-3 w-3 flex-none" aria-hidden="true" />
+              )}
+              {hop.title}
+            </p>
             {/* A repair is a paragraph, and a paragraph set to the width of a
                 1600px window is one nobody finishes reading. */}
-            <p className="max-w-[92ch] text-[11px] text-err/85">{hop.note}</p>
+            <p
+              className={cn(
+                "max-w-[92ch] text-[11px]",
+                hop.idle ? "text-fg-mut" : "text-err/85"
+              )}
+            >
+              {hop.note}
+            </p>
           </>
         )}
       </div>

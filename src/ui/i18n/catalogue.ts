@@ -116,6 +116,9 @@ export const en = {
     stopNoServiceNamed: "No Service named {name} in this namespace",
     stopPublishesNothingYet: "Nothing is published behind {selector} yet",
     stopNoPodCarries: "No pod carries {selector}",
+    stopScaledToZero: "No pods by intent: {name} is scaled to zero",
+    stopScaledToZeroNote:
+      "Connections to this address are refused until it is scaled up again. The labels are not at fault.",
     stopNotScheduledNote:
       "No node has taken them: they are Pending with no node, so they have no address and nothing is published. Their events say why the scheduler passes them over.",
     stopNotStartedNote:

@@ -94,6 +94,9 @@ export const ru: Catalogue = {
     stopPublishesNothingYet:
       "По селектору {selector} пока ничего не опубликовано",
     stopNoPodCarries: "Ни у одного пода нет метки {selector}",
+    stopScaledToZero: "Подов нет намеренно: {name} масштабирован до нуля",
+    stopScaledToZeroNote:
+      "Подключения к этому адресу отклоняются, пока нагрузку не масштабируют обратно. Метки здесь ни при чём.",
     stopNotScheduledNote:
       "Ни один узел их не принял: они в Pending без узла, поэтому адреса у них нет и публиковать нечего. В их событиях сказано, почему планировщик их обходит.",
     stopNotStartedNote:

@@ -11,6 +11,7 @@ import {
   dependentsOf,
   describeStop,
   describeUsages,
+  hopTone,
   trafficChains,
   type RoutedIngress,
 } from "./connections";
@@ -23,6 +24,7 @@ import type {
   ObjectFacts,
   ObjectRef,
   ResourceConnections,
+  Rollout,
   Usage,
 } from "@/generated/types";
 
@@ -774,6 +776,63 @@ describe("the traffic chain", () => {
     expect(new Set(titles).size).toBe(3);
     expect(titles[0]).toContain("No Service named demo");
     expect(titles[1]).toBe("No pod carries app=tls-demo");
+  });
+
+  /**
+   * Lena scaled hello-web to zero: the header read Idle and the chain said in
+   * red that no pod carries app=hello-web. Fails if an idle workload's empty
+   * selector is drawn as a label mismatch, or a running one's stops being.
+   */
+  it("says a workload scaled to zero has no pods by intent, not that its labels are wrong", () => {
+    const front = service("hello-web", "app=hello-web");
+    const chainOf = (rollout: Rollout) => {
+      const deployment = ref("Deployment", "hello-web", {
+        kind: "workload",
+        replicas: 0,
+        readyReplicas: 0,
+        rollout,
+        revision: null,
+        current: null,
+      });
+      const [path] = trafficChains(
+        connections(
+          deployment,
+          [
+            {
+              from: front,
+              to: deployment,
+              relation: { verb: "selects", selector: "app=hello-web" },
+            },
+          ],
+          [
+            {
+              reason: "selectsNothing",
+              service: front,
+              selector: "app=hello-web",
+            },
+          ]
+        ),
+        t
+      );
+      return { path, stop: path.hops.at(-1)! };
+    };
+
+    const idle = chainOf({ state: "idle" });
+    expect(idle.stop).toMatchObject({
+      at: "stop",
+      idle: true,
+      title: "No pods by intent: hello-web is scaled to zero",
+    });
+    expect(hopTone(idle.stop)).toBe("on");
+    expect(idle.path.broken).toBe(false);
+
+    const short = chainOf({ state: "short", available: 0, desired: 2 });
+    expect(short.stop).toMatchObject({
+      idle: false,
+      title: "No pod carries app=hello-web",
+    });
+    expect(hopTone(short.stop)).toBe("bad");
+    expect(short.path.broken).toBe(true);
   });
 
   it("costs one line when nothing fronts the workload", () => {

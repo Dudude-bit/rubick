@@ -8,7 +8,7 @@ import {
   connectionCount,
   connectionGroups,
   describeExistence,
-  describeStop,
+  chainStopHop,
   hopTone,
   trafficChains,
   type ChainHop,
@@ -51,7 +51,7 @@ function hopOf(hop: ChainHop, t: T): ReportHop {
         tone: hop.tone === "on" ? "ok" : "warn",
       };
     case "stop":
-      return { ...plain, text: hop.title, detail: hop.note, tone: "err" };
+      return { ...plain, text: hop.title, detail: hop.note, tone };
     case "certificate":
       // On the page a certificate not read back yet is a moment; in a file
       // it is for good, and a hop with no warning reads as one that is fine.
@@ -125,10 +125,10 @@ export function trafficOf(
     hops: path.hops.map((hop) => hopOf(hop, t)),
   }));
   for (const stop of conns.stops) {
-    const said = describeStop(stop, t);
+    const said = chainStopHop(stop, conns.subject, t);
     if (drawn.has(said.title)) continue;
     paths.push({
-      broken: true,
+      broken: !said.idle,
       hops: [
         {
           ref: refOf(stopSubject(stop)),
@@ -141,7 +141,7 @@ export function trafficOf(
           ref: null,
           text: said.title,
           detail: said.note,
-          tone: "err",
+          tone: ROLE_OF_TONE[hopTone(said)],
           self: false,
         },
       ],
