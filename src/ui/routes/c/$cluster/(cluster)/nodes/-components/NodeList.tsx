@@ -27,7 +27,11 @@ import { MetricsStatusBanner } from "../../../-metrics";
 import { ResourceList } from "../../../-list/ResourceList";
 import { ResourceListHeader } from "../../../-list/ResourceListHeader";
 import { ShareScreenAction } from "@/components/share/ShareAction";
-import { createAgeColumn, createNameColumn } from "../../../-list/columns";
+import {
+  createAgeColumn,
+  createNameColumn,
+  metricCellFloor,
+} from "../../../-list/columns";
 import { SpotMark } from "../../../-object/spot-mark";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 import { describePool, poolFacts, poolOf, spotMark } from "@/lib/node-pool";
@@ -138,6 +142,7 @@ export const columns = (
     id: "cpu",
     header: columnHeader("columns", "cpuUsage"),
     meta: {
+      floor: metricCellFloor,
       share: (row: NodeInfo, t) => {
         const used = nodeMetricsByName.get(row.name)?.cpuMillicores;
         return typeof used === "number"
@@ -162,6 +167,7 @@ export const columns = (
     id: "memory",
     header: columnHeader("columns", "memoryUsage"),
     meta: {
+      floor: metricCellFloor,
       share: (row: NodeInfo, t) => {
         const used = nodeMetricsByName.get(row.name)?.memoryBytes;
         return typeof used === "number"

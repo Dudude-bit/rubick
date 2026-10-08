@@ -1,6 +1,7 @@
 import type { AppColumnMeta } from "@/components/ui/table-features";
 import type { HeaderSaying } from "@/i18n/column-header";
 import type { T } from "@/i18n/useT";
+import { textWidth } from "@/lib/text-width";
 
 interface LabelledColumn {
   header?: unknown;
@@ -23,7 +24,7 @@ export function columnLabel(column: LabelledColumn, t: T): string | null {
   );
 }
 
-/** 11px medium Inter: 7px covers the long labels, and a short one runs wider than that ("Memory", "Домены"). */
+/** Where text is not laid out: 7px a glyph of 11px medium Inter, and a short word runs wider ("Memory", "Домены"). */
 const GLYPH_PX = 7;
 const SHORT_WORD_SLACK_PX = 5;
 /** A sort control's 12px mark, its 4px gap and the button's own 8px of padding. */
@@ -32,23 +33,23 @@ const SORT_MARK_PX = 24;
 const PADDING_PX = 20;
 
 /**
- * The narrowest a column can be drawn with its header whole. "Готовность",
- * "Перезапуски" and "Возраст" were cut on a Pods table with room to spare.
+ * The narrowest a column can be drawn with its header whole, from the width
+ * its words are drawn at in the reader's language.
  */
 export function headerFloor(column: LabelledColumn, t: T): number {
   const label = columnLabel(column, t);
   if (!label) return 0;
   const sortable = (column.meta as AppColumnMeta | undefined)?.label;
-  return Math.ceil(
-    label.length * GLYPH_PX +
-      SHORT_WORD_SLACK_PX +
-      (sortable ? SORT_MARK_PX : 0) +
-      PADDING_PX
-  );
+  const drawn =
+    textWidth(label, "header") ?? label.length * GLYPH_PX + SHORT_WORD_SLACK_PX;
+  return Math.ceil(drawn + (sortable ? SORT_MARK_PX : 0) + PADDING_PX);
 }
 
 /** The narrowest a column is drawn: what its cells declare, and its header's words. */
 export function columnFloor(column: LabelledColumn, t: T): number {
   const declared = (column.meta as AppColumnMeta | undefined)?.floor ?? 0;
-  return Math.max(declared, headerFloor(column, t));
+  return Math.max(
+    typeof declared === "function" ? declared(t) : declared,
+    headerFloor(column, t)
+  );
 }

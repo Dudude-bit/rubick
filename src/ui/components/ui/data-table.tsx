@@ -749,6 +749,16 @@ function DataTableInner<TData extends RowData>({
 
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const [portWidth, attachPort] = usePortWidth(scrollRef);
+  // Floors are measured text: drawn again once the fonts they are measured in arrive.
+  const [, fontsArrived] = React.useReducer((n: number) => n + 1, 0);
+  React.useEffect(() => {
+    if (document.fonts?.status !== "loading") return;
+    let live = true;
+    void document.fonts.ready.then(() => live && fontsArrived());
+    return () => {
+      live = false;
+    };
+  }, []);
 
   // The window is spliced into the table with spacer rows rather than
   // absolutely positioned ones: an out-of-flow `tr` leaves the fixed-layout

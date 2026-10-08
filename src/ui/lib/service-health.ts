@@ -171,6 +171,18 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
   }
 }
 
+/** Every label `serviceHealthWords` can draw, two-digit counts included, for the column that has to hold the widest. */
+export const serviceVerdictLabels = (t: T) => [
+  t("count", "nReady", { n: 99 }),
+  t("count", "readyOfTotal", { ready: 99, total: 99 }),
+  t("empty", "stopNoneReady"),
+  t("readings", "healthNoEndpoints"),
+  t("readings", "healthDnsAlias"),
+  t("readings", "healthByHand"),
+  t("readings", "healthStillReading"),
+  t("nav", "notChecked"),
+];
+
 /** A Service's verdict from its neighbourhood, the answer its trace draws. */
 export function healthFromConnections(
   data: ResourceConnections | undefined,

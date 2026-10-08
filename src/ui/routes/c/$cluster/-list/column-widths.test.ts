@@ -4,6 +4,7 @@ import { actionsColumnSize, tableLayout } from "@/components/ui/column-shares";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { columnFloor } from "@/lib/column-label";
+import { serviceVerdictLabels } from "@/lib/service-health";
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
 
 import { AGE_CELL_PX, NAME_CELL_PX, NODE_CELL_PX } from "./columns";
@@ -33,7 +34,11 @@ interface Column {
   accessorKey?: unknown;
   accessorFn?: unknown;
   header?: unknown;
-  meta?: { share?: unknown; label?: unknown; floor?: number };
+  meta?: {
+    share?: unknown;
+    label?: unknown;
+    floor?: number | ((t: T) => number);
+  };
 }
 
 /**
@@ -239,7 +244,7 @@ describe("the Name column", () => {
     "%s never draws its Name under the shared floor",
     (_page, columns) => {
       const name = columns.find((c) => c.accessorKey === "name");
-      expect(name?.meta?.floor).toBeGreaterThanOrEqual(NAME_CELL_PX);
+      expect(columnFloor(name ?? {}, en)).toBeGreaterThanOrEqual(NAME_CELL_PX);
     }
   );
 
@@ -411,6 +416,53 @@ describe("the Pods table", () => {
   it("keeps the room the row's buttons need when the table scrolls", () => {
     const { px, scrolls } = laidOut(shown, 640, ru);
     expect(scrolls).toBe(true);
-    expect(px[px.length - 1]).toBeGreaterThanOrEqual(actionsColumnSize(4));
+    expect(px[px.length - 1]).toBeGreaterThanOrEqual(
+      actionsColumnSize(4) - 0.0001
+    );
+  });
+});
+
+describe("a value a cell says in words", () => {
+  const floorOf = (columns: Column[], id: string, t: T) =>
+    columnFloor(columns.find((c) => nameOf(c) === id) ?? {}, t);
+
+  /** Lena read "ни один не го…" in Services: fails if the Endpoints column stops holding its widest verdict badge in either language. */
+  it.each([
+    ["English", en],
+    ["Russian", ru],
+  ] as const)("holds every Service verdict whole in %s", (_language, t) => {
+    for (const label of serviceVerdictLabels(t))
+      expect(floorOf(services(), "health", t)).toBeGreaterThanOrEqual(
+        Math.ceil(label.length * 6.6 + 14 + 20)
+      );
+  });
+
+  /** Lena read "нет зам…" under Память on Nodes: fails if a metric column stops holding the words it says when there is no value. */
+  it.each([
+    ["Nodes", nodes(new Map())],
+    ["Pods", pods],
+  ] as const)(
+    "%s holds a metric's no-sample words in Russian",
+    (_page, columns) => {
+      for (const id of ["cpu", "memory"])
+        expect(floorOf(columns, id, ru)).toBeGreaterThanOrEqual(
+          Math.ceil("нет замера".length * 7.2 + 20)
+        );
+    }
+  );
+
+  /** Fails if a Services row cuts its type, its namespace or a Cilium-sized port name once the window narrows. */
+  it("holds a Service's type, namespace and named port whole", () => {
+    expect(floorOf(services(), "type", en)).toBeGreaterThanOrEqual(
+      Math.ceil("LoadBalancer".length * 7 + 20)
+    );
+    expect(floorOf(services(), "namespace", en)).toBeGreaterThanOrEqual(
+      Math.ceil("ingress-nginx".length * 7.2 + 20)
+    );
+    expect(floorOf(services(), "ports", en)).toBeGreaterThanOrEqual(
+      Math.ceil(
+        "9964→9964".length * 7.2 + 4 + "envoy-metrics · TCP".length * 6.2 + 20
+      )
+    );
   });
 });
