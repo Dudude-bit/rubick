@@ -8,6 +8,7 @@
   --color-canvas: hsl(var(--canvas));
   --color-raise: hsl(var(--raise));
   --color-hair: hsl(var(--hair));
+  --color-fold: hsl(var(--fold));
   --color-hover: hsl(var(--hover));
   --color-sel: hsl(var(--sel));
 
@@ -203,6 +204,8 @@
      * ============================================ */
     --canvas: 40 30% 98%;
     --hair: 34 20% 30% / 0.14;
+    /* The shade where a list continues past its edge: a fade to white alone hides grey text and nothing else. */
+    --fold: 34 20% 20% / 0.12;
     --hover: 34 25% 20% / 0.06;
     --sel: 34 25% 20% / 0.1;
     --fg: 32 16% 11%;
@@ -306,6 +309,7 @@
      * weight against it. */
     --canvas: 220 8% 13%;
     --hair: 0 0% 100% / 0.09;
+    --fold: 0 0% 0% / 0.22;
     --hover: 0 0% 100% / 0.055;
     --sel: 0 0% 100% / 0.11;
     --fg: 220 6% 93%;

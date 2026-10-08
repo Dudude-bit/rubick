@@ -27,11 +27,13 @@ import type { T } from "@/i18n/useT";
 import type {
   ClusterOverview,
   ClusterProblem,
+  IngressHealthInput,
   NodeSummary,
   PodComposition,
   WarningGroup,
 } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
+import { ingressHealthOf } from "@/lib/ingress-health";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
@@ -1078,5 +1080,109 @@ describe("what Needs attention says it checked", () => {
     expect(screen.getAllByRole("link", { name: /^Pod api-/ })).toHaveLength(14);
     expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
     expect(screen.getByText("and 3 more")).toBeInTheDocument();
+  });
+});
+
+describe("Ingresses asking for an IngressClass the cluster does not have", () => {
+  const unserved = (name: string, className: string, tls = false) =>
+    ({
+      name,
+      namespace: "k8s-gui-test",
+      className,
+      rules: [],
+      defaultBackend: null,
+      loadBalancerIps: [],
+      tlsConfigs: tls
+        ? [{ hosts: [], secretName: `${name}-tls`, isCatchAll: false }]
+        : [],
+    }) as IngressHealthInput;
+
+  const attention = () =>
+    attentionFrom([], {
+      ingresses: {
+        data: {
+          rows: [
+            unserved("checkout", "traefik", true),
+            unserved("dupe-nginx-new", "nginx"),
+            unserved("expiring-demo", "traefik"),
+            unserved("ghost-demo", "nginx"),
+            unserved("ghost-nginx", "nginx"),
+            unserved("lonely", "haproxy"),
+          ],
+          unread: [],
+        },
+        error: null,
+      },
+      ingressHealth: (row) =>
+        ingressHealthOf({
+          ingress: row,
+          binding: {
+            known: true,
+            value: {
+              requested: row.className,
+              resolved: null,
+              controller: null,
+              viaDefault: false,
+              available: [],
+            },
+          },
+          backing: { known: true, value: new Map() },
+          certificates: new Map([
+            ["checkout-tls", { problem: { says: "noSecret" } } as never],
+          ]),
+        }),
+    });
+
+  /**
+   * Sam's Overview printed "No IngressClass named nginx in this cluster, so
+   * nothing picks this Ingress up" on about 20 rows. Fails if a grouped row
+   * says the sentence again, if the class marker goes, or if grouping changes
+   * the count the sidebar and status bar read.
+   */
+  it("says the missing class once per class and marks each Ingress under it with the class", async () => {
+    const read = attention();
+    expect(read.total).toBe(6);
+    await wrap(
+      <AttentionPanel
+        attention={read}
+        pods={RUNNING}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+
+    const lines = screen.getAllByTestId("attention-unserved");
+    expect(lines.map((line) => line.textContent)).toEqual([
+      "no controller2 Ingresses here ask for an IngressClass this cluster does not have: traefik",
+      "no controller3 Ingresses here ask for an IngressClass this cluster does not have: nginx",
+    ]);
+    expect(
+      screen.getAllByRole("img", {
+        name: "No IngressClass named nginx in this cluster",
+      })
+    ).toHaveLength(3);
+    expect(
+      screen.getAllByRole("img", {
+        name: "No IngressClass named traefik in this cluster",
+      })
+    ).toHaveLength(2);
+    expect(screen.queryAllByText(/nothing picks this Ingress up/)).toHaveLength(
+      1
+    );
+    expect(screen.getByText(/checkout-tls/)).toBeInTheDocument();
+  });
+
+  /** A Share report of the same list must group it the same way. */
+  it("offers Share one finding per missing class, with the class on each Ingress", () => {
+    const section = attentionShare(attention(), t);
+    const items = section.body.type === "findings" ? section.body.items : [];
+    const titles = items.map((item) => item.title);
+    expect(titles[0]).toBe(
+      "2 Ingresses here ask for an IngressClass this cluster does not have: traefik"
+    );
+    expect(titles[1]).toBe("no controller · traefik");
+    expect(items[1]?.detail).toMatch(/checkout-tls/);
+    expect(items[1]?.detail).not.toMatch(/IngressClass/);
+    expect(titles).toContain("no controller");
   });
 });

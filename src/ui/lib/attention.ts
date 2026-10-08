@@ -44,6 +44,8 @@ export interface AttentionItem {
   foldedPods: number | null;
   /** Where the row opens: the object itself, or what an autoscaler scales. */
   opens: { kind: string; name: string; namespace: string | null };
+  /** The IngressClass it asks for that nothing serves, and what else is wrong with it. */
+  unservedClass?: { name: string; rest: string | null };
 }
 
 /** A reach, or one object's input, that could not be read. */
@@ -202,6 +204,24 @@ interface Judged {
   reading: boolean;
 }
 
+function unservedClassOf(
+  health: IngressHealth,
+  t: T
+): AttentionItem["unservedClass"] {
+  const missing = health.problems.find(
+    (problem) => problem.kind === "noController"
+  );
+  if (missing?.kind !== "noController" || !missing.className) return undefined;
+  const rest = health.problems.filter((problem) => problem !== missing);
+  return {
+    name: missing.className,
+    rest:
+      rest.length > 0
+        ? ingressHealthWords({ ...health, problems: rest }, t).reason
+        : null,
+  };
+}
+
 const ingressItems = remember(
   (
     rows: IngressHealthInput[],
@@ -210,7 +230,8 @@ const ingressItems = remember(
   ): Judged => {
     const judged: Judged = { items: [], unknown: [], reading: false };
     for (const ingress of rows) {
-      const words = ingressHealthWords(healthOf(ingress), t);
+      const health = healthOf(ingress);
+      const words = ingressHealthWords(health, t);
       if (words.code === "reading") {
         judged.reading = true;
         continue;
@@ -240,6 +261,7 @@ const ingressItems = remember(
           restarts: null,
           foldedPods: null,
           opens: subject,
+          unservedClass: unservedClassOf(health, t),
         })
       );
     }
@@ -360,6 +382,38 @@ function ranked(items: AttentionItem[]): AttentionItem[] {
     (a, b) =>
       SEVERITY[a.tone] - SEVERITY[b.tone] || dated(a.since) - dated(b.since)
   );
+}
+
+export type AttentionLine =
+  | { at: "item"; item: AttentionItem; grouped: boolean }
+  | { at: "unserved"; className: string; members: number };
+
+/**
+ * The list as it is drawn: Ingresses asking for the same missing IngressClass
+ * sit under one line that says so, where the first of them ranked.
+ */
+export function attentionLines(items: AttentionItem[]): AttentionLine[] {
+  const byClass = new Map<string, AttentionItem[]>();
+  for (const item of items) {
+    const name = item.unservedClass?.name;
+    if (name) byClass.set(name, [...(byClass.get(name) ?? []), item]);
+  }
+  const lines: AttentionLine[] = [];
+  const placed = new Set<string>();
+  for (const item of items) {
+    const name = item.unservedClass?.name;
+    const members = name ? (byClass.get(name) ?? []) : [];
+    if (!name || members.length < 2) {
+      lines.push({ at: "item", item, grouped: false });
+      continue;
+    }
+    if (placed.has(name)) continue;
+    placed.add(name);
+    lines.push({ at: "unserved", className: name, members: members.length });
+    for (const member of members)
+      lines.push({ at: "item", item: member, grouped: true });
+  }
+  return lines;
 }
 
 /** "2 failed pods", where a row stands for runs it folded. */

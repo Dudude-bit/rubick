@@ -20,6 +20,7 @@ import type { ObjectEventsQuery } from "@/hooks/useObjectEvents";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
 import { eventsTab } from "./events-tab";
 import { AnyObject } from "./AnyObject";
@@ -665,5 +666,40 @@ describe("the Events tab's own words", () => {
     expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(
       "События"
     );
+  });
+});
+
+describe.each(
+  [...KINDS, ...OWN_READ].filter((target) =>
+    [
+      "Deployment",
+      "StatefulSet",
+      "DaemonSet",
+      "ReplicaSet",
+      "Job",
+      "Node",
+    ].includes(target.kind)
+  )
+)("a $kind page's Pods tab in Russian", (target) => {
+  /** Lena's Russian Deployment strip read "Pods 2" beside "События" and "Контейнеры"; fails if any page with a pods tab names it in English again. */
+  it("names its pods tab in the reader's language, as the tabs beside it are", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      await openEventAbout(target, async () => []);
+      await waitFor(() =>
+        expect(
+          screen
+            .getAllByRole("tab")
+            .some((tab) => tab.textContent?.startsWith("Поды"))
+        ).toBe(true)
+      );
+      expect(
+        screen
+          .getAllByRole("tab")
+          .filter((tab) => tab.textContent?.startsWith("Pods"))
+      ).toEqual([]);
+    } finally {
+      useLocaleStore.setState({ choice: "en" });
+    }
   });
 });

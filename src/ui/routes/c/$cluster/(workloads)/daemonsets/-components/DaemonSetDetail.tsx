@@ -277,7 +277,7 @@ export function DaemonSetDetail() {
                 daemonSet?.selector
                   ? [
                       {
-                        label: "Pods",
+                        label: t("columns", "pods"),
                         value: daemonSet.selector,
                         mono: true,
                       },
@@ -327,7 +327,7 @@ export function DaemonSetDetail() {
       },
       {
         id: toPlural(ResourceType.Pod),
-        label: "Pods",
+        label: t("columns", "pods"),
         glyph: kindGlyph(ResourceType.Pod),
         mark: podsMark(pods, t),
         content: <PodListCard pods={pods} error={podsError} />,

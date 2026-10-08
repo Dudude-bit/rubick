@@ -281,6 +281,28 @@ describe("the counts at the end of each row", () => {
     expect(badge).toHaveAccessibleName("3+ problems, not all checked");
     attention = null;
   });
+
+  /**
+   * Marco's badge was a bare "3+" and only its hover card said not all was
+   * checked. Fails if the incomplete badge loses the hollow ring the app
+   * draws for "not checked", or a complete one gains it.
+   */
+  it("wears the not-checked ring beside a floor, and none beside a whole count", async () => {
+    overview = overviewWithPods(4);
+    attention = { total: 3, worst: "err", complete: false };
+    const partial = await wrap(<Sidebar />);
+    const badge = await screen.findByText("3+");
+    expect(
+      within(badge).getByTestId("attention-unchecked-ring")
+    ).toBeInTheDocument();
+    partial.unmount();
+
+    attention = { total: 3, worst: "err", complete: true };
+    await wrap(<Sidebar />);
+    await screen.findByText("3");
+    expect(screen.queryByTestId("attention-unchecked-ring")).toBeNull();
+    attention = null;
+  });
 });
 
 describe("the update dot", () => {

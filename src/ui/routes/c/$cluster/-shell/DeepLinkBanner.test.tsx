@@ -49,3 +49,28 @@ describe("a link that opens an object in another namespace", () => {
     }
   );
 });
+
+describe("the note a live link leaves", () => {
+  /** Lena's page sat 40px lower until she closed the note, then jumped; fails if the note goes back into the page's flow. */
+  it("floats over the page instead of pushing it down", async () => {
+    useClusterStore.setState({
+      currentContext: "acme",
+      isConnected: true,
+      namespaceScope: [],
+      setNamespaceScope,
+    });
+    useDeepLinkStore.setState({
+      arrival: {
+        status: "live",
+        link: { context: "acme", path: PATH, capturedAt: null },
+      },
+    });
+    const { container } = await renderWithRouter(<DeepLinkBanner />, {
+      at: PATH,
+      route: "/c/$cluster/deployments/$namespace/$name",
+    });
+    const note = await screen.findByRole("status");
+    expect(container.contains(note)).toBe(false);
+    expect(note.className).toContain("fixed");
+  });
+});

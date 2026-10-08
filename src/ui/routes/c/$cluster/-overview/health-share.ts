@@ -9,6 +9,7 @@ import { ownCountedWord } from "@/lib/status-words";
 import type { WorkloadStatus } from "@/lib/workload-status";
 import type { JobStatus } from "@/lib/status-meaning";
 import {
+  attentionLines,
   foldedWords,
   reasonWord,
   type Attention,
@@ -110,15 +111,37 @@ export function memoryRatio(
 
 /** What the "Needs attention" panel draws, as a Share finding per row. */
 export function attentionShare(attention: Attention, t: T): PlacedSection {
-  const items: ReportFinding[] = attention.items.map((item) => ({
-    title: reasonWord(item, t),
-    detail:
-      [foldedWords(item, t), detailWords(item.detail, t)]
-        .filter((part) => part !== null)
-        .join(" · ") || null,
-    role: item.tone,
-    ref: refOf({ kind: item.kind, name: item.name, namespace: item.namespace }),
-  }));
+  const items = attentionLines(attention.items).map((line): ReportFinding => {
+    if (line.at === "unserved")
+      return {
+        title: t("count", "ingressesUnserved", {
+          n: line.members,
+          classes: line.className,
+        }),
+        detail: t("empty", "nothingPickedThemUp"),
+        role: "err",
+      };
+    const { item } = line;
+    const marked = line.grouped ? item.unservedClass : undefined;
+    return {
+      title: marked
+        ? `${reasonWord(item, t)} · ${marked.name}`
+        : reasonWord(item, t),
+      detail:
+        [
+          foldedWords(item, t),
+          marked ? marked.rest : detailWords(item.detail, t),
+        ]
+          .filter((part) => part !== null)
+          .join(" · ") || null,
+      role: item.tone,
+      ref: refOf({
+        kind: item.kind,
+        name: item.name,
+        namespace: item.namespace,
+      }),
+    };
+  });
   const cut = attention.total - attention.items.length;
   if (cut > 0)
     items.push({
