@@ -16,6 +16,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { useRightsAsked } from "@/lib/refusals";
 import { seedScope } from "@/lib/namespace-scope";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
@@ -61,9 +62,10 @@ export function useResourceAccess(queries: ListQuery[]): Map<string, boolean> {
   // rows, the Gateway rows ask about theirs, and one key for both would
   // hand the second asker the first one's answers.
   const asked = queries.map((query) => query.resource).sort();
+  const rights = useRightsAsked();
 
   const { data } = useQuery({
-    queryKey: ["list-access", currentContext, namespaces, asked],
+    queryKey: ["list-access", currentContext, namespaces, asked, rights],
     queryFn: () => commands.checkListAccess(queries, namespaces),
     enabled: isConnected && Boolean(currentContext),
     staleTime: REVIEW_FRESH_MS,
@@ -127,9 +129,10 @@ function useReadableIn(queries: ListQuery[]): Map<string, Reach> {
   const isConnected = useClusterStore((s) => s.isConnected);
   const namespaces = useNameableNamespaces();
   const asked = queries.map((query) => query.resource).sort();
+  const rights = useRightsAsked();
 
   const { data } = useQuery({
-    queryKey: ["list-access-in", currentContext, namespaces, asked],
+    queryKey: ["list-access-in", currentContext, namespaces, asked, rights],
     queryFn: async () => {
       const answers = await Promise.all(
         namespaces.map((namespace) =>

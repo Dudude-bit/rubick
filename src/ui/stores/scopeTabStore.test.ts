@@ -445,11 +445,20 @@ describe("titles", () => {
     expect(tabRouteLabel("/c/pods", t)).toBe("Overview");
   });
 
-  // The peek is the foreground, so it is what the tab is showing.
-  it("names the open peek over the list behind it", () => {
-    expect(tabRouteLabel("/c/prod/pods?peek=pods%2Fweb%2Fapi-7f9", t)).toBe(
-      "api-7f9"
-    );
+  /**
+   * Marco peeked checkout-api from the Services list and the tab read
+   * "checkout-api". Fails if a peek over a list renames the tab.
+   */
+  it("keeps the list's name under a peek opened over it", () => {
+    expect(
+      tabRouteLabel(
+        "/c/prod/services?peek=services%2Fteam-checkout%2Fcheckout-api",
+        t
+      )
+    ).toBe("Services");
+    expect(
+      tabRouteLabel("/c/prod/events?peek=pods%2Fdemo%2Funready-demo", t)
+    ).toBe("Events");
   });
 
   /**
@@ -466,10 +475,10 @@ describe("titles", () => {
     ).toBe("checkout-api-6767");
   });
 
-  /** The Overview is a page too: a peek opened over it is what is on screen. */
-  it("names the open peek over the Overview", () => {
+  /** The Overview is a page too. Fails if a peek over it renames the tab. */
+  it("keeps the Overview's name under a peek opened over it", () => {
     expect(tabRouteLabel("/c/prod?peek=pods%2Fweb%2Fapi-7f9", t)).toBe(
-      "api-7f9"
+      "Overview"
     );
   });
 

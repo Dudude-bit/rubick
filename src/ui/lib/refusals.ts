@@ -24,9 +24,10 @@ interface Refused {
   error: unknown;
 }
 
-const useRefusals = create<{ reads: ReadonlyMap<string, Refused> }>(() => ({
-  reads: new Map(),
-}));
+const useRefusals = create<{
+  reads: ReadonlyMap<string, Refused>;
+  forgotten: number;
+}>(() => ({ reads: new Map(), forgotten: 0 }));
 
 /** A read by what it asks: the command and its arguments, or `null` for arguments that do not print. */
 export function readOf(
@@ -72,7 +73,19 @@ export function noteRefusal(
 
 /** The reader says their rights may have changed: every refused read is asked once more. */
 export function forgetRefusals(): void {
-  useRefusals.setState({ reads: new Map() });
+  useRefusals.setState((s) => ({
+    reads: new Map(),
+    forgotten: s.forgotten + 1,
+  }));
+}
+
+/**
+ * How many times the reader said their rights may have changed. Every
+ * answer about rights keys on it, so the sidebar's locks, the picker's
+ * offers and the access reviews are asked again with the refused read.
+ */
+export function useRightsAsked(): number {
+  return useRefusals((s) => s.forgotten);
 }
 
 /** Whether this read was refused on `connection`, for a screen that decides on it. */

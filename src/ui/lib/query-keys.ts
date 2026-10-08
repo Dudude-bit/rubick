@@ -261,11 +261,13 @@ export const queryKeys = {
   accessReview: (
     context: string | null,
     connection: number,
+    rights: number,
     asked: readonly string[]
   ): (string | null)[] => [
     "access-review",
     context,
     String(connection),
+    String(rights),
     ...asked,
   ],
   lineage: (

@@ -9,6 +9,7 @@ import {
   noteRefusal,
   readOf,
   useRefusedAmong,
+  useRightsAsked,
 } from "@/lib/refusals";
 import { seedScope } from "@/lib/namespace-scope";
 import { listQueryFor, toKind } from "@/lib/resource-registry";
@@ -81,9 +82,10 @@ export function useAccessReview(asked: readonly Asked[]): void {
   const connection = useClusterStore((s) => s.connectionAttemptId);
   const context = useClusterStore((s) => s.currentContext);
   const connected = useClusterStore((s) => s.isConnected);
+  const rights = useRightsAsked();
   const reads = asked.map((query) => deniedRead(query.verb, query)).sort();
   useQuery({
-    queryKey: queryKeys.accessReview(context, connection, reads),
+    queryKey: queryKeys.accessReview(context, connection, rights, reads),
     enabled: connected && !!context && asked.length > 0,
     staleTime: Infinity,
     retry: false,

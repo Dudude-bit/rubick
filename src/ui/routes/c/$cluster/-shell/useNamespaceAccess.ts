@@ -9,6 +9,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
+import { useRightsAsked } from "@/lib/refusals";
 import { useClusterStore } from "@/stores/clusterStore";
 
 /** Rights change rarely, never within an open picker; matches useListAccess. */
@@ -24,9 +25,10 @@ export function useNamespaceAccess(names: string[]): NamespaceAccessMap {
   // Sorted into the key: the same namespaces in a different order are one
   // question, and keying on the order would ask it twice.
   const sorted = [...names].sort();
+  const rights = useRightsAsked();
 
   const { data } = useQuery({
-    queryKey: ["namespace-access", currentContext, sorted],
+    queryKey: ["namespace-access", currentContext, sorted, rights],
     queryFn: () => commands.checkNamespaceAccess(sorted),
     enabled: isConnected && Boolean(currentContext) && names.length > 0,
     staleTime: REVIEW_FRESH_MS,

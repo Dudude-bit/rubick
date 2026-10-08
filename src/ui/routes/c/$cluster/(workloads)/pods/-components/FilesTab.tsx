@@ -204,6 +204,10 @@ export function FilesTab({
   // change with the same rows did the work again. Filtering preserves order,
   // so a keystroke is now a walk and no sort at all.
   const entries = state.phase === "idle" ? NO_ENTRIES : state.entries;
+  const filterLabel =
+    state.phase === "reading"
+      ? t("files", "filterNamesReading")
+      : t("files", "filterNames", { n: entries.length });
   const sorted = useMemo(
     () => sortEntries(entries, sort.key, sort.descending),
     [entries, sort]
@@ -462,7 +466,7 @@ export function FilesTab({
               setFilter("");
             }}
           />
-          {entries.length > 0 && (
+          {(entries.length > 0 || state.phase === "reading") && (
             <input
               autoComplete="off"
               autoCorrect="off"
@@ -470,8 +474,8 @@ export function FilesTab({
               spellCheck={false}
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              aria-label={t("files", "filterNames", { n: entries.length })}
-              placeholder={t("files", "filterNames", { n: entries.length })}
+              aria-label={filterLabel}
+              placeholder={filterLabel}
               className="ml-auto w-48 rounded border border-hair bg-canvas px-1.5 py-0.5 text-[11px] focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
             />
           )}
