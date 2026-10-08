@@ -1371,6 +1371,30 @@ describe("a workload pane", () => {
   });
 
   /**
+   * Sam's shop/recommendations scaled to 0: Overview said scaled to zero and
+   * Logs said "No pods to read from yet.", as if one were coming. Fails if a
+   * workload idle on purpose reads as a wait, or if the reason is dropped.
+   */
+  it("says why a workload with no pods on purpose has nothing to read, not that pods are coming", async () => {
+    renderWithProviders(
+      <LogViewer
+        namespace="default"
+        pods={[]}
+        laneRule="pod"
+        workload={{ owner: "recommendations", ownerKind: "Deployment" }}
+        idle="This Deployment is scaled to zero."
+      />
+    );
+    expect((await screen.findByTestId("log-idle")).textContent).toBe(
+      "This Deployment is scaled to zero."
+    );
+    expect(
+      screen.getByText("No pod runs, so there is no log to read.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("No pods to read from yet.")).toBeNull();
+  });
+
+  /**
    * The same empty array arrives from a workload with no pods and from a
    * read the cluster refused. Said the same way, the pane makes a claim
    * about a cluster it did not look at — and the Pods tab beside it, on the

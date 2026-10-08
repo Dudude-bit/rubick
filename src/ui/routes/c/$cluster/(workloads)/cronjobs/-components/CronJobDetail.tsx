@@ -431,6 +431,13 @@ export function CronJobDetail() {
                 podsError={podsError}
                 laneRule="run"
                 workload={name ? { owner: name, ownerKind: "CronJob" } : null}
+                idle={
+                  cronJob
+                    ? cronJob.suspend
+                      ? t("empty", "cronJobSuspended")
+                      : t("empty", "cronJobNoRunInFlight")
+                    : null
+                }
               />
             </div>
           </div>

@@ -4915,6 +4915,7 @@ export const en = {
       "This policy names neither direction, so it applies to nothing.",
     podsUnread:
       "This workload's pods could not be read, so nothing here says whether it has any: {reason}",
+    idleNothingToRead: "No pod runs, so there is no log to read.",
     noPodsToStream: "No pods to read from yet.",
     podListUnread: "pod list not read",
     everyLaneHidden: "Every pod is hidden.",

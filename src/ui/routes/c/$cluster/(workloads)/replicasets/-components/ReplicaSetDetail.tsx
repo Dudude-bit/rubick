@@ -278,6 +278,7 @@ export function ReplicaSetDetail() {
               podsError={podsError}
               laneRule="pod"
               workload={name ? { owner: name, ownerKind: "ReplicaSet" } : null}
+              idle={replicaSet && emptyPods ? whyEmpty : null}
             />
           </div>
         </div>

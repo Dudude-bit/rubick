@@ -181,6 +181,8 @@ interface LogViewerProps {
    * pod's streams, because that is the only thing the API server will follow.
    */
   workload?: { owner: string; ownerKind: string } | null;
+  /** Why the workload runs no pods on purpose, as its page says it; absent while it should have some. */
+  idle?: string | null;
 }
 
 export function LogViewer({
@@ -190,6 +192,7 @@ export function LogViewer({
   pods,
   podsError,
   laneRule = "pod",
+  idle = null,
   soloContainer,
   workload,
 }: LogViewerProps) {
@@ -1228,6 +1231,7 @@ export function LogViewer({
           intake={intake.length > 0}
           allHidden={shownLanes.length === 0 && laneKeys.length > 0}
           noPods={lanes && pods.length === 0 && laneKeys.length === 0}
+          idle={idle}
           podsUnread={podsError}
           lanes={lanes}
           previous={previousRun}
