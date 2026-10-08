@@ -48,6 +48,7 @@ import {
   StreamFailureNotice,
 } from "./LogNotices";
 import { LaneCoverage } from "./LaneCoverage";
+import { countReadings, readLanes, type ReadSource } from "./readings";
 import { downloadNotice } from "./download-notice";
 import { EmptyState } from "./LogEmptyState";
 import { containerColors as buildContainerColors } from "./container-colors";
@@ -68,6 +69,13 @@ import {
   type ViewMode,
 } from "./types";
 import { formatCount } from "@/lib/count";
+
+const RESTARTS_ALWAYS: ReadonlySet<string> = new Set([
+  "Deployment",
+  "ReplicaSet",
+  "StatefulSet",
+  "DaemonSet",
+]);
 
 /** Before the first batch there is no index to read the legend's tally from. */
 const EMPTY_COUNTS: Map<string, number> = new Map();
@@ -903,6 +911,40 @@ export function LogViewer({
     return null;
   }, [lanes, bannered, containerInfos, hidden, podName]);
 
+  const restartsAlways =
+    workload !== null &&
+    workload !== undefined &&
+    RESTARTS_ALWAYS.has(workload.ownerKind);
+  const readings = useMemo(() => {
+    const readSources: ReadSource[] = lanes
+      ? pods.flatMap((pod) =>
+          pod.containers.map((info) => ({
+            lane: pod.name,
+            pod: pod.name,
+            container: info.name,
+            info,
+          }))
+        )
+      : containerInfos.map((info) => ({
+          lane: info.name,
+          pod: podName,
+          container: info.name,
+          info,
+        }));
+    return readLanes(readSources, failures, {
+      previous: previousRun,
+      restartsAlways,
+    });
+  }, [
+    lanes,
+    pods,
+    containerInfos,
+    podName,
+    failures,
+    previousRun,
+    restartsAlways,
+  ]);
+
   const legendEntries = useMemo<LegendEntry[]>(
     () =>
       lanes
@@ -924,8 +966,9 @@ export function LogViewer({
                     laneNames
                   ),
             gone: gone.has(key),
+            reading: readings.get(key),
           }))
-        : containerEntries(containerInfos),
+        : containerEntries(containerInfos, readings),
     [
       lanes,
       laneKeys,
@@ -935,82 +978,23 @@ export function LogViewer({
       laneNames,
       gone,
       containerInfos,
+      readings,
     ]
   );
-  /**
-   * What is actually attached, counted over pods.
-   *
-   * `gone` is not a refusal. The streamer emits it when a followed run
-   * ends by the pod's own status, which is the ordinary end of every init container
-   * and of every pod of a finished Job — so counting any failure as
-   * not-streaming made a Deployment with one migration init container read
-   * "0 of 3 pods streaming" while all three were writing into the pane.
-   *
-   * `refused` counts pods, not streams, because the sentence beside it
-   * counts pods; and a paused pane is not an unread one, so the whole
-   * sentence steps aside while the reader has stopped it.
-   */
-  const coverage = useMemo(() => {
-    if (!lanes) return null;
-    const terminated = new Set(
-      pods.flatMap((pod) =>
-        pod.containers
-          .filter((container) => container.state.type === "terminated")
-          .map((container) => `${pod.name}/${container.name}`)
-      )
-    );
-    const unread = (failure: ContainerFailure) => {
-      if (failure.kind === "no-previous-run") return false;
-      // Read to the end, not refused: the container finished.
-      if (
-        failure.kind === "gone" &&
-        terminated.has(`${failure.pod}/${failure.container}`)
-      ) {
-        return false;
-      }
-      return true;
-    };
-    const unreadable = failures.filter(unread);
-    // Counted over pods, because the clause beside it counts pods and the
-    // noun is elided. `broken` is the could-not-look state, so the
-    // sentence says that rather than claiming a refusal.
-    const refused = new Set(
-      unreadable
-        .filter((failure) => !gone.has(failure.pod))
-        .map((failure) => failure.pod)
-    ).size;
-    // A pod is streaming while one of its streams is still attached; one
-    // whose every stream ended with its container was read to the end.
-    const attached = new Set(
-      (sources ?? [])
-        .filter(
-          (source) =>
-            !failures.some(
-              (failure) =>
-                failure.pod === source.pod &&
-                failure.container === source.container
-            )
-        )
-        .map((source) => source.pod)
-    );
-    const streaming = pods.filter((pod) => attached.has(pod.name)).length;
-    const finished = pods.filter(
-      (pod) =>
-        !attached.has(pod.name) &&
-        !unreadable.some((failure) => failure.pod === pod.name) &&
-        failures.some(
-          (failure) => failure.pod === pod.name && failure.kind === "gone"
-        )
-    ).length;
-    return {
-      podsRead: !podsError,
-      total: pods.length,
-      streaming,
-      finished,
-      refused,
-      gone: gone.size,
-    };
-  }, [lanes, pods, podsError, failures, gone, sources]);
+  const coverage = useMemo(
+    () =>
+      lanes
+        ? {
+            podsRead: !podsError,
+            total: pods.length,
+            counts: countReadings(
+              pods.map((pod) => readings.get(pod.name)?.reading)
+            ),
+            gone: gone.size,
+          }
+        : null,
+    [lanes, pods, podsError, readings, gone]
+  );
 
   return (
     <div ref={rootRef} className="flex h-full flex-col">
@@ -1077,8 +1061,6 @@ export function LogViewer({
         colors={colors}
         counts={counts}
         hidden={hidden}
-        failures={failures}
-        failureKey={laneOfFailure}
         onToggle={handleToggleContainer}
         onSolo={handleSoloContainer}
         onShowAll={handleShowAllContainers}
@@ -1231,6 +1213,7 @@ export function LogViewer({
           noPods={lanes && pods.length === 0 && laneKeys.length === 0}
           podsUnread={podsError}
           lanes={lanes}
+          previous={previousRun}
           onClearQuery={handleClearQuery}
           onShowAll={handleShowAllContainers}
         />

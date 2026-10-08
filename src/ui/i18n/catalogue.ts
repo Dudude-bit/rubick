@@ -6245,6 +6245,7 @@ export const en = {
     chipNotStarted: "not started",
     chipLost: "lost",
     chipNotFollowed: "not followed",
+    chipRestarting: "restarting",
     noneHasRestarted:
       ": none of them has restarted, so there is nothing before the run they are on.",
     everyContainerHidden: "Every container is hidden.",
@@ -6255,6 +6256,7 @@ export const en = {
     },
     nothingLeftToShow: "Nothing left to show.",
     noOutputYet: "No output yet.",
+    previousRunWroteNothing: "The previous run wrote nothing.",
     streamAttachedNothingWritten:
       "The stream is attached; nothing has been written since these containers started.",
     notStreaming: "Not streaming.",
@@ -6914,6 +6916,22 @@ export const en = {
     podsFinished: {
       one: "{n} finished, read to the end",
       other: "{n} finished, read to the end",
+    },
+    podsRestarting: {
+      one: "{n} restarting, new run not followed",
+      other: "{n} restarting, new run not followed",
+    },
+    podsNotFollowed: {
+      one: "{n} not followed",
+      other: "{n} not followed",
+    },
+    podsNotStarted: {
+      one: "{n} not started",
+      other: "{n} not started",
+    },
+    podsNoEarlierRun: {
+      one: "{n} with no earlier run",
+      other: "{n} with no earlier run",
     },
     podsGoneKept: {
       one: "{n} gone, lines kept",

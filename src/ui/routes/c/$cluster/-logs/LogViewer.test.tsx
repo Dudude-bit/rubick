@@ -1428,6 +1428,154 @@ describe("a workload pane", () => {
     expect(screen.getByRole("button", { name: /Stopped/ })).toBeInTheDocument();
   });
 
+  const crashLooping = (state: ContainerInfo["state"]) =>
+    container("app", {
+      ready: false,
+      state,
+      lastTerminated: {
+        exitCode: 1,
+        signal: null,
+        reason: "Error",
+        message: null,
+        startedAt: null,
+        finishedAt: new Date(Date.now() - 20_000).toISOString(),
+      },
+      restartCount: 9,
+    });
+  const waitingInBackoff = {
+    type: "waiting",
+    reason: "CrashLoopBackOff",
+  } as const;
+  const exited = {
+    type: "terminated",
+    termination: {
+      exitCode: 1,
+      signal: null,
+      reason: "Error",
+      message: null,
+      startedAt: null,
+      finishedAt: null,
+    },
+  } as const;
+  const recommendations = (state: ContainerInfo["state"]) =>
+    pane([pod("recommendations-5c68fb6c5c-5hk8r", [crashLooping(state)])]);
+  const chipOf = (name: string) =>
+    within(screen.getByTestId("log-legend"))
+      .getAllByRole("button")
+      .find((button) => button.textContent?.startsWith(name))!;
+  const lanesHeader = () => screen.getByTestId("log-lane-coverage").textContent;
+
+  /**
+   * Sam's shop/recommendations: one container in a crash loop, kubectl logs
+   * reads it fine. The header said "1 pod could not be read" in back-off and
+   * "1 finished, read to the end" in the seconds it sat terminated, and the
+   * chip said ended. Fails if the pod is called unreadable, or finished, in
+   * any state of the loop, or if header and chip say different things.
+   */
+  it("says a crash-looping pod it read fine is restarting, the same in the header and on its chip, through the loop", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(
+      async (config: { podName: string }) => `stream-${config.podName}`
+    );
+    const { rerender } = renderWithProviders(recommendations(waitingInBackoff));
+    await waitFor(() =>
+      expect(commands.logStreamSubscribed).toHaveBeenCalledTimes(1)
+    );
+    act(() => {
+      listeners["log-batch"]!({
+        payload: {
+          stream_id: "stream-recommendations-5c68fb6c5c-5hk8r",
+          lines: [line("panic: connection refused")],
+        },
+      });
+      fireFailure(
+        "gone",
+        "default/recommendations-5c68fb6c5c-5hk8r stopped streaming: container app is no longer running.",
+        "stream-recommendations-5c68fb6c5c-5hk8r"
+      );
+    });
+
+    for (const state of [
+      waitingInBackoff,
+      exited,
+      { type: "running" },
+    ] as const) {
+      rerender(recommendations(state));
+      await waitFor(() =>
+        expect(lanesHeader()).toContain("1 restarting, new run not followed")
+      );
+      expect(lanesHeader()).not.toContain("could not be read");
+      expect(lanesHeader()).not.toContain("finished");
+      expect(lanesHeader()).not.toContain("1 of 1 pod streaming");
+      expect(chipOf("recommendations").textContent).toContain("· restarting");
+    }
+  });
+
+  /**
+   * Sam's log-demo under the node's inotify limit: three of a pod's five
+   * containers refused to follow. The header counted the pod as streaming and
+   * as could-not-be-read, and the chip said "not followed". Fails if one pod
+   * is counted in two clauses.
+   */
+  it("counts a pod whose follow the node stopped once, as not followed, and says the same on its chip", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(
+      async (config: { podName: string; container: string | null }) =>
+        `stream-${config.podName}-${config.container}`
+    );
+    renderWithProviders(
+      pane([
+        pod("log-demo-gk2wp", [container("json"), container("web")]),
+        pod("log-demo-kkcxv", [container("json"), container("web")]),
+      ])
+    );
+    await waitFor(() =>
+      expect(commands.logStreamSubscribed).toHaveBeenCalledTimes(4)
+    );
+
+    act(() => {
+      fireFailure(
+        "follow-stopped",
+        "failed to create fsnotify watcher: too many open files",
+        "stream-log-demo-kkcxv-json"
+      );
+    });
+
+    await waitFor(() =>
+      expect(lanesHeader()).toContain("1 of 2 pods streaming · 1 not followed")
+    );
+    expect(lanesHeader()).not.toContain("could not be read");
+    expect(chipOf("log-demo-kkcxv").textContent).toContain("· not followed");
+    expect(chipOf("log-demo-gk2wp").textContent).not.toContain("not followed");
+  });
+
+  /**
+   * Sam's Previous run on the crash-looping pod: a one-shot read of a run
+   * that is over, and the header said "1 of 1 pod streaming" beside a green
+   * Live. Fails if reading an old run is called streaming or live.
+   */
+  it("calls a previous run read to the end, not streaming and not live", async () => {
+    vi.mocked(commands.streamPodLogs).mockImplementation(
+      async (config: { podName: string }) => `stream-${config.podName}`
+    );
+    renderWithProviders(recommendations(waitingInBackoff));
+    await userEvent.click(
+      await screen.findByRole("button", { name: /Previous run/ })
+    );
+    await waitFor(() =>
+      expect(commands.streamPodLogs).toHaveBeenCalledWith(
+        expect.objectContaining({ previous: true })
+      )
+    );
+
+    await waitFor(() =>
+      expect(lanesHeader()).toContain("1 finished, read to the end")
+    );
+    expect(lanesHeader()).toContain("0 of 1 pod streaming");
+    expect(screen.getByRole("button", { name: /Stopped/ })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Live/ })
+    ).not.toBeInTheDocument();
+  });
+
   it("does not call a pod list it could not read an empty one", async () => {
     renderWithProviders(
       pane([], new Error("pods is forbidden: User cannot list pods"))

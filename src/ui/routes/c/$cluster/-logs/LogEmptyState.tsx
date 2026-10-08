@@ -44,6 +44,7 @@ export function EmptyState({
   noPods = false,
   podsUnread,
   lanes = false,
+  previous = false,
   onClearQuery,
   onShowAll,
 }: {
@@ -63,6 +64,8 @@ export function EmptyState({
   podsUnread?: unknown;
   /** A workload pane: what is hidden is a pod, not a container. */
   lanes?: boolean;
+  /** The run before the current one is being read: a read that finished, not a stream. */
+  previous?: boolean;
   onClearQuery: () => void;
   onShowAll: () => void;
 }) {
@@ -150,6 +153,8 @@ export function EmptyState({
       </Note>
     );
   }
+
+  if (previous) return <Note>{t("empty", "previousRunWroteNothing")}</Note>;
 
   if (streaming) {
     return (

@@ -162,7 +162,7 @@ interface UseLogStreamResult {
   lastBatchAt: number;
   intakeFrom: number;
   unfilteredFrom: number;
-  /** True while at least one container's stream is attached. */
+  /** True while at least one container's followed stream is attached; a previous run is read, not followed. */
   isStreaming: boolean;
   isConnecting: boolean;
   /**
@@ -432,7 +432,7 @@ export function useLogStream({
       // old lines after the live tail and drag a following reader down into
       // them. It streams from here, like the pod it replaced did.
       const tail = initial ? backfillPerContainer(limit, wanted.length) : 0;
-      const started = await Promise.all(
+      await Promise.all(
         added.map(async (source) => {
           const key = sourceKey(source);
           s.opened.set(key, "");
@@ -456,7 +456,7 @@ export function useLogStream({
             }
             s.opened.set(key, streamId);
             s.sourceOf.set(streamId, source);
-            s.live.add(streamId);
+            if (!previous) s.live.add(streamId);
             // It answered: whatever it said last time is no longer true.
             setFailures((prev) =>
               prev.filter(
@@ -498,7 +498,7 @@ export function useLogStream({
       );
       if (!s.active) return;
       setIsConnecting(false);
-      setIsStreaming(started.some(Boolean) || s.live.size > 0);
+      setIsStreaming(s.live.size > 0);
     },
     [limit, previous, intakeTerms, namespace]
   );
