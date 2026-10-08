@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { TableSkeleton } from "@/components/ui/skeleton";
 import { ReasonTip } from "@/components/object/detail-blocks";
 import { useToast } from "@/components/ui/use-toast";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
@@ -184,6 +185,18 @@ export function FilesTab({
     ]
   );
   const { state, stop, reload } = useContainerFiles(target);
+
+  // Until this container has answered once, the tab has no path, columns or
+  // names to show; a later directory keeps the bar it already earned.
+  const scope = `${readingLife}:${via?.container ?? ""}`;
+  const [answeredIn, setAnsweredIn] = useState<string | null>(null);
+  const answered =
+    state.phase === "done" ||
+    state.phase === "failed" ||
+    (state.phase === "reading" && state.entries.length > 0);
+  if (answered && answeredIn !== scope) setAnsweredIn(scope);
+  const beforeAnswer =
+    state.phase === "reading" && !answered && answeredIn !== scope;
 
   // Two stages, and in this order. Sorting the filtered list meant every
   // keystroke re-sorted up to MAX_ENTRIES rows, and every 100 ms batch
@@ -413,7 +426,7 @@ export function FilesTab({
         </Notice>
       )}
 
-      {target !== null && (
+      {target !== null && !beforeAnswer && (
         <div className="flex flex-wrap items-center gap-1 border-b border-hair px-3 py-1.5 font-mono text-[11px]">
           {crumbs(target.path).map((crumb, i) => (
             <span
@@ -483,6 +496,20 @@ export function FilesTab({
         <Sentence>
           {t("files", "findingWorkingDir", { container: container.name })}
         </Sentence>
+      ) : beforeAnswer ? (
+        <div
+          data-testid="files-loading"
+          aria-busy
+          aria-label={t("files", "listingOf", { path })}
+          className="px-3 py-2"
+        >
+          <TableSkeleton
+            widths={[260, 100, 80, 90]}
+            rows={8}
+            showSearch={false}
+            compact
+          />
+        </div>
       ) : state.phase === "failed" ? (
         <Failure
           state={state}
