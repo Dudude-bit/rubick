@@ -85,16 +85,17 @@ describe("what the density strip says when the lines are too close to map", () =
     expect(document.body.textContent).not.toMatch(/instant/);
   });
 
-  /** Would break if the count stopped choosing its form by the number. */
-  it("counts the lines with the form the number takes", () => {
+  /** Would break if the count stopped choosing its form by the number, or the sentence went back to Lena's calque "в пределах 89 мс друг от друга". */
+  it("counts the lines with the form the number takes, in plain Russian", () => {
     useLocaleStore.setState({ choice: "ru" });
     const logs = burst([0, 50, 100, 150]);
     render(
       <LogDensityStrip {...common} mode="full" logs={logs} retained={4} />
     );
     expect(document.body.textContent).toMatch(
-      /Все 4 строки пришли в пределах 150\sмс/
+      /Все 4 строки уложились в 150\sмс: это слишком мало, чтобы делить время на срезы\./
     );
+    expect(document.body.textContent).not.toContain("друг от друга");
   });
 
   /** English keeps its own sentence for the same burst. */
