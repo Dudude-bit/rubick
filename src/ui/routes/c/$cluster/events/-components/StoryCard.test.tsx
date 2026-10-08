@@ -49,4 +49,36 @@ describe("a story card held between watch ticks", () => {
     rerender(<StoryCard story={story} options={cut} showNamespace={false} />);
     expect(unreadSlices()).toBe(12);
   });
+
+  /**
+   * A filter narrowing the feed turns a quiet story from done into cannot
+   * say with nothing else on the card moving. Fails if the card is held over
+   * a state it no longer has.
+   */
+  it("draws the story's new state when a filter narrows the feed under it", async () => {
+    const started: EventInfo = {
+      ...backOff,
+      type: "Normal",
+      reason: "Started",
+      message: "Started container app",
+    };
+    const whole: StoryOptions = {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+      readFrom: null,
+    };
+    const narrowed: StoryOptions = { ...whole, narrowed: true };
+    const [done] = storiesOf([started], whole);
+    const { rerender } = await renderWithRouter(
+      <StoryCard story={done} options={whole} showNamespace={false} />
+    );
+    expect(screen.getByText("done")).toBeInTheDocument();
+
+    const [unsure] = storiesOf([started], narrowed);
+    rerender(
+      <StoryCard story={unsure} options={narrowed} showNamespace={false} />
+    );
+    expect(screen.getByText("cannot say")).toBeInTheDocument();
+  });
 });

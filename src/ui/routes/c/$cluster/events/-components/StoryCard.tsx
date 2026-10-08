@@ -16,6 +16,7 @@ import {
   type TimelineEntry,
 } from "@/lib/event-stories";
 import { cn } from "@/lib/utils";
+import { useNow } from "@/hooks/useNow";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { sayWords, spanWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
@@ -98,22 +99,27 @@ const sameStory = (a: Story, b: Story) =>
   a.events.every((event, index) => event === b.events[index]);
 
 function sameStrip(a: StoryCardProps, b: StoryCardProps): boolean {
-  if (a.options.readFrom === b.options.readFrom) return true;
   const after = densityOf(b.story, b.options);
   return densityOf(a.story, a.options).every(
-    (bucket, index) => bucket.read === after[index].read
+    (bucket, index) =>
+      bucket.count === after[index].count &&
+      bucket.worst === after[index].worst &&
+      bucket.read === after[index].read
   );
 }
 
-/** The watch refolds every story once a second; a card whose own events did not change is not drawn again. */
+/**
+ * The watch refolds every story once a second and the clock moves every
+ * thirty; a card is drawn again only when what it shows changed.
+ */
 export const StoryCard = memo(
   StoryCardView,
   (before, after) =>
     before.showNamespace === after.showNamespace &&
-    before.options.now === after.options.now &&
     before.options.windowMs === after.options.windowMs &&
-    before.options.narrowed === after.options.narrowed &&
     sameStory(before.story, after.story) &&
+    before.story.state === after.story.state &&
+    JSON.stringify(before.story.says) === JSON.stringify(after.story.says) &&
     sameStrip(before, after)
 );
 
@@ -227,7 +233,7 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
         </p>
       ) : null}
 
-      {open ? <Timeline story={story} now={options.now} /> : null}
+      {open ? <Timeline story={story} /> : null}
     </article>
   );
 }
@@ -292,8 +298,9 @@ function podsOf(story: Story): {
 }
 
 /** The events on one clock, with the pods' remembered exits placed among them. */
-function Timeline({ story, now }: { story: Story; now: number }) {
+function Timeline({ story }: { story: Story }) {
   const t = useT();
+  const now = useNow();
   const { asked: pods, skipped } = podsOf(story);
   const statuses = useQueries({
     queries: pods.map((pod) => ({
