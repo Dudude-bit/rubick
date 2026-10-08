@@ -549,7 +549,7 @@ describe("FilesTab", () => {
         onStopVia={() => {}}
       />
     );
-    expect(screen.getAllByTestId("files-crumb").length).toBeGreaterThan(0);
+    expect(screen.queryAllByTestId("files-crumb")).toHaveLength(0);
     expect(screen.queryByRole("textbox")).toBeNull();
     reading.unmount();
 
@@ -565,6 +565,39 @@ describe("FilesTab", () => {
     expect(
       screen.getByRole("textbox", { name: "filter 1 name…" })
     ).toBeInTheDocument();
+  });
+
+  /**
+   * Marco saw the path bar and the Name, Mode, Size header half a second
+   * before the first read answered. Fails if anything but one loading shape
+   * is drawn before the answer, or if a later directory loses the bar.
+   */
+  it("draws one loading shape until the first read answers, then keeps the bar", async () => {
+    listing.mockReturnValue({ phase: "reading", entries: [], startedAt: 0 });
+    const shown = pod();
+    const tab = () => (
+      <FilesTab
+        pod={shown}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    const view = await wrap(tab());
+    expect(screen.getByTestId("files-loading")).toBeInTheDocument();
+    expect(screen.queryAllByTestId("files-crumb")).toHaveLength(0);
+    expect(screen.queryByText("Mode")).toBeNull();
+    expect(screen.getByText(/reading · 0 entries so far/)).toBeInTheDocument();
+
+    listing.mockReturnValue(done([file("app.conf")]));
+    view.rerender(tab());
+    expect(screen.queryByTestId("files-loading")).toBeNull();
+    expect(screen.getByText("Mode")).toBeInTheDocument();
+
+    listing.mockReturnValue({ phase: "reading", entries: [], startedAt: 0 });
+    view.rerender(tab());
+    expect(screen.queryByTestId("files-loading")).toBeNull();
+    expect(screen.getAllByTestId("files-crumb").length).toBeGreaterThan(0);
   });
 
   /**

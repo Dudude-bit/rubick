@@ -97,7 +97,11 @@ export function StatefulSetDetail() {
 
   // The failure travels rather than becoming an empty list; see the same
   // change on the DaemonSet page.
-  const { data: pods = [], error: podsError } = useLiveQuery({
+  const {
+    data: pods = [],
+    error: podsError,
+    refetch: refetchPods,
+  } = useLiveQuery({
     queryKey: queryKeys.ownedPods(ResourceType.StatefulSet, namespace, name),
     queryFn: async () => {
       if (!name || !namespace) return [];
@@ -335,7 +339,13 @@ export function StatefulSetDetail() {
         label: t("columns", "pods"),
         glyph: kindGlyph(ResourceType.Pod),
         mark: podsMark(pods, t),
-        content: <PodListCard pods={pods} error={podsError} />,
+        content: (
+          <PodListCard
+            pods={pods}
+            error={podsError}
+            onRetry={() => void refetchPods()}
+          />
+        ),
       },
       {
         id: "logs",
@@ -403,6 +413,7 @@ export function StatefulSetDetail() {
       statefulSet,
       pods,
       podsError,
+      refetchPods,
       yaml,
       copyYaml,
       namespace,

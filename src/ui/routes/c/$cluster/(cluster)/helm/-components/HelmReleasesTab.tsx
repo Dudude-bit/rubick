@@ -31,13 +31,14 @@ import { DetailAction } from "@/components/object/detail-blocks";
 import type { HelmRelease, UnreadNamespace } from "@/generated/types";
 import { StaleRows } from "../../../-list/StaleRows";
 import { UnreadNamespaces } from "../../../-list/UnreadNamespaces";
+import { UnreadList } from "../../../-list/UnreadList";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { helmReleaseLink, hrefOf } from "@/lib/links";
 import { noneWhereAnswered } from "@/lib/namespace-scope";
 import { formatDate, formatWhen } from "@/lib/utils";
 
 import { SourceIcon } from "./SourceIcon";
-import { errorToShow, isRefusal } from "@/lib/error-utils";
+import { isRefusal } from "@/lib/error-utils";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
 import { None } from "@/components/ui/none";
@@ -53,7 +54,7 @@ export interface HelmReleasesTabProps {
   unread?: UnreadNamespace[];
   isLoading: boolean;
   /** `unknown`, not `Error`: the query's thrown value is not guaranteed to be
-   *  an Error, and `errorToShow`/`isRefusal` both take it as-is. */
+   *  an Error, and `UnreadList`/`isRefusal` both take it as-is. */
   error: unknown;
   /** When the releases on screen were read, where a later read failed over them. */
   readAt?: number | null;
@@ -316,20 +317,17 @@ export function HelmReleasesTab({
         onRetry={onRefetch}
       />
       {error && releases.length === 0 ? (
-        <div className="max-w-[68ch] py-8">
-          <p className="text-xs text-err">
-            {/* A refusal is not a failure: saying "could not read" about one
-                invites a retry the cluster will refuse again. */}
-            {isRefusal(error)
+        <UnreadList
+          error={error}
+          words={
+            isRefusal(error)
               ? t("nav", "noListAccess")
               : t("empty", "couldNotReadInScope", {
                   label: t("empty", "helmReleases"),
-                })}
-          </p>
-          <p className="mt-1.5 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
-            {errorToShow(error)}
-          </p>
-        </div>
+                })
+          }
+          onRetry={onRefetch}
+        />
       ) : (
         <DataTable
           columns={columns}

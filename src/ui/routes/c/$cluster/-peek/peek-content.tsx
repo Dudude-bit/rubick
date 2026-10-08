@@ -19,7 +19,6 @@ import {
 } from "@/hooks/useObjectEvents";
 
 import { SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { Skeleton } from "@/components/ui/skeleton";
 import { PeekSkeleton } from "./peek-skeleton";
 import { PhaseBadge, StatusBadge } from "@/components/ui/status-badge";
 import { statusMeaning } from "@/lib/status-meaning";
@@ -40,7 +39,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { policiesOnService, policyVerdict } from "@/lib/gateway-policies";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
-import { EventRows } from "@/components/object/detail-blocks";
+import { ObjectEventsBody } from "../-object/ObjectEventsBody";
 import { KeyValueList } from "../-object/detail-kv";
 import { WordTable } from "../-object/WordTable";
 import { AccessPanel } from "../-object/AccessPanel";
@@ -784,13 +783,10 @@ const PEEK_EVENTS = 20;
 
 function PeekEvents({ target }: { target: PeekTarget }) {
   const t = useT();
-  const { data: events, error } = useObjectEvents(
-    target.kind,
-    target.name,
-    target.namespace,
-    { refresh: "overview" }
-  );
-  const latest = events ? latestOf(events, PEEK_EVENTS) : null;
+  const query = useObjectEvents(target.kind, target.name, target.namespace, {
+    refresh: "overview",
+  });
+  const latest = query.data ? latestOf(query.data, PEEK_EVENTS) : null;
   const everyObject = eventsOfEveryObject(target.kind);
 
   return (
@@ -809,23 +805,12 @@ function PeekEvents({ target }: { target: PeekTarget }) {
             : latest?.rows.length || undefined
         }
       />
-      {error ? (
-        <p className="py-1 text-xs text-warn">
-          {t("empty", "couldNotReadEvents")}
-        </p>
-      ) : !latest ? (
-        <Skeleton className="h-3 w-2/3" />
-      ) : (
-        <EventRows
-          events={latest.rows}
-          showObject={everyObject}
-          emptyMessage={t(
-            "empty",
-            everyObject ? "noEventsInNamespace" : "noEventsForObject"
-          )}
-          compact
-        />
-      )}
+      <ObjectEventsBody
+        query={query}
+        everyObject={everyObject}
+        shown={latest?.rows}
+        compact
+      />
     </>
   );
 }

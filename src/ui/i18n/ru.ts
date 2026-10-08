@@ -6557,6 +6557,9 @@ export const ru: Catalogue = {
       "Прочитаны все поды, Deployment, StatefulSet, DaemonSet, Job, CronJob и Ingress {where}; ни один из них его не называет.",
     couldNotReadKind: "Не удалось прочитать этот {kind}: {error}",
     couldNotReadEvents: "Не удалось прочитать события.",
+    eventsRefusedHere: "У вас нет прав читать эти события.",
+    eventsNoneReadAt:
+      "Прочитано в {time}: событий пока нет. Кластер хранит события около часа.",
     ageOld: "возраст {age}",
     andMore: "и ещё {n}",
     theServiceInFront: "Service перед ним",

@@ -88,9 +88,11 @@ const holdsPlace = (pod: PodInfo) => !hasTerminated(pod);
 function NodePods({
   pods,
   error,
+  onRetry,
 }: {
   pods: PodInfo[] | undefined;
   error: Error | null;
+  onRetry: () => void;
 }) {
   const t = useT();
   const finished = (pods ?? []).filter(hasTerminated);
@@ -99,6 +101,7 @@ function NodePods({
       <PodListCard
         pods={(pods ?? []).filter(holdsPlace)}
         error={error}
+        onRetry={onRetry}
         emptyMessage={t("empty", "noPodsOnNode")}
       />
       {finished.length > 0 && (
@@ -426,7 +429,11 @@ export function NodeDetail() {
           ? countMark(podCount)
           : undefined,
       content: (
-        <NodePods pods={podsOnThisNode.data} error={podsOnThisNode.error} />
+        <NodePods
+          pods={podsOnThisNode.data}
+          error={podsOnThisNode.error}
+          onRetry={() => void podsOnThisNode.refetch()}
+        />
       ),
     },
     {

@@ -23,3 +23,41 @@ export function useHeldRows<Row>(rows: Row[], held: boolean, key: string) {
   const show = useCallback(() => setSnapshot(null), []);
   return { shown, waiting, show };
 }
+
+/** `rows` in the order `ids` held them; rows that arrived since come after, in their own order. */
+export function inHeldOrder<Row>(
+  rows: Row[],
+  ids: readonly string[],
+  idOf: (row: Row) => string
+): Row[] {
+  const byId = new Map(rows.map((row) => [idOf(row), row]));
+  const held = new Set(ids);
+  const kept = ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row === undefined ? [] : [row];
+  });
+  return [...kept, ...rows.filter((row) => !held.has(idOf(row)))];
+}
+
+/**
+ * While `held`, the order the rows had when the hold began, each row still
+ * its latest self; a row that arrived meanwhile is added at the end.
+ */
+export function useHeldOrder<Row>(
+  rows: Row[],
+  held: boolean,
+  key: string,
+  idOf: (row: Row) => string
+): Row[] {
+  const [order, setOrder] = useState<{ ids: string[]; key: string } | null>(
+    null
+  );
+  if (held && (order === null || order.key !== key))
+    setOrder({ ids: rows.map(idOf), key });
+  if (!held && order !== null) setOrder(null);
+  const ids = held && order?.key === key ? order.ids : null;
+  return useMemo(
+    () => (ids === null ? rows : inHeldOrder(rows, ids, idOf)),
+    [rows, ids, idOf]
+  );
+}

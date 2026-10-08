@@ -13,10 +13,16 @@ interface PodListCardProps {
   emptyMessage?: string;
   /** The pod list failed to read. Not the same as owning no pods. */
   error?: Error | null;
+  onRetry?: () => void;
 }
 
 /** The pods a workload owns. */
-export function PodListCard({ pods, emptyMessage, error }: PodListCardProps) {
+export function PodListCard({
+  pods,
+  emptyMessage,
+  error,
+  onRetry,
+}: PodListCardProps) {
   const t = useT();
   // A pod on a node that stopped reporting keeps whatever the kubelet last
   // wrote. Every other surface that draws a pod's status drops the colour for
@@ -26,6 +32,7 @@ export function PodListCard({ pods, emptyMessage, error }: PodListCardProps) {
     <ChildRows
       emptyMessage={emptyMessage ?? t("empty", "noPodsForWorkload")}
       error={error}
+      onRetry={onRetry}
       label={t("count", "podNoun", { n: 2 })}
       rows={pods.map((pod) => {
         const { ready, total } = podReadiness(pod);

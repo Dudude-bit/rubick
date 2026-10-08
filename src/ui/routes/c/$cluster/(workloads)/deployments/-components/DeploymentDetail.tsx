@@ -123,7 +123,11 @@ export function DeploymentDetail() {
     guardedOf(ResourceType.Deployment, namespace || null)
   ).patch;
 
-  const { data: pods = [], error: podsError } = useLiveQuery({
+  const {
+    data: pods = [],
+    error: podsError,
+    refetch: refetchPods,
+  } = useLiveQuery({
     queryKey: queryKeys.ownedPods(ResourceType.Deployment, namespace, name),
     queryFn: async () => {
       try {
@@ -427,7 +431,13 @@ export function DeploymentDetail() {
       label: t("columns", "pods"),
       glyph: kindGlyph(ResourceType.Pod),
       mark: podsMark(pods, t),
-      content: <PodListCard pods={pods} error={podsError} />,
+      content: (
+        <PodListCard
+          pods={pods}
+          error={podsError}
+          onRetry={() => void refetchPods()}
+        />
+      ),
     },
     {
       id: toPlural(ResourceType.ReplicaSet),

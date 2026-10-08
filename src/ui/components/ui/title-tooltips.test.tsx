@@ -58,17 +58,43 @@ describe("a native title", () => {
 
   /** Fails if a title stays up through a click or a context menu, which hid the menu's own first item. */
   it("goes away on a press or a menu and stays away until the pointer leaves", async () => {
-    fireEvent.pointerOver(tab());
+    fireEvent.pointerOver(tab(), { clientX: 10, clientY: 10 });
     await wait(700);
     expect(card()).not.toBeNull();
-    fireEvent.contextMenu(tab());
+    fireEvent.contextMenu(tab(), { clientX: 10, clientY: 10 });
     expect(card()).toBeNull();
     await wait(2000);
     expect(card()).toBeNull();
     fireEvent.pointerOut(tab(), {
       relatedTarget: screen.getByTestId("elsewhere"),
     });
-    fireEvent.pointerOver(tab());
+    fireEvent.pointerOver(tab(), { clientX: 30, clientY: 10 });
+    await wait(700);
+    expect(card()?.textContent).toBe("Events: 5");
+  });
+
+  /**
+   * Dana's right click on a row put the status tooltip away, and it came
+   * straight back when the live list redrew the row under the parked
+   * pointer. Fails if a pointerover without movement brings it back.
+   */
+  it("stays away after a menu when the row is redrawn under a pointer that has not moved", async () => {
+    fireEvent.pointerOver(tab(), { clientX: 10, clientY: 10 });
+    await wait(700);
+    fireEvent.contextMenu(tab(), { clientX: 10, clientY: 10 });
+    expect(card()).toBeNull();
+
+    fireEvent.pointerOut(tab(), {
+      relatedTarget: screen.getByTestId("elsewhere"),
+    });
+    fireEvent.pointerOver(tab(), { clientX: 10, clientY: 10 });
+    await wait(2000);
+    expect(card()).toBeNull();
+
+    fireEvent.pointerOut(tab(), {
+      relatedTarget: screen.getByTestId("elsewhere"),
+    });
+    fireEvent.pointerOver(tab(), { clientX: 14, clientY: 10 });
     await wait(700);
     expect(card()?.textContent).toBe("Events: 5");
   });
