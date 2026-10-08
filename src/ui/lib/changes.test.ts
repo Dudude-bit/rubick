@@ -904,9 +904,7 @@ describe("a gap in words", () => {
         [span(T0 - HOUR, T0 + HOUR)]
       );
       expect(hole.elsewhere).toBe(true);
-      expect(gapWords(hole, r, clock)).toMatch(
-        new RegExp(`^${start.replace(/[()]/g, "\\$&")}`)
-      );
+      expect(gapWords(hole, r, clock).slice(0, start.length)).toBe(start);
       expect(gapWords(hole, r, clock)).not.toMatch(/Вне наблюдаемых/);
     }
   );
