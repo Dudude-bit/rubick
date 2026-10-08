@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 
 import type { ResourceCounts } from "@/generated/types";
+import { kindPlural } from "@/lib/resource-registry";
 
 export const RBAC_GROUP = "rbac.authorization.k8s.io";
 
@@ -74,10 +75,16 @@ export function accessKind(kind: string): AccessKind | undefined {
   return BY_KIND.get(kind);
 }
 
-/** What a list of this kind is called: an access kind's plural, or else the kind as the cluster spells it. */
-export function listTitleOf(entry: { kind: string; group: string }): string {
+/** What a list of this kind is called: an access kind's plural, or else the cluster's plural spelled like the kind. */
+export function listTitleOf(entry: {
+  kind: string;
+  group: string;
+  plural: string;
+}): string {
   const access = accessKind(entry.kind);
-  return access?.group === entry.group ? access.displayPlural : entry.kind;
+  return access?.group === entry.group
+    ? access.displayPlural
+    : kindPlural(entry.kind, entry.plural);
 }
 
 /** `<plural>.<group>`, or the bare plural of a core kind, as kubectl names it. */

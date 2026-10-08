@@ -372,6 +372,18 @@ describe("a registry kind on the generic list", () => {
       screen.getByText(/changes how many replicas a workload runs/)
     ).toBeVisible();
   });
+
+  /** Sam read "HorizontalPodAutoscaler 5" over a list every other page titles in the plural; fails if the title goes back to the bare kind. */
+  it("is titled by the kind's own plural, as every list is", async () => {
+    answers.catalog = () => Promise.resolve({ entries: [HPA], unread: [] });
+    answers.table = () =>
+      Promise.resolve(table([lease("hpa-a"), lease("hpa-b")]) as ResourceTable);
+    await renderWithRouter(
+      <PrintedList resource="horizontalpodautoscalers.autoscaling" />
+    );
+    const heading = await screen.findByRole("heading", { level: 2 });
+    expect(heading.textContent).toBe("HorizontalPodAutoscalers");
+  });
 });
 
 describe("a ClusterRoleBinding row", () => {

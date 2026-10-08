@@ -422,6 +422,10 @@ describe("titles", () => {
     ["/c/prod/pods/web/api-7f9", "api-7f9"],
     ["/c/prod/nodes/k3d-agent-0", "k3d-agent-0"],
     ["/c/prod/helm/native/web/redis", "redis"],
+    [
+      "/c/prod/horizontalpodautoscalers.autoscaling",
+      "HorizontalPodAutoscalers",
+    ],
   ])("names %s as %s", (href, expected) => {
     expect(tabRouteLabel(href, t)).toBe(expected);
   });

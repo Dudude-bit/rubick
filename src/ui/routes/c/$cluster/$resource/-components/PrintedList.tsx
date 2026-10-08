@@ -32,7 +32,6 @@ import { commands } from "@/lib/commands";
 import { hrefOf, objectLink } from "@/lib/links";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
-import { kindPlural } from "@/lib/resource-registry";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useClusterStore } from "@/stores/clusterStore";
 import { None } from "@/components/ui/none";
@@ -180,10 +179,7 @@ function PrintedTable({
   );
   const rows = printed.data?.rows;
   const access = accessKind(entry.kind);
-  const plural =
-    access?.group === entry.group
-      ? access.displayPlural
-      : kindPlural(entry.kind, entry.plural);
+  const plural = listTitleOf(entry);
   const noun = useMemo(
     () => ({ kind: entry.kind, plural }),
     [entry.kind, plural]
@@ -191,7 +187,7 @@ function PrintedTable({
 
   return (
     <ResourceList<PrintedRow>
-      title={listTitleOf(entry)}
+      title={plural}
       description={
         isExplained(entry.kind) && access?.group === entry.group ? (
           <KindAbout kind={entry.kind} />

@@ -33,7 +33,11 @@ import {
 } from "@/lib/namespace-scope";
 import { ACCESS_KINDS, segmentOf } from "@/lib/access-kinds";
 import { clusterOf, retargetHref } from "@/lib/links";
-import { getDisplayPlural, isResourceType } from "@/lib/resource-registry";
+import {
+  RESOURCE_REGISTRY,
+  getDisplayPlural,
+  isResourceType,
+} from "@/lib/resource-registry";
 import { useClusterStore } from "./clusterStore";
 
 /** The front door: no cluster yet, and a tab's address before it has one. */
@@ -556,7 +560,9 @@ export function tabRouteLabel(href: string, t: T): string {
   if (isResourceType(page)) return getDisplayPlural(page);
   return (
     PAGE_NAMES[page]?.(t) ??
-    ACCESS_KINDS.find((entry) => segmentOf(entry) === page)?.displayPlural ??
+    [...ACCESS_KINDS, ...RESOURCE_REGISTRY].find(
+      (entry) => segmentOf(entry) === page
+    )?.displayPlural ??
     page
   );
 }
