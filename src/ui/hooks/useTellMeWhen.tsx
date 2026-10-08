@@ -117,13 +117,16 @@ interface Stream extends Sight {
 function settle(
   watchId: string,
   verdict: Verdict,
-  coalescer: Coalescer<Answer> | null
+  coalescer: Coalescer<Answer> | null,
+  atOnce = false
 ) {
   const store = useTellMeWhenStore.getState();
   const current = store.watches.find((w) => w.id === watchId);
   if (!current || !isOpen(current)) return;
   store.setStatus(watchId, { state: "done", verdict, at: Date.now() });
-  coalescer?.push({ watch: current, verdict });
+  const answer = { watch: current, verdict };
+  if (atOnce) coalescer?.now(answer);
+  else coalescer?.push(answer);
 }
 
 /** Where the panels showing the watched object cache it. */
@@ -390,7 +393,13 @@ export function useTellMeWhen() {
           emptied ? null : change.resource
         );
         if (verdict) {
-          settle(watchId, verdict, coalescer.current);
+          // Answered on the first look: the reply to the click, said while the click is fresh.
+          settle(
+            watchId,
+            verdict,
+            coalescer.current,
+            current.baseline === null
+          );
           close(watchId);
           // The stream saw this before any poll did; the peek beside the button says it too.
           void queryClient.invalidateQueries({ queryKey: objectKey(current) });
