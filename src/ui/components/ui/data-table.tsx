@@ -1215,6 +1215,11 @@ function DataTableInner<TData extends RowData>({
                     setTableDensity(isCompact ? "comfortable" : "compact")
                   }
                   className="h-7 w-7 p-0 text-fg-mut"
+                  aria-label={
+                    isCompact
+                      ? t("action", "comfortableView")
+                      : t("action", "compactView")
+                  }
                 >
                   {isCompact ? (
                     <AlignJustify className="h-3.5 w-3.5" />

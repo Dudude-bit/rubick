@@ -272,6 +272,14 @@ describe("DataTable rows", () => {
     expect(statusCell).toHaveClass("text-ellipsis");
   });
 
+  /** The density switch is an icon alone; fails if a screen reader hears only "button" again. */
+  it("names the density switch by what it switches to", async () => {
+    await renderTable();
+    expect(
+      screen.getByRole("button", { name: /^(Compact|Comfortable) view$/ })
+    ).toBeInTheDocument();
+  });
+
   /**
    * Marco's greyed trash said why only over the left of its glyph: WebKitGTK's
    * overlay scrollbar takes a scrolling port's last 21px, and a pixel of hit
