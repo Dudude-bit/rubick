@@ -139,6 +139,26 @@ describe("a CRD's printer columns in its instance list", () => {
   });
 });
 
+describe("a status column on an object with no status", () => {
+  /**
+   * Dana's widget-demo read "Ready: none" while kubectl printed nothing: the
+   * object has no status, so the controller never answered. Fails if the
+   * list claims "none" for it, or stops saying "none" for an absent spec field.
+   */
+  it("says not reported, not none", async () => {
+    await draw(
+      [{ ...node("controlplane", "172.30.1.2", "192.168.0.69"), status: null }],
+      [column("Ready", ".status.ready"), column("Tier", ".spec.tier")]
+    );
+    const row = within(await rowOf("controlplane"));
+    expect(row.getByText("not reported").closest("[title]")).toHaveAttribute(
+      "title",
+      expect.stringContaining("has not reported Ready")
+    );
+    expect(row.getAllByText("none")).toHaveLength(1);
+  });
+});
+
 /** The `widgets.demo.k8s-gui.io` specimen, one instance. */
 const widget: CustomResourceInfo = {
   name: "blue",

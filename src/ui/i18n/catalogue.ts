@@ -6010,6 +6010,9 @@ export const en = {
     clusterIpHeadlessWhy:
       "clusterIP: None. A headless Service has no virtual IP: its DNS name answers with the addresses of the pods themselves.",
     notEvaluatedLower: "not evaluated",
+    notReportedLower: "not reported",
+    printerNotReported:
+      "The object has no status yet, so its controller has not reported {column}.",
     shellEndedPodGone:
       "The shell session ended: its pod was deleted, and the terminal went with it.",
     printerNotEvaluated:

@@ -295,7 +295,7 @@ function readsCarriedOwner(steps: Step[]): boolean {
 }
 
 export type PrinterCell =
-  | { evaluated: true; value: unknown }
+  | { evaluated: true; value: unknown; unreported?: true }
   | { evaluated: false };
 
 /**
@@ -341,5 +341,12 @@ export function printerCell(
     ...(row.status === null ? {} : { status: row.status }),
   };
   const [value] = run(steps, [document]);
-  return { evaluated: true, value: value ?? undefined };
+  // No status at all is a controller that never wrote one, not a value of none.
+  const unreported =
+    value === undefined && row.status === null && first.keys.includes("status");
+  return {
+    evaluated: true,
+    value: value ?? undefined,
+    ...(unreported && { unreported: true }),
+  };
 }

@@ -88,6 +88,22 @@ describe("a printer column's JSONPath, as the API server reads it", () => {
     });
   });
 
+  /** Dana's widget-demo read "Ready: none" with no status at all, a claim
+   *  the cluster never made. Fails if a status column of an object with no
+   *  status is not marked unreported, or a spec column is. */
+  it("marks a status column of an object with no status as unreported", () => {
+    const bare = { ...certificate, status: null };
+    expect(printerCell(bare, ".status.ready")).toEqual({
+      evaluated: true,
+      value: undefined,
+      unreported: true,
+    });
+    expect(printerCell(bare, ".spec.tier")).toEqual({
+      evaluated: true,
+      value: undefined,
+    });
+  });
+
   /**
    * Fails if a path this reader cannot parse, or metadata a list row does
    * not carry, is answered as an absent field instead of as not evaluated.

@@ -6621,6 +6621,9 @@ export const ru: Catalogue = {
     clusterIpHeadlessWhy:
       "clusterIP: None. У headless-сервиса нет виртуального IP: его DNS-имя отвечает адресами самих подов.",
     notEvaluatedLower: "не вычислено",
+    notReportedLower: "не сообщено",
+    printerNotReported:
+      "У объекта ещё нет status, поэтому контроллер не сообщил {column}.",
     shellEndedPodGone:
       "Сеанс оболочки завершён: Pod удалён, а вместе с ним закрылся и терминал.",
     printerNotEvaluated:
