@@ -2095,6 +2095,7 @@ export const en = {
     restartedSince:
       "Container {container} has restarted since this listing (restart {restarts}). Anything written outside a mount is gone with it.",
     readNewContainer: "Read the new container",
+    filterNamesReading: "filter names…",
     filterNames: {
       one: "filter {n} name…",
       other: "filter {n} names…",

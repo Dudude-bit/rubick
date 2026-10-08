@@ -601,6 +601,35 @@ describe("FilesTab", () => {
   });
 
   /**
+   * Marco entered /etc and the filter box vanished while it read, then came
+   * back: the bar jumped under him. Fails if a later read hides the filter.
+   */
+  it("keeps the filter in the bar while a later directory reads", async () => {
+    listing.mockReturnValue(
+      done([file("etc", { kind: "dir" }), file("app.conf")])
+    );
+    const shown = pod();
+    const tab = () => (
+      <FilesTab
+        pod={shown}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    const view = await wrap(tab());
+    expect(
+      screen.getByRole("textbox", { name: "filter 2 names…" })
+    ).toBeInTheDocument();
+
+    listing.mockReturnValue({ phase: "reading", entries: [], startedAt: 0 });
+    view.rerender(tab());
+    expect(
+      screen.getByRole("textbox", { name: "filter names…" })
+    ).toBeInTheDocument();
+  });
+
+  /**
    * The same tab told Marco a debug container could read the stopped
    * container's files while Debug was greyed for his account. Fails if the
    * way in is suggested to an account the cluster refuses it, or withheld

@@ -2179,6 +2179,7 @@ export const ru: Catalogue = {
     restartedSince:
       "Контейнер {container} перезапускался после этого листинга (перезапуск {restarts}). Всё, что было записано вне монтирований, ушло вместе с ним.",
     readNewContainer: "Прочитать новый контейнер",
+    filterNamesReading: "фильтр по именам…",
     filterNames: {
       one: "фильтр по {n} имени…",
       few: "фильтр по {n} именам…",
