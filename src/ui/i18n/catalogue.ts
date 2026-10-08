@@ -1623,7 +1623,9 @@ export const en = {
       "A copy shares the namespace, labels, DNS policy and service account. It is not the pod, and it is deleted when the answer is in.",
     whatItSaid: "What it printed",
     containerCannotAnswer:
-      "{container} cannot take an exec: {why}. The check runs from a copy of the pod.",
+      "{container} cannot take an exec: {why}. Run creates a copy of the pod, asks from it and deletes it when the answer is in.",
+    runsAsExec:
+      "Run is an exec into {container}, as kubectl exec is: it creates nothing in the cluster.",
   },
   changes: {
     title: "Changes",

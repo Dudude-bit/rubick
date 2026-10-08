@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Play } from "lucide-react";
+import { Play, SquareTerminal } from "lucide-react";
 
 import { ReasonTip } from "@/components/object/detail-blocks";
 import { Button } from "@/components/ui/button";
@@ -113,6 +113,13 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
   );
   const fromCopy = why !== null;
   const runDenied = fromCopy ? copyDenied : denied.shell;
+  const does =
+    why !== null
+      ? t("checks", "containerCannotAnswer", {
+          container: container || "?",
+          why,
+        })
+      : t("checks", "runsAsExec", { container: container || "?" });
 
   return (
     <div className="flex flex-col gap-[22px]">
@@ -178,7 +185,11 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
             placeholder="postgres.shop.svc.cluster.local"
             className="h-7 max-w-md font-mono text-xs"
           />
-          <RunButton reason={runDenied} disabled={busy || !name.trim()} />
+          <RunButton
+            reason={runDenied}
+            does={does}
+            disabled={busy || !name.trim()}
+          />
         </form>
         <form
           className="flex items-center gap-2"
@@ -205,16 +216,15 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
             placeholder="postgres:5432"
             className="h-7 max-w-md font-mono text-xs"
           />
-          <RunButton reason={runDenied} disabled={busy || !hostPort} />
+          <RunButton
+            reason={runDenied}
+            does={does}
+            disabled={busy || !hostPort}
+          />
         </form>
         {why !== null ? (
           <div className="flex items-center gap-2">
-            <p className="text-xs text-warn">
-              {t("checks", "containerCannotAnswer", {
-                container: container || "?",
-                why,
-              })}
-            </p>
+            <p className="text-xs text-warn">{does}</p>
             <Input
               aria-label={t("checks", "copyImage")}
               value={image}
@@ -222,7 +232,12 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
               className="h-7 w-56 font-mono text-xs"
             />
           </div>
-        ) : null}
+        ) : (
+          <p className="flex items-center gap-1.5 text-xs text-fg-mut">
+            <SquareTerminal aria-hidden="true" className="h-3 w-3 flex-none" />
+            {does}
+          </p>
+        )}
         {busy ? (
           <p className="text-xs text-fg-fnt" role="status">
             {t("checks", "running")}
@@ -259,17 +274,19 @@ export function ChecksTab({ pod }: { pod: PodInfo }) {
   );
 }
 
-/** Run, greyed with the can-i question where the route it takes is refused. */
+/** Run, greyed with the can-i question where the route it takes is refused, and saying that route otherwise. */
 function RunButton({
   reason,
+  does,
   disabled,
 }: {
   reason: string | undefined;
+  does: string;
   disabled: boolean;
 }) {
   const t = useT();
   return (
-    <ReasonTip reason={reason}>
+    <ReasonTip reason={reason ?? does}>
       <Button
         size="sm"
         type="submit"

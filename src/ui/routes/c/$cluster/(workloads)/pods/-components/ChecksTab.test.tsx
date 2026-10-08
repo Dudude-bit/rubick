@@ -317,6 +317,27 @@ describe("Checks for Marco, who may exec into team-checkout's pods and not creat
    * stays offered; the copy a missing tool offers next is a new pod and is
    * greyed. Fails if the guard shuts the exec or leaves the copy live.
    */
+  it("names the route Run takes, an exec that creates nothing or a copy that is a new pod", async () => {
+    const execs = mount(inCheckout(pod));
+    const exec =
+      "Run is an exec into payments, as kubectl exec is: it creates nothing in the cluster.";
+    expect(screen.getByText(exec)).toBeVisible();
+    await userEvent.type(screen.getByLabelText(/Resolve/), "checkout-api");
+    await userEvent.hover(screen.getAllByRole("button", { name: /Run/ })[0]);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(exec);
+    execs.unmount();
+
+    mount(inCheckout(crashing));
+    expect(
+      screen.getByText((text) =>
+        text.endsWith(
+          "Run creates a copy of the pod, asks from it and deletes it when the answer is in."
+        )
+      )
+    ).toBeVisible();
+    expect(screen.queryByText(exec)).toBeNull();
+  });
+
   it("keeps Run for an exec and greys Run from a copy", async () => {
     vi.mocked(commands.runPodCheck).mockResolvedValue(
       outcome({ answer: "noTool", answeredWith: null, tried: ["nc", "bash"] })
