@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useQueries } from "@tanstack/react-query";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -82,15 +82,42 @@ function clockOf(ms: number, now: number): string {
   return `${day} ${time}`;
 }
 
-export function StoryCard({
-  story,
-  options,
-  showNamespace,
-}: {
+interface StoryCardProps {
   story: Story;
   options: StoryOptions;
   showNamespace: boolean;
-}) {
+}
+
+const sameStory = (a: Story, b: Story) =>
+  a.key === b.key &&
+  a.subject.kind === b.subject.kind &&
+  a.subject.name === b.subject.name &&
+  a.subject.namespace === b.subject.namespace &&
+  a.subject.byName === b.subject.byName &&
+  a.events.length === b.events.length &&
+  a.events.every((event, index) => event === b.events[index]);
+
+function sameStrip(a: StoryCardProps, b: StoryCardProps): boolean {
+  if (a.options.readFrom === b.options.readFrom) return true;
+  const after = densityOf(b.story, b.options);
+  return densityOf(a.story, a.options).every(
+    (bucket, index) => bucket.read === after[index].read
+  );
+}
+
+/** The watch refolds every story once a second; a card whose own events did not change is not drawn again. */
+export const StoryCard = memo(
+  StoryCardView,
+  (before, after) =>
+    before.showNamespace === after.showNamespace &&
+    before.options.now === after.options.now &&
+    before.options.windowMs === after.options.windowMs &&
+    before.options.narrowed === after.options.narrowed &&
+    sameStory(before.story, after.story) &&
+    sameStrip(before, after)
+);
+
+function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const lastSeen = useRealtimeAge(
