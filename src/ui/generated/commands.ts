@@ -959,11 +959,7 @@ export async function subscribeOwnedPodWatch(
   namespace: string | null,
   name: string
 ): Promise<string> {
-  return invoke<string>("subscribe_owned_pod_watch", {
-    kind,
-    namespace,
-    name,
-  });
+  return invoke<string>("subscribe_owned_pod_watch", { kind, namespace, name });
 }
 
 export async function subscribeCustomObjectWatch(

@@ -11,6 +11,79 @@ export interface CronJobInfo {
   createdAt: string | null;
 }
 
+export interface IngressHealthInput {
+  name: string;
+  namespace: string;
+  className: string | null;
+  rules: IngressRule[];
+  defaultBackend: IngressDefaultBackend | null;
+  loadBalancerIps: string[];
+  tlsConfigs: IngressTlsConfig[];
+}
+
+export interface IngressTlsConfig {
+  hosts: string[];
+  secretName: string | null;
+  isCatchAll: boolean;
+}
+
+export interface IngressDefaultBackend {
+  backendService: string;
+  backendPort: string;
+  resourceBackend: string | null;
+}
+
+export interface IngressRule {
+  host: string;
+  paths: IngressPath[];
+}
+
+export interface IngressPath {
+  path: string;
+  pathType: string;
+  backendService: string;
+  backendPort: string;
+  resourceBackend: string | null;
+}
+
+export interface AutoscalerInfo {
+  autoscaler: ObjectRef;
+  target: ObjectRef;
+}
+
+export interface ObjectRef {
+  kind: string;
+  name: string;
+  namespace: string | null;
+  group?: string;
+  existence: Existence;
+  facts: ObjectFacts | null;
+}
+
+export interface ConditionInfo {
+  type: string;
+  status: string;
+  reason: string | null;
+  message: string | null;
+  lastTransitionTime: string | null;
+  observedGeneration?: number;
+}
+
+export interface AutoscalerMetric {
+  name: string;
+  source: string;
+  target: string;
+  current: string | null;
+}
+
+export interface ServicePortInfo {
+  name: string | null;
+  port: number;
+  targetPort: string;
+  nodePort: number | null;
+  protocol: string;
+}
+
 export interface LokiPage {
   lines: LokiLine[];
   streams: number;
@@ -267,17 +340,6 @@ export interface IngressClassParameters {
   namespace: string | null;
 }
 
-export interface NearMiss {
-  pods: ObjectRef[];
-  carries: string;
-  lacks: string;
-}
-
-export interface ServiceBacking {
-  services: ServiceInfo[];
-  published: ServicePublished[];
-}
-
 export interface ServiceHealthInputs {
   namespace: string;
   groups: ServiceHealthGroup[];
@@ -292,6 +354,17 @@ export interface ServiceHealthGroup {
   notReady: number;
   unrouted: number;
   stop?: ChainStop;
+}
+
+export interface NearMiss {
+  pods: ObjectRef[];
+  carries: string;
+  lacks: string;
+}
+
+export interface ServiceBacking {
+  services: ServiceInfo[];
+  published: ServicePublished[];
 }
 
 export interface ServicePublished {
@@ -333,39 +406,6 @@ export interface PublishedPort {
   port: number | null;
   protocol: string;
   exposed: boolean;
-}
-
-export interface ObjectRef {
-  kind: string;
-  name: string;
-  namespace: string | null;
-  group?: string;
-  existence: Existence;
-  facts: ObjectFacts | null;
-}
-
-export interface ConditionInfo {
-  type: string;
-  status: string;
-  reason: string | null;
-  message: string | null;
-  lastTransitionTime: string | null;
-  observedGeneration?: number;
-}
-
-export interface AutoscalerMetric {
-  name: string;
-  source: string;
-  target: string;
-  current: string | null;
-}
-
-export interface ServicePortInfo {
-  name: string | null;
-  port: number;
-  targetPort: string;
-  nodePort: number | null;
-  protocol: string;
 }
 
 export interface NetworkPolicyInfo {
@@ -421,41 +461,6 @@ export interface IngressInfo {
   labels: Record<string, string>;
   annotations: Record<string, string>;
   createdAt: string | null;
-}
-
-export interface IngressHealthInput {
-  name: string;
-  namespace: string;
-  className: string | null;
-  rules: IngressRule[];
-  defaultBackend: IngressDefaultBackend | null;
-  loadBalancerIps: string[];
-  tlsConfigs: IngressTlsConfig[];
-}
-
-export interface IngressTlsConfig {
-  hosts: string[];
-  secretName: string | null;
-  isCatchAll: boolean;
-}
-
-export interface IngressDefaultBackend {
-  backendService: string;
-  backendPort: string;
-  resourceBackend: string | null;
-}
-
-export interface IngressRule {
-  host: string;
-  paths: IngressPath[];
-}
-
-export interface IngressPath {
-  path: string;
-  pathType: string;
-  backendService: string;
-  backendPort: string;
-  resourceBackend: string | null;
 }
 
 export interface ServiceInfo {
@@ -1774,11 +1779,6 @@ export interface HelmReleaseDetail {
   notes: string | null;
 }
 
-export interface AutoscalerInfo {
-  autoscaler: ObjectRef;
-  target: ObjectRef;
-}
-
 export interface Scoped<T> {
   rows: T[];
   unread: UnreadNamespace[];
@@ -1877,6 +1877,17 @@ export interface OverviewUnread {
   message: string;
 }
 
+export interface RolloutCount {
+  reason: string;
+  count: number;
+  podsUnread: boolean;
+}
+
+export interface ReasonCount {
+  reason: string;
+  count: number;
+}
+
 export interface PodComposition {
   running: number;
   pending: number;
@@ -1887,17 +1898,6 @@ export interface PodComposition {
   notReady: number;
   stuck: ReasonCount[];
   starting: number;
-}
-
-export interface ReasonCount {
-  reason: string;
-  count: number;
-}
-
-export interface RolloutCount {
-  reason: string;
-  count: number;
-  podsUnread: boolean;
 }
 
 export interface Census<T> {
@@ -2038,7 +2038,7 @@ export interface PodRowStatus {
   phase: string;
   display: string;
   loopingExitAt?: string;
-  exitUnreported?: boolean;
+  exitUnreported: boolean;
 }
 
 export interface FileEntry {
@@ -2187,7 +2187,7 @@ export interface PodStatusInfo {
   message: string | null;
   reason: string | null;
   loopingExitAt?: string;
-  exitUnreported?: boolean;
+  exitUnreported: boolean;
 }
 
 export interface DeploymentInfo {
@@ -2295,82 +2295,6 @@ export interface Via {
   root: string;
 }
 
-export type StepNote =
-  | { says: "said"; text: string }
-  | { says: "attempt"; revision: number }
-  | { says: "challengeOn"; kind: string; domain: string };
-
-export type Stalled =
-  | { says: "notRequested" }
-  | { says: "requestNotIssued" }
-  | { says: "challengePending"; kind: string; domain: string }
-  | { says: "orderNotCompleted" };
-
-export type ChainStop =
-  | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }
-  | {
-      reason: "routeNotAccepted";
-      route: ObjectRef;
-      gateway: ObjectRef;
-      conditionReason: string | null;
-      message: string | null;
-    }
-  | {
-      reason: "routeRefsUnresolved";
-      route: ObjectRef;
-      conditionReason: string | null;
-      message: string | null;
-    }
-  | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
-  | {
-      reason: "selectsNothing";
-      service: ObjectRef;
-      selector: string;
-      near: NearMiss | null;
-    }
-  | {
-      reason: "scaledToZero";
-      service: ObjectRef;
-      selector: string;
-      workloads: ObjectRef[];
-    }
-  | {
-      reason: "publishesNothingYet";
-      service: ObjectRef;
-      selector: string;
-      podsUnread: boolean;
-    }
-  | {
-      reason: "noneReady";
-      service: ObjectRef;
-      selector: string;
-      pods: number;
-      why: NotServing;
-    }
-  | {
-      reason: "publishesNothing";
-      service: ObjectRef;
-      selector: string;
-      pods: number;
-      readyPods: number;
-      unnamedPorts: string[];
-    };
-
-export type NotServing =
-  | "unscheduled"
-  | "starting"
-  | "crashLooping"
-  | "terminating"
-  | "failingReadiness"
-  | "finished"
-  | "mixed"
-  | "other"
-  | "inSlices"
-  | "comingUp"
-  | "podsUnread";
-
-export type EndpointSource = "slices" | "legacyEndpoints" | "podReadiness";
-
 export type ObjectFacts =
   | {
       kind: "service";
@@ -2452,6 +2376,82 @@ export type Rollout =
   | { state: "podsUnread"; controller: Rollout };
 
 export type Existence = "present" | "missing" | "notChecked";
+
+export type StepNote =
+  | { says: "said"; text: string }
+  | { says: "attempt"; revision: number }
+  | { says: "challengeOn"; kind: string; domain: string };
+
+export type Stalled =
+  | { says: "notRequested" }
+  | { says: "requestNotIssued" }
+  | { says: "challengePending"; kind: string; domain: string }
+  | { says: "orderNotCompleted" };
+
+export type ChainStop =
+  | { reason: "backendMissing"; ingress: ObjectRef; service: ObjectRef }
+  | {
+      reason: "routeNotAccepted";
+      route: ObjectRef;
+      gateway: ObjectRef;
+      conditionReason: string | null;
+      message: string | null;
+    }
+  | {
+      reason: "routeRefsUnresolved";
+      route: ObjectRef;
+      conditionReason: string | null;
+      message: string | null;
+    }
+  | { reason: "gatewayMissing"; route: ObjectRef; gateway: ObjectRef }
+  | {
+      reason: "selectsNothing";
+      service: ObjectRef;
+      selector: string;
+      near: NearMiss | null;
+    }
+  | {
+      reason: "scaledToZero";
+      service: ObjectRef;
+      selector: string;
+      workloads: ObjectRef[];
+    }
+  | {
+      reason: "publishesNothingYet";
+      service: ObjectRef;
+      selector: string;
+      podsUnread: boolean;
+    }
+  | {
+      reason: "noneReady";
+      service: ObjectRef;
+      selector: string;
+      pods: number;
+      why: NotServing;
+    }
+  | {
+      reason: "publishesNothing";
+      service: ObjectRef;
+      selector: string;
+      pods: number;
+      readyPods: number;
+      unnamedPorts: string[];
+    };
+
+export type NotServing =
+  | "unscheduled"
+  | "starting"
+  | "crashLooping"
+  | "terminating"
+  | "failingReadiness"
+  | "finished"
+  | "mixed"
+  | "other"
+  | "inSlices"
+  | "comingUp"
+  | "podsUnread";
+
+export type EndpointSource = "slices" | "legacyEndpoints" | "podReadiness";
 
 export type PolicySelects =
   | { kind: "everything" }
@@ -2739,11 +2739,6 @@ export type CertificateProblem =
   | { says: "noPemCertificate" }
   | { says: "unparseable"; said: string };
 
-export type Withheld =
-  | { says: "privateKey" }
-  | { says: "declared"; by: string }
-  | { says: "keyName" };
-
 export type AppEvent =
   | { channel: "log-batch"; stream_id: string; lines: LogLineEvent[] }
   | {
@@ -2930,6 +2925,11 @@ export type CheckAnswer = "yes" | "no" | "unanswered" | "noTool";
 export type Check =
   | { kind: "dns"; name: string }
   | { kind: "tcp"; host: string; port: number };
+
+export type Withheld =
+  | { says: "privateKey" }
+  | { says: "declared"; by: string }
+  | { says: "keyName" };
 
 export type FileRead =
   | { state: "preview"; preview: FilePreview }
