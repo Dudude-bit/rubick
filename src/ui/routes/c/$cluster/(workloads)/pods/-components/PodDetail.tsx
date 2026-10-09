@@ -106,6 +106,7 @@ import { statusRole } from "@/lib/status-role";
 import {
   loopingContainer,
   loopState,
+  restartsAreNews,
   seenLoop,
   withKnownLoop,
   type SeenLoop,
@@ -716,7 +717,7 @@ export function PodDetail() {
     {
       label: t("columns", "restarts"),
       value: pod ? describeRestarts(pod, t) : 0,
-      tone: (pod?.restartCount ?? 0) > 0 ? "warn" : undefined,
+      tone: pod && restartsAreNews(pod) ? "warn" : undefined,
     },
     // Where the raw phase stays reachable — "the pod really is in phase
     // Running while its container loops" is a thing an SRE has to be able

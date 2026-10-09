@@ -1,4 +1,5 @@
 import { podReadiness } from "@/lib/container-sequence";
+import { restartsAreNews } from "@/lib/crash-loop";
 import { silenceOf } from "@/lib/node-reporting";
 import { podRole, podStatusTitle } from "@/lib/share/pod-status";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
@@ -53,7 +54,9 @@ export function PodListCard({
                 })}
               </span>
               {restarts > 0 && (
-                <span className="text-warn">
+                <span
+                  className={restartsAreNews(pod) ? "text-warn" : "text-fg-mut"}
+                >
                   {" · "}
                   {t("count", "restartsPlain", { n: restarts })}
                 </span>

@@ -1,4 +1,5 @@
 import { podReadiness } from "@/lib/container-sequence";
+import { restartsAreNews } from "@/lib/crash-loop";
 import { iconSvg } from "@/lib/icon-svg";
 import { silenceOf, type NodeSilence } from "@/lib/node-reporting";
 import type { ReportValue } from "@/lib/report";
@@ -41,7 +42,10 @@ export function podsSection(share: PodsShare, t: T): PlacedSection {
         share.capturedAt
       ),
       { text: `${ready}/${total}` },
-      { text: String(restarts), role: restarts > 0 ? "warn" : undefined },
+      {
+        text: String(restarts),
+        role: restartsAreNews(pod) ? "warn" : undefined,
+      },
     ];
     return { cells };
   });

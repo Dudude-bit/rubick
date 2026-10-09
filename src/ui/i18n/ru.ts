@@ -7412,6 +7412,7 @@ export const ru: Catalogue = {
     degraded: "Деградировал",
     retrying: "Повторяет попытку",
     crashLooping: "В цикле падений",
+    restarting: "Перезапускается",
     crashLoopingCounted: {
       one: "в цикле падений",
       few: "в цикле падений",

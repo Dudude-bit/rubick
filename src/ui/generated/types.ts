@@ -2041,6 +2041,7 @@ export interface PodRowStatus {
   display: string;
   loopingUntil?: string;
   exitUnreported: boolean;
+  restartingUntil?: string;
 }
 
 export interface FileEntry {
@@ -2169,6 +2170,8 @@ export interface ContainerInfo {
   state: ContainerState;
   lastTerminated: TerminationInfo | null;
   restartCount: number;
+  loopingUntil?: string;
+  restartingUntil?: string;
   ports: ContainerPortInfo[];
   resources: DeploymentContainerResources;
   env: EnvVarInfo[];
@@ -2190,6 +2193,7 @@ export interface PodStatusInfo {
   reason: string | null;
   loopingUntil?: string;
   exitUnreported: boolean;
+  restartingUntil?: string;
 }
 
 export interface DeploymentInfo {

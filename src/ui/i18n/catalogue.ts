@@ -6790,6 +6790,7 @@ export const en = {
     retrying: "Retrying",
     crashLooping: "Crash-looping",
     crashLoopingCounted: { other: "Crash-looping" },
+    restarting: "Restarting",
     stalledCounted: { other: "Stalled" },
     degradedCounted: { other: "Degraded" },
     idleCounted: { other: "Idle" },

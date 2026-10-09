@@ -38,6 +38,7 @@ import type {
   DeploymentContainerInfo,
 } from "@/generated/types";
 import { describeProbe, PROBE_LABEL } from "@/lib/probe-words";
+import { containerRestartsAreNews } from "@/lib/crash-loop";
 import { declaredQuantity } from "@/lib/metric-format";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
@@ -325,7 +326,7 @@ function ContainerBlock({
     items.push({
       label: t("columns", "restarts"),
       value: container.restartCount,
-      tone: container.restartCount > 0 ? "warn" : undefined,
+      tone: containerRestartsAreNews(container) ? "warn" : undefined,
     });
     // A container that restarts is one that died, and the count alone
     // never said of what. The heading carries the state word, so this row

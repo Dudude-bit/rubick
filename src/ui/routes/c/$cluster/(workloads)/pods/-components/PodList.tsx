@@ -21,6 +21,7 @@ import {
   NODE_CELL_PX,
 } from "../../../-list/columns";
 import { podReadiness } from "@/lib/container-sequence";
+import { restartsAreNews } from "@/lib/crash-loop";
 import { commands } from "@/lib/commands";
 import { ResourceList } from "../../../-list/ResourceList";
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -59,7 +60,7 @@ function RestartsCell({ pod }: { pod: PodRow }) {
   return (
     <span
       className={
-        pod.restartCount > 5 ? "font-mono text-warn" : "font-mono text-fg-mut"
+        restartsAreNews(pod) ? "font-mono text-warn" : "font-mono text-fg-mut"
       }
       title={last ? `${pod.restartCount} (${last})` : undefined}
     >
@@ -160,7 +161,7 @@ export const columns: ColumnDef<PodRow>[] = [
       share: (pod: PodRow) => ({
         text: String(pod.restartCount),
         mono: true,
-        role: pod.restartCount > 5 ? "warn" : undefined,
+        role: restartsAreNews(pod) ? "warn" : undefined,
       }),
     },
     header: ({ column }) => <SortableHeader column={column} k="restarts" />,

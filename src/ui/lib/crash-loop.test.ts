@@ -2,10 +2,14 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vite-plus/test";
 
+import type { ContainerInfo } from "@/generated/types";
 import {
   CRASH_LOOP_WINDOW_MS,
+  containerRestartsAreNews,
   loopingNow,
   loopState,
+  restartingNow,
+  restartsAreNews,
   seenLoop,
   withKnownLoop,
 } from "./crash-loop";
@@ -15,8 +19,10 @@ interface Case {
   now: string;
   display: string;
   loopingUntil: string | null;
+  restartingUntil: string | null;
   looping: boolean;
   exitUnreported: boolean;
+  containerStatuses: { restartCount: number }[];
 }
 
 const shared = JSON.parse(
@@ -42,6 +48,34 @@ describe("the crash-loop window", () => {
       };
       expect(loopState(status, Date.parse(c.now))).toBe(
         c.looping ? "looping" : c.exitUnreported ? "unreported" : "clear"
+      );
+    }
+  );
+
+  /** The backend ships when each case's restarts stop being news; fails if
+   *  this side calls a cluster restart's history amber, or a loop that just
+   *  settled after short runs neutral. */
+  it.each(shared.cases.map((c) => [c.name, c] as const))(
+    "reads the restarts of %s as news or history as the shared file says",
+    (_, c) => {
+      const now = Date.parse(c.now);
+      const status = {
+        display: c.display,
+        loopingUntil: c.loopingUntil ?? undefined,
+        exitUnreported: c.exitUnreported,
+        restartingUntil: c.restartingUntil ?? undefined,
+      };
+      const restarting =
+        c.restartingUntil !== null && now < Date.parse(c.restartingUntil);
+      expect(restartingNow(status, now)).toBe(restarting);
+      expect(
+        restartsAreNews(
+          { restartCount: c.containerStatuses[0].restartCount, status },
+          now
+        )
+      ).toBe(
+        c.containerStatuses[0].restartCount > 0 &&
+          (c.looping || c.exitUnreported || restarting)
       );
     }
   );
@@ -138,5 +172,63 @@ describe("a loop the kubelet stopped reporting the exit of", () => {
     });
     expect(seenLoop(backingOff, first, now + 5_000)).toBe(first);
     expect(seenLoop(unreported, first, now + 5_000)).toBe(first);
+  });
+});
+
+describe("a container's restarts", () => {
+  const now = Date.parse("2026-10-09T10:02:00Z");
+  const container = (over: Partial<ContainerInfo>): ContainerInfo => ({
+    name: "app",
+    image: "busybox:1.36",
+    ready: true,
+    started: true,
+    phase: "app",
+    state: { type: "running" },
+    lastTerminated: {
+      exitCode: 255,
+      signal: null,
+      reason: "Unknown",
+      message: null,
+      startedAt: "2026-10-09T08:10:02Z",
+      finishedAt: "2026-10-09T09:56:33Z",
+    },
+    restartCount: 3,
+    ports: [],
+    resources: { requests: {}, limits: {} },
+    env: [],
+    envFrom: [],
+    ...over,
+  });
+
+  /**
+   * Marco's healthy checkout-api read its restarts in amber on the
+   * Containers tab, every one of them a cluster restart. Fails if a
+   * container up again after long runs is news, or one still restarting
+   * after short runs, one backing off, or one whose exit is not reported is
+   * not.
+   */
+  it("is news only while the exits keep coming", () => {
+    expect(containerRestartsAreNews(container({}), now)).toBe(false);
+    expect(
+      containerRestartsAreNews(
+        container({ restartingUntil: "2026-10-09T10:56:33Z" }),
+        now
+      )
+    ).toBe(true);
+    expect(
+      containerRestartsAreNews(
+        container({
+          state: { type: "waiting", reason: "CrashLoopBackOff" },
+          ready: false,
+        }),
+        now
+      )
+    ).toBe(true);
+    expect(
+      containerRestartsAreNews(container({ lastTerminated: null }), now)
+    ).toBe(true);
+    expect(containerRestartsAreNews(container({ restartCount: 0 }), now)).toBe(
+      false
+    );
   });
 });

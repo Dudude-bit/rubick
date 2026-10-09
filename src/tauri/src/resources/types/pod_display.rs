@@ -270,12 +270,34 @@ pub fn looping_until(pod: &Pod) -> Option<DateTime<Utc>> {
         .container_statuses
         .iter()
         .flatten()
-        .filter(|cs| cs.restart_count >= 2)
-        .filter_map(loop_lasts_until)
+        .filter_map(container_looping_until)
         .max()
 }
 
-fn loop_lasts_until(cs: &ContainerStatus) -> Option<DateTime<Utc>> {
+/// [`looping_until`] for one container, whatever its pod's phase.
+#[must_use]
+pub fn container_looping_until(cs: &ContainerStatus) -> Option<DateTime<Utc>> {
+    let ended = repeated_short_exit(cs)?;
+    let window = ended + chrono::Duration::seconds(CRASH_LOOP_WINDOW_SECONDS);
+    let up = cs
+        .state
+        .as_ref()
+        .and_then(|s| s.running.as_ref())
+        .and_then(|r| r.started_at.as_ref())
+        .map(Moment::moment);
+    Some(up.map_or(window, |at| {
+        window.min(at + chrono::Duration::seconds(CRASH_LOOP_SETTLE_SECONDS))
+    }))
+}
+
+/// When a container restarted twice or more last exited, if that exit ended a
+/// short run or one of unreported length. An exit after a long run is one
+/// exit, and restarts made of those are history rather than exits that keep
+/// coming.
+fn repeated_short_exit(cs: &ContainerStatus) -> Option<DateTime<Utc>> {
+    if cs.restart_count < 2 {
+        return None;
+    }
     let exit = latest_exit(cs)?;
     let ended = exit.finished_at.as_ref()?.moment();
     // The kubelet writes the epoch as the start of a run that never began.
@@ -287,16 +309,32 @@ fn loop_lasts_until(cs: &ContainerStatus) -> Option<DateTime<Utc>> {
     if began.is_some_and(|at| ended - at >= chrono::Duration::seconds(LONG_RUN_SECONDS)) {
         return None;
     }
-    let window = ended + chrono::Duration::seconds(CRASH_LOOP_WINDOW_SECONDS);
-    let up = cs
-        .state
-        .as_ref()
-        .and_then(|s| s.running.as_ref())
-        .and_then(|r| r.started_at.as_ref())
-        .map(Moment::moment);
-    Some(up.map_or(window, |at| {
-        window.min(at + chrono::Duration::seconds(CRASH_LOOP_SETTLE_SECONDS))
-    }))
+    Some(ended)
+}
+
+/// How long after its last short exit a container's restarts still count as
+/// news. A crash loop comes round inside five minutes, so a pod that has not
+/// exited in an hour is over whatever it was.
+pub const RESTART_RECENT_SECONDS: i64 = 3600;
+
+/// Until when a running pod's restarts are exits that keep coming, read
+/// without a clock as [`looping_until`] is: the same evidence, held for
+/// [`RESTART_RECENT_SECONDS`] rather than until the loop lapses. Restarts that
+/// each ended a long run, a cluster restart above all, never count.
+#[must_use]
+pub fn restarting_until(pod: &Pod) -> Option<DateTime<Utc>> {
+    running_status(pod)?
+        .container_statuses
+        .iter()
+        .flatten()
+        .filter_map(container_restarting_until)
+        .max()
+}
+
+/// [`restarting_until`] for one container, whatever its pod's phase.
+#[must_use]
+pub fn container_restarting_until(cs: &ContainerStatus) -> Option<DateTime<Utc>> {
+    repeated_short_exit(cs).map(|ended| ended + chrono::Duration::seconds(RESTART_RECENT_SECONDS))
 }
 
 /// Whether a running pod has a container that restarted while neither its
@@ -1015,6 +1053,22 @@ mod tests {
             );
             assert_eq!(row.status.exit_unreported, case["exitUnreported"], "{name}");
             assert_eq!(crash_looping(&pod, now), case["looping"], "{name}");
+            assert_eq!(
+                serde_json::to_value(row.status.restarting_until).expect("value"),
+                case["restartingUntil"],
+                "{name}"
+            );
+            let info = crate::resources::PodInfo::from(&pod);
+            assert_eq!(
+                serde_json::to_value(info.containers[0].restarting_until).expect("value"),
+                case["restartingUntil"],
+                "{name}"
+            );
+            assert_eq!(
+                serde_json::to_value(info.containers[0].looping_until).expect("value"),
+                case["loopingUntil"],
+                "{name}"
+            );
         }
     }
 

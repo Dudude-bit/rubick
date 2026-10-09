@@ -14,7 +14,9 @@ use std::collections::BTreeMap;
 
 use super::common::{init_phase, state_of, ContainerPhase, ContainerState};
 use super::pod::{phase_of, resource_totals};
-use super::pod_display::{display_status, exit_unreported, looping_until, restarts};
+use super::pod_display::{
+    display_status, exit_unreported, looping_until, restarting_until, restarts,
+};
 use crate::utils::Moment;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -73,6 +75,9 @@ pub struct PodRowStatus {
     /// See `PodStatusInfo::exit_unreported`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub exit_unreported: bool,
+    /// See `PodStatusInfo::restarting_until`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restarting_until: Option<DateTime<Utc>>,
 }
 
 /// What the Ready column is decided from, per container.
@@ -139,6 +144,7 @@ impl From<&Pod> for PodRow {
                 display: display_status(pod),
                 looping_until: looping_until(pod),
                 exit_unreported: exit_unreported(pod),
+                restarting_until: restarting_until(pod),
             },
             node_name: spec.and_then(|s| s.node_name.clone()),
             pod_ip: status.and_then(|s| s.pod_ip.clone()),

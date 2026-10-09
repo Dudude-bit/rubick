@@ -10,7 +10,9 @@ use crate::resources::serialization::OwnerReference;
 use crate::utils::format_cpu;
 
 use super::common::{extract_owner_references, ConditionInfo, ContainerInfo};
-use super::pod_display::{display_status, exit_unreported, looping_until, restarts};
+use super::pod_display::{
+    display_status, exit_unreported, looping_until, restarting_until, restarts,
+};
 use crate::utils::Moment;
 
 /// Simplified pod information for frontend
@@ -400,6 +402,9 @@ pub struct PodStatusInfo {
     /// from, which the reader must not draw as health.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub exit_unreported: bool,
+    /// See [`restarting_until`]; the reader compares it with its own clock.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restarting_until: Option<DateTime<Utc>>,
 }
 
 impl PodStatusInfo {
@@ -415,6 +420,7 @@ impl PodStatusInfo {
                 reason: None,
                 looping_until: None,
                 exit_unreported: false,
+                restarting_until: None,
             };
         };
 
@@ -439,6 +445,7 @@ impl PodStatusInfo {
             reason: status.reason.clone(),
             looping_until: looping_until(pod),
             exit_unreported: exit_unreported(pod),
+            restarting_until: restarting_until(pod),
         }
     }
 }

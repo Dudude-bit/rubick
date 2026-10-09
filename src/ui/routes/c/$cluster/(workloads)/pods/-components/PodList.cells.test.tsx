@@ -18,7 +18,13 @@ describe("what a narrow pod column keeps on hover", () => {
     render(
       <>
         {columnOf("restarts").cell({
-          row: { original: { restartCount: 7, lastRestartAt } },
+          row: {
+            original: {
+              restartCount: 7,
+              lastRestartAt,
+              status: { display: "Running" },
+            },
+          },
         } as never)}
       </>
     );
@@ -26,6 +32,36 @@ describe("what a narrow pod column keeps on hover", () => {
       "title",
       expect.stringMatching(/^7 \(.+ ago\)$/)
     );
+  });
+
+  /**
+   * Sam's log-demo pods read "10" and "15" in amber, every restart one their
+   * cluster gave them after runs of hours. Fails if restarts that are history
+   * are drawn as news, or exits after short runs inside the hour are not.
+   */
+  it("draws a restart count amber only while the exits keep coming", () => {
+    const lastRestartAt = new Date(Date.now() - 5 * 60_000).toISOString();
+    const cell = (status: Record<string, string>) =>
+      render(
+        <>
+          {columnOf("restarts").cell({
+            row: {
+              original: {
+                restartCount: 15,
+                lastRestartAt,
+                status: { display: "Running", ...status },
+              },
+            },
+          } as never)}
+        </>
+      );
+    const history = cell({});
+    expect(screen.getByText("15")).not.toHaveClass("text-warn");
+    history.unmount();
+    cell({
+      restartingUntil: new Date(Date.now() + 55 * 60_000).toISOString(),
+    });
+    expect(screen.getByText("15")).toHaveClass("text-warn");
   });
 
   /** "Готов…" and "Перезап…" could not be read, and a screen reader heard only "sort by this column". */

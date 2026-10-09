@@ -24,6 +24,7 @@ import { podStatusValue } from "@/lib/share/pod-status";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { formatSince } from "@/lib/utils";
 import { describeTermination, lastTermination } from "@/lib/pod-status";
+import { restartsAreNews } from "@/lib/crash-loop";
 import { errorToShow } from "@/lib/error-utils";
 import { useT, type T } from "@/i18n/useT";
 import { useHintSettingsStore } from "@/stores/hintSettingsStore";
@@ -54,7 +55,7 @@ function statsOf(pod: PodInfo, capturedAt: string, t: T): ReportStat[] {
     {
       label: t("columns", "restarts"),
       value: String(pod.restartCount),
-      role: pod.restartCount > 0 ? "warn" : undefined,
+      role: restartsAreNews(pod) ? "warn" : undefined,
     },
   ];
   const created = pod.createdAt ? Date.parse(pod.createdAt) : NaN;
