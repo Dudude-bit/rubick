@@ -7189,6 +7189,7 @@ export const en = {
       other: "{n} restarts, last {ago} ago",
     },
     restartsPlain: { one: "{n} restart", other: "{n} restarts" },
+    restartsBy: "{restarts}: {split}",
     restartsExitUnreported: {
       one: "{n} restart, last exit not reported",
       other: "{n} restarts, last exit not reported",

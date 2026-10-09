@@ -102,8 +102,13 @@ pub enum ProblemSeverity {
 pub enum ProblemDetail {
     /// The object's own words, quoted.
     Said { text: String },
-    /// A pod restarting more than the screen tolerates.
-    Restarts { n: i32 },
+    /// A pod restarting more than the screen tolerates, and the containers
+    /// behind the count where more than one of them restarted.
+    Restarts {
+        n: i32,
+        #[serde(default)]
+        by: Option<Vec<crate::resources::ContainerRestarts>>,
+    },
     /// A Deployment short of replicas whose own condition said nothing.
     ReplicasReady { ready: i32, desired: i32 },
     /// A node marked unschedulable.
@@ -114,6 +119,14 @@ impl ProblemDetail {
     /// The cluster's own message, where it wrote one.
     fn said(message: Option<String>) -> Option<Self> {
         message.map(|text| Self::Said { text })
+    }
+
+    /// `n` restarts of `pod`, with the containers behind them.
+    fn restarts(pod: &Pod, n: i32) -> Self {
+        Self::Restarts {
+            n,
+            by: crate::resources::restarts_by(pod),
+        }
     }
 }
 
@@ -473,7 +486,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 CRASH_LOOPING
             }
             .to_string(),
-            detail: Some(ProblemDetail::Restarts { n: restarts }),
+            detail: Some(ProblemDetail::restarts(pod, restarts)),
             since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
             restarts: Some(restarts),
             folded_pods: None,
@@ -481,14 +494,25 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
     }
 
     if let Some((reason, message)) = stuck {
+        // An init container's loop reads as an app container's does beside
+        // it, not in the kubelet's back-off sentence with the pod's uid in it.
+        let looping = in_init && crash_looping(pod, now);
         return Some(ClusterProblem {
             severity: ProblemSeverity::Critical,
             kind: "Pod".to_string(),
             name,
             namespace,
             reason,
-            detail: ProblemDetail::said(message),
-            since: created,
+            detail: if looping {
+                Some(ProblemDetail::restarts(pod, restarts))
+            } else {
+                ProblemDetail::said(message)
+            },
+            since: if looping {
+                last_restart_at.map(|t| t.to_rfc3339()).or(created)
+            } else {
+                created
+            },
             restarts: Some(restarts),
             folded_pods: None,
         });
@@ -554,7 +578,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             name,
             namespace,
             reason: "Restarting".to_string(),
-            detail: Some(ProblemDetail::Restarts { n: restarts }),
+            detail: Some(ProblemDetail::restarts(pod, restarts)),
             // Dated by the restart, not by the pod. `since: created` put a
             // twelve-day-old date on something that happened minutes ago.
             since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
@@ -2665,7 +2689,7 @@ mod tests {
             assert_eq!(problems[0].severity, ProblemSeverity::Critical, "{instant}");
             assert_eq!(
                 problems[0].detail,
-                Some(ProblemDetail::Restarts { n: 9 }),
+                Some(ProblemDetail::Restarts { n: 9, by: None }),
                 "{instant}"
             );
         }
@@ -2784,6 +2808,84 @@ mod tests {
         }
     }
 
+    /// Sam's Needs attention row for init-demo printed the kubelet's
+    /// "back-off 5m0s restarting failed container=migrate pod=init-demo_..."
+    /// with the pod's uid in it, beside rows reading "N restarts since
+    /// creation", and its 17 counted five restarts of wait-for-db, an init
+    /// container that had finished fine, with nothing saying so. Fails if an
+    /// init container's loop is worded in the kubelet's sentence, or its
+    /// count does not name the containers behind it.
+    #[test]
+    fn an_init_container_loop_is_worded_as_restarts_by_container() {
+        let now = Utc::now();
+        let ago = |seconds: i64| (now - chrono::Duration::seconds(seconds)).to_rfc3339();
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "init-demo", "namespace": "k8s-gui-test",
+                "creationTimestamp": ago(40_000),
+            },
+            "spec": {
+                "initContainers": [{ "name": "wait-for-db" }, { "name": "migrate" }, { "name": "seed" }],
+                "containers": [{ "name": "app" }],
+            },
+            "status": {
+                "phase": "Pending",
+                "conditions": [{ "type": "Initialized", "status": "False" }],
+                "initContainerStatuses": [
+                    {
+                        "name": "wait-for-db", "image": "busybox", "imageID": "", "ready": true,
+                        "restartCount": 5,
+                        "state": { "terminated": { "exitCode": 0, "reason": "Completed" } },
+                    },
+                    {
+                        "name": "migrate", "image": "busybox", "imageID": "", "ready": false,
+                        "restartCount": 12,
+                        "state": { "waiting": {
+                            "reason": "CrashLoopBackOff",
+                            "message": "back-off 5m0s restarting failed container=migrate pod=init-demo_k8s-gui-test(a7b8f832-8e5c-4f43-83e8-77fca11059e1)",
+                        } },
+                        "lastState": { "terminated": {
+                            "exitCode": 1, "reason": "Error",
+                            "startedAt": ago(130), "finishedAt": ago(120),
+                        } },
+                    },
+                    {
+                        "name": "seed", "image": "busybox", "imageID": "", "ready": false,
+                        "restartCount": 0, "state": { "waiting": { "reason": "PodInitializing" } },
+                    },
+                ],
+                "containerStatuses": [{
+                    "name": "app", "image": "busybox", "imageID": "", "ready": false,
+                    "restartCount": 0, "state": { "waiting": { "reason": "PodInitializing" } },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote");
+
+        let problems = pod_problems([&pod], now);
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].reason, "Init:CrashLoopBackOff");
+        let by = vec![
+            crate::resources::ContainerRestarts {
+                container: "wait-for-db".into(),
+                n: 5,
+            },
+            crate::resources::ContainerRestarts {
+                container: "migrate".into(),
+                n: 12,
+            },
+        ];
+        assert_eq!(
+            problems[0].detail,
+            Some(ProblemDetail::Restarts {
+                n: 17,
+                by: Some(by.clone())
+            })
+        );
+        assert_eq!(problems[0].since, Some(ago(120)));
+        assert_eq!(crate::resources::PodInfo::from(&pod).restarts_by, Some(by));
+    }
+
     /// Sam saw init-demo's init container exit 1 again and again with its
     /// restarts grey. Fails if the instant it is up between short failed
     /// runs reads as an ordinary wait rather than as the loop it is in.
@@ -2865,7 +2967,10 @@ mod tests {
         let now = Utc::now();
 
         let ours = pod_problems(&[restarted_pod("flapper", now, 7, Some(120))], now);
-        assert_eq!(ours[0].detail, Some(ProblemDetail::Restarts { n: 7 }));
+        assert_eq!(
+            ours[0].detail,
+            Some(ProblemDetail::Restarts { n: 7, by: None })
+        );
 
         let cordoned = node_problems(&[unschedulable_node("worker-1")]);
         assert_eq!(cordoned[0].detail, Some(ProblemDetail::Unschedulable));

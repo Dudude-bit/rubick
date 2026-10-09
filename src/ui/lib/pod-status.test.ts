@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { containerStatus } from "./pod-status";
+import { containerStatus, describeRestarts } from "./pod-status";
 import type { ContainerState, TerminationInfo } from "@/generated/types";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
 
 const terminated = (extra: Partial<TerminationInfo> = {}): ContainerState => ({
   type: "terminated",
@@ -77,5 +79,40 @@ describe("containerStatus", () => {
     expect(
       containerStatus({ ready: false, state: { type: "unknown" } })
     ).toEqual({ text: "Unknown", role: "warn" });
+  });
+});
+
+describe("describeRestarts", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  const ru: T = (section, key, values) => translate("ru", section, key, values);
+  const initDemo = {
+    restartCount: 15,
+    lastRestartAt: "2026-10-09T14:00:00Z",
+    restartsBy: [
+      { container: "wait-for-db", n: 5 },
+      { container: "migrate", n: 10 },
+    ],
+  };
+
+  /**
+   * Sam's init-demo page said "10 restarts so far" for migrate and "15
+   * restarts" in its Restarts row, five of them wait-for-db's, which had
+   * finished fine, with nothing saying whose. Fails if a count more than one
+   * container makes does not name them, or one container's count is split.
+   */
+  it("names the containers behind a count more than one of them makes", () => {
+    expect(describeRestarts(initDemo, t, "3m")).toBe(
+      "15 restarts, last 3m ago: wait-for-db 5, migrate 10"
+    );
+    expect(describeRestarts(initDemo, ru, "3 мин")).toBe(
+      "15 перезапусков, последний 3 мин назад: wait-for-db 5, migrate 10"
+    );
+    expect(
+      describeRestarts(
+        { ...initDemo, restartsBy: [{ container: "migrate", n: 15 }] },
+        t,
+        "3m"
+      )
+    ).toBe("15 restarts, last 3m ago");
   });
 });

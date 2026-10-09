@@ -4,7 +4,12 @@ import type { ResourcePressure } from "@/generated/types";
 import { parseMemory } from "@/lib/k8s-quantity";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { cpuRatio, memoryRatio, schedulerShare } from "./health-share";
+import {
+  composedDetail,
+  cpuRatio,
+  memoryRatio,
+  schedulerShare,
+} from "./health-share";
 
 const pressure = (requested: number, allocatable: number) =>
   ({ requested, allocatable, usage: null }) as ResourcePressure;
@@ -61,5 +66,34 @@ describe("the scheduler headroom share", () => {
     expect(texts).toContain("· 46%");
     expect(texts).toContain("· 1%");
     expect(texts).not.toContain("· 47%");
+  });
+});
+
+describe("a restarting pod's row", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+
+  /**
+   * init-demo's Needs attention row said "17 restarts" over a count five of
+   * whose restarts were an init container's that had finished fine. Fails if
+   * a count more than one container makes does not name them, or a row with
+   * one does.
+   */
+  it("names the containers behind its count where more than one restarted", () => {
+    expect(
+      composedDetail(
+        {
+          says: "restarts",
+          n: 17,
+          by: [
+            { container: "wait-for-db", n: 5 },
+            { container: "migrate", n: 12 },
+          ],
+        },
+        t
+      )
+    ).toBe("17 restarts since creation: wait-for-db 5, migrate 12");
+    expect(composedDetail({ says: "restarts", n: 66, by: null }, t)).toBe(
+      "66 restarts since creation"
+    );
   });
 });

@@ -11,9 +11,17 @@ use crate::utils::format_cpu;
 
 use super::common::{extract_owner_references, ConditionInfo, ContainerInfo};
 use super::pod_display::{
-    display_status, exit_unreported, looping_until, restarting_until, restarts,
+    display_status, exit_unreported, looping_until, restarting_until, restarts, restarts_by,
 };
 use crate::utils::Moment;
+
+/// One container's share of a pod's restart count.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContainerRestarts {
+    pub container: String,
+    pub n: i32,
+}
 
 /// Simplified pod information for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,6 +56,9 @@ pub struct PodInfo {
     /// restart count readable: 653 an hour ago and 653 last week are the
     /// same number and not the same pod.
     pub last_restart_at: Option<DateTime<Utc>>,
+    /// See [`super::pod_display::restarts_by`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restarts_by: Option<Vec<ContainerRestarts>>,
     // Resource requests/limits (from spec)
     pub cpu_requests: Option<String>, // aggregated from all containers
     pub cpu_limits: Option<String>,   // aggregated from all containers
@@ -368,6 +379,7 @@ impl From<&Pod> for PodInfo {
             created_at: pod.creation_timestamp().map(|t| t.moment()),
             restart_count,
             last_restart_at,
+            restarts_by: restarts_by(pod),
             cpu_requests: totals.cpu_requests,
             cpu_limits: totals.cpu_limits,
             memory_requests: totals.memory_requests,

@@ -7987,6 +7987,7 @@ export const ru: Catalogue = {
       few: "{n} перезапуска",
       other: "{n} перезапусков",
     },
+    restartsBy: "{restarts}: {split}",
     restartsExitUnreported: {
       one: "{n} перезапуск, о последнем завершении не сообщено",
       few: "{n} перезапуска, о последнем завершении не сообщено",

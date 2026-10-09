@@ -1979,6 +1979,11 @@ export interface ClusterProblem {
   foldedPods: number | null;
 }
 
+export interface ContainerRestarts {
+  container: string;
+  n: number;
+}
+
 export interface TlsCertificate {
   secretName: string;
   certificate: CertificateFacts | null;
@@ -2127,6 +2132,7 @@ export interface PodInfo {
   createdAt: string | null;
   restartCount: number;
   lastRestartAt: string | null;
+  restartsBy?: ContainerRestarts[];
   cpuRequests: string | null;
   cpuLimits: string | null;
   memoryRequests: string | null;
@@ -2735,7 +2741,7 @@ export type OverviewSource = "watch" | "list";
 
 export type ProblemDetail =
   | { says: "said"; text: string }
-  | { says: "restarts"; n: number }
+  | { says: "restarts"; n: number; by: ContainerRestarts[] | null }
   | { says: "replicasReady"; ready: number; desired: number }
   | { says: "unschedulable" };
 

@@ -26,12 +26,12 @@ pub use deployment::{
 pub use metadata::{ConfigMapInfo, EventInfo, InvolvedObjectInfo, NamespaceInfo, SecretInfo};
 pub use node::{NodeAddressInfo, NodeInfo, NodeStatusInfo, ResourceQuantities, TaintInfo};
 pub use pod::{
-    mounts_of, volume_source, PodInfo, PodStatusInfo, PodVolumeInfo, VolumeMountInfo,
-    VolumeObjectRef,
+    mounts_of, volume_source, ContainerRestarts, PodInfo, PodStatusInfo, PodVolumeInfo,
+    VolumeMountInfo, VolumeObjectRef,
 };
 pub use pod_display::{
     backing_off, condition_is_true, crash_looping, exit_unreported, looping_until, pending_grace,
-    pending_since, restarting_until, restarts, stuck_reason, within_pending_grace,
+    pending_since, restarting_until, restarts, restarts_by, stuck_reason, within_pending_grace,
     CRASH_LOOP_WINDOW_SECONDS, PENDING_GRACE_SECONDS, START_GRACE_SECONDS,
 };
 pub use pod_row::{PodRow, PodRowStatus, PodWorkload, RowContainer};
