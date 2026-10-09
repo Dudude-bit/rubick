@@ -285,7 +285,7 @@ describe("ResourceDetailLayout chrome", () => {
 
   it("puts the actions on the tab strip's row", async () => {
     await withActions("overview");
-    const row = screen.getByRole("tablist").parentElement;
+    const row = screen.getByRole("tablist").parentElement?.parentElement;
     expect(row).toContainElement(
       screen.getByRole("button", { name: "Delete" })
     );
