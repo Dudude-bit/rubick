@@ -150,12 +150,12 @@ Needs [Bun](https://bun.sh) 1.3+, Rust 1.91+, and the [Tauri prerequisites](http
 
 ```bash
 bunx tsc --noEmit                                     # types
-bun run lint                                          # eslint, zero warnings
+bun run lint                                          # oxlint, zero warnings
 bun run test                                          # frontend tests
 cargo test --workspace                                # Rust tests
 ```
 
-A block of lint rules keeps the codebase from drifting back, and each fails the commit: colours must be role tokens and no component may branch on the theme; nothing outside `src/integrations/` may name a vendor; polling rates go through `useLiveQuery` rather than a hand-written interval; a `StatusBadge` keeps the untranslated status, because its colour is a table lookup; and `<select>` comes from `components/ui`, because the native one is painted by the OS and ignores the theme. [CONTRIBUTING](CONTRIBUTING.md) says why each exists.
+A block of lint rules keeps the codebase from drifting back, and each fails the commit: colours must be role tokens and no component may branch on the theme; nothing outside `src/ui/integrations/` may name a vendor; polling rates go through `useLiveQuery` rather than a hand-written interval; a `StatusBadge` keeps the untranslated status, because its colour is a table lookup; and `<select>` comes from `components/ui`, because the native one is painted by the OS and ignores the theme. [CONTRIBUTING](CONTRIBUTING.md) says why each exists.
 
 Idle polling was measured and cut 77% — from ~895 to ~205 API requests a minute — so leaving the window open does not tax the cluster. A query that has slowed down says so rather than showing a stale number under a live badge.
 

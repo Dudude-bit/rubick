@@ -1,0 +1,584 @@
+import { useEffect, useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
+
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
+import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
+import { SectionHeader } from "@/components/ui/section";
+import { DataFreshness } from "@/components/ui/realtime";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/components/ui/use-toast";
+import { ShareScreenAction } from "@/components/share/ShareAction";
+import {
+  HelmStatusBanner,
+  HelmInstallDialog,
+  HelmUpgradeDialog,
+  HelmAddRepoDialog,
+  HelmHistoryDialog,
+  HelmReleasesTab,
+  HelmChartsTab,
+  HelmRepositoriesTab,
+} from "./";
+import { Package, Search, FolderGit2 } from "lucide-react";
+import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
+import type {
+  HelmRelease,
+  HelmChartSearchResult,
+  HelmInstallOptions,
+  NamespaceInfo,
+  UnreadNamespace,
+} from "@/generated/types";
+import { scopeCacheKey, wireScope } from "@/lib/namespace-scope";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useDependenciesStore } from "@/stores/dependenciesStore";
+import { useT } from "@/i18n/useT";
+import { toastError } from "@/lib/toast-error";
+
+const namesOf = (namespaces: NamespaceInfo[]) =>
+  namespaces.map((ns) => ns.name);
+const NO_RELEASES: HelmRelease[] = [];
+const NOTHING_UNREAD: UnreadNamespace[] = [];
+
+export function Helm() {
+  const t = useT();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { isConnected } = useClusterStore();
+  const { helm, checkHelmAvailability } = useDependenciesStore();
+
+  const [rollbackTarget, setRollbackTarget] = useState<{
+    release: HelmRelease;
+    revision: number;
+  } | null>(null);
+  const [uninstallTarget, setUninstallTarget] = useState<HelmRelease | null>(
+    null
+  );
+  const [historyDialog, setHistoryDialog] = useState<HelmRelease | null>(null);
+  // The releases list follows the window's namespace selection like every
+  // other list, rather than carrying a second dropdown of its own. A two- or
+  // more namespace scope is read one namespace at a time, so a user with rights
+  // in some namespaces and not others still sees theirs — a single cluster-wide
+  // secret list would 403 and come back empty.
+  const scope = useNamespaceScope();
+  const [activeTab, setActiveTab] = useState<string>("releases");
+
+  const [addRepoDialogOpen, setAddRepoDialogOpen] = useState(false);
+  const [newRepoName, setNewRepoName] = useState("");
+  const [newRepoUrl, setNewRepoUrl] = useState("");
+  const [deleteRepoTarget, setDeleteRepoTarget] = useState<string | null>(null);
+
+  const [searchKeyword, setSearchKeyword] = useState("");
+  const [searchResults, setSearchResults] = useState<HelmChartSearchResult[]>(
+    []
+  );
+  const [isSearching, setIsSearching] = useState(false);
+
+  const [installChart, setInstallChart] =
+    useState<HelmChartSearchResult | null>(null);
+  const [installReleaseName, setInstallReleaseName] = useState("");
+  const [installNamespace, setInstallNamespace] = useState("default");
+  const [installVersion, setInstallVersion] = useState("");
+  const [installValues, setInstallValues] = useState("");
+  const [installCreateNs, setInstallCreateNs] = useState(false);
+  const [installWait, setInstallWait] = useState(true);
+
+  const [upgradeTarget, setUpgradeTarget] = useState<HelmRelease | null>(null);
+  const [upgradeVersion, setUpgradeVersion] = useState("");
+  const [upgradeValues, setUpgradeValues] = useState("");
+  const [upgradeWait, setUpgradeWait] = useState(true);
+
+  useEffect(() => {
+    if (isConnected && !helm) {
+      checkHelmAvailability();
+    }
+  }, [isConnected, helm, checkHelmAvailability]);
+
+  const { data: namespaces = [] } = useQuery({
+    queryKey: queryKeys.namespaces(),
+    queryFn: () => commands.listNamespaces(),
+    select: namesOf,
+    enabled: isConnected,
+  });
+
+  const helmCliAvailable = helm?.available ?? false;
+
+  const {
+    data: answer,
+    isLoading,
+    error: releasesError,
+    refetch,
+    freshness,
+  } = useLiveQuery({
+    queryKey: queryKeys.helm.releases(scopeCacheKey(scope.scope)),
+    // The `commands` wrapper already throws a normalised Error; a second
+    // catch here re-threw a bare string, and the refusal block's
+    // `verbatim(error.message)` then read `.message` off a string and crashed.
+    // Let the wrapper's Error propagate, like every other list.
+    queryFn: () => commands.listHelmReleasesIn(wireScope(scope.scope)),
+    enabled: isConnected,
+    refresh: "steady",
+  });
+
+  const releases = answer?.rows ?? NO_RELEASES;
+  const unread = answer?.unread ?? NOTHING_UNREAD;
+
+  const { data: historyData = [], isLoading: historyLoading } = useQuery({
+    queryKey: queryKeys.helm.history(
+      historyDialog?.namespace,
+      historyDialog?.name
+    ),
+    queryFn: async () => {
+      if (!historyDialog) return [];
+      return await commands.getHelmHistory(
+        historyDialog.name,
+        historyDialog.namespace
+      );
+    },
+    enabled: !!historyDialog,
+  });
+
+  const { data: repositories = [], isLoading: reposLoading } = useQuery({
+    queryKey: ["helm-repos"],
+    queryFn: async () => {
+      try {
+        return await commands.listHelmRepos();
+      } catch (err) {
+        console.error("Failed to list repos:", err);
+        return [];
+      }
+    },
+    enabled: helmCliAvailable,
+  });
+
+  const rollbackMutation = useMutation({
+    mutationFn: async ({
+      name,
+      namespace,
+      revision,
+    }: {
+      name: string;
+      namespace: string;
+      revision: number;
+    }) => commands.helmRollback(name, namespace, revision),
+    onSuccess: () => {
+      toast({
+        title: t("action", "rollbackInitiated"),
+        description: t("action", "rollbackInitiatedDetail"),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
+      setRollbackTarget(null);
+    },
+    onError: (error) => {
+      toastError(t("action", "rollbackFailed"), error);
+    },
+  });
+
+  const uninstallMutation = useMutation({
+    mutationFn: async ({
+      name,
+      namespace,
+    }: {
+      name: string;
+      namespace: string;
+    }) => commands.helmUninstall(name, namespace),
+    onSuccess: () => {
+      toast({
+        title: t("action", "releaseUninstalled"),
+        description: t("action", "releaseUninstalledDetail"),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
+      setUninstallTarget(null);
+    },
+    onError: (error) => {
+      toastError(t("action", "uninstallFailed"), error);
+    },
+  });
+
+  const addRepoMutation = useMutation({
+    mutationFn: async ({ name, url }: { name: string; url: string }) =>
+      commands.addHelmRepo(name, url),
+    onSuccess: () => {
+      toast({
+        title: t("action", "repositoryAdded"),
+        description: t("action", "repositoryAddedDetail", {
+          name: newRepoName,
+        }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["helm-repos"] });
+      setAddRepoDialogOpen(false);
+      setNewRepoName("");
+      setNewRepoUrl("");
+    },
+    onError: (error) => {
+      toastError(t("action", "addRepositoryFailed"), error);
+    },
+  });
+
+  const removeRepoMutation = useMutation({
+    mutationFn: async (name: string) => commands.removeHelmRepo(name),
+    onSuccess: () => {
+      toast({
+        title: t("action", "repositoryRemoved"),
+        description: t("action", "repositoryRemovedDetail"),
+      });
+      queryClient.invalidateQueries({ queryKey: ["helm-repos"] });
+      setDeleteRepoTarget(null);
+    },
+    onError: (error) => {
+      toastError(t("action", "removeRepositoryFailed"), error);
+    },
+  });
+
+  const updateReposMutation = useMutation({
+    mutationFn: async () => commands.updateHelmRepos(),
+    onSuccess: () => {
+      toast({
+        title: t("action", "repositoriesUpdated"),
+        description: t("action", "repositoriesUpdatedDetail"),
+      });
+      queryClient.invalidateQueries({ queryKey: ["helm-repos"] });
+    },
+    onError: (error) => {
+      toastError(t("action", "updateRepositoriesFailed"), error);
+    },
+  });
+
+  const handleSearchCharts = async () => {
+    if (!searchKeyword.trim()) return;
+    setIsSearching(true);
+    try {
+      const results = await commands.helmSearchCharts(searchKeyword);
+      setSearchResults(results);
+    } catch (error) {
+      toastError(t("action", "searchFailed"), error);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const installMutation = useMutation({
+    mutationFn: async (options: HelmInstallOptions) =>
+      commands.helmInstall(options),
+    onSuccess: () => {
+      toast({
+        title: t("action", "chartInstalled"),
+        description: t("action", "chartInstalledDetail", {
+          name: installReleaseName,
+        }),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
+      setInstallChart(null);
+      setInstallReleaseName("");
+      setInstallNamespace("default");
+      setInstallVersion("");
+      setInstallValues("");
+      setInstallCreateNs(false);
+      setInstallWait(true);
+    },
+    onError: (error) => {
+      toastError(t("settings", "installationFailed"), error);
+    },
+  });
+
+  const upgradeMutation = useMutation({
+    mutationFn: async (options: HelmInstallOptions) =>
+      commands.helmUpgrade(options),
+    onSuccess: () => {
+      toast({
+        title: t("action", "releaseUpgraded"),
+        description: t("action", "releaseUpgradedDetail", {
+          name: upgradeTarget?.name ?? "",
+        }),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.helm.everyRelease(),
+      });
+      setUpgradeTarget(null);
+      setUpgradeVersion("");
+      setUpgradeValues("");
+      setUpgradeWait(true);
+    },
+    onError: (error) => {
+      toastError(t("action", "upgradeFailed"), error);
+    },
+  });
+
+  if (!isConnected) {
+    return (
+      <ConnectClusterEmptyState resourceLabel={t("empty", "helmReleases")} />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <HelmStatusBanner />
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        {/* The window tab strip already says which screen this is, so the
+            page gets the same 13px section heading as everything else —
+            and the tabs sit on its right instead of under a title block.
+            They stay inside the Tabs root so Radix keeps triggers and
+            panels wired together. */}
+        <SectionHeader
+          title="Helm"
+          // No count beside a refused read — "0 releases" there would say the
+          // opposite of the tab's "no access". The tab reads the same error.
+          // Nor beside an unread namespace, where it is not the total.
+          count={
+            (releasesError && releases.length === 0) || unread.length > 0
+              ? undefined
+              : t("count", "releases", { n: releases.length })
+          }
+          actions={
+            <>
+              <TabsList>
+                <TabsTrigger value="releases">
+                  <Package className="h-3 w-3" aria-hidden="true" />
+                  {t("nav", "releases")}
+                </TabsTrigger>
+                <TabsTrigger value="charts" disabled={!helmCliAvailable}>
+                  <Search className="h-3 w-3" aria-hidden="true" />
+                  {t("nav", "charts")}
+                </TabsTrigger>
+                <TabsTrigger value="repositories" disabled={!helmCliAvailable}>
+                  <FolderGit2 className="h-3 w-3" aria-hidden="true" />
+                  {t("nav", "repositories")}
+                </TabsTrigger>
+              </TabsList>
+              <DataFreshness
+                dataUpdatedAt={freshness.dataUpdatedAt}
+                slowed={freshness.slowed}
+                stale={freshness.stale}
+              />
+              <ShareScreenAction screen={{ title: "Helm" }} />
+            </>
+          }
+        />
+
+        <TabsContent value="releases">
+          <HelmReleasesTab
+            releases={releases}
+            unread={unread}
+            isLoading={isLoading}
+            error={releasesError ?? null}
+            readAt={freshness.stale ? freshness.dataUpdatedAt : null}
+            helmCliAvailable={helmCliAvailable}
+            onRefetch={() => refetch()}
+            onShowHistory={setHistoryDialog}
+            onUpgrade={(release) => {
+              setUpgradeTarget(release);
+              setUpgradeVersion("");
+              setUpgradeValues("");
+            }}
+            onRollback={(release) => {
+              if (release.revision > 1) {
+                setRollbackTarget({
+                  release,
+                  revision: release.revision - 1,
+                });
+              }
+            }}
+            onUninstall={setUninstallTarget}
+          />
+        </TabsContent>
+
+        <TabsContent value="charts">
+          <HelmChartsTab
+            searchKeyword={searchKeyword}
+            onSearchKeywordChange={setSearchKeyword}
+            results={searchResults}
+            isSearching={isSearching}
+            onSearch={handleSearchCharts}
+            onInstall={(chart) => {
+              setInstallChart(chart);
+              setInstallReleaseName(chart.name.split("/").pop() || chart.name);
+              setInstallVersion(chart.version);
+            }}
+          />
+        </TabsContent>
+
+        <TabsContent value="repositories">
+          <HelmRepositoriesTab
+            repositories={repositories}
+            isLoading={reposLoading}
+            isUpdating={updateReposMutation.isPending}
+            onUpdateAll={() => updateReposMutation.mutate()}
+            onAddRepoClick={() => setAddRepoDialogOpen(true)}
+            onDeleteRepo={setDeleteRepoTarget}
+          />
+        </TabsContent>
+      </Tabs>
+
+      <HelmAddRepoDialog
+        open={addRepoDialogOpen}
+        onClose={() => setAddRepoDialogOpen(false)}
+        name={newRepoName}
+        onNameChange={setNewRepoName}
+        url={newRepoUrl}
+        onUrlChange={setNewRepoUrl}
+        onAdd={() =>
+          addRepoMutation.mutate({ name: newRepoName, url: newRepoUrl })
+        }
+        isAdding={addRepoMutation.isPending}
+      />
+
+      <ConfirmDialog
+        open={deleteRepoTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteRepoTarget(null);
+        }}
+        title={t("action", "removeRepository")}
+        description={t("action", "removeRepositoryConfirm", {
+          name: deleteRepoTarget ?? "",
+        })}
+        confirmLabel={t("action", "remove")}
+        confirmVariant="destructive"
+        confirmDisabled={removeRepoMutation.isPending}
+        onConfirm={() => {
+          if (deleteRepoTarget) {
+            removeRepoMutation.mutate(deleteRepoTarget);
+          }
+        }}
+      />
+
+      <HelmInstallDialog
+        chart={installChart}
+        onClose={() => setInstallChart(null)}
+        namespaces={namespaces}
+        releaseName={installReleaseName}
+        onReleaseNameChange={setInstallReleaseName}
+        namespace={installNamespace}
+        onNamespaceChange={setInstallNamespace}
+        version={installVersion}
+        onVersionChange={setInstallVersion}
+        values={installValues}
+        onValuesChange={setInstallValues}
+        createNamespace={installCreateNs}
+        onCreateNamespaceChange={setInstallCreateNs}
+        wait={installWait}
+        onWaitChange={setInstallWait}
+        onInstall={() => {
+          if (installChart && installReleaseName && installNamespace) {
+            installMutation.mutate({
+              releaseName: installReleaseName,
+              chart: installChart.name,
+              namespace: installNamespace,
+              version: installVersion || null,
+              values: installValues || null,
+              createNamespace: installCreateNs,
+              wait: installWait,
+              timeout: installWait ? "5m0s" : null,
+            });
+          }
+        }}
+        isInstalling={installMutation.isPending}
+      />
+
+      <HelmUpgradeDialog
+        release={upgradeTarget}
+        onClose={() => setUpgradeTarget(null)}
+        version={upgradeVersion}
+        onVersionChange={setUpgradeVersion}
+        values={upgradeValues}
+        onValuesChange={setUpgradeValues}
+        wait={upgradeWait}
+        onWaitChange={setUpgradeWait}
+        onUpgrade={() => {
+          if (upgradeTarget) {
+            upgradeMutation.mutate({
+              releaseName: upgradeTarget.name,
+              chart: upgradeTarget.chart,
+              namespace: upgradeTarget.namespace,
+              version: upgradeVersion || null,
+              values: upgradeValues || null,
+              createNamespace: false,
+              wait: upgradeWait,
+              timeout: upgradeWait ? "5m0s" : null,
+            });
+          }
+        }}
+        isUpgrading={upgradeMutation.isPending}
+      />
+
+      {historyDialog && (
+        <HelmHistoryDialog
+          release={historyDialog}
+          history={historyData}
+          isLoading={historyLoading}
+          helmCliAvailable={helmCliAvailable}
+          onClose={() => setHistoryDialog(null)}
+          onRollback={(revision) => {
+            setRollbackTarget({ release: historyDialog, revision });
+            setHistoryDialog(null);
+          }}
+        />
+      )}
+
+      <ConfirmDialog
+        open={rollbackTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setRollbackTarget(null);
+        }}
+        title={t("action", "rollBackReleaseQuestion")}
+        description={
+          rollbackTarget
+            ? t("action", "rollBackReleaseDetail", {
+                name: rollbackTarget.release.name,
+                revision: rollbackTarget.revision,
+              })
+            : undefined
+        }
+        confirmLabel={t("action", "rollBack")}
+        confirmVariant="default"
+        confirmDisabled={rollbackMutation.isPending}
+        onConfirm={() => {
+          if (rollbackTarget) {
+            rollbackMutation.mutate({
+              name: rollbackTarget.release.name,
+              namespace: rollbackTarget.release.namespace,
+              revision: rollbackTarget.revision,
+            });
+          }
+        }}
+      />
+
+      <DangerousConfirmDialog
+        open={uninstallTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setUninstallTarget(null);
+        }}
+        title={t("action", "uninstallRelease")}
+        description={
+          uninstallTarget
+            ? t("action", "uninstallReleaseDetail", {
+                name: uninstallTarget.name,
+                namespace: uninstallTarget.namespace,
+              })
+            : undefined
+        }
+        confirmationText={uninstallTarget?.name ?? ""}
+        confirmLabel={t("action", "uninstall")}
+        isLoading={uninstallMutation.isPending}
+        onConfirm={() => {
+          if (uninstallTarget) {
+            uninstallMutation.mutate({
+              name: uninstallTarget.name,
+              namespace: uninstallTarget.namespace,
+            });
+          }
+        }}
+      />
+    </div>
+  );
+}
+
+export default Helm;

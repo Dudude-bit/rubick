@@ -1,0 +1,379 @@
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+import { DataSection } from "./data-rows";
+import { translate } from "@/i18n";
+import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useLocaleStore } from "@/stores/localeStore";
+
+const writeText = vi.fn().mockResolvedValue(undefined);
+Object.defineProperty(navigator, "clipboard", {
+  value: { writeText },
+  configurable: true,
+});
+
+describe("DataSection", () => {
+  beforeEach(() => writeText.mockClear());
+  it("shows a ConfigMap's values straight away", () => {
+    render(<DataSection data={{ "log.level": "debug" }} />);
+    expect(screen.getByText("log.level")).toBeInTheDocument();
+    expect(screen.getByText("debug")).toBeInTheDocument();
+  });
+
+  it("hides a Secret's value behind a reveal that says so", async () => {
+    render(<DataSection data={{ password: "hunter2" }} sensitive />);
+
+    expect(screen.queryByText("hunter2")).not.toBeInTheDocument();
+    // The affordance carries a word, not just an eye glyph: a masked value
+    // and an empty one must not look the same.
+    const reveal = screen.getByRole("button", { name: "Reveal" });
+
+    await userEvent.click(reveal);
+    expect(screen.getByText("hunter2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide" })).toBeInTheDocument();
+  });
+
+  it("reveals and re-hides every value at once", async () => {
+    render(<DataSection data={{ a: "one", b: "two" }} sensitive />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Reveal all" }));
+    expect(screen.getByText("one")).toBeInTheDocument();
+    expect(screen.getByText("two")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Hide all" }));
+    expect(screen.queryByText("one")).not.toBeInTheDocument();
+  });
+
+  it("lists keys it cannot read rather than claiming there is no data", () => {
+    render(<DataSection data={{}} keys={["tls.crt"]} sensitive />);
+    expect(screen.getByText("tls.crt")).toBeInTheDocument();
+    expect(
+      screen.getByText("not readable with this access")
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reveal" })).toBeNull();
+  });
+
+  it("sorts keys so the block does not reorder between polls", () => {
+    render(<DataSection data={{ zulu: "1", alpha: "2", mike: "3" }} />);
+    const keys = screen
+      .getAllByText(/^(zulu|alpha|mike)$/)
+      .map((node) => node.textContent);
+    expect(keys).toEqual(["alpha", "mike", "zulu"]);
+  });
+
+  it("says the object is empty when it holds nothing", () => {
+    render(
+      <DataSection data={{}} emptyMessage="This ConfigMap holds no keys" />
+    );
+    expect(
+      screen.getByText("This ConfigMap holds no keys")
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * Would break if a private key became renderable or copyable. The backend
+   * withholds it, and the row that stands in for it must not offer either
+   * control — a Reveal on a value the app does not hold is a button that
+   * either lies or, worse, one day starts working.
+   */
+  it("offers neither reveal nor copy for a withheld value", () => {
+    render(
+      <DataSection
+        data={{ "tls.crt": "-----BEGIN CERTIFICATE-----" }}
+        withheld={{ "tls.key": { says: "privateKey" } }}
+        keys={["tls.crt", "tls.key"]}
+        sensitive
+      />
+    );
+
+    expect(screen.getByText("tls.key")).toBeInTheDocument();
+    expect(
+      screen.getByText("a private key, which the app never shows")
+    ).toBeInTheDocument();
+
+    // One Reveal and one Copy, both belonging to tls.crt.
+    expect(screen.getAllByRole("button", { name: "Reveal" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(1);
+  });
+
+  /**
+   * Would break if a withheld key were drawn as one the reader simply
+   * cannot see — a different and untrue claim, and one that sends them to
+   * ask for permissions they already have.
+   */
+  it("does not blame the reader's access for a withheld value", () => {
+    render(
+      <DataSection
+        data={{}}
+        withheld={{ "tls.key": { says: "privateKey" } }}
+        keys={["tls.key"]}
+        sensitive
+      />
+    );
+
+    expect(
+      screen.queryByText("not readable with this access")
+    ).not.toBeInTheDocument();
+  });
+
+  /**
+   * Would break if a keystore were run back through a lossy decode. The old
+   * behaviour put a screenful of replacement characters where the value goes
+   * — indistinguishable from a value someone had typed, and no more use.
+   */
+  it("describes a binary value instead of rendering it as text", () => {
+    render(
+      <DataSection
+        data={{ ok: "hello" }}
+        binary={{ blob: { bytes: 5, base64: "AAEC//4=" } }}
+        keys={["ok", "blob"]}
+        sensitive
+      />
+    );
+
+    expect(screen.getByText("blob")).toBeInTheDocument();
+    expect(screen.getByText("binary, not text: 5 B")).toBeInTheDocument();
+    // Neither the bytes nor a mangled stand-in appears anywhere.
+    expect(screen.queryByText(/�/)).not.toBeInTheDocument();
+    // Nothing to reveal, so no control claiming there is.
+    expect(screen.getAllByRole("button", { name: "Reveal" })).toHaveLength(1);
+  });
+
+  it("names the copy that hands over base64 rather than the value", async () => {
+    render(
+      <DataSection
+        data={{}}
+        binary={{ blob: { bytes: 5, base64: "AAEC//4=" } }}
+        keys={["blob"]}
+      />
+    );
+
+    const copy = screen.getByRole("button", { name: "Copy base64" });
+    await userEvent.click(copy);
+    expect(writeText).toHaveBeenCalledWith("AAEC//4=");
+  });
+
+  /**
+   * Copy all used to serialise the values map alone. Once binary is out of
+   * that map, saying nothing would silently drop keys; emitting the lossy
+   * text would be the original lie in a second place.
+   */
+  it("copies binary as base64 and says how many", async () => {
+    render(
+      <DataSection
+        data={{ ok: "hello" }}
+        binary={{ blob: { bytes: 5, base64: "AAEC//4=" } }}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy all" }));
+    expect(JSON.parse(writeText.mock.calls[0][0])).toEqual({
+      ok: "hello",
+      blob: "AAEC//4=",
+    });
+  });
+});
+
+describe("the per-key controls, in the reader's language", () => {
+  afterEach(() => useLocaleStore.setState({ choice: null }));
+
+  /**
+   * Each row's buttons read "Reveal" and "Copy" in English beside the
+   * header's Russian "Показать все" and "Копировать всё".
+   */
+  it("names reveal, hide and copy in Russian", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(<DataSection data={{ password: "hunter2" }} sensitive />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Показать" }));
+    expect(screen.getByRole("button", { name: "Скрыть" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Копировать" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /Reveal|Hide|Copy/ })
+    ).toBeNull();
+  });
+
+  /**
+   * The TLS Secret's tls.key row read "a private key, the app never shows
+   * one" in English in the Russian UI. Fails if the backend's reason is drawn
+   * as text again rather than worded here.
+   */
+  it("says why a private key is withheld in Russian", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(
+      <DataSection
+        data={{}}
+        withheld={{
+          "tls.key": { says: "declared", by: "kubernetes.io/tls" },
+          "server.key": { says: "keyName" },
+        }}
+        keys={["tls.key", "server.key"]}
+        sensitive
+      />
+    );
+    expect(
+      screen.getByText(
+        "тип kubernetes.io/tls объявляет это значение закрытым ключом, а такие ключи приложение никогда не показывает"
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "судя по имени, это закрытый ключ, а такие ключи приложение никогда не показывает"
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/private key/)).toBeNull();
+  });
+
+  /** Lena read "такие приложение никогда не показывает"; fails if the reason loses the noun the "такие" points at. */
+  it("names what the app never shows, in agreement, for a private key", () => {
+    expect(translate("ru", "readings", "withheldPrivateKey")).toBe(
+      "закрытый ключ, а такие ключи приложение никогда не показывает"
+    );
+  });
+
+  /** A ConfigMap's ca.crt read "1107 символов"; fails if a long count loses its group space. */
+  it("groups the thousands of a character count", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(<DataSection data={{ "ca.crt": "x".repeat(1107) }} />);
+    expect(screen.getByText(/символов/).textContent).toBe(
+      "1\u202f107 символов"
+    );
+  });
+
+  /** Would break if the base64 copy went back to an English label. */
+  it("names the base64 copy in Russian", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    render(
+      <DataSection
+        data={{}}
+        binary={{ blob: { bytes: 5, base64: "AAEC//4=" } }}
+        keys={["blob"]}
+      />
+    );
+    expect(
+      screen.getByRole("button", { name: "Копировать base64" })
+    ).toBeInTheDocument();
+  });
+});
+
+describe("editing one key", () => {
+  /** Asked for in #107. The YAML editor could already change these, and that
+   *  is exactly what the reader was doing when a JSON value inside a YAML
+   *  string turned into an indentation puzzle. The value on its own has no
+   *  indentation to get wrong. */
+  it("writes back only the key that was edited", async () => {
+    const onEditKey = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DataSection
+        data={{ "app.json": '{"a":1}', "log.level": "debug" }}
+        onEditKey={onEditKey}
+      />
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Value of app.json" })
+    );
+    const box = screen.getByRole("textbox", { name: "Value of app.json" });
+    await userEvent.clear(box);
+    await userEvent.type(box, '{{"a":2}');
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(onEditKey).toHaveBeenCalledTimes(1);
+    expect(onEditKey.mock.calls[0][0]).toBe("app.json");
+  });
+
+  /** A page that does not pass the handler must not offer the control — a
+   *  Secret's values are not edited here, and an Edit button that did
+   *  nothing would be worse than none. */
+  it("offers nothing to edit when the page did not allow it", () => {
+    render(<DataSection data={{ "log.level": "debug" }} />);
+    expect(screen.queryByRole("button", { name: /Value of/ })).toBeNull();
+  });
+
+  /** Bytes are not text, and a textarea is not the way to edit bytes.
+   *
+   *  The backend puts a key in exactly one of values/binary/withheld, so this
+   *  overlap cannot come from there — it is the component defending its own
+   *  contract against a caller. Written to actually reach the guard: passing
+   *  only `binary` leaves `value` undefined and the earlier check does all
+   *  the work, so that version of this test passed against the guard
+   *  deleted. */
+  it("does not offer to edit a key that is also binary", () => {
+    render(
+      <DataSection
+        data={{ "keystore.jks": "not really text" }}
+        binary={{ "keystore.jks": { bytes: 2048, base64: "AAAA" } }}
+        onEditKey={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /Value of/ })).toBeNull();
+  });
+
+  /** Same again for a value the backend refused to hand over: it is not ours
+   *  to write back. */
+  it("does not offer to edit a withheld key", () => {
+    render(
+      <DataSection
+        data={{ "tls.key": "" }}
+        withheld={{ "tls.key": { says: "keyName" } }}
+        onEditKey={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /Value of/ })).toBeNull();
+  });
+});
+
+describe("editing a key on critical infrastructure", () => {
+  const PROD = "prod-eu-1";
+
+  beforeEach(() => {
+    useClusterIdentityStore.setState({ marks: {} });
+    useClusterStore.setState({ currentContext: PROD, isConnected: true });
+    useClusterIdentityStore.getState().setCritical(PROD, true);
+  });
+
+  afterEach(() => {
+    useClusterIdentityStore.setState({ marks: {} });
+    useClusterStore.setState({ currentContext: null, isConnected: false });
+  });
+
+  /**
+   * Editing a key writes live config the cluster's workloads read; on the
+   * marked cluster the Save waits on the cluster's own name, the same gate the
+   * destructive dialogs use.
+   */
+  it("holds Save until the cluster's name is typed", async () => {
+    const onEditKey = vi.fn().mockResolvedValue(undefined);
+    render(
+      <DataSection data={{ "log.level": "debug" }} onEditKey={onEditKey} />
+    );
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Value of log.level" })
+    );
+    const box = screen.getByRole("textbox", { name: "Value of log.level" });
+    await userEvent.clear(box);
+    await userEvent.type(box, "info");
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(screen.getByRole("alert")).toHaveTextContent(PROD);
+    expect(save).toBeDisabled();
+
+    await userEvent.type(screen.getByPlaceholderText(PROD), PROD);
+    expect(save).toBeEnabled();
+
+    await userEvent.click(save);
+    expect(onEditKey).toHaveBeenCalledWith("log.level", "info");
+  });
+});

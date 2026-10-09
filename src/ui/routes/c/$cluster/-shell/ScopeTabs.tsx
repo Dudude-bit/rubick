@@ -1,0 +1,1624 @@
+import {
+  Fragment,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+
+import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
+import {
+  AlertCircle,
+  Check,
+  ChevronDown,
+  Lock,
+  Search,
+  ShieldUser,
+  SquareTerminal,
+} from "lucide-react";
+
+import { ClusterMenu } from "@/components/cluster/ClusterMenu";
+import { ClusterRow } from "@/components/cluster/ClusterRow";
+import { Kbd } from "@/components/ui/kbd";
+import { Spinner } from "@/components/ui/spinner";
+import { ProviderMark } from "@/components/ui/provider-mark";
+import { fitStrip } from "@/components/object/tab-fit";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { useTriggerTooltip } from "@/components/ui/use-trigger-tooltip";
+import {
+  useClusterSummary,
+  type NamespaceListState,
+  type NamespaceScope,
+} from "@/hooks/useClusterSummary";
+import {
+  ATTENTION_TEXT,
+  attentionWords,
+  type NamespaceAttention,
+} from "@/lib/attention";
+import { useNamespaceAccess } from "./useNamespaceAccess";
+import { useOpenCluster } from "@/hooks/useOpenCluster";
+import {
+  clusterColor,
+  detectProvider,
+  providerLabel,
+} from "@/lib/cluster-identity";
+import {
+  SCOPE_LIMIT,
+  inScope,
+  isNamespaceName,
+  scopeLabel,
+  seedScope,
+} from "@/lib/namespace-scope";
+import { namespaceShownBy, pageLink, retargetHref } from "@/lib/links";
+import { splitName } from "@/lib/resource-identity";
+import { nameCut } from "@/components/object/ResourceName";
+import { formatShortcut } from "@/lib/platform";
+import { cn } from "@/lib/utils";
+import { useClusterMark } from "@/stores/clusterIdentityStore";
+import {
+  splitByRecency,
+  useClusterRecencyStore,
+} from "@/stores/clusterRecencyStore";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
+import { useKeptShellStore } from "@/stores/keptShellStore";
+import { useT, type T } from "@/i18n/useT";
+import {
+  tabRouteLabel,
+  tabScope,
+  tabTitle,
+  useScopeTabStore,
+  type ScopeTab,
+} from "@/stores/scopeTabStore";
+
+/**
+ * The window's tab strip. A tab is a route plus the scope it is read under,
+ * and the cluster and the namespace are separate click targets: namespaces
+ * change dozens of times an hour and clusters a few times a day, so one
+ * merged list would bury the frequent job under the rare one.
+ *
+ * What a tab protects as it narrows, most protected first:
+ *
+ * 1. Never the cluster's colour dot or provider mark — acting on the wrong
+ *    cluster is the expensive mistake here.
+ * 2. The route is the tab's name and the only part written nowhere else on
+ *    screen, so it shrinks last and has a floor of its own.
+ * 3. The namespace goes first: the active tab's namespace is also the one
+ *    the page itself is filtered by.
+ * 4. The cluster's *name* is spent only where it discriminates — dropped on
+ *    every tab while the strip holds one cluster, since the sidebar has just
+ *    said it and the dot still guards the mistake.
+ *
+ * Each tab is as wide as its own label up to a cap, nothing stretches, and
+ * a short name is never cut: as the strip fills, the longest names give up
+ * characters first, down to a floor that still reads. Past that a tab is
+ * whole in the strip or named in the menu beside it, and the tabs in the
+ * strip stay put while the open one is among them.
+ */
+export function ScopeTabs() {
+  const t = useT();
+  const currentContext = useClusterStore((s) => s.currentContext);
+  const currentNamespace = useClusterStore((s) => s.currentNamespace);
+  const namespaceScope = useClusterStore((s) => s.namespaceScope);
+
+  const tabs = useScopeTabStore((s) => s.tabs);
+  const activeId = useScopeTabStore((s) => s.activeId);
+
+  const roomRef = useRef<HTMLDivElement>(null);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLButtonElement>(null);
+
+  // The active tab's scope lives in `clusterStore`, not on the tab; a tab
+  // whose cluster is gone keeps the name it was pointed at, because nothing
+  // else remembers it.
+  const shown = useMemo(
+    () =>
+      tabs.map((tab) =>
+        tab.id === activeId && !tab.missing
+          ? {
+              ...tab,
+              context: currentContext,
+              namespace: currentNamespace,
+              scope: namespaceScope,
+            }
+          : tab
+      ),
+    [tabs, activeId, currentContext, currentNamespace, namespaceScope]
+  );
+
+  const multiCluster =
+    new Set(shown.map((tab) => tab.context).filter(Boolean)).size > 1;
+  const hidden = useHiddenTabs({
+    room: roomRef,
+    strip: stripRef,
+    menu: menuRef,
+    ids: shown.map((tab) => tab.id),
+    open: shown.findIndex((tab) => tab.id === activeId),
+  });
+
+  return (
+    <div className="flex h-[38px] flex-none items-center gap-1 border-b border-hair px-2.5">
+      <NewTabButton />
+
+      <div
+        ref={roomRef}
+        className="flex min-w-0 flex-1 items-center gap-1"
+        data-scope-room
+      >
+        <div
+          ref={stripRef}
+          role="tablist"
+          aria-label={t("action", "openScopes")}
+          className="relative flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
+        >
+          {shown.map((tab, index) => (
+            <ScopeTabItem
+              key={tab.id}
+              tab={tab}
+              active={tab.id === activeId}
+              namesCluster={multiCluster}
+              closable={shown.length > 1}
+              overflow={hidden[index]}
+            />
+          ))}
+        </div>
+        {hidden.some(Boolean) && (
+          <HiddenScopeTabs
+            tabs={shown.filter((_, index) => hidden[index])}
+            activeId={activeId}
+            namesCluster={multiCluster}
+            buttonRef={menuRef}
+          />
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={() =>
+          window.dispatchEvent(new CustomEvent("command-palette-open"))
+        }
+        className="flex flex-none items-center gap-1 rounded-md px-2 py-1 text-[11px] leading-[14px] text-fg-mut transition-colors hover:bg-hover hover:text-fg"
+      >
+        {t("action", "search")}
+        <Kbd shortcut="mod+K" className="leading-[13px]" />
+      </button>
+    </div>
+  );
+}
+
+/** The strip's `gap-1`, which the fit counts between tabs and before the menu. */
+const GAP_PX = 4;
+/** The menu before it has been drawn once: "ещё 10" and its chevron. */
+const MENU_PX = 64;
+/** The widest a tab is drawn, however long its label. */
+const TAB_CAP_PX = 416;
+
+/**
+ * The least each part of a label is cut to, in pixels: a part shorter than
+ * its floor is never cut. An object's name keeps `pay…rf746`, its start and
+ * its generated end; a namespace keeps `team-checkout`.
+ */
+const CUT_FLOOR = { cluster: 56, scope: 96, page: 96, object: 72 } as const;
+
+/**
+ * Which tabs the menu holds. Each part marked `data-cut` is measured at its
+ * own width, the fit decides at the parts' floors, and the parts of the
+ * tabs it shows get back the width it leaves, written straight onto them
+ * because a width the next render draws from is a frame late.
+ */
+function useHiddenTabs({
+  room,
+  strip,
+  menu,
+  ids,
+  open,
+}: {
+  room: React.RefObject<HTMLDivElement | null>;
+  strip: React.RefObject<HTMLDivElement | null>;
+  menu: React.RefObject<HTMLButtonElement | null>;
+  ids: readonly string[];
+  open: number;
+}): boolean[] {
+  const [hidden, setHidden] = useState<boolean[]>([]);
+  const inStrip = useRef<ReadonlySet<string> | null>(null);
+  const idsKey = ids.join("\n");
+  const menuShown = hidden.some(Boolean);
+  useLayoutEffect(() => {
+    const box = room.current;
+    const list = strip.current;
+    if (!box || !list) return;
+    const order = idsKey.split("\n");
+    const measure = () => {
+      if (box.clientWidth === 0) return;
+      const tabs = [...list.querySelectorAll<HTMLElement>("[data-scope-tab]")];
+      const cuts = tabs.map((tab) => [
+        ...tab.querySelectorAll<HTMLElement>("[data-cut]"),
+      ]);
+      for (const part of cuts.flat()) part.style.maxWidth = "";
+      const measured = tabs.map((tab, index) => {
+        const parts = cuts[index].map((part) => {
+          const natural = part.getBoundingClientRect().width;
+          return {
+            natural,
+            floor: Math.min(natural, Number(part.dataset.cut)),
+          };
+        });
+        const cuttable = parts.reduce((sum, part) => sum + part.natural, 0);
+        return {
+          chrome: tab.getBoundingClientRect().width - cuttable,
+          parts,
+        };
+      });
+      const before = inStrip.current;
+      const fit = fitStrip({
+        tabs: measured,
+        room: box.clientWidth,
+        gap: GAP_PX,
+        menu: (menu.current?.getBoundingClientRect().width || MENU_PX) + GAP_PX,
+        open,
+        cap: TAB_CAP_PX,
+        shown: before ? order.map((id) => before.has(id)) : undefined,
+      });
+      cuts.forEach((parts, index) =>
+        parts.forEach((part, at) => {
+          const width = fit.widths[index][at];
+          if (width < measured[index].parts[at].natural - 0.5)
+            part.style.maxWidth = `${width}px`;
+        })
+      );
+      inStrip.current = new Set(order.filter((_, index) => fit.shown[index]));
+      const next = fit.shown.map((fits) => !fits);
+      setHidden((prev) => (prev.join() === next.join() ? prev : next));
+    };
+    measure();
+    let live = true;
+    if (document.fonts?.status === "loading")
+      void document.fonts.ready.then(() => live && measure());
+    // A label that changes under a tab, a namespace picked or a shell
+    // started, changes nothing the strip's own size would report.
+    const mutations =
+      typeof MutationObserver === "undefined"
+        ? undefined
+        : new MutationObserver(measure);
+    mutations?.observe(list, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    const resizes =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(measure);
+    resizes?.observe(box);
+    if (menu.current) resizes?.observe(menu.current);
+    return () => {
+      live = false;
+      mutations?.disconnect();
+      resizes?.disconnect();
+    };
+  }, [room, strip, menu, idsKey, open, menuShown]);
+  return ids.map((_, index) => hidden[index] ?? false);
+}
+
+/** Every tab the strip cannot show whole, one click away, the open one marked. */
+function HiddenScopeTabs({
+  tabs,
+  activeId,
+  namesCluster,
+  buttonRef,
+}: {
+  tabs: ScopeTab[];
+  activeId: string | null;
+  namesCluster: boolean;
+  buttonRef: React.RefObject<HTMLButtonElement | null>;
+}) {
+  const t = useT();
+  const activateTab = useScopeTabStore((s) => s.activateTab);
+  const open = tabs.find((tab) => tab.id === activeId);
+  const label = t("action", "tabsMoreLabel", { n: tabs.length });
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          ref={buttonRef}
+          type="button"
+          aria-label={
+            open
+              ? `${label}. ${t("action", "tabsMoreHoldsOpen", { tab: tabRouteLabel(open.href, t) })}`
+              : label
+          }
+          className={cn(
+            "flex flex-none items-center gap-1 rounded-md px-2 py-1 text-[11px] leading-[14px] transition-colors hover:bg-hover hover:text-fg",
+            open ? "bg-sel text-fg" : "text-fg-mut"
+          )}
+        >
+          {t("action", "tabsMore", { n: tabs.length })}
+          <ChevronDown className="h-3 w-3" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-w-[340px]">
+        {tabs.map((tab) => (
+          <HiddenScopeTab
+            key={tab.id}
+            tab={tab}
+            open={tab.id === activeId}
+            namesCluster={namesCluster}
+            onPick={() => activateTab(tab.id)}
+          />
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function HiddenScopeTab({
+  tab,
+  open,
+  namesCluster,
+  onPick,
+}: {
+  tab: ScopeTab;
+  open: boolean;
+  namesCluster: boolean;
+  onPick: () => void;
+}) {
+  const t = useT();
+  const mark = useClusterMark(tab.context);
+  const alias = mark.alias?.trim();
+  const keepsShell = useKeptShellStore((s) =>
+    s.shells.some((shell) => shell.tab === tab.id)
+  );
+  return (
+    <DropdownMenuItem
+      onSelect={onPick}
+      aria-current={open ? "true" : undefined}
+      aria-label={tabTitle(tab, t, alias)}
+      className={cn("gap-1.5", open && "font-medium text-fg")}
+    >
+      <span
+        className={cn(
+          "h-1.5 w-1.5 flex-none rounded-full",
+          tab.missing && "border border-fg-fnt"
+        )}
+        style={
+          tab.missing
+            ? undefined
+            : { background: clusterColor(tab.context, mark.hue) }
+        }
+      />
+      <ProviderMark
+        provider={detectProvider(tab.context ?? "")}
+        className="h-[13px] w-[13px] flex-none"
+      />
+      {(namesCluster || tab.missing) && (
+        <span className="flex-none text-fg-mut">
+          {alias ?? tab.context ?? t("cluster", "noCluster")} /
+        </span>
+      )}
+      {/* Whole, as in the strip: the object name beside it gives up the width. */}
+      <span className="flex-none text-fg-mut">
+        {scopeLabel(tabScope(tab), t)} /
+      </span>
+      {keepsShell && (
+        <SquareTerminal
+          className="h-3 w-3 flex-none text-ok"
+          aria-hidden="true"
+        />
+      )}
+      <RouteName name={tabRouteLabel(tab.href, t)} className="min-w-0" />
+      {open && (
+        <Check className="ml-auto h-3 w-3 flex-none" aria-hidden="true" />
+      )}
+    </DropdownMenuItem>
+  );
+}
+
+/**
+ * A route that names an object is cut by `ResourceName`'s rule: whole
+ * characters of its start, one ellipsis, and its generated end, since two pods
+ * of one ReplicaSet differ only there. Any other route is cut at its end.
+ */
+function RouteName({ name, className }: { name: string; className?: string }) {
+  const { stem, tail } = splitName(name);
+  if (!tail)
+    return (
+      <span data-cut={CUT_FLOOR.page} className={cn("truncate", className)}>
+        {name}
+      </span>
+    );
+  const cut = nameCut({ name, stem, generated: true, before: 0, label: 0 });
+  return (
+    <span
+      className={cn(
+        "flex overflow-hidden whitespace-nowrap font-mono",
+        className
+      )}
+      style={{ width: `${cut.box}ch` }}
+      data-cut={CUT_FLOOR.object}
+      data-route-name
+    >
+      <span
+        className="flex-none overflow-hidden"
+        style={{ width: cut.head.css }}
+      >
+        {name}
+      </span>
+      <span
+        aria-hidden="true"
+        className="flex-none overflow-hidden before:content-['…']"
+        style={{ width: cut.cut.css }}
+      />
+      {cut.end && (
+        <span
+          aria-hidden="true"
+          className="flex-none overflow-hidden [direction:rtl]"
+          style={{ width: cut.end.css }}
+        >
+          <span
+            dir="ltr"
+            data-name={name}
+            className="before:content-[attr(data-name)]"
+          />
+        </span>
+      )}
+    </span>
+  );
+}
+
+/**
+ * The way to open a tab, in its two meanings.
+ *
+ * A left click opens a tab on the cluster already on screen: a browser's
+ * new tab lands on a home page, not on a picker, and inheriting the
+ * connection makes the shortcut instant.
+ *
+ * The other reason to open a tab is to go somewhere else, and that used to
+ * be what this button did — until a tab became a route plus a scope, which
+ * made picking a cluster afterwards a second step. Right click gives it
+ * back: one gesture, one new tab, on the cluster you named.
+ */
+function NewTabButton() {
+  const t = useT();
+  const contexts = useClusterStore((s) => s.contexts);
+  const currentContext = useClusterStore((s) => s.currentContext);
+  const openTab = useScopeTabStore((s) => s.openTab);
+  const [menu, setMenu] = useState(false);
+  const tip = useTriggerTooltip(menu);
+
+  return (
+    <ContextMenu onOpenChange={setMenu}>
+      <Tooltip {...tip.tooltip}>
+        <TooltipTrigger asChild>
+          <ContextMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={t("action", "newTabAria")}
+              aria-haspopup="menu"
+              onClick={() => openTab()}
+              className="flex-none rounded-md px-[7px] py-[3px] text-[12px] leading-[15px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+            >
+              +
+            </button>
+          </ContextMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" className="max-w-[240px]">
+          <p className="flex items-center gap-1.5">
+            {t("action", "newTabHere")}
+            <Kbd shortcut="mod+T" className="leading-[13px]" />
+          </p>
+          <p className="mt-0.5">{t("action", "rightClickForAnotherCluster")}</p>
+        </TooltipContent>
+      </Tooltip>
+
+      <ContextMenuContent
+        className="w-[244px]"
+        onCloseAutoFocus={tip.onCloseAutoFocus}
+      >
+        <ContextMenuLabel>{t("action", "newTabOn")}</ContextMenuLabel>
+        {contexts.length === 0 && (
+          <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
+            {t("empty", "noContextsInKubeconfig")}
+          </p>
+        )}
+        {/* The same row the picker and the front door use, so a renamed or
+            recoloured cluster is renamed and recoloured here too. */}
+        {contexts.map((ctx) => (
+          <ContextMenuItem
+            key={ctx.name}
+            onSelect={() => openTab({ context: ctx.name })}
+            className="p-0"
+          >
+            <ClusterRow context={ctx.name} />
+          </ContextMenuItem>
+        ))}
+        <ContextMenuSeparator />
+        <ContextMenuItem onSelect={() => openTab()}>
+          {/* Named by what it does rather than by the cluster, because the
+              cluster it lands on is whichever one is on screen. */}
+          {t("action", "newTabHere")}
+          <span className="ml-auto pl-4 text-fg-fnt">
+            {currentContext ?? t("cluster", "noCluster")}
+          </span>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+}
+
+function ScopeTabItem({
+  tab,
+  active,
+  namesCluster,
+  closable,
+  overflow,
+}: {
+  tab: ScopeTab;
+  active: boolean;
+  /** The strip holds more than one cluster, so the name is worth its width. */
+  namesCluster: boolean;
+  /** The strip has somewhere to fall back to if this tab goes. */
+  closable: boolean;
+  /** In the menu, not the strip: out of sight and out of the way, still measured. */
+  overflow: boolean;
+}) {
+  const t = useT();
+  const { context } = tab;
+  const scope = tabScope(tab);
+  const setNamespaceScope = useClusterStore((s) => s.setNamespaceScope);
+  const openCluster = useOpenCluster();
+  const activateTab = useScopeTabStore((s) => s.activateTab);
+  const closeTab = useScopeTabStore((s) => s.closeTab);
+  const router = useRouter();
+  const navigate = useNavigate();
+
+  const [open, setOpen] = useState<"ctx" | "ns" | null>(null);
+  // A picker belongs to the scope on screen, so it shuts when its tab stops
+  // being the open one: a click on another tab, or Ctrl+Tab from inside it.
+  const [wasActive, setWasActive] = useState(active);
+  if (active !== wasActive) {
+    setWasActive(active);
+    if (!active) setOpen(null);
+  }
+  // The tooltip stands down while a picker is open rather than floating over
+  // the list the reader is trying to read.
+  const tip = useTriggerTooltip(open !== null);
+  const mark = useClusterMark(context);
+  const alias = mark.alias?.trim();
+  const color = clusterColor(context, mark.hue);
+  const route = tabRouteLabel(tab.href, t);
+  // Closing a tab ends the shell it keeps, so the tab says it keeps one.
+  const shell = useKeptShellStore((s) =>
+    s.shells.find((each) => each.tab === tab.id)
+  );
+  const keepsShell = shell
+    ? t("action", "tabKeepsShell", {
+        target: `${shell.pod}/${shell.container}`,
+      })
+    : null;
+  const title = tabTitle(tab, t, alias);
+  // A cluster the kubeconfig has lost is the odd one out however many
+  // clusters are open — that is exactly when the name is the fact the
+  // reader needs.
+  const showName = namesCluster || tab.missing;
+
+  // A segment on a parked tab is a way back to that scope, not a picker
+  // for it: opening a list that edits a scope the window is not showing
+  // would act on the wrong cluster, which is the mistake this strip
+  // exists to prevent.
+  const guard = (which: "ctx" | "ns") => (next: boolean) => {
+    if (!active) {
+      activateTab(tab.id);
+      return;
+    }
+    setOpen(next ? which : null);
+  };
+
+  // A list page that ran out of time offers the narrower question, and this
+  // is where that question is asked. Only the active tab answers: the
+  // picker belongs to the scope the reader is looking at.
+  useEffect(() => {
+    if (!active) return;
+    const onOpen = () => setOpen("ns");
+    window.addEventListener(SCOPE_PICKER_OPEN, onOpen);
+    return () => window.removeEventListener(SCOPE_PICKER_OPEN, onOpen);
+  }, [active]);
+
+  const pickCluster = (next: string) => {
+    setOpen(null);
+    if (next === context) return;
+    openCluster(next);
+  };
+
+  // An object outside the scope just picked gives way to its list, as it
+  // does to a cluster switch: the tab would name a namespace it is not in.
+  const pickScope = (next: string[], keepOpen: boolean) => {
+    if (!keepOpen) setOpen(null);
+    void setNamespaceScope(next);
+    const { pathname } = router.state.location;
+    if (context && !inScope(next, namespaceShownBy(pathname)))
+      void navigate({ href: retargetHref(pathname, context) });
+  };
+
+  // A tab with no cluster keeps its place — it is where a cluster gets
+  // picked, so it cannot vanish — but it stops describing an absence.
+  // `no cluster / all namespaces / overview` is two segments naming a
+  // scope that cannot exist and a page with nothing on it; one segment
+  // survives, and it is a verb.
+  if (!context && !tab.missing) {
+    return (
+      <div
+        role="tab"
+        aria-selected={active}
+        data-active={active}
+        data-scope-tab
+        data-overflow={overflow || undefined}
+        onClick={() => {
+          if (!active) activateTab(tab.id);
+        }}
+        onAuxClick={(event) => {
+          if (event.button !== 1 || !closable) return;
+          event.preventDefault();
+          closeTab(tab.id);
+        }}
+        className={cn(
+          "flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px]",
+          OVERFLOW
+        )}
+      >
+        <ContextPopover
+          open={open === "ctx"}
+          onOpenChange={guard("ctx")}
+          activeContext={null}
+          onSelect={pickCluster}
+        >
+          <button
+            type="button"
+            className={cn(
+              segClass(open === "ctx"),
+              "text-info ring-1 ring-inset ring-info/45 hover:bg-info/10",
+              open === "ctx" && "bg-info/10 hover:bg-info/10"
+            )}
+          >
+            <ProviderMark
+              provider="generic"
+              className="h-[13px] w-[13px] flex-none"
+            />
+            {t("cluster", "chooseCluster")}
+          </button>
+        </ContextPopover>
+        {closable && (
+          <button
+            type="button"
+            aria-label={t("action", "closeTab")}
+            onClick={(event) => {
+              event.stopPropagation();
+              closeTab(tab.id);
+            }}
+            className="flex-none pl-0.5 text-fg-fnt transition-colors hover:text-fg"
+          >
+            <span aria-hidden="true">✕</span>
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <Tooltip {...tip.tooltip}>
+      <TooltipTrigger asChild>
+        <div
+          role="tab"
+          aria-selected={active}
+          aria-label={keepsShell ? `${title}. ${keepsShell}` : title}
+          data-active={active}
+          data-scope-tab
+          data-overflow={overflow || undefined}
+          onClick={() => {
+            if (!active) activateTab(tab.id);
+          }}
+          // Middle-click closes, as it does on every tab strip the reader has
+          // used. `onClick` never fires for the middle button.
+          onAuxClick={(event) => {
+            if (event.button !== 1) return;
+            event.preventDefault();
+            closeTab(tab.id);
+          }}
+          className={cn(
+            // As wide as its label: the strip cuts the parts marked
+            // `data-cut`, never the tab, so no tab holds empty room. The
+            // label clips as a backstop; the close button sits outside it.
+            "flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
+            OVERFLOW,
+            active ? "bg-sel text-fg-mut" : "text-fg-fnt hover:bg-hover"
+          )}
+        >
+          <span className="flex min-w-0 items-center gap-[5px] overflow-hidden">
+            <ContextPopover
+              open={open === "ctx"}
+              onOpenChange={guard("ctx")}
+              onCloseAutoFocus={tip.onCloseAutoFocus}
+              activeContext={context}
+              onSelect={pickCluster}
+            >
+              {/* Right, not Down: the strip is walked with Left and Right, but
+                this is the one segment where a menu is the point, and Down
+                is already spoken for by the `+` beside it. */}
+              <ClusterMenu context={context ?? ""} openKeys={["ArrowRight"]}>
+                <button
+                  type="button"
+                  aria-haspopup="menu"
+                  className={cn(segClass(open === "ctx"), "flex-none")}
+                >
+                  {/* Only the dot carries the cluster colour here, and the mark
+                    stays at text contrast so the tab reads as one label and
+                    the colour signal has a single owner. A cluster the
+                    kubeconfig has lost gets a ring instead of a fill, so the
+                    state survives with the hue taken away. */}
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 flex-none rounded-full",
+                      tab.missing && "border border-fg-fnt"
+                    )}
+                    style={tab.missing ? undefined : { background: color }}
+                  />
+                  <ProviderMark
+                    provider={detectProvider(context ?? "")}
+                    className="h-[13px] w-[13px] flex-none"
+                  />
+                  {showName && (
+                    <span data-cut={CUT_FLOOR.cluster} className="truncate">
+                      {alias ?? context ?? t("cluster", "noCluster")}
+                    </span>
+                  )}
+                </button>
+              </ClusterMenu>
+            </ContextPopover>
+
+            {/* Not a suffix on the name but a state of the tab, in the same
+              micro-label the context list uses for a provider. The tab
+              cannot be made live and nothing about it is going to change
+              until the kubeconfig does. */}
+            {tab.missing && (
+              <span className="flex-none rounded border border-hair px-1 text-[10px] uppercase leading-[13px] tracking-wider text-fg-fnt">
+                {t("cluster", "missingBadge")}
+              </span>
+            )}
+
+            <span aria-hidden="true" className="flex-none text-fg-fnt">
+              /
+            </span>
+
+            <NamespacePopover
+              open={open === "ns"}
+              onOpenChange={guard("ns")}
+              onCloseAutoFocus={tip.onCloseAutoFocus}
+              scope={scope}
+              onSelect={pickScope}
+            >
+              <button
+                type="button"
+                className={cn(segClass(open === "ns"), "flex-none")}
+              >
+                <span data-cut={CUT_FLOOR.scope} className="truncate">
+                  {scopeLabel(scope, t)}
+                </span>
+                <span aria-hidden="true" className="flex-none text-[9px]">
+                  ▾
+                </span>
+              </button>
+            </NamespacePopover>
+
+            <span aria-hidden="true" className="flex-none text-fg-fnt">
+              /
+            </span>
+
+            {/* The tab's name. One `/` throughout makes cluster, namespace and
+              page one path — the same trail a detail page draws — and the
+              page end of it carries the strongest colour in the tab,
+              because it is the part that says which tab this is. */}
+            {keepsShell && (
+              <SquareTerminal
+                className="h-3 w-3 flex-none text-ok"
+                aria-hidden="true"
+              />
+            )}
+            <RouteName
+              name={route}
+              className={active ? "text-fg" : "text-fg-mut"}
+            />
+          </span>
+
+          <button
+            type="button"
+            aria-label={t("action", "closeNamed", { name: title })}
+            onClick={(event) => {
+              event.stopPropagation();
+              closeTab(tab.id);
+            }}
+            className="ml-auto flex-none pl-0.5 text-fg-fnt transition-colors hover:text-fg"
+          >
+            <span aria-hidden="true">✕</span>
+          </button>
+        </div>
+      </TooltipTrigger>
+
+      {/* Exactly what the strip had to drop, at full length. */}
+      <TooltipContent side="bottom" align="start" className="max-w-[340px]">
+        <p className="text-fg">{route}</p>
+        <p className="truncate font-mono">
+          {context ?? t("cluster", "noCluster")} / {scopeLabel(scope, t)}
+        </p>
+        {tab.missing && (
+          <p className="mt-0.5">{t("cluster", "missingTabHint")}</p>
+        )}
+        {keepsShell && (
+          <p className="mt-0.5 flex items-start gap-1.5">
+            <SquareTerminal
+              className="mt-px h-3 w-3 flex-none text-ok"
+              aria-hidden="true"
+            />
+            {keepsShell}
+          </p>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+const OVERFLOW = "data-[overflow=true]:invisible data-[overflow=true]:absolute";
+
+/** The open segment carries the fill: it is what says which of the two
+ *  lists you are looking at while both stay visible. */
+function segClass(on: boolean) {
+  return cn(
+    "inline-flex items-center gap-1.5 rounded px-[5px] py-0.5 transition-colors hover:bg-hover",
+    on && "bg-sel hover:bg-sel"
+  );
+}
+
+function ContextPopover({
+  children,
+  open,
+  onOpenChange,
+  onCloseAutoFocus,
+  onSelect,
+  activeContext,
+}: {
+  children: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: () => void;
+  onSelect: (context: string) => void;
+  activeContext?: string | null;
+}) {
+  const t = useT();
+  const contexts = useClusterStore((s) => s.contexts);
+  const lastUsed = useClusterRecencyStore((s) => s.lastUsed);
+
+  // The same order the front door uses. Two cluster lists that disagree
+  // about which cluster is first is exactly the drift that made them one
+  // component in the first place.
+  const { recent, rest } = splitByRecency(contexts, lastUsed);
+  const ordered = [...recent, ...rest];
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverContent
+        className="w-[244px] p-1"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
+        <div
+          role="listbox"
+          aria-label={t("nav", "cluster")}
+          className="max-h-[420px] overflow-auto"
+        >
+          {contexts.length === 0 && (
+            <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
+              {t("empty", "noContextsInKubeconfig")}
+            </p>
+          )}
+          {ordered.map((ctx) => {
+            const selected = ctx.name === activeContext;
+            return (
+              <button
+                key={ctx.name}
+                type="button"
+                role="option"
+                aria-selected={selected}
+                onClick={() => onSelect(ctx.name)}
+                className={cn(
+                  "w-full rounded-[5px] transition-colors hover:bg-hover",
+                  selected && "bg-sel"
+                )}
+              >
+                <ClusterRow
+                  context={ctx.name}
+                  selected={selected}
+                  meta={
+                    <span className="text-[10px] uppercase tracking-wider">
+                      {providerLabel(detectProvider(ctx.name))}
+                    </span>
+                  }
+                />
+              </button>
+            );
+          })}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** One row of the namespace list, and everything the row is drawn from. */
+interface NamespaceOption {
+  /** `""` is "All namespaces", which is the absence of a selection. */
+  key: string;
+  label: string;
+  mono: boolean;
+  /** `null` when the cluster-wide overview was refused — unknown, drawn "—". */
+  podCount: number | null;
+  problems: NamespaceAttention | null;
+  selected: boolean;
+  /** The selection is full, so this row can only be opened on its own. */
+  closed: boolean;
+  /** Why a row the namespace list did not name is offered at all. */
+  source?: NamespaceSource;
+  /** The authorizer refused this user the namespace's pods. */
+  refused?: boolean;
+}
+
+/** Where an offered namespace came from, when not from the list. */
+type NamespaceSource = "kubeconfig" | "recent" | "typed" | "unlisted";
+
+const SOURCE_NOTE = {
+  kubeconfig: "nsFromKubeconfig",
+  recent: "nsRecent",
+  typed: "nsAsTyped",
+  unlisted: "nsNotListed",
+} as const satisfies Record<NamespaceSource, string>;
+
+/** What the picker says above the rows when the list itself is not there. */
+const LIST_NOTE = {
+  pending: { icon: null, key: "namespacesListing", tone: "text-fg-fnt" },
+  refused: { icon: Lock, key: "namespacesRefused", tone: "text-fg-mut" },
+  failed: { icon: AlertCircle, key: "namespacesUnread", tone: "text-warn" },
+} as const satisfies Record<
+  Exclude<NamespaceListState, "listed">,
+  { icon: unknown; key: string; tone: string }
+>;
+
+const NO_RECENT: readonly string[] = [];
+
+/**
+ * One namespace, or several.
+ *
+ * A plain click *replaces* the selection and shuts the list — the frequent
+ * job, done dozens of times an hour. Holding the platform's multi-select key
+ * toggles instead and leaves the list open, the same gesture a file manager
+ * and every list in this app's tables already use, so the new job costs a
+ * modifier and the old one costs what it always did.
+ *
+ * Nothing inside a row may be a control: `option` carries *children
+ * presentational* in ARIA 1.2, so assistive tech flattens whatever it holds
+ * and folds every label inside into one accessible name. Hence a filtered
+ * listbox driven from the filter box — the shape `LogQuery` already uses. The
+ * caret never leaves the input, the rows are named by `aria-activedescendant`,
+ * and the whole popover is one tab stop. `Enter` replaces the selection and
+ * `mod+Enter` toggles: the keyboard spelling of the two gestures the mouse
+ * has, rather than a third vocabulary. The checkbox is a hit target for the
+ * mouse and only for the mouse — a modifier is not an affordance, and somebody
+ * who has never held one still has to be able to build a selection by
+ * clicking.
+ *
+ * Only *adding* stops at `SCOPE_LIMIT`; replacing the selection with one
+ * namespace is always allowed, so the ceiling never gets between a reader and
+ * the namespace they are trying to open. The footer is both the filter box's
+ * description and a live region, so the ceiling is spoken before it bites and
+ * the refusal when it does.
+ */
+function NamespacePopover({
+  children,
+  open,
+  onOpenChange,
+  onCloseAutoFocus,
+  scope,
+  onSelect,
+}: {
+  children: React.ReactNode;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus: () => void;
+  scope: string[];
+  onSelect: (namespaces: string[], keepOpen: boolean) => void;
+}) {
+  const t = useT();
+  const contextNamespace = useClusterStore(
+    (s) => s.contexts.find((c) => c.name === s.currentContext)?.namespace
+  );
+  const context = useClusterStore((s) => s.currentContext);
+  const recent =
+    useNamespaceRecencyStore((s) =>
+      context ? s.recent[context] : undefined
+    ) ?? NO_RECENT;
+  // Counted like the scope's own, so a namespace keeps its count when the
+  // window moves off it.
+  const seeds = useMemo(
+    () => [...seedScope(contextNamespace), ...recent],
+    [contextNamespace, recent]
+  );
+  const { namespaces, podCount, namespaceList } = useClusterSummary({
+    enabled: open,
+    problems: true,
+    alsoCount: seeds,
+  });
+  const [filter, setFilter] = useState("");
+  const [cursor, setCursor] = useState(-1);
+  /** The namespace the ceiling has just turned down, until anything else
+   *  happens. A refusal nobody is told about is a control that broke. */
+  const [refused, setRefused] = useState<string | null>(null);
+  /** Which namespaces were selected when the list opened, so the ones the
+   *  reader came to deselect sit at the top — pinned at open rather than live,
+   *  so a row does not slide out from under the pointer as it is toggled. */
+  const [pinned, setPinned] = useState<readonly string[]>([]);
+  /** The rows in the order this opening first drew them; counts that move
+   *  while it is open, and toggles, leave every row where the pointer last
+   *  saw it. A name that arrives later joins at the end. */
+  const [order, setOrder] = useState<readonly string[]>([]);
+  /** Every row this opening has drawn: a toggle or a late answer about
+   *  access never takes one away while the list is open. */
+  const [drawn, setDrawn] = useState<readonly string[]>([]);
+  /** Whether the namespaces the reader has no access to are being shown
+   *  anyway — a per-open escape hatch, off again on close. */
+  const [showBlocked, setShowBlocked] = useState(false);
+  // On the prop, not on the popover's own close: a pick closes it from the
+  // parent, which kept the last filter for the next open.
+  const [wasOpen, setWasOpen] = useState(open);
+  const opening = open !== wasOpen;
+  if (opening) {
+    setWasOpen(open);
+    if (open) {
+      setPinned(scope);
+      setOrder([]);
+      setDrawn([]);
+    } else {
+      setFilter("");
+      setCursor(-1);
+      setRefused(null);
+      setShowBlocked(false);
+    }
+  }
+  const listId = useId();
+  const noteId = `${listId}-note`;
+
+  const listed = namespaceList === "listed";
+  // Without a list the picker still offers what it can name: the
+  // kubeconfig's namespace and the ones used here before. The scope itself is
+  // always a row, or a namespace the window is on could not be seen or left.
+  const offered: Array<NamespaceScope & { source?: NamespaceSource }> = [
+    ...namespaces,
+  ];
+  const offer = (name: string, source?: NamespaceSource) => {
+    if (offered.some((ns) => ns.name === name)) return;
+    offered.push({ name, podCount: null, problems: null, source });
+  };
+  if (!listed) {
+    for (const name of seedScope(contextNamespace)) offer(name, "kubeconfig");
+    for (const name of recent) offer(name, "recent");
+  }
+  for (const name of [...scope, ...drawn])
+    offer(name, listed ? "unlisted" : undefined);
+
+  const access = useNamespaceAccess(offered.map((ns) => ns.name));
+
+  const typedName = filter.trim();
+  const needle = typedName.toLowerCase();
+  const visible = needle
+    ? offered.filter((ns) => ns.name.toLowerCase().includes(needle))
+    : offered;
+  // A name the reader typed is a namespace they can open, whether or not any
+  // list could name it: rights to one namespace rarely include listing them.
+  const typed =
+    isNamespaceName(typedName) && !offered.some((ns) => ns.name === typedName)
+      ? typedName
+      : null;
+
+  // A namespace where nothing may be listed is not offered. Never one the
+  // review could not reach (absent = unknown, kept), never one that refuses
+  // pods and serves other lists (offered, saying what it refuses), never a
+  // selected one (hiding it would strand a scope the window is on), never
+  // the one the reader typed in full, and never one this opening has drawn;
+  // a reveal brings the rest back.
+  const usable = (name: string) =>
+    showBlocked ||
+    !access.shut.has(name) ||
+    scope.includes(name) ||
+    name === typedName ||
+    drawn.includes(name);
+  const shown = visible.filter((ns) => usable(ns.name));
+  const hiddenCount = visible.length - shown.length;
+  const undrawn = shown
+    .map((ns) => ns.name)
+    .filter((name) => !drawn.includes(name));
+  if (open && !opening && undrawn.length > 0) setDrawn([...drawn, ...undrawn]);
+
+  // Selected-at-open first, the rest after, each group keeping the summary's
+  // own problem/pod/name order. A stable sort keyed only on membership does
+  // exactly that. Ordering is what changes here; `selected`/`closed`/`full`
+  // below still read the live `scope`, so the ceiling and the checkmarks
+  // stay honest as the reader toggles.
+  const pinnedSet = new Set(pinned);
+  const unranked = [...offered]
+    .sort(
+      (a, b) => Number(pinnedSet.has(b.name)) - Number(pinnedSet.has(a.name))
+    )
+    .map((ns) => ns.name)
+    .filter((name) => !order.includes(name));
+  if (open && !opening && unranked.length > 0)
+    setOrder([...order, ...unranked]);
+  const rank = new Map(
+    [...order, ...unranked].map((name, index) => [name, index])
+  );
+  const ordered = [...shown].sort(
+    (a, b) => (rank.get(a.name) ?? 0) - (rank.get(b.name) ?? 0)
+  );
+
+  const full = scope.length >= SCOPE_LIMIT;
+
+  // One array, so the cursor is an index into what is actually on screen and
+  // "All namespaces" is arrowed onto like any other row.
+  const rows: NamespaceOption[] = [
+    {
+      key: "",
+      label: t("cluster", "allNamespaces"),
+      mono: false,
+      podCount,
+      problems: null,
+      selected: scope.length === 0,
+      closed: false,
+    },
+    ...ordered.map((ns) => ({
+      key: ns.name,
+      label: ns.name,
+      mono: true,
+      podCount: ns.podCount,
+      problems: ns.problems,
+      selected: scope.includes(ns.name),
+      closed: full && !scope.includes(ns.name),
+      source: ns.source,
+      refused: access.pods.get(ns.name) === false,
+    })),
+    ...(typed === null
+      ? []
+      : [
+          {
+            key: typed,
+            label: typed,
+            mono: true,
+            podCount: null,
+            problems: null,
+            selected: false,
+            closed: full,
+            source: listed ? ("unlisted" as const) : ("typed" as const),
+          },
+        ]),
+  ];
+
+  // A cursor left pointing past a list the filter has shortened is not a row.
+  const at = cursor < rows.length ? cursor : -1;
+
+  // The caret stays in the input, so the browser will not bring the arrowed
+  // row into view. Optional call because jsdom does not implement it.
+  useEffect(() => {
+    if (at < 0) return;
+    document
+      .getElementById(`${listId}-${at}`)
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [at, listId]);
+
+  const replace = (row: NamespaceOption) => {
+    setRefused(null);
+    onSelect(row.key === "" ? [] : [row.key], false);
+  };
+
+  const toggle = (row: NamespaceOption) => {
+    // "All" is the absence of a selection, so it clears one rather than
+    // joining it — there is nothing for it to be added to.
+    if (row.key === "") {
+      replace(row);
+      return;
+    }
+    if (row.selected) {
+      setRefused(null);
+      onSelect(
+        scope.filter((entry) => entry !== row.key),
+        true
+      );
+      return;
+    }
+    // Adding past the ceiling refuses and says so. Replacing the selection
+    // instead would throw away four namespaces on a gesture that asked to
+    // keep them.
+    if (full) {
+      setRefused(row.key);
+      return;
+    }
+    setRefused(null);
+    onSelect([...scope, row.key], true);
+  };
+
+  const note = refused
+    ? t("cluster", "namespaceLimitRefused", {
+        namespace: refused,
+        limit: SCOPE_LIMIT,
+      })
+    : full
+      ? t("cluster", "namespaceLimitFull", { n: scope.length })
+      : scope.length > 1
+        ? listed
+          ? t("cluster", "namespaceScopeOfListed", {
+              selected: scope.length,
+              n: namespaces.length,
+              limit: SCOPE_LIMIT,
+            })
+          : t("cluster", "namespaceScopeCount", {
+              n: scope.length,
+              limit: SCOPE_LIMIT,
+            })
+        : t("cluster", "namespaceMultiHint", {
+            click: formatShortcut("mod"),
+            enter: formatShortcut("mod+Enter"),
+            limit: SCOPE_LIMIT,
+          });
+
+  return (
+    <Popover open={open} onOpenChange={onOpenChange}>
+      <PopoverTrigger asChild>{children}</PopoverTrigger>
+      <PopoverContent
+        className="w-[268px] p-0"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
+        <div className="flex items-center gap-[7px] border-b border-hair px-2.5 py-2 text-fg-fnt">
+          <Search aria-hidden="true" className="h-3 w-3 flex-none" />
+          <input
+            autoComplete="off"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
+            value={filter}
+            onChange={(event) => {
+              setFilter(event.target.value);
+              setCursor(-1);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                const step = event.key === "ArrowDown" ? 1 : -1;
+                const next = at + step;
+                setCursor(next < 0 ? rows.length - 1 : next % rows.length);
+                return;
+              }
+              if (event.key !== "Enter") return;
+              // Enter with nothing arrowed onto is the filter's own answer:
+              // type three letters, press it, and you are in that namespace —
+              // which is the frequent job done without touching the mouse.
+              const exact = rows.findIndex(
+                (row, index) => index > 0 && row.key === typedName
+              );
+              const row =
+                at >= 0
+                  ? rows[at]
+                  : needle !== ""
+                    ? rows[exact > 0 ? exact : 1]
+                    : undefined;
+              if (!row) return;
+              event.preventDefault();
+              if (event.metaKey || event.ctrlKey) toggle(row);
+              else replace(row);
+            }}
+            placeholder={t(
+              "action",
+              listed
+                ? "filterNamespacesPlaceholder"
+                : "typeNamespacePlaceholder"
+            )}
+            aria-label={t("action", "filterNamespaces")}
+            role="combobox"
+            aria-expanded
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={at >= 0 ? `${listId}-${at}` : undefined}
+            aria-describedby={noteId}
+            className="w-full bg-transparent text-xs text-fg outline-hidden placeholder:text-fg-fnt"
+          />
+        </div>
+        {!listed && <ListNote state={namespaceList} />}
+        <div className="max-h-[260px] overflow-auto p-1">
+          <div
+            id={listId}
+            role="listbox"
+            aria-label={t("cluster", "namespaces")}
+            aria-multiselectable
+            // The caret belongs to the filter box for as long as the list is
+            // open — it is what names the arrowed row — and a press on a row
+            // would take it away. On the list rather than on the scroller, so
+            // the scrollbar is still draggable.
+            onMouseDown={(event) => event.preventDefault()}
+          >
+            {rows.map((row, index) => (
+              <Fragment key={row.key}>
+                <NamespaceRow
+                  id={`${listId}-${index}`}
+                  row={row}
+                  active={index === at}
+                  noteId={noteId}
+                  onHover={() => setCursor(index)}
+                  onReplace={() => replace(row)}
+                  onToggle={() => toggle(row)}
+                />
+                {/* Presentational on purpose: a listbox's children are
+                    options, and a bare hairline among them is a child
+                    assistive tech has no name for. */}
+                {index === 0 && (
+                  <div role="presentation" className="my-1 h-px bg-hair" />
+                )}
+              </Fragment>
+            ))}
+          </div>
+          {/* Outside the listbox, because it is a sentence and not an option
+              nobody can pick. */}
+          {visible.length === 0 && typed === null && (
+            <EmptyNote
+              typed={typedName}
+              listed={listed}
+              anyOffered={offered.length > 0}
+            />
+          )}
+          {hiddenCount > 0 && !showBlocked && (
+            // Not an option in the listbox: it is a sentence with a control,
+            // and no namespace to select. Says how many the reader was turned
+            // away from and offers to show them anyway.
+            <button
+              type="button"
+              onClick={() => setShowBlocked(true)}
+              className="flex w-full items-center justify-between gap-2 px-[7px] py-1.5 text-left text-[11px] text-fg-fnt"
+            >
+              <span>{t("count", "namespacesHidden", { n: hiddenCount })}</span>
+              <span className="underline underline-offset-2">
+                {t("action", "showInaccessibleNamespaces")}
+              </span>
+            </button>
+          )}
+        </div>
+        {/* The ceiling is stated as a cost, not as a rule: each namespace
+            past the first is a separate reading of the cluster, which is the
+            reason there is a number here at all. */}
+        <p
+          id={noteId}
+          aria-live="polite"
+          className={cn(
+            "border-t border-hair px-2.5 py-1.5 text-[10px] leading-[13px]",
+            refused ? "text-warn" : "text-fg-fnt"
+          )}
+        >
+          {note}
+        </p>
+        <Link
+          {...pageLink("my-access", undefined, context ?? undefined)}
+          onClick={() => onOpenChange(false)}
+          className="flex items-center gap-1.5 border-t border-hair px-2.5 py-1.5 text-[11px] text-info transition-colors hover:bg-hover"
+        >
+          <ShieldUser aria-hidden="true" className="h-3 w-3 flex-none" />
+          {scope.length === 1
+            ? t("cluster", "whatCanIDoIn", { namespace: scope[0] })
+            : t("cluster", "whatCanIDo")}
+        </Link>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function NamespaceRow({
+  id,
+  row,
+  active,
+  noteId,
+  onHover,
+  onReplace,
+  onToggle,
+}: {
+  id: string;
+  row: NamespaceOption;
+  /** The row the arrows are on, and the one Enter acts on. */
+  active: boolean;
+  /** The ceiling sentence, pointed at only by the rows it applies to. */
+  noteId: string;
+  onHover: () => void;
+  /** Replace the selection with this one. */
+  onReplace: () => void;
+  /** Add it to the selection, or take it out. */
+  onToggle: () => void;
+}) {
+  const t = useT();
+  const note = row.refused
+    ? t("cluster", "nsPodsRefused")
+    : row.source
+      ? t("cluster", SOURCE_NOTE[row.source])
+      : null;
+  const pods =
+    row.podCount === null
+      ? t("empty", "unknownLower")
+      : t("cluster", "podCount", { n: row.podCount });
+  const problems = problemWords(row.problems, t);
+  return (
+    <div
+      id={id}
+      role="option"
+      aria-selected={row.selected}
+      // Spelled out, because an option's own text reads as "prod 12 · 3 bad".
+      aria-label={[row.label, note ?? pods, problems?.spoken]
+        .filter(Boolean)
+        .join(", ")}
+      // The one thing about the row that cannot be read off the row itself:
+      // why its box has gone quiet.
+      aria-describedby={row.closed ? noteId : undefined}
+      // Hover and the arrows move the same cursor, so there is never a second
+      // highlight competing with the one Enter will act on.
+      onMouseEnter={onHover}
+      onClick={(event) =>
+        // The box is a target and the modifier is a gesture; both mean "add".
+        event.metaKey ||
+        event.ctrlKey ||
+        (event.target as HTMLElement).closest("[data-add]") !== null
+          ? onToggle()
+          : onReplace()
+      }
+      className={cn(
+        "grid w-full cursor-default select-none grid-cols-[14px_1fr_auto] items-center gap-[9px] rounded-[5px] px-[7px] py-[5px] text-left text-xs transition-colors",
+        active && "bg-hover",
+        row.selected && "text-fg"
+      )}
+    >
+      <span
+        data-add
+        // The box is 13px and the target around it is not: a checkbox that
+        // has to be hit exactly is a checkbox nobody uses twice.
+        className="m-[-7px] grid h-[27px] w-[27px] place-items-center"
+      >
+        <span
+          className={cn(
+            "grid h-[13px] w-[13px] place-items-center rounded-[3px] border",
+            row.selected ? "border-info bg-info" : "border-fg-fnt",
+            // Not hidden: the row is still selectable on its own, and a box
+            // that vanished would read as a row that cannot be picked at all.
+            row.closed && "opacity-40"
+          )}
+        >
+          {row.selected && (
+            <Check className="h-[9px] w-[9px] text-canvas" strokeWidth={4} />
+          )}
+        </span>
+      </span>
+      <span className={cn("truncate", row.mono && "font-mono")}>
+        {row.label}
+      </span>
+      {note !== null && (
+        <span className="inline-flex items-center gap-1 text-[11px] text-fg-fnt">
+          {row.refused && (
+            <Lock aria-hidden="true" className="h-2.5 w-2.5 flex-none" />
+          )}
+          {note}
+        </span>
+      )}
+      <span
+        className={cn(
+          "font-mono text-[11px]",
+          row.podCount !== null && problems ? problems.tone : "text-fg-fnt",
+          note !== null && "hidden"
+        )}
+      >
+        {row.podCount === null
+          ? t("empty", "unknownLower")
+          : problems
+            ? `${row.podCount} · ${problems.shown}`
+            : row.podCount}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * A namespace's Needs attention count as its own Overview states it; a
+ * count some kind was not read for says so rather than passing for whole.
+ */
+function problemWords(problems: NamespaceAttention | null, t: T) {
+  if (!problems || (problems.complete && problems.total === 0)) return null;
+  const { total: n, complete, worst } = problems;
+  return {
+    shown: complete
+      ? t("cluster", "problemCount", { n })
+      : n > 0
+        ? t("cluster", "problemCountAtLeast", { n })
+        : t("cluster", "problemsNotAllChecked"),
+    spoken: attentionWords({ total: n, complete }, t),
+    tone: worst ? ATTENTION_TEXT[worst] : "text-fg-mut",
+  };
+}
+
+/** Why the rows are what they are, when the cluster would not list them. */
+function ListNote({ state }: { state: Exclude<NamespaceListState, "listed"> }) {
+  const t = useT();
+  const { icon: Icon, key, tone } = LIST_NOTE[state];
+  return (
+    <p
+      className={cn(
+        "flex items-start gap-1.5 border-b border-hair px-2.5 py-1.5 text-[11px] leading-[14px]",
+        tone
+      )}
+    >
+      {Icon ? (
+        <Icon aria-hidden="true" className="mt-px h-3 w-3 flex-none" />
+      ) : (
+        <Spinner size="sm" aria-hidden className="mt-px h-3 w-3 flex-none" />
+      )}
+      {t("empty", key)}
+    </p>
+  );
+}
+
+/** A sentence in place of rows: never "none exist" about a list not read. */
+function EmptyNote({
+  typed,
+  listed,
+  anyOffered,
+}: {
+  typed: string;
+  listed: boolean;
+  anyOffered: boolean;
+}) {
+  const t = useT();
+  const text =
+    typed !== ""
+      ? t("empty", "notANamespaceName", { query: typed })
+      : listed && !anyOffered
+        ? t("empty", "noNamespacesVisible")
+        : null;
+  if (text === null) return null;
+  return (
+    <p
+      role={typed !== "" ? "alert" : undefined}
+      className={cn(
+        "px-[7px] py-2 text-[11px]",
+        typed !== "" ? "text-warn" : "text-fg-fnt"
+      )}
+    >
+      {text}
+    </p>
+  );
+}

@@ -1,0 +1,207 @@
+import type { ContextBindingInfo, ContextInfo } from "@/generated/types";
+import { Checkbox } from "@/components/ui/checkbox";
+import { clusterColor, clusterNameParts } from "@/lib/cluster-identity";
+import { criticalityOf } from "@/lib/critical";
+import { useShownPath } from "@/lib/hide-paths";
+import { cn } from "@/lib/utils";
+import {
+  useClusterIdentityStore,
+  useClusterMark,
+} from "@/stores/clusterIdentityStore";
+import { useSettingSearchMatch } from "../settings-search";
+import { VENDOR_LABEL, binaryLabel, readContext } from "./context-reading";
+import { useT } from "@/i18n/useT";
+
+/**
+ * One context, and the three questions every row answers: what is it, how
+ * does it prove who you are, and is anything missing.
+ *
+ * The third is why the screen exists. Today you learn that `kubelogin` is
+ * absent by pressing connect and reading an error; the file already knew,
+ * and so did PATH.
+ *
+ * There is no connect button here. The front door and the sidebar own
+ * connecting, and a second cluster switcher hidden in Settings is how two
+ * of them drift apart.
+ */
+/** The four states a context can be in, in words. */
+const CONTEXT_STATUS = {
+  connected: "contextConnected",
+  ready: "contextReady",
+  "cannot connect": "contextCannotConnect",
+  "cannot tell": "contextCannotTell",
+} as const;
+
+export function ContextRow({
+  context,
+  binding,
+  binaries,
+  connected,
+  onBind,
+  fromFile,
+}: {
+  context: ContextInfo;
+  binding: ContextBindingInfo | undefined;
+  binaries: Map<string, string | null>;
+  connected: boolean;
+  onBind: (context: string) => void;
+  /**
+   * Which file named this context, where more than one is being read.
+   *
+   * Absent with a single file — every context came from it, and repeating
+   * the path on every row is noise. With a work file and a home file it is
+   * the one thing the row cannot be worked out from.
+   */
+  fromFile?: string;
+}) {
+  const t = useT();
+  const reading = readContext(context, { binaries, binding, connected }, t);
+  const show = useShownPath();
+  const visible = useSettingSearchMatch(reading.searchText);
+  const mark = useClusterMark(context.name);
+  const setCritical = useClusterIdentityStore((s) => s.setCritical);
+  const criticality = criticalityOf(context.name, mark);
+  const colour = clusterColor(context.name, mark.hue);
+  const { prefix, label } = clusterNameParts(context.name);
+
+  const missing = reading.missingBinary;
+  const blocked = missing !== null;
+  // A plugin whose binary is missing has a louder problem than an unset
+  // profile, and one problem per row is the budget.
+  const unbound =
+    !blocked && reading.bound === null && reading.needs !== null
+      ? reading.vendor
+      : null;
+
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-[10px_minmax(0,1fr)_auto] items-start gap-x-3 border-b border-hair py-2.5",
+        !visible && "hidden"
+      )}
+      hidden={!visible}
+    >
+      <span
+        className={cn(
+          "mt-[5px] h-1.5 w-1.5 rounded-full",
+          blocked && "bg-err",
+          connected && "ring-[3px] ring-ok/20"
+        )}
+        style={
+          blocked
+            ? undefined
+            : connected
+              ? { background: colour }
+              : { boxShadow: `inset 0 0 0 1.5px ${colour}` }
+        }
+        aria-hidden
+      />
+
+      <div className="min-w-0">
+        <div className="truncate font-mono text-xs">
+          {prefix && <span className="text-fg-fnt">{prefix}</span>}
+          <span style={{ color: colour }}>{label}</span>
+        </div>
+        {fromFile && (
+          <div className="truncate font-mono text-[11px] text-fg-fnt">
+            {show(fromFile)}
+          </div>
+        )}
+        {context.server && (
+          <div className="truncate font-mono text-[11px] text-fg-fnt">
+            {context.server}
+          </div>
+        )}
+        <div className="mt-1 text-[11px] text-fg-mut">
+          {reading.how}
+          {reading.bound && (
+            <button
+              type="button"
+              onClick={() => onBind(context.name)}
+              className="ml-2 rounded-[3px] border border-hair px-1.5 py-px align-[1px] text-[10px] text-fg-mut transition-colors hover:border-fg-fnt hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+            >
+              {t("settings", "vendorProfile", {
+                vendor: VENDOR_LABEL[reading.bound.vendor],
+              })}{" "}
+              <span className="font-mono">{reading.bound.profile}</span>
+            </button>
+          )}
+        </div>
+
+        {missing && (
+          <div className="mt-1 text-[11px] text-err">
+            <span className="font-mono">{binaryLabel(missing)}</span>{" "}
+            {t("settings", "binaryNotOnPath")}
+          </div>
+        )}
+
+        {/* An unbound plugin is not broken, so this is a warning and not a
+            failure — but it is the fact somebody debugging a wrong-account
+            403 came for, so it is on the row rather than in a Bindings tab. */}
+        {unbound && unbound !== "aws" && (
+          <div className="mt-1 text-[11px] text-warn">
+            {t("settings", "noProfileBoundPrefix", {
+              vendor: VENDOR_LABEL[unbound],
+            })}{" "}
+            <span className="font-mono">
+              {binaryLabel(reading.needs ?? "")}
+            </span>
+            {t("settings", "noProfileBoundSuffix")}{" "}
+            <button
+              type="button"
+              onClick={() => onBind(context.name)}
+              className="text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+            >
+              {t("settings", "bindOne")}
+            </button>
+          </div>
+        )}
+        <label className="mt-1.5 flex cursor-pointer items-start gap-2 text-[11px]">
+          <Checkbox
+            checked={criticality.critical}
+            onCheckedChange={(checked) =>
+              // Unticking clears the mark back to undecided rather than storing
+              // an explicit `false` — that residue would suppress the guessed
+              // hint on a prod-looking name the reader never meant to overrule.
+              setCritical(context.name, checked === true ? true : null)
+            }
+            className="mt-px"
+          />
+          <span className="min-w-0">
+            <span className={criticality.critical ? "text-err" : "text-fg-mut"}>
+              {t("settings", "criticalLabel")}
+            </span>
+            {criticality.guessed && (
+              <span className="ml-1.5 text-warn">
+                {t("settings", "criticalGuessed")}
+              </span>
+            )}
+          </span>
+        </label>
+
+        {unbound === "aws" && (
+          <div className="mt-1 text-[11px] text-fg-fnt">
+            {t("settings", "awsNoProfilesPrefix")}{" "}
+            <span className="font-mono">aws</span>
+            {t("settings", "awsNoProfilesMid")}{" "}
+            <span className="font-mono">$AWS_PROFILE</span>
+            {t("settings", "awsNoProfilesSuffix")}
+          </div>
+        )}
+      </div>
+
+      <span
+        className={cn(
+          "whitespace-nowrap text-[11px]",
+          reading.status === "connected"
+            ? "text-ok"
+            : blocked
+              ? "text-err"
+              : "text-fg-fnt"
+        )}
+      >
+        {t("settings", CONTEXT_STATUS[reading.status])}
+      </span>
+    </div>
+  );
+}

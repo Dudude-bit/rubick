@@ -1,0 +1,720 @@
+import type { ReactElement } from "react";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { screen } from "@testing-library/react";
+
+import { objectLink } from "@/lib/links";
+import { renderWithRouter } from "@/test/render";
+
+import { TrafficChain } from "./TrafficChain";
+import type { ConnectionsQuery } from "@/hooks/useConnections";
+import type { ServiceEdges } from "./useServiceEdge";
+import type {
+  ChainStop,
+  ObjectRef,
+  ResourceConnections,
+} from "@/generated/types";
+
+// The hop notes are an extension's, so the chain asks a capability for them.
+// Nothing is detected here, which is the state of nearly every cluster and
+// the one every assertion below is written against: the chain must read
+// exactly the same with no cloud controller installed anywhere.
+const detectInClusterExtensions = vi.fn().mockResolvedValue([]);
+vi.mock("@/lib/commands", () => ({
+  commands: {
+    detectInClusterExtensions: () => detectInClusterExtensions(),
+  },
+}));
+
+const wrap = (ui: ReactElement) =>
+  renderWithRouter(ui, {
+    at: "/c/prod/services/k8s-gui-test/demo",
+    route: "/c/$cluster/$",
+  });
+
+const ingressRouteAPI = () =>
+  objectLink({
+    kind: "IngressRoute",
+    name: "api",
+    namespace: "backend",
+    crd: "ingressroutes.traefik.io",
+  })!;
+
+const service: ObjectRef = {
+  kind: "Service",
+  name: "demo",
+  namespace: "k8s-gui-test",
+  existence: "present",
+  facts: {
+    kind: "service",
+    type: "ClusterIP",
+    clusterIp: "10.43.0.9",
+    externalName: null,
+    selector: "app=demo",
+    ports: [],
+  },
+};
+
+const answered = (stops: ChainStop[]): ResourceConnections => ({
+  subject: service,
+  edges: [],
+  stops,
+  published: [],
+  notLookedAt: [],
+});
+
+const query = (data: ResourceConnections | undefined, isPending = false) =>
+  ({ data, error: null, isPending }) as ConnectionsQuery;
+
+const ingress: ObjectRef = {
+  kind: "Ingress",
+  name: "shop",
+  namespace: "k8s-gui-test",
+  existence: "present",
+  facts: null,
+} as unknown as ObjectRef;
+
+/** The backend of an Ingress on a cluster that refused the Services list. */
+const unreadBackend: ObjectRef = {
+  kind: "Service",
+  name: "checkout",
+  namespace: "k8s-gui-test",
+  existence: "notChecked",
+  facts: null,
+} as unknown as ObjectRef;
+
+describe("TrafficChain", () => {
+  /** The pod page said only that no Service selects the pod while one was a
+   *  label short. Fails if the near Service is not drawn as a link with the
+   *  label it lacks. */
+  it("links the Service one label short of a pod none selects", async () => {
+    const pod = {
+      kind: "Pod",
+      name: "checkout-api-a",
+      namespace: "k8s-gui-test",
+      existence: "present",
+      facts: null,
+    } as unknown as ObjectRef;
+    const view = await wrap(
+      <TrafficChain
+        query={query({
+          subject: pod,
+          edges: [],
+          stops: [],
+          published: [],
+          notLookedAt: [],
+          nearlySelectedBy: [
+            { service, carries: "app=demo", lacks: "track=stable" },
+          ],
+        })}
+      />
+    );
+    expect(view.container.textContent).toContain(
+      "the pod carries app=demo but not track=stable"
+    );
+    expect(screen.getByRole("link", { name: /demo/ })).toBeInTheDocument();
+  });
+
+  it("gives each stop its own answer", async () => {
+    /** A view that draws all three the same way is a red dot. Each of these
+     *  is a different repair — a name to fix, a selector to fix, a probe to
+     *  fix — and the sentence is the whole product. */
+    const said = async (stop: ChainStop) => {
+      const view = await wrap(<TrafficChain query={query(answered([stop]))} />);
+      const text = view.container.textContent ?? "";
+      view.unmount();
+      return text;
+    };
+
+    const missing = await said({
+      reason: "backendMissing",
+      ingress: {
+        kind: "Ingress",
+        name: "ghost-demo",
+        namespace: "k8s-gui-test",
+        existence: "present",
+        facts: null,
+      },
+      service,
+    });
+    const empty = await said({
+      reason: "selectsNothing",
+      service,
+      selector: "app=tls-demo",
+      near: null,
+    });
+    const unready = await said({
+      reason: "noneReady",
+      service,
+      selector: "app=unready-demo",
+      pods: 2,
+      why: "failingReadiness",
+    });
+
+    expect(missing).toContain("No Service named demo in this namespace");
+    expect(empty).toContain("No pod carries app=tls-demo");
+    expect(unready).toContain(
+      "2 pods carry app=unready-demo, and none of them is ready"
+    );
+    expect(new Set([missing, empty, unready]).size).toBe(3);
+  });
+
+  /**
+   * Marco's ledger page drew the Service's stop in red, a claim about a pod
+   * nobody had read, under a Deployment whose verdict was grey. Fails if a
+   * stop waiting on unread pods, or on pods still starting, takes the
+   * fault's red, or loses the mark that says which it is.
+   */
+  it.each([
+    ["podsUnread", "lucide-eye-off", "text-fg-mid"],
+    ["comingUp", "lucide-clock", "text-info"],
+  ] as const)(
+    "draws a stop waiting on %s pods apart from a fault",
+    async (why, icon, colour) => {
+      await wrap(
+        <TrafficChain
+          query={query(
+            answered([
+              {
+                reason: "noneReady",
+                service,
+                selector: "app=ledger",
+                pods: 1,
+                why,
+              },
+            ])
+          )}
+        />
+      );
+      const title = screen.getByText(/app=ledger, and it is not ready/);
+      expect(title).toHaveClass(colour);
+      expect(title).not.toHaveClass("text-err");
+      expect(title.querySelector("svg")).toHaveClass(icon);
+    }
+  );
+
+  it("spends one line where there is nothing to draw", async () => {
+    /** The whole feature has to be free on the pages that do not need it.
+     *  A heading over an empty chain is two lines spent saying nothing is
+     *  there. */
+    await wrap(
+      <TrafficChain
+        query={query({
+          subject: {
+            kind: "Deployment",
+            name: "quiet-demo",
+            namespace: "k8s-gui-test",
+            existence: "present",
+            facts: null,
+          },
+          edges: [],
+          stops: [],
+          published: [],
+          notLookedAt: [],
+        })}
+      />
+    );
+
+    expect(
+      screen.getByText(/No Service in this namespace selects these pods/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText("How traffic gets here")).not.toBeInTheDocument();
+  });
+
+  it("carries the certificate above the Ingress, and reads without one", async () => {
+    /** The certificate is the first thing a browser consults, so it is the
+     *  top of the chain. And it is core: a cluster with nothing installed
+     *  on it still gets the expiry, because `tls.crt` states it. The second
+     *  half of this test is the promise the extension seam makes — the
+     *  chain must be whole before any extension has said anything. */
+    const conns: ResourceConnections = {
+      subject: {
+        kind: "Ingress",
+        name: "shop",
+        namespace: "k8s-gui-test",
+        existence: "present",
+        facts: { kind: "ingress", className: "traefik" },
+      },
+      edges: [
+        {
+          from: {
+            kind: "Ingress",
+            name: "shop",
+            namespace: "k8s-gui-test",
+            existence: "present",
+            facts: null,
+          },
+          to: {
+            kind: "Secret",
+            name: "shop-tls",
+            namespace: "k8s-gui-test",
+            existence: "notChecked",
+            facts: null,
+          },
+          relation: {
+            verb: "uses",
+            usages: [{ how: "ingressTls", hosts: ["shop.k8s-gui.test"] }],
+          },
+        },
+        {
+          from: {
+            kind: "Ingress",
+            name: "shop",
+            namespace: "k8s-gui-test",
+            existence: "present",
+            facts: null,
+          },
+          to: service,
+          relation: {
+            verb: "routes",
+            host: "shop.k8s-gui.test",
+            path: "/",
+            pathType: "Prefix",
+            port: "80",
+            tls: true,
+          },
+        },
+      ],
+      stops: [],
+      published: [],
+      notLookedAt: [],
+    };
+
+    const withCert = await wrap(
+      <TrafficChain
+        query={query(conns)}
+        certificates={
+          new Map([
+            [
+              "shop-tls",
+              {
+                secretName: "shop-tls",
+                problem: null,
+                certificate: {
+                  subject: "shop.k8s-gui.test",
+                  issuer: "k8s-gui test root",
+                  dnsNames: ["shop.k8s-gui.test"],
+                  notBefore: "2020-01-01T00:00:00Z",
+                  notAfter: "2999-01-01T00:00:00Z",
+                  serial: "01",
+                  selfSigned: false,
+                  chainLength: 1,
+                },
+              },
+            ],
+          ])
+        }
+      />
+    );
+    expect(withCert.container.textContent).toContain("shop-tls");
+    expect(withCert.container.textContent).toMatch(
+      /valid for [\d\u202f]+ days/
+    );
+    withCert.unmount();
+
+    const bare = await wrap(<TrafficChain query={query(conns)} />);
+    expect(bare.container.textContent).toContain("shop-tls");
+    expect(bare.container.textContent).toContain("shop.k8s-gui.test/");
+    expect(bare.container.textContent).toContain("demo");
+  });
+
+  it("says when no controller claims an Ingress", async () => {
+    /** The failure that looks like nothing at all: correct YAML, no events,
+     *  no error, and never served. The classes that do exist are named,
+     *  because that turns "it does not work" into a one-word fix. */
+    const conns: ResourceConnections = {
+      subject: {
+        kind: "Ingress",
+        name: "ghost-demo",
+        namespace: "k8s-gui-test",
+        existence: "present",
+        facts: { kind: "ingress", className: "nginx" },
+      },
+      edges: [
+        {
+          from: {
+            kind: "Ingress",
+            name: "ghost-demo",
+            namespace: "k8s-gui-test",
+            existence: "present",
+            facts: null,
+          },
+          to: service,
+          relation: {
+            verb: "routes",
+            host: "ghost-demo.local",
+            path: "/",
+            pathType: "Prefix",
+            port: "80",
+            tls: false,
+          },
+        },
+      ],
+      stops: [],
+      published: [],
+      notLookedAt: [],
+    };
+
+    await wrap(
+      <TrafficChain
+        query={query(conns)}
+        controller={{
+          requested: "nginx",
+          resolved: null,
+          controller: null,
+          viaDefault: false,
+          available: [
+            {
+              name: "traefik",
+              controller: "traefik.io/ingress-controller",
+              isDefault: false,
+              parameters: null,
+            },
+          ],
+        }}
+      />
+    );
+
+    expect(
+      screen.getByText("No IngressClass named nginx in this cluster")
+    ).toBeInTheDocument();
+    expect(screen.getByText(/This cluster has traefik\./)).toBeInTheDocument();
+  });
+
+  it("marks the dot the reader is standing on, and only that one", async () => {
+    await wrap(
+      <TrafficChain
+        query={query(
+          answered([
+            {
+              reason: "selectsNothing",
+              service,
+              selector: "app=demo",
+              near: null,
+            },
+          ])
+        )}
+      />
+    );
+    expect(screen.getAllByTestId("rail-here")).toHaveLength(1);
+  });
+
+  it("does not draw a chain it has not read yet", async () => {
+    /** Loading is its own screen. A blank space where the chain will be
+     *  reads as "nothing routes here", which is the one wrong answer. */
+    await wrap(<TrafficChain query={query(undefined, true)} />);
+    expect(screen.getByText("Following the path in…")).toBeInTheDocument();
+  });
+
+  describe("which hostnames reach the Service through a vendor's objects", () => {
+    const chain = answered([
+      { reason: "selectsNothing", service, selector: "app=demo", near: null },
+    ]);
+
+    const drawWithRoutes = (value: {
+      available: boolean;
+      isPending: boolean;
+      routes: Map<string, unknown[]>;
+    }) => {
+      vi.doMock("@/hooks/useServiceRoutes", async (original) => ({
+        ...(await original<typeof import("@/hooks/useServiceRoutes")>()),
+        useServicesRoutes: () => value,
+      }));
+      return import("./TrafficChain");
+    };
+
+    /**
+     * The whole reason the integrations exist, finally on the page every
+     * reader actually opens: a cluster whose edge is IngressRoutes used to
+     * draw this chain starting at the Service, as though nothing from
+     * outside ever reached it.
+     */
+    it("names the host, scheme and object that route the Service", async () => {
+      vi.resetModules();
+      const { TrafficChain: Chain } = await drawWithRoutes({
+        available: true,
+        isPending: false,
+        routes: new Map([
+          [
+            "k8s-gui-test/demo",
+            [
+              {
+                host: "api.example.com",
+                path: "/",
+                tls: true,
+                source: {
+                  kind: "IngressRoute",
+                  name: "api",
+                  namespace: "backend",
+                },
+                to: ingressRouteAPI(),
+              },
+            ],
+          ],
+        ]),
+      });
+      await wrap(<Chain query={query(chain)} />);
+
+      expect(screen.getByText("https://api.example.com")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "api" })).toHaveAttribute(
+        "href",
+        "/c/prod/ingressroutes.traefik.io/backend/api"
+      );
+      vi.doUnmock("@/hooks/useServiceRoutes");
+    });
+
+    /**
+     * A source that names its CRD is drawn as a real reference — glyph, hue,
+     * peek — landing on the same instance page the vendor's own `to` named.
+     * The bare blue text link is only the fallback for a vendor that said
+     * nothing more.
+     */
+    it("draws a crd-bearing source as a reference, not bare text", async () => {
+      vi.resetModules();
+      const { TrafficChain: Chain } = await drawWithRoutes({
+        available: true,
+        isPending: false,
+        routes: new Map([
+          [
+            "k8s-gui-test/demo",
+            [
+              {
+                host: "api.example.com",
+                path: "/",
+                tls: true,
+                source: {
+                  kind: "IngressRoute",
+                  name: "api",
+                  namespace: "backend",
+                  crd: "ingressroutes.traefik.io",
+                },
+                to: ingressRouteAPI(),
+              },
+            ],
+          ],
+        ]),
+      });
+      await wrap(<Chain query={query(chain)} />);
+
+      expect(
+        screen.getByRole("link", { name: "IngressRoute api" })
+      ).toHaveAttribute("href", "/c/prod/ingressroutes.traefik.io/backend/api");
+      vi.doUnmock("@/hooks/useServiceRoutes");
+    });
+
+    /**
+     * The core graph already draws Ingress hops with their addresses — a
+     * route the capability reports off the same Ingress is the same way in
+     * said twice, and the second time claims the cluster has two.
+     */
+    it("does not repeat a way in the core already draws", async () => {
+      vi.resetModules();
+      const { TrafficChain: Chain } = await drawWithRoutes({
+        available: true,
+        isPending: false,
+        routes: new Map([
+          [
+            "k8s-gui-test/demo",
+            [
+              {
+                host: "shop.example.com",
+                path: "/",
+                tls: true,
+                source: { kind: "Ingress", name: "shop", namespace: "shop" },
+              },
+            ],
+          ],
+        ]),
+      });
+      await wrap(<Chain query={query(chain)} />);
+
+      expect(screen.queryByText(/shop\.example\.com/)).toBeNull();
+      vi.doUnmock("@/hooks/useServiceRoutes");
+    });
+  });
+
+  describe("what a cloud says about the Service", () => {
+    const edges = (edge: Partial<ServiceEdges>): ServiceEdges => ({
+      available: true,
+      configs: new Map(),
+      error: null,
+      ...edge,
+    });
+
+    // Two hops, because a path of one is not a path and is collapsed to a
+    // single line: the Service and the stop below it.
+    const chain = answered([
+      { reason: "selectsNothing", service, selector: "app=demo", near: null },
+    ]);
+
+    const drawWith = (edge: ServiceEdges) => {
+      vi.doMock("./useServiceEdge", async (original) => ({
+        ...(await original<typeof import("./useServiceEdge")>()),
+        useServiceEdge: () => edge,
+      }));
+      return import("./TrafficChain");
+    };
+
+    it("adds the cloud's configuration under the Service and never instead of it", async () => {
+      /** Would break if an extension were ever allowed to replace part of a
+       *  hop rather than extend it. The Service's own selector is core and
+       *  must still be drawn on a cluster that has every cloud controller
+       *  installed — the note is a line below it or nothing at all. */
+      vi.resetModules();
+      const { TrafficChain: Chain } = await drawWith(
+        edges({
+          configs: new Map([
+            [
+              "k8s-gui-test/demo",
+              [
+                {
+                  source: {
+                    kind: "BackendConfig",
+                    name: "shop-backend",
+                    to: null,
+                  },
+                  summary: [
+                    {
+                      key: "verbatimLine",
+                      values: {
+                        said: "every port · health check HTTP :8080/healthz",
+                      },
+                    },
+                  ],
+                  problem: null,
+                },
+              ],
+            ],
+          ]),
+        })
+      );
+      await wrap(<Chain query={query(chain)} />);
+
+      expect(screen.getByText(/selects app=demo/)).toBeInTheDocument();
+      expect(screen.getByText("shop-backend")).toBeInTheDocument();
+      expect(
+        screen.getByText(/health check HTTP :8080\/healthz/)
+      ).toBeInTheDocument();
+      vi.doUnmock("./useServiceEdge");
+    });
+
+    it("states configuration plainly and colours only what an object said", async () => {
+      /** The line this whole tier turns on. A BackendConfig has no status —
+       *  it cannot report a failing health check — so the summary is never
+       *  toned. A name that resolves to no object is different in kind: it
+       *  was checked, it is missing, and it gets the colour. */
+      vi.resetModules();
+      const { TrafficChain: Chain } = await drawWith(
+        edges({
+          configs: new Map([
+            [
+              "k8s-gui-test/demo",
+              [
+                {
+                  source: { kind: "BackendConfig", name: "ghost", to: null },
+                  summary: [
+                    { key: "verbatimLine", values: { said: "every port" } },
+                  ],
+                  problem: {
+                    text: {
+                      key: "verbatimLine" as const,
+                      values: {
+                        said: "no BackendConfig named ghost in this namespace — nothing is applied",
+                      },
+                    },
+                    tone: "err",
+                  },
+                },
+              ],
+            ],
+          ]),
+        })
+      );
+      const view = await wrap(<Chain query={query(chain)} />);
+
+      const problem = screen.getByText(/nothing is applied/);
+      expect(problem).toHaveClass("text-err");
+      expect(
+        view.container.querySelector(".text-err")?.textContent
+      ).not.toContain("every port");
+      vi.doUnmock("./useServiceEdge");
+    });
+
+    it("says nothing at all where nothing answered", async () => {
+      /** The state every cluster without a cloud controller is in. An
+       *  absent capability must leave no gap, no placeholder and no
+       *  invitation — the hop is exactly what it was before this existed. */
+      vi.resetModules();
+      const { TrafficChain: Chain } = await drawWith(
+        edges({ available: false })
+      );
+      const view = await wrap(<Chain query={query(chain)} />);
+
+      expect(screen.getByText(/selects app=demo/)).toBeInTheDocument();
+      expect(view.container.textContent).not.toContain("BackendConfig");
+      vi.doUnmock("./useServiceEdge");
+    });
+  });
+
+  /**
+   * The chain reads the same `useConnections` query as the Connections tab, so
+   * a refusal must end in the rule to ask for and a retry here too — not the
+   * bare red dead-end it used to. Same fact, two readers.
+   */
+  it("offers the rule and a retry when the connections read is refused", async () => {
+    const refetch = vi.fn();
+    const refused = {
+      data: undefined,
+      isPending: false,
+      error: new Error(
+        'services is forbidden: User "system:serviceaccount:team:x" cannot list resource "services" in API group "" at the cluster scope'
+      ),
+      refetch,
+    } as unknown as ConnectionsQuery;
+
+    await wrap(<TrafficChain query={refused} />);
+
+    expect(
+      screen.getByRole("button", { name: /copy the rule to ask for/i })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /try the read again/i })
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * A refused Services list now reaches the chain as `notChecked` with no
+   * stop — the fix that stopped the app calling those Services missing. The
+   * chain drew the hop as an ordinary working link in the ordinary tone, so
+   * a backend nobody looked at was indistinguishable from one that is there
+   * and healthy, on the one view whose whole job is where traffic stops.
+   */
+  it("does not draw a backend nobody looked at as a backend that is there", async () => {
+    await wrap(
+      <TrafficChain
+        query={query({
+          subject: ingress,
+          edges: [
+            {
+              from: ingress,
+              to: unreadBackend,
+              relation: {
+                verb: "routes",
+                host: "shop.example.com",
+                path: "/",
+                pathType: "Prefix",
+                port: "http",
+                tls: false,
+              },
+            },
+          ],
+          stops: [],
+          published: [],
+          notLookedAt: [],
+        } as unknown as ResourceConnections)}
+      />
+    );
+
+    expect(screen.getByText("checkout")).toBeInTheDocument();
+    expect(screen.getByText("not checked")).toBeInTheDocument();
+  });
+});

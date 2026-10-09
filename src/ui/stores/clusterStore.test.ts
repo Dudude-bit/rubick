@@ -1,0 +1,388 @@
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
+vi.mock("@/lib/commands", () => ({
+  commands: {
+    connectCluster: vi.fn(async (context: string) => ({ context })),
+    disconnectCluster: vi.fn(async () => undefined),
+    saveClusterPreferences: vi.fn(async () => undefined),
+    listContexts: vi.fn(async () => [{ name: "dev" }, { name: "prod" }]),
+    getCurrentContext: vi.fn(async () => "dev"),
+    getClusterPreferences: vi.fn(async () => ({
+      lastContext: "prod",
+      namespaces: {},
+      scopes: {},
+    })),
+  },
+}));
+
+import { commands } from "@/lib/commands";
+import {
+  credentialsExpired,
+  credentialsRestored,
+  readExpiredCredentials,
+} from "@/lib/credentials";
+import { SCOPE_LIMIT } from "@/lib/namespace-scope";
+import type { ContextInfo } from "@/generated/types";
+import { useClusterStore } from "./clusterStore";
+
+const saveClusterPreferences = vi.mocked(commands.saveClusterPreferences);
+
+const state = () => useClusterStore.getState();
+
+beforeEach(() => {
+  saveClusterPreferences.mockClear();
+  useClusterStore.setState({
+    currentContext: "prod-eu",
+    currentNamespace: "",
+    namespaceScope: [],
+  });
+});
+
+describe("what the window is scoped to", () => {
+  it("derives the wire value from the selection", async () => {
+    await state().setNamespaceScope(["web"]);
+    expect(state().currentNamespace).toBe("web");
+
+    // Several has no single namespace to ask for, so the lists read the
+    // cluster and narrow afterwards.
+    await state().setNamespaceScope(["web", "api"]);
+    expect(state().currentNamespace).toBe("");
+  });
+
+  it("drops empties and duplicates rather than passing them on", async () => {
+    await state().setNamespaceScope(["web", "", "web", "api"]);
+    expect(state().namespaceScope).toEqual(["web", "api"]);
+  });
+
+  /**
+   * Would take the ceiling off what a scope makes more expensive: the
+   * overview reads every selected namespace every ten seconds, the events
+   * feed asks each one every second, and this is the one place that number
+   * is bounded.
+   */
+  it("never watches more namespaces than it can answer for", async () => {
+    await state().setNamespaceScope(
+      Array.from({ length: SCOPE_LIMIT + 4 }, (_, i) => `ns-${i}`)
+    );
+    expect(state().namespaceScope).toHaveLength(SCOPE_LIMIT);
+    expect(state().namespaceScope[0]).toBe("ns-0");
+  });
+});
+
+describe("moving between clusters", () => {
+  /**
+   * Reported from a shop with six clusters and rights to a couple of
+   * namespaces in each: switching cleared the selection every time, so the
+   * same two or three namespaces were picked again on every move.
+   */
+  it("restores what that cluster was last left on", async () => {
+    useClusterStore.setState({
+      savedScopes: { "prod-eu": ["web"], "prod-us": ["api", "jobs"] },
+      currentContext: "prod-eu",
+      namespaceScope: ["web"],
+      currentNamespace: "web",
+    });
+
+    await state().switchContext("prod-us");
+
+    expect(state().namespaceScope).toEqual(["api", "jobs"]);
+    // Two namespaces have no single wire value; the selection is the truth.
+    expect(state().currentNamespace).toBe("");
+  });
+
+  it("gives the whole cluster to one it has never been asked about", async () => {
+    useClusterStore.setState({
+      savedScopes: { "prod-eu": ["web"] },
+      currentContext: "prod-eu",
+      namespaceScope: ["web"],
+      currentNamespace: "web",
+    });
+
+    await state().switchContext("staging");
+
+    expect(state().namespaceScope).toEqual([]);
+    expect(state().currentNamespace).toBe("");
+  });
+
+  /** After a disconnect there is no current context, and the scope left
+   *  behind belonged to the last cluster: connecting elsewhere kept it, and
+   *  the new cluster opened filtered to a namespace it does not have. */
+  it("does not carry the last cluster's scope across a disconnect", async () => {
+    useClusterStore.setState({
+      savedScopes: { "prod-eu": ["web"] },
+      currentContext: null,
+      namespaceScope: ["web"],
+      currentNamespace: "web",
+    });
+
+    await state().connect("staging");
+
+    expect(state().namespaceScope).toEqual([]);
+  });
+
+  /**
+   * A Role that reads one namespace cannot read "All namespaces", and the
+   * kubeconfig already says which one it is. Fails if a cluster with nothing
+   * stored stops opening on its context's namespace.
+   */
+  it("opens a cluster on its kubeconfig namespace when nothing is stored", async () => {
+    useClusterStore.setState({
+      contexts: [
+        { name: "marco", namespace: "team-checkout" },
+      ] as unknown as ContextInfo[],
+      savedScopes: {},
+      currentContext: null,
+      namespaceScope: [],
+    });
+
+    await state().connect("marco");
+
+    expect(state().namespaceScope).toEqual(["team-checkout"]);
+    expect(state().currentNamespace).toBe("team-checkout");
+  });
+
+  /** Fails if the kubeconfig overrules a scope the reader chose there. */
+  it("keeps a stored choice over the kubeconfig namespace", async () => {
+    useClusterStore.setState({
+      contexts: [
+        { name: "marco", namespace: "team-checkout" },
+      ] as unknown as ContextInfo[],
+      savedScopes: { marco: [] },
+      currentContext: null,
+      namespaceScope: [],
+    });
+
+    await state().connect("marco");
+
+    expect(state().namespaceScope).toEqual([]);
+  });
+
+  /** Switching to the cluster already open changes nothing. */
+  it("leaves the scope alone when the context has not moved", async () => {
+    useClusterStore.setState({
+      savedScopes: { "prod-eu": ["something", "else"] },
+      currentContext: "prod-eu",
+      namespaceScope: ["web", "api"],
+      currentNamespace: "",
+    });
+
+    await state().switchContext("prod-eu");
+
+    expect(state().namespaceScope).toEqual(["web", "api"]);
+  });
+});
+
+describe("what is written to disk", () => {
+  /**
+   * Would break every screen of a build that does not have this feature.
+   * `ClusterPreferences.namespaces` is one string per context and older
+   * builds read it straight into `currentNamespace`; handed `"web,api"` they
+   * would ask for a namespace that does not exist and show nothing anywhere,
+   * without ever saying why.
+   */
+  it("saves a namespace an older build can still ask for", async () => {
+    await state().setNamespaceScope(["web", "api"]);
+    expect(saveClusterPreferences).toHaveBeenCalledWith(null, "prod-eu", "", [
+      "web",
+      "api",
+    ]);
+
+    await state().setNamespaceScope(["web"]);
+    expect(saveClusterPreferences).toHaveBeenLastCalledWith(
+      null,
+      "prod-eu",
+      "web",
+      ["web"]
+    );
+  });
+
+  /**
+   * The whole selection rides in its own field, so the wire value stays the
+   * single namespace an older build knows how to ask for while this one
+   * keeps all of it.
+   */
+  it("keeps the whole selection beside the one an older build reads", async () => {
+    await state().setNamespaceScope(["web", "api", "jobs"]);
+    const [, , wire, scope] = saveClusterPreferences.mock.lastCall!;
+    expect(wire).toBe("");
+    expect(scope).toEqual(["web", "api", "jobs"]);
+  });
+
+  it("writes nothing while no cluster owns the scope", async () => {
+    useClusterStore.setState({ currentContext: null });
+    await state().setNamespaceScope(["web"]);
+    expect(saveClusterPreferences).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The refusal flag is raised at the commands choke point; the only thing
+ * that may lower it is a session the cluster actually accepted. "Sign in
+ * again" reconnects to the *same* context, so clearing must ride on the
+ * connect that worked — the context-change effect never fires for it, and
+ * the reader was left staring at the banner over a healthy session.
+ */
+describe("an expired session and the reconnect", () => {
+  beforeEach(() => credentialsRestored());
+
+  it("clears the refusal when the same context connects again", async () => {
+    credentialsExpired("Unauthorized");
+    await state().connect("prod-eu");
+    expect(readExpiredCredentials()).toBeNull();
+    expect(state().isConnected).toBe(true);
+  });
+
+  it("keeps the refusal when the reconnect fails too", async () => {
+    credentialsExpired("Unauthorized");
+    vi.mocked(commands.connectCluster).mockRejectedValueOnce(
+      new Error("still refused")
+    );
+    await state().connect("prod-eu");
+    expect(readExpiredCredentials()).not.toBeNull();
+    expect(state().isConnected).toBe(false);
+  });
+});
+
+describe("a connect that failed", () => {
+  /**
+   * The field is read by the cluster door, its toast and the alert panel.
+   * Kept with the command in front, two of them printed
+   * "Tauri command 'connectCluster' failed:" over the server's words.
+   */
+  it("keeps the server's words without the command in front", async () => {
+    vi.mocked(commands.connectCluster).mockRejectedValueOnce(
+      new Error(
+        "Tauri command 'connectCluster' failed: exec plugin: aws-iam-authenticator not found"
+      )
+    );
+    await state().connect("prod-eu");
+    expect(state().error).toBe("exec plugin: aws-iam-authenticator not found");
+  });
+
+  /** The same field, set by an unreadable kubeconfig. */
+  it("keeps the server's words when the contexts could not be read", async () => {
+    vi.mocked(commands.listContexts).mockRejectedValueOnce(
+      new Error("Tauri command 'listContexts' failed: kubeconfig: bad yaml")
+    );
+    await state().loadContexts();
+    expect(state().error).toBe("kubeconfig: bad yaml");
+  });
+});
+
+describe("restoring the last cluster on launch", () => {
+  beforeEach(() => {
+    vi.mocked(commands.connectCluster).mockClear();
+    useClusterStore.setState({
+      currentContext: null,
+      connectionAttemptId: 0,
+      pendingContext: null,
+      isAuthenticating: false,
+    });
+  });
+
+  /**
+   * The address is the only thing that connects. A store that still
+   * connected on launch would race the cluster the address names, and a
+   * deep link would open under the saved cluster's name.
+   */
+  it("remembers the saved cluster for the front door and connects to nothing", async () => {
+    await state().loadContexts();
+    expect(state().lastContext).toBe("prod");
+    expect(state().contextsKnown).toBe(true);
+    expect(vi.mocked(commands.connectCluster)).not.toHaveBeenCalled();
+  });
+
+  /**
+   * An unreadable kubeconfig is not one that lists nothing: the cluster
+   * route says "could not read", never "not in your kubeconfig".
+   */
+  it("does not call the contexts known when they could not be read", async () => {
+    useClusterStore.setState({ contextsKnown: false });
+    vi.mocked(commands.listContexts).mockRejectedValueOnce(
+      new Error("Tauri command 'listContexts' failed: kubeconfig: bad yaml")
+    );
+    await state().loadContexts();
+    expect(state().contextsKnown).toBe(false);
+  });
+
+  /** Leaving a cluster on purpose must not bounce the front door straight back to it. */
+  it("forgets the last cluster on a deliberate disconnect", async () => {
+    await state().loadContexts();
+    await state().disconnect();
+    expect(state().lastContext).toBeNull();
+  });
+});
+
+describe("landing on a different cluster", () => {
+  /**
+   * The counter is what tells a surface holding a route from the old cluster
+   * to let go, so it has to move on exactly the connects that make a route
+   * meaningless — and on no others, or every reconnect would throw the
+   * reader off the page they were reading.
+   */
+  it("counts a move to another cluster and not a reconnect to the same one", async () => {
+    useClusterStore.setState({
+      lastConnected: null,
+      contextSwitches: 0,
+      currentContext: null,
+    });
+
+    await state().connect("dev");
+    expect(state().contextSwitches).toBe(0);
+
+    await state().connect("dev");
+    expect(state().contextSwitches).toBe(0);
+
+    await state().connect("prod");
+    expect(state().contextSwitches).toBe(1);
+  });
+
+  /** Disconnecting does not make the next cluster the first one. */
+  it("still counts the move when the window was disconnected in between", async () => {
+    useClusterStore.setState({
+      lastConnected: null,
+      contextSwitches: 0,
+      currentContext: null,
+    });
+
+    await state().connect("dev");
+    await state().disconnect();
+    await state().connect("prod");
+
+    expect(state().contextSwitches).toBe(1);
+  });
+
+  /**
+   * A deep link names the cluster and the object together, and arrives by
+   * connecting and then navigating. Counting that as a switch would have the
+   * tab let go of the very route the link is opening.
+   */
+  it("does not count a connect that is bringing its own route", async () => {
+    useClusterStore.setState({
+      lastConnected: null,
+      contextSwitches: 0,
+      currentContext: null,
+    });
+    await state().connect("dev");
+    await state().connect("prod", { keepRoute: true });
+
+    expect(state().contextSwitches).toBe(0);
+  });
+
+  /** A connect that failed left the reader where they were. */
+  it("does not count a connect that never landed", async () => {
+    useClusterStore.setState({
+      lastConnected: null,
+      contextSwitches: 0,
+      currentContext: null,
+    });
+    await state().connect("dev");
+
+    vi.mocked(commands.connectCluster).mockRejectedValueOnce(
+      new Error("no route to host")
+    );
+    await state().connect("prod");
+
+    expect(state().contextSwitches).toBe(0);
+  });
+});

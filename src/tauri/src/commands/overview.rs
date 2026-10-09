@@ -1,0 +1,5521 @@
+//! Cluster overview — the "do I need to do something right now?" query.
+//!
+//! Deliberately not a count-the-objects endpoint: how many of each kind
+//! exist is not something anyone acts on. This one answers "what is
+//! broken, how tight is the scheduler, and what is this cluster" in a
+//! single round trip.
+//!
+//! The aggregation lives here rather than in the frontend because the
+//! inputs are the full pod / node / deployment / event lists: shipping
+//! all of that over IPC to reduce it to a dozen rows in JS wastes both
+//! the transfer and the main thread, and the reduction has to re-run on
+//! every watch event.
+
+use crate::commands::helpers::{api_in, reaches, scope_of};
+use crate::error::{Error, Result};
+use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
+use crate::resources::node_budget::holds_reservation;
+use crate::resources::{
+    backing_off, condition_is_true, counts_ready, crash_looping, exit_unreported, job_state,
+    looping_until, pending_since, pod_start, restarting_until, stuck_reason, within_pending_grace,
+    PodStart, Rollout,
+};
+use crate::state::AppState;
+use crate::utils::quantities::{parse_cpu, parse_memory};
+use crate::utils::Moment;
+use chrono::{DateTime, Utc};
+use futures::future::join_all;
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
+use k8s_openapi::api::batch::v1::{CronJob, Job};
+use k8s_openapi::api::core::v1::{
+    ConfigMap, Endpoints, Event, Namespace, Node, PersistentVolumeClaim, Pod, Secret, Service,
+    ServiceAccount,
+};
+use k8s_openapi::api::networking::v1::Ingress;
+use kube::api::ListParams;
+use kube::{Api, Client, Resource};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fmt::Debug;
+use std::sync::Arc;
+use tauri::State;
+
+use crate::overview::{RefusedCounts, Snapshot};
+
+/// How far back an event still counts as "recent" for the warnings feed.
+const RECENT_WARNING_WINDOW_MINUTES: i64 = 60;
+
+/// Server-side page size for the event list. Events are the largest collection
+/// in most clusters and this query re-runs every couple of seconds, so pulling
+/// the full list to keep one hour of it is the wrong trade.
+const EVENT_FETCH_LIMIT: u32 = 500;
+
+/// How many event pages to walk at most. The API returns events in etcd key
+/// order, not newest first, so a single page can miss the entire last hour on
+/// a cluster with thousands of warnings — following `continue` widens the
+/// window. The cap keeps the trade: four pages cover 2000 warnings, and a
+/// pathological cluster cannot stall a query that re-runs every few seconds.
+const MAX_EVENT_PAGES: usize = 4;
+
+/// Page size for the count probe in [`count_of`]. One page is the whole
+/// cost of a count, so this is only "how many objects a small cluster is
+/// counted in a single round trip" — big enough that most kinds never need
+/// the apiserver's own tally, small enough to be nothing next to the
+/// collection it replaces.
+const COUNT_PAGE_SIZE: u32 = 500;
+
+/// Cap on the problems list. A node outage produces one row per pod on it,
+/// and neither the IPC payload nor the two-second re-render survives that.
+/// Applied once to the whole scope, however many namespaces it adds up.
+const MAX_PROBLEMS: usize = 50;
+
+/// Restart count above which a pod is called out even while it is Running.
+/// A pod that restarted a few times hours ago is noise; one climbing past
+/// this is worth a look before it starts flapping.
+const RESTART_ATTENTION_THRESHOLD: i32 = 5;
+
+/// This app's word for a pod it reads as crash-looping while the kubelet says
+/// something else at this instant: `Running` between crashes, `Error` as one
+/// ends. Printed as the kubelet's `CrashLoopBackOff`, it put a status kubectl
+/// never showed on a pod that had restarted with its node.
+pub const CRASH_LOOPING: &str = "CrashLooping";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ProblemSeverity {
+    /// Workload is down or cannot start.
+    Critical,
+    /// Degraded or trending bad, but still serving.
+    Warning,
+}
+
+/// What the detail line on a problem row says.
+///
+/// Two unlike things arrived in this one field and only one of them may be
+/// translated: most rows quote the object's own status message, which is the
+/// cluster's wording and stays as written, while three are sentences this app
+/// composes. Naming the variant is what lets the reader see the second kind
+/// in their own language without the app rewriting the first.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "says", rename_all = "camelCase")]
+pub enum ProblemDetail {
+    /// The object's own words, quoted.
+    Said { text: String },
+    /// A pod restarting more than the screen tolerates, and the containers
+    /// behind the count where more than one of them restarted.
+    Restarts {
+        n: i32,
+        #[serde(default)]
+        by: Option<Vec<crate::resources::ContainerRestarts>>,
+    },
+    /// A Deployment short of replicas whose own condition said nothing.
+    ReplicasReady { ready: i32, desired: i32 },
+    /// A node marked unschedulable.
+    Unschedulable,
+}
+
+impl ProblemDetail {
+    /// The cluster's own message, where it wrote one.
+    fn said(message: Option<String>) -> Option<Self> {
+        message.map(|text| Self::Said { text })
+    }
+
+    /// `n` restarts of `pod`, with the containers behind them.
+    fn restarts(pod: &Pod, n: i32) -> Self {
+        Self::Restarts {
+            n,
+            by: crate::resources::restarts_by(pod),
+        }
+    }
+}
+
+/// One actionable row in the problems list. `kind` + `namespace` + `name`
+/// is enough for the frontend to build a deep link to the detail page.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterProblem {
+    pub severity: ProblemSeverity,
+    pub kind: String,
+    pub name: String,
+    pub namespace: Option<String>,
+    /// Short machine-ish label: `CrashLoopBackOff`, `Pending`, `NotReady`.
+    pub reason: String,
+    /// Why, named rather than written — see [`ProblemDetail`].
+    pub detail: Option<ProblemDetail>,
+    /// RFC3339 timestamp the condition started, for "N minutes ago".
+    pub since: Option<String>,
+    pub restarts: Option<i32>,
+    /// The failed pods a failed Job's row stands for instead of listing them.
+    pub folded_pods: Option<i32>,
+}
+
+/// Requested vs allocatable for one resource dimension, plus live usage.
+///
+/// `requested` is the number that decides whether the next pod schedules;
+/// `usage` is the one people look at. Both are returned so the UI can lead
+/// with the former and keep the latter as context.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourcePressure {
+    pub requested: f64,
+    pub allocatable: f64,
+    pub usage: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SchedulerPressure {
+    /// Millicores.
+    pub cpu: ResourcePressure,
+    /// Bytes.
+    pub memory: ResourcePressure,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NodeSummary {
+    pub name: String,
+    pub ready: bool,
+    pub schedulable: bool,
+    pub roles: Vec<String>,
+    pub pod_count: usize,
+    pub pod_capacity: Option<i64>,
+    pub cpu: ResourcePressure,
+    pub memory: ResourcePressure,
+}
+
+/// Warning events collapsed by reason. Twenty `FailedScheduling` lines are
+/// one problem, not twenty.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WarningGroup {
+    pub reason: String,
+    pub count: i32,
+    pub last_seen: Option<String>,
+    /// Most recent message for this reason.
+    pub sample: Option<String>,
+    /// The object the most recent event referred to, kept apart the way
+    /// `ClusterProblem` keeps it. It used to be one `"Kind/name"` string with
+    /// the namespace thrown away, which is why the panel above this one could
+    /// link a message and this one could not: the same sentence needs a kind,
+    /// a name *and* a namespace to be resolved against, and two thirds of one
+    /// is a guess.
+    pub object_kind: Option<String>,
+    pub object_name: Option<String>,
+    /// The involved object's namespace, not the event's: an event about a
+    /// pod is recorded beside it, but a cluster-scoped object's event is not.
+    pub namespace: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NamespaceLoad {
+    pub name: String,
+    /// `None` where this namespace's pods were not read.
+    pub pod_count: Option<usize>,
+    /// Counted before the list is cut to `MAX_PROBLEMS`: on a cluster with
+    /// fifty critical problems elsewhere, a namespace with only warnings has
+    /// problems, not none.
+    pub problem_count: usize,
+}
+
+/// How many objects of each kind live in the requested scope.
+///
+/// Every count is optional, and `None` is not `Some(0)`: RBAC denies one kind
+/// at a time, and a token that may not list Secrets must not make the UI
+/// announce that the namespace has none. "Nothing there" and "not allowed to
+/// look" are different facts and the UI renders them differently.
+///
+/// Namespaced kinds follow the selected namespace; `nodes` and `namespaces`
+/// are cluster-wide because they have no namespace to be scoped to.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceCounts {
+    pub pods: Option<usize>,
+    pub deployments: Option<usize>,
+    pub stateful_sets: Option<usize>,
+    pub daemon_sets: Option<usize>,
+    pub jobs: Option<usize>,
+    pub cron_jobs: Option<usize>,
+    pub nodes: Option<usize>,
+    pub namespaces: Option<usize>,
+    pub services: Option<usize>,
+    pub ingresses: Option<usize>,
+    pub config_maps: Option<usize>,
+    pub secrets: Option<usize>,
+    pub endpoints: Option<usize>,
+    pub persistent_volume_claims: Option<usize>,
+    pub service_accounts: Option<usize>,
+    /// Events the apiserver still holds. Events expire on the cluster's own
+    /// TTL — an hour on most installs — so this is a recent-activity count,
+    /// not a lifetime total.
+    pub events: Option<usize>,
+}
+
+/// Pods by phase, plus the one sub-phase that matters.
+///
+/// Phase is the only pod field that separates "serving" from "ran and
+/// finished", and without it a completed Job pod is indistinguishable from a
+/// healthy one — which is how the Workloads block came to count backups as
+/// running workload. The fields sum to the scoped pod count.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PodComposition {
+    pub running: usize,
+    pub pending: usize,
+    pub succeeded: usize,
+    pub failed: usize,
+    /// Phase absent or a value this build does not know.
+    pub unknown: usize,
+    /// A subset of `running`, not an addition to it: a pod whose containers
+    /// are looping in a back-off reports phase Running while serving nothing,
+    /// and a composition bar that hides that is the bar's whole failure mode.
+    pub crash_looping: usize,
+    /// Also a subset of `running`, apart from `crash_looping`: up, and not
+    /// `Ready`, so no Service sends it traffic. kubectl prints `Running` and
+    /// `0/1` for it; counted as running, the Overview called it fine.
+    pub not_ready: usize,
+    /// Pods whose `Ready` condition is true, the ones kubectl counts ready: a
+    /// subset of `running` that `crash_looping` may overlap at the instant a
+    /// looping container is up. A pod being deleted is not among them.
+    pub ready: usize,
+    /// Also a subset of `running`, apart from the others: pods being deleted,
+    /// which kubectl prints `Terminating` while their containers stop.
+    pub terminating: usize,
+    /// A subset of `pending`: pods whose container the kubelet holds in a
+    /// reason that waiting will not clear, under the reason the Pods list and
+    /// Needs attention print. Counted as Pending, a pod the list calls
+    /// `CreateContainerConfigError` read as merely slow to start.
+    pub stuck: Vec<ReasonCount>,
+    /// A subset of `pending`, apart from `stuck`: pods still inside the wait
+    /// `pending_grace` gives them and showing no fault, which Needs attention
+    /// does not list and the workload running them counts as coming up.
+    pub starting: usize,
+}
+
+/// How many pods one reason holds.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReasonCount {
+    pub reason: String,
+    pub count: usize,
+}
+
+/// How many workloads one rollout word holds, and whether it is the
+/// controller's word alone because their pods could not be read.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RolloutCount {
+    pub reason: String,
+    pub count: usize,
+    pub pods_unread: bool,
+}
+
+/// What the lists of one kind that answered hold.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Census<T> {
+    pub read: T,
+    /// False when a namespace in scope did not answer, which `unread` names:
+    /// `read` is then part of the scope, not its total.
+    pub complete: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClusterOverview {
+    /// Sorted worst-first, then oldest-first: the top row is where to look.
+    /// Capped at `MAX_PROBLEMS`.
+    pub problems: Vec<ClusterProblem>,
+    /// How many problems were dropped by the cap, so the UI can say "+N more"
+    /// rather than quietly understate an outage.
+    pub problems_truncated: usize,
+    /// What a workload's controller states where its pods, unread, could have
+    /// changed it, ranked as `problems` are: named as not checked, never
+    /// counted with them.
+    pub unconfirmed: Vec<ClusterProblem>,
+    pub scheduler: SchedulerPressure,
+    /// Uncapped: node counts are bounded in practice (hundreds at worst, and
+    /// unlike pods they do not multiply per workload), and a truncated node
+    /// list would hide exactly the node someone is looking for.
+    pub nodes: Vec<NodeSummary>,
+    /// False when the cluster-wide node/pod reads the capacity view needs were
+    /// refused — a namespace-scoped token has no cluster read rights. `nodes`
+    /// and `scheduler` are then empty and mean "unknown", not "no capacity":
+    /// the panels say so rather than drawing a cluster with zero headroom.
+    pub nodes_known: bool,
+    pub warnings: Vec<WarningGroup>,
+    /// False when an events list failed or was cut at the page cap:
+    /// `warnings` then holds only what was read, and an empty one is not
+    /// "no warnings".
+    pub warnings_known: bool,
+    pub namespaces: Vec<NamespaceLoad>,
+    /// Objects per kind in the requested scope, for the sidebar and the
+    /// composition bars.
+    pub counts: ResourceCounts,
+    /// Phase breakdown of the pods read in the requested scope; `None` when
+    /// no pod list in it answered.
+    pub pods: Option<Census<PodComposition>>,
+    /// Jobs per word the Jobs list prints; `None` when no Job list answered.
+    pub jobs: Option<Census<Vec<ReasonCount>>>,
+    /// Deployments per rollout word the Deployments list prints, the words
+    /// only the controller's counts stand behind apart; `None` when no
+    /// Deployment list answered.
+    pub deployments: Option<Census<Vec<RolloutCount>>>,
+    /// False when the metrics API is unavailable, so the UI can say so
+    /// instead of rendering an empty usage bar that reads as "idle".
+    pub metrics_available: bool,
+    /// Whether this answer came from the watch-fed stores or from listing.
+    pub served_from: OverviewSource,
+    /// The first moment after this answer that a verdict in it turns on the
+    /// clock alone: a pod's wait running out, or its crash loop lapsing. The
+    /// reader asks again then, so the Overview turns with the pod's own page
+    /// rather than on its next poll.
+    pub next_change_at: Option<DateTime<Utc>>,
+    /// The kinds whose problems this answer could not look for, and why.
+    pub unread: Vec<OverviewUnread>,
+}
+
+/// A kind the overview asked for in one reach and got no list of: its
+/// problems there are unknown, not absent.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OverviewUnread {
+    pub kind: String,
+    /// `None` for a read of the whole cluster.
+    pub namespace: Option<String>,
+    /// One of `src/contracts/error-codes.json`.
+    pub code: String,
+    pub message: String,
+}
+
+impl OverviewUnread {
+    fn of(kind: &str, namespace: Option<&str>, error: &Error) -> Self {
+        Self {
+            kind: kind.to_string(),
+            namespace: namespace.map(str::to_string),
+            code: error.code().to_string(),
+            message: error.said(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum OverviewSource {
+    Watch,
+    List,
+}
+
+/// What the scheduler holds for this pod, by the one rule in
+/// `resources::reservation` — sidecars, the largest init container, overhead
+/// and pod-level requests included.
+pub(crate) fn pod_requests(pod: &Pod) -> (f64, u64) {
+    let Some(spec) = pod.spec.as_ref() else {
+        return (0.0, 0);
+    };
+    let held = crate::resources::reservation::pod_reservation(spec);
+    (
+        held.requests.get("cpu").copied().unwrap_or(0.0),
+        held.requests.get("memory").copied().unwrap_or(0.0) as u64,
+    )
+}
+
+fn node_is_ready(node: &Node) -> bool {
+    node.status
+        .as_ref()
+        .and_then(|s| s.conditions.as_ref())
+        .is_some_and(|cs| cs.iter().any(|c| c.type_ == "Ready" && c.status == "True"))
+}
+
+fn node_roles(node: &Node) -> Vec<String> {
+    node.metadata
+        .labels
+        .as_ref()
+        .map(|labels| {
+            labels
+                .keys()
+                .filter_map(|k| k.strip_prefix("node-role.kubernetes.io/"))
+                .filter(|r| !r.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Collect every pod-level problem: stuck containers, failed pods,
+/// unschedulable pods, and restart storms. `now` is injected so the Pending
+/// grace period is testable.
+fn pod_problems<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    now: DateTime<Utc>,
+) -> Vec<ClusterProblem> {
+    pods.into_iter()
+        .filter_map(|pod| pod_problem(pod, now))
+        .collect()
+}
+
+/// The single worst thing to say about one pod, or `None` if it is fine.
+fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
+    let name = pod.metadata.name.clone().unwrap_or_default();
+    let namespace = pod.metadata.namespace.clone();
+    let created = pod
+        .metadata
+        .creation_timestamp
+        .as_ref()
+        .map(|t| t.moment().to_rfc3339());
+    let status = pod.status.as_ref()?;
+    let phase = status.phase.as_deref().unwrap_or("");
+
+    // The same count the pod list shows, and the time of the last one. This
+    // used to sum `container_statuses` here and nowhere else, which left
+    // init containers and sidecars out — so a pod whose sidecar was flapping
+    // had one restart count on the Pods page and a different one here.
+    let (restarts, last_restart_at) = crate::resources::restarts(pod);
+
+    // Before the waiting reason, so the row reads the same at every instant
+    // of the back-off cycle rather than turning amber while the container is up.
+    // The kubelet's word only while the kubelet says it; otherwise this app's,
+    // and an init container's `Init:` word wherever the list prints one.
+    let stuck = stuck_reason(pod);
+    let in_init = stuck
+        .as_ref()
+        .is_some_and(|(reason, _)| reason.starts_with("Init:"));
+    if crash_looping(pod, now) && !in_init {
+        return Some(ClusterProblem {
+            severity: ProblemSeverity::Critical,
+            kind: "Pod".to_string(),
+            name,
+            namespace,
+            reason: if backing_off(pod) {
+                "CrashLoopBackOff"
+            } else {
+                CRASH_LOOPING
+            }
+            .to_string(),
+            detail: Some(ProblemDetail::restarts(pod, restarts)),
+            since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
+            restarts: Some(restarts),
+            folded_pods: None,
+        });
+    }
+
+    if let Some((reason, message)) = stuck {
+        // An init container's loop reads as an app container's does beside
+        // it, not in the kubelet's back-off sentence with the pod's uid in it.
+        let looping = in_init && crash_looping(pod, now);
+        return Some(ClusterProblem {
+            severity: ProblemSeverity::Critical,
+            kind: "Pod".to_string(),
+            name,
+            namespace,
+            reason,
+            detail: if looping {
+                Some(ProblemDetail::restarts(pod, restarts))
+            } else {
+                ProblemDetail::said(message)
+            },
+            since: if looping {
+                last_restart_at.map(|t| t.to_rfc3339()).or(created)
+            } else {
+                created
+            },
+            restarts: Some(restarts),
+            folded_pods: None,
+        });
+    }
+
+    // A pod that ran and lost is the whole reason this screen exists, and
+    // nothing else reports it: terminal pods are skipped by the resource
+    // accounting and produce no waiting-state reason.
+    if phase == "Failed" {
+        return Some(ClusterProblem {
+            severity: ProblemSeverity::Critical,
+            kind: "Pod".to_string(),
+            name,
+            namespace,
+            reason: status
+                .reason
+                .clone()
+                .unwrap_or_else(|| "Failed".to_string()),
+            detail: ProblemDetail::said(status.message.clone()),
+            since: created,
+            restarts: (restarts > 0).then_some(restarts),
+            folded_pods: None,
+        });
+    }
+
+    if phase == "Pending" {
+        // `PodScheduled=False` carries the scheduler's own explanation
+        // ("0/3 nodes are available: Insufficient memory"), which is
+        // far more useful than the word "Pending".
+        let scheduled = status
+            .conditions
+            .as_ref()
+            .and_then(|cs| cs.iter().find(|c| c.type_ == "PodScheduled"));
+        if still_starting(pod, now) {
+            return None;
+        }
+        let pending_since = pending_since(pod);
+        return Some(ClusterProblem {
+            severity: ProblemSeverity::Critical,
+            kind: "Pod".to_string(),
+            name,
+            namespace,
+            reason: "Pending".to_string(),
+            detail: ProblemDetail::said(
+                scheduled
+                    .and_then(|c| c.message.clone())
+                    .or_else(|| status.message.clone()),
+            ),
+            since: pending_since.map(|t| t.to_rfc3339()),
+            restarts: None,
+            folded_pods: None,
+        });
+    }
+
+    // Unreported exits still report, the way an undated Pending pod does:
+    // not knowing how a run ended is not evidence that it is over.
+    let restarting = exit_unreported(pod) || restarting_until(pod).is_some_and(|until| now < until);
+
+    if restarts >= RESTART_ATTENTION_THRESHOLD && phase == "Running" && restarting {
+        return Some(ClusterProblem {
+            severity: ProblemSeverity::Warning,
+            kind: "Pod".to_string(),
+            name,
+            namespace,
+            reason: "Restarting".to_string(),
+            detail: Some(ProblemDetail::restarts(pod, restarts)),
+            // Dated by the restart, not by the pod. `since: created` put a
+            // twelve-day-old date on something that happened minutes ago.
+            since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
+            restarts: Some(restarts),
+            folded_pods: None,
+        });
+    }
+
+    None
+}
+
+/// A Pending pod inside the wait it gets and showing no fault, a restart
+/// included, as the workload running it reads it.
+fn still_starting(pod: &Pod, now: DateTime<Utc>) -> bool {
+    within_pending_grace(pod, now) && !matches!(pod_start(pod), PodStart::Failing)
+}
+
+/// The pods each Deployment runs through its `ReplicaSets`, by namespace and name.
+fn pods_by_deployment<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+) -> HashMap<(&'a str, &'a str), Vec<&'a Pod>> {
+    let mut owned: HashMap<(&str, &str), Vec<&Pod>> = HashMap::new();
+    for pod in pods {
+        if let Some(deployment) = crate::resources::deployment_of(pod) {
+            let namespace = pod.metadata.namespace.as_deref().unwrap_or_default();
+            owned.entry((namespace, deployment)).or_default().push(pod);
+        }
+    }
+    owned
+}
+
+/// Whether the scope's pods went unread where `namespace` is.
+fn pods_unread_in(unread: &[OverviewUnread], namespace: Option<&str>) -> bool {
+    unread.iter().any(|entry| {
+        entry.kind == "Pod"
+            && (entry.namespace.is_none() || entry.namespace.as_deref() == namespace)
+    })
+}
+
+/// Whether the lists of `kind` that answered are the whole scope; `None`
+/// where none did.
+fn census_of(unread: &[OverviewUnread], kind: &str, scope: Option<&[String]>) -> Option<bool> {
+    let missing: Vec<Option<&str>> = unread
+        .iter()
+        .filter(|entry| entry.kind == kind)
+        .map(|entry| entry.namespace.as_deref())
+        .collect();
+    let answered = match scope {
+        None => !missing.contains(&None),
+        Some(names) => names
+            .iter()
+            .any(|name| !missing.contains(&Some(name.as_str()))),
+    };
+    answered.then_some(missing.is_empty())
+}
+
+/// A workload's verdict with its own pods asked, or the controller's alone
+/// where its namespace refused them.
+fn with_pods_read<'a>(
+    rollout: Rollout,
+    meta: &kube::core::ObjectMeta,
+    pods: impl IntoIterator<Item = &'a Pod>,
+    unread: &[OverviewUnread],
+    now: DateTime<Utc>,
+) -> Rollout {
+    if pods_unread_in(unread, meta.namespace.as_deref()) {
+        return rollout.pods_unread();
+    }
+    crate::resources::with_pods(rollout, pods, now)
+}
+
+/// A Deployment's rollout as its list and page read it, its own pods included.
+fn rollout_with_pods(
+    d: &Deployment,
+    owned: &HashMap<(&str, &str), Vec<&Pod>>,
+    unread: &[OverviewUnread],
+    now: DateTime<Utc>,
+) -> Rollout {
+    let key = (
+        d.metadata.namespace.as_deref().unwrap_or_default(),
+        d.metadata.name.as_deref().unwrap_or_default(),
+    );
+    with_pods_read(
+        crate::resources::deployment_rollout(d),
+        &d.metadata,
+        owned.get(&key).into_iter().flatten().copied(),
+        unread,
+        now,
+    )
+}
+
+/// A verdict that is a problem as it stands.
+fn as_problem(rollout: &Rollout) -> Option<&Rollout> {
+    rollout.is_problem().then_some(rollout)
+}
+
+/// The problem a workload's controller states where its pods, unread, could
+/// have changed it: not counted, and not dropped either.
+fn unconfirmed(rollout: &Rollout) -> Option<&Rollout> {
+    match rollout {
+        Rollout::PodsUnread { controller } if controller.is_problem() => Some(controller),
+        _ => None,
+    }
+}
+
+fn deployment_problems<'a>(
+    deployments: impl IntoIterator<Item = &'a Deployment>,
+    owned: &HashMap<(&str, &str), Vec<&Pod>>,
+    unread: &[OverviewUnread],
+    now: DateTime<Utc>,
+) -> Vec<ClusterProblem> {
+    deployments_saying(deployments, owned, unread, now, as_problem)
+}
+
+fn deployments_saying<'a>(
+    deployments: impl IntoIterator<Item = &'a Deployment>,
+    owned: &HashMap<(&str, &str), Vec<&Pod>>,
+    unread: &[OverviewUnread],
+    now: DateTime<Utc>,
+    pick: fn(&Rollout) -> Option<&Rollout>,
+) -> Vec<ClusterProblem> {
+    deployments
+        .into_iter()
+        .filter_map(|d| {
+            let read = rollout_with_pods(d, owned, unread, now);
+            let rollout = pick(&read)?;
+            let status = d.status.as_ref();
+            let desired = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1);
+            let ready = status.and_then(|s| s.ready_replicas).unwrap_or(0);
+            // The condition that decided it, for its words and its date.
+            let decided_by = if matches!(rollout, Rollout::Stalled { .. }) {
+                "Progressing"
+            } else {
+                "Available"
+            };
+            let condition = status.and_then(|s| {
+                s.conditions
+                    .as_ref()?
+                    .iter()
+                    .find(|c| c.type_ == decided_by && c.status != "True")
+                    .cloned()
+            });
+            Some(ClusterProblem {
+                severity: rollout_severity(rollout),
+                kind: "Deployment".to_string(),
+                name: d.metadata.name.clone().unwrap_or_default(),
+                namespace: d.metadata.namespace.clone(),
+                reason: rollout.code().to_string(),
+                detail: ProblemDetail::said(condition.as_ref().and_then(|c| c.message.clone()))
+                    .or(Some(ProblemDetail::ReplicasReady { ready, desired })),
+                since: condition
+                    .as_ref()
+                    .and_then(|c| c.last_transition_time.as_ref())
+                    .map(|t| t.moment().to_rfc3339()),
+                restarts: None,
+                folded_pods: None,
+            })
+        })
+        .collect()
+}
+
+fn rollout_severity(rollout: &Rollout) -> ProblemSeverity {
+    if matches!(rollout, Rollout::Short { .. }) {
+        ProblemSeverity::Warning
+    } else {
+        ProblemSeverity::Critical
+    }
+}
+
+/// A `StatefulSet` or `DaemonSet` the rollout reader flags. Neither kind
+/// writes conditions, so the counts are the detail and nothing dates it.
+fn set_problem(
+    kind: &str,
+    meta: &kube::core::ObjectMeta,
+    rollout: &Rollout,
+    ready: i32,
+    desired: i32,
+) -> Option<ClusterProblem> {
+    rollout.is_problem().then(|| ClusterProblem {
+        severity: rollout_severity(rollout),
+        kind: kind.to_string(),
+        name: meta.name.clone().unwrap_or_default(),
+        namespace: meta.namespace.clone(),
+        reason: rollout.code().to_string(),
+        detail: Some(ProblemDetail::ReplicasReady { ready, desired }),
+        since: None,
+        restarts: None,
+        folded_pods: None,
+    })
+}
+
+/// The pods each controller runs, by the controller's uid.
+fn pods_by_controller<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+) -> HashMap<&'a str, Vec<&'a Pod>> {
+    let mut owned: HashMap<&str, Vec<&Pod>> = HashMap::new();
+    for pod in pods {
+        if let Some(owner) = pod
+            .metadata
+            .owner_references
+            .iter()
+            .flatten()
+            .find(|o| o.controller == Some(true))
+        {
+            owned.entry(owner.uid.as_str()).or_default().push(pod);
+        }
+    }
+    owned
+}
+
+/// A set's verdict with the pods it runs asked, as its page reads it.
+fn with_own_pods(
+    rollout: Rollout,
+    set: &kube::core::ObjectMeta,
+    owned: &HashMap<&str, Vec<&Pod>>,
+    unread: &[OverviewUnread],
+    now: DateTime<Utc>,
+) -> Rollout {
+    let pods = set.uid.as_deref().and_then(|uid| owned.get(uid));
+    with_pods_read(
+        rollout,
+        set,
+        pods.into_iter().flatten().copied(),
+        unread,
+        now,
+    )
+}
+
+fn stateful_set_problems<'a>(
+    sets: impl IntoIterator<Item = &'a StatefulSet>,
+    owned: &HashMap<&str, Vec<&Pod>>,
+    unread: &[OverviewUnread],
+    now: DateTime<Utc>,
+    pick: fn(&Rollout) -> Option<&Rollout>,
+) -> Vec<ClusterProblem> {
+    sets.into_iter()
+        .filter_map(|set| {
+            set_problem(
+                "StatefulSet",
+                &set.metadata,
+                pick(&with_own_pods(
+                    crate::resources::statefulset_rollout(set),
+                    &set.metadata,
+                    owned,
+                    unread,
+                    now,
+                ))?,
+                set.status
+                    .as_ref()
+                    .and_then(|s| s.ready_replicas)
+                    .unwrap_or(0),
+                set.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
+            )
+        })
+        .collect()
+}
+
+fn daemon_set_problems<'a>(
+    sets: impl IntoIterator<Item = &'a DaemonSet>,
+    owned: &HashMap<&str, Vec<&Pod>>,
+    unread: &[OverviewUnread],
+    now: DateTime<Utc>,
+    pick: fn(&Rollout) -> Option<&Rollout>,
+) -> Vec<ClusterProblem> {
+    sets.into_iter()
+        .filter_map(|set| {
+            let status = set.status.as_ref();
+            set_problem(
+                "DaemonSet",
+                &set.metadata,
+                pick(&with_own_pods(
+                    crate::resources::daemonset_rollout(set),
+                    &set.metadata,
+                    owned,
+                    unread,
+                    now,
+                ))?,
+                status.map_or(0, |s| s.number_ready),
+                status.map_or(0, |s| s.desired_number_scheduled),
+            )
+        })
+        .collect()
+}
+
+fn failed_since(job: &Job) -> Option<String> {
+    job.status
+        .as_ref()?
+        .conditions
+        .as_ref()?
+        .iter()
+        .find(|c| c.type_ == "Failed" && c.status == "True")?
+        .last_transition_time
+        .as_ref()
+        .map(|t| t.moment().to_rfc3339())
+}
+
+fn job_problems<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> Vec<ClusterProblem> {
+    jobs.into_iter()
+        .filter_map(|job| {
+            let failure = job_state(job).failure()?;
+            Some(ClusterProblem {
+                severity: ProblemSeverity::Critical,
+                kind: "Job".to_string(),
+                name: job.metadata.name.clone().unwrap_or_default(),
+                namespace: job.metadata.namespace.clone(),
+                reason: failure.reason.unwrap_or_else(|| "Failed".to_string()),
+                detail: ProblemDetail::said(failure.message),
+                since: failed_since(job),
+                restarts: None,
+                folded_pods: None,
+            })
+        })
+        .collect()
+}
+
+fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterProblem> {
+    nodes
+        .into_iter()
+        .filter_map(|n| {
+            let name = n.metadata.name.clone().unwrap_or_default();
+            if !node_is_ready(n) {
+                let condition = n.status.as_ref().and_then(|s| {
+                    s.conditions
+                        .as_ref()?
+                        .iter()
+                        .find(|c| c.type_ == "Ready")
+                        .cloned()
+                });
+                return Some(ClusterProblem {
+                    severity: ProblemSeverity::Critical,
+                    kind: "Node".to_string(),
+                    name,
+                    namespace: None,
+                    reason: "NotReady".to_string(),
+                    detail: ProblemDetail::said(condition.as_ref().and_then(|c| c.message.clone())),
+                    since: condition
+                        .as_ref()
+                        .and_then(|c| c.last_transition_time.as_ref())
+                        .map(|t| t.moment().to_rfc3339()),
+                    restarts: None,
+                    folded_pods: None,
+                });
+            }
+            // Cordoned nodes are usually intentional, but a node left
+            // cordoned after a maintenance window silently shrinks capacity.
+            if n.spec
+                .as_ref()
+                .and_then(|s| s.unschedulable)
+                .unwrap_or(false)
+            {
+                return Some(ClusterProblem {
+                    severity: ProblemSeverity::Warning,
+                    kind: "Node".to_string(),
+                    name,
+                    namespace: None,
+                    reason: "Cordoned".to_string(),
+                    detail: Some(ProblemDetail::Unschedulable),
+                    since: None,
+                    restarts: None,
+                    folded_pods: None,
+                });
+            }
+            None
+        })
+        .collect()
+}
+
+fn recent_warnings<'a>(events: impl IntoIterator<Item = &'a Event>) -> Vec<WarningGroup> {
+    let cutoff = chrono::Utc::now() - chrono::Duration::minutes(RECENT_WARNING_WINDOW_MINUTES);
+    let mut grouped: BTreeMap<String, WarningGroup> = BTreeMap::new();
+
+    for event in events {
+        if event.type_.as_deref() != Some("Warning") {
+            continue;
+        }
+        let last = event
+            .last_timestamp
+            .as_ref()
+            .map(Moment::moment)
+            .or_else(|| event.event_time.as_ref().map(Moment::moment));
+        if last.is_some_and(|t| t < cutoff) {
+            continue;
+        }
+        let reason = event
+            .reason
+            .clone()
+            .unwrap_or_else(|| "Unknown".to_string());
+        let entry = grouped.entry(reason.clone()).or_insert(WarningGroup {
+            reason,
+            count: 0,
+            last_seen: None,
+            sample: None,
+            object_kind: None,
+            object_name: None,
+            namespace: None,
+        });
+        entry.count += event.count.unwrap_or(1);
+        let last_rfc = last.map(|t| t.to_rfc3339());
+        // Keep the newest occurrence as the representative sample.
+        if entry.last_seen.is_none() || last_rfc > entry.last_seen {
+            entry.last_seen = last_rfc;
+            entry.sample.clone_from(&event.message);
+            entry.object_kind.clone_from(&event.involved_object.kind);
+            entry.object_name.clone_from(&event.involved_object.name);
+            // Deliberately not `event.metadata.namespace`, which is `default`
+            // for an event about a Node — inheriting it would file a
+            // cluster-scoped object inside a namespace it does not live in.
+            entry.namespace.clone_from(&event.involved_object.namespace);
+        }
+    }
+
+    let mut groups: Vec<_> = grouped.into_values().collect();
+    groups.sort_by_key(|group| std::cmp::Reverse(group.count));
+    groups
+}
+
+/// Live usage keyed by node name, or `None` when there is no usage to show.
+///
+/// `get_node_metrics` reports a missing or forbidden metrics-server as an
+/// `Ok` response carrying a non-`Available` status and an empty list, so the
+/// `Result` says nothing about availability. Reading it as "available with
+/// zero usage" is how the UI ended up stating "actually using 0m (0%)" as
+/// fact on every cluster without metrics-server.
+///
+/// An empty data set is the same claim by another route — a metrics-server
+/// that answered but knows nothing about any node measures nothing — so it is
+/// unavailable too, not zero.
+fn usage_index(response: Option<NodeMetricsResponse>) -> Option<BTreeMap<String, (f64, u64)>> {
+    let response = response?;
+    if !matches!(response.status.status, MetricsStatusKind::Available) || response.data.is_empty() {
+        return None;
+    }
+    Some(
+        response
+            .data
+            .into_iter()
+            .map(|n| {
+                (
+                    n.name,
+                    (n.cpu_millicores.unwrap_or(0.0), n.memory_bytes.unwrap_or(0)),
+                )
+            })
+            .collect(),
+    )
+}
+
+struct NodeAggregate {
+    summaries: Vec<NodeSummary>,
+    scheduler: SchedulerPressure,
+}
+
+fn summarize_nodes<'a>(
+    nodes: impl IntoIterator<Item = &'a Node>,
+    requests_by_node: &BTreeMap<String, (f64, u64)>,
+    pods_by_node: &BTreeMap<String, usize>,
+    usage_by_node: Option<&BTreeMap<String, (f64, u64)>>,
+) -> NodeAggregate {
+    let metrics_available = usage_by_node.is_some();
+    let mut summaries = Vec::new();
+    let mut cluster_cpu = ResourcePressure {
+        requested: 0.0,
+        allocatable: 0.0,
+        usage: metrics_available.then_some(0.0),
+    };
+    let mut cluster_memory = ResourcePressure {
+        requested: 0.0,
+        allocatable: 0.0,
+        usage: metrics_available.then_some(0.0),
+    };
+
+    for node in nodes {
+        let name = node.metadata.name.clone().unwrap_or_default();
+        // Allocatable, not capacity: capacity includes what the kubelet and
+        // the OS reserve, which the scheduler will never hand to a pod.
+        let allocatable = node.status.as_ref().and_then(|s| s.allocatable.as_ref());
+        let cpu_allocatable = allocatable
+            .and_then(|a| a.get("cpu"))
+            .map_or(0.0, |q| parse_cpu(&q.0));
+        let memory_allocatable = allocatable
+            .and_then(|a| a.get("memory"))
+            .map_or(0.0, |q| parse_memory(&q.0) as f64);
+        let pod_capacity = allocatable
+            .and_then(|a| a.get("pods"))
+            .and_then(|q| q.0.parse::<i64>().ok());
+
+        let (cpu_requested, memory_requested) =
+            requests_by_node.get(&name).copied().unwrap_or((0.0, 0));
+        let usage = usage_by_node.and_then(|u| u.get(&name).copied());
+
+        cluster_cpu.requested += cpu_requested;
+        cluster_cpu.allocatable += cpu_allocatable;
+        cluster_memory.requested += memory_requested as f64;
+        cluster_memory.allocatable += memory_allocatable;
+        if let Some((cpu_usage, memory_usage)) = usage {
+            if let Some(total) = cluster_cpu.usage.as_mut() {
+                *total += cpu_usage;
+            }
+            if let Some(total) = cluster_memory.usage.as_mut() {
+                *total += memory_usage as f64;
+            }
+        }
+
+        summaries.push(NodeSummary {
+            ready: node_is_ready(node),
+            schedulable: !node
+                .spec
+                .as_ref()
+                .and_then(|s| s.unschedulable)
+                .unwrap_or(false),
+            roles: node_roles(node),
+            pod_count: pods_by_node.get(&name).copied().unwrap_or(0),
+            pod_capacity,
+            cpu: ResourcePressure {
+                requested: cpu_requested,
+                allocatable: cpu_allocatable,
+                usage: usage.map(|(cpu, _)| cpu),
+            },
+            memory: ResourcePressure {
+                requested: memory_requested as f64,
+                allocatable: memory_allocatable,
+                usage: usage.map(|(_, memory)| memory as f64),
+            },
+            name,
+        });
+    }
+
+    NodeAggregate {
+        summaries,
+        scheduler: SchedulerPressure {
+            cpu: cluster_cpu,
+            memory: cluster_memory,
+        },
+    }
+}
+
+#[derive(Default)]
+struct NodeAccounting {
+    requests: BTreeMap<String, (f64, u64)>,
+    pods: BTreeMap<String, usize>,
+}
+
+/// Attribute pod requests to the node each pod landed on, so a single full
+/// node can be shown as such while the cluster average still looks roomy.
+fn account_by_node<'a>(pods: impl IntoIterator<Item = &'a Pod>) -> NodeAccounting {
+    let mut accounting = NodeAccounting::default();
+    for pod in pods {
+        if !holds_reservation(pod) {
+            continue;
+        }
+        let Some(node_name) = pod.spec.as_ref().and_then(|s| s.node_name.clone()) else {
+            continue;
+        };
+        let (cpu, memory) = pod_requests(pod);
+        let entry = accounting
+            .requests
+            .entry(node_name.clone())
+            .or_insert((0.0, 0));
+        entry.0 += cpu;
+        entry.1 += memory;
+        *accounting.pods.entry(node_name).or_insert(0) += 1;
+    }
+    accounting
+}
+
+fn pod_composition<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    now: DateTime<Utc>,
+) -> PodComposition {
+    let mut composition = PodComposition::default();
+    let mut stuck: BTreeMap<String, usize> = BTreeMap::new();
+    for pod in pods {
+        match pod
+            .status
+            .as_ref()
+            .and_then(|s| s.phase.as_deref())
+            .unwrap_or_default()
+        {
+            "Running" => {
+                composition.running += 1;
+                if pod.metadata.deletion_timestamp.is_some() {
+                    composition.terminating += 1;
+                } else if crash_looping(pod, now) || stuck_reason(pod).is_some() {
+                    composition.crash_looping += 1;
+                } else if !condition_is_true(pod.status.as_ref(), "Ready") {
+                    composition.not_ready += 1;
+                }
+                if counts_ready(pod) {
+                    composition.ready += 1;
+                }
+            }
+            "Pending" => {
+                composition.pending += 1;
+                if let Some((reason, _)) = stuck_reason(pod) {
+                    *stuck.entry(reason).or_default() += 1;
+                } else if still_starting(pod, now) {
+                    composition.starting += 1;
+                }
+            }
+            "Succeeded" => composition.succeeded += 1,
+            "Failed" => composition.failed += 1,
+            _ => composition.unknown += 1,
+        }
+    }
+    composition.stuck = stuck
+        .into_iter()
+        .map(|(reason, count)| ReasonCount { reason, count })
+        .collect();
+    composition
+}
+
+/// How many objects each word covers, in the order the words first appear.
+fn count_codes<'a>(codes: impl IntoIterator<Item = &'a str>) -> Vec<ReasonCount> {
+    let mut counts: Vec<ReasonCount> = Vec::new();
+    for code in codes {
+        match counts.iter_mut().find(|entry| entry.reason == code) {
+            Some(entry) => entry.count += 1,
+            None => counts.push(ReasonCount {
+                reason: code.to_string(),
+                count: 1,
+            }),
+        }
+    }
+    counts
+}
+
+/// How many verdicts each word covers, a word whose pods went unread counted
+/// apart from the same word with them read.
+fn count_rollouts(rollouts: &[Rollout]) -> Vec<RolloutCount> {
+    let mut counts: Vec<RolloutCount> = Vec::new();
+    for rollout in rollouts {
+        let (reason, pods_unread) = (
+            rollout.code(),
+            matches!(rollout, Rollout::PodsUnread { .. }),
+        );
+        match counts
+            .iter_mut()
+            .find(|entry| entry.reason == reason && entry.pods_unread == pods_unread)
+        {
+            Some(entry) => entry.count += 1,
+            None => counts.push(RolloutCount {
+                reason: reason.to_string(),
+                count: 1,
+                pods_unread,
+            }),
+        }
+    }
+    counts
+}
+
+fn job_composition<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> Vec<ReasonCount> {
+    count_codes(jobs.into_iter().map(|job| job_state(job).code()))
+}
+
+/// What one page of a limited list says about the size of the whole
+/// collection, or `None` for "cannot say" — see [`count_of`].
+fn tally(meta: &kube::core::ListMeta, seen: usize) -> Option<usize> {
+    // A continue token is the apiserver saying there is more; without one
+    // this page is the whole collection and has counted itself.
+    if meta.continue_.as_deref().unwrap_or_default().is_empty() {
+        return Some(seen);
+    }
+    let rest = meta.remaining_item_count?;
+    Some(seen + usize::try_from(rest).unwrap_or(0))
+}
+
+/// Count objects of one kind without pulling the collection.
+///
+/// `list_metadata` keeps the bodies out of the response, which is the
+/// difference between counting Secrets and shipping every Secret's payload.
+/// What it does not do is make the *list* smaller: counting Events meant the
+/// metadata of every Event in the cluster — the largest collection there is,
+/// see [`EVENT_FETCH_LIMIT`] — pulled every ten seconds, in up to four
+/// scopes at once, to produce one integer for the rail.
+///
+/// A limited list answers it in one page: alongside the page the apiserver
+/// returns `remainingItemCount`, which is the rest of the tally it has
+/// already done. So the cost is a fixed page regardless of how many objects
+/// there are.
+///
+/// An apiserver that fills the page but leaves `remainingItemCount` unset
+/// (pre-1.15, or something in the middle that drops it) leaves us knowing
+/// only "at least a page", and the rail draws `None` as nothing at all
+/// rather than a number that is wrong.
+async fn count_of<K>(api: &Api<K>, reach: Option<&str>, refused: &RefusedCounts) -> Option<usize>
+where
+    K: Resource<DynamicType = ()> + Clone + DeserializeOwned + Debug,
+{
+    // Asked again on every refresh, a kind the token may not list was one
+    // more 403 every ten seconds for a number the screen never shows.
+    let asked = format!("{}/{}", reach.unwrap_or_default(), K::plural(&()));
+    if refused.contains(&asked) {
+        return None;
+    }
+    // A list that could not be read is not an empty list: every caller here
+    // is counting a kind the screen can do without, so a refusal degrades
+    // that one number to "unknown" instead of stating as fact that the
+    // namespace holds none of them.
+    match api
+        .list_metadata(&ListParams::default().limit(COUNT_PAGE_SIZE))
+        .await
+    {
+        Ok(page) => tally(&page.metadata, page.items.len()),
+        Err(error) => {
+            if Error::from(error).is_refusal() {
+                refused.insert(asked);
+            }
+            None
+        }
+    }
+}
+
+fn namespace_loads<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    problems: &[ClusterProblem],
+) -> Vec<NamespaceLoad> {
+    let mut counts: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
+    for namespace in pods
+        .into_iter()
+        .filter_map(|p| p.metadata.namespace.as_deref())
+    {
+        counts.entry(namespace).or_default().0 += 1;
+    }
+    // A namespace can have a problem and no pod: a Deployment whose pods
+    // were never created.
+    for namespace in problems.iter().filter_map(|p| p.namespace.as_deref()) {
+        counts.entry(namespace).or_default().1 += 1;
+    }
+    let mut loads: Vec<_> = counts
+        .into_iter()
+        .map(|(name, (pod_count, problem_count))| NamespaceLoad {
+            name: name.to_string(),
+            pod_count: Some(pod_count),
+            problem_count,
+        })
+        .collect();
+    loads.sort_by_key(|load| std::cmp::Reverse(load.pod_count));
+    loads
+}
+
+/// Each namespace of a scope of several, as the picker counts them: the
+/// pods read there, none included, or `None` where they were refused.
+fn scope_loads<'a>(
+    scope: &[String],
+    pods: impl IntoIterator<Item = &'a Pod>,
+    problems: &[ClusterProblem],
+    unread: &[OverviewUnread],
+) -> Vec<NamespaceLoad> {
+    let mut loads = namespace_loads(pods, problems);
+    for name in scope {
+        if !loads.iter().any(|load| &load.name == name) {
+            loads.push(NamespaceLoad {
+                name: name.clone(),
+                pod_count: Some(0),
+                problem_count: 0,
+            });
+        }
+    }
+    for load in &mut loads {
+        if pods_unread_in(unread, Some(&load.name)) {
+            load.pod_count = None;
+        }
+    }
+    loads.sort_by_key(|load| std::cmp::Reverse(load.pod_count));
+    loads
+}
+
+/// A failed Job's failed pods are its runs, not news of their own: they fold
+/// into the Job's row as a count, so one `CronJob` failure is one row and not
+/// three.
+fn fold_job_runs<'a>(
+    problems: Vec<ClusterProblem>,
+    pods: impl IntoIterator<Item = &'a Pod>,
+) -> Vec<ClusterProblem> {
+    type Key = (Option<String>, String);
+    let failed_jobs: HashSet<Key> = problems
+        .iter()
+        .filter(|p| p.kind == "Job")
+        .map(|p| (p.namespace.clone(), p.name.clone()))
+        .collect();
+    let runs: HashMap<Key, String> = pods
+        .into_iter()
+        .filter(|pod| pod.status.as_ref().and_then(|s| s.phase.as_deref()) == Some("Failed"))
+        .filter_map(|pod| {
+            let job = pod
+                .metadata
+                .owner_references
+                .as_ref()?
+                .iter()
+                .find(|owner| owner.kind == "Job" && owner.controller == Some(true))?;
+            Some((
+                (pod.metadata.namespace.clone(), pod.metadata.name.clone()?),
+                job.name.clone(),
+            ))
+        })
+        .collect();
+
+    let mut folded: HashMap<Key, i32> = HashMap::new();
+    let mut kept: Vec<ClusterProblem> = problems
+        .into_iter()
+        .filter(|p| {
+            let job = (p.kind == "Pod")
+                .then(|| runs.get(&(p.namespace.clone(), p.name.clone())))
+                .flatten()
+                .map(|job| (p.namespace.clone(), job.clone()))
+                .filter(|job| failed_jobs.contains(job));
+            let Some(job) = job else { return true };
+            *folded.entry(job).or_default() += 1;
+            false
+        })
+        .collect();
+    for p in kept.iter_mut().filter(|p| p.kind == "Job") {
+        p.folded_pods = folded.get(&(p.namespace.clone(), p.name.clone())).copied();
+    }
+    kept
+}
+
+/// Worst first, then oldest first — the top row is both the most severe and
+/// the one that has been broken longest — then cut to `MAX_PROBLEMS`.
+/// Returns the list and how many rows the cut dropped.
+fn rank_and_cap(mut problems: Vec<ClusterProblem>) -> (Vec<ClusterProblem>, usize) {
+    problems.sort_by(|a, b| {
+        (a.severity == ProblemSeverity::Warning)
+            .cmp(&(b.severity == ProblemSeverity::Warning))
+            .then_with(|| a.since.cmp(&b.since))
+    });
+    let truncated = problems.len().saturating_sub(MAX_PROBLEMS);
+    problems.truncate(MAX_PROBLEMS);
+    (problems, truncated)
+}
+
+/// Warning events from the pages the API will hand over cheaply, and whether
+/// they are the whole list: a failure, or a `continue` still left at the
+/// page cap, keeps what was collected and says it is not.
+async fn list_warning_events(events_api: &Api<Event>) -> (Vec<Event>, bool) {
+    let mut items = Vec::new();
+    let mut token: Option<String> = None;
+
+    for _ in 0..MAX_EVENT_PAGES {
+        // Filtering warnings server-side turns the largest collection in the
+        // cluster into a small one.
+        let mut params = ListParams::default()
+            .fields("type=Warning")
+            .limit(EVENT_FETCH_LIMIT);
+        if let Some(token) = token.as_deref() {
+            params = params.continue_token(token);
+        }
+        let Ok(mut page) = events_api.list(&params).await else {
+            return (items, false);
+        };
+        token = page.metadata.continue_.take().filter(|t| !t.is_empty());
+        items.append(&mut page.items);
+        if token.is_none() {
+            break;
+        }
+    }
+
+    (items, token.is_none())
+}
+
+/// Borrowed from the watch stores or from a fresh list alike: `Arc`s so the
+/// ten thousand pods a store holds are looked at, never copied, per request.
+struct OverviewInputs<'a> {
+    /// Pods in the requested scope: problems, namespace breakdown, counts.
+    scoped_pods: &'a [Arc<Pod>],
+    /// Cluster-wide pods, driving everything that is divided by node
+    /// allocatable. Same slice as `scoped_pods` when nothing is selected.
+    accounting_pods: &'a [Arc<Pod>],
+    nodes: &'a [Arc<Node>],
+    /// False when the node list (or the cluster-wide accounting pods) was
+    /// refused: the capacity view is unknown, not empty.
+    nodes_known: bool,
+    /// Every workload the scope handed over. Their problems stand whether or
+    /// not another namespace refused its list; the counts do not.
+    deployments: &'a [Arc<Deployment>],
+    stateful_sets: &'a [Arc<StatefulSet>],
+    daemon_sets: &'a [Arc<DaemonSet>],
+    jobs: &'a [Arc<Job>],
+    /// The workload, Job and Node lists that were not read, and where.
+    unread: &'a [OverviewUnread],
+    events: &'a [Arc<Event>],
+    /// False when an events list failed.
+    events_known: bool,
+    usage_by_node: Option<BTreeMap<String, (f64, u64)>>,
+    /// Counts for the kinds this query does not otherwise need to read.
+    counts: ResourceCounts,
+    /// The namespaces asked about, or `None` for the whole cluster.
+    scope: Option<&'a [String]>,
+    now: DateTime<Utc>,
+    served_from: OverviewSource,
+}
+
+fn refs<T>(items: &[Arc<T>]) -> impl Iterator<Item = &T> {
+    items.iter().map(Arc::as_ref)
+}
+
+fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
+    let metrics_available = input.usage_by_node.is_some();
+    // A refused capacity read is unknown, not an empty cluster: draw from no
+    // nodes so the scheduler headroom is not a confident zero, and let the
+    // `nodes_known` flag below tell the panels to say "no access" instead.
+    let nodes: &[Arc<Node>] = if input.nodes_known { input.nodes } else { &[] };
+    let accounting = account_by_node(refs(input.accounting_pods));
+    let aggregate = summarize_nodes(
+        refs(nodes),
+        &accounting.requests,
+        &accounting.pods,
+        input.usage_by_node.as_ref(),
+    );
+
+    let unread = input.unread;
+    let pods_known = !unread.iter().any(|entry| entry.kind == "Pod");
+    let mut problems = pod_problems(refs(input.scoped_pods), input.now);
+    let by_deployment = pods_by_deployment(refs(input.scoped_pods));
+    problems.extend(deployment_problems(
+        refs(input.deployments),
+        &by_deployment,
+        unread,
+        input.now,
+    ));
+    let rollouts: Vec<Rollout> = input
+        .deployments
+        .iter()
+        .map(|d| rollout_with_pods(d, &by_deployment, unread, input.now))
+        .collect();
+    let owned = pods_by_controller(refs(input.scoped_pods));
+    problems.extend(stateful_set_problems(
+        refs(input.stateful_sets),
+        &owned,
+        unread,
+        input.now,
+        as_problem,
+    ));
+    problems.extend(daemon_set_problems(
+        refs(input.daemon_sets),
+        &owned,
+        unread,
+        input.now,
+        as_problem,
+    ));
+    let mut said = deployments_saying(
+        refs(input.deployments),
+        &by_deployment,
+        unread,
+        input.now,
+        unconfirmed,
+    );
+    said.extend(stateful_set_problems(
+        refs(input.stateful_sets),
+        &owned,
+        unread,
+        input.now,
+        unconfirmed,
+    ));
+    said.extend(daemon_set_problems(
+        refs(input.daemon_sets),
+        &owned,
+        unread,
+        input.now,
+        unconfirmed,
+    ));
+    let (unconfirmed, _) = rank_and_cap(said);
+    problems.extend(job_problems(refs(input.jobs)));
+    problems.extend(node_problems(refs(nodes)));
+    let problems = fold_job_runs(problems, refs(input.scoped_pods));
+    // One namespace's breakdown restates it; several are each the picker's.
+    let namespaces = match input.scope {
+        None if pods_known => namespace_loads(refs(input.scoped_pods), &problems),
+        Some(scope) if scope.len() > 1 => {
+            scope_loads(scope, refs(input.scoped_pods), &problems, unread)
+        }
+        _ => Vec::new(),
+    };
+    let (problems, problems_truncated) = rank_and_cap(problems);
+
+    // The lists this query already had to read answer their own counts, so
+    // those four kinds cost no extra request. A refused node read is `None`,
+    // not `Some(0)` — the same distinction the other counts make.
+    let read = |kind: &str| !unread.iter().any(|entry| entry.kind == kind);
+    let counts = ResourceCounts {
+        pods: pods_known.then_some(input.scoped_pods.len()),
+        deployments: read("Deployment").then_some(input.deployments.len()),
+        stateful_sets: read("StatefulSet").then_some(input.stateful_sets.len()),
+        daemon_sets: read("DaemonSet").then_some(input.daemon_sets.len()),
+        jobs: read("Job").then_some(input.jobs.len()),
+        nodes: input.nodes_known.then_some(input.nodes.len()),
+        ..input.counts.clone()
+    };
+    let census = |kind: &str| census_of(unread, kind, input.scope);
+
+    ClusterOverview {
+        problems,
+        problems_truncated,
+        unconfirmed,
+        scheduler: aggregate.scheduler,
+        nodes: aggregate.summaries,
+        nodes_known: input.nodes_known,
+        warnings: recent_warnings(refs(input.events)),
+        warnings_known: input.events_known,
+        counts,
+        pods: census("Pod").map(|complete| Census {
+            read: pod_composition(refs(input.scoped_pods), input.now),
+            complete,
+        }),
+        jobs: census("Job").map(|complete| Census {
+            read: job_composition(refs(input.jobs)),
+            complete,
+        }),
+        deployments: census("Deployment").map(|complete| Census {
+            read: count_rollouts(&rollouts),
+            complete,
+        }),
+        namespaces,
+        metrics_available,
+        served_from: input.served_from,
+        next_change_at: next_change(refs(input.scoped_pods), input.now),
+        unread: unread.to_vec(),
+    }
+}
+
+/// The earliest wait or crash loop among `pods` still to run out after `now`.
+fn next_change<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    pods.into_iter()
+        .flat_map(|pod| {
+            let start = match pod_start(pod) {
+                PodStart::Starting { until } => Some(until),
+                PodStart::Settled | PodStart::Up { .. } | PodStart::Failing => None,
+            };
+            [start, looping_until(pod)]
+        })
+        .flatten()
+        .filter(|at| *at > now)
+        .min()
+}
+
+/// Get everything the overview screen needs in one round trip.
+///
+/// `scope` is the namespaces to answer for, added up into one overview, or
+/// `None` for the whole cluster. An empty list is refused rather than read as
+/// "every namespace": a caller that lost its selection would otherwise be
+/// handed the whole cluster's numbers under a label naming none of it.
+#[tauri::command]
+pub async fn get_cluster_overview(
+    scope: Option<Vec<String>>,
+    state: State<'_, AppState>,
+) -> Result<ClusterOverview> {
+    Box::pin(cluster_overview(&state, scope)).await
+}
+
+/// The counts and the usage every overview needs beside its lists.
+struct Sides {
+    counts: ResourceCounts,
+    usage_by_node: Option<BTreeMap<String, (f64, u64)>>,
+}
+
+/// Nine bounded metadata pages, for one namespace or the whole cluster.
+async fn namespaced_counts(
+    client: &Client,
+    reach: Option<&str>,
+    refused: &RefusedCounts,
+) -> ResourceCounts {
+    let cron_jobs_api: Api<CronJob> = api_in(client, reach);
+    let services_api: Api<Service> = api_in(client, reach);
+    let ingresses_api: Api<Ingress> = api_in(client, reach);
+    let config_maps_api: Api<ConfigMap> = api_in(client, reach);
+    let secrets_api: Api<Secret> = api_in(client, reach);
+    let endpoints_api: Api<Endpoints> = api_in(client, reach);
+    let claims_api: Api<PersistentVolumeClaim> = api_in(client, reach);
+    let accounts_api: Api<ServiceAccount> = api_in(client, reach);
+    let events_api: Api<Event> = api_in(client, reach);
+    let (
+        cron_jobs,
+        services,
+        ingresses,
+        config_maps,
+        secrets,
+        endpoints,
+        persistent_volume_claims,
+        service_accounts,
+        events,
+    ) = tokio::join!(
+        count_of(&cron_jobs_api, reach, refused),
+        count_of(&services_api, reach, refused),
+        count_of(&ingresses_api, reach, refused),
+        count_of(&config_maps_api, reach, refused),
+        count_of(&secrets_api, reach, refused),
+        count_of(&endpoints_api, reach, refused),
+        count_of(&claims_api, reach, refused),
+        count_of(&accounts_api, reach, refused),
+        count_of(&events_api, reach, refused),
+    );
+    ResourceCounts {
+        cron_jobs,
+        services,
+        ingresses,
+        config_maps,
+        secrets,
+        endpoints,
+        persistent_volume_claims,
+        service_accounts,
+        events,
+        ..Default::default()
+    }
+}
+
+/// Several namespaces' counts as one. A count one of them refused stays
+/// `None` in the sum: two answers and a refusal is not a total, and a number
+/// printed from it would state something the reader cannot check.
+fn add_counts(parts: &[ResourceCounts]) -> ResourceCounts {
+    let sum = |count: fn(&ResourceCounts) -> Option<usize>| {
+        parts
+            .iter()
+            .try_fold(0, |total, part| Some(total + count(part)?))
+    };
+    ResourceCounts {
+        cron_jobs: sum(|c| c.cron_jobs),
+        services: sum(|c| c.services),
+        ingresses: sum(|c| c.ingresses),
+        config_maps: sum(|c| c.config_maps),
+        secrets: sum(|c| c.secrets),
+        endpoints: sum(|c| c.endpoints),
+        persistent_volume_claims: sum(|c| c.persistent_volume_claims),
+        service_accounts: sum(|c| c.service_accounts),
+        events: sum(|c| c.events),
+        ..Default::default()
+    }
+}
+
+/// The namespaced counts in every reach, added up, and the namespace count once.
+async fn side_counts(
+    client: &Client,
+    scope: Option<&[String]>,
+    refused: &RefusedCounts,
+) -> ResourceCounts {
+    let namespaces_api: Api<Namespace> = Api::all(client.clone());
+    let (namespaces, parts) = tokio::join!(
+        count_of(&namespaces_api, None, refused),
+        join_all(
+            reaches(scope)
+                .into_iter()
+                .map(|reach| namespaced_counts(client, reach, refused))
+        ),
+    );
+    ResourceCounts {
+        namespaces,
+        ..add_counts(&parts)
+    }
+}
+
+/// The overview for `scope` (`None` is the whole cluster): from the
+/// watch-fed stores when they are healthy, otherwise by listing.
+pub async fn cluster_overview(
+    state: &AppState,
+    scope: Option<Vec<String>>,
+) -> Result<ClusterOverview> {
+    let scope = scope_of(scope)?;
+    let client = (*state.current_client()?).clone();
+    let context = state
+        .get_current_context()
+        .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
+    let refused = state.overview_cache.refused_counts(&context);
+    let (metrics, counts, snapshot) = tokio::join!(
+        crate::metrics::get_node_metrics(state),
+        side_counts(&client, scope.as_deref(), &refused),
+        state.overview_cache.snapshot(&context, || client.clone()),
+    );
+    let sides = Sides {
+        counts,
+        // Live usage is best-effort: metrics-server is not installed everywhere.
+        usage_by_node: usage_index(metrics.ok()),
+    };
+    match snapshot {
+        Some(snapshot) => Ok(from_snapshot(&snapshot, scope.as_deref(), sides)),
+        None => by_listing(&client, scope.as_deref(), sides).await,
+    }
+}
+
+/// The stores' objects in scope; nodes are the cluster's whichever scope is
+/// asked for, and the accounting pods stay cluster-wide.
+struct Projected {
+    scoped_pods: Vec<Arc<Pod>>,
+    deployments: Vec<Arc<Deployment>>,
+    stateful_sets: Vec<Arc<StatefulSet>>,
+    daemon_sets: Vec<Arc<DaemonSet>>,
+    jobs: Vec<Arc<Job>>,
+    events: Vec<Arc<Event>>,
+}
+
+fn project(snapshot: &Snapshot, scope: Option<&[String]>) -> Projected {
+    fn keep<K>(
+        items: &[Arc<K>],
+        scope: Option<&[String]>,
+        of: fn(&K) -> Option<&str>,
+    ) -> Vec<Arc<K>> {
+        items
+            .iter()
+            .filter(|item| {
+                scope.is_none_or(|names| {
+                    of(item).is_some_and(|namespace| names.iter().any(|name| name == namespace))
+                })
+            })
+            .cloned()
+            .collect()
+    }
+    Projected {
+        scoped_pods: keep(&snapshot.pods, scope, |p| p.metadata.namespace.as_deref()),
+        deployments: keep(&snapshot.deployments, scope, |d| {
+            d.metadata.namespace.as_deref()
+        }),
+        stateful_sets: keep(&snapshot.stateful_sets, scope, |s| {
+            s.metadata.namespace.as_deref()
+        }),
+        daemon_sets: keep(&snapshot.daemon_sets, scope, |d| {
+            d.metadata.namespace.as_deref()
+        }),
+        jobs: keep(&snapshot.jobs, scope, |j| j.metadata.namespace.as_deref()),
+        events: keep(&snapshot.events, scope, |e| e.metadata.namespace.as_deref()),
+    }
+}
+
+fn from_snapshot(snapshot: &Snapshot, scope: Option<&[String]>, sides: Sides) -> ClusterOverview {
+    let scoped = project(snapshot, scope);
+    build_overview(&OverviewInputs {
+        scoped_pods: &scoped.scoped_pods,
+        accounting_pods: &snapshot.pods,
+        nodes: &snapshot.nodes,
+        // A store only serves while every watch it holds is allowed and
+        // healthy, so the capacity view is known here by construction.
+        nodes_known: true,
+        deployments: &scoped.deployments,
+        stateful_sets: &scoped.stateful_sets,
+        daemon_sets: &scoped.daemon_sets,
+        jobs: &scoped.jobs,
+        unread: &[],
+        events: &scoped.events,
+        events_known: true,
+        usage_by_node: sides.usage_by_node,
+        counts: sides.counts,
+        scope,
+        now: Utc::now(),
+        served_from: OverviewSource::Watch,
+    })
+}
+
+fn arcs<T>(items: impl IntoIterator<Item = T>) -> Vec<Arc<T>> {
+    items.into_iter().map(Arc::new).collect()
+}
+
+/// One reach's lists: a namespace's, or the whole cluster's.
+struct Listed {
+    reach: Option<String>,
+    pods: Result<Vec<Pod>>,
+    deployments: Result<Vec<Deployment>>,
+    stateful_sets: Result<Vec<StatefulSet>>,
+    daemon_sets: Result<Vec<DaemonSet>>,
+    jobs: Result<Vec<Job>>,
+    events: Vec<Event>,
+    events_known: bool,
+}
+
+async fn list_in(client: &Client, reach: Option<&str>) -> Listed {
+    let params = ListParams::default();
+    let pods_api: Api<Pod> = api_in(client, reach);
+    let deployments_api: Api<Deployment> = api_in(client, reach);
+    let stateful_sets_api: Api<StatefulSet> = api_in(client, reach);
+    let daemon_sets_api: Api<DaemonSet> = api_in(client, reach);
+    let jobs_api: Api<Job> = api_in(client, reach);
+    let events_api: Api<Event> = api_in(client, reach);
+    let (pods, deployments, stateful_sets, daemon_sets, jobs, events) = tokio::join!(
+        pods_api.list(&params),
+        deployments_api.list(&params),
+        stateful_sets_api.list(&params),
+        daemon_sets_api.list(&params),
+        jobs_api.list(&params),
+        list_warning_events(&events_api),
+    );
+    let (events, events_known) = events;
+    Listed {
+        reach: reach.map(str::to_string),
+        pods: pods.map(|list| list.items).map_err(Error::from),
+        deployments: deployments.map(|list| list.items).map_err(Error::from),
+        stateful_sets: stateful_sets.map(|list| list.items).map_err(Error::from),
+        daemon_sets: daemon_sets.map(|list| list.items).map_err(Error::from),
+        jobs: jobs.map(|list| list.items).map_err(Error::from),
+        events,
+        events_known,
+    }
+}
+
+/// Every reach's lists as one.
+struct Gathered {
+    pods: Vec<Arc<Pod>>,
+    deployments: Vec<Arc<Deployment>>,
+    stateful_sets: Vec<Arc<StatefulSet>>,
+    daemon_sets: Vec<Arc<DaemonSet>>,
+    jobs: Vec<Arc<Job>>,
+    events: Vec<Arc<Event>>,
+    events_known: bool,
+    unread: Vec<OverviewUnread>,
+}
+
+/// What one reach answered for one kind, kept; or why not, written down.
+fn take<K>(
+    kind: &str,
+    reach: Option<&str>,
+    answer: Result<Vec<K>>,
+    into: &mut Vec<Arc<K>>,
+    unread: &mut Vec<OverviewUnread>,
+) {
+    match answer {
+        Ok(items) => into.extend(arcs(items)),
+        Err(error) => unread.push(OverviewUnread::of(kind, reach, &error)),
+    }
+}
+
+impl Listed {
+    /// Whether any of this reach's workload lists answered.
+    fn answered(&self) -> bool {
+        self.pods.is_ok()
+            || self.deployments.is_ok()
+            || self.stateful_sets.is_ok()
+            || self.daemon_sets.is_ok()
+            || self.jobs.is_ok()
+    }
+}
+
+/// Joins the reaches by the rule the counts follow: what one namespace
+/// refused is never filled in by the ones that answered.
+///
+/// Every kind feeds problems as well as counts: the problems of the
+/// namespaces that answered stand, the count goes unknown, and the refusal is
+/// carried by kind and namespace. Only a scope where no workload list
+/// answered anywhere fails, with its pods' refusal. Events are what
+/// answered, said to be part.
+fn gather(parts: Vec<Listed>) -> Result<Gathered> {
+    let answered = parts.iter().any(Listed::answered);
+    let mut gathered = Gathered {
+        pods: Vec::new(),
+        deployments: Vec::new(),
+        stateful_sets: Vec::new(),
+        daemon_sets: Vec::new(),
+        jobs: Vec::new(),
+        events: Vec::new(),
+        events_known: parts.iter().all(|part| part.events_known),
+        unread: Vec::new(),
+    };
+    for part in parts {
+        let reach = part.reach.as_deref();
+        let unread = &mut gathered.unread;
+        match part.pods {
+            Ok(pods) => gathered.pods.extend(arcs(pods)),
+            Err(error) if !answered => return Err(error),
+            Err(error) => unread.push(OverviewUnread::of("Pod", reach, &error)),
+        }
+        take(
+            "Deployment",
+            reach,
+            part.deployments,
+            &mut gathered.deployments,
+            unread,
+        );
+        take(
+            "StatefulSet",
+            reach,
+            part.stateful_sets,
+            &mut gathered.stateful_sets,
+            unread,
+        );
+        take(
+            "DaemonSet",
+            reach,
+            part.daemon_sets,
+            &mut gathered.daemon_sets,
+            unread,
+        );
+        take("Job", reach, part.jobs, &mut gathered.jobs, unread);
+        gathered.events.extend(arcs(part.events));
+    }
+    Ok(gathered)
+}
+
+async fn by_listing(
+    client: &Client,
+    scope: Option<&[String]>,
+    sides: Sides,
+) -> Result<ClusterOverview> {
+    let params = ListParams::default();
+    let nodes_api: Api<Node> = Api::all(client.clone());
+    // Scheduler headroom and the node rows describe the cluster, not the
+    // selection: dividing one namespace's requests by every node's allocatable
+    // would state a reserved share that is nobody's number. So the accounting
+    // pass always runs on a cluster-wide pod list — read once for the whole
+    // scope, and only when there is one, since otherwise the scoped list
+    // already is that list.
+    let cluster_pods_api: Api<Pod> = Api::all(client.clone());
+    let cluster_pods_request = async {
+        match scope {
+            Some(_) => Some(cluster_pods_api.list(&params).await),
+            None => None,
+        }
+    };
+
+    let (parts, cluster_pods_result, nodes_result) = tokio::join!(
+        join_all(
+            reaches(scope)
+                .into_iter()
+                .map(|reach| list_in(client, reach))
+        ),
+        cluster_pods_request,
+        nodes_api.list(&params),
+    );
+
+    // With no workload read in scope there is no screen to draw. On the whole
+    // cluster the scoped lists are the cluster-wide ones, so a token with no
+    // cluster read rights fails here and the page shows the refusal (and
+    // says to pick a namespace).
+    let listed = gather(parts)?;
+    // The node list and the cluster-wide accounting pods are cluster-scoped
+    // reads a namespace-restricted token is refused. They degrade to "unknown"
+    // rather than failing the whole overview, so a scoped user still sees the
+    // workloads they CAN read with the capacity view marked no-access.
+    let mut unread = listed.unread;
+    let cluster_pods = match cluster_pods_result.transpose() {
+        Ok(listed) => listed.map(|list| arcs(list.items)),
+        Err(error) => {
+            unread.push(OverviewUnread::of("Node", None, &Error::from(error)));
+            None
+        }
+    };
+    let nodes = match nodes_result {
+        Ok(list) => Some(arcs(list.items)),
+        Err(error) => {
+            unread.retain(|kind| kind.kind != "Node");
+            unread.push(OverviewUnread::of("Node", None, &Error::from(error)));
+            None
+        }
+    };
+    // Unscoped, the accounting pods are the scoped ones, refused with them.
+    let pods_refused = unread.iter().find(|entry| entry.kind == "Pod").cloned();
+    let accounting_known = match (scope, pods_refused) {
+        (Some(_), _) => cluster_pods.is_some(),
+        (None, None) => true,
+        (None, Some(refused)) => {
+            if nodes.is_some() {
+                unread.push(OverviewUnread {
+                    kind: "Node".to_string(),
+                    ..refused
+                });
+            }
+            false
+        }
+    };
+    let nodes_known = nodes.is_some() && accounting_known;
+
+    Ok(build_overview(&OverviewInputs {
+        scoped_pods: &listed.pods,
+        accounting_pods: cluster_pods.as_deref().unwrap_or(&listed.pods),
+        nodes: nodes.as_deref().unwrap_or_default(),
+        nodes_known,
+        deployments: &listed.deployments,
+        stateful_sets: &listed.stateful_sets,
+        daemon_sets: &listed.daemon_sets,
+        unread: &unread,
+        jobs: &listed.jobs,
+        events: &listed.events,
+        events_known: listed.events_known,
+        usage_by_node: sides.usage_by_node,
+        counts: sides.counts,
+        scope,
+        now: Utc::now(),
+        served_from: OverviewSource::List,
+    }))
+}
+
+#[cfg(test)]
+// Every float here is compared against a value the arithmetic under test
+// produces exactly, so an exact comparison is the assertion we want.
+#[allow(clippy::float_cmp)]
+mod tests {
+    use super::*;
+
+    use crate::metrics::{MetricsStatus, NodeMetrics};
+    use crate::resources::{PENDING_GRACE_SECONDS, START_GRACE_SECONDS};
+    use k8s_openapi::api::batch::v1::{JobCondition, JobStatus};
+    use k8s_openapi::api::core::v1::{
+        Container, ContainerState, ContainerStateRunning, ContainerStateTerminated,
+        ContainerStateWaiting, ContainerStatus, NodeCondition, NodeSpec, NodeStatus, PodCondition,
+        PodSpec, PodStatus, ResourceRequirements,
+    };
+    use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
+    use kube::core::ObjectMeta;
+
+    fn at(now: DateTime<Utc>, seconds_ago: i64) -> Time {
+        Time(
+            crate::utils::moment::as_cluster_time(now - chrono::Duration::seconds(seconds_ago))
+                .expect("an instant this test wrote itself"),
+        )
+    }
+
+    fn pod(name: &str, status: PodStatus) -> Pod {
+        Pod {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                namespace: Some("default".to_string()),
+                ..Default::default()
+            },
+            status: Some(status),
+            ..Default::default()
+        }
+    }
+
+    fn pending_pod(name: &str, now: DateTime<Utc>, pending_for: i64) -> Pod {
+        let mut p = pod(
+            name,
+            PodStatus {
+                phase: Some("Pending".to_string()),
+                conditions: Some(vec![PodCondition {
+                    type_: "PodScheduled".to_string(),
+                    status: "False".to_string(),
+                    last_transition_time: Some(at(now, pending_for)),
+                    message: Some("0/3 nodes are available".to_string()),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            },
+        );
+        p.metadata.creation_timestamp = Some(at(now, pending_for));
+        p
+    }
+
+    fn quantities(pairs: &[(&str, &str)]) -> BTreeMap<String, Quantity> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_string(), Quantity((*v).to_string())))
+            .collect()
+    }
+
+    fn node(name: &str, cpu: &str, memory: &str) -> Node {
+        Node {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                ..Default::default()
+            },
+            status: Some(k8s_openapi::api::core::v1::NodeStatus {
+                allocatable: Some(quantities(&[("cpu", cpu), ("memory", memory)])),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }
+    }
+
+    fn scheduled_pod(name: &str, namespace: &str, node_name: &str, cpu: &str, memory: &str) -> Pod {
+        Pod {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                namespace: Some(namespace.to_string()),
+                ..Default::default()
+            },
+            spec: Some(PodSpec {
+                node_name: Some(node_name.to_string()),
+                containers: vec![Container {
+                    name: "app".to_string(),
+                    resources: Some(ResourceRequirements {
+                        requests: Some(quantities(&[("cpu", cpu), ("memory", memory)])),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            status: Some(PodStatus {
+                phase: Some("Running".to_string()),
+                ..Default::default()
+            }),
+        }
+    }
+
+    fn overview(
+        scoped_pods: &[Pod],
+        accounting_pods: &[Pod],
+        namespace: Option<&str>,
+    ) -> ClusterOverview {
+        let scope = namespace.map(|name| vec![name.to_string()]);
+        build_overview(&OverviewInputs {
+            scoped_pods: &arcs(scoped_pods.to_vec()),
+            accounting_pods: &arcs(accounting_pods.to_vec()),
+            nodes: &arcs(vec![node("n1", "4", "8Gi"), node("n2", "4", "8Gi")]),
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &[],
+            events: &[],
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: scope.as_deref(),
+            served_from: OverviewSource::List,
+            now: Utc::now(),
+        })
+    }
+
+    fn node_metrics_response(
+        status: MetricsStatusKind,
+        data: Vec<NodeMetrics>,
+    ) -> NodeMetricsResponse {
+        NodeMetricsResponse {
+            status: MetricsStatus {
+                status,
+                message: None,
+            },
+            data,
+        }
+    }
+
+    fn problem(reason: &str, severity: ProblemSeverity, since: Option<&str>) -> ClusterProblem {
+        ClusterProblem {
+            severity,
+            kind: "Pod".to_string(),
+            name: reason.to_string(),
+            namespace: None,
+            reason: reason.to_string(),
+            detail: None,
+            since: since.map(str::to_string),
+            restarts: None,
+            folded_pods: None,
+        }
+    }
+
+    /// A namespace-scoped token is refused the cluster-wide node and pod reads
+    /// the capacity view needs, so those come back unknown. The workloads the
+    /// user CAN read stay on the screen; the nodes and scheduler are marked
+    /// no-access, and the node count is `None`, never a confident `Some(0)`.
+    #[test]
+    fn a_refused_node_read_leaves_the_capacity_view_unknown_not_empty() {
+        let pods = [
+            pod(
+                "api",
+                PodStatus {
+                    phase: Some("Running".to_string()),
+                    ..Default::default()
+                },
+            ),
+            pod(
+                "web",
+                PodStatus {
+                    phase: Some("Running".to_string()),
+                    ..Default::default()
+                },
+            ),
+        ];
+        let result = build_overview(&OverviewInputs {
+            scoped_pods: &arcs(pods.clone()),
+            accounting_pods: &arcs(pods),
+            // Nodes were handed in, but the flag says they could not be read:
+            // they must be ignored, not drawn and not counted.
+            nodes: &arcs(vec![node("n1", "4", "8Gi")]),
+            nodes_known: false,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &[],
+            events: &[],
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: Some(&["team-a".to_string()]),
+            served_from: OverviewSource::List,
+            now: Utc::now(),
+        });
+
+        assert!(!result.nodes_known, "a refused node read is unknown");
+        assert!(
+            result.nodes.is_empty(),
+            "no node rows are drawn from a read that was refused"
+        );
+        assert_eq!(
+            result.counts.nodes, None,
+            "the node count is unknown, not zero"
+        );
+        // The workloads the user could read are still on the screen.
+        assert_eq!(result.counts.pods, Some(2));
+        assert_eq!(
+            result.pods.expect("every pod list answered").read.running,
+            2
+        );
+    }
+
+    /// A missing metrics-server comes back as `Ok` with a `NotInstalled`
+    /// status and no data. Trusting the `Result` made the UI report "actually
+    /// using 0m (0%)" as measured fact on every such cluster.
+    #[test]
+    fn metrics_unavailable_leaves_usage_none() {
+        for status in [
+            MetricsStatusKind::NotInstalled,
+            MetricsStatusKind::Forbidden,
+            MetricsStatusKind::Error,
+        ] {
+            let usage = usage_index(Some(node_metrics_response(status, vec![])));
+            assert!(usage.is_none(), "non-Available status must yield no usage");
+
+            let aggregate = summarize_nodes(
+                &[Node {
+                    metadata: ObjectMeta {
+                        name: Some("n1".to_string()),
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                }],
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                usage.as_ref(),
+            );
+            assert!(aggregate.scheduler.cpu.usage.is_none());
+            assert!(aggregate.scheduler.memory.usage.is_none());
+            assert!(aggregate.summaries[0].cpu.usage.is_none());
+            assert!(aggregate.summaries[0].memory.usage.is_none());
+        }
+    }
+
+    /// `Available` with nothing in it measures nothing. Reporting it as
+    /// available turned the cluster totals into `Some(0.0)` and put the same
+    /// "actually using 0m (0%)" claim back on screen.
+    #[test]
+    fn metrics_available_without_data_is_unavailable() {
+        assert!(usage_index(Some(node_metrics_response(
+            MetricsStatusKind::Available,
+            vec![],
+        )))
+        .is_none());
+
+        let result = build_overview(&OverviewInputs {
+            scoped_pods: &[],
+            accounting_pods: &[],
+            nodes: &arcs(vec![node("n1", "4", "8Gi")]),
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &[],
+            events: &[],
+            events_known: true,
+            usage_by_node: usage_index(Some(node_metrics_response(
+                MetricsStatusKind::Available,
+                vec![],
+            ))),
+            counts: ResourceCounts::default(),
+            scope: None,
+            now: Utc::now(),
+            served_from: OverviewSource::List,
+        });
+        assert!(!result.metrics_available);
+        assert!(result.scheduler.cpu.usage.is_none());
+        assert!(result.scheduler.memory.usage.is_none());
+    }
+
+    /// The scheduler panel divides requests by every node's allocatable, so
+    /// feeding it one namespace's requests printed a "6% reserved" that
+    /// describes no real quantity.
+    #[test]
+    fn namespace_scope_keeps_resource_accounting_cluster_wide() {
+        let scoped = vec![scheduled_pod("api", "app", "n1", "500m", "1Gi")];
+        let cluster = vec![
+            scheduled_pod("api", "app", "n1", "500m", "1Gi"),
+            scheduled_pod("db", "data", "n1", "1", "2Gi"),
+            scheduled_pod("agent", "kube-system", "n2", "250m", "512Mi"),
+        ];
+
+        let result = overview(&scoped, &cluster, Some("app"));
+
+        assert_eq!(result.scheduler.cpu.allocatable, 8000.0);
+        assert_eq!(result.scheduler.cpu.requested, 1750.0);
+        assert_eq!(result.nodes[0].pod_count, 2);
+        assert_eq!(result.nodes[1].pod_count, 1);
+        assert_eq!(result.nodes[0].cpu.requested, 1500.0);
+        // The scoped list still owns the counts that are about the selection.
+        assert_eq!(result.counts.pods, Some(1));
+    }
+
+    /// Unscoped, the same slice does both jobs and the numbers must not move.
+    #[test]
+    fn unscoped_accounting_matches_the_single_pod_list() {
+        let pods = vec![
+            scheduled_pod("api", "app", "n1", "500m", "1Gi"),
+            scheduled_pod("agent", "kube-system", "n2", "250m", "512Mi"),
+        ];
+
+        let result = overview(&pods, &pods, None);
+
+        assert_eq!(result.scheduler.cpu.requested, 750.0);
+        assert_eq!(result.counts.pods, Some(2));
+        assert_eq!(result.namespaces.len(), 2);
+    }
+
+    /// One row restating the namespace you already picked, under a heading
+    /// counting "namespaces with workloads: 1", is worse than no card.
+    #[test]
+    fn namespaces_breakdown_is_dropped_when_scoped() {
+        let scoped = vec![scheduled_pod("api", "app", "n1", "500m", "1Gi")];
+        assert!(overview(&scoped, &scoped, Some("app"))
+            .namespaces
+            .is_empty());
+    }
+
+    #[test]
+    fn namespace_loads_are_sorted_by_pod_count() {
+        let pods = vec![
+            scheduled_pod("a", "quiet", "n1", "100m", "64Mi"),
+            scheduled_pod("b", "busy", "n1", "100m", "64Mi"),
+            scheduled_pod("c", "busy", "n2", "100m", "64Mi"),
+        ];
+        let loads = namespace_loads(&pods, &[]);
+        assert_eq!(loads[0].name, "busy");
+        assert_eq!(loads[0].pod_count, Some(2));
+        assert_eq!(loads[1].name, "quiet");
+    }
+
+    /// The namespace picker counted problems in the list after it was cut to
+    /// fifty, worst first: fifty-one failed pods in one namespace pushed every
+    /// other namespace's warnings off it, and those namespaces read "0".
+    #[test]
+    fn a_namespace_counts_its_problems_before_the_list_is_cut() {
+        let now = Utc::now();
+        let mut pods: Vec<Pod> = (0..=MAX_PROBLEMS)
+            .map(|i| {
+                let mut failed = pod(
+                    &format!("job-{i}"),
+                    PodStatus {
+                        phase: Some("Failed".to_string()),
+                        ..Default::default()
+                    },
+                );
+                failed.metadata.namespace = Some("prod".to_string());
+                failed
+            })
+            .collect();
+        let mut waiting = pending_pod("web", now, 3600);
+        waiting.metadata.namespace = Some("dev".to_string());
+        pods.push(waiting);
+
+        let result = build_overview(&OverviewInputs {
+            scoped_pods: &arcs(pods.clone()),
+            accounting_pods: &arcs(pods),
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &[],
+            events: &[],
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            now,
+        });
+
+        assert!(result
+            .problems
+            .iter()
+            .all(|p| p.namespace.as_deref() != Some("dev")));
+        let count = |ns: &str| {
+            result
+                .namespaces
+                .iter()
+                .find(|load| load.name == ns)
+                .map(|load| load.problem_count)
+        };
+        assert_eq!(count("dev"), Some(1));
+        assert_eq!(count("prod"), Some(MAX_PROBLEMS + 1));
+    }
+
+    /// Terminal pods hold no reservation; counting them would inflate both the
+    /// per-node pod count and the reserved share.
+    #[test]
+    fn terminal_pods_are_left_out_of_the_accounting() {
+        let mut finished = scheduled_pod("backup", "app", "n1", "500m", "1Gi");
+        finished.status = Some(PodStatus {
+            phase: Some("Succeeded".to_string()),
+            ..Default::default()
+        });
+        let pods = vec![finished, scheduled_pod("api", "app", "n1", "250m", "512Mi")];
+
+        let accounting = account_by_node(&pods);
+        assert_eq!(accounting.pods.get("n1"), Some(&1));
+        assert_eq!(accounting.requests.get("n1").map(|r| r.0), Some(250.0));
+    }
+
+    /// KEP-2837: a pod-level request is what the scheduler reserves, so the
+    /// accounting uses it in place of the container sum, per resource. A pod
+    /// asking for 2 CPU at the pod level over a 500m container reserves 2, not
+    /// 2.5 and not 0.5. The pod detail page aggregates the same way — one fact,
+    /// both readers.
+    #[test]
+    fn a_pod_level_request_replaces_the_container_sum() {
+        let mut pod = scheduled_pod("p", "app", "n1", "500m", "256Mi");
+        pod.spec.as_mut().unwrap().resources = Some(ResourceRequirements {
+            requests: Some(quantities(&[("cpu", "2"), ("memory", "1Gi")])),
+            ..Default::default()
+        });
+        let (cpu, memory) = pod_requests(&pod);
+        assert_eq!(cpu, parse_cpu("2"), "pod-level CPU stands in for the sum");
+        assert_eq!(memory, parse_memory("1Gi"), "pod-level memory too");
+
+        // No pod-level request: the container sum still stands.
+        assert_eq!(
+            pod_requests(&scheduled_pod("q", "app", "n1", "500m", "256Mi")).0,
+            parse_cpu("500m")
+        );
+    }
+
+    #[test]
+    fn metrics_available_indexes_usage_by_node() {
+        let usage = usage_index(Some(node_metrics_response(
+            MetricsStatusKind::Available,
+            vec![NodeMetrics {
+                name: "n1".to_string(),
+                cpu_millicores: Some(250.0),
+                memory_bytes: Some(1024),
+            }],
+        )))
+        .expect("available metrics must yield an index");
+
+        assert_eq!(usage.get("n1"), Some(&(250.0, 1024)));
+    }
+
+    /// Every pod is Pending for its first seconds. Reporting that made the
+    /// "N problems need attention" panel permanently red on any cluster with
+    /// `CronJobs`, which is the same as having no panel at all.
+    #[test]
+    fn pending_pod_is_reported_only_after_the_grace_period() {
+        let now = Utc::now();
+        let problems = pod_problems(
+            &[
+                pending_pod("fresh", now, PENDING_GRACE_SECONDS - 10),
+                pending_pod("stuck", now, PENDING_GRACE_SECONDS + 10),
+            ],
+            now,
+        );
+
+        let names: Vec<_> = problems.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["stuck"]);
+        assert_eq!(problems[0].reason, "Pending");
+    }
+
+    /// A fresh cluster pulls its images for minutes: eleven pods placed and
+    /// still in `ContainerCreating` at 90 s were each listed as Pending. Fails
+    /// if a scheduled pod is reported inside the start grace, or one past it
+    /// is let off.
+    #[test]
+    fn a_scheduled_pod_still_creating_is_not_a_problem_until_the_start_grace_runs_out() {
+        let now = Utc::now();
+        let placed = |name: &str, pending_for: i64| {
+            let mut p = pending_pod(name, now, pending_for);
+            let condition = &mut p
+                .status
+                .as_mut()
+                .expect("a status")
+                .conditions
+                .as_mut()
+                .expect("conditions")[0];
+            condition.status = "True".to_string();
+            condition.message = None;
+            p
+        };
+        let problems = pod_problems(
+            &[
+                placed("pulling", 90),
+                placed("stuck", START_GRACE_SECONDS + 10),
+                pending_pod("unschedulable", now, 90),
+            ],
+            now,
+        );
+
+        let names: Vec<_> = problems.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["stuck", "unschedulable"]);
+    }
+
+    /// Sam's big-pull, placed and pulling its image, read amber "Pending" on
+    /// the Overview's Pods tile while its page and its Deployment read coming
+    /// up. Fails if a pod Needs attention lets off is not counted as starting,
+    /// or one it lists, past its wait or held in an error, is.
+    #[test]
+    fn a_pending_pod_inside_its_wait_is_counted_starting_as_needs_attention_lets_it_off() {
+        let now = Utc::now();
+        let placed = |name: &str, pending_for: i64| {
+            let mut p = pending_pod(name, now, pending_for);
+            p.status
+                .as_mut()
+                .expect("a status")
+                .conditions
+                .as_mut()
+                .expect("conditions")[0]
+                .status = "True".to_string();
+            p
+        };
+        let pods = [
+            placed("big-pull", 90),
+            pending_pod("just-made", now, PENDING_GRACE_SECONDS - 10),
+            placed("stuck", START_GRACE_SECONDS + 10),
+            pending_pod("never-placed", now, PENDING_GRACE_SECONDS + 10),
+            config_error_pod(),
+        ];
+        let composition = pod_composition(&pods, now);
+        assert_eq!((composition.pending, composition.starting), (5, 2));
+        let listed = pod_problems(&pods, now).len();
+        assert_eq!(composition.pending - composition.starting, listed);
+    }
+
+    /// Without a `PodScheduled` condition the creation timestamp is the only
+    /// clock available, and an undated pod must not be silently swallowed.
+    #[test]
+    fn pending_grace_falls_back_to_creation_timestamp() {
+        let now = Utc::now();
+        let mut fresh = pod(
+            "fresh",
+            PodStatus {
+                phase: Some("Pending".to_string()),
+                ..Default::default()
+            },
+        );
+        fresh.metadata.creation_timestamp = Some(at(now, 5));
+        let undated = pod(
+            "undated",
+            PodStatus {
+                phase: Some("Pending".to_string()),
+                ..Default::default()
+            },
+        );
+
+        let problems = pod_problems(&[fresh, undated], now);
+        let names: Vec<_> = problems.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["undated"]);
+    }
+
+    /// A Job pod that ran and lost produces no waiting reason and is skipped
+    /// by the resource accounting, so without an explicit branch it never
+    /// appeared on the one screen whose job is showing what is broken.
+    #[test]
+    fn failed_pod_is_reported_as_critical() {
+        let now = Utc::now();
+        let problems = pod_problems(
+            &[pod(
+                "migrate",
+                PodStatus {
+                    phase: Some("Failed".to_string()),
+                    reason: Some("Evicted".to_string()),
+                    message: Some("The node was low on resource: memory".to_string()),
+                    ..Default::default()
+                },
+            )],
+            now,
+        );
+
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].severity, ProblemSeverity::Critical);
+        assert_eq!(problems[0].reason, "Evicted");
+        assert_eq!(
+            problems[0].detail,
+            Some(ProblemDetail::Said {
+                text: "The node was low on resource: memory".to_string()
+            })
+        );
+    }
+
+    #[test]
+    fn succeeded_pod_is_not_a_problem() {
+        let now = Utc::now();
+        let problems = pod_problems(
+            &[pod(
+                "backup",
+                PodStatus {
+                    phase: Some("Succeeded".to_string()),
+                    ..Default::default()
+                },
+            )],
+            now,
+        );
+        assert!(problems.is_empty());
+    }
+
+    /// A pod that restarted `count` times, the last of them `ago` seconds
+    /// back, and has been `Running` ever since.
+    fn restarted_pod(name: &str, now: DateTime<Utc>, count: i32, ago: Option<i64>) -> Pod {
+        pod(
+            name,
+            PodStatus {
+                phase: Some("Running".to_string()),
+                container_statuses: Some(vec![ContainerStatus {
+                    name: "app".to_string(),
+                    restart_count: count,
+                    ready: true,
+                    started: Some(true),
+                    state: Some(ContainerState {
+                        running: Some(ContainerStateRunning::default()),
+                        ..Default::default()
+                    }),
+                    last_state: ago.map(|seconds| ContainerState {
+                        terminated: Some(ContainerStateTerminated {
+                            exit_code: 1,
+                            finished_at: Some(at(now, seconds)),
+                            ..Default::default()
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            },
+        )
+    }
+
+    /// Reported from the field: somebody rebooted a bare-metal cluster, every
+    /// pod on it restarted, and two days later the Overview badge still said
+    /// one problem — about a pod that was `Running`, ready, and had not
+    /// restarted since. A restart count never falls, so "has restarted" was
+    /// true for the rest of that pod's life.
+    #[test]
+    fn a_pod_that_stopped_restarting_two_days_ago_is_not_a_problem() {
+        let now = Utc::now();
+        let problems = pod_problems(&[restarted_pod("csi", now, 7, Some(2 * 24 * 3600))], now);
+        assert!(
+            problems.is_empty(),
+            "a pod that has been up for two days is not restarting: {problems:?}"
+        );
+    }
+
+    /// One that settled inside the hour is still news, in amber: it is past
+    /// the kubelet's back-off window, so it is no longer crash-looping.
+    #[test]
+    fn a_pod_that_flapped_within_the_hour_is_reported_as_restarting() {
+        let now = Utc::now();
+        let problems = pod_problems(&[restarted_pod("flapper", now, 7, Some(30 * 60))], now);
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].reason, "Restarting");
+        assert_eq!(problems[0].severity, ProblemSeverity::Warning);
+        assert_eq!(problems[0].restarts, Some(7));
+    }
+
+    /// Dana's shop Overview said "9 of 14 pods running" when it caught the
+    /// checkout pods between crashes and `3 CrashLoop` a minute later, and
+    /// their Needs attention rows went from red `CrashLoopBackOff` to amber
+    /// "Restarting" and back. Fails if the two instants of one crash loop
+    /// are counted or ranked differently, or the row puts the kubelet's
+    /// `CrashLoopBackOff` on the instant the kubelet says `Running`.
+    #[test]
+    fn a_crash_loop_counts_and_reads_the_same_whether_its_container_is_up_or_waiting() {
+        let now = Utc::now();
+        let up = restarted_pod("checkout", now, 9, Some(20));
+        let mut backing_off = restarted_pod("checkout", now, 9, Some(40));
+        let container = &mut backing_off
+            .status
+            .as_mut()
+            .unwrap()
+            .container_statuses
+            .as_mut()
+            .unwrap()[0];
+        container.ready = false;
+        container.state = Some(ContainerState {
+            waiting: Some(ContainerStateWaiting {
+                reason: Some("CrashLoopBackOff".to_string()),
+                message: Some("back-off 5m0s restarting failed container=app".to_string()),
+            }),
+            ..Default::default()
+        });
+
+        for (instant, pod, word) in [
+            ("up", &up, CRASH_LOOPING),
+            ("backing off", &backing_off, "CrashLoopBackOff"),
+        ] {
+            let composition = pod_composition([pod], now);
+            assert_eq!(
+                (composition.running, composition.crash_looping),
+                (1, 1),
+                "{instant}"
+            );
+            let problems = pod_problems([pod], now);
+            assert_eq!(problems.len(), 1, "{instant}");
+            assert_eq!(problems[0].reason, word, "{instant}");
+            assert_eq!(problems[0].severity, ProblemSeverity::Critical, "{instant}");
+            assert_eq!(
+                problems[0].detail,
+                Some(ProblemDetail::Restarts { n: 9, by: None }),
+                "{instant}"
+            );
+        }
+    }
+
+    /// Sam's Overview called orders-db-0 `CrashLoopBackOff` and read "3 of
+    /// 15 pods ready" while kubectl had 6: the pod had run 2 h 20 m, exited
+    /// once with its node and been Ready since. Fails if one exit after a
+    /// long run is counted, listed or ranked as a crash loop, or a Ready pod
+    /// is left out of the ready count.
+    #[test]
+    fn a_pod_restarted_once_with_its_node_is_ready_and_not_crash_looping() {
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "orders-db-0", "namespace": "shop" },
+            "spec": { "containers": [{ "name": "db" }] },
+            "status": {
+                "phase": "Running",
+                "conditions": [{ "type": "Ready", "status": "True" }],
+                "containerStatuses": [{
+                    "name": "db", "image": "postgres:16", "imageID": "",
+                    "ready": true, "started": true, "restartCount": 2,
+                    "state": { "running": { "startedAt": "2026-10-09T08:25:11Z" } },
+                    "lastState": { "terminated": {
+                        "exitCode": 255, "reason": "Unknown",
+                        "startedAt": "2026-10-09T06:04:34Z",
+                        "finishedAt": "2026-10-09T08:25:05Z",
+                    } },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote");
+        let now = DateTime::parse_from_rfc3339("2026-10-09T08:39:00Z")
+            .expect("now")
+            .with_timezone(&Utc);
+        let composition = pod_composition([&pod], now);
+        assert_eq!(
+            (
+                composition.running,
+                composition.crash_looping,
+                composition.ready
+            ),
+            (1, 0, 1)
+        );
+        assert!(pod_problems([&pod], now).is_empty());
+    }
+
+    /// `shop/init-demo` with its init container crash-looping, created a
+    /// minute ago, at one instant of its back-off: waiting, just exited, or up.
+    fn init_demo(now: DateTime<Utc>, state: serde_json::Value) -> Pod {
+        let created = (now - chrono::Duration::seconds(60)).to_rfc3339();
+        serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "init-demo", "namespace": "shop", "creationTimestamp": created },
+            "spec": {
+                "nodeName": "node01",
+                "initContainers": [{ "name": "wait-for-db" }],
+                "containers": [{ "name": "app" }],
+            },
+            "status": {
+                "phase": "Pending",
+                "conditions": [
+                    { "type": "Initialized", "status": "False" },
+                    { "type": "PodScheduled", "status": "True", "lastTransitionTime": created },
+                ],
+                "initContainerStatuses": [{
+                    "name": "wait-for-db", "image": "busybox:1.36", "imageID": "",
+                    "ready": false, "restartCount": 3, "state": state,
+                }],
+                "containerStatuses": [{
+                    "name": "app", "image": "busybox:1.36", "imageID": "",
+                    "ready": false, "restartCount": 0,
+                    "state": { "waiting": { "reason": "PodInitializing" } },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote")
+    }
+
+    /// Dana's Overview counted init-demo under Pending while the Pods list
+    /// drew it red as `Init:CrashLoopBackOff`, and inside its first ten
+    /// minutes it would have counted as starting and listed nothing. Fails
+    /// if any instant of an init container's loop is counted as a wait, or
+    /// the backed-off one under another word than the list's.
+    #[test]
+    fn an_init_container_crash_looping_is_a_problem_at_every_instant() {
+        let now = Utc::now();
+        let backing_off = init_demo(
+            now,
+            serde_json::json!({ "waiting": { "reason": "CrashLoopBackOff", "message": "back-off 40s" } }),
+        );
+        let exited = init_demo(
+            now,
+            serde_json::json!({ "terminated": { "exitCode": 1, "reason": "Error" } }),
+        );
+        let up = init_demo(now, serde_json::json!({ "running": {} }));
+        assert_eq!(
+            crate::resources::PodRow::from(&backing_off).status.display,
+            "Init:CrashLoopBackOff"
+        );
+
+        for (instant, pod, word) in [
+            ("backing off", &backing_off, Some("Init:CrashLoopBackOff")),
+            ("exited", &exited, Some("Init:Error")),
+            ("up", &up, None),
+        ] {
+            let composition = pod_composition([pod], now);
+            assert_eq!(composition.starting, 0, "{instant}");
+            assert_eq!(
+                composition.stuck.first().map(|held| held.reason.as_str()),
+                word,
+                "{instant}"
+            );
+            let problems = pod_problems([pod], now);
+            assert_eq!(problems.len(), 1, "{instant}");
+            assert_eq!(problems[0].severity, ProblemSeverity::Critical, "{instant}");
+            assert_eq!(problems[0].reason, word.unwrap_or("Pending"), "{instant}");
+        }
+    }
+
+    /// Sam's Needs attention row for init-demo printed the kubelet's
+    /// "back-off 5m0s restarting failed container=migrate pod=init-demo_..."
+    /// with the pod's uid in it, beside rows reading "N restarts since
+    /// creation", and its 17 counted five restarts of wait-for-db, an init
+    /// container that had finished fine, with nothing saying so. Fails if an
+    /// init container's loop is worded in the kubelet's sentence, or its
+    /// count does not name the containers behind it.
+    #[test]
+    fn an_init_container_loop_is_worded_as_restarts_by_container() {
+        let now = Utc::now();
+        let ago = |seconds: i64| (now - chrono::Duration::seconds(seconds)).to_rfc3339();
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "init-demo", "namespace": "k8s-gui-test",
+                "creationTimestamp": ago(40_000),
+            },
+            "spec": {
+                "initContainers": [{ "name": "wait-for-db" }, { "name": "migrate" }, { "name": "seed" }],
+                "containers": [{ "name": "app" }],
+            },
+            "status": {
+                "phase": "Pending",
+                "conditions": [{ "type": "Initialized", "status": "False" }],
+                "initContainerStatuses": [
+                    {
+                        "name": "wait-for-db", "image": "busybox", "imageID": "", "ready": true,
+                        "restartCount": 5,
+                        "state": { "terminated": { "exitCode": 0, "reason": "Completed" } },
+                    },
+                    {
+                        "name": "migrate", "image": "busybox", "imageID": "", "ready": false,
+                        "restartCount": 12,
+                        "state": { "waiting": {
+                            "reason": "CrashLoopBackOff",
+                            "message": "back-off 5m0s restarting failed container=migrate pod=init-demo_k8s-gui-test(a7b8f832-8e5c-4f43-83e8-77fca11059e1)",
+                        } },
+                        "lastState": { "terminated": {
+                            "exitCode": 1, "reason": "Error",
+                            "startedAt": ago(130), "finishedAt": ago(120),
+                        } },
+                    },
+                    {
+                        "name": "seed", "image": "busybox", "imageID": "", "ready": false,
+                        "restartCount": 0, "state": { "waiting": { "reason": "PodInitializing" } },
+                    },
+                ],
+                "containerStatuses": [{
+                    "name": "app", "image": "busybox", "imageID": "", "ready": false,
+                    "restartCount": 0, "state": { "waiting": { "reason": "PodInitializing" } },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote");
+
+        let problems = pod_problems([&pod], now);
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].reason, "Init:CrashLoopBackOff");
+        let by = vec![
+            crate::resources::ContainerRestarts {
+                container: "wait-for-db".into(),
+                n: 5,
+            },
+            crate::resources::ContainerRestarts {
+                container: "migrate".into(),
+                n: 12,
+            },
+        ];
+        assert_eq!(
+            problems[0].detail,
+            Some(ProblemDetail::Restarts {
+                n: 17,
+                by: Some(by.clone())
+            })
+        );
+        assert_eq!(problems[0].since, Some(ago(120)));
+        assert_eq!(crate::resources::PodInfo::from(&pod).restarts_by, Some(by));
+    }
+
+    /// Sam saw init-demo's init container exit 1 again and again with its
+    /// restarts grey. Fails if the instant it is up between short failed
+    /// runs reads as an ordinary wait rather than as the loop it is in.
+    #[test]
+    fn an_init_container_up_between_failed_runs_is_crash_looping() {
+        let now = Utc::now();
+        let ago = |seconds: i64| (now - chrono::Duration::seconds(seconds)).to_rfc3339();
+        let mut pod = init_demo(
+            now,
+            serde_json::json!({ "running": { "startedAt": ago(3) } }),
+        );
+        pod.status
+            .as_mut()
+            .and_then(|status| status.init_container_statuses.as_mut())
+            .expect("an init container")[0]
+            .last_state = serde_json::from_value(serde_json::json!({
+            "terminated": { "exitCode": 1, "reason": "Error", "startedAt": ago(10), "finishedAt": ago(5) }
+        }))
+        .expect("a last state");
+
+        let problems = pod_problems([&pod], now);
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].reason, CRASH_LOOPING);
+    }
+
+    /// Sam's Overview turned amber six seconds after the unplaced pod's own
+    /// page did, on its next poll. Fails if the answer does not name the
+    /// moment its first wait runs out or crash loop lapses, or names one
+    /// already past.
+    #[test]
+    fn the_answer_names_the_moment_its_first_verdict_turns_on_the_clock() {
+        let now = Utc::now();
+        let waiting = pending_pod("never-placed", now, 20);
+        let looping = restarted_pod("checkout", now, 9, Some(20));
+        let late = pending_pod("long-gone", now, 600);
+        let at = |seconds: i64| Some((now + chrono::Duration::seconds(seconds)).timestamp());
+
+        assert_eq!(
+            next_change([&waiting, &looping, &late], now).map(|t| t.timestamp()),
+            at(PENDING_GRACE_SECONDS - 20)
+        );
+        assert_eq!(
+            next_change([&looping, &late], now).map(|t| t.timestamp()),
+            at(crate::resources::CRASH_LOOP_WINDOW_SECONDS - 20)
+        );
+        assert_eq!(next_change([&late], now), None);
+    }
+
+    /// kubectl counts a crash-looping pod ready in the seconds its container
+    /// is up and Ready. Fails if the ready count leaves such a pod out, or
+    /// counts one whose `Ready` condition is false.
+    #[test]
+    fn the_ready_count_is_the_pods_whose_ready_condition_is_true() {
+        let now = Utc::now();
+        let mut up = restarted_pod("checkout", now, 9, Some(20));
+        up.status.as_mut().unwrap().conditions = Some(vec![PodCondition {
+            type_: "Ready".to_string(),
+            status: "True".to_string(),
+            ..Default::default()
+        }]);
+        let composition = pod_composition([&up, &search_pod(false), &search_pod(true)], now);
+        assert_eq!(
+            (
+                composition.running,
+                composition.crash_looping,
+                composition.ready
+            ),
+            (3, 1, 2)
+        );
+    }
+
+    /// The distinction the field exists for. A row that quotes the cluster
+    /// has to keep the cluster's wording; a row this app composes has to
+    /// arrive as a name, or the reader's language never reaches it. Both
+    /// were `Option<String>` once, which is exactly how three English
+    /// sentences ended up on the first screen of a Russian interface.
+    #[test]
+    fn our_sentences_are_named_and_the_cluster_is_quoted() {
+        let now = Utc::now();
+
+        let ours = pod_problems(&[restarted_pod("flapper", now, 7, Some(120))], now);
+        assert_eq!(
+            ours[0].detail,
+            Some(ProblemDetail::Restarts { n: 7, by: None })
+        );
+
+        let cordoned = node_problems(&[unschedulable_node("worker-1")]);
+        assert_eq!(cordoned[0].detail, Some(ProblemDetail::Unschedulable));
+
+        let quoted = pod_problems(
+            &[pod(
+                "migrate",
+                PodStatus {
+                    phase: Some("Failed".to_string()),
+                    message: Some("The node was low on resource: memory".to_string()),
+                    ..Default::default()
+                },
+            )],
+            now,
+        );
+        assert_eq!(
+            quoted[0].detail,
+            Some(ProblemDetail::Said {
+                text: "The node was low on resource: memory".to_string()
+            })
+        );
+    }
+
+    fn unschedulable_node(name: &str) -> Node {
+        Node {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                ..Default::default()
+            },
+            spec: Some(NodeSpec {
+                unschedulable: Some(true),
+                ..Default::default()
+            }),
+            status: Some(NodeStatus {
+                conditions: Some(vec![k8s_openapi::api::core::v1::NodeCondition {
+                    type_: "Ready".to_string(),
+                    status: "True".to_string(),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            }),
+        }
+    }
+
+    /// The row shows the age of `since`. Dating it by the pod put "12d" on
+    /// something that happened two minutes ago.
+    #[test]
+    fn the_problem_is_dated_by_the_restart_not_by_the_pod() {
+        let now = Utc::now();
+        let problems = pod_problems(&[restarted_pod("flapper", now, 9, Some(120))], now);
+        let since: DateTime<Utc> = problems[0]
+            .since
+            .as_deref()
+            .expect("a restart problem carries the time of the restart")
+            .parse()
+            .expect("rfc3339");
+        assert!(
+            (now - since).num_seconds() < 300,
+            "expected the last restart, got {since}"
+        );
+    }
+
+    /// Not knowing when it happened is not evidence that it is over — the
+    /// same rule the Pending branch follows for an undated pod.
+    #[test]
+    fn restarts_with_no_recorded_time_still_report() {
+        let now = Utc::now();
+        let problems = pod_problems(&[restarted_pod("undated", now, 7, None)], now);
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].reason, "Restarting");
+    }
+
+    /// Sam's log-demo pods sat in Needs attention as "Restarting, 15
+    /// restarts": five containers, each restarted three times with its
+    /// cluster after runs of hours, Running and Ready since. Fails if
+    /// restarts that each ended a long run are a problem, or the same count
+    /// made of short runs inside the hour stops being one.
+    #[test]
+    fn restarts_that_each_ended_a_long_run_are_history_not_a_problem() {
+        let now = Utc::now();
+        let container = |name: &str, run_seconds: i64| ContainerStatus {
+            name: name.to_string(),
+            restart_count: 3,
+            ready: true,
+            started: Some(true),
+            state: Some(ContainerState {
+                running: Some(ContainerStateRunning {
+                    started_at: Some(at(now, 6 * 60)),
+                }),
+                ..Default::default()
+            }),
+            last_state: Some(ContainerState {
+                terminated: Some(ContainerStateTerminated {
+                    exit_code: 255,
+                    reason: Some("Unknown".to_string()),
+                    started_at: Some(at(now, 6 * 60 + 7 + run_seconds)),
+                    finished_at: Some(at(now, 6 * 60 + 7)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let restarted_with = |run_seconds: i64| {
+            pod(
+                "log-demo",
+                PodStatus {
+                    phase: Some("Running".to_string()),
+                    container_statuses: Some(
+                        ["a", "b", "c", "d", "e"]
+                            .iter()
+                            .map(|name| container(name, run_seconds))
+                            .collect(),
+                    ),
+                    ..Default::default()
+                },
+            )
+        };
+        assert!(pod_problems(&[restarted_with(2 * 3600)], now).is_empty());
+        let flapping = pod_problems(&[restarted_with(4)], now);
+        assert_eq!(flapping.len(), 1);
+        assert_eq!(flapping[0].reason, "Restarting");
+    }
+
+    /// One restart, however recent, is not a loop: a node reboot gives every
+    /// pod on it one. A second inside the back-off window is, and reads so.
+    #[test]
+    fn a_single_restart_is_not_worth_a_row() {
+        let now = Utc::now();
+        let problems = pod_problems(&[restarted_pod("fine", now, 1, Some(30))], now);
+        assert!(problems.is_empty());
+    }
+
+    #[test]
+    fn problems_are_capped_with_an_accurate_dropped_count() {
+        let overflow = 7;
+        let problems: Vec<_> = (0..MAX_PROBLEMS + overflow)
+            .map(|i| {
+                problem(
+                    "Pending",
+                    ProblemSeverity::Critical,
+                    Some(&format!("2026-08-05T00:{i:02}:00Z")),
+                )
+            })
+            .collect();
+
+        let (kept, truncated) = rank_and_cap(problems);
+        assert_eq!(kept.len(), MAX_PROBLEMS);
+        assert_eq!(truncated, overflow);
+    }
+
+    #[test]
+    fn cap_keeps_the_worst_and_oldest_rows() {
+        let mut problems = vec![problem(
+            "Restarting",
+            ProblemSeverity::Warning,
+            Some("2026-08-05T00:00:00Z"),
+        )];
+        problems.extend((0..MAX_PROBLEMS).map(|i| {
+            problem(
+                "Pending",
+                ProblemSeverity::Critical,
+                Some(&format!("2026-08-05T01:{i:02}:00Z")),
+            )
+        }));
+
+        let (kept, truncated) = rank_and_cap(problems);
+        assert_eq!(truncated, 1);
+        assert!(
+            kept.iter().all(|p| p.severity == ProblemSeverity::Critical),
+            "the warning must be the row dropped, not a critical one"
+        );
+    }
+
+    #[test]
+    fn short_problem_lists_are_not_truncated() {
+        let (kept, truncated) = rank_and_cap(vec![problem(
+            "Pending",
+            ProblemSeverity::Critical,
+            Some("2026-08-05T00:00:00Z"),
+        )]);
+        assert_eq!(kept.len(), 1);
+        assert_eq!(truncated, 0);
+    }
+
+    fn page_meta(continue_token: Option<&str>, remaining: Option<i64>) -> kube::core::ListMeta {
+        kube::core::ListMeta {
+            continue_: continue_token.map(ToString::to_string),
+            remaining_item_count: remaining,
+            ..Default::default()
+        }
+    }
+
+    /// The whole point of the optional counts, now that a count is one page
+    /// rather than the collection. A page the apiserver says nothing follows
+    /// has counted itself; a page it *does* have more after is only a count
+    /// if it tells us how many more. Answering that case with the page size
+    /// would print "500 Events" on a cluster holding fifty thousand — and a
+    /// count nobody can back is exactly what `None` exists for, the same way
+    /// a refused list stays unknown instead of becoming zero.
+    #[test]
+    fn a_page_only_counts_the_collection_when_it_can() {
+        assert_eq!(tally(&page_meta(None, None), 12), Some(12));
+        assert_eq!(tally(&page_meta(Some(""), None), 12), Some(12));
+        assert_eq!(
+            tally(&page_meta(Some("tok"), Some(49_500)), 500),
+            Some(50_000)
+        );
+        assert_eq!(tally(&page_meta(Some("tok"), None), 500), None);
+    }
+
+    fn names(names: &[&str]) -> Vec<String> {
+        names.iter().map(ToString::to_string).collect()
+    }
+
+    fn in_namespace<K: Default + kube::Resource<DynamicType = ()>>(namespace: &str) -> K {
+        let mut object = K::default();
+        object.meta_mut().namespace = Some(namespace.to_string());
+        object
+    }
+
+    /// A namespaced overview from the stores must be the namespace's own
+    /// objects on a cluster-wide capacity view: the nodes and the accounting
+    /// pods stay the cluster's, everything else is the selection's.
+    #[test]
+    fn a_projection_keeps_the_namespace_and_the_whole_clusters_nodes() {
+        let snapshot = Snapshot {
+            pods: arcs([
+                in_namespace::<Pod>("app"),
+                in_namespace::<Pod>("app"),
+                in_namespace::<Pod>("data"),
+            ]),
+            nodes: arcs([Node::default(), Node::default()]),
+            deployments: arcs([in_namespace::<Deployment>("app"), in_namespace("data")]),
+            jobs: arcs([in_namespace::<Job>("data")]),
+            stateful_sets: Vec::new(),
+            daemon_sets: Vec::new(),
+            events: arcs([in_namespace::<Event>("app"), in_namespace("data")]),
+        };
+        let app = project(&snapshot, Some(&names(&["app"])));
+        assert_eq!(app.scoped_pods.len(), 2);
+        assert_eq!(app.deployments.len(), 1);
+        assert_eq!(app.jobs.len(), 0);
+        assert_eq!(app.events.len(), 1);
+        let whole = project(&snapshot, None);
+        assert_eq!(whole.scoped_pods.len(), 3);
+        assert_eq!(whole.deployments.len(), 2);
+        assert_eq!(whole.jobs.len(), 1);
+        assert_eq!(whole.events.len(), 2);
+    }
+
+    /// A scope of several namespaces is every one of them from the stores,
+    /// and nothing of the namespaces outside it. Matching only the first
+    /// name would answer for a third of a three-namespace window.
+    #[test]
+    fn a_projection_of_several_namespaces_keeps_each_and_nothing_else() {
+        let snapshot = Snapshot {
+            pods: arcs([
+                in_namespace::<Pod>("app"),
+                in_namespace::<Pod>("data"),
+                in_namespace::<Pod>("data"),
+                in_namespace::<Pod>("kube-system"),
+            ]),
+            nodes: arcs([Node::default()]),
+            deployments: arcs([
+                in_namespace::<Deployment>("data"),
+                in_namespace("kube-system"),
+            ]),
+            jobs: arcs([in_namespace::<Job>("app")]),
+            stateful_sets: Vec::new(),
+            daemon_sets: Vec::new(),
+            events: arcs([in_namespace::<Event>("kube-system")]),
+        };
+        let both = project(&snapshot, Some(&names(&["app", "data"])));
+        assert_eq!(both.scoped_pods.len(), 3);
+        assert_eq!(both.deployments.len(), 1);
+        assert_eq!(both.jobs.len(), 1);
+        assert!(both.events.is_empty());
+    }
+
+    /// What the line above used to claim, asserted where it can fail.
+    ///
+    /// `project` takes the snapshot by reference and returns no nodes at
+    /// all, so `snapshot.nodes.len()` was the test's own input read back:
+    /// no edit to the projection or to `from_snapshot` could move it.
+    /// Reserved capacity is the *cluster's* number — a namespace's requests
+    /// over every node's allocatable — and narrowing the nodes to the
+    /// namespace is the mistake this exists to catch.
+    #[test]
+    fn the_capacity_view_stays_the_whole_clusters_however_the_scope_narrows() {
+        let snapshot = Snapshot {
+            pods: arcs([
+                in_namespace::<Pod>("app"),
+                in_namespace::<Pod>("app"),
+                in_namespace::<Pod>("data"),
+            ]),
+            nodes: arcs([Node::default(), Node::default()]),
+            deployments: arcs([]),
+            jobs: arcs([]),
+            stateful_sets: Vec::new(),
+            daemon_sets: Vec::new(),
+            events: arcs([]),
+        };
+        let sides = || Sides {
+            counts: ResourceCounts::default(),
+            usage_by_node: None,
+        };
+
+        let scoped = from_snapshot(&snapshot, Some(&names(&["app"])), sides());
+        let whole = from_snapshot(&snapshot, None, sides());
+
+        assert!(
+            !whole.nodes.is_empty(),
+            "the assertion is worthless if there were no nodes to lose"
+        );
+        assert_eq!(
+            scoped.nodes.len(),
+            whole.nodes.len(),
+            "a namespace does not have fewer nodes than its cluster"
+        );
+        assert!(
+            scoped.nodes_known,
+            "the stores serve only while every watch is healthy"
+        );
+    }
+
+    /// The stores hold objects with their bulk stripped; every fact the
+    /// overview derives from a pod must survive the strip, or the cached
+    /// answer would differ from the listed one.
+    #[test]
+    fn the_facts_the_overview_reads_survive_the_store_strip() {
+        let now = Utc::now();
+        let mut pod = restarted_pod("api", now, 7, Some(120));
+        pod.metadata.annotations = Some(
+            [(
+                "kubectl.kubernetes.io/last-applied-configuration".to_string(),
+                "{}".repeat(200),
+            )]
+            .into_iter()
+            .collect(),
+        );
+        let spec = pod.spec.get_or_insert_default();
+        spec.node_name = Some("n1".to_string());
+        spec.containers = vec![Container {
+            name: "api".to_string(),
+            env: Some(vec![k8s_openapi::api::core::v1::EnvVar {
+                name: "A".to_string(),
+                value: Some("b".repeat(500)),
+                ..Default::default()
+            }]),
+            resources: Some(ResourceRequirements {
+                requests: Some(
+                    [
+                        ("cpu".to_string(), Quantity("500m".to_string())),
+                        ("memory".to_string(), Quantity("1Gi".to_string())),
+                    ]
+                    .into_iter()
+                    .collect(),
+                ),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }];
+        let mut stripped = pod.clone();
+        crate::overview::strip_pod(&mut stripped);
+
+        assert_eq!(pod_problem(&stripped, now), pod_problem(&pod, now));
+        assert_eq!(pod_requests(&stripped), pod_requests(&pod));
+        assert_eq!(
+            crate::resources::restarts(&stripped),
+            crate::resources::restarts(&pod)
+        );
+        assert_eq!(holds_reservation(&stripped), holds_reservation(&pod));
+        // The one pod field the store path needs that no assertion above
+        // reads: the scheduler view accounts by node and silently skips a
+        // pod without one, so a strip that took it would quietly empty the
+        // capacity panel.
+        assert_eq!(
+            stripped.spec.as_ref().and_then(|s| s.node_name.as_deref()),
+            Some("n1")
+        );
+        let before = serde_json::to_vec(&pod).unwrap().len();
+        let after = serde_json::to_vec(&stripped).unwrap().len();
+        assert!(
+            after * 2 < before,
+            "strip kept the bulk: {after} of {before} bytes"
+        );
+    }
+
+    /// Where the answer came from, which the frontend shows. Flipping
+    /// `from_snapshot`'s `OverviewSource::Watch` to `List` left every Rust
+    /// test green: the only assertion on it is an `#[ignore]`d live test that
+    /// loops until it sees `Watch` and never checks the fallback half. A scope
+    /// of several namespaces is one snapshot, so it is watched or listed
+    /// whole — never some namespaces of each.
+    #[test]
+    fn an_overview_built_from_the_stores_says_it_came_from_the_watch() {
+        let snapshot = Snapshot {
+            pods: arcs([in_namespace::<Pod>("app"), in_namespace("data")]),
+            nodes: arcs([Node::default()]),
+            deployments: arcs([]),
+            jobs: arcs([]),
+            stateful_sets: Vec::new(),
+            daemon_sets: Vec::new(),
+            events: arcs([]),
+        };
+        for scope in [None, Some(names(&["app", "data"]))] {
+            let built = from_snapshot(
+                &snapshot,
+                scope.as_deref(),
+                Sides {
+                    counts: ResourceCounts::default(),
+                    usage_by_node: None,
+                },
+            );
+            assert_eq!(built.served_from, OverviewSource::Watch);
+            assert_eq!(built.counts.pods, Some(2));
+        }
+    }
+
+    /// Counts alone left a rollout past its deadline off the list while its
+    /// old pods still served, and listed every ordinary rollout as short.
+    #[test]
+    fn a_stalled_rollout_needs_attention_and_a_moving_one_does_not() {
+        use k8s_openapi::api::apps::v1::{DeploymentCondition, DeploymentSpec, DeploymentStatus};
+        let deployment = |updated: i32, progressing: (&str, &str)| Deployment {
+            metadata: ObjectMeta {
+                name: Some("search".to_string()),
+                namespace: Some("shop".to_string()),
+                generation: Some(2),
+                ..Default::default()
+            },
+            spec: Some(DeploymentSpec {
+                replicas: Some(2),
+                ..Default::default()
+            }),
+            status: Some(DeploymentStatus {
+                observed_generation: Some(2),
+                replicas: Some(3),
+                updated_replicas: Some(updated),
+                ready_replicas: Some(2),
+                available_replicas: Some(2),
+                conditions: Some(vec![DeploymentCondition {
+                    type_: "Progressing".to_string(),
+                    status: progressing.0.to_string(),
+                    reason: Some(progressing.1.to_string()),
+                    message: Some(
+                        "ReplicaSet \"search-6df9f694b5\" has timed out progressing.".to_string(),
+                    ),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            }),
+        };
+        let stalled = deployment_problems(
+            [&deployment(1, ("False", "ProgressDeadlineExceeded"))],
+            &HashMap::new(),
+            &[],
+            Utc::now(),
+        );
+        assert_eq!(stalled.len(), 1);
+        assert_eq!(stalled[0].reason, "Stalled");
+        assert_eq!(stalled[0].severity, ProblemSeverity::Critical);
+        assert!(deployment_problems(
+            [&deployment(1, ("True", "ReplicaSetUpdated"))],
+            &HashMap::new(),
+            &[],
+            Utc::now()
+        )
+        .is_empty());
+    }
+
+    /// The other four strips had no test at all: emptying `strip_node`,
+    /// `strip_job` and `strip_event`, or adding `status = None` to
+    /// `strip_deployment`, each left the whole suite green. The deployment
+    /// one is the sharp case — `deployment_problems` reads `spec.replicas`
+    /// and `status`, and `status` is exactly what a careless strip reaches
+    /// for.
+    #[test]
+    fn what_the_overview_reads_off_the_other_kinds_survives_their_strips() {
+        let mut deployment = Deployment {
+            metadata: ObjectMeta {
+                name: Some("api".to_string()),
+                namespace: Some("shop".to_string()),
+                annotations: Some(
+                    [("last-applied".to_string(), "{}".repeat(200))]
+                        .into_iter()
+                        .collect(),
+                ),
+                ..Default::default()
+            },
+            spec: Some(k8s_openapi::api::apps::v1::DeploymentSpec {
+                replicas: Some(3),
+                ..Default::default()
+            }),
+            status: Some(k8s_openapi::api::apps::v1::DeploymentStatus {
+                observed_generation: Some(1),
+                replicas: Some(3),
+                updated_replicas: Some(3),
+                ready_replicas: Some(1),
+                conditions: Some(vec![k8s_openapi::api::apps::v1::DeploymentCondition {
+                    type_: "Available".to_string(),
+                    status: "False".to_string(),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            }),
+        };
+        let before = deployment.clone();
+        crate::overview::strip_deployment(&mut deployment);
+        assert_eq!(
+            deployment_problems([&before], &HashMap::new(), &[], Utc::now()).len(),
+            1
+        );
+        assert_eq!(
+            deployment_problems([&deployment], &HashMap::new(), &[], Utc::now()),
+            deployment_problems([&before], &HashMap::new(), &[], Utc::now()),
+            "a Deployment strip that reached status would empty the panel"
+        );
+        assert!(
+            deployment.metadata.annotations.is_none(),
+            "a strip that keeps everything proves nothing"
+        );
+
+        let mut node = Node {
+            metadata: ObjectMeta {
+                name: Some("n1".to_string()),
+                annotations: Some([("csi".to_string(), "x".repeat(400))].into_iter().collect()),
+                ..Default::default()
+            },
+            status: Some(NodeStatus {
+                conditions: Some(vec![NodeCondition {
+                    type_: "Ready".to_string(),
+                    status: "True".to_string(),
+                    ..Default::default()
+                }]),
+                allocatable: Some(
+                    [("cpu".to_string(), Quantity("4".to_string()))]
+                        .into_iter()
+                        .collect(),
+                ),
+                images: Some(vec![
+                    k8s_openapi::api::core::v1::ContainerImage::default();
+                    50
+                ]),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let node_before = node.clone();
+        crate::overview::strip_node(&mut node);
+        // Compared as what the frontend receives, which is the only shape
+        // both sides have in common.
+        let seen = |n: &Node| {
+            serde_json::to_value(
+                summarize_nodes([n], &BTreeMap::new(), &BTreeMap::new(), None).summaries,
+            )
+            .expect("a node summary serialises")
+        };
+        assert_eq!(
+            seen(&node),
+            seen(&node_before),
+            "the capacity view is derived from what the strip has to keep"
+        );
+        assert!(
+            node.status
+                .as_ref()
+                .and_then(|s| s.images.as_ref())
+                .is_none(),
+            "a strip that keeps the image list proves nothing"
+        );
+    }
+
+    /// A refusal on one kind must not take the rest of the screen with it.
+    #[test]
+    fn refused_kinds_report_none_while_the_rest_of_the_overview_stands() {
+        let pods = vec![scheduled_pod("api", "app", "n1", "500m", "1Gi")];
+        let result = build_overview(&OverviewInputs {
+            scoped_pods: &arcs(pods.clone()),
+            accounting_pods: &arcs(pods),
+            nodes: &arcs(vec![node("n1", "4", "8Gi")]),
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[
+                OverviewUnread::of(
+                    "Deployment",
+                    None,
+                    &Error::PermissionDenied("deployments".into()),
+                ),
+                OverviewUnread::of("Job", None, &Error::PermissionDenied("jobs".into())),
+            ],
+            jobs: &[],
+            events: &[],
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts {
+                services: Some(6),
+                secrets: None,
+                ..Default::default()
+            },
+            scope: None,
+            now: Utc::now(),
+            served_from: OverviewSource::List,
+        });
+
+        assert_eq!(result.counts.deployments, None);
+        assert_eq!(result.counts.jobs, None);
+        assert_eq!(result.counts.secrets, None);
+        assert!(result.jobs.is_none());
+        // The kinds that were readable still answer, and so does the screen.
+        assert_eq!(result.counts.pods, Some(1));
+        assert_eq!(result.counts.nodes, Some(1));
+        assert_eq!(result.counts.services, Some(6));
+        assert_eq!(result.scheduler.cpu.allocatable, 4000.0);
+    }
+
+    /// The lists the query already reads answer their own counts, and the
+    /// pod count follows the selected namespace like every other scoped kind.
+    #[test]
+    fn counts_come_from_the_scoped_lists() {
+        let scoped = vec![scheduled_pod("api", "app", "n1", "500m", "1Gi")];
+        let cluster = vec![
+            scheduled_pod("api", "app", "n1", "500m", "1Gi"),
+            scheduled_pod("db", "data", "n1", "1", "2Gi"),
+        ];
+        let deployments = vec![Deployment::default(), Deployment::default()];
+        let jobs = vec![Job::default()];
+
+        let result = build_overview(&OverviewInputs {
+            scoped_pods: &arcs(scoped),
+            accounting_pods: &arcs(cluster),
+            nodes: &arcs(vec![node("n1", "4", "8Gi"), node("n2", "4", "8Gi")]),
+            nodes_known: true,
+            deployments: &arcs(deployments),
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &arcs(jobs),
+            events: &[],
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: Some(&["app".to_string()]),
+            now: Utc::now(),
+            served_from: OverviewSource::List,
+        });
+
+        assert_eq!(result.counts.pods, Some(1));
+        assert_eq!(result.counts.deployments, Some(2));
+        assert_eq!(result.counts.jobs, Some(1));
+        assert_eq!(result.counts.nodes, Some(2));
+    }
+
+    /// Counting a completed Job pod as healthy running workload is the bug
+    /// this breakdown exists to kill: a nightly backup is not a live replica.
+    #[test]
+    fn pod_composition_separates_running_from_completed() {
+        let phases = ["Running", "Succeeded", "Succeeded", "Pending", "Failed"];
+        let pods: Vec<_> = phases
+            .iter()
+            .enumerate()
+            .map(|(i, phase)| {
+                pod(
+                    &format!("p{i}"),
+                    PodStatus {
+                        phase: Some((*phase).to_string()),
+                        ..Default::default()
+                    },
+                )
+            })
+            .collect();
+
+        let composition = pod_composition(&pods, Utc::now());
+        assert_eq!(composition.running, 1);
+        assert_eq!(composition.succeeded, 2);
+        assert_eq!(composition.pending, 1);
+        assert_eq!(composition.failed, 1);
+        assert_eq!(composition.crash_looping, 0);
+    }
+
+    /// A crash-looping pod reports phase Running while serving nothing. It
+    /// stays inside `running` — the fields have to sum to the pod count — and
+    /// is called out separately so the bar can carve it back out.
+    #[test]
+    fn crash_looping_pods_are_a_subset_of_running() {
+        let mut looping = pod(
+            "crash",
+            PodStatus {
+                phase: Some("Running".to_string()),
+                ..Default::default()
+            },
+        );
+        looping.status.as_mut().unwrap().container_statuses = Some(vec![ContainerStatus {
+            name: "app".to_string(),
+            state: Some(ContainerState {
+                waiting: Some(ContainerStateWaiting {
+                    reason: Some("CrashLoopBackOff".to_string()),
+                    message: None,
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }]);
+
+        let composition = pod_composition(&[looping], Utc::now());
+        assert_eq!(composition.running, 1);
+        assert_eq!(composition.crash_looping, 1);
+    }
+
+    /// Search pod `shop/search-77fbd8f66-52kp8` as the kubelet wrote it: up,
+    /// its readiness probe answering 404, so `Ready` is False.
+    fn search_pod(ready: bool) -> Pod {
+        let condition = |type_: &str| {
+            if ready {
+                serde_json::json!({ "type": type_, "status": "True" })
+            } else {
+                serde_json::json!({
+                    "type": type_,
+                    "status": "False",
+                    "reason": "ContainersNotReady",
+                    "message": "containers with unready status: [search]",
+                })
+            }
+        };
+        serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "search-77fbd8f66-52kp8",
+                "namespace": "shop",
+                "creationTimestamp": "2026-10-06T21:20:11Z",
+            },
+            "spec": {
+                "nodeName": "node01",
+                "containers": [{ "name": "search", "image": "nginx:1.27-alpine" }],
+            },
+            "status": {
+                "phase": "Running",
+                "conditions": [
+                    { "type": "PodReadyToStartContainers", "status": "True" },
+                    { "type": "Initialized", "status": "True" },
+                    condition("Ready"),
+                    condition("ContainersReady"),
+                    { "type": "PodScheduled", "status": "True" },
+                ],
+                "containerStatuses": [{
+                    "name": "search",
+                    "ready": ready,
+                    "started": true,
+                    "restartCount": 0,
+                    "image": "docker.io/library/nginx:1.27-alpine",
+                    "imageID": "docker.io/library/nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10",
+                    "state": { "running": { "startedAt": "2026-10-06T21:20:13Z" } },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote")
+    }
+
+    /// Dana's shop Overview said "6 of 14 pods running" while kubectl had 5
+    /// ready: the search pod was `Running`, `0/1`, its readiness probe
+    /// failing. Fails if a pod up and not Ready is counted as serving, or if
+    /// the count and the Pods list's Ready column disagree about it.
+    #[test]
+    fn a_running_pod_failing_its_readiness_probe_is_counted_not_ready() {
+        let pods = [search_pod(false), search_pod(true)];
+
+        let composition = pod_composition(&pods, Utc::now());
+
+        assert_eq!(
+            (
+                composition.running,
+                composition.crash_looping,
+                composition.not_ready
+            ),
+            (2, 0, 1)
+        );
+        let unready_rows = pods
+            .iter()
+            .map(crate::resources::PodRow::from)
+            .filter(|row| row.containers.iter().any(|c| !c.ready))
+            .count();
+        assert_eq!(composition.not_ready, unready_rows);
+    }
+
+    /// Sam's old big-pull pod kept `Ready` while it terminated, and the
+    /// Overview drew it in the green Running segment and counted it ready.
+    /// Fails if a pod being deleted is counted serving, ready or not ready.
+    #[test]
+    fn a_running_pod_being_deleted_is_counted_terminating_not_ready() {
+        let mut leaving = search_pod(true);
+        leaving.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(Utc::now()).expect("now is a time"),
+        ));
+        let pods = [leaving, search_pod(true)];
+
+        let composition = pod_composition(&pods, Utc::now());
+
+        assert_eq!(
+            (
+                composition.running,
+                composition.terminating,
+                composition.ready,
+                composition.not_ready
+            ),
+            (2, 1, 1, 0)
+        );
+    }
+
+    /// `team-checkout/checkout-worker` as the kubelet wrote it: scheduled,
+    /// its container never created because a Secret it reads is missing.
+    fn config_error_pod() -> Pod {
+        serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "checkout-worker-6d9f7b8c4-q2x7m",
+                "namespace": "team-checkout",
+                "creationTimestamp": "2026-10-06T20:02:41Z",
+            },
+            "spec": {
+                "nodeName": "node01",
+                "containers": [{ "name": "worker", "image": "busybox:1.36" }],
+            },
+            "status": {
+                "phase": "Pending",
+                "conditions": [
+                    { "type": "PodReadyToStartContainers", "status": "True" },
+                    { "type": "Initialized", "status": "True" },
+                    {
+                        "type": "Ready",
+                        "status": "False",
+                        "reason": "ContainersNotReady",
+                        "message": "containers with unready status: [worker]",
+                    },
+                    {
+                        "type": "ContainersReady",
+                        "status": "False",
+                        "reason": "ContainersNotReady",
+                        "message": "containers with unready status: [worker]",
+                    },
+                    { "type": "PodScheduled", "status": "True" },
+                ],
+                "containerStatuses": [{
+                    "name": "worker",
+                    "ready": false,
+                    "started": false,
+                    "restartCount": 0,
+                    "image": "busybox:1.36",
+                    "imageID": "",
+                    "state": {
+                        "waiting": {
+                            "reason": "CreateContainerConfigError",
+                            "message": "secret \"checkout-db\" not found",
+                        },
+                    },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote")
+    }
+
+    /// Sam's team-checkout Overview read "1 Pending" for the pod its Pods
+    /// list and its Needs attention row both called
+    /// `CreateContainerConfigError`. Fails if the composition files it under
+    /// the phase, or under a word the other two do not print.
+    #[test]
+    fn a_pending_pod_held_in_a_config_error_is_counted_under_that_error() {
+        let pod = config_error_pod();
+        let now = Utc::now();
+
+        let composition = pod_composition([&pod], now);
+
+        assert_eq!(composition.pending, 1);
+        assert_eq!(
+            composition.stuck,
+            vec![ReasonCount {
+                reason: "CreateContainerConfigError".to_string(),
+                count: 1,
+            }]
+        );
+        let row = crate::resources::PodRow::from(&pod);
+        assert_eq!(row.status.display, composition.stuck[0].reason);
+        let problems = pod_problems([&pod], now);
+        assert_eq!(problems[0].reason, composition.stuck[0].reason);
+    }
+
+    /// Sam's controlplane: Headroom and Used said 51 pods, Requested and
+    /// `kubectl describe node` 39, the Overview 40. The Succeeded and Failed
+    /// pods of finished Jobs hold no place. Fails if the Overview's count of
+    /// the pods on a node and the node page's budget count them differently.
+    #[test]
+    fn the_overview_and_the_node_page_count_only_the_pods_holding_a_place() {
+        let node: Node = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "controlplane", "labels": { "kubernetes.io/hostname": "controlplane" } },
+            "status": {
+                "capacity": { "cpu": "1", "memory": "2300140Ki", "pods": "110", "ephemeral-storage": "19221248Ki" },
+                "allocatable": { "cpu": "1", "memory": "2197740Ki", "pods": "110", "ephemeral-storage": "18233108Ki" },
+            },
+        }))
+        .expect("a node the kubelet wrote");
+        let on_node = |name: &str, phase: &str| -> Pod {
+            serde_json::from_value(serde_json::json!({
+                "metadata": { "name": name, "namespace": "shop" },
+                "spec": {
+                    "nodeName": "controlplane",
+                    "containers": [{
+                        "name": "app",
+                        "image": "busybox:1.36",
+                        "resources": { "requests": { "cpu": "10m", "memory": "16Mi" } },
+                    }],
+                },
+                "status": { "phase": phase },
+            }))
+            .expect("a pod the kubelet wrote")
+        };
+        let pods = vec![
+            on_node("cart-9df89489c-jhgk9", "Running"),
+            on_node("search-77fbd8f66-52kp8", "Running"),
+            on_node("payments-6c9b8d7f5-x2k4q", "Pending"),
+            on_node("reports-29855392-7m2qd", "Succeeded"),
+            on_node("reports-29855390-h8z4w", "Failed"),
+        ];
+
+        let page = crate::resources::node_budget::budget(&node, Some(&pods), Vec::new(), None);
+        let overview = account_by_node(&pods);
+
+        assert_eq!(page.pods, Some(3));
+        assert_eq!(overview.pods.get("controlplane").copied(), page.pods);
+    }
+
+    #[test]
+    fn pods_with_no_phase_are_unknown_not_dropped() {
+        let composition = pod_composition(&[pod("mystery", PodStatus::default())], Utc::now());
+        assert_eq!(composition.unknown, 1);
+        assert_eq!(composition.running, 0);
+    }
+
+    fn problems_of(
+        stateful_sets: &[StatefulSet],
+        daemon_sets: &[DaemonSet],
+        jobs: &[Job],
+    ) -> Vec<ClusterProblem> {
+        problems_with_pods(stateful_sets, daemon_sets, jobs, &[])
+    }
+
+    fn problems_with_pods(
+        stateful_sets: &[StatefulSet],
+        daemon_sets: &[DaemonSet],
+        jobs: &[Job],
+        pods: &[Pod],
+    ) -> Vec<ClusterProblem> {
+        build_overview(&OverviewInputs {
+            scoped_pods: &arcs(pods.to_vec()),
+            accounting_pods: &[],
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &arcs(stateful_sets.to_vec()),
+            daemon_sets: &arcs(daemon_sets.to_vec()),
+            unread: &[],
+            jobs: &arcs(jobs.to_vec()),
+            events: &[],
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            now: Utc::now(),
+        })
+        .problems
+    }
+
+    /// The overview read Deployments only, so a `StatefulSet` with nothing
+    /// available and a `DaemonSet` short of a node were red on their own pages
+    /// and absent from the first screen.
+    #[test]
+    fn a_stateful_set_or_daemon_set_the_rollout_reader_flags_is_a_problem() {
+        let down: StatefulSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "orders-db", "namespace": "shop", "generation": 1 },
+            "spec": { "replicas": 1, "selector": {}, "serviceName": "orders-db", "template": {} },
+            "status": { "observedGeneration": 1, "replicas": 1, "readyReplicas": 0, "availableReplicas": 0 },
+        }))
+        .expect("a StatefulSet");
+        let mut healthy = down.clone();
+        healthy.metadata.name = Some("cache".to_string());
+        let status = healthy.status.as_mut().expect("a status");
+        status.ready_replicas = Some(1);
+        status.available_replicas = Some(1);
+        let short: DaemonSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "agent", "namespace": "kube-system", "generation": 1 },
+            "spec": { "selector": {}, "template": {} },
+            "status": {
+                "observedGeneration": 1,
+                "desiredNumberScheduled": 2,
+                "currentNumberScheduled": 2,
+                "updatedNumberScheduled": 2,
+                "numberMisscheduled": 0,
+                "numberReady": 1,
+                "numberAvailable": 1,
+            },
+        }))
+        .expect("a DaemonSet");
+
+        let problems = problems_of(&[down, healthy], &[short], &[]);
+
+        assert_eq!(problems.len(), 2, "{problems:?}");
+        let set = problems
+            .iter()
+            .find(|p| p.kind == "StatefulSet")
+            .expect("the StatefulSet with nothing available");
+        assert_eq!(set.name, "orders-db");
+        assert_eq!(set.reason, "Unavailable");
+        assert_eq!(set.severity, ProblemSeverity::Critical);
+        assert_eq!(
+            set.detail,
+            Some(ProblemDetail::ReplicasReady {
+                ready: 0,
+                desired: 1
+            })
+        );
+        let agent = problems
+            .iter()
+            .find(|p| p.kind == "DaemonSet")
+            .expect("the DaemonSet short of a node");
+        assert_eq!(agent.reason, "Degraded");
+        assert_eq!(agent.severity, ProblemSeverity::Warning);
+    }
+
+    /// Lena's scale on a `StatefulSet` and a `DaemonSet`: one pod serving, the
+    /// new one being created, and Needs attention listed both Degraded while
+    /// their pages said coming up. Fails if a set whose missing pod is still
+    /// starting is listed, or one whose new pod cannot pull its image is not.
+    #[test]
+    fn a_set_scaling_up_needs_attention_only_once_its_new_pod_is_stuck() {
+        let owned = |name: &str, owner: &str, ready: bool, waiting: &str| -> Pod {
+            serde_json::from_value(serde_json::json!({
+                "metadata": {
+                    "name": name,
+                    "namespace": "shop",
+                    "creationTimestamp": (Utc::now() - chrono::Duration::seconds(5)).to_rfc3339(),
+                    "ownerReferences": [{
+                        "apiVersion": "apps/v1",
+                        "kind": if owner == "web" { "StatefulSet" } else { "DaemonSet" },
+                        "name": owner, "uid": owner, "controller": true,
+                    }],
+                },
+                "status": {
+                    "phase": if ready { "Running" } else { "Pending" },
+                    "conditions": [{ "type": "Ready", "status": if ready { "True" } else { "False" } }],
+                    "containerStatuses": [{
+                        "name": "app", "image": "app", "imageID": "", "ready": ready,
+                        "restartCount": 0,
+                        "state": if ready { serde_json::json!({ "running": {} }) }
+                                 else { serde_json::json!({ "waiting": { "reason": waiting } }) },
+                    }],
+                },
+            }))
+            .expect("a pod")
+        };
+        let set: StatefulSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "web", "namespace": "shop", "uid": "web", "generation": 2 },
+            "spec": { "replicas": 2, "selector": {}, "serviceName": "web", "template": {} },
+            "status": {
+                "observedGeneration": 2, "replicas": 2, "readyReplicas": 1, "availableReplicas": 1,
+                "updatedReplicas": 2, "currentRevision": "web-1", "updateRevision": "web-1",
+            },
+        }))
+        .expect("a StatefulSet");
+        let daemon: DaemonSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "agent", "namespace": "shop", "uid": "agent", "generation": 1 },
+            "spec": { "selector": {}, "template": {} },
+            "status": {
+                "observedGeneration": 1, "desiredNumberScheduled": 2, "currentNumberScheduled": 2,
+                "updatedNumberScheduled": 2, "numberMisscheduled": 0, "numberReady": 1,
+                "numberAvailable": 1,
+            },
+        }))
+        .expect("a DaemonSet");
+        let starting = [
+            owned("web-0", "web", true, ""),
+            owned("web-1", "web", false, "ContainerCreating"),
+            owned("agent-a", "agent", true, ""),
+            owned("agent-b", "agent", false, "ContainerCreating"),
+        ];
+
+        let calm = problems_with_pods(
+            std::slice::from_ref(&set),
+            std::slice::from_ref(&daemon),
+            &[],
+            &starting,
+        );
+        assert!(calm.is_empty(), "{calm:?}");
+
+        let stuck = [
+            owned("web-0", "web", true, ""),
+            owned("web-1", "web", false, "ImagePullBackOff"),
+            owned("agent-a", "agent", true, ""),
+            owned("agent-b", "agent", false, "ImagePullBackOff"),
+        ];
+        let listed = problems_with_pods(&[set], &[daemon], &[], &stuck);
+        for kind in ["StatefulSet", "DaemonSet"] {
+            let problem = listed.iter().find(|p| p.kind == kind).expect(kind);
+            assert_eq!(problem.reason, "Degraded");
+        }
+    }
+
+    /// Dana scaled `cart` from 3 to 4: Progressing stayed
+    /// `NewReplicaSetAvailable`, the fourth pod was being created, and Needs
+    /// attention and the census listed `cart` Degraded. Fails if a Deployment
+    /// whose missing pod is still starting is listed, or one whose new pod
+    /// cannot pull its image is not.
+    #[test]
+    fn a_deployment_scaling_up_needs_attention_only_once_its_new_pod_is_stuck() {
+        let cart: Deployment = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "cart", "namespace": "shop", "uid": "cart", "generation": 3 },
+            "spec": { "replicas": 4, "selector": {}, "template": {} },
+            "status": {
+                "observedGeneration": 3, "replicas": 4, "updatedReplicas": 4,
+                "readyReplicas": 3, "availableReplicas": 3,
+                "conditions": [
+                    { "type": "Available", "status": "True", "reason": "MinimumReplicasAvailable" },
+                    { "type": "Progressing", "status": "True", "reason": "NewReplicaSetAvailable" },
+                ],
+            },
+        }))
+        .expect("a Deployment");
+        let pod = |name: &str, ready: bool, waiting: &str| -> Pod {
+            serde_json::from_value(serde_json::json!({
+                "metadata": {
+                    "name": name,
+                    "namespace": "shop",
+                    "labels": { "pod-template-hash": "9df89489c" },
+                    "creationTimestamp": (Utc::now() - chrono::Duration::seconds(2)).to_rfc3339(),
+                    "ownerReferences": [{
+                        "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                        "name": "cart-9df89489c", "uid": "rs", "controller": true,
+                    }],
+                },
+                "status": {
+                    "phase": if ready { "Running" } else { "Pending" },
+                    "conditions": [{ "type": "Ready", "status": if ready { "True" } else { "False" } }],
+                    "containerStatuses": [{
+                        "name": "cart", "image": "cart", "imageID": "", "ready": ready,
+                        "restartCount": 0,
+                        "state": if ready { serde_json::json!({ "running": {} }) }
+                                 else { serde_json::json!({ "waiting": { "reason": waiting } }) },
+                    }],
+                },
+            }))
+            .expect("a pod")
+        };
+        let problems = |new_pod: &str| {
+            let pods = arcs(vec![
+                pod("cart-9df89489c-a1", true, ""),
+                pod("cart-9df89489c-b2", true, ""),
+                pod("cart-9df89489c-c3", true, ""),
+                pod("cart-9df89489c-d4", false, new_pod),
+            ]);
+            build_overview(&OverviewInputs {
+                scoped_pods: &pods,
+                accounting_pods: &[],
+                nodes: &[],
+                nodes_known: true,
+                deployments: &arcs(vec![cart.clone()]),
+                stateful_sets: &[],
+                daemon_sets: &[],
+                unread: &[],
+                jobs: &[],
+                events: &[],
+                events_known: true,
+                usage_by_node: None,
+                counts: ResourceCounts::default(),
+                scope: None,
+                served_from: OverviewSource::List,
+                now: Utc::now(),
+            })
+            .problems
+        };
+        let calm = problems("ContainerCreating");
+        assert!(calm.iter().all(|p| p.kind != "Deployment"), "{calm:?}");
+        let listed = problems("ImagePullBackOff");
+        let cart = listed
+            .iter()
+            .find(|p| p.kind == "Deployment")
+            .expect("cart listed");
+        assert_eq!(cart.reason, "Degraded");
+    }
+
+    /// A Job whose controller gave up was a red segment in the Jobs bar and
+    /// nothing in the list above it. One still retrying is not a failure.
+    #[test]
+    fn a_job_its_controller_gave_up_on_is_a_problem_and_a_retry_is_not() {
+        let job = |name: &str, conditions: Vec<JobCondition>, failed: i32| Job {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                namespace: Some("shop".to_string()),
+                ..Default::default()
+            },
+            status: Some(JobStatus {
+                conditions: Some(conditions),
+                failed: Some(failed),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let gave_up = job(
+            "reports-1",
+            vec![JobCondition {
+                type_: "Failed".to_string(),
+                status: "True".to_string(),
+                reason: Some("BackoffLimitExceeded".to_string()),
+                message: Some("Job has reached the specified backoff limit".to_string()),
+                ..Default::default()
+            }],
+            2,
+        );
+        let retrying = job("reports-2", Vec::new(), 1);
+
+        let problems = problems_of(&[], &[], &[gave_up, retrying]);
+
+        assert_eq!(problems.len(), 1, "{problems:?}");
+        assert_eq!(problems[0].kind, "Job");
+        assert_eq!(problems[0].name, "reports-1");
+        assert_eq!(problems[0].reason, "BackoffLimitExceeded");
+        assert_eq!(problems[0].severity, ProblemSeverity::Critical);
+        assert_eq!(
+            problems[0].detail,
+            Some(ProblemDetail::Said {
+                text: "Job has reached the specified backoff limit".to_string()
+            })
+        );
+    }
+
+    /// Dana: each failed `CronJob` run was three rows, two Failed pods and the
+    /// Job. The pods a failed Job owns fold into its row as a count; a failed
+    /// pod of a Job still retrying, and any other pod, keep their own rows.
+    /// Fails if the fold drops a pod it should keep or keeps one it folded.
+    #[test]
+    fn a_failed_jobs_failed_pods_fold_into_its_row() {
+        let job = |name: &str, failed: bool| -> Job {
+            serde_json::from_value(serde_json::json!({
+                "metadata": { "name": name, "namespace": "shop" },
+                "status": { "conditions": if failed { serde_json::json!([{
+                    "type": "Failed", "status": "True", "reason": "BackoffLimitExceeded"
+                }]) } else { serde_json::json!([]) } },
+            }))
+            .expect("a Job")
+        };
+        let pod = |name: &str, owner: &str, phase: &str| -> Pod {
+            serde_json::from_value(serde_json::json!({
+                "metadata": {
+                    "name": name,
+                    "namespace": "shop",
+                    "ownerReferences": [{
+                        "apiVersion": "batch/v1", "kind": "Job", "name": owner,
+                        "uid": owner, "controller": true
+                    }]
+                },
+                "status": { "phase": phase },
+            }))
+            .expect("a Pod")
+        };
+        let pods = arcs(vec![
+            pod("reports-1-a", "reports-1", "Failed"),
+            pod("reports-1-b", "reports-1", "Failed"),
+            pod("reports-2-a", "reports-2", "Failed"),
+        ]);
+
+        let problems = build_overview(&OverviewInputs {
+            scoped_pods: &pods,
+            accounting_pods: &[],
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &arcs(vec![job("reports-1", true), job("reports-2", false)]),
+            events: &[],
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            now: Utc::now(),
+        })
+        .problems;
+
+        let names: Vec<_> = problems.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names.len(), 2, "{names:?}");
+        assert!(names.contains(&"reports-1") && names.contains(&"reports-2-a"));
+        let failed = problems.iter().find(|p| p.kind == "Job").expect("the Job");
+        assert_eq!(failed.folded_pods, Some(2));
+    }
+
+    /// The stores drop the pod template; the rollout verdict has to read the
+    /// same from what is kept, or the watched answer differs from the listed one.
+    #[test]
+    fn a_workload_reads_the_same_rollout_after_the_store_strip() {
+        let set: StatefulSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "db", "namespace": "shop", "generation": 2 },
+            "spec": {
+                "replicas": 3,
+                "selector": {},
+                "serviceName": "db",
+                "template": { "spec": { "containers": [{ "name": "db", "image": "db" }] } },
+                "updateStrategy": { "type": "RollingUpdate", "rollingUpdate": { "partition": 1 } },
+                "volumeClaimTemplates": [{ "metadata": { "name": "data" } }],
+            },
+            "status": {
+                "observedGeneration": 2,
+                "replicas": 3,
+                "readyReplicas": 3,
+                "availableReplicas": 3,
+                "updatedReplicas": 1,
+            },
+        }))
+        .expect("a StatefulSet");
+        let mut stripped = set.clone();
+        crate::overview::strip_stateful_set(&mut stripped);
+        assert!(stripped
+            .spec
+            .as_ref()
+            .is_some_and(|s| s.template.spec.is_none()));
+        assert_eq!(
+            crate::resources::statefulset_rollout(&stripped),
+            crate::resources::statefulset_rollout(&set)
+        );
+
+        let daemon: DaemonSet = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "agent", "namespace": "kube-system", "generation": 1 },
+            "spec": {
+                "selector": {},
+                "template": { "spec": { "containers": [{ "name": "a", "image": "a" }] } },
+                "updateStrategy": { "type": "OnDelete" },
+            },
+            "status": {
+                "observedGeneration": 1,
+                "desiredNumberScheduled": 2,
+                "currentNumberScheduled": 2,
+                "updatedNumberScheduled": 1,
+                "numberMisscheduled": 0,
+                "numberReady": 2,
+                "numberAvailable": 2,
+            },
+        }))
+        .expect("a DaemonSet");
+        let mut stripped = daemon.clone();
+        crate::overview::strip_daemon_set(&mut stripped);
+        assert_eq!(
+            crate::resources::daemonset_rollout(&stripped),
+            crate::resources::daemonset_rollout(&daemon)
+        );
+    }
+
+    /// The census filed every Deployment Needs attention left out under
+    /// "Available", Idle and Paused ones included. Fails if two rollout words
+    /// share a count again.
+    #[test]
+    fn deployment_census_counts_each_rollout_word_apart() {
+        use k8s_openapi::api::apps::v1::{DeploymentSpec, DeploymentStatus};
+        let deployment = |replicas: i32, paused: bool| Deployment {
+            spec: Some(DeploymentSpec {
+                replicas: Some(replicas),
+                paused: Some(paused),
+                ..Default::default()
+            }),
+            status: Some(DeploymentStatus {
+                observed_generation: Some(1),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let owned = HashMap::new();
+        let rollouts: Vec<Rollout> = [
+            deployment(0, false),
+            deployment(2, true),
+            deployment(0, false),
+        ]
+        .iter()
+        .map(|d| rollout_with_pods(d, &owned, &[], Utc::now()))
+        .collect();
+
+        let count = |reason: &str, count: usize| RolloutCount {
+            reason: reason.to_string(),
+            count,
+            pods_unread: false,
+        };
+        assert_eq!(
+            count_rollouts(&rollouts),
+            vec![count("Idle", 2), count("Paused", 1)]
+        );
+    }
+
+    /// Marco's ledger: its pods refused, the Overview's Deployments bar drew
+    /// it red Unavailable while every other screen drew the controller's word
+    /// grey and unread. Fails if an unread verdict shares a count with the
+    /// same word read.
+    #[test]
+    fn deployment_census_counts_a_word_its_pods_left_unconfirmed_apart() {
+        let unavailable = || Rollout::Unavailable {
+            reason: None,
+            message: None,
+            available: 0,
+            desired: 1,
+        };
+        let counts = count_rollouts(&[unavailable(), unavailable().pods_unread()]);
+        assert_eq!(
+            counts,
+            vec![
+                RolloutCount {
+                    reason: "Unavailable".to_string(),
+                    count: 1,
+                    pods_unread: false,
+                },
+                RolloutCount {
+                    reason: "Unavailable".to_string(),
+                    count: 1,
+                    pods_unread: true,
+                },
+            ]
+        );
+    }
+
+    /// A pod failure inside a Job that still has retries left is a retry.
+    /// Only the controller's own `Failed` condition means the Job lost.
+    #[test]
+    fn job_composition_follows_the_controller_conditions() {
+        let job = |condition: Option<(&str, &str)>| Job {
+            status: Some(JobStatus {
+                conditions: condition.map(|(type_, status)| {
+                    vec![JobCondition {
+                        type_: type_.to_string(),
+                        status: status.to_string(),
+                        ..Default::default()
+                    }]
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let composition = job_composition(&[
+            job(Some(("Complete", "True"))),
+            job(Some(("Failed", "True"))),
+            // A condition that has flipped back to False says nothing happened.
+            job(Some(("Failed", "False"))),
+            job(None),
+        ]);
+
+        let count = |code: &str| {
+            composition
+                .iter()
+                .find(|entry| entry.reason == code)
+                .map_or(0, |entry| entry.count)
+        };
+        assert_eq!(count("Complete"), 1);
+        assert_eq!(count("Failed"), 1);
+        assert_eq!(count("Running") + count("Pending"), 2);
+        assert_eq!(
+            composition.iter().map(|entry| entry.count).sum::<usize>(),
+            4
+        );
+    }
+}
+
+/// One overview for several namespaces, against an API server that counts
+/// what it was asked. These were the frontend's merge rules while the window
+/// asked once per namespace and added the answers up; the rules stayed when
+/// the adding moved here, and so did the cases.
+#[cfg(test)]
+mod across_namespaces {
+    use super::*;
+    use crate::client::served::test_server::{answering, server, Hits};
+    use k8s_openapi::apimachinery::pkg::apis::meta::v1::Time;
+    use serde_json::{json, Value};
+
+    const PROD: &str = "prod";
+    const STAGING: &str = "staging";
+
+    fn list(items: Vec<Value>) -> String {
+        json!({ "apiVersion": "v1", "kind": "List", "metadata": {}, "items": items }).to_string()
+    }
+
+    fn refused(what: &str) -> String {
+        json!({
+            "kind": "Status",
+            "apiVersion": "v1",
+            "status": "Failure",
+            "message": format!("{what} is forbidden"),
+            "reason": "Forbidden",
+            "code": 403,
+        })
+        .to_string()
+    }
+
+    fn named(count: usize) -> Vec<Value> {
+        (0..count)
+            .map(|i| json!({ "metadata": { "name": format!("object-{i}") } }))
+            .collect()
+    }
+
+    fn pod(name: &str, namespace: &str, phase: &str) -> Value {
+        json!({
+            "apiVersion": "v1",
+            "kind": "Pod",
+            "metadata": {
+                "name": name,
+                "namespace": namespace,
+                "creationTimestamp": "2026-08-05T00:00:00Z",
+            },
+            "spec": { "nodeName": "n1", "containers": [] },
+            "status": { "phase": phase },
+        })
+    }
+
+    fn crash_looping(name: &str, namespace: &str) -> Value {
+        let mut pod = pod(name, namespace, "Running");
+        pod["status"]["containerStatuses"] = json!([{
+            "name": "app",
+            "image": "app",
+            "imageID": "",
+            "ready": false,
+            "restartCount": 0,
+            "state": { "waiting": { "reason": "CrashLoopBackOff" } },
+        }]);
+        pod
+    }
+
+    fn node(name: &str, ready: bool) -> Value {
+        let status = if ready { "True" } else { "False" };
+        json!({
+            "apiVersion": "v1",
+            "kind": "Node",
+            "metadata": { "name": name },
+            "status": {
+                "conditions": [{ "type": "Ready", "status": status }],
+                "allocatable": { "cpu": "4", "memory": "8Gi", "pods": "110" },
+            },
+        })
+    }
+
+    fn job(name: &str, namespace: &str, outcome: Option<&str>) -> Value {
+        let conditions: Vec<Value> = outcome
+            .map(|type_| json!({ "type": type_, "status": "True" }))
+            .into_iter()
+            .collect();
+        json!({
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "metadata": { "name": name, "namespace": namespace },
+            "status": { "conditions": conditions },
+        })
+    }
+
+    fn unavailable(name: &str, namespace: &str) -> Value {
+        json!({
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": { "name": name, "namespace": namespace, "generation": 1 },
+            "spec": { "replicas": 2, "selector": {}, "template": {} },
+            "status": {
+                "observedGeneration": 1,
+                "replicas": 2,
+                "updatedReplicas": 2,
+                "readyReplicas": 0,
+                "conditions": [{ "type": "Available", "status": "False" }],
+            },
+        })
+    }
+
+    fn warning(namespace: &str, reason: &str, count: i32) -> Value {
+        json!({
+            "apiVersion": "v1",
+            "kind": "Event",
+            "metadata": { "name": format!("{reason}-{namespace}"), "namespace": namespace },
+            "type": "Warning",
+            "reason": reason,
+            "count": count,
+            "lastTimestamp": (Utc::now() - chrono::Duration::minutes(5))
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string(),
+            "involvedObject": { "kind": "Pod", "name": "api", "namespace": namespace },
+        })
+    }
+
+    /// Every path an overview of prod and staging reads, each answering an
+    /// empty list until a test says otherwise.
+    struct Cluster(Vec<(&'static str, u16, String)>);
+
+    impl Cluster {
+        fn new() -> Self {
+            let paths = [
+                "/api/v1/nodes",
+                "/api/v1/pods",
+                "/api/v1/namespaces",
+                "/api/v1/namespaces/prod/pods",
+                "/api/v1/namespaces/staging/pods",
+                "/apis/apps/v1/namespaces/prod/deployments",
+                "/apis/apps/v1/namespaces/staging/deployments",
+                "/apis/batch/v1/namespaces/prod/jobs",
+                "/apis/batch/v1/namespaces/staging/jobs",
+                "/api/v1/namespaces/prod/events",
+                "/api/v1/namespaces/staging/events",
+                "/apis/apps/v1/namespaces/prod/statefulsets",
+                "/apis/apps/v1/namespaces/staging/statefulsets",
+                "/apis/apps/v1/namespaces/prod/daemonsets",
+                "/apis/apps/v1/namespaces/staging/daemonsets",
+                "/apis/batch/v1/namespaces/prod/cronjobs",
+                "/apis/batch/v1/namespaces/staging/cronjobs",
+                "/api/v1/namespaces/prod/services",
+                "/api/v1/namespaces/staging/services",
+                "/apis/networking.k8s.io/v1/namespaces/prod/ingresses",
+                "/apis/networking.k8s.io/v1/namespaces/staging/ingresses",
+                "/api/v1/namespaces/prod/configmaps",
+                "/api/v1/namespaces/staging/configmaps",
+                "/api/v1/namespaces/prod/secrets",
+                "/api/v1/namespaces/staging/secrets",
+                "/api/v1/namespaces/prod/endpoints",
+                "/api/v1/namespaces/staging/endpoints",
+                "/api/v1/namespaces/prod/persistentvolumeclaims",
+                "/api/v1/namespaces/staging/persistentvolumeclaims",
+                "/api/v1/namespaces/prod/serviceaccounts",
+                "/api/v1/namespaces/staging/serviceaccounts",
+            ];
+            Self(
+                paths
+                    .into_iter()
+                    .map(|path| (path, 200, list(Vec::new())))
+                    .collect(),
+            )
+        }
+
+        fn answer(mut self, path: &str, status: u16, body: String) -> Self {
+            let route = self
+                .0
+                .iter_mut()
+                .find(|(known, _, _)| *known == path)
+                .expect("a path the overview reads");
+            route.1 = status;
+            route.2 = body;
+            self
+        }
+
+        fn items(self, path: &str, items: Vec<Value>) -> Self {
+            self.answer(path, 200, list(items))
+        }
+
+        fn refuse(self, path: &str) -> Self {
+            self.answer(path, 403, refused(path))
+        }
+
+        /// The overview of prod and staging, listed, and what was asked for.
+        async fn overview(self) -> (Result<ClusterOverview>, Hits) {
+            let (client, hits) = server(self.0).await;
+            let scope =
+                scope_of(Some(vec![STAGING.to_string(), PROD.to_string()])).expect("a valid scope");
+            let counts = side_counts(&client, scope.as_deref(), &RefusedCounts::default()).await;
+            let sides = Sides {
+                counts,
+                usage_by_node: None,
+            };
+            (by_listing(&client, scope.as_deref(), sides).await, hits)
+        }
+
+        async fn listed(self) -> ClusterOverview {
+            self.overview().await.0.expect("an overview")
+        }
+    }
+
+    fn asked(hits: &Hits, path: &str) -> usize {
+        hits.lock().unwrap().get(path).copied().unwrap_or(0)
+    }
+
+    /// The reason this moved to Rust. Asked once per namespace, every part
+    /// re-read the nodes, the namespace count and — listing — a full
+    /// cluster-wide pod LIST: four namespaces were five of those a round.
+    /// A cluster read issued per namespace fails here.
+    #[tokio::test]
+    async fn a_scope_reads_cluster_facts_once_and_each_namespace_once() {
+        let (answer, hits) = Cluster::new().overview().await;
+        answer.expect("an overview");
+
+        for path in ["/api/v1/nodes", "/api/v1/pods", "/api/v1/namespaces"] {
+            assert_eq!(asked(&hits, path), 1, "{path} is the cluster's, read once");
+        }
+        for namespace in [PROD, STAGING] {
+            for kind in ["pods", "secrets"] {
+                let path = format!("/api/v1/namespaces/{namespace}/{kind}");
+                assert_eq!(asked(&hits, &path), 1, "{path}");
+            }
+            let deployments = format!("/apis/apps/v1/namespaces/{namespace}/deployments");
+            assert_eq!(asked(&hits, &deployments), 1, "{deployments}");
+        }
+    }
+
+    /// Would draw the warnings of the namespaces that answered as the
+    /// scope's, and a refused events list as a scope with none.
+    #[tokio::test]
+    async fn a_refused_events_list_leaves_the_warnings_unknown() {
+        assert!(Cluster::new().listed().await.warnings_known);
+        let refused = Cluster::new()
+            .refuse("/api/v1/namespaces/staging/events")
+            .listed()
+            .await;
+        assert!(!refused.warnings_known);
+    }
+
+    /// Prod's warning events in `pages` pages, a `continue` on all but the
+    /// last; what the overview read of them, and how many pages it asked for.
+    async fn events_in_pages(pages: usize) -> ((Vec<Event>, bool), usize) {
+        const EVENTS: &str = "/api/v1/namespaces/prod/events";
+        let (client, hits) = answering(move |path, nth| {
+            if path != EVENTS {
+                return (404, "{}".to_string());
+            }
+            let metadata = if nth < pages {
+                json!({ "continue": format!("after-{nth}") })
+            } else {
+                json!({})
+            };
+            let page = json!({
+                "apiVersion": "v1", "kind": "EventList", "metadata": metadata,
+                "items": [warning(PROD, &format!("Page{nth}"), 1)],
+            });
+            (200, page.to_string())
+        })
+        .await;
+        let read = list_warning_events(&Api::namespaced(client, PROD)).await;
+        (read, asked(&hits, EVENTS))
+    }
+
+    /// Would draw the pages the cap let through as the whole list, and a cut
+    /// that held no warnings as a namespace with none.
+    #[tokio::test]
+    async fn events_left_past_the_page_cap_leave_the_warnings_unknown() {
+        let ((events, known), asked) = events_in_pages(MAX_EVENT_PAGES + 1).await;
+        assert_eq!(
+            asked, MAX_EVENT_PAGES,
+            "the cap ended the walk, not a failure"
+        );
+        assert_eq!(events.len(), MAX_EVENT_PAGES);
+        assert!(!known);
+    }
+
+    /// Would call a list unknown for using every page the cap allows, when
+    /// the last of them said there was nothing after it.
+    #[tokio::test]
+    async fn a_list_that_ends_on_the_last_page_allowed_is_the_whole() {
+        let ((events, known), asked) = events_in_pages(MAX_EVENT_PAGES).await;
+        assert_eq!(asked, MAX_EVENT_PAGES);
+        assert_eq!(events.len(), MAX_EVENT_PAGES);
+        assert!(known);
+    }
+
+    /// Would draw one `NotReady` node once per namespace in scope, under as
+    /// many identical React keys, with a headline counting it that often:
+    /// the node half of the problems comes off the cluster, whatever
+    /// namespace was asked for.
+    #[tokio::test]
+    async fn a_node_problem_is_one_row_however_many_namespaces_are_in_scope() {
+        let overview = Cluster::new()
+            .items("/api/v1/nodes", vec![node("n1", false)])
+            .items(
+                "/api/v1/namespaces/prod/pods",
+                vec![pod("api", PROD, "Failed")],
+            )
+            .items(
+                "/api/v1/namespaces/staging/pods",
+                vec![pod("web", STAGING, "Failed")],
+            )
+            .listed()
+            .await;
+
+        let nodes = overview.problems.iter().filter(|p| p.kind == "Node");
+        assert_eq!(nodes.count(), 1);
+        assert_eq!(overview.problems.len(), 3);
+        assert_eq!(overview.problems_truncated, 0);
+    }
+
+    /// Would report a three-node cluster as six the moment two namespaces
+    /// were watched: the nodes and the namespace count are cluster facts,
+    /// taken once, never added up.
+    #[tokio::test]
+    async fn cluster_facts_are_taken_once_instead_of_summed() {
+        let overview = Cluster::new()
+            .items(
+                "/api/v1/nodes",
+                vec![node("a", true), node("b", true), node("c", true)],
+            )
+            .items("/api/v1/namespaces", named(12))
+            .listed()
+            .await;
+
+        assert_eq!(overview.nodes.len(), 3);
+        assert_eq!(overview.counts.nodes, Some(3));
+        assert_eq!(overview.counts.namespaces, Some(12));
+    }
+
+    /// Marco's token may not list the cluster's namespaces; counted on every
+    /// refresh, that was one more 403 every ten seconds for a badge that
+    /// never shows. Fails if a refused count is asked again on the same
+    /// connection, or if its refusal reads as a number.
+    #[tokio::test]
+    async fn a_refused_count_is_asked_once_per_connection() {
+        let secrets = "/api/v1/namespaces/prod/secrets";
+        let namespaces = "/api/v1/namespaces";
+        let (client, hits) = server(Cluster::new().refuse(secrets).refuse(namespaces).0).await;
+        let scope =
+            scope_of(Some(vec![STAGING.to_string(), PROD.to_string()])).expect("a valid scope");
+        let refused = RefusedCounts::default();
+        for _ in 0..3 {
+            let counts = side_counts(&client, scope.as_deref(), &refused).await;
+            assert_eq!(counts.secrets, None, "refused in one namespace is no total");
+            assert_eq!(counts.namespaces, None);
+            assert_eq!(counts.config_maps, Some(0));
+        }
+        assert_eq!(asked(&hits, secrets), 1);
+        assert_eq!(asked(&hits, namespaces), 1);
+        assert_eq!(asked(&hits, "/api/v1/namespaces/staging/secrets"), 3);
+    }
+
+    /// The counts that belong to a namespace add up across the scope.
+    #[tokio::test]
+    async fn per_namespace_counts_add_up() {
+        let pods = |namespace: &str, n: usize| {
+            (0..n)
+                .map(|i| pod(&format!("p{i}"), namespace, "Running"))
+                .collect()
+        };
+        let overview = Cluster::new()
+            .items("/api/v1/namespaces/prod/pods", pods(PROD, 4))
+            .items("/api/v1/namespaces/staging/pods", pods(STAGING, 7))
+            .items("/api/v1/namespaces/prod/services", named(1))
+            .items("/api/v1/namespaces/staging/services", named(2))
+            .listed()
+            .await;
+
+        assert_eq!(overview.counts.pods, Some(11));
+        assert_eq!(overview.counts.services, Some(3));
+    }
+
+    /// The sidebar showed no number beside Endpoints, PVCs or service accounts
+    /// for a token that can list all three. Fails if any of them stops being
+    /// counted across the scope, or a refusal of one reads as a number.
+    #[tokio::test]
+    async fn endpoints_claims_and_service_accounts_are_counted_across_the_scope() {
+        let overview = Cluster::new()
+            .items("/api/v1/namespaces/prod/endpoints", named(2))
+            .items("/api/v1/namespaces/staging/endpoints", named(1))
+            .items("/api/v1/namespaces/prod/persistentvolumeclaims", named(4))
+            .items("/api/v1/namespaces/prod/serviceaccounts", named(3))
+            .refuse("/api/v1/namespaces/staging/serviceaccounts")
+            .listed()
+            .await;
+
+        assert_eq!(overview.counts.endpoints, Some(3));
+        assert_eq!(overview.counts.persistent_volume_claims, Some(4));
+        assert_eq!(overview.counts.service_accounts, None);
+    }
+
+    /// Would break the app's one rule about numbers. Two namespaces
+    /// answering and one refusing is not a total, and a sum of the two that
+    /// answered would be printed as the scope's.
+    #[tokio::test]
+    async fn a_count_one_namespace_refused_is_unknown_not_a_partial_sum() {
+        let overview = Cluster::new()
+            .items("/api/v1/namespaces/prod/secrets", named(2))
+            .refuse("/api/v1/namespaces/staging/secrets")
+            .items("/api/v1/namespaces/prod/services", named(1))
+            .listed()
+            .await;
+
+        assert_eq!(overview.counts.secrets, None);
+        assert_eq!(overview.counts.services, Some(1));
+    }
+
+    /// One namespace refusing its pods failed the whole scope, and a
+    /// readable namespace beside it read as refused. Fails if the refusal is
+    /// not named where it happened, if the answered half is summed as the
+    /// scope's pods, or if a workload there is judged by pods nobody read.
+    /// Marco's ledger then vanished from Needs attention: fails too if its
+    /// controller's Unavailable is not said beside the problems.
+    #[tokio::test]
+    async fn a_namespace_that_refuses_its_pods_is_named_and_the_rest_of_the_scope_stands() {
+        let overview = Cluster::new()
+            .items(
+                "/api/v1/namespaces/prod/pods",
+                vec![crash_looping("api", PROD)],
+            )
+            .refuse("/api/v1/namespaces/staging/pods")
+            .items(
+                "/apis/apps/v1/namespaces/staging/deployments",
+                vec![unavailable("ledger", STAGING)],
+            )
+            .listed()
+            .await;
+
+        let pods: Vec<_> = overview
+            .unread
+            .iter()
+            .filter(|entry| entry.kind == "Pod")
+            .collect();
+        assert_eq!(pods.len(), 1, "{:?}", overview.unread);
+        assert_eq!(pods[0].namespace.as_deref(), Some(STAGING));
+        assert_eq!(pods[0].code, "PERMISSION_DENIED");
+        assert_eq!(overview.counts.pods, None, "not prod's pods as the scope's");
+        let pods = overview.pods.expect("prod's pod list answered");
+        assert!(!pods.complete, "prod's pods drawn as the scope's");
+        assert_eq!(pods.read.running, 1);
+        assert_eq!(pods.read.crash_looping, 1);
+        assert!(overview
+            .problems
+            .iter()
+            .any(|p| p.kind == "Pod" && p.name == "api"));
+        assert!(
+            !overview.problems.iter().any(|p| p.name == "ledger"),
+            "{:?}",
+            overview.problems
+        );
+        assert_eq!(
+            overview
+                .unconfirmed
+                .iter()
+                .map(|p| (p.kind.as_str(), p.name.as_str(), p.reason.as_str()))
+                .collect::<Vec<_>>(),
+            [("Deployment", "ledger", "Unavailable")],
+            "the controller's word, said beside the problems"
+        );
+        assert_eq!(overview.counts.deployments, Some(1));
+        assert_eq!(
+            overview.deployments,
+            Some(Census {
+                read: vec![RolloutCount {
+                    reason: "Unavailable".to_string(),
+                    count: 1,
+                    pods_unread: true,
+                }],
+                complete: true,
+            })
+        );
+    }
+
+    /// The refusal screen is for a scope with nothing read in it at all.
+    /// Fails if a scope whose every workload list was refused draws an
+    /// overview of nothing instead.
+    #[tokio::test]
+    async fn a_scope_where_no_workload_list_answered_fails_with_its_refusal() {
+        let mut cluster = Cluster::new();
+        for namespace in [PROD, STAGING] {
+            for path in [
+                format!("/api/v1/namespaces/{namespace}/pods"),
+                format!("/apis/apps/v1/namespaces/{namespace}/deployments"),
+                format!("/apis/apps/v1/namespaces/{namespace}/statefulsets"),
+                format!("/apis/apps/v1/namespaces/{namespace}/daemonsets"),
+                format!("/apis/batch/v1/namespaces/{namespace}/jobs"),
+            ] {
+                cluster = cluster.refuse(&path);
+            }
+        }
+        let (answer, _) = cluster.overview().await;
+
+        let error = answer.expect_err("nothing in scope answered");
+        assert!(error.is_refusal(), "{error}");
+    }
+
+    /// Unscoped, the pods that are refused are the ones the capacity view
+    /// adds up. Fails if that view is drawn from no pods as a cluster with
+    /// nothing requested, or if the node half is not named as unread.
+    #[tokio::test]
+    async fn an_unscoped_overview_whose_pods_were_refused_claims_no_capacity() {
+        let (client, _) = server(vec![
+            ("/api/v1/nodes", 200, list(vec![node("n1", true)])),
+            ("/api/v1/pods", 403, refused("/api/v1/pods")),
+            (
+                "/apis/apps/v1/deployments",
+                200,
+                list(vec![unavailable("api", PROD)]),
+            ),
+        ])
+        .await;
+        let sides = Sides {
+            counts: ResourceCounts::default(),
+            usage_by_node: None,
+        };
+        let overview = by_listing(&client, None, sides)
+            .await
+            .expect("the Deployments answered");
+
+        assert!(!overview.nodes_known);
+        assert!(overview.unread.iter().any(|entry| entry.kind == "Node"));
+        assert_eq!(overview.counts.pods, None);
+        assert!(overview.namespaces.is_empty());
+    }
+
+    /// A token that can list Jobs in one namespace and not another read as
+    /// one that could list none: prod's Jobs, and their failures, were gone.
+    /// Fails if the composition is not prod's alone, if it is not marked as
+    /// part, if the total is stated, or if prod's failed Job is not a problem.
+    #[tokio::test]
+    async fn the_jobs_a_namespace_answered_are_counted_as_part_when_another_refused() {
+        let overview = Cluster::new()
+            .items(
+                "/apis/batch/v1/namespaces/prod/jobs",
+                vec![
+                    job("backup", PROD, Some("Complete")),
+                    job("report", PROD, Some("Failed")),
+                ],
+            )
+            .refuse("/apis/batch/v1/namespaces/staging/jobs")
+            .listed()
+            .await;
+
+        let jobs = overview.jobs.expect("prod's Job list answered");
+        assert!(!jobs.complete);
+        assert_eq!(jobs.read.iter().map(|e| e.count).sum::<usize>(), 2);
+        assert_eq!(overview.counts.jobs, None);
+        assert!(overview
+            .problems
+            .iter()
+            .any(|p| p.kind == "Job" && p.name == "report"));
+        assert!(overview
+            .unread
+            .iter()
+            .any(|e| e.kind == "Job" && e.namespace.as_deref() == Some(STAGING)));
+    }
+
+    /// A kind no namespace of the scope answered has nothing to draw, not
+    /// an empty composition. Fails if a Job list refused everywhere becomes
+    /// a census of zero Jobs.
+    #[tokio::test]
+    async fn a_kind_refused_in_every_namespace_of_the_scope_has_no_census() {
+        let overview = Cluster::new()
+            .refuse("/apis/batch/v1/namespaces/prod/jobs")
+            .refuse("/apis/batch/v1/namespaces/staging/jobs")
+            .listed()
+            .await;
+
+        assert!(overview.jobs.is_none());
+        assert_eq!(overview.counts.jobs, None);
+        assert!(overview.pods.is_some_and(|pods| pods.complete));
+    }
+
+    /// A Deployment list is problems as well as a count. The rows prod could
+    /// show stay on screen when staging refuses; only the count, which would
+    /// be a partial sum, goes unknown.
+    #[tokio::test]
+    async fn problems_of_the_namespaces_that_answered_stand_when_another_refused() {
+        let overview = Cluster::new()
+            .items(
+                "/apis/apps/v1/namespaces/prod/deployments",
+                vec![unavailable("api", PROD)],
+            )
+            .refuse("/apis/apps/v1/namespaces/staging/deployments")
+            .listed()
+            .await;
+
+        assert!(overview
+            .problems
+            .iter()
+            .any(|p| p.kind == "Deployment" && p.name == "api"));
+        assert_eq!(overview.counts.deployments, None);
+        let deployments = overview.deployments.expect("prod answered");
+        assert!(!deployments.complete);
+        assert_eq!(deployments.read.iter().map(|e| e.count).sum::<usize>(), 1);
+    }
+
+    fn stateful_set_down(name: &str, namespace: &str) -> Value {
+        json!({
+            "apiVersion": "apps/v1",
+            "kind": "StatefulSet",
+            "metadata": { "name": name, "namespace": namespace, "generation": 1 },
+            "spec": { "replicas": 1, "selector": {}, "serviceName": name, "template": {} },
+            "status": { "observedGeneration": 1, "replicas": 1, "availableReplicas": 0 },
+        })
+    }
+
+    /// A refused `StatefulSet` list in one namespace was nothing at all: no
+    /// problem, no count, no word that it was not looked at. The namespace
+    /// that answered keeps its row; the one that refused is named, with the
+    /// code that tells a refusal from a fault.
+    #[tokio::test]
+    async fn a_workload_list_one_namespace_refused_is_named_beside_the_others_problems() {
+        let overview = Cluster::new()
+            .items(
+                "/apis/apps/v1/namespaces/prod/statefulsets",
+                vec![stateful_set_down("db", PROD)],
+            )
+            .refuse("/apis/apps/v1/namespaces/staging/statefulsets")
+            .listed()
+            .await;
+
+        assert!(overview
+            .problems
+            .iter()
+            .any(|p| p.kind == "StatefulSet" && p.name == "db" && p.reason == "Unavailable"));
+        assert_eq!(overview.counts.stateful_sets, None);
+        assert_eq!(overview.unread.len(), 1, "{:?}", overview.unread);
+        let unread = &overview.unread[0];
+        assert_eq!(unread.kind, "StatefulSet");
+        assert_eq!(unread.namespace.as_deref(), Some(STAGING));
+        assert_eq!(unread.code, "PERMISSION_DENIED");
+    }
+
+    /// Every list answered is the one case with nothing to name.
+    #[tokio::test]
+    async fn an_overview_every_list_answered_names_nothing_unread() {
+        let overview = Cluster::new().listed().await;
+        assert!(overview.unread.is_empty(), "{:?}", overview.unread);
+        assert_eq!(overview.counts.stateful_sets, Some(0));
+        assert_eq!(overview.counts.daemon_sets, Some(0));
+    }
+
+    /// A namespace-scoped token is refused the nodes: a `NotReady` node is then
+    /// unknown, and the answer has to say so rather than list no node problem.
+    #[tokio::test]
+    async fn a_refused_node_list_is_named_as_unread_once() {
+        let overview = Cluster::new()
+            .refuse("/api/v1/nodes")
+            .refuse("/api/v1/pods")
+            .listed()
+            .await;
+
+        let nodes: Vec<_> = overview
+            .unread
+            .iter()
+            .filter(|unread| unread.kind == "Node")
+            .collect();
+        assert_eq!(nodes.len(), 1, "{:?}", overview.unread);
+        assert_eq!(nodes[0].namespace, None);
+        assert_eq!(nodes[0].code, "PERMISSION_DENIED");
+    }
+
+    /// Would drop a namespace's rows from the join: both namespaces' problems
+    /// are on the panel.
+    #[tokio::test]
+    async fn problems_every_namespace_reported_are_joined() {
+        let overview = Cluster::new()
+            .items(
+                "/api/v1/namespaces/prod/pods",
+                vec![pod("api-1", PROD, "Failed")],
+            )
+            .items(
+                "/api/v1/namespaces/staging/pods",
+                vec![pod("web-2", STAGING, "Failed")],
+            )
+            .listed()
+            .await;
+
+        let names: Vec<_> = overview.problems.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["api-1", "web-2"]);
+    }
+
+    /// Pod phases and Job outcomes add up across the scope.
+    #[tokio::test]
+    async fn pod_composition_and_jobs_add_up_across_namespaces() {
+        let overview = Cluster::new()
+            .items(
+                "/api/v1/namespaces/prod/pods",
+                vec![
+                    pod("a", PROD, "Running"),
+                    pod("b", PROD, "Running"),
+                    crash_looping("c", PROD),
+                    pod("d", PROD, "Pending"),
+                ],
+            )
+            .items(
+                "/api/v1/namespaces/staging/pods",
+                vec![
+                    pod("e", STAGING, "Running"),
+                    pod("f", STAGING, "Running"),
+                    pod("g", STAGING, "Succeeded"),
+                    pod("h", STAGING, "Failed"),
+                ],
+            )
+            .items(
+                "/apis/batch/v1/namespaces/staging/jobs",
+                vec![
+                    job("x", STAGING, Some("Complete")),
+                    job("y", STAGING, Some("Complete")),
+                    job("z", STAGING, None),
+                ],
+            )
+            .listed()
+            .await;
+
+        let pods = overview.pods.expect("both namespaces answered");
+        assert!(pods.complete);
+        let pods = pods.read;
+        assert_eq!(pods.running, 5);
+        assert_eq!(pods.crash_looping, 1);
+        assert_eq!(pods.pending, 1);
+        assert_eq!(pods.succeeded, 1);
+        assert_eq!(pods.failed, 1);
+        let jobs = overview.jobs.expect("both namespaces answered");
+        assert!(jobs.complete);
+        let jobs = jobs.read;
+        let count = |code: &str| {
+            jobs.iter()
+                .find(|e| e.reason == code)
+                .map_or(0, |e| e.count)
+        };
+        assert_eq!(count("Complete"), 2);
+        assert_eq!(count("Failed"), 0);
+        assert_eq!(jobs.iter().map(|e| e.count).sum::<usize>(), 3);
+    }
+
+    /// The node list and the cluster-wide pods behind the capacity view are
+    /// one read each. Either refused leaves the whole scope's capacity view
+    /// unknown — no node rows, and no node count beside the "no node access"
+    /// note the page shows.
+    #[tokio::test]
+    async fn the_capacity_view_is_unknown_when_a_cluster_read_was_refused() {
+        for refused in ["/api/v1/nodes", "/api/v1/pods"] {
+            let overview = Cluster::new()
+                .items("/api/v1/nodes", vec![node("n1", true)])
+                .refuse(refused)
+                .listed()
+                .await;
+
+            assert!(!overview.nodes_known, "{refused}");
+            assert!(overview.nodes.is_empty(), "{refused}");
+            assert_eq!(overview.counts.nodes, None, "{refused}");
+        }
+    }
+
+    /// Marco checked team-blind beside team-checkout and team-checkout's
+    /// picker row said "0" pods beside an Overview counting 3: a scope of
+    /// several had no breakdown, and the picker read its absence as none.
+    /// Fails if a scope of several does not count each of its namespaces,
+    /// or counts one whose pods were refused.
+    #[tokio::test]
+    async fn a_scope_of_several_counts_each_namespace_and_none_whose_pods_were_refused() {
+        let overview = Cluster::new()
+            .items(
+                "/api/v1/namespaces/prod/pods",
+                vec![pod("a", PROD, "Running"), pod("b", PROD, "Running")],
+            )
+            .refuse("/api/v1/namespaces/staging/pods")
+            .listed()
+            .await;
+
+        let count = |name: &str| {
+            overview
+                .namespaces
+                .iter()
+                .find(|load| load.name == name)
+                .map(|load| load.pod_count)
+        };
+        assert_eq!(count(PROD), Some(Some(2)));
+        assert_eq!(count(STAGING), Some(None));
+        assert_eq!(overview.counts.pods, None);
+    }
+
+    /// Would break the warnings panel, which keys its rows by reason: two
+    /// namespaces reporting `FailedScheduling` were two rows under one key,
+    /// one never drawn, the other carrying one namespace's count.
+    #[tokio::test]
+    async fn a_warning_reason_is_one_row_carrying_the_whole_scopes_count() {
+        let overview = Cluster::new()
+            .items(
+                "/api/v1/namespaces/prod/events",
+                vec![warning(PROD, "FailedScheduling", 4)],
+            )
+            .items(
+                "/api/v1/namespaces/staging/events",
+                vec![warning(STAGING, "FailedScheduling", 9)],
+            )
+            .listed()
+            .await;
+
+        assert_eq!(overview.warnings.len(), 1);
+        assert_eq!(overview.warnings[0].count, 13);
+    }
+
+    fn event(namespace: &str, reason: &str, count: i32, minutes_ago: Option<i64>) -> Event {
+        let mut event: Event = serde_json::from_value(warning(namespace, reason, count))
+            .expect("an event this test wrote");
+        event.last_timestamp = minutes_ago.map(|minutes| {
+            Time(
+                crate::utils::moment::as_cluster_time(
+                    Utc::now() - chrono::Duration::minutes(minutes),
+                )
+                .expect("an instant this test wrote"),
+            )
+        });
+        event
+    }
+
+    /// The sample describes one event and has to keep describing one: the
+    /// message from the loudest namespace under the time of the newest would
+    /// put a sentence on screen at a moment it never happened.
+    #[test]
+    fn the_sample_is_the_newest_event_whole_whichever_namespace_saw_it() {
+        let mut loud = event(STAGING, "FailedScheduling", 20, Some(50));
+        loud.message = Some("0/3 nodes are available".to_string());
+        loud.involved_object.name = Some("batch-7".to_string());
+        let mut recent = event(PROD, "FailedScheduling", 1, Some(10));
+        recent.message = Some("Insufficient memory".to_string());
+        recent.involved_object.name = Some("api-1".to_string());
+
+        let groups = recent_warnings([&loud, &recent]);
+
+        assert_eq!(groups.len(), 1);
+        let group = &groups[0];
+        assert_eq!(group.count, 21);
+        assert_eq!(group.sample.as_deref(), Some("Insufficient memory"));
+        assert_eq!(group.object_name.as_deref(), Some("api-1"));
+        assert_eq!(group.namespace.as_deref(), Some(PROD));
+    }
+
+    /// An undated event cannot be shown to be the newer one.
+    #[test]
+    fn an_undated_event_never_takes_the_sample_from_a_dated_one() {
+        let mut dated = event(PROD, "BackOff", 1, Some(30));
+        dated.message = Some("dated".to_string());
+        let mut undated = event(STAGING, "BackOff", 1, None);
+        undated.message = Some("undated".to_string());
+
+        for order in [[&dated, &undated], [&undated, &dated]] {
+            let groups = recent_warnings(order);
+            assert_eq!(groups[0].sample.as_deref(), Some("dated"));
+        }
+    }
+
+    /// The panel is read top-down, and adding the namespaces up changes the
+    /// order: loudest across the whole scope first.
+    #[test]
+    fn warning_groups_are_ordered_by_the_scopes_count() {
+        let events = [
+            event(PROD, "BackOff", 9, Some(5)),
+            event(PROD, "FailedScheduling", 2, Some(5)),
+            event(STAGING, "FailedScheduling", 8, Some(5)),
+        ];
+        let reasons: Vec<_> = recent_warnings(&events)
+            .into_iter()
+            .map(|group| group.reason)
+            .collect();
+        assert_eq!(reasons, ["FailedScheduling", "BackOff"]);
+    }
+
+    fn problem_in(
+        namespace: &str,
+        name: &str,
+        severity: ProblemSeverity,
+        since: Option<&str>,
+    ) -> ClusterProblem {
+        ClusterProblem {
+            severity,
+            kind: "Pod".to_string(),
+            name: name.to_string(),
+            namespace: Some(namespace.to_string()),
+            reason: "CrashLoopBackOff".to_string(),
+            detail: None,
+            since: since.map(str::to_string),
+            restarts: None,
+            folded_pods: None,
+        }
+    }
+
+    /// Would break the promise the panel's caption makes. In namespace
+    /// order, a mild problem in the first namespace sat above the
+    /// `CrashLoopBackOff` in the second.
+    #[test]
+    fn the_worst_row_leads_whichever_namespace_it_came_from() {
+        let (kept, _) = rank_and_cap(vec![
+            problem_in(
+                PROD,
+                "web-1",
+                ProblemSeverity::Warning,
+                Some("2026-08-05T08:00:00Z"),
+            ),
+            problem_in(
+                STAGING,
+                "api-1",
+                ProblemSeverity::Critical,
+                Some("2026-08-05T10:00:00Z"),
+            ),
+        ]);
+        let names: Vec<_> = kept.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["api-1", "web-1"]);
+    }
+
+    /// Oldest first inside a severity: the top row is what has been broken
+    /// longest, and an unknown age is not evidence that a problem is young.
+    #[test]
+    fn equal_severities_are_ordered_by_age_undated_first() {
+        let critical = ProblemSeverity::Critical;
+        let (kept, _) = rank_and_cap(vec![
+            problem_in(PROD, "recent", critical, Some("2026-08-05T10:00:00Z")),
+            problem_in(PROD, "undated", critical, None),
+            problem_in(STAGING, "old", critical, Some("2026-08-05T01:00:00Z")),
+        ]);
+        let names: Vec<_> = kept.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, ["undated", "old", "recent"]);
+    }
+
+    /// Would grow the panel by fifty rows per namespace watched, on exactly
+    /// the clusters the cap was written for. The rows dropped are still
+    /// counted, or the headline above the panel understates an outage.
+    #[test]
+    fn the_scope_is_cut_to_one_panel_and_counts_what_it_dropped() {
+        let many = |namespace: &str, n: usize, severity: ProblemSeverity| {
+            (0..n)
+                .map(|i| {
+                    problem_in(
+                        namespace,
+                        &format!("{namespace}-{i}"),
+                        severity,
+                        Some(&format!("2026-08-05T00:{:02}:00Z", i % 60)),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        // The mild namespace first, as it sorts: a cut taken before the
+        // ranking would keep its fifty warnings and drop every critical.
+        let mut problems = many(PROD, MAX_PROBLEMS, ProblemSeverity::Warning);
+        problems.extend(many(STAGING, MAX_PROBLEMS + 3, ProblemSeverity::Critical));
+
+        let (kept, truncated) = rank_and_cap(problems);
+
+        assert_eq!(kept.len(), MAX_PROBLEMS);
+        assert!(kept.iter().all(|p| p.severity == ProblemSeverity::Critical));
+        assert_eq!(truncated, MAX_PROBLEMS + 3);
+        assert_eq!(kept.len() + truncated, 2 * MAX_PROBLEMS + 3);
+    }
+
+    /// Usage is the cluster's node metrics, read once for the scope, so a
+    /// scope cannot be half measured: the answer carries that one reading or
+    /// says there is none, never usage for some namespaces.
+    #[test]
+    fn metrics_are_one_reading_for_the_whole_scope() {
+        let snapshot = Snapshot {
+            pods: Vec::new(),
+            nodes: arcs([serde_json::from_value::<Node>(node("n1", true)).expect("a node")]),
+            deployments: Vec::new(),
+            jobs: Vec::new(),
+            stateful_sets: Vec::new(),
+            daemon_sets: Vec::new(),
+            events: Vec::new(),
+        };
+        let scope = vec![PROD.to_string(), STAGING.to_string()];
+        let with = |usage_by_node| {
+            from_snapshot(
+                &snapshot,
+                Some(&scope),
+                Sides {
+                    counts: ResourceCounts::default(),
+                    usage_by_node,
+                },
+            )
+        };
+
+        let measured = with(Some(BTreeMap::from([("n1".to_string(), (250.0, 1024))])));
+        assert!(measured.metrics_available);
+        assert_eq!(measured.nodes[0].cpu.usage, Some(250.0));
+        let unmeasured = with(None);
+        assert!(!unmeasured.metrics_available);
+        assert_eq!(unmeasured.nodes[0].cpu.usage, None);
+    }
+}

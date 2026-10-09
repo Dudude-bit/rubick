@@ -1,0 +1,154 @@
+import { useCallback, useMemo } from "react";
+import { columnHeader } from "@/i18n/column-header";
+import { useNavigate } from "@tanstack/react-router";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { scopeCacheKey } from "@/lib/namespace-scope";
+import { PhaseBadge } from "@/components/ui/status-badge";
+import type { ColumnDef } from "@/components/ui/table-features";
+import { Eye, Trash2 } from "lucide-react";
+import { ResourceList } from "../../../-list/ResourceList";
+import { StorageClassRef } from "../../../-object/storage-refs";
+import {
+  createAccessModesColumn,
+  createCapacityColumn,
+  createAgeColumn,
+  createNameColumn,
+  createNamespaceColumn,
+} from "../../../-list/columns";
+import { ResourceRef } from "@/components/object/ResourceRef";
+import type { QuickAction } from "@/components/ui/quick-actions";
+import { commands } from "@/lib/commands";
+import type { PersistentVolumeClaimInfo } from "@/generated/types";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { hrefOf, objectLink } from "@/lib/links";
+import { queryKeys } from "@/lib/query-keys";
+import { STALE_TIMES } from "@/lib/refresh";
+import { getResourceRowId } from "@/lib/table-utils";
+import { useWatchedList } from "@/hooks/useWatchedList";
+import { useT } from "@/i18n/useT";
+import { None } from "@/components/ui/none";
+
+// Exported for `column-widths.test.ts`, at the cost of this file's fast
+// refresh: a save remounts the page instead of hot-swapping it.
+// oxlint-disable-next-line react-refresh/only-export-components
+export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
+  createNameColumn<PersistentVolumeClaimInfo>(
+    ResourceType.PersistentVolumeClaim
+  ),
+  createNamespaceColumn<PersistentVolumeClaimInfo>(),
+  {
+    size: 110,
+    accessorKey: "status",
+    header: columnHeader("columns", "status"),
+    cell: ({ row }) => <PhaseBadge phase={row.original.status} />,
+  },
+  {
+    // A generated PV name — `pvc-3f2c1e0a-…` — is as long as the claim's own.
+    size: 300,
+    accessorKey: "volume",
+    header: columnHeader("columns", "volume"),
+    cell: ({ row }) =>
+      row.original.volume ? (
+        <ResourceRef
+          kind={ResourceType.PersistentVolume}
+          name={row.original.volume}
+          showKind={false}
+        />
+      ) : (
+        <None />
+      ),
+  },
+  createCapacityColumn<PersistentVolumeClaimInfo>(),
+  createAccessModesColumn<PersistentVolumeClaimInfo>(),
+  {
+    size: 160,
+    accessorKey: "storageClass",
+    header: columnHeader("columns", "storageClass"),
+    cell: ({ row }) => (
+      <StorageClassRef name={row.original.storageClass} fallback="default" />
+    ),
+  },
+  createAgeColumn<PersistentVolumeClaimInfo>(),
+];
+
+const pvcLink = (pvc: PersistentVolumeClaimInfo) =>
+  objectLink({
+    kind: ResourceType.PersistentVolumeClaim,
+    name: pvc.name,
+    namespace: pvc.namespace,
+  })!;
+
+const PVC_DETAIL = queryKeys.rowDetail(ResourceType.PersistentVolumeClaim);
+
+export function PersistentVolumeClaimList() {
+  const t = useT();
+  const scope = useNamespaceScope();
+  const navigate = useNavigate();
+
+  const cacheKey = scopeCacheKey(scope.scope);
+
+  const queryKey = useMemo(
+    () => queryKeys.resources(ResourceType.PersistentVolumeClaim, cacheKey),
+    [cacheKey]
+  );
+  const subscribe = useCallback(
+    () => commands.subscribePvcWatch(scope.wire),
+    [scope.wire]
+  );
+
+  const { live, refresh, resyncing } =
+    useWatchedList<PersistentVolumeClaimInfo>({
+      enabled: true,
+      subscribe,
+      queryKey,
+      detail: PVC_DETAIL,
+      reportFailure: toPlural(ResourceType.PersistentVolumeClaim),
+    });
+
+  const quickActions = useMemo<
+    (
+      setDeleteTarget: (item: PersistentVolumeClaimInfo) => void
+    ) => QuickAction<PersistentVolumeClaimInfo>[]
+  >(
+    () => (setDeleteTarget) => [
+      {
+        icon: Eye,
+        label: t("action", "viewDetails"),
+        onClick: (item) => navigate(pvcLink(item)),
+      },
+      {
+        icon: Trash2,
+        label: t("action", "delete"),
+        onClick: (item) => setDeleteTarget(item),
+        variant: "destructive",
+      },
+    ],
+    [navigate, t]
+  );
+
+  return (
+    <ResourceList<PersistentVolumeClaimInfo>
+      title="Persistent Volume Claims"
+      queryKey={queryKey}
+      getRowId={getResourceRowId}
+      queryFn={() => commands.listPersistentVolumeClaimsIn(scope.wire)}
+      columns={columns}
+      quickActions={quickActions}
+      emptyStateLabel={toPlural(ResourceType.PersistentVolumeClaim)}
+      deleteConfig={{
+        mutationFn: (item) =>
+          commands.deletePersistentVolumeClaim(
+            item.name,
+            item.namespace ?? null
+          ),
+        invalidateQueryKeys: [queryKey],
+        resourceType: ResourceType.PersistentVolumeClaim,
+      }}
+      staleTime={STALE_TIMES.resourceList}
+      refresh={refresh}
+      live={live}
+      resyncing={resyncing}
+      getRowHref={(row) => hrefOf(pvcLink(row))}
+    />
+  );
+}

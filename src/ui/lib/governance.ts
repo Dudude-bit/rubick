@@ -1,0 +1,604 @@
+/**
+ * What acts on an object without the object having asked: an HPA and a PDB
+ * are written by somebody else, about this workload, and leave no trace on
+ * its YAML. Nothing on a Deployment says "an HPA overwrites `spec.replicas`
+ * fifteen seconds after you set it", or "a node drain will block on this".
+ *
+ * Pure — it reads the `governs` edges the connections call already returned,
+ * and never re-derives a number the cluster published. Repeating an
+ * autoscaler's own arithmetic gives two answers that disagree the moment a
+ * scaling policy is involved.
+ *
+ * The HPA's target is not drawn on the Usage bar: those rows are live usage
+ * summed over replicas against summed *limits*, while an HPA target is a
+ * per-pod mean against the *request*. Different denominator, different
+ * aggregation, and a limit is a ceiling the kernel enforces while crossing a
+ * target adds a pod — one axis for both would be wrong by the
+ * limit-to-request ratio.
+ */
+
+import type { T } from "@/i18n/useT";
+
+import type {
+  ConditionInfo,
+  ObjectFacts,
+  ObjectRef,
+  Relation,
+  ResourceConnections,
+} from "@/generated/types";
+import type { DeliveryIntercept } from "./delivery";
+import { objectLink, type AppLink } from "./links";
+import { formatAge } from "./utils";
+
+export type AutoscalerFacts = Extract<ObjectFacts, { kind: "autoscaler" }>;
+export type BudgetFacts = Extract<ObjectFacts, { kind: "budget" }>;
+
+export interface Autoscaler {
+  object: ObjectRef;
+  facts: AutoscalerFacts;
+  /** What it scales — the workload, even when read from a pod's page. */
+  target: ObjectRef;
+}
+
+export interface Budget {
+  object: ObjectRef;
+  facts: BudgetFacts;
+  /** What its selector matched: a workload, or one pod on a node. */
+  covers: ObjectRef;
+  selector: string | null;
+}
+
+/**
+ * How loud a finding is allowed to be.
+ *
+ * `neutral` is not a lesser warning, it is a different claim: the fact is
+ * true and worth reading and the cluster is not in trouble. Every
+ * `DisruptionAllowed=False` on a healthy two-replica workload is one, the
+ * same judgement `condition-health.ts` makes about the condition itself.
+ */
+export interface Finding {
+  tone: "err" | "warn" | "neutral";
+  title: string;
+  detail: string;
+}
+
+const governs = (conns: ResourceConnections) =>
+  conns.edges.filter(
+    (
+      edge
+    ): edge is typeof edge & {
+      relation: Extract<Relation, { verb: "governs" }>;
+    } => edge.relation.verb === "governs"
+  );
+
+/** Every autoscaler that named something in this neighbourhood. */
+export function autoscalers(conns: ResourceConnections): Autoscaler[] {
+  return governs(conns).flatMap((edge) =>
+    edge.from.facts?.kind === "autoscaler"
+      ? [{ object: edge.from, facts: edge.from.facts, target: edge.to }]
+      : []
+  );
+}
+
+/** Every disruption budget whose selector matched something here. */
+export function budgets(conns: ResourceConnections): Budget[] {
+  return governs(conns).flatMap((edge) =>
+    edge.from.facts?.kind === "budget"
+      ? [
+          {
+            object: edge.from,
+            facts: edge.from.facts,
+            covers: edge.to,
+            selector: edge.relation.selector,
+          },
+        ]
+      : []
+  );
+}
+
+type Stated = Pick<ConditionInfo, "type" | "status">;
+
+const condition = <C extends Stated>(
+  conditions: C[],
+  type: string
+): C | undefined =>
+  conditions.find((c) => c.type.toLowerCase() === type.toLowerCase());
+
+const isTrue = (c: Stated | undefined) => c?.status === "True";
+const isFalse = (c: Stated | undefined) => c?.status === "False";
+
+/** Whether `desiredReplicas` is a count the autoscaler computed, not the zero a failed computation leaves. */
+export const desiredComputed = (conditions: Stated[]): boolean =>
+  !isFalse(condition(conditions, "ScalingActive"));
+
+/**
+ * A controller's message, made into a sentence that another can follow.
+ *
+ * Kubernetes writes condition messages as lower-case clauses with no full
+ * stop, which runs straight into whatever is appended to them. Quoting
+ * verbatim is still right: the words are the controller's, and paraphrasing
+ * them loses the search term.
+ */
+function sentence(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed === "") return "";
+  const ended = /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+  return ended[0].toUpperCase() + ended.slice(1);
+}
+
+/** "1 to 5 replicas", or "pinned at 3" for the degenerate range. */
+export function autoscalerRange(facts: AutoscalerFacts, t: T): string {
+  return facts.minReplicas === facts.maxReplicas
+    ? t("readings", "hpaPinnedAt", { n: facts.maxReplicas })
+    : t("readings", "hpaRange", {
+        min: facts.minReplicas,
+        n: facts.maxReplicas,
+      });
+}
+
+export interface MetricReading {
+  key: string;
+  /** "cpu", or "cpu in web" for a per-container target. */
+  label: string;
+  /** The metric's source type, named only where it is not the obvious one. */
+  from: string | null;
+  target: string;
+  /** `null` where the autoscaler published no reading at all. */
+  current: string | null;
+}
+
+export function metricReadings(facts: AutoscalerFacts): MetricReading[] {
+  return facts.metrics.map((metric, at) => ({
+    key: `${metric.source}/${metric.name}/${at}`,
+    label: metric.name,
+    from:
+      metric.source === "resource" || metric.source === "containerResource"
+        ? null
+        : metric.source,
+    target: metric.target,
+    current: metric.current,
+  }));
+}
+
+/** Which of an autoscaler's own conditions is the finding, and how loud. */
+export interface AutoscalerVerdict {
+  says: "cannotReach" | "standingBy" | "noMetrics" | "atFloor" | "atCeiling";
+  tone: Finding["tone"];
+  /** The condition that decided it, for its reason and its words. */
+  condition: ConditionInfo | undefined;
+}
+
+/**
+ * The one thing worth saying about an autoscaler, or nothing.
+ *
+ * Ordered by what stops the autoscaler working soonest. An HPA that cannot
+ * reach the thing it scales has not got as far as reading a metric, and an
+ * HPA that cannot read a metric never gets as far as being limited, so the
+ * first true one is the whole answer and the rest is detail.
+ */
+export function autoscalerVerdict(
+  facts: AutoscalerFacts
+): AutoscalerVerdict | null {
+  const { conditions } = facts;
+  const able = condition(conditions, "AbleToScale");
+  const active = condition(conditions, "ScalingActive");
+  const limited = condition(conditions, "ScalingLimited");
+
+  if (isFalse(able))
+    return { says: "cannotReach", tone: "err", condition: able };
+  if (isFalse(active)) {
+    // Zero replicas is the one `ScalingActive=False` that is a setting rather
+    // than a fault: an HPA deliberately stops at zero and waits to be scaled
+    // up by hand, and colouring it red would fire on every idle workload.
+    // Blind to its metrics, it stops scaling and the workload keeps serving
+    // at its size: degraded, the amber of a warning, not the red of down.
+    return active?.reason === "ScalingDisabled"
+      ? { says: "standingBy", tone: "neutral", condition: active }
+      : { says: "noMetrics", tone: "warn", condition: active };
+  }
+  if (isTrue(limited)) {
+    // `ScalingLimited` covers the floor, the ceiling and the stabilisation
+    // window with one condition, and they are three different findings.
+    // Reading the status word alone would call all three "limited".
+    if (limited?.reason === "TooFewReplicas")
+      return { says: "atFloor", tone: "neutral", condition: limited };
+    if (limited?.reason === "ScaleDownStabilized") return null;
+    return { says: "atCeiling", tone: "warn", condition: limited };
+  }
+  return null;
+}
+
+/** {@link autoscalerVerdict} as the sentence the workload's page prints. */
+export function autoscalerFinding(auto: Autoscaler, t: T): Finding | null {
+  const verdict = autoscalerVerdict(auto.facts);
+  if (!verdict) return null;
+  const { tone, condition: decided } = verdict;
+  const name = auto.object.name;
+
+  switch (verdict.says) {
+    case "cannotReach":
+      return {
+        tone,
+        title: t("readings", "hpaCannotReach", { name }),
+        detail: decided?.message
+          ? sentence(decided.message)
+          : t("readings", "hpaCannotReachDetail", {
+              kind: auto.target.kind,
+              target: auto.target.name,
+            }),
+      };
+    case "standingBy":
+      return {
+        tone,
+        title: t("readings", "hpaStandingBy", { name }),
+        detail: decided?.message
+          ? sentence(decided.message)
+          : t("readings", "hpaStandingByDetail"),
+      };
+    case "noMetrics":
+      return {
+        tone,
+        title: t("readings", "hpaNoMetrics", { name }),
+        detail: t("readings", "hpaNoMetricsDetail", {
+          said: sentence(
+            decided?.message ??
+              decided?.reason ??
+              t("readings", "hpaNoMetricsDefault")
+          ),
+        }),
+      };
+    case "atFloor":
+      return {
+        tone,
+        title: t("readings", "hpaAtFloor", {
+          name,
+          min: auto.facts.minReplicas,
+        }),
+        detail: t("readings", "hpaAtFloorDetail"),
+      };
+    case "atCeiling":
+      return {
+        tone,
+        title: t("readings", "hpaAtCeiling", {
+          name,
+          max: auto.facts.maxReplicas,
+        }),
+        detail: t("readings", "hpaAtCeilingDetail", {
+          said: sentence(
+            decided?.message ?? t("readings", "hpaAtCeilingDefault")
+          ),
+        }),
+      };
+  }
+}
+
+/**
+ * "2 running · 2 wanted", and the one case where the second half is a lie.
+ *
+ * An autoscaler that failed to compute leaves `status.desiredReplicas` at
+ * zero — not because it wants zero replicas, but because it never got as far
+ * as wanting anything. "0 wanted" beside a running workload reads as an
+ * autoscaler about to delete everything, and it is the field being unset.
+ */
+export function autoscalerReplicas(facts: AutoscalerFacts, t: T): string {
+  const parts = [
+    t("readings", "hpaRunning", { n: facts.currentReplicas }),
+    desiredComputed(facts.conditions)
+      ? t("readings", "hpaWanted", { n: facts.desiredReplicas })
+      : t("readings", "hpaNothingComputed"),
+  ];
+  if (facts.lastScaleTime)
+    parts.push(
+      t("readings", "hpaLastScaled", { ago: formatAge(facts.lastScaleTime, t) })
+    );
+  return parts.join(" · ");
+}
+
+/**
+ * When the count last moved, or nothing where it never has.
+ *
+ * Split from {@link autoscalerReplicas}: the replica numbers beside it belong
+ * to the workload's own block and this clause does not — it is the one thing
+ * the autoscaler knows that the count itself cannot say.
+ */
+export function lastScaled(facts: AutoscalerFacts, t: T): string | null {
+  return facts.lastScaleTime
+    ? t("readings", "hpaLastScaled", { ago: formatAge(facts.lastScaleTime, t) })
+    : null;
+}
+
+/** "at least 1 available" / "at most 1 unavailable". */
+export function budgetRule(facts: BudgetFacts, t: T): string {
+  if (facts.minAvailable !== null)
+    return t("readings", "pdbAtLeast", { n: facts.minAvailable });
+  if (facts.maxUnavailable !== null)
+    return t("readings", "pdbAtMost", { n: facts.maxUnavailable });
+  return t("readings", "pdbNoRule");
+}
+
+/**
+ * How much room the budget is leaving, right now.
+ *
+ * `expectedPods` is how many pods the *selector* matched, not a target — a
+ * selector that also catches thirteen evicted pods reports fifteen, and
+ * "2 of 15 healthy" reads as a workload in ruins. "of 15 selected" says the
+ * denominator is a match count, which is what it is.
+ */
+export function budgetRoom(facts: BudgetFacts, t: T): string {
+  const allowed =
+    facts.disruptionsAllowed === 0
+      ? t("readings", "pdbNoDisruption")
+      : t("count", "disruptionsAllowed", { n: facts.disruptionsAllowed });
+  return t("readings", "pdbRoom", {
+    allowed,
+    healthy: facts.currentHealthy,
+    selected: facts.expectedPods,
+  });
+}
+
+/**
+ * What a budget is worth saying, and how loudly.
+ *
+ * `disruptionsAllowed == 0` is the fact a drain runs into, and it is also the
+ * **normal** state of a workload with as many replicas as `minAvailable`
+ * demands. Painting that red claims a fault the cluster never reported — the
+ * same call `condition-health.ts` makes about `DisruptionAllowed=False` by
+ * treating the condition as advisory.
+ *
+ * So the fact is always stated and the colour is earned by whether the budget
+ * is *spent* or *broken*. Exactly met is spent, and one more ready replica
+ * frees it: no colour. Below its own floor is broken, because the drain
+ * blocks *and* nothing will free it until the workload recovers — a warning,
+ * and one about the workload rather than about the budget.
+ */
+export function budgetFinding(budget: Budget, t: T): Finding | null {
+  const facts = budget.facts;
+  if (facts.disruptionsAllowed > 0) return null;
+
+  const short = facts.currentHealthy < facts.desiredHealthy;
+  if (short) {
+    return {
+      tone: "warn",
+      title: t("readings", "pdbBelowFloor", {
+        name: budget.object.name,
+        healthy: facts.currentHealthy,
+        required: facts.desiredHealthy,
+      }),
+      detail: t("readings", "pdbBelowFloorDetail"),
+    };
+  }
+
+  return {
+    tone: "neutral",
+    title: t("readings", "pdbExactlyMet", { name: budget.object.name }),
+    detail: t("readings", "pdbExactlyMetDetail", {
+      healthy: facts.currentHealthy,
+      required: facts.desiredHealthy,
+    }),
+  };
+}
+
+// --- the moment a budget actually matters -------------------------------
+
+export interface DrainBlocker {
+  budget: Budget;
+  /** How many pods on this node the budget covers. */
+  pods: number;
+}
+
+/**
+ * The budgets on this node that will refuse the first eviction.
+ *
+ * `kubectl drain` does not fail on a spent budget, it retries, and a reader
+ * who does not know which budget is holding it has no way to tell a slow
+ * drain from a stuck one.
+ *
+ * Deduplicated by budget rather than listed per pod: one budget covering four
+ * pods on this node is one reason, not four identical lines.
+ */
+export function drainBlockers(
+  conns: ResourceConnections | undefined
+): DrainBlocker[] {
+  if (!conns) return [];
+  const byBudget = new Map<string, DrainBlocker>();
+  for (const budget of budgets(conns)) {
+    if (budget.facts.disruptionsAllowed > 0) continue;
+    const key = `${budget.object.namespace}/${budget.object.name}`;
+    const seen = byBudget.get(key);
+    if (seen) seen.pods += 1;
+    else byBudget.set(key, { budget, pods: 1 });
+  }
+  return [...byBudget.values()];
+}
+
+// --- at the point of action ---------------------------------------------
+
+/**
+ * One reason the replica count you are about to set will not stay set.
+ *
+ * The same shape delivery's intercept produces, so the Scale dialog can hold
+ * two of them without knowing which kind either one is. `subject` is the
+ * three-word noun heading a stacked line: with two warnings the dialog has to
+ * say *what* is doing it before what will happen, or the two paragraphs read
+ * as one long complaint.
+ */
+export interface ActionWarning {
+  key: string;
+  subject: string;
+  /** The clause that has to be read, in six words. */
+  lead: string;
+  description: string;
+  /** Where the change would really have to be made, where there is a page. */
+  to: AppLink | null;
+  /** The words on that link, where they are not delivery's. */
+  linkLabel?: string;
+  /** The one autoscaler that owns the count, whose bounds are the way out. */
+  autoscaler?: {
+    name: string;
+    namespace: string | null;
+    minReplicas: number;
+    maxReplicas: number;
+  };
+}
+
+/**
+ * What the autoscalers on this object will do to a hand-set replica count.
+ *
+ * Three cases, and the middle one is the reason this is not a boolean:
+ *
+ * - one autoscaler, working — the number goes back within about fifteen
+ *   seconds, and the honest instruction is to change the bounds instead;
+ * - one autoscaler that cannot currently act — the number *stands* until the
+ *   metrics come back, and nothing announces that moment, so "this will be
+ *   undone" would be a lie the reader can check;
+ * - several autoscalers on one workload — each writes `spec.replicas` from
+ *   its own reading and each undoes the other, so no range on the page is
+ *   the range.
+ */
+export function autoscalerScaleWarnings(
+  conns: ResourceConnections | undefined,
+  t: T
+): ActionWarning[] {
+  if (!conns) return [];
+  const found = autoscalers(conns);
+  if (found.length === 0) return [];
+
+  if (found.length > 1) {
+    const names = found.map((auto) => auto.object.name).join(", ");
+    return [
+      {
+        key: "hpa:several",
+        subject: t("readings", "hpaSeveralTitle", { n: found.length }),
+        lead: t("readings", "hpaSeveralHead", { n: found.length }),
+        description: t("readings", "hpaSeveralDetail", { names }),
+        to: null,
+      },
+    ];
+  }
+
+  const auto = found[0];
+  const facts = auto.facts;
+  const owner = {
+    to: objectLink(auto.object),
+    linkLabel: t("action", "openAutoscaler"),
+    autoscaler: {
+      name: auto.object.name,
+      namespace: auto.object.namespace ?? null,
+      minReplicas: facts.minReplicas,
+      maxReplicas: facts.maxReplicas,
+    },
+  };
+  const stalled =
+    isFalse(condition(facts.conditions, "AbleToScale")) ||
+    isFalse(condition(facts.conditions, "ScalingActive"));
+
+  if (stalled) {
+    const why =
+      condition(facts.conditions, "ScalingActive")?.reason ??
+      condition(facts.conditions, "AbleToScale")?.reason ??
+      t("readings", "hpaCannotActNow");
+    return [
+      {
+        key: `hpa:${auto.object.name}`,
+        subject: t("readings", "hpaAutoscalerNamed", {
+          name: auto.object.name,
+        }),
+        lead: t("readings", "hpaOwnsStuckHead", { name: auto.object.name }),
+        description: t("readings", "hpaStuckDetail", {
+          why,
+          min: facts.minReplicas,
+          max: facts.maxReplicas,
+        }),
+        ...owner,
+      },
+    ];
+  }
+
+  return [
+    {
+      key: `hpa:${auto.object.name}`,
+      subject: t("readings", "hpaAutoscalerNamed", { name: auto.object.name }),
+      lead: t("readings", "hpaWillRevertHead", { name: auto.object.name }),
+      description: t("readings", "hpaWillRevertDetail", {
+        min: facts.minReplicas,
+        max: facts.maxReplicas,
+      }),
+      ...owner,
+    },
+  ];
+}
+
+/**
+ * What is wrong with a pair of bounds, as the API server would judge them,
+ * or `null` when they would be accepted.
+ */
+export function boundsProblem(
+  min: number,
+  max: number
+): "hpaMinTooLow" | "hpaMinAboveMax" | null {
+  if (!Number.isInteger(min) || min < 1) return "hpaMinTooLow";
+  if (!Number.isInteger(max) || min > max) return "hpaMinAboveMax";
+  return null;
+}
+
+/**
+ * Everything that will move a replica count back, soonest first.
+ *
+ * The order is the order the reader will feel them: an autoscaler re-reads in
+ * about fifteen seconds, a delivery controller reconciles in minutes. Having
+ * both — an HPA in git, applied by Argo — is unremarkable, and the two do
+ * different things: the HPA replaces the number, the controller replaces the
+ * *object*, taking the number with it.
+ */
+export function scaleWarnings(
+  conns: ResourceConnections | undefined,
+  intercept: DeliveryIntercept | null,
+  t: T
+): ActionWarning[] {
+  return [...autoscalerScaleWarnings(conns, t), ...deliveryWarning(intercept)];
+}
+
+/** A delivery intercept as one of the stacked warnings, or none. */
+export function deliveryWarning(
+  intercept: DeliveryIntercept | null
+): ActionWarning[] {
+  if (!intercept) return [];
+  return [
+    {
+      key: "delivery",
+      subject: intercept.subject,
+      lead: intercept.lead,
+      description: intercept.description,
+      to: intercept.where?.to ?? null,
+    },
+  ];
+}
+
+/**
+ * Everything that will undo the manifest you are about to apply.
+ *
+ * A delivery controller re-applies the **whole object**, so every field is at
+ * risk and its warning is true whatever was edited. An HPA owns exactly one
+ * field — `spec.replicas` — and says nothing about an image tag, a resource
+ * limit or an env var: warning about it on every save would be wrong on
+ * almost every save, and a dialog that is usually wrong gets dismissed unread
+ * on the day it is right.
+ *
+ * Never naming it is the other wrong answer, because a replica count typed
+ * into the YAML editor is undone exactly as fast as one typed into the Scale
+ * dialog, where the app already warns. So the rule is the diff:
+ * `changesReplicaCount` compares what the API server had when the editor
+ * opened against what is about to be sent, and the autoscaler is named when —
+ * and only when — that field is what moved.
+ */
+export function applyWarnings(
+  conns: ResourceConnections | undefined,
+  intercept: DeliveryIntercept | null,
+  replicasMoved: boolean,
+  t: T
+): ActionWarning[] {
+  return [
+    ...(replicasMoved ? autoscalerScaleWarnings(conns, t) : []),
+    ...deliveryWarning(intercept),
+  ];
+}

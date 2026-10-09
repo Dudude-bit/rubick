@@ -1,0 +1,326 @@
+import type { ColumnDef } from "@/components/ui/table-features";
+import { MetricsAbsenceContext, absenceOf } from "@/lib/metrics-absence";
+import { None } from "@/components/ui/none";
+import { columnHeader } from "@/i18n/column-header";
+import { SortableHeader } from "@/components/ui/sortable-header";
+import { useNavigate } from "@tanstack/react-router";
+import { Eye, Trash2, SquareTerminal, FileText } from "lucide-react";
+import { useMemo } from "react";
+import {
+  usePodsWithMetrics,
+  type PodWithMetrics,
+} from "@/hooks/usePodsWithMetrics";
+import type { WithNodeSilence } from "@/lib/node-reporting";
+import { CopyableAddress, IPV4_CELL_PX } from "@/components/ui/copyable-value";
+import {
+  createNameColumn,
+  createNamespaceColumn,
+  createAgeColumn,
+  createCpuColumn,
+  createMemoryColumn,
+  nodeCellPx,
+} from "../../../-list/columns";
+import { podReadiness } from "@/lib/container-sequence";
+import { restartsAreNews } from "@/lib/crash-loop";
+import { commands } from "@/lib/commands";
+import { ResourceList } from "../../../-list/ResourceList";
+import { ResourceRef } from "@/components/object/ResourceRef";
+import { ResourceType, toPlural } from "@/lib/resource-registry";
+import { queryKeys } from "@/lib/query-keys";
+import { hrefOf, objectLink } from "@/lib/links";
+import { MetricsStatusBanner } from "../../../-metrics";
+import { getResourceRowId } from "@/lib/table-utils";
+import { formatAge } from "@/lib/utils";
+import { refOf } from "@/lib/report-parts";
+import { podStatusValue } from "@/lib/share/pod-status";
+import type { QuickAction } from "@/components/ui/quick-actions";
+import { useT } from "@/i18n/useT";
+import { narrowPods } from "@/lib/pod-filter";
+import { usePodFilter } from "@/hooks/usePodFilter";
+import { PodSelectorBanner } from "./PodSelectorBanner";
+import { PodStatusBadge } from "./PodStatusBadge";
+import { useShellAskStore } from "@/stores/shellAskStore";
+
+/** A pod row that also knows whether its node is still reporting. */
+type PodRow = WithNodeSilence<PodWithMetrics>;
+
+/**
+ * How long ago the last restart was.
+ *
+ * A component rather than an expression in the column literal: the age now
+ * needs the translator, and a hook is only legal inside one.
+ */
+/** "653 (2h ago)": kubectl's count with the age of the last one, whole on hover where the column cuts it. */
+function RestartsCell({ pod }: { pod: PodRow }) {
+  const t = useT();
+  const last =
+    pod.restartCount > 0 && pod.lastRestartAt
+      ? t("action", "agoSuffix", { age: formatAge(pod.lastRestartAt, t) })
+      : null;
+  return (
+    <span
+      className={
+        restartsAreNews(pod) ? "font-mono text-warn" : "font-mono text-fg-mut"
+      }
+      title={last ? `${pod.restartCount} (${last})` : undefined}
+    >
+      {pod.restartCount}
+      {last && <span className="text-fg-fnt"> ({last})</span>}
+    </span>
+  );
+}
+
+/** The copy label is a word, so the cell needs the hook the array cannot use. */
+function PodIpCell({ pod }: { pod: PodRow }) {
+  const t = useT();
+  return (
+    <CopyableAddress
+      value={pod.podIp}
+      label={t("columns", "podIp")}
+      className="text-fg-mut"
+    />
+  );
+}
+
+// Exported for `column-widths.test.ts`, at the cost of this file's fast
+// refresh: a save remounts the page instead of hot-swapping it.
+// oxlint-disable-next-line react-refresh/only-export-components
+export const columns: ColumnDef<PodRow>[] = [
+  createNameColumn<PodRow>(ResourceType.Pod),
+  createNamespaceColumn<PodRow>(),
+  {
+    // A longer reason ends in an ellipsis, whole on hover.
+    size: 235,
+    id: "status",
+    // Sorted by the word the reader sees, not by the phase behind it: they
+    // asked for this to group the crashing pods together, and `Running` is
+    // the phase of a pod that has crashed six hundred times.
+    accessorFn: (pod) => pod.status.display,
+    enableSorting: true,
+    meta: {
+      // "CreateContainerConfigError" at 7.2px a glyph, its mark and padding.
+      floor: 224,
+      label: { section: "columns", key: "status" },
+      share: (pod: PodRow, t) =>
+        podStatusValue(pod, pod.nodeSilence ?? null, t),
+    },
+    header: ({ column }) => <SortableHeader column={column} k="status" />,
+    // The derived status, not the phase: a pod that has crashed 653
+    // times is in phase `Running` and nobody means that by "how is
+    // it". The phase rides along in the tooltip so it is not lost.
+    cell: ({ row }) => (
+      <PodStatusBadge
+        pod={row.original}
+        silence={row.original.nodeSilence ?? null}
+      />
+    ),
+  },
+  createCpuColumn<PodRow>(),
+  createMemoryColumn<PodRow>(),
+  {
+    // "Готовность" and its sort mark.
+    size: 120,
+    id: "ready",
+    // By what is missing, so the ones short of a replica sort together —
+    // 0/3 before 2/3 before 1/1.
+    accessorFn: (pod) => {
+      const { ready, total } = podReadiness(pod);
+      return total - ready;
+    },
+    enableSorting: true,
+    meta: {
+      label: { section: "columns", key: "ready" },
+      share: (pod: PodRow) => {
+        const { ready, total } = podReadiness(pod);
+        return { text: `${ready}/${total}`, mono: true };
+      },
+    },
+    header: ({ column }) => <SortableHeader column={column} k="ready" />,
+    // The number people compare against `kubectl get pod` in the next
+    // window, so it is kubectl's number: sidecars in both halves,
+    // finished init containers in neither.
+    cell: ({ row }) => {
+      const { ready, total } = podReadiness(row.original);
+      return (
+        <span className="font-mono text-fg-mid">
+          {ready}/{total}
+        </span>
+      );
+    },
+  },
+  {
+    // The count and the age of the last one: "7 (2 мин назад)".
+    size: 140,
+    id: "restarts",
+    accessorFn: (pod) => pod.restartCount,
+    enableSorting: true,
+    meta: {
+      // "7 (59 мин назад)" at 7.2px a glyph and a cell's padding.
+      floor: 136,
+      label: { section: "columns", key: "restarts" },
+      share: (pod: PodRow) => ({
+        text: String(pod.restartCount),
+        mono: true,
+        role: restartsAreNews(pod) ? "warn" : undefined,
+      }),
+    },
+    header: ({ column }) => <SortableHeader column={column} k="restarts" />,
+    // kubectl prints the count with the age of the last one, and it is
+    // the half that carries the news: 653 an hour ago and 653 last
+    // week are the same number and not the same pod.
+    cell: ({ row }) => <RestartsCell pod={row.original} />,
+  },
+  {
+    // A managed node's name is as long as a pod's: `gke-prod-pool-1-a3f9-x2kd`.
+    size: 170,
+    id: "node",
+    header: columnHeader("columns", "node"),
+    meta: {
+      floor: (_t, rows: readonly PodRow[]) =>
+        nodeCellPx(rows, (pod) => pod.nodeName),
+      share: (pod: PodRow, t) =>
+        pod.nodeName
+          ? {
+              text: pod.nodeName,
+              ref: refOf({ kind: "Node", name: pod.nodeName, namespace: null }),
+            }
+          : { text: t("empty", "noneLower"), quiet: true },
+    },
+    cell: ({ row }) =>
+      row.original.nodeName ? (
+        <ResourceRef
+          kind={ResourceType.Node}
+          name={row.original.nodeName}
+          showKind={false}
+        />
+      ) : (
+        <None />
+      ),
+  },
+  {
+    size: 130,
+    id: "ip",
+    header: columnHeader("columns", "ip"),
+    meta: {
+      floor: IPV4_CELL_PX,
+      share: (pod: PodRow, t) =>
+        pod.podIp
+          ? { text: pod.podIp, mono: true }
+          : { text: t("empty", "noneLower"), quiet: true },
+    },
+    cell: ({ row }) => <PodIpCell pod={row.original} />,
+  },
+  createAgeColumn<PodRow>(),
+];
+
+export function PodList() {
+  const t = useT();
+  const navigate = useNavigate();
+  const {
+    data: podsWithMetrics,
+    podStatus,
+    podUnread,
+    refetchPodMetrics,
+    isLoading,
+    error,
+    unread,
+    isPlaceholderData,
+    dataUpdatedAt,
+    watchLive,
+    resyncing,
+    waitingSince,
+    refetch,
+  } = usePodsWithMetrics();
+  const filter = usePodFilter();
+  const rows = useMemo(
+    () => narrowPods(podsWithMetrics, filter),
+    [podsWithMetrics, filter]
+  );
+
+  const quickActions = useMemo<
+    (
+      setDeleteTarget: (item: PodWithMetrics) => void
+    ) => QuickAction<PodWithMetrics>[]
+  >(
+    () => (setDeleteTarget) => [
+      {
+        icon: Eye,
+        label: t("action", "viewDetails"),
+        onClick: (item) =>
+          navigate(objectLink({ kind: ResourceType.Pod, ...item })!),
+      },
+      {
+        icon: FileText,
+        label: t("action", "viewLogs"),
+        onClick: (item) =>
+          navigate(
+            objectLink({ kind: ResourceType.Pod, ...item }, { tab: "logs" })!
+          ),
+      },
+      {
+        icon: SquareTerminal,
+        label: t("action", "shell"),
+        onClick: (item) => {
+          useShellAskStore.getState().askFor(item.namespace, item.name);
+          navigate(
+            objectLink({ kind: ResourceType.Pod, ...item }, { tab: "shell" })!
+          );
+        },
+      },
+      {
+        icon: Trash2,
+        label: t("action", "delete"),
+        onClick: (item) => setDeleteTarget(item),
+        variant: "destructive",
+      },
+    ],
+    [t, navigate]
+  );
+
+  const list = (
+    <ResourceList<PodWithMetrics>
+      title="Pods"
+      data={rows}
+      unread={unread}
+      placeholder={isPlaceholderData}
+      isLoading={isLoading}
+      waitingSince={waitingSince}
+      onRetry={() => void refetch()}
+      error={error}
+      dataUpdatedAt={dataUpdatedAt}
+      live={watchLive}
+      resyncing={resyncing}
+      getRowId={getResourceRowId}
+      columns={columns}
+      quickActions={quickActions}
+      emptyStateLabel={toPlural(ResourceType.Pod)}
+      // Inside the list rather than above it, as the Nodes page has it: the
+      // list owns the window's height now, and a banner outside it is one more
+      // box the height has to be threaded through.
+      headerContent={
+        <>
+          {filter && <PodSelectorBanner filter={filter} />}
+          <MetricsStatusBanner
+            status={podStatus}
+            unread={podUnread}
+            onRetry={() => void refetchPodMetrics()}
+          />
+        </>
+      }
+      getRowHref={(row) =>
+        hrefOf(objectLink({ kind: ResourceType.Pod, ...row })!)
+      }
+      deleteConfig={{
+        mutationFn: (item) =>
+          commands.deletePod(item.name, item.namespace, false),
+        invalidateQueryKeys: [queryKeys.everyPodRows()],
+        resourceType: ResourceType.Pod,
+      }}
+    />
+  );
+  return (
+    <MetricsAbsenceContext.Provider value={absenceOf(podStatus)}>
+      {list}
+    </MetricsAbsenceContext.Provider>
+  );
+}

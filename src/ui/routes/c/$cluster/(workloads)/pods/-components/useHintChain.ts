@@ -1,0 +1,308 @@
+/**
+ * The chain behind a pod's trouble, read once for whoever asks.
+ *
+ * The panel says it in a sentence and the report writes it into a file;
+ * both have to be the same reading, or a colleague opening the report sees
+ * a verdict the screen never showed.
+ */
+
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
+
+import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
+import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
+import { addressIn, namespaceOf, type Chain, type Trouble } from "@/lib/hints";
+import { readsPreviousRun } from "@/lib/container-sequence";
+import { usePolicyPeerData } from "@/hooks/usePolicyPeers";
+import { knownOf } from "@/lib/known";
+import { labelSelectorMatches } from "@/lib/label-selector";
+import { pathPolicies, type PolicyRows } from "@/lib/policy-peers";
+import { ResourceType } from "@/lib/resource-registry";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useT } from "@/i18n/useT";
+import type { PodInfo } from "@/generated/types";
+
+/** One array, so "no lines yet" is the same value on every render. */
+const EMPTY_LINES: string[] = [];
+const NO_SELECTOR: Record<string, string> = {};
+
+const LOG_LINES = 40;
+const STALE = 15_000;
+
+export function useHintChain(
+  pod: PodInfo,
+  trouble: Trouble | null,
+  wantLogs: boolean
+) {
+  const t = useT();
+  const context = useClusterStore((s) => s.currentContext);
+  const logContainer =
+    trouble && "container" in trouble && trouble.container
+      ? trouble.container
+      : null;
+  // The run that holds the last exit: the one before only once the
+  // container has left it. Asked of a container that has just exited, the
+  // run before is the one the node has already dropped.
+  const crashed = [...pod.initContainers, ...pod.containers].find(
+    (container) => container.name === logContainer
+  );
+  const previous = crashed !== undefined && readsPreviousRun(crashed);
+
+  const logs = useQuery({
+    queryKey: [
+      context,
+      "hints",
+      "logs",
+      pod.namespace,
+      pod.name,
+      logContainer,
+      previous,
+      pod.restartCount,
+    ],
+    queryFn: async () => {
+      try {
+        const lines = await commands.getPodLogs(
+          pod.name,
+          pod.namespace,
+          logContainer,
+          LOG_LINES,
+          null,
+          previous
+        );
+        return lines.map((line) => line.raw || line.message);
+      } catch (error) {
+        throw new Error(normalizeTauriError(error), { cause: error });
+      }
+    },
+    enabled: wantLogs && logContainer !== null,
+    staleTime: STALE,
+    retry: false,
+  });
+
+  // The pod's own namespace is enough for `db.shop`: the cross-namespace
+  // form every Kubernetes reader writes, which was called outside the
+  // cluster and gated off the Service lookup.
+  const namespaces = useMemo(() => [pod.namespace], [pod.namespace]);
+  const address = useMemo(
+    () => addressIn(logs.data ?? [], namespaces),
+    [logs.data, namespaces]
+  );
+  const inCluster = address?.where === "inCluster" ? address : null;
+
+  const services = useQuery({
+    queryKey: [context, "hints", "services", pod.namespace],
+    queryFn: () =>
+      commands.listServices({
+        namespace: pod.namespace,
+        labelSelector: null,
+        fieldSelector: null,
+        limit: null,
+        serviceType: null,
+      }),
+    enabled: inCluster !== null,
+    staleTime: STALE,
+    retry: false,
+  });
+  /**
+   * The Service the address names, matched with its namespace.
+   *
+   * `shop-db-rw.billing.svc.cluster.local` was matched on the bare name
+   * against this namespace's Services, so a same-named Service next door
+   * was reported — with its endpoint count — as the thing behind an
+   * address in another namespace.
+   */
+  const service = useMemo(() => {
+    if (!inCluster || !services.data) return null;
+    const host = inCluster.host.toLowerCase();
+    const labels = namespaceOf(host, pod.namespace);
+    // Not this namespace: the app did not list that one, so it has not
+    // looked rather than found nothing.
+    if (labels.namespace !== pod.namespace) return null;
+    const bare = labels.name;
+    return (
+      services.data.find(
+        (svc) =>
+          svc.clusterIp === inCluster.host ||
+          svc.name.toLowerCase() === host ||
+          (labels.qualified && svc.name.toLowerCase() === bare)
+      ) ?? null
+    );
+  }, [inCluster, services.data, pod.namespace]);
+
+  /** The address is in another namespace, which this app did not list. */
+  const elsewhere = useMemo(() => {
+    if (!inCluster) return null;
+    const { namespace } = namespaceOf(
+      inCluster.host.toLowerCase(),
+      pod.namespace
+    );
+    return namespace === pod.namespace ? null : namespace;
+  }, [inCluster, pod.namespace]);
+
+  const endpoints = useQuery({
+    queryKey: queryKeys.detail(
+      ResourceType.Endpoints,
+      pod.namespace,
+      service?.name
+    ),
+    queryFn: () => commands.getEndpoints(service!.name, pod.namespace),
+    enabled: service !== null,
+    staleTime: STALE,
+    retry: false,
+  });
+
+  // The NetworkPolicies on the way, read as the Pod's NetworkPolicies tab
+  // reads them and from the same cache entry.
+  const onTheWay = address !== null && address.where !== "sidecar";
+  const policyList = useQuery({
+    queryKey: queryKeys.resources(ResourceType.NetworkPolicy, pod.namespace),
+    queryFn: () => commands.listNetworkPoliciesIn([pod.namespace]),
+    enabled: onTheWay,
+    staleTime: STALE,
+    retry: false,
+  });
+  const selector = service?.selector ?? NO_SELECTOR;
+  const selecting = Object.keys(selector).length > 0;
+  const { home: namespacePods } = usePolicyPeerData(
+    onTheWay && selecting ? pod.namespace : null
+  );
+  const policies = useMemo(() => {
+    const listed = knownOf(policyList);
+    const rows: PolicyRows = listed.known
+      ? {
+          known: true,
+          value: {
+            rows: listed.value.rows,
+            unreadHere:
+              listed.value.unread.find(
+                (entry) => entry.namespace === pod.namespace
+              )?.message ?? null,
+          },
+        }
+      : listed;
+    const targets =
+      address?.where === "inCluster" && selecting
+        ? namespacePods.known
+          ? {
+              known: true as const,
+              value: namespacePods.value.filter(
+                (candidate) =>
+                  labelSelectorMatches(
+                    { matchLabels: selector },
+                    candidate.labels
+                  ) === true
+              ),
+            }
+          : namespacePods
+        : null;
+    return pathPolicies(pod, targets, rows);
+  }, [policyList, namespacePods, address, selecting, selector, pod]);
+
+  const chain = useMemo<Chain>(() => {
+    const notRead: string[] = [];
+    if (logs.error && logContainer)
+      notRead.push(
+        t("hints", "notReadLogs", {
+          container: logContainer,
+          reason: errorToShow(logs.error),
+        })
+      );
+    if (services.error)
+      notRead.push(
+        t("hints", "notReadService", {
+          namespace: pod.namespace,
+          reason: errorToShow(services.error),
+        })
+      );
+    if (endpoints.error && service)
+      notRead.push(
+        t("hints", "notReadEndpoints", {
+          service: service.name,
+          reason: errorToShow(endpoints.error),
+        })
+      );
+    if (policyList.error)
+      notRead.push(
+        t("hints", "notReadPolicies", {
+          namespace: pod.namespace,
+          reason: errorToShow(policyList.error),
+        })
+      );
+    if (!namespacePods.known && namespacePods.why !== null)
+      notRead.push(
+        t("hints", "notReadPods", {
+          namespace: pod.namespace,
+          reason: namespacePods.why,
+        })
+      );
+    if (elsewhere)
+      notRead.push(
+        t("hints", "notReadOtherNamespace", { namespace: elsewhere })
+      );
+    const ready =
+      endpoints.data?.subsets.reduce((sum, s) => sum + s.addresses.length, 0) ??
+      null;
+    const notReady =
+      endpoints.data?.subsets.reduce(
+        (sum, s) => sum + s.notReadyAddresses.length,
+        0
+      ) ?? null;
+    // The container that declares the port, not the next one in the list.
+    // Declaration order named an unrelated container as the thing that is
+    // not listening, and the pod's own `ports` answered the question.
+    const sidecar =
+      address?.where === "sidecar" && address.port !== null
+        ? ([...pod.containers, ...pod.initContainers].find((c) =>
+            c.ports.some((port) => port.containerPort === address.port)
+          ) ?? null)
+        : null;
+    return {
+      address,
+      // A read that failed is not an answer. Without these, a 403 on the
+      // Services of this namespace produced the same sentence as a cluster
+      // where nothing answers to that address.
+      // A Service in another namespace was never asked about, so nothing
+      // here may say whether one answers to that address.
+      servicesKnown:
+        inCluster === null || (services.data !== undefined && !elsewhere),
+      endpointsKnown: service === null || endpoints.data !== undefined,
+      service: service
+        ? {
+            name: service.name,
+            namespace: pod.namespace,
+            // Found, but the endpoints behind it were not read: the count
+            // is unknown rather than zero.
+            ready: ready,
+            total:
+              ready !== null && notReady !== null ? ready + notReady : null,
+          }
+        : null,
+      sidecar,
+      policies,
+      notRead,
+    };
+  }, [
+    policies,
+    policyList.error,
+    namespacePods,
+    address,
+    service,
+    endpoints.data,
+    endpoints.error,
+    elsewhere,
+    inCluster,
+    services.data,
+    services.error,
+    logs.error,
+    logContainer,
+    pod,
+    t,
+  ]);
+
+  // A fresh `[]` every call is a new dependency every render, and the report
+  // it feeds is rebuilt each time — see `usePodReport`, whose memo lists it.
+  const logLines = useMemo(() => logs.data ?? EMPTY_LINES, [logs.data]);
+
+  return { chain, logLines, logContainer, previous };
+}

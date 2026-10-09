@@ -1,0 +1,138 @@
+/**
+ * The one place that says which table features this app uses.
+ *
+ * In TanStack Table v9 the feature set is part of the type — `ColumnDef` reads
+ * `<TFeatures, TData, TValue>`, and a table only has the options, state and row
+ * APIs its features contribute — so it would otherwise appear in the type of
+ * every column in the app. Named once here, lists import `ColumnDef` from this
+ * module and go on writing `ColumnDef<Pod>`, and turning a feature on later is
+ * one edit rather than thirty.
+ */
+
+import {
+  columnFilteringFeature,
+  columnSizingFeature,
+  columnVisibilityFeature,
+  createFilteredRowModel,
+  createSortedRowModel,
+  filterFn_includesString,
+  globalFilteringFeature,
+  rowSortingFeature,
+  tableFeatures,
+  type CellData,
+  type Column,
+  type TableFeatures,
+  type CellContext as VendorCellContext,
+  type ColumnDef as VendorColumnDef,
+  type Row as VendorRow,
+  type RowData,
+} from "@tanstack/react-table";
+
+import type { HeaderSaying } from "@/i18n/column-header";
+import type { T } from "@/i18n/useT";
+import type { ReportValue } from "@/lib/report";
+
+/**
+ * What a column says about itself beyond what it draws. `share` is the words
+ * its cell draws, for a shared file: a column whose value is not what the
+ * cell shows says it here, or the file cannot say it at all.
+ */
+export interface AppColumnMeta {
+  // `never`: each list types its own row, and the file calls every column
+  // with the row the table was given.
+  share?: (row: never, t: T) => ReportValue | string | null;
+  /** The header's words, where the header is a control rather than `columnHeader`. */
+  label?: HeaderSaying;
+  /** Pixels the column is never drawn under, whatever the table's width; a function where it depends on the reader's language or on the rows the table holds. */
+  floor?: number | ((t: T, rows: readonly never[]) => number);
+  /** Pixels it is drawn at while the port has room for every column's. */
+  ideal?: number | ((t: T, rows: readonly never[]) => number);
+}
+
+/**
+ * Sorting, per-column filtering, one search box over every column, hiding
+ * columns and column widths — what `DataTable` actually offers. Row
+ * selection, pinning and pagination are deliberately absent: the app does
+ * none of them, and in v9 leaving them out is what keeps them out of the
+ * bundle.
+ *
+ * `columnResizingFeature` is absent on purpose even though the tables *do*
+ * resize: its handler commits pixel deltas against a layout written in
+ * shares, so `DataTable` owns the drag and writes `columnSizing` itself.
+ *
+ * Grouping is absent for a different reason. The lists *do* group — the
+ * namespace captions on a Pods list — but by `RowGrouping`, which draws caption
+ * rows between the table's own rows and hides the column it took over: a
+ * rendering concern, not a row model.
+ *
+ * No `sortFns` registry: no column names one, and sorting's `auto` reaches
+ * the built-ins. A filter's `auto` does *not* — it resolves through the slot
+ * below, and left empty a column filter matches nothing while nothing fails
+ * (#185). No column filters one today; the entry stays so the first that
+ * does works, and `columnFilteringFeature` is here because the vendor makes
+ * global filtering depend on it.
+ */
+export const tableStack = tableFeatures({
+  columnMeta: {} as AppColumnMeta,
+  rowSortingFeature,
+  columnFilteringFeature,
+  columnSizingFeature,
+  globalFilteringFeature,
+  columnVisibilityFeature,
+  sortedRowModel: createSortedRowModel(),
+  filteredRowModel: createFilteredRowModel(),
+  filterFns: { includesString: filterFn_includesString },
+});
+
+/**
+ * What the vendor will accept as a row and as a cell value. Re-exported so a
+ * list that needs to constrain its own generic has one door to knock on.
+ */
+export type { CellData, RowData };
+
+/** The feature set as a type, for the rare place that needs to name it. */
+export type TableStack = typeof tableStack;
+
+/** A column of one of this app's tables. */
+export type ColumnDef<
+  TData extends RowData,
+  TValue extends CellData = CellData,
+> = VendorColumnDef<TableStack, TData, TValue>;
+
+/** A row of one of this app's tables. */
+export type Row<TData extends RowData> = VendorRow<TableStack, TData>;
+
+/** What a column's `cell` renderer is handed. */
+export type CellContext<
+  TData extends RowData,
+  TValue extends CellData = CellData,
+> = VendorCellContext<TableStack, TData, TValue>;
+
+const searchableIn = new WeakMap<object, Map<string, boolean>>();
+
+/**
+ * Whether the search box reads a column: the vendor's own rule, a first value
+ * that is a string or a number, asked once per data. The vendor asks before
+ * it looks for an accessor, so for a column without one it walked every row
+ * for a value that never comes, on each keystroke: 10 000 pods, once per
+ * such column.
+ */
+export function searchableColumn<
+  TFeatures extends TableFeatures,
+  TData extends RowData,
+  TValue extends CellData = CellData,
+>(column: Column<TFeatures, TData, TValue>): boolean {
+  if (!column.accessorFn) return false;
+  const rows = column.table.getCoreRowModel().flatRows;
+  let known = searchableIn.get(rows);
+  if (!known) searchableIn.set(rows, (known = new Map()));
+  let answer = known.get(column.id);
+  if (answer === undefined) {
+    const value = rows
+      .find((row) => row.getValue(column.id) != null)
+      ?.getValue(column.id);
+    answer = typeof value === "string" || typeof value === "number";
+    known.set(column.id, answer);
+  }
+  return answer;
+}

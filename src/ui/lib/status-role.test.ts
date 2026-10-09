@@ -1,0 +1,185 @@
+import { describe, expect, it } from "vite-plus/test";
+import {
+  ROLE_DOT,
+  ROLE_ICON,
+  ROLE_TEXT,
+  statusRole,
+  type StatusRole,
+} from "@/lib/status-role";
+import { iconSvg } from "@/lib/icon-svg";
+import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
+
+const ROLES: StatusRole[] = ["ok", "pending", "warn", "err", "neutral"];
+
+describe("statusRole", () => {
+  /** `kubectl get nodes` prints exactly this for a cordoned node, and the
+   *  badge's colour is a table lookup on that string — a miss renders grey
+   *  and says nothing. Amber, not red: a cordon is somebody's decision. The
+   *  Nodes list could not say it at all until `unschedulable` reached the
+   *  frontend, while the overview had been calling the same node "Cordoned"
+   *  all along. */
+  it("knows the word kubectl prints for a cordoned node", () => {
+    expect(statusRole("Ready,SchedulingDisabled")).toBe("warn");
+    expect(statusRole("Ready")).toBe("ok");
+  });
+
+  it("maps healthy states", () => {
+    for (const s of [
+      "Running",
+      "Ready",
+      "Available",
+      "Active",
+      "Succeeded",
+      "Bound",
+      "deployed",
+    ])
+      expect(statusRole(s)).toBe("ok");
+  });
+
+  it("maps in-flight states", () => {
+    for (const s of [
+      "Pending",
+      "Waiting",
+      "Progressing",
+      "Creating",
+      "pending-install",
+    ])
+      expect(statusRole(s)).toBe("pending");
+  });
+
+  it("maps degraded states", () => {
+    for (const s of ["Warning", "Degraded", "Suspended"])
+      expect(statusRole(s)).toBe("warn");
+  });
+
+  /** Sam's old big-pull pod read green while it drained under a Deployment
+   *  made again in its place, and blue would call it coming up. Fails if a
+   *  pod on its way out takes any colour but the amber its Service's
+   *  "draining" has. */
+  it("draws a pod being deleted in amber, as its Service's draining", () => {
+    expect(statusRole("Terminating")).toBe("warn");
+  });
+
+  it("maps failures", () => {
+    for (const s of [
+      "Error",
+      "Failed",
+      "CrashLoopBackOff",
+      "Evicted",
+      "OOMKilled",
+      "ImagePullBackOff",
+    ])
+      expect(statusRole(s)).toBe("err");
+  });
+
+  /**
+   * A Gateway that is not programmed reaches the peek badge as its reason.
+   * Unlisted, `Invalid` drew a grey badge beside a list that paints it red.
+   */
+  it("reads a Gateway's not-programmed reasons as failures", () => {
+    for (const reason of [
+      "Invalid",
+      "AddressNotAssigned",
+      "AddressNotUsable",
+      "NoResources",
+    ]) {
+      expect(statusRole(reason), reason).toBe("err");
+    }
+  });
+
+  it("maps terminal and unknown states to neutral", () => {
+    for (const s of ["Completed", "Terminated", "Superseded", "", "wat"])
+      expect(statusRole(s)).toBe("neutral");
+  });
+
+  it("ignores case, spaces and dashes", () => {
+    expect(statusRole("crash loop back off")).toBe("err");
+    expect(statusRole("CRASH-LOOP-BACK-OFF")).toBe("err");
+  });
+
+  // What kubectl's derivation produces beyond the plain reasons. Without
+  // these every one of them fell through to neutral grey — the loudest
+  // states in the cluster rendered as the quietest thing on the page.
+  it("reads an init container's failure through its prefix", () => {
+    expect(statusRole("Init:CrashLoopBackOff")).toBe("err");
+    expect(statusRole("Init:ImagePullBackOff")).toBe("err");
+    expect(statusRole("Init:ExitCode:1")).toBe("err");
+    expect(statusRole("Init:Signal:9")).toBe("err");
+  });
+
+  it("treats init progress as pending, not as a failure", () => {
+    expect(statusRole("Init:0/2")).toBe("pending");
+    expect(statusRole("Init:1/3")).toBe("pending");
+  });
+
+  it("maps a bare exit code by whether it is clean", () => {
+    expect(statusRole("ExitCode:0")).toBe("neutral");
+    expect(statusRole("ExitCode:137")).toBe("err");
+    expect(statusRole("Signal:11")).toBe("err");
+  });
+
+  it("keeps a healthy pod quiet", () => {
+    expect(statusRole("Running")).toBe("ok");
+  });
+});
+
+describe("role marks", () => {
+  it("gives every role its own shape", () => {
+    // Hue is the channel a greyscale screenshot and a red-green deficiency
+    // both lose. If two roles shared a glyph, a condition list or a container
+    // block would be saying one thing in one channel.
+    expect(new Set(ROLES.map((role) => ROLE_ICON[role])).size).toBe(
+      ROLES.length
+    );
+  });
+
+  /** A bar before "Complete" or "DNS alias" reads as a dash typed into the value. */
+  it("draws the neutral mark as a ring, not a horizontal bar", () => {
+    const svg = iconSvg(ROLE_ICON.neutral);
+    expect(svg).toContain("<circle ");
+    expect(svg).not.toMatch(/d="M[\d.]+ [\d.]+h[\d.]+"/);
+  });
+
+  it("never reuses a kind's glyph", () => {
+    // A status mark and a `ResourceRef`'s kind mark sit in adjacent columns
+    // of the same table row; sharing one collapses two channels into one.
+    const kinds = new Set(RESOURCE_REGISTRY.map((entry) => entry.icon));
+    for (const role of ROLES) expect(kinds.has(ROLE_ICON[role])).toBe(false);
+  });
+
+  it("answers every role in every channel", () => {
+    for (const role of ROLES) {
+      expect(ROLE_TEXT[role]).toMatch(/^text-/);
+      expect(ROLE_DOT[role]).toMatch(/^bg-/);
+    }
+  });
+  /**
+   * A status the table does not know falls to `neutral`, and the badge draws
+   * the same grey glyph for "the controller accepted this" as for "the
+   * controller refused it". The Gateway API surfaces added five of these.
+   */
+  it("colours the Gateway API verdicts", () => {
+    expect(statusRole("Accepted")).toBe("ok");
+    expect(statusRole("Programmed")).toBe("ok");
+    expect(statusRole("Claimed")).toBe("ok");
+    expect(statusRole("Refused")).toBe("err");
+    expect(statusRole("Unclaimed")).toBe("neutral");
+  });
+
+  /**
+   * Would break if a storage phase went back to falling through the lookup.
+   *
+   * `statusRole` answers `neutral` for anything it does not know, so a status
+   * nobody added reads as "nothing to see here" — the same grey dash a
+   * completed job gets. These two are the opposite of that: `Lost` is a claim
+   * whose volume is gone, and every pod mounting it fails to start.
+   */
+  it("colours the storage phases that mean somebody has to act", () => {
+    expect(statusRole("Lost")).toBe("err");
+    expect(statusRole("Released")).toBe("warn");
+    // And the ones that were already right stay right.
+    expect(statusRole("Bound")).toBe("ok");
+    expect(statusRole("Available")).toBe("ok");
+    expect(statusRole("Failed")).toBe("err");
+  });
+});

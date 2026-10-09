@@ -1,0 +1,1371 @@
+/**
+ * The route's diagnosis, in debug order — the page IS the trace.
+ *
+ * Eight links, in the order a person who has done this before checks them:
+ * class claimed, gateway programmed with an address, listener accepts,
+ * namespace allowed, references resolve, backend exists, endpoints ready,
+ * reachable from outside. The first broken link is the verdict; everything
+ * after it is "not reached", not broken.
+ *
+ * Two sources of truth, never conflated: what the controllers wrote
+ * (conditions, per parent) and what the cluster's objects say for
+ * themselves (the gateway list, the Services, what they publish). Where a
+ * source cannot be read the step goes `blind`, drawn dashed — "can't know
+ * from here" — instead of guessing either way.
+ */
+
+import type {
+  BackendRefInfo,
+  ConditionInfo,
+  GatewayClassInfo,
+  GatewayInfo,
+  ListenerInfo,
+  ParentRefInfo,
+  ResolveProbe,
+  RouteInfo,
+  RouteParentStatusInfo,
+  TcpProbe,
+} from "@/generated/types";
+import { backingOf, type Backing, type BackingSources } from "@/integrations";
+import { describeStop, stopMood } from "@/lib/connections";
+import type { T } from "@/i18n/useT";
+import { saidOf, statusesFor, verdictOf } from "@/lib/route-verdict";
+
+export interface TraceQuote {
+  asks: string;
+  serves: string;
+}
+
+export interface TraceDetail {
+  title: string;
+  body: string;
+  quote?: TraceQuote;
+  /** A ready-to-apply manifest, where one repairs the step. */
+  scaffold?: string;
+}
+
+export type TraceStepId =
+  | "class"
+  | "gateway"
+  | "listener"
+  | "namespace"
+  | "refs"
+  | "backend"
+  | "endpoints"
+  | "reachable";
+
+export type TraceStepState = "ok" | "err" | "warn" | "off" | "blind";
+
+export interface TraceStep {
+  id: TraceStepId;
+  state: TraceStepState;
+  say: string;
+  who: "infra" | "yours" | "controller" | "machine";
+  /** The break compressed to list length — set on every err step, so the
+   *  routes list can say "stops at listener — hostnames don't intersect"
+   *  in exactly the words this step will expand into. */
+  short?: string;
+  /** Addresses this step vouches for, kept out of {@link say} so the UI
+   *  can make each one copyable instead of baking them into prose. */
+  addresses?: string[];
+  /** The object {@link say} names, where it exists — so the UI can make
+   *  the name a peek like every other reference in the app. Absent on a
+   *  missing object: a link to a 404 is worse than plain text. */
+  subject?: {
+    kind: string;
+    name: string;
+    namespace: string | null;
+  };
+  /** A Service port worth forwarding, kept out of {@link say} so the UI
+   *  can make it a click-to-forward instead of baking it into prose.
+   *  Only set beside a Service {@link subject} that answers on it. */
+  forwardPort?: number;
+  detail?: TraceDetail;
+  /** Set when the verdict is about an older spec generation. */
+  freshness?: { observed: number; current: number };
+  /** The controller took this and wrote `Unknown`: nothing broke here, and
+   *  nothing said it works either. */
+  pending?: boolean;
+}
+
+export interface RouteTrace {
+  /** The parent this trace runs through — named even when missing. The
+   *  sectionName keeps two attachments to one gateway distinct. */
+  gateway: { name: string; namespace: string; sectionName: string | null };
+  /**
+   * The `ListenerSet` the route named, where it named one rather than the
+   * Gateway. Null for a direct attachment.
+   *
+   * `gateway` resolves to the Gateway on purpose — that is the road, and the
+   * row groups by it — but two sets on one Gateway would then share a trace's
+   * whole identity, colliding on keys and hiding which set a verdict is about.
+   */
+  via: { name: string; namespace: string } | null;
+  serving: boolean;
+  /**
+   * False when a step could not read its source.
+   *
+   * `serving` is computed from the steps that broke, and a step that could
+   * not look is not a step that found nothing — a reader without cluster-wide
+   * Gateway rights would otherwise get a green verdict on a route nobody
+   * verified. A refusal still counts as known: an `err` is an answer. So does
+   * the unprobed last mile, which is blind on every healthy trace.
+   */
+  servingKnown: boolean;
+  /**
+   * Why {@link servingKnown} is false, null where it is not: a source nobody
+   * could read, or a verdict a controller has taken and not given yet.
+   */
+  unknownBecause: "unread" | "undecided" | null;
+  /** 1-based index of the first broken step, where one is. */
+  stopStep: number | null;
+  steps: TraceStep[];
+  /** What "from this machine" would try: a concrete host, the gateway's
+   *  address, the listener's port. Null pieces are simply not probeable. */
+  probe: { host: string | null; address: string | null; port: number | null };
+}
+
+export interface TraceSources {
+  gateways: GatewayInfo[];
+  classes: GatewayClassInfo[];
+  /** False while gateways and classes are still being read — or cannot be. */
+  topologyKnown: boolean;
+  backing: BackingSources;
+}
+
+/** The Programmed verdict, with the legacy `Ready` fallback some
+ *  controllers still write — one rule, so the trace, the pulse and the
+ *  topology map can never drift apart on it again. */
+export function gatewayProgrammed(
+  gateway: GatewayInfo
+): ConditionInfo | undefined {
+  return (
+    gateway.conditions.find((c) => c.type === "Programmed") ??
+    gateway.conditions.find((c) => c.type === "Ready")
+  );
+}
+
+/**
+ * Whether this parentRef points at that Gateway, directly or through one of
+ * its `ListenerSet`s.
+ *
+ * A route may name a `ListenerSet` instead of the Gateway: the set carries the
+ * listeners, and its own `spec.parentRef` says which Gateway they belong to.
+ * The route is still that Gateway's — it just took the long way. Reported by a
+ * maintainer whose whole setup works this way: a bare Gateway, and all TLS and
+ * hostname configuration in a ListenerSet per app. Every one of his routes read
+ * as attached to nothing.
+ */
+export function parentIsGateway(
+  parent: { kind: string; name: string; namespace: string | null },
+  routeNamespace: string,
+  gateway: GatewayInfo
+): boolean {
+  const at = parent.namespace ?? routeNamespace;
+  if (parent.kind === "Gateway") {
+    return parent.name === gateway.name && at === gateway.namespace;
+  }
+  if (parent.kind === "ListenerSet") {
+    return gateway.listenerSets.some(
+      (set) => set.name === parent.name && set.namespace === at
+    );
+  }
+  return false;
+}
+
+/** One lookup for "this name+namespace, in the fetched list". */
+export function findGateway(
+  gateways: GatewayInfo[],
+  name: string,
+  namespace: string
+): GatewayInfo | undefined {
+  return gateways.find(
+    (candidate) => candidate.name === name && candidate.namespace === namespace
+  );
+}
+
+/** The Gateway a parentRef leads to, directly or through a `ListenerSet`. */
+export function gatewayOfParent(
+  gateways: GatewayInfo[],
+  parent: { kind: string; name: string; namespace: string | null },
+  routeNamespace: string
+): GatewayInfo | undefined {
+  return gateways.find((candidate) =>
+    parentIsGateway(parent, routeNamespace, candidate)
+  );
+}
+
+/**
+ * Whether a failure to resolve this parent is an answer or a gap.
+ *
+ * A `ListenerSet` parent resolves through `GatewayInfo.listenerSets`, and that
+ * list is empty both when a Gateway has no sets and when the sets could not be
+ * listed at all — a missing CRD, a refused list, a timeout. Reporting the
+ * second as "Gateway X does not exist" would be this app inventing a verdict
+ * out of its own blind spot, which is the whole thing it is not supposed to do.
+ */
+export function parentResolutionKnown(
+  gateways: GatewayInfo[],
+  parent: { kind: string }
+): boolean {
+  if (parent.kind !== "ListenerSet") return true;
+  return gateways.every((gateway) => gateway.listenerSetsKnown);
+}
+
+/** Whether a parentRef could name a Gateway at all — directly or via a set. */
+export function parentCarriesTraffic(parent: { kind: string }): boolean {
+  // Only `ListenerSet`. The kind graduated into
+  // `gateway.networking.k8s.io/v1` in Gateway API 1.5, and the backend reads
+  // it under that name alone, so the older `XListenerSet` in the x-k8s.io
+  // group never reaches `GatewayInfo.listenerSets` and a branch for it here
+  // could not fire. Confirmed against a live cluster: kind `ListenerSet`,
+  // group `gateway.networking.k8s.io`, version v1.
+  return parent.kind === "Gateway" || parent.kind === "ListenerSet";
+}
+
+/** The protocol label a hostless route kind wears wherever it is drawn. */
+export const HOSTLESS_PROTO: Record<string, string> = {
+  TCPRoute: "TCP",
+  UDPRoute: "UDP",
+  TLSRoute: "TLS",
+};
+
+const namesNoService = (route: RouteInfo): boolean =>
+  !route.rules.some((rule) =>
+    rule.backendRefs.some((backend) => backend.kind === "Service")
+  );
+
+/** Redirect-only means every rule redirects and none names a Service —
+ *  configuration, not breakage, in the same words on every surface. */
+export function redirectOnly(route: RouteInfo): boolean {
+  return (
+    route.rules.length > 0 &&
+    route.rules.every((rule) => rule.hasRedirect) &&
+    namesNoService(route)
+  );
+}
+
+const namesNoBackend = (route: RouteInfo): boolean =>
+  !route.rules.some((rule) => rule.backendRefs.length > 0);
+
+/**
+ * Every rule either redirects or hands off to an ExtensionRef filter, and
+ * the route names no backend at all.
+ *
+ * **Not a claim that the filter answers.** What a vendor filter does is its
+ * vendor's business and this app does not read it: `KongPlugin` and
+ * Traefik's `Middleware` decorate a request and still need somewhere to
+ * send it, and even Envoy Gateway's own `HTTPRouteFilter` has variants that
+ * do. This says only that there is nothing here for the backend steps to
+ * look at — hence `blind` rather than `ok`, and copy that names the filter
+ * instead of vouching for it.
+ *
+ * `namesNoBackend`, not `namesNoService`: a route with a non-Service
+ * backendRef does name somewhere to go, and "no backends" about it would
+ * be false.
+ */
+export function selfAnswered(route: RouteInfo): boolean {
+  return (
+    route.rules.length > 0 &&
+    route.rules.every(
+      (rule) => rule.hasRedirect || rule.extensionRefs.length > 0
+    ) &&
+    namesNoBackend(route)
+  );
+}
+
+/**
+ * Annotations on this route addressed to the controller that owns it.
+ *
+ * A rule with no backendRefs and no terminating filter answers 500 by the
+ * spec, and this app said so outright — "the route matches traffic and drops
+ * it". But a controller can be configured by annotation in its own domain,
+ * and that is configuration this app does not read. A Cloudflare Tunnel
+ * route carrying `gateway.cloudflare-tunnel.io/http-status: 404` answers
+ * every matched request with a 404 on purpose, to keep a path off the
+ * internet — reported as broken on a cluster where it was working exactly
+ * as written.
+ *
+ * Matched on the controller's own domain rather than a list of vendors:
+ * what makes an annotation load-bearing here is that it is addressed to the
+ * component whose behaviour is in question, and a list would be a new table
+ * keyed by vendor that goes quiet for the next one.
+ */
+export function addressedToController(
+  route: RouteInfo,
+  controllerName: string | undefined
+): string[] {
+  const domain = controllerName?.split("/")[0];
+  if (!domain) return [];
+  return Object.keys(route.annotations)
+    .filter((key) => key.split("/")[0] === domain)
+    .sort();
+}
+
+/**
+ * The route names no backend at all, and carries settings its own controller
+ * reads. One predicate for the trace, the list row and the peek, so the three
+ * cannot answer differently about the same route.
+ *
+ * `namesNoBackend`, not "no Service": a route with a backendRef of some other
+ * kind — an implementation's own `Backend` — does name somewhere to go, and
+ * "no backendRefs" about it would be false. `selfAnswered` draws the same
+ * line for the same reason.
+ */
+export function answeredByItsController(
+  route: RouteInfo,
+  controllerName: string | undefined
+): string[] {
+  if (!namesNoBackend(route)) return [];
+  return addressedToController(route, controllerName);
+}
+
+const said = (c: ConditionInfo): string =>
+  [c.reason, c.message].filter(Boolean).join(": ") || `${c.type}: ${c.status}`;
+
+/** The staleness trap: a verdict written about an older spec generation. */
+function freshnessOf(
+  condition: ConditionInfo | undefined,
+  route: RouteInfo
+): { observed: number; current: number } | undefined {
+  if (
+    condition?.observedGeneration == null ||
+    route.generation == null ||
+    condition.observedGeneration >= route.generation
+  ) {
+    return undefined;
+  }
+  return { observed: condition.observedGeneration, current: route.generation };
+}
+
+/** The listeners this parentRef points at — one by section, or all. */
+export function candidateListeners(
+  gateway: GatewayInfo | undefined,
+  parent: ParentRefInfo,
+  routeNamespace: string
+): ListenerInfo[] {
+  if (!gateway) return [];
+  // A route that named a ListenerSet reaches only that set's listeners. The
+  // Gateway's own and every other set's are merged into the same array, so
+  // without this a route through one team's set is checked against another
+  // team's — and a sectionName that means nothing to it can match.
+  const mine =
+    parent.kind === "ListenerSet"
+      ? gateway.listeners.filter(
+          (l) =>
+            l.fromListenerSet?.name === parent.name &&
+            l.fromListenerSet.namespace === (parent.namespace ?? routeNamespace)
+        )
+      : gateway.listeners;
+  if (parent.sectionName) {
+    return mine.filter((l) => l.name === parent.sectionName);
+  }
+  if (parent.port != null) {
+    return mine.filter((l) => l.port === parent.port);
+  }
+  return mine;
+}
+
+function classStep(
+  gateway: GatewayInfo | undefined,
+  classes: GatewayClassInfo[],
+  topologyKnown: boolean,
+  t: T
+): TraceStep {
+  if (!topologyKnown) {
+    return {
+      id: "class",
+      state: "blind",
+      say: t("empty", "gwClassBlind"),
+      who: "infra",
+    };
+  }
+  if (!gateway) {
+    return {
+      id: "class",
+      state: "blind",
+      say: t("empty", "gwClassNoGateway"),
+      who: "infra",
+    };
+  }
+  const subject = {
+    kind: "GatewayClass",
+    name: gateway.className,
+    namespace: null,
+  };
+  const cls = classes.find((c) => c.name === gateway.className);
+  if (!cls) {
+    return {
+      id: "class",
+      state: "err",
+      say: t("empty", "gwClassMissingSay", { name: gateway.className }),
+      who: "infra",
+      short: t("empty", "gwClassMissingShort", { name: gateway.className }),
+      detail: {
+        title: t("empty", "gwClassMissingTitle", { name: gateway.className }),
+        body: t("empty", "gwClassMissingBody"),
+      },
+    };
+  }
+  if (cls.accepted !== true) {
+    const refused = cls.conditions.find(
+      (c) => c.type === "Accepted" && c.status === "False"
+    );
+    return {
+      id: "class",
+      state: "err",
+      say: t("empty", "gwClassUnclaimedSay", { name: gateway.className }),
+      who: "infra",
+      short: t("empty", "gwClassUnclaimedShort", { name: gateway.className }),
+      subject,
+      detail: {
+        title: t("empty", "gwClassUnclaimedTitle", { name: gateway.className }),
+        body: refused
+          ? t("empty", "gwClassRefusedBody", { said: said(refused) })
+          : t("empty", "gwClassSilentBody", {
+              controller: cls.controllerName,
+            }),
+      },
+    };
+  }
+  return {
+    id: "class",
+    state: "ok",
+    say: t("empty", "gwClassClaimedSay", {
+      name: gateway.className,
+      controller: cls.controllerName,
+    }),
+    who: "infra",
+    subject,
+  };
+}
+
+function gatewayStep(
+  gateway: GatewayInfo | undefined,
+  parent: ParentRefInfo,
+  routeNamespace: string,
+  topologyKnown: boolean,
+  resolutionKnown: boolean,
+  t: T
+): TraceStep {
+  const at = parent.namespace ?? routeNamespace;
+  if (!topologyKnown) {
+    return {
+      id: "gateway",
+      state: "blind",
+      say: t("empty", "gwGatewayBlind", { name: parent.name }),
+      who: "infra",
+    };
+  }
+  if (!gateway && !resolutionKnown) {
+    // The parent names a ListenerSet and the sets could not be listed, so
+    // "no Gateway claims it" is not something this app read anywhere.
+    return {
+      id: "gateway",
+      state: "blind",
+      say: t("empty", "gwSetsUnreadSay", { name: parent.name }),
+      who: "infra",
+      detail: {
+        title: t("empty", "gwSetsUnreadTitle"),
+        body: t("empty", "gwSetsUnreadBody"),
+      },
+    };
+  }
+  if (!gateway) {
+    return {
+      id: "gateway",
+      state: "err",
+      say: t("empty", "gwGatewayMissingSay", {
+        name: parent.name,
+        namespace: at,
+      }),
+      who: "yours",
+      short: t("empty", "gwGatewayMissingShort", { name: parent.name }),
+      detail: {
+        title: t("empty", "gwGatewayMissingTitle"),
+        body: t("empty", "gwGatewayMissingBody"),
+      },
+    };
+  }
+  const subject = {
+    kind: "Gateway",
+    name: gateway.name,
+    namespace: gateway.namespace,
+  };
+  const programmed = gatewayProgrammed(gateway);
+  if (programmed?.status === "False") {
+    return {
+      id: "gateway",
+      state: "err",
+      say: t("empty", "gwNotProgrammedSay", { name: gateway.name }),
+      who: "infra",
+      short: t("empty", "gwNotProgrammedShort", { name: gateway.name }),
+      subject,
+      detail: {
+        title: t("empty", "gwNotProgrammedTitle"),
+        body: t("empty", "gwNotProgrammedBody", { said: said(programmed) }),
+      },
+    };
+  }
+  // No Programmed condition at all: nobody has said, which is undecided,
+  // not programmed — with or without an address.
+  if (!programmed) {
+    return {
+      id: "gateway",
+      state: "warn",
+      say: t("empty", "gwProgrammedQuietSay", { name: gateway.name }),
+      who: "infra",
+      subject,
+      pending: true,
+    };
+  }
+  if (gateway.addresses.length === 0) {
+    // `status.addresses` is optional in the spec, and an implementation on
+    // a private or overlay network has nothing to publish there. So once
+    // the controller has said Programmed, an empty list is this app failing
+    // to see where traffic arrives — not traffic having nowhere to arrive.
+    // Blind rather than err, which is what keeps `servingKnown` honest.
+    // Reported against 4.6.0: a Netbird gateway, programmed and working,
+    // with five routes under it all reading "traffic has nowhere to arrive".
+    if (programmed?.status === "True") {
+      return {
+        id: "gateway",
+        state: "blind",
+        say: t("empty", "gwNoAddressPublishedSay", { name: gateway.name }),
+        who: "infra",
+        short: t("empty", "gwNoAddressPublishedShort", { name: gateway.name }),
+        subject,
+        detail: {
+          title: t("empty", "gwNoAddressPublishedTitle"),
+          body: t("empty", "gwNoAddressPublishedBody"),
+        },
+      };
+    }
+    // A controller that has taken this and not decided has not failed to
+    // give it an address — it has not got there yet, so a Gateway
+    // mid-provisioning must not read "traffic has nowhere to arrive". The
+    // same over-claim as calling it programmed, three branches down; this
+    // branch runs first, so it is the one the reader actually saw.
+    if (programmed.status === "Unknown") {
+      return {
+        id: "gateway",
+        state: "warn",
+        say: t("empty", "gwProgrammedPendingSay", { name: gateway.name }),
+        who: "infra",
+        subject,
+        pending: true,
+      };
+    }
+    // Nothing has vouched for it and there is no address: the old reading
+    // stands, because now neither half is known good.
+    return {
+      id: "gateway",
+      state: "err",
+      say: t("empty", "gwNoAddressSay", { name: gateway.name }),
+      who: "infra",
+      short: t("empty", "gwNoAddressShort", { name: gateway.name }),
+      subject,
+      detail: {
+        title: t("empty", "gwNoAddressTitle"),
+        body: t("empty", "gwNoAddressBody"),
+      },
+    };
+  }
+  // `Unknown` is the API's third answer: a controller that has taken the
+  // Gateway and not decided yet (`Pending`) is not "is programmed". The
+  // Gateways list says "unknown" in its column for the same state.
+  if (programmed.status !== "True") {
+    return {
+      id: "gateway",
+      state: "warn",
+      say: t("empty", "gwProgrammedPendingSay", { name: gateway.name }),
+      who: "infra",
+      subject,
+      pending: true,
+    };
+  }
+  return {
+    id: "gateway",
+    state: "ok",
+    say: t("empty", "gwProgrammedSay", { name: gateway.name }),
+    who: "infra",
+    addresses: gateway.addresses,
+    subject,
+  };
+}
+
+function listenerLabel(listeners: ListenerInfo[], t: T): string {
+  if (listeners.length === 1) {
+    return t("empty", "gwListenerNamed", { name: listeners[0].name });
+  }
+  return t("empty", "gwListenerAny");
+}
+
+/** The hostnames a listener set serves, for the two sides of a mismatch
+ *  quote. Named for the listener, like `listenerLabel` beside it: the routes
+ *  list has a helper of its own by the old name, about a route rather than a
+ *  listener, and one word for two ideas across two files of one feature is a
+ *  trap for whoever reads them in either order. */
+function listenerHosts(listeners: ListenerInfo[], t: T): string {
+  if (listeners.length === 0) return t("empty", "gwListenerNotFound");
+  return listeners
+    .map((l) => l.hostname ?? t("empty", "gwAllHosts"))
+    .join(", ");
+}
+
+/** Steps 3 and 4 — both written by the controller as one Accepted verdict,
+ *  split here so the break lands on the link the reason actually names. */
+function acceptanceSteps(
+  route: RouteInfo,
+  gateway: GatewayInfo | undefined,
+  parent: ParentRefInfo,
+  entries: RouteParentStatusInfo[],
+  t: T
+): [TraceStep, TraceStep] {
+  const listeners = candidateListeners(gateway, parent, route.namespace);
+  const label = listenerLabel(listeners, t);
+
+  if (entries.length === 0) {
+    // No parent status written at all, which by the time this runs can only
+    // mean a controller that exists and stayed quiet about *this route* —
+    // as several implementations still do for the alpha kinds. The cases
+    // where nobody is there to have written one are caught above: an
+    // unclaimed class stops at step 1, a missing or refused gateway at step
+    // 2, and both force everything below them off. So: blind, not err — the
+    // route may well be carrying traffic — and the steps below still run.
+    return [
+      {
+        id: "listener",
+        state: "blind",
+        say: t("empty", "gwNoRouteStatusSay"),
+        who: "controller",
+        short: t("empty", "gwNoRouteStatusShort"),
+        detail: {
+          title: t("empty", "gwNoRouteStatusTitle"),
+          body: t("empty", "gwNoRouteStatusBody"),
+        },
+      },
+      namespaceQuiet(route, listeners, "ok", t),
+    ];
+  }
+
+  const accepted = saidOf(verdictOf(entries, "Accepted"));
+  const freshness = freshnessOf(accepted, route);
+
+  if (!accepted) {
+    return [
+      {
+        id: "listener",
+        state: "warn",
+        say: t("empty", "gwNoAcceptedYet"),
+        pending: true,
+        who: "controller",
+        freshness,
+      },
+      namespaceQuiet(route, listeners, "ok", t),
+    ];
+  }
+
+  if (accepted.status === "False") {
+    if (accepted.reason === "NotAllowedByListeners") {
+      return [
+        {
+          id: "listener",
+          state: "ok",
+          say: t("empty", "gwListenerMatches", { label }),
+          who: "yours",
+          freshness,
+        },
+        {
+          id: "namespace",
+          state: "err",
+          say: t("empty", "gwNsNotAllowedSay", {
+            namespace: route.namespace,
+          }),
+          who: "yours",
+          short: t("empty", "gwNsNotAllowedShort", {
+            namespace: route.namespace,
+          }),
+          // The namespace's labels are the fix — a selector matches them.
+          subject: {
+            kind: "Namespace",
+            name: route.namespace,
+            namespace: null,
+          },
+          freshness,
+          detail: {
+            title: t("empty", "gwNsNotAllowedTitle"),
+            body: t("empty", "gwNsNotAllowedBody", { said: said(accepted) }),
+            quote: {
+              asks: route.namespace,
+              serves: listeners
+                .map((l) => l.allowedNamespaces ?? "Same")
+                .join(", "),
+            },
+          },
+        },
+      ];
+    }
+    const hostnameMiss = accepted.reason === "NoMatchingListenerHostname";
+    return [
+      {
+        id: "listener",
+        state: "err",
+        say: t("empty", "gwListenerRefusesSay", { label }),
+        who: "yours",
+        short: hostnameMiss
+          ? t("empty", "gwHostnamesShort")
+          : (accepted.reason ?? t("empty", "gwRefusedWord")),
+        freshness,
+        detail: {
+          title: hostnameMiss
+            ? t("empty", "gwHostnamesTitle")
+            : t("empty", "gwRouteRefusedTitle"),
+          body: t("empty", "gwRouteRefusedBody", { said: said(accepted) }),
+          quote: hostnameMiss
+            ? {
+                asks: route.hostnames.join(", ") || t("empty", "anyHost"),
+                serves: listenerHosts(listeners, t),
+              }
+            : undefined,
+        },
+      },
+      namespaceQuiet(route, listeners, "off", t),
+    ];
+  }
+
+  // `Unknown` is the third answer: a controller that has taken this parent
+  // and not decided is not "the listener accepts". The peek and the routes
+  // list keep the same state neutral.
+  if (accepted.status !== "True") {
+    return [
+      {
+        id: "listener",
+        state: "warn",
+        say: t("empty", "gwAcceptedPending"),
+        who: "controller",
+        freshness,
+        pending: true,
+      },
+      namespaceQuiet(route, listeners, "ok", t),
+    ];
+  }
+
+  return [
+    {
+      id: "listener",
+      state: freshness ? "warn" : "ok",
+      say: t("empty", "gwListenerAccepts", { label }),
+      who: "yours",
+      freshness,
+      detail: freshness
+        ? {
+            title: t("empty", "gwStaleTitle"),
+            body: t("empty", "gwStaleBody", {
+              observed: freshness.observed,
+              current: freshness.current,
+            }),
+          }
+        : undefined,
+    },
+    namespaceQuiet(route, listeners, "ok", t),
+  ];
+}
+
+function namespaceQuiet(
+  route: RouteInfo,
+  listeners: ListenerInfo[],
+  state: "ok" | "off",
+  t: T
+): TraceStep {
+  const allowed = listeners.map((l) => l.allowedNamespaces ?? "Same");
+  return {
+    id: "namespace",
+    state,
+    say:
+      state === "ok"
+        ? allowed.length > 0
+          ? t("empty", "gwNsAllowedListSay", {
+              namespace: route.namespace,
+              list: allowed.join(", "),
+            })
+          : t("empty", "gwNsAllowedSay", { namespace: route.namespace })
+        : t("empty", "gwNsAllowedQuiet"),
+    who: "yours",
+    subject:
+      state === "ok"
+        ? { kind: "Namespace", name: route.namespace, namespace: null }
+        : undefined,
+  };
+}
+
+/** The manifest that repairs RefNotPermitted, scoped to exactly this
+ *  from/to pair — implementations differ per kind, a broad one may not do. */
+function grantScaffold(route: RouteInfo, targetNamespace: string): string {
+  return [
+    "apiVersion: gateway.networking.k8s.io/v1beta1",
+    "kind: ReferenceGrant",
+    "metadata:",
+    `  name: allow-${route.namespace}-${route.kind.toLowerCase()}s`,
+    `  namespace: ${targetNamespace}`,
+    "spec:",
+    "  from:",
+    "    - group: gateway.networking.k8s.io",
+    `      kind: ${route.kind}`,
+    `      namespace: ${route.namespace}`,
+    "  to:",
+    '    - group: ""',
+    "      kind: Service",
+  ].join("\n");
+}
+
+function refsStep(
+  route: RouteInfo,
+  entries: RouteParentStatusInfo[],
+  t: T
+): TraceStep {
+  const verdict = verdictOf(entries, "ResolvedRefs");
+  const resolved = saidOf(verdict);
+  const freshness = freshnessOf(resolved, route);
+
+  // `Unknown` is not "they resolve", the same third answer the listener step
+  // keeps apart from "accepts".
+  if (verdict.state === "pending") {
+    return {
+      id: "refs",
+      state: "warn",
+      say: t("empty", "gwRefsPending"),
+      who: "controller",
+      freshness,
+      pending: true,
+    };
+  }
+
+  if (resolved?.status === "False") {
+    if (resolved.reason === "RefNotPermitted") {
+      const foreign = route.rules
+        .flatMap((rule) => rule.backendRefs)
+        .find(
+          (backend) =>
+            backend.namespace != null && backend.namespace !== route.namespace
+        );
+      const target = foreign?.namespace ?? "<target-namespace>";
+      return {
+        id: "refs",
+        state: "err",
+        say: foreign
+          ? t("empty", "gwRefNotPermittedSay", {
+              target: `${target}/${foreign.name}`,
+            })
+          : t("empty", "gwRefNotPermittedAnon"),
+        who: "yours",
+        short: t("empty", "gwRefNotPermittedShort", { namespace: target }),
+        // The backend may well exist — only the *permission* is missing —
+        // so its name stays a reference the reader can peek behind.
+        subject: foreign
+          ? { kind: "Service", name: foreign.name, namespace: target }
+          : undefined,
+        freshness,
+        detail: {
+          title: t("empty", "gwRefNotPermittedTitle", { namespace: target }),
+          body: t("empty", "gwRefNotPermittedBody", { said: said(resolved) }),
+          scaffold: grantScaffold(route, target),
+        },
+      };
+    }
+    return {
+      id: "refs",
+      state: "err",
+      say: t("empty", "gwRefUnresolvedSay"),
+      who: "yours",
+      short:
+        resolved.message ??
+        resolved.reason ??
+        t("empty", "gwRefUnresolvedShort"),
+      freshness,
+      detail: {
+        title: "ResolvedRefs: False",
+        body: `${said(resolved)}.`,
+      },
+    };
+  }
+
+  // No ResolvedRefs at all is the controller not having said: undecided,
+  // like `Unknown`, not resolved.
+  if (resolved == null) {
+    return {
+      id: "refs",
+      state: "warn",
+      say: t("empty", "gwRefsResolveQuiet"),
+      who: "controller",
+      freshness,
+      pending: true,
+    };
+  }
+  return {
+    id: "refs",
+    state: freshness ? "warn" : "ok",
+    say: t("empty", "gwRefsResolve"),
+    who: "yours",
+    freshness,
+  };
+}
+
+interface BackendVerdict {
+  backend: BackendRefInfo;
+  namespace: string;
+  state: Backing;
+}
+
+/** Steps 6 and 7 — what the backends' Services say for themselves. */
+function backendSteps(
+  route: RouteInfo,
+  backing: BackingSources,
+  controllerName: string | undefined,
+  t: T
+): [TraceStep, TraceStep] {
+  const serviceRefs = route.rules.flatMap((rule) =>
+    rule.backendRefs.filter((backend) => backend.kind === "Service")
+  );
+  // A redirect is terminal by the spec's own words, so this app can say it
+  // needs no backend and mean it.
+  if (serviceRefs.length === 0 && redirectOnly(route)) {
+    const say = t("empty", "gwRedirectsOnly");
+    return [
+      { id: "backend", state: "ok", say, who: "yours" },
+      { id: "endpoints", state: "ok", say, who: "yours" },
+    ];
+  }
+  // A filter is named and nothing else is. Blind, not ok: the difference
+  // between "we looked and it is fine" and "there is nothing here we can
+  // read". It is also what keeps `servingKnown` false, so a Kong plugin
+  // with a forgotten backendRef does not come back reading as serving.
+  if (serviceRefs.length === 0 && selfAnswered(route)) {
+    const say = t("empty", "gwFilterNamed");
+    return [
+      { id: "backend", state: "blind", say, who: "yours" },
+      { id: "endpoints", state: "blind", say, who: "yours" },
+    ];
+  }
+  // Configuration this app cannot read, addressed to the controller that
+  // owns this route. Blind rather than err: the spec's 500 is what happens
+  // when nobody said otherwise, and somebody here plainly did.
+  const addressed = answeredByItsController(route, controllerName);
+  if (addressed.length > 0) {
+    const say = t("empty", "gwControllerConfiguredSay");
+    const detail = {
+      title: t("empty", "gwControllerConfiguredTitle"),
+      body: t("count", "gwControllerConfiguredBody", {
+        n: addressed.length,
+        keys: addressed.join(", "),
+      }),
+    };
+    return [
+      { id: "backend", state: "blind", say, who: "yours", detail },
+      { id: "endpoints", state: "blind", say, who: "yours" },
+    ];
+  }
+  if (serviceRefs.length === 0) {
+    return [
+      {
+        id: "backend",
+        state: "err",
+        say: t("empty", "gwNoBackendRefsSay"),
+        who: "yours",
+        short: t("empty", "gwNoBackendRefsShort"),
+        detail: {
+          title: t("empty", "gwNoBackendRefsTitle"),
+          body: t("empty", "gwNoBackendRefsBody"),
+        },
+      },
+      {
+        id: "endpoints",
+        state: "off",
+        say: t("empty", "gwEndpointsQuiet"),
+        who: "yours",
+      },
+    ];
+  }
+  // A read that failed is not one still coming. Blind either way, not err:
+  // nothing here says the route is broken, only that nobody could look.
+  if (!backing.backingKnown) {
+    const failed = backing.backingError;
+    const detail = failed
+      ? { title: t("empty", "gwBackendsUnread"), body: failed }
+      : undefined;
+    return [
+      {
+        id: "backend",
+        state: "blind",
+        say: t("empty", failed ? "gwBackendsUnread" : "gwBackendsReading"),
+        who: "yours",
+        detail,
+      },
+      {
+        id: "endpoints",
+        state: "blind",
+        say: t("empty", failed ? "gwEndpointsUnread" : "gwEndpointsReading"),
+        who: "yours",
+      },
+    ];
+  }
+
+  const verdicts: BackendVerdict[] = serviceRefs.map((backend) => ({
+    backend,
+    namespace: backend.namespace ?? route.namespace,
+    state: backingOf(
+      { name: backend.name, namespace: backend.namespace ?? route.namespace },
+      { kind: route.kind, name: route.name, namespace: route.namespace },
+      backing
+    ),
+  }));
+
+  const missing = verdicts.find(
+    (v) => v.state.stop?.reason === "backendMissing"
+  );
+  const wrongPort = verdicts.find(
+    (v) =>
+      v.state.service != null &&
+      v.backend.port != null &&
+      !v.state.service.ports.some((p) => p.port === v.backend.port)
+  );
+
+  const backendStep: TraceStep = missing
+    ? {
+        id: "backend",
+        state: "err",
+        say: t("empty", "gwBackendMissingSay", {
+          name: missing.backend.name,
+          namespace: missing.namespace,
+        }),
+        who: "yours",
+        short: t("empty", "gwBackendMissingShort", {
+          name: missing.backend.name,
+        }),
+        detail: {
+          title: describeStop(missing.state.stop!, t).title,
+          body: describeStop(missing.state.stop!, t).note,
+        },
+      }
+    : wrongPort
+      ? {
+          id: "backend",
+          state: "err",
+          say: t("empty", "gwWrongPortSay", {
+            name: wrongPort.backend.name,
+            port: wrongPort.backend.port!,
+          }),
+          who: "yours",
+          short: t("empty", "gwWrongPortSay", {
+            name: wrongPort.backend.name,
+            port: wrongPort.backend.port!,
+          }),
+          subject: {
+            kind: "Service",
+            name: wrongPort.backend.name,
+            namespace: wrongPort.namespace,
+          },
+          detail: {
+            title: t("empty", "gwWrongPortTitle"),
+            body: t("empty", "gwWrongPortBody"),
+            quote: {
+              asks: String(wrongPort.backend.port),
+              serves:
+                wrongPort.state
+                  .service!.ports.map((p) => String(p.port))
+                  .join(", ") || t("empty", "gwNoPortsAtAll"),
+            },
+          },
+        }
+      : {
+          id: "backend",
+          state: "ok",
+          say:
+            verdicts.length === 1
+              ? verdicts[0].backend.port != null
+                ? t("empty", "gwBackendServes", {
+                    name: verdicts[0].backend.name,
+                  })
+                : t("empty", "gwBackendExists", {
+                    name: verdicts[0].backend.name,
+                  })
+              : t("count", "gwBackendsAllExist", { n: verdicts.length }),
+          who: "yours",
+          subject:
+            verdicts.length === 1
+              ? {
+                  kind: "Service",
+                  name: verdicts[0].backend.name,
+                  namespace: verdicts[0].namespace,
+                }
+              : undefined,
+          forwardPort:
+            verdicts.length === 1
+              ? (verdicts[0].backend.port ?? undefined)
+              : undefined,
+        };
+
+  if (backendStep.state === "err") {
+    return [
+      backendStep,
+      {
+        id: "endpoints",
+        state: "off",
+        say: t("empty", "gwEndpointsQuiet"),
+        who: "yours",
+      },
+    ];
+  }
+
+  const down = verdicts.find(
+    (v) => v.state.stop != null && v.state.stop.reason !== "backendMissing"
+  );
+  if (down) {
+    const stop = describeStop(down.state.stop!, t);
+    // Pods on their way are not a broken path, nor are pods nobody could
+    // read: the first is undecided until they are ready, the second unknown.
+    const mood = stopMood(down.state.stop!);
+    return [
+      backendStep,
+      {
+        id: "endpoints",
+        state:
+          mood === "coming" ? "warn" : mood === "unchecked" ? "blind" : "err",
+        pending: mood === "coming" || undefined,
+        say: `${down.backend.name}: ${stop.title}`,
+        who: "yours",
+        short: stop.title,
+        subject: {
+          kind: "Service",
+          name: down.backend.name,
+          namespace: down.namespace,
+        },
+        detail: { title: stop.title, body: stop.note },
+      },
+    ];
+  }
+
+  const external = verdicts.every(
+    (v) => v.state.service?.type === "ExternalName"
+  );
+  const ready = verdicts.reduce((sum, v) => sum + v.state.ready, 0);
+  const draining = verdicts.reduce((sum, v) => sum + v.state.draining, 0);
+  return [
+    backendStep,
+    {
+      id: "endpoints",
+      state: "ok",
+      say: external
+        ? t("empty", "gwExternalName")
+        : t("count", "gwEndpointsPublish", { n: ready }) +
+          (draining > 0 ? `, ${t("count", "nDraining", { n: draining })}` : ""),
+      who: "yours",
+    },
+  ];
+}
+
+function probeOf(
+  route: RouteInfo,
+  gateway: GatewayInfo | undefined,
+  parent: ParentRefInfo
+): RouteTrace["probe"] {
+  // A wildcard never resolves; probe the first concrete name.
+  const host = route.hostnames.find((name) => !name.startsWith("*")) ?? null;
+  const listeners = candidateListeners(gateway, parent, route.namespace);
+  return {
+    host,
+    address: gateway?.addresses[0] ?? null,
+    port: listeners[0]?.port ?? parent.port ?? null,
+  };
+}
+
+function reachableStep(probe: RouteTrace["probe"], t: T): TraceStep {
+  if (probe.host == null && probe.address == null) {
+    return {
+      id: "reachable",
+      state: "off",
+      say: t("empty", "gwReachableNothing"),
+      who: "machine",
+    };
+  }
+  return {
+    id: "reachable",
+    state: "blind",
+    say: t("empty", "gwReachableUnchecked"),
+    who: "machine",
+  };
+}
+
+function traceFor(
+  route: RouteInfo,
+  parent: ParentRefInfo,
+  sources: TraceSources,
+  t: T
+): RouteTrace {
+  const namespace = parent.namespace ?? route.namespace;
+  // Resolved rather than looked up by name: the parentRef may name a
+  // `ListenerSet`, whose own parentRef says which Gateway carries it.
+  const gateway = gatewayOfParent(sources.gateways, parent, route.namespace);
+  const entries = statusesFor(route, parent);
+  const [listener, allowed] = acceptanceSteps(
+    route,
+    gateway,
+    parent,
+    entries,
+    t
+  );
+  const [backend, endpoints] = backendSteps(
+    route,
+    sources.backing,
+    entries[0]?.controllerName,
+    t
+  );
+  const probe = probeOf(route, gateway, parent);
+
+  const steps: TraceStep[] = [
+    classStep(gateway, sources.classes, sources.topologyKnown, t),
+    gatewayStep(
+      gateway,
+      parent,
+      route.namespace,
+      sources.topologyKnown,
+      parentResolutionKnown(sources.gateways, parent),
+      t
+    ),
+    listener,
+    allowed,
+    refsStep(route, entries, t),
+    backend,
+    endpoints,
+    reachableStep(probe, t),
+  ];
+
+  const firstBroken = steps.findIndex((step) => step.state === "err");
+  // Blind because the cluster could not be read, not because nobody has
+  // probed yet: the last mile is `who: "machine"` and is blind on every
+  // healthy trace by design, so counting it would make every verdict unknown.
+  // A controller that wrote nothing is silence, not a failed read.
+  const unread = steps.some(
+    (step) =>
+      step.state === "blind" &&
+      step.who !== "machine" &&
+      step.who !== "controller"
+  );
+  const unknownBecause =
+    firstBroken >= 0
+      ? null
+      : unread
+        ? "unread"
+        : steps.some((step) => step.pending)
+          ? "undecided"
+          : null;
+  if (firstBroken >= 0) {
+    for (const step of steps.slice(firstBroken + 1)) {
+      step.state = "off";
+      step.detail = undefined;
+      step.freshness = undefined;
+      step.subject = undefined;
+      step.addresses = undefined;
+      step.forwardPort = undefined;
+      step.pending = undefined;
+    }
+  }
+
+  return {
+    // The Gateway, not the ListenerSet that pointed at it: this names what
+    // the row's "via" shows, and two sets on one Gateway are one road.
+    gateway: {
+      name: gateway?.name ?? parent.name,
+      namespace: gateway?.namespace ?? namespace,
+      sectionName: parent.sectionName,
+    },
+    via:
+      parent.kind === "ListenerSet" ? { name: parent.name, namespace } : null,
+    serving: firstBroken < 0,
+    servingKnown: unknownBecause === null,
+    unknownBecause,
+    stopStep: firstBroken < 0 ? null : firstBroken + 1,
+    steps,
+    probe,
+  };
+}
+
+/** The verdict in words, the reason included where there is no verdict. */
+export function servingSay(trace: RouteTrace, t: T): string {
+  if (trace.unknownBecause === null) {
+    return t("empty", trace.serving ? "gwServing" : "gwNotServing");
+  }
+  const why = {
+    unread: "gwServingUnknown",
+    undecided: "gwServingUndecided",
+  } as const satisfies Record<
+    NonNullable<RouteTrace["unknownBecause"]>,
+    string
+  >;
+  return t("empty", why[trace.unknownBecause]);
+}
+
+/**
+ * One trace per Gateway parent. Mesh parents (GAMMA — parentRef to a
+ * Service) are not this page's to judge and produce no trace; a route with
+ * only mesh parents returns none, and the page says so in its own words.
+ */
+export function routeTraces(
+  route: RouteInfo,
+  sources: TraceSources,
+  t: T
+): RouteTrace[] {
+  return route.parentRefs
+    .filter(parentCarriesTraffic)
+    .map((parent) => traceFor(route, parent, sources, t));
+}
+
+/** A probe's life: never run, waiting on DNS, in flight, answered. */
+export type ProbeStep<T> =
+  | { status: "idle" }
+  | { status: "pending" }
+  | { status: "loading" }
+  | { status: "finished"; result: T }
+  | { status: "error"; message: string };
+
+/**
+ * The `reachable` step, told what the probe below it found.
+ *
+ * The step and the panel under it are two renderings of one fact, and the
+ * step is the static one — left alone it says "not checked yet" forever,
+ * including after a reader presses Probe and watches the panel answer
+ * (reported against 4.7.1).
+ *
+ * The trace's own data is deliberately not touched: a probe from this
+ * machine is not what the cluster says, which is why the step is
+ * `who: "machine"` and why `servingKnown` ignores it. Only the words and
+ * the mark move.
+ *
+ * A failed probe is a `warn`, never an `err`: this laptop being unable to
+ * reach the address says as much about this laptop, its VPN and its
+ * firewall as about the gateway.
+ */
+export function probedReachable(
+  step: TraceStep,
+  dns: ProbeStep<ResolveProbe>,
+  tcp: ProbeStep<TcpProbe>,
+  t: T
+): TraceStep {
+  if (dns.status === "loading" || tcp.status === "loading") {
+    return { ...step, say: t("empty", "gwReachableProbing") };
+  }
+  if (tcp.status === "finished") {
+    const answered = tcp.result.error == null && tcp.result.reason == null;
+    return {
+      ...step,
+      state: answered ? "ok" : "warn",
+      say: t("empty", answered ? "gwReachableAnswered" : "gwReachableSilent"),
+    };
+  }
+  if (tcp.status === "error" || dns.status === "error") {
+    return { ...step, state: "warn", say: t("empty", "gwReachableSilent") };
+  }
+  // A resolve that answered while the connect has not run yet — the panel
+  // shows both rows; the step waits for the half that decides.
+  return step;
+}

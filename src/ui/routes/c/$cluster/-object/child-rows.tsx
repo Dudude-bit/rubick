@@ -1,0 +1,353 @@
+import { useState, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
+import { CircleX, Loader2, Lock } from "lucide-react";
+
+import { ROLE_DOT, statusRole, type StatusRole } from "@/lib/status-role";
+import { objectLink } from "@/lib/links";
+import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
+import { cn, formatDate } from "@/lib/utils";
+import { useRealtimeAge } from "@/hooks/useRealtimeAge";
+import { ResourceRef } from "@/components/object/ResourceRef";
+import type { JobInfo, ReplicaSetInfo } from "@/generated/types";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
+import { errorToShow, isRefusal } from "@/lib/error-utils";
+import { isReadDeadline, LIST_DEADLINE_SECONDS } from "@/lib/read-deadline";
+import { None } from "@/components/ui/none";
+import { ReadAgain } from "@/components/ui/read-again";
+import { ownStatusWord } from "@/lib/status-words";
+import { RollBackLink } from "../-changes/RollBackLink";
+
+/**
+ * The objects a workload owns, listed on its detail page.
+ *
+ * The same shape as the overview's node list: a dot for the state, the name,
+ * the one count that says whether it is doing its job, and an age. The state
+ * word is always present — the dot is a second reading of it, never the only
+ * one.
+ */
+
+export interface ChildRow {
+  kind: ResourceKind;
+  name: string;
+  namespace?: string | null;
+  /** Raw status word from the API, shown as-is beside the name. */
+  status: string;
+  /** Words for a status this app made up rather than read; `status` still picks the colour. */
+  statusLabel?: string;
+  /** What the word means on hover, as the list and the page give it. */
+  statusTitle?: string;
+  /**
+   * Draw the status without its colour, keeping the word.
+   *
+   * For a reading nobody can vouch for — a pod whose kubelet stopped
+   * reporting keeps whatever it last wrote, and `Running` in confident green
+   * is a claim about a moment that has passed. The pods list and the pod page
+   * have always dropped the colour for it; the rows drawn here had not.
+   */
+  unverified?: boolean;
+  /** The colour, where the word alone does not decide it. */
+  role?: StatusRole;
+  /** Right-aligned facts: readiness, restarts, completions. */
+  detail?: ReactNode;
+  timestamp?: string | null;
+}
+
+/**
+ * Only an abnormal state colours its word; running and completed stay quiet.
+ * The dot is `ROLE_DOT`, shared — this file had its own copy in which
+ * `pending` was amber while every other surface drew it blue, so one pod in
+ * ContainerCreating looked like a different severity depending on which
+ * screen you were on.
+ */
+const WORD: Record<StatusRole, string> = {
+  ok: "text-fg-fnt",
+  pending: "text-info",
+  warn: "text-warn",
+  err: "text-err",
+  neutral: "text-fg-fnt",
+};
+
+export function ChildRows({
+  rows,
+  // A default is what most callers ship with, so it has to name a state
+  // rather than shrug: "Nothing here" told the reader neither what was
+  // looked for nor whether the lookup worked.
+  emptyMessage,
+  /**
+   * The read failed, and there is nothing to show from before it.
+   *
+   * Without this the card had one story for two states: a workload with no
+   * pods and a pod list nobody was allowed to read both rendered "no pods
+   * for this workload". The second is a claim about the cluster made from a
+   * question that was never answered — and it is the reading somebody takes
+   * to mean their deployment is down. Same rule `ResourceList` follows: the
+   * failure only replaces the rows when there are no rows left.
+   */
+  error,
+  /** What was being listed, for the failure line. */
+  label,
+  onRetry,
+  pending = false,
+}: {
+  rows: ChildRow[];
+  emptyMessage?: string;
+  error?: Error | null;
+  label?: string;
+  /** Ask the read again, refused or failed. */
+  onRetry?: () => void;
+  /** The read has not answered for this object yet: no rows is not none. */
+  pending?: boolean;
+}) {
+  const t = useT();
+  const reserve = useStatusReserve(rows);
+  if (rows.length === 0 && error) {
+    const refused = isRefusal(error);
+    return (
+      <div className="px-1.5 py-1">
+        <p
+          data-read={refused ? "refused" : "failed"}
+          className={cn(
+            "flex items-center gap-1.5 text-xs",
+            refused ? "text-warn" : "text-err"
+          )}
+        >
+          {refused ? (
+            <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+          ) : (
+            <CircleX className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
+          )}
+          {refused
+            ? t("nav", "noListAccess")
+            : isReadDeadline(error)
+              ? t("empty", "readDeadlineShort", {
+                  label: label ?? "",
+                  seconds: LIST_DEADLINE_SECONDS,
+                })
+              : t("empty", "couldNotReadInScope", { label: label ?? "" })}
+        </p>
+        <p className="mt-1 select-text wrap-break-word font-mono text-[11px] text-fg-fnt">
+          {errorToShow(error)}
+        </p>
+        {onRetry && (
+          <ReadAgain error={error} onRetry={onRetry} className="mt-1.5" />
+        )}
+      </div>
+    );
+  }
+  if (rows.length === 0 && pending) {
+    return (
+      <p
+        data-read="reading"
+        className="flex items-center gap-1.5 px-1.5 py-1 text-xs text-fg-mut"
+      >
+        <Loader2
+          className="h-3 w-3 flex-none animate-spin text-info"
+          aria-hidden="true"
+        />
+        {t("action", "readingInline")}
+      </p>
+    );
+  }
+  if (rows.length === 0) {
+    return (
+      <p className="px-1.5 py-1 text-xs text-fg-fnt">
+        {emptyMessage ?? <T section="empty" k="nothingBelongsToObject" />}
+      </p>
+    );
+  }
+  return (
+    <div>
+      {rows.map((row) => (
+        <ChildRowItem
+          key={`${row.namespace ?? ""}/${row.name}`}
+          row={row}
+          reserve={reserve}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** The widest status these rows have shown, kept while they are on screen: a pod flipping between CrashLoopBackOff and Running cut its name and gave it back. */
+function useStatusReserve(rows: ChildRow[]): number {
+  const now = Math.max(
+    0,
+    ...rows.map((row) => (row.statusLabel ?? row.status).length)
+  );
+  const [widest, setWidest] = useState(now);
+  if (now > widest) setWidest(now);
+  return Math.max(widest, now);
+}
+
+function ChildRowItem({ row, reserve }: { row: ChildRow; reserve: number }) {
+  const navigate = useNavigate();
+  const link = objectLink(row);
+  const role = row.unverified
+    ? "neutral"
+    : (row.role ?? statusRole(row.status));
+  const age = useRealtimeAge(row.timestamp ?? null);
+
+  return (
+    // The row opens the page and the name opens the peek, which is the split
+    // the resource tables already use — so the name has to keep its own click.
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("a, button")) return;
+        if (link) navigate(link);
+      }}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" || event.target !== event.currentTarget)
+          return;
+        if (link) navigate(link);
+      }}
+      className="grid cursor-pointer grid-cols-[7px_minmax(0,1fr)_auto_44px] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs hover:bg-hover"
+    >
+      <span
+        className={cn("h-[7px] w-[7px] rounded-full", ROLE_DOT[role])}
+        aria-hidden="true"
+      />
+      <span className="flex min-w-0 items-baseline gap-2">
+        <ResourceRef
+          kind={row.kind}
+          name={row.name}
+          namespace={row.namespace}
+          showKind={false}
+        />
+        <span
+          className={cn("flex-none text-[11px]", WORD[role])}
+          style={{ minWidth: `${reserve}ch` }}
+          title={row.statusTitle}
+          data-testid="child-row-status"
+        >
+          {row.statusLabel ?? row.status}
+        </span>
+      </span>
+      <span className="text-right text-[11px] tabular-nums text-fg-mut">
+        {row.detail}
+      </span>
+      <span
+        className="text-right text-[11px] tabular-nums text-fg-fnt"
+        title={formatDate(row.timestamp ?? null) ?? undefined}
+      >
+        {row.timestamp ? age : <None />}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The revisions a Deployment has, newest first.
+ *
+ * A Deployment keeps its old ReplicaSets around scaled to zero, so most of
+ * this list is history rather than trouble: the state word is which revision
+ * is live, and the count beside it is how many pods each is actually running.
+ */
+export function RevisionRows({
+  revisions,
+  emptyMessage,
+  pending,
+  onRollback,
+  rollbackDenied,
+}: {
+  revisions: ReplicaSetInfo[];
+  emptyMessage?: string;
+  pending?: boolean;
+  /** Offered on every older revision. */
+  onRollback?: (rs: ReplicaSetInfo) => void;
+  /** Why the cluster will not take a rollback from this user. */
+  rollbackDenied?: string;
+}) {
+  const t = useT();
+  return (
+    <ChildRows
+      emptyMessage={emptyMessage ?? t("empty", "deploymentHasNoReplicaSets")}
+      pending={pending}
+      rows={revisions.map((rs) => {
+        const { desired, ready } = rs.replicas;
+        const live = rs.revision !== null && rs.revision === rs.currentRevision;
+        return {
+          kind: ResourceType.ReplicaSet,
+          name: rs.name,
+          namespace: rs.namespace,
+          status: live ? "Current" : "Superseded",
+          statusLabel: live
+            ? t("empty", "revisionCurrentWord")
+            : t("empty", "supersededLower"),
+          detail: (
+            <>
+              {rs.revision !== null && (
+                <span className="text-fg-fnt">
+                  {t("changes", "revisionNumber", { n: rs.revision })}
+                  {" · "}
+                </span>
+              )}
+              <span className="text-fg-fnt">
+                {desired === 0
+                  ? t("empty", "scaledToZero")
+                  : parts(t("count", "readyFraction", { total: desired }), {
+                      ready: <span className="text-fg-mut">{ready}</span>,
+                    })}
+              </span>
+              {onRollback && !live && rs.revision !== null && (
+                <RollBackLink
+                  onClick={() => onRollback(rs)}
+                  denied={rollbackDenied}
+                  className="ml-2"
+                />
+              )}
+            </>
+          ),
+          timestamp: rs.createdAt,
+        };
+      })}
+    />
+  );
+}
+
+/** The Jobs a CronJob has spawned. */
+export function JobRows({
+  jobs,
+  emptyMessage,
+}: {
+  jobs: JobInfo[];
+  emptyMessage?: string;
+}) {
+  const t = useT();
+  return (
+    <ChildRows
+      emptyMessage={emptyMessage ?? t("empty", "cronJobNotRunYet")}
+      rows={jobs.map((job) => ({
+        kind: ResourceType.Job,
+        name: job.name,
+        namespace: job.namespace,
+        status: job.status || "Unknown",
+        statusLabel: ownStatusWord(job.status, t),
+        detail: (
+          <>
+            <span className="text-fg-fnt">
+              {parts(
+                t("count", "completedFraction", {
+                  total: job.completions ?? 1,
+                }),
+                { done: <span className="text-fg-mut">{job.succeeded}</span> }
+              )}
+            </span>
+            {job.failed > 0 && (
+              <span
+                className={job.status === "Failed" ? "text-err" : "text-warn"}
+              >
+                {" · "}
+                {t("action", "jobsFailed", { n: job.failed })}
+              </span>
+            )}
+          </>
+        ),
+        timestamp: job.createdAt,
+      }))}
+    />
+  );
+}

@@ -1,0 +1,909 @@
+//! The overview's inputs, held from watches instead of listed every round.
+//!
+//! Every ten seconds the window asked for the overview once per namespace in
+//! scope and once more for the rail, and each answer was a full pod LIST,
+//! with a cluster-wide one beside every namespaced one for the scheduler
+//! view: four namespaces was five full lists a round on a cluster of ten
+//! thousand pods. A watch per kind, kept in a store, answers the same
+//! question from memory; a request only projects its namespaces out.
+//!
+//! The store serves only while every watch it holds is healthy. A refused or
+//! broken watch is not stale data quietly served as fresh: the request falls
+//! back to listing, exactly as before, and the cache is retried later.
+
+use std::collections::BTreeSet;
+use std::fmt::Debug;
+use std::hash::Hash;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use dashmap::{DashMap, DashSet};
+use futures::StreamExt;
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
+use k8s_openapi::api::batch::v1::Job;
+use k8s_openapi::api::core::v1::{Container, Event, Node, Pod};
+use kube::runtime::reflector::{self, Store};
+use kube::runtime::watcher::{self, Config as WatcherConfig};
+use kube::runtime::WatchStreamExt;
+use kube::{Api, Client, Resource};
+use parking_lot::Mutex;
+use serde::de::DeserializeOwned;
+use tokio::sync::{broadcast, Notify};
+use tokio_util::sync::CancellationToken;
+
+use crate::state::AppEvent;
+
+/// Errors in a row before a kind counts as broken and the cache stops serving.
+const BROKEN_STREAK: u32 = 3;
+/// Errors in a row before the whole cluster's watches are dropped.
+const GIVE_UP_STREAK: u32 = 10;
+/// How long a dropped cluster waits before a request may start it again.
+const COOLDOWN: Duration = Duration::from_mins(5);
+/// Watches nobody has asked for this long are stopped.
+const IDLE_AFTER: Duration = Duration::from_mins(3);
+const REAP_EVERY: Duration = Duration::from_secs(30);
+/// How often the wait for readiness looks at whether a kind has given up.
+const BROKEN_POLL: Duration = Duration::from_millis(250);
+/// The first request waits this long for the stores to fill before listing.
+const READY_TIMEOUT: Duration = Duration::from_mins(1);
+/// Just under the five minutes kube used to enforce; see `watch::WATCH_TIMEOUT_SECS`.
+const WATCH_TIMEOUT_SECS: u32 = 290;
+const PAGE_SIZE: u32 = 500;
+
+/// Watches per connected cluster, started on the first overview request.
+#[derive(Default)]
+pub struct OverviewCache {
+    clusters: Arc<DashMap<String, Arc<ClusterWatch>>>,
+    cooldown: Arc<DashMap<String, Instant>>,
+    /// Clusters that refused a watch: not started again until a reconnect.
+    refused: Arc<DashSet<String>>,
+    /// Per cluster, the counts it refused: not asked again until a reconnect.
+    refused_counts: DashMap<String, Arc<RefusedCounts>>,
+    /// Where a change the stores took is announced, so a screen showing the
+    /// overview reads it again then rather than a ten-second poll later.
+    events: Option<broadcast::Sender<AppEvent>>,
+}
+
+/// The fastest a cluster's changes are announced. Changes inside it are
+/// gathered into the next announcement, never dropped.
+const ANNOUNCE_EVERY: Duration = Duration::from_secs(1);
+
+/// What changed in a cluster's stores since it was last announced.
+#[derive(Default)]
+struct Changes {
+    touched: Mutex<Touched>,
+    pending: Notify,
+}
+
+#[derive(Default, Debug, PartialEq, Eq)]
+struct Touched {
+    namespaces: BTreeSet<String>,
+    cluster: bool,
+}
+
+impl Changes {
+    /// An object added, changed or removed; a list a watch resyncs from is
+    /// not news about any of them.
+    fn note<K: Resource>(&self, event: &watcher::Event<K>) {
+        let (watcher::Event::Apply(object) | watcher::Event::Delete(object)) = event else {
+            return;
+        };
+        {
+            let mut touched = self.touched.lock();
+            match &object.meta().namespace {
+                Some(namespace) => {
+                    touched.namespaces.insert(namespace.clone());
+                }
+                None => touched.cluster = true,
+            }
+        }
+        self.pending.notify_one();
+    }
+
+    fn take(&self) -> Touched {
+        std::mem::take(&mut *self.touched.lock())
+    }
+}
+
+/// The kinds, by reach and plural, a cluster refused to count.
+pub type RefusedCounts = DashSet<String>;
+
+/// What the stores held at one moment. Arcs, not clones: ten thousand pods
+/// are looked at, not copied, on every request.
+pub struct Snapshot {
+    pub pods: Vec<Arc<Pod>>,
+    pub nodes: Vec<Arc<Node>>,
+    pub deployments: Vec<Arc<Deployment>>,
+    pub stateful_sets: Vec<Arc<StatefulSet>>,
+    pub daemon_sets: Vec<Arc<DaemonSet>>,
+    pub jobs: Vec<Arc<Job>>,
+    /// Warning events only; the watch is field-selected to them.
+    pub events: Vec<Arc<Event>>,
+}
+
+struct ClusterWatch {
+    pods: Store<Pod>,
+    nodes: Store<Node>,
+    deployments: Store<Deployment>,
+    stateful_sets: Store<StatefulSet>,
+    daemon_sets: Store<DaemonSet>,
+    jobs: Store<Job>,
+    events: Store<Event>,
+    health: Arc<Mutex<Health>>,
+    stop: CancellationToken,
+}
+
+/// Which watches are failing, and when the cache was last asked.
+#[derive(Debug)]
+pub struct Health {
+    streaks: [(&'static str, u32); KINDS.len()],
+    last_used: Instant,
+}
+
+const KINDS: [&str; 7] = [
+    "Pod",
+    "Node",
+    "Deployment",
+    "StatefulSet",
+    "DaemonSet",
+    "Job",
+    "Event",
+];
+
+impl Health {
+    fn new(kinds: [&'static str; KINDS.len()]) -> Self {
+        Self {
+            streaks: kinds.map(|kind| (kind, 0)),
+            last_used: Instant::now(),
+        }
+    }
+
+    /// One more error for `kind`; the streak it is now on.
+    fn failed(&mut self, kind: &str) -> u32 {
+        let slot = self.slot(kind);
+        slot.1 += 1;
+        slot.1
+    }
+
+    /// One watcher item for `kind`.
+    ///
+    /// The rule is here rather than at the call site so the loop cannot
+    /// forget it: `Event::Init` is the marker kube sends before every list
+    /// attempt, so a refused stream alternates marker and error for ever.
+    /// Counting the marker kept this ladder on its first rung and neither
+    /// `broken` nor `given up` was reachable under a 403.
+    fn saw<K>(&mut self, kind: &str, event: &kube::runtime::watcher::Event<K>) {
+        if crate::watch::answered(event) {
+            self.recovered(kind);
+        }
+    }
+
+    fn recovered(&mut self, kind: &str) {
+        self.slot(kind).1 = 0;
+    }
+
+    fn slot(&mut self, kind: &str) -> &mut (&'static str, u32) {
+        self.streaks
+            .iter_mut()
+            .find(|(name, _)| *name == kind)
+            .expect("a kind this cache watches")
+    }
+
+    /// Every kind is either healthy or recovering; nothing is known broken.
+    #[must_use]
+    pub fn serves(&self) -> bool {
+        self.broken().is_empty()
+    }
+
+    fn broken(&self) -> BTreeSet<&'static str> {
+        self.streaks
+            .iter()
+            .filter(|(_, streak)| *streak >= BROKEN_STREAK)
+            .map(|(kind, _)| *kind)
+            .collect()
+    }
+}
+
+fn namespace_and_name<K: kube::Resource>(object: &K) -> (&str, &str) {
+    let meta = object.meta();
+    (
+        meta.namespace.as_deref().unwrap_or_default(),
+        meta.name.as_deref().unwrap_or_default(),
+    )
+}
+
+/// The apiserver's own order, which is by namespace then name.
+fn by_name<K: kube::Resource>(mut items: Vec<Arc<K>>) -> Vec<Arc<K>> {
+    // Borrowed keys: cloning both strings on every comparison was four
+    // allocations per compare across every pod in the cluster.
+    items.sort_by(|a, b| namespace_and_name(a.as_ref()).cmp(&namespace_and_name(b.as_ref())));
+    items
+}
+
+impl OverviewCache {
+    /// A cache that announces the changes its stores take on `events`.
+    #[must_use]
+    pub fn announcing(events: broadcast::Sender<AppEvent>) -> Self {
+        Self {
+            events: Some(events),
+            ..Self::default()
+        }
+    }
+
+    /// The stores' contents for `context`, or `None` when they cannot be
+    /// trusted: not started and in cooldown, still filling past the wait,
+    /// or a watch is broken. `None` means "list instead".
+    pub async fn snapshot(
+        &self,
+        context: &str,
+        client: impl FnOnce() -> Client,
+    ) -> Option<Snapshot> {
+        if self.cooling_down(context) {
+            return None;
+        }
+        let watch = self
+            .clusters
+            .entry(context.to_string())
+            .or_insert_with(|| Arc::new(self.start(context, client())))
+            .clone();
+        // Health is consulted *while* waiting, not after it. A watch the
+        // cluster refuses never becomes ready, so waiting the whole minute
+        // first meant a refused kind cost every overview request a minute
+        // before falling back to listing — and the requests come every ten
+        // seconds. The cache knows it is broken within a couple of retries.
+        let ready = tokio::time::timeout(READY_TIMEOUT, async {
+            tokio::select! {
+                ready = watch.wait_until_ready() => ready,
+                () = watch.until_broken() => false,
+            }
+        })
+        .await;
+        match ready {
+            Ok(true) => {}
+            Ok(false) | Err(_) => return None,
+        }
+        let mut health = watch.health.lock();
+        health.last_used = Instant::now();
+        if !health.serves() {
+            tracing::debug!(context, broken = ?health.broken(), "overview cache not serving");
+            return None;
+        }
+        drop(health);
+        // By name, because a reflector store hands its contents back in hash
+        // order while the listing path gets the apiserver's own. Without
+        // this the node rows and any problems that tie reshuffle between
+        // polls — a list that changes under the reader while nothing in the
+        // cluster did, and which differs from what listing shows.
+        Some(Snapshot {
+            pods: by_name(watch.pods.state()),
+            nodes: by_name(watch.nodes.state()),
+            deployments: by_name(watch.deployments.state()),
+            stateful_sets: by_name(watch.stateful_sets.state()),
+            daemon_sets: by_name(watch.daemon_sets.state()),
+            jobs: by_name(watch.jobs.state()),
+            events: by_name(watch.events.state()),
+        })
+    }
+
+    /// Stop and drop the watches of one cluster; the next request starts them again.
+    ///
+    /// The cooldown goes with them, or "starts them again" would be false:
+    /// a cluster dropped after ten failures holds a five-minute pause, and
+    /// a reader who reconnects — the one event that plausibly fixes what
+    /// failed — would keep listing for the rest of it.
+    pub fn forget(&self, context: &str) {
+        if let Some((_, watch)) = self.clusters.remove(context) {
+            watch.stop.cancel();
+        }
+        self.cooldown.remove(context);
+        self.refused.remove(context);
+        self.refused_counts.remove(context);
+    }
+
+    pub fn forget_all(&self) {
+        for entry in self.clusters.iter() {
+            entry.value().stop.cancel();
+        }
+        self.clusters.clear();
+        self.cooldown.clear();
+        self.refused.clear();
+        self.refused_counts.clear();
+    }
+
+    /// The counts `context` refused on this connection.
+    #[must_use]
+    pub fn refused_counts(&self, context: &str) -> Arc<RefusedCounts> {
+        self.refused_counts
+            .entry(context.to_string())
+            .or_default()
+            .clone()
+    }
+
+    /// The watches this process holds, for diagnostics.
+    #[must_use]
+    pub fn watching(&self) -> Vec<String> {
+        self.clusters.iter().map(|e| e.key().clone()).collect()
+    }
+
+    fn cooling_down(&self, context: &str) -> bool {
+        if self.refused.contains(context) {
+            return true;
+        }
+        // The read guard is released before `remove` asks for the write
+        // lock on the same shard; holding both is a deadlock, not a race.
+        let until = self.cooldown.get(context).map(|until| *until);
+        match until {
+            Some(until) if Instant::now() < until => true,
+            Some(_) => {
+                self.cooldown.remove(context);
+                false
+            }
+            None => false,
+        }
+    }
+
+    fn start(&self, context: &str, client: Client) -> ClusterWatch {
+        let health = Arc::new(Mutex::new(Health::new(KINDS)));
+        let stop = CancellationToken::new();
+        let cluster = WatchConfigs {
+            context: context.to_string(),
+            health: health.clone(),
+            stop: stop.clone(),
+            clusters: self.clusters.clone(),
+            cooldown: self.cooldown.clone(),
+            refused: self.refused.clone(),
+            changes: Arc::new(Changes::default()),
+        };
+        let watcher_config = || {
+            WatcherConfig::default()
+                .timeout(WATCH_TIMEOUT_SECS)
+                .page_size(PAGE_SIZE)
+        };
+
+        let pods = cluster.spawn("Pod", Api::all(client.clone()), watcher_config(), strip_pod);
+        let nodes = cluster.spawn(
+            "Node",
+            Api::all(client.clone()),
+            watcher_config(),
+            strip_node,
+        );
+        let deployments = cluster.spawn(
+            "Deployment",
+            Api::all(client.clone()),
+            watcher_config(),
+            strip_deployment,
+        );
+        let stateful_sets = cluster.spawn(
+            "StatefulSet",
+            Api::all(client.clone()),
+            watcher_config(),
+            strip_stateful_set,
+        );
+        let daemon_sets = cluster.spawn(
+            "DaemonSet",
+            Api::all(client.clone()),
+            watcher_config(),
+            strip_daemon_set,
+        );
+        let jobs = cluster.spawn("Job", Api::all(client.clone()), watcher_config(), strip_job);
+        let events = cluster.spawn(
+            "Event",
+            Api::all(client),
+            watcher_config().fields("type=Warning"),
+            strip_event,
+        );
+
+        cluster.spawn_reaper(IDLE_AFTER);
+        if let Some(events) = &self.events {
+            cluster.spawn_announcer(events.clone());
+        }
+        tracing::info!(context, "overview watches started");
+        ClusterWatch {
+            pods,
+            nodes,
+            deployments,
+            stateful_sets,
+            daemon_sets,
+            jobs,
+            events,
+            health,
+            stop,
+        }
+    }
+}
+
+impl ClusterWatch {
+    /// True once every store has its first list; false when a writer was
+    /// dropped, which is the cluster being forgotten mid-wait.
+    /// Resolves once any kind has failed often enough to stop serving.
+    ///
+    /// Polled rather than signalled: the streaks are behind a mutex the
+    /// drivers already take on every error, and a watcher channel for a
+    /// question asked once per request is more machinery than it saves.
+    async fn until_broken(&self) {
+        loop {
+            if !self.health.lock().serves() {
+                return;
+            }
+            tokio::time::sleep(BROKEN_POLL).await;
+        }
+    }
+
+    async fn wait_until_ready(&self) -> bool {
+        let all = tokio::join!(
+            self.pods.wait_until_ready(),
+            self.nodes.wait_until_ready(),
+            self.deployments.wait_until_ready(),
+            self.stateful_sets.wait_until_ready(),
+            self.daemon_sets.wait_until_ready(),
+            self.jobs.wait_until_ready(),
+            self.events.wait_until_ready(),
+        );
+        all.0.is_ok()
+            && all.1.is_ok()
+            && all.2.is_ok()
+            && all.3.is_ok()
+            && all.4.is_ok()
+            && all.5.is_ok()
+            && all.6.is_ok()
+    }
+}
+
+/// What every kind's driver shares.
+#[derive(Clone)]
+struct WatchConfigs {
+    context: String,
+    health: Arc<Mutex<Health>>,
+    stop: CancellationToken,
+    clusters: Arc<DashMap<String, Arc<ClusterWatch>>>,
+    cooldown: Arc<DashMap<String, Instant>>,
+    refused: Arc<DashSet<String>>,
+    changes: Arc<Changes>,
+}
+
+impl WatchConfigs {
+    fn spawn<K>(
+        &self,
+        kind: &'static str,
+        api: Api<K>,
+        config: WatcherConfig,
+        strip: fn(&mut K),
+    ) -> Store<K>
+    where
+        K: Resource + Clone + DeserializeOwned + Debug + Send + Sync + 'static,
+        K::DynamicType: Default + Eq + Hash + Clone,
+    {
+        let (store, writer) = reflector::store();
+        let health = self.health.clone();
+        let stop = self.stop.clone();
+        let context = self.context.clone();
+        let clusters = self.clusters.clone();
+        let cooldown = self.cooldown.clone();
+        let refused = self.refused.clone();
+        let changes = self.changes.clone();
+        tokio::spawn(async move {
+            let events = reflector::reflector(
+                writer,
+                watcher::watcher(api, config)
+                    .modify(strip)
+                    .default_backoff(),
+            );
+            futures::pin_mut!(events);
+            loop {
+                let next = tokio::select! {
+                    biased;
+                    () = stop.cancelled() => break,
+                    next = events.next() => next,
+                };
+                match next {
+                    Some(Ok(event)) => {
+                        health.lock().saw(kind, &event);
+                        changes.note(&event);
+                    }
+                    Some(Err(error)) if crate::error::watch_refused(&error) => {
+                        // A one-namespace token was refused all seven kinds, ten times each, every five minutes.
+                        tracing::warn!(
+                            context,
+                            kind,
+                            error = %crate::error::watch_failure(&error),
+                            "overview watch refused; listing instead until a reconnect"
+                        );
+                        refused.insert(context.clone());
+                        if let Some((_, watch)) = clusters.remove(&context) {
+                            watch.stop.cancel();
+                        }
+                        stop.cancel();
+                        break;
+                    }
+                    Some(Err(error)) => {
+                        let streak = health.lock().failed(kind);
+                        if streak == BROKEN_STREAK {
+                            tracing::warn!(context, kind, %error, "overview watch broken; listing instead");
+                        }
+                        if streak >= GIVE_UP_STREAK {
+                            tracing::warn!(
+                                context,
+                                kind,
+                                "overview watch given up; retry after cooldown"
+                            );
+                            cooldown.insert(context.clone(), Instant::now() + COOLDOWN);
+                            if let Some((_, watch)) = clusters.remove(&context) {
+                                watch.stop.cancel();
+                            }
+                            stop.cancel();
+                            break;
+                        }
+                    }
+                    None => break,
+                }
+            }
+        });
+        store
+    }
+
+    /// Announces what the stores took, at most once every [`ANNOUNCE_EVERY`]
+    /// and only while they serve: a broken store is listed instead, and an
+    /// announcement would only make that listing more frequent.
+    fn spawn_announcer(&self, events: broadcast::Sender<AppEvent>) {
+        let changes = self.changes.clone();
+        let health = self.health.clone();
+        let stop = self.stop.clone();
+        let context = self.context.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    biased;
+                    () = stop.cancelled() => break,
+                    () = changes.pending.notified() => {}
+                }
+                let touched = changes.take();
+                if health.lock().serves() {
+                    let _ = events.send(AppEvent::OverviewChanged {
+                        context: context.clone(),
+                        namespaces: touched.namespaces.into_iter().collect(),
+                        cluster: touched.cluster,
+                    });
+                }
+                tokio::select! {
+                    biased;
+                    () = stop.cancelled() => break,
+                    () = tokio::time::sleep(ANNOUNCE_EVERY) => {}
+                }
+            }
+        });
+    }
+
+    /// Stops the cluster's watches once nothing has asked for them in `idle`.
+    fn spawn_reaper(&self, idle: Duration) {
+        let health = self.health.clone();
+        let stop = self.stop.clone();
+        let clusters = self.clusters.clone();
+        let context = self.context.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    biased;
+                    () = stop.cancelled() => break,
+                    () = tokio::time::sleep(REAP_EVERY) => {}
+                }
+                if health.lock().last_used.elapsed() > idle {
+                    tracing::info!(context, "overview watches idle; stopped");
+                    if let Some((_, watch)) = clusters.remove(&context) {
+                        watch.stop.cancel();
+                    }
+                    stop.cancel();
+                    break;
+                }
+            }
+        });
+    }
+}
+
+fn strip_container(container: &mut Container) {
+    container.env = None;
+    container.env_from = None;
+    container.volume_mounts = None;
+    container.volume_devices = None;
+    container.command = None;
+    container.args = None;
+    container.lifecycle = None;
+    container.liveness_probe = None;
+    container.readiness_probe = None;
+    container.startup_probe = None;
+    container.security_context = None;
+}
+
+/// What the overview never reads, dropped before the object is stored: the
+/// store holds every pod in the cluster, and a pod's env, mounts and probes
+/// are most of its bytes.
+pub fn strip_pod(pod: &mut Pod) {
+    pod.metadata.managed_fields = None;
+    pod.metadata.annotations = None;
+    if let Some(spec) = pod.spec.as_mut() {
+        spec.volumes = None;
+        spec.affinity = None;
+        spec.tolerations = None;
+        spec.containers.iter_mut().for_each(strip_container);
+        if let Some(init) = spec.init_containers.as_mut() {
+            init.iter_mut().for_each(strip_container);
+        }
+        if let Some(ephemeral) = spec.ephemeral_containers.as_mut() {
+            ephemeral.clear();
+        }
+    }
+}
+
+pub fn strip_node(node: &mut Node) {
+    node.metadata.managed_fields = None;
+    node.metadata.annotations = None;
+    if let Some(status) = node.status.as_mut() {
+        status.images = None;
+        status.volumes_attached = None;
+        status.volumes_in_use = None;
+    }
+}
+
+pub fn strip_deployment(deployment: &mut Deployment) {
+    deployment.metadata.managed_fields = None;
+    deployment.metadata.annotations = None;
+    if let Some(spec) = deployment.spec.as_mut() {
+        spec.template.spec = None;
+        spec.template.metadata = None;
+    }
+}
+
+pub fn strip_stateful_set(set: &mut StatefulSet) {
+    set.metadata.managed_fields = None;
+    set.metadata.annotations = None;
+    if let Some(spec) = set.spec.as_mut() {
+        spec.template.spec = None;
+        spec.template.metadata = None;
+        spec.volume_claim_templates = None;
+    }
+}
+
+pub fn strip_daemon_set(set: &mut DaemonSet) {
+    set.metadata.managed_fields = None;
+    set.metadata.annotations = None;
+    if let Some(spec) = set.spec.as_mut() {
+        spec.template.spec = None;
+        spec.template.metadata = None;
+    }
+}
+
+pub fn strip_job(job: &mut Job) {
+    job.metadata.managed_fields = None;
+    job.metadata.annotations = None;
+    if let Some(spec) = job.spec.as_mut() {
+        spec.template.spec = None;
+        spec.template.metadata = None;
+    }
+}
+
+pub fn strip_event(event: &mut Event) {
+    event.metadata.managed_fields = None;
+    event.metadata.annotations = None;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn in_namespace(namespace: Option<&str>) -> Pod {
+        let mut pod = Pod::default();
+        pod.metadata.name = Some("checkout-k6j2n".to_string());
+        pod.metadata.namespace = namespace.map(str::to_string);
+        pod
+    }
+
+    /// Sam's Overview read "41 of 62 ready" for six seconds after kubectl was
+    /// back at 40: it was read every ten seconds while the stores under it
+    /// knew at once. Fails if a change is not announced, if two inside a
+    /// second are announced apart or lost, if a resync counts as a change, or
+    /// if a cache that stopped serving still announces.
+    #[tokio::test]
+    async fn changes_are_announced_at_most_once_a_second_and_only_while_served() {
+        let (tx, mut rx) = broadcast::channel(16);
+        let cluster = WatchConfigs {
+            context: "k3d-rubick".to_string(),
+            health: Arc::new(Mutex::new(Health::new(KINDS))),
+            stop: CancellationToken::new(),
+            clusters: Arc::default(),
+            cooldown: Arc::default(),
+            refused: Arc::default(),
+            changes: Arc::new(Changes::default()),
+        };
+        cluster.spawn_announcer(tx);
+        let said = |event: AppEvent| match event {
+            AppEvent::OverviewChanged {
+                context,
+                namespaces,
+                cluster,
+            } => (context, namespaces, cluster),
+            other => panic!("not an overview change: {other:?}"),
+        };
+
+        cluster
+            .changes
+            .note(&watcher::Event::InitApply(in_namespace(Some("shop"))));
+        cluster
+            .changes
+            .note(&watcher::Event::Apply(in_namespace(Some("shop"))));
+        let first = tokio::time::timeout(Duration::from_millis(500), rx.recv())
+            .await
+            .expect("announced at once")
+            .expect("an event");
+        assert_eq!(
+            said(first),
+            ("k3d-rubick".to_string(), vec!["shop".to_string()], false)
+        );
+
+        cluster
+            .changes
+            .note(&watcher::Event::Delete(in_namespace(Some("team-blind"))));
+        cluster
+            .changes
+            .note(&watcher::Event::Apply(in_namespace(None)));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(600), rx.recv())
+                .await
+                .is_err(),
+            "a second announcement inside the second"
+        );
+        let gathered = tokio::time::timeout(Duration::from_millis(1500), rx.recv())
+            .await
+            .expect("announced when the second is up")
+            .expect("an event");
+        assert_eq!(
+            said(gathered),
+            (
+                "k3d-rubick".to_string(),
+                vec!["team-blind".to_string()],
+                true
+            )
+        );
+
+        for _ in 0..BROKEN_STREAK {
+            cluster.health.lock().failed("Pod");
+        }
+        cluster
+            .changes
+            .note(&watcher::Event::Apply(in_namespace(Some("shop"))));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(1500), rx.recv())
+                .await
+                .is_err(),
+            "a cache that is not serving announced a change"
+        );
+        cluster.stop.cancel();
+    }
+
+    /// One broken watch is enough: an overview built from four fresh stores and one stale one is one stale overview.
+    #[test]
+    fn one_broken_kind_stops_the_cache_from_serving() {
+        let mut health = Health::new(KINDS);
+        assert!(health.serves());
+        for _ in 0..BROKEN_STREAK - 1 {
+            health.failed("Node");
+        }
+        assert!(health.serves(), "a blip is not a break");
+        health.failed("Node");
+        assert!(!health.serves());
+        assert_eq!(health.broken().into_iter().collect::<Vec<_>>(), ["Node"]);
+        health.recovered("Node");
+        assert!(health.serves());
+    }
+
+    /// The ladder exists to give up on a watch the cluster refuses — and it
+    /// could not, because kube announces every list attempt with `Init` and
+    /// the loop counted that as the cluster answering. The streak never
+    /// passed one, so `broken` never came and neither did the cooldown.
+    #[test]
+    fn a_refused_watch_still_climbs_the_ladder() {
+        use k8s_openapi::api::core::v1::Pod;
+        use kube::runtime::watcher::Event;
+
+        let mut health = Health::new(KINDS);
+        for _ in 0..BROKEN_STREAK {
+            // What a refused stream actually sends: the marker, then the
+            // error, over and over.
+            health.saw::<Pod>("Pod", &Event::Init);
+            health.failed("Pod");
+        }
+        assert!(
+            !health.serves(),
+            "a watch refused three times over is a broken one"
+        );
+
+        // And an answer still ends the streak.
+        health.saw("Pod", &Event::Apply(Pod::default()));
+        assert!(health.serves());
+    }
+
+    /// A cluster in cooldown is not restarted by the next request.
+    #[test]
+    fn a_cluster_that_gave_up_is_not_restarted_until_the_cooldown_passes() {
+        let cache = OverviewCache::default();
+        assert!(!cache.cooling_down("prod"));
+        cache
+            .cooldown
+            .insert("prod".to_string(), Instant::now() + COOLDOWN);
+        assert!(cache.cooling_down("prod"));
+        let passed = Instant::now()
+            .checked_sub(Duration::from_secs(1))
+            .expect("a second ago exists");
+        cache.cooldown.insert("prod".to_string(), passed);
+        assert!(!cache.cooling_down("prod"));
+        assert!(
+            cache.cooldown.get("prod").is_none(),
+            "an expired cooldown is forgotten"
+        );
+    }
+
+    /// Forgetting is what a reconnect does, and it is the one event that
+    /// plausibly fixes whatever made the watches give up. Leaving the
+    /// cooldown behind made `forget`'s own promise — "the next request
+    /// starts them again" — false for the next five minutes.
+    #[test]
+    fn forgetting_a_cluster_lifts_the_pause_it_was_holding() {
+        let cache = OverviewCache::default();
+        cache
+            .cooldown
+            .insert("prod".to_string(), Instant::now() + COOLDOWN);
+        assert!(cache.cooling_down("prod"));
+
+        cache.forget("prod");
+        assert!(
+            !cache.cooling_down("prod"),
+            "a reconnect has to be able to start the watches again"
+        );
+    }
+
+    /// A refusal is the token's rights, which no retry or cooldown changes:
+    /// the seven cluster-wide watches came back every five minutes and were
+    /// refused ten times each. Fails if a refused cluster is started again
+    /// before the reconnect that could change its rights.
+    #[test]
+    fn a_refused_cluster_is_not_restarted_until_a_reconnect() {
+        let cache = OverviewCache::default();
+        cache.refused.insert("prod".to_string());
+        assert!(cache.cooling_down("prod"));
+        assert!(!cache.cooling_down("dev"), "only the cluster that refused");
+
+        cache.forget("prod");
+        assert!(!cache.cooling_down("prod"));
+    }
+
+    /// A reflector store hands its contents back in hash order. The listing
+    /// path gets the apiserver's, so without a sort the two answers differ
+    /// and the watch-served one reshuffles between polls while nothing in
+    /// the cluster changed.
+    #[test]
+    fn a_snapshot_is_in_the_order_the_apiserver_would_have_given() {
+        let node = |name: &str| {
+            let mut node = Node::default();
+            node.metadata.name = Some(name.to_string());
+            Arc::new(node)
+        };
+        let jumbled = vec![node("worker-3"), node("control"), node("worker-1")];
+        let ordered: Vec<_> = by_name(jumbled)
+            .iter()
+            .map(|n| n.metadata.name.clone().unwrap_or_default())
+            .collect();
+        assert_eq!(ordered, ["control", "worker-1", "worker-3"]);
+    }
+
+    /// The same for the whole-window teardown, which a kubeconfig change runs.
+    #[test]
+    fn forgetting_every_cluster_lifts_every_pause() {
+        let cache = OverviewCache::default();
+        for context in ["prod", "dev"] {
+            cache
+                .cooldown
+                .insert(context.to_string(), Instant::now() + COOLDOWN);
+        }
+        cache.forget_all();
+        assert!(!cache.cooling_down("prod"));
+        assert!(!cache.cooling_down("dev"));
+    }
+}

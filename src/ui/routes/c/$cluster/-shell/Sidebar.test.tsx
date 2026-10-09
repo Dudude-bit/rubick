@@ -1,0 +1,1136 @@
+import type { ReactElement } from "react";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+
+import { useSettingsStore } from "@/stores/settingsStore";
+import { forgetRefusals } from "@/lib/refusals";
+import { listSegment } from "@/lib/resource-registry";
+import { renderWithRouter } from "@/test/render";
+
+import type { ClusterOverview, DetectedExtension } from "@/generated/types";
+import {
+  attentionFigure,
+  namespaceAttention,
+  type Attention,
+} from "@/lib/attention";
+
+const detectInClusterExtensions = vi.fn<() => Promise<DetectedExtension[]>>();
+const listIngresses = vi.fn().mockResolvedValue([]);
+const listCustomResources = vi.fn().mockResolvedValue([]);
+const checkListAccess = vi.fn().mockResolvedValue([]);
+const resolveIngressClass = vi.fn().mockResolvedValue({
+  requested: null,
+  resolved: null,
+  controller: null,
+  viaDefault: false,
+  available: [],
+});
+const detectGatewayApi = vi.fn();
+const listGatewayRoutes = vi.fn();
+const listGateways = vi.fn();
+const listGatewayClasses = vi.fn();
+const listServices = vi.fn();
+const listServiceEndpoints = vi.fn();
+
+/** The backend's fan-out over the per-namespace mocks: one read per namespace, the refused ones named. */
+async function across<T>(
+  scope: string[] | null,
+  read: (ns: string | null) => Promise<T[]>
+) {
+  if (scope === null) return { rows: await read(null), unread: [] };
+  const settled = await Promise.allSettled(scope.map((ns) => read(ns)));
+  const failed = settled.flatMap((answer, i) =>
+    answer.status === "rejected"
+      ? [
+          {
+            namespace: scope[i],
+            code: "PERMISSION_DENIED",
+            message: String(answer.reason),
+          },
+        ]
+      : []
+  );
+  if (failed.length === scope.length) {
+    throw (settled[0] as PromiseRejectedResult).reason;
+  }
+  return {
+    rows: settled.flatMap((answer) =>
+      answer.status === "fulfilled" ? answer.value : []
+    ),
+    unread: failed,
+  };
+}
+
+vi.mock("@/lib/commands", () => ({
+  commands: {
+    detectInClusterExtensions: () => detectInClusterExtensions(),
+    listIngresses: () => listIngresses(),
+    listCustomResources: (crdName: string) => listCustomResources(crdName),
+    resolveIngressClass: () => resolveIngressClass(),
+    getClusterOverview: vi.fn().mockResolvedValue(null),
+    checkListAccess: (...args: unknown[]) => checkListAccess(...args),
+    // The CRD `get` review left with its lock. It answers "refused" so that a
+    // lock brought back marks the rows, rather than failing unseen.
+    checkCrdReadAccess: () => Promise.resolve(false),
+    detectGatewayApi: () => detectGatewayApi(),
+    listGatewayRoutesIn: (kind: string, scope: string[] | null) =>
+      across(scope, (ns) => listGatewayRoutes(kind, ns)),
+    listGateways: (ns: string | null) => listGateways(ns),
+    listGatewaysIn: (scope: string[] | null) => across(scope, listGateways),
+    listGatewayClasses: () => listGatewayClasses(),
+    listServices: (ns: string | null) => listServices(ns),
+    listServiceEndpoints: (ns: string | null) => listServiceEndpoints(ns),
+  },
+}));
+
+/** Only the three fields the rail reads; the rest of the overview is noise here. */
+type OverviewStub = Pick<
+  ClusterOverview,
+  "counts" | "problems" | "problemsTruncated"
+>;
+let overview: OverviewStub | undefined;
+vi.mock("@/hooks/useClusterOverview", () => ({
+  // Deliberately ignores `enabled`, the way React Query's own
+  // `keepPreviousData` does: the hook goes on handing back the last cluster's
+  // answer after a disconnect, which is the condition the rail must survive.
+  useClusterOverview: () => ({ data: overview }),
+  useScopedOverview: () => ({ data: overview }),
+}));
+
+let attention: Pick<Attention, "total" | "worst" | "complete"> | null = null;
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: () => attention,
+}));
+
+const { Sidebar } = await import("./Sidebar");
+const { useClusterStore } = await import("@/stores/clusterStore");
+const { useUpdaterStore } = await import("@/stores/updaterStore");
+const { useLocaleStore } = await import("@/stores/localeStore");
+
+function wrap(node: ReactElement, at = "/c/prod") {
+  return renderWithRouter(node, { at, route: "/c/$cluster/$" });
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  listIngresses.mockResolvedValue([]);
+  listCustomResources.mockResolvedValue([]);
+  detectInClusterExtensions.mockResolvedValue([]);
+  checkListAccess.mockResolvedValue([]);
+  detectGatewayApi.mockResolvedValue({ installed: false, kinds: [] });
+  listGatewayRoutes.mockResolvedValue([]);
+  listGateways.mockResolvedValue([]);
+  listGatewayClasses.mockResolvedValue([]);
+  listServices.mockResolvedValue([]);
+  listServiceEndpoints.mockResolvedValue([]);
+  overview = undefined;
+  useClusterStore.setState({ isConnected: true, currentContext: "prod" });
+  useUpdaterStore.setState({ available: false });
+  // A test that fails mid-way must not leave the next one reading Russian.
+  useLocaleStore.setState({ choice: "en" });
+});
+
+const DAY = 86_400_000;
+const inDays = (days: number) =>
+  new Date(Date.now() + days * DAY).toISOString();
+
+/** A cert-manager Certificate as `listCustomResources` would hand it back. */
+function demoCertificate(status: Record<string, unknown>) {
+  return {
+    name: "web-cert",
+    namespace: "shop",
+    uid: "cert-1",
+    apiVersion: "cert-manager.io/v1",
+    kind: "Certificate",
+    spec: { secretName: "web-tls" },
+    status: {
+      conditions: [{ type: "Ready", status: "True" }],
+      ...status,
+    },
+    labels: {},
+    annotations: {},
+    createdAt: null,
+    ownerReferences: [],
+  };
+}
+
+const healthyCertificate = () =>
+  demoCertificate({ notAfter: inDays(60), notBefore: inDays(-30) });
+
+const overdueCertificate = (renewalTime: string) =>
+  demoCertificate({
+    notAfter: inDays(2.25),
+    notBefore: inDays(-4.75),
+    renewalTime,
+  });
+
+/** An overview carrying one recognisable number and nothing else. */
+function overviewWithPods(pods: number): OverviewStub {
+  return {
+    counts: { pods } as ClusterOverview["counts"],
+    problems: [],
+    problemsTruncated: 0,
+  };
+}
+
+describe("the counts at the end of each row", () => {
+  it("prints the cluster's numbers while there is a cluster", async () => {
+    overview = overviewWithPods(41);
+    await wrap(<Sidebar />);
+    expect(await screen.findByText("41")).toBeInTheDocument();
+  });
+
+  /**
+   * Would break if the rail went on printing the counts of the cluster the
+   * reader just left. The overview query keeps its last answer as
+   * placeholder data across the key change a disconnect causes, so
+   * "is there data" is not the question — "is there a cluster" is. The
+   * status bar has always answered it this way.
+   */
+  it("prints none of them once there is no cluster", async () => {
+    overview = overviewWithPods(41);
+    useClusterStore.setState({ isConnected: false, currentContext: null });
+
+    await wrap(<Sidebar />);
+
+    expect(await screen.findByText("Pods")).toBeInTheDocument();
+    expect(screen.queryByText("41")).not.toBeInTheDocument();
+  });
+  /**
+   * Marco's rail said Ingresses 0 beside Endpoints, PVCs and ServiceAccounts
+   * with no number, though he could list all three. Fails if a row shows a
+   * number for a kind nobody counted, a 0 for a count the cluster refused, or
+   * one of those three goes back to blank.
+   */
+  it("numbers the kinds it counted, and never a 0 it did not measure", async () => {
+    overview = {
+      counts: {
+        pods: 11,
+        nodes: 20,
+        namespaces: 21,
+        ingresses: 0,
+        endpoints: 12,
+        persistentVolumeClaims: 3,
+        serviceAccounts: 5,
+        secrets: null,
+      } as ClusterOverview["counts"],
+      problems: [],
+      problemsTruncated: 0,
+    };
+    await wrap(<Sidebar />);
+
+    const row = (name: string) =>
+      screen.findByRole("link", { name: new RegExp(`^${name}`) });
+    expect(within(await row("Nodes")).getByText("20")).toBeInTheDocument();
+    expect(within(await row("Namespaces")).getByText("21")).toBeInTheDocument();
+    expect(within(await row("Ingresses")).getByText("0")).toBeInTheDocument();
+    expect(within(await row("Endpoints")).getByText("12")).toBeInTheDocument();
+    expect(within(await row("PVCs")).getByText("3")).toBeInTheDocument();
+    expect(
+      within(await row("ServiceAccounts")).getByText("5")
+    ).toBeInTheDocument();
+    expect(within(await row("Secrets")).queryByText(/^\d+$/)).toBeNull();
+  });
+
+  /**
+   * The Overview row carries the panel's own total in its worst row's tone.
+   * Fails if the badge goes back to counting only the backend's problems, or
+   * paints a list of warnings red.
+   */
+  it("badges the Overview row with the attention total in its worst tone", async () => {
+    overview = overviewWithPods(41);
+    attention = { total: 3, worst: "warn", complete: true };
+
+    await wrap(<Sidebar />);
+
+    const badge = await screen.findByText("3");
+    expect(badge).toHaveClass("text-warn");
+    attention = null;
+  });
+
+  /**
+   * Marco's picker said "team-checkout 3+ problems" while this badge said a
+   * plain 3, with DaemonSets and Nodes unread. Fails if the badge drops the
+   * floor mark the picker derives from the same Attention.
+   */
+  it("marks the count a floor where a kind went unread, as the picker does", async () => {
+    overview = overviewWithPods(4);
+    const whole: Attention = {
+      items: [],
+      total: 3,
+      complete: false,
+      worst: "err",
+      checks: [
+        {
+          kind: "DaemonSet",
+          state: "unread",
+          unread: [
+            { namespace: "team-checkout", code: "PERMISSION", message: "" },
+          ],
+        },
+      ],
+      byNamespace: new Map([["team-checkout", 3]]),
+      unconfirmed: [],
+    };
+    attention = whole;
+
+    await wrap(<Sidebar />);
+
+    const picker = namespaceAttention(whole, "team-checkout");
+    const badge = await screen.findByText(attentionFigure(picker));
+    expect(badge).toHaveTextContent("3+");
+    expect(badge).toHaveAccessibleName("3+ problems, not all checked");
+    attention = null;
+  });
+
+  /**
+   * Marco's badge was a bare "3+" and only its hover card said not all was
+   * checked. Fails if the incomplete badge loses the hollow ring the app
+   * draws for "not checked", or a complete one gains it.
+   */
+  it("wears the not-checked ring beside a floor, and none beside a whole count", async () => {
+    overview = overviewWithPods(4);
+    attention = { total: 3, worst: "err", complete: false };
+    const partial = await wrap(<Sidebar />);
+    const badge = await screen.findByText("3+");
+    expect(
+      within(badge).getByTestId("attention-unchecked-ring")
+    ).toBeInTheDocument();
+    partial.unmount();
+
+    attention = { total: 3, worst: "err", complete: true };
+    await wrap(<Sidebar />);
+    await screen.findByText("3");
+    expect(screen.queryByTestId("attention-unchecked-ring")).toBeNull();
+    attention = null;
+  });
+});
+
+describe("a rail taller than the window", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** A rail 600px tall holding `content` pixels of rows. */
+  function railOf(content: number) {
+    vi.spyOn(Element.prototype, "scrollHeight", "get").mockImplementation(
+      function (this: Element) {
+        return this.tagName === "NAV" ? content : 0;
+      }
+    );
+    vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(
+      function (this: Element) {
+        return this.tagName === "NAV" ? 600 : 0;
+      }
+    );
+  }
+
+  /**
+   * At 1024x800 Marco and Lena read a sliced "ACCESS" caption above the App
+   * block, as if the rail were broken. Fails if the edge the rail continues
+   * past stops fading, or a rail that fits wears a fade for nothing.
+   */
+  it("fades the edge it continues past, and only that one", async () => {
+    railOf(900);
+    await wrap(<Sidebar />);
+    const rail = screen.getByRole("navigation");
+    expect(rail.className).toContain(
+      "[mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]"
+    );
+
+    rail.scrollTop = 300;
+    fireEvent.scroll(rail);
+    expect(rail.className).toContain(
+      "[mask-image:linear-gradient(to_bottom,transparent,black_24px)]"
+    );
+  });
+
+  /** Fails if a rail with nothing past its edges is faded anyway. */
+  it("wears no fade when every row fits", async () => {
+    railOf(600);
+    await wrap(<Sidebar />);
+    expect(screen.getByRole("navigation").className).not.toContain(
+      "mask-image"
+    );
+  });
+});
+
+describe("the update dot", () => {
+  /**
+   * Would break if the dot went back to `/settings`, which redirects to
+   * Appearance — the one pane that says nothing about updates. The dot is a
+   * deep link; it has to land where the update is.
+   */
+  it("opens Settings on About while an update is waiting", async () => {
+    useUpdaterStore.setState({ available: true });
+    useSettingsStore.setState({ open: false, section: "appearance" });
+    await wrap(<Sidebar />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Settings" })
+    );
+    expect(useSettingsStore.getState()).toMatchObject({
+      open: true,
+      section: "about",
+    });
+  });
+
+  it("opens Settings where it was last when no update is waiting", async () => {
+    useSettingsStore.setState({ open: false, section: "registries" });
+    await wrap(<Sidebar />);
+
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Settings" })
+    );
+    expect(useSettingsStore.getState()).toMatchObject({
+      open: true,
+      section: "registries",
+    });
+  });
+
+  /**
+   * Settings is a layer, not a route, so the router cannot light this row.
+   * Would break if the row went back to reading the location, leaving
+   * Settings open with no row in the rail lit.
+   */
+  it("marks the row while Settings is open, whatever the route", async () => {
+    useSettingsStore.setState({ open: true });
+    await wrap(<Sidebar />, "/c/prod/pods");
+
+    const row = await screen.findByRole("button", { name: "Settings" });
+    expect(row.className).toContain("bg-sel");
+    expect(row).toHaveAttribute("aria-expanded", "true");
+  });
+});
+
+describe("the API resources row", () => {
+  /**
+   * Priya found Leases by accident through a breadcrumb, and PriorityClass,
+   * webhook configurations and Roles not at all: nothing listed what the
+   * cluster serves.
+   */
+  it("offers the page that lists every served kind", async () => {
+    await wrap(<Sidebar />);
+    expect(
+      await screen.findByRole("link", { name: "API resources" })
+    ).toHaveAttribute("href", "/c/prod/api-resources");
+  });
+});
+
+describe("the Access group", () => {
+  /**
+   * Priya could not reach Role developer, RoleBinding marco-developer or
+   * ServiceAccount marco from anywhere: no list offered them.
+   */
+  it("lists every RBAC kind where the cluster serves it", async () => {
+    await wrap(<Sidebar />);
+    const hrefs = await Promise.all(
+      [
+        "ServiceAccounts",
+        "Roles",
+        "RoleBindings",
+        "ClusterRoles",
+        "ClusterRoleBindings",
+      ].map(async (name) =>
+        (await screen.findByRole("link", { name })).getAttribute("href")
+      )
+    );
+    expect(screen.getByRole("link", { name: "Your access" })).toHaveAttribute(
+      "href",
+      "/c/prod/my-access"
+    );
+    expect(hrefs).toEqual([
+      "/c/prod/serviceaccounts",
+      "/c/prod/roles.rbac.authorization.k8s.io",
+      "/c/prod/rolebindings.rbac.authorization.k8s.io",
+      "/c/prod/clusterroles.rbac.authorization.k8s.io",
+      "/c/prod/clusterrolebindings.rbac.authorization.k8s.io",
+    ]);
+  });
+
+  /**
+   * A namespace-only reader may list Roles and not ClusterRoles. Fails if
+   * the access rows stop asking the authorizer, or ask without their group.
+   */
+  it("locks the access row the authorizer refuses, and only that one", async () => {
+    checkListAccess.mockResolvedValue([
+      { resource: "clusterroles", allowed: false },
+      { resource: "roles", allowed: true },
+      { resource: "rolebindings", allowed: null },
+    ]);
+    await wrap(<Sidebar />);
+    const locked = await screen.findByRole("link", { name: /ClusterRoles/ });
+    await waitFor(() =>
+      expect(within(locked).getByLabelText(/permission to list/)).toBeVisible()
+    );
+    for (const name of ["Roles", "RoleBindings"])
+      expect(
+        within(screen.getByRole("link", { name })).queryByLabelText(
+          /permission to list/
+        )
+      ).toBeNull();
+    const asked = checkListAccess.mock.calls.flatMap(
+      ([queries]) => queries as { group: string; resource: string }[]
+    );
+    expect(asked).toContainEqual({
+      group: "rbac.authorization.k8s.io",
+      resource: "clusterroles",
+      namespaced: false,
+    });
+  });
+
+  /**
+   * Read again on a refused page asks the cluster anew; a sidebar that kept
+   * its five-minute review held the lock beside a list that now reads.
+   */
+  it("lifts a lock once the reader asks a refused read again and the authorizer now allows it", async () => {
+    checkListAccess.mockResolvedValue([
+      { resource: "clusterroles", allowed: false },
+    ]);
+    await wrap(<Sidebar />);
+    const row = await screen.findByRole("link", { name: /ClusterRoles/ });
+    await waitFor(() =>
+      expect(within(row).getByLabelText(/permission to list/)).toBeVisible()
+    );
+    checkListAccess.mockResolvedValue([
+      { resource: "clusterroles", allowed: true },
+    ]);
+    act(() => forgetRefusals());
+    await waitFor(() =>
+      expect(within(row).queryByLabelText(/permission to list/)).toBeNull()
+    );
+  });
+});
+
+describe("a lock for a reader with rights in one namespace", () => {
+  type Query = { resource: string; namespaced: boolean };
+  /** Marco: refused every list across the cluster, allowed most of them in team-checkout. */
+  const marco = (queries: Query[], namespaces: string[]) =>
+    Promise.resolve(
+      queries.map((query) => ({
+        resource: query.resource,
+        allowed:
+          namespaces[0] === "team-checkout" &&
+          query.namespaced &&
+          query.resource !== "daemonsets",
+      }))
+    );
+
+  beforeEach(() => {
+    checkListAccess.mockImplementation(marco);
+    useClusterStore.setState({
+      namespaceScope: [],
+      contexts: [{ name: "prod", namespace: "team-checkout" } as never],
+    });
+  });
+
+  const rowOf = (name: string) =>
+    screen.findByRole("link", { name: new RegExp(`^${name}`) });
+  const lockOn = async (name: string, words: RegExp) => {
+    const row = await rowOf(name);
+    await waitFor(() =>
+      expect(within(row).getByLabelText(words)).toBeVisible()
+    );
+  };
+
+  /**
+   * Under All namespaces every list is asked about the whole cluster, and a
+   * refusal there read "You do not have permission to list these" beside
+   * Pods, Services and Roles Marco lists every day in his namespace.
+   */
+  it("says a list refused across the cluster can be listed in the namespace the reader has", async () => {
+    await wrap(<Sidebar />);
+    await lockOn(
+      "Pods",
+      /across the whole cluster.*list them in team-checkout/
+    );
+    await lockOn(
+      "Roles",
+      /across the whole cluster.*list them in team-checkout/
+    );
+    await lockOn(
+      "DaemonSets",
+      /^Listing these was refused across the whole cluster and in team-checkout too\.$/
+    );
+    await lockOn("Nodes", /^You do not have permission to list these$/);
+    expect(checkListAccess).toHaveBeenCalledWith(
+      expect.arrayContaining([expect.objectContaining({ resource: "pods" })]),
+      ["team-checkout"]
+    );
+  });
+
+  /** In a namespace the reader chose, a refusal is the whole answer. */
+  it("says no permission for a list refused in the namespace chosen", async () => {
+    useClusterStore.setState({ namespaceScope: ["team-checkout"] });
+    await wrap(<Sidebar />);
+    await lockOn("DaemonSets", /^You do not have permission to list these$/);
+    expect(
+      within(await rowOf("Pods")).queryByLabelText(/permission|refused/)
+    ).toBeNull();
+  });
+});
+
+describe("the Network group", () => {
+  /**
+   * Endpoints was collateral of a nav rebuild and spent months reachable
+   * only by typing the URL. Services name the endpoints behind one Service;
+   * this list is the only answer to "what is behind everything at once".
+   */
+  it("offers Endpoints its own row", async () => {
+    await wrap(<Sidebar />);
+    expect(
+      await screen.findByRole("link", { name: "Endpoints" })
+    ).toHaveAttribute("href", "/c/prod/endpoints");
+  });
+
+  /**
+   * Sam typed "Crash" in Pods, opened Services from the sidebar, and read
+   * "Nothing matches Crash, 0 of 27 shown": a filter typed for one list
+   * emptied another. Fails if a sidebar row carries the list search again.
+   */
+  it("leaves the search with the list it was typed in", async () => {
+    await wrap(<Sidebar />, `/c/prod/${listSegment("Pod")}?q=Crash`);
+    expect(
+      await screen.findByRole("link", { name: "Services" })
+    ).toHaveAttribute("href", "/c/prod/services");
+  });
+});
+
+describe("which row is open", () => {
+  /**
+   * A list row stays lit on the pages of what it lists, and the overview's
+   * address is the start of every other one in the cluster. Fails if the
+   * overview stops matching exactly, lighting it beside every other row.
+   */
+  it("lights the list a page belongs to, and the overview only on itself", async () => {
+    await wrap(<Sidebar />, "/c/prod/pods/web/api-0");
+    const pods = await screen.findByRole("link", { name: /^Pods/ });
+    expect(pods.className).toContain("bg-sel");
+    expect(
+      screen.getByRole("link", { name: /^Overview/ }).className
+    ).not.toContain("bg-sel");
+  });
+
+  /**
+   * Every vendor without a screen of its own shares the catalog's address,
+   * so the query decides. Fails if the catalog lights up while one of those
+   * vendors is the row open on it.
+   */
+  it("lights the catalog only while no vendor is picked on it", async () => {
+    await wrap(<Sidebar />, "/c/prod/integrations?vendor=prometheus");
+    expect(
+      (await screen.findByRole("link", { name: "All integrations" })).className
+    ).not.toContain("bg-sel");
+  });
+
+  it("lights the catalog on the catalog", async () => {
+    await wrap(<Sidebar />, "/c/prod/integrations");
+    expect(
+      (await screen.findByRole("link", { name: "All integrations" })).className
+    ).toContain("bg-sel");
+  });
+});
+
+describe("the Integrations category", () => {
+  /**
+   * The category is a door now, not a claim: the catalog row is always
+   * there — "this cluster has none of these" is that page's own answer —
+   * but a vendor nothing detected must still never get a row of its own.
+   */
+  it("offers the catalog and no vendor rows when nothing is detected", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "traefik", installed: false, version: null },
+      { id: "cert-manager", installed: false, version: null },
+    ]);
+
+    await wrap(<Sidebar />);
+
+    expect(
+      await screen.findByRole("link", { name: "All integrations" })
+    ).toHaveAttribute("href", "/c/prod/integrations");
+    await waitFor(() =>
+      expect(screen.queryByRole("link", { name: /Traefik/ })).toBeNull()
+    );
+  });
+
+  /**
+   * Would break if a detected vendor that owns a page stopped reaching the
+   * rail — the only way into the page other than a typed URL.
+   */
+  it("names a detected vendor that owns a page, and links to it", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "traefik", installed: true, version: "v2.11.18" },
+    ]);
+
+    await wrap(<Sidebar />);
+
+    const link = await screen.findByRole("link", { name: /Traefik/ });
+    expect(link).toHaveAttribute("href", "/c/prod/integrations/traefik");
+    expect(screen.getByText("Integrations")).toBeInTheDocument();
+  });
+
+  /**
+   * Would break if a detected vendor were dropped from the rail again. The
+   * category used to list only vendors declaring a page, so a cluster running
+   * one that did not was told it had no integrations at all.
+   *
+   * It is asserted through a vendor that *has* a page because there is no
+   * longer a detected one without: every tier-2 record now owns a screen. The
+   * Settings fallback stays live for a *configured* vendor — Prometheus and
+   * Loki reach the rail by answering a probe rather than by a CRD scan, and
+   * neither declares a page — and that path is not reachable from here,
+   * because this file mocks the CRD scan and not the probe.
+   */
+  it("lists a detected vendor whether or not it is the one being looked for", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "cert-manager", installed: true, version: "v1.16.2" },
+      { id: "aws-load-balancer-controller", installed: true, version: null },
+    ]);
+
+    await wrap(<Sidebar />);
+
+    expect(
+      await screen.findByRole("link", { name: /cert-manager/i })
+    ).toHaveAttribute("href", "/c/prod/integrations/cert-manager");
+    expect(
+      screen.getByRole("link", { name: /AWS Load Balancer Controller/i })
+    ).toHaveAttribute(
+      "href",
+      "/c/prod/integrations/aws-load-balancer-controller"
+    );
+  });
+
+  /**
+   * #138: a detected integration whose resources the reader is refused (403)
+   * must draw its row disabled with a reason, not link to a page that only
+   * errors. A mark, never a lock — the row stays a link. Fails if the gate
+   * check is dropped or the forbidden state stops reaching the row.
+   */
+  it("draws a detected vendor the reader cannot list as a denied row", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "flux", installed: true, version: "v2.3.0" },
+    ]);
+    // The authorizer refuses the flux page's primary list.
+    checkListAccess.mockResolvedValue([
+      { resource: "kustomizations", allowed: false },
+    ]);
+
+    await wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /Flux/ });
+    expect(
+      await screen.findByLabelText(/permission to list Flux/i)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * #304: every vendor page lists across the cluster, so a reader allowed
+   * only in the namespaces they picked opened a page that was refused, with
+   * no lock on its row. The review has to ask what the page reads.
+   */
+  it("asks for a vendor's list at the cluster scope whatever namespaces are picked", async () => {
+    useClusterStore.setState({
+      namespaceScope: ["team-a"],
+      currentNamespace: "team-a",
+    });
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "cert-manager", installed: true, version: "v1.15.0" },
+    ]);
+    checkListAccess.mockResolvedValue([
+      { resource: "certificates", allowed: false },
+    ]);
+
+    await wrap(<Sidebar />);
+
+    const vendorReview = () =>
+      checkListAccess.mock.calls.find(([queries]) =>
+        (queries as { resource: string }[] | undefined)?.some(
+          (query) => query.resource === "certificates"
+        )
+      );
+    await waitFor(() => expect(vendorReview()).toBeDefined());
+    expect(vendorReview()?.[1]).toEqual([]);
+    expect(
+      await screen.findByLabelText(/permission to list cert-manager/i)
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * The other side of the three states: allowed, or could-not-ask, must never
+   * draw the lock. Fails if `forbidden` were set from anything but a firm
+   * `allowed === false`.
+   */
+  it("leaves a readable vendor row unlocked", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "flux", installed: true, version: "v2.3.0" },
+    ]);
+    checkListAccess.mockResolvedValue([
+      { resource: "kustomizations", allowed: true },
+    ]);
+
+    await wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /Flux/ });
+    expect(screen.queryByLabelText(/permission to list Flux/i)).toBeNull();
+  });
+
+  /**
+   * The vendor pages find their kinds through discovery since #275 and never
+   * get a CRD, so a reader who may list the vendor's objects but not get
+   * `customresourcedefinitions` opens the page fine. The row used to be
+   * marked forbidden for a read the page no longer makes; fails if that
+   * review comes back, since the mock answers it "refused".
+   */
+  it("leaves a CRD-based vendor open to a reader who may list its objects", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "flux", installed: true, version: "v2.3.0" },
+    ]);
+    checkListAccess.mockResolvedValue([
+      { resource: "kustomizations", allowed: true },
+    ]);
+
+    await wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /Flux/ });
+    await waitFor(() => expect(checkListAccess).toHaveBeenCalled());
+    expect(screen.queryByLabelText(/permission to list Flux/i)).toBeNull();
+  });
+
+  /**
+   * The dot beside the number. A row that is all inventory stays quiet; a
+   * page with something worth opening says so in one pixel, because the
+   * count itself is not allowed to borrow a colour.
+   */
+  it("puts a dot on a vendor row whose page has something worth a look", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "cert-manager", installed: true, version: "v1.16.2" },
+    ]);
+    listCustomResources.mockResolvedValue([
+      overdueCertificate("2026-01-01T00:00:00Z"),
+    ]);
+
+    await wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /cert-manager/i });
+    expect(await screen.findByLabelText("worth a look")).toBeInTheDocument();
+  });
+
+  it("draws no dot while every certificate is fine", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "cert-manager", installed: true, version: "v1.16.2" },
+    ]);
+    listCustomResources.mockResolvedValue([healthyCertificate()]);
+
+    await wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /cert-manager/i });
+    expect(await screen.findByText("1")).toBeInTheDocument();
+    expect(screen.queryByLabelText("worth a look")).toBeNull();
+    expect(screen.queryByLabelText("broken")).toBeNull();
+  });
+
+  /**
+   * Would break if the rail went back to showing cluster A's certificate
+   * count while pointed at cluster B. The detection scan is keyed on the
+   * context and always was; the numbers must be too, or a switch keeps a
+   * minute of the old cluster's arithmetic.
+   */
+  it("forgets the previous cluster's numbers on switch", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "cert-manager", installed: true, version: "v1.16.2" },
+    ]);
+    listCustomResources.mockResolvedValue([
+      healthyCertificate(),
+      healthyCertificate(),
+    ]);
+
+    await wrap(<Sidebar />);
+    expect(await screen.findByText("2")).toBeInTheDocument();
+
+    listCustomResources.mockResolvedValue([healthyCertificate()]);
+    useClusterStore.setState({ currentContext: "staging" });
+
+    expect(await screen.findByText("1")).toBeInTheDocument();
+    expect(screen.queryByText("2")).toBeNull();
+  });
+
+  /**
+   * The caption says the category is still being read rather than letting
+   * a half-arrived list pass for the whole answer.
+   */
+  it("spins beside the caption while the integrations are being read", async () => {
+    let answer!: (extensions: DetectedExtension[]) => void;
+    detectInClusterExtensions.mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+
+    await wrap(<Sidebar />);
+
+    expect(
+      await screen.findByLabelText("reading integrations")
+    ).toBeInTheDocument();
+
+    answer([]);
+    await waitFor(() =>
+      expect(screen.queryByLabelText("reading integrations")).toBeNull()
+    );
+  });
+
+  /**
+   * The label is spoken, not drawn, and a screen reader is the one reader
+   * who cannot see that the rest of the rail is in their language. It is
+   * built from the same catalogue key the caption draws, so the two cannot
+   * drift apart.
+   */
+  it("says it in the reader's language too", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    detectInClusterExtensions.mockReturnValue(new Promise(() => {}));
+
+    await wrap(<Sidebar />);
+
+    expect(
+      await screen.findByLabelText("идёт чтение: интеграции")
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * Would break if a vendor the cluster does not have started appearing.
+   * The category is a claim about what this cluster *has*, not about what
+   * the app knows how to read.
+   */
+  it("leaves out an extension this cluster does not have", async () => {
+    detectInClusterExtensions.mockResolvedValue([
+      { id: "traefik", installed: true, version: "v2.11.18" },
+      { id: "cert-manager", installed: false, version: null },
+    ]);
+
+    await wrap(<Sidebar />);
+
+    await screen.findByRole("link", { name: /Traefik/ });
+    expect(screen.queryByRole("link", { name: /cert-manager/ })).toBeNull();
+  });
+});
+
+describe("the rail in another language", () => {
+  it("translates its own captions and leaves the kinds alone", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+
+    await wrap(<Sidebar />);
+
+    expect(screen.getByText("Нагрузки")).toBeInTheDocument();
+    expect(screen.getByText("Обзор")).toBeInTheDocument();
+    expect(screen.getByText("Настройки")).toBeInTheDocument();
+
+    // The point of the split: a Kubernetes kind is a proper noun, and
+    // "Поды" would be this app inventing a word no cluster answers to.
+    expect(screen.getByText("Pods")).toBeInTheDocument();
+    expect(screen.getByText("Helm")).toBeInTheDocument();
+  });
+});
+
+describe("the Gateway and Routes rows for a namespace-scoped token", () => {
+  const routeIn = (ns: string) => ({
+    kind: "HTTPRoute",
+    apiVersion: "gateway.networking.k8s.io/v1",
+    name: `route-${ns}`,
+    namespace: ns,
+    hostnames: [],
+    parentRefs: [],
+    rules: [],
+    parents: [],
+    generation: null,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+  });
+  const gatewayIn = (ns: string) => ({
+    name: `gw-${ns}`,
+    namespace: ns,
+    apiVersion: "gateway.networking.k8s.io/v1",
+    className: "istio",
+    listeners: [],
+    listenerSets: [],
+    listenerSetsKnown: true,
+    addresses: [],
+    conditions: [],
+    generation: null,
+    labels: {},
+    annotations: {},
+    createdAt: null,
+  });
+
+  /**
+   * The whole point of #137/#138: a team token can list its own namespaces
+   * and not the whole cluster. The routes page reads per namespace, so the
+   * rail must too — a cluster-wide read here 403s and would leave the count
+   * blank above a page that lists the user's routes. The verdict sources stay
+   * cluster-wide (refused -> no health mark), which is honest, not a red dot.
+   */
+  it("counts routes per namespace when the cluster-wide read is refused", async () => {
+    detectGatewayApi.mockResolvedValue({
+      installed: true,
+      kinds: [{ kind: "Gateway" }, { kind: "HTTPRoute" }],
+    });
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["team-a", "team-b"],
+    });
+    listGateways.mockImplementation(async (ns: string | null) => {
+      if (ns === null) throw new Error("gateways is forbidden (code: 403)");
+      return [gatewayIn(ns)];
+    });
+    listGatewayRoutes.mockImplementation(
+      async (_kind: string, ns: string | null) => {
+        if (ns === null) throw new Error("httproutes is forbidden (code: 403)");
+        return [routeIn(ns)];
+      }
+    );
+
+    await wrap(<Sidebar />);
+
+    const routes = await screen.findByRole("link", { name: /routes/i });
+    // Two namespaces, one route each — the fan-out, not a cluster-wide blank.
+    await waitFor(() =>
+      expect(within(routes).getByText("2")).toBeInTheDocument()
+    );
+    // Read per namespace, never cluster-wide.
+    const routeNamespacesAsked = listGatewayRoutes.mock.calls.map(
+      ([, ns]) => ns
+    );
+    expect(routeNamespacesAsked).toContain("team-a");
+    expect(routeNamespacesAsked).toContain("team-b");
+    expect(routeNamespacesAsked).not.toContain(null);
+  });
+
+  /**
+   * One namespace of the selection refused while the other answered. The
+   * rail used to count the one that answered and print it as the scope's
+   * total; a number there now would say the refused namespace has none.
+   */
+  it("gives no count when a namespace of the selection could not be read", async () => {
+    detectGatewayApi.mockResolvedValue({
+      installed: true,
+      kinds: [{ kind: "Gateway" }, { kind: "HTTPRoute" }],
+    });
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["team-a", "team-b"],
+    });
+    listGateways.mockImplementation(async (ns: string | null) => {
+      if (ns !== "team-a") throw new Error("gateways is forbidden (code: 403)");
+      return [gatewayIn(ns)];
+    });
+    listGatewayRoutes.mockImplementation(
+      async (_kind: string, ns: string | null) => {
+        if (ns !== "team-a") {
+          throw new Error("httproutes is forbidden (code: 403)");
+        }
+        return [routeIn(ns)];
+      }
+    );
+
+    await wrap(<Sidebar />);
+
+    const routes = await screen.findByRole("link", { name: /routes/i });
+    const gateways = await screen.findByRole("link", { name: /gateways/i });
+    await waitFor(() =>
+      expect(listGatewayRoutes.mock.calls.map(([, ns]) => ns)).toContain(
+        "team-b"
+      )
+    );
+    await new Promise((settle) => setTimeout(settle, 50));
+    expect(within(routes).queryByText("1")).toBeNull();
+    expect(within(gateways).queryByText("1")).toBeNull();
+  });
+
+  /**
+   * A token may list one served route kind and not another. The rail dropped
+   * the refused kind and printed the rest as the total, so a kind nobody
+   * could read counted as a kind with no routes, while the same refusal in
+   * one namespace of two blanked the count. A refused kind blanks it too, as
+   * it does on the routes page.
+   */
+  it("gives no count when one served route kind is refused", async () => {
+    detectGatewayApi.mockResolvedValue({
+      installed: true,
+      kinds: [{ kind: "Gateway" }, { kind: "HTTPRoute" }, { kind: "TCPRoute" }],
+    });
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    listGateways.mockResolvedValue([]);
+    listGatewayRoutes.mockImplementation(async (kind: string) => {
+      if (kind === "TCPRoute") {
+        throw new Error("tcproutes is forbidden (code: 403)");
+      }
+      return [routeIn("team-a")];
+    });
+
+    await wrap(<Sidebar />);
+
+    const routes = await screen.findByRole("link", { name: /routes/i });
+    await waitFor(() =>
+      expect(listGatewayRoutes.mock.calls.map(([kind]) => kind)).toContain(
+        "TCPRoute"
+      )
+    );
+    await new Promise((settle) => setTimeout(settle, 50));
+    expect(within(routes).queryByText("1")).toBeNull();
+  });
+
+  /**
+   * The route pages find their kinds through discovery since #275, so the
+   * list reviews are the whole question. Checking a CRD `get` the pages no
+   * longer make marked both rows denied and switched off the route count;
+   * fails if that review comes back, since the mock answers it "refused".
+   */
+  it("keeps Routes and Gateways open and counted for a reader who may list them", async () => {
+    detectGatewayApi.mockResolvedValue({
+      installed: true,
+      kinds: [{ kind: "Gateway" }, { kind: "HTTPRoute" }],
+    });
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    listGateways.mockResolvedValue([]);
+    listGatewayRoutes.mockResolvedValue([routeIn("team-a")]);
+    checkListAccess.mockResolvedValue([
+      { resource: "httproutes", allowed: true },
+      { resource: "gateways", allowed: true },
+    ]);
+
+    await wrap(<Sidebar />);
+
+    const routes = await screen.findByRole("link", { name: /routes/i });
+    await waitFor(() =>
+      expect(within(routes).getByText("1")).toBeInTheDocument()
+    );
+    expect(
+      within(routes).queryByLabelText(/permission to list these/i)
+    ).toBeNull();
+    const gateways = await screen.findByRole("link", { name: /gateways/i });
+    expect(
+      within(gateways).queryByLabelText(/permission to list these/i)
+    ).toBeNull();
+  });
+});

@@ -1,0 +1,253 @@
+/**
+ * Flux's Helm objects: HelmRelease, HelmRepository, HelmChart.
+ *
+ * A Flux-managed release is not in Helm's own storage in the shape the Helm
+ * pages read, so these are where its chart, version and source actually are.
+ */
+
+import type { CrdColumn } from "../kit";
+import { getValueByPath, matchMultiple, orNone, orNotWritten } from "../kit";
+import type { CrdView } from "../registry";
+import { formatDate } from "@/lib/utils";
+
+/**
+ * Status configuration for Flux resources (uses standard conditions)
+ */
+/**
+ * Columns for HelmRelease list
+ */
+const helmReleaseColumns: CrdColumn[] = [
+  {
+    id: "ready",
+    header: "ready",
+    accessor: (resource) => {
+      const conditions = getValueByPath(resource, "status.conditions") as
+        | Array<{ type: string; status: string; reason?: string }>
+        | undefined;
+
+      if (!Array.isArray(conditions)) return "Unknown";
+
+      const readyCondition = conditions.find((c) => c.type === "Ready");
+      if (!readyCondition) return "Unknown";
+
+      if (readyCondition.status === "True") return "True";
+      if (readyCondition.reason === "Progressing") return "Progressing";
+      return "False";
+    },
+    cell: orNone,
+  },
+  {
+    id: "chart",
+    header: "chart",
+    accessor: (resource) => {
+      const chartSpec = getValueByPath(resource, "spec.chart.spec") as
+        | {
+            chart?: string;
+            sourceRef?: { name: string };
+          }
+        | undefined;
+
+      return chartSpec?.chart ?? null;
+    },
+    cell: orNone,
+  },
+  {
+    id: "version",
+    header: "version",
+    accessor: (resource) => {
+      // Try to get installed version from status first
+      const lastAppliedRevision = getValueByPath(
+        resource,
+        "status.lastAppliedRevision"
+      ) as string | undefined;
+      if (lastAppliedRevision) return lastAppliedRevision;
+
+      // Fall back to spec version
+      const chartSpec = getValueByPath(resource, "spec.chart.spec") as
+        | {
+            version?: string;
+          }
+        | undefined;
+
+      return chartSpec?.version ?? "*";
+    },
+    cell: orNone,
+  },
+  {
+    id: "sourceRef",
+    header: "source",
+    accessor: (resource) => {
+      const chartSpec = getValueByPath(resource, "spec.chart.spec") as
+        | {
+            sourceRef?: { kind?: string; name: string };
+          }
+        | undefined;
+
+      if (!chartSpec?.sourceRef) return null;
+      const kind = chartSpec.sourceRef.kind ?? "HelmRepository";
+      return `${kind}/${chartSpec.sourceRef.name}`;
+    },
+    cell: orNone,
+  },
+  {
+    id: "targetNamespace",
+    header: "targetNS",
+    accessor: (resource) => getValueByPath(resource, "spec.targetNamespace"),
+    cell: (value) => String(value ?? "(same)"),
+  },
+  {
+    id: "suspended",
+    header: "suspended",
+    accessor: (resource) => getValueByPath(resource, "spec.suspend") === true,
+    cell: (value) => (value ? "Yes" : "No"),
+  },
+];
+
+/**
+ * Columns for HelmRepository list
+ */
+const helmRepositoryColumns: CrdColumn[] = [
+  {
+    id: "ready",
+    header: "ready",
+    accessor: (resource) => {
+      const conditions = getValueByPath(resource, "status.conditions") as
+        | Array<{ type: string; status: string }>
+        | undefined;
+
+      if (!Array.isArray(conditions)) return "Unknown";
+
+      const readyCondition = conditions.find((c) => c.type === "Ready");
+      return readyCondition?.status === "True" ? "True" : "False";
+    },
+    cell: orNone,
+  },
+  {
+    id: "url",
+    header: "url",
+    accessor: (resource) => getValueByPath(resource, "spec.url"),
+    cell: (value) => {
+      if (!value) return orNone(null);
+      // Truncate long URLs
+      const url = String(value);
+      if (url.length > 50) {
+        return url.substring(0, 47) + "...";
+      }
+      return url;
+    },
+  },
+  {
+    id: "type",
+    header: "type",
+    accessor: (resource) => {
+      const repoType = getValueByPath(resource, "spec.type") as
+        | string
+        | undefined;
+      return repoType ?? "default";
+    },
+    cell: orNone,
+  },
+  {
+    id: "interval",
+    header: "interval",
+    accessor: (resource) => getValueByPath(resource, "spec.interval"),
+    cell: orNone,
+  },
+  {
+    id: "artifact",
+    header: "lastFetched",
+    accessor: (resource) =>
+      getValueByPath(resource, "status.artifact.lastUpdateTime"),
+    cell: (value, t) => formatDate(value) ?? orNotWritten(null, t),
+  },
+];
+
+/**
+ * Columns for HelmChart list
+ */
+const helmChartColumns: CrdColumn[] = [
+  {
+    id: "ready",
+    header: "ready",
+    accessor: (resource) => {
+      const conditions = getValueByPath(resource, "status.conditions") as
+        | Array<{ type: string; status: string }>
+        | undefined;
+
+      if (!Array.isArray(conditions)) return "Unknown";
+
+      const readyCondition = conditions.find((c) => c.type === "Ready");
+      return readyCondition?.status === "True" ? "True" : "False";
+    },
+    cell: orNone,
+  },
+  {
+    id: "chart",
+    header: "chart",
+    accessor: (resource) => getValueByPath(resource, "spec.chart"),
+    cell: orNone,
+  },
+  {
+    id: "version",
+    header: "version",
+    accessor: (resource) => {
+      // Try artifact version first (actual fetched version)
+      const artifactRevision = getValueByPath(
+        resource,
+        "status.artifact.revision"
+      ) as string | undefined;
+      if (artifactRevision) return artifactRevision;
+
+      // Fall back to spec version constraint
+      return getValueByPath(resource, "spec.version") ?? "*";
+    },
+    cell: orNone,
+  },
+  {
+    id: "sourceRef",
+    header: "source",
+    accessor: (resource) => {
+      const sourceRef = getValueByPath(resource, "spec.sourceRef") as
+        | {
+            kind?: string;
+            name: string;
+          }
+        | undefined;
+
+      if (!sourceRef) return null;
+      return `${sourceRef.kind ?? "HelmRepository"}/${sourceRef.name}`;
+    },
+    cell: orNone,
+  },
+  {
+    id: "interval",
+    header: "interval",
+    accessor: (resource) => getValueByPath(resource, "spec.interval"),
+    cell: orNone,
+  },
+];
+
+/**
+ * Flux owns all of `helm.toolkit.fluxcd.io`, and only the Helm half of
+ * `source.toolkit.fluxcd.io` — the Git and OCI sources in that group are a
+ * different shape and get the generic view until somebody writes them.
+ */
+export const crd: CrdView = {
+  matches: matchMultiple([
+    ["helm.toolkit.fluxcd.io"],
+    ["source.toolkit.fluxcd.io", "HelmRepository"],
+    ["source.toolkit.fluxcd.io", "HelmChart"],
+  ]),
+  columnsFor: (kind) => {
+    switch (kind.toLowerCase()) {
+      case "helmrelease":
+        return helmReleaseColumns;
+      case "helmrepository":
+        return helmRepositoryColumns;
+      case "helmchart":
+        return helmChartColumns;
+      default:
+        return helmReleaseColumns;
+    }
+  },
+};

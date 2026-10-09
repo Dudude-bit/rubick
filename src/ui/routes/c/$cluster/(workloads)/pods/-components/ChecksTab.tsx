@@ -1,0 +1,421 @@
+import { useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { Play, SquareTerminal } from "lucide-react";
+
+import { ReasonTip } from "@/components/object/detail-blocks";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Section, SectionHeader } from "@/components/ui/section";
+import { noteDenied, usePodDenied } from "@/lib/access";
+import { commands } from "@/lib/commands";
+import {
+  DEFAULT_CHECK_IMAGE,
+  parseHostPort,
+  verdictOf,
+  type Verdict,
+} from "@/lib/checks";
+import { offeredContainers, whyNoShell } from "@/lib/container-sequence";
+import { errorToShow } from "@/lib/error-utils";
+import { cn } from "@/lib/utils";
+import type { Check, CheckOutcome, PodInfo } from "@/generated/types";
+import { useT, type T } from "@/i18n/useT";
+
+type Kind = "dns" | "tcp";
+
+interface Run {
+  kind: Kind;
+  check: Check;
+  outcome: CheckOutcome;
+}
+
+/**
+ * Two questions a person asks about a pod that is not doing what it should,
+ * asked from the pod's own network and never from this machine's: does the
+ * name resolve, does the port answer.
+ *
+ * Where the image has a tool for it the exec goes into the pod's own
+ * container. Where it has none, the same exec goes into a throwaway copy of
+ * the pod that shares its namespace, labels, DNS policy and service account,
+ * and the answer says so: a copy is not the pod, and it is deleted the moment
+ * the answer is in.
+ */
+export function ChecksTab({ pod }: { pod: PodInfo }) {
+  const t = useT();
+  const containers = offeredContainers(pod);
+  const [container, setContainer] = useState(
+    () =>
+      containers.find((c) => whyNoShell(c, t) === null)?.name ??
+      containers[0]?.name ??
+      ""
+  );
+  const [name, setName] = useState("");
+  const [address, setAddress] = useState("");
+  const [image, setImage] = useState(DEFAULT_CHECK_IMAGE);
+  const [runs, setRuns] = useState<Run[]>([]);
+  const denied = usePodDenied(pod.namespace);
+  // A copy is a new pod and then an exec into it; the pod's own container is
+  // only the exec.
+  const copyDenied = denied.copy ?? denied.shell;
+
+  const run = useMutation({
+    mutationFn: async ({
+      kind,
+      check,
+      copy,
+    }: {
+      kind: Kind;
+      check: Check;
+      copy: boolean;
+    }) => {
+      const outcome = await commands.runPodCheck(
+        pod.name,
+        pod.namespace,
+        container,
+        check,
+        copy ? { image } : null
+      );
+      return { kind, check, outcome };
+    },
+    onSuccess: (done) => setRuns((previous) => [done, ...previous].slice(0, 8)),
+    onError: (error, { copy }) => {
+      if (!copy)
+        noteDenied(
+          "create",
+          {
+            group: "",
+            resource: "pods",
+            namespace: pod.namespace,
+            subresource: "exec",
+          },
+          error
+        );
+    },
+  });
+
+  const hostPort = parseHostPort(address);
+  const busy = run.isPending;
+  // The judgement the chooser shows, asked about the container that is
+  // actually selected. The chooser only renders for a pod with more than one
+  // container, so on a one-container pod — the crash-looping one a reader is
+  // most likely to open this on — nothing said the exec could not land, and
+  // Run offered it anyway. A container that cannot take an exec cannot
+  // answer a check, and the copy is the route that still can.
+  const why = whyNoShell(
+    containers.find((c) => c.name === container) ?? containers[0],
+    t
+  );
+  const fromCopy = why !== null;
+  const runDenied = fromCopy ? copyDenied : denied.shell;
+  const does =
+    why !== null
+      ? t("checks", "containerCannotAnswer", {
+          container: container || "?",
+          why,
+        })
+      : t("checks", "runsAsExec", { container: container || "?" });
+
+  return (
+    <div className="flex flex-col gap-[22px]">
+      <Section>
+        <SectionHeader
+          title={t("checks", "title")}
+          description={t("checks", "lede")}
+          actions={
+            containers.length > 1 ? (
+              <Select value={container} onValueChange={setContainer}>
+                <SelectTrigger
+                  aria-label={t("checks", "fromContainer")}
+                  className="h-7 w-44 text-xs"
+                >
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {containers.map((c) => {
+                    // The same judgement the shell chooser and the peek
+                    // both read. A container that cannot take an exec
+                    // cannot answer a check either, and offering it
+                    // silently sends the reader at a run that will fail
+                    // with the runtime's words instead of ours.
+                    const why = whyNoShell(c, t);
+                    return (
+                      <SelectItem
+                        key={c.name}
+                        value={c.name}
+                        disabled={!!why}
+                        title={why ?? undefined}
+                      >
+                        {why ? `${c.name}: ${why}` : c.name}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            ) : null
+          }
+        />
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!name.trim() || runDenied) return;
+            run.mutate({
+              kind: "dns",
+              check: { kind: "dns", name: name.trim() },
+              copy: fromCopy,
+            });
+          }}
+        >
+          <label
+            className="w-36 shrink-0 whitespace-nowrap text-xs text-fg-mut"
+            htmlFor="check-dns"
+          >
+            {t("checks", "dns")}
+          </label>
+          <Input
+            id="check-dns"
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="postgres.shop.svc.cluster.local"
+            className="h-7 max-w-md font-mono text-xs"
+          />
+          <RunButton
+            reason={runDenied}
+            does={does}
+            disabled={busy || !name.trim()}
+          />
+        </form>
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!hostPort || runDenied) return;
+            run.mutate({
+              kind: "tcp",
+              check: { kind: "tcp", host: hostPort.host, port: hostPort.port },
+              copy: fromCopy,
+            });
+          }}
+        >
+          <label
+            className="w-36 shrink-0 whitespace-nowrap text-xs text-fg-mut"
+            htmlFor="check-tcp"
+          >
+            {t("checks", "tcp")}
+          </label>
+          <Input
+            id="check-tcp"
+            value={address}
+            onChange={(event) => setAddress(event.target.value)}
+            placeholder="postgres:5432"
+            className="h-7 max-w-md font-mono text-xs"
+          />
+          <RunButton
+            reason={runDenied}
+            does={does}
+            disabled={busy || !hostPort}
+          />
+        </form>
+        {why !== null ? (
+          <div className="flex items-center gap-2">
+            <p className="text-xs text-warn">{does}</p>
+            <Input
+              aria-label={t("checks", "copyImage")}
+              value={image}
+              onChange={(event) => setImage(event.target.value)}
+              className="h-7 w-56 font-mono text-xs"
+            />
+          </div>
+        ) : (
+          <p className="flex items-center gap-1.5 text-xs text-fg-mut">
+            <SquareTerminal aria-hidden="true" className="h-3 w-3 flex-none" />
+            {does}
+          </p>
+        )}
+        {busy ? (
+          <p className="text-xs text-fg-fnt" role="status">
+            {t("checks", "running")}
+          </p>
+        ) : null}
+        {run.error ? (
+          <p className="text-xs text-err" role="alert">
+            {t("checks", "failed", { error: errorToShow(run.error) })}
+          </p>
+        ) : null}
+      </Section>
+
+      {runs.length > 0 ? (
+        <Section>
+          <SectionHeader title={t("checks", "answers")} />
+          <ul className="flex flex-col gap-2" data-testid="check-answers">
+            {runs.map((done, index) => (
+              <Answer
+                key={index}
+                run={done}
+                image={image}
+                onImage={setImage}
+                busy={busy}
+                copyDenied={copyDenied}
+                onCopy={() =>
+                  run.mutate({ kind: done.kind, check: done.check, copy: true })
+                }
+              />
+            ))}
+          </ul>
+        </Section>
+      ) : null}
+    </div>
+  );
+}
+
+/** Run, greyed with the can-i question where the route it takes is refused, and saying that route otherwise. */
+function RunButton({
+  reason,
+  does,
+  disabled,
+}: {
+  reason: string | undefined;
+  does: string;
+  disabled: boolean;
+}) {
+  const t = useT();
+  return (
+    <ReasonTip reason={reason ?? does}>
+      <Button
+        size="sm"
+        type="submit"
+        disabled={!reason && disabled}
+        aria-disabled={reason ? true : undefined}
+        className={cn(reason && "cursor-default opacity-40")}
+      >
+        <Play aria-hidden="true" className="mr-1.5 h-3 w-3" />
+        {t("checks", "run")}
+      </Button>
+    </ReasonTip>
+  );
+}
+
+function subjectOf(check: Check): string {
+  return check.kind === "dns" ? check.name : `${check.host}:${check.port}`;
+}
+
+function Answer({
+  run,
+  image,
+  onImage,
+  busy,
+  copyDenied,
+  onCopy,
+}: {
+  run: Run;
+  image: string;
+  onImage: (image: string) => void;
+  busy: boolean;
+  copyDenied: string | undefined;
+  onCopy: () => void;
+}) {
+  const t = useT();
+  const verdict = verdictOf(run.kind, run.outcome);
+  const subject = subjectOf(run.check);
+  // Three states, three tones. `notResolved` and `refused` are findings
+  // about the cluster and are worth the warning colour; `noTool` and
+  // `unanswered` are findings about the attempt — the file says so where
+  // the verdict is defined — and amber beside "the check ended without
+  // saying how it went" reads as the cluster having a problem, which is the
+  // opposite of what the sentence says.
+  const tone: Record<Verdict["says"], string> = {
+    resolved: "text-ok",
+    connected: "text-ok",
+    notResolved: "text-warn",
+    refused: "text-warn",
+    noTool: "text-fg-mut",
+    unanswered: "text-fg-mut",
+  };
+
+  return (
+    <li className="rounded border border-hair px-3 py-2 text-xs">
+      <p className={`font-medium ${tone[verdict.says]}`}>
+        {sentence(verdict, subject, t)}
+      </p>
+      <p className="mt-0.5 text-[11px] text-fg-fnt">
+        {run.outcome.ranIn === "copy" && run.outcome.copy
+          ? t("checks", "ranInCopy", {
+              image: run.outcome.copy.image,
+              pod: run.outcome.copy.pod,
+              deleted: run.outcome.copy.deleted
+                ? t("checks", "copyDeleted")
+                : t("checks", "copyNotDeleted"),
+            })
+          : t("checks", "ranInContainer")}
+        {run.outcome.answeredWith
+          ? ` · ${t("checks", "answeredWith", { tool: run.outcome.answeredWith })}`
+          : null}
+        {` · ${run.outcome.elapsedMs} ms`}
+      </p>
+      {verdict.says === "noTool" ? (
+        <div className="mt-2 flex items-center gap-2">
+          <Input
+            aria-label={t("checks", "copyImage")}
+            value={image}
+            onChange={(event) => onImage(event.target.value)}
+            className="h-7 w-56 font-mono text-xs"
+          />
+          <ReasonTip reason={copyDenied}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => !copyDenied && onCopy()}
+              disabled={!copyDenied && busy}
+              aria-disabled={copyDenied ? true : undefined}
+              className={cn(copyDenied && "cursor-default opacity-40")}
+            >
+              {t("checks", "runFromCopy")}
+            </Button>
+          </ReasonTip>
+          <span className="text-[11px] text-fg-fnt">
+            {t("checks", "copyNote")}
+          </span>
+        </div>
+      ) : null}
+      {run.outcome.stdout || run.outcome.stderr ? (
+        <details className="mt-1.5">
+          <summary className="cursor-pointer text-[11px] text-fg-fnt">
+            {t("checks", "whatItSaid")}
+          </summary>
+          <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap font-mono text-[11px] text-fg-mut">
+            {run.outcome.stdout}
+            {run.outcome.stderr ? `\n${run.outcome.stderr}` : ""}
+          </pre>
+        </details>
+      ) : null}
+    </li>
+  );
+}
+
+function sentence(verdict: Verdict, subject: string, t: T): string {
+  switch (verdict.says) {
+    case "resolved":
+      return t("checks", "resolved", {
+        name: subject,
+        addresses: verdict.addresses.join(", "),
+      });
+    case "notResolved":
+      return t("checks", "notResolved", { name: subject });
+    case "connected":
+      return t("checks", "connected", { address: subject });
+    case "refused":
+      return t("checks", "refused", { address: subject });
+    case "noTool":
+      return t("checks", "noTool", { tried: verdict.tried.join(", ") });
+    case "unanswered":
+      return verdict.tool
+        ? t("checks", "unansweredBy", { tool: verdict.tool })
+        : t("checks", "unanswered");
+  }
+}

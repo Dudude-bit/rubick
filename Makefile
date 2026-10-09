@@ -31,24 +31,25 @@ gen-entities-tauri:
 		echo "error: cargo-expand not found — run 'mise install', or 'cargo install cargo-expand' (needs a nightly toolchain)"; \
 		exit 1; \
 	}
-	@before=$$(grep -c '^export async function' src/generated/commands.ts 2>/dev/null || echo 0); \
+	@before=$$(grep -c '^export async function' src/ui/generated/commands.ts 2>/dev/null || echo 0); \
 	$(MISE_EXEC) tauri-ts-generator generate --verbose || exit 1; \
-	after=$$(grep -c '^export async function' src/generated/commands.ts); \
+	after=$$(grep -c '^export async function' src/ui/generated/commands.ts); \
 	removed=$${REMOVED:-0}; \
 	expected=$$((before - removed)); \
 	if [ "$$after" -lt "$$expected" ]; then \
 		echo "error: generated command count is $$after, expected at least $$expected ($$before minus REMOVED=$$removed)."; \
-		echo "       The output is missing commands — discard it with 'git checkout -- src/generated/'."; \
+		echo "       The output is missing commands — discard it with 'git checkout -- src/ui/generated/'."; \
 		echo "       Deleting commands on purpose? Say how many: make gen-entities-tauri REMOVED=n"; \
 		exit 1; \
 	fi; \
 	echo "generated $$after commands"
+	@bun scripts/retarget-invoke.mjs
 	@# The generator writes one long line per import list and per signature;
 	@# the committed files are formatted. Without this every regeneration
 	@# reads as ~900 changed lines and the one real change hides in them.
-	@bunx prettier --write src/generated/commands.ts src/generated/types.ts >/dev/null
+	@bunx vp fmt src/ui/generated/commands.ts src/ui/generated/types.ts >/dev/null
 
-# Regenerate every platform's icon from src-tauri/icons/base.png.
+# Regenerate every platform's icon from src/tauri/icons/base.png.
 #
 # `base.png` is drawn by hand and committed — edit that, then run this. There
 # used to be a `scripts/gen_icon.py` on the line above that generated it, and
@@ -57,7 +58,7 @@ gen-entities-tauri:
 # replaced the real icon with the old one and rebuilt all sixteen sizes from
 # it.
 gen-icons:
-	$(MISE_EXEC) bun run tauri icon src-tauri/icons/base.png
+	$(MISE_EXEC) bun run tauri icon src/tauri/icons/base.png
 
 # Run Tauri development server: vite HMR for the frontend, incremental
 # debug builds for Rust. The CLI comes from devDependencies so this works
@@ -96,8 +97,8 @@ clean:
 
 # Apply Kubernetes test manifests (CRDs first).
 apply-test-manifests:
-	kubectl apply -f test-manifests/k8s-gui-crds.yaml
-	kubectl apply -f test-manifests/k8s-gui-all.yaml
+	kubectl apply -f tests/manifests/k8s-gui-crds.yaml
+	kubectl apply -f tests/manifests/k8s-gui-all.yaml
 
 # A 10 000-pod cluster to measure against; docs/perf.md says how.
 PERF_RATE ?= 100

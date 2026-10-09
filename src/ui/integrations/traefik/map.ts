@@ -1,0 +1,215 @@
+/**
+ * Traefik's routing, as the three columns a request crosses.
+ *
+ * Entry point → host → service, and nothing between them: the middleware
+ * chain is per-path rather than per-host, and a fourth column carrying "2
+ * middlewares" for a host with twenty paths would be a number about nothing.
+ * The chain under the host row on the Routes tab is where a single path is
+ * read in full; this is where the *shape* is.
+ *
+ * The pods are not a column either. A Service and what it publishes are one
+ * fact — "`api` in `shop`, 0 ready" is the sentence, and splitting it across
+ * a line makes the reader join two boxes to read one thing — so the count
+ * rides on the Service node as its tag.
+ */
+
+import type { T } from "@/i18n/useT";
+
+import { ResourceType } from "@/lib/resource-registry";
+import { hostsBrokenOfTotal } from "@/lib/two-counts";
+
+import { hostFilterLink, hostSeverity, hostTlsTag } from "../ingress";
+import type { MapEdge, MapNode, MapTone, RoutingMapData } from "../routing-map";
+import {
+  backingOf,
+  boundEntryPoints,
+  type HostGroup,
+  type TraefikSources,
+} from "./model";
+
+const hostId = (group: HostGroup, index: number) =>
+  `host/${group.host ?? `catch-all-${index}`}`;
+
+/** Where clicking a host goes: its own routes, filtered to it. */
+function toneOf(group: HostGroup): MapTone {
+  return hostSeverity(group) ?? "ok";
+}
+
+/**
+ * Where the controller says this host is reachable.
+ *
+ * Read off `status.loadBalancer.ingress` on the Ingresses this group came
+ * from — already in the list the page fetched, so it costs nothing. An
+ * IngressRoute contributes none: Traefik's CRD carries no status address at
+ * all, and inventing one from the proxy's Service would be this page guessing
+ * at something the object does not say.
+ */
+function publishedAt(group: HostGroup, sources: TraefikSources): string[] {
+  const names = new Set(
+    group.routes
+      .filter((route) => route.source.kind === "Ingress")
+      .map((route) => `${route.source.namespace}/${route.source.name}`)
+  );
+  return [
+    ...new Set(
+      sources.ingresses
+        .filter((ingress) => names.has(`${ingress.namespace}/${ingress.name}`))
+        .flatMap((ingress) => ingress.loadBalancerIps)
+    ),
+  ];
+}
+
+export function routingMap(
+  groups: HostGroup[],
+  sources: TraefikSources,
+  t: T
+): RoutingMapData {
+  const entryPoints = new Map<string, MapNode>();
+  const services = new Map<string, MapNode>();
+  const edges: MapEdge[] = [];
+  const seen = new Set<string>();
+
+  const link = (from: string, to: string, tone: MapTone) => {
+    const key = `${from}->${to}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    edges.push({ from, to, tone });
+  };
+
+  const hosts = groups.map((group, index): MapNode => {
+    const id = hostId(group, index);
+    const tone = toneOf(group);
+
+    for (const route of group.routes) {
+      for (const entry of boundEntryPoints(route, sources.entryPoints)) {
+        const entryId = `entry/${entry.name}`;
+        if (!entryPoints.has(entryId)) {
+          entryPoints.set(entryId, {
+            id: entryId,
+            label: entry.name,
+            sub: [entry.address, entry.tls ? "TLS" : null]
+              .filter(Boolean)
+              .join(" · "),
+            tone: "mute",
+          });
+        }
+        link(entryId, id, tone);
+      }
+
+      // Only a real Service gets a node. Traefik's own internals have no
+      // endpoints by design and an API-object backend cannot be seen into;
+      // drawing either as a backend that publishes nothing would be the map
+      // inventing an outage out of a supported configuration.
+      const service = route.service;
+      if (!service?.kubernetes) continue;
+      const serviceId = `service/${service.namespace}/${service.name}`;
+      const backing = backingOf(route, sources);
+      if (!services.has(serviceId)) {
+        services.set(serviceId, {
+          id: serviceId,
+          label: service.name,
+          sub: `${service.namespace}${service.port ? ` · :${service.port}` : ""}`,
+          tone: !backing.known ? "unknown" : backing.stop ? "err" : "ok",
+          object: {
+            kind: ResourceType.Service,
+            name: service.name,
+            namespace: service.namespace,
+          },
+          tag: !backing.known
+            ? backing.error
+              ? { text: t("empty", "endpointsUnread"), tone: "unknown" }
+              : undefined
+            : backing.stop
+              ? {
+                  text: t("count", "nReady", { n: 0 }),
+                  tone: "err",
+                }
+              : {
+                  text: t("count", "nReady", {
+                    n: backing.ready + backing.draining,
+                  }),
+                  tone: backing.ready === 0 ? "warn" : "mute",
+                },
+        });
+      }
+      link(
+        id,
+        serviceId,
+        !backing.known
+          ? "unknown"
+          : backing.stop
+            ? "err"
+            : tone === "err"
+              ? "warn"
+              : "ok"
+      );
+    }
+
+    const at = publishedAt(group, sources);
+    return {
+      id,
+      label: group.host ?? t("action", "anyHost"),
+      // The address the hostname has to resolve to, beside the path count.
+      // Without it the column is a list of names somebody still has to go and
+      // look up one at a time, which is the errand a map is supposed to end.
+      sub: [
+        t("count", "paths", { n: group.routes.length }),
+        at.length > 0 ? at.join(", ") : null,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      tone,
+      to: hostFilterLink(group.host),
+      tag: hostTlsTag(group.tls, tone === "err", t),
+    };
+  });
+
+  return {
+    columns: [
+      {
+        label: t("readings", "mapEntryPoint"),
+        nodes: [...entryPoints.values()],
+      },
+      { label: t("columns", "host"), nodes: hosts },
+      { label: t("columns", "service"), nodes: [...services.values()] },
+    ],
+    edges,
+  };
+}
+
+/**
+ * The line over the map. The unchecked count goes beside trouble too, as the
+ * routes tab says it: a count of broken hosts over hosts nobody could check
+ * reads as the rest being fine.
+ */
+export function mapSummary(groups: HostGroup[], t: T): string {
+  const broken = groups.filter((group) => group.worst === "err").length;
+  const worthALook = groups.filter((group) => group.worst === "warn").length;
+  const unchecked = groups.filter(
+    (group) => hostSeverity(group) === "unknown"
+  ).length;
+  const parts =
+    broken > 0
+      ? [
+          hostsBrokenOfTotal(broken, groups.length, t),
+          ...(worthALook > 0
+            ? [t("count", "worthALook", { n: worthALook })]
+            : []),
+        ]
+      : worthALook > 0
+        ? [
+            t("empty", "nothingBroken"),
+            t("count", "worthALookOfTotal", {
+              n: worthALook,
+              total: groups.length,
+            }),
+          ]
+        : unchecked === 0
+          ? [t("count", "hostsNoneWithProblem", { n: groups.length })]
+          : [];
+  if (unchecked > 0)
+    parts.push(
+      t("count", "notCheckedOfTotal", { n: unchecked, total: groups.length })
+    );
+  return parts.join(" · ");
+}

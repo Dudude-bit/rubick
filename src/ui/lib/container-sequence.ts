@@ -1,0 +1,542 @@
+import type { T } from "@/i18n/useT";
+import type {
+  ContainerInfo,
+  ContainerPhase,
+  ContainerPortInfo,
+  DeploymentContainerInfo,
+  TerminationInfo,
+} from "@/generated/types";
+import {
+  containerStatus,
+  lastTermination,
+  type ContainerStatus,
+} from "@/lib/pod-status";
+import { formatDuration } from "@/lib/utils";
+
+/**
+ * A pod's containers as the sequence they actually are.
+ *
+ * `phase` alone cannot say that a waiting init container has neither
+ * failed nor started — it has not been given a turn, and the only thing
+ * that says so is its *position*: the one before it has not finished.
+ * Hence a layer between the data and the rows rather than inside them.
+ */
+
+/** The silhouette a step gets on the rail. */
+export type StepMark = "done" | "failed" | "running" | "queued";
+
+/**
+ * The word beside a container's name, where it changes what the name means.
+ * An app container gets none: it is what a reader assumes a container is.
+ */
+export const PHASE_LABEL: Partial<Record<ContainerPhase, string>> = {
+  init: "init",
+  sidecar: "sidecar",
+};
+
+export interface ContainerStep {
+  container: ContainerInfo;
+  mark: StepMark;
+  status: ContainerStatus;
+  /** The one sentence the state on its own cannot say, or nothing. */
+  note: string | null;
+  /** The exit a `{when}` left in the note is the age of, drawn at render on the clock. */
+  exit: TerminationInfo | null;
+}
+
+export interface ContainerGroup {
+  phase: ContainerPhase;
+  title: string;
+  /** What the group is, for readers who have never met an init container. */
+  caption: string;
+  /** In run order for `init`, in spec order for the rest. */
+  steps: ContainerStep[];
+}
+
+/** The heading a phase gets, the same word for a run and a declaration. */
+const GROUP_TITLE: Record<ContainerPhase, string> = {
+  init: "Init",
+  sidecar: "Sidecars",
+  app: "Containers",
+};
+
+/** A container, or a declaration of one — anything that knows when it runs. */
+interface Phased {
+  phase: ContainerPhase;
+}
+
+/**
+ * The two lists a pod object and a workload template both carry.
+ *
+ * `initContainers` is a separate field in the API object, and everything
+ * already reading `containers` means app containers by it. Taking this
+ * pair rather than an array is what makes `podReadiness(pod.containers)`
+ * — and every other form of the bug — a type error, not a convention.
+ */
+export interface ContainerLists<T extends Phased> {
+  initContainers?: T[];
+  containers: T[];
+}
+
+export type PodContainerLists = ContainerLists<ContainerInfo>;
+/** What readiness is decided from; a `ContainerInfo` and a list row's container both carry it. */
+export type ReadinessContainer = Pick<
+  ContainerInfo,
+  "ready" | "started" | "phase" | "state"
+>;
+export type ReadinessLists = ContainerLists<ReadinessContainer>;
+/** A Deployment, StatefulSet, DaemonSet, Job or CronJob's pod template. */
+export type TemplateContainerLists = ContainerLists<DeploymentContainerInfo>;
+
+/**
+ * Both lists, in the order the kubelet runs them.
+ *
+ * A caller handed only `.containers` is the bug this piece exists to fix
+ * — on a pod and on the five kinds sharing one template type alike.
+ */
+export function declaredContainers<T extends Phased>(
+  lists: ContainerLists<T>
+): T[] {
+  return [...(lists.initContainers ?? []), ...lists.containers];
+}
+
+function splitByPhase<T extends Phased>(containers: readonly T[]) {
+  return {
+    init: containers.filter((c) => c.phase === "init"),
+    sidecars: containers.filter((c) => c.phase === "sidecar"),
+    app: containers.filter((c) => c.phase === "app"),
+  };
+}
+
+/** Terminated cleanly — the only outcome that lets the sequence advance. */
+export function containerSucceeded(container: ReadinessContainer): boolean {
+  const { state } = container;
+  return (
+    state.type === "terminated" &&
+    state.termination.exitCode === 0 &&
+    state.termination.signal === null
+  );
+}
+
+/**
+ * Whether the last exit's output is in the run before the current one. A
+ * container that is *waiting* is backing off from a death whose output
+ * belongs to the run before this one: the current run has printed nothing
+ * yet and may not have started at all. A container that is terminated is
+ * still sitting on the output that killed it, and the run before it may
+ * already be gone from the node.
+ */
+export function readsPreviousRun(container: ContainerInfo): boolean {
+  return (
+    container.lastTerminated !== null && container.state.type !== "terminated"
+  );
+}
+
+export function containerFailed(container: ContainerInfo): boolean {
+  const { state } = container;
+  if (state.type === "terminated") return !containerSucceeded(container);
+  // A crash loop is a *waiting* state; the death it is backing off from
+  // is only in `lastTerminated`, which is also the whole reason the
+  // Containers tab could show "Waiting" for a container that has died
+  // nine times.
+  return state.type === "waiting" && container.lastTerminated !== null;
+}
+
+function markOf(container: ContainerInfo): StepMark {
+  if (containerSucceeded(container)) return "done";
+  if (containerFailed(container)) return "failed";
+  if (container.state.type === "running") return "running";
+  return "queued";
+}
+
+/** Every container the pod ran, in the order it ran them. */
+export function podContainers(pod: PodContainerLists): ContainerInfo[] {
+  return declaredContainers(pod);
+}
+
+/**
+ * Every container the pod ran, in the order a reader is asked to pick one.
+ *
+ * Run order and pick order are different questions and this is the second.
+ * A surface that offers all of them — including the stopped ones, which is
+ * the point of offering them — still must not lead with the mesh proxy: a
+ * strip built on run order defaulted to `istio-proxy`, because a sidecar is
+ * an init container and init containers run first.
+ */
+export function offeredContainers(pod: PodContainerLists): ContainerInfo[] {
+  return podContainers(pod).sort(byPhase);
+}
+
+/**
+ * App containers first, then sidecars, then the rest.
+ *
+ * Run order answers "what happened"; this order answers "which one do you
+ * mean", where the container a reader wants offered first is their own,
+ * not the mesh proxy injected into their pod without them asking.
+ */
+const PHASE_ORDER: Record<ContainerPhase, number> = {
+  app: 0,
+  sidecar: 1,
+  init: 2,
+};
+
+function byPhase(a: ContainerInfo, b: ContainerInfo): number {
+  return PHASE_ORDER[a.phase] - PHASE_ORDER[b.phase];
+}
+
+/**
+ * The containers meant to be up for as long as the pod is — the set
+ * kubectl means by `READY`, and the spine of every helper under it.
+ *
+ * App containers and sidecars, nothing else: a sidecar is an init
+ * container with `restartPolicy: Always`, so it starts during init and
+ * keeps running beside the app. An ordinary init container has exited by
+ * the time anyone is looking, so counting it as part of the pod,
+ * forwarding to a port it declared, or offering it as a debug target all
+ * describe a process that is not there.
+ */
+export function lifetimeContainers<T extends ReadinessContainer>(
+  pod: ContainerLists<T>
+): T[] {
+  return [
+    ...pod.containers,
+    ...(pod.initContainers ?? []).filter((c) => c.phase === "sidecar"),
+  ];
+}
+
+export interface PodReadiness {
+  ready: number;
+  total: number;
+  /** What decides whether the tally is worth a warning colour. */
+  allReady: boolean;
+}
+
+/**
+ * `2/2` — kubectl's READY column, derived the way kubectl derives it.
+ *
+ * Ported from `printPod` in `pkg/printers/internalversion/printers.go`,
+ * which is also where `pod_display.rs` gets the status beside it. Two
+ * rules a naive tally gets backwards, both biting on every meshed pod:
+ *
+ * - A restartable init container — a sidecar — counts in *both* halves.
+ *   `sidecar-demo` is one app container plus one sidecar and kubectl
+ *   reports it `2/2`, not `1/1` and not `2/3`.
+ * - An ordinary init container counts in neither: the kubelet leaves
+ *   `ready: true` on one that exited 0, so
+ *   `[...init, ...app].filter(c => c.ready)` reads `3/3` on a pod
+ *   kubectl calls `2/2`.
+ *
+ * The halves use different predicates because kubectl uses different
+ * predicates: an app container is `Ready && State.Running`, a sidecar is
+ * `Started && Ready`. `started` is the kubelet's startup-probe verdict
+ * and its own field, which is why the walk below reads it rather than
+ * standing a running state in for it.
+ */
+export function podReadiness(pod: ReadinessLists): PodReadiness {
+  const total = lifetimeContainers(pod).length;
+  const ready =
+    pod.containers.filter((c) => c.ready && c.state.type === "running").length +
+    startedSidecars(pod).length;
+  return { ready, total, allReady: ready === total };
+}
+
+/**
+ * The sidecars kubectl reaches before it gives up on the init sequence.
+ *
+ * `printPod` walks `initContainerStatuses` from the front and stops at
+ * the first entry that neither exited 0 nor is a started sidecar — so a
+ * sidecar declared *after* an init container that is still going has not
+ * been reached, and does not count however ready it looks. Nothing on the
+ * container itself says that; it is the position, exactly as it is in the
+ * sequence UI.
+ */
+function startedSidecars<T extends ReadinessContainer>(
+  pod: ContainerLists<T>
+): T[] {
+  const reached: T[] = [];
+  for (const container of pod.initContainers ?? []) {
+    if (containerSucceeded(container)) continue;
+    if (container.phase !== "sidecar" || !container.started) break;
+    if (container.ready) reached.push(container);
+  }
+  return reached;
+}
+
+export interface PodPort {
+  container: ContainerInfo;
+  port: ContainerPortInfo;
+}
+
+/**
+ * Every port something in this pod could actually be listening on.
+ *
+ * A sidecar's port is the proxy port on a meshed pod, which is the one a
+ * forward is usually aimed at — so it sits beside the app's rather than
+ * in a section of its own, but not first: the port a dialog fills in by
+ * default should be the one the reader's own container declared.
+ */
+export function podPorts(pod: PodContainerLists): PodPort[] {
+  return lifetimeContainers(pod)
+    .sort(byPhase)
+    .flatMap((container) =>
+      container.ports.map((port) => ({ container, port }))
+    );
+}
+
+/** Waiting reasons that mean "not yet", rather than "no". */
+const NOT_STARTED = new Set([
+  "podinitializing",
+  "containercreating",
+  "creating",
+]);
+
+/**
+ * Why a shell cannot attach to this container, or nothing if it can — the
+ * one judgement about attachability in the app.
+ *
+ * Decided by state, not by which list the container arrived in: a shell
+ * needs a live process on the other end, so a running sidecar takes one
+ * exactly as an app container does and a finished init container takes
+ * one from nobody.
+ *
+ * A reason rather than a boolean, because the Shell chooser keeps
+ * unattachable containers on the list, struck out and carrying it: the
+ * answer to "why can I not shell into `prepare`" is a fact about
+ * `prepare`, not an absence the reader has to interpret.
+ */
+export function whyNoShell(container: ContainerInfo, t: T): string | null {
+  const { state } = container;
+  if (state.type === "running") return null;
+  if (state.type === "terminated") {
+    return state.termination.exitCode === 0
+      ? t("readings", "shellFinished")
+      : t("readings", "shellExited", { code: state.termination.exitCode });
+  }
+  if (state.type === "waiting") {
+    const reason = state.reason ?? "";
+    if (NOT_STARTED.has(reason.toLowerCase()))
+      return t("readings", "shellNotStarted");
+    if (container.lastTerminated) return t("readings", "shellBetweenRestarts");
+    return reason
+      ? t("readings", "shellNotRunningWhy", { reason })
+      : t("readings", "shellNotRunning");
+  }
+  return t("readings", "shellStateUnknown");
+}
+
+/**
+ * The containers a shell could attach to right now, best first.
+ *
+ * Not `lifetimeContainers`: an init container that is running at this
+ * instant genuinely can take a shell, and during a long migration that is
+ * the only shell in the pod worth having. The set is about what is alive
+ * now, which is why it is `whyNoShell` that decides it and not `phase`.
+ */
+export function shellTargets(pod: PodContainerLists): ContainerInfo[] {
+  // The reason is discarded — only its absence decides membership — so this
+  // asks in no language rather than making every caller supply one.
+  const noWords: T = () => "";
+  return offeredContainers(pod).filter((c) => whyNoShell(c, noWords) === null);
+}
+
+/** "4s", from the two stamps the kubelet writes on a finished run. */
+export function runDuration(
+  started: string | null,
+  finished: string | null
+): string | null {
+  if (!started || !finished) return null;
+  const from = Date.parse(started);
+  const to = Date.parse(finished);
+  if (Number.isNaN(from) || Number.isNaN(to) || to < from) return null;
+  return formatDuration((to - from) / 1000);
+}
+
+/** An exit the kubelet stamped, which a note can say the age of. */
+function dated(
+  termination: TerminationInfo | null
+): termination is TerminationInfo {
+  return !!termination?.finishedAt;
+}
+
+/** The exit a failed or finished step's note dates, where it has one. */
+function noteExit(
+  container: ContainerInfo,
+  mark: StepMark
+): TerminationInfo | null {
+  const dates =
+    mark === "failed" || (mark === "done" && container.phase !== "app");
+  const exit = dates ? lastTermination(container) : null;
+  return dated(exit) ? exit : null;
+}
+
+function noteFor(
+  container: ContainerInfo,
+  mark: StepMark,
+  /** The init container the sequence is currently stuck on, if any. */
+  blockedBy: string | null,
+  t: T
+): string | null {
+  const phase = container.phase;
+
+  if (mark === "failed") {
+    const death = lastTermination(container);
+    if (container.restartCount > 0) {
+      return t("readings", "logsAttemptsLast", {
+        attempts: t("count", "attemptsCount", { n: container.restartCount }),
+        when: dated(death) ? t("readings", "logsLastWhen") : "",
+      });
+    }
+    return t("readings", "logsPrintedBeforeExit");
+  }
+
+  if (mark === "done" && phase !== "app") {
+    const { state } = container;
+    const termination =
+      state.type === "terminated"
+        ? state.termination
+        : container.lastTerminated;
+    const took = termination
+      ? runDuration(termination.startedAt, termination.finishedAt)
+      : null;
+    // Said out loud because a finished container looks identical to a
+    // silent one in a log pane, and Follow does nothing on either.
+    return t("readings", "logsFinishedComplete", {
+      took: took ? t("readings", "logsTook", { took }) : "",
+      when: dated(termination) ? t("readings", "logsWhen") : "",
+    });
+  }
+
+  if (mark === "queued") {
+    if (phase === "app") {
+      return blockedBy
+        ? t("readings", "logsNoneInitUnfinished")
+        : t("readings", "logsNoneNotStarted");
+    }
+    return blockedBy && blockedBy !== container.name
+      ? t("readings", "logsNeverRanBlocked", { on: blockedBy })
+      : t("readings", "logsNeverRan");
+  }
+
+  if (mark === "running" && phase === "sidecar") {
+    return t("readings", "logsSidecarRunning");
+  }
+
+  return null;
+}
+
+/**
+ * Group and annotate a pod's containers.
+ *
+ * Callers hand it `[...pod.initContainers, ...pod.containers]`: init
+ * order is the payload and the backend already ships it, so this never
+ * sorts.
+ */
+export function containerSequence(
+  containers: readonly ContainerInfo[],
+  t: T
+): ContainerGroup[] {
+  const { init, sidecars, app } = splitByPhase(containers);
+
+  // The first init container that has not succeeded is what everything
+  // after it is waiting on — including the app containers.
+  const blockedBy = init.find((c) => !containerSucceeded(c))?.name ?? null;
+
+  const step = (container: ContainerInfo): ContainerStep => {
+    const mark = markOf(container);
+    return {
+      container,
+      mark,
+      status: containerStatus(container),
+      note: noteFor(container, mark, blockedBy, t),
+      exit: noteExit(container, mark),
+    };
+  };
+
+  const groups: ContainerGroup[] = [];
+  if (init.length > 0) {
+    groups.push({
+      phase: "init",
+      title: GROUP_TITLE.init,
+      caption: t("readings", "groupInitCaption"),
+      steps: init.map(step),
+    });
+  }
+  if (sidecars.length > 0) {
+    groups.push({
+      phase: "sidecar",
+      title: GROUP_TITLE.sidecar,
+      // Neither group: sidecars start during init and never finish, so
+      // filing them with the init sequence would imply they completed
+      // and filing them with the app containers would imply they
+      // started at the same time.
+      caption: t("readings", "groupSidecarCaption"),
+      steps: sidecars.map(step),
+    });
+  }
+  if (app.length > 0) {
+    groups.push({
+      phase: "app",
+      title: GROUP_TITLE.app,
+      caption:
+        blockedBy !== null
+          ? t("readings", "groupAppBlocked")
+          : t("readings", "groupAppCaption"),
+      steps: app.map(step),
+    });
+  }
+  return groups;
+}
+
+export interface TemplateGroup {
+  phase: ContainerPhase;
+  title: string;
+  caption: string;
+  /** In the order the template declares them, which is the order they run. */
+  containers: DeploymentContainerInfo[];
+}
+
+/**
+ * The same three groups for a template, in a template's tense.
+ *
+ * A declaration has no run to report, so there is no `ContainerStep`
+ * here: no mark, no state badge, no "finished 3s ago". Position is the
+ * one live-looking thing kept — the kubelet runs init containers in the
+ * order they are written, which is a fact about the spec rather than
+ * about any pod made from it. The captions carry the rest of the
+ * difference: "started during init and still running" is a claim about a
+ * process, and the template can only say what will happen when a pod is
+ * made.
+ */
+export function templateSequence(
+  template: TemplateContainerLists,
+  t: T
+): TemplateGroup[] {
+  const { init, sidecars, app } = splitByPhase(declaredContainers(template));
+
+  const groups: TemplateGroup[] = [];
+  if (init.length > 0) {
+    groups.push({
+      phase: "init",
+      title: GROUP_TITLE.init,
+      caption: t("readings", "groupInitCaptionEach"),
+      containers: init,
+    });
+  }
+  if (sidecars.length > 0) {
+    groups.push({
+      phase: "sidecar",
+      title: GROUP_TITLE.sidecar,
+      caption: t("readings", "groupSidecarCaptionEach"),
+      containers: sidecars,
+    });
+  }
+  if (app.length > 0) {
+    groups.push({
+      phase: "app",
+      title: GROUP_TITLE.app,
+      caption: t("readings", "groupAppCaptionEach"),
+      containers: app,
+    });
+  }
+  return groups;
+}

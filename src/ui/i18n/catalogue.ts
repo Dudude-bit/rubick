@@ -1,0 +1,7820 @@
+/**
+ * The English catalogue, which is also the type every other language is
+ * checked against.
+ *
+ * `en` is a plain object rather than a JSON file so that TypeScript can do
+ * the job an i18n library would otherwise do at runtime: `ru.ts` is declared
+ * `Catalogue`, so a missing key is a compile error and a key nobody uses any
+ * more is a dead-code warning.
+ *
+ * Kubernetes vocabulary never appears here: kind names, status values,
+ * condition types and reasons, field names as the API spells them, and
+ * anything printed for parity with `kubectl`. A reader who sees
+ * `CrashLoopBackOff` can search for it, a reader who sees a translation of it
+ * cannot, and the diagnostics report they paste into an issue would stop
+ * being readable by the maintainer. See `src/ui/lib/status-role.ts` for the
+ * mechanical half of that rule: the colour lookup reads those strings.
+ *
+ * A count is not `${n} ${noun}${n === 1 ? "" : "s"}`. Russian has three forms
+ * and Polish four, and the form depends on the number in a way English cannot
+ * express. Anything counted is written as a `Plural` and resolved through
+ * `Intl.PluralRules`, which knows every language's categories already.
+ */
+
+/** The forms a language may ask for. `other` is the only required one. */
+export interface Plural {
+  zero?: string;
+  one?: string;
+  two?: string;
+  few?: string;
+  many?: string;
+  other: string;
+}
+
+export const en = {
+  // The rail's own words. Resource rows are absent on purpose: their labels
+  // come from `getDisplayPlural(kind)`, and a Kubernetes kind is a proper
+  // noun that reads the same in every language: "Pods", not "Поды".
+  nav: {
+    changes: "Changes",
+    apiResources: "API resources",
+    myAccess: "Your access",
+    selectsLabels: "selects {selector}",
+    allNamespacesLower: "all namespaces",
+    dataTable: "Data table",
+    protectsVerb: "protects",
+    scalesVerb: "scales",
+    actsOn: "acts on",
+    nothingIsTheTop: "nothing: a {kind} sits at the top of the chain",
+    replicaCountSetHere: "the replica count is set here",
+    noServiceSelectsThese:
+      "No Service in this namespace selects these pods, so nothing in the cluster routes traffic to this {kind}.",
+    serviceResolvesExternal:
+      "This Service has no selector: it resolves to {name} rather than to anything in this cluster.",
+    servesTlsFor: "serves TLS for {hosts}",
+    inVolumeUnmounted: "in volume {volume}, which no container mounts",
+    readOnlySuffix: ", read-only",
+    fromSubPath: " from {subPath}",
+    mountedAt: "mounted at {path}",
+    projectedInto: "projected into {path}",
+    envReadsKey: "{env} reads {key}",
+    keyNotInSubject: "key {key} is not in this {kind}",
+    keyNotInSubjectOptional:
+      "key {key} is not in this {kind}; it is optional, so the pod still starts",
+    // Said on a nav row the authorizer refused, and on the page behind it.
+    // The reader is not being told the app is broken: they are being told
+    // whose decision it was, which is the one fact that makes it actionable.
+    noListAccess: "You do not have permission to list these",
+    noVendorAccess: "You do not have permission to list {vendor}'s resources",
+    relatedResources: "Related resources",
+    runsOn: "Runs on",
+    whatRunsHere: "What runs here",
+    needsToRun: "Needs to run",
+    needsToRunNote: "if one of these is missing, the pod does not start",
+    usedBy: "Used by",
+    usedByNote: "what names this in its pod spec",
+    whatAnswersHere: "What answers here",
+    whatAnswersHereNote: "what made the pods behind this address",
+    reachedThrough: "Traffic comes through",
+    reachedThroughNote: "what sends traffic to these pods",
+    routedHereNote: "what sends traffic to this address",
+    boundTo: "Bound to",
+    governedBy: "Governed by",
+    governedByNote:
+      "acts on this on its own schedule, and nothing here asked for it",
+    madeByAndMakes: "Made by, and makes",
+    theServices: "the Services here",
+    theIngresses: "the Ingresses here",
+    thePods: "the pods here",
+    notLookedAt: "Not looked at",
+    notLookedAtNote:
+      "named, so a group that is absent is never read as a group that is empty",
+    deliveredBy: "Delivered by",
+    deliveredFromPath: "from {path}",
+    disruptionBudget: "Disruption budget",
+    autoscaling: "Autoscaling",
+    tlsCertificate: "TLS certificate",
+    configuration: "Configuration",
+    everyKeyBecomesEnv: "every key becomes an environment variable",
+    usedToPullImages: "used to pull the images",
+    identityItRunsAs: "the identity it runs as",
+    servesTlsForHosts: "serves TLS for every host on this Ingress",
+    noSelector: "no selector",
+    notInThisNamespace: "does not exist in this namespace",
+    notChecked: "not checked",
+    nobodyDoes: "nobody does",
+    overHttps: "over HTTPS",
+    overHttpPlain: "over plain HTTP",
+    resourceBackend: "a resource backend, which the app does not follow",
+    ownerNotController: "an owner, not the controller",
+    replicasSetHere: "the replica count is set here",
+    noNamespaceValue: "no namespace",
+    servicePublishesNoEndpoint: "This Service publishes no endpoint",
+    stopNoSliceNote:
+      "{matched}, and not one of them is in anything this Service publishes. These objects do not say why: a pod is written into a slice a moment after it turns Ready, and never at all while the endpoint controller is not running.",
+    stopUnnamedPortNote:
+      "{matched}, but it asks for {asked} and no container declares a port by that name, so the endpoint controller skips every one of them. Nothing reaches them. Name the port in the container, or give the Service the number.",
+    stopNoServiceNamed: "No Service named {name} in this namespace",
+    stopPublishesNothingYet: "Nothing is published behind {selector} yet",
+    stopNoPodCarries: "No pod carries {selector}",
+    stopScaledToZero: "No pods by intent: {name} is scaled to zero",
+    stopScaledToZeroSeveral: "No pods by intent: {names} are scaled to zero",
+    stopPodsBeingMade:
+      "No pod carries {selector} yet: {name} is making its pods",
+    stopPodsBeingMadeSeveral:
+      "No pod carries {selector} yet: {names} are making their pods",
+    stopPodsBeingMadeNote:
+      "They have only just been asked for and have no address yet, so connections to this address are refused for now. It is a fault only if no pod comes.",
+    stopNearMissNote:
+      "Closest: {pods}. Connections to this address are refused until a pod carries the whole selector: add {lacks} to their template, or drop it from the selector.",
+    stopScaledToZeroNote:
+      "Connections to this address are refused until it is scaled up again. The labels are not at fault.",
+    stopNotScheduledNote:
+      "No node has taken them: they are Pending with no node, so they have no address and nothing is published. Their events say why the scheduler passes them over.",
+    stopNotStartedNote:
+      "They are on a node and have not started, so they have no address yet and nothing is published. Their events say what they are waiting for: an image, a volume, a Secret.",
+    stopCrashLoopingNote:
+      "Their containers keep exiting, so they never become Ready and nothing is published. The logs of the last run say why.",
+    stopTerminatingNote:
+      "They are being deleted. A terminating pod is not Ready, so nothing is published until a replacement is.",
+    stopFailingReadinessNote:
+      "They are running and fail their readiness probe, and a Service publishes no endpoint for a pod that is not Ready, so traffic is refused until they are Ready. Their events say why the probe fails.",
+    stopFinishedNote:
+      "They have run to completion and will not serve again. A Service in front of finished pods publishes nothing.",
+    stopMixedNote:
+      "They are not Ready for more than one reason. The Service's Endpoints tab names the state of each one.",
+    stopOtherNote:
+      "Their own status says why. The Service's Endpoints tab names the state of each one.",
+    stopComingUpNote:
+      "The workload behind it is coming up: its pods are on their way and have no ready address yet. It is a fault only if they are still not ready when the wait runs out.",
+    stopPodsUnreadNote:
+      "The pods could not be read here, so whether they are still starting is not known. The workload behind it reads the controller's verdict alone.",
+    stopInSlicesNote:
+      "Every address behind this Service is in its slices and not one is serving. The pods were not read here, so which state they are in is not said.",
+    stopRouteNotAcceptedTitle: "{gateway} does not accept this route",
+    stopRouteNotAcceptedNote:
+      "The controller answered Accepted: False{said}. The route's YAML is valid and nothing serves it: an unaccepted route is simply never programmed.",
+    stopRefNotPermittedTitle:
+      "A reference this route makes is not permitted: no ReferenceGrant allows it",
+    stopRefUnresolvedTitle: "A reference this route makes did not resolve",
+    stopRefsUnresolvedNote:
+      "The controller answered ResolvedRefs: False{said}. The spec obliges the implementation to fail the affected traffic rather than route around it.",
+    stopGatewayMissingTitle: "Names a Gateway that does not exist",
+    stopGatewayMissingNote:
+      "{route} attaches to {gateway}, which the API server does not have. No controller will ever write status for that parent, so this is the one refusal the cluster cannot state itself.",
+    targetPortNamed: "targetPort: {name}",
+    stopUnnamedPortCause:
+      "No container declares the port the Service asks for ({asked}), so nothing is published",
+    listAndLast: "{list}, and {last}",
+    twoAnd: "{a} and {b}",
+    backendNeverCreated:
+      "{kind} routes this path to a backend that was never created, so the controller has nothing to send the request to.",
+    connectionRefusedNothingBehind:
+      "Anything that reaches this address gets a connection refused. The Service exists and is wired up; there is simply nothing behind it.",
+    endpointsByHandNoneWritten:
+      "This Service has no selector and publishes nothing: its endpoints are written by hand, and nobody has written any.",
+    ingressStatesNoBackend:
+      "This Ingress states no backend, so it routes nothing.",
+    noServiceSelectsPod:
+      "No Service in this namespace selects this pod, so nothing in the cluster routes traffic to it.",
+    noServiceSelectsPodNear:
+      "No Service in this namespace selects this pod. Closest is {service}{more}: the pod carries {carries} but not {lacks}, so nothing in the cluster routes traffic to it.",
+    noServiceSelectsTheseNear:
+      "No Service in this namespace selects these pods. Closest is {service}{more}: they carry {carries} but not {lacks}, so nothing in the cluster routes traffic to this {kind}.",
+    trafficPath: "Traffic path",
+    releases: "Releases",
+    charts: "Charts",
+    repositories: "Repositories",
+    reconcilers: "Reconcilers",
+    sources: "Sources",
+    controllers: "Controllers",
+    reachableAt: "Reachable at",
+    howTrafficGetsHere: "How traffic gets here",
+    volumes: "Volumes",
+    subsets: "Subsets",
+    routedDefinedNowhere: "Routed to, and defined nowhere",
+    entryPoints: "Entry points",
+    renewal: "Renewal",
+    appSets: "App sets",
+    applicationSets: "Application sets",
+    projects: "Projects",
+    argoOwnWorkloads: "Argo's own workloads",
+    argoOwnUi: "Argo's own UI",
+    itsObjects: "Its objects",
+    openApiSchema: "OpenAPI schema",
+    matchesSelectorNotPublished: "Matches the selector, not published",
+    portsNotExposed: "Ports the Service does not expose",
+    recentEvents: "Recent events",
+    recentEventsInNamespace: "Recent events in this namespace",
+    globalSettings: "Global settings",
+    template: "Template",
+    revisions: "Revisions",
+    childrenRuns: "Runs",
+    conditions: "Conditions",
+    backends: "Backends",
+    access: "Access",
+    selector: "Selector",
+    versions: "Versions",
+    schema: "Schema",
+    instances: "Instances",
+    definition: "Definition",
+    podSelector: "Pod selector",
+    howDeclared: "How it is declared",
+    published: "Published",
+    topology: "Topology",
+    routes: "Routes",
+    map: "Map",
+    controller: "Controller",
+    operators: "Operators",
+    metadata: "Metadata",
+    allIntegrations: "All integrations",
+    overview: "Overview",
+    workloads: "Workloads",
+    cluster: "Cluster",
+    network: "Network",
+    storage: "Storage",
+    config: "Config",
+    integrations: "Integrations",
+    app: "App",
+    settings: "Settings",
+    attachedRoutes: "Attached routes",
+    gatewaysUsingIt: "Gateways using it",
+    fromThisMachine: "From this machine",
+    policies: "Policies",
+    contents: "Contents",
+    gwWeightZero: "weight 0: deliberately gets no traffic",
+    gwSectionNamed: "section {name}",
+  },
+  /**
+   * Table column headers.
+   *
+   * Only the ones that are UI words. A header naming a kind (Claim, Storage
+   * Class, Volume) stays as the API spells it: the cell under it is a
+   * reference to an object of that kind, and kubectl prints the same word.
+   */
+  columns: {
+    govNow: "Now",
+    selects: "Selects",
+    files: "Files",
+    members: "Members",
+    racks: "Racks",
+    instances: "Instances",
+    cluster: "Cluster",
+    mode: "Mode",
+    primaryInstance: "Primary",
+    backupMethod: "Method",
+    connections: "Connections",
+    providerId: "Provider ID",
+    resourceVersion: "Resource version",
+    uid: "UID",
+    apiVersion: "API version",
+    aDrainWaits: "A drain waits",
+    setBy: "Set by",
+    cpu: "CPU",
+    pods: "Pods",
+    events: "Events",
+    ip: "IP",
+    routing: "Routing",
+    priority: "Priority",
+    entryPoints: "Entry Points",
+    subsets: "Subsets",
+    action: "Action",
+    applies: "Applies",
+    autoSync: "Auto-sync",
+    binds: "Binds",
+    cipherSuites: "Cipher Suites",
+    controllerSays: "Controller says",
+    destination: "Destination",
+    destinations: "Destinations",
+    details: "Details",
+    dnsNames: "DNS Names",
+    domains: "Domains",
+    endpoints: "Endpoints",
+    expires: "Expires",
+    exportTo: "Export To",
+    gateways: "Gateways",
+    generators: "Generators",
+    healthCheck: "Health check",
+    httpRoutes: "HTTP Routes",
+    interval: "Interval",
+    issuer: "Issuer",
+    leavesAlone: "Leaves alone",
+    location: "Location",
+    maxVersion: "Max Version",
+    middlewares: "Middlewares",
+    minVersion: "Min Version",
+    notProvisioned: "Not provisioned",
+    pod: "Pod",
+    project: "Project",
+    repository: "Repository",
+    requestor: "Requestor",
+    resolution: "Resolution",
+    secret: "Secret",
+    serverDetails: "Server/Details",
+    servers: "Servers",
+    service: "Service",
+    services: "Services",
+    sniStrict: "SNI Strict",
+    sourceRepos: "Source repos",
+    suspended: "Suspended",
+    sync: "Sync",
+    targetGroup: "Target group",
+    targetNS: "Target NS",
+    targets: "Targets",
+    tcpRoutes: "TCP Routes",
+    tls: "TLS",
+    toPodsLabelled: "To pods labelled",
+    trafficPolicy: "Traffic Policy",
+    url: "URL",
+    reachableAt: "Reachable at",
+    wouldBeReachableAt: "Would be reachable at",
+    controlledBy: "Controlled by",
+    objects: "Objects",
+    lastFetched: "Last fetched",
+    appliedBy: "Applied by",
+    rules: "Rules",
+    match: "Match",
+    backend: "Backend",
+    loadBalancerAddress: "Load balancer address",
+    containerRuntime: "Container runtime",
+    os: "OS",
+    architecture: "Architecture",
+    created: "Created",
+    pool: "Pool",
+    instanceType: "Instance type",
+    cloud: "Cloud",
+    ephemeralStorage: "Ephemeral storage",
+    headroom: "Headroom",
+    allocatable: "Allocatable",
+    lastRun: "Last run",
+    nextRun: "Next run",
+    rollout: "Rollout",
+    ingressAddress: "Ingress address",
+    podIp: "Pod IP",
+    hostIp: "Host IP",
+    phase: "Phase",
+    entryPoint: "Entry point",
+    image: "Image",
+    lastExit: "Last exit",
+    requests: "Requests",
+    limits: "Limits",
+    probes: "Probes",
+    resources: "Resources",
+    health: "Health",
+    whatThisRevisionRuns: "what this revision runs",
+    selector: "Selector",
+    object: "Object",
+    ownedBy: "Owned by",
+    finalizers: "Finalizers",
+    definition: "Definition",
+    imported: "imported",
+    thisCluster: "This cluster",
+    itKnows: "It knows",
+    alsoScraping: "Also scraping",
+    metric: "Metric",
+    powers: "Powers",
+    scrapedFrom: "Scraped from",
+    externalIp: "External IP",
+    externalName: "External name",
+    environment: "Environment",
+    says: "Says",
+    assumedBy: "Assumed by",
+    listeners: "Listeners",
+    backendConfig: "Backend config",
+    edgeCache: "Edge cache",
+    takenOutAfter: "Taken out after",
+    revisionInline: "rev {n}",
+    classParams: "Class params",
+    facing: "Facing",
+    reachableFrom: "Reachable from",
+    order: "Order",
+    targetGroups: "Target groups",
+    trafficIn: "in",
+    trafficOut: "out",
+    volumeExpansion: "Volume expansion",
+    defaultClass: "Default class",
+    ips: "IPs",
+    listener: "Listener",
+    notCovered: "Not covered",
+    servingNow: "Serving now",
+    issuedBy: "Issued by",
+    serial: "Serial",
+    conditions: "Conditions",
+    containers: "Containers",
+    shell: "Shell",
+    placement: "Placement",
+    spotNode: "Spot node",
+    serviceAccount: "Service account",
+    template: "Template",
+    howDeclared: "How it is declared",
+    governingService: "Governing service",
+    updateStrategy: "Update strategy",
+    usage: "Usage",
+    allowed: "allowed",
+    disabled: "disabled",
+    value: "Value",
+    binding: "Binding",
+    identity: "Identity",
+    clientId: "Client id",
+    frontend: "Frontend",
+    app: "App",
+    revision: "Revision",
+    lastDeployed: "Last deployed",
+    firstDeployed: "First deployed",
+    description: "Description",
+    allNamespaces: "all namespaces",
+    container: "Container",
+    target: "Target",
+    port: "Port",
+    nodePort: "Node port",
+    protocol: "Protocol",
+    subset: "Subset",
+    served: "Served",
+    storage: "Storage",
+    printerColumns: "Printer columns",
+    note: "Note",
+    notReadyCount: "Not ready",
+    clusterIp: "Cluster IP",
+    progress: "Progress",
+    message: "Message",
+    reason: "Reason",
+    eventCount: "Count",
+    runtime: "Runtime",
+    scheduling: "Scheduling",
+    provisioning: "Provisioning",
+    provisioner: "Provisioner",
+    machine: "Machine",
+    platform: "Platform",
+    completed: "Completed",
+    succeeded: "Succeeded",
+    spot: "Spot",
+    taints: "Taints",
+    kubelet: "Kubelet",
+    images: "Images",
+    spec: "Spec",
+    volume: "Volume",
+    claim: "Claim",
+    requestsAndLimits: "Requests and limits",
+    backoffLimit: "Backoff limit",
+    timeZone: "Time zone",
+    lastSuccess: "Last success",
+    activeJobs: "Active jobs",
+    tlsHosts: "TLS hosts",
+    storageClass: "Storage class",
+    upToDateCount: "Up to date",
+    availableCount: "Available",
+    externalIps: "External IPs",
+    loadBalancer: "Load balancer",
+    group: "Group",
+    kind: "Kind",
+    scope: "Scope",
+    storageVersion: "Storage version",
+    plural: "Plural",
+    singular: "Singular",
+    shortNames: "Short names",
+    categories: "Categories",
+    source: "Source",
+    rev: "Rev",
+    chart: "Chart",
+    appVersion: "App Version",
+    updated: "Updated",
+    annotations: "Annotations",
+    rule: "Rule",
+    published: "Published",
+    certificate: "Certificate",
+    covers: "Covers",
+    valid: "Valid",
+    state: "State",
+    zone: "Zone",
+    labels: "Labels",
+    writtenBy: "Written by",
+    fields: "Fields",
+    selectors: "Selectors",
+    data: "Data",
+    serviceType: "Service Type",
+    sessionAffinity: "Session Affinity",
+    host: "Host",
+    path: "Path",
+    pathType: "Path Type",
+    backendService: "Backend Service",
+    backendPort: "Backend Port",
+    secretType: "Secret Type",
+    name: "Name",
+    namespace: "Namespace",
+    age: "Age",
+    memory: "Memory",
+    capacity: "Capacity",
+    resource: "Resource",
+    requested: "Requested",
+    limited: "Limited",
+    used: "Used",
+    extendedResource: "extended",
+    accessModes: "Access Modes",
+    replicas: "Replicas",
+    retention: "Retention",
+    groups: "Groups",
+    keys: "Keys",
+    status: "Status",
+    ready: "Ready",
+    restarts: "Restarts",
+    node: "Node",
+    cpuOfAllocatable: "CPU, % of allocatable",
+    memoryOfAllocatable: "Memory, % of allocatable",
+    utilisation: "Utilisation",
+    tableView: "Table",
+    view: "View",
+    strategy: "Strategy",
+    desired: "Desired",
+    current: "Current",
+    completions: "Completions",
+    schedule: "Schedule",
+    suspend: "Suspend",
+    active: "Active",
+    lastSchedule: "Last Schedule",
+    type: "Type",
+    ports: "Ports",
+    class: "Class",
+    hosts: "Hosts",
+    paths: "Paths",
+    address: "Address",
+    roles: "Roles",
+    role: "Role",
+    version: "Version",
+    internalIp: "Internal IP",
+    cpuUsage: "CPU Usage",
+    memoryUsage: "Memory Usage",
+    podCap: "Pod Cap",
+    reclaimPolicy: "Reclaim Policy",
+    bindingMode: "Binding Mode",
+    expansion: "Expansion",
+    parameters: "Parameters",
+    delivery: "Delivery",
+    // The route trace (Gateway API): who vouches for a step, and the two
+    // sides of a mismatch quote.
+    stepClass: "class",
+    stepGateway: "gateway",
+    stepListener: "listener",
+    stepNamespace: "namespace",
+    stepRefs: "references",
+    stepRoute: "route",
+    stepBackend: "backend",
+    stepEndpoints: "endpoints",
+    stepReachable: "reachable",
+    missingTag: "missing",
+    backends: "Backends",
+    addresses: "Addresses",
+    routesFrom: "Routes from",
+    attached: "Attached",
+    hostnames: "Hostnames",
+    readAt: "Read at",
+    crdBundle: "CRD bundle",
+    controller: "Controller",
+    weight: "Weight",
+    behindIt: "Behind it",
+    kinds: "Kinds",
+    hostname: "Hostname",
+    gatewayAddress: "Gateway address",
+    listenerHostname: "Listener hostname {host}",
+    whoInfra: "infra",
+    whoYours: "your side",
+    whoController: "controller",
+    whoMachine: "this machine",
+    gwAsksListener: "the route asks for",
+    gwServesListener: "the listener serves",
+    gwAsksNamespace: "the route lives in",
+    gwServesNamespace: "the listener allows",
+    gwAsksPort: "the ref asks for port",
+    gwServesPorts: "the Service serves",
+    gwAsksGeneric: "asks for",
+    gwServesGeneric: "serves",
+    attachesTo: "Attaches to",
+    sni: "SNI",
+    trusts: "Trusts",
+    gateway: "Gateway",
+    grantFrom: "From",
+    grantTo: "To",
+    serves: "Serves",
+    parents: "Parents",
+    verdicts: "Verdicts",
+    ciliumSelects: "Selects",
+    ciliumInForce: "In force",
+    ciliumRules: "Rules",
+    ciliumReach: "Reach",
+    ciliumSecurityLabels: "Security labels",
+    programmed: "Programmed",
+  },
+  action: {
+    laneLabelColour: "Colour lane",
+    laneLabelShort: "Short prefix",
+    laneLabelFull: "Full name",
+    showAllLanes: "Show every pod",
+    laneLabelHint:
+      "How each line names its lane: by the colour alone, by the last characters of the name, or by the whole name.",
+    filterOn: "Filter on {key}={value}",
+    laneRulePod: "lane = pod",
+    laneRuleOrdinal: "lane = ordinal",
+    laneRuleNode: "lane = node",
+    laneRuleRun: "lane = run",
+    legendGone: "· gone",
+    eventsStories: "Stories",
+    eventsAll: "All events",
+    warningsFirst: "Warnings first",
+    newestFirst: "Newest",
+    showTimeline: "Timeline",
+    hideTimeline: "Hide timeline",
+    storyWindow: "Window",
+    storyOrder: "Order",
+    feedOptions: "Feed settings",
+    showInaccessibleNamespaces: "Show them",
+    connectToForward: "Connect to a cluster to start port-forwarding.",
+    siteHasItAt: "{site} has it at {url}",
+    addressOnClipboard:
+      "The {site} address is on your clipboard instead: {url}",
+    couldNotOpenBrowser: "Could not open your browser",
+    kindYaml: "{kind} YAML",
+    debugBusybox: "BusyBox (minimal)",
+    debugAlpine: "Alpine (shell + apk)",
+    debugNetshoot: "Netshoot (network tools)",
+    debugUbuntu: "Ubuntu",
+    debugCustom: "Custom...",
+    findReplacement: "Find replacement",
+    searchingEllipsis: "Searching…",
+    compactView: "Compact view",
+    comfortableView: "Comfortable view",
+    searchEllipsis: "Search...",
+    verbAnyway: "{verb} anyway",
+    portsOutOfRange: "Ports must be between 1 and 65535.",
+    portForwardStartFailed: "Failed to start port-forward",
+    portForwardStopFailed: "Failed to stop port-forward",
+    terminalListenersFailed: "Failed to set up terminal listeners",
+    copiedToClipboard: "Copied to clipboard",
+    unknownBackendError: "Unknown backend error",
+    undo: "Undo",
+    openOnSiteShort: "Open on {site}",
+    valueNoun: "value",
+    readingGroup: "reading {group}",
+    listAnd: " and ",
+    listComma: ", ",
+    readLastRunOf: "Read {name}'s last run",
+    readLogOf: "Read {name}'s log",
+    portForwardHint: "Forward traffic from your machine to this pod.",
+    quickPresets: "Quick presets",
+    clickToAutofillPorts: "Click to auto-fill local and remote ports",
+    localPort: "Local port",
+    remotePort: "Remote port",
+    autoReconnect: "Auto reconnect",
+    autoReconnectHint: "Retry when the pod or connection drops",
+    saveAsConfig: "Save this port-forward",
+    saveAsConfigHint:
+      "It stays in the activity panel, ready to start again in one click",
+    autoStart: "Auto start",
+    autoStartHint: "Start automatically when this cluster connects",
+    configName: "Port-forward name",
+    activePortForwards: "Active port-forwards",
+    activeInline: "Active",
+    debugPodReady: "Debug pod ready",
+    debugPodReadyDetail: 'Debug pod "{pod}" created on node "{node}"',
+    debugPodNotReady: "Debug Pod Not Ready",
+    theDebugPod: "The debug pod",
+    onNode: "on node",
+    creatingDebugPod: "Creating debug pod...",
+    waitingForPod: "Waiting for pod...",
+    createPrivilegedDebugPodOnNode: "Create a privileged debug pod on node",
+    targetNode: "Target Node",
+    debugPodNamespace: "Debug Pod Namespace",
+    debugPodNamespaceHint: "Namespace where the debug pod will be created",
+    debugNodeWarningPre: "This will create a",
+    privilegedPod: "privileged pod",
+    debugNodeWarningPost:
+      "with full access to the host. The host filesystem will be mounted at",
+    repositoryAdded: "Repository added",
+    repositoryAddedDetail: 'Repository "{name}" has been added successfully.',
+    addRepositoryFailed: "Failed to add repository",
+    repositoryRemoved: "Repository removed",
+    repositoryRemovedDetail: "The repository has been removed successfully.",
+    removeRepositoryFailed: "Failed to remove repository",
+    repositoriesUpdated: "Repositories updated",
+    repositoriesUpdatedDetail: "All Helm repositories have been updated.",
+    updateRepositoriesFailed: "Failed to update repositories",
+    searchFailed: "Search failed",
+    chartInstalled: "Chart installed",
+    chartInstalledDetail: 'Release "{name}" has been installed successfully.',
+    releaseUpgraded: "Release upgraded",
+    releaseUpgradedDetail: 'Release "{name}" has been upgraded successfully.',
+    upgradeFailed: "Upgrade failed",
+    removeRepository: "Remove Repository",
+    removeRepositoryConfirm:
+      'Are you sure you want to remove the repository "{name}"?',
+    openPortForwardPanel: "Open the port-forward panel",
+    portForwardActive: "Port-forward active",
+    portForwardReconnecting: "Port-forward reconnecting",
+    portForwardReconnected: "Port-forward reconnected",
+    portForwardStopped: "Port-forward stopped",
+    portForwardError: "Port-forward error",
+    started: "Started",
+    notStarted: "not started",
+    bufferFill: "Buffer fill",
+    filterReconcilers: "Filter reconcilers",
+    filterReconcilersPlaceholder: "Filter by name, path, chart or source",
+    somethingWentWrong: "Something went wrong",
+    goHome: "Go Home",
+    yamlCopied: "YAML copied to clipboard.",
+    viewKindDetails: "View {kind} details",
+    invalidPort: "Invalid port",
+    invalidPortHint: "Please enter port numbers from 1 to 65535",
+    updating: "updating…",
+    tabsMore: "{n} more",
+    tabsMoreLabel: {
+      one: "{n} more tab does not fit",
+      other: "{n} more tabs do not fit",
+    },
+    tabsMoreHoldsOpen: "The open tab, {tab}, is one of them",
+    manifestCopiedNamed: "{name} manifest copied",
+    kindManifest: "{kind} manifest",
+    suspendedLower: "suspended",
+    inTime: "in {time}",
+    nowLower: "now",
+    unknownLower: "unknown",
+    resourceWatchFailed: "Resource watch failed",
+    eventBridgeLagged: {
+      one: "The event bridge fell behind and dropped {n} update, so this list may be incomplete.",
+      other:
+        "The event bridge fell behind and dropped {n} updates, so this list may be incomplete.",
+    },
+    filterByHostVirtualServiceDestination:
+      "Filter by host, VirtualService or destination",
+    manage: "Manage",
+    rolloutSubject: "one pod per eligible node",
+    today: "today",
+    eventsWarnings: "Warnings",
+    eventsNormal: "Normal",
+    eventType: "Event type",
+    eventsFetched: "Events fetched",
+    noLimit: "No limit",
+    latestN: "Latest {n}",
+    drainNamed: "Drain {name}",
+    cordonNamed: "Cordon {name}?",
+    uncordonNamed: "Uncordon {name}?",
+    drainAnyway: "Drain anyway",
+    stopDraining: "Stop draining",
+    drainEnded: "The drain of {name} ended",
+    reopenTheNodeToRead: "Open the node again to read what stayed.",
+    drainingAttempt: "Asking again, try {n}",
+    nodeIsDrained: "The node is drained.",
+    drainStopped: "The drain stopped.",
+    drainCancelled: "You stopped the drain.",
+    drainFailed: "The drain broke.",
+    evictUnmanagedPods: "Also move pods nothing would replace",
+    evictPodsWithLocalData: "Also move pods holding local data",
+    openTheNodeFirst: "Open the node first",
+    loadOlder: "Load older",
+    hideHistory: "Hide history",
+    viewYaml: "View YAML",
+    editYaml: "Edit YAML",
+    yamlCopiedToClipboard: "YAML copied to clipboard.",
+    manifestIsValid: "Manifest is valid and can be applied.",
+    manifestApplied: "Manifest applied to cluster.",
+    failedToApplyManifest: "Failed to apply manifest.",
+    formatted: "Formatted",
+    yamlFormatted: "YAML has been formatted.",
+    restored: "Restored",
+    contentRestoredFromHistory: "Content restored from history.",
+    unsavedChanges: "Unsaved Changes",
+    viewYamlManifest: "View the YAML manifest",
+    editYamlManifestHint:
+      "Edit the YAML manifest and apply changes to the cluster",
+    applyChangesQuestion: "Apply Changes?",
+    applyManifestConfirm:
+      "This will apply the manifest to your Kubernetes cluster. Make sure you have reviewed the changes.",
+    dryRunFromServer:
+      "What the cluster would store, against what it holds now. Asked of the server without applying.",
+    dryRunAsking: "Asking the cluster what would change…",
+    dryRunFailed:
+      "The cluster did not answer the dry run ({error}); this is the editor's own diff.",
+    dryRunCreated: "would be created",
+    dryRunConfigured: "would change",
+    dryRunUnchanged: "would not change",
+    dryRunLiveUnread:
+      "is accepted, but the current object could not be read, so whether anything changes is unknown",
+    dryRunUnanswered:
+      "got no answer from the cluster, so this is the editor's own diff and the apply is not blocked",
+    dryRunRefused: "is refused, and a real apply would be refused the same way",
+    changesToBeApplied: "Changes to be applied:",
+    filterApplications: "Filter applications",
+    filterByNameProjectRepoObject: "Filter by name, project, repo or object",
+    openInArgoCd: "Open {name} in Argo CD",
+    debugNode: "Debug node",
+    jumpToLatest: "Jump to latest",
+    forwardThisPort: "Forward this port",
+    cronExpression: "cron expression",
+    agoSuffix: "{age} ago",
+    never: "never",
+    lastSuccessAt: "last success {when}",
+    noRunSucceededYet: "no run has succeeded yet",
+    cronJobNeverFired: "this CronJob has not fired",
+    suspendFlagNote: "nothing will start until the suspend flag is cleared",
+    scheduleUnreadable: "the schedule could not be read",
+    runs: "Runs",
+    runsSubject: "jobs this CronJob still owns",
+    barUpToDate: { one: "up to date", other: "up to date" },
+    barOutdated: { one: "outdated", other: "outdated" },
+    historyLimits:
+      "keeps the last {succeeded} succeeded and {failed} failed runs",
+    jobsFailed: { one: "{n} failed", other: "{n} failed" },
+    activePerController: "{n} active per the controller",
+    howDeclared: "How it is declared",
+    keptHistoryLimits: "{n} kept · history limits decide how many",
+    concurrency: "Concurrency",
+    startingDeadline: "Starting deadline",
+    noStartingDeadline:
+      "none: the latest missed run still starts, however late",
+    emptyList: "empty list",
+    emptyObject: "empty object",
+    nameDeleted: "{name} has been deleted.",
+    blocksDeletion: "blocks deletion until cleared",
+    willBeRemovedIrreversible:
+      "“{name}” will be removed from the cluster. This cannot be undone.",
+    run: "Run",
+    runSubject: "how many have to succeed, and what it costs to retry",
+    successfulPodNeeded: "successful pod needed",
+    atATime: "{n} at a time",
+    upTo: "up to",
+    noPodRunningLastFailed: "no pod is running and the last one failed",
+    timing: "Timing",
+    finished: "Finished",
+    stillRunning: "still running",
+    failedAt: "Failed",
+    endNotRecorded: "the cluster did not record when",
+    ranFor: "Ran for",
+    deadline: "Deadline",
+    afterStart: "{n}s after start",
+    nAvailable: "{n} available",
+    onCurrentSpec: "on the current spec",
+    updateStrategy: "Update strategy",
+    debugWithCopy: "Debug with a copy of this pod",
+    debugWithEphemeral: "Debug with an ephemeral container",
+    containerToAttach: "Container to attach a shell to",
+    attachShellTo: "Attach a shell to {name}, and end the one that is open",
+    confirmByTyping: "Confirm this action by typing the required text",
+    typeWord: "Type",
+    toConfirm: "to confirm",
+    nodeCordoned: "Node cordoned",
+    nodeCordonedDetail: "Node {name} has been cordoned.",
+    nodeUncordoned: "Node uncordoned",
+    nodeUncordonedDetail: "Node {name} has been uncordoned.",
+    nodeDrained: "Node drained",
+    nodeDrainedDetail: "Node {name} has been drained.",
+    cordonFailed: "Failed to cordon node: {error}",
+    uncordonFailed: "Failed to uncordon node: {error}",
+    viewLogs: "View Logs",
+    shell: "Shell",
+    unbound: "unbound",
+    upgradeRelease: "Upgrade Release",
+    upgradeReleaseIn: "Upgrade {name} in namespace {namespace}",
+    currentChart: "Current chart",
+    revision: "Revision",
+    newVersionOptional: "New Version (optional)",
+    leaveEmptyForLatest: "Leave empty for latest",
+    valuesPlaceholder: "# Custom values to merge\nreplicaCount: 3",
+    upgrading: "Upgrading...",
+    paletteDescPod: "Single container workload",
+    paletteDescDeployment: "Replicated workload",
+    paletteDescService: "Stable network endpoint",
+    paletteDescIngress: "HTTP routing rules",
+    paletteDescConfigMap: "Configuration data",
+    paletteDescSecret: "Sensitive data",
+    templateWebService: "Web Service",
+    templateConfigBackedApp: "Config-backed App",
+    readingEllipsis: "Reading…",
+    askForLastRange: "Ask for the last {range}",
+    rangeNeedsPrometheus:
+      "Needs a Prometheus: metrics-server keeps no history to range over",
+    realtimeUnavailable: "Real-time updates unavailable",
+    fallingBackToPolling: "{title}: falling back to periodic refresh.",
+    dismissJob: "Dismiss {job} {name}",
+    closeTerminal: "Close terminal",
+    startShellIn: "Start a shell in {container}",
+    readFiles: "Read the files",
+    base64Copied: "Base64 of {key} copied: {size} of binary.",
+    deletePod: "Delete Pod",
+    creatingDebugContainer: "Creating debug container...",
+    waitingForContainer: "Waiting for container...",
+    debugContainerForPod: "Debug container for pod",
+    initializing: "initializing…",
+    elapsed: "Elapsed",
+    debugPodTitle: "Debug Pod",
+    debugPodPrefix: "Debug pod",
+    inNamespace: "in namespace",
+    debugMode: "Debug Mode",
+    ephemeralContainerMode: "Ephemeral Container",
+    ephemeralModeHint: "Add debug container to existing pod without restart",
+    copyPodMode: "Copy Pod",
+    copyPodModeHint: "Create a copy of the pod with debug container",
+    debugImage: "Debug Image",
+    selectDebugImage: "Select debug image",
+    customImagePlaceholder:
+      "Enter custom image (e.g., myregistry/debug:latest)",
+    targetContainer: "Target Container",
+    selectTargetContainer: "Select target container",
+    targetContainerHint:
+      "Debug container will share process namespace with this container",
+    shareProcessNamespace: "Share Process Namespace",
+    shareProcessNamespaceHint:
+      "Allow debug container to see processes from other containers",
+    ephemeralUnsupported:
+      'Ephemeral containers require Kubernetes 1.25+. This cluster reports {version}, so use "Copy Pod" instead.',
+    unknownVersion: "an unknown version",
+    intake: "intake",
+    keepingOnlyMatches: "keeping only what matches",
+    streaming: "Streaming",
+    mixedFormat: "mixed",
+    showInNamespace: "Show {label} in {namespace}",
+    showInNamespaceNarrows:
+      "Show {label} in {namespace}: narrows this tab to that namespace",
+    scopeTabTo: "Scope this tab to {namespace}",
+    ageOldSuffix: "old",
+    searchChartsPlaceholder: "Search charts: nginx, redis, postgresql…",
+    editResourceTitle: "Edit {kind}: {name}",
+    logDensityOverTime: "Log density over time",
+    mapsKeptLinesOnly: "maps kept lines only",
+    densityOverTime: "Density over time",
+    expandDensityStrip: "Expand the density strip",
+    collapseDensityStrip: "Collapse the density strip to a band",
+    clickToJumpDragToFilter: "click to jump · drag to filter",
+    densityKeysHint:
+      "Left and right arrows move between slices, Enter scrolls the log to one, shift with the arrows selects a time range, Escape clears it.",
+    filterBySource: "Filter by source",
+    allSources: "all sources",
+    showSecrets: "Show secrets",
+    collapse: "Collapse",
+    expand: "Expand",
+    filterIdentities: "Filter identities",
+    filterIdentitiesPlaceholder: "Filter by identity, client id or pod…",
+    filterHostsPlaceholder: "Filter by host or Service…",
+    askAgain: "Ask again",
+    readTheLast: "Read the last {range}",
+    readWhatVendorKept: "Read what {vendor} kept",
+    connectOne: "connect one",
+    legendShow: "Show {name} in the view",
+    legendHide: "Hide {name} from the view",
+    legendSoloHint:
+      "Its stream keeps running either way. Double-click or alt-click to read {name} alone",
+    legendOrPress: ", or press {key}",
+    copyValue: "Copy {value}",
+    nameCopied: "{name} copied",
+    copyContextName: "Copy context name",
+    openInNewTab: "Open in a new tab",
+    copyLink: "Copy link",
+    openRow: "Open",
+    openInPanel: "Open in side panel",
+    copyQualifiedName: "Copy name with namespace",
+    copyKubectlGet: "Copy kubectl get command",
+    learnMore: "Learn more",
+    recentChanges: "Recent Changes",
+    nativeHelmRelease: "Native Helm release",
+    searchKindPlaceholder: "Search {kind}...",
+    searchCrdsPlaceholder: "Search CRDs...",
+    rollBackReleaseQuestion: "Roll back release?",
+    rollBackReleaseDetail:
+      '"{name}" will be rolled back to revision {revision}.',
+    uninstallRelease: "Uninstall release",
+    uninstallReleaseDetail:
+      'This permanently deletes the Helm release "{name}" and every resource it created in namespace "{namespace}". This cannot be undone.',
+    installedByRelease: "Installed by this release",
+    notesHeading: "Notes",
+    valuesTab: "Values",
+    manifestTab: "Manifest",
+    valuesOf: "Values of {name}",
+    manifestOf: "Manifest of {name}",
+    valuesNote: "what this release overrides in the chart",
+    manifestNote: "what the chart actually applied",
+    releaseValuesCopied: "Release values copied.",
+    renderedManifestCopied: "Rendered manifest copied.",
+    thisKindHere: "this {kind}",
+    atInline: "at",
+    servingClass: "serving class {name}",
+    andClusterDefault: ", this cluster's default",
+    scaleKind: "Scale {kind} {name}",
+    replicasLabel: "Number of replicas",
+    scaleCountUnread:
+      "The current count is not read yet. Type how many replicas to run.",
+    scaleNeedsCount: "Type how many replicas to run, 0 or more.",
+    scopeWindowToIt: "Scope this window to it",
+    itsOwnAlb: "its own ALB",
+    filterLoadBalancers: "Filter load balancers",
+    filterAlbPlaceholder: "Filter by group, Ingress or host…",
+    albSharedTitle: "One load balancer, several namespaces",
+    albOrderClashTitle: "Two Ingresses claim order {order}",
+    albDisagreeTitle: "Members disagree about {field}",
+    albNoParamsTitle: "No IngressClassParams named {name}",
+    notSet: "not set",
+    notSetHere: "not set here",
+    anywhereSubnetsAllow: "anywhere the subnets allow",
+    anyHost: "any host",
+    addHelmRepository: "Add Helm Repository",
+    addHelmRepositoryHint:
+      "Add a new Helm chart repository to search and install charts from.",
+    repositoryName: "Repository Name",
+    repositoryNamePlaceholder: "e.g., bitnami",
+    repositoryUrl: "Repository URL",
+    repositoryUrlPlaceholder: "e.g., https://charts.bitnami.com/bitnami",
+    adding: "Adding...",
+    authenticationRequired: "Authentication Required",
+    authentication: "Authentication",
+    contextLabel: "Context:",
+    commandLabel: "Command:",
+    unexpectedError: "Unexpected error",
+    renderFailed: "Something went wrong while rendering.",
+    expandRow: "Expand {name}",
+    openOnSite: "Open {name} on {site}",
+    panelWidth: "Panel width",
+    openWhatDeliversIt: "Open what delivers it",
+    openAutoscaler: "Open the autoscaler",
+    hpaBoundsLead: "For a different count, change the autoscaler's bounds:",
+    hpaBoundsChange: "Change bounds",
+    hpaBoundsUnchanged:
+      "{name} already has minReplicas {min} and maxReplicas {max}. Change one to set new bounds.",
+    hpaBoundsConfirm: "Set {name} to minReplicas {min} and maxReplicas {max}?",
+    hpaMinTooLow: "minReplicas must be at least 1.",
+    hpaMinAboveMax: "minReplicas cannot be above maxReplicas.",
+    hpaBoundsSaved: "Autoscaler updated",
+    hpaBoundsSavedDetail: "{name} now keeps this between {min} and {max}.",
+    hpaBoundsFailed: "Could not change the autoscaler",
+    openIt: "Open it",
+    termsAreQueryAgain: {
+      one: "{list} is a query again",
+      other: "{list} are queries again",
+    },
+    termsAreQueryAgainHint:
+      "New lines are kept from now on; the ones already discarded do not come back.",
+    keepingOnly: "Keeping only {list}",
+    keepingOnlyHint:
+      "Lines that do not match are discarded as they arrive. What is already buffered stays.",
+    filterCertificates: "Filter certificates",
+    filterCertificatesPlaceholder: "Filter by name, namespace, host or issuer",
+    valueCopied: "Value of {label} copied.",
+    filterTheLog: "Filter the log",
+    textOrKeyValue: "text, or key=value",
+    valueOfKey: "value of {key}",
+    backToAllFields: "Back to all fields (backspace)",
+    allFields: "All fields",
+    valuesOfKey: "Values of {key}",
+    fieldsInBufferedLog: "Fields in the buffered log",
+    chipIntakeTitle:
+      "{label}, as intake: lines that do not match are discarded as they arrive",
+    chipQueryTitle: "{label}, as a query over the buffered lines",
+    chipQueryTimeTitle:
+      "{label}, as a query over the buffered lines. A time range cannot be intake: it ends in the past, so it would discard every line still to come.",
+    chipFrozenTitle:
+      "{label}, frozen: these lines stay in the buffer while the stream goes on, and do not count against Keep",
+    startFreezeLabel:
+      "Freeze {label}: keep these lines while the stream goes on; they are not counted against Keep",
+    stopFreezeLabel: "Thaw {label}: these lines can be evicted again",
+    startFreezeTitle: "Freeze this interval",
+    stopFreezeTitle: "Thaw this interval",
+    thawFrozen: "thaw",
+    frozenNote:
+      "Lines from {range} stay in the buffer while the stream goes on and do not count against Keep. Click to thaw.",
+    stopIntakeLabel:
+      "Stop discarding lines that do not match {label}. New lines are kept from now on; the ones already discarded do not come back",
+    startIntakeLabel:
+      "Keep only lines matching {label}; the rest are discarded as they arrive",
+    stopIntakeTitle:
+      "Back to a query. New lines are kept from now on; the ones already discarded do not come back.",
+    startIntakeTitle:
+      "Keep only {label}. Lines that do not match are discarded as they arrive, so the buffer holds more of what you asked for.",
+    removeTerm: "Remove {label}",
+    filterHosts: "Filter hosts",
+    filterByHostServiceObject: "Filter by host, service or object",
+    podRestarted: "Pod restarted",
+    podRestartingDetail: "Pod {name} is being restarted.",
+    failedToRestartPod: "Failed to restart pod: {error}",
+    debugPodStillRunning: "Debug pod still running",
+    debugPodDeleteHint: "Delete when done to free cluster resources",
+    deleteNow: "Delete Now",
+    failedToDelete: "Failed to delete",
+    foundReplacementPod: "Found replacement pod",
+    switchingTo: "Switching to {name}",
+    noReplacementFound: "No replacement found",
+    seeContainers: "See containers",
+    seeConditions: "See conditions",
+    kindScaledTo: {
+      one: "{kind} {name} scaled to {n} replica.",
+      other: "{kind} {name} scaled to {n} replicas.",
+    },
+    failedToScaleKind: "Failed to scale {kind}",
+    needsAttention: "Needs attention",
+    all: "All",
+    notDelivered: "Not delivered",
+    readingInline: "reading…",
+    cordon: "Cordon",
+    uncordon: "Uncordon",
+    drain: "Drain",
+    connected: "Connected",
+    ended: "Ended",
+    idle: "Idle",
+    openScopes: "Open scopes",
+    newTabAria: "New tab. Menu key opens it on another cluster.",
+    newTabHere: "New tab here",
+    rightClickForAnotherCluster: "Right click for another cluster.",
+    newTabOn: "New tab on",
+    closeTab: "Close tab",
+    closeNamed: "Close {name}",
+    tabKeepsShell: "A shell is running in {target}. Closing this tab ends it.",
+    filterNamespaces: "Filter namespaces",
+    filterNamespacesPlaceholder: "Filter namespaces…",
+    typeNamespacePlaceholder: "Type a namespace…",
+    details: "Details",
+    copyDetails: "Copy details",
+    chooseNamespace: "Choose a namespace",
+    filterClusters: "Filter clusters",
+    filterClustersPlaceholder: "Filter clusters…",
+    change: "Change…",
+    reload: "Reload",
+    useTheDefault: "Use the default",
+    chooseDifferentFile: "Choose a different file…",
+    debugContainerReady: "Debug container ready",
+    debugContainerReadyDetail:
+      'Container "{container}" is ready in pod "{pod}"',
+    debugFailed: "Debug failed",
+    invalidImage: "Invalid image",
+    invalidImageDetail: "Please select or enter a valid debug image",
+    debugPodDeleted: "Debug pod deleted",
+    podDeletedDetail: 'Pod "{pod}" has been deleted',
+    failedToDeletePod: "Failed to delete pod",
+    containerNotReady: "Container Not Ready",
+    debugContainerInPod: "The debug container in pod",
+    didNotBecomeReady: "did not become ready within the timeout period.",
+    lastStatus: "Last status",
+    goToOverview: "Go to Overview",
+    goToPods: "Go to Pods",
+    goToDeployments: "Go to Deployments",
+    goToServices: "Go to Services",
+    goToNodes: "Go to Nodes",
+    goToConfigMaps: "Go to ConfigMaps",
+    goToSecrets: "Go to Secrets",
+    goToEvents: "Go to Events",
+    goToHelm: "Go to Helm",
+    goToApiResources: "Go to API resources",
+    goToMyAccess: "Go to your access",
+    goToSettings: "Go to Settings",
+    paletteRecent: "Recent",
+    paletteNavigation: "Navigation",
+    paletteResources: "Resources",
+    matchedByNamespaceOnly: "Only the namespace matches {query}",
+    paletteKinds: "Kinds",
+    paletteThisObject: "This object",
+    actionsOn: "Actions on",
+    filterActions: "Filter actions…",
+    readingObject: "Reading {name}…",
+    commandPalette: "Command palette",
+    searchResourcesActionsPages: "Search resources, actions and pages",
+    searchThisCluster: "Search this cluster…",
+    searchOrBang: "Search resources, or ! for a cluster…",
+    results: "Results",
+    hintScopeToIt: "scope to it",
+    hintUseAsScope: "scope to it",
+    hintOpenList: "open its list",
+    searchAllNamespaces: "Search all namespaces",
+    hintComplete: "complete",
+    hintRun: "run",
+    hintActions: "actions",
+    hintNewTab: "new tab",
+    hintDropCluster: "drop the cluster",
+    hintACluster: "a cluster",
+    hintTypeAllPrefix: "type",
+    hintTypeAllSuffix: "for all",
+    dropScope: "Drop {label}",
+    dropScopeAria: "Drop {label} and search every cluster's own scope again",
+    alreadyConnectedSearched: "already-connected ones are searched",
+    reading: "Reading…",
+    rollbackInitiated: "Rollback initiated",
+    rollbackInitiatedDetail: "The release is being rolled back.",
+    rollbackFailed: "Rollback failed",
+    releaseUninstalled: "Release uninstalled",
+    releaseUninstalledDetail:
+      "The Helm release has been successfully uninstalled.",
+    uninstallFailed: "Uninstall failed",
+    openHelmRelease: "Open the HelmRelease",
+    managedByFlux: "Managed by Flux",
+    releaseHeading: "Release",
+    revisionsHeading: "Revisions",
+    unset: "unset",
+    kindScaled: "{kind} scaled",
+    kindScaledDetail: {
+      one: "{kind} {name} scaled to {n} replica.",
+      other: "{kind} {name} scaled to {n} replicas.",
+    },
+    scaleKindFailed: "Failed to scale {kind}",
+    kindRestarted: "{kind} restarted",
+    kindRestartingDetail: "{kind} {name} is being restarted.",
+    restartKindFailed: "Failed to restart {kind}",
+    imageUpdated: "Image updated",
+    imageUpdatedDetail: "Container {container} image updated to {image}.",
+    updateImageFailed: "Failed to update image",
+    selectPod: "Select pod",
+    updateContainerImage: "Update Container Image",
+    newImage: "New Image",
+    imagePlaceholder: "e.g., nginx:1.21",
+    update: "Update",
+    deleteKindFailed: "Failed to delete {kind}",
+    yes: "yes",
+    no: "no",
+    allNamespaces: "All namespaces",
+    selectNamespace: "Select namespace",
+    searchReleases: "Search releases...",
+    helmCliRequired: "Helm CLI required",
+    resume: "Resume",
+    suspend: "Suspend",
+    reconcile: "Reconcile",
+    viewCrd: "View CRD",
+    installing: "Installing...",
+    installChart: "Install Chart",
+    installChartHint: "Install {name} to your cluster",
+    releaseName: "Release Name",
+    versionOptional: "Version (optional)",
+    valuesYamlOptional: "Values (YAML, optional)",
+    createNamespace: "Create namespace",
+    waitForReady: "Wait for ready",
+    configureInSettings: "Configure in Settings",
+    installHelm: "Install Helm",
+    search: "Search",
+    filterEventsPlaceholder: "Filter events…",
+    hintOpen: "open",
+    hintMove: "move",
+    hintSearch: "search",
+    chooseFile: "Choose a file…",
+    lookAgain: "Look again",
+    error: "Error",
+    kindDeleted: "{kind} deleted",
+    kindDeletedDetail: "{kind} {name} has been deleted.",
+    deleteFailed: "Failed to delete {kind} {name}: {error}",
+    resourceNoun: "resource",
+    deleteKindQuestion: "Delete {kind}?",
+    willDelete: "This will delete {name}.",
+    willDeleteInNamespace: "This will delete {name} in {namespace}.",
+    couldNotDo: "Could not {action} {name}",
+    restartWhileUnready:
+      "Not every pod is ready: {ready} of {desired}. A restart starts the same template again, so pods that crash or fail their probes will do so again. {pods}",
+    restartSeeWhy: "See why on the Pods tab.",
+    notPermitted:
+      "Your access does not allow this: the cluster answers no to kubectl auth can-i {check}.",
+    notPermittedEither:
+      "Your access does not allow this: the cluster answers no to kubectl auth can-i {check} and to kubectl auth can-i {other}.",
+    validationPassed: "Validation passed",
+    applySucceeded: "Apply succeeded",
+    applyFailed: "Apply failed",
+    applyUnanswered: "The cluster did not answer",
+    applyUnansweredHint:
+      "We stopped waiting. Admission can outlast the wait, so whether the change was applied is unknown: check the object before applying again.",
+
+    custom: "Custom",
+    stripFull: "Full",
+    stripFullHint: "Volume over time, with the clock and the error counts",
+    stripBand: "Band",
+    stripBandHint:
+      "A few pixels: where the errors are, still clickable, still marking the viewport",
+    stripHidden: "Hidden",
+    stripHiddenHint:
+      "No map at all: clicking to jump and dragging a time range go with it",
+    viewCompact: "Compact",
+    viewCompactHint: "One line per entry, fields inline",
+    viewTable: "Table",
+    viewTableHint: "Level spelled out and the message wrapped in full",
+    viewRaw: "Raw",
+    viewRawHint: "The whole line, with the colour codes taken out",
+    repeats: "Repeats",
+    collapseRepeatsHint:
+      "Collapse consecutive repeats into one row with a count and a time span",
+    previousRun: "Previous run",
+    previousRunOnHint:
+      "Reading the run before the current one. Click for the current run",
+    previousRunOffHint:
+      "Read the run before the current one, which for a crash loop is the run that printed the reason",
+    follow: "Follow",
+    followOnHint: "Following the tail. Click to stop and read",
+    followOffHint: "Jump to the newest line and follow it",
+    keepLines: "Keep {n}",
+    keepLinesHint: "How many lines to backfill and then keep",
+    startStreamHint: "Attach to the container and follow its output",
+    stopStreamHint: "Stop reading from the container",
+    connecting: "Connecting",
+    streamLive: "Live",
+    streamPaused: "Paused",
+    filtering: "filtering…",
+    streamStopped: "Stopped",
+    moreLogActions: "More log actions",
+    densityStrip: "Density strip",
+    showEveryLine: "Show every line",
+    showEveryContainer: "Show every container",
+    showAllContainers: "Show all containers",
+    interleaveAnyway: "Interleave them anyway",
+    clearQuery: "Clear the query",
+    downloadFailed: "Download failed",
+    logSaved: { one: "Log saved", other: "{n} logs saved" },
+    logsPartlySaved: {
+      one: "{n} of {total} logs saved",
+      other: "{n} of {total} logs saved",
+    },
+    notSaved: "Not saved:",
+    downloadFailedDetail: "Could not read the log from the API",
+    confirm: "Confirm",
+    processing: "Processing...",
+    openActions: "Open actions",
+    openFullPage: "Open full page",
+    copyName: "Copy name",
+    dragToResize: "Drag to resize · double-click to reset",
+    more: "More",
+    moreActions: "More actions",
+    goBack: "Go back",
+    show: "Show",
+    hide: "Hide",
+    reveal: "Reveal",
+    revealAll: "Reveal all",
+    hideAll: "Hide all",
+    copyAll: "Copy all",
+    copyBase64: "Copy base64",
+    clearSearch: "Clear search",
+    logs: "Logs",
+    updateImage: "Update image",
+    scale: "Scale",
+    scaleAnyway: "Scale anyway",
+    restart: "Restart",
+    debug: "Debug",
+    portForward: "Port forward",
+    restartDeletesIt: "Restart (deletes it)",
+    podFinishedNoShell:
+      "This pod has finished: {phase}. There is no process left to attach a shell to.",
+    podStoppedNoShell:
+      "This pod has stopped. Its containers are gone, so there is nothing to attach to.",
+    noContainerRunningYet:
+      "No container is running yet: this pod is {phase}{note}.",
+    waitingNote: " · {container} {reason}",
+    podDeclaresNoPort:
+      "No container in this pod declares a port, so there is nothing to forward to.",
+    nothingListeningYet:
+      "Nothing is listening yet: no container is running, this pod is {phase}{note}.",
+    serviceDeclaresNoPorts:
+      "This Service declares no ports, so there is nothing to forward.",
+    endpointsUnreadable: "Could not read this Service's endpoints: {error}",
+    noReadyEndpoints:
+      "No ready endpoints: nothing is behind this Service to forward to.",
+    deleteSubjectTitle: "Delete {subject}?",
+    deleteSubjectBody: "Deleting {subject} {effect}",
+    restartSubjectTitle: "Restart {subject}?",
+    restartPlanUnknown: "Replaces every pod, following the update strategy.",
+    restartNothingRuns: "No pods are running, so nothing is replaced.",
+    restartPlanRolling:
+      "Replaces {replaces}: {unavailable} and {extra} at a time.",
+    restartNoneUnavailable: "none unavailable",
+    restartNoExtra: "no extra",
+    restartPlanOrdered:
+      "Replaces {replaces} one at a time, from {last} down to {first}, each once the one before it is Ready.",
+    restartPlanOrderedBatch: {
+      one: "Replaces {replaces} from {last} down to {first}, up to {n} at a time where the cluster allows maxUnavailable on StatefulSets, otherwise one at a time.",
+      other:
+        "Replaces {replaces} from {last} down to {first}, up to {n} at a time where the cluster allows maxUnavailable on StatefulSets, otherwise one at a time.",
+    },
+    restartPartitionHolds:
+      "Pods below ordinal {partition} keep their current template (partition {partition}).",
+    restartPartitionHoldsAll:
+      "Nothing restarts: partition {partition} holds every pod at its current template.",
+    restartPlanOnDelete:
+      "Nothing restarts yet: with OnDelete, a pod picks up the change only when it is deleted. Delete the pods yourself to restart them.",
+    restartNoNodes:
+      "No node runs a pod of this DaemonSet, so nothing is replaced.",
+    restartPlanNodes: {
+      one: "Replaces the pod on each of {nodes}, {n} node at a time.",
+      other: "Replaces the pod on each of {nodes}, {n} nodes at a time.",
+    },
+    restartPlanNodesSurge: {
+      one: "Replaces the pod on each of {nodes}, starting the new pod before stopping the old one on {n} node at a time.",
+      other:
+        "Replaces the pod on each of {nodes}, starting the new pod before stopping the old one on {n} nodes at a time.",
+    },
+    restartPodBody:
+      "Restarting a pod means deleting it. Deleting Pod {name} {effect}",
+    effectPodUnread:
+      "removes it now. Whether anything starts a replacement depends on its owner, which has not been read yet.",
+    effectPodOwned:
+      "removes it now. Its {kind} {name} will start a replacement.",
+    effectPodBare:
+      "removes it now. Nothing owns this pod, so nothing will bring it back.",
+    effectPodUncontrolled:
+      "removes it now. {kind} {name} owns it but does not control it, so nothing will bring it back.",
+    effectPodFinished:
+      "removes it now, with its logs. Its Job {name} does not replace a pod that has finished.",
+    effectDeployment: "removes it, its ReplicaSets and every pod they run.",
+    effectStatefulSet: "removes it and its pods.",
+    effectStatefulSetUnread:
+      "removes it and its pods. Whether PersistentVolumeClaims stay depends on its volumeClaimTemplates, which have not been read yet.",
+    effectStatefulSetClaimsStay:
+      "removes it and its pods. The PersistentVolumeClaims made from its volumeClaimTemplates ({templates}) stay, with their data and their cost: its claim retention policy on delete is Retain.",
+    effectStatefulSetClaimsGo:
+      "removes it, its pods and the PersistentVolumeClaims made from its volumeClaimTemplates ({templates}): its claim retention policy on delete is Delete.",
+    effectDaemonSet: "removes it and its pod on every node it runs on.",
+    effectJob: "removes it and the pods it created, including their logs.",
+    effectCronJob:
+      "stops the schedule and removes it, along with the Jobs it created and their pods.",
+    effectService:
+      "removes its address. Anything resolving this name stops reaching these pods.",
+    effectConfigLike:
+      "leaves running pods alone, but any pod that mounts it will fail to start until it is recreated.",
+    effectClaim:
+      "releases the volume. Depending on the storage class's reclaim policy the data may be erased.",
+    effectVolume:
+      "removes the volume object. Whether the data survives is up to its reclaim policy.",
+    effectCrd:
+      "removes the kind it defines and every object of that kind, in every namespace. It cannot be undone.",
+    effectPermanent: "is permanent and cannot be undone.",
+    podSubject: "Pod {name}",
+    validate: "Validate",
+    apply: "Apply",
+    applyAnyway: "Apply anyway",
+    formatYaml: "Format YAML",
+    copyToClipboard: "Copy to Clipboard",
+    resetToOriginal: "Reset to Original",
+    toggleDiffView: "Toggle Diff View",
+    history: "History",
+    viewDetails: "View details",
+    viewInstances: "View instances",
+    viewHistory: "View History",
+    remove: "Remove",
+    rollBack: "Roll back",
+    rollBackToThis: "Roll back to this revision",
+    rollbackTitle: "Roll back {subject} to revision {n}?",
+    rollbackBody:
+      "Its pod template becomes the one revision {n} recorded, and the controller rolls that out like any other change.",
+    rollbackWhatChanges: "What changes",
+    rollbackCurrentUnknown:
+      "The revision it is on now could not be read, so what will change is not known.",
+    rollbackStarted: "{kind} {name} is rolling out revision {n}'s template.",
+    rollbackAlreadyThere:
+      "{kind} {name} already runs revision {n}'s template; nothing was changed.",
+    uninstall: "Uninstall",
+    install: "Install",
+    upgrade: "Upgrade",
+    addRepository: "Add repository",
+    updateAll: "Update all",
+    backToReleases: "Back to releases",
+    checkAgain: "Check again",
+    copyUrl: "Copy URL",
+    leave: "Leave",
+    keepWaiting: "Keep Waiting",
+    startDebug: "Start Debug",
+    stop: "Stop",
+    starting: "Starting...",
+    startPortForward: "Start port-forward",
+    saveChanges: "Save changes",
+    savePortForward: "Save port forward",
+    copyDiagnostics: "Copy diagnostics",
+    downloadAndInstall: "Download & install",
+    checkForUpdates: "Check for updates",
+    checking: "Checking…",
+    disconnect: "Disconnect",
+    connect: "Connect",
+    edit: "Edit",
+    test: "Test",
+    testing: "Testing…",
+    clear: "Clear",
+    import: "Import",
+    copyLinesInView: "Copy the lines in view",
+    downloadFullLog: "Download the full log",
+    clearBuffered: "Clear what is buffered",
+    reconnect: "Reconnect",
+    followAgain: "Follow again",
+    followNewRun: "Follow the new run",
+    showCurrentRun: "Show the current run",
+    showFewer: "Show fewer",
+    showAll: "Show all {n}",
+    cancel: "Cancel",
+    close: "Close",
+    save: "Save",
+    delete: "Delete",
+    pickOneNamespace: "Pick one namespace",
+    retry: "Retry",
+    download: "Download",
+    refresh: "Refresh",
+    copy: "Copy",
+    copied: "Copied",
+    copyFailed: "Could not copy",
+    openInBrowser: "Open in Browser",
+    back: "Back",
+    gwFilterPlaceholder: "name, host, gateway…",
+    filterRoutes: "Filter routes",
+    filterByKind: "Filter by kind",
+    allKinds: "All kinds",
+    hideMap: "Hide map",
+    map: "Map",
+    openGateways: "Open Gateways →",
+    copyListenerHostname: "Listener hostname {host}",
+    inInline: "in",
+    probe: "Probe",
+    openScopedTo: "Open {plural} scoped to {namespace}",
+    copyKindAddress: "{kind} address",
+    probing: "Probing…",
+    copyManifest: "Copy manifest",
+    grantManifestCopied: "ReferenceGrant manifest copied",
+    copyHost: "Host {host}",
+    copyResolvedIp: "Resolved address {ip}",
+    copyGatewayAddress: "Gateway address {address}",
+    sortByColumn: "Sort by this column",
+    editKeyLabel: "Value of {key}",
+    keyUpdated: "{key} updated",
+    keyUpdateFailed: "Could not write {key}",
+    runNow: "Run now",
+    runNowTitle: "Run this CronJob now",
+    runNowBody:
+      "Creates a Job from {name}'s template, the way the schedule would. The controller takes it from there.",
+    runNowName: "Name for this run",
+    cronRunStarted: "Run started",
+    cronRunStartedName: "Job {name} created",
+    cronRunFailed: "Could not start the run",
+    copyPair: "Copy {pair}",
+    toInline: "to",
+    viaGateway: "via Gateway",
+  },
+  activity: {
+    forwardDialogServiceHint:
+      "Forward traffic from your machine to this Service, through a ready pod behind it. When that pod goes, the forward moves to another.",
+    servicePort: "Service port",
+    podPort: "Port in the pod",
+    localPortEmptyHint: "Leave empty to pick a free port.",
+    opensAt: "Opens at {address}",
+    opensOnFreePort: "Opens on a free local port, picked when it starts.",
+    localPortPrivileged:
+      "Port {port} needs administrator rights on this machine. Use {suggestion} or leave it empty to pick a free one.",
+    localPortInUse:
+      "Port {port} is already in use on this machine. Use {suggestion} or leave it empty to pick a free one.",
+    useSuggestedPort: "Use {port}",
+    localPortInvalid: "The local port is a number from 1 to 65535, or empty.",
+    remotePortInvalid: "The port is a number from 1 to 65535.",
+    savedNeedsLocalPort:
+      "A saved forward needs a fixed local port. Fill one in, or turn saving off.",
+    forwardMovedTitle: "Port forward moved",
+    forwardFailedTitle: "Port forward ended",
+    failedForwards: "Ended",
+    dismissForward: "Dismiss {pod}",
+    viaInline: "via {kind} {name}",
+    forwardStarted: "Port forward started",
+    forwardingDetail: "Forwarding localhost:{local} → {pod}:{remote}",
+    forwardStopped: "Port forward stopped",
+    forwardDialogHint: "Forward traffic from your machine to this pod.",
+    saveAsConfig: "Save this port-forward",
+    saveAsConfigHint:
+      "It stays in the activity panel, ready to start again in one click",
+    configName: "Port-forward name",
+    forwardNameExample: "Auth API",
+    activeForwards: "Active port-forwards",
+    activeFallback: "Active",
+    reconnectingInline: "reconnecting",
+    runningElsewhere: "Running elsewhere",
+    missingTarget: "Missing target",
+    missingTargetDetail: "Pod name and namespace are required.",
+    invalidPort: "Invalid port",
+    invalidPortDetail: "Ports must be between 1 and 65535.",
+    saveForwardFailed: "Failed to save port-forward",
+    createForwardFailed: "Failed to create port-forward",
+    editPortForward: "Edit port forward",
+    newPortForward: "New port forward",
+    forwardSavedFor:
+      "Saved for {context} and offered in the activity panel until you delete it.",
+    localPort: "Local port",
+    remotePort: "Remote port",
+    autoReconnect: "Auto reconnect",
+    autoReconnectHint: "Retry when the pod or the connection drops.",
+    autoStartLabel: "Auto start",
+    autoStartHint: "Start as soon as this cluster connects.",
+    panel: "Activity panel",
+    saved: "Saved",
+    startAll: "Start all",
+    new: "New",
+    autoStart: "auto",
+    connectToManageForwards: "Connect to a cluster to manage port forwards",
+    noForwardsSaved: "No port forwards saved for {context}",
+    forwardsSavedElsewhere: {
+      one: "{n} forward is saved against another cluster, reachable by switching to it.",
+      other:
+        "{n} forwards are saved against other clusters, reachable by switching to them.",
+    },
+    forwardSavedHint:
+      "A forward saved here can be started again without retyping the pod and ports.",
+    startForwardFailed: "Failed to start port forward",
+    stopForwardFailed: "Failed to stop port forward",
+    deleteForwardFailed: "Failed to delete port forward",
+    startedForwards: "Started port forwards",
+    startedForwardsDetail:
+      "{started} started, {skipped} already running, {failed} failed.",
+    startAllFailed: "Failed to start port forwards",
+    stopForwarding: "Stop forwarding {pod}",
+    startNamed: "Start {name}",
+    stopNamed: "Stop {name}",
+    moreActionsFor: "More actions for {name}",
+    finished: "Finished",
+    sessions: "Sessions",
+    running: "Running",
+    panelPortForwards: "Port forwards",
+    title: "Activity",
+    idle: "activity",
+    ports: "Ports",
+    terminals: "Shells",
+    endShell: "End the shell in {pod}",
+    shellIdle: "idle",
+    shellConnecting: "connecting",
+    shellConnected: "connected",
+    shellClosing: "ending",
+    shellDisconnected: "ended",
+    shellError: "error",
+    shellEndedOnLeave: "Shell ended",
+    shellEndedOnLeaveBody:
+      "The shell in {target} was ended because its tab moved to another page.",
+    readingTerminals: "Reading the open shells",
+    terminalsUnread: "Could not read the open shells",
+    jobs: "Jobs",
+    portForwards: { one: "{n} port forward", other: "{n} port forwards" },
+    terminalCount: { one: "{n} shell", other: "{n} shells" },
+    watchCount: { one: "{n} watch", other: "{n} watches" },
+    watching: "Watching",
+    active: "{n} active",
+  },
+  checks: {
+    tab: "Checks",
+    title: "Test a hypothesis from the pod",
+    lede: "Asked from the pod's own network, never from this machine: does the name resolve, does the port answer.",
+    fromContainer: "From container",
+    dns: "Resolve",
+    tcp: "Connect to",
+    run: "Run",
+    running: "Asking the pod…",
+    failed: "The check could not run: {error}",
+    answers: "Answers",
+    resolved: "{name} resolves to {addresses}",
+    notResolved: "{name} does not resolve from here",
+    connected: "{address} accepts a connection from here",
+    refused: "{address} does not answer from here",
+    noTool: "The image has nothing to ask with (tried {tried})",
+    ranInContainer: "in the pod's own container",
+    ranInCopy: "in a copy of the pod running {image}, {deleted} ({pod})",
+    copyDeleted: "deleted afterwards",
+    copyNotDeleted: "not confirmed deleted",
+    unanswered: "The check ended without saying how it went",
+    unansweredBy:
+      "{tool} ended without saying how it went, so this is not an answer about the cluster",
+
+    answeredWith: "answered by {tool}",
+    runFromCopy: "Run from a copy",
+    copyImage: "Image for the copy",
+    copyNote:
+      "A copy shares the namespace, labels, DNS policy and service account. It is not the pod, and it is deleted when the answer is in.",
+    whatItSaid: "What it printed",
+    containerCannotAnswer:
+      "{container} cannot take an exec: {why}. Run creates a copy of the pod, asks from it and deletes it when the answer is in.",
+    runsAsExec:
+      "Run is an exec into {container}, as kubectl exec is: it creates nothing in the cluster.",
+  },
+  changes: {
+    title: "Changes",
+    last24h: "Last 24 hours",
+    explained:
+      "Four records on one clock: the controller's revisions, the delivery owner's history, Helm's history, and what this app watched while it was connected. Where it was not watching, the clock shows a gap.",
+    clusterExplained:
+      "What this app saw change in the cluster's workloads while it was connected, in the order it saw it. A gap is a stretch it was not watching; nothing is known about it.",
+    notObserved: "Not observed {from} to {to}",
+    notObservedStill: "Not observed since {from}",
+    notObservedBrief: {
+      one: "Not observed for {n} second at {at}",
+      other: "Not observed for {n} seconds at {at}",
+    },
+    outsideScope: "Watching other namespaces, not this one, {from} to {to}",
+    outsideScopeBrief: {
+      one: "Watching other namespaces, not this one, for {n} second at {at}",
+      other: "Watching other namespaces, not this one, for {n} seconds at {at}",
+    },
+    revisionNumber: "revision {n}",
+    revisionCurrent: "current",
+    revisionOldest: "oldest known; nothing earlier to compare with",
+    sameTemplate: "the same template as the revision before it",
+    comparedUnchangedRestUnread:
+      "no change in image, env, envFrom, ports, resources, readinessProbe, livenessProbe, startupProbe or checksum annotations; the rest of the template could not be compared",
+    otherFieldsDiffer: {
+      one: "{n} other field differs",
+      other: "{n} other fields differ",
+    },
+    moreOtherFields: { one: "and {n} more", other: "and {n} more" },
+    templateUnread:
+      "this revision's template, or the one before it, could not be read; what changed is not known",
+    revisionsMissing: {
+      one: "{n} revision in between is no longer on the cluster",
+      other: "{n} revisions in between are no longer on the cluster",
+    },
+    readopted:
+      "re-adopted by a rollback: the clock is when this object was created, not when it became current",
+    changeCause: "kubernetes.io/change-cause",
+    fieldContainer: "container",
+    added: "added",
+    removed: "removed",
+    delivered: "{owner} applied {revision}",
+    deliveredFrom: "from {from}",
+    helmRevision: "Helm revision {n}: {chart}",
+    journalCreated: "{kind} appeared",
+    objectCreated: "created; nothing before this belongs to it",
+    journalDeleted: "{kind} gone",
+    journalGeneration: "spec generation {from} → {to}",
+    journalImage: "{container} image {from} → {to}",
+    journalReplicas: "replicas {from} → {to}",
+    journalAnnotation: "{key} {from} → {to}",
+    journalSeenAtRelist:
+      "Seen at a relist after a break: it changed sometime in the gap before this.",
+    sinceMarker: "since the link was made",
+    sinceNothing: "Nothing on this clock since {when}.",
+    nothingRecordedSince:
+      "No change recorded since {since}: no workload here was created, deleted, scaled or edited.",
+    revisionsUnread: "The revisions could not be read: {reason}",
+    historyUnread: "{owner}'s history could not be read: {reason}",
+    helmUnread: "Helm's history for {release} could not be read: {reason}",
+    nothingInWindow: "Nothing on this clock in the window.",
+    notWatchingNow: "Not watching this cluster's workloads right now.",
+    watchingNow: "Watching since {since}",
+    earlierRows:
+      "Rows before {since} were recorded by this app while it watched from {from} to {to}",
+    unwatchedRefused: "{kinds} not watched: the cluster refused",
+    deliveriesUnread: "What delivers this could not be read: {reason}",
+    claimedOwner:
+      "{owner} does not list this object; it only carries the label naming it",
+    moreRows: {
+      one: "{n} more row not drawn",
+      other: "{n} more rows not drawn",
+    },
+  },
+  hints: {
+    mostLikely: "Most likely",
+    notTested:
+      "«Probably» is the app's word for a chain it read end to end but did not test: nothing here sent a packet.",
+    googleIt: "Search it",
+    copyForAgent: "Copy for agent",
+    copiedForAgent: {
+      one: "Copied {n} character. Read it before you paste it: the log lines are whatever the container printed.",
+      other:
+        "Copied {n} characters. Read it before you paste it: the log lines are whatever the container printed.",
+    },
+    searchNoEngine:
+      "No search engine: the custom URL in Settings is not an address.",
+    searchOpens: "opens {site}; change the engine in Settings",
+    guessCrashLoop:
+      "Most likely: {container} exits on its own right after starting, {restarts} so far. The reason is probably in its last lines before the exit.",
+    guessCrashRefusedSidecar:
+      "Most likely: nothing answers on {host}:{port} inside this pod. That address belongs to sidecar {sidecar}, which is {state}; the app itself is probably fine and waits on it.",
+    guessCrashRefusedServiceEmpty:
+      "Most likely: {host}:{port} refused the connection. That address is Service {service}, which has nothing ready behind it right now; the pod itself is probably fine.",
+    guessCrashRefusedServiceReady:
+      "Most likely: {host}:{port} refused the connection. That address is Service {service}, with {ready} of {total} endpoints ready, so the refusal probably comes from the process behind it rather than from the cluster.",
+    guessCrashTimeoutServiceEmpty:
+      "Most likely: {host}:{port} never answered. That address is Service {service}, which has nothing ready behind it right now; the pod itself is probably fine.",
+    guessCrashTimeoutServiceReady:
+      "Most likely: {host}:{port} never answered. That address is Service {service}, with {ready} of {total} endpoints ready, and no NetworkPolicy here restricts this pod's egress or their ingress, so the packets are probably dropped somewhere else: a network plugin's own policy, or nothing listening on that port.",
+    guessCrashTimeoutServicePolicy:
+      "Most likely: {host}:{port} never answered. That address is Service {service}, with {ready} of {total} endpoints ready, and a NetworkPolicy stands on the way: {policies}. A connection it does not allow is dropped, which probably looks exactly like this.",
+    guessCrashTimeoutServicePoliciesUnread:
+      "Most likely: {host}:{port} never answered. That address is Service {service}, with {ready} of {total} endpoints ready, so the packets are probably dropped on the way. A NetworkPolicy is the usual reason, and the ones on this path could not be read, so this app cannot say.",
+    guessCrashServiceUncounted:
+      "Most likely: the app cannot reach {host}:{port}. That address is Service {service}, and what is behind it could not be read. Whether anything is ready there is probably the first thing to look at, and this app cannot say.",
+    guessCrashInClusterUnread:
+      "Most likely: the app cannot reach {host}:{port}, an address inside the cluster. The Services of this namespace could not be read, so what answers to it is probably worth checking by hand; this app cannot say.",
+    guessCrashLoopback:
+      "Most likely: {host}:{port} refused the connection, and that address is this pod itself. Usually that is a sidecar that is not up, or one that never listens on that port. No container in this pod declares it.",
+    guessCrashUnreachableOutside:
+      "Most likely: {host}:{port} could not be reached, and the line does not say whether anything answered. Usually that is a route or a name that resolves to nowhere from this cluster. The app sees the road, not the far end.",
+    guessCrashInClusterUnknown:
+      "Most likely: the app cannot reach {host}:{port}, an address inside the cluster that no Service in this namespace answers to. Probably a wrong address or a Service in another namespace.",
+    guessCrashTimeoutOutside:
+      "Most likely: {host} is outside the cluster and the packets are dropped on the way, usually by an egress policy, a firewall or an allow-list without this cluster's address. The app can only see the road, not what is at the end of it.",
+    guessCrashRefusedOutside:
+      "Most likely: {host}:{port} answered and said no. Something outside the cluster refused the connection, usually the service itself or a proxy in front of it; a firewall would have timed out.",
+    guessOom:
+      "Most likely: {container} is killed for using more memory than its limit. It probably needs a higher limit, or it has a leak.",
+    guessOomWithLimit:
+      "Most likely: {container} is killed for using more memory than its limit of {limit}. It probably needs a higher limit, or it has a leak.",
+    guessOomUnsaid:
+      "Most likely: {container} is killed for going past its memory limit of {limit}. It ends with exit 137, a kill, and the kubelet says Error rather than OOMKilled, which usually means the kernel killed a process the container started rather than its main one.",
+    guessImagePull:
+      "Most likely: the image {image} cannot be pulled, usually a wrong tag, a private registry without a pull secret, or a registry that is rate-limiting.",
+    guessFailedMount:
+      "Most likely: a volume{volume} cannot be mounted, {attempts} so far, usually a Secret or ConfigMap that does not exist yet or a PersistentVolumeClaim that is not bound.",
+    guessPendingSame:
+      "Most likely: no node fits it. The scheduler gave the same answer {times}, so probably nothing about the nodes has changed since it first asked.",
+    guessPendingVaried:
+      "Most likely: no node fits it, and the scheduler's answer has changed over {attempts}, so the nodes are probably changing under it.",
+    notPlacedYet:
+      "Not placed yet: the scheduler has found no node for it so far, and it is still inside the wait a new pod gets, so this is not a fault yet.",
+    guessUnknownUnread:
+      "The pod's events could not be read, so what is probably wrong cannot be said from here. The container states below are all this app could look at.",
+    guessProbeUnnamed:
+      "Most likely: a probe fails and the kubelet acts on it, {times} so far; the event does not say which. The app probably starts slower than the probe allows, or listens on another port or path.",
+    guessProbe:
+      "Most likely: the {probe} probe fails and the kubelet acts on it, {times} so far. The app probably starts slower than the probe allows, or listens on another port or path.",
+    factLastLineSaid: "The last line before the exit said: {line}",
+    factEgressRestricted:
+      "A NetworkPolicy restricts this pod's egress: {policies}. Only what it allows goes out.",
+    factEgressOpen:
+      "No NetworkPolicy in {namespace} restricts this pod's egress.",
+    factIngressRestricted:
+      "A NetworkPolicy restricts ingress to the pods behind {service}: {policies}. Only what it allows comes in.",
+    factIngressOpen:
+      "No NetworkPolicy restricts ingress to the pods behind {service}.",
+    factPoliciesUnread:
+      "The NetworkPolicies of {namespace} could not be read, so whether one drops this connection cannot be said.",
+    factExited: "{container} exited with code {code}, {restarts} so far.",
+    factRestarts: "{container} restarted {times}.",
+    countRestarts: { one: "{n} restart", other: "{n} restarts" },
+    countAttempts: { one: "{n} attempt", other: "{n} attempts" },
+    countTimes: { one: "{n} time", other: "{n} times" },
+    factKubeletSaid: "The kubelet said: {message}",
+    factSchedulerSaid: "The scheduler said: {message}",
+    checkLastLines: "Read the last lines of {container} before the exit",
+    checkLastLinesUnnamed:
+      "Read the last lines before the exit; the event does not say which container",
+    stateWaiting: "waiting",
+    stateWaitingReason: "{reason}",
+    stateExited: "exited {code}",
+    stateRunning: "running",
+    stateRunningNotReady: "running, not ready",
+    checkSidecarLines: "Read the last lines of {sidecar}",
+    checkNetworkPolicy: "Read NetworkPolicy {name}: what it lets through",
+    checkService:
+      "Check Service {service}: its endpoints and what stands behind them",
+    checkConfig:
+      "Look at {kind} {name}, if the address is wrong rather than down",
+    checkLimits: "Compare the memory limit with what the container uses",
+    checkNode: "See node {node}: memory pressure and what else runs there",
+    checkImageRef:
+      "Check the image reference {image}: tag, registry, pull secret",
+    checkMountedSecret:
+      "Secret {name}: one the pod mounts. The pull secret is a different field, which this app does not read",
+    checkPullSecret: "Secret {name}: a pull secret the pod mounts",
+    checkVolumeRef: "{kind} {name}: does it exist, is it bound",
+    checkRequests: "Compare the requests with what the nodes have free",
+    checkNodes: "Look at the nodes: taints, capacity, what is already placed",
+    checkProbe:
+      "Read the probe: port, path, initial delay, against what the container listens on",
+    notReadService: "the Services of {namespace} ({reason})",
+    notReadEndpoints: "the endpoints of Service {service} ({reason})",
+    notReadLogs: "the last lines of {container} ({reason})",
+    notReadEvents: "the events of this pod ({reason})",
+    eventsHeld: "Held while the pointer is here, so no row moves under it",
+    notReadOtherNamespace:
+      "the Services of {namespace}, where that address lives: this app only listed this pod's own namespace",
+    notReadPolicies: "the NetworkPolicies of {namespace} ({reason})",
+    notReadPods: "the pods of {namespace} ({reason})",
+  },
+  services: {
+    myServices: "My services",
+    pin: "Pin",
+    unpin: "Unpin",
+    noneYetHint:
+      "Pin a Deployment, StatefulSet, DaemonSet or CronJob on its page to keep its readiness and last change here. Nothing is pinned in this cluster yet.",
+    pickOneToPin: "Find one to pin",
+    readyOf: "{ready}/{total} ready",
+    gone: "does not exist",
+    reading: "reading…",
+    couldNotRead: "could not read",
+    wayIn: "Way in",
+    notReadYet: "not read yet",
+    nothingPublishes: "nothing publishes it",
+    nothingBehind: "nothing behind it",
+    moreWays: "{n} more",
+    lastChange: "Last change",
+    nothingSeen: "nothing seen while this app was watching",
+    waitingOn: "Waiting on",
+    notLookedAt: "Not looked at",
+    pinsFull: {
+      one: "Already {n} service pinned in this cluster",
+      other: "Already {n} services pinned in this cluster",
+    },
+    pinsFullHint: "Unpin one on the home page to make room.",
+    pinWords: "pin my services home page favourite",
+  },
+  share: {
+    publish: "Publish",
+    publishTo: "Publish to {target}",
+    published: "Published, version {n}",
+    publishing: "Publishing…",
+    publishFailed: "Could not publish",
+    copyLink: "Copy link",
+    saveInstead: "Save as HTML instead",
+    target: "Target",
+    noTargets:
+      "No publishing target yet. A report is saved as a file until you add one in Settings › Sharing.",
+    targetNoKey: "This target has no key yet; add one in Settings › Sharing.",
+    publicWarning:
+      "Anyone with the link can read this, and so can {host}. The report carries your cluster's names, its images and its log lines.",
+    publicAcknowledge: "I understand what leaves this machine",
+    addTarget: "Add a target",
+    targetLabel: "Name",
+    targetUrl: "API address",
+    targetKind: "Kind",
+    targetKindPostplan: "postplan",
+    targetKindGeneric: "Plain endpoint",
+    targetPublic: "Anyone with the link can read it",
+    targetPublicHint:
+      "Turn on for a service open to the internet. It is drawn in the reserved red and asks for an acknowledgement every time.",
+    targetKey: "API key",
+    targetKeyKept: "A key is stored. Leave empty to keep it.",
+    importPostplan: "Import the key postplan already has",
+    importedPostplan: "Will use the key from ~/.postplan, ending {key}",
+    importFailed: "Could not read the key from ~/.postplan",
+    saveTargetFailed: "Could not save the target",
+    removeTargetFailed: "Could not remove the target",
+    noPostplanKey: "No postplan key on this machine.",
+    verify: "Check the key",
+    verified: "{account} · key {key}",
+    verifyFailed: "The target did not accept the key",
+    removeTarget: "Remove",
+    targetsEmpty: "No targets yet. Reports are saved as files.",
+    share: "Share",
+    shareThis: "Share this page",
+    captured: "Captured",
+    openInRubick: "Open in Rubick",
+    linkFallback: "or paste this link into Rubick's search:",
+    sectionVerdict: "Most likely",
+    sectionTraffic: "How traffic reaches it",
+    sectionConnections: "What it is connected to",
+    sectionChanges: "What changed",
+    sectionLogs: "Log lines",
+    sectionNotRead: "Not read",
+    publishedNoLink: "The target did not say where it put it.",
+    targetsUnread: "The list of targets could not be read: {reason}",
+    targetsReading: "Reading the list of targets…",
+    chainStillReading:
+      "The app had not finished reading what connects to this when the file was made.",
+    nothingHere: "Nothing here.",
+    previousRun: "previous run",
+    kicker: "Investigation",
+    kickerScreen: "Snapshot",
+    created: "Created",
+    stillReading: "Still being read when the report was made.",
+    shareScreen: "Share this screen",
+    rowsMore: {
+      one: "{n} more row is in the app.",
+      other: "{n} more rows are in the app.",
+    },
+    atCapture: "when captured",
+    initContainer: "init",
+    kindNotLookedAt: "{kind}: not looked at while reading the connections",
+    notReadCount: {
+      one: "{n} thing could not be read. The list is at the end.",
+      other: "{n} things could not be read. The list is at the end.",
+    },
+    allRead: "Everything this report names was read.",
+    includeLogs: "Include log lines",
+    logsShown: {
+      one: "{n} line, as the Logs tab showed it",
+      other: "{n} lines, as the Logs tab showed it",
+    },
+    logsTail: {
+      one: "the last {shown} of {n} line the Logs tab showed",
+      other: "the last {shown} of {n} lines the Logs tab showed",
+    },
+    logsFromHint: "the lines «Most likely» read for its verdict",
+    logsNotOpened:
+      "None: the Logs tab was not open on this page when the report was made.",
+    logsLeftOut:
+      "Log lines were left out of this report by the person who shared it.",
+    logsOffInSettings:
+      "The person who shared this has log lines turned off for everything the app hands over.",
+    openLink: "Open {url}",
+    journalEmpty:
+      "This app was not watching this cluster, so it recorded no changes.",
+    madeBy: "Made by Rubick",
+    noSecrets: "No Secret value is ever written into this file.",
+    screenGaveNothing:
+      "Nothing on this screen was put into the file: open it in Rubick to see it.",
+    tableSearched:
+      "Only the rows matching «{query}», as the list was searched.",
+    columnsLeftOut: "Not in this file: {names}.",
+    checkedNoneWrong: {
+      one: "{n} checked, no problems.",
+      other: "{n} checked, no problems.",
+    },
+    traefikRouters: "Every router",
+    utilisationWindow: "Peak and average over the last {range}.",
+    noSecretsLogs:
+      "No Secret is read into this file. The log lines are as the container wrote them, with recognisable passwords and tokens taken out, and that cleaning cannot be complete.",
+    saveHtml: "Save as HTML",
+    saved: "Saved to {path}",
+    saveFailed: "Could not write the file",
+    preview: "What goes in the file",
+    whatItCarries:
+      "One self-contained HTML file of what this page shows: the status, the evidence behind it and what could not be read, drawn the way Rubick draws it. No script, no request when it is opened.",
+    charactersLong: {
+      one: "{n} character",
+      other: "{n} characters",
+    },
+    nothingToShare: "There is nothing to put in a report yet.",
+    trfSectionRoutes: "Routes",
+    wlAvailable: "Available",
+    wlParallelism: "Parallelism",
+    wlFailed: "Failed",
+    wlUpToDate: "Up to date",
+    notWrittenYet: "not written yet",
+    cmNotAfter: "Expires",
+    cmIssuer: "Issuer",
+    cmDnsNames: "DNS names",
+    cmSecret: "Secret",
+    cmIssuerType: "Type",
+    cmIssuerTypeUnknown: "not one of the known issuer types",
+    cmChallengeType: "Challenge type",
+    argoDestination: "Destination",
+    argoSource: "Source",
+    argoGeneratedBy: "Generated by",
+    argoResources: "Resources",
+    argoSync: "Sync",
+    argoHealth: "Health",
+    clKubernetesVersion: "Kubernetes version",
+    clSectionPodsOnNode: "Pods on this node",
+    clPodsNotOpened:
+      "The Pods tab was not open on this page when the report was made.",
+    clSectionKeys: "Keys",
+    clKeyColumn: "Key",
+    clSizeColumn: "Size",
+    clEffectColumn: "Effect",
+    clDataUnread: "The data could not be read: {reason}",
+    netListenerConditions: "Listener conditions",
+    netPolicyTypes: "Policy types",
+    fluxSource: "Source",
+    fluxApplied: "Applied",
+    fluxInterval: "Interval",
+    fluxMessage: "Message",
+    fluxRef: "Tracking",
+    fluxArtifact: "Artifact",
+    scrNotReadable: "Could not be read",
+    promSelector: "Selector",
+    promNamespaces: "Namespaces",
+    promEndpoints: "Endpoints",
+    promPath: "Path",
+    promVersion: "Version",
+    promRetention: "Retention",
+    promServiceMonitorSelector: "ServiceMonitor selector",
+    promPodMonitorSelector: "PodMonitor selector",
+    promGroup: "Group",
+    promRule: "Rule",
+    promExpr: "Expression",
+    istioGateways: "Gateways",
+    istioEveryRequest: "every request",
+    istioProtocol: "Protocol",
+    istioDestination: "Destination",
+    istioSectionRoutes: "Routes",
+    istioSubsets: "Subsets",
+    istioModeUnset: "not set, inherits the mesh default",
+    istioMtlsMode: "mTLS mode",
+    istioAction: "Action",
+    istioRuleCount: "Rules",
+    scrFilters: "Filters",
+    cnpgPrimary: "Primary",
+    cnpgVersion: "PostgreSQL version",
+    cnpgArchiving: "Continuous archiving",
+    cnpgInstances: "Instances",
+    cnpgRole: "Role",
+    cnpgMethod: "Method",
+    cnpgLastScheduled: "Last scheduled",
+    cnpgCluster: "Cluster",
+    cnpgPoolMode: "Pool mode",
+    scrWatched: "Watched",
+    scrGapsInWindow: {
+      one: "{n} gap in this window was not observed.",
+      other: "{n} gaps in this window were not observed.",
+    },
+    scyllaMembers: "Members",
+    scyllaVersion: "Version",
+    scyllaDatacenter: "Datacenter",
+    scyllaUpgrade: "Upgrade",
+    scyllaRacks: "Racks",
+    scyllaNodes: "Tuned nodes",
+    intConnectionAuth: "Authentication",
+    intConnectionReachable: "Reachable",
+    intAuthBasicInUrl: "basic, in the address",
+    intAuthNone: "no authentication",
+    ciliumEveryEndpoint: "every endpoint in scope",
+    ciliumExpressions: {
+      one: "narrowed by {n} expression this report cannot spell out",
+      other: "narrowed by {n} expressions this report cannot spell out",
+    },
+    ciliumNodes: "nodes, not pod endpoints",
+    ciliumSpecNotHere:
+      "not on the wire this report reads, written as a specs: list",
+    ciliumAccepted: "accepted",
+    ciliumRejected: "rejected",
+    ciliumSelects: "Selects",
+    ciliumRules: "Rules",
+    ciliumIngressEgress: "{ingress} ingress, {egress} egress",
+    ciliumDenies: "Deny rules",
+    ciliumLeavesCluster: "Reaches outside the cluster",
+    gceHealthCheck: "Health check",
+    gceApplies: "Applies",
+    gceDomains: "Domains",
+    awsNoFailure: "nothing the controller has flagged",
+    awsTargetGroup: "Target group",
+    awsTargets: "Targets",
+    scrBasis: "Basis",
+    scrSilent: "No series",
+    azureType: "Type",
+    azureResource: "Azure resource",
+    azureBindsIdentity: "Identity",
+    azureToPods: "To pods labelled",
+    azureLeavesAlone: "Leaves alone",
+    azureDangling: "Bindings to a missing identity",
+  },
+  files: {
+    noContainers: "This pod declares no containers.",
+    viaDebug:
+      "Viewing through debug container {debug}, at {root} of container {container}. Mode and owner are as the debug container sees them; a file the app process cannot read may still show here. The debug container stays on the pod.",
+    stopVia: "Read the container directly again",
+    restartedSince:
+      "Container {container} has restarted since this listing (restart {restarts}). Anything written outside a mount is gone with it.",
+    readNewContainer: "Read the new container",
+    filterNamesReading: "filter names…",
+    shownOf: "{shown} of {n} shown",
+    noNameMatches: "No name here contains “{filter}”.",
+    noNameMatchesYet: "No name read so far contains “{filter}”.",
+    clearFilter: "Clear the filter",
+    filterNames: {
+      one: "filter {n} name…",
+      other: "filter {n} names…",
+    },
+    notRunning:
+      "Container {container} is {state}: there is nothing to exec into.",
+    listingOf: "Files in {path}",
+    findingWorkingDir: "Asking {container} where it works…",
+    workingDirPlace: "Working directory of {container}",
+    mode: "Mode",
+    size: "Size",
+    modified: "Modified",
+    stoppedBeforeAnything:
+      "You stopped this listing before anything arrived, so what is in here is unknown.",
+    cappedAt: {
+      one: "· stopped at {n} row, so this is not the whole directory",
+      other: "· stopped at {n} rows, so this is not the whole directory",
+    },
+    unreadableLines: {
+      one: "· {n} line could not be read, so a row is missing",
+      other: "· {n} lines could not be read, so rows are missing",
+    },
+    lostOnTheWay: {
+      one: "· {n} row was lost on the way, so this is not the whole directory",
+      other:
+        "· {n} rows were lost on the way, so this is not the whole directory",
+    },
+    nothingArrived: {
+      one: "The tool listed {n} row and it was lost on the way, so what is in here is unknown.",
+      other:
+        "The tool listed {n} rows and none of them arrived, so what is in here is unknown.",
+    },
+    cannotSwitchViaDebug:
+      "While reading through a debug container the rows come from the container it targets. Stop it to pick another.",
+    emptyDirectory: "{path} is empty: the tool ran and found nothing in it.",
+    nothingReadable: {
+      one: "The tool printed {n} line and it could not be read, so what is in here is unknown.",
+      other:
+        "The tool printed {n} lines and none of them could be read, so what is in here is unknown.",
+    },
+    keys: "↑↓ move · ↵ open · ⌫ up · {download} download · tags come from this pod's mounts, the same facts the Connections tab shows",
+    readingSoFar: {
+      one: "reading · {n} entry so far · {seconds} s",
+      other: "reading · {n} entries so far · {seconds} s",
+    },
+    readingSoFarUntimed: {
+      one: "reading · {n} entry so far",
+      other: "reading · {n} entries so far",
+    },
+    readVia: {
+      one: "read via {how} · {n} entry · {seconds} s",
+      other: "read via {how} · {n} entries · {seconds} s",
+    },
+    stoppedUntimed: {
+      one: "stopped · {n} entry arrived, not the whole directory",
+      other: "stopped · {n} entries arrived, not the whole directory",
+    },
+    stoppedAfter: {
+      one: "stopped · {n} entry arrived in {seconds} s, not the whole directory",
+      other:
+        "stopped · {n} entries arrived in {seconds} s, not the whole directory",
+    },
+    gnuFind: "find (GNU)",
+    busyboxStat: "sh + stat (busybox)",
+    fromMount: "from {name}",
+    noToolsTitle: "The image has nothing to list files with",
+    noToolsBody:
+      "{tried} were each executed directly in container {container} and none exists. The image is {image}; the files are there, the tools to read them are not.",
+    openViaDebug: "Open through a debug container",
+    readMountsInstead: "Read the pod's mounts instead",
+    debugExplained:
+      "A debug container adds an ephemeral container to this pod sharing its process namespace and reads files at /proc/1/root. It is a change to the pod, it stays until the pod is replaced, and the listing will say so.",
+    refused: "The cluster refused to exec into this pod",
+    notRunningNow:
+      "Container {container} is not running, so there is nothing to exec into",
+    listFailed: "The listing did not finish: {code}",
+    unopenable:
+      "{path} could not be opened: it is not a directory, or this container may not list it. A debug container often runs as a user that can.",
+
+    mountsOnlyIntro:
+      "What the pod declares mounted into {container}. This is the spec, not a read of the filesystem.",
+    noMounts: "Nothing is mounted into this container.",
+    binary: "binary",
+    text: "text",
+    lineCount: { one: "{n} line", other: "{n} lines" },
+    lineCountAtLeast: {
+      one: "{n} line read of more",
+      other: "{n} lines read of more",
+    },
+    mountedFrom: "mounted from {kind} {name}",
+    mountedFromSource: "mounted from the {source} source of volume {volume}",
+    mountedFromSeveral: {
+      one: "mounted from volume {name}, which projects {n} source",
+      other:
+        "mounted from volume {name}, which projects {n} sources; the pod does not say which one this file came from",
+    },
+    pathCopied: "Path copied",
+    copyPath: "Copy path",
+    tooBigToDownload: "Downloads over {cap} are refused in this version",
+    bigDownloadTitle: "Download {name} ({size})?",
+    bigDownloadBody:
+      "It comes through the exec channel, which is slow: a file this size takes minutes, and the download gives up after 30 seconds of silence. Nothing is written to your file until the whole of it has arrived.",
+    noHeadInImage: "No head in this image to read the file with.",
+    readFailed: "Could not read the file (exit {code}):",
+    noPreviewBinary:
+      "No preview for a binary file. Download it to look at it elsewhere.",
+    nonTextShare: "The first 4 KiB have {percent}% non-text bytes.",
+    previewTruncated:
+      "The preview stops at {cap}; the file goes on. Download it for the rest.",
+    previewRepaired:
+      "These bytes are not valid UTF-8. What is below is a repair, with every byte we could not read replaced by \uFFFD. It is not the file; download it for the bytes.",
+    downloaded: "Downloaded {name}",
+    downloadFailed: "Could not download {name}",
+    noCatInImage: "No cat in this image to copy the file with.",
+  },
+  operators: {
+    cnpgPageDescription:
+      "First the operator itself, then every Cluster in CloudNativePG's own words, the one that needs you first. Backups come from the Backup objects, because the status fields are deprecated and empty with plugins.",
+    cnpgOperatorExplained:
+      "CloudNativePG runs one Deployment, cnpg-controller-manager, that reconciles every Cluster in every namespace. Its version is read off that image; its CRDs are what detection found.",
+    couldNotReadClusters: "Could not read the Cluster objects",
+    clustersTab: "Clusters",
+    backupsTab: "Backups",
+    poolersTab: "Poolers",
+    operatorTab: "Operator",
+    clustersNeedAttention: {
+      one: "{n} cluster needs attention",
+      other: "{n} clusters need attention",
+    },
+    noClusters:
+      "No Cluster objects in any namespace. The operator is here; nothing has asked it for a database yet.",
+    controllerFact: "Controller",
+    controllerNotFound:
+      "no Deployment carries app.kubernetes.io/name=cloudnative-pg; the CRDs are here, the operator may not be",
+    inNamespace: "in {namespace}",
+    versionUnknown: "unknown: no controller image to read it from",
+    fromImage: "from the Deployment image",
+    canActFact: "Can act",
+    canPatchClusters: "patch clusters",
+    canCreateBackups: "create backups",
+    allowed: "yes",
+    refused: "refused",
+    couldNotTell: "could not tell",
+    checkedAgo: "checked for you {ago} ago",
+    phaseUnknown: "phase not written",
+    primaryFact: "Primary",
+    readyFact: "Ready",
+    readyOfDeclared: {
+      one: "{ready} of {n} instance",
+      other: "{ready} of {n} instances",
+    },
+    // Scylla counts members, not instances. One string for both vendors made
+    // a ScyllaCluster report "instances", which is not the operator's word.
+    readyMembersOfDeclared: {
+      one: "{ready} of {n} member",
+      other: "{ready} of {n} members",
+    },
+    readyConditionFalse: "condition Ready False",
+    archivingFact: "WAL archiving",
+    archivingNotDeclared: "not declared",
+    backupsFact: "Backups",
+    backupsUnknown:
+      "unknown: the Backup objects could not be read, so nothing is said about them",
+    backupsNone: "none: no Backup objects for this cluster",
+    backupsLastCompleted: {
+      one: "last completed {ago} · {n} Backup object",
+      other: "last completed {ago} · {n} Backup objects",
+    },
+    backupsNoneCompleted: {
+      one: "{n} Backup object, none completed",
+      other: "{n} Backup objects, none completed",
+    },
+    schedulesUnknown: "schedules could not be read",
+    suspendedWord: "suspended",
+    specSeenFact: "Spec seen by the operator",
+    specSeenUnknownCnpg: "cannot tell: CNPG writes no observedGeneration",
+    fencedWord: "fenced",
+    findingNotReady: "The cluster says it is not Ready",
+    findingArchivingFailing: "WAL archiving has been failing for {ago}",
+    findingFailedInstances: "Instances the operator lists as failed: {names}",
+    findingSwitchover: "Switchover in progress: {from} → {to}",
+    findingFailover: "Failing over from {from}",
+    failoverExplained:
+      "This is not a switchover: the primary went away and the operator is promoting a replica without being asked. Writes are refused until it finishes.",
+    findingPhaseUnwritten:
+      "The operator has written no status for this Cluster",
+    phaseUnwrittenExplained:
+      "Nothing here has been reconciled: the object may be new, or the controller may not be running. It is not a healthy cluster; it is a cluster nobody has reported on.",
+    findingFenced: "Fenced by hand: {names}",
+    backupNotCreated:
+      "the cluster did not create the Backup, and said nothing about why",
+    fencedAllOne:
+      "the whole cluster is fenced with `*`, which names every instance including ones CNPG has not listed, so one cannot be taken out of it without unfencing the rest",
+    fencingUnknown:
+      "the cnpg.io/fencedInstances annotation is set to something this version cannot read, so which instances are fenced is unknown. Fencing is written back as a whole list, so acting would overwrite it",
+    fencedUnknownWord: "fencing unreadable",
+    findingFencedUnknown:
+      "The annotation naming the fenced instances could not be read, so whether any instance is stopped is unknown.",
+    fencedExplained:
+      "Postgres is stopped in a fenced instance while its pod stays; the annotation cnpg.io/fencedInstances holds it. Unfence when the reason is gone.",
+    findingHibernated: "Hibernated",
+    hibernatedExplained:
+      "The pods are removed and the primary's PVC kept; the annotation cnpg.io/hibernation is on. Wake up puts the pods back from that PVC.",
+    actionRestart: "Restart",
+    actionRestartExplained:
+      "Rolling, replicas first and the primary last, by stamping kubectl.kubernetes.io/restartedAt on the Cluster. Each instance restarts after the previous one is back.",
+    actionReload: "Reload configuration",
+    actionReloadExplained:
+      "Re-reads postgresql.conf and pg_hba without restarting, by stamping cnpg.io/reloadedAt on the Cluster.",
+    actionBackup: "Backup now",
+    actionBackupExplained:
+      "Creates a Backup object for this cluster; the method is whatever the cluster's backup configuration declares. The operator runs it and writes the outcome on that object.",
+    actionFence: "Fence",
+    actionFenceExplained:
+      "Stops Postgres in this instance and keeps its pod, by adding it to cnpg.io/fencedInstances. Fencing the primary takes the cluster's write path with it.",
+    actionUnfence: "Unfence",
+    actionUnfenceExplained:
+      "Removes this instance from cnpg.io/fencedInstances; Postgres starts in it again.",
+    actionHibernate: "Hibernate",
+    actionHibernateExplained:
+      "Removes every pod and keeps the primary's PVC, by setting cnpg.io/hibernation to on. Nothing answers on this cluster until it is woken.",
+    actionWake: "Wake up",
+    actionWakeExplained:
+      "Sets cnpg.io/hibernation to off; the operator recreates the pods from the kept PVC.",
+    refusedPatch:
+      "the cluster refuses patch on clusters.postgresql.cnpg.io for you",
+    refusedCreateBackup:
+      "the cluster refuses create on backups.postgresql.cnpg.io for you",
+    notDuringSwitchover: "not during a switchover",
+    confirmTitle: "{action} {target}?",
+    actionDone: "{action}: done on {cluster}",
+    actionFailed: "{action} on {cluster} did not go through",
+    noBackupObjects: "No Backup objects in any namespace.",
+    allBackupObjects: "Every Backup object, as a list",
+    poolersUnknown: "The Pooler objects could not be read",
+    noPoolers: "No Pooler objects in any namespace.",
+    operatorLogs: "Logs of the controller",
+    scyllaPageDescription:
+      "First the operator: controller, ScyllaDB Manager, the NodeConfigs that set up local disks. Then every ScyllaCluster as racks and members with Scylla's three conditions, an upgrade in progress, and the Manager tasks it declares.",
+    scyllaOperatorExplained:
+      "The Scylla operator runs one Deployment, scylla-operator, and reconciles every ScyllaCluster. Repairs and backups run in ScyllaDB Manager, a separate Deployment; without it they are declared and never run.",
+    couldNotReadScyllaClusters: "Could not read the ScyllaCluster objects",
+    nodeConfigsTab: "Node configs",
+    noScyllaClusters:
+      "No ScyllaCluster objects in any namespace. The CRDs are here; nothing has asked for a cluster yet.",
+    deploymentsUnreadable:
+      "the Deployments could not be read, so whether the operator is running is unknown, which is not the same as absent",
+    scyllaOperatorNotFound:
+      "no Deployment carries app.kubernetes.io/name=scylla-operator; the CRDs are here, the operator may not be, and every ScyllaCluster will sit without a status",
+    managerPresent: "repairs and backups can run",
+    managerAbsent:
+      "not installed: spec.repairs and spec.backups are ignored, and status.managerId stays empty",
+    canPatchScyllaClusters: "patch scyllaclusters",
+    noStatusYet: "no status yet",
+    upgradingWord: "upgrading",
+    conditionsNotWritten: "conditions not written",
+    conditionsUnsure: "operator unsure",
+    rolledOut: "rolled out",
+    conditionsFact: "Conditions",
+    membersFact: "Members",
+    notWritten: "not written by the operator",
+    specSeenUnknownScylla: "cannot tell: no observedGeneration on this read",
+    specSeenYes: "yes · observedGeneration {n} = generation {n}",
+    specSeenBehind:
+      "behind: observedGeneration {observed}, generation {generation}",
+    repairFact: "Repair",
+    backupFact: "Backup",
+    noneDeclared: "none declared",
+    notDeclared: "not declared",
+    taskInManager:
+      "runs in ScyllaDB Manager; outcomes live there, not on this object",
+    taskNoManager: "declared, but no Manager to run it",
+    rackUpdated: "{updated} of {members} on {version}",
+    staleWord: "stale: not reconciled since the spec changed",
+    findingDegraded: "Degraded, in the operator's words",
+    findingUnavailable: "Not Available",
+    findingProgressing: "Progressing",
+    findingUpgrading: "Rolling upgrade in progress",
+    findingUpgradingFromTo: "Rolling upgrade in progress: {from} → {to}",
+    upgradeAtRack: "Currently on rack {rack}, node {node}.",
+    findingStale: "Racks the operator has not looked at since the spec changed",
+    findingMembersMissing: "Members not ready",
+    findingTasksWithoutManager:
+      "Repairs or backups are declared, but there is no ScyllaDB Manager to run them",
+    findingConditionsUnwritten:
+      "The operator has written no conditions for this cluster",
+    findingConditionsUnknown:
+      "The operator wrote Unknown for a condition, so it does not know either",
+    membersNotWritten: {
+      one: "{n} declared, ready not written",
+      other: "{n} declared, ready not written",
+    },
+    findingNoStatus: "The operator has written nothing on this object yet",
+    actionRollingRestart: "Rolling restart",
+    actionRollingRestartExplained:
+      "Sets spec.forceRedeploymentReason to a new value. The operator restarts the members one at a time, highest ordinal first, rack by rack, each waiting for the previous to be ready.",
+    rollingRestartConfirm:
+      "Sets spec.forceRedeploymentReason on {cluster}. The operator then restarts the {members} members one at a time, highest ordinal first, rack by rack; each waits for the previous to be ready. Nothing here can be cancelled once a member is down.",
+    actionScaleRack: "Scale",
+    actionScaleRackExplained:
+      "Sets racks[].members for this rack. Scaling down decommissions the highest ordinals first, which streams their data away and takes as long as the data is big.",
+    actionUpgrade: "Upgrade",
+    actionUpgradeExplained:
+      "Sets spec.version. The operator upgrades rack by rack, member by member, taking system and data snapshots first; the progress lands in status.upgrade.",
+    membersInput: "Members in {rack}",
+    versionInput: "ScyllaDB version, e.g. 2025.2.1",
+    refusedPatchScylla:
+      "the cluster refuses patch on scyllaclusters.scylla.scylladb.com for you",
+    notDuringUpgrade: "not during an upgrade",
+    nodeConfigsUnknown: "The NodeConfig objects could not be read",
+    noNodeConfigs:
+      "No NodeConfig objects. Local disks are then whatever the nodes came with; the operator sets none up.",
+    nodeStatusesNotWritten:
+      "the operator has written no node statuses, so how many nodes it tuned is unknown",
+    nodesSetUp: "{tuned} {of} set up",
+  },
+  tell: {
+    askRollout: "Tell me when the rollout finishes",
+    askPod: "Tell me when it is ready, or falls over",
+    askJob: "Tell me how it ends",
+    askDrain: "Tell me when the drain finishes",
+    askDrainExplained:
+      "A desktop notification when the node is empty or the drain gives up.",
+    askForward: "Tell me if it dies",
+    stopAsking: "Stop watching",
+    watchingSince: "watching for {ago}",
+    lostSince: "lost sight {ago} ago",
+    expired: "Expired after a day with no answer",
+    empty: "Nothing being watched",
+    emptyHint:
+      "Choose “Tell me…” in the side panel of a pod, a job or a workload, in a node's drain dialog or beside a port forward: the answer comes as a notification and stays here.",
+    dismiss: "Dismiss",
+    openWatching: "Open Watching",
+    severalAnswered: {
+      one: "{n} thing you asked about",
+      other: "{n} things you asked about",
+    },
+    full: "Already watching {max} things on this cluster",
+    fullBody:
+      "Twelve is the most one cluster gets. Pick one to stop watching, or keep all of them and skip this one.",
+    keepAll: "Keep all",
+    swap: "Stop that one, watch this",
+    saysRolledOut: "{name} rolled out",
+    saysAlreadyRolledOut:
+      "{name} was already rolled out: no rollout is under way",
+    saysRolloutStalled: "{name} rollout stalled",
+    saysRolloutPaused:
+      "{name} is paused and will not roll out until it is resumed",
+    saysReady: "{name} is ready",
+    saysCrashedAgain: "{name} fell over again",
+    saysSucceeded: "{name} succeeded",
+    saysFailed: "{name} failed",
+    saysDrained: "{name} is drained",
+    saysDrainStopped: "{name} drain stopped",
+    saysDrainCancelled: "{name} drain cancelled",
+    saysDrainFailed: "{name} drain broke",
+    saysRenewed: "{name} certificate renewed",
+    saysIssuanceFailed: "{name} certificate issuance failed",
+    saysForwardDied: "Forward to {name} died",
+    saysGone: "{name} is gone",
+    saysLostSight: "Lost sight of {name}",
+    saysTimedOut: "{name}: no answer within two minutes",
+    afterRestart: "after restart",
+    afterScale: "after scale to {n}",
+    afterApply: "after apply",
+    afterImage: "after image change",
+    withinDeadline: "an answer within two minutes, or none is the answer",
+    askRolloutShort: "rollout",
+    askPodShort: "ready or falls over",
+    askJobShort: "how it ends",
+    askDrainShort: "drain",
+    askRenewedShort: "renewal",
+    askForwardShort: "stays up",
+  },
+  auth: {
+    started: "Signing in",
+    startedIn:
+      "Finish signing in to {context} in your browser. Cancel if you closed the tab.",
+    // A provider only accepts a redirect address its client has registered,
+    // and nobody but the reader can add one, so it goes on screen while they
+    // wait, next to the browser that may already be refusing it.
+    waitingOn:
+      "Waiting on {uri}. Your provider must allow that address for this client.",
+    windowTitle: "Sign in to {context}",
+    windowFailed: "Could not open the sign-in window",
+    windowFailedBody: "Try again.",
+    failed: "Sign-in failed",
+    couldNotOpen: "Could not open sign-in. Try again.",
+    failedFor: "Could not sign in to {context}.",
+    complete: "Signed in",
+    completeFor: "Signed in to {context}.",
+    cancelAlt: "Cancel signing in",
+    cancelled: "Sign-in cancelled",
+    cancelledFor: "Cancelled {context}.",
+  },
+  // What each extension gets the reader, in the words of the thing they get.
+  // Here rather than in the vendor module because a vendor module is a plain
+  // table with no hook to call: it names the key, and the row translates it.
+  monitors: {
+    tabMonitors: "Monitors",
+    tabConnection: "Connection",
+    notConnectedShort: "not connected",
+    pageHint:
+      "Every ServiceMonitor and PodMonitor: what it selects, which Prometheus picks it up, and whether the connected Prometheus is really scraping it.",
+    couldNotReadMonitors: "Could not read the monitors",
+    kindAbsent: "No {kind} can exist here: its CRD is not installed.",
+    kindUnread: "{kind} objects could not be read: {reason}",
+    prometheusKindAbsent:
+      "The operator's Prometheus CRD is not installed, so nothing here can pick a monitor up. Pick-up is not judged.",
+    noInstances:
+      "No Prometheus object in the cluster: nothing picks the monitors up. Was the operator uninstalled with its CRDs left behind?",
+    instancesUnread:
+      "The Prometheus objects could not be read, so which instance picks a monitor up is unknown.",
+    readyOf: "{ready} of {wanted} ready",
+    readyUnknown: "readiness not written",
+    retention: "retention {value}",
+    notConnected:
+      "No Prometheus is connected for this cluster. Selection and pick-up are read from the objects; whether anything is really scraped stays unchecked.",
+    connectPrometheus: "Connect one in Settings",
+    unanswered:
+      "The connected Prometheus did not answer for its targets: {reason}. Scraping is unknown, not empty.",
+    targetsRead: {
+      one: "Scrape truth from the connected Prometheus · {n} target",
+      other: "Scrape truth from the connected Prometheus · {n} targets",
+    },
+    ofTotal: "of {total}",
+    needAttention: {
+      one: "{n} of {total} needs attention",
+      other: "{n} of {total} need attention",
+    },
+    needAttentionSomeUnread: {
+      one: "{n} needs attention, of a number this account cannot count",
+      other: "{n} need attention, of a number this account cannot count",
+    },
+    someUnread:
+      "Some monitors could not be read, so this is not the whole picture",
+    allScraped: {
+      one: "{n} monitor, scraped",
+      other: "{n} monitors, all scraped",
+    },
+    scrapeUnchecked: {
+      one: "{n} monitor; whether it is scraped is unchecked",
+      other: "{n} monitors; whether they are scraped is unchecked",
+    },
+    filterMonitors: "Filter by name or namespace",
+    filterMonitorsLabel: "Filter monitors by name or namespace",
+    none: "No ServiceMonitor or PodMonitor in this cluster.",
+    pickOne: "Choose a monitor on the left.",
+    noneMatch: "No monitor matches the filter.",
+    chipAll: "all",
+    chipBroken: "broken",
+    chipWaiting: "waiting",
+    chipScraped: "scraped",
+    chipUnchecked: "unchecked",
+    groupBroken: "Broken",
+    groupWaiting: "Waiting",
+    groupScraped: "Scraped",
+    groupUnchecked: "Not checked",
+    keysMove: "↑↓ move",
+    keysOpen: "↵ open object",
+    rowSelectsNothing: "selects nothing",
+    rowNotPickedUp: "not picked up",
+    rowDownOf: "{down} of {total} down",
+    rowUnscraped: "{n} of {total} discovered, not scraped yet",
+    rowNoTargets: "no target yet",
+    rowUnknown: "unknown",
+    rowNotChecked: "not checked",
+    rowUp: "{n} up",
+    scrapedAgo: "{ago} ago",
+    openObject: "Open",
+    targetsInPrometheus: "Targets in Prometheus",
+    verdictSelectsNothing: "Selects no Service, so there is nothing to scrape.",
+    verdictSelectsNothingBody: "{selector} matches nothing in {namespace}.",
+    verdictSelectionUnread: "What it selects could not be counted.",
+    verdictSelectorUnevaluable: "Its selector cannot be evaluated.",
+    verdictNotPickedUp: "No Prometheus picks it up, so nothing scrapes it.",
+    verdictNoInstances:
+      "No Prometheus object in the cluster, so nothing picks it up.",
+    verdictPickedUpUnknown: "Whether a Prometheus picks it up is unknown.",
+    verdictDown: "{down} {of} down.",
+    verdictDownSince: "{down} {of} down since {since}.",
+    ofTargets: { one: "of {n} target", other: "of {n} targets" },
+    prometheusSays: "Prometheus says",
+    verdictNoTargets: "Picked up, but Prometheus has no target for it yet.",
+    verdictUp: {
+      one: "{n} target up, scraped {ago} ago.",
+      other: "{n} targets up, scraped {ago} ago.",
+    },
+    nothingToDo: "Nothing to do here.",
+    verdictUnscraped: "Picked up. {n} of {total} discovered, not scraped yet.",
+    unscrapedSettles:
+      "Prometheus has the targets and has not finished a round for them. A pool that has just appeared settles on its own.",
+    verdictNotChecked:
+      "Selected and picked up. Whether it is scraped is not checked.",
+    verdictNoKind:
+      "Selected. Nothing can pick it up here: the operator's Prometheus CRD is not installed.",
+    lastHour: "Last hour",
+    perCell: "1 min per cell",
+    heartbeatUnread: "History could not be read: {reason}",
+    downCount: "{n} down",
+    upCount: "{n} up",
+    sinceTime: "since {time}",
+    moreLanes: "+{n} more",
+    selects: "Selects",
+    selectsServices: {
+      one: "{n} Service",
+      other: "{n} Services",
+    },
+    noServicesIn: "0 Services in {namespace}",
+    notCounted: "pods, not counted here",
+    selectionUnread:
+      "Services could not be listed, so what this selects is unknown: {reason}",
+    selectorUnevaluable:
+      "Kubernetes would refuse to build this selector (a missing or empty key, an operator other than In, NotIn, Exists and DoesNotExist, In or NotIn with no values, Exists or DoesNotExist with some, or a field of the wrong type), so what it selects cannot be said: {selector}",
+    endpoints: "Endpoints",
+    everyInterval: "every {interval}",
+    chipLabel: "label",
+    chipPort: "port",
+    chipPath: "path",
+    chipEvery: "every",
+    pickedUpBy: "Picked up by",
+    pickedUpCount: {
+      one: "{n} Prometheus",
+      other: "{n} Prometheus",
+    },
+    notPickedUp:
+      "no serviceMonitorSelector or podMonitorSelector matches it in a namespace that Prometheus is allowed to watch",
+    pickedUpUnknown:
+      "whether a Prometheus picks it up depends on namespace labels that could not be read: {reason}",
+    pickedUpUnevaluable:
+      "{prometheus} has a selector Kubernetes would refuse to build, so whether it picks this up cannot be said",
+    notJudged: "not judged",
+    picksUp: "picks up",
+    picksUpAll: "every monitor in every namespace",
+    picksUpOwn: "every monitor in its own namespace",
+    picksUpMatching: "monitors matching {selector}",
+    picksUpEvery: "every monitor",
+    picksUpNone: "no monitors: it names no selector for them",
+    picksUpUnevaluable: "monitors by a selector Kubernetes would not build",
+    inNamespacesMatching: "in namespaces matching {selector}",
+    inEveryNamespace: "in every namespace",
+    inItsOwnNamespace: "in its own namespace",
+    targets: "Targets",
+    health: "Health",
+    scrapeUrl: "Scrape URL",
+    lastScrape: "Last scrape",
+    lastError: "Last error",
+    noTargetYet: "none yet",
+    noTargets:
+      "The operator has written no target for it: no endpoint behind the named port, or written for another Prometheus than the one connected.",
+    moreTargets: { one: "+{n} more target", other: "+{n} more targets" },
+    notChecked: "not checked",
+    mostLikely: "Most likely",
+    hintLoopbackWhy:
+      "kubeadm binds {component} to 127.0.0.1, so nothing outside the node reaches :{port}.",
+    hintLoopbackHow:
+      "Set {flag} in the static pod manifest under /etc/kubernetes/manifests, or turn this monitor off in the chart.",
+    hintRefusedWhy: "Nothing listens on :{port} at that address.",
+    hintRefusedHow:
+      "Check which port the process really serves metrics on, and that the Service port name on the monitor points at it.",
+    hintNotFoundWhy:
+      "The Service answers, the path does not: nothing serves {path} on port {port}.",
+    hintNotFoundHow:
+      "Check what the app exposes: another port, another path, or no metrics at all. A monitor on a Service that was never meant to be scraped is noise in every alert list.",
+    hintUnauthorizedWhy:
+      "The endpoint wants credentials the scrape does not send.",
+    hintUnauthorizedHow:
+      "Give the endpoint a bearerTokenFile or basicAuth on the monitor, or open the metrics path to the Prometheus service account.",
+    hintTlsWhy:
+      "The TLS handshake failed: the certificate is not one Prometheus trusts.",
+    hintTlsHow:
+      "Point tlsConfig.ca at the right CA, or set insecureSkipVerify on the endpoint when the certificate is self-signed on purpose.",
+    hintTimeoutWhy: "The target did not answer within the scrape timeout.",
+    hintTimeoutHow:
+      "A NetworkPolicy between Prometheus and the pod, or an endpoint that takes longer than scrapeTimeout to render its metrics.",
+    hintDnsWhy: "The scrape address does not resolve.",
+    hintDnsHow:
+      "The Service or pod behind the monitor is gone, or the endpoint names a host Prometheus cannot look up.",
+    hintSelectsNothingWhy: "No Service in {namespace} carries {selector}.",
+    hintSelectsNothingHow:
+      "Compare the selector with the labels on the Service the monitor was written for. The label the app sets is usually the one the Helm chart chose, not the one you remember.",
+    hintPodPortWhy: "Pods match, but none has a container port named {port}.",
+    hintPodPortHow:
+      "Name the port in the pod spec, or point the PodMonitor at the port the container actually declares.",
+    hintNoEndpointsWhy:
+      "The Service exists, but no endpoint sits behind port {port}.",
+    hintNoEndpointsHow:
+      "The pods behind the Service are not ready, or the Service port name on the monitor does not match a port the Service declares.",
+    copyForAgent: "Copy for agent",
+    copiedForAgent: "Monitor, findings and hint copied",
+    searchError: "Search the error",
+    askedOfPrometheus: "Asked of Prometheus",
+    copyQuery: "Copy",
+    openInPrometheus: "Open in Prometheus",
+    noAddress: "No address given for this cluster.",
+    bearerToken: "bearer token",
+    editInSettings: "Edit in Settings",
+  },
+  slow: {
+    panel: "Why slow",
+    title: "Why slow",
+    hint: "What the app measured about its own window in the last minute. This is about Rubick, not about the cluster.",
+    tooltip:
+      "Rubick's own window stalled in the last minute: it answered late. This is about the app, not the cluster. Click for why.",
+    stalls: {
+      one: "{n} UI stall",
+      other: "{n} UI stalls",
+    },
+    stallsLabel: "UI stalls",
+    stallsValue: {
+      one: "{n} stall, the longest {longest} ms",
+      other: "{n} stalls, the longest {longest} ms",
+    },
+    sourceLongTask:
+      "A stall is a moment the window could not respond for 50 ms or more.",
+    sourceFrameGap:
+      "A stall is a moment the window drew a frame 50 ms or more late.",
+    happeningLabel: "What was happening",
+    stallMs: "{ms} ms",
+    inputTyping: "Typing in “{field}”",
+    inputTypingUnnamed: "Typing in a field",
+    inputKey: "Key {key}",
+    inputClick: "Click on “{target}”",
+    inputClickUnnamed: "A click",
+    inputNone:
+      "No input just before it: the app's own work, such as a watch batch or an answer arriving",
+    listsLabel: "Big lists on screen",
+    listRows: {
+      one: "{n} row of {label}",
+      other: "{n} rows of {label}",
+    },
+    // For a table that wears no label: the kind's plural goes out
+    // untranslated, and there is no word here to put in its place.
+    listRowsPlain: {
+      one: "{n} row",
+      other: "{n} rows",
+    },
+    // Not "none": these two facts are fed by the table and by the command
+    // wrapper, and nothing else. A log buffer or a watch batch can block
+    // the thread without reaching either, so an empty answer here is the
+    // app saying it did not look, not that there was nothing to see.
+    noBigList: "Nothing over a thousand rows on a table this counts.",
+    listsWhy:
+      "Every watch batch is filtered and sorted over the whole list, and a search re-reads every row.",
+    answerLabel: "Largest answer",
+    answerRows: {
+      one: "{n} row from {command}",
+      other: "{n} rows from {command}",
+    },
+    noBigAnswer: "Nothing over a thousand rows from a command this counts.",
+    answerWhy:
+      "A big answer is parsed on the main thread before anything can be drawn.",
+    whatToDo:
+      "Narrow the namespace scope or the search: the list and its answers shrink with them. For timings per command and per render, turn on the recorder.",
+    notCounted:
+      "Log lines and watch batches are not counted above, so a stall on the Logs tab or during a resync will leave both rows empty.",
+    openRecorder: "Open Settings › Diagnostics",
+  },
+
+  alerts: {
+    tabAlerts: "Alerts",
+    pageHint:
+      "Every PrometheusRule: which Prometheus picks it up, whether it loaded the rules, and what is firing right now.",
+    couldNotRead: "Could not read the rules",
+    kindUnread: "PrometheusRule objects could not be read: {reason}",
+    none: "No PrometheusRule in this cluster.",
+    pickOne: "Choose a rule object on the left.",
+    noneMatch: "No rule object matches the filter.",
+    objects: {
+      one: "{n} rule object",
+      other: "{n} rule objects",
+    },
+    firingNow: {
+      one: "{n} alert firing {where}",
+      other: "{n} alerts firing {where}",
+    },
+    inRuleObjects: {
+      one: "in {n} rule object",
+      other: "across {n} rule objects",
+    },
+    quietNow: {
+      one: "{n} rule object, nothing firing",
+      other: "{n} rule objects, nothing firing",
+    },
+    brokenCount: {
+      one: "{n} broken",
+      other: "{n} broken",
+    },
+    notConnected:
+      "No Prometheus is connected for this cluster. Pick-up is read from the objects; whether the rules are loaded and firing stays unchecked.",
+    unanswered:
+      "The connected Prometheus did not answer for its rules: {reason}. Firing is unknown, not empty.",
+    rulesLoaded: {
+      one: "{n} alerting rule loaded on the connected Prometheus",
+      other: "{n} alerting rules loaded on the connected Prometheus",
+    },
+    groupFiring: "Firing",
+    groupBroken: "Broken",
+    groupPending: "Pending",
+    groupQuiet: "Quiet",
+    groupUnchecked: "Not checked",
+    rowFiring: {
+      one: "{n} alert firing",
+      other: "{n} alerts firing",
+    },
+    rowPending: {
+      one: "{n} alert pending",
+      other: "{n} alerts pending",
+    },
+    rowNotLoaded: "not loaded",
+    rowPartlyLoaded: {
+      one: "{n} rule not loaded",
+      other: "{n} rules not loaded",
+    },
+    aboutUnread:
+      "Whether anything is firing about this could not be read: {reason}",
+    aboutUnreachable: "The connected Prometheus did not answer: {reason}",
+    markUnchecked: {
+      one: "{n} rule object not checked",
+      other: "{n} rule objects not checked",
+    },
+    markBroken: {
+      one: "{n} rule object needs attention",
+      other: "{n} rule objects need attention",
+    },
+    rowNotEvaluated: "loaded, never evaluated",
+    rowEvalError: "evaluation error",
+    rowQuiet: "quiet",
+    rowRecordingOnly: "recording rules only",
+    recordingOnly:
+      "Recording rules only. Prometheus lists them apart from alerts, and nothing here fires.",
+    filter: "Filter by name, namespace or alert",
+    filterLabel: "Filter rule objects by name, namespace or alert",
+    ruleCount: {
+      one: "{n} rule",
+      other: "{n} rules",
+    },
+    recordingCount: {
+      one: "{n} recording rule",
+      other: "{n} recording rules",
+    },
+    inPrometheus: "Alerts in Prometheus",
+    notPickedUp:
+      "no ruleSelector matches it in a namespace that Prometheus is allowed to watch",
+    loaded: "Loaded",
+    notLoadedShort: "not loaded",
+    loadedOf: "{n} of {total}",
+    notLoaded:
+      "The connected Prometheus has no rule file named after this object: the operator has not written it, or wrote it for another Prometheus than the one connected.",
+    chipFile: "file",
+    rules: "Rules",
+    verdictFiring: {
+      one: "{n} alert firing {from}.",
+      other: "{n} alerts firing {from}.",
+    },
+    fromRules: {
+      one: "from {n} rule",
+      other: "from {n} rules",
+    },
+    verdictNotPickedUp:
+      "No Prometheus picks it up, so none of its rules is evaluated.",
+    verdictNotLoaded:
+      "Picked up, but the connected Prometheus has not loaded it.",
+    verdictPartlyLoaded: {
+      one: "{n} rule of this object is missing from the connected Prometheus.",
+      other:
+        "{n} rules of this object are missing from the connected Prometheus.",
+    },
+    verdictNotEvaluated: "{rule} is loaded and has never been evaluated.",
+    notEvaluated:
+      "Prometheus reports this rule's health as unknown, which is what it says about a rule it has loaded and not yet run.",
+    verdictEvalError: "{rule} fails to evaluate.",
+    verdictPending: {
+      one: "{n} alert pending {from}, not yet past its for clause.",
+      other: "{n} alerts pending {from}, not yet past their for clauses.",
+    },
+    verdictNotChecked:
+      "Picked up. Whether it is loaded and firing is not checked.",
+    verdictQuiet: {
+      one: "{n} rule loaded and evaluating, nothing firing.",
+      other: "{n} rules loaded and evaluating, nothing firing.",
+    },
+    notInPrometheus: "not in Prometheus",
+    since: "since {time} · {ago}",
+    moreAlerts: {
+      one: "+{n} more alert",
+      other: "+{n} more alerts",
+    },
+    aboutFiring: {
+      one: "{n} alert firing about this object",
+      other: "{n} alerts firing about this object",
+    },
+    aboutPending: {
+      one: "{n} alert pending about this object",
+      other: "{n} alerts pending about this object",
+    },
+    openAlerts: "All alerts",
+    backToSearch: "back to search",
+    readAsAnAlert: "Read as an alert",
+    unnamedAlert: "an alert with no name",
+    formatAlertmanager: "Alertmanager",
+    formatSubject: "Alertmanager subject",
+    formatGrafana: "Grafana",
+    formatDatadog: "Datadog",
+    cluster: "Cluster",
+    namespace: "Namespace",
+    object: "Object",
+    container: "Container",
+    firedSince: "Since",
+    ignored: "Ignored",
+    notNamed: "not named",
+    notDated: "the alert does not date itself, so there is no window to open",
+    nothingSaysAKind: "nothing in this text says a kind",
+    namesTheMonitoring: "names the monitoring side, not the cluster",
+    noClusterNamed: "nothing here names a cluster. Which of yours?",
+    clusterNotYours: "no cluster of yours is called that. Which did it mean?",
+    clustersUnread: "your clusters could not be read: {reason}",
+    clustersReading: "still reading your clusters…",
+    clusterOnlyInHost:
+      "no label named a cluster; this is the Source host. Which of yours was it?",
+    whichIsTheNamespace:
+      "this line carries no keys. Which of these is the namespace?",
+    noKeysToReadItBy: "no key to read it by",
+    namesSeveral: {
+      one: "{n} object is named. Is it the one you wanted?",
+      other: "{n} objects are named. Which one did you want?",
+    },
+    theSubject: "the alert's subject",
+    alsoNamed: "also named",
+    whyNamedExactly: "named exactly",
+    whyNameAppears: "the alert's word is in this name",
+    whyInSourceHost: "its name is in the Source host",
+    whyYours: "yours",
+    fromTheSourceHost: "guessed from the Source host",
+    byShape: "by shape",
+    guessedFromShape:
+      "Nothing in this line said which field is which. What is above was recognised by shape, and is worth a look before you open it.",
+    theAlertsWords: "The alert's words. This app has not checked them.",
+    noPageForKind: "this app has no page for a {kind}",
+    noNamespaceToOpenBy: "nothing here names the namespace this {kind} is in",
+    grouped: {
+      one: "this message carries {n} alert; the fields below are its own",
+      other:
+        "this message groups {n} alerts, and the fields below are the first of them",
+    },
+    openThis: "Open {kind} {name}",
+    openIt: "Open",
+    orTheNamespace: "or the namespace {namespace}",
+    saidAt: "{name} said at {when}, {ago} ago",
+    dismiss: "Dismiss",
+    readAgo: "read {ago} ago",
+    readJustNow: "What this app read just now:",
+    readNoStatus: "read; this kind has no state to show",
+    stillReading: "This app is still reading it.",
+    objectUnread: "This app could not read it: {error}",
+    alertWords: "alert alertmanager pagerduty grafana datadog paste incident",
+  },
+
+  vendor: {
+    ciliumGives:
+      "every Cilium network policy with whether the agent accepted it: a rejected policy enforces nothing and looks exactly like one that works",
+    argocdGives:
+      "every Application with what it is failing to apply, and which objects differ from git",
+    scyllaGives:
+      "every ScyllaDB cluster as racks and members with Scylla's three conditions, upgrade progress and Manager tasks, with the operator's real knobs",
+    cloudnativepgGives:
+      "every Postgres cluster in CloudNativePG's own words: phase, primary, instances, WAL archiving and backups from the Backup objects, with the operator's real knobs",
+    awsGives:
+      "the real ALB target group behind a Service, and what the controller could not apply",
+    azureGives:
+      "which pod identity binds which pods, and what an App Gateway ingress is told to leave alone",
+    certManagerGives:
+      "why a certificate has not renewed, from the object that failed",
+    fluxGives:
+      "what Flux is applying, what it is applying from, and where a stopped fetch has quietly frozen the cluster",
+    googleCloudGives:
+      "what a GKE load balancer was told, and which domains a Google-managed certificate is stuck on",
+    ingressNginxGives:
+      "annotations read as behaviour instead of as a wall of strings",
+    istioGives:
+      "VirtualServices and DestinationRules read as routing rather than as raw custom resources",
+    lokiGives: "logs from before the current pod existed",
+    prometheusGives:
+      "usage history, volume fullness and traffic on pods and workloads from an address; every ServiceMonitor and PodMonitor with what it selects, which Prometheus picks it up and whether it is really scraped; every PrometheusRule with whether the connected Prometheus has loaded it and what is firing from it, and the alerts firing about an object on its own page",
+    traefikGives: "every host this cluster serves, and where each one stops",
+  },
+
+  /**
+   * What an integration says about a vendor's own setting.
+   *
+   * Its own section because `vendor` is one blurb per extension and a test
+   * holds it to exactly that: a key there with no vendor behind it reads as
+   * copy for something the app no longer offers.
+   */
+  readings: {
+    govBothClauses: "{first}, and {second}",
+    govNoReading: "no reading",
+    govAgainstTarget: "against {target}",
+    caBundleNamed: "{name} bundle",
+    govMetricFrom: "{source} metric",
+    govBudgetKeeps: "keeps {rule}; {room}",
+    storyChanged:
+      "{changes} within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+    storyPods:
+      "Pods within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+    changesRollouts: { one: "{n} rollout", other: "{n} rollouts" },
+    changesScales: { one: "{n} scale", other: "{n} scales" },
+    changesBoth: "{rollouts} and {scales}",
+    storyJob: "Ran within {span}: {created}, {completed} completed.",
+    storyQuiet: "{reasons} within {span}. Nothing to say beyond that.",
+    storyCrash:
+      "Cannot stay up: the kubelet is backing off from restarting the container, {times} within {span}: {detail}",
+    storyStartFailed:
+      "The container could not be started, {times} within {span}: {detail}",
+    storyPull: "Cannot pull the image, {times} within {span}: {detail}",
+    storySchedulingSame:
+      "Cannot be scheduled, the same answer {times} within {span}: {detail}",
+    storySchedulingVaried:
+      "Cannot be scheduled, {k} different answers within {span}, the latest: {detail}",
+    storyProbe: "Probes failed {times} within {span}: {detail}",
+    storyPressure: "Under pressure, {times} within {span}: {detail}",
+    storyVolumeTrouble: "Volume trouble, {times} within {span}: {detail}",
+    storyJobTrouble: "Job trouble, {times} within {span}: {detail}",
+    storyScaling: "Autoscaler trouble, {times} within {span}: {detail}",
+    storyNode: "Node trouble, {times} within {span}: {detail}",
+    storyRolloutTrouble: "Rollout trouble, {times} within {span}: {detail}",
+    storyTrouble: "{reason} {times} within {span}: {detail}",
+    storyStillHappening: "still happening",
+    storySettled: "settled",
+    storyStateUnknown: "cannot say",
+    podStatusNotAsked: {
+      one: "1 more pod's exits are not on this clock, because it was not asked.",
+      other:
+        "{n} more pods' exits are not on this clock, because they were not asked.",
+    },
+    timesSeen: { one: "once", other: "{n} times" },
+    jobsCreated: { one: "1 Job created", other: "{n} Jobs created" },
+    storyDone: "done",
+    podsOf: "pods of {name}",
+    groupedByName:
+      "Grouped by the generated suffix of the pod names. No controller event in this window names the owner of these pods.",
+    fromPodStatus: "from the pod status, not an event",
+    lastSeen: "last {ago} ago",
+    podStatusUnread: {
+      one: "The status of {n} pod could not be read; its exits are not on this clock.",
+      other:
+        "The status of {n} pods could not be read; their exits are not on this clock.",
+    },
+    containerExited: "{container} exited with code {code}",
+    lastSeenStrip: "When each event was last seen across the window.",
+    storiesExplained:
+      "A story is one object's events in this window, ranked with warnings first and summed up from counts and times. Nothing is inferred beyond the events themselves.",
+    membersFolded: { one: "{n} object", other: "{n} objects" },
+    twoWord: "Two",
+    threeWord: "Three",
+    warnUndoThis: {
+      one: "{count} thing will undo this.",
+      other: "{count} things will undo this.",
+    },
+    warnUndoApply: {
+      one: "{count} thing will undo this apply.",
+      other: "{count} things will undo this apply.",
+    },
+    warnRevertCount: {
+      one: "{count} thing will put this number back.",
+      other: "{count} things will put this number back.",
+    },
+    rowsOfTotal: {
+      one: "{shown} of {n} {kind}",
+      other: "{shown} of {n} {plural}",
+    },
+    objectCount: { one: "{n} {kind}", other: "{n} {plural}" },
+    rowsWhereAnswered: {
+      one: "{n} {kind}, from the namespaces that answered",
+      other: "{n} {plural}, from the namespaces that answered",
+    },
+    rowCount: { one: "{n} row", other: "{n} rows" },
+    rowCountWhereAnswered: {
+      one: "{n} row, from the namespaces that answered",
+      other: "{n} rows, from the namespaces that answered",
+    },
+    longListTrim: {
+      one: "{n} row. To trim the list, narrow the scope or search",
+      other: "{n} rows. To trim the list, narrow the scope or search",
+    },
+    listCutAt:
+      "Only the latest {n} were read. To see older ones, narrow the scope or raise the limit",
+    limitWord: "limit",
+    capacityWord: "capacity",
+    usageShareOf: "{percent}% of {noun}",
+    usageRestarted: "restarted",
+    usageNothingYet: "{label}: nothing recorded yet.",
+    usageNow: "now {value}",
+    usagePeak: "peak {value}",
+    peakAvgPercent: "peak {peak}% · avg {avg}%",
+    cordonedWord: "cordoned",
+    usageAvg: "avg {value}",
+    usageAt: "at {clock}",
+    usageNowWord: "now",
+    usagePeakWord: "peak",
+    usageNotReporting: "not reporting",
+    requestWord: "request",
+    usageLimitIs: "{noun} {value}",
+    usageNoLimit: "no {noun} set, scaled to {value} used",
+    usageNoneDeclaredLimit: "no limits declared",
+    usageNoneDeclaredCapacity: "no capacity declared",
+    usageAgainstDeclaredLimit: "against declared limits",
+    usageAgainstDeclaredCapacity: "against declared capacity",
+    usageReadingsWatched: {
+      one: "{label}: {n} reading watched",
+      other: "{label}: {n} readings watched",
+    },
+    usageReadingsRecorded: {
+      one: "{label}: {n} reading recorded, none since it stopped",
+      other: "{label}: {n} readings recorded, none since it stopped",
+    },
+    usageRestarts: { one: "{n} restart", other: "{n} restarts" },
+    envInline: "inline",
+    envSecret: "secret",
+    envConfigMap: "configmap",
+    envFieldRef: "fieldRef",
+    envResourceRef: "resourceRef",
+    envFromSecret: "secret · envFrom",
+    envFromConfigMap: "configmap · envFrom",
+    envAllSources: "all sources",
+    envFromWord: "envFrom",
+    envKeyNotInObject: "key {key} is not in {object}",
+    envObjectNotThere: "{object} does not exist",
+    envObjectHasKeys: "keys it has: {keys}",
+    envObjectHasNoKeys: "it holds no keys at all",
+    envRefOptional: "optional, so the pod starts without it",
+    envObjectRefused:
+      "no access to {object}, so whether {key} is there is unknown",
+    envObjectRefusedAll: "no access to {object}, so its keys are unknown",
+    envObjectUnread: "could not read {object}: {error}",
+    forwardRetrying: "{text}; trying again in {n} s",
+    forwardGaveUp: {
+      one: "Gave up after {n} attempt: {text}",
+      other: "Gave up after {n} attempts: {text}",
+    },
+    forwardPodGone: "pod {pod} was deleted",
+    forwardWaiting:
+      "pod {pod} was deleted; waiting for a ready pod of {kind} {name}",
+    forwardNoReplacement:
+      "pod {pod} was deleted and {kind} {name} has no ready pod to move to",
+    forwardSearchFailed:
+      "pod {pod} was deleted and looking for another failed: {text}",
+    forwardMoved: "moved here from {from}",
+    forwardNoStream:
+      "the pod took the connection but opened no stream for this port",
+    forwardListenerFailed: "the local port stopped taking connections: {text}",
+    readyOfNodes: "{ready} {of}",
+    helmRelease: "Helm release",
+    crdEstablished: "Established",
+    crdNotEstablished: "Not established",
+    legacyEndpointsNote:
+      "This cluster served no EndpointSlices, so the legacy Endpoints object answered. It cannot tell a draining address from a dead one, and it stops at 1000.",
+    podReadinessNote:
+      "Neither EndpointSlices nor the Endpoints object answered, so this is a deduction rather than the cluster's own word: the pods the selector matches, each read for its own Ready condition.",
+    legacyEndpointsShort:
+      "This is the object the control plane writes for compatibility. It cannot express serving or terminating, and it stops at 1000 addresses. But no EndpointSlice answered here, so it is also all there is to read.",
+    nodeStoppedReportingAgo:
+      "Node {node} stopped reporting {age} ago. This status is the last one it sent, not the pod's state now.",
+    nodeStoppedReporting:
+      "Node {node} stopped reporting. This status is the last one it sent, not the pod's state now.",
+    allContainers: "all containers",
+    traefikAnotherEntryPoint: "another entry point",
+    certSelfSigned: "self-signed: nothing above it vouched for this",
+    certIssuedBy: "issued by {name}",
+    certIssuerNotNamed: "issuer not named",
+    controllerUnread:
+      "Whether the controller is installed is unknown, because the cluster refused the lists it would be found in: {why}",
+    controllerLookupFailed:
+      "Whether the controller is installed is unknown, because the lists it would be found in could not be read: {why}",
+    controllerLookupDeadline:
+      "Whether the controller is installed is unknown: the cluster did not answer the lists it would be found in within {seconds} s.",
+    argoNoWorkloads:
+      "Nothing in this cluster carries {selector}, so Argo's own workloads could not be found. Its Applications are still read from the API server.",
+    traefikNoController:
+      "Nothing in this cluster carries {selector}, so the proxy's own configuration could not be read.",
+    traefikManifestUnreadable:
+      "Its entry points are unknown, because its manifest could not be read: {why}",
+    traefikNoArgs:
+      "It was started with no arguments, so its entry points come from a configuration file this app cannot read.",
+    reachClusterDns:
+      "{host} is a name only the cluster can resolve, and this app runs on your machine and asks from here, not from inside the cluster. Either give it an address that reaches it from here (an Ingress hostname, a LoadBalancer address), or forward the port and use that: kubectl port-forward -n <namespace> svc/<service> 9090:9090, then http://localhost:9090.",
+    reachNoScheme:
+      "{host} has no scheme: write http:// or https:// in front of it.",
+    connReasonAndShape: "{said}. {shape}",
+    lokiHoldsNoneShort: "holds none of it",
+    lokiCouldNotTell: "could not tell",
+    lokiHoldsPart: "holds part of it",
+    lokiHoldsAll: "holding this cluster",
+    connDidNotSayWhy: "it did not say why",
+    connDidNotAnswer: "did not answer: {reason}",
+    connAnsweredAgo: "answered {age} ago",
+    connKeeps: "keeps {retention}",
+    connRanges: "ranges {ranges}",
+    lokiPageLimit: {
+      one: "up to {n} line a page",
+      other: "up to {n} lines a page",
+    },
+    promResolutionOf: "{range} in {resolution}",
+    promBucketsAtScrape: "{step} buckets, at the scrape resolution",
+    promBucketsMaxOver: "{step} buckets, max over a {inner} resolution",
+    argoMissing: "missing",
+    argoFailedToApply: "failed to apply",
+    argoDegraded: "degraded",
+    argoProgressing: "progressing",
+    azureNoIdentityNamedPlain: "no identity named",
+    azureUserAssignedMsi: "user-assigned MSI",
+    azureServicePrincipal: "service principal",
+    azureServicePrincipalCert: "service principal (certificate)",
+    azureBinds: "binds {name}",
+    azureToPodsLabelled: "to pods labelled aadpodidbinding={selector}",
+    azureNamesNeither: "names neither an identity nor a selector",
+    azureAnyHostname: "any hostname",
+    argoSynced: "synced",
+    argoNotCompared: "not compared",
+    argoThisCluster: "this cluster",
+    argoNamespaceCount: { one: "{n} namespace", other: "{n} namespaces" },
+    relReadsFrom: "reads from",
+    relWaitsFor: "waits for",
+    relManages: "manages",
+    relGovernedBy: "governed by",
+    relIssuedBy: "issued by",
+    relIssuesInto: "issues into",
+    relServing: "serving",
+    relMountedNotCovering: "mounted but not covering",
+    relControlledBy: "controlled by",
+    relOwnedBy: "owned by",
+    govNotRead: "{kind}: not read",
+    govSeveralAutoscalers: {
+      one: "{n} autoscaler claims this",
+      other: "{n} autoscalers claim this, and each undoes the other",
+    },
+    govWhatDrainRespects: "what a drain must respect",
+    govWhoSetsIt: "who sets it",
+    nginxNoController:
+      "Nothing in this cluster carries {selector}, so the controller's own configuration could not be read.",
+    nginxManifestUnreadable:
+      "The global ConfigMap it uses is unknown, because its manifest could not be read: {why}",
+    nginxNoConfigMapFlag:
+      "This controller was started with no --configmap flag, so it has no global ConfigMap and every setting comes from its own defaults or from an Ingress.",
+    nginxConfigMapUnreadable:
+      "The controller reads {where}, and it could not be read here: {why}",
+    tlsFromVendor: "from {by}",
+    tlsHostFrom: "{host}, from {by}",
+    awsAcmNamed: "ACM {name}",
+    awsAcmCertificate: "an ACM certificate",
+    awsAcmDiscovered: "a certificate discovered in ACM",
+    awsHttpOnly: "an HTTP listener only",
+    azureCertOnGateway: "{name} on the Application Gateway",
+    azureSomeCertOnGateway: "a certificate on the Application Gateway",
+    istioMeshOnly: "mesh only",
+    mapEntryPoint: "Entry point",
+    mapCanary: "canary",
+    mapCanaryShare: "{n}% canary",
+    mapOutsideMesh: "outside the mesh",
+    traefikRouting: "Routing",
+    traefikRouteNumber: { one: "Route {n}", other: "Route {n}" },
+    traefikPriorityDefault: {
+      one: "{n}: the rule's length, Traefik's default",
+      other: "{n}: the rule's length, Traefik's default",
+    },
+    traefikRoute: "Route",
+    traefikEveryEntryPoint: "every entry point, since none is named",
+    traefikH2c: "h2c: gRPC, not a browser's way in",
+    traefikNotRead: "not read: {why}",
+    traefikDefaultCertificate: "the proxy's default certificate",
+    traefikNoTlsDeclared:
+      "none declared, though an entry point may still carry it",
+    traefikRuleEmpty: "the rule is empty",
+    traefikRuleNotPlain: "it is not a plain list of matchers",
+    traefikRuleNegated:
+      "it is negated, so a matcher in it is not a requirement",
+    traefikRuleUnreadable: "no host or path in it could be read",
+    traefikAnyPath: "any path",
+    traefikPathExact: "{path} (exact)",
+    hpaNoMetricsDetail:
+      "{said} Nothing about the workload says so: replica counts, conditions and events all look exactly as they do on a healthy autoscaler, and the number simply stops moving.",
+    hpaAtCeilingDetail:
+      "{said} Both replica counts read as a healthy steady state while this is true, so nothing else on this page shows it: raising maxReplicas is what would let the workload grow.",
+    hpaStuckDetail:
+      "It cannot act right now ({why}), so the number you set will stand until it can. Then it takes the count back to somewhere between {min} and {max} without announcing it.",
+    logFormatJson: "Structured JSON log format with parsed fields",
+    logFormatLogfmt: 'Key=value pairs format (e.g., level=info msg="hello")',
+    logFormatKlog: "Kubernetes log format with severity prefix (I/W/E/F)",
+    logFormatLogback: "Java Logback format with timestamp and level",
+    logFormatPlain: "Plain text without structured formatting",
+    logFormatPlainName: "plain",
+    noTimestamp: "no timestamp",
+    awsPortNumber: "port {port}",
+    awsNoTargetGroup: "no target group named",
+    gcpEveryPort: "every port",
+    gcpPortNumber: "port {port}",
+    gcpNamedFor: "named for {scope}",
+    gcpNoBackendConfig:
+      "no BackendConfig named {name} in this namespace, so nothing is applied.",
+    azureGatewayDefaults: "gateway defaults",
+    agicSpeaks: "speaks {protocol} to the pods",
+    agicRewritesPath: "rewrites the path to {path}",
+    agicSendsHost: "sends Host: {host}",
+    agicProbes: "probes {path}",
+    agicAccepts: "accepts {codes}",
+    agicCookieAffinity: "cookie affinity",
+    agicSslRedirect: "redirects to HTTPS",
+    agicPrivateIp: "on the private IP",
+    agicRewriteSet: "rewrite set {name}",
+    agicWaf: "WAF {name}",
+    agicRequestTimeout: {
+      one: "{n}s request timeout",
+      other: "{n}s request timeout",
+    },
+    agicDraining: { one: "{n}s draining", other: "{n}s draining" },
+    agicOutAfter: {
+      one: "out after {n} failed probe",
+      other: "out after {n} failed probes",
+    },
+    gcpRedirectsToHttps: "redirects HTTP to HTTPS {code}",
+    gcpSslPolicy: "SSL policy {name}",
+    gcpHealthCheck: "health check {what}",
+    gcpCdnWith: "CDN {what}",
+    gkeFrontendConfigMissingWhy:
+      "{ingress} names it and there is none in {namespace}, so no redirect and no SSL policy are applied",
+    gkeCertificateMissingWhy:
+      "{ingress} names it and there is none in {namespace}, so nothing terminates TLS for it",
+    gkeBackendConfigMissingWhy:
+      "{backend} names it and there is none in {namespace}, so the backend keeps its defaults",
+    gkeBackendConfigMissingWhyUnnamed:
+      "A Service names it and there is none in {namespace}, so the backend keeps its defaults",
+    gcpCdnOn: "CDN on",
+    gcpIapOn: "IAP on",
+    gcpCloudArmor: "Cloud Armor {name}",
+    gcpAffinity: "{how} affinity",
+    gcpAccessLogsOn: "access logs on",
+    gcpAccessLogsAt: "access logs at {percent}%",
+    gcpSetsNothing: "sets nothing",
+    gcpTimeout: "{n}s timeout",
+    gcpDraining: "{n}s draining",
+    gcpRequestHeaders: {
+      one: "{n} request header",
+      other: "{n} request headers",
+    },
+    gcpResponseHeaders: {
+      one: "{n} response header",
+      other: "{n} response headers",
+    },
+    istioAllWorkloads: "All workloads",
+    istioNoRules: "No rules",
+    traefikAuthEnabled: "Auth enabled",
+    traefikCustomHeaders: "Custom headers",
+    istioRuleCount: { one: "{n} rule", other: "{n} rules" },
+    forwardNoFreePort:
+      "Every local port between {from} and {to} is already forwarding something.",
+    forwardNoPod:
+      "No ready pod is behind {where}, so there is nothing to forward to.",
+    forwardServiceGone:
+      "{where} is not in this cluster any more, so there is nothing to forward to.",
+    forwardNoKnownPort: {
+      one: "{name} exposes {n} port and it is not one this app recognises. Forward it by hand and give the address instead.",
+      other:
+        "{name} exposes {n} ports and none of them is one this app recognises. Forward it by hand and give the address instead.",
+    },
+    forwardByComponent: 'its "{part}" component',
+    forwardByLabel: "labelled {label}",
+    forwardByName: "named for it",
+    weekdaySunday: "Sunday",
+    weekdayMonday: "Monday",
+    weekdayTuesday: "Tuesday",
+    weekdayWednesday: "Wednesday",
+    weekdayThursday: "Thursday",
+    weekdayFriday: "Friday",
+    weekdaySaturday: "Saturday",
+    cronEveryMinute: "every minute",
+    cronHourlyAt: "hourly at :{minute}",
+    cronDailyAt: "daily at {clock}",
+    cronWeeklyAt: "every {day} at {clock}",
+    cronWeekdaysAt: "weekdays at {clock}",
+    cronMonthlyAt: "monthly on day {day} at {clock}",
+    cronEveryMinutes: { one: "every {n} minute", other: "every {n} minutes" },
+    cronEveryHours: {
+      one: "every {n} hour, at :{minute}",
+      other: "every {n} hours, at :{minute}",
+    },
+    problemRestarts: {
+      one: "{n} restart since creation",
+      other: "{n} restarts since creation",
+    },
+    problemReplicasReady: {
+      one: "{ready}/{n} replica ready",
+      other: "{ready}/{n} replicas ready",
+    },
+    problemUnschedulable: "marked unschedulable: no new pods will land here",
+    certNoSecret: "no Secret of that name in this namespace",
+    certSecretUnreadable: "the Secret could not be read: {said}",
+    certNoTlsCrt:
+      "this Secret holds no tls.crt, so there is no certificate in it",
+    certNoPem: "tls.crt holds no PEM certificate",
+    certUnparseable: "tls.crt is not a certificate the app can read: {said}",
+    certCrossNamespace: "cross-namespace, needs a ReferenceGrant",
+    withheldPrivateKey: "a private key, which the app never shows",
+    withheldDeclared:
+      "{type} declares this to be the private key, which the app never shows",
+    withheldKeyName: "named like a private key, which the app never shows",
+    unreadUnanswered:
+      "the app asked for {version} and the cluster did not answer ({said}), so it cannot say whether one applies here",
+    unreadNodeClaims:
+      "the app does not read the claims the pods on this node hold, so it cannot say which volumes would have to detach before those pods start elsewhere",
+    unreadVolumeMounts:
+      "the app does not read what mounts this volume's claim, so it cannot say whether anything is still writing to it",
+    connNoAddress: "no address is configured",
+    stepAttempt: "attempt {revision}",
+    stepChallengeOn: "{kind} on {domain}",
+    stalledNotRequested: "no certificate has been requested yet",
+    stalledRequestNotIssued: "the certificate request has not been issued",
+    stalledChallengePending:
+      "the {kind} challenge on {domain} has not completed",
+    stalledOrderNotCompleted: "the ACME order has not completed",
+    authTimedOut: "the wait for the browser ran out",
+    authNoTokenInCredential: "the credential helper answered without a token",
+    authStateMismatch: "the callback did not match the request this app sent",
+    authSuperseded: "a newer attempt on this context took over",
+    authSwitchedAway: "you moved to another cluster while this was waiting",
+    verbatimLine: "{said}",
+    gcpStatusOnDomain: "{status} on {domain}",
+    awsIngressClassParams: {
+      one: "{n} IngressClassParams",
+      other: "{n} IngressClassParams",
+    },
+    awsBindingsUnapplied: {
+      one: "{n} binding the controller could not apply",
+      other: "{n} bindings the controller could not apply",
+    },
+    azureBindings: { one: "{n} binding", other: "{n} bindings" },
+    azureProhibited: {
+      one: "{n} prohibited target",
+      other: "{n} prohibited targets",
+    },
+    azureIdentities: {
+      one: "{n} AzureIdentity",
+      other: "{n} AzureIdentities",
+    },
+    azureNoIdentityNamed: {
+      one: "no AzureIdentity named {name}",
+      other: "no AzureIdentity named {name}",
+    },
+    azureDanglingBindings: {
+      one: "{n} binding names an identity that does not exist",
+      other: "{n} bindings name an identity that does not exist",
+    },
+    gcpCertificatesFailed: {
+      one: "{n} certificate failed",
+      other: "{n} certificates failed",
+    },
+    gcpNotServingYet: {
+      one: "{n} not serving yet",
+      other: "{n} not serving yet",
+    },
+    factOneExpiring: "1 {what}",
+    factCertificates: { one: "{n} certificate", other: "{n} certificates" },
+    factRenewalsOverdue: {
+      one: "{n} renewal overdue",
+      other: "{n} renewals overdue",
+    },
+    factExpiringSoonest: {
+      one: "{n} expiring, soonest in {span}",
+      other: "{n} expiring, soonest in {span}",
+    },
+    factRenewalsFailing: {
+      one: "{n} renewal failing",
+      other: "{n} renewals failing",
+    },
+    factNeverIssued: {
+      one: "{n} certificate never issued",
+      other: "{n} certificates never issued",
+    },
+    certOverdueBy: "{span} overdue",
+    certNeverIssuedShort: "never issued",
+    certRenewalFailing: "renewal failing",
+    certRenewing: "renewing",
+    certIssued: "issued",
+    certNoExpiryDate: "no readable expiry date",
+    certExpiredToday: "expired today",
+    expiredWord: "Expired",
+    cipherSuitesDefault: "Default",
+    certExpiresIn: "expires in {span}",
+    certValidFor: "valid for {span}",
+    certRenewsIn: "renews in {span}",
+    certRenewalOverdue: "renewal overdue: expires in {span}",
+    certNotValidYet: {
+      one: "not valid for another {n} day",
+      other: "not valid for another {n} days",
+    },
+    certExpiredAgo: {
+      one: "expired {n} day ago",
+      other: "expired {n} days ago",
+    },
+    spanDays: { one: "{n} day", other: "{n} days" },
+    spanHours: { one: "{n} hour", other: "{n} hours" },
+    spanMinutes: { one: "{n} minute", other: "{n} minutes" },
+    spanMinutesInSentence: { one: "{n} minute", other: "{n} minutes" },
+    factShowThem: "Show them",
+    factUpgrading: {
+      one: "{n} cluster upgrading",
+      other: "{n} clusters upgrading",
+    },
+    factClustersInTrouble: {
+      one: "{n} cluster in trouble",
+      other: "{n} clusters in trouble",
+    },
+    factArchivingFailing: {
+      one: "WAL archiving failing on {n} cluster",
+      other: "WAL archiving failing on {n} clusters",
+    },
+    factShowIt: "Show it",
+    factNoIngressClass: "claims no IngressClass",
+    factNotReady: "not ready",
+    factRenewalOverdue: "1 renewal overdue",
+    kindCount: { one: "{n} {kind}", other: "{n} {kind}s" },
+    factReconcilers: { one: "{n} reconciler", other: "{n} reconcilers" },
+    factReconcilersRead: {
+      one: "{n} reconciler read",
+      other: "{n} reconcilers read",
+    },
+    factKindsUnread: {
+      one: "{n} kind could not be listed",
+      other: "{n} kinds could not be listed",
+    },
+    factNotReconciled: {
+      one: "{n} not reconciled",
+      other: "{n} not reconciled",
+    },
+    factSuspendedCount: { one: "{n} suspended", other: "{n} suspended" },
+    factSourceNotFetching: {
+      one: "{n} source not fetching",
+      other: "{n} sources not fetching",
+    },
+    factHosts: { one: "{n} host", other: "{n} hosts" },
+    factMiddlewares: { one: "{n} middleware", other: "{n} middlewares" },
+    factServesClasses: {
+      one: "serves class {names}",
+      other: "serves classes {names}",
+    },
+    factFailingToSync: {
+      one: "{n} failing to sync",
+      other: "{n} failing to sync",
+    },
+    factDriftedUnfixed: {
+      one: "{n} out of sync with nothing fixing it",
+      other: "{n} out of sync with nothing fixing them",
+    },
+    factHostsNoGateway: {
+      one: "{n} host no Gateway serves",
+      other: "{n} hosts no Gateway serves",
+    },
+    factHostsRouted: { one: "{n} host routed", other: "{n} hosts routed" },
+    istioOrJoin: " or ",
+    istioAndMoreBelow: "{said}, and more below",
+    istioAndJoin: ", and ",
+    istioEveryRequest: "every request",
+    istioShownBelow: "shown as written below",
+    istioHeaderTerm: "the {header} header {how} {what}",
+    istioPortTerm: "it arrived on port {port}",
+    istioSchemeTerm: "the scheme {how} {what}",
+    istioMethodTerm: "the method {how} {what}",
+    istioHostTerm: "the Host header {how} {what}",
+    istioPathTerm: "path {how} {what}",
+    istioIgnoreUriCase:
+      "it sets ignoreUriCase, which changes what every path term in it means",
+    istioUnreadableMatch: "it is not a match block this app can read",
+    istioStartsWith: "starts with",
+    istioIsExactly: "is exactly",
+    notReadyEndpoints: {
+      one: "{n} not ready",
+      few: "{n} not ready",
+      many: "{n} not ready",
+      other: "{n} not ready",
+    },
+    factCiliumPolicies: {
+      one: "{n} network policy",
+      other: "{n} network policies",
+    },
+    factCiliumClusterwide: {
+      one: "{n} cluster-wide",
+      other: "{n} cluster-wide",
+    },
+    factCiliumRejected: {
+      one: "{n} policy Cilium rejected: it enforces nothing",
+      other: "{n} policies Cilium rejected: they enforce nothing",
+    },
+    factCiliumUnanswered: {
+      one: "{n} policy the agent has not answered about",
+      other: "{n} policies the agent has not answered about",
+    },
+    drainingCount: {
+      one: "{n} draining",
+      few: "{n} draining",
+      many: "{n} draining",
+      other: "{n} draining",
+    },
+    publishedCount: {
+      one: "{n} published",
+      few: "{n} published",
+      many: "{n} published",
+      other: "{n} published",
+    },
+    stillTakingTraffic: ", still taking traffic",
+    noneOfItsPodsPublished: "none of its pods published",
+    acrossTheService: "across the Service: {counts}",
+    delUnconfirmedMark: "{vendor} · {claim} · unconfirmed",
+    delEditWhatApplies: "To change it for good, change what {name} applies.",
+    delEditManifests: "To change it for good, edit the manifests under {path}.",
+    argoOutOfSync: "out of sync",
+    argoNotComparing: "not comparing",
+    argoSyncFailing: "sync failing",
+    argoCannotCompare:
+      "{name} cannot compare against its repository, so nothing is being applied and an edit here stands until somebody fixes it. Then it is undone.",
+    argoSelfHeals:
+      "Argo self-heals this Application: an edit made here is put back on its next comparison, within about five minutes.",
+    argoAutoSyncNoHeal:
+      "Auto-sync is on but self-heal is off, so an edit here stands until the next commit touches this object.",
+    argoNoAutoSync:
+      "Auto-sync is off, so an edit here stands until somebody syncs the Application.",
+    fluxSuspendedWord: "suspended",
+    fluxNotReconcilingWord: "not reconciling",
+    fluxKustSuspended:
+      "{name} is suspended, so nothing is being applied and an edit here stands until somebody resumes it. Then it is undone.",
+    fluxKustStopped:
+      "{name} is not reconciling, so an edit here stands until it starts again. Then it is undone.",
+    fluxKustReapplies:
+      "{name} re-applies its manifests every {interval}, so an edit here is undone on the next pass.",
+    fluxRelSuspended:
+      "{name} is suspended, so an edit here stands until somebody resumes it.",
+    fluxRelStopped:
+      "{name} is not upgrading the release, so an edit here stands until it starts again.",
+    fluxRelUpgrades:
+      "{name} upgrades the release on its interval, and a hand edit is replaced by the chart's own value.",
+    promCpuHistory: "CPU over a window longer than this app has been open",
+    promMemoryHistory: "memory history",
+    promVolumeFullness: "how full a volume actually is",
+    promNetworkBytes: "bytes in and out of a workload",
+    promFromCadvisor: "cAdvisor, via the kubelet",
+    promFromKubelet: "the kubelet",
+    promDeclaredHistory: "requests and limits as they stood through a window",
+    promFromKsm: "kube-state-metrics",
+    promNoNodesListed:
+      "This cluster's nodes could not be listed, so there is nothing to compare what Prometheus knows against.",
+    promNoNodeLabel:
+      "Nothing here carries a node name, neither kube_node_info nor cAdvisor's node label, so which cluster this Prometheus is watching cannot be established from here. The metric families below are still read, and are the better evidence.",
+    promCouldNotTell: "could not tell",
+    promNoNodesToCompare: "no nodes to compare",
+    promAnotherCluster: "watching another cluster",
+    promPartOfIt: "watching part of it",
+    promMoreThanThis: "watching more than this",
+    promThisCluster: "watching this cluster",
+    epKeptForCompat:
+      "{addresses} {from} This object is kept for compatibility.",
+    epListsOf: "This object lists {listed} of {real} addresses. {from} {why}",
+    epDisagree:
+      "This object lists {listed} addresses and the slices publish {real}. {from} The two disagree, which they do briefly while the controllers catch up with each other.",
+    epReady: "ready",
+    epReadyTerminating: "ready, terminating",
+    epServingTerminating: "serving, terminating",
+    epServingNotReady: "serving, not ready",
+    epTerminating: "terminating",
+    epNotReady: "not ready",
+    epFromLegacy: "from the legacy Endpoints object",
+    epDeducedFromPods: "deduced from pod readiness",
+    epLegacyAnswered:
+      "This cluster served no EndpointSlices, so the legacy Endpoints object answered. It cannot tell a draining address from an absent one.",
+    epDeduction:
+      "Neither EndpointSlices nor the Endpoints object answered, so this is a deduction rather than the cluster's own answer.",
+    epZoneReach: "a client in {zone} reaches {n} of {total}",
+    epHintsOn: "Hints are on, so traffic stays in the client's zone: {reach}.",
+    epInSliceNoPort: "in a slice that carries no port",
+    epInNoSlice: "in no slice at all",
+    epReadyAnd: "Ready, and {where}",
+    epNotReadyNeverPublished:
+      "{state}: a pod that is not Ready is never published",
+    epNotReadyWord: "Not ready",
+    epTargetPort: "targetPort: {name}",
+    epLegacyCompat:
+      "This is the object the control plane writes for compatibility. It cannot express serving or terminating, so a draining address is simply absent from it.",
+    epOverCapacity:
+      "The control plane truncates this object at 1000 and has annotated it endpoints.kubernetes.io/over-capacity.",
+    epCannotExpress:
+      "It cannot express serving or terminating, so an address that is draining is simply absent from it.",
+    delLabelledNotListed:
+      "Labelled as delivered by {claim}, which does not list it",
+    delLabelledNoOwner:
+      "Labelled as delivered by {claim}, and no {kind} by that name exists",
+    delLabelClaimDetail:
+      "The label is a claim anybody can write, and the {kind} it names does not have this object in its inventory.",
+    delNothingApplyingDetail:
+      "Nothing here is applying this object. A {kind} that was deleted without pruning, or a manifest that was removed from git, leaves a label behind.",
+    delTwoDeliver: "{vendors} both deliver this object",
+    delTwoDeliverDetail:
+      "{names} each list it and each re-apply it, so whichever reconciles last wins and the other undoes it on its next pass.",
+    delSince: "; {name} last applied it {ago} ago",
+    delDrifted: "Live differs from git{since}",
+    delDriftedDetail:
+      "{vendor} says this object no longer matches what was applied. {note}",
+    delStopped: "Nothing is applying this object right now",
+    delStoppedDetail: "{name} has stopped reconciling.",
+    delFromGit: "Delivered from git: an edit made here does not stick",
+    delNotDelivered: "not delivered",
+    delLabelledNotListedShort: "labelled, not listed",
+    delTwoControllers: "two controllers",
+    delOutOfSyncAge: "out of sync · {ago}",
+    delOutOfSync: "out of sync",
+    delScaleAnyway: "Scale anyway",
+    delVendorWillUndo: "{verb}: {vendor} will undo this",
+    delVendorWillUndoDetail: "{vendor} will undo this.",
+    delApplyLabelNotHonoured:
+      "Apply: this object's delivery label is not honoured",
+    delApplyLabelDetail:
+      "Nothing is applying this object, whatever its label says.",
+    rolloutStalled:
+      "Rollout stalled: the controller stopped waiting for the new pods",
+    rolloutStalledServing: {
+      one: "Rollout stalled: the new pods never came up, and {n} old pod still serves",
+      other:
+        "Rollout stalled: the new pods never came up, and {n} old pods still serve",
+    },
+    rolloutUnavailable: "Not available: too few pods are up to serve",
+    rolloutUnavailableReason: "Not available ({reason})",
+    rolloutPaused:
+      "Rollout paused: changes to the template wait until it is resumed",
+    rolloutUnobserved:
+      "The controller has not read the latest change yet, so these counts are from before it",
+    controllerSaid: "The controller says: {said}",
+    rolloutMoving: {
+      one: "Rolling out: {updated} of {n} pod on the new template",
+      other: "Rolling out: {updated} of {n} pods on the new template",
+    },
+    rolloutComingUp: {
+      one: "Pods coming up: {available} of {n} pod is available",
+      other: "Pods coming up: {available} of {n} pods are available",
+    },
+    rolloutScalingDown: {
+      one: "Scaling down: {current} pods still exist, {n} is wanted",
+      other: "Scaling down: {current} pods still exist, {n} are wanted",
+    },
+    rolloutShort: {
+      one: "Rolled out, and only {available} of {n} pod is available",
+      other: "Rolled out, and only {available} of {n} pods are available",
+    },
+    rolloutPodsUnread:
+      "{word} by the controller's counts alone: its pods could not be read, so whether they are still starting is not known",
+    rolloutPodsUnreadShort: "pods not read",
+    upBetweenCrashes: "up between crashes",
+    exitUnreported: "last exit not reported",
+    hpaPinnedAt: "pinned at {n}",
+    hpaRange: { one: "{min} to {n} replica", other: "{min} to {n} replicas" },
+    hpaCannotReach: "{name} cannot reach what it scales",
+    hpaCannotReachDetail:
+      "The autoscaler names {kind} {target} and cannot read its scale, so it is not scaling anything.",
+    hpaStandingBy: "{name} is standing by while this is scaled to zero",
+    hpaStandingByDetail:
+      "An autoscaler does not scale a workload up from zero. Set a replica count by hand and it takes over from there.",
+    hpaNoMetrics: "{name} is not scaling this: it cannot read its metrics",
+    hpaNoMetricsDefault: "The metric source did not answer.",
+    hpaAtFloor: "{name} is holding this at its floor of {min}",
+    hpaAtFloorDetail:
+      "The metrics say fewer replicas would do; minReplicas is what is keeping them running.",
+    hpaAtCeiling: "{name} wants more replicas than {max}, which is its ceiling",
+    hpaAtCeilingDefault: "The desired replica count is above maxReplicas.",
+    hpaRunning: "{n} running",
+    hpaWanted: "{n} wanted",
+    hpaNothingComputed: "nothing computed",
+    hpaLastScaled: "last scaled {ago} ago",
+    pdbAtLeast: "at least {n} available",
+    pdbAtMost: "at most {n} unavailable",
+    pdbNoRule: "no rule stated",
+    pdbNoDisruption: "no disruption allowed",
+    pdbRoom: "{allowed} · {healthy} healthy of {selected} selected",
+    pdbBelowFloor:
+      "{name} is below its own floor: {healthy} healthy, {required} required",
+    pdbBelowFloorDetail:
+      "Evicting a pod here is refused, and will stay refused until the missing replicas come back. A node drain covering this workload will not finish.",
+    pdbExactlyMet: "{name} allows no disruption right now",
+    pdbExactlyMetDetail:
+      "The budget is exactly met: {healthy} healthy against a floor of {required}. A node drain covering this workload will wait.",
+    hpaSeveralTitle: {
+      one: "{n} autoscaler",
+      other: "{n} autoscalers",
+    },
+    hpaSeveralHead: {
+      one: "{n} autoscaler claims this workload.",
+      other: "{n} autoscalers claim this workload.",
+    },
+    hpaSeveralDetail:
+      "{names} each set spec.replicas from their own reading, and each undoes the other on its next pass. Nothing you set here survives.",
+    hpaCannotActNow: "it is not currently able to act",
+    hpaOwnsStuckHead: "{name} owns this replica count, and is stuck.",
+    hpaOwnsStuckDetail:
+      "It cannot act right now ({why}), so the number you set will stand until it can. Then it takes the count back.",
+    hpaWillRevertHead: "{name} will put this number back.",
+    hpaWillRevertDetail:
+      "It keeps this between {min} and {max} and re-reads its metrics about every fifteen seconds.",
+    hpaAutoscalerNamed: "The autoscaler {name}",
+    docNoReplicaCount: "the document has no replica count",
+    cannotTell: "cannot tell",
+    shellFinished: "finished, nothing to attach to",
+    shellExited: "exited {code}, nothing to attach to",
+    shellNotStarted: "has not started",
+    shellBetweenRestarts: "not running between restarts",
+    shellNotRunningWhy: "not running · {reason}",
+    shellNotRunning: "not running",
+    shellStateUnknown: "state unknown, nothing to attach to",
+    logsPrintedBeforeExit: "What it printed before it exited is in Logs.",
+    logsAttemptsLast:
+      "{attempts}{when}. What the run that failed printed is in Logs.",
+    logsFinishedComplete: "Finished{took}{when}. Its log is complete.",
+    logsTook: " in {took}",
+    logsWhen: ", {when}",
+    logsLastWhen: ", last {when}",
+    logsNoneInitUnfinished: "No logs yet: init has not finished.",
+    logsNoneNotStarted: "No logs yet: it has not started.",
+    logsNeverRanBlocked: "Never ran: the sequence is still on {on}.",
+    logsNeverRan: "Never ran.",
+    logsSidecarRunning:
+      "Started during init and does not finish; the sequence went on once it was ready.",
+    groupInitCaption:
+      "run in order before the pod starts, each waiting on the last",
+    groupSidecarCaption: "started during init and still running",
+    groupAppBlocked: "never started: the pod is still in init",
+    groupAppCaption: "run together for the life of the pod",
+    groupInitCaptionEach:
+      "run in order before each pod starts, each waiting on the last",
+    groupSidecarCaptionEach:
+      "start during init and run for the life of each pod",
+    groupAppCaptionEach: "run together for the life of each pod",
+    ngxSnippetsAllowed:
+      "An Ingress in this cluster may inject raw nginx configuration through configuration-snippet and server-snippet.",
+    ngxSnippetsIgnored:
+      "configuration-snippet and server-snippet on an Ingress are ignored, so an Ingress carrying one is not doing what it says.",
+    ngxRiskCritical:
+      "Every annotation is honoured, including the ones that can execute configuration.",
+    ngxRiskHigh:
+      "Annotations up to the High risk level are honoured; Critical ones, which are the snippets, are ignored.",
+    ngxRiskMedium:
+      "Only Low and Medium risk annotations are honoured; anything above is ignored.",
+    ngxRiskLow:
+      "Only Low risk annotations are honoured; most of the interesting ones are ignored.",
+    ngxForwardedTrusted:
+      "X-Forwarded-For from the client is trusted and passed through, which is right behind a load balancer and wrong when nginx is exposed directly.",
+    ngxForwardedReplaced:
+      "X-Forwarded-For from the client is replaced with the address nginx actually saw.",
+    ngxForwardedAppended:
+      "The client's address is appended to X-Forwarded-For rather than replacing it.",
+    ngxRealIpFromProxy:
+      "The client's real address is taken from the proxy protocol or the forwarded header rather than from the connection.",
+    ngxTrustedRanges:
+      "Forwarded headers are trusted only from {ranges}; from anywhere else they are ignored.",
+    ngxServerTokensOn:
+      "Every response names the nginx version in its Server header.",
+    ngxServerTokensOff:
+      "The nginx version is kept out of responses and error pages.",
+    ngxTlsVersions:
+      "Only {versions} are offered to clients; anything older is refused at the handshake.",
+    ngxHstsOn:
+      "Every TLS response tells the browser to refuse plain HTTP to this host in future.",
+    ngxHstsOff:
+      "No Strict-Transport-Security header is sent, so a browser will try plain HTTP again.",
+    ngxHstsAge: {
+      one: "The browser is told to remember that for {n} second.",
+      other: "The browser is told to remember that for {n} seconds.",
+    },
+    ngxHttp2On: "HTTP/2 is offered on the TLS listener.",
+    ngxHttp2Off: "HTTP/2 is switched off; every client falls back to HTTP/1.1.",
+    ngxGzipOn: "Responses are compressed before they leave nginx.",
+    ngxWorkersAuto: "One nginx worker per CPU the container is allowed.",
+    ngxWorkerConnections:
+      "One worker holds at most {count} connections; past that new ones wait.",
+    ngxKeepaliveTimeout:
+      "An idle client connection is held open for {wait} seconds before nginx closes it.",
+    ngxKeepaliveRequests:
+      "A client connection is reused for {count} requests and then closed.",
+    ngxUpstreamKeepalive:
+      "{count} idle connections per backend are kept open for reuse.",
+    ngxAccessLogOff:
+      "Nothing is written to the access log, so this controller's logs will not show a request that reached it.",
+    ngxErrorDebug:
+      "The error log records everything, including per-request detail.",
+    ngxErrorInfo: "The error log records informational messages and worse.",
+    ngxErrorNotice: "The error log records notices and worse.",
+    ngxErrorWarn: "The error log records warnings and worse.",
+    ngxErrorError: "The error log records errors only.",
+    ngxModsecOn:
+      "Every request is passed through ModSecurity before it reaches a backend.",
+    ngxModsecOwasp: "ModSecurity runs with the OWASP core rule set loaded.",
+    nginxRewriteTarget:
+      "The path is rewritten to {target} before the backend sees it.",
+    nginxAppRoot: "A request for / is redirected to {root}.",
+    nginxPermanentRedirect:
+      "Every request here is answered with a permanent redirect to {to}; the backend is never reached.",
+    nginxTemporalRedirect:
+      "Every request here is answered with a temporary redirect to {to}.",
+    nginxUpstreamHost:
+      "The backend is sent Host: {host} rather than the hostname the client asked for.",
+    nginxBodyLimit: "A request body larger than {limit} is refused with 413.",
+    nginxHeaderBuffer:
+      "Up to {limit} is set aside for the backend's response headers; a larger set of headers fails with 502.",
+    nginxReadTimeout:
+      "nginx waits up to {wait} between reads from the backend before giving up with 504.",
+    nginxSendTimeout:
+      "nginx waits up to {wait} while sending the request to the backend.",
+    nginxConnectTimeout:
+      "nginx gives up after {wait} if the backend does not accept the connection.",
+    nginxWhitelist:
+      "Only clients in {ranges} are served; every other address is refused with 403.",
+    nginxDenylist:
+      "Clients in {ranges} are refused with 403; everybody else is served.",
+    nginxAuthSecret:
+      "The user names and password hashes are read from the Secret {secret}.",
+    nginxAuthRealm: "The browser's password prompt is labelled “{realm}”.",
+    nginxAuthUrl:
+      "Every request is first sent to {url}; anything but a 2xx from it refuses the request.",
+    nginxAuthSignin:
+      "A request the authentication service refused is redirected to {url} to sign in.",
+    nginxCorsOrigins: "Cross-origin calls are allowed from {origins}.",
+    nginxCanaryWeightPercent:
+      "{weight}% of this host's requests take this route instead of the one it shadows.",
+    nginxCanaryWeightOf:
+      "{weight} of every {total} requests for this host take this route instead of the one it shadows.",
+    nginxCanaryTotal:
+      "The weight above is a share of {total} rather than a percentage.",
+    nginxCanaryHeader:
+      "A request carrying {header}: always takes this route, and one carrying {header}: never never does. This is checked before any weight is.",
+    nginxCanaryHeaderValue:
+      "A request whose {header} header is exactly {wanted} takes this route.",
+    nginxCanaryCookie:
+      "A request carrying the cookie {cookie}=always takes this route, and {cookie}=never never does.",
+    nginxStickyCookieName: "The stickiness cookie is called {name}.",
+    nginxDefaultBackend:
+      "A request this route cannot serve is answered by the Service {service} instead.",
+    nginxCustomErrors:
+      "A {codes} from the backend is replaced by the default backend's own body rather than passed through.",
+    nginxServerAlias: "This route also answers for {aliases}.",
+    nginxSslRedirectOn: "Plain HTTP is answered with a redirect to HTTPS.",
+    nginxSslRedirectOff:
+      "Plain HTTP is served as it arrives; nothing upgrades the connection.",
+    nginxForceSslOn:
+      "Plain HTTP is redirected to HTTPS even though this Ingress declares no certificate of its own.",
+    nginxForceSslOff: "The forced redirect to HTTPS is switched off here.",
+    nginxSslPassthrough:
+      "TLS is handed to the backend untouched: nginx terminates nothing and never sees the path.",
+    nginxBackendHttp: "nginx speaks plain HTTP to the backend.",
+    nginxBackendHttps: "nginx speaks HTTPS to the backend.",
+    nginxBackendGrpc: "nginx speaks gRPC to the backend.",
+    nginxBackendGrpcs: "nginx speaks gRPC over TLS to the backend.",
+    nginxBackendFcgi: "nginx speaks FastCGI to the backend.",
+    nginxBackendAjp: "nginx speaks AJP to the backend.",
+    nginxRegexPaths:
+      "The paths on this Ingress are read as regular expressions rather than as prefixes.",
+    nginxFromWww:
+      "A request for the www form of this host is redirected to the bare one.",
+    nginxBodyUnlimited:
+      "A request body of any size is accepted: there is no limit.",
+    nginxBuffered:
+      "The response is buffered in nginx before any of it reaches the client.",
+    nginxStreamed:
+      "The response is streamed to the client as it arrives, which is what a long poll or an event stream needs.",
+    nginxAuthBasic:
+      "Every request must carry HTTP basic authentication or it is refused with 401.",
+    nginxAuthDigest:
+      "Every request must carry HTTP digest authentication or it is refused with 401.",
+    nginxCorsOn: "A browser on another origin is allowed to call this route.",
+    nginxCanaryOn:
+      "This is a second route for a host another Ingress already serves, and nginx sends it a share of that host's traffic.",
+    nginxCanaryOff:
+      "Canary routing is switched off here, so this route is served like any other.",
+    nginxStickyCookie:
+      "One client keeps reaching the same backend pod, tracked with a cookie nginx sets.",
+    nginxStickyRebalance:
+      "Stickiness is given up when the set of pods changes, so a rollout rebalances.",
+    nginxStickyPersist:
+      "A client stays pinned to its pod across rollouts, so a scale-up takes no share of the existing traffic.",
+    nginxRoundRobin: "Requests go to the backend's pods in turn.",
+    nginxLeastTime:
+      "Each request goes to whichever pod has been answering fastest.",
+    nginxServiceUpstream:
+      "Requests are sent to the Service's cluster IP rather than to its pods, so kube-proxy picks the pod and nginx never sees the endpoints.",
+    nginxRawUnknownKey:
+      "Shown as written: this app has no sentence for this key, and a guessed one would be worse than the key.",
+    nginxRawUnknownValue:
+      "Shown as written: the key is one this app knows, and the value is not a shape it can state.",
+    nginxRawSnippet:
+      "Raw nginx configuration, injected verbatim into the server block. Shown exactly as written; this app will not paraphrase it, because it can rewrite, redirect or deny anything on this route.",
+    revisionCurrent: "{said}, current",
+    // What a rollout last looked like, carried by a verdict. `revision` is
+    // the Deployment's own annotation and goes out as the cluster wrote it.
+    rolloutSeen: "{ready} of {desired} ready",
+    rolloutSeenRevision: "{ready} of {desired} ready, revision {revision}",
+    nodeCordonedWord: "cordoned",
+    ciliumSelectsAll: "every endpoint in scope",
+    ciliumSelectsNodes: "nodes, by nodeSelector; no endpoint",
+    ciliumCovered: "covered",
+    ciliumPartly: "only {direction} restricted",
+    ciliumUnrestricted: "nothing restricts it",
+    ciliumOnlyRejected: "only rejected policies",
+    ciliumCannotSay: "cannot say",
+    ciliumEnforcesNothing: "rejected, enforces nothing",
+    ciliumDirectionRestricted: "restricted by",
+    ciliumDirectionOnlyRejected: "only rejected policies name it",
+    ciliumDirectionOpen: "no policy restricts it",
+    ciliumDirectionCannotSay: "cannot say",
+    ciliumNetworkPoliciesUnread: "NetworkPolicies could not be read",
+    ciliumFindingKubernetesUnread:
+      "NetworkPolicies could not be read. Cilium enforces them too, so no endpoint here is called unrestricted: a direction no Cilium policy restricts reads as cannot say.",
+    ciliumUnreadablePolicies: {
+      one: "{n} more policy names endpoints somewhere this window cannot read",
+      other:
+        "{n} more policies name endpoints somewhere this window cannot read",
+    },
+    ciliumFindingRejected: {
+      one: "{n} policy the operator rejected: it enforces nothing",
+      other: "{n} policies the operator rejected: they enforce nothing",
+    },
+    ciliumFindingOnlyRejected: {
+      one: "{n} endpoint is selected only by policies that were rejected: it reads as covered and is not",
+      other:
+        "{n} endpoints are selected only by policies that were rejected: they read as covered and are not",
+    },
+    ciliumFindingUnrestricted: {
+      one: "{n} endpoint no policy restricts in either direction",
+      other: "{n} endpoints no policy restricts in either direction",
+    },
+    ciliumNotOnTheWire: "written where this window cannot read it",
+    ciliumAndExpressions: {
+      one: "and {n} expression",
+      other: "and {n} expressions",
+    },
+    ciliumSelectsByExpression: {
+      one: "by {n} expression",
+      other: "by {n} expressions",
+    },
+    ciliumIngressRules: { one: "{n} in", other: "{n} in" },
+    ciliumEgressRules: { one: "{n} out", other: "{n} out" },
+    ciliumDenies: { one: "{n} deny", other: "{n} deny" },
+    ciliumLeavesCluster: "outside the cluster",
+    lbWaiting: "pending",
+    lbNeverAssigned: "nothing assigns it",
+    lbWaitingWhy:
+      "Kubernetes does not assign this address itself; a load balancer implementation in the cluster does. Other LoadBalancer Services here have addresses, so one exists, and this Service is waiting for it.",
+    lbNeverAssignedWhy:
+      "Kubernetes does not assign this address itself; a load balancer implementation in the cluster does. No LoadBalancer Service in this cluster has an address, so nothing here has ever assigned one, and this one may never arrive.",
+    lbCannotTellWhy:
+      "Kubernetes does not assign this address itself; a load balancer implementation in the cluster does. Whether this cluster has one could not be told: {why}.",
+    lbNotReadYet: "the other Services are still being read",
+    lbNodePortFallback:
+      "Meanwhile its NodePort answers on every node: {ports}.",
+    healthDnsAlias: "DNS alias",
+    healthDnsAliasWhy:
+      "An ExternalName Service answers with another DNS name and has no endpoints.",
+    healthByHand: "by hand",
+    healthStillReading: "still reading",
+    healthNothingServesClass:
+      "No IngressClass named {name} in this cluster, so nothing picks this Ingress up",
+    healthNoClassNoDefault:
+      "It names no IngressClass and the cluster has no default, so nothing picks it up",
+    healthNoTlsSecret: "No Secret named {name} for its TLS",
+    healthBackendDown: "{name} takes no traffic",
+    healthNoController: "no controller",
+    healthNoEndpoints: "no endpoints",
+    healthComingUp: "coming up",
+    healthIdle: "idle",
+    healthDrainingWhy:
+      "None of its addresses is ready, so its traffic goes to the ones still finishing their connections until they are gone",
+    healthBackendIdle:
+      "{name} has no pods by intent: what runs behind it is scaled to zero",
+    healthBackendStarting: "{name} is coming up: its pods are still starting",
+    healthBackendStartingShort: "backend coming up",
+    healthBackendUnconfirmed:
+      "{name} has no ready address, and its pods could not be read to tell whether they are still starting",
+    healthBackendUnconfirmedShort: "backend not checked",
+    healthBackendIdleShort: "backend idle",
+    healthMissingBackend: "missing backend",
+    healthMissingTlsSecret: "missing TLS Secret",
+    healthBackendDownShort: "backend down",
+    healthNoAddressYet: "no address yet",
+    healthNoAddressYetWhy:
+      "A controller serves its class and has not published an address for it yet.",
+    healthServed: "served",
+    sliceNoPorts: "none, so nothing is routed to these addresses",
+    podFilterMatching: "Pods matching {selector} in {namespaces}",
+    podFilterEvery: "Every pod in {namespaces}",
+    podFilterEveryNamespace: "every namespace",
+    podFilterClear: "Show every pod",
+    podFilterUnreadable:
+      "This selector cannot be read, so no pod is shown as matching it: {selector}",
+    podFilterOutside:
+      "{namespaces} is outside the namespaces this window looks at, so its pods were not read here.",
+    podFilterOutsideAll:
+      "This selector reaches every namespace, and this window looks at some of them only.",
+    podFilterLookThere: "Look there",
+    podIngressIsolated: "isolated: only what these policies allow comes in",
+    podIngressOpen: "not isolated: any pod may connect",
+    podEgressIsolated: "isolated: only what these policies allow goes out",
+    podEgressOpen: "not isolated: it may connect anywhere",
+    podPoliciesCannotSay: "cannot say",
+    podPoliciesOpenWhy:
+      "No NetworkPolicy in this namespace selects this pod and names {direction} in its policyTypes. A network plugin's own policy kinds are not read here and may still restrict it.",
+    podPoliciesDeniesAll:
+      "Lets nothing through: it names {direction} and lists no rule.",
+    podPoliciesReading: "Reading the NetworkPolicies of this namespace…",
+    podPoliciesUndecided:
+      "Whether these policies select this pod cannot be evaluated: {names}",
+  },
+  cluster: {
+    integrationsHint:
+      "What this cluster has that the app can use. Most of it is detected by whether its CRDs exist; anything with its own address is configured here, per cluster.",
+    configuredGroup: "Configured: an address per cluster",
+    detectedGroup: "Detected in this cluster",
+    operatorsGroup:
+      "Operators: a controller in the cluster running a database for you",
+    refusalNotNow: "Refused for now",
+    refusalNothingWouldReplaceIt: "Nothing would replace it",
+    refusalHoldsLocalData: "Holds local data",
+    refusalOther: "Refused",
+    nameMissingParens: "{name} (missing)",
+    noClusterSelected: "No cluster selected",
+    criticalNoticeTitle: "Critical infrastructure",
+    criticalNoticeBody:
+      "This is {context}. Whatever this does, it does there. Type the cluster's name to go on.",
+    criticalStripe: "Critical: {context}",
+    metricsNotInstalled:
+      "metrics-server is not installed, so CPU and memory are not shown",
+    metricsNotInstalledBody:
+      "Installing it is a job for whoever runs this cluster. The app checks again every few minutes.",
+    metricsForbidden:
+      "Metrics are not readable with this access, so CPU and memory are not shown",
+    metricsForbiddenBody:
+      "Reading metrics.k8s.io needs a role that allows it. The app checks again every few minutes rather than asking on every refresh.",
+    metricsError:
+      "The metrics API is failing, so CPU and memory may be missing",
+    metricsErrorBody:
+      "The cluster answered with an error. It is asked again on the usual schedule.",
+    metricsCheckAgain: "Check again",
+    metricsChecking: "Checking…",
+    metricsHideForCluster: "Hide for this cluster",
+    metricsShortNotInstalled: "metrics-server not installed",
+    metricsShortForbidden: "metrics not readable with this access",
+    metricsShortError: "metrics API failing",
+    metricNotAvailable: "n/a",
+    metricNoSampleYet: "no sample yet",
+    metricNoSample: "no sample",
+    sizeB: "{n} B",
+    sizeKi: "{n}Ki",
+    sizeMi: "{n}Mi",
+    sizeGi: "{n}Gi",
+    sizeTi: "{n}Ti",
+    sizePi: "{n}Pi",
+    // Always one decimal, so always the form a fraction takes.
+    cpuCores: "{cores} cores",
+    podMetricsLabel: "pod metrics",
+    markBroken: "broken",
+    markUnchecked: "not checked",
+    markWorthALook: "worth a look",
+    spotNodeWarning:
+      "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
+    unknownAge: "Unknown",
+    freshPolling: "polling",
+    freshPollingNote:
+      "No watch on this view: it re-reads the cluster on a timer.",
+    clustersInKubeconfig: "Clusters in the kubeconfig",
+    recent: "Recent",
+    allContexts: "All contexts",
+    rename: "rename",
+    freshLive: "live",
+    freshSlowed: "polled less often",
+    freshOffline: "offline",
+    freshStale: "read failing",
+    freshLiveNote:
+      "The cluster is pushing changes to this view as they happen.",
+    freshSlowedNote:
+      "Nothing here has changed for a while, so it is being re-read less often. Anything you do on this page brings it back up to rate.",
+    freshOfflineNote: "Not connected. Nothing on this screen is updating.",
+    freshStaleNote:
+      "The last read failed, so what is on screen is from the last read that answered.",
+    freshRefused: "refused",
+    freshRefusedNote:
+      "The cluster refused the last read, and this screen does not ask again on its own. Try the read again asks once more.",
+    freshNeverReadNote:
+      "The read failed, and no read of this has answered yet.",
+    lastRead: "Last read",
+    justNow: "just now",
+    agoSuffix: "ago.",
+    connectingToLower: "connecting to {context}…",
+    notConnectedLower: "not connected",
+    throughProxy: "through kubectl proxy",
+    throughProxyHint:
+      "The app's own credentials were refused, so this session goes through a kubectl proxy it started. kubectl holds the keys and renews them.",
+    proxyNoKubectl:
+      "kubectl is not on the search path. With it, Rubick would have tried kubectl proxy as a second way in.",
+    proxyFailed: "kubectl proxy could not take over either ({kubectl}):",
+    proxyFailedToo: "kubectl proxy could not get through either.",
+    tunnelWaking: "connecting…",
+    linkCopied: "Copied where you are",
+    // The object menu copies a link to the row that was right-clicked,
+    // which is not where the reader is standing.
+    objectLinkCopied: "Copied a link to {name}",
+    linkOpened: "Opened from a link. You are looking at the cluster now.",
+    linkOpenedAt:
+      "Opened from a link captured {when}. You are looking at the cluster now, not at what it showed then.",
+    linkContextMissing:
+      "This link points at cluster {context}, which is not in this kubeconfig. Nothing was opened.",
+    linkContextMissingKnown:
+      "Clusters here: {known}. A cluster with a similar name is not the same cluster, so none was picked for you.",
+    linkContextMissingNone: "No cluster is configured on this machine yet.",
+    linkOpenClusters: "Settings › Clusters",
+    linkDismiss: "Dismiss",
+    tunnelAsleep: "asleep",
+    renameOrRecolour: "Rename or recolour {name}",
+    called: "Called",
+    colour: "Colour",
+    hueDefault: "Default",
+    hueGreen: "Green",
+    hueCyan: "Cyan",
+    hueBlue: "Blue",
+    hueViolet: "Violet",
+    huePink: "Pink",
+    whatToCall: "What to call {context}",
+    currentScope: "current scope",
+    sessionRefusedNamed: "{context} is no longer accepting this session",
+    sessionRefused: "This session is no longer accepted",
+    credentialsExpiredAgo:
+      "The credentials this window connected with expired {since} ago. ",
+    credentialsRefusedAgo:
+      "The cluster refused this window's credentials {since} ago. ",
+    credentialsExpiredBody:
+      "Every list, count and chart in this window stopped being answerable at that moment, which is why the page is this rather than a screen of empty ones.",
+    renewalWasScheduled:
+      "This window was set to renew them quietly before they expired, and the cluster refused them anyway. ",
+    renewalNoDeadline:
+      "The credential plugin named no expiry, so there was no moment to renew them before; nothing here could act early. ",
+    renewalPassed:
+      "The moment they expired had already gone by when this window looked, so there was nothing left to renew ahead of. ",
+    renewalFailed:
+      "Renewing them quietly was tried and did not come back. That is a read that failed, not anything about you. ",
+    renewalRanOut:
+      "Renewing them quietly was tried at every moment there was room for, and the plugin handed back the same credentials each time, so there was nothing newer to put in place. ",
+    renewalLastChance:
+      "Renewing them quietly was tried while they were still good and the plugin handed back the same credentials, so one more attempt is set for just after they expire: some plugins mint nothing until the old ones are actually gone. ",
+    renewalNeedsYouBody:
+      "This window did try to renew them quietly; the plugin needed you, which is what this screen is. ",
+    renewalDelegated:
+      "kubectl holds the credentials for this session and renews them itself, so this refusal came from its side. ",
+    renewalUnknown: "",
+    renewalNeedsYou: "sign-in needed",
+    renewalNeedsYouHint:
+      "Renewing this session in the background needed a person, so it stopped. Nothing is wrong yet: the current credentials still work, and you will be asked to sign in when they expire.",
+    renewalRanOutHint:
+      "The credential plugin kept handing back the credentials already in use, so there was nothing newer to put in place before they expire. Nothing is wrong yet, and you will be asked to sign in when they do.",
+    stillRefusedHint:
+      "Still refused? The credential plugin this context uses may need a sign-in of its own first. For GKE that is",
+    healthy: "Healthy",
+    schedulerHeadroom: "Scheduler headroom",
+    headroomLegend: "requests vs allocatable · tick marks live usage",
+    headroomLegendNoMetrics:
+      "requests vs allocatable · live usage not available from the metrics API",
+    warningEvents: "Warning events",
+    warningEventsScope: "last hour, by reason",
+    warningEventsUnread:
+      "Not every events list was read in full, so warnings may be missing here.",
+    noCluster: "no cluster",
+    missingBadge: "missing",
+    missingTabHint:
+      "This cluster is no longer in the kubeconfig, so the tab cannot be made live.",
+    allNamespaces: "All namespaces",
+    namespaces: "Namespaces",
+    namespaceLimitRefused:
+      "Cannot watch {namespace} as well: {limit} namespaces is the most one window reads at once. Open it on its own instead.",
+    namespaceLimitFull: {
+      one: "{n} namespace is the most one window reads at once.",
+      other: "{n} namespaces is the most one window reads at once.",
+    },
+    namespaceScopeCount: {
+      one: "{n} namespace selected, up to {limit} at once; every list is narrowed to it.",
+      other:
+        "{n} namespaces selected, up to {limit} at once; every list is narrowed to them.",
+    },
+    namespaceScopeOfListed: {
+      one: "{selected} of {n} namespace selected, up to {limit} at once; every list is narrowed to them.",
+      other:
+        "{selected} of {n} namespaces selected, up to {limit} at once; every list is narrowed to them.",
+    },
+    namespaceMultiHint:
+      "{click}-click or {enter}, or the box, to watch up to {limit} at once.",
+    whatCanIDoIn: "What can I do in {namespace}?",
+    whatCanIDo: "What can I do here?",
+    countsUnread: "not counted",
+    podsNotCounted: "pods not counted {where}",
+    notReadWhere: "not read {where}",
+    countsIn: "in {scope}",
+    countsInAll: "in all namespaces",
+    countsInMany: { one: "in {n} namespace", other: "in {n} namespaces" },
+    clusterWideCounts: "Across the whole cluster: {pods} · {problems}",
+    clusterWideUnread:
+      "The whole cluster could not be read with this access, so only this scope is counted.",
+    nsFromKubeconfig: "from kubeconfig",
+    nsRecent: "recent",
+    nsAsTyped: "press Enter",
+    nsNotListed: "not in the list",
+    nsPodsRefused: "pod list forbidden",
+    readingKubeconfig: "Reading your kubeconfig…",
+    connectACluster: "Connect a cluster",
+    pickOneToStart: "in your kubeconfig. Pick one to start.",
+    readFrom: "Read from",
+    defaultLookup: "the default lookup",
+    wasRead: "Read",
+    originOverride: "pinned in Settings",
+    originEnv: "from $KUBECONFIG",
+    originUnset: "$KUBECONFIG unset",
+    connectingTo: "Connecting to {context}…",
+    authPrompt:
+      "Your cluster is asking who you are. This can open a browser window.",
+    waitingForApiServer: "Waiting for the cluster's API server to answer.",
+    runningCommand: "Running",
+    reaching: "Reaching",
+    didNotAnswer: "The cluster did not answer",
+    notReachable:
+      "{context} is not reachable from this machine. It may be off, or behind a VPN.",
+    couldNotConnect: "Could not connect to {context}",
+    failDns:
+      "{host} does not resolve from this machine. The name may be wrong, or resolve only on a VPN.",
+    failRefused:
+      "{host} turned the connection away: nothing listens on that port, or a firewall refused it.",
+    failTimeout:
+      "{host} did not answer in time. It may be off, or reachable only through a VPN.",
+    failTls:
+      "The TLS handshake with {host} failed: its certificate is not one this kubeconfig trusts.",
+    failCredentials:
+      "The cluster answered and turned these credentials down. Sign in again, or refresh the token.",
+    failSignIn: "Signing in failed before the cluster was asked.",
+    failPlugin:
+      "The credential plugin {plugin} failed, so there was nothing to sign in with.",
+    orPickAnother: "or pick another below",
+    server: "Server",
+    allClusters: "all clusters",
+    liveInline: "live",
+    notConnectedInline: "not connected",
+    connectingInline: "connecting…",
+    searchingInline: "searching…",
+    failedInline: "failed",
+    kindsUnreadInline: {
+      one: "could not read {n} kind: {kinds}",
+      other: "could not read {n} kinds: {kinds}",
+    },
+    kindsRefusedHover: "The cluster refused your account: {kinds}",
+    kindsNotListableHover:
+      "The cluster serves these without a list verb, so no account can search them: {kinds}",
+    otherKindsNotSearched: "kinds outside the app's own are not searched",
+    lastUsedAgo: "last used {age} ago",
+    retryInline: "retry",
+    toSearchIt: "to search it",
+    notInKubeconfig: "not in the kubeconfig",
+    resultsAsTheyAnswer: "results appear as each one does",
+    connectionFailedRetry: "connection failed, retry",
+    chooseCluster: "Choose a cluster",
+    signingIn: "Signing in…",
+    notConnected: "No cluster connected",
+    connecting: "Connecting…",
+    signInAgain: "Sign in again",
+    podCount: { one: "{n} pod", other: "{n} pods" },
+    problemCount: { one: "{n} problem", other: "{n} problems" },
+    problemCountPartial: { other: "{n}+ problems, not all checked" },
+    problemCountAtLeast: { other: "{n}+ problems" },
+    problemsNotAllChecked: "not all checked",
+    finishedOnNode: "Finished here",
+    finishedOnNodeNote:
+      "Succeeded and Failed pods hold no place on the node, so the pod counts on this page leave them out, as kubectl describe node does.",
+    attentionNothing: "nothing needs attention",
+    attentionNoneFound: "nothing found in what could be checked",
+    attentionNotChecked: "Not checked",
+    attentionUnconfirmed:
+      "its controller has said {word} for {age}; its pods were not read",
+    attentionUnconfirmedUndated:
+      "its controller says {word}; its pods were not read",
+    attentionStillReading: "still reading",
+    attentionRefused: "refused",
+    attentionForbidden: "{verb} is forbidden",
+    attentionClusterWide: "across the cluster",
+    attentionFailed: "could not be read",
+    attentionInNamespace: "in {namespace}",
+    attentionInNamespaces: {
+      one: "in {n} namespace",
+      other: "in {n} namespaces",
+    },
+    attentionMore: "and {n} more",
+    attentionOverall: "overall",
+    attentionPartly: "partly checked",
+    claimPendingDetail:
+      "No volume is bound to it yet, so a pod that mounts it cannot start.",
+  },
+  settings: {
+    installationFailed: "Installation failed",
+    updateAvailableTitle: "Update available",
+    whatsNew: "What's new",
+    whatsNewHint:
+      "The release notes for this version, the ones that open once after an update.",
+    searchWhatsNewWords: "release notes changelog",
+    showWhatsNew: "Show",
+    whatsNewIn: "What's new in {version}",
+    whatsNewSince: "Everything since {version}",
+    updateAvailableToast:
+      "Version {version} is available. Go to Settings to download it.",
+    notOnPathPlain: "{label} is not on PATH. Set the path below.",
+    provenanceNothingFound: "nothing was found",
+    provenancePinned: "pinned here, in this app",
+    provenanceEnv: "named by $KUBECONFIG",
+    provenanceDefault:
+      "found by the default lookup, since $KUBECONFIG is unset",
+    notOnPathSearched: {
+      one: "Not on PATH: {n} location searched, including the app's own.",
+      other: "Not on PATH: {n} locations searched, including the app's own.",
+    },
+    provenanceEnvMerged: {
+      one: "named by $KUBECONFIG, merged with {n} more file",
+      other: "named by $KUBECONFIG, merged with {n} more files",
+    },
+    searchVersionWords: "build release",
+    documentation: "Documentation",
+    documentationHint: "How Rubick works and what each screen shows.",
+    openReadme: "README on GitHub",
+    searchDocsWords: "docs help manual readme github",
+    searchRuntimeWords: "runtime webview",
+    searchFrameworkWords: "react typescript",
+    searchUpdateWords: "update upgrade install download",
+    searchAutoUpdateWords: "auto check background",
+    searchLanguageWords: "language locale translation русский",
+    searchThemeWords: "dark light appearance",
+    searchColourWords: "color coloring tint kind",
+    contextConnected: "connected",
+    contextReady: "ready",
+    contextCannotConnect: "cannot connect",
+    contextCannotTell: "cannot tell",
+    criticalLabel:
+      "Critical infrastructure: every change asks for the cluster's name",
+    criticalGuessed: "The name suggests it. Tick to make it so.",
+
+    searchMissingWords: "not found missing path",
+    searchContextWords: "context kubeconfig authentication",
+    searchKubeconfigWords:
+      "kubeconfig file source contexts $KUBECONFIG default lookup override",
+    searchToolsWords: "kubectl helm cli tools binary path version",
+    searchCloudWords:
+      "cloud profiles gcp google azure adc az login credentials",
+    searchNoContextsWords: "no contexts kubeconfig empty clusters",
+    toolsNoProfiles: ": none defined.",
+    toolsNoGcp: "none for GCP",
+    toolsNoAzure: "none for Azure",
+    toolsProfiles: ": {gcp}, {azure}.",
+    toolsGcpCount: "{n} GCP",
+    toolsAzureCount: "{n} Azure",
+    notOnPath: "{label} is not on PATH. Set the path below.",
+    lookingForBinary: "Looking for the binary…",
+    kubeconfigRestored: "Kubeconfig restored",
+    kubeconfigUpdated: "Kubeconfig updated",
+    backToDefaultLookup: "Back to the default lookup.",
+    wasDefaultLookup: "Was the default lookup.",
+    wasPath: "Was {path}.",
+    revertedToDefault: "Reverted to the default lookup.",
+    undoKubeconfigChange: "Undo the kubeconfig change",
+    selectKubeconfigFile: "Select kubeconfig file",
+    restorePreviousFailed: "Failed to restore the previous kubeconfig",
+    setKubeconfigFailed: "Failed to set kubeconfig path",
+    clearKubeconfigFailed: "Failed to clear kubeconfig override",
+    pointAtServiceYourself: "Point at a Service yourself",
+    pointAtServiceHint:
+      "For anything that speaks this API without carrying the vendor's name: a VictoriaMetrics is called vmsingle and answers the same queries.",
+    serviceLabel: "Service",
+    chooseService: "Choose a Service",
+    portLabel: "Port",
+    choosePort: "Choose a port",
+    subpathLabel: "Subpath",
+    subpathHint:
+      "What comes after the port, when the API is not at the root. VMSingle serves it under /prometheus; a VMCluster's vmselect under /select/0/prometheus. Leave empty for a plain Prometheus.",
+    forwardIt: "Forward it",
+    authRunsPlugin: "Runs {plugin} for a token.",
+    aCredentialPlugin: "a credential plugin",
+    authClientCertFrom:
+      "Client certificate, from {source}. Nothing else needed.",
+    authClientCertEmbedded:
+      "Client certificate, embedded in the file. Nothing else needed.",
+    authTokenFrom: "A bearer token, read from {source}.",
+    authTokenInFile:
+      "A bearer token, written in the file. Nothing else needed.",
+    authBasicAs: "Username and password, as {username}.",
+    authBasicInFile: "Username and password, stored in the file.",
+    authProviderNamed: "The {name} auth provider, configured in the file.",
+    authUnrecognised:
+      "The file does not say how this context authenticates, and this app cannot tell.",
+    forwardingTunnelNote:
+      "Forwarding {target} to {local}. Left off, the row stays in the sidebar and pressing it opens the tunnel. Kept per cluster, on this machine only.",
+    tokenUnchangedPlaceholder: "unchanged; type to replace it",
+    tokenNewPlaceholder: "pasted here, kept out of this window afterwards",
+    credentialStorageNote:
+      "Stored in plain text in this app’s config file, which only your account can read. It is sent only from the backend and never handed back to this window.",
+    lookingEllipsis: "Looking…",
+    findVendorInCluster: "Find {vendor} in this cluster",
+    probeAnswered: "Answered in {ms}ms",
+    probeDidNotAnswer: "Did not answer: {reason}",
+    oneAddressPerCluster:
+      "One address per cluster, because a {vendor} is per cluster: staging's is not production's. Gives {gives}.",
+    addressIsFromHere:
+      "Asked from this machine, not from inside the cluster, so a cluster-internal name like {example} will not resolve. Give an address that reaches it from here, or let the app forward a port to it.",
+    openTunnelOnSwitch: "Open the tunnel when I switch to this cluster",
+    sendBearerToken: "Send a bearer token",
+    acceptUntrustedCert: "Accept a certificate this machine does not trust",
+    noServiceForVendor:
+      "No Service in this cluster is labelled or named for {vendor}. If it is here under another name, forward it yourself and give the address above.",
+    forwardingEllipsis: "forwarding…",
+    noProfileBoundPrefix:
+      "No {vendor} profile is bound, so it will use whatever",
+    noProfileBoundSuffix: " defaults to.",
+    bindOne: "Bind one",
+    awsNoProfilesPrefix:
+      "This app has no AWS profiles, so it will use whatever",
+    awsNoProfilesMid: " defaults to:",
+    awsNoProfilesSuffix: ", then the default profile.",
+    inWord: "in",
+    displayName: "Display name",
+    region: "Region",
+    auth: "Auth",
+    username: "Username",
+    password: "Password",
+    token: "Token",
+    importFailed: "Import failed",
+    themeNamed: "Theme: {theme}",
+    sectionAppearance: "Appearance",
+    sectionAppearanceHint: "Chosen once, applies everywhere, belongs to you.",
+    sectionClusters: "Clusters",
+    sectionClustersHint:
+      "How the app reaches a cluster: the file that names them, the identity that authenticates, and the binaries it shells out to.",
+    sectionDiagnostics: "Diagnostics",
+    sectionDiagnosticsHint: "What this app can see of the machine it runs on.",
+    perfTitle: "Performance",
+    perfRecording: "Recording",
+    perfHint:
+      "Times every call to the backend, every long task and every profiled render while on. Each answer is serialised a second time to count its bytes, so leave it off unless you are measuring.",
+    perfStart: "Start",
+    perfStop: "Stop",
+    perfSummary:
+      "{seconds} s recorded · {ipc} backend calls · {tasks} long tasks.",
+    perfTaskSourceObserver: "Long tasks come from the platform observer.",
+    perfTaskSourceFrames:
+      "This webview has no long-task observer, so a late frame counts as one.",
+    perfCommand: "Command",
+    perfCount: "calls",
+    perfRows: "rows",
+    perfBytes: "bytes",
+    perfTasks: "Long tasks",
+    perfRenders: "Render",
+    perfNavigation: "Navigation",
+    perfNoRenders:
+      "No render timings: React reports them only from a dev or profiling build.",
+    perfBackend:
+      "Backend pushed {events} events, {bytes} in total, largest {max}, {changes} watch changes.",
+    perfCopy: "Copy report",
+    perfCopied: "Report copied",
+    perfSampled:
+      "Percentiles use the last {cap} samples per kind; counts and maxima cover everything.",
+    perfBackendError: "The backend did not answer: {error}",
+    perfRetryStop: "Try stopping again",
+    sectionSharing: "Sharing",
+    sectionSharingHint:
+      "Where a report may be published, and the key that lets it.",
+    sharingTargets: "Targets",
+    sharingTargetsHint:
+      "Share asks which one to publish to; each keeps its own key.",
+    searchSharingWords: "publish postplan target endpoint key report share",
+    sectionAbout: "About",
+    sectionAboutHint: "What this build is, and how it replaces itself.",
+    sectionHandoff: "Search and hand-off",
+    sectionHandoffHint: "Where a search goes, and what a hand-off includes.",
+    searchEngine: "Search engine",
+    searchEngineHint:
+      "The query carries the reason and what the app recognised in the failure, never a raw log line, plus utm_source=rubick.tech so the site can tell where people come from.",
+    searchEngineCustom: "Custom, any URL with {q}",
+    searchCustomUrl: "Custom search URL",
+    stripNames: "Strip names from the search query",
+    stripNamesHint:
+      "Pod, namespace, image and host names are replaced with … before the query leaves the app. Turn off if your names are not sensitive.",
+    handoffLogLines: "«Copy for agent» and Share include log lines",
+    handoffLogLinesHint:
+      "Up to 40 lines before the last exit, as the container wrote them. No Secret is ever read, but a container that printed one prints it here too. Passwords, tokens and connection strings are taken out where they are recognisable, and that cannot be complete.",
+    showMostLikely: "Show the «Most likely» panel",
+    showMostLikelyHint:
+      "Only on pods with a problem the app can read a chain for. Off hides the panel, not the facts.",
+    searchHandoffWords:
+      "google duckduckgo search agent copy hand-off most likely",
+    nothingHereMatches: "nothing here matches “{query}”",
+    searchSettings: "Search settings",
+    clearSearch: "Clear search",
+    settingsSections: "Settings sections",
+    navMatching: "{label}, {n} matching",
+    theme: "Theme",
+    themeHint: "System follows your desktop's light/dark preference.",
+    themeLight: "Light",
+    themeDark: "Dark",
+    themeSystem: "System",
+    resourceColouring: "Resource colouring",
+    resourceColouringHint:
+      "Colour tells resource kinds apart and gives each object a stable tint. Minimal keeps the icon only.",
+    colouringFull: "Full",
+    colouringFullHint: "Kind and identifier both coloured",
+    colouringMinimal: "Minimal",
+    colouringMinimalHint: "Kind by icon, identifier dimmed",
+    colouringOff: "Off",
+    colouringOffHint: "No colour on resource names",
+    notTranslatedYet: "not translated yet",
+    version: "Version",
+    framework: "Framework",
+    updates: "Updates",
+    updateAvailable: "Version {version} is available",
+    upToDate: "You are running the latest version",
+    updateHint: "Downloading an update restarts the app when it is ready.",
+    lastChecked: "Checked at {time}.",
+    downloadingUpdate: "Downloading update",
+    downloadingUpdateHint: "The app restarts automatically when ready.",
+    downloadAndInstall: "Download & install",
+    updateFound: "Update available",
+    updateReady: "Version {version} is ready to download.",
+    noUpdates: "No updates",
+    upToDateToast: "You're running the latest version.",
+    checkingUpdates: "Checking…",
+    checkForUpdates: "Check for updates",
+    autoUpdates: "Automatic updates",
+    autoUpdatesHint: "Check on startup and every 30 minutes.",
+    managedUpdates:
+      "This build updates through the package manager it was installed with.",
+    diagnosticsCopied: "Diagnostics copied",
+    copyDiagnostics: "Copy diagnostics",
+    redactNamesAndPaths: "Redact names and paths",
+    redactEverywhere:
+      "Applies to every path from this computer the app shows, not only this report: your home folder reads ~ and your login name <user>.",
+    diagnosticsAllClear:
+      "No problems found with the kubeconfig, the settings or the plugins your contexts need. A tool or directory shown as not found below is only absent, not a fault. The environment below is what this app sees when it spawns a credential plugin, which is not always what your shell sees.",
+    searchPathBlock: {
+      one: "Search path · {n} directory",
+      other: "Search path · {n} directories",
+    },
+    shellEnvImported:
+      "Read from {shell}, started as an interactive login shell the way a terminal starts it. Variables changed: {n}, removed: {removed}. PATH merged.",
+    shellEnvTimedOut:
+      "{shell} did not print its environment within {seconds} s, so this process kept the environment it was started with, and the PATH below is a list of well-known directories. A slow .zshrc or .bashrc is the usual cause.",
+    shellEnvCouldNotStart:
+      "{shell} could not be started ({error}), so this process kept the environment it was started with, and the PATH below is a list of well-known directories.",
+    shellEnvNoAnswer:
+      "{shell} exited with code {exit} without printing its environment, so this process kept the environment it was started with, and the PATH below is a list of well-known directories.",
+    shellFindingTitle:
+      "The login shell did not answer, so the search path is a guess",
+    shellFindingConsequence:
+      "Until it does, PATH is a list of well-known directories and nothing your profile adds, so a plugin or tool reported missing below may be installed on a directory this app could not see.",
+    shellEnvNotRecorded:
+      "The app has not recorded whether it asked the login shell, so the search path below is the well-known directories and nothing your profile adds.",
+    shellEnvNotAsked:
+      "Not asked on this platform: Windows hands an app the environment from the system settings. Anything set only in a PowerShell profile is not in it.",
+    notThere: "not there",
+    toolsBlock: "Tools · {found} of {total}",
+    answeredNothing: "found, but would not say its version",
+    pluginsBlock: "Plugins · {n}",
+    notFoundInline: "not found",
+    neededBy: "· needed by {list}",
+    contextsBlock: "Contexts · {n}",
+    noneRead: "None read.",
+    contextCount: { one: "{n} context", other: "{n} contexts" },
+    noKubeconfigLoaded:
+      "None loaded yet. Connect a cluster and this will name the file.",
+    applicationBlock: "Application",
+    connectionsBlock: "Connections · {n}",
+    noConnectionsYet: "No connection attempted yet.",
+    pathDirect: "Direct",
+    pathProxy: "kubectl proxy",
+    pathOk: "ok",
+    pathProxyOk: "ok on port {port} ({kubectl})",
+    pathNotTried: "not tried",
+    pathNoKubectl: "no kubectl on the search path",
+    appVersion: "Version {version}",
+    logsTo: "Logs: {destination}",
+    logsNowhere:
+      "No log file this run, so there is nothing on disk to send. This window could not create the folder it writes to.",
+    logsMoreDetail: "Start with RUST_LOG=debug for more detail.",
+    readingFile: "Reading the file…",
+    contexts: "Contexts",
+    searchFiltersList: "{n} in all; search filters this list",
+    kubeconfigFile: "Kubeconfig file",
+    browseKubeconfig: "Browse for a kubeconfig file",
+    noKubeconfig: "no kubeconfig",
+    fileNotThere: "this file is not there",
+    useDefaultLookup: "Use the default lookup",
+    useAnotherFile: "Use another file",
+    kubeconfigFilesTitle: "Kubeconfig files",
+    addKubeconfigFile: "Add a file",
+    removeKubeconfigFile: "Stop reading this file",
+    mergedFirstWins:
+      "merged in this order: the first file to name a context keeps it",
+    everyContextClaimedElsewhere:
+      "every context here is also in a file above, which keeps them",
+    manageToolPaths: "manage tool paths",
+    helmOnlyForHelmPage:
+      "Helm is only needed for the Helm page; nothing here uses it.",
+    cloudProfiles: "Cloud profiles",
+    foundInline: "found",
+    notFound: "Not found",
+    checking: "Checking",
+    available: "Available",
+    vendorProfile: "{vendor} profile",
+    binaryNotOnPath:
+      "is not on the PATH this app sees, so connecting will fail. Install it, or put its directory on that PATH and restart the app.",
+    toolPathsSaveFailed: "Could not save the tool paths",
+    kubectlPathNote:
+      "Its directory is added to PATH when the app runs a credential plugin, which is how kubectl plugins like oidc-login are found.",
+    helmPathNote:
+      "Only the Helm page uses it. Nothing about reaching a cluster does.",
+    toolPathsIntro:
+      "Where these binaries live, when they are somewhere the app does not look. Leave a field empty to search PATH again.",
+    recheckTool: "Re-check {tool}",
+    toolPathPlaceholder: "/path/to/{tool}, or leave empty to auto-detect",
+    browseForBinary: "Browse for the {tool} binary",
+    selectBinaryTitle: "Select {tool} binary",
+    cloudProfilesIntro:
+      "Named credentials for GKE and AKS. A context with none of them authenticates the way its plugin does by default.",
+    bindingSaved: "Context binding saved",
+    bindingRemoved: "Context binding removed",
+    gcpProfile: "GCP profile",
+    azureProfile: "Azure profile",
+    useAdc: "Use Application Default Credentials",
+    useDefaultAzLogin: "Use the default az login",
+    profileForContext: "Profile for this context",
+    loading: "Loading…",
+    edit: "Edit",
+    testNamed: "Test {name}",
+    deleteNamed: "Delete {name}",
+    gcpProfileSaved: "GCP profile saved",
+    gcpProfileDeleted: "GCP profile deleted",
+    azureProfileSaved: "Azure profile saved",
+    azureProfileDeleted: "Azure profile deleted",
+    success: "Success",
+    failed: "Failed",
+    addProfile: "Add profile",
+    serviceAccount: "service account",
+    tenantDetail: "tenant {id}…",
+    editGcpProfile: "Edit GCP Profile",
+    createGcpProfile: "Create GCP Profile",
+    editAzureProfile: "Edit Azure Profile",
+    createAzureProfile: "Create Azure Profile",
+    gcpProfileDialogHint: "Configure authentication settings for GKE clusters",
+    azureProfileDialogHint:
+      "Configure authentication settings for AKS clusters",
+    profileName: "Profile Name",
+    profileNamePlaceholder: "e.g., production, personal",
+    descriptionOptional: "Description (optional)",
+    gcpDescriptionPlaceholder: "e.g., Production GKE clusters",
+    azureDescriptionPlaceholder: "e.g., Production AKS clusters",
+    serviceAccountKeyPath: "Service Account Key Path (optional)",
+    adcPlaceholder: "Leave empty to use ADC",
+    browseServiceAccountKey: "Browse for a service account key",
+    adcHint: "If not set, uses Application Default Credentials (gcloud auth).",
+    defaultProject: "Default Project (optional)",
+    gcpProjectPlaceholder: "GCP Project ID",
+    preferNativeAuth: "Prefer Native SDK Auth",
+    tenantId: "Tenant ID (optional)",
+    tenantIdPlaceholder: "Azure AD Tenant ID",
+    defaultSubscription: "Default Subscription (optional)",
+    subscriptionPlaceholder: "Azure Subscription ID",
+    useCliFallback: "Use CLI Fallback",
+    language: "Language",
+    languageHint:
+      "The interface language. Kubernetes names and statuses stay as the cluster spells them.",
+    systemLanguage: "Match the system",
+  },
+  // The controllers above an object, nearest last.
+  lineage: {
+    label: "Owners",
+    ownerGone: "{kind} {name} (gone)",
+    ownerUnread: "{kind} {name} (not read)",
+    kindNotServed: "{kind} (not served here)",
+    several: "several owners",
+    tooDeep: "more owners above",
+  },
+  // What an object owns, from the ownership index.
+  owns: {
+    tab: "Owns",
+    none: "Owns nothing among the kinds read.",
+    notController: "owner, not controller",
+    expand: "Show what {name} owns",
+    collapse: "Hide what {name} owns",
+    failed: "Could not read what it owns. {error}",
+    retry: "Try again",
+    groupUnread: "discovery did not answer",
+    syncing: "still listing",
+    stale: "stale since {since}",
+    refused: "refused",
+    partial: "read only in {namespaces}",
+    readFailed: "failed",
+    unlistable: "cannot be listed",
+    unwatchable: "cannot be watched",
+    skipped: "left out",
+  },
+  // What deleting an object takes with it.
+  cascade: {
+    working: "Working out what goes with it…",
+    notKnownYet:
+      "What goes with it is not known yet: the app is still reading the cluster.",
+    readHere: "Read only in {namespace}, where anything it owns lives:",
+    takes: "Also deletes:",
+    nothing: "Nothing else goes with it, among the kinds read.",
+    possibly: "And possibly objects of the kinds it could not read:",
+    possiblyInPart:
+      "And possibly objects of the kinds it could read only in part:",
+    failed: "Could not work out what goes with it. {error}",
+    objectsGo: "Every {kind} in the cluster goes with it:",
+    objectsNone: "No {kind} exists, so none goes with it.",
+    openList: "Open their list",
+    inside: "Everything inside goes with it:",
+    insideNothing: "Nothing is inside it, among the kinds read.",
+    holdsUnread:
+      "Everything it holds goes with it, and what it holds could not be read.",
+    dependentsWorking: "Looking for what still points at it…",
+    dependents: {
+      one: "Left behind, still pointing at it:",
+      other: "Left behind, still pointing at it:",
+    },
+    dependentsFailed: "Could not check what points at it. {error}",
+    dependentsUnread: "Not checked for references to it: {kinds}.",
+  },
+  // An object whose meaning belongs to one parent, opened there or not.
+  attached: {
+    openedFrom: "Opened from {object}, which belongs here.",
+    replicaSetsListedHere:
+      "ReplicaSets have no list of their own, so this is the Deployments list. Each ReplicaSet is on the {tab} tab of the Deployment that owns it.",
+    gatewayClassesListedHere:
+      "GatewayClasses have no list of their own, so this is the Gateways list. Each Gateway names its GatewayClass in the {column} column.",
+    openOwn: "Open it on its own page",
+    targetMissing: "Not opened on its target: {kind} {name} does not exist.",
+    targetUnread:
+      "Not opened on its target: could not read {kind} {name}. {error}",
+    targetContested:
+      "Not opened on its target: more than one autoscaler aims at {kind} {name}, and they fight over it.",
+    siblingsUnread:
+      "Not opened on its target: could not check whether another autoscaler also aims at {kind} {name}.",
+    noService:
+      "There is no Service named {name} here, so nothing keeps these endpoints but whoever wrote them.",
+    noOwner: "No controller owns this revision.",
+    involvedGone: "{kind} {name}, which this event is about, no longer exists.",
+  },
+  // Every kind the cluster serves, as kubectl api-resources lists them.
+  apiResources: {
+    description:
+      "Every kind this cluster serves, by API group. Each opens its list.",
+    filter: "Filter kinds",
+    core: "core",
+    namespaced: "namespaced",
+    clusterWide: "cluster-wide",
+    notListable: "cannot be listed",
+    groupUnread:
+      "Discovery did not answer for this group, so its kinds cannot be shown.",
+    noMatch: "No served kind matches {filter}.",
+    noMatchAnswered:
+      "No kind in the groups that answered matches {filter}. The groups below did not answer.",
+    unreadTitle: "Could not read what this cluster serves",
+    notConnected: "Connect to a cluster to see what it serves.",
+    retry: "Try again",
+  },
+  // "What can I do here", asked of the cluster for the signed-in user.
+  myAccess: {
+    title: "What you may do",
+    description:
+      "The rules the cluster says apply to you, ClusterRoleBindings included, as {command} prints them.",
+    perNamespace:
+      "Rules are granted per namespace, so there is no one answer for every namespace. Choose one, and this page answers for it.",
+    couldNotAsk: "Could not ask the cluster what you may do in {namespace}.",
+    incomplete:
+      "The cluster says this list is incomplete: an authorizer it asked cannot list its rules, so you may be able to do more than shown.",
+    evaluationError:
+      "The cluster reported an error while working out this list:",
+    rulesIn: "In {namespace}",
+    none: "The cluster lists no rules for you here.",
+    noneListed: "No rules listed, and the list is incomplete.",
+    caveat:
+      "A request these rules allow can still be refused by admission control.",
+  },
+  // Roles and bindings, read as what they grant and to whom.
+  rbac: {
+    anyName: "any",
+    noRules: "Grants nothing: no rules.",
+    noSubjects: "Binds nobody: no subjects.",
+    wildcard: "* matches every value",
+    escalates: "grants more than it names",
+    escalationNote:
+      "Marked verbs reach past the rule: bind and escalate grant roles beyond your own, impersonate acts as someone else, and * on secrets reads every token.",
+    mayDo: "What it may do",
+    boundTo: "Bound to",
+    inNamespace: "in {namespace}",
+    clusterWide: "cluster-wide",
+    throughGroup: "through {group}",
+    broadGrants: {
+      one: "{n} more binding grants this to every ServiceAccount or to everyone signed in",
+      other:
+        "{n} more bindings grant this to every ServiceAccount or to everyone signed in",
+    },
+    roleMissing:
+      "{kind} {name} does not exist, so this binding grants nothing.",
+    couldNotReadRole:
+      "Could not read {kind} {name}, so what this binding grants is not known.",
+    couldNotReadClusterWide: "Could not read {label} across the cluster.",
+    noGrants:
+      "No ClusterRoleBinding, and no RoleBinding in {namespace}, grants it anything.",
+    noneFoundUnread: "None found, but not every binding could be read.",
+    notEverythingRead:
+      "Not every binding could be read, so there may be more than this.",
+    otherNamespaces:
+      "RoleBindings in other namespaces were not read. One there can grant it rights in that namespace.",
+    notBoundRole: "No RoleBinding in {namespace} grants it.",
+    notBoundClusterRole: "No ClusterRoleBinding or RoleBinding grants it.",
+    notBoundClusterRoleIn:
+      "No ClusterRoleBinding, and no RoleBinding in {namespaces}, grants it.",
+    readOnlyIn:
+      "RoleBindings were read only in {namespaces}. The other namespaces were not looked at.",
+  },
+  empty: {
+    addressMissing: "Nothing lives at this address",
+    addressMissingBody:
+      "{path} is not a page Rubick has. It may have come from an older build or a mistyped link.",
+    toOverview: "Cluster overview",
+    toClusters: "All clusters",
+    clusterMissing: "{cluster} is not in the kubeconfig",
+    clusterMissingBody:
+      "The link names a cluster this kubeconfig does not list. Open one it does.",
+    kubeconfigUnread: "Could not read the kubeconfig",
+    kubeconfigUnreadBody: "So whether {cluster} is in it is not known. {error}",
+    notServed: "This cluster serves no {resource}",
+    notServedBody:
+      "Its API discovery lists no kind by that name. The address may be mistyped, or what installs the kind is not on this cluster.",
+    discoveryUnread: "Could not tell whether this cluster serves {resource}",
+    discoveryUnreadBody: "Discovery for its API group did not answer. {error}",
+    notListable: "{resource} cannot be listed",
+    notListableBody:
+      "The cluster serves this kind but not the list verb on it. Each object opens from anything that refers to it.",
+    objectUnread: "Could not read this object",
+    objectMissing: "There is no {kind} named {name}",
+    objectMissingBody:
+      "The cluster serves this kind and answered that no such object exists.",
+    printedMore: "Showing the first {count}. The cluster has more.",
+    showMore: "Show more",
+    // A NetworkPolicy's four readings of one direction, and its three of a
+    // `podSelector`. Each one is a state the others would be mistaken for.
+    saysNothing: "not restricted by this policy",
+    // The same, in a policy's own row, where "this policy" is the row.
+    notRestricted: "not restricted",
+    // `policyTypes` and its two values are the API's words, kept as written.
+    doesNotRestrict:
+      "Does not restrict {direction}: policyTypes names {types} only.",
+    podsMatching: {
+      one: "{n} pod",
+      other: "{n} pods",
+    },
+    noPodMatches: "no pod matches",
+    inNamespacesCount: {
+      one: "in {n} namespace",
+      other: "in {n} namespaces",
+    },
+    peerPodsNotRead: "pods not read",
+    peerCannotEvaluate: "cannot be evaluated",
+    deniesAll: "denies all",
+    allowsAll: "allows all",
+    podsNotRead: "pods not read",
+    selectsNoPods: "no pods",
+    everyPodHere: "every pod here",
+    noSelectorOnPolicy: "no selector",
+    everyPodThere: "every pod",
+    // A rule that names no peer lets traffic through in this direction from
+    // or to anything. Two strings, because the direction is the half that
+    // makes the sentence readable and it is not the same word.
+    fromAnywhere: "from anywhere",
+    toAnywhere: "to anywhere",
+    // The two selectors of one peer are always an AND: those pods, in those
+    // namespaces. One string, so a translator gets the word order with it.
+    podsInNamespaces: "{pods} in {namespaces}",
+    // The namespace half, already carrying the preposition's case.
+    inThisNamespace: "this namespace",
+    inEveryNamespace: "every namespace",
+    exceptRanges: "except {ranges}",
+    // A port entry naming only a protocol is every port of it, which is the
+    // widest thing the entry can say.
+    everyPortOf: "every {protocol} port",
+    governsNeither:
+      "This policy names neither direction, so it applies to nothing.",
+    podsUnread:
+      "This workload's pods could not be read, so nothing here says whether it has any: {reason}",
+    idleNothingToRead: "No pod runs, so there is no log to read.",
+    noPodsToStream: "No pods to read from yet.",
+    podListUnread: "pod list not read",
+    everyLaneHidden: "Every pod is hidden.",
+    noStoriesInWindow:
+      "Nothing happened in {scope} in the last {range}. The read came back with no events in it.",
+    noStoriesInWindowCapped: {
+      one: "No story in {scope} in the last {range}, out of the latest {n} event read. Anything older than that is not in this answer.",
+      other:
+        "No story in {scope} in the last {range}, out of the latest {n} events read. Anything older than those is not in this answer.",
+    },
+    eventsRefused: "Could not read the events in {scope}:",
+    noStoriesMatch: "No story in {scope} matches “{query}”.",
+    noEventsMatchInWindow: {
+      one: "Nothing in the latest {n} event of {scope} matches «{query}». Anything older was not read; raise the limit to search further back.",
+      other:
+        "Nothing in the latest {n} events of {scope} matches «{query}». Anything older was not read; raise the limit to search further back.",
+    },
+    kindCouldNotRead: "Could not read this {kind}",
+    whatIsThisKind: "What is this {kind}?",
+    moreFieldsInYaml: {
+      one: "{n} more field, in the YAML tab",
+      other: "{n} more fields, in the YAML tab",
+    },
+    goneMark: "gone",
+    goneTitle: "This {kind} no longer exists.",
+    absentTitle: "This {kind} does not exist.",
+    goneReplacedBy:
+      "{kind} {owner} owned it and replaces what it loses: open it to find what runs now.",
+    goneOwnedBy: "{kind} {owner} owned it.",
+    goneThroughReplicaSet:
+      "Deployment {deployment} owned it through ReplicaSet {replicaSet}, which replaces what it loses: open it to find what runs now.",
+    goneRolledTo:
+      "Deployment {deployment} owned it through ReplicaSet {replicaSet}, now scaled to 0. What runs now comes from ReplicaSet {current}.",
+    goneRolledOn:
+      "Deployment {deployment} owned it through ReplicaSet {replicaSet}, now scaled to 0: open the Deployment to find what runs now.",
+    goneScaledDown:
+      "{kind} {owner} owned it and is scaled to 0, so nothing replaces it.",
+    goneUnowned: "Nothing owned it, so nothing replaces it.",
+    expandRepeats: "Expand {count} repeats",
+    anEmptySpec: "An empty spec",
+    nothingConfigured: "Nothing configured",
+    emptyParens: "(empty)",
+    noRevision: "no revision",
+    fluxNotReconciledYet: "not reconciled yet",
+    fluxFrozenSource: "frozen · source failing",
+    fluxWaitingDependency: "waiting on a dependency",
+    fluxFetchStale: "fetch failing · artifact is stale",
+    fluxNeverFetched: "never fetched",
+    fluxNotFetchedYet: "not fetched yet",
+    fluxFetchedUnused: "fetched · unused",
+    fluxFetched: "fetched",
+    fluxSaidNothingMore: "The controller gave no reason.",
+    notBoundYet: "not bound",
+    spotReclaim:
+      "The cloud can take this node back at any time. Pods leaving here are the arrangement, not a fault.",
+    emptySpec: "An empty spec",
+    hideLineDetail: "Hide line detail",
+    showLineDetail: "Show line detail",
+    collapseRepeats: "Collapse these repeats",
+    watchingFromNow:
+      "Watching from now: metrics-server keeps no history, so the line starts here and grows to the right.",
+    noLimitSet:
+      "No limit set: the scale is what it has used, and nothing stops it taking the node's.",
+    noRulesRoutesNothing: "No rules, so this ingress routes nothing.",
+    noContainerToAttach: "No container is running to attach to",
+    whichFailedTimes: {
+      one: "which has failed {n} time",
+      other: "which has failed {n} times",
+    },
+    whichExited: "which exited {code}",
+    whichHasNotFinished: "which has not finished",
+    shellAnswerIsInTheLog:
+      "What the shell would have told you is in the log of the run that failed.",
+    podStoppedInInit:
+      "The pod is still in init and stopped on {container}, {failure}.",
+    haveNotStarted: {
+      one: "{names} has not started.",
+      other: "{names} have not started.",
+    },
+    initContainersAlreadyExited: {
+      one: "{names}, the init container that did run, has already exited.",
+      other:
+        "{names}, the {n} init containers that did run, have already exited.",
+    },
+    shellNeedsLiveProcess: "A shell needs a live process on the other end.",
+    everyContainerExited:
+      "Every container in this pod has exited; {container} was the last{when}.",
+    shellNeedsLiveProcessNoneLeft:
+      "A shell needs a live process on the other end, and this pod has none left. What they printed is all that is still here.",
+    containerHasNotStarted: "{container} has not started.",
+    containerHeldAt:
+      "{container} has not started: the kubelet is holding it at {reason}.",
+    podIsStatusNoneRunning:
+      "This pod is {status}, and none of its containers is running.",
+    overPlainHttp: "{n} over plain HTTP",
+    rulesOfEqualOrder: "rules of equal order",
+    membersDisagree: "members disagree",
+    sharedAcrossNamespaces: "shared across namespaces",
+    readingWhatConnects: "Reading what connects to this…",
+    couldNotReadFlux: "Could not read what Flux is reconciling",
+    couldNotReadFluxBody:
+      "Everything on this page comes from Flux’s own objects in this API server, and that request failed, so a list here would be a guess rather than an answer.",
+    fluxPageDescription:
+      "What Flux is applying, what it is applying from, and where the two have come apart.",
+    readingWhatFluxApplies: "Reading what Flux applies…",
+    fluxApplyingNothing: "Flux is installed here and applying nothing.",
+    fluxNoReconcilers:
+      "No Kustomization and no HelmRelease exists in this cluster, so nothing has been given to its controllers to apply.",
+    noReconcilerMatches: "No reconciler here matches that.",
+    fetchFailingLower: "fetch failing",
+    fetchedLower: "fetched",
+    nothingToApplyFrom: "nothing to apply from",
+    sourceHasRevision: "the source has {revision}",
+    neverApplied: "never applied",
+    appliedRevision: "applied {revision}",
+    nothingApplied: "nothing applied",
+    suspendedLower: "suspended",
+    heldInHelmStorage: "held in Helm's own storage",
+    fromRevision: "from {revision}",
+    nothingAppliedYet: "nothing applied yet",
+    aHelmRelease: "a Helm release",
+    dependsOn: "depends on {list}",
+    fluxSuspendedTitle:
+      "Suspended: it is not reconciling and it is not failing",
+    fluxSuspendedTitleAgo:
+      "Suspended {age} ago: it is not reconciling and it is not failing",
+    fluxSuspendedWasReady:
+      "A suspended {kind} keeps the Ready condition from the last time it ran, so it reads as healthy in every list, Flux's own included. It last applied {revision}; whatever has been committed since is not here.",
+    fluxSuspendedNeverRan:
+      "It was suspended before it ever reconciled, so nothing it describes has been applied at all.",
+    fluxFrozenTitle:
+      "Its source stopped fetching; everything below it is frozen at {revision}",
+    fluxFrozenHelm:
+      "The release is installed and healthy, from a chart version the source can no longer refresh.",
+    fluxFrozenObjects: {
+      one: "The {n} object is applied and healthy, from a revision the source can no longer refresh.",
+      other:
+        "The {n} objects are applied and healthy, from a revision the source can no longer refresh.",
+    },
+    fluxFrozenExceptPre: "Nothing here says “failed” except",
+    fluxFrozenExceptPost: ", and every reconciler under it looks fine.",
+    fluxSourceMissing: "The source it names is not in this cluster",
+    fluxSourceStoppedNeverApplied:
+      "Its source has stopped fetching, and this has never applied anything",
+    fluxSourceNeverFetched:
+      "Its source has never fetched, so this has never applied anything",
+    fluxNotReconciling: "Not reconciling",
+    fluxNotReconcilingReason: "Not reconciling: {reason}",
+    fluxStalledTitle:
+      "Stalled: it has stopped retrying and will not try again on its own",
+    fluxStalledNote:
+      "Flux gives up after its retry budget. Nothing changes until the spec does.",
+    fluxBlockingTitle: {
+      one: "{list} is waiting on this one",
+      other: "{list} are waiting on this one",
+    },
+    fluxBlockingDeclares: { one: "declares", other: "both declare" },
+    fluxBlockingTail: {
+      one: ", so it has not reconciled either. Fixing this one releases it.",
+      other:
+        ", so neither has reconciled either. Fixing this one releases them.",
+    },
+    fluxWaitingOn: "Waiting on {name}, which is not ready",
+    fluxWaitingSays: "says:",
+    fluxWaitingTail:
+      ". Nothing here is wrong, and nothing here will move until that does.",
+    fluxWaitingQueue:
+      "Nothing here is wrong; it is in the queue behind something that is.",
+    readingSources: "Reading the sources…",
+    fluxNoSources:
+      "No source objects. Nothing is being fetched, so nothing can be applied.",
+    fluxSourcesUnread:
+      "No source of the kinds that could be read. The kinds above could not be listed, so what this cluster fetches is not known here.",
+    fluxReconcilersUnread:
+      "No Kustomization, and HelmReleases could not be listed, so whether Flux is applying anything is not known here.",
+    fluxUnreadNote:
+      "Anything below that names one of these is shown as not read, not as missing.",
+    fluxSourcesDescription:
+      "A source is fetched once and applied by everything that names it. This is the half of Flux that fails quietly: a source that stops fetching leaves every reconciler under it reporting the last revision it managed to apply.",
+    noUrlDeclared: "no URL declared",
+    nothingLower: "nothing",
+    fluxFetchStopped:
+      "It stopped fetching, and what it fetched before is what is running",
+    fluxFetchNever:
+      "It has never fetched, so nothing under it has ever been applied",
+    fluxSourceUnusedTitle: "Nothing applies this source",
+    fluxSourceUnusedBody:
+      "It is fetched on its schedule and no Kustomization or HelmRelease names it, so it is configuration doing nothing. Nowhere else in this app could tell you that.",
+    fluxFrozenStillApplying: {
+      one: "is still applying {revision}{fetched}, and reports Ready while doing it.",
+      other:
+        "are still applying {revision}{fetched}, and report Ready while doing it.",
+    },
+    fluxFetchedAgo: ", fetched {age} ago",
+    fluxFrozenNothingToApply: {
+      one: "has nothing to apply.",
+      other: "have nothing to apply.",
+    },
+    fluxSourceUnaffected: "Nothing names this source, so nothing is affected.",
+    fluxFrozenUnread:
+      "HelmReleases could not be listed, so any built from this source are not counted here.",
+    fluxHelmReleasesNotRead: "HelmReleases not read",
+    readingFluxWorkloads: "Reading Flux’s own workloads…",
+    fluxWorkloadsTitle: "Flux's own workloads",
+    fluxWorkloadsDescription:
+      "One controller per kind of object, each with its own logs, and that is where a Flux problem this page cannot see is actually diagnosed. Flux ships no dashboard, so there is nowhere else to go.",
+    fluxNoControllersPre: "Nothing in this cluster carries",
+    fluxNoControllersPost:
+      ", so Flux’s own workloads could not be found. Its objects are still read from the API server, but with no controller running, none of them is being acted on.",
+    allHosts: "All hosts",
+    noClassNoDefault: "none named, and no cluster default",
+    nothingServesClass: "{name}: no IngressClass by that name",
+    noneTrafficUnencrypted: "none: traffic is unencrypted",
+    catchAllCertificate: "catch-all certificate",
+    ingressDefaultBackendOnly:
+      "No rules, so every request reaching this load balancer goes to the default backend:",
+    ingressNoRulesNoDefault:
+      "No rules and no default backend, so this ingress routes nothing.",
+    noTlsConfigured: "No TLS configured: this ingress serves plain HTTP.",
+    autoGenerated: "(auto-generated)",
+    catchAllAppliesToRest: "catch-all · applies to every host not listed",
+    noHosts: "no hosts",
+    pageFailedToRender:
+      "The page failed to render. You can reload or return home.",
+    readingRepositories: "Reading repositories…",
+    noRepositoriesConfigured:
+      "No repositories configured. Add one to search for charts.",
+    resourceNotFoundInCluster: "Resource not found in cluster",
+    supersededByRevision:
+      "Superseded by revision {revision}. The Deployment keeps this one at zero so a rollback can bring it straight back.",
+    deploymentScaledToZeroNote:
+      "The Deployment is scaled to zero, so its current revision runs no pods.",
+    noDeploymentRollingOut: "nothing: no Deployment is rolling this out",
+    currentRevisionLower: "current revision",
+    supersededLower: "superseded",
+    revisionCurrentWord: "current",
+    noCertificateObjectAnywhere:
+      "No Certificate object exists in any namespace, and no Ingress carries the {annotation} annotation that would make one.",
+    noIngressMountsSecret: "No Ingress in {namespace} mounts {secret}.",
+    itsSecret: "its Secret",
+    nothingServingTlsFrom:
+      "Nothing is serving TLS from {secret}, so every host above it is refused or served in the clear.",
+    certificateStillServed:
+      "The certificate already in {secret} is still being served, so this is not an outage yet.",
+    certificateStillServedUntil:
+      "The certificate already in {secret} is still being served, so this is not an outage yet: it {expiry}.",
+    noIssuerNoClusterIssuer: "This cluster has no Issuer and no ClusterIssuer.",
+    certManagerNeedsIssuer:
+      "cert-manager signs nothing without one, so any Certificate here will sit unissued until one exists.",
+    issuersCouldNotBeRead: "issuers could not be read",
+    containerIsWaiting: "{container} is waiting · {reason}",
+    schedulerHasNotPlacedIt: "The scheduler has not placed it on a node yet.",
+    noContainerHasStarted: "No container has started: this pod is {status}.",
+    recentEventsSayMore:
+      "{explanation} Recent events on the Overview tab say more.",
+    podDeclaresNoContainers: "This pod declares no containers.",
+    nothingToInspectUntilSpecFixed:
+      "Nothing to inspect until its spec is fixed.",
+    couldNotReadKindData: "Could not read this {kind}'s data.",
+    couldNotReadWorkloadPods: "Could not read this workload's pods.",
+    couldNotReadCronJobRuns: "Could not read this CronJob's runs.",
+    couldNotReadKindManifest: "Could not read this {kind}'s manifest.",
+    clusterIpOnlyInside:
+      "{type} services are only reachable from inside the cluster. To reach this one from your machine, forward a port to it.",
+    integrationsPageLists:
+      "{link} lists every extension this app knows about and what each one would give.",
+    accessExternalLb: "External (LoadBalancer)",
+    accessExternalLbHint: "Access via load balancer IP",
+    accessExternalNodePort: "External (NodePort)",
+    accessExternalNodePortHint: "Access via any cluster node IP",
+    accessExternalName: "External Name",
+    accessExternalNameHint: "DNS alias to external service",
+    accessExternalIpHint:
+      "kube-proxy answers on it wherever the network routes it to a node",
+    accessInternalFullDns: "Internal (full DNS)",
+    accessInternalFullDnsHint: "From any namespace in cluster",
+    accessInternalShort: "Internal (short)",
+    accessInternalShortHint: "From same namespace only",
+    mountedByNothing: "mounted by nothing",
+    allocatableNote: "what the scheduler may hand out",
+    nodeResourcesNote:
+      "capacity is the machine, allocatable is what the kubelet offers, requested is what the scheduler has already promised",
+    nodeBudgetQuestion: "Could not read what is reserved on this node.",
+    nodeBudgetFailed: "Requested and limited are unknown: {error}",
+    nodeBudgetRefused: {
+      one: "Requested and limited are unknown: listing pods in {n} namespace was refused ({namespaces}). A total over the rest would be a smaller number presented as the whole, so none is shown.",
+      other:
+        "Requested and limited are unknown: listing pods in {n} namespaces was refused ({namespaces}). A total over the rest would be a smaller number presented as the whole, so none is shown.",
+    },
+    nodeBudgetRule: {
+      one: "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead, over {n} pod holding a place here",
+      other:
+        "requested: max(init + sidecars before it, Σ containers + sidecars) + overhead, over {n} pods holding a place here",
+    },
+    unknownWord: "unknown",
+    noUsageSource: "no usage source",
+    noPodsOnNode: "No pods on this node",
+    placementNote: "what the cloud says this node is and where",
+    everyPort: "every port",
+    portNumber: "port {port}",
+    noSuchIntegration: "no such integration",
+    couldNotReadMeshRouting: "Could not read this mesh’s routing",
+    meshRoutingRequestFailed:
+      "Every route this page draws is a Gateway, a VirtualService or a DestinationRule in this API server, and that request failed, so the chain would be a guess rather than an answer.",
+    istioPageDescription:
+      "What this mesh routes, and where each hostname stops.",
+    readingMesh: "Reading the mesh…",
+    noVirtualServiceRoutes:
+      "No VirtualService routes anything here, so there is no shape to draw.",
+    istioNothingRoutes:
+      "Istio is installed here and nothing routes through it.",
+    istioNoVirtualServiceHost:
+      "No VirtualService declares a host. The mesh will still carry traffic between the workloads that have a sidecar, which is the default and needs no object, but there is no routing rule to draw.",
+    noHostVirtualServiceMatches:
+      "No host, VirtualService or destination here matches that.",
+    noGatewayServesIt: "no Gateway serves it",
+    subsetNotDefined: "subset not defined",
+    weightsDoNotAddUp: "weights do not add up",
+    routingState: "routing",
+    inMeshOnly: "in-mesh only",
+    throughGateways: "through {list}",
+    everyRequest: "every request",
+    nowhere: "nowhere",
+    theRuleFor: "the rule for",
+    noEdgeListener: "no edge listener",
+    notInThisCluster: "not in this cluster",
+    servesOtherHosts: "serves other hosts",
+    noSubset: "no subset",
+    definesList: "defines {list}",
+    noSubsets: "no subsets",
+    noRuleNamesThisHost: "no rule names this host",
+    outsideThisCluster: "outside this cluster",
+    notThisClustersPods: "not this cluster's pods",
+    maybeThisClustersService: "Services not read; may be one here",
+    subsetUnconfirmed: "defined if this is the Service; Services not read",
+    istioSubsetsMaybeRouted:
+      "{list} routed only through a host the unread Services would confirm",
+    matchShownAsWrittenBecause:
+      "This match is shown exactly as written, because {reason}.",
+    matchFieldsNotInterpreted: {
+      one: "Shown exactly as written: {list} is not interpreted here.",
+      other: "Shown exactly as written: {list} are not interpreted here.",
+    },
+    istioNoGatewayServes: "No Gateway serves {host}",
+    istioGatewaysAbsentNote: {
+      one: "{list} is named here and does not exist in this cluster. Istio accepts the reference without complaint and the VirtualService receives nothing at the edge. No status, event or condition anywhere says so.",
+      other:
+        "{list} are named here and do not exist in this cluster. Istio accepts the reference without complaint and the VirtualService receives nothing at the edge. No status, event or condition anywhere says so.",
+    },
+    istioGatewaysCoverNothingNote: {
+      one: "{list} exists and no server on it covers this hostname, so nothing at the edge is listening for it. The VirtualService is correct YAML that receives no request.",
+      other:
+        "{list} exist and no server on them covers this hostname, so nothing at the edge is listening for it. The VirtualService is correct YAML that receives no request.",
+    },
+    istioSubsetUndefinedTitle:
+      "{name} routes to a subset called {subset}, and nothing defines it",
+    istioSubsetRuleDeclaresNote:
+      "A DestinationRule names {host} and declares {declares}. Istio has no endpoints to send this route to, and every request on it is answered with a 503.",
+    istioSubsetDeclaredNot: "{list}, but not {subset}",
+    istioNoSubsetsAtAll: "no subsets at all",
+    istioNoRuleNamesHostNote:
+      "No DestinationRule in this cluster names {host} at all, so the subset {subset} is defined nowhere. A subset is a label selector that has to exist before it can be routed to; every request on this route gets a 503.",
+    istioWeightsTitle: "The weights on this rule add up to {sum}, not 100",
+    istioWeightsNote:
+      "Istio divides a route's traffic by a hundred, so {detail}. The proportion actually served is not something these objects state.",
+    istioWeightsUnder:
+      "{percent}% of the requests matching this rule are not covered by any destination it names",
+    istioWeightsOver:
+      "the shares written here are not the shares that will be served",
+    istioRouteResolves503:
+      "This route resolves and every request gets a 503: {detail}",
+    istioNoGatewayObjects:
+      "This cluster has no Gateway objects, so nothing in the mesh is exposed at the edge. Traffic between workloads that have a sidecar still flows, which needs no Gateway.",
+    istioGatewaysDescription:
+      "What the mesh listens on at its edge, and which hosts bind to each. A Gateway nothing binds to is a listener with no routes behind it.",
+    noServers: "no servers",
+    nothingBindsToIt: "nothing binds to it",
+    istioNoDestinationRules:
+      "This cluster has no DestinationRule objects. Every route reaches its Service’s pods with no subset in between, which is the ordinary case.",
+    istioRoutedDefinedNowhereNote:
+      "A subset is a label selector that has to exist before a route can name it. Istio accepts the reference and answers every request on that route with a 503.",
+    istioSubsetsDescription:
+      "Every DestinationRule, the subsets it defines, and whether anything routes to them.",
+    noSubsetsTrafficPolicyOnly: "no subsets, traffic policy only",
+    theLoadBalancerInFront: "the load balancer in front",
+    cannotPullImage: "{container} cannot pull its image",
+    imagePullRetrying:
+      "is being retried by the kubelet, with a longer wait after each attempt. The name, the tag or the pull credentials are what to check.",
+    startsAndExits: "{container} starts and then exits, over and over",
+    crashRestartsWithLastRun: {
+      one: "{n} restart so far; the last run ended {how}. What it printed before it died is in Logs.",
+      other:
+        "{n} restarts so far; the last run ended {how}. What it printed before it died is in Logs.",
+    },
+    crashRestartsNoLastRun: {
+      one: "{n} restart so far. What it printed before it last died is in Logs.",
+      other:
+        "{n} restarts so far. What it printed before it last died is in Logs.",
+    },
+    restartedExitUnreported:
+      "{container} restarted, and its last exit is not reported",
+    restartsExitUnreportedDetail: {
+      one: "{n} restart so far. The kubelet does not report how the last run ended, so whether it is still crash-looping is not known. What it printed before it last exited is in Logs.",
+      other:
+        "{n} restarts so far. The kubelet does not report how the last run ended, so whether it is still crash-looping is not known. What it printed before it last exited is in Logs.",
+    },
+    cannotBeBuilt: "{container} cannot be built from this spec",
+    missingConfigMapSecretOrVolume:
+      "A ConfigMap, Secret or volume the container names is missing, or has no such key.",
+    waitingToStart: "{container} is waiting to start",
+    containerExitedWith: "{container} exited with {code}",
+    lastRunNotClean:
+      "{how}: the last run of this container did not finish cleanly.",
+    noNodeWillTakePod: "No node will take this pod",
+    waitingForNode: "Waiting to be placed on a node",
+    conditionIsStatus: "{type} is {status}",
+    thisPodFailed: "This pod failed",
+    certificateExpired: "certificate expired",
+    certificateRunningOut: "certificate running out",
+    canaryShadowingNothing: "canary shadowing nothing",
+    servedInTheClear: "served in the clear",
+    splitShares: "split {shares}",
+    tlsFrom: "TLS from {name}",
+    noTls: "no TLS",
+    tlsEveryHost: "every host",
+    tlsNotChecked: "TLS not checked",
+    relatedShortBy:
+      "An integration that reads {kind} objects could not answer, so what is below is short by an unknown amount.",
+    stopNoServiceToSendTo: "no service to send to",
+    stopSelectorMatchesNothing: "selector matches nothing",
+    stopScaledToZeroUnder: "scaled to zero",
+    stopPodsBeingMadeUnder: "pods being made",
+    stopNothingPublishedYet: "nothing published yet",
+    stopRunningNoneReady: "running, none ready",
+    stopNotScheduled: "not scheduled",
+    stopNotStarted: "not started",
+    stopCrashLooping: "crash looping",
+    stopTerminating: "terminating",
+    stopFinished: "finished",
+    stopNoneReady: "none ready",
+    causeFailingReadiness: "they fail their readiness probe",
+    causeSeveral: "for more than one reason",
+    causeOwnStatus: "their own status says why",
+    causeComingUp: "still starting",
+    causePodsUnread: "pods not read, so whether they are starting is not known",
+    stopComingUp: "coming up",
+    causeOnServicePage: "the Service's page says why",
+    stopNoPortToSendTo: "no port to send to",
+    everyRequest503:
+      "This host answers, and every request gets a 503: {reason}",
+    servedInClearTitle:
+      "Served in the clear: nothing offers this host over TLS",
+    nginxClearRedirectAnyway:
+      "No Ingress under this host declares a certificate, so nginx serves it on :80 and nothing else. One of them does carry ssl-redirect, which reads like protection and is doing nothing: nginx applies that redirect only where the Ingress has a certificate to redirect to.",
+    nginxClearNote:
+      "No Ingress under this host declares a certificate, so nginx serves it on :80 and there is no encrypted way to reach it, even for a client that asks for one.",
+    twoIngressesClaimPath: "Two Ingresses claim {path} on this host",
+    nginxDuplicateWinner:
+      "nginx serves {object}, since the older object wins a conflict, and writes a warning to its log that nothing else in this cluster surfaces. The other never fires.",
+    nginxDuplicateTie:
+      "nginx breaks the tie by creation time and serves the older object; these do not both state one, so which of them is serving the request is not something this app can say from here.",
+    canaryShadowingNothingTitle: "{name} is a canary shadowing nothing",
+    canaryShadowingNothingNote:
+      "A canary Ingress is merged into the server block of a host another Ingress already serves. No other Ingress serves this host, so there is nothing to merge it into and nginx never routes a request to it. The object is correct YAML that does nothing at all.",
+    secretNotACertificate: "{name} could not be read as a certificate",
+    secretNotParsable:
+      "The Secret is there and what is in it is not a certificate this app could parse.",
+    certExpiryBrowserNote:
+      "Requests to this host fail closed in every browser once it goes, and nothing on the Ingress or the Service says so.",
+    traefikRoutingRequestFailed:
+      "The routes this page draws come from the Ingresses and IngressRoutes in this API server, and that request failed, so the table would be a guess rather than an answer.",
+    traefikPageDescription:
+      "What this proxy serves, and where each hostname goes.",
+    traefikRestOnNodeHint:
+      "Rest on a node to light up everything one edge away. A host goes to its own paths and their chain; a Service goes to its page. Every line is one object naming another.",
+    traefikRunningNothingRoutes:
+      "Traefik is running here and nothing routes to it.",
+    traefikNoRouteClaimsClass:
+      "No IngressRoute exists, and no Ingress names an IngressClass this proxy claims. An Ingress naming a class nothing serves is correct YAML with no events and no error, and is simply never served.",
+    theEdge: "the edge",
+    tlsEndsAt: "TLS ends at {name}",
+    everyEntryPoint: "every entry point",
+    throughWord: "through",
+    anApiObject: "an API object",
+    insideTheProxy: "inside the proxy",
+    thePathThrough: "the path through {path}",
+    notReadLower: "not read",
+    kindRule: "{kind} rule",
+    shownInFullBelow: "shown in full below",
+    traefiksOwnNotService: "Traefik's own, not a Service",
+    notPods: "not pods",
+    ruleShownAsWrittenBecause:
+      "This rule is shown exactly as written, because {reason}.",
+    shownExactlyAsWritten: {
+      one: "Shown exactly as written: {list} is not interpreted here.",
+      other: "Shown exactly as written: {list} are not interpreted here.",
+    },
+    notFoundInThisCluster: "not found in this cluster",
+    everyRequest502:
+      "This host answers, and every request gets a 502: {reason}",
+    traefikClearNote: {
+      one: "No route under this host carries a certificate, and it is bound to {list}, which terminates no TLS and carries no redirection. There is no encrypted way to reach it, even for a client that asks for one.",
+      other:
+        "No route under this host carries a certificate, and it is bound to {list}, which terminate no TLS and carry no redirection. There is no encrypted way to reach it, even for a client that asks for one.",
+    },
+    twoObjectsClaimPath: "Two objects claim {path} on this host",
+    traefikDuplicateWinner:
+      "wins because {because}, and the rest never fire for this path.",
+    traefikPriorityDeclared:
+      "it declares priority {n}, above the others' declared or defaulted weight",
+    traefikPriorityLongest:
+      "its rule is the longest, which is Traefik's default priority for a router that declares none",
+    traefikDuplicateTied:
+      "carry the same priority, declared or defaulted to their rule’s length, so Traefik’s pick between them is not something the objects state.",
+    traefikDuplicateUnsettled:
+      "both match it. Traefik breaks the tie by router priority, which is declared or defaults to the length of the router’s rule. For an Ingress that rule is one Traefik generates and this app never sees, so which of them serves the request is not settled from here.",
+    noMiddlewareObjects:
+      "This cluster has no Middleware objects. Traefik serves every route without one, which is the ordinary case.",
+    middlewaresDescription:
+      "Every one, and who uses it. A middleware nothing references is doing nothing, and nowhere else in this app could tell you.",
+    middlewareUnreferenced:
+      "nothing references it, so it is configuration that does nothing",
+    readingTheProxy: "Reading the proxy…",
+    cannotSayWhatTraefikListensOn:
+      "This cluster cannot say what Traefik listens on.",
+    entryPointsAreStatic:
+      "Entry points are static configuration: they exist only in the flags the proxy was started with, and nothing in the API server carries them.",
+    entryPointsDescription:
+      "What the proxy listens on, which of them terminate TLS, and which hosts land on each: the answer to “why is my route on :80”.",
+    plainLower: "plain",
+    redirectsTo: "redirects to {target}",
+    plainEntryPointsHead: {
+      one: "{list} terminates no TLS and redirects nowhere.",
+      other: "{list} terminate no TLS and redirect nowhere.",
+    },
+    plainEntryPointsNote:
+      "A route that names no entry point is bound to all of them, so every host in this cluster is also reachable unencrypted, including the ones with a certificate. Setting a redirection on the entry point fixes all of them at once; a redirect middleware fixes one route.",
+    theProxyTitle: "The proxy",
+    theProxyDescription:
+      "Where a Traefik problem is actually diagnosed: its own pods, and its own logs.",
+    traefikClaimsNoClass:
+      "Traefik is running and claims no IngressClass, so no Ingress in this cluster can reach it by class.",
+    renewalNotReadable:
+      "The certificate above was read from the Secret. Who renews it could not be read: {error}",
+    renewedAutomaticallyBy: "Renewed automatically by",
+    nextRenewalAt: ", next {when}",
+    issuanceFailed: "failed",
+    issuanceNotFinished: "not finished",
+    issuanceInProgress: "in progress",
+    startedWhen: "started {when}",
+    renewsAutomatically: "renews automatically {when}",
+    renewalNotFinished: "Renewal has not finished",
+    noEventsInScope: "No events in {scope} yet.",
+    noWarningsInScopeHiding: {
+      one: "No warnings in {scope}; the type filter hides {n} other event.",
+      other: "No warnings in {scope}; the type filter hides {n} other events.",
+    },
+    noNormalInScopeHiding: {
+      one: "No normal events in {scope}; the type filter hides {n} warning.",
+      other: "No normal events in {scope}; the type filter hides {n} warnings.",
+    },
+    noWarningsInScopeFiltered:
+      "No warnings in {scope}; the type filter leaves every other event out.",
+    noNormalInScopeFiltered:
+      "No normal events in {scope}; the type filter leaves every warning out.",
+    noWarningsInWindowFiltered:
+      "No warnings in {scope} in the last {range}; the type filter leaves every other event out.",
+    noNormalInWindowFiltered:
+      "No normal events in {scope} in the last {range}; the type filter leaves every warning out.",
+    noEventsMatch:
+      "No event in {scope} matches “{query}”. The filter reads the reason, the object, its namespace and the message.",
+    drainExplained:
+      "The node is cordoned and every pod on it that a controller can replace is evicted. DaemonSet pods stay.",
+    readingWhatRefusesToMove: "Reading what would refuse to move…",
+    drainKeepsAsking:
+      "The drain moves what it can and keeps asking about the rest, the way kubectl does. Nothing is deleted to get past a budget, and you can stop it at any point.",
+    evictUnmanagedPodsExplained:
+      "Nothing would bring these back, so moving them ends them.",
+    evictPodsWithLocalDataExplained:
+      "Whatever their emptyDir holds does not survive the move.",
+    waitingOnTheseExplained:
+      "These move on their own as soon as the cluster allows it. Leaving the window does not stop the drain.",
+    drainReportsMissed:
+      "Some of this drain's reports were lost on the way to this window, so it may already have finished. What is shown is the last one that arrived.",
+    stoppedExplained:
+      "Nothing here changes by waiting. Each one needs an answer only you can give.",
+    notNowExplained:
+      "Kubernetes refuses these for a time rather than for good: usually a disruption budget with nothing spare, sometimes the API pacing itself.",
+    budgetRuleHealthyCovering:
+      "{rule}, {healthy} of {expected} healthy, covering {pods} here.",
+    couldNotReadClusterState: "Could not read cluster state",
+    noClusterOverviewAccess:
+      "You do not have permission to read the whole cluster. Open a namespace you have access to: type its name in the namespace picker above.",
+    noClusterOverviewAccessIn: {
+      one: "You do not have permission to read the whole cluster. You can read {namespaces}: choose it in the namespace picker above.",
+      other:
+        "You do not have permission to read the whole cluster. You can read {namespaces}: choose one in the namespace picker above.",
+    },
+    noScopeOverviewAccess:
+      "You do not have permission to read {scope}. Type another namespace in the picker above.",
+    refusedClusterWide:
+      "Listing these across the whole cluster was refused. A namespace you have access to may still answer.",
+    refusedClusterWideOnly:
+      "Listing these across the whole cluster was refused.",
+    refusedAcrossCluster:
+      "Listing these across the whole cluster was refused. Choose a namespace you have access to in the picker above.",
+    listableIn: {
+      one: "Listing these across the whole cluster was refused. You can list them in {namespaces}: choose it in the namespace picker above.",
+      other:
+        "Listing these across the whole cluster was refused. You can list them in {namespaces}: choose one in the namespace picker above.",
+    },
+    listableInNamespaces: {
+      one: "You can list them in {namespaces}.",
+      other: "You can list them in {namespaces}.",
+    },
+    refusedClusterWideAndIn: {
+      one: "Listing these was refused across the whole cluster and in {namespaces} too.",
+      other:
+        "Listing these was refused across the whole cluster and in {namespaces} too.",
+    },
+    noNodeAccess:
+      "You do not have permission to read the cluster's nodes, so capacity and scheduler headroom are not shown.",
+    controllerLower: "controller",
+    noneSet: "none set",
+    couldNotReadManifest: "Could not read the manifest",
+    couldNotReadApplications: "Could not read this cluster’s Applications",
+    applicationsUnreadableBody:
+      "Everything on this page comes from the {kind} objects in this API server, and that request failed, so a list here would be a guess rather than an answer.",
+    argoPageDescription:
+      "Whether what is running is what git says should be running, and what is stopping it where it is not.",
+    acrossEveryNamespace: "{count} across every namespace",
+    readingApplications: "Reading the Applications…",
+    argoOwnsNothing: "Argo CD is installed here and owns nothing yet.",
+    argoNoApplicationsBody:
+      "No {kind} exists in this cluster, so nothing is being delivered from git. The controller is running and waiting for one.",
+    nothingFailing: "nothing failing",
+    allInSync: "{count}, all in sync",
+    noApplicationMatches: "No Application here matches that.",
+    argoProjectDestination: "project {project} → {destination}",
+    generatedByName: "generated by {name}",
+    noSourceDeclared: "no source declared",
+    defaultBranch: "default branch",
+    autoSyncSelfHealing: "auto-sync, self-healing",
+    autoSyncOn: "auto-sync on",
+    autoSyncOff: "auto-sync off",
+    nothingComparedYet: "nothing compared yet",
+    lastSyncedAgo: "last synced {age} ago",
+    neverSynced: "never synced",
+    fromGit: "from git",
+    syncedAgo: "synced {age} ago",
+    unknownLower: "unknown",
+    argoNotComparedYet:
+      "Argo has not compared this Application yet, so it lists no objects.",
+    generatedByApplicationSet: "Generated by ApplicationSet",
+    editingGeneratedAppUndone:
+      ". Editing this Application is undone the next time the generator runs; the file to change is the ApplicationSet.",
+    argoDiffNoAddress:
+      "The line-by-line diff lives in Argo’s own API, which needs a credential this app does not hold, and no Ingress in this cluster serves {service}, so there is no address to send you to.",
+    forLineByLineDiff:
+      "for the line-by-line diff, which needs a credential this app does not hold.",
+    syncFailingFor: "Sync has been failing for {age}, and auto-sync is on",
+    syncFailing: "Sync has been failing, and auto-sync is on",
+    argoRetries:
+      "Argo retries and fails; nothing will converge until the manifest changes.",
+    lastSyncFailedAgo: "The last sync failed, {age} ago, and auto-sync is off",
+    lastSyncFailed: "The last sync failed, and auto-sync is off",
+    nothingRetryingSync:
+      "Nothing is retrying it. It will stay exactly as it is until somebody syncs it again.",
+    outOfSyncLastSynced:
+      "Out of sync: last synced {age} ago, and auto-sync is off",
+    outOfSyncNeverSynced: "Out of sync and never synced, and auto-sync is off",
+    driftedNote:
+      "Nothing is going to fix this on its own. Somebody either changed the cluster by hand and meant to, or changed git and nobody pressed sync.",
+    nameIsDegraded: "{name} is degraded",
+    degradedNote:
+      "It is applied and it is not working, which the sync status says nothing about.",
+    argoReports: "Argo reports {type}",
+    noApplicationSets:
+      "No ApplicationSet in this cluster. Every Application here was written by hand, which means editing one is a change that stays.",
+    applicationSetsDescription:
+      "A generator and the Applications it made. What it generated is a template's output, so editing one of those Applications is undone the next time the generator runs.",
+    generatedNothing: "generated nothing in this cluster",
+    noAppProjects:
+      "This cluster has no AppProject objects, not even {name}, which Argo normally installs. Every Application names a project, so one of them is naming something that is not there.",
+    projectsDescription:
+      "What each project lets an Application do: which repositories it may deploy from, and where it may deploy to.",
+    noRepositoryAllowed: "no repository allowed",
+    anyRepository: "any repository",
+    anyRepositoryExcept: "any repository except {repos}",
+    noDestinationAllowed: "no destination allowed",
+    anyNamespace: "any namespace",
+    scopeAnyNamespace: "any namespace",
+    scopeNamespaceCount: { one: "{n} namespace", other: "{n} namespaces" },
+    anyCluster: "any cluster",
+    namespaceOnCluster: "{namespace} on {cluster}",
+    readingArgoWorkloads: "Reading Argo’s own workloads…",
+    argoWorkloadsUnread:
+      "Could not list {kinds}, so any of Argo's own workloads among them are missing here.",
+    argoWorkloadsDescription:
+      "Where an Argo problem is actually diagnosed. A repository it cannot reach and a webhook it never received are in the repo-server's and the controller's logs, not in any Application's status.",
+    argoUiDescription:
+      "Half of what Argo knows needs a credential this app does not hold, the line-by-line diff above all. Where the cluster says how to reach Argo's UI, this page hands those questions over.",
+    kindNameServes: "{kind} {name} serves",
+    anIngressServes: "An Ingress serves",
+    soEveryApplicationOffersWayIn:
+      ", so every Application above offers a way into it.",
+    readingWhatRoutes: "Reading what routes {service}…",
+    somethingWord: "Something",
+    hostNotKnownTls:
+      ", but nothing in the API server says whether that host is served over TLS: the proxy’s entry points are start-up flags and this app could not read them. Rather than guess a scheme and hand you a link that may refuse the connection, the host is stated and left to you.",
+    nothingRoutesServiceToHostname:
+      "Nothing this app can read routes {service} to a hostname",
+    noIngressNoRoutingController:
+      ": there is no Ingress, and no routing controller installed that could be asked about its own objects",
+    serviceIsClusterIpNoRoute:
+      ". {service} is a ClusterIP with no route from this machine, so there is no address this app could construct, and a link into a connection error is worse than no link.",
+    everythingReadFromObjects:
+      " Everything on this page is read from the {kind} objects themselves and needs no credential.",
+    oneRoutingControllerDidNotAnswer:
+      "One routing controller was asked and did not answer:",
+    itsObjectsDescription:
+      "The CRDs this page reads, for a reader who wants the raw thing.",
+    loadingTerminal: "Loading terminal…",
+    noMetricsReading:
+      "metrics-server has no reading for this object; its containers may not be running",
+    helmReleases: "Helm releases",
+    manifests: "Manifests",
+    customResourceNotRead:
+      "This custom resource has not been read yet. Its spec is whatever the CRD defines, and nothing here has seen it.",
+    shellNotPermitted: "No shell with this access",
+    shellWaits: "No shell is running here yet",
+    shellWaitsBody:
+      "A shell is a live process in {container}, so only a click starts one: on the {tab} tab or on the button below. Opening the page by a link, a restored tab or Back starts nothing.",
+    filesWait: "The files have not been read yet",
+    filesWaitBody:
+      "Each folder is read by running a command in the container, so only a click reads them: on the {tab} tab or on the button below. Opening the page by a link, a restored tab or Back reads nothing.",
+    shellEnded: "The shell was ended",
+    shellEndedBody:
+      "Nothing is running in {container} now. A click on the {tab} tab, on the button below or on a container above opens a new shell.",
+    pvUnbound: "unbound: no claim is using this volume",
+    vendorDidNotAnswer:
+      "{vendor} did not answer: {reason}. This is the window the app watched itself; the longer ranges are gone until it is back.",
+    longerNeedsPrometheus: "Longer than this needs a Prometheus: {link}.",
+    trendsNeedPrometheus: "Utilisation over time needs a Prometheus: {link}.",
+    trendsSortNote: "least headroom first, each point the peak of its bucket",
+    nodesFromPods:
+      "Summed from each node's pods: {vendor} keeps no whole-node series, so the kubelet, system daemons and the OS are left out and real usage is higher.",
+    nodesSilentTitle: "No node has a CPU or memory series in {vendor}",
+    nodesSilentAsked:
+      "Asked for {cpu} and {memory}: first each node's root cgroup ({root}), then the sum of its pods' containers. Both came back empty.",
+    nodesSilentReason:
+      "{vendor} most likely keeps no cAdvisor series: nothing scrapes the kubelet's /metrics/cadvisor endpoint, or a relabelling drops them.",
+    nodesSilentCheck:
+      "Check that the kubelet's cAdvisor endpoint is scraped in {monitors}.",
+    notLookedShort: "could not look",
+    noAllocatableShort: "allocatable unreadable",
+    nodesDidNotList:
+      "Could not read the node list, so there is nothing to put a reading against: {reason}",
+    nodeNoAllocatable:
+      "Samples exist, but this node's allocatable could not be read, so a share of it cannot be drawn.",
+    nodeNoSamplesYet:
+      "no samples in the window: the newest is {age} old, the window asks for {range}",
+    noSeriesShort: "no series",
+    historyWithoutMetricsServer:
+      "There is no current sample ({reason}). The history here is {vendor} alone and stands on its own.",
+    declaredNowOnly:
+      "kube-state-metrics is not in this Prometheus, so what was declared earlier in the window is unknown; request and limit are today's figures, drawn flat.",
+    declaredUnknown:
+      "Could not read whether kube-state-metrics kept what was declared, so the window is unknown either way; request and limit are today's figures, drawn flat.",
+    declaredSizeNotFullness:
+      "Declared size, not how full. metrics-server reports CPU and memory only; how much of a volume is in use comes from the kubelet, which a Prometheus can read and this app cannot.",
+    declaredSizeForUnreported:
+      "Declared size, not how full, for the {n} of these the kubelet does not report on.",
+    terminalSessionEnded: "Session ended: {status}",
+    valuesHiddenByDefault: "values hidden by default",
+    binaryNotText: "binary, not text: {size}",
+    blindReconcilers: {
+      one: "{vendors} reports no per-object drift: it corrects silently, so its objects appear here only when the reconciler itself has stopped.",
+      other:
+        "{vendors} report no per-object drift: they correct silently, so their objects appear here only when the reconciler itself has stopped.",
+    },
+    promCouldNotAsk: "Could not ask this Prometheus anything",
+    promPageDescription:
+      "Whether the Prometheus this cluster is pointed at is scraping this cluster, which a connection test cannot tell you, and whether it holds the metrics the app's history is built on.",
+    promAsking: "Asking it what it knows…",
+    promWhichCluster: "Which cluster it is watching",
+    promNodeNamesWhy:
+      "Node names, because nothing else identifies a cluster from the outside: a namespace called default exists everywhere and a pod name is gone by tomorrow.",
+    promComparisonFailed: "The comparison could not be made",
+    promForeignNodes: "other clusters, or nodes this one has lost",
+    nothingElse: "nothing else",
+    promNotWatching: "This Prometheus is not watching this cluster",
+    promNotWatchingBody: {
+      one: "This cluster’s one node does not appear in it. The address answers PromQL, which is all the connection test proved, and every history and volume figure the app draws from it is about somebody else’s cluster.",
+      other:
+        "Not one of this cluster’s {n} nodes appears in it. The address answers PromQL, which is all the connection test proved, and every history and volume figure the app draws from it is about somebody else’s cluster.",
+    },
+    promUnseenNodesBody:
+      "are in the cluster and not in Prometheus, so a pod that happens to be scheduled on one of them draws an empty history, which looks exactly like a pod that used nothing.",
+    promWhatAppAsks: "What the app asks it for",
+    promFamiliesWhy:
+      "The exact metric names the queries use. A family that is absent answers every query with an empty series, and an empty series is drawn as a flat chart rather than as a gap, so the absence is named here instead.",
+    noSeriesAtAll: "no series at all",
+    promNothingCarries: "Nothing in this Prometheus carries",
+    promMissingFamiliesTail:
+      ". Charts that would have used it fall back to the window this app watched itself, and dim the ranges that reach further back. They report no error, because an empty answer is a valid one.",
+    lokiCouldNotAsk: "Could not ask this Loki anything",
+    lokiPageDescription:
+      "Whether the Loki this cluster is pointed at holds this cluster's logs, which a connection test cannot tell you: an address that answers LogQL says nothing about whose lines are behind it.",
+    lokiNoNamespaces:
+      "This cluster’s namespaces could not be read, so there is nothing to compare against what Loki holds.",
+    lokiAsking: "Asking it for a line…",
+    lokiNamespacesTitle: "Namespaces it has lines for",
+    lokiOneLineProof:
+      "One line is proof, so one line is all that is asked for. A namespace that wrote nothing in the window is not evidence either way, which is why an empty answer is drawn as a question and not as a verdict.",
+    lokiQueryFailed: "query failed",
+    lokiHasLines: "has lines",
+    lokiNothingInWindow: "nothing in the window",
+    lokiHoldsNone: "This Loki holds none of this cluster's namespaces",
+    lokiHoldsNoneBody:
+      "Not one of the namespaces asked about has a line in the last hour. The address answers LogQL, which is all the connection test proved, so what is behind it is most likely another cluster’s logs, and the history offer in the log viewer will keep answering with nothing.",
+    lokiFailureNotAbsence:
+      "A failed query is not an absence. Nothing is claimed about these namespaces either way.",
+    integrationsNoCluster:
+      "Connect a cluster and this will say what it has. Every extension here is detected by asking the API server for its CRDs, and there is no API server to ask.",
+    yamlNoteDefault:
+      "the object as you would apply it: without status, ownerReferences, finalizers and the fields the server sets",
+    diffComputing: "Comparing…",
+    diffUnavailable:
+      "Could not compare these two. What Apply would do is unchanged; the comparison is what failed.",
+    noChangesDetected: "No changes detected",
+    addRepositoryThenSearch: "Add a repository, then search it for charts.",
+    manifestsAreAt: "The manifests are at",
+    inRevision: "in",
+    enableShowSecrets: "(enable 'Show all secrets' to reveal)",
+    noDataFound: "(no data found)",
+    notFoundRef: "(not found: {name}:{key})",
+    allKeysFrom: "all keys from",
+    nothingToMapYet: "Nothing to map yet. The strip fills in as lines arrive.",
+    noLineMatchesInBuffer:
+      "No line in the buffer matches the query, so there is no shape to show.",
+    oneLineSoFar:
+      "One line so far, at {clock}. Nothing to map until there is a stretch of time to map.",
+    allLinesWithinSpan: {
+      one: "All {count} line landed within {span} of each other, too short a stretch to slice.",
+      other:
+        "All {count} lines landed within {span} of each other, too short a stretch to slice.",
+    },
+    allLinesAtOnce: {
+      one: "All {count} line landed at the same moment; there is no stretch of time to slice.",
+      other:
+        "All {count} lines landed at the same moment; there is no stretch of time to slice.",
+    },
+    intakeNotOnBand:
+      "Intake discarded the rest before they reached the buffer, so they are not on this band.",
+    intakeNotOnMap:
+      "Intake discarded the rest before they reached the buffer, so they are not on this map.",
+    olderLinesDroppedAxis:
+      "Older lines have been dropped; the log starts before this.",
+    olderLinesDroppedSummary:
+      "Older lines have been dropped, so the strip begins later than the log does.",
+    intakeCoversKeptOnly:
+      "Intake is set, so this covers only the lines it kept; the rest were discarded before they reached the buffer.",
+    noLinesToShow: "No lines to show.",
+    mixedFormatNote: "These containers write in more than one log format",
+    intakeDiscardNote:
+      "Lines that do not match are discarded before they reach the viewer, so they cannot be counted here",
+    intakeArrivingRate:
+      "; the lines still held from before intake were arriving at {rate} a second",
+    couldNotReadIdentities: "Could not read this cluster’s identities",
+    aksAddonsHint:
+      "Which pods can become which Azure identity, and, where a cluster is still on it, what the retired pod-identity add-on was told.",
+    podAsksForIdentity: "asks for an identity its ServiceAccount does not name",
+    azureIdentityFinding1: "It carries",
+    azureIdentityFinding2: ", so the webhook projects a token for it, but",
+    azureIdentityFinding3: "in",
+    azureIdentityFinding4: "has no",
+    azureIdentityFinding5:
+      " annotation, so the token is for no identity at all. Every call it makes to Azure comes back 401 and nothing in Kubernetes says why.",
+    azureUnreadNote:
+      "What is drawn below is what the other reads answered; this one is not in it, and nothing here says what it would have shown.",
+    azureAccountUnreadTitle:
+      "{pod} asks for an identity, and its ServiceAccount could not be read",
+    azureAccountUnread:
+      "Whether {account} in {namespace} names an Azure identity is not known: {reason}",
+    readingIdentities: "Reading the identities…",
+    noPodCarries: "No pod in this cluster carries",
+    nothingFederatingToAzure:
+      ", so nothing here is federating to Azure through Workload ID.",
+    legacyAddonInstalled:
+      " The retired pod-identity add-on is still installed, and what it holds is below.",
+    legacyAddonNotInstalled:
+      " The retired pod-identity add-on is not installed either: neither of its kinds, AzureIdentity and AzureIdentityBinding, is served by this API server.",
+    podIdentityRetired: "Pod identity, which is retired",
+    podIdentityRetiredHint:
+      "aad-pod-identity was deprecated in October 2022, archived in September 2023, and its AKS add-on left support in September 2025. What is here still works until it does not; Workload ID above is where it goes.",
+    noAzureIdentityNamed: "No AzureIdentity named {name}",
+    bindingAcceptedPrefix: "The binding is accepted, no",
+    bindingAcceptedSuffix:
+      " is ever created, the pods run perfectly, and every call they make to Azure comes back 403 with nothing in Kubernetes to say why.",
+    namesNone: "names none",
+    noPodUsesIt: "no pod uses it",
+    tenantMeta: " · tenant {id}",
+    noPodCarriesLabel: "no pod carries the label",
+    gkeIngressHint:
+      "Every hostname this cluster's Google load balancers serve: what terminates it, and what answers behind it.",
+    unresolvedNotMissing:
+      "Anything below that names one is shown as unresolved rather than as missing. The two are not the same, and only one of them is a fault in the cluster.",
+    ingressesWrongClassField:
+      "Ingresses asking for GKE the way GKE does not read",
+    gkeReads: "GKE reads",
+    gkeIgnores: "and ignores",
+    gkeClassFieldNote:
+      ". These name a GKE class in the field Kubernetes documents, carry no annotation, and are served by nothing at all. The YAML is correct, with no events and no error:",
+    noIngressCarries: "No Ingress in this cluster carries",
+    orInline: "or",
+    gkeControllerServesNothing:
+      ", so GKE’s controller is serving nothing here. The CRDs it owns may still be installed, which is what put this page in the sidebar.",
+    nothingBehindIt: "nothing behind it",
+    certificateFailed: "certificate failed",
+    namesSomethingAbsent: "names something absent",
+    namesSomethingUnread: "names something not read",
+    worthALook: "worth a look",
+    everyHost: "every host",
+    anyHostNotMatched: "any host not matched above",
+    noHttpListener: " · no HTTP listener",
+    staticIp: "static IP {ip}",
+    httpAndHttps: "HTTP and HTTPS",
+    httpsOnly: "HTTPS only",
+    nameAbsent: "{name}: absent",
+    nameUnread: "{name}: not read",
+    noFrontendConfig: "no FrontendConfig",
+    nothingTerminatesTls: "nothing terminates TLS",
+    uploadedToGoogle: "uploaded to Google, not in this cluster",
+    fromSpecTls: "from spec.tls",
+    containerNativeNeg: "container-native (NEG)",
+    throughKubeProxy: "through kube-proxy",
+    gkeDefaults: "GKE defaults",
+    noWord: "No",
+    namedWord: "named",
+    certificateIs: "is",
+    certFailedNotVisible:
+      "Google could not reach {domain} at this load balancer, which is almost always DNS that does not point here yet. It stays this way until something changes: {certificate} will not retry its way out of it.",
+    certProvisioningNote:
+      "From {certificate}. Provisioning is a wait rather than a fault; anything beginning Failed is a stop.",
+    asksForWildcard: "asks for a wildcard, which Google will not issue",
+    wildcardNotePrefix:
+      "Google-managed certificates do not support wildcard domains at all: up to a hundred names, every one of them literal. The API server accepted",
+    wildcardNoteSuffix:
+      ", Google never issues it, and the object reports it as ordinary provisioning for ever. A wildcard needs a self-managed certificate here, or the Gateway API with Certificate Manager.",
+    coversUnservedDomain: "covers a domain this Ingress does not serve",
+    domainUnservedMid: "is in the certificate’s",
+    domainUnservedSuffix:
+      "and in none of this Ingress’s rules. Google provisions a domain by reaching this load balancer at that name, and nothing here answers to it, so the whole certificate sits unissued for a domain nobody meant to serve.",
+    answersOnNothing: "answers on nothing",
+    httpListenerOffPrefix: "Its HTTP listener is switched off with",
+    httpListenerOffSuffix:
+      "and it names no certificate of any kind, so GKE builds neither listener.",
+    manifestDeclaresNoObjects: "The stored manifest declares no objects.",
+    noShellsOpen: "No shells are open",
+    openFromPodPage: "Start one on any pod's page.",
+    noIngressClassNamed: "No IngressClass named {name} in this cluster",
+    ingressNamesNoClass:
+      "This Ingress names no class, and this cluster has no default one",
+    nothingPickedIngressUp:
+      "Nothing has picked this Ingress up, so it has no address and never will until a controller for that class exists.",
+    clusterHasClasses: "This cluster has {list}.",
+    clusterHasNoIngressClass: "This cluster has no IngressClass at all.",
+    nothingPickedThemUp:
+      "Nothing has picked them up, so they have no address and never will until a controller for that class exists.",
+    noAddressYet:
+      "No address yet: the controller has published none, so nothing reaches this Ingress however its rules read.",
+    followingPathIn: "Following the path in…",
+    couldNotReadConnections: "Could not read what connects to this: {reason}",
+    couldNotReadIngress:
+      "Could not read Ingress {name}, so nothing below is complete for it",
+    couldNotReadIngressController:
+      "Could not read which controller serves Ingress {name}",
+    historyApiExhausted:
+      "The API server has nothing more for {target}. Reading past a pod's own lifetime needs a Loki: {link}.",
+    historyApiExhaustedShort: "The API server has nothing more for {target}.",
+    historyOlderThanPods: "Older than the pods on screen:",
+    historyVendorMayHave: "{vendor} may still have those lines.",
+    historyVendorUnreachable:
+      "{vendor} did not answer: {reason}. The live stream above is untouched; what it kept from before this pod is out of reach until it is back.",
+    historyVendorFailed:
+      "{vendor} did not answer: {reason}. The live stream above is untouched.",
+    historyReadingVendor: "Reading what {vendor} kept…",
+    historyUnmatchedPod:
+      "{vendor} answered with nothing for this pod; its labels may not match this app's query (tried {labels}). Nothing was found in the last {range}.",
+    historyUnmatchedWorkload:
+      "{vendor} answered with nothing for this workload; its labels may not match this app's query (tried {labels}). Nothing was found in the last {range}.",
+    historyLoadedSummary:
+      "from {from}, the last {range}. Not live: these lines do not grow and {follow} does not reach them.",
+    notReadableWithAccess: "not readable with this access",
+    couldNotReadIngresses: "Could not read this cluster's Ingresses",
+    albPageDescription:
+      "One row per ALB rather than per Ingress, because this controller is the one that puts several Ingresses, from several namespaces, on the same load balancer.",
+    ciliumPageDescription:
+      "Every endpoint with what restricts its ingress and its egress, Cilium policies and NetworkPolicies alike, and the ones nothing restricts at all",
+    couldNotReadCilium: "Could not read Cilium's endpoints and policies",
+    couldNotReadCiliumBody:
+      "Coverage is the two lists joined, and one of them did not come back, so nothing here can say which pods a policy reaches.",
+    readingCilium: "Reading endpoints and policies…",
+    ciliumNoEndpoints:
+      "No CiliumEndpoint in this cluster. Cilium writes one per pod it manages, so it is managing none here.",
+    crdCouldNotBeListed: "{crd} could not be listed",
+    albUnreadNote:
+      "Groups are still drawn from the Ingresses themselves; what is missing is what the class configured for them.",
+    readingIngresses: "Reading the Ingresses…",
+    albNoIngressAsksForClass:
+      "No Ingress in this cluster asks for the alb class, so this controller is running no load balancer here. Its CRDs may still be installed, which is what put this page in the sidebar.",
+    albSharedBody:
+      "{namespaces} all put Ingresses on this ALB. Their rules are concatenated into one listener, so a path added in one namespace can shadow a path in another, and the certificate, scheme and WAF are shared. None of that is visible from any of the Ingresses' own pages.",
+    albOrderClashBody:
+      "{members} ask for the same position in the listener's rule list. The controller will pick one; nothing in these objects says which, and the one that loses has its rules evaluated after the other's.",
+    albAsksFor: "{by} asks for {value}",
+    albDisagreeNote:
+      "A load balancer has one of these. One of the two is being discarded, and the controller decides which.",
+    albNoParamsBody:
+      "The {className} class points its spec.parameters at it and there is none in the cluster, so every default it was meant to set is unset instead: scheme, certificate, subnets, WAF.",
+    noBackend: "no backend",
+    noTargetGroupBinding: "no TargetGroupBinding",
+    noLimitsDeclared:
+      "No limits declared on this template: the scale is what these pods have used, and nothing caps what they can take.",
+    limitsNotKnown:
+      "This template's limits could not be read: the scale is what these pods have used, and whether anything caps them is not known.",
+    noStructuralSchema:
+      "This version publishes no structural schema, so the API server validates nothing beyond the object's metadata.",
+    readyLower: "ready",
+    notReadyLower: "not ready",
+    noStatusYet: "no status yet",
+    deprecatedInline: "deprecated",
+    unnamedInline: "unnamed",
+    allInline: "all",
+    portsNotExposedHint:
+      "A slice matches its ports to the Service's by name. These ports' names match none the slice declares, so nothing routes to them.",
+    couldNotReadWhatConnects: "Could not read what connects to this.",
+    clusterDidNotAnswer: "The cluster did not answer.",
+    unknownRefused: "The cluster refused: {message}",
+    unknownFault: "The read failed: {message}",
+    unknownRetry: "Try the read again",
+    unknownCopyRule: "Copy the rule to ask for",
+    unknownRuleCopied:
+      "A Role and a RoleBinding that would allow this read. Give it to whoever owns access.",
+    inNamespaceWhere: "in {namespace}",
+    inClusterWhere: "in the cluster",
+    nothingStatesEdge: "Nothing {where} states an edge to this {kind}.",
+    everyWorkloadRead:
+      "Every pod, Deployment, StatefulSet, DaemonSet, Job, CronJob and Ingress {where} was read; none of them names it.",
+    couldNotReadKind: "Could not read this {kind}: {error}",
+    couldNotReadEvents: "Could not read events.",
+    eventsRefusedHere: "You do not have permission to read these events.",
+    eventsNoneReadAt:
+      "Read at {time}: none yet. The cluster keeps events for about an hour.",
+    ageOld: "{age} old",
+    andMore: "and {n} more",
+    theServiceInFront: "the Service in front",
+    theServiceEndpointsPublish: "the Service these endpoints publish",
+    thisKind: "this {kind}",
+    addressesAnswering: "the addresses actually answering, pod by pod",
+    itsPage: "its page",
+    metricOfLimit: "{used} / {limit} limit ({percent}%)",
+    metricRequestedNoLimit: "{used} · {requested} requested, no limit",
+    metricNoLimit: "{used} · no limit",
+    couldNotReadCertificates: "Could not read this cluster’s certificates",
+    couldNotReadCertificatesBody:
+      "Every row on this page comes from the cert-manager objects in this API server, and that request failed, so the list would be a guess rather than an answer.",
+    certManagerPageHint:
+      "What has a certificate, what is running out, and what has stopped renewing.",
+    readingCertificates: "Reading the certificates…",
+    readingIssuers: "Reading the issuers…",
+    nothingAskedForCertificate:
+      "cert-manager is running here and nothing has asked it for a certificate.",
+    noCertificateMatchesFilter:
+      "No certificate, host or issuer here matches that.",
+    certWalkCost:
+      "The walk under a certificate that is stuck stops at the last kind that could be read, so a step missing from it is not a step that did not happen.",
+    issuersUnknownCost:
+      "So nothing here can say whether this cluster has an issuer: the list is empty because a read failed, not because there is nothing in it.",
+    issuersPartialCost:
+      "So this is only what could be read, and an issuer missing from it is not one that does not exist.",
+    couldNotBeListed: "could not be listed",
+    nothingServingCertificate:
+      " Nothing is serving this certificate, and it is renewed on schedule regardless.",
+    routingCrdMayMount:
+      " A routing CRD may still be mounting it: this app reads Ingresses, and a Traefik IngressRoute or an Istio Gateway is not one. So this is what was checked rather than a verdict.",
+    servingLabel: "Serving",
+    namesLabel: "Names",
+    renewsLabel: "Renews",
+    attemptsLabel: "Attempts",
+    noneInTheSpec: "none in the spec",
+    noneNamed: "none named",
+    secretDoesNotExistYet:
+      "does not exist yet, so nothing can serve TLS from it",
+    whatItIsWaitingOn: "What it is waiting on",
+    certNeverIssued: "This certificate has never been issued",
+    certNotRenewing: "This certificate is not renewing",
+    issuerRefusing: "This issuer is refusing",
+    everyNamespace: "every namespace",
+    noCertificateNamesIt: "no certificate names it",
+    healthySigningNothing:
+      "It is healthy and no Certificate names it, so it is signing nothing.",
+    noneLower: "none",
+    clusterIpHeadless: "None (headless)",
+    clusterIpHeadlessWhy:
+      "clusterIP: None. A headless Service has no virtual IP: its DNS name answers with the addresses of the pods themselves.",
+    notEvaluatedLower: "not evaluated",
+    notReportedLower: "not reported",
+    printerNotReported:
+      "The object has no status yet, so its controller has not reported {column}.",
+    shellEndedPodGone: "The shell ended: its pod was deleted.",
+    printerNotEvaluated:
+      "This app cannot evaluate the column's JSONPath, so this is not a reading of the object: {expression}",
+    noLower: "no",
+    couldNotReadRouting: "Could not read this cluster’s routing",
+    routingRequestFailed:
+      "Every route this page draws is an Ingress in this API server, and that request failed, so the table would be a guess rather than an answer.",
+    nginxPageDescription:
+      "What this controller serves, where each hostname goes, and what its annotations actually do.",
+    readingRoutingTable: "Reading the routing table…",
+    restOnNodeHint:
+      "Rest on a node to light up everything one edge away. A host goes to its own routes; a Service goes to its page. Every line is one object naming another.",
+    nginxRunningNothingRoutes:
+      "ingress-nginx is running here and nothing routes to it.",
+    nginxNoIngressClaimsClass:
+      "No Ingress in this cluster names an IngressClass this controller claims. An Ingress naming a class nothing serves is correct YAML with no events and no error, and is simply never served. That is the usual outcome of installing a second controller beside the one the cluster shipped with.",
+    checkingWhatIsBehind: "checking what is behind them…",
+    noHostServiceObjectMatches: "No host, service or object here matches that.",
+    anyHost: "any host",
+    toTarget: "to",
+    noServiceBackend: "no service",
+    notAService: "not a Service",
+    canaryWhenHeader: "canary · when {header}",
+    canaryAlways: "always",
+    canaryCookie: "canary · cookie {cookie}",
+    canaryNoWeight: "no weight set, so nothing goes here",
+    theRest: "the rest",
+    pathThroughOn: "the path through {path} on {name}",
+    tlsTerminatedHere: "TLS terminated here",
+    noTlsHere: "no TLS here",
+    behaviourSetHere: "behaviour set here",
+    shownRawBelow: "shown raw below",
+    apiObjectNotService: "an API object, not a Service",
+    readingEndpoints: "reading endpoints",
+    endpointsUnread: "endpoints not read",
+    behindUnread: "what is behind them could not be read: {why}",
+    servedUnder: "served under",
+    rawNginxConfig: "Raw nginx configuration, injected verbatim",
+    shownAsWritten: "Shown as written",
+    andMoreOpenRow: "and {n} more: open the row",
+    noNginxAnnotations:
+      "No Ingress this controller serves carries an nginx annotation. Every route is being served with the controller’s own defaults, which the Global settings tab lists.",
+    annotationsDescription:
+      "What each one does, with the key it came from beside it. The ones this app will not paraphrase say so and print the value instead.",
+    wrongParaphraseNote:
+      "A wrong paraphrase of a routing rule is worse than the annotation nobody read, because this time somebody believed it.",
+    readingController: "Reading the controller…",
+    noGlobalNginxSettings: "This cluster has no global nginx settings to show.",
+    controllerNamesNoConfigMap:
+      "The controller names no ConfigMap, so every setting comes from its own defaults.",
+    settingsEveryRouteTitle: "Settings that apply to every route",
+    settingsEveryRouteDescription:
+      "The ConfigMap the controller was started with. A key set here changes the behaviour of every host on the Routes tab at once, unless an Ingress overrides it with the annotation of the same name.",
+    namedInConfigmapFlagPre: "is named in the controller’s own ",
+    namedInConfigmapFlagPost:
+      " flag, which is the only place in this cluster that says which ConfigMap is the global one.",
+    configMapEmptyDefaults:
+      "It is empty, so every setting is the controller’s own default.",
+    ingressMayOverride:
+      "an Ingress may override this one with the annotation of the same name",
+    theControllerTitle: "The controller",
+    theControllerDescription:
+      "Where an nginx problem is actually diagnosed: its own pods, and its own logs.",
+    classesItClaims: "Classes it claims",
+    classesItClaimsDescription:
+      "An Ingress naming a class nothing claims is correct YAML with no events and no error, and is simply never served.",
+    nginxClaimsNoClass:
+      "ingress-nginx is running and claims no IngressClass, so no Ingress in this cluster can reach it by class.",
+    clustersDefault: "this cluster’s default",
+    startedWithFlag:
+      "Started with {flag}, which is the string it looks for in an IngressClass.",
+    staticConfiguration: "Static configuration",
+    staticConfigurationDescription:
+      "The flags the process was started with. Nothing in the API server carries these, which is why they are read from the workload itself.",
+    fieldTooManyValues:
+      "carries over {n} distinct values, too many to list. Type the one you are after and press enter.",
+    noValueMatches: "No value of {key} matches “{query}”.",
+    nothingBufferedYet:
+      "Nothing buffered yet. The fields appear as lines arrive.",
+    noFieldMatches:
+      "No field matches “{query}”. Enter searches the text instead.",
+    showingMostCommon: "Showing the {n} most common. Type to narrow.",
+    noStructuredFields:
+      "These lines carry no structured fields, only level and container.",
+    readingCertificate: "reading the certificate…",
+    doesNotCover: "does not cover {names}",
+    certNoNames: "no names, so it serves nothing",
+    certValidFromTo: "{from} to {to}",
+    certNotCoveredNote:
+      "{names}: browsers refuse a name the certificate does not carry",
+    notProvisionedYet: "not provisioned yet",
+    notBoundNothingSatisfied: "not bound: nothing has satisfied this claim",
+    clusterDefault: "cluster default",
+    noAccessModes: "no access modes",
+    noVolumeBound: "no volume bound",
+    defaultClassBadge: "default class",
+    claimsUseThisClass: "yes: claims that name no class use this one",
+    expansionAllowed: "allowed",
+    expansionNotAllowed: "not allowed: claims cannot grow",
+    mountFrom: "from",
+    readOnly: "read-only",
+    seeWhereReadFrom: "See where it was read from",
+    unscheduled: "unscheduled",
+    spotNodeNote:
+      "The cloud can reclaim this node at any time. An eviction here is the arrangement, not a fault.",
+    sessionAttachedTo: "session attached to {container}",
+    startedInParallel: "Started in parallel",
+    startedInOrder: "Started in order, one at a time",
+    noGoverningService: "none: pods have no stable DNS",
+    noMatchingRunningPods: "No other running pods with matching labels",
+    couldNotReadCrds: "Could not read this cluster’s CRDs",
+    crdDetectionFailed:
+      "Every extension here is detected by asking the API server for the custom resource definitions it installs, and that request failed, so this list would be a guess rather than an answer.",
+    couldNotLookForExtensions: "The cluster would not say what is installed",
+    couldNotLookWhy:
+      "Detection asks the API server for each extension's CustomResourceDefinitions, and this account may not list those. Something may well be installed; this screen cannot tell.",
+    nothingInstalledKnown: "Nothing installed that this app knows how to use",
+    everyExtensionOptional:
+      "The cluster works exactly as it does now: every extension here is optional, and none of them is needed to read a pod.",
+    lookedForExtensions:
+      "Looked for {list} by asking the API server for their CRDs. None of them are in this cluster.",
+    listAnd: "and",
+    gives: "Gives",
+    wouldGive: "Would give",
+    asking: "asking…",
+    looking: "looking…",
+    detected: "detected",
+    // Said of an extension the cluster would not answer about. Neither
+    // "detected" nor "not installed": both of those are claims, and a
+    // refusal to look establishes neither of them.
+    couldNotTell: "could not tell",
+    notInstalled: "not installed",
+    notConfigured: "not configured",
+    connected: "connected",
+    installedButUnreadable:
+      "It is installed, but its objects could not be read: {reason}",
+    readingWhatVendorKept:
+      "Reading what {vendor} kept from while it was running.",
+    noLiveLineVendorKept:
+      "There is no live line to draw. This is what {vendor} kept from while it was running.",
+    vendorNothingInWindow:
+      "{vendor} has nothing for it in this window either. Try a longer one, or it ran before this one was watching.",
+    noContextsInKubeconfig: "No contexts in the kubeconfig.",
+    noNamespacesVisible: "No namespaces visible on this cluster.",
+    namespacesListing: "Listing namespaces…",
+    namespacesRefused:
+      "Cannot list namespaces here. Type the one you have access to.",
+    namespacesUnread: "Could not list namespaces. Type the one you want.",
+    notANamespaceName:
+      "“{query}” cannot be a namespace: lowercase letters, digits and hyphens only, up to 63 characters.",
+    serving: "serving",
+    noValuesSet: "# No values set: the chart's defaults apply.",
+    noStoredManifest: "# The release stored no manifest.",
+    fluxManagedRelease:
+      "This release is a Flux CD HelmRelease. Its spec, status and reconciliation history live on the custom resource.",
+    helmCliMissing:
+      "Helm CLI not found, so rollback and uninstall are unavailable.",
+    readingHistory: "Reading history…",
+    typeToSearchAll: "Type to search every cluster you are connected to.",
+    typeToSearchContext: "Type to search {context}.",
+    connectOrBang: "Connect to a cluster, or type ! to search another one.",
+    noMatchesInline: "no matches",
+    selectPodForLogs: "Select a pod to view logs",
+    noBackends: "No backends: nothing is behind this service right now.",
+    noPortsInSubsets:
+      "No ports across any subset, so the backends above, if there are any, are reachable on nothing.",
+    noPortsDeclared:
+      "No ports declared, so this Service accepts no traffic: nothing reaches the pods its selector matches.",
+    readyOne: "Ready",
+    notReadyOne: "Not ready",
+    noneDeclared: "none declared",
+    noneInline: "none",
+    pendingInline: "pending",
+    addressNoController: "none: nothing serves its class to assign one",
+    helmCliNotFound: "Helm CLI not found",
+    helmWriteOpsNeedCli:
+      "Releases and their details still read over the Kubernetes API. Installing, upgrading, rolling back, uninstalling and managing repositories need the CLI.",
+    helmLookedIn: "Looked in: {paths}",
+    getOneRunning: "Get one running",
+    dockerDesktopHint: "enable Kubernetes in its settings",
+    localClusterHint: "a local cluster in one command",
+    haveOneElsewhere: "Already have one elsewhere?",
+    pointAtConfigHint: "point at its config file",
+    lookedAt: "Looked at",
+    readingWhatServicePublishes: "Reading what this Service publishes…",
+    couldNotReadWhatServicePublishes:
+      "Could not read what this Service publishes:",
+    publishedUnread: "Could not read what this Service publishes.",
+    revisionsUnread: "Could not read this Deployment's ReplicaSets.",
+    helmHistoryUnread: "Could not read this release's history.",
+    noAnswer: "no answer",
+    registeredByHand: "registered by hand",
+    stillReading: "Still reading {label} in {scope}",
+    narrowerIsFaster:
+      "A large cluster answers a narrower question faster: one namespace is one list instead of several.",
+    readDeadline:
+      "Reading {label} in {scope} did not finish within {seconds} s.",
+    readDeadlineHint:
+      "The cluster did not answer in time. That is what a large cluster looks like from here, and it is not a fault to retry into: a narrower question is the way through.",
+    couldNotReadInScope: "Could not read {label} in this scope.",
+    staleRows:
+      "Could not read {label} just now. The rows below are from {time}, the last read that answered.",
+    staleObject:
+      "Could not read {label} just now. What is below is from {time}, the last read that answered.",
+    couldNotReadInNamespace: "Could not read {label} in {namespace}.",
+    noneWhereAnswered: "No {label} in {namespaces}.",
+    gwNoRoutesOfKindsRead: "No routes of the kinds that could be read.",
+    readDeadlineShort: "Reading {label} did not finish within {seconds} s.",
+    containerTerminated: "Container terminated · {detail}",
+    podNotFound: "Pod not found",
+    noShellOn: "No shell on {target}.",
+    noLongerAvailable: "{target} is no longer available.",
+    nothingLeftToAttachTo: "Nothing left to attach to",
+    logNotKept:
+      "The node no longer has that log of {container}: the runtime dropped it. Nothing here can fetch it back, since the same node would answer again.",
+    noPreviousRunOf: "No previous run of {container}: it has not restarted.",
+    containerNotStarted:
+      "{container} has not started, so it has nothing to say yet.",
+    streamEndedGone: "Stream ended: {pod}/{container} is gone.",
+    streamEndedRestarting:
+      "Stream ended: {pod}/{container} is restarting, and its new run is not followed.",
+    streamLost: "Lost the log stream from {pod}/{container}.",
+    kubeletHoldingAt: "The kubelet is holding it at",
+    itExited: "It exited",
+    intakeStillSet:
+      "Intake is still set: reconnecting resumes from now, and what the stream missed is not fetched back.",
+    nothingToReconnectTo: "Nothing left to reconnect to",
+    nodeStoppedFollowing: "The node stopped following {pod}/{container}.",
+    stillRunningUnfollowed:
+      "{container} is still running, but its new lines will not reach this pane until it is followed again.",
+    nodeSaid: "The node said: {said}",
+    // Beside the status on every page and peek: what the object's own Helm
+    // annotation says, which is a claim and not a read.
+    installedByRelease: "Installed by the Helm release {name}",
+    // Both values are the cluster's own words; only "is" was ours.
+    conditionIs: "{type} is {status}",
+    releaseNotRead: "could not be read",
+    gwRowControllerConfigured: "answered by its controller's own settings",
+    gwControllerConfiguredSay:
+      "No backendRefs: this route's own controller answers",
+    gwControllerConfiguredTitle: "Configuration this app does not read",
+    bufferHoldsNewest:
+      "The buffer holds the newest {count}; what came before is no longer here.",
+    // Said instead of the three above whenever an interval is frozen. The
+    // eviction steps over the frozen lines and takes what is around them,
+    // so the loss is a hole beside the kept block and not a head the log
+    // begins after.
+    bufferHoldsKeptAndNewest:
+      "The buffer holds the frozen interval and the newest {count} around it; the rest is no longer here.",
+    linesDroppedAroundKeptAxis:
+      "Lines have been dropped around the frozen interval; the log is not continuous from here.",
+    linesDroppedAroundKeptSummary:
+      "Lines have been dropped around the frozen interval, so the strip has a gap beside it.",
+    repeatsOnNote:
+      "Repeats is on, so a line that says what the one above it said is folded into it.",
+    matchedIn: "matched in {fields}",
+    matchedOutsideMessage: "matched outside the message: Raw shows it",
+    nothingMatchedFor: "Nothing has matched {terms} for {span}.",
+    intakeNarrowNote:
+      "The stream is attached and reading. This is intake being narrow, not the log stopping.",
+    openedOn: "Opened on",
+    openedOnAloneInit:
+      " alone: the pod is stuck in init, so nothing after it has written a line.",
+    linesOfFailedRun:
+      "These are the lines of the run that failed, not of the current one.",
+    showingRunOf: "Showing the run of",
+    thatFailedNotCurrent:
+      " that failed, not the current one. It has restarted since, and the current run has printed nothing yet.",
+    ranBeforePodStarted:
+      "ran before the pod started and are minutes older than everything else here, so they are held out rather than interleaved at the top of the buffer.",
+    reading: "Reading",
+    aSidecar: "a sidecar",
+    anInitContainer: "an init container",
+    itFinished: "It finished",
+    soLogIsComplete: ", so this log is complete and will not grow.",
+    noEarlierRunOf: "No earlier run of",
+    chipLogNotKept: "log not kept",
+    chipNoEarlierRun: "no earlier run",
+    chipEnded: "ended",
+    chipNotStarted: "not started",
+    chipLost: "lost",
+    chipNotFollowed: "not followed",
+    chipRestarting: "restarting",
+    noneHasRestarted:
+      ": none of them has restarted, so there is nothing before the run they are on.",
+    everyContainerHidden: "Every container is hidden.",
+    noLineMatchesQuery: "No line matches the query.",
+    filteringLines: {
+      one: "Filtering {count} line…",
+      other: "Filtering {count} lines…",
+    },
+    nothingLeftToShow: "Nothing left to show.",
+    noOutputYet: "No output yet.",
+    previousRunWroteNothing: "The previous run wrote nothing.",
+    streamAttachedNothingWritten:
+      "The stream is attached; nothing has been written since these containers started.",
+    notStreaming: "Not streaming.",
+    useStreamControl: "Use the stream control in the toolbar to attach.",
+    noPodsForJob: "No pods for this job",
+    noEventsForClaim: "No events for this claim",
+    noLabels: "No labels",
+    noKeys: "No keys",
+    clusterLocal: "cluster local",
+    endpointsByHand: "none: endpoints are managed by hand",
+    anythingUnmatched: "anything unmatched",
+    noRulesNoBackend: "No rules and no default backend",
+    listsNoAddress: "It lists no address",
+    notBoundValue: "not bound",
+    notAllowed: "not allowed",
+    nothingReportedYet: "Nothing reported yet",
+    noSpec: "No spec",
+    unlimited: "unlimited",
+    noAnnotations: "No annotations",
+    noFinalizers: "No finalizers",
+    noOwner: "Nothing owns this object; it was created directly.",
+    noConditions: "No conditions reported",
+    noEventsForObject: "No events for this object",
+    noEventsInNamespace: "No events in this namespace",
+    eventsOfEveryObjectIn:
+      "The events of every object in {namespace}, not only those about the Namespace itself.",
+    noEventsUnprovisioned:
+      "No events yet: no provisioner has picked this claim up.",
+    nothingScheduled: "nothing scheduled",
+    scaledToZero: "scaled to zero",
+    noResourcesInScope: "No resources of this type in the current scope.",
+    nothingMatches: "Nothing matches",
+    noDataKeys: "No data keys",
+    nothingBelongsToObject: "Nothing of this kind belongs to this object.",
+    deploymentHasNoReplicaSets: "This Deployment has no ReplicaSets",
+    cronJobNotRunYet: "This CronJob has not run yet",
+    noPodsForWorkload: "No pods for this workload",
+    kindHoldsNoKeys: "This {kind} holds no keys",
+    kindHasNoPods: "This {kind} has no pods right now",
+    revisionHasNoPods: "This revision has no pods right now",
+    noPodsSuperseded: "No pods: revision {revision} took over from this one.",
+    noPodsScaledToZero: "No pods: the Deployment is scaled to zero.",
+    noConditionsReplicaSet:
+      "This ReplicaSet has raised nothing. It only reports a condition when it cannot create a pod.",
+    noSelectorDaemonSet: "No selector, so this DaemonSet matches nothing",
+    noSelectorService: "No selector: this service does not pick pods by label",
+    noParameters: "No parameters: the provisioner uses its own defaults.",
+    noLabelsOnNode:
+      "No labels on this node, not even the kubernetes.io/* set kubelet registers, which usually means the object was not read.",
+    noneInScope: "none in scope",
+    noneWhereRead: "none where it could be read",
+    nothingBroken: "nothing broken",
+    nothingRunning: "nothing running",
+    usagePodsNotRead:
+      "Usage is summed from this {kind}'s pods, and they could not be read, so what they use is not known.",
+    usageIdleNote:
+      "Usage is summed from running pods, and metrics-server keeps nothing about a pod that has exited, so there is no line rather than a line at zero.",
+    kindScaledToZero: "This {kind} is scaled to zero.",
+    kindNoPodsRunning: "None of this {kind}'s pods is running.",
+    daemonSetNoNodeMatches:
+      "No node matches this DaemonSet, so it has placed no pods.",
+    cronJobSuspended: "This CronJob is suspended, so no run will start.",
+    cronJobNoRunInFlight: "No run of this CronJob is in flight.",
+    jobFinished: "This Job has finished.",
+    jobNoPodRunningFailed:
+      "No pod of this Job is running, and the last one failed.",
+    jobNoPodRunning: "No pod of this Job is running.",
+    noPodsToReadLogs: "This deployment has no pods to read logs from.",
+    podMountsNothing: "This pod mounts nothing of its own.",
+    noContainersInSpec:
+      "No containers in this spec: nothing to inspect, and nothing an image or a probe could be read from.",
+    noEnvVarsMatchFilter: "No environment variables match the selected filter",
+    nothingReadForService: "Nothing was read for this Service.",
+    servicePublishesNothing:
+      "This Service publishes no address at all, so nothing reaches it.",
+    noSchemaInfo: "No schema information available.",
+    noContextNeedsPlugin: "No context needs one.",
+    noneRead: "None read.",
+    fileNamesNoContexts: "This file names no contexts",
+    fileNamesNoContextsBody:
+      "The file above parsed, and it has nothing to connect to. Either it is not the kubeconfig you meant or its contexts were never written. Point the app at another file to check.",
+    configWillNotParse: "The config file could not be read",
+    configWillNotParseSub:
+      "It is on disk, but it is not valid YAML; the error below names where reading stopped. Nothing can connect until it parses.",
+    configHasNoClusters: "The config file has no clusters in it",
+    configHasNoClustersSub:
+      "It was read, but it lists no context to connect with.",
+    notConnectedYet: "You are not connected to a cluster yet",
+    noKubeconfigFound: "No cluster configuration was found on this machine.",
+    noClusterIsConnected: "No cluster is connected",
+    kindReadFromCluster:
+      "{kind} are read from a cluster, and this window is not on one yet.",
+    notOnClusterYet: "This window is not on a cluster yet.",
+    kubeconfigListsNoClusters: "Your kubeconfig lists no clusters either.",
+    noActionMatches: "No action matches “{query}”.",
+    noClusterMatchesNeedle:
+      "No cluster in the kubeconfig answers to “{needle}”.",
+    noMatchesYet:
+      "No matches yet: {answered} of {total} clusters have answered.",
+    stillSearchingFor: "Still reading names for “{query}”…",
+    nothingSearchedNoCluster:
+      "Nothing has been searched: no cluster here is connected yet.",
+    nothingSearchedAnywhere:
+      "Nothing has been searched: the search did not complete on any cluster here.",
+    nothingMatchesOnSearched:
+      "No object matches “{query}” on the {answered} of {total} clusters that were searched.",
+    nothingMatchesQuery: "Nothing matches “{query}”.",
+    nothingMatchesInReadable:
+      "No object matches “{query}” in the kinds that could be read.",
+    nothingMatchesInReadableIn:
+      "No object in {scope} matches “{query}” in the kinds that could be read.",
+    noHelmHistory: "No history: Helm keeps none for this release.",
+    nothingRoutesThroughController:
+      "Nothing routes through this controller, so there is no shape to draw.",
+    noIntegrationByName: "No integration by that name",
+    noIntegrationByNameBody:
+      "This app has no page for “{slug}”. The name may have changed, or the link may be from a newer version.",
+    integrationCannotTell: "Cannot tell whether {name} is installed",
+    integrationNotInstalled: "{name} is not installed in this cluster",
+    integrationNotInstalledBody:
+      "Its custom resource definitions are not in this API server, so there is nothing for this page to read. Every extension is optional; the cluster works exactly as it does now.",
+    integrationNotConnected: "{name} is not connected",
+    integrationNotConnectedBody:
+      "It works from an address you give this app, kept per cluster. Give it one and this page comes alive.",
+    noProfilesGcp: "No profiles, so Application Default Credentials are used.",
+    noProfilesAzure:
+      "No profiles, so the default az login credentials are used.",
+    noCrdsInCluster: "This cluster has no custom resource definitions.",
+    crdNoInstances: "The CRD is installed, but no {kind} has been created yet.",
+    crdNoInstancesInNamespace:
+      "The CRD is installed, but no {kind} has been created in {namespace} yet.",
+    nothingManagesSecret:
+      "Nothing in this namespace manages this Secret, so it will not renew on its own; whoever put this certificate here replaces it.",
+    // The route trace (Gateway API), step by step: what each link says in
+    // each of its states. {said} carries the controller's own reason and
+    // message, the cluster's words quoted rather than translated.
+    gwClassBlind: "GatewayClass: cannot be read from here",
+    gwClassNoGateway: "GatewayClass: unknown, the Gateway itself is missing",
+    gwClassMissingSay: "Class {name} does not exist",
+    gwClassMissingShort: "class {name} does not exist",
+    gwClassMissingTitle: "No GatewayClass named {name}",
+    gwClassMissingBody:
+      "The Gateway names a class that is not installed. No controller will ever program it, so everything through this gateway is dead until the class exists or the Gateway names one that does.",
+    gwClassUnclaimedSay: "Nothing claims class {name}",
+    gwClassUnclaimedShort: "nothing claims class {name}",
+    gwClassUnclaimedTitle: "No controller has accepted {name}",
+    gwClassRefusedBody:
+      "{said}. Everything through this gateway is dead until a controller claims the class.",
+    gwClassSilentBody:
+      "The class names controller {controller}, and nothing has answered for it. Usually the controller is not installed or not running. Everything through this gateway is dead until it answers.",
+    gwClassClaimedSay: "Class {name} is claimed by {controller}",
+    gwGatewayBlind: "Gateway {name}: cannot be read from here",
+    gwSetsUnreadSay: "Cannot tell which Gateway {name} belongs to",
+    gwSetsUnreadTitle: "The ListenerSets could not be read",
+    gwSetsUnreadBody:
+      "This route attaches to a ListenerSet, and which Gateway that set belongs to is written on the set itself. Listing them was refused or the kind is not installed, so the Gateway cannot be named from here, which is not the same as there being none.",
+    gwGatewayMissingSay: "Gateway {name} does not exist in {namespace}",
+    gwGatewayMissingShort: "{name} does not exist",
+    gwGatewayMissingTitle: "The parentRef names a Gateway that is not there",
+    gwGatewayMissingBody:
+      "Nothing can accept this route. Usually a typo in the name or namespace, or the Gateway was deleted after the route was written.",
+    gwNotProgrammedSay: "Gateway {name} is not programmed",
+    gwNotProgrammedShort: "{name} is not programmed",
+    gwNotProgrammedTitle: "The controller refuses this Gateway",
+    gwNotProgrammedBody:
+      "{said}. Nothing behind it serves until the Gateway itself is fixed; this is upstream of every route attached to it.",
+    gwNoAddressPublishedSay: "Gateway {name} publishes no address",
+    gwNoAddressPublishedShort: "{name} publishes no address",
+    gwNoAddressPublishedTitle: "No address to read",
+    gwNoAddressPublishedBody:
+      "The controller reports this Gateway as Programmed, and status.addresses is optional: an implementation on a private or overlay network has nothing to publish there. So this app cannot say where traffic arrives, which is not the same as saying it does not.",
+    gwNoAddressSay: "Gateway {name} has no address yet",
+    gwNoAddressShort: "{name} has no address yet",
+    gwNoAddressTitle: "No address to send traffic to",
+    gwNoAddressBody:
+      "The controller accepted the Gateway but no address has been assigned. On cloud LoadBalancers this is provisioning still running, a quota hit, or the implementation failing to allocate. Until an address exists, traffic has nowhere to arrive.",
+    gwProgrammedQuietSay:
+      "Gateway {name}: the controller has not reported Programmed",
+    gwProgrammedPendingSay:
+      "Gateway {name}: waiting for a controller to program it",
+    gwProgrammedSay: "Gateway {name} is programmed",
+    gwListenerNamed: "Listener :{name}",
+    gwListenerAny: "A listener",
+    gwListenerNotFound: "unknown: the listener was not found",
+    gwAllHosts: "all hosts",
+    gwNoControllerShort: "no controller answered",
+    gwNoRouteStatusSay: "The controller wrote no verdict for this route",
+    gwNoRouteStatusShort: "no route status",
+    gwNoRouteStatusTitle: "Nothing written about this route",
+    gwNoRouteStatusBody:
+      "A controller claims this Gateway's class and has not refused the Gateway itself, so one is running; it simply wrote no status for this route. Several implementations still write none for the alpha route kinds. Whether the route is carrying traffic cannot be read from here, which is not the same as saying it is not.",
+    gwNoStatusPeek: "No controller wrote status, so nothing serves this route.",
+    gwAcceptedPending:
+      "The controller has taken this parent and not decided yet",
+    gwNoAcceptedYet: "The controller wrote status but no Accepted verdict yet",
+    gwListenerMatches: "{label} matches this route",
+    gwNsNotAllowedSay: "The listener does not allow routes from {namespace}",
+    gwNsNotAllowedShort: "namespace {namespace} not allowed",
+    gwNsNotAllowedTitle: "The namespace is outside what the listener allows",
+    gwNsNotAllowedBody:
+      "{said}. The listener's allowedRoutes decide which namespaces may attach: widen them on the Gateway, or move the route.",
+    gwListenerRefusesSay: "{label} does not accept this route",
+    gwHostnamesShort: "hostnames don't intersect",
+    gwHostnamesTitle: "Hostnames don't intersect",
+    gwRefusedWord: "refused",
+    gwRouteRefusedTitle: "The gateway does not accept this route",
+    gwRouteRefusedBody:
+      "{said}. An unaccepted route is never programmed: the YAML is valid, and nothing serves it.",
+    gwListenerAccepts: "{label} accepts this route",
+    gwStaleTitle: "This verdict is about the previous version of the route",
+    gwStaleBody:
+      "The controller last looked at generation {observed}; you are on {current}. Everything below may change when it catches up, usually within seconds. Nothing here is wrong yet; it is old.",
+    gwNsAllowedListSay:
+      "Namespace {namespace} is allowed by the listener ({list})",
+    gwNsAllowedSay: "Namespace {namespace} is allowed by the listener",
+    gwNsAllowedQuiet: "Namespace allowed by the listener",
+    gwRefNotPermittedSay: "Reference to {target} is not permitted",
+    gwRefNotPermittedAnon: "A reference is not permitted",
+    gwRefNotPermittedShort: "needs a ReferenceGrant in {namespace}",
+    gwRefNotPermittedTitle: "No ReferenceGrant in {namespace} allows it",
+    gwRefNotPermittedBody:
+      "{said}. A cross-namespace reference needs the target namespace's consent, and the controller must fail this traffic until it exists. This exact grant would fix it:",
+    gwRefUnresolvedSay: "A reference this route makes did not resolve",
+    gwRefUnresolvedShort: "a reference did not resolve",
+    gwRefsResolveQuiet:
+      "The controller has not said whether references resolve",
+    gwRefsResolve: "References resolve",
+    gwRefsPending:
+      "The controller has not decided whether the references resolve",
+    gwRedirectsOnly: "This route redirects: no backends, and none needed",
+    gwFilterNamed:
+      "An extension filter is named and no backend is; what the filter does, this app does not read",
+    gwNoBackendRefsSay: "No backendRefs: a matched request has nowhere to go",
+    gwNoBackendRefsShort: "no backendRefs: matched requests have nowhere to go",
+    gwNoBackendRefsTitle: "The route matches traffic and drops it",
+    gwNoBackendRefsBody:
+      "Every rule is missing backendRefs (and neither redirects nor hands off to an extension filter). A matched request gets an immediate error from the gateway.",
+    gwBackendsReading: "Backend Services: still being read",
+    gwEndpointsReading: "Endpoints: still being read",
+    gwBackendsUnread: "Backend Services: could not be read",
+    gwEndpointsUnread: "Endpoints: could not be read",
+    gwBackendMissingSay: "Backend Service {name} does not exist in {namespace}",
+    gwBackendMissingShort: "Service {name} does not exist",
+    gwWrongPortSay: "Service {name} does not serve port {port}",
+    gwWrongPortTitle: "The Service exists, the port does not",
+    gwWrongPortBody:
+      "The backendRef's port must be one of the Service's own ports; traffic to any other number is refused before it reaches a pod.",
+    gwNoPortsAtAll: "no ports at all",
+    gwBackendServes: "Backend Service {name} serves",
+    gwBackendExists: "Backend Service {name} exists",
+    gwEndpointsQuiet: "Endpoints published and ready",
+    gwExternalName:
+      "Resolves elsewhere (ExternalName), so no endpoints by design",
+    gwReachableNothing: "Reachable from outside: nothing to probe",
+    gwReachableProbing: "Reachable from outside: checking from this machine",
+    gwReachableAnswered: "Reachable from outside: answered from this machine",
+    gwReachableSilent:
+      "Reachable from outside: nothing answered from this machine",
+    gwReachableUnchecked: "Reachable from outside: DNS · TCP · not checked yet",
+    // The trace drawn: the chips, the probe, the policies at the backend hop.
+    gwNotReached: "not reached",
+    gwAboutGeneration: "about generation {observed}; you are on {current}",
+    gwTlsToBackend: "TLS to this backend:",
+    gwTrustsBundle: "trusts the {ca} bundle",
+    gwCaFrom: "CA from {refs}",
+    gwPolicyUnknown: "unknown",
+    gwPolicyTruncated: "accepted; the ancestor list may be truncated",
+    gwPolicyAccepted: "accepted",
+    gwProbeDisclaimer:
+      "checked from your laptop, not from inside the cluster; a VPN or split DNS can disagree",
+    gwNothingToConnect: "nothing to connect to",
+    gwNoHostnameDialDirect:
+      "no hostname on this route, so DNS has nothing to check; the gateway's address is dialled directly",
+    gwDnsIdle: "DNS, not checked yet",
+    gwResolving: "resolving…",
+    gwNoResolveFromHere: "does not resolve from here",
+    gwResolvesTo: "resolves to",
+    gwNotTheGateways:
+      "not the gateway's {address}. DNS still points somewhere else; traffic never arrives at this cluster.",
+    gwGatewaysAddress: "the gateway's address",
+    gwUdpNoCheck:
+      "a TCP connect proves nothing about a UDP listener, so this machine does not pretend to check it",
+    gwNotCheckedYet: "not checked yet",
+    gwWaitingDns: "waiting for DNS",
+    gwConnecting: "connecting…",
+    gwAnswersIn: "answers in {ms} ms",
+    gwServing: "Serving",
+    gwGroupUnknown: "Cannot tell whether serving",
+    gwNotServing: "Not serving",
+    gwAllHostsListenerServes: "all hosts the listener serves",
+    gwStopsAtStep: "stops at step {n} of {total}",
+    gwNoParentRefsPage:
+      "No parentRefs: this route attaches to nothing and serves no traffic.",
+    gwRowClassMissing:
+      "names class {name}, which does not exist, so anything attached to it is dead",
+    gwRowClassUnclaimed:
+      "nothing claims class {name}, so anything attached to it is dead",
+    gwRowNotProgrammed: "is not programmed by its controller",
+    gwRowNoAddress: "has no address yet, so traffic has nowhere to arrive",
+    gwRowNoParents: "no parentRefs: attaches to nothing and serves no traffic",
+    gwRowMesh: "attaches to {parent}: GAMMA, not judged here",
+    gwRowRedirects: "redirects: no backends, none needed",
+    gwRowFilterNamed: "an extension filter, and no backend",
+    gwBrokenRefs: "broken refs",
+    gwGatewayMissingWord: "gateway missing",
+    gwDoorGatewayClass: "Gateway · class {name}",
+    gwSpeaksTlsSni: "the gateway speaks TLS to this backend, SNI {sni}",
+    kindDoesNotExist: "{kind} {name} does not exist",
+    metaMissing: "{meta} that does not exist",
+    noneCount: "none",
+    gwStopsAtPhrase: "stops at {at}: {short}",
+    gwStaleChipRow: "verdict about gen {observed}, you are on {current}",
+    gwContestedBy: "host also claimed by {by}; the older route wins",
+    gwGhostTooltip:
+      "{kind} {name} does not exist in {namespace}: this route names an object that is not there, so nothing can accept it. Usually a typo, or it was deleted after the route was written.",
+    gwNoCrdsPage:
+      "This cluster does not serve the Gateway API route kinds. Install the CRDs (the standard channel is enough) and this page fills in on its own.",
+    gwAllServing: "all serving",
+    gwPulseLine: "Gateway {name} {say}.",
+    gwNothingToDraw: "Nothing to draw for this filter: no route matches it.",
+    gwCouldNotReadRoutes: "Could not read routes in this scope.",
+    readingRoutes: "Reading routes…",
+    gwNoRoutesInScope: "No routes in the current scope.",
+    nothingMatchesFilter: "Nothing matches the filter.",
+    gwReadingVerdicts:
+      "Reading verdicts: gateways, classes and endpoints are still on their way…",
+    gwMeshGroup: "Mesh",
+    resolvesElsewhere: "resolves elsewhere",
+    gwProgrammedWord: "programmed",
+    gwNotProgrammedWord: "not programmed",
+    gwNoReadyPodBehind: "No ready pod stands behind {name} right now.",
+    gwForwardThrough: "Forward this port through a pod behind {name}",
+    gwNoListeners:
+      "No listeners: this Gateway accepts no traffic, and no route can attach to it.",
+    fromListenerSet: "from {name}",
+    brokenWord: "broken",
+    sameDefault: "Same (default)",
+    noSuchGatewayClass: "no such GatewayClass",
+    claimedBy: "claimed by {name}",
+    refusedBy: "refused by {name}",
+    noControllerClaimed: "no controller has claimed this class",
+    meshGamma: "mesh (GAMMA)",
+    backendWeight: "weight {n}",
+    storedVersion: "{version} (stored)",
+    couldNotAskRoutes:
+      "Could not ask the integrations which of their routes reach these Services, so a way in may be missing below.",
+    nonePublished: "none published",
+    mixedCrdBundle:
+      "mixed versions: a partial upgrade left Gateway API CRDs from different releases",
+    gwNoRouteKinds:
+      "The cluster serves no route kinds, so nothing can attach here.",
+    gwRoutesUnreadable:
+      'The routes could not be read, so whether anything attaches here is not known, which is not the same as "nothing does".',
+    gwNoRouteNames:
+      "No route names this Gateway. Its listeners answer, and every request meets whatever the controller serves for an unmatched host.",
+    gwAcceptedWord: "accepted",
+    couldNotReadGateways: "Could not read the gateways: {message}",
+    readingGateways: "Reading gateways…",
+    gwClassUnused:
+      "No Gateway names this class, so deleting it breaks nothing today.",
+    noAddressShort: "no address",
+    gwClassNoAnswer:
+      "no controller has answered, so everything through this class is dead",
+    nsNoLabelsSelector:
+      "No labels, so no namespaceSelector anywhere matches this namespace.",
+    matchesEverythingWord: "everything",
+    matchesEverything: "matches everything",
+    gwNoRules: "No rules: nothing is matched.",
+    gwUninterpretedFilters: "filters this app does not interpret:",
+    gwRedirectsNoBackends: "Redirects: no backends, and none needed.",
+    gwFilterNoBackends:
+      "No backend on this rule. Whether the filter above answers by itself is the filter's business: this app does not read it, so it does not say.",
+    needsReferenceGrant: "needs a ReferenceGrant",
+    zeroWeight: "0: receives no traffic",
+    resolvesElsewhereExternal: "resolves elsewhere (ExternalName)",
+    gwMeshNotInterpreted:
+      "{list}: mesh routing (GAMMA), not interpreted by this app.",
+    gwServingUnknown: "Can't tell: something here could not be read",
+    gwServingUndecided: "Can't tell yet: a controller has not decided",
+    gwCheckingInstall: "Checking whether Gateway API is installed…",
+    gwCouldNotCheckInstall:
+      "Could not check whether Gateway API is installed, so this page cannot say what is here.",
+    gwCouldNotReadVerdicts:
+      "The gateways could not be read, so no verdict below is a verdict.",
+    gwCouldNotReadBacking:
+      "The Services behind these routes could not be read, so no verdict below is a verdict.",
+    gwNoConditionsYet: "No controller has written conditions yet.",
+    gwProbeRefused:
+      "refused: the address answers, but nothing listens on this port",
+    gwProbeTimedOut:
+      "timed out after 3s: packets go unanswered; a firewall, or the wrong address",
+  },
+  statusWords: {
+    suspended: "Suspended",
+    waiting: "Waiting",
+    active: "Active",
+    idle: "Idle",
+    stalled: "Stalled",
+    degraded: "Degraded",
+    retrying: "Retrying",
+    crashLooping: "Crash-looping",
+    crashLoopingCounted: { other: "Crash-looping" },
+    restarting: "Restarting",
+    stalledCounted: { other: "Stalled" },
+    degradedCounted: { other: "Degraded" },
+    idleCounted: { other: "Idle" },
+    retryingCounted: { other: "Retrying" },
+    suspendedCounted: { other: "Suspended" },
+    startingCounted: { other: "starting" },
+    waitingCounted: { other: "Waiting" },
+    ready: "Ready",
+    progressing: "Progressing",
+    unavailable: "Unavailable",
+    paused: "Paused",
+    readyCounted: { other: "Ready" },
+    progressingCounted: { other: "Progressing" },
+    unavailableCounted: { other: "Unavailable" },
+    pausedCounted: { other: "Paused" },
+  },
+  statusMeaning: {
+    phasePending:
+      "accepted by the cluster, but not every container is running yet; usually waiting for a node or an image.",
+    phaseRunning:
+      "placed on a node with every container created, and at least one of them running or restarting.",
+    phaseSucceeded:
+      "every container finished with exit code 0 and will not be restarted.",
+    phaseFailed:
+      "every container has stopped, and at least one of them failed.",
+    phaseUnknown:
+      "the node stopped telling the cluster about this pod, so its state is not known.",
+    containerCreating:
+      "the node is pulling images and setting up the containers.",
+    podInitializing:
+      "the init containers have finished and the app's own containers are starting.",
+    crashLoopBackOff:
+      "a container keeps exiting soon after it starts, and the kubelet waits longer before each restart; the logs of the previous run usually say why.",
+    imagePullBackOff:
+      "the node could not pull an image and is waiting before it tries again; check the image name, its tag and the pull secret.",
+    errImagePull:
+      "the last attempt to pull an image failed; check the image name, its tag and the pull secret.",
+    createContainerConfigError:
+      "a ConfigMap, Secret or key a container needs is missing, so the container cannot be created.",
+    createContainerError:
+      "the container runtime refused to create a container; the pod's events say why.",
+    invalidImageName: "the image reference is not a valid image name.",
+    runContainerError:
+      "the container was created but could not start, often because of a wrong command or a missing file.",
+    oomKilled: "a container used more memory than its limit and was killed.",
+    error: "a container exited with a non-zero code.",
+    completed: "every container finished successfully.",
+    terminating:
+      "the pod was deleted and is shutting down; it goes away once its containers have stopped and the kubelet has said so. Its logs stay readable until then.",
+    evicted:
+      "the node removed this pod, usually because it ran short of memory or disk.",
+    nodeLost: "the node this pod runs on stopped answering.",
+    schedulingGated:
+      "the pod is held back from scheduling until its scheduling gates are removed.",
+    notReady:
+      "the containers run, but the pod fails its readiness check, so Services send it no traffic.",
+    betweenCrashes:
+      "Up between crashes: a container keeps exiting, and the kubelet keeps starting it again.",
+    exitUnreported:
+      "Restarted, and the kubelet reports no last exit, so whether a container is still crash-looping is not known.",
+    pendingTooLong:
+      "Pending past the wait a pod is given before it counts as a problem: a minute for a node to take it, ten minutes to start once one has.",
+    pendingStarting:
+      "Starting: still inside the wait a pod is given before it counts as a problem, so not a fault yet.",
+    containerStatusUnknown:
+      "the container's state was lost, usually after the node restarted.",
+    deadlineExceeded:
+      "the pod ran longer than its activeDeadlineSeconds allow and was stopped.",
+    initProgress:
+      "init containers run one at a time before the app's own; {done} of {total} have finished.",
+    initNote:
+      "It is an init container, which has to finish before the app's own containers start.",
+    exitCode: "a container exited with code {code} and gave no reason.",
+    signal: "a container was stopped by signal {signal}.",
+    workloadReady: "every desired replica is up and available.",
+    workloadProgressing:
+      "new Pods are coming up or old ones going away: a rollout or a scale is under way.",
+    workloadIdle: "scaled to zero replicas on purpose, so nothing runs.",
+    workloadStalled:
+      "the rollout stopped making progress within its deadline; old Pods may still be serving.",
+    workloadUnavailable:
+      "fewer replicas are ready than the workload needs to serve.",
+    workloadPaused:
+      "the rollout is paused, so changes to the template are not rolled out until it resumes.",
+    workloadWaiting: "the controller has not acted on the latest change yet.",
+    workloadDegraded:
+      "the rollout finished, but fewer replicas are available than desired.",
+    jobComplete:
+      "the Job's controller marked it Complete: every run it needed succeeded.",
+    jobFailed:
+      "the Job's controller gave up and marked it Failed, for the reason it states.",
+    jobSuspended:
+      "the Job is suspended, so no new Pods are started until it resumes.",
+    jobRetrying:
+      "a Pod failed and the Job is trying again, within its backoffLimit.",
+    jobRunning: "Pods are running and none has failed.",
+    jobPending: "no Pod has started yet.",
+  },
+  kindAbout: {
+    Pod: "A Pod is one running copy of an app, one or more containers sharing a network address; look here to see which copies are up, restarting or stuck.",
+    Deployment:
+      "A Deployment keeps a chosen number of identical Pods running and replaces them gradually when a new version ships; look here to see whether a rollout finished.",
+    ReplicaSet:
+      "A ReplicaSet keeps a fixed number of identical Pods running, and a Deployment makes a new one for every version it rolls out, so each one is a revision.",
+    StatefulSet:
+      "A StatefulSet runs Pods that keep their name and their disk across restarts, as databases and queues need; look here to see whether every replica is ready.",
+    DaemonSet:
+      "A DaemonSet runs one copy of a Pod on every node, or on every node that matches, which is how agents for logs, metrics and networking usually run.",
+    Job: "A Job runs Pods until a task completes and then stops; look here to see whether a one-off task succeeded, failed or is still running.",
+    CronJob:
+      "A CronJob starts a Job on a schedule, like cron; look here to see when it last ran and whether that run succeeded.",
+    ConfigMap:
+      "A ConfigMap holds settings as keys and values that Pods read as environment variables or files, and changing one does not restart the Pods that use it.",
+    Secret:
+      "A Secret holds passwords, tokens and keys that Pods read as environment variables or files; its values are base64-encoded, which is not encryption.",
+    Service:
+      "A Service gives a set of Pods one stable name and address inside the cluster, so other apps can reach them while the Pods come and go.",
+    Ingress:
+      "An Ingress routes HTTP and HTTPS traffic from outside the cluster to Services by host name and path, and does nothing until an ingress controller is installed.",
+    NetworkPolicy:
+      "A NetworkPolicy says which Pods may talk to which, and once a Pod is selected by one, any traffic it does not allow is dropped.",
+    Gateway:
+      "A Gateway is an entry point that accepts traffic on chosen ports and host names, served by a controller installed in the cluster.",
+    GatewayClass:
+      "A GatewayClass names a controller that can run Gateways, much as a StorageClass names a kind of disk.",
+    HTTPRoute:
+      "An HTTPRoute sends HTTP requests arriving at a Gateway to Services, by host name, path and headers.",
+    GRPCRoute:
+      "A GRPCRoute sends gRPC calls arriving at a Gateway to Services, by service and method name.",
+    TLSRoute:
+      "A TLSRoute sends encrypted connections arriving at a Gateway to Services by the host name the client asked for, without decrypting them.",
+    TCPRoute:
+      "A TCPRoute sends TCP connections arriving at a Gateway port to Services.",
+    UDPRoute:
+      "A UDPRoute sends UDP traffic arriving at a Gateway port to Services.",
+    PersistentVolumeClaim:
+      "A PersistentVolumeClaim asks for a disk of a given size for Pods to use, and stays Pending until a PersistentVolume is bound to it.",
+    PersistentVolume:
+      "A PersistentVolume is a piece of storage in the cluster, made by an administrator or on demand by a StorageClass, that one claim can bind to.",
+    StorageClass:
+      "A StorageClass describes a kind of storage the cluster can create on demand, such as a fast SSD or a network disk.",
+    Endpoints:
+      "Endpoints list the addresses of the Pods behind each Service, which is where its traffic actually goes; an empty list means the Service reaches nothing.",
+    Node: "A Node is a machine, physical or virtual, that runs Pods; look here to see whether each one is ready and how full it is.",
+    Event:
+      "Events are short notes the cluster writes when something happens to an object, such as a Pod being scheduled or a probe failing, and they expire after about an hour.",
+    Namespace:
+      "A Namespace is a named group of objects inside one cluster, used to keep teams and apps apart; most names only have to be unique within one.",
+    HorizontalPodAutoscaler:
+      "A HorizontalPodAutoscaler changes how many replicas a workload runs, following CPU, memory or other metrics.",
+    PodDisruptionBudget:
+      "A PodDisruptionBudget limits how many Pods of an app may be taken down at once during planned work such as draining a node.",
+    CustomResourceDefinition:
+      "A CustomResourceDefinition adds a new kind of object to the cluster's API, which is how operators and add-ons bring their own resources.",
+    ServiceAccount:
+      "A ServiceAccount is the identity a Pod's processes use with the API server; the roles bound to it decide what they may do.",
+    Role: "A Role lists what may be done to which resources in one namespace, and grants nothing until a RoleBinding gives it to someone.",
+    RoleBinding:
+      "A RoleBinding gives the rules of a Role or ClusterRole to users, groups or ServiceAccounts inside one namespace.",
+    ClusterRole:
+      "A ClusterRole lists what may be done to which resources across the whole cluster, or in the namespace a RoleBinding names.",
+    ClusterRoleBinding:
+      "A ClusterRoleBinding gives the rules of a ClusterRole to users, groups or ServiceAccounts in every namespace at once.",
+  },
+  shortcuts: {
+    title: "Keyboard",
+    lede: "Every key the app answers to. Unmodified keys stay quiet inside a field or a terminal.",
+    then: "then",
+    sectionGlobal: "Everywhere",
+    filterClusters: "Find a cluster by name",
+    downloadFile: "Download the file you are looking at",
+    upADirectory: "Up a directory",
+    selectLogs: "Select the lines on screen",
+    connectCluster: "Connect to the selected cluster",
+    scopeAnother: "Add another namespace to the scope",
+    sectionNavigate: "Go to",
+    sectionPage: "On an object's page",
+    sectionTabs: "Tabs",
+    sectionTable: "In a list",
+    sectionTree: "Along ownership",
+    treeUp: "Go to what owns this object",
+    treeDown: "Go to the first thing it owns",
+    treeSiblings: "Go to the owner's previous or next object of this kind",
+    sectionLogs: "In the log viewer",
+    palette: "Search and commands",
+    settings: "Settings",
+    copyLink: "Copy a link to this place",
+    help: "This list",
+    escape: "Close what is open",
+    goOverview: "Overview",
+    goPods: "Pods",
+    goDeployments: "Deployments",
+    goServices: "Services",
+    goIngresses: "Ingresses",
+    goNodes: "Nodes",
+    goEvents: "Events",
+    goJobs: "Jobs",
+    goConfigMaps: "ConfigMaps",
+    tabOverview: "Overview tab",
+    tabLogs: "Logs tab",
+    tabYaml: "YAML tab",
+    tabEvents: "Events tab",
+    nextTab: "Next tab",
+    previousTab: "Previous tab",
+    newTab: "New tab",
+    closeTab: "Close tab",
+    nthTab: "Tab by number, 9 is the last",
+    rowMove: "Move between rows",
+    rowOpen: "Open the row",
+    rowClear: "Clear the selection",
+    rowFilter: "Filter the list",
+    docs: "Rubick documentation",
+    kindDocs: "{kind} in the Kubernetes docs",
+    soloContainer: "Only this container, by legend position",
+    allContainers: "Every container",
+  },
+  // What Ctrl+K finds a page or kind by besides its title, in both languages at once.
+  paletteWords: {
+    Pod: "",
+    Deployment: "",
+    StatefulSet: "",
+    DaemonSet: "",
+    ReplicaSet: "",
+    Job: "",
+    CronJob: "schedule, scheduled",
+    HorizontalPodAutoscaler: "autoscaler, autoscalers, autoscaling",
+    Service: "",
+    Ingress: "",
+    NetworkPolicy: "firewall",
+    ConfigMap: "config, configs, configuration",
+    Secret: "credentials",
+    ServiceAccount: "identity, identities",
+    Role: "rbac, permissions",
+    RoleBinding: "rbac, permissions",
+    ClusterRole: "rbac, permissions",
+    ClusterRoleBinding: "rbac, permissions",
+    PersistentVolumeClaim: "volume claim, volume claims",
+    PersistentVolume: "volume, volumes, disk, disks",
+    StorageClass: "storage",
+    Namespace: "project, projects",
+    Node: "machine, machines, host, hosts",
+    overview: "home, dashboard",
+    events: "",
+    helm: "releases, charts",
+    apiResources: "api-resources, kinds",
+    myAccess: "my access, can i, permissions, rbac, auth can-i",
+    settings: "preferences, options",
+    ports: "port-forward, tunnel",
+    terminals: "terminal, console",
+  },
+  count: {
+    secondsShort: "{n} s",
+    pods: { one: "{n} pod", other: "{n} pods" },
+    dependents: { one: "owns {n}", other: "owns {n}" },
+    kindsNotRead: {
+      one: "{n} kind not read in full",
+      other: "{n} kinds not read in full",
+    },
+    readSoFar: { one: "{n} read so far", other: "{n} read so far" },
+    servedKinds: { one: "{n} kind", other: "{n} kinds" },
+    kindsReadOf: {
+      one: "Reading the kinds that can be watched: {n} of {total}",
+      other: "Reading the kinds that can be watched: {n} of {total}",
+    },
+    ingressesUnserved: {
+      one: "{n} Ingress here asks for an IngressClass this cluster does not have: {classes}",
+      other:
+        "{n} Ingresses here ask for an IngressClass this cluster does not have: {classes}",
+    },
+    kindsReadSettled: {
+      one: "Read {n} of {total} kinds that can be watched",
+      other: "Read {n} of {total} kinds that can be watched",
+    },
+    kindsServedLeftOut: {
+      one: "{n} kind served; Events and kinds that cannot be watched are left out",
+      other:
+        "{n} kinds served; Events and kinds that cannot be watched are left out",
+    },
+    notReadList: "Not read: {list}",
+    podsStreaming: {
+      one: "{streaming} of {n} pod streaming",
+      other: "{streaming} of {n} pods streaming",
+    },
+    podsPaused: {
+      one: "{n} pod, paused",
+      other: "{n} pods, paused",
+    },
+    podsUnreadable: {
+      one: "{n} pod could not be read",
+      other: "{n} pods could not be read",
+    },
+    podsFinished: {
+      one: "{n} finished, read to the end",
+      other: "{n} finished, read to the end",
+    },
+    podsRestarting: {
+      one: "{n} restarting, new run not followed",
+      other: "{n} restarting, new run not followed",
+    },
+    podsNotFollowed: {
+      one: "{n} not followed",
+      other: "{n} not followed",
+    },
+    podsNotStarted: {
+      one: "{n} not started",
+      other: "{n} not started",
+    },
+    podsNoEarlierRun: {
+      one: "{n} with no earlier run",
+      other: "{n} with no earlier run",
+    },
+    podsGoneKept: {
+      one: "{n} gone, lines kept",
+      other: "{n} gone, lines kept",
+    },
+    stories: { one: "{n} story", other: "{n} stories" },
+    eventsWaiting: { one: "Show {n} update", other: "Show {n} updates" },
+    eventObjects: { one: "{n} event", other: "{n} events" },
+    eventObjectsLatest: {
+      one: "the latest {n} event, more not read",
+      other: "the latest {n} events, more not read",
+    },
+    eventsSeen: { one: "happened once", other: "happened {n} times" },
+    namespacesHidden: {
+      one: "{n} namespace hidden: nothing in it may be listed",
+      other: "{n} namespaces hidden: nothing in them may be listed",
+    },
+    endpointsAcrossSlices: "{endpoints} across {slices}",
+    endpointsCount: { one: "{n} endpoint", other: "{n} endpoints" },
+    slicesCount: { one: "{n} slice", other: "{n} slices" },
+    addressesCount: { one: "{n} address", other: "{n} addresses" },
+    podsSelectorMatches: {
+      one: "{n} pod the selector matches",
+      other: "{n} pods the selector matches",
+    },
+    addressesInEndpoints: {
+      one: "{n} address in the Endpoints object",
+      other: "{n} addresses in the Endpoints object",
+    },
+    unroutedMatched: {
+      one: "{n} address the selector matched carries no port",
+      other: "{n} addresses the selector matched carry no port",
+    },
+    portsMatchNothing: {
+      one: "{ports} matches no port this pod's containers declare",
+      other: "{ports} match no port this pod's containers declare",
+    },
+    slicesRead: {
+      one: "The count comes from {n} EndpointSlice, which is what kube-proxy reads.",
+      other:
+        "The count comes from {n} EndpointSlices, which is what kube-proxy reads.",
+    },
+    addressesAgree: {
+      one: "{n} address, and the slices agree.",
+      other: "{n} addresses, and the slices agree.",
+    },
+    disruptionsAllowed: {
+      one: "{n} disruption allowed",
+      other: "{n} disruptions allowed",
+    },
+    attemptsCount: { one: "{n} attempt", other: "{n} attempts" },
+    ngxWorkers: {
+      one: "{n} nginx worker, whatever the container's CPU allowance is.",
+      other: "{n} nginx workers, whatever the container's CPU allowance is.",
+    },
+    nginxSeconds: { one: "{n} second", other: "{n} seconds" },
+    nginxRatePerSecond: {
+      one: "One client address is allowed {n} request a second; the rest are refused with 503.",
+      other:
+        "One client address is allowed {n} requests a second; the rest are refused with 503.",
+    },
+    nginxRatePerMinute: {
+      one: "One client address is allowed {n} request a minute; the rest are refused with 503.",
+      other:
+        "One client address is allowed {n} requests a minute; the rest are refused with 503.",
+    },
+    nginxConnections: {
+      one: "One client address may hold {n} connection at a time.",
+      other: "One client address may hold {n} connections at a time.",
+    },
+    readyOfTotal: "{ready} of {total} ready",
+    addressesTakeNoTraffic: {
+      one: "{n} of its addresses takes no traffic",
+      other: "{n} of its addresses take no traffic",
+    },
+    readyFraction: "{ready}/{total} ready",
+    completedFraction: "{done}/{total} completed",
+    restartsWithLast: {
+      one: "{n} restart, last {ago} ago",
+      other: "{n} restarts, last {ago} ago",
+    },
+    restartsPlain: { one: "{n} restart", other: "{n} restarts" },
+    restartsBy: "{restarts}: {split}",
+    restartsExitUnreported: {
+      one: "{n} restart, last exit not reported",
+      other: "{n} restarts, last exit not reported",
+    },
+    podsMatchAllReady: {
+      one: "{n} pod matches its selector and it is Ready",
+      other: "{n} pods match its selector and all of them are Ready",
+    },
+    podsMatchSomeReady: {
+      one: "{n} pod matches its selector and {ready} of them are Ready",
+      other: "{n} pods match its selector and {ready} of them are Ready",
+    },
+    endpointsNoneReady: {
+      one: "The endpoints list {n} address for {selector}, and it is not ready",
+      other:
+        "The endpoints list {n} addresses for {selector}, and none of them is ready",
+    },
+    podsCarryNotReady: {
+      one: "{n} pod carries {selector}, and it is not ready",
+      other: "{n} pods carry {selector}, and none of them is ready",
+    },
+    podsCarryPartOf: {
+      one: "{n} pod carries {carries} but not {lacks}",
+      other: "{n} pods carry {carries} but not {lacks}",
+    },
+    reconcilersFromSources: {
+      one: "{n} reconciler from {sources}",
+      other: "{n} reconcilers from {sources}",
+    },
+    reconcilersSomeUnread: {
+      one: "{n} reconciler · some kinds not read",
+      other: "{n} reconcilers · some kinds not read",
+    },
+    sources: { one: "{n} source", other: "{n} sources" },
+    notReconcilingAndFirst: {
+      one: "{n} of {total} not reconciling, and first",
+      other: "{n} of {total} not reconciling, and first",
+    },
+    reconcilersAllApplied: {
+      one: "{n} reconciler, all applied",
+      other: "{n} reconcilers, all applied",
+    },
+    overPlainHttp: "{n} over plain HTTP",
+    ingressProxyHosts: {
+      one: "That Service is {vendor}'s own proxy: this Ingress is its front door, and the {n} host it serves is on",
+      other:
+        "That Service is {vendor}'s own proxy: this Ingress is its front door, and the {n} hosts it serves are on",
+    },
+    moreCertificatesInBundle: {
+      one: "with {n} more certificate in the bundle",
+      other: "with {n} more certificates in the bundle",
+    },
+    kindInstances: "{kind} Instances",
+    otherRevisionsAtZero: {
+      one: "{n} other revision is scaled to zero",
+      other: "{n} other revisions are scaled to zero",
+    },
+    needAttentionOfTotal: {
+      one: "{n} of {total} needs attention",
+      other: "{n} of {total} need attention",
+    },
+    issuersNotReady: {
+      one: "{n} issuer not ready",
+      other: "{n} issuers not ready",
+    },
+    servedNotInDnsNames: {
+      one: "{names} is served from this Secret and not in its {field}. Every other surface reads this as healthy, since the Secret is populated, the certificate is valid and the Ingress is serving, yet a browser refuses the connection outright.",
+      other:
+        "{names} are served from this Secret and not in its {field}. Every other surface reads this as healthy, since the Secret is populated, the certificate is valid and the Ingress is serving, yet a browser refuses the connection outright.",
+    },
+    servicesFrontThis: {
+      one: "{n} Service fronts this",
+      other: "{n} Services front this",
+    },
+    routesToUndefinedSubset: {
+      one: "{n} route to a subset nothing defines",
+      other: "{n} routes to a subset nothing defines",
+    },
+    rules: { one: "{n} rule", other: "{n} rules" },
+    gatewaysNamed: { one: "{n} gateway named", other: "{n} gateways named" },
+    hostsNameItNoneCovered: {
+      one: "{n} host names it, none covered",
+      other: "{n} hosts name it, none covered",
+    },
+    subsetsNothingRoutesTo: {
+      one: "{list}: nothing routes to it",
+      other: "{list}: nothing routes to them",
+    },
+    runningSegment: { one: "running", other: "running" },
+    succeededSegment: { one: "succeeded", other: "succeeded" },
+    failedSegment: { one: "failed", other: "failed" },
+    jobsSucceededSegment: { one: "succeeded", other: "succeeded" },
+    jobsFailedSegment: { one: "failed", other: "failed" },
+    retryingSegment: { one: "retrying", other: "retrying" },
+    notScheduledSegment: { one: "not scheduled", other: "not scheduled" },
+    plusMore: "+{n} more",
+    hostsNeedAttention: {
+      one: "{n} {of} needs attention",
+      other: "{n} {of} need attention",
+    },
+    ofHosts: { one: "of {n} host", other: "of {n} hosts" },
+    ofApplications: { one: "of {n} application", other: "of {n} applications" },
+    binaryValues: { one: "{n} binary", other: "{n} binary" },
+    snippetsOfRawNginx: {
+      one: "{n} snippet of raw nginx config",
+      other: "{n} snippets of raw nginx config",
+    },
+    middlewaresUnused: {
+      one: "{n} middleware unused",
+      other: "{n} middlewares unused",
+    },
+    hostsBrokenOfTotal: {
+      one: "{n} {of} broken",
+      other: "{n} {of} broken",
+    },
+    hostsLandHere: { one: "{n} host lands here", other: "{n} hosts land here" },
+    inDays: { one: "in {n} day", other: "in {n} days" },
+    crdServices: { one: "{n} service", other: "{n} services" },
+    crdServers: { one: "{n} server", other: "{n} servers" },
+    cipherSuites: { one: "{n} suite", other: "{n} suites" },
+    dnsNames: { one: "{n} name", other: "{n} names" },
+    daysAgo: { one: "{n} day ago", other: "{n} days ago" },
+    warningEvents: { one: "{n} warning event", other: "{n} warning events" },
+    normalEvents: { one: "{n} normal event", other: "{n} normal events" },
+    inStoryWindow: "in the {span} window",
+    latestKept: "of the latest {n}",
+    podsStayedOnTheNode: {
+      one: "One pod stayed on the node.",
+      other: "{n} pods stayed on the node.",
+    },
+    waitingOnPods: {
+      one: "Waiting on one pod.",
+      other: "Waiting on {n} pods.",
+    },
+    podsStillLeaving: {
+      one: "One is on its way out.",
+      other: "{n} are on their way out.",
+    },
+    daemonsetPodsStay: {
+      one: "One DaemonSet pod stays, as it always does.",
+      other: "{n} DaemonSet pods stay, as they always do.",
+    },
+    staticPodsStay: {
+      one: "One static pod stays: it belongs to the node, not the cluster.",
+      other: "{n} static pods stay: they belong to the node, not the cluster.",
+    },
+    podsHadAlreadyLeft: {
+      one: "One pod had already gone on its own.",
+      other: "{n} pods had already gone on their own.",
+    },
+    podsMovedOff: {
+      one: "One pod moved off.",
+      other: "{n} pods moved off.",
+    },
+    budgetsAllowNoEviction: {
+      one: "One disruption budget on this node allows nothing to be evicted.",
+      other: "{n} disruption budgets on this node allow nothing to be evicted.",
+    },
+    applicationsNeedAttention: {
+      one: "{n} {of} needs attention",
+      other: "{n} {of} need attention",
+    },
+    failingAndFirst: "{n} of {total} failing, and first",
+    objects: { one: "{n} object", other: "{n} objects" },
+    toLookAt: { one: "{n} to look at", other: "{n} to look at" },
+    andMoreSynced: {
+      one: "and {n} more Argo reports as synced",
+      other: "and {n} more Argo reports as synced",
+    },
+    argoRetriesAfterAttempts: {
+      one: "Argo retries and fails, {n} attempt so far; nothing will converge until the manifest changes.",
+      other:
+        "Argo retries and fails, {n} attempts so far; nothing will converge until the manifest changes.",
+    },
+    resourcesDegraded: {
+      one: "{list} is degraded",
+      other: "{list} are degraded",
+    },
+    syncedOutOfSync: "{synced} synced · {drifted} out of sync",
+    jobsKept: { one: "job kept", other: "jobs kept" },
+    nodesWanted: { one: "node wanted", other: "nodes wanted" },
+    volumes: { one: "{n} volume", other: "{n} volumes" },
+    declaredWord: "declared",
+    notBound: { one: "{n} not bound", other: "{n} not bound" },
+    usedOfTotal: "{used} used of {total}",
+    params: { one: "{n} param", other: "{n} params" },
+    chars: { one: "{n} char", other: "{n} chars" },
+    valuesCopiedWithBinary: {
+      one: "{n} value copied, {binary} as base64.",
+      other: "{n} values copied, {binary} as base64.",
+    },
+    allValuesCopied: {
+      one: "All {n} value copied.",
+      other: "All {n} values copied.",
+    },
+    ofThem: "{n} of them",
+    otherNodes: { one: "{n} other node", other: "{n} other nodes" },
+    nodesNotScraped: {
+      one: "{n} of this cluster's nodes is not scraped",
+      other: "{n} of this cluster's nodes are not scraped",
+    },
+    seriesRightNow: {
+      one: "{n} series right now",
+      other: "{n} series right now",
+    },
+    familiesAbsent: {
+      one: "{n} of the four families is absent",
+      other: "{n} of the four families are absent",
+    },
+    lastMinutes: { one: "last {n} minute", other: "last {n} minutes" },
+    namespacesNotAsked: {
+      one: "{n} more namespace was not asked about. The check is one query each, and a page that cost a hundred of them to say “yes” would not be worth opening.",
+      other:
+        "{n} more namespaces were not asked about. The check is one query each, and a page that cost a hundred of them to say “yes” would not be worth opening.",
+    },
+    identities: { one: "{n} identity", other: "{n} identities" },
+    bindingsNameMissingIdentity: {
+      one: "{n} binding names an identity that does not exist",
+      other: "{n} bindings name an identity that does not exist",
+    },
+    errorsInSlices: {
+      one: "Errors in {n} slice: {list}",
+      other: "Errors in {n} slices: {list}",
+    },
+    ofLimitKept: "of {limit} kept",
+    linesPerSecond: "{rate} lines/s",
+    keptPerSecond: "{rate} kept/s",
+    ofPerSecond: " of {rate}/s",
+    arrivingBefore: "{rate}/s arriving before it was set",
+    shown: "{n} shown",
+    hiddenByFilter: "{n} hidden by filter and grouping",
+    frozenLines: {
+      one: "{count} frozen line",
+      other: "{count} frozen lines",
+    },
+    spanInSlices: "{span} in {step} slices",
+    runOverSpan: "× {count} over {span}",
+    runAtOnce: "× {count} at the same moment",
+    densitySummary: {
+      one: "Density of the log over time: {n} slice of {step}, from {from} to {to}.",
+      other:
+        "Density of the log over time: {n} slices of {step}, from {from} to {to}.",
+    },
+    densityTotals: "{lines}, {errors}, {warnings}.",
+    densityLines: { one: "{count} line", other: "{count} lines" },
+    densityErrors: { one: "{count} error", other: "{count} errors" },
+    densityWarnings: { one: "{count} warning", other: "{count} warnings" },
+    busiestSlice: {
+      one: "Busiest slice {clock} with {lines} line.",
+      other: "Busiest slice {clock} with {lines} lines.",
+    },
+    andNMore: ", and {n} more",
+    acrossNamespaces: {
+      one: "across {n} namespace",
+      other: "across {n} namespaces",
+    },
+    ingressObjects: { one: "{n} Ingress", other: "{n} Ingresses" },
+    ofNodePodCapacity: {
+      one: "of the {n} this node will take",
+      other: "of the {n} this node will take",
+    },
+    andMore: "and {n} more",
+    hiddenShowAll: "{n} hidden · show all",
+    heldFor: "for {age}",
+    historyMoreNotHeld: {
+      one: "{count} more came back and is not held: the live stream already fills Keep {keep}. Raise it, or clear the pane, and ask again.",
+      other:
+        "{count} more came back and are not held: the live stream already fills Keep {keep}. Raise it, or clear the pane, and ask again.",
+    },
+    historyTruncated: {
+      one: "Showing the newest {count} line of this range. The limit was reached, so there is more inside it.",
+      other:
+        "Showing the newest {count} lines of this range. The limit was reached, so there is more inside it.",
+    },
+    trafficReadings: {
+      one: "Network: {n} reading, now in {rx}, out {tx}, peak {peak}",
+      other: "Network: {n} readings, now in {rx}, out {tx}, peak {peak}",
+    },
+    certificatesAcrossNamespaces: {
+      one: "{n} certificate across every namespace",
+      other: "{n} certificates across every namespace",
+    },
+    certificatesNoneWithProblem: {
+      one: "{n} certificate, none with a problem",
+      other: "{n} certificates, none with a problem",
+    },
+    shownOfTotal: "{n} of {total}",
+    brokenAndFirst: "{n} of {total} broken, and first",
+    servedOnNames: {
+      one: "Served on a name this certificate does not carry",
+      other: "Served on {n} names this certificate does not carry",
+    },
+    failedAttemptsSoFar: {
+      one: "{n} failed attempt so far",
+      other: "{n} failed attempts so far",
+    },
+    nothingSignsCanRenew: {
+      one: "Nothing it signs can renew while it is in this state; {n} certificate names it.",
+      other:
+        "Nothing it signs can renew while it is in this state; {n} certificates name it.",
+    },
+    healthyAndSigns: {
+      one: "It is healthy and signs {n} certificate.",
+      other: "It is healthy and signs {n} certificates.",
+    },
+    vendorProxyHosts: {
+      one: "{vendor}'s own proxy: the {n} host it serves is on",
+      other: "{vendor}'s own proxy: the {n} hosts it serves are on",
+    },
+    nOfTotal: "{n} of {total}",
+    gwControllerConfiguredBody: {
+      one: "{keys} tells this route's own controller what to answer. By the spec a rule with no backendRefs gets a 500; here it gets whatever that says, and this app does not read it.",
+      other:
+        "{keys} tell this route's own controller what to answer. By the spec a rule with no backendRefs gets a 500; here it gets whatever those say, and this app does not read them.",
+    },
+    // Tab and group marks, which were built by concatenation: no whole
+    // string for a scanner to find, which is how they stayed English.
+    podsFailing: {
+      one: "{n} of {total} failing · {name} is {status}",
+      other: "{n} of {total} failing · {name} is {status}",
+    },
+    someSpot: "{n} of {total} spot",
+    // A pool caption names its values until there are too many, then counts
+    // them. Both halves were English, and the node count was the
+    // `n === 1 ? "node" : "nodes"` shape this catalogue forbids by name.
+    machineTypes: { one: "{n} machine type", other: "{n} machine types" },
+    zonesCount: { one: "{n} zone", other: "{n} zones" },
+    nodesCount: { one: "{n} node", other: "{n} nodes" },
+    allSpot: "spot",
+    nReady: "{n} ready",
+    nNotReady: "{n} not ready",
+    nPublished: "{n} published",
+    nDraining: { one: "{n} draining", other: "{n} draining" },
+    ofN: "of {n}",
+    nDecoded: "{n} decoded",
+    nNotRead: "{n} not read",
+    worthALook: "{n} worth a look",
+    worthALookOfTotal: "{n} of {total} worth a look",
+    notCheckedOfTotal: "{n} of {total} not checked",
+    hostsAcrossNamespaces: {
+      one: "{n} host across every namespace",
+      other: "{n} hosts across every namespace",
+    },
+    hostsNoneWithProblem: {
+      one: "{n} host, none with a problem",
+      other: "{n} hosts, none with a problem",
+    },
+    linesShownAsWritten: {
+      one: "{n} line here is shown as written.",
+      other: "{n} lines here are shown as written.",
+    },
+    restartNoun: { one: "restart", other: "restarts" },
+    failedPodsFolded: { one: "{n} failed pod", other: "{n} failed pods" },
+    podNoun: { one: "pod", other: "pods" },
+    worstFirst: "{n} · worst first",
+    worstFirstPartial: "{n}+ · worst first · not all checked",
+    moreMostSevere: "+{n} more; showing the {shown} most severe",
+    unrankedProblems: {
+      one: "{n} unranked problem",
+      other: "{n} unranked problems",
+    },
+    readySegment: { one: "ready", other: "ready" },
+    notReadySegment: { one: "not ready", other: "not ready" },
+    nodesReadySegment: { one: "ready", other: "ready" },
+    nodesNotReadySegment: { one: "not ready", other: "not ready" },
+    startingSegment: { one: "starting", other: "starting" },
+    failingSegment: { one: "failing", other: "failing" },
+    notCreatedSegment: { one: "not created", other: "not created" },
+    fromEndpoint: "from {endpoint}",
+    watchingFromNow: "watching from now",
+    watchedSincePageOpen: "watched since you opened this page · {span} so far",
+    nodes: { one: "{n} node", other: "{n} nodes" },
+    clusters: { one: "{n} cluster", other: "{n} clusters" },
+    users: { one: "{n} user", other: "{n} users" },
+    typeAtLeastChars: {
+      one: "Type at least {n} character to search resources.",
+      other: "Type at least {n} characters to search resources.",
+    },
+    matchCount: { one: "{n} match", other: "{n} matches" },
+    matchesCapped: { other: "{n}+ matches · capped" },
+    moreOnThisCluster: "{n} more on this cluster",
+    kindsSearchedByName: {
+      one: "Names searched in {n} kind",
+      other: "Names searched in {n} kinds",
+    },
+    kindsSearchedOfServed: {
+      one: "Names searched in {searched} of {n} kind served",
+      other: "Names searched in {searched} of {n} kinds served",
+    },
+    kindsStillLoading: {
+      one: "{n} kind still loading",
+      other: "{n} kinds still loading",
+    },
+    kindsNotSearched: {
+      one: "{n} kind not searched",
+      other: "{n} kinds not searched",
+    },
+    kindsNotListable: {
+      one: "{n} kind cannot be listed by anyone",
+      other: "{n} kinds cannot be listed by anyone",
+    },
+    apiGroupsNotDiscovered: {
+      one: "{n} API group did not answer discovery",
+      other: "{n} API groups did not answer discovery",
+    },
+    searchKindsToo: {
+      one: "Search {n} more kind too",
+      other: "Search the other {n} kinds too",
+    },
+    noObjectWhileLoading: {
+      one: "No object matches “{query}” in what has been read; {n} kind is still loading.",
+      other:
+        "No object matches “{query}” in what has been read; {n} kinds are still loading.",
+    },
+    noObjectInKinds: {
+      one: "No object matches “{query}” in the {n} kind searched.",
+      other: "No object matches “{query}” in the {n} kinds searched.",
+    },
+    noObjectInKindsIn: {
+      one: "No object in {scope} matches “{query}” in the {n} kind searched.",
+      other:
+        "No object in {scope} matches “{query}” in the {n} kinds searched.",
+    },
+    noObjectOnClusters: {
+      one: "No object matches “{query}” in the kinds searched on {n} cluster.",
+      other:
+        "No object matches “{query}” in the kinds searched on {n} clusters.",
+    },
+    otherKindsWereNotSearched: {
+      one: "{n} other kind was not searched.",
+      other: "{n} other kinds were not searched.",
+    },
+    withFailed: "{total} · {n} failed",
+    conditions: { one: "{n} condition", other: "{n} conditions" },
+    ports: { one: "{n} port", other: "{n} ports" },
+    versions: { one: "{n} version", other: "{n} versions" },
+    versionsWithDeprecated: "{n} · {deprecated} deprecated",
+    slashReady: "{n}/{total} ready",
+    readySummary: "{n} ready",
+    notReadySummary: "{n} not ready",
+    readyNotReadySummary: "{n} ready · {notReady} not ready",
+    upToDateAvailable: "{updated} up to date · {available} available",
+    notReadyWord: "not ready",
+    certificates: { one: "{n} certificate", other: "{n} certificates" },
+    annotations: { one: "{n} annotation", other: "{n} annotations" },
+    clustersAnswered: "{n} of {total} clusters answered",
+    podsReady: "{n} {of} ready",
+    readyBetweenCrashes: {
+      one: "{n} of them only between crashes",
+      other: "{n} of them only between crashes",
+    },
+    nodesReady: "{n} {of} ready",
+    ofPods: { one: "of {n} pod", other: "of {n} pods" },
+    ofNodes: { one: "of {n} node", other: "of {n} nodes" },
+    kindsNotLookedAt: {
+      one: "{n} kind not looked at",
+      other: "{n} kinds not looked at",
+    },
+    moreNotDrawn: {
+      one: "{n} more not drawn; the counts above are the whole of it.",
+      other: "{n} more not drawn; the counts above are the whole of it.",
+    },
+    restartsSoFar: { one: "{n} restart so far", other: "{n} restarts so far" },
+    olderLinesDropped: {
+      one: "{count} older line has been dropped.",
+      other: "{count} older lines have been dropped.",
+    },
+    linesDroppedAroundKept: {
+      one: "{count} line has been dropped around the frozen interval.",
+      other: "{count} lines have been dropped around the frozen interval.",
+    },
+    rowsStandFor: { one: "This row stands", other: "These {n} rows stand" },
+    forLines: { one: "for {count} line.", other: "for {count} lines." },
+    linesCopied: { one: "{count} line copied", other: "{count} lines copied" },
+    linesBufferedBehindLegend: {
+      one: "{count} line is buffered behind the legend.",
+      other: "{count} lines are buffered behind the legend.",
+    },
+    linesKept: { one: "{count} line kept.", other: "{count} lines kept." },
+    linesReceived: {
+      one: "{count} line received.",
+      other: "{count} lines received.",
+    },
+    keys: { one: "{n} key", other: "{n} keys" },
+    items: { one: "{n} item", other: "{n} items" },
+    fields: { one: "{n} field", other: "{n} fields" },
+    settingsMatch: { one: "{n} setting matches", other: "{n} settings match" },
+    paths: { one: "{n} path", other: "{n} paths" },
+    routeRules: { one: "{n} route", other: "{n} routes" },
+    hosts: { one: "{n} host", other: "{n} hosts" },
+    resources: { one: "{n} resource", other: "{n} resources" },
+    releases: { one: "{n} release", other: "{n} releases" },
+    changesSeen: { one: "{n} change seen", other: "{n} changes seen" },
+    revisionCount: { one: "{n} revision", other: "{n} revisions" },
+    deliveryCount: { one: "{n} delivery", other: "{n} deliveries" },
+    contexts: { one: "{n} context", other: "{n} contexts" },
+    // `n` is the total, not the number shown: "1 of 42 context" is what
+    // happens when the count that picks the form is the filtered one.
+    contextsMatching: {
+      one: "{shown} of {n} context",
+      other: "{shown} of {n} contexts",
+    },
+    contextsFromFile: { one: "{n} context", other: "{n} contexts" },
+    apiGroups: { one: "{n} API group", other: "{n} API groups" },
+    loadBalancers: { one: "{n} load balancer", other: "{n} load balancers" },
+    queriesFailed: {
+      one: "{n} query failed",
+      other: "{n} queries failed",
+    },
+    failedPods: { one: "{n} failed pod", other: "{n} failed pods" },
+    summedOverPods: {
+      one: "summed over {n} pod",
+      other: "summed over {n} pods",
+    },
+    replicasWanted: { one: "replica wanted", other: "replicas wanted" },
+    completionsWanted: {
+      one: "completion wanted",
+      other: "completions wanted",
+    },
+    retryNoun: { one: "retry", other: "retries" },
+    lineNoun: { one: "line", other: "lines" },
+    errorNoun: { one: "error", other: "errors" },
+    warningNoun: { one: "warning", other: "warnings" },
+    inSliceCount: { one: "in {n} slice", other: "in {n} slices" },
+    ofTotalReady: "{n} of {total} ready",
+    nRoutes: { one: "{n} route", other: "{n} routes" },
+    nBarePods: { one: "{n} bare pod", other: "{n} bare pods" },
+    gwNotServingCount: {
+      one: "{n} not serving",
+      other: "{n} not serving",
+    },
+    fromSets: {
+      one: "(+{n} from sets)",
+      other: "(+{n} from sets)",
+    },
+    gwBackendsAllExist: "All {n} backend Services exist, ports match",
+    restartPods: { one: "{n} pod", other: "{n} pods" },
+    restartUnavailable: {
+      one: "at most {n} unavailable",
+      other: "at most {n} unavailable",
+    },
+    restartExtra: { one: "{n} extra", other: "{n} extra" },
+    restartPlanRecreate: {
+      one: "Stops the only pod before starting its replacement: nothing serves until the new pod is Ready.",
+      other:
+        "Stops all {n} pods before starting any replacement: nothing serves until the new pods are Ready.",
+    },
+    restartOfNodes: { one: "{n} node", other: "{n} nodes" },
+    needAttention: {
+      one: "{n} needs attention",
+      other: "{n} need attention",
+    },
+    unconfirmedByPods: {
+      one: "{n} not checked: pods not read",
+      other: "{n} not checked: pods not read",
+    },
+    gwParentUnresolved: {
+      one: "names a gateway parent this app could not resolve to a Gateway.",
+      other: "name a gateway parent this app could not resolve to a Gateway.",
+    },
+    gwMeshAlsoNames: {
+      one: "also names this Service as a mesh parent: GAMMA, not through any gateway.",
+      other:
+        "also name this Service as a mesh parent: GAMMA, not through any gateway.",
+    },
+    gwEndpointsPublish: {
+      one: "Endpoints publish {n} ready",
+      other: "Endpoints publish {n} ready",
+    },
+  },
+} as const;
+
+/**
+ * The shape a translation must fill.
+ *
+ * Derived from `en` rather than declared beside it, so adding a key to English
+ * is what makes every other language fail to compile, which is the only
+ * moment anybody will remember to translate it.
+ */
+export type Catalogue = {
+  [Section in keyof typeof en]: {
+    [
+      Key in keyof (typeof en)[Section]
+    ]: (typeof en)[Section][Key] extends string ? string : Plural;
+  };
+};

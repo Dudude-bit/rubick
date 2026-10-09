@@ -1,0 +1,115 @@
+/**
+ * One request for a whole neighbourhood, shared by the two surfaces that
+ * read it.
+ *
+ * The chain sits on the Overview and the groups sit behind a tab, and both
+ * want the same answer. One query key means the page asks once whichever the
+ * reader opens first, and switching tabs costs nothing.
+ */
+
+import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
+import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
+import { useGatewayApi } from "@/hooks/useGatewayApi";
+import { useHeldRead } from "@/hooks/useHeldRead";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
+import type {
+  GatewayApiDetection,
+  ResourceConnections,
+} from "@/generated/types";
+
+export type ConnectionsQuery = ReturnType<typeof useConnections>;
+
+/** What a surface draws a neighbourhood from: the query, or an answer held back from it. */
+export type ConnectionsRead = Pick<
+  ConnectionsQuery,
+  "data" | "error" | "isPending" | "refetch"
+>;
+
+export function useConnections(
+  kind: string,
+  name: string | undefined,
+  namespace: string | null | undefined,
+  /**
+   * Held back until the answer is wanted.
+   *
+   * The peek needs the governing edges only once somebody presses Scale, and
+   * a neighbourhood read on every row a reader arrows past would be six lists
+   * per keystroke. The query key is unchanged, so a page that has already
+   * asked answers the peek from the cache.
+   */
+  enabled = true,
+  /**
+   * How often to ask again.
+   *
+   * A page reading one neighbourhood follows the detail pages. A screen
+   * holding a dozen of them at once is a different bill for the same query,
+   * and says so here rather than polling the cluster a dozen times over.
+   */
+  refresh: RefreshRate = "slow"
+) {
+  // The cluster's cached Gateway API scan rides along so the backend can
+  // draw route hops without a CRD list of its own. It joins the query key:
+  // a chain answered before the scan landed must not stay cached as the
+  // whole answer once the cluster turns out to speak Gateway API.
+  const gateway = useGatewayApi().data ?? null;
+  const queryKey = keyOf(kind, name, namespace, gateway);
+  return useLiveQuery<ResourceConnections>({
+    queryKey,
+    queryFn: () =>
+      commands.getResourceConnections(kind, name!, namespace ?? null, gateway),
+    enabled: enabled && !!name,
+    // The scan landing changes the key, not the object. A list's row menu
+    // keeps one observer across rows, and drew one row's autoscaler in the
+    // next row's Scale dialog.
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey
+        .slice(0, 4)
+        .every((part, index) => part === queryKey[index])
+        ? previous
+        : undefined,
+    // A pod going ready is the fact this view exists to show, so it follows
+    // the list pages rather than sitting on a stale answer.
+    staleTime: STALE_TIMES.resourceDetail,
+    refresh,
+    retry: false,
+  });
+}
+
+/** The key {@link useConnections} reads one neighbourhood under, for a watch that reads it again. */
+export function useConnectionsKey(
+  kind: string,
+  name: string | undefined,
+  namespace: string | null | undefined
+) {
+  return keyOf(kind, name, namespace, useGatewayApi().data ?? null);
+}
+
+function keyOf(
+  kind: string,
+  name: string | undefined,
+  namespace: string | null | undefined,
+  gateway: GatewayApiDetection | null
+) {
+  return queryKeys.connections(
+    kind,
+    namespace,
+    name,
+    gateway?.installed ? gateway.kinds.map((k) => k.readVersion) : null
+  );
+}
+
+/**
+ * {@link useConnections} about the object its page holds: a NotFound beside
+ * it is still reading, and asked again (see `useHeldRead`).
+ */
+export function useObjectConnections(
+  kind: string,
+  name: string | undefined,
+  namespace: string | null | undefined,
+  enabled = true
+): ConnectionsRead {
+  const query = useConnections(kind, name, namespace, enabled);
+  const key = useConnectionsKey(kind, name, namespace);
+  return useHeldRead(kind, namespace, name, query, key);
+}

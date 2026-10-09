@@ -1,0 +1,332 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import type { ApiCatalog, CatalogEntry } from "@/generated/types";
+import { crdFor, resourceSegment } from "@/lib/links";
+import {
+  decide,
+  eventLanding,
+  peekLanding,
+  readerOver,
+  type Exists,
+  type Reader,
+  type Target,
+} from "./attachment";
+
+/** A cluster where each named object answers as `exists` says. */
+function reader(
+  exists: Record<string, Exists>,
+  siblings: Array<Record<string, unknown>> | null = []
+): Reader {
+  return {
+    exists: async (target: Target) =>
+      exists[`${target.kind}/${target.name}`] ?? "missing",
+    siblings: async () => siblings,
+    refOf: (target: Target) => ({
+      kind: target.kind,
+      name: target.name,
+      namespace: target.namespace ?? null,
+    }),
+  };
+}
+
+const hpa = (name: string, target = "api") => ({
+  metadata: { name, namespace: "shop" },
+  spec: {
+    scaleTargetRef: { apiVersion: "apps/v1", kind: "Deployment", name: target },
+  },
+});
+
+describe("an autoscaler", () => {
+  it("opens on the workload it scales when it is the only one there", async () => {
+    expect(
+      await decide(
+        "horizontalpodautoscalers",
+        hpa("api"),
+        reader({ "Deployment/api": "present" }, [hpa("api")])
+      )
+    ).toEqual({
+      state: "parent",
+      parent: { kind: "Deployment", name: "api", namespace: "shop" },
+    });
+  });
+
+  /**
+   * "Does not exist" and "could not read" are two claims. A refused read
+   * that came out as the first would tell someone their workload is gone.
+   */
+  it("says its target could not be read, not that it is missing", async () => {
+    const answer = await decide(
+      "horizontalpodautoscalers",
+      hpa("api"),
+      reader({ "Deployment/api": { unread: "deployments is forbidden" } })
+    );
+    expect(answer).toEqual({
+      state: "stay",
+      stay: {
+        says: "targetUnread",
+        kind: "Deployment",
+        name: "api",
+        error: "deployments is forbidden",
+      },
+    });
+  });
+
+  it("says its target does not exist when the read found nothing", async () => {
+    const answer = await decide(
+      "horizontalpodautoscalers",
+      hpa("api"),
+      reader({})
+    );
+    expect(answer).toMatchObject({ stay: { says: "targetMissing" } });
+  });
+
+  /** Two autoscalers on one workload fight; opening either on it hides that. */
+  it("stays on its own page when another autoscaler aims at the same target", async () => {
+    const answer = await decide(
+      "horizontalpodautoscalers",
+      hpa("api"),
+      reader({ "Deployment/api": "present" }, [hpa("api"), hpa("api-2")])
+    );
+    expect(answer).toMatchObject({ stay: { says: "targetContested" } });
+  });
+
+  /** Siblings nobody could read are not siblings that are absent. */
+  it("stays when whether it is alone could not be checked", async () => {
+    const answer = await decide(
+      "horizontalpodautoscalers",
+      hpa("api"),
+      reader({ "Deployment/api": "present" }, null)
+    );
+    expect(answer).toMatchObject({ stay: { says: "siblingsUnread" } });
+  });
+});
+
+describe("endpoints", () => {
+  const endpoints = { metadata: { name: "web", namespace: "shop" } };
+
+  it("open on their Service's endpoints tab", async () => {
+    expect(
+      await decide("endpoints", endpoints, reader({ "Service/web": "present" }))
+    ).toMatchObject({ state: "parent", tab: "endpoints" });
+  });
+
+  it("stay where no Service keeps them", async () => {
+    expect(await decide("endpoints", endpoints, reader({}))).toEqual({
+      state: "stay",
+      stay: { says: "noService", name: "web" },
+    });
+  });
+
+  it("follow a slice to its Service by the label it carries", async () => {
+    const slice = {
+      metadata: {
+        name: "web-x7k2p",
+        namespace: "shop",
+        labels: { "kubernetes.io/service-name": "web" },
+      },
+    };
+    expect(
+      await decide(
+        "endpointslices.discovery.k8s.io",
+        slice,
+        reader({ "Service/web": "present" })
+      )
+    ).toMatchObject({ state: "parent", parent: { name: "web" } });
+  });
+});
+
+describe("the other attached kinds", () => {
+  it("open a revision on its owner's history", async () => {
+    const revision = {
+      metadata: {
+        name: "db-5d8f",
+        namespace: "shop",
+        ownerReferences: [
+          {
+            apiVersion: "apps/v1",
+            kind: "StatefulSet",
+            name: "db",
+            controller: true,
+          },
+        ],
+      },
+    };
+    expect(
+      await decide(
+        "controllerrevisions.apps",
+        revision,
+        reader({ "StatefulSet/db": "present" })
+      )
+    ).toMatchObject({ state: "parent", tab: "changes" });
+  });
+
+  it("keep a revision nothing owns on its own page", async () => {
+    expect(
+      await decide(
+        "controllerrevisions.apps",
+        { metadata: { name: "x", namespace: "shop" } },
+        reader({})
+      )
+    ).toEqual({ state: "stay", stay: { says: "noOwner" } });
+  });
+
+  /**
+   * A Service's event moves to its page's Events tab; a custom resource's
+   * stays, as its namesakes share a kind. Fails if either side changes.
+   */
+  it("open an event only on a page that has an events tab", async () => {
+    const about = (kind: string, apiVersion: string) => ({
+      metadata: { name: "e", namespace: "shop" },
+      involvedObject: { apiVersion, kind, name: "x", namespace: "shop" },
+    });
+    expect(
+      await decide(
+        "events",
+        about("Ingress", "networking.k8s.io/v1"),
+        reader({ "Ingress/x": "present" })
+      )
+    ).toMatchObject({ state: "parent", tab: "events" });
+    expect(
+      await decide(
+        "events",
+        about("Service", "v1"),
+        reader({ "Service/x": "present" })
+      )
+    ).toMatchObject({ state: "parent", tab: "events" });
+    expect(
+      await decide(
+        "events",
+        about("HorizontalPodAutoscaler", "autoscaling/v2"),
+        reader({ "HorizontalPodAutoscaler/x": "present" })
+      )
+    ).toMatchObject({ state: "parent", tab: "events" });
+    expect(
+      await decide(
+        "events",
+        about("Widget", "example.com/v1"),
+        reader({ "Widget/x": "present" })
+      )
+    ).toEqual({ state: "free" });
+  });
+
+  /**
+   * Keyed by kind alone, an event about an Istio Gateway moved to the events
+   * tab of a Gateway API page, which its CRD's page does not have.
+   */
+  it("leave an event about a namesake of a kind with an events tab where it is", async () => {
+    const event = {
+      metadata: { name: "e", namespace: "shop" },
+      involvedObject: {
+        apiVersion: "networking.istio.io/v1",
+        kind: "Gateway",
+        name: "edge",
+        namespace: "shop",
+      },
+    };
+    expect(
+      await decide("events", event, reader({ "Gateway/edge": "present" }))
+    ).toEqual({ state: "free" });
+  });
+
+  it("open a node's heartbeat on the node, and leave other leases alone", async () => {
+    const lease = (namespace: string) => ({
+      metadata: { name: "node-1", namespace },
+    });
+    expect(
+      await decide(
+        "leases.coordination.k8s.io",
+        lease("kube-node-lease"),
+        reader({ "Node/node-1": "present" })
+      )
+    ).toMatchObject({ state: "parent", parent: { kind: "Node" } });
+    expect(
+      await decide(
+        "leases.coordination.k8s.io",
+        lease("kube-system"),
+        reader({})
+      )
+    ).toEqual({ state: "free" });
+  });
+});
+
+describe("the parent an attached object opens on", () => {
+  const gateway = (group: string): CatalogEntry => ({
+    group,
+    version: "v1",
+    kind: "Gateway",
+    plural: "gateways",
+    namespaced: true,
+    verbs: ["get", "list"],
+    shortNames: [],
+  });
+  const catalog: ApiCatalog = {
+    entries: [
+      gateway("gateway.networking.k8s.io"),
+      gateway("networking.istio.io"),
+    ],
+    unread: [],
+  };
+  const segmentOfParent = (apiVersion: string) => {
+    const parent = readerOver(catalog, "events", "shop").refOf({
+      apiVersion,
+      kind: "Gateway",
+      name: "edge",
+      namespace: "shop",
+    });
+    return resourceSegment({ kind: parent.kind, crd: crdFor(parent) });
+  };
+
+  /**
+   * Resolved by kind name alone, an Istio Gateway's parent link opened the
+   * Gateway API page of a Gateway that does not exist.
+   */
+  it("is the kind of that very group, never a namesake's page", () => {
+    expect(segmentOfParent("networking.istio.io/v1")).toBe(
+      "gateways.networking.istio.io"
+    );
+    expect(segmentOfParent("gateway.networking.k8s.io/v1")).toBe("gateways");
+  });
+});
+
+describe("where an Event about an object opens", () => {
+  /** A Lease's page has no Events tab; fails if an Event about one is sent to a tab that is not there. */
+  it("lands on the Events tab only where the kind's page has one", () => {
+    const event = { namespace: "shop", name: "web.17f3" };
+    expect(eventLanding("Service", event)).toEqual({
+      tab: "events",
+      via: "events/shop/web.17f3",
+    });
+    expect(eventLanding("Lease", event)).toBeUndefined();
+  });
+
+  /**
+   * An Event about the HPA cart opened the Deployment cart, whose Events tab
+   * has none of the HPA's events. Fails if an attached kind's landing lets
+   * it go on to its parent, or if an unattached kind is pinned to itself.
+   */
+  it("keeps an attached kind on its own page", () => {
+    const event = { namespace: "shop", name: "cart.18dc" };
+    for (const kind of ["HorizontalPodAutoscaler", "Endpoints"])
+      expect(eventLanding(kind, event)).toEqual({
+        tab: "events",
+        via: "events/shop/cart.18dc",
+        view: "own",
+      });
+    expect(eventLanding("Deployment", event)?.view).toBeUndefined();
+  });
+
+  /** The peek's Open full page went where the row's link did not; fails if they part. */
+  it("sends the peek's full page where the row's link goes", () => {
+    expect(
+      peekLanding({
+        kind: "HorizontalPodAutoscaler",
+        via: "events/shop/cart.18dc",
+      })
+    ).toEqual(
+      eventLanding("HorizontalPodAutoscaler", {
+        namespace: "shop",
+        name: "cart.18dc",
+      })
+    );
+  });
+});

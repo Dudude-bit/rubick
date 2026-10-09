@@ -1,0 +1,131 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import {
+  errorToShow,
+  isRefusal,
+  normalizeError,
+  verbatim,
+} from "./error-utils";
+
+/**
+ * The failure a reader is shown is the server's, not ours.
+ *
+ * `wrapCommand` puts the name of the Tauri command on the front of every
+ * rejected invoke. That is useful in a stack trace and worthless in a toast:
+ * "Tauri command 'applyManifest' failed:" is four words about our plumbing in
+ * front of the one sentence — `field is immutable`, `is forbidden` — that says
+ * what to do next.
+ */
+describe("what a failure says on screen", () => {
+  it("drops our framing and keeps the server's words", () => {
+    expect(
+      errorToShow(
+        new Error(
+          "Tauri command 'applyManifest' failed: deployments.apps \"api\" is forbidden"
+        )
+      )
+    ).toBe('deployments.apps "api" is forbidden');
+  });
+
+  it("leaves an error that never had the framing alone", () => {
+    expect(errorToShow(new Error("connection refused"))).toBe(
+      "connection refused"
+    );
+    expect(errorToShow("plain string")).toBe("plain string");
+  });
+
+  /**
+   * The payments card read "Log streaming error: Failed to get logs:
+   * ApiError: ... BadRequest", Marco's Overview "Kubernetes API error:
+   * ApiError: daemonsets.apps is forbidden". The backend sends the server's
+   * sentence as `said` beside its code; that is what is shown, through the
+   * Error `wrapCommand` throws. Fails if the Rust chain reaches the screen.
+   */
+  it("shows the server's sentence the backend sent, not the chain around it", () => {
+    const said =
+      'container "app" in pod "payments-6d9d7d9db4-jflp4" is waiting to start: trying and failing to pull image';
+    const wire = {
+      code: "LOG_STREAM_ERROR",
+      message: `Log streaming error: Failed to get logs: ${said}`,
+      said,
+    };
+    const thrown = new Error(
+      `Tauri command 'getPodLogs' failed: ${wire.message}`,
+      { cause: wire }
+    );
+    expect(errorToShow(thrown)).toBe(said);
+    expect(errorToShow(new Error(errorToShow(thrown), { cause: thrown }))).toBe(
+      said
+    );
+  });
+
+  /** Only at the front, and only ours: a quoted one in the body is content. */
+  it("strips nothing from the middle of a message", () => {
+    const message = "kubectl said: Tauri command 'x' failed: nope";
+    expect(verbatim(message)).toBe(message);
+  });
+});
+
+describe("whether an error is worth retrying", () => {
+  /**
+   * Would retry a verdict. Every Kubernetes error about an Ingress or a
+   * NetworkPolicy names `networking.k8s.io`, so a substring match on
+   * "network" read a flat 403 as a network blip and asked again until it
+   * gave up.
+   */
+  it("does not retry a refusal that happens to name a network API group", () => {
+    const refusal = normalizeError(
+      new Error(
+        'ingresses.networking.k8s.io is forbidden: User "dev" cannot list resource "ingresses"'
+      )
+    );
+    expect(refusal.isRetryable).toBe(false);
+  });
+
+  it("still retries a real network failure", () => {
+    expect(normalizeError(new Error("network unreachable")).isRetryable).toBe(
+      true
+    );
+    expect(normalizeError(new Error("connection refused")).isRetryable).toBe(
+      true
+    );
+  });
+});
+
+/**
+ * The words in these messages are the API server's, and Kubernetes objects
+ * carry them inside their own names. `isRetryableError` learned that once —
+ * every error about `networking.k8s.io` contains "network" — and this end of
+ * the file had not.
+ */
+describe("telling a refusal from a fault", () => {
+  it("reads a refusal whatever else the sentence happens to say", () => {
+    for (const message of [
+      'nodes is forbidden: User "dev" cannot list resource "nodes"',
+      // Istio's own kinds carry "auth" in the resource name.
+      'authorizationpolicies.security.istio.io is forbidden: User "dev" cannot list',
+      // ...and so does an ordinary namespace, or a service account's path.
+      'pods is forbidden: User "dev" cannot list resource "pods" in the namespace "auth"',
+      'pods is forbidden: User "system:serviceaccount:auth:dex" cannot list',
+      "permission denied",
+    ]) {
+      expect(isRefusal(new Error(message))).toBe(true);
+    }
+  });
+
+  it("still calls an authentication failure what it is", () => {
+    for (const message of [
+      "Unauthorized",
+      "not authenticated",
+      "authentication failed: token expired",
+    ]) {
+      expect(isRefusal(new Error(message))).toBe(false);
+    }
+  });
+
+  /** Nothing about permissions in it at all. */
+  it("leaves an ordinary fault alone", () => {
+    expect(isRefusal(new Error("connection reset by peer"))).toBe(false);
+    expect(isRefusal(new Error("context deadline exceeded"))).toBe(false);
+  });
+});

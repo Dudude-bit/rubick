@@ -1,0 +1,315 @@
+import { ArrowDownToLine, Info } from "lucide-react";
+import { DeleteAction } from "../../../-object/DeleteAction";
+
+import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
+import {
+  Peer,
+  PeerReach,
+  ReachCell,
+} from "../../../-object/network-policy-cells";
+import { countMark, viewGlyph } from "@/components/object/detail-tab";
+import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
+import { yamlTab } from "../../../-object/yaml-tab";
+import { Section, SectionHeader } from "@/components/ui/section";
+import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
+import { useNetworkPolicyShare } from "./useNetworkPolicyShare";
+import { useResourceDetail } from "@/hooks";
+import { usePolicyPeerData, type PeerData } from "@/hooks/usePolicyPeers";
+import { T } from "@/i18n/T";
+import { useT } from "@/i18n/useT";
+import { commands } from "@/lib/commands";
+import { deliveryOfKind } from "@/lib/delivery";
+import {
+  directionFact,
+  notGovernedSentence,
+  portText,
+  reachOf,
+} from "@/lib/network-policy";
+import { leavesNamespace } from "@/lib/policy-peers";
+import { ResourceType } from "@/lib/resource-registry";
+import type {
+  NetworkPolicyInfo,
+  PolicyDirection,
+  PolicyRule,
+} from "@/generated/types";
+import { eventsTab } from "../../../-object/events-tab";
+import { useObjectEvents } from "@/hooks/useObjectEvents";
+
+interface Resolving {
+  home: string;
+  data: PeerData;
+}
+
+function Rule({
+  rule,
+  outbound,
+  resolving,
+}: {
+  rule: PolicyRule;
+  outbound: boolean;
+  resolving: Resolving;
+}) {
+  const t = useT();
+  return (
+    <div className="flex flex-col gap-1 border-b border-hair py-2 last:border-b-0">
+      <div className="flex flex-col gap-0.5 text-[12px]">
+        {rule.peers.length === 0 ? (
+          // No peer is not "no source": it is every source, and it is the
+          // shape a policy takes when somebody meant to restrict and left the
+          // list empty. Which word depends on the direction — the English is
+          // the same shape both ways and the Russian is not.
+          <span className="text-warn">
+            {t("empty", outbound ? "toAnywhere" : "fromAnywhere")}
+          </span>
+        ) : (
+          rule.peers.map((peer, i) => (
+            <div key={i} className="flex flex-wrap items-baseline gap-x-2">
+              <Peer peer={peer} />
+              <PeerReach
+                peer={peer}
+                home={resolving.home}
+                data={resolving.data}
+              />
+            </div>
+          ))
+        )}
+      </div>
+      <div className="text-[11px] text-fg-fnt">
+        {rule.ports.length === 0
+          ? t("empty", "everyPort")
+          : rule.ports.map((port) => portText(port, t)).join(", ")}
+      </div>
+    </div>
+  );
+}
+
+function Direction({
+  title,
+  direction,
+  outbound,
+  resolving,
+}: {
+  title: string;
+  direction: PolicyDirection;
+  outbound: boolean;
+  resolving: Resolving;
+}) {
+  const t = useT();
+  const fact = directionFact(direction, t);
+  return (
+    <Section>
+      <SectionHeader title={title} />
+      {direction.rules.length === 0 ? (
+        <p
+          className={`text-[12px] ${fact.tone === "warn" ? "text-warn" : "text-fg-mut"}`}
+        >
+          {fact.value}
+        </p>
+      ) : (
+        direction.rules.map((rule, i) => (
+          <Rule key={i} rule={rule} outbound={outbound} resolving={resolving} />
+        ))
+      )}
+    </Section>
+  );
+}
+
+export function NetworkPolicyDetail() {
+  const t = useT();
+  const {
+    name,
+    namespace,
+    resource: policy,
+    isLoading,
+    error,
+    yaml,
+    copyYaml,
+    activeTab,
+    setActiveTab,
+    goBack,
+    deleteMutation,
+    freshness,
+  } = useResourceDetail<NetworkPolicyInfo>({
+    resourceKind: ResourceType.NetworkPolicy,
+    fetchResource: (name, namespace) =>
+      commands.getNetworkPolicy(name, namespace),
+    deleteResource: async (name, namespace) => {
+      await commands.deleteNetworkPolicy(name, namespace);
+    },
+    defaultTab: "overview",
+  });
+
+  const events = useObjectEvents(ResourceType.NetworkPolicy, name, namespace, {
+    refresh: "slow",
+  });
+
+  const reach = policy ? reachOf(policy.selected) : null;
+  const peers = [policy?.ingress, policy?.egress].flatMap((direction) =>
+    direction?.governed ? direction.rules.flatMap((rule) => rule.peers) : []
+  );
+  const data = usePolicyPeerData(policy?.namespace, {
+    cluster: peers.some(leavesNamespace),
+    namespaces: peers.some((peer) => peer.namespaces.kind === "written"),
+  });
+  const resolving = { home: policy?.namespace ?? "", data };
+  const facts: KeyValue[] = policy
+    ? [
+        {
+          label: t("columns", "selects"),
+          value:
+            policy.selects.kind === "written"
+              ? policy.selects.query
+              : policy.selects.kind === "everything"
+                ? t("empty", "everyPodHere")
+                : t("empty", "noSelectorOnPolicy"),
+          mono: policy.selects.kind === "written",
+        },
+        {
+          label: t("columns", "pods"),
+          // The list's own cell: a pod list the reader was refused is not a
+          // policy with nothing behind it, and not a count either.
+          value: <ReachCell policy={policy} />,
+          tone: reach?.kind === "nothing" ? "warn" : undefined,
+        },
+        {
+          label: "Ingress",
+          ...directionFact(policy.ingress, t),
+        },
+        {
+          label: "Egress",
+          ...directionFact(policy.egress, t),
+        },
+      ]
+    : [];
+
+  const deliveryQuery = deliveryOfKind(ResourceType.NetworkPolicy, policy);
+  const intercept = useDeliveryIntercept(deliveryQuery);
+  const share = useNetworkPolicyShare(policy);
+  // Only the rules the tab draws. A policy carrying an `ingress:` block that
+  // `policyTypes` does not name keeps those rules on the object, and counting
+  // them promised a reader rules the tab then refuses to show.
+  const ruleCount = [policy?.ingress, policy?.egress]
+    .filter((direction) => direction?.governed)
+    .reduce((n, direction) => n + (direction?.rules.length ?? 0), 0);
+
+  const tabs = [
+    {
+      id: "overview",
+      label: t("nav", "overview"),
+      glyph: viewGlyph(Info),
+      content: (
+        <KeyValueSection
+          title={t("columns", "selector")}
+          items={facts}
+          className="max-w-lg"
+        />
+      ),
+    },
+    {
+      id: "rules",
+      label: t("columns", "rules"),
+      glyph: viewGlyph(ArrowDownToLine),
+      mark: countMark(ruleCount),
+      content: policy && (
+        <div className="flex flex-col gap-4">
+          {!policy.ingress.governed && !policy.egress.governed ? (
+            <p className="text-[12px] text-fg-mut">
+              <T section="empty" k="governsNeither" />
+            </p>
+          ) : (
+            <>
+              {policy.ingress.governed ? (
+                <Direction
+                  title="Ingress"
+                  direction={policy.ingress}
+                  outbound={false}
+                  resolving={resolving}
+                />
+              ) : (
+                <p className="text-[12px] text-fg-mut">
+                  {notGovernedSentence(policy, "Ingress", t)}
+                </p>
+              )}
+              {policy.egress.governed ? (
+                <Direction
+                  title="Egress"
+                  direction={policy.egress}
+                  outbound
+                  resolving={resolving}
+                />
+              ) : (
+                <p className="text-[12px] text-fg-mut">
+                  {notGovernedSentence(policy, "Egress", t)}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      ),
+    },
+    eventsTab(events, t, {
+      kind: ResourceType.NetworkPolicy,
+      name: name ?? "",
+    }),
+    yamlTab({
+      title: t("action", "kindYaml", { kind: "NetworkPolicy" }),
+      yaml,
+      resourceKind: ResourceType.NetworkPolicy,
+      resourceName: name || "",
+      namespace,
+      onCopy: copyYaml,
+    }),
+  ];
+
+  return (
+    <ResourceDetailLayout
+      freshness={freshness}
+      resource={policy}
+      delivery={deliveryQuery}
+      share={share}
+      isLoading={isLoading}
+      error={error}
+      resourceKind={ResourceType.NetworkPolicy}
+      title={policy?.name || name || ""}
+      createdAt={policy?.createdAt}
+      namespace={namespace}
+      badges={
+        policy && (
+          // Each half keeps its own tone: "allows all" is the one verdict
+          // the colour exists for, and a fixed muted span dropped it here
+          // while the row and the fact below it both painted it.
+          <span className="text-[11px]">
+            {[policy.ingress, policy.egress]
+              .map((direction) => directionFact(direction, t))
+              .map((fact, i) => (
+                <span key={i}>
+                  {i > 0 && <span className="text-fg-fnt"> · </span>}
+                  <span
+                    className={
+                      fact.tone === "warn" ? "text-warn" : "text-fg-mut"
+                    }
+                  >
+                    {fact.value}
+                  </span>
+                </span>
+              ))}
+          </span>
+        )
+      }
+      onBack={goBack}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      tabs={tabs}
+      actions={
+        <DeleteAction
+          kind={ResourceType.NetworkPolicy}
+          name={policy?.name || name || ""}
+          namespace={namespace}
+          detail={policy}
+          intercept={intercept("Delete")}
+          mutation={deleteMutation}
+        />
+      }
+    />
+  );
+}

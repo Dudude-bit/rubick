@@ -1,0 +1,283 @@
+/**
+ * Unified hook for resource detail pages
+ *
+ * Provides common functionality for all detail pages including:
+ * - Resource data fetching with loading/error states
+ * - YAML fetching for YAML tab
+ * - Tab management
+ * - Navigation helpers
+ * - Copy to clipboard
+ */
+
+import { useCallback } from "react";
+import { useNavigate, useParams, useRouter } from "@tanstack/react-router";
+import {
+  useMutation,
+  useQueryClient,
+  keepPreviousData,
+  type QueryKey,
+} from "@tanstack/react-query";
+import { useToast } from "@/components/ui/use-toast";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { useLiveQuery, type Freshness } from "@/hooks/useLiveQuery";
+import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
+import { useResourceYaml } from "./useResourceYaml";
+import { useRereadWith } from "./useRereadWith";
+import { queryKeys } from "@/lib/query-keys";
+import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
+import { useT } from "@/i18n/useT";
+import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
+import { useRememberOwners } from "./useLastOwners";
+import { useObjectWatch } from "./useObjectWatch";
+import { useStaleNotFound } from "./useStaleNotFound";
+
+export interface UseResourceDetailOptions<T> {
+  /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
+  resourceKind: string;
+  /** Whether this is a cluster-scoped resource (no namespace) */
+  isClusterScoped?: boolean;
+  /** Function for fetching resource */
+  fetchResource: (name: string, namespace: string | null) => Promise<T>;
+  /** Function for deleting resource */
+  deleteResource?: (name: string, namespace: string | null) => Promise<void>;
+  /** Optional callback when resource is fetched */
+  onResourceFetched?: (resource: T) => void;
+  /** Optional callback after successful deletion */
+  onDeleted?: () => void;
+  /** Enable placeholder data for smoother transitions */
+  placeholderData?: boolean;
+  /** Default tab to show */
+  defaultTab?: string;
+  /** Which rate this re-reads at, or `false` for a watch-fed page. */
+  refresh?: RefreshRate | false;
+  /** Override stale time */
+  staleTime?: number;
+}
+
+export interface UseResourceDetailResult<T> {
+  // Route params
+  name: string | undefined;
+  namespace: string | undefined;
+
+  // Resource data
+  resource: T | undefined;
+  isLoading: boolean;
+  error: Error | null;
+  refetch: () => void;
+  /** What the header's freshness reading is drawn from. */
+  freshness: Freshness;
+
+  // YAML data
+  yaml: string | undefined;
+  isLoadingYaml: boolean;
+  copyYaml: () => void;
+  refetchYaml: () => Promise<unknown>;
+
+  // Tab management
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
+
+  // Navigation
+  goBack: () => void;
+  navigate: ReturnType<typeof useNavigate>;
+
+  deleteMutation: ReturnType<typeof useMutation<void, Error, void>> | null;
+
+  // Toast
+  toast: ReturnType<typeof useToast>["toast"];
+
+  // Clipboard
+  copyToClipboard: ReturnType<typeof useCopyToClipboard>;
+}
+
+/**
+ * Hook for resource detail pages with common functionality
+ */
+export function useResourceDetail<T>(
+  options: UseResourceDetailOptions<T>
+): UseResourceDetailResult<T> {
+  const t = useT();
+  const {
+    resourceKind,
+    isClusterScoped = false,
+    fetchResource,
+    deleteResource,
+    onResourceFetched,
+    onDeleted,
+    placeholderData = true,
+    defaultTab = "overview",
+    refresh = "resourceDetail",
+    staleTime = STALE_TIMES.resourceDetail,
+  } = options;
+
+  // For cluster-scoped resources, namespace won't be in the URL
+  const { namespace: nsParam, name } = useParams({ strict: false });
+  const namespace = isClusterScoped ? undefined : nsParam;
+  const navigate = useNavigate();
+  const router = useRouter();
+  const { toast } = useToast();
+  const copyToClipboard = useCopyToClipboard();
+  const queryClient = useQueryClient();
+
+  // A link may name the tab it was copied from; the page's own default is
+  // for arrivals that did not say.
+  const activeTab = useAppSearch().tab ?? defaultTab;
+  const setSearch = useSetSearch();
+  const setActiveTab = useCallback(
+    (tab: string) =>
+      setSearch(
+        { tab: tab === defaultTab ? undefined : tab },
+        { replace: true }
+      ),
+    [setSearch, defaultTab]
+  );
+
+  // Fetch resource data
+  const {
+    data: held,
+    isLoading: reading,
+    isPlaceholderData,
+    error: readError,
+    errorUpdatedAt,
+    isFetching,
+    refetch,
+    freshness,
+  } = useLiveQuery<T, Error, T, QueryKey>({
+    queryKey: queryKeys.detail(resourceKind, namespace, name),
+    queryFn: async () => {
+      if (!name) throw new Error("Name is required");
+      const result = await fetchResource(name, namespace || null);
+      onResourceFetched?.(result);
+      return result;
+    },
+    enabled: !!name,
+    placeholderData: placeholderData ? keepPreviousData : undefined,
+    staleTime,
+    refresh,
+  });
+
+  // A failed re-read of the object already on screen is not a page.
+  //
+  // `ResourceDetailLayout` replaces the whole page with "Could not read this
+  // pod" for any error, so one dropped poll — an expiring token, a blip
+  // between the app and the API server — threw away a page the reader was
+  // working in, and the next poll two seconds later brought it back. The rule
+  // is the list's: an error only speaks when there is nothing left to show,
+  // and the header's freshness reading is what says the page is going stale.
+  //
+  // `isPlaceholderData` is the whole distinction. It marks data belonging to
+  // the *previous* name — the reader has navigated, and holding a pod's fields
+  // under another pod's URL because the new one 404'd is the one thing this
+  // must never do. Then the error is the page.
+  //
+  // NotFound is not a dropped poll: the object is gone, and the page says so
+  // as the peek does, from the owners its last read named.
+  const reappearing = useStaleNotFound(resourceKind, namespace, name, {
+    error: readError,
+    errorUpdatedAt,
+    isFetching,
+  });
+  const resource = reappearing ? undefined : held;
+  const isLoading = reading || reappearing;
+  const holdsThisObject = resource !== undefined && !isPlaceholderData;
+  const error =
+    reappearing || (holdsThisObject && !isResourceNotFoundError(readError))
+      ? null
+      : readError;
+  useRememberOwners(
+    { kind: resourceKind, name: name ?? "", namespace },
+    holdsThisObject ? resource : undefined
+  );
+
+  useRereadWith(
+    queryKeys.detail(resourceKind, namespace, name),
+    queryKeys.manifest(resourceKind, namespace, name)
+  );
+  const live = useObjectWatch(
+    resourceKind,
+    namespace,
+    name,
+    isResourceNotFoundError(readError)
+  );
+  const {
+    data: yaml,
+    isLoading: isLoadingYaml,
+    refetch: refetchYaml,
+  } = useResourceYaml(resourceKind, name, namespace, activeTab);
+
+  const copyYaml = useCallback(() => {
+    if (yaml) {
+      copyToClipboard(yaml, t("action", "yamlCopied"));
+    }
+  }, [yaml, copyToClipboard, t]);
+
+  const goBack = useCallback(() => {
+    router.history.back();
+  }, [router]);
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!name || !deleteResource) return;
+      await deleteResource(name, namespace || null);
+    },
+    onSuccess: () => {
+      toast({
+        title: t("action", "kindDeleted", { kind: resourceKind }),
+        description: t("action", "kindDeletedDetail", {
+          kind: resourceKind,
+          name: name ?? "",
+        }),
+      });
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.details(resourceKind),
+      });
+      if (onDeleted) {
+        onDeleted();
+      } else {
+        goBack();
+      }
+    },
+    onError: (err) => {
+      toast({
+        title: t("action", "error"),
+        description: t("action", "deleteFailed", {
+          kind: resourceKind,
+          name: name ?? "",
+          error: errorToShow(err),
+        }),
+        variant: "destructive",
+      });
+    },
+  });
+
+  return {
+    name,
+    namespace,
+    resource,
+    isLoading,
+    error,
+    refetch,
+    freshness: live ? { ...freshness, live } : freshness,
+    yaml,
+    isLoadingYaml,
+    copyYaml,
+    refetchYaml,
+    activeTab,
+    setActiveTab,
+    goBack,
+    navigate,
+    deleteMutation,
+    toast,
+    copyToClipboard,
+  };
+}
+
+/**
+ * Whether the object is gone, as the backend's code says — not a refused
+ * list, and not a container with no previous run, both of which read "not
+ * found" to a substring.
+ */
+export function isResourceNotFoundError(error: Error | null | string): boolean {
+  if (!error) return false;
+  return errorCode(error) === ERROR_CODES.NOT_FOUND;
+}

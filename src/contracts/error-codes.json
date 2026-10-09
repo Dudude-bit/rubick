@@ -1,0 +1,26 @@
+{
+  "about": "The `code` an error carries across IPC, beside a `message` that is its Display string byte for byte. Rust: `Error::code` in src/tauri/src/error.rs. TypeScript: `ERROR_CODES` in src/ui/lib/error-utils.ts, which also has UNKNOWN_ERROR for anything that did not come from the backend.",
+  "codes": [
+    "AUTH_ERROR",
+    "CONFIG_ERROR",
+    "CREDENTIALS_EXPIRED",
+    "INTERNAL_ERROR",
+    "KUBE_API_ERROR",
+    "LIST_UNREAD",
+    "LOCAL_PORT_IN_USE",
+    "LOCAL_PORT_PRIVILEGED",
+    "LOG_NOT_KEPT",
+    "LOG_STREAM_ERROR",
+    "NETWORK_ERROR",
+    "NO_PREVIOUS_RUN",
+    "NO_READY_POD",
+    "NOT_CONNECTED",
+    "NOT_FOUND",
+    "PERMISSION_DENIED",
+    "PLUGIN_ERROR",
+    "READ_DEADLINE",
+    "TERMINAL_ERROR",
+    "TIMEOUT_ERROR",
+    "VALIDATION_ERROR"
+  ]
+}

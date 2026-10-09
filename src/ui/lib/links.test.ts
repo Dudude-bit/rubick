@@ -1,0 +1,433 @@
+// @vitest-environment jsdom
+import { describe, expect, it } from "vite-plus/test";
+import { createMemoryHistory, createRouter } from "@tanstack/react-router";
+import { QueryClient } from "@tanstack/react-query";
+
+import { routeTree } from "@/generated/routeTree.gen";
+import {
+  clusterOf,
+  crdFor,
+  crdInGroup,
+  crdInstancesLink,
+  helmReleaseLink,
+  hrefOf,
+  listLink,
+  namespaceShownBy,
+  objectLink,
+  retargetHref,
+  servedListLink,
+  servedObjectLink,
+  setRouter,
+} from "./links";
+import { RESOURCE_REGISTRY } from "./resource-registry";
+import { parseDeepLink } from "./deep-link";
+import { catalogQuery } from "@/routes/c/$cluster/-object/served";
+import type { ApiCatalog } from "@/generated/types";
+
+function at(path: string) {
+  const router = createRouter({
+    routeTree,
+    context: { queryClient: new QueryClient() },
+    history: createMemoryHistory({ initialEntries: [path] }),
+  });
+  setRouter(router);
+  return router;
+}
+
+/** The route an address lands on, or the generic one for "nothing of its own". */
+function routeOf(router: ReturnType<typeof at>, href: string): string {
+  const [pathname] = href.split("?");
+  return router.matchRoutes(pathname).at(-1)?.routeId ?? "";
+}
+
+const GENERIC = /\/\$resource\//;
+
+describe("an object's address", () => {
+  /** Built from the cluster the window is in, so a link never leaves it by accident. */
+  it("is the kind's plural under the current cluster", async () => {
+    const router = at("/c/prod/pods");
+    await router.load();
+    const link = objectLink({ kind: "Pod", name: "api-0", namespace: "web" });
+    expect(hrefOf(link!)).toBe("/c/prod/pods/web/api-0");
+    expect(routeOf(router, hrefOf(link!))).not.toMatch(GENERIC);
+  });
+
+  /** A namespaced kind with no namespace would be a dead link the reader finds by clicking. */
+  it("is refused for a namespaced kind handed no namespace", () => {
+    at("/c/prod");
+    expect(objectLink({ kind: "Pod", name: "api-0" })).toBeNull();
+  });
+
+  /** A cluster-scoped kind keeps no namespace, whatever an owner reference carried. */
+  it("drops the namespace of a cluster-scoped kind", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const link = objectLink({ kind: "Node", name: "n1", namespace: "web" });
+    expect(hrefOf(link!)).toBe("/c/prod/nodes/n1");
+  });
+
+  /** A custom resource is named by its CRD, the way kubectl names it. */
+  it("names a custom resource by its CRD", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const link = objectLink({
+      kind: "Certificate",
+      name: "tls",
+      namespace: "web",
+      crd: "certificates.cert-manager.io",
+    });
+    expect(hrefOf(link!)).toBe("/c/prod/certificates.cert-manager.io/web/tls");
+    expect(hrefOf(crdInstancesLink("certificates.cert-manager.io"))).toBe(
+      "/c/prod/customresourcedefinitions/certificates.cert-manager.io?tab=instances"
+    );
+  });
+
+  /**
+   * A reference resolved through its group carries a segment even for a
+   * built-in kind. Read as a custom resource, a Gateway API Gateway opened
+   * the generic page and peeked as a manifest instead of as a Gateway.
+   */
+  it("opens a built-in kind's own page for its own segment, and a namesake's CRD otherwise", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const own = {
+      kind: "Gateway",
+      name: "edge",
+      namespace: "web",
+      crd: "gateways.gateway.networking.k8s.io",
+    };
+    expect(hrefOf(objectLink(own)!)).toBe("/c/prod/gateways/web/edge");
+    expect(routeOf(router, hrefOf(objectLink(own)!))).not.toMatch(GENERIC);
+    expect(crdFor(own)).toBeUndefined();
+    const istio = { ...own, crd: "gateways.networking.istio.io" };
+    expect(hrefOf(objectLink(istio)!)).toBe(
+      "/c/prod/gateways.networking.istio.io/web/edge"
+    );
+    expect(crdFor(istio)).toBe("gateways.networking.istio.io");
+  });
+
+  /** A context name from EKS is an ARN, with slashes and colons in it. */
+  it("survives a cluster name with slashes in it", async () => {
+    const arn = "arn:aws:eks:eu-west-1:123:cluster/prod";
+    const router = at(`/c/${encodeURIComponent(arn)}`);
+    await router.load();
+    const href = hrefOf(objectLink({ kind: "Node", name: "n1" })!);
+    expect(clusterOf(href)).toBe(arn);
+  });
+});
+
+describe("every kind the registry knows", () => {
+  /**
+   * A kind that gained a page in the registry and no folder in the tree
+   * would quietly open on the generic page; one with a list folder missing
+   * would land on "Rubick does not list this yet".
+   */
+  it("lists on a page of its own", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const generic = RESOURCE_REGISTRY.filter(
+      (entry) =>
+        !["HorizontalPodAutoscaler", "PodDisruptionBudget"].includes(entry.kind)
+    )
+      .map((entry) => hrefOf(listLink(entry.kind)))
+      .filter((href) => GENERIC.test(routeOf(router, href)));
+    expect(generic).toEqual([]);
+  });
+});
+
+describe("a kind with no list of its own", () => {
+  /**
+   * Lena clicked ReplicaSet in API resources, and the deep link to
+   * replicasets, and landed on Deployments with no word of why. Fails if
+   * either way in stops saying which kind was asked for.
+   */
+  it.each([
+    ["ReplicaSet", "replicasets", "deployments"],
+    ["GatewayClass", "gatewayclasses", "gateways"],
+  ])(
+    "says %s was asked for, by its link and by its address",
+    async (kind, plural, lands) => {
+      const router = at(`/c/prod/${plural}`);
+      await router.load();
+      const landed = `/c/prod/${lands}?listOf=${plural}`;
+      expect(router.state.location.href).toBe(landed);
+      expect(hrefOf(listLink(kind))).toBe(landed);
+    }
+  );
+
+  /** Fails if a kind with a list of its own is sent there with a note it does not need. */
+  it("adds nothing to a kind that has its own list", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    expect(hrefOf(listLink("Deployment"))).toBe("/c/prod/deployments");
+  });
+});
+
+describe("a served kind's list", () => {
+  /** A kind the registry holds opens its own page; a namesake in another group does not. */
+  it("opens the registry's page only for that very kind", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const pods = hrefOf(
+      servedListLink({ kind: "Pod", group: "", plural: "pods" })
+    );
+    expect(pods).toBe("/c/prod/pods");
+    expect(routeOf(router, pods)).not.toMatch(GENERIC);
+    const routes = hrefOf(
+      servedListLink({
+        kind: "HTTPRoute",
+        group: "gateway.networking.k8s.io",
+        plural: "httproutes",
+      })
+    );
+    expect(routeOf(router, routes)).not.toMatch(GENERIC);
+    const events = hrefOf(
+      servedListLink({
+        kind: "Event",
+        group: "events.k8s.io",
+        plural: "events",
+      })
+    );
+    expect(events).toBe("/c/prod/events.events.k8s.io");
+    expect(routeOf(router, events)).toMatch(GENERIC);
+  });
+
+  it("lists a core kind the registry does not hold by its bare plural", async () => {
+    at("/c/prod");
+    expect(
+      hrefOf(
+        servedListLink({
+          kind: "ServiceAccount",
+          group: "",
+          plural: "serviceaccounts",
+        })
+      )
+    ).toBe("/c/prod/serviceaccounts");
+  });
+});
+
+describe("an object of a served kind", () => {
+  /**
+   * A search hit for a ServiceAccount, a ClusterRole or an Istio Gateway
+   * carries its group and plural. Linked by kind name alone, the first two
+   * had nowhere to go and the third opened the Gateway API page of a
+   * Gateway that does not exist.
+   */
+  it("opens the registry's page only for that very kind, and the generic page otherwise", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const href = (ref: Parameters<typeof servedObjectLink>[0]) =>
+      hrefOf(servedObjectLink(ref)!);
+
+    const pod = href({
+      kind: "Pod",
+      group: "",
+      plural: "pods",
+      name: "api-0",
+      namespace: "web",
+    });
+    expect(pod).toBe("/c/prod/pods/web/api-0");
+    expect(routeOf(router, pod)).not.toMatch(GENERIC);
+
+    expect(
+      href({
+        kind: "ServiceAccount",
+        group: "",
+        plural: "serviceaccounts",
+        name: "marco",
+        namespace: "team-checkout",
+      })
+    ).toBe("/c/prod/serviceaccounts/team-checkout/marco");
+    const role = href({
+      kind: "ClusterRole",
+      group: "rbac.authorization.k8s.io",
+      plural: "clusterroles",
+      name: "view",
+      namespace: null,
+    });
+    expect(role).toBe("/c/prod/clusterroles.rbac.authorization.k8s.io/view");
+    expect(routeOf(router, role)).toMatch(GENERIC);
+    expect(
+      href({
+        kind: "Gateway",
+        group: "networking.istio.io",
+        plural: "gateways",
+        name: "edge",
+        namespace: "istio-system",
+      })
+    ).toBe("/c/prod/gateways.networking.istio.io/istio-system/edge");
+  });
+});
+
+describe("a reference that knows its group but not its plural", () => {
+  const crds = (group: string, kind: string) =>
+    group === "networking.istio.io" && kind === "Gateway"
+      ? "gateways.networking.istio.io"
+      : null;
+
+  /**
+   * An owner reference or a vendor's inventory names a group and a kind.
+   * Linked by the kind alone, an Istio Gateway opened the Gateway API page,
+   * and so did one whose CRD was still being read.
+   */
+  it("opens the built-in only in its own group, a namesake's CRD, and nothing while no CRD names it", () => {
+    at("/c/prod");
+    expect(
+      crdInGroup({ kind: "Gateway", group: "gateway.networking.k8s.io" }, crds)
+    ).toBeUndefined();
+    expect(
+      crdInGroup({ kind: "Gateway", group: "networking.istio.io" }, crds)
+    ).toBe("gateways.networking.istio.io");
+    expect(
+      crdInGroup(
+        { kind: "ClusterRole", group: "rbac.authorization.k8s.io" },
+        crds
+      )
+    ).toBeUndefined();
+    const unknown = crdInGroup(
+      { kind: "StatefulSet", group: "apps.kruise.io" },
+      crds
+    );
+    expect(unknown).toBeNull();
+    expect(
+      objectLink({
+        kind: "StatefulSet",
+        name: "db",
+        namespace: "web",
+        crd: unknown,
+      })
+    ).toBeNull();
+  });
+});
+
+describe("the same place in another cluster", () => {
+  /** A list means the same thing in any cluster. */
+  it("keeps a list", () => {
+    expect(retargetHref("/c/prod/pods?q=api", "dev")).toBe("/c/dev/pods");
+  });
+
+  /** An object exists only in the cluster it was opened in. */
+  it("gives way to the object's list", () => {
+    expect(retargetHref("/c/prod/pods/web/api-0", "dev")).toBe("/c/dev/pods");
+    expect(retargetHref("/c/prod/replicasets/web/api-7f9", "dev")).toBe(
+      "/c/dev/deployments"
+    );
+  });
+
+  /** Outside any cluster there is no place to keep. */
+  it("starts at the overview from the front door", () => {
+    expect(retargetHref("/", "dev")).toBe("/c/dev");
+  });
+});
+
+describe("the namespace an address shows one object in", () => {
+  /**
+   * The tab names this namespace beside the page. Fails if an address built
+   * here for one object reads as being in no namespace, or in the wrong one.
+   */
+  it("is the object's own namespace for every address that shows one", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const built = [
+      objectLink({ kind: "Pod", name: "wd-demo", namespace: "lena-sandbox" }),
+      objectLink({ kind: "ConfigMap", name: "cfg", namespace: "lena-sandbox" }),
+      helmReleaseLink({
+        source: "secrets",
+        namespace: "lena-sandbox",
+        name: "web",
+      }),
+    ];
+    for (const link of built)
+      expect(namespaceShownBy(hrefOf(link!))).toBe("lena-sandbox");
+    expect(
+      namespaceShownBy(hrefOf(objectLink({ kind: "Namespace", name: "shop" })!))
+    ).toBe("shop");
+    expect(namespaceShownBy("/c/prod/pods/team%20a/api-0?tab=logs")).toBe(
+      "team a"
+    );
+  });
+
+  /** Fails if a list, a page or a cluster-scoped object claims a namespace. */
+  it("is none where the address shows no namespaced object", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    for (const href of [
+      "/c/prod",
+      "/c/prod/pods",
+      "/c/prod/pods?peek=pods%2Fweb%2Fapi-0",
+      "/c/prod/namespaces",
+      "/c/prod/helm",
+      "/c/prod/integrations/argocd",
+      hrefOf(objectLink({ kind: "Node", name: "agent-0" })!),
+      "/",
+    ])
+      expect(namespaceShownBy(href)).toBeNull();
+  });
+});
+
+describe("one segment under a kind's address", () => {
+  const LEASES: ApiCatalog = {
+    entries: [
+      {
+        group: "coordination.k8s.io",
+        version: "v1",
+        kind: "Lease",
+        plural: "leases",
+        namespaced: true,
+        verbs: ["list", "watch"],
+        shortNames: [],
+      },
+    ],
+    unread: [],
+  };
+
+  async function landed(path: string, catalog?: ApiCatalog) {
+    const queryClient = new QueryClient();
+    if (catalog) queryClient.setQueryData(catalogQuery().queryKey, catalog);
+    const router = createRouter({
+      routeTree,
+      context: { queryClient },
+      history: createMemoryHistory({ initialEntries: [path] }),
+    });
+    setRouter(router);
+    await router.load();
+    return router.state.location;
+  }
+
+  /**
+   * Marco's `rubick://open/c/acme-staging/deployments/team-blind` opened
+   * "Could not read this object ... in the namespace default". Fails if one
+   * segment under a namespaced kind is taken for an object's name.
+   */
+  it("opens a namespaced kind's list scoped to that namespace", async () => {
+    const location = await landed("/c/acme-staging/deployments/team-blind");
+    expect(location.pathname).toBe("/c/acme-staging/deployments");
+    expect(location.search).toEqual({ namespace: "team-blind" });
+  });
+
+  /** The generic route reads discovery for a kind the registry does not hold. */
+  it("does the same for a kind only discovery knows", async () => {
+    const location = await landed("/c/prod/leases/kube-system", LEASES);
+    expect(location.pathname).toBe("/c/prod/leases");
+    expect(location.search).toEqual({ namespace: "kube-system" });
+  });
+
+  /** Fails if a namespace and a name, or a cluster-scoped object, lose their page. */
+  it("keeps two segments as a namespace and a name, and a cluster-scoped kind's object", async () => {
+    expect(
+      (await landed("/c/prod/deployments/team-blind/ledger")).pathname
+    ).toBe("/c/prod/deployments/team-blind/ledger");
+    expect((await landed("/c/prod/nodes/worker-1")).pathname).toBe(
+      "/c/prod/nodes/worker-1"
+    );
+  });
+
+  /** A link handed around keeps the namespace through the deep-link parser. */
+  it("survives a deep link", () => {
+    expect(
+      parseDeepLink(
+        "rubick://open/c/acme-staging/deployments?namespace=team-blind"
+      )?.path
+    ).toBe("/c/acme-staging/deployments?namespace=team-blind");
+  });
+});

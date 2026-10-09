@@ -1,0 +1,138 @@
+/**
+ * A Helm-release list read that the cluster refused must read as a refusal —
+ * not as an empty "no releases" table, which is the empty-collection-on-a-403
+ * collapse the app exists to prevent. A refusal that still returned some rows
+ * (another namespace answered) shows those rows. Deleting the error branch or
+ * the isRefusal split puts the silent-empty-table back.
+ */
+
+import { describe, expect, it, vi } from "vite-plus/test";
+import { screen } from "@testing-library/react";
+
+import type { HelmRelease } from "@/generated/types";
+import { renderWithRouter } from "@/test/render";
+import { HelmReleasesTab } from "./HelmReleasesTab";
+
+const release = (name: string): HelmRelease => ({
+  name,
+  namespace: "team-a",
+  revision: 1,
+  status: "deployed",
+  chart: "nginx-1.0.0",
+  appVersion: "1.0.0",
+  updated: "2026-09-05T10:00:00Z",
+  source: "native",
+  suspended: false,
+  sourceRef: null,
+  unreadable: null,
+});
+
+function mount(props: Partial<Parameters<typeof HelmReleasesTab>[0]> = {}) {
+  return renderWithRouter(
+    <HelmReleasesTab
+      releases={[]}
+      isLoading={false}
+      error={null}
+      helmCliAvailable={true}
+      onRefetch={vi.fn()}
+      onShowHistory={vi.fn()}
+      onUpgrade={vi.fn()}
+      onRollback={vi.fn()}
+      onUninstall={vi.fn()}
+      {...props}
+    />,
+    { at: "/c/test/helm", route: "/c/$cluster/helm" }
+  );
+}
+
+describe("what the releases tab does when the read fails", () => {
+  // The errors are raw strings on purpose: the query's thrown value is not
+  // guaranteed to be an Error, and reading `.message` off a string (the old
+  // code did) throws mid-render. Passing an Error here would test a shape the
+  // page need not produce and hide that crash — so these are strings, the
+  // harsher case.
+  it("names a refusal instead of showing an empty table", async () => {
+    await mount({
+      error:
+        "Tauri command 'listHelmReleasesIn' failed: secrets is forbidden (code: 403)",
+    });
+
+    expect(
+      screen.getByText(/do not have permission to list/i)
+    ).toBeInTheDocument();
+    expect(screen.getByText(/secrets is forbidden/)).toBeInTheDocument();
+    // The framing prefix is off the message.
+    expect(screen.queryByText(/Tauri command/)).not.toBeInTheDocument();
+  });
+
+  it("calls a non-refusal failure a read error, not a refusal", async () => {
+    await mount({ error: "error trying to connect: connection refused" });
+
+    expect(
+      screen.getByText(/Could not read Helm releases/i)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/do not have permission to list/i)
+    ).not.toBeInTheDocument();
+  });
+
+  it("still shows the rows a readable namespace returned despite a sibling's refusal", async () => {
+    await mount({
+      releases: [release("api"), release("web")],
+      error: "secrets is forbidden (code: 403)",
+    });
+
+    // Rows present -> the table, not the refusal block.
+    expect(screen.getByText("api")).toBeInTheDocument();
+    expect(screen.getByText("web")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/do not have permission to list/i)
+    ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * The empty message already knew a namespace went unread, but the footer
+ * under the rows still printed "1 row", the count of what answered stated
+ * as the count of the scope.
+ */
+describe("the releases tab beside a namespace it could not read", () => {
+  it("does not call the rows a total in the footer", async () => {
+    await mount({
+      releases: [release("api")],
+      unread: [
+        { namespace: "team-b", code: "FORBIDDEN", message: "forbidden" },
+      ],
+    });
+
+    expect(
+      screen.getByText("1 row, from the namespaces that answered")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("1 row")).toBeNull();
+  });
+});
+
+/**
+ * The release the app could not read must be on the page as itself, not as
+ * an absence. A secret that would not decode was dropped with a
+ * `tracing::warn!` nobody reads, so the page reported the survivors as the
+ * whole truth — "this cluster has no Helm releases" composed out of a read
+ * that failed, which is the one lie this app exists not to tell.
+ */
+describe("a release whose secret would not decode", () => {
+  it("is a row that says so, not a row that is missing", async () => {
+    await mount({
+      releases: [
+        {
+          ...release("shop-api"),
+          status: "",
+          chart: "",
+          unreadable: "missing field `config`",
+        },
+      ],
+    });
+    expect(await screen.findByText("shop-api")).toBeInTheDocument();
+    expect(screen.getByText("could not be read")).toBeInTheDocument();
+    expect(screen.getByTitle("missing field `config`")).toBeInTheDocument();
+  });
+});

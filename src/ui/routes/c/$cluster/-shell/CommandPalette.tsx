@@ -1,0 +1,1694 @@
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+} from "react";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Ban,
+  CircleDashed,
+  FolderOpen,
+  FolderSearch,
+  ListPlus,
+  Lock,
+  ScanSearch,
+  Search,
+  SearchX,
+  TriangleAlert,
+  X,
+  Zap,
+} from "lucide-react";
+
+import { useActivityPanelStore } from "@/stores/activityPanelStore";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import {
+  AlertReadingPanel,
+  type AlertTarget,
+} from "../-alerts/AlertReadingPanel";
+import { looksLikeAlert, parseAlert, type AlertReading } from "@/lib/alerts";
+import { useAlertArrivalStore } from "@/stores/alertArrivalStore";
+import { Kbd } from "@/components/ui/kbd";
+import { ProviderMark } from "@/components/ui/provider-mark";
+import { KindIcon } from "@/components/object/KindIcon";
+import { ResourceName } from "@/components/object/ResourceName";
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { buildDeepLink } from "@/lib/deep-link";
+import { planPeekActions } from "../-peek/peek-actions";
+import {
+  actionTargetOfEntry,
+  objectOnScreen,
+  paletteActionsOf,
+  registryKindOf,
+  sameReport,
+  targetKey,
+  targetLink,
+  type ActionsReport,
+  type ActionTarget,
+  type PaletteActionId,
+} from "./palette-actions";
+import type { ActionsRunner } from "./PaletteActionsHost";
+import { ResourceRef } from "@/components/object/ResourceRef";
+import {
+  useResourceSearch,
+  type ClusterSearchState,
+  type SearchHit,
+} from "./useResourceSearch";
+import { clusterColor, detectProvider } from "@/lib/cluster-identity";
+import { commands } from "@/lib/commands";
+import { parseBang } from "@/lib/cluster-search";
+import { hrefOf, type AppLink } from "@/lib/links";
+import { cn } from "@/lib/utils";
+import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
+import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { SETTINGS_SHORTCUT, useSettingsStore } from "@/stores/settingsStore";
+import type { RecentItem } from "@/generated/types";
+import { useT, type T } from "@/i18n/useT";
+import { catalogQuery } from "../-object/served";
+import {
+  buildActionEntries,
+  buildPaletteEntries,
+  english,
+  hasAnswered,
+  byKindName,
+  hitKey,
+  isCold,
+  isSelectable,
+  type Entry,
+  type HintTone,
+  type Scope,
+} from "./palette-entries";
+import { formatCount } from "@/lib/count";
+
+const PaletteActionsHost = lazy(() => import("./PaletteActionsHost"));
+
+/** Each action's English words, so they find it in every language. */
+function englishLabels(target: ActionTarget): ReadonlyMap<string, string> {
+  const plan = planPeekActions(
+    registryKindOf(target) ?? target.kind,
+    undefined,
+    english
+  );
+  return new Map(
+    paletteActionsOf(target, [...plan.inline, ...plan.menu], {}, english).map(
+      (action) => [action.id, action.label]
+    )
+  );
+}
+
+/** One object's actions on screen, and the search row they were opened from. */
+interface ActionsOf {
+  target: ActionTarget;
+  selected: string | null;
+}
+
+/**
+ * The clusters the reader has explicitly agreed to open a connection to,
+ * and the request that carries that agreement.
+ *
+ * `connect` is one flag for the whole fan-out, so waking exactly the cluster
+ * that was asked for means leaving the other cold ones out of the request —
+ * their rows are kept here and rendered from the snapshot instead. Otherwise
+ * one Enter would run the credential plugin of every cluster in the
+ * kubeconfig.
+ */
+interface Wake {
+  /** Contexts the request asks about, connecting where it must. */
+  searched: string[];
+  /** Cold clusters deliberately left out, still shown and still offered. */
+  cold: ClusterSearchState[];
+  /** Bumped by a retry, which is otherwise the identical request. */
+  attempt: number;
+}
+
+export function CommandPalette() {
+  const t = useT();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState("");
+  const [scope, setScope] = useState<Scope>({ kind: "current" });
+  const [wake, setWake] = useState<Wake | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
+  const [opening, setOpening] = useState("");
+  const [everything, setEverything] = useState(false);
+  const [allNamespaces, setAllNamespaces] = useState(false);
+  const [actionsOf, setActionsOf] = useState<ActionsOf | null>(null);
+  const [actionText, setActionText] = useState("");
+  // The object an action ran on stays mounted after the palette closes, so
+  // the dialog it opened outlives the palette.
+  const [pinned, setPinned] = useState<ActionTarget | null>(null);
+  const [report, setReport] = useState<ActionsReport | null>(null);
+  const runner = useRef<ActionsRunner | null>(null);
+  const copy = useCopyToClipboard();
+  const onReport = useCallback(
+    (next: ActionsReport) =>
+      setReport((previous) => (sameReport(previous, next) ? previous : next)),
+    []
+  );
+
+  const navigate = useNavigate();
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const pointer = useRef<string | null>(null);
+  const listId = useId();
+
+  const contexts = useClusterStore((s) => s.contexts);
+  const currentContext = useClusterStore((s) => s.currentContext);
+  const currentNamespace = useClusterStore((s) => s.currentNamespace);
+  const namespaceScope = useNamespaceScope();
+  const isConnected = useClusterStore((s) => s.isConnected);
+  const catalog = useQuery({
+    ...catalogQuery(),
+    enabled: open && isConnected,
+  });
+  const switchNamespace = useClusterStore((s) => s.switchNamespace);
+  const openActivityOn = useActivityPanelStore((s) => s.openOn);
+  const openSettings = useSettingsStore((s) => s.openSettings);
+  const marks = useClusterIdentityStore((s) => s.marks);
+  const openTab = useScopeTabStore((s) => s.openTab);
+  const onScreen = useRouterState({ select: (state) => state.matches.at(-1) });
+  const pageObject = useMemo(
+    () =>
+      onScreen && currentContext && isConnected
+        ? objectOnScreen(
+            {
+              fullPath: onScreen.fullPath,
+              params: onScreen.params as Record<string, string | undefined>,
+            },
+            currentContext,
+            catalog.data?.entries
+          )
+        : null,
+    [onScreen, currentContext, isConnected, catalog.data?.entries]
+  );
+  const hostTarget =
+    pinned ?? (open ? (actionsOf?.target ?? pageObject) : null);
+  const hostReport =
+    hostTarget && report?.target === targetKey(hostTarget) ? report : null;
+
+  // A bang is only ever at the start, so it survives the rest of the query
+  // being retyped and cannot be triggered by a `!` inside a resource name.
+  const bang = useMemo(() => parseBang(text), [text]);
+  const query = text.trim();
+  const hasQuery = query.length > 0;
+  const scoped = scope.kind !== "current";
+  const wholeCluster = scoped || allNamespaces;
+
+  const scopeContexts = useMemo(() => {
+    if (scope.kind === "context") return [scope.context];
+    if (scope.kind === "all") return contexts.map((ctx) => ctx.name);
+    return [];
+  }, [scope, contexts]);
+
+  const requestContexts = wake ? wake.searched : scopeContexts;
+
+  const { hits, clusters, isSearching, error } = useResourceSearch({
+    query,
+    contexts: requestContexts,
+    // Another cluster's namespaces are not this one's, so a scoped search
+    // is a whole-cluster search; the unscoped one keeps today's filter.
+    namespace: wholeCluster ? null : currentNamespace || null,
+    connect: wake !== null,
+    attempt: wake?.attempt ?? 0,
+    // A retry is a question asked again, so it lists again too.
+    session: `${opening}:${wake?.attempt ?? 0}`,
+    everything: everything && !scoped,
+    enabled: open && bang === null && (scoped || isConnected),
+  });
+
+  const pageActions = useMemo(
+    () =>
+      pageObject && !actionsOf
+        ? {
+            target: pageObject,
+            actions:
+              hostReport?.reading === "ready"
+                ? paletteActionsOf(
+                    pageObject,
+                    hostReport.actions,
+                    hostReport.busy,
+                    t
+                  )
+                : null,
+            english: englishLabels(pageObject),
+          }
+        : undefined,
+    [pageObject, actionsOf, hostReport, t]
+  );
+
+  /** Cluster rows in the order they were asked, cold ones included. */
+  const shownClusters = useMemo(() => {
+    const byContext = new Map(clusters.map((c) => [c.context, c]));
+    for (const cold of wake?.cold ?? []) {
+      if (!byContext.has(cold.context)) byContext.set(cold.context, cold);
+    }
+    const order = scopeContexts.length
+      ? scopeContexts
+      : clusters.map((c) => c.context);
+    // A cluster in the scope with nothing said about it yet is one the
+    // request has just gone out for. Leaving it out of the list instead
+    // would drop it off the screen for the length of a debounce.
+    return order.map(
+      (context): ClusterSearchState =>
+        byContext.get(context) ?? {
+          context,
+          status: "searching",
+          reason: null,
+          message: null,
+          matched: 0,
+          truncated: false,
+          searched: [],
+          unreadable: [],
+          loading: [],
+        }
+    );
+  }, [clusters, wake, scopeContexts]);
+
+  const hitsByContext = useMemo(() => {
+    const grouped = new Map<string, Map<string, SearchHit>>();
+    // The unscoped search asks the cluster for one namespace or for all of
+    // them, so a window narrowed to several has to keep what it wants here —
+    // the same rule the lists follow. A scoped search keeps every hit:
+    // another cluster's namespaces are not this one's.
+    for (const hit of wholeCluster ? hits : namespaceScope.narrow(hits)) {
+      const bucket = grouped.get(hit.context) ?? new Map<string, SearchHit>();
+      bucket.set(hitKey(hit), hit);
+      grouped.set(hit.context, bucket);
+    }
+    return grouped;
+  }, [hits, wholeCluster, namespaceScope]);
+
+  const answered = shownClusters.filter(hasAnswered).length;
+  const unreadGroups = catalog.data?.unread.length;
+
+  // ----- what the list is made of -----
+
+  const searchEntries = useMemo(
+    () =>
+      buildPaletteEntries({
+        text,
+        scope,
+        contexts,
+        currentContext,
+        marks,
+        recentItems,
+        isConnected,
+        error,
+        shownClusters,
+        hitsByContext,
+        kinds: catalog.data?.entries,
+        unreadGroups,
+        everything,
+        scopeLabel: allNamespaces
+          ? t("cluster", "allNamespaces")
+          : namespaceScope.label,
+        narrowedTo:
+          allNamespaces || namespaceScope.isAll
+            ? undefined
+            : namespaceScope.inWords,
+        page: pageActions,
+        t,
+      }),
+    [
+      text,
+      scope,
+      contexts,
+      currentContext,
+      marks,
+      recentItems,
+      isConnected,
+      error,
+      shownClusters,
+      hitsByContext,
+      catalog.data?.entries,
+      unreadGroups,
+      everything,
+      allNamespaces,
+      namespaceScope.label,
+      namespaceScope.isAll,
+      namespaceScope.inWords,
+      pageActions,
+      t,
+    ]
+  );
+  const actionEntries = useMemo(
+    () =>
+      actionsOf
+        ? buildActionEntries({
+            target: actionsOf.target,
+            report: hostReport,
+            text: actionText,
+            english: englishLabels(actionsOf.target),
+            t,
+          })
+        : null,
+    [actionsOf, hostReport, actionText, t]
+  );
+  const entries = actionEntries ?? searchEntries;
+
+  const selectable = useMemo(() => entries.filter(isSelectable), [entries]);
+  // Selection follows the row, not its position: groups arrive as each
+  // cluster answers, and an index would slide the highlight onto whatever
+  // the slowest cluster pushed into that slot.
+  const activeId =
+    selectable.find((entry) => entry.id === selectedId)?.id ??
+    selectable[0]?.id ??
+    null;
+
+  // ----- acting on it -----
+
+  const close = useCallback(() => setOpen(false), []);
+
+  const actionTargetOf = useCallback(
+    (entry: Entry | undefined) => actionTargetOfEntry(entry, currentContext),
+    [currentContext]
+  );
+
+  const showActions = useCallback(
+    (target: ActionTarget, from: string | null) => {
+      setActionsOf({ target, selected: from });
+      setActionText("");
+      setSelectedId(null);
+      inputRef.current?.focus();
+    },
+    []
+  );
+
+  const backToSearch = useCallback(() => {
+    setSelectedId(actionsOf?.selected ?? null);
+    setActionsOf(null);
+    setActionText("");
+    inputRef.current?.focus();
+  }, [actionsOf]);
+
+  /**
+   * An alert somebody pasted, instead of a search.
+   *
+   * It has to be caught on paste rather than read out of the field: an
+   * `input` drops the newlines on the way in, and the newlines are the whole
+   * grammar. Nothing is opened by arriving here, and `esc` puts the search
+   * back.
+   */
+  const [alert, setAlert] = useState<AlertReading | null>(null);
+  const arriveFromAlert = useAlertArrivalStore((s) => s.arrive);
+  const openFromAlert = useCallback(
+    (target: AlertTarget) => {
+      arriveFromAlert(alert!, {
+        // The cluster the reader picked, which the banner needs: without it
+        // the alert's words followed the object's name into whichever
+        // cluster the window was showing.
+        context: target.context,
+        kind: target.kind,
+        name: target.name,
+        namespace: target.namespace,
+      });
+      setAlert(null);
+      if (target.context !== currentContext) {
+        openTab({
+          href: target.path,
+          context: target.context,
+          namespace: target.namespace ?? "",
+          background: false,
+        });
+        close();
+        return;
+      }
+      close();
+      requestAnimationFrame(() => void navigate({ href: target.path }));
+    },
+    [alert, arriveFromAlert, currentContext, openTab, close, navigate]
+  );
+
+  const go = useCallback(
+    (
+      link: AppLink,
+      remember?: {
+        name: string;
+        kind: string;
+        namespace?: string;
+        context: string | null;
+        crd?: string;
+      }
+    ) => {
+      if (remember) {
+        commands
+          .addRecentItem({
+            ...remember,
+            namespace: remember.namespace ?? undefined,
+            context: remember.context ?? undefined,
+            timestamp: Date.now(),
+          })
+          .catch(() => {});
+      }
+      close();
+      requestAnimationFrame(() => void navigate(link));
+    },
+    [close, navigate]
+  );
+
+  const pickScope = useCallback(
+    (next: Scope) => {
+      setScope(next);
+      setWake(null);
+      setText(bang?.rest ?? "");
+      inputRef.current?.focus();
+    },
+    [bang]
+  );
+
+  /**
+   * Agree to open a connection to one cold cluster, or ask a failed one
+   * again. Everything already answering stays in the request; every other
+   * cold cluster stays out of it, and out of its credential plugin.
+   */
+  const wakeCluster = useCallback(
+    (context: string) => {
+      setWake((previous) => {
+        const searched = shownClusters
+          .filter((c) => c.context === context || !isCold(c))
+          .map((c) => c.context);
+        return {
+          searched,
+          cold: shownClusters.filter((c) => c.context !== context && isCold(c)),
+          attempt: (previous?.attempt ?? 0) + 1,
+        };
+      });
+    },
+    [shownClusters]
+  );
+
+  /**
+   * One action on one object. The registry's run on the mounted host, which
+   * stays mounted for the dialog they open once the palette is gone; the
+   * object menu's own copy, open and Logs are a link or a copy.
+   */
+  const runAction = useCallback(
+    (target: ActionTarget, id: PaletteActionId) => {
+      const link = targetLink(target);
+      switch (id) {
+        case "logs": {
+          const logs = targetLink(target, { tab: "logs" });
+          if (logs) go(logs);
+          return;
+        }
+        case "copyName":
+          void copy(
+            target.name,
+            t("action", "nameCopied", { name: target.name })
+          );
+          close();
+          return;
+        case "copyLink":
+          if (link) {
+            void copy(
+              buildDeepLink(hrefOf(link)),
+              t("cluster", "objectLinkCopied", { name: target.name })
+            );
+          }
+          close();
+          return;
+        case "openTab":
+          // Behind this one, as from the object menu: the palette stays.
+          if (link) openTab({ href: hrefOf(link), background: true });
+          return;
+        default:
+          setPinned(target);
+          runner.current?.run(id);
+          close();
+      }
+    },
+    [close, copy, go, openTab, t]
+  );
+
+  const activate = useCallback(
+    (entry: Entry, newTab: boolean) => {
+      // Once here rather than in each arm that moves the reader: Settings is
+      // an opaque layer over the window, and this listener is on `window`,
+      // which a Radix modal does not stop. Anything that moves the reader has
+      // to stand it aside first — including the `hit` arm that switches to a
+      // foreground tab in another cluster. Not for `settings`, which opens it.
+      if (entry.kind !== "settings") {
+        useSettingsStore.getState().closeSettings();
+      }
+      switch (entry.kind) {
+        case "all-clusters":
+          pickScope({ kind: "all" });
+          return;
+        case "cluster":
+          pickScope({ kind: "context", context: entry.context });
+          return;
+        case "group":
+          if (entry.action !== "none") wakeCluster(entry.cluster.context);
+          return;
+        case "more":
+          // The rest of one cluster's hits is that cluster on its own,
+          // which is a scope the reader already has a word for.
+          setScope({ kind: "context", context: entry.context });
+          setWake(null);
+          inputRef.current?.focus();
+          return;
+        case "hit": {
+          const { hit } = entry;
+          // A namespace is a scope, so picking one points this window at it —
+          // the same verb the namespaces list offers — and leaves the reader
+          // on the page they were reading, now under that scope.
+          if (entry.path === null) {
+            if (newTab || hit.context !== currentContext) {
+              openTab({
+                context: hit.context,
+                namespace: hit.name,
+                background: newTab,
+              });
+            } else {
+              void switchNamespace(hit.name);
+            }
+            // A tab opened behind the palette leaves it standing: the next
+            // one is a keystroke away, and closing was the reason a reader
+            // could not open three pods in a row.
+            if (!newTab) close();
+            return;
+          }
+          // Crossing a cluster boundary costs a tab: switching this one
+          // would pull the ground out from under the page being read.
+          if (newTab || hit.context !== currentContext) {
+            openTab({
+              href: hrefOf(entry.path),
+              context: hit.context,
+              namespace: hit.namespace ?? "",
+              background: newTab,
+            });
+            if (!newTab) close();
+            return;
+          }
+          go(entry.path, {
+            name: hit.name,
+            kind: hit.kind,
+            namespace: hit.namespace ?? undefined,
+            context: hit.context,
+          });
+          return;
+        }
+        case "recent":
+          if (newTab) {
+            openTab({ href: hrefOf(entry.path), background: true });
+            return;
+          }
+          go(entry.path, {
+            name: entry.name,
+            kind: entry.resourceKind,
+            namespace: entry.namespace,
+            context: entry.context,
+            crd: entry.crd,
+          });
+          return;
+        case "link":
+        case "kind":
+          if (newTab) {
+            openTab({ href: hrefOf(entry.path), background: true });
+            return;
+          }
+          go(entry.path);
+          return;
+        case "search-more":
+          setEverything(true);
+          inputRef.current?.focus();
+          return;
+        case "search-all-namespaces":
+          setAllNamespaces(true);
+          inputRef.current?.focus();
+          return;
+        case "page-actions":
+          showActions(entry.target, entry.id);
+          return;
+        case "action":
+          runAction(entry.target, entry.action.id);
+          return;
+        case "panel":
+          // Nothing to open in a tab: it is a panel over the current page,
+          // not a page of its own.
+          openActivityOn(entry.tab);
+          close();
+          return;
+        case "settings":
+          openSettings();
+          close();
+          return;
+        default:
+          return;
+      }
+    },
+    [
+      close,
+      currentContext,
+      go,
+      openActivityOn,
+      openSettings,
+      openTab,
+      pickScope,
+      runAction,
+      showActions,
+      switchNamespace,
+      wakeCluster,
+    ]
+  );
+
+  const move = useCallback(
+    (delta: number) => {
+      if (selectable.length === 0) return;
+      const at = selectable.findIndex((entry) => entry.id === activeId);
+      const next = Math.min(
+        Math.max((at === -1 ? 0 : at) + delta, 0),
+        selectable.length - 1
+      );
+      setSelectedId(selectable[next].id);
+    },
+    [activeId, selectable]
+  );
+
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLInputElement>) => {
+      const entry = selectable.find((item) => item.id === activeId);
+
+      if (actionsOf) {
+        if (
+          (event.key === "Tab" && event.shiftKey) ||
+          (event.key === "Backspace" && actionText === "")
+        ) {
+          event.preventDefault();
+          backToSearch();
+          return;
+        }
+        if (event.key === "Tab") {
+          event.preventDefault();
+          return;
+        }
+      } else if (
+        !bang &&
+        ((event.key === "Tab" && !event.shiftKey) ||
+          (event.key === "ArrowRight" && caretAtEnd(event.currentTarget)))
+      ) {
+        const target = actionTargetOf(entry);
+        if (target && entry) {
+          event.preventDefault();
+          showActions(target, entry.id);
+          return;
+        }
+      }
+
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        move(1);
+        return;
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        move(-1);
+        return;
+      }
+      // Tab writes the whole cluster name into the field, so the next
+      // keystroke narrows from a name that is certainly real.
+      if (event.key === "Tab" && bang) {
+        event.preventDefault();
+        if (entry?.kind === "cluster") setText(`!${entry.context}`);
+        else if (entry?.kind === "all-clusters") setText("!*");
+        return;
+      }
+      if (event.key === "Enter") {
+        if (!entry) return;
+        event.preventDefault();
+        activate(entry, event.metaKey || event.ctrlKey);
+        return;
+      }
+      // The chip is a token in the field, and every token field in the app
+      // gives it back to backspace at an empty caret.
+      if (event.key === "Backspace" && text === "" && scoped && !actionsOf) {
+        event.preventDefault();
+        setScope({ kind: "current" });
+        setWake(null);
+      }
+    },
+    [
+      actionText,
+      actionTargetOf,
+      actionsOf,
+      activate,
+      activeId,
+      backToSearch,
+      bang,
+      move,
+      scoped,
+      selectable,
+      showActions,
+      text,
+    ]
+  );
+
+  // ----- lifecycle -----
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "k") {
+        event.preventDefault();
+        setOpen((previous) => !previous);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener("command-palette-open", onOpen);
+    return () => window.removeEventListener("command-palette-open", onOpen);
+  }, []);
+
+  // Reset on every open/close transition. Genuine sync-prop-into-state —
+  // a `key`-style remount would be cleaner but the palette is mounted at
+  // the app root.
+  /* oxlint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (open) {
+      inputRef.current?.focus();
+      setPinned(null);
+      setOpening(
+        `${Date.now().toString(36)}.${Math.random().toString(36).slice(2)}`
+      );
+      commands
+        .getRecentItems()
+        .then(setRecentItems)
+        .catch(() => setRecentItems([]));
+    } else {
+      pointer.current = null;
+      setText("");
+      setScope({ kind: "current" });
+      setWake(null);
+      setEverything(false);
+      setAllNamespaces(false);
+      setActionsOf(null);
+      setActionText("");
+      setSelectedId(null);
+      // The alert too: a reader who pasted one, closed the palette and
+      // pressed ⌘K again got the same alert's panel back instead of the
+      // search box, and the field no longer answered to typing.
+      setAlert(null);
+    }
+  }, [open]);
+  /* oxlint-enable react-hooks/set-state-in-effect */
+
+  // Arrowing past the fold has to bring the row with it — the field keeps
+  // the focus, so the browser will not do it. Optional call because jsdom
+  // does not implement it.
+  useEffect(() => {
+    if (activeId === null) return;
+    document
+      .getElementById(`${listId}-${activeId}`)
+      ?.scrollIntoView?.({ block: "nearest" });
+  }, [activeId, listId]);
+
+  // ----- the surface -----
+
+  const scopeLabel =
+    scope.kind === "all"
+      ? t("cluster", "allClusters")
+      : scope.kind === "context"
+        ? scope.context
+        : null;
+
+  const activeEntry = selectable.find((entry) => entry.id === activeId);
+  const actionable = !actionsOf && actionTargetOf(activeEntry) !== null;
+
+  return (
+    <>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent
+          className="z-60 max-w-[620px] gap-0 overflow-hidden p-0"
+          onEscapeKeyDown={(event) => {
+            if (!actionsOf) return;
+            // Out of one object's actions, back to the search it came from.
+            event.preventDefault();
+            backToSearch();
+          }}
+        >
+          <DialogTitle className="sr-only">
+            {t("action", "commandPalette")}
+          </DialogTitle>
+
+          {/* One field on the raised surface. A bordered input inside an
+            overlay is a second surface on top of the only surface the
+            design allows — the hairline below is the whole chrome. */}
+          <div className="flex items-center gap-2 border-b border-hair px-3 py-2.5 text-fg-fnt">
+            <Search className="h-3.5 w-3.5 flex-none" />
+            {actionsOf && (
+              <span className="inline-flex min-w-0 shrink-0 items-center gap-1 rounded bg-hover px-1.5 text-[11px] leading-[18px] text-fg-mut">
+                <Zap className="h-3 w-3 flex-none" aria-hidden />
+                {actionsOf.target.name}
+              </span>
+            )}
+            {!actionsOf && scopeLabel && (
+              <ScopeChip
+                label={scopeLabel}
+                onRemove={() => {
+                  setScope({ kind: "current" });
+                  setWake(null);
+                  inputRef.current?.focus();
+                }}
+              />
+            )}
+            <input
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              ref={inputRef}
+              autoFocus
+              aria-label={t("action", "searchResourcesActionsPages")}
+              role="combobox"
+              // While an alert is being read there is no listbox under this
+              // box at all — the panel has its own controls — so the box
+              // pointed a screen reader at elements that are not in the DOM.
+              aria-expanded={alert === null}
+              aria-controls={alert === null ? listId : undefined}
+              aria-activedescendant={
+                alert === null && activeId ? `${listId}-${activeId}` : undefined
+              }
+              placeholder={
+                actionsOf
+                  ? t("action", "filterActions")
+                  : scopeLabel
+                    ? t("action", "searchThisCluster")
+                    : t("action", "searchOrBang")
+              }
+              value={actionsOf ? actionText : text}
+              onChange={(event) =>
+                actionsOf
+                  ? setActionText(event.target.value)
+                  : setText(event.target.value)
+              }
+              onPaste={(event) => {
+                const pasted = event.clipboardData.getData("text");
+                if (!looksLikeAlert(pasted)) return;
+                // The field would swallow the newlines, and the newlines are
+                // the grammar this is read by.
+                event.preventDefault();
+                setAlert(parseAlert(pasted));
+              }}
+              onKeyDown={(event) => {
+                if (alert !== null) {
+                  if (event.key === "Escape") {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    setAlert(null);
+                  }
+                  return;
+                }
+                handleKeyDown(event);
+              }}
+              className="w-full bg-transparent text-[13px] text-fg outline-hidden placeholder:text-fg-fnt"
+            />
+          </div>
+
+          {alert !== null ? (
+            <div className="max-h-[420px] overflow-y-auto scrollbar-thin">
+              {/*
+              Keyed by the alert itself: the panel holds which cluster,
+              object and namespace the reader picked, and a second paste
+              into the same panel kept the first alert's answers.
+            */}
+              <AlertReadingPanel
+                key={alertKey(alert)}
+                reading={alert}
+                onOpen={openFromAlert}
+              />
+            </div>
+          ) : (
+            <div
+              id={listId}
+              role="listbox"
+              aria-label={t("action", "results")}
+              className="max-h-[380px] overflow-y-auto p-1 scrollbar-thin"
+            >
+              {entries.map((entry) => (
+                <EntryRow
+                  key={entry.id}
+                  domId={`${listId}-${entry.id}`}
+                  entry={entry}
+                  selected={entry.id === activeId}
+                  actionable={actionable && entry.id === activeId}
+                  onHover={(event) => {
+                    // A row that slid under a resting pointer, as results
+                    // arrive, is not one the reader pointed at.
+                    const at = `${event.clientX},${event.clientY}`;
+                    const moved =
+                      pointer.current !== null && pointer.current !== at;
+                    pointer.current = at;
+                    if (moved && isSelectable(entry)) setSelectedId(entry.id);
+                  }}
+                  onPick={(event) =>
+                    activate(
+                      entry,
+                      event.metaKey || event.ctrlKey || event.button === 1
+                    )
+                  }
+                />
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center gap-3.5 border-t border-hair px-3 py-1.5 text-[11px] text-fg-fnt">
+            {alert !== null ? (
+              <>
+                <FootKey shortcut="↑↓">{t("action", "hintMove")}</FootKey>
+                <FootKey shortcut="↵">{t("action", "hintOpen")}</FootKey>
+                <FootKey shortcut="esc">{t("alerts", "backToSearch")}</FootKey>
+              </>
+            ) : actionsOf ? (
+              <>
+                <FootKey shortcut="↑↓">{t("action", "hintMove")}</FootKey>
+                <FootKey shortcut="↵">{t("action", "hintRun")}</FootKey>
+                <FootKey shortcut="esc">{t("alerts", "backToSearch")}</FootKey>
+              </>
+            ) : bang ? (
+              <>
+                <FootKey shortcut="↵">{t("action", "hintScopeToIt")}</FootKey>
+                <FootKey shortcut="tab">{t("action", "hintComplete")}</FootKey>
+                <span className="ml-auto">
+                  {t("action", "hintTypeAllPrefix")}{" "}
+                  <span className="font-mono text-fg-mut">!*</span>{" "}
+                  {t("action", "hintTypeAllSuffix")}
+                </span>
+              </>
+            ) : (
+              <>
+                <FootKey shortcut="↑↓">{t("action", "hintMove")}</FootKey>
+                <FootKey shortcut="↵">{t("action", "hintOpen")}</FootKey>
+                <FootKey shortcut="mod+↵">{t("action", "hintNewTab")}</FootKey>
+                {actionable && (
+                  <FootKey shortcut="tab">{t("action", "hintActions")}</FootKey>
+                )}
+                {scoped ? (
+                  <FootKey shortcut="⌫">
+                    {t("action", "hintDropCluster")}
+                  </FootKey>
+                ) : (
+                  <FootKey shortcut="!">{t("action", "hintACluster")}</FootKey>
+                )}
+                {shownClusters.length > 1 && hasQuery && (
+                  <span className="ml-auto">
+                    {t("count", "clustersAnswered", {
+                      n: answered,
+                      total: shownClusters.length,
+                    })}
+                    {isSearching && ` · ${t("cluster", "resultsAsTheyAnswer")}`}
+                  </span>
+                )}
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+      {hostTarget && (
+        <Suspense fallback={null}>
+          <PaletteActionsHost
+            key={targetKey(hostTarget)}
+            target={hostTarget}
+            onReport={onReport}
+            ref={runner}
+          />
+        </Suspense>
+      )}
+    </>
+  );
+}
+
+/** What makes one pasted alert a different alert from the last one. */
+function alertKey(reading: AlertReading): string {
+  // Encoded rather than joined: a label's value may itself hold the
+  // separator, and two different alerts would then share a key — which is
+  // the panel keeping the first one's picks for the second.
+  return JSON.stringify([
+    reading.alertName,
+    reading.firedAt?.value ?? null,
+    reading.cluster?.value ?? null,
+    reading.namespace?.value ?? null,
+    reading.objects.map((o) => [o.kind, o.name]),
+    reading.unkeyed,
+  ]);
+}
+
+/** Right at the end of what was typed has nowhere left to move the caret. */
+function caretAtEnd(input: HTMLInputElement): boolean {
+  const end = input.value.length;
+  return input.selectionStart === end && input.selectionEnd === end;
+}
+
+function FootKey({
+  shortcut,
+  children,
+}: {
+  shortcut: string;
+  children: ReactNode;
+}) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <Kbd shortcut={shortcut} />
+      {children}
+    </span>
+  );
+}
+
+/**
+ * The resolved bang: the same object the log query's terms are, down to the
+ * hue and the inset edge — visible, removable, and surviving while the rest
+ * of the query is retyped.
+ */
+function ScopeChip({
+  label,
+  onRemove,
+}: {
+  label: string;
+  onRemove: () => void;
+}) {
+  const t = useT();
+  return (
+    <span className="inline-flex shrink-0 items-center rounded bg-info/16 font-mono text-[11px] leading-[18px] text-info ring-1 ring-inset ring-info/45">
+      <span className="flex items-center gap-1 pl-1.5">
+        <span aria-hidden="true">!</span>
+        {label}
+      </span>
+      <button
+        type="button"
+        // Not a tab stop: the caret never leaves the field, and backspace
+        // on an empty query does exactly this.
+        tabIndex={-1}
+        aria-label={t("action", "dropScopeAria", { label })}
+        title={t("action", "dropScope", { label })}
+        onClick={onRemove}
+        className="pr-1 text-info/70 transition-colors hover:text-err"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </span>
+  );
+}
+
+function EntryRow({
+  domId,
+  entry,
+  selected,
+  actionable,
+  onHover,
+  onPick,
+}: {
+  domId: string;
+  entry: Entry;
+  selected: boolean;
+  /** Tab opens this row's actions. */
+  actionable: boolean;
+  onHover: (event: ReactPointerEvent) => void;
+  onPick: (event: ReactMouseEvent) => void;
+}) {
+  const t = useT();
+  if (entry.kind === "caption") {
+    return (
+      <div
+        role="presentation"
+        className="px-2 pb-0.5 pt-2 text-[11px] text-fg-fnt first:pt-1"
+      >
+        {entry.text}
+      </div>
+    );
+  }
+
+  if (entry.kind === "hint") {
+    return (
+      <p
+        data-tone={entry.tone}
+        className="flex items-start gap-2 px-2 py-1.5 text-xs text-fg-mut"
+      >
+        {entry.tone && (
+          <span className="flex h-4 flex-none items-center">
+            {HINT_MARK[entry.tone]}
+          </span>
+        )}
+        <span>{entry.text}</span>
+      </p>
+    );
+  }
+
+  if (entry.kind === "coverage") {
+    return <Coverage entry={entry} />;
+  }
+
+  if (entry.kind === "target") {
+    return (
+      <div
+        role="presentation"
+        className="flex items-center gap-2 px-2 pb-1 pt-1.5 text-[11px] text-fg-fnt"
+      >
+        <span className="min-w-0">
+          <ResourceName
+            kind={entry.target.kind}
+            name={entry.target.name}
+            namespace={entry.target.namespace}
+          />
+        </span>
+        <span className="ml-auto flex-none">{entry.target.kind}</span>
+      </div>
+    );
+  }
+
+  if (entry.kind === "action" && (entry.action.reason || entry.action.busy)) {
+    const { action } = entry;
+    return (
+      <div
+        id={domId}
+        role="option"
+        aria-selected={false}
+        aria-disabled
+        className="flex w-full items-center gap-2 rounded-[5px] px-2 py-[5px] text-xs text-fg-fnt"
+      >
+        <action.icon className="h-3.5 w-3.5 flex-none" />
+        <span className="flex-none">{action.label}</span>
+        {action.busy ? (
+          <span className="ml-auto h-1.5 w-1.5 flex-none animate-pulse-subtle rounded-full bg-info" />
+        ) : (
+          <span
+            className="ml-auto min-w-0 truncate text-[11px]"
+            title={action.reason}
+          >
+            {action.reason}
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  if (entry.kind === "group") {
+    return (
+      <ClusterGroup
+        domId={domId}
+        entry={entry}
+        selected={selected}
+        onHover={onHover}
+        onPick={onPick}
+      />
+    );
+  }
+
+  const shared = {
+    domId,
+    selected,
+    onHover,
+    onPick,
+  };
+
+  switch (entry.kind) {
+    case "all-clusters":
+      return (
+        <Row {...shared}>
+          <span className="h-1.5 w-1.5 flex-none rounded-full border border-fg-fnt" />
+          <span className="min-w-0 truncate font-mono">
+            {t("cluster", "allClusters")}
+          </span>
+          {/* `!*` does not connect to anything on its own: on a laptop
+              with fifteen contexts that would be fifteen auth prompts
+              from one keystroke. */}
+          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+            {t("action", "alreadyConnectedSearched")}
+          </span>
+        </Row>
+      );
+    case "cluster":
+      return (
+        <Row {...shared}>
+          <span
+            className="h-1.5 w-1.5 flex-none rounded-full"
+            style={{ background: clusterColor(entry.context, entry.hue) }}
+          />
+          <ProviderMark
+            provider={detectProvider(entry.context)}
+            className="h-[13px] w-[13px] flex-none"
+          />
+          <span className="flex min-w-0 flex-col">
+            {/* A name a person typed is prose; a context name is a token
+                you paste into a shell. Only the second one is mono. */}
+            <span className={cn("truncate", !entry.sub && "font-mono")}>
+              {entry.label}
+            </span>
+            {entry.sub && (
+              <span className="truncate font-mono text-[10px] leading-[13px] text-fg-fnt">
+                {entry.sub}
+              </span>
+            )}
+          </span>
+          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+            {entry.meta}
+          </span>
+        </Row>
+      );
+    case "hit":
+      return (
+        <Row {...shared}>
+          {/* No `truncate` here: a reference clips its own name, and
+              clipping it twice shrinks the row to a few characters. */}
+          <span className="min-w-0">
+            <ResourceRef
+              kind={entry.hit.kind}
+              name={entry.hit.name}
+              namespace={entry.hit.namespace}
+              showKind={false}
+              onClick={(event) => {
+                // The row underneath picks too; without stopping here a
+                // ctrl-click on the name opened the object in two tabs.
+                event.preventDefault();
+                event.stopPropagation();
+                onPick(event);
+              }}
+            />
+          </span>
+          {entry.hit.namespace && (
+            <span className="truncate text-fg-fnt">{entry.hit.namespace}</span>
+          )}
+          {/* Where the namespace would be, because for this row the name
+              already is one and what the reader gets is the scope. */}
+          {entry.path === null && (
+            <span className="truncate text-fg-fnt">
+              {t("action", "hintUseAsScope")}
+            </span>
+          )}
+          <span className="ml-auto flex flex-none items-center gap-1.5 text-[11px] text-fg-fnt">
+            {actionable && <Kbd shortcut="tab" />}
+            {entry.hit.kind}
+          </span>
+        </Row>
+      );
+    case "page-actions":
+      return (
+        <Row {...shared}>
+          <Zap className="h-3.5 w-3.5 flex-none text-info" />
+          <span className="flex-none">{t("action", "actionsOn")}</span>
+          <span className="min-w-0">
+            <ResourceName
+              kind={entry.target.kind}
+              name={entry.target.name}
+              showKind={false}
+            />
+          </span>
+          <Kbd shortcut="tab" className="ml-auto flex-none" />
+        </Row>
+      );
+    case "action":
+      return (
+        <Row {...shared}>
+          <entry.action.icon
+            className={cn(
+              "h-3.5 w-3.5 flex-none",
+              entry.action.danger ? "text-err" : "text-fg-fnt"
+            )}
+          />
+          <span
+            className={cn(
+              "min-w-0 truncate",
+              entry.action.danger && "text-err"
+            )}
+          >
+            {entry.action.label}
+          </span>
+          <span className="ml-auto min-w-0 truncate text-[11px] text-fg-fnt">
+            {entry.target.name}
+          </span>
+        </Row>
+      );
+    case "recent":
+      return (
+        <Row {...shared}>
+          <span className="min-w-0">
+            <ResourceRef
+              kind={entry.resourceKind}
+              name={entry.name}
+              namespace={entry.namespace}
+              showKind={false}
+              onClick={(event) => {
+                // The row underneath picks too; without stopping here a
+                // ctrl-click on the name opened the object in two tabs.
+                event.preventDefault();
+                event.stopPropagation();
+                onPick(event);
+              }}
+            />
+          </span>
+          {entry.namespace && (
+            <span className="truncate text-fg-fnt">{entry.namespace}</span>
+          )}
+          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+            {entry.resourceKind}
+          </span>
+        </Row>
+      );
+    case "more":
+      return (
+        <Row {...shared}>
+          <span className="min-w-0 truncate text-fg-fnt">
+            {t("count", "moreOnThisCluster", {
+              n: formatCount(entry.rest),
+            })}
+          </span>
+          <span className="ml-auto flex flex-none items-center gap-1 text-[11px] text-fg-fnt">
+            <Kbd shortcut="↵" /> {t("action", "hintScopeToIt")}
+          </span>
+        </Row>
+      );
+    case "link":
+    case "panel":
+      return (
+        <Row {...shared}>
+          <entry.icon className="h-3.5 w-3.5 flex-none text-fg-fnt" />
+          <span className="min-w-0 truncate">{entry.label}</span>
+        </Row>
+      );
+    case "kind":
+      return (
+        <Row {...shared}>
+          <KindIcon kind={entry.entry.kind} className="h-3.5 w-3.5" />
+          <span className="min-w-0 truncate font-mono">{entry.entry.kind}</span>
+          <span className="truncate font-mono text-fg-fnt">
+            {entry.entry.group
+              ? `${entry.entry.group}/${entry.entry.version}`
+              : entry.entry.version}
+          </span>
+          <span className="ml-auto flex-none text-[11px] text-fg-fnt">
+            {t("action", "hintOpenList")}
+          </span>
+        </Row>
+      );
+    case "search-more":
+      return (
+        <Row {...shared}>
+          <ListPlus className="h-3.5 w-3.5 flex-none text-info" />
+          <span className="min-w-0 truncate">
+            {t("count", "searchKindsToo", { n: entry.count })}
+          </span>
+          <Kbd shortcut="↵" className="ml-auto flex-none" />
+        </Row>
+      );
+    case "search-all-namespaces":
+      return (
+        <Row {...shared}>
+          <FolderSearch className="h-3.5 w-3.5 flex-none text-info" />
+          <span className="min-w-0 truncate">
+            {t("action", "searchAllNamespaces")}
+          </span>
+          <Kbd shortcut="↵" className="ml-auto flex-none" />
+        </Row>
+      );
+    case "settings":
+      return (
+        <Row {...shared}>
+          <entry.icon className="h-3.5 w-3.5 flex-none text-fg-fnt" />
+          <span className="min-w-0 truncate">{entry.label}</span>
+          <Kbd shortcut={SETTINGS_SHORTCUT} className="ml-auto flex-none" />
+        </Row>
+      );
+    default:
+      return null;
+  }
+}
+
+/** Still coming, partly unread and read-and-empty never look alike. */
+const HINT_MARK: Record<HintTone, ReactNode> = {
+  loading: (
+    <span className="h-1.5 w-1.5 animate-pulse-subtle rounded-full bg-info" />
+  ),
+  unread: <TriangleAlert className="h-3.5 w-3.5 text-warn" aria-hidden />,
+  empty: <SearchX className="h-3.5 w-3.5 text-fg-fnt" aria-hidden />,
+};
+
+const kindNames = (kinds: readonly { kind: string }[]) =>
+  byKindName(kinds)
+    .map((kind) => kind.kind)
+    .join(", ");
+
+/**
+ * What a name search read in one cluster, and what it did not: the kinds it
+ * compared, the namespaces it read them in, the ones still loading, and the
+ * served kinds it never looked at. Each part carries its own icon and tone,
+ * and names its kinds on hover. The kinds it could not read are said once,
+ * on the cluster's own line.
+ */
+function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
+  const t = useT();
+  const { cluster, scope, notSearched, unlistable, unreadGroups, served } =
+    entry;
+  return (
+    <div
+      role="presentation"
+      className="flex flex-wrap items-center gap-x-3 gap-y-0.5 px-2 pb-1 pt-0.5 text-[11px] text-fg-mut"
+    >
+      <span
+        className="flex items-center gap-1"
+        title={kindNames(cluster.searched)}
+      >
+        <ScanSearch className="h-3 w-3 flex-none" aria-hidden />
+        {served === null
+          ? t("count", "kindsSearchedByName", { n: cluster.searched.length })
+          : t("count", "kindsSearchedOfServed", {
+              n: served,
+              searched: cluster.searched.length,
+            })}
+      </span>
+      {scope !== null && (
+        <span className="flex items-center gap-1">
+          <FolderOpen className="h-3 w-3 flex-none" aria-hidden />
+          {scope}
+        </span>
+      )}
+      {cluster.loading.length > 0 && (
+        <span
+          className="flex items-center gap-1 text-info"
+          title={kindNames(cluster.loading)}
+        >
+          <span className="h-1.5 w-1.5 flex-none animate-pulse-subtle rounded-full bg-info" />
+          {t("count", "kindsStillLoading", { n: cluster.loading.length })}
+        </span>
+      )}
+      {notSearched === null ? (
+        <span className="flex items-center gap-1 text-fg-fnt">
+          <CircleDashed className="h-3 w-3 flex-none" aria-hidden />
+          {t("cluster", "otherKindsNotSearched")}
+        </span>
+      ) : (
+        notSearched.length > 0 && (
+          <span
+            className="flex items-center gap-1 text-fg-fnt"
+            title={kindNames(notSearched)}
+          >
+            <CircleDashed className="h-3 w-3 flex-none" aria-hidden />
+            {t("count", "kindsNotSearched", { n: notSearched.length })}
+          </span>
+        )
+      )}
+      {unlistable !== null && unlistable.length > 0 && (
+        <span
+          className="flex items-center gap-1 text-fg-fnt"
+          title={t("cluster", "kindsNotListableHover", {
+            kinds: kindNames(unlistable),
+          })}
+        >
+          <Ban className="h-3 w-3 flex-none" aria-hidden />
+          {t("count", "kindsNotListable", { n: unlistable.length })}
+        </span>
+      )}
+      {unreadGroups > 0 && (
+        <span className="flex items-center gap-1 text-warn">
+          <TriangleAlert className="h-3 w-3 flex-none" aria-hidden />
+          {t("count", "apiGroupsNotDiscovered", { n: unreadGroups })}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Every refused kind on one line, and any other failure with its own words. */
+function unreadHover(cluster: ClusterSearchState, t: T): string {
+  const unreadable = byKindName(cluster.unreadable);
+  const refused = unreadable.filter((unread) => unread.reason === "forbidden");
+  const failed = unreadable.filter((unread) => unread.reason !== "forbidden");
+  return [
+    ...(refused.length > 0
+      ? [
+          t("cluster", "kindsRefusedHover", {
+            kinds: refused.map((unread) => unread.kind).join(", "),
+          }),
+        ]
+      : []),
+    ...failed.map((unread) => `${unread.kind}: ${unread.message}`),
+  ].join("\n");
+}
+
+/**
+ * One cluster's own line: which cluster, and what it has said so far.
+ *
+ * Four truths share this row and none may pretend to be another. Still
+ * connecting is not "no results"; failed says why and offers to be asked
+ * again; a cluster nobody has connected to is not woken silently, because
+ * its credential plugin can prompt.
+ */
+function ClusterGroup({
+  domId,
+  entry,
+  selected,
+  onHover,
+  onPick,
+}: {
+  domId: string;
+  entry: Extract<Entry, { kind: "group" }>;
+  selected: boolean;
+  onHover: (event: ReactPointerEvent) => void;
+  onPick: (event: ReactMouseEvent) => void;
+}) {
+  const t = useT();
+  const { cluster, action } = entry;
+  const working =
+    cluster.status === "searching" || cluster.status === "connecting";
+
+  let state: ReactNode;
+  let tone = "text-fg-mut";
+  if (cluster.status === "connecting") {
+    state = t("cluster", "connectingInline");
+    tone = "text-info";
+  } else if (cluster.status === "searching") {
+    state = t("cluster", "searchingInline");
+    tone = "text-info";
+  } else if (cluster.status === "failed") {
+    state = (
+      <>
+        {cluster.message ?? t("cluster", "failedInline")} (
+        <Kbd shortcut="↵" /> {t("cluster", "retryInline")})
+      </>
+    );
+    tone = "text-err";
+  } else if (cluster.status === "skipped") {
+    state =
+      cluster.reason === "not-connected" ? (
+        <>
+          {t("cluster", "notConnectedInline")} (
+          <Kbd shortcut="↵" /> {t("cluster", "toSearchIt")})
+        </>
+      ) : (
+        t("cluster", "notInKubeconfig")
+      );
+  } else {
+    state =
+      cluster.matched === 0
+        ? t("empty", "noMatchesInline")
+        : t("count", "matchCount", { n: cluster.matched });
+    if (cluster.truncated)
+      state = t("count", "matchesCapped", { n: cluster.matched });
+    if (cluster.unreadable.length > 0) {
+      const Mark = cluster.unreadable.every(
+        (unread) => unread.reason === "forbidden"
+      )
+        ? Lock
+        : TriangleAlert;
+      // The one place the palette names what it could not read: cut to the
+      // row, whole on hover. Refusals share one line: forty 403 sentences
+      // made a tooltip taller than the screen.
+      state = (
+        <span className="min-w-0 truncate" title={unreadHover(cluster, t)}>
+          {state} · <Mark className="inline h-3 w-3 align-[-2px]" aria-hidden />{" "}
+          {t("cluster", "kindsUnreadInline", {
+            n: cluster.unreadable.length,
+            kinds: kindNames(cluster.unreadable),
+          })}
+        </span>
+      );
+      tone = "text-warn";
+    }
+  }
+  const partial = cluster.status === "done" && cluster.unreadable.length > 0;
+
+  return (
+    <div
+      {...(action === "none"
+        ? { role: "presentation" }
+        : {
+            role: "option",
+            "aria-selected": selected,
+            onClick: onPick,
+            onPointerMove: onHover,
+          })}
+      id={domId}
+      className={cn(
+        "mt-1 flex items-center gap-2 rounded-[5px] px-2 py-1 text-[11px] first:mt-0",
+        action !== "none" && "cursor-pointer",
+        selected && action !== "none" && "bg-sel"
+      )}
+    >
+      <span
+        className={cn(
+          "h-1.5 w-1.5 flex-none rounded-full",
+          cluster.status === "done" && (partial ? "bg-warn" : "bg-ok"),
+          working && "animate-pulse-subtle bg-info",
+          cluster.status === "failed" && "bg-err",
+          cluster.status === "skipped" && "border border-fg-fnt"
+        )}
+      />
+      <span className="min-w-0 truncate font-mono text-fg-mut">
+        {cluster.context}
+      </span>
+      <span
+        className={cn(
+          "ml-auto flex items-center gap-1",
+          // Takes what the cluster's name leaves, and cuts there.
+          partial ? "min-w-0 flex-1 justify-end" : "flex-none",
+          tone
+        )}
+      >
+        {state}
+      </span>
+    </div>
+  );
+}
+
+function Row({
+  domId,
+  selected,
+  onHover,
+  onPick,
+  children,
+}: {
+  domId: string;
+  selected: boolean;
+  onHover: (event: ReactPointerEvent) => void;
+  onPick: (event: ReactMouseEvent) => void;
+  children: ReactNode;
+}) {
+  return (
+    // A div, not a button: a resource row names its object with a
+    // `ResourceRef`, and an anchor inside a button is not a thing the
+    // browser will render. Arrows and Enter are handled by the field.
+    <div
+      id={domId}
+      role="option"
+      aria-selected={selected}
+      onClick={onPick}
+      onAuxClick={(event) => event.button === 1 && onPick(event)}
+      onPointerMove={onHover}
+      className={cn(
+        "flex w-full cursor-pointer items-center gap-2 rounded-[5px] px-2 py-[5px] text-left text-xs transition-colors",
+        selected ? "bg-sel text-fg" : "text-fg-mid"
+      )}
+    >
+      {children}
+    </div>
+  );
+}

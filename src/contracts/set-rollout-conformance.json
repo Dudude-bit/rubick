@@ -1,0 +1,304 @@
+{
+  "about": "A Deployment's, StatefulSet's or DaemonSet's verdict once its pods are asked, as both halves read it: `with_starts` in src/tauri/src/resources/workloads/rollout.rs (the page, the peek, Share, Needs attention, the census and Connections) and `withStarts` in src/ui/lib/workload-status.ts (the lists). Neither set kind writes a condition that tells a pod still starting from one that never will, and a Deployment's scale leaves Progressing at NewReplicaSetAvailable, so a workload short of available pods is coming up only while some pod of its own is still starting and none shows a fault. A Deployment's own pods are those its ReplicaSets run. Each pod arrives as `pod_start` read it in Rust: up until an instant (ready from its first run, inside the start grace since it turned Ready), settled (ready longer or after a restart, finished or terminating), starting until an instant, or failing. More pods up than the controller counts available is the controller still to count them, as its status trails its pods: coming up. A start whose instant has passed is the fault. No pod starting means nothing explains the gap: a pod the controller could not create looks exactly like that, so the workload stays as it read. The same holds for a workload with none available yet (unavailable at zero) and for one whose newest spec its controller has not read (unobserved), each carrying its counts: a pod already starting is the evidence the counts lag. Unavailable with some still available, and every other state, passes through. Pods that could not be read are null, not an empty list: a verdict they could have changed becomes podsUnread, the controller's verdict alone, and any other passes through.",
+  "now": "2026-10-08T10:00:00Z",
+  "cases": [
+    {
+      "name": "a scale whose new pod is still starting is coming up",
+      "rollout": { "state": "short", "available": 1, "desired": 2 },
+      "pods": [
+        { "state": "settled" },
+        { "state": "starting", "until": "2026-10-08T10:05:00Z" }
+      ],
+      "is": { "state": "comingUp", "available": 1, "desired": 2 }
+    },
+    {
+      "name": "a Deployment scaled from 3 to 4 with its fourth pod being created is coming up",
+      "rollout": { "state": "short", "available": 3, "desired": 4 },
+      "pods": [
+        { "state": "settled" },
+        { "state": "settled" },
+        { "state": "settled" },
+        { "state": "starting", "until": "2026-10-08T10:01:00Z" }
+      ],
+      "is": { "state": "comingUp", "available": 3, "desired": 4 }
+    },
+    {
+      "name": "a Deployment scaled from 3 to 4 whose fourth pod cannot pull its image stays short",
+      "rollout": { "state": "short", "available": 3, "desired": 4 },
+      "pods": [
+        { "state": "settled" },
+        { "state": "settled" },
+        { "state": "settled" },
+        { "state": "failing" }
+      ],
+      "is": { "state": "short", "available": 3, "desired": 4 }
+    },
+    {
+      "name": "a start that ran past its grace is the fault",
+      "rollout": { "state": "short", "available": 1, "desired": 2 },
+      "pods": [
+        { "state": "settled" },
+        { "state": "starting", "until": "2026-10-08T09:59:59Z" }
+      ],
+      "is": { "state": "short", "available": 1, "desired": 2 }
+    },
+    {
+      "name": "a start that ends this instant is over",
+      "rollout": { "state": "short", "available": 1, "desired": 2 },
+      "pods": [
+        { "state": "settled" },
+        { "state": "starting", "until": "2026-10-08T10:00:00Z" }
+      ],
+      "is": { "state": "short", "available": 1, "desired": 2 }
+    },
+    {
+      "name": "one failing pod keeps the set short while another starts",
+      "rollout": { "state": "short", "available": 1, "desired": 3 },
+      "pods": [
+        { "state": "settled" },
+        { "state": "starting", "until": "2026-10-08T10:05:00Z" },
+        { "state": "failing" }
+      ],
+      "is": { "state": "short", "available": 1, "desired": 3 }
+    },
+    {
+      "name": "nothing starting leaves the gap unexplained",
+      "rollout": { "state": "short", "available": 1, "desired": 2 },
+      "pods": [{ "state": "settled" }],
+      "is": { "state": "short", "available": 1, "desired": 2 }
+    },
+    {
+      "name": "no pods read is no evidence",
+      "rollout": { "state": "short", "available": 1, "desired": 2 },
+      "pods": [],
+      "is": { "state": "short", "available": 1, "desired": 2 }
+    },
+    {
+      "name": "every pod still starting is coming up, however many",
+      "rollout": { "state": "short", "available": 2, "desired": 4 },
+      "pods": [
+        { "state": "settled" },
+        { "state": "settled" },
+        { "state": "starting", "until": "2026-10-08T10:09:00Z" },
+        { "state": "starting", "until": "2026-10-08T10:01:00Z" }
+      ],
+      "is": { "state": "comingUp", "available": 2, "desired": 4 }
+    },
+    {
+      "name": "a fresh Deployment whose only pod is still inside its start window is coming up, not unavailable",
+      "rollout": {
+        "state": "unavailable",
+        "reason": "MinimumReplicasUnavailable",
+        "message": null,
+        "available": 0,
+        "desired": 1
+      },
+      "pods": [{ "state": "starting", "until": "2026-10-08T10:05:00Z" }],
+      "is": { "state": "comingUp", "available": 0, "desired": 1 }
+    },
+    {
+      "name": "a fresh Deployment whose only pod has just turned Ready, before its controller counts it available, is coming up, not unavailable",
+      "rollout": {
+        "state": "unavailable",
+        "reason": "MinimumReplicasUnavailable",
+        "message": "Deployment does not have minimum availability.",
+        "available": 0,
+        "desired": 1
+      },
+      "pods": [{ "state": "up", "until": "2026-10-08T10:09:59Z" }],
+      "is": { "state": "comingUp", "available": 0, "desired": 1 }
+    },
+    {
+      "name": "a pod Ready for longer than the start grace while its controller counts none available stays unavailable",
+      "rollout": {
+        "state": "unavailable",
+        "reason": "MinimumReplicasUnavailable",
+        "message": null,
+        "available": 0,
+        "desired": 1
+      },
+      "pods": [{ "state": "up", "until": "2026-10-08T09:59:00Z" }],
+      "is": {
+        "state": "unavailable",
+        "reason": "MinimumReplicasUnavailable",
+        "message": null,
+        "available": 0,
+        "desired": 1
+      }
+    },
+    {
+      "name": "a scale whose pods have all just come up, before its controller counts them, is coming up",
+      "rollout": { "state": "short", "available": 1, "desired": 2 },
+      "pods": [
+        { "state": "up", "until": "2026-10-08T10:09:00Z" },
+        { "state": "up", "until": "2026-10-08T10:09:30Z" }
+      ],
+      "is": { "state": "comingUp", "available": 1, "desired": 2 }
+    },
+    {
+      "name": "a scale whose one pod that came up is already counted, and no other starting, stays short",
+      "rollout": { "state": "short", "available": 1, "desired": 2 },
+      "pods": [{ "state": "up", "until": "2026-10-08T10:09:00Z" }],
+      "is": { "state": "short", "available": 1, "desired": 2 }
+    },
+    {
+      "name": "nothing serving and a pod that cannot start stays unavailable",
+      "rollout": {
+        "state": "unavailable",
+        "reason": null,
+        "message": null,
+        "available": 0,
+        "desired": 2
+      },
+      "pods": [
+        { "state": "starting", "until": "2026-10-08T10:05:00Z" },
+        { "state": "failing" }
+      ],
+      "is": {
+        "state": "unavailable",
+        "reason": null,
+        "message": null,
+        "available": 0,
+        "desired": 2
+      }
+    },
+    {
+      "name": "nothing serving and no pod read stays unavailable",
+      "rollout": {
+        "state": "unavailable",
+        "reason": null,
+        "message": null,
+        "available": 0,
+        "desired": 1
+      },
+      "pods": [],
+      "is": {
+        "state": "unavailable",
+        "reason": null,
+        "message": null,
+        "available": 0,
+        "desired": 1
+      }
+    },
+    {
+      "name": "a Deployment unavailable while some pods still serve is not called coming up",
+      "rollout": {
+        "state": "unavailable",
+        "reason": "MinimumReplicasUnavailable",
+        "message": null,
+        "available": 1,
+        "desired": 3
+      },
+      "pods": [
+        { "state": "settled" },
+        { "state": "starting", "until": "2026-10-08T10:05:00Z" }
+      ],
+      "is": {
+        "state": "unavailable",
+        "reason": "MinimumReplicasUnavailable",
+        "message": null,
+        "available": 1,
+        "desired": 3
+      }
+    },
+    {
+      "name": "a StatefulSet pod Pending on its claim the second after a scale is coming up before the controller reports it",
+      "rollout": { "state": "unobserved", "available": 1, "desired": 2 },
+      "pods": [
+        { "state": "settled" },
+        { "state": "starting", "until": "2026-10-08T10:01:00Z" }
+      ],
+      "is": { "state": "comingUp", "available": 1, "desired": 2 }
+    },
+    {
+      "name": "a spec the controller has not read, with no pod starting, stays waiting",
+      "rollout": { "state": "unobserved", "available": 1, "desired": 2 },
+      "pods": [{ "state": "settled" }],
+      "is": { "state": "unobserved", "available": 1, "desired": 2 }
+    },
+    {
+      "name": "a spec the controller has not read, with every pod it wants available, stays waiting",
+      "rollout": { "state": "unobserved", "available": 2, "desired": 2 },
+      "pods": [
+        { "state": "settled" },
+        { "state": "starting", "until": "2026-10-08T10:01:00Z" }
+      ],
+      "is": { "state": "unobserved", "available": 2, "desired": 2 }
+    },
+    {
+      "name": "a set between revisions stays rolling out",
+      "rollout": { "state": "rollingOut", "updated": 1, "desired": 3 },
+      "pods": [{ "state": "failing" }],
+      "is": { "state": "rollingOut", "updated": 1, "desired": 3 }
+    },
+    {
+      "name": "a ready set stays ready",
+      "rollout": { "state": "ready" },
+      "pods": [{ "state": "settled" }],
+      "is": { "state": "ready" }
+    },
+    {
+      "name": "a short scale whose pods could not be read is the controller's verdict alone",
+      "rollout": { "state": "short", "available": 1, "desired": 2 },
+      "pods": null,
+      "is": {
+        "state": "podsUnread",
+        "controller": { "state": "short", "available": 1, "desired": 2 }
+      }
+    },
+    {
+      "name": "nothing serving and the pods not read is the controller's Unavailable alone, not a confirmed fault",
+      "rollout": {
+        "state": "unavailable",
+        "reason": "MinimumReplicasUnavailable",
+        "message": null,
+        "available": 0,
+        "desired": 1
+      },
+      "pods": null,
+      "is": {
+        "state": "podsUnread",
+        "controller": {
+          "state": "unavailable",
+          "reason": "MinimumReplicasUnavailable",
+          "message": null,
+          "available": 0,
+          "desired": 1
+        }
+      }
+    },
+    {
+      "name": "a spec the controller has not read, with the pods not read either, is its verdict alone",
+      "rollout": { "state": "unobserved", "available": 1, "desired": 2 },
+      "pods": null,
+      "is": {
+        "state": "podsUnread",
+        "controller": { "state": "unobserved", "available": 1, "desired": 2 }
+      }
+    },
+    {
+      "name": "unavailable while some still serve is no gap the pods explain, read or not",
+      "rollout": {
+        "state": "unavailable",
+        "reason": "MinimumReplicasUnavailable",
+        "message": null,
+        "available": 1,
+        "desired": 3
+      },
+      "pods": null,
+      "is": {
+        "state": "unavailable",
+        "reason": "MinimumReplicasUnavailable",
+        "message": null,
+        "available": 1,
+        "desired": 3
+      }
+    },
+    {
+      "name": "a ready set needs no pods read to stay ready",
+      "rollout": { "state": "ready" },
+      "pods": null,
+      "is": { "state": "ready" }
+    }
+  ]
+}

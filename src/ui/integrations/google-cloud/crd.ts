@@ -1,0 +1,111 @@
+/**
+ * GKE's Ingress objects, drawn as what they configure.
+ *
+ * All three land on the same list page today as a name and an age, which for
+ * a `ManagedCertificate` means the reader has to open every one to find the
+ * domain that is not provisioning. The columns are the fields somebody would
+ * have opened it for.
+ *
+ * Two API groups, because GKE splits them: `BackendConfig` is
+ * `cloud.google.com`, and `FrontendConfig` and `ManagedCertificate` are both
+ * `networking.gke.io`. The group is matched rather than sniffed — reaching
+ * one of these list pages requires the CRD to exist, so the group *is* the
+ * detection and there is nothing to ask the cluster.
+ */
+
+import { joinSayings, sayWords } from "@/i18n/say";
+import type { CrdColumn } from "../kit";
+import { matchMultiple, orNone } from "../kit";
+import type { CrdView } from "../registry";
+import {
+  backendConfigSummary,
+  certificateDomains,
+  certificateStatusOf,
+  certificateTone,
+  domainStatuses,
+  frontendConfigSummary,
+  healthCheckOf,
+} from "./model";
+
+const backendConfigColumns: CrdColumn[] = [
+  {
+    id: "healthCheck",
+    header: "healthCheck",
+    accessor: (resource, t) => {
+      const said = healthCheckOf(resource);
+      return said === null ? null : sayWords(said, t);
+    },
+    cell: orNone,
+  },
+  {
+    id: "behaviour",
+    header: "applies",
+    accessor: (resource, t) => joinSayings(backendConfigSummary(resource), t),
+    cell: orNone,
+  },
+];
+
+const frontendConfigColumns: CrdColumn[] = [
+  {
+    id: "behaviour",
+    header: "applies",
+    accessor: (resource, t) => joinSayings(frontendConfigSummary(resource), t),
+    cell: orNone,
+  },
+];
+
+const managedCertificateColumns: CrdColumn[] = [
+  {
+    id: "certificateStatus",
+    header: "status",
+    accessor: (resource) => certificateStatusOf(resource),
+    // Not a badge, and deliberately: an empty status is what the controller
+    // writes before it has looked at the certificate *and* what a cluster
+    // with no controller running has, and a pill saying "Unknown" over the
+    // second one would dress a missing controller up as a certificate state.
+    cell: (value) => (typeof value === "string" ? orNone(value) : orNone(null)),
+  },
+  {
+    id: "domains",
+    header: "domains",
+    accessor: (resource) => certificateDomains(resource).join(", "),
+    cell: orNone,
+  },
+  {
+    id: "notProvisioned",
+    header: "notProvisioned",
+    // The column the list page exists for. A certificate with four domains
+    // and one FailedNotVisible reads as "Provisioning" at the top level for
+    // as long as anybody leaves it, and this is the only place that names
+    // the domain whose DNS never got pointed here.
+    accessor: (resource) =>
+      domainStatuses(resource)
+        .filter((entry) => certificateTone(entry.status) !== "ok")
+        .map((entry) => `${entry.domain} ${entry.status}`)
+        .join(", "),
+    cell: orNone,
+  },
+];
+
+/**
+ * Both of GKE's Ingress groups. Only `ManagedCertificate` reports health, and
+ * it has its own column above; a verdict derived from the other two kinds'
+ * specs would be this app inventing one.
+ */
+export const crd: CrdView = {
+  matches: matchMultiple([
+    ["cloud.google.com", "BackendConfig"],
+    ["networking.gke.io", "FrontendConfig"],
+    ["networking.gke.io", "ManagedCertificate"],
+  ]),
+  columnsFor: (kind) => {
+    switch (kind.toLowerCase()) {
+      case "frontendconfig":
+        return frontendConfigColumns;
+      case "managedcertificate":
+        return managedCertificateColumns;
+      default:
+        return backendConfigColumns;
+    }
+  },
+};

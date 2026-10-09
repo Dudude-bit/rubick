@@ -1,0 +1,1273 @@
+/**
+ * Everything the app knows about a specific vendor's product, and the only
+ * door into it.
+ *
+ * A surface asks for a facet and gets an implementation or nothing; it never
+ * learns which vendor answered, or whether one did. `registry.ts` has the
+ * rest of the rule and what is deliberately outside it.
+ *
+ * Adding a vendor is two files, both in this tree and nothing anywhere else:
+ * `src/ui/integrations/<id>/index.ts` with `defineVendor({ … })` plus anything
+ * bulky beside it in the same folder, and one import plus one entry in
+ * {@link VENDORS} here. A vendor bringing a whole screen adds
+ * `page: { count, load }` beside `extension`, which puts a row in the sidebar
+ * and serves `/c/<cluster>/integrations/<id>` through the route that
+ * already exists.
+ *
+ * Two exceptions, both inside the tree: a new *capability* adds a key to
+ * `Capabilities` in `registry.ts` and needs a surface written to consume it;
+ * a new cluster *flavour* adds a member to `ClusterProvider` there, because
+ * that union is what keeps the mark table exhaustive.
+ */
+
+import { sayWords } from "@/i18n/say";
+
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+  type UseQueryOptions,
+} from "@tanstack/react-query";
+import {
+  lazy,
+  useMemo,
+  type ComponentType,
+  type LazyExoticComponent,
+} from "react";
+import type { LucideIcon } from "lucide-react";
+
+import { commands } from "@/lib/commands";
+import { pageLink, vendorLink, type AppLink } from "@/lib/links";
+import { queryKeys } from "@/lib/query-keys";
+import { useClusterStore } from "@/stores/clusterStore";
+import {
+  forwardsFor,
+  useClusterForwardStore,
+} from "@/stores/clusterForwardStore";
+import { pageDecision } from "./page-state";
+import argocd from "./argocd";
+import cloudnativepg from "./cloudnativepg";
+import scylla from "./scylla";
+import aws, { awsLoadBalancerController } from "./aws";
+import azure, { aksAddons } from "./azure";
+import certManager from "./cert-manager";
+import cilium from "./cilium";
+import flux, { helmReleaseObjectLink } from "./flux";
+import googleCloud, { gkeIngress } from "./google-cloud";
+import ingressNginx from "./ingress-nginx";
+import istio from "./istio";
+import k3s from "./k3s";
+import karpenter from "./karpenter";
+import loki from "./loki";
+import minikube from "./minikube";
+import prometheus from "./prometheus";
+import traefik from "./traefik";
+import { gatewayCrd } from "./gateway-crd";
+import { errorToShow } from "@/lib/error-utils";
+import type {
+  CapabilityKey,
+  CapabilityState,
+  Capabilities,
+  ClusterProvider,
+  Connect,
+  Gate,
+  ConnectionDraft,
+  CrdView,
+  EdgeConfig,
+  Extension,
+  Flavour,
+  HistoryLine,
+  LogHistory,
+  LogHistoryPage,
+  LogScope,
+  ProbeResult,
+  ProxyBehind,
+  RelatedObject,
+  SavedConnection,
+  IngressTls,
+  ServiceRoute,
+  TrafficWindow,
+  UsageRange,
+  UsageScope,
+  UsageWindow,
+  DeclaredHistory,
+  DeclaredPoint,
+  NodeBasis,
+  NodeUsageSeries,
+  NodeUsageWindow,
+  Vendor,
+  VendorFact,
+  VendorPage,
+  VolumeFullness,
+} from "./registry";
+
+export { RANGE_WINDOW_MS, USAGE_RANGES } from "./registry";
+export type {
+  CapabilityKey,
+  CapabilityState,
+  Capabilities,
+  ClusterProvider,
+  Connect,
+  ConnectionDraft,
+  CrdView,
+  EdgeConfig,
+  Extension,
+  HistoryLine,
+  LogHistory,
+  LogHistoryPage,
+  LogScope,
+  ProbeResult,
+  ProxyBehind,
+  RelatedObject,
+  SavedConnection,
+  IngressTls,
+  ServiceRoute,
+  TrafficWindow,
+  UsageRange,
+  UsageScope,
+  UsageWindow,
+  DeclaredHistory,
+  DeclaredPoint,
+  NodeBasis,
+  NodeUsageSeries,
+  NodeUsageWindow,
+  Vendor,
+  VendorFact,
+  VendorPage,
+  VolumeFullness,
+};
+
+/**
+ * The delivery vocabulary, through the door rather than from the file.
+ *
+ * `gitops.ts` is not a vendor folder — it is the handful of facts Argo and Flux
+ * genuinely share — but the guard covers the whole tree by path and should:
+ * "where is the git-remote parser" wants exactly one answer, and a surface
+ * reaching for `@/integrations/gitops` is one import away from reaching for
+ * `@/integrations/argocd`.
+ */
+export {
+  deliveryKey,
+  gitRepoLink,
+  gitRevisionLink,
+  shortRevision,
+} from "./gitops";
+export type {
+  Delivery,
+  DeliveryOwner,
+  DeliveryQuery,
+  DeliveryRevision,
+  DeliverySource,
+  GitLink,
+} from "./gitops";
+
+/**
+ * Every vendor that ships in the binary.
+ *
+ * A list, not a plugin API: third parties loading code into the app is a
+ * different product with a different threat model. Order is meaningful and
+ * is the only tie-break in the tree — where two vendors could claim the
+ * same node label or the same context name, the earlier one wins, so the
+ * more specific vendor goes first.
+ */
+const VENDORS: Vendor[] = [
+  certManager,
+  traefik,
+  ingressNginx,
+  argocd,
+  flux,
+  istio,
+  cilium,
+  cloudnativepg,
+  scylla,
+  prometheus,
+  loki,
+  k3s,
+  // Each cloud's controllers sit immediately before the cloud itself. The
+  // order between the two carries nothing — a tier-two record declares no
+  // node label, no flavour and no provider scheme, so it can win no tie-break
+  // — and keeping the pair adjacent is what stops the tier-one ordering,
+  // which *is* load-bearing, from being read as arbitrary.
+  awsLoadBalancerController,
+  aws,
+  gkeIngress,
+  googleCloud,
+  karpenter,
+  aksAddons,
+  azure,
+  minikube,
+];
+
+/**
+ * What is installed in the connected cluster.
+ *
+ * One CRD list per cluster, and it does not change while the app is open
+ * often enough to be worth polling — an install is a deliberate act, and a
+ * reader who has just done one can switch context or reopen.
+ */
+function useDetected() {
+  // Gated on the connection actually standing, not on a context being
+  // named: at startup the context is known from the kubeconfig a beat
+  // before the client exists, and firing then buys four errored queries
+  // and their retry backoff on every launch.
+  const isConnected = useClusterStore((state) => state.isConnected);
+  // Keyed on the context: cluster B must never read cluster A's scan,
+  // and a window with no
+  // cluster — context null — reads nothing, so the rail forgets the old
+  // cluster's vendors the moment the reader leaves it.
+  const context = useClusterStore((state) => state.currentContext);
+  return useQuery({
+    queryKey: ["in-cluster-extensions", context],
+    queryFn: commands.detectInClusterExtensions,
+    staleTime: 5 * 60_000,
+    enabled: isConnected && context !== null,
+  });
+}
+
+/** Every vendor the reader gives an address to, in registry order. */
+const CONNECTED: ReadonlyArray<Vendor & { connect: Connect }> = VENDORS.filter(
+  (vendor): vendor is Vendor & { connect: Connect } =>
+    vendor.connect !== undefined
+);
+
+/**
+ * What a configured vendor is doing for this cluster.
+ *
+ * Three states because there are three, and the middle one is the whole
+ * reason this exists: a vendor that was configured and is not answering must
+ * never look like one nobody set up.
+ */
+export type ConnectionState =
+  | { state: "reading" }
+  | { state: "notConfigured" }
+  | { state: "connected"; saved: SavedConnection; probe: ProbeResult }
+  | { state: "unreachable"; saved: SavedConnection; reason: string };
+
+/**
+ * The saved address and the probe, for every tier-3 vendor.
+ *
+ * One read plus one probe per configured vendor, on the same cadence the
+ * detection scan uses — an address is a deliberate act and does not change
+ * while the app is open often enough to poll for. A cluster with none of
+ * them configured makes no requests at all: `read` answers `null` from the
+ * config file and the probe never runs.
+ *
+ * Keyed on the context, so switching clusters asks again rather than
+ * offering the staging Prometheus's answers for production.
+ */
+function useConnections(): Map<string, ConnectionState> {
+  const t = useT();
+  const context = useClusterStore((state) => state.currentContext);
+  // The same gate as detection, for the same launch-time beat.
+  const isConnected = useClusterStore((state) => state.isConnected);
+
+  const saved = useQueries({
+    queries: CONNECTED.map((vendor) => ({
+      queryKey: queryKeys.integrationConnection(vendor.id, context),
+      queryFn: () => vendor.connect.read(),
+      enabled: context !== null && isConnected,
+      staleTime: CONNECTION_STALE_TIME,
+    })),
+  });
+
+  const probes = useQueries({
+    queries: CONNECTED.map((vendor, index) => ({
+      queryKey: queryKeys.integrationProbe(vendor.id, context),
+      queryFn: () => vendor.connect.probe(),
+      // The same connected gate the read above has, and it matters more
+      // here: a probe fired between sessions comes back as an *answer* —
+      // "did not answer, no cluster is connected" — and a failure that is
+      // data rather than an error sits on the row until something happens
+      // to ask again.
+      enabled: context !== null && isConnected && Boolean(saved[index]?.data),
+      staleTime: CONNECTION_STALE_TIME,
+      // A Prometheus that has gone away should stop being retried behind the
+      // reader's back; the row and the chart both say so, and there is a
+      // Test button for asking again on purpose.
+      retry: false,
+    })),
+  });
+
+  return new Map(
+    CONNECTED.map((vendor, index): [string, ConnectionState] => {
+      // No cluster is no question: an address is stored against a context,
+      // so without one there is nothing to have configured. `isLoading`
+      // rather than `isPending` for the same reason — a disabled query is
+      // pending forever, and a row stuck on "asking…" would be a lie.
+      if (context === null) return [vendor.id, { state: "notConfigured" }];
+      const connection = saved[index];
+      const probe = probes[index];
+      if (connection?.isLoading) return [vendor.id, { state: "reading" }];
+      if (!connection?.data) return [vendor.id, { state: "notConfigured" }];
+      if (probe?.isLoading) return [vendor.id, { state: "reading" }];
+      if (probe?.error) {
+        return [
+          vendor.id,
+          {
+            state: "unreachable",
+            saved: connection.data,
+            reason: errorToShow(probe.error),
+          },
+        ];
+      }
+      if (!probe?.data?.ok) {
+        return [
+          vendor.id,
+          {
+            state: "unreachable",
+            saved: connection.data,
+            reason:
+              probe?.data?.ok === false
+                ? sayWords(probe.data.reason, t)
+                : t("empty", "noAnswer"),
+          },
+        ];
+      }
+      return [
+        vendor.id,
+        { state: "connected", saved: connection.data, probe: probe.data },
+      ];
+    })
+  );
+}
+
+/**
+ * How long a connection's answer stands. Longer than the facts, because a
+ * probe is a network round trip to somebody else's server and the Test
+ * button exists for the reader who wants one now.
+ */
+const CONNECTION_STALE_TIME = 5 * 60_000;
+
+/**
+ * The implementation of a capability, or `null`.
+ *
+ * `null` is not an error state and the caller must not draw it as one: it
+ * is the answer for the majority of clusters, and every surface that asks
+ * owes a whole page without it.
+ *
+ * Fine for a tier-1 or tier-2 capability, where absent is the only way to
+ * not have one. A surface consuming a *configured* vendor's capability wants
+ * {@link useCapabilityState} instead — this hook collapses "nobody
+ * configured one" and "the one you configured is down" into the same `null`,
+ * and those are two different sentences the reader is owed.
+ */
+export function useCapability<K extends CapabilityKey>(
+  key: K
+): Capabilities[K] | null {
+  return useCapabilities(key)[0] ?? null;
+}
+
+/**
+ * A capability, its absence, or its breakage — with the words for each.
+ *
+ * The surface gets `vendor` and `endpoint` as strings to print and must not
+ * branch on them: "from prometheus.monitoring:9090" is what makes a chart's
+ * numbers attributable, and a chart whose provenance is unstated is a chart
+ * nobody can check.
+ */
+export function useCapabilityState<K extends CapabilityKey>(
+  key: K
+): CapabilityState<K> {
+  const { data } = useDetected();
+  const connections = useConnections();
+
+  const installed = new Set(
+    (data ?? []).filter((entry) => entry.installed).map((entry) => entry.id)
+  );
+
+  for (const vendor of VENDORS) {
+    const implementation = vendor.provides?.[key];
+    if (!implementation) continue;
+
+    if (!vendor.connect) {
+      // Tier 1 and 2: present or not, and not-present has one answer.
+      if (installed.has(vendor.id)) {
+        return {
+          state: "ready",
+          vendor: vendor.name,
+          endpoint: "",
+          use: implementation as Capabilities[K],
+          page: answeredAt(vendor, key),
+        };
+      }
+      continue;
+    }
+
+    const connection = connections.get(vendor.id);
+    if (!connection || connection.state === "notConfigured") continue;
+    if (connection.state === "reading") continue;
+    if (connection.state === "unreachable") {
+      return {
+        state: "unreachable",
+        vendor: vendor.name,
+        endpoint: endpointOf(connection.saved.url),
+        reason: connection.reason,
+      };
+    }
+    return {
+      state: "ready",
+      vendor: vendor.name,
+      endpoint: endpointOf(connection.saved.url),
+      use: implementation as Capabilities[K],
+      page: answeredAt(vendor, key),
+    };
+  }
+
+  return { state: "absent" };
+}
+
+/**
+ * Whether an alert could name this kind at all, whoever evaluates them.
+ *
+ * Registry knowledge rather than a connection, so the answer holds while
+ * the evaluator is unreachable: a kind no evaluator labels gets neither a
+ * block nor a sentence about a read that failed, and the surface keeps no
+ * list of kinds of its own.
+ */
+export function alertsCanBeAbout(kind: string): boolean {
+  return VENDORS.some(
+    (vendor) => vendor.provides?.["alerts.about"]?.speaksOf(kind) === true
+  );
+}
+
+/**
+ * The link a surface offers beside a capability's short answer.
+ *
+ * `null` unless the vendor both owns a screen and said which part of it
+ * answers this key: a link to a page that does not discuss the thing is
+ * worse than no link, and the vendor is the only one who knows.
+ */
+function answeredAt(vendor: Vendor, key: CapabilityKey): AppLink | null {
+  const suffix = vendor.page?.answers?.[key];
+  if (suffix === undefined) return null;
+  return vendorLink(vendor.id, Object.fromEntries(new URLSearchParams(suffix)));
+}
+
+/** The address as a chart label wants it — no scheme, no trailing slash. */
+function endpointOf(url: string): string {
+  return url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+}
+
+/**
+ * Every installed vendor that supplies a capability, in registry order.
+ *
+ * {@link useCapability} answers with the first, which is right where the
+ * question has one answer: one thing issues the certificate in a given
+ * Secret.
+ *
+ * Delivery is not that question. Argo CD and Flux are routinely installed
+ * side by side — one team's namespace under each — so the *first* provider is
+ * the wrong answer for half the objects and would silently return `null` for
+ * them, and an object both controllers really do apply is a fact worth
+ * shouting that a lookup stopping at the first hit could never find. The
+ * surfaces that need it ask everybody and reconcile the answers themselves.
+ */
+export function useCapabilities<K extends CapabilityKey>(
+  key: K
+): Array<Capabilities[K]> {
+  const { data } = useDetected();
+  const installed = new Set(
+    (data ?? []).filter((entry) => entry.installed).map((entry) => entry.id)
+  );
+  return VENDORS.flatMap((vendor) => {
+    const found = installed.has(vendor.id) ? vendor.provides?.[key] : undefined;
+    return found ? [found as Capabilities[K]] : [];
+  });
+}
+
+/**
+ * A vendor's own glyph, by the id a capability answered with.
+ *
+ * The seam's rule is that a surface never learns *which* vendor answered, and
+ * this does not break it: the surface is handed an opaque id and gets back a
+ * mark, exactly as it is handed a `vendor` string and prints it. What it must
+ * not do is branch on the id, and there is nothing here to branch on — an id
+ * this registry does not know draws no glyph rather than a wrong one.
+ */
+export function vendorIcon(vendorId: string): LucideIcon | null {
+  return (
+    VENDORS.find((vendor) => vendor.id === vendorId)?.extension?.icon ?? null
+  );
+}
+
+/**
+ * A detected extension's facts, or the reason there are none.
+ *
+ * `failed` is a third thing from installed and absent, and it has to be:
+ * a row that fell back to an empty fact list would state, in the app's own
+ * quiet voice, that a cluster with two hundred certificates has none.
+ */
+export type FactsState =
+  | { state: "none" }
+  | { state: "loading" }
+  | { state: "ready"; facts: VendorFact[] }
+  | { state: "failed"; reason: string };
+
+export interface IntegrationStatus {
+  vendor: Vendor;
+  /** Narrowed off the vendor, because only vendors with one are listed. */
+  extension: Extension;
+  /**
+   * Present and usable: for a detected vendor "its CRDs are here", for a
+   * configured one "it has an address and the address answered". `null` where
+   * the cluster would not say — which is not "no".
+   */
+  installed: boolean | null;
+  version: string | null;
+  facts: FactsState;
+  /** `null` for a vendor nobody gives an address to. */
+  connection: ConnectionState | null;
+}
+
+/**
+ * How long a count is allowed to stand before it is read again.
+ *
+ * The pane is glanced at, not watched, so nothing polls: opening it reads
+ * the cluster, and opening it again within the minute does not. A number on
+ * screen is therefore at most one pane-open old, which is why it is stated
+ * without a timestamp and without a live mark.
+ */
+const FACTS_STALE_TIME = 60_000;
+
+/** Every vendor that is an installable extension, in registry order. */
+const EXTENSIONS: ReadonlyArray<Vendor & { extension: Extension }> =
+  VENDORS.filter(
+    (vendor): vendor is Vendor & { extension: Extension } =>
+      vendor.extension !== undefined
+  );
+
+/**
+ * The names the Integrations pane says it looked for when it found none.
+ *
+ * Detected ones only. A configured integration was never *looked* for — it
+ * is absent because nobody gave it an address, not because the API server
+ * was asked and said no — and listing it under "looked for by asking the API
+ * server for their CRDs" would state a method that was never used.
+ */
+export const EXTENSION_NAMES: readonly string[] = EXTENSIONS.filter(
+  (vendor) => vendor.connect === undefined || vendor.crd !== undefined
+).map((vendor) => vendor.name);
+
+/**
+ * Every extension this cluster could have, whether it has it, and what the
+ * ones it has are currently doing — for the one screen allowed to name them.
+ *
+ * Only vendors declaring {@link Extension} appear, which keeps the cluster's
+ * own flavour out: GKE and k3s are vendors in this tree too, and "Google
+ * Cloud · not installed" is nonsense.
+ *
+ * Facts are fetched for detected extensions only — an absent one's objects
+ * cannot exist — and nothing is fetched at all unless the reader is standing
+ * on the pane, so mounting this to answer a search query costs no requests.
+ *
+ * A configured vendor never appears in the detection scan and must not: it is
+ * present because somebody gave it an address, and its facts come from the
+ * probe rather than from a query it would have to make twice.
+ */
+/**
+ * Whether this vendor is here, or `null` when nobody could tell.
+ *
+ * Three-valued on purpose. `found` is `null` for a detection scan that
+ * could not look — a refused CRD list — and folding that into "not
+ * installed" told a reader the operator is absent on exactly the cluster
+ * where nobody checked, while the vendor's own page says the opposite two
+ * clicks away. An answering address is the one thing that settles it
+ * either way.
+ */
+export function isInstalled(
+  found: boolean | null,
+  connected: boolean,
+  hasAddress: boolean
+): boolean | null {
+  if (hasAddress && connected) return true;
+  return found;
+}
+
+export function useIntegrations({ facts = true }: { facts?: boolean } = {}): {
+  statuses: IntegrationStatus[];
+  isPending: boolean;
+  error: Error | null;
+} {
+  const { data, isPending, error } = useDetected();
+  const connections = useConnections();
+  const context = useClusterStore((state) => state.currentContext);
+
+  const detected = EXTENSIONS.map((vendor) => {
+    const connection = vendor.connect
+      ? (connections.get(vendor.id) ?? { state: "reading" as const })
+      : null;
+    const entry = data?.find((candidate) => candidate.id === vendor.id);
+    // A vendor the scan never mentioned is not installed. A vendor it
+    // mentioned without an answer is a different thing.
+    const found = entry ? entry.installed : false;
+    // A vendor with both ways in is here by either: an answering address,
+    // or its kinds in the cluster.
+    const connected = connection?.state === "connected";
+    return {
+      vendor,
+      connection,
+      installed: isInstalled(found, connected, connection !== null),
+      version: connected
+        ? connection.probe.ok
+          ? connection.probe.version
+          : null
+        : (entry?.version ?? null),
+    };
+  });
+
+  const asking = detected.filter(
+    ({ vendor, installed }) => installed && vendor.extension.facts
+  );
+
+  const results = useQueries({
+    queries: asking.map(({ vendor }) => ({
+      // The context first, like every other integration read: a fact is a
+      // sentence about *this* cluster ("2 renewals overdue"), and one kept
+      // from the last cluster is not stale inventory, it is an accusation
+      // aimed at the wrong place.
+      queryKey: [context, "integration-facts", vendor.id],
+      queryFn: () => vendor.extension.facts!(),
+      enabled: facts,
+      staleTime: FACTS_STALE_TIME,
+    })),
+  });
+
+  return {
+    statuses: detected.map(({ vendor, installed, version, connection }) => {
+      const index = asking.findIndex((entry) => entry.vendor.id === vendor.id);
+      return {
+        vendor,
+        extension: vendor.extension,
+        installed,
+        version,
+        connection,
+        facts: connection
+          ? connectionFacts(vendor, connection)
+          : factsStateOf(index === -1 ? undefined : results[index]),
+      };
+    }),
+    isPending,
+    error,
+  };
+}
+
+/**
+ * A configured vendor's facts, taken from the probe it already ran.
+ *
+ * A broken one says so *here*, once, instead of leaving the reader to infer
+ * it from a chart that quietly went shorter — which is the reason this row
+ * is worth reading at all.
+ */
+function connectionFacts(
+  vendor: Vendor & { connect?: Connect },
+  connection: ConnectionState
+): FactsState {
+  if (!vendor.connect) return { state: "none" };
+  switch (connection.state) {
+    case "reading":
+      return { state: "loading" };
+    case "notConfigured":
+      return { state: "none" };
+    case "unreachable":
+      return {
+        state: "ready",
+        facts: vendor.connect.facts(connection.saved, {
+          ok: false,
+          at: Date.now(),
+          reason: { key: "verbatimLine", values: { said: connection.reason } },
+        }),
+      };
+    case "connected":
+      return {
+        state: "ready",
+        facts: vendor.connect.facts(connection.saved, connection.probe),
+      };
+  }
+}
+
+/**
+ * Everything the Connect dialog needs, for one vendor, without naming it.
+ *
+ * The pane is handed the vendor from {@link useIntegrations} and passes its
+ * id back, so the one screen allowed to *say* "Prometheus" still never
+ * imports it.
+ */
+export function useConnectionEditor(vendorId: string): {
+  connect: Connect | null;
+  saved: SavedConnection | null;
+  save: (draft: ConnectionDraft) => Promise<void>;
+  forget: () => Promise<void>;
+  test: (draft: ConnectionDraft) => Promise<ProbeResult>;
+  isSaving: boolean;
+} {
+  const t = useT();
+  const context = useClusterStore((state) => state.currentContext);
+  const client = useQueryClient();
+  const vendor = CONNECTED.find((candidate) => candidate.id === vendorId);
+
+  // Both keys, because saving an address changes what is stored *and*
+  // whether it answers, and a row still reading "not configured" after a
+  // successful save would be the app disagreeing with itself.
+  const refresh = () =>
+    Promise.all([
+      client.invalidateQueries({
+        queryKey: queryKeys.integrationConnection(vendorId, context),
+      }),
+      client.invalidateQueries({
+        queryKey: queryKeys.integrationProbe(vendorId, context),
+      }),
+    ]).then(() => undefined);
+
+  const saving = useMutation({
+    mutationFn: async (draft: ConnectionDraft | null) => {
+      if (!vendor) return;
+      if (draft === null) await vendor.connect.forget();
+      else await vendor.connect.save(draft);
+      await refresh();
+    },
+  });
+
+  const { data: saved = null } = useQuery({
+    queryKey: queryKeys.integrationConnection(vendorId, context),
+    queryFn: () => vendor!.connect.read(),
+    enabled: vendor !== undefined && context !== null,
+    staleTime: CONNECTION_STALE_TIME,
+  });
+
+  return {
+    connect: vendor?.connect ?? null,
+    saved,
+    save: (draft) => saving.mutateAsync(draft).then(() => undefined),
+    forget: () => saving.mutateAsync(null).then(() => undefined),
+    test: async (draft) =>
+      vendor
+        ? vendor.connect.probe(draft).then((result) => {
+            // Seeds the shared probe answer, so pressing Test and watching
+            // it succeed does not leave the row behind the dialog showing
+            // "no answer" from the cached probe. Only when the tested draft
+            // *is* the saved connection: a test against an edited address is
+            // about a different address.
+            if (
+              saved &&
+              saved.url === draft.url &&
+              saved.authType === draft.authType &&
+              saved.insecureTls === draft.insecureTls
+            ) {
+              client.setQueryData(
+                queryKeys.integrationProbe(vendorId, context),
+                result
+              );
+            }
+            return result;
+          })
+        : Promise.resolve({
+            ok: false as const,
+            at: Date.now(),
+            reason: {
+              key: "verbatimLine" as const,
+              values: { said: t("empty", "noSuchIntegration") },
+            },
+          }),
+    isSaving: saving.isPending,
+  };
+}
+
+function factsStateOf(
+  result: { data?: VendorFact[]; error: Error | null } | undefined
+): FactsState {
+  if (!result) return { state: "none" };
+  // Checked before `data`, because react-query keeps the last good answer
+  // through a failed refetch and a count nobody could re-read is not a
+  // count worth printing.
+  if (result.error) {
+    return { state: "failed", reason: errorToShow(result.error) };
+  }
+  if (result.data) return { state: "ready", facts: result.data };
+  return { state: "loading" };
+}
+
+// --- the pages ----------------------------------------------------------
+
+/**
+ * Every vendor that owns a screen, in registry order.
+ *
+ * Narrowed on `extension` as well as on `page`, because the sidebar row a
+ * page gets is drawn from the extension's glyph and the vendor's name, and
+ * the category lists only what the cluster was detected to have.
+ */
+const PAGES: ReadonlyArray<
+  Vendor & { extension: Extension; page: VendorPage }
+> = VENDORS.filter(
+  (vendor): vendor is Vendor & { extension: Extension; page: VendorPage } =>
+    vendor.page !== undefined && vendor.extension !== undefined
+);
+
+/**
+ * `React.lazy` per vendor, made once.
+ *
+ * Calling `lazy()` in render would hand React a new component type on every
+ * pass, which remounts the page and re-runs its queries on every keystroke
+ * the reader types into it.
+ */
+const LAZY = new Map<string, LazyExoticComponent<ComponentType>>();
+
+function lazyPageOf(vendorId: string, page: VendorPage) {
+  const made = LAZY.get(vendorId);
+  if (made) return made;
+  const component = lazy(page.load);
+  LAZY.set(vendorId, component);
+  return component;
+}
+
+export interface IntegrationPageEntry {
+  id: string;
+  name: string;
+  icon: LucideIcon;
+  link: AppLink;
+  /** `null` while it is being read, and where the cluster refused to say. */
+  count: number | null;
+  /**
+   * The dot beside the count — the worst thing on the vendor's page, or
+   * nothing. `null` wherever {@link count} is, and for a vendor whose page
+   * declares no opinion.
+   */
+  tone: "warn" | "err" | "unchecked" | null;
+  /**
+   * Whether {@link link} is the vendor's own screen or its Settings row.
+   * The caller needs it because the second kind shares one route between
+   * several rows, and "which of these is the open one" is then a question
+   * about the query string rather than about the path.
+   */
+  own: boolean;
+  /** Drawn under Operators rather than Integrations; see `Extension.operator`. */
+  operator: boolean;
+  /**
+   * Configured, and its connection is not up.
+   *
+   * Only ever true for a vendor the reader reached through a port-forward:
+   * the tunnel dies with the app, and a row that disappeared with it would be
+   * indistinguishable from one that was never set up. So the row stays and
+   * says it is asleep; pressing it is what wakes it.
+   */
+  asleep: boolean;
+  /**
+   * The authorizer refused this reader the vendor's primary list, so its
+   * screen would only error — the row is drawn disabled with a reason. Set
+   * from `allowed === false` alone, so a review that could not be asked never
+   * reads as forbidden; distinct from `count === null`.
+   */
+  forbidden: boolean;
+}
+
+/**
+ * The Integrations category: one row per extension this cluster actually
+ * has, or an empty list.
+ *
+ * **Every one of them, not only the ones with a screen.** An extension that
+ * owns no screen is still installed, still doing something, and still worth a
+ * row — it goes to its Settings row, where what it gives and what it is
+ * currently doing are already written.
+ *
+ * Empty is still the answer for most clusters and the caller must draw
+ * nothing at all for it — not an empty group, not a placeholder. Nothing is
+ * hidden by that: Settings → Integrations names every extension the app knows
+ * either way.
+ */
+export function useIntegrationPages(): {
+  pages: IntegrationPageEntry[];
+  /**
+   * Detection or the connection reads still running. A rail that drew
+   * nothing during that window would be claiming the cluster has no
+   * integrations — the one state this list must never claim by accident.
+   */
+  pending: boolean;
+  /**
+   * Anything in the category still being read — detection or any row's
+   * number. Wider than {@link pending} on purpose: the rows may already
+   * stand while their counts are on the wire, and the caption is what says
+   * the picture is not finished yet.
+   */
+  reading: boolean;
+} {
+  const { data, isPending } = useDetected();
+  const connections = useConnections();
+
+  const context = useClusterStore((state) => state.currentContext);
+  const isConnected = useClusterStore((state) => state.isConnected);
+  const saved = useClusterForwardStore((state) => state.forwards);
+  const forwarded = new Set(
+    forwardsFor(saved, context).map(([vendorId]) => vendorId)
+  );
+
+  const here = EXTENSIONS.filter((vendor) => {
+    const connection = connections.get(vendor.id);
+    // A configured vendor is present because its address answered, or
+    // because this machine reaches it through a forward, which dies with the
+    // app: the address is saved, the tunnel is not, and dropping the row
+    // would say the integration was never configured. A vendor that also
+    // installs kinds is here by those too.
+    if (
+      connection &&
+      (connection.state === "connected" || forwarded.has(vendor.id))
+    ) {
+      return true;
+    }
+    return data?.some((entry) => entry.id === vendor.id && entry.installed);
+  });
+
+  const withPages = here.filter(
+    (vendor): vendor is (typeof here)[number] & { page: VendorPage } =>
+      vendor.page !== undefined
+  );
+
+  // Only the pages whose subject is countable — a page may own no number at
+  // all, and asking for one would run a query to display nothing.
+  const withCounts = withPages.filter((vendor) => vendor.page.count);
+
+  // The page's own query, its `select` widened to carry the dot beside the
+  // number. Still one cache entry per vendor: a reader who opens the page
+  // finds it already answered and the app makes one set of reads, not two.
+  const counts = useQueries({
+    // `select` and `tone` are declared over the payload the vendor's own
+    // query returns and erased at the registry boundary, so the list can
+    // hold every vendor's count without this file knowing what any of them
+    // reads.
+    queries: withCounts.map((vendor) => {
+      const declared = vendor.page.count!;
+      return {
+        // The context first, the vendor's key after: cluster B must never
+        // read cluster A's numbers, which is the same rule the detection
+        // scan states. A page sharing this cache entry prefixes the same
+        // way — see PageCount.
+        queryKey: [context, ...declared.queryKey],
+        queryFn: declared.queryFn,
+        staleTime: declared.staleTime,
+        select: (data: unknown) => ({
+          count: declared.select(data as never),
+          tone: declared.tone?.(data as never) ?? null,
+        }),
+      } as UseQueryOptions<
+        unknown,
+        Error,
+        { count: number | null; tone: "warn" | "err" | "unchecked" | null }
+      >;
+    }),
+  });
+
+  // The one list each detected vendor's page cannot open without. Ask the
+  // cluster's own authorizer once and draw the row disabled where it is
+  // refused — a screen that only errors is worse than one the reader was
+  // told not to open. Only detected vendors that declare a `gate` are asked.
+  // `!= null`: `gate: null` is a page that works without its custom resources.
+  const gated = here.filter(
+    (
+      vendor
+    ): vendor is (typeof here)[number] & {
+      page: VendorPage & { gate: Gate };
+    } => vendor.page?.gate != null
+  );
+  const gateIds = (vendor: (typeof gated)[number]): string[] => {
+    const crd = vendor.page.gate.crd;
+    return typeof crd === "string" ? [crd] : [...crd];
+  };
+  const gateQueries = gated.flatMap((vendor) =>
+    gateIds(vendor).map((id) => {
+      const dot = id.indexOf(".");
+      return {
+        group: id.slice(dot + 1),
+        resource: id.slice(0, dot),
+        namespaced: vendor.page.gate.namespaced,
+      };
+    })
+  );
+  // Asked at the cluster scope, whatever namespaces are picked: every vendor
+  // page lists its objects across the cluster, so a reader allowed only in
+  // their own namespaces opens a page that is refused.
+  const { data: gateAnswers } = useQuery({
+    queryKey: [
+      "integration-access",
+      context,
+      gateQueries.map((q) => q.resource).sort(),
+    ],
+    queryFn: () => commands.checkListAccess(gateQueries, []),
+    enabled: isConnected && Boolean(context) && gateQueries.length > 0,
+    staleTime: 5 * 60 * 1000,
+    // A cluster that cannot answer leaves every row as it was — the state the
+    // app has always been in — rather than spending requests to hear it again.
+    retry: false,
+  });
+  // Plural resource -> allowed; null/undefined both mean "could not ask".
+  const allowedByResource = new Map(
+    (gateAnswers ?? []).map((answer) => [answer.resource, answer.allowed])
+  );
+  // Forbidden only when EVERY spelling of the gate was answered `false`. A
+  // could-not-ask (null), or any spelling allowed, leaves the row open — so a
+  // failed review never renders as a refusal.
+  const forbidden = new Set(
+    gated
+      .filter((vendor) => {
+        const answers = gateIds(vendor).map((id) =>
+          allowedByResource.get(id.slice(0, id.indexOf(".")))
+        );
+        return answers.length > 0 && answers.every((a) => a === false);
+      })
+      .map((vendor) => vendor.id)
+  );
+
+  const pages = here.map((vendor): IntegrationPageEntry => {
+    const index = withPages.findIndex(
+      (candidate) => candidate.id === vendor.id
+    );
+    const measured =
+      index === -1
+        ? undefined
+        : counts[
+            withCounts.findIndex((candidate) => candidate.id === vendor.id)
+          ]?.data;
+    return {
+      id: vendor.id,
+      name: vendor.name,
+      icon: vendor.extension.icon,
+      link:
+        index === -1
+          ? pageLink("integrations", { vendor: vendor.id })
+          : vendorLink(vendor.id),
+      asleep:
+        forwarded.has(vendor.id) &&
+        connections.get(vendor.id)?.state !== "connected",
+      count: measured?.count ?? null,
+      tone: measured?.tone ?? null,
+      own: index !== -1,
+      operator: vendor.extension.operator === true,
+      forbidden: forbidden.has(vendor.id),
+    };
+  });
+
+  // Detection alone: once the scan has answered, an empty list is the real
+  // "this cluster has none" and the group must vanish rather than shimmer.
+  // A configured-only row still pops in when its connection read lands.
+  // No cluster is not "still detecting" — a disabled query is pending
+  // forever, and the front door would shimmer an answer that cannot come.
+  return {
+    pages,
+    pending: context !== null && isPending,
+    reading:
+      context !== null &&
+      (isPending || counts.some((query) => query.isPending)),
+  };
+}
+
+/**
+ * What is at `/integrations/<slug>`.
+ *
+ * Five answers rather than a component or `null`, because the not-a-page
+ * cases read differently to somebody who arrived by a stale link, a
+ * restored tab or a cluster switch: a slug no vendor claims is a typo, a
+ * vendor the cluster does not have is a cluster answer, a configured-only
+ * vendor nobody gave an address is a settings answer, and detection still
+ * running is none of the three. The decision itself lives in
+ * {@link pageDecision}, where it can be tested without the three hooks.
+ */
+export type IntegrationPageState =
+  | { state: "detecting" }
+  | { state: "unknown" }
+  | { state: "absent"; name: string; icon: LucideIcon }
+  /** The scan was refused; neither presence nor absence was established. */
+  | { state: "cannotTell"; name: string; icon: LucideIcon }
+  | { state: "notConfigured"; name: string; icon: LucideIcon }
+  | {
+      state: "ready";
+      name: string;
+      icon: LucideIcon;
+      Page: LazyExoticComponent<ComponentType>;
+    };
+
+export function useIntegrationPage(
+  slug: string | undefined
+): IntegrationPageState {
+  const { data } = useDetected();
+  const connections = useConnections();
+  const vendor = PAGES.find((candidate) => candidate.id === slug);
+
+  const decision = pageDecision(
+    vendor && { id: vendor.id, configured: vendor.connect !== undefined },
+    data,
+    vendor && connections.get(vendor.id)
+  );
+
+  switch (decision) {
+    case "unknown":
+      return { state: "unknown" };
+    case "detecting":
+      return { state: "detecting" };
+    case "absent":
+    case "cannotTell":
+    case "notConfigured":
+      return {
+        state: decision,
+        name: vendor!.name,
+        icon: vendor!.extension.icon,
+      };
+    case "ready":
+      return {
+        state: "ready",
+        name: vendor!.name,
+        icon: vendor!.extension.icon,
+        Page: lazyPageOf(vendor!.id, vendor!.page),
+      };
+  }
+}
+
+/**
+ * The vendor view for a custom resource's API group, or `null` for the
+ * thousands of CRDs nobody here has heard of, which get the CRD's own
+ * printer columns.
+ *
+ * No detection call: reaching a `cert-manager.io` list page requires the
+ * group to exist, so the group is the detection.
+ */
+export function useCrdView(group: string, kind: string): CrdView | null {
+  return useMemo(() => crdViewFor(group, kind), [group, kind]);
+}
+
+function crdViewFor(group: string, kind: string): CrdView | null {
+  // Gateway API first: an official group, not a vendor's, so it cannot live
+  // in the vendor list — and no vendor may claim it out from under core.
+  if (gatewayCrd.matches(group, kind)) return gatewayCrd;
+  return (
+    VENDORS.find((vendor) => vendor.crd?.matches(group, kind))?.crd ?? null
+  );
+}
+
+// The peek a vendor owns for one of its kinds — the same facet rule as
+// `useCrdView`, one level deeper: the panel asks by CRD name and falls back
+// to the generic flatten for the thousands of kinds nobody here claims.
+export { vendorPeek } from "./peek";
+export type { VendorPeekBody, VendorPeekGroup } from "./peek";
+
+// The shared routing mechanics, through the door: the Gateway API pages in
+// core Network read a route's backends with the same two facts every vendor
+// routing page reads (see ./ingress), and naming the file from outside
+// would break the seam the lint rule keeps.
+export {
+  backingFrom,
+  backingListsKey,
+  backingOf,
+  useBackingLists,
+  ROUTING_STALE,
+} from "./ingress";
+export type {
+  Backing,
+  BackingLists,
+  BackingSources,
+  ServiceStop,
+} from "./ingress";
+export { RoutingMap } from "./routing-map";
+export type { MapEdge, MapNode, MapTone, RoutingMapData } from "./routing-map";
+
+/**
+ * Every label a vendor uses to name the pool a node was made by, in
+ * registry order, so the first hit is the more specific vendor's.
+ *
+ * Flattened once at module load rather than per node: a forty-node list
+ * asks this question forty times and the answer cannot change.
+ */
+export const NODE_POOL_LABELS: readonly string[] = VENDORS.flatMap(
+  (vendor) => vendor.nodeLabels?.pool ?? []
+);
+
+/**
+ * Every label that means "the cloud may take this node back", with the
+ * value that means yes.
+ *
+ * Only "yes" is listed. `capacityType=ON_DEMAND` and `priority=regular`
+ * exist and are not read, because nothing in the app ever states that a
+ * node is *not* spot.
+ */
+export const NODE_SPOT_LABELS: ReadonlyArray<
+  readonly [key: string, value: string]
+> = VENDORS.flatMap((vendor) => vendor.nodeLabels?.spot ?? []);
+
+/**
+ * The cloud that writes a given `spec.providerID` scheme, or `null`.
+ *
+ * A scheme no vendor here claims is left unnamed rather than guessed at —
+ * and plenty of clusters have one, k3s and RKE2 included.
+ */
+export function cloudOfProviderScheme(scheme: string): string | null {
+  const match = VENDORS.find(
+    (vendor) => vendor.nodeLabels?.providerScheme?.[0] === scheme
+  );
+  return match?.nodeLabels?.providerScheme?.[1] ?? null;
+}
+
+/**
+ * Every flavour a kubeconfig context can be recognised as, in registry
+ * order — which is the order they are tested in, most specific vendor
+ * first. Deliberately not exported: nothing outside needs the list, only
+ * the two answers below.
+ */
+const FLAVOURS: readonly Flavour[] = VENDORS.flatMap(
+  (vendor) => vendor.flavours ?? []
+);
+
+/**
+ * The flavour whose vendor claims this context name, or `null` for the
+ * generic case — a cluster run by somebody this app has never heard of,
+ * which is a perfectly ordinary thing for a cluster to be.
+ */
+export function flavourOfContext(context: string): Flavour | null {
+  const name = context.toLowerCase();
+  // "aks" inside "peaks-cluster" is not Azure, so markers are matched as
+  // whole segments of a name that separates words with -, _, . or :.
+  const hasWord = (word: string) =>
+    new RegExp(`(^|[^a-z0-9])${word}([^a-z0-9]|$)`).test(name);
+  return FLAVOURS.find((flavour) => flavour.claims(name, hasWord)) ?? null;
+}
+
+/** The flavour a provider id names, for the surfaces that hold one already. */
+export function flavourOf(provider: ClusterProvider): Flavour | null {
+  return FLAVOURS.find((flavour) => flavour.id === provider) ?? null;
+}
+
+/**
+ * Where a Flux-managed Helm release's real object lives.
+ *
+ * The one facet that names its vendor out loud, because the surface that
+ * uses it already does: the Helm page says "Managed by Flux" before it
+ * offers the link. Naming a vendor in *copy* was never the problem; naming
+ * one in an `import` is.
+ */
+export { helmReleaseObjectLink as fluxHelmReleaseLink };
+
+/**
+ * Reaching a configured vendor that runs *in* the cluster.
+ *
+ * Through the seam like everything else: the settings form asks for a way to
+ * reach "this vendor" and is handed the machinery, never a vendor's folder.
+ */
+export {
+  candidates,
+  forward,
+  type Candidate,
+  type Forwarded,
+  type InClusterHint,
+  normalisedSubpath,
+} from "./forwarded";
+import { useT } from "@/i18n/useT";
+
+/**
+ * A configured vendor's connect record, outside React.
+ *
+ * For the one caller that needs it without a component: moving a forward's
+ * local port has to rewrite the address the connection was saved under, and
+ * that happens while a tunnel is being brought up rather than while a form is
+ * on screen. Still the seam — the caller passes an id and never names a
+ * vendor.
+ */
+export function connectOf(vendorId: string): Connect | null {
+  return (
+    CONNECTED.find((candidate) => candidate.id === vendorId)?.connect ?? null
+  );
+}

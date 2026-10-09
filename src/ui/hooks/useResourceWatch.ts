@@ -1,0 +1,562 @@
+import { useEffect, useRef, useState } from "react";
+import {
+  hashKey,
+  useQueryClient,
+  type QueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
+
+import { commands } from "@/lib/commands";
+import { errorToShow } from "@/lib/error-utils";
+import {
+  listenEvent,
+  listenResourceEvents,
+  type ResourceChange,
+} from "@/lib/events";
+import { useRenewals } from "@/hooks/useCredentialRenewal";
+import { useT } from "@/i18n/useT";
+import type { Scoped } from "@/generated/types";
+import { watched } from "@/lib/watched-rows";
+import { queryKeys } from "@/lib/query-keys";
+import { useWindowActivity } from "@/lib/window-activity";
+
+interface UseResourceWatchOptions<T> {
+  /**
+   * `true` once dependencies are ready (current namespace, etc.).
+   * The hook short-circuits and does nothing while `false`.
+   */
+  enabled: boolean;
+  /**
+   * Async subscription factory. Returns a stream id; the hook owns
+   * the rest of the lifecycle (listen + gate release + unsubscribe).
+   */
+  subscribe: () => Promise<string>;
+  /** The cache entry the watch keeps up to date: a list's `Scoped` answer. */
+  queryKey: QueryKey;
+  /**
+   * Where a row's own object is cached, its manifest included. The peek, the
+   * page and the row menu poll them, and read them again when the watch has
+   * seen the row change.
+   */
+  detail?: (row: T) => readonly QueryKey[];
+  /**
+   * Called on a backend `failed` event — typically RBAC `watch` denial or a
+   * persistent network problem. The cache is NOT mutated for those; the
+   * consumer decides what to do (toast, fall back to polling, …).
+   */
+  onError?: (error: string) => void;
+  /**
+   * Called once when a non-failed event arrives after a failed one: the
+   * watcher recovered. Consumers flip watchFailed back to false here, which
+   * stops the polling fallback and reverts to pure-watch updates.
+   */
+  onRecovered?: () => void;
+  /**
+   * Whether `a` stands before `b`, for a list kept in an order of its own. A
+   * row whose change moves it is moved, and a resync is put in this order.
+   * Without one, rows keep the API's order, namespace then name.
+   */
+  order?: (a: T, b: T) => boolean;
+  /** Whether a list growing or shrinking re-reads the overview's counts. */
+  recount?: boolean;
+  /**
+   * Whether a list delivered by the stream reads the panels in `detail` again
+   * where they answered before it was asked for: a change between the two
+   * arrives in the list, never as a change of its own. For a page's own
+   * watches, whose rows are few.
+   */
+  behind?: boolean;
+  /** Called when a change after the list lands: a read taken before it is behind. */
+  onChange?: () => void;
+}
+
+export interface ResourceWatchState {
+  /**
+   * A resync is in flight: the watcher is re-listing the collection, so the
+   * cached rows are the last complete state and not the current one. Surfaces
+   * show what they have — or a skeleton where they have nothing — not an
+   * empty state that reads as "your cluster has none of these".
+   */
+  resyncing: boolean;
+}
+
+/**
+ * Subscribes to a backend resource watch, listens for `resource-event` Tauri
+ * events and updates the TanStack Query cache directly.
+ *
+ * Same deferred-start handshake as `useGenericTerminalSession` and
+ * `useLogStream`: `commands.resourceWatchSubscribed` is called only after
+ * `listen()` has resolved, so the backend's first `applied`/`restarted`
+ * events cannot land in the void.
+ */
+export function useResourceWatch<
+  T extends { name: string; namespace?: string | null },
+>({
+  enabled,
+  subscribe,
+  queryKey,
+  detail,
+  onError,
+  onRecovered,
+  order,
+  recount = true,
+  behind = false,
+  onChange,
+}: UseResourceWatchOptions<T>): ResourceWatchState {
+  const t = useT();
+  const queryClient = useQueryClient();
+  const renewals = useRenewals();
+  const [resyncing, setResyncing] = useState(false);
+  // Outlives the stream: a renewal or re-enable subscribes again under the
+  // same key, and only an answer may end the failure the consumer was told of.
+  const failedFor = useRef<QueryKey | null>(null);
+  // Latest callbacks captured via refs so flipping a useState in
+  // either callback doesn't tear down the subscription.
+  const onErrorRef = useRef(onError);
+  const onRecoveredRef = useRef(onRecovered);
+  const detailRef = useRef(detail);
+  const tRef = useRef(t);
+  const orderRef = useRef(order);
+  const recountRef = useRef(recount);
+  const behindRef = useRef(behind);
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onErrorRef.current = onError;
+    onRecoveredRef.current = onRecovered;
+    detailRef.current = detail;
+    tRef.current = t;
+    orderRef.current = order;
+    recountRef.current = recount;
+    behindRef.current = behind;
+    onChangeRef.current = onChange;
+  }, [onError, onRecovered, detail, t, order, recount, behind, onChange]);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    let active = true;
+    let streamId: string | null = null;
+    let unlisten: (() => void) | null = null;
+    // Tracks whether the last stream state was a failure, so `onRecovered`
+    // fires once per failure→recovery transition and not on every event.
+    let inFailedState = failedFor.current === queryKey;
+    const fail = () => {
+      inFailedState = true;
+      failedFor.current = queryKey;
+    };
+    // The rows a resync has delivered so far, held here rather than in
+    // the cache until the backend says the burst is complete.
+    let staged: Map<string, T> | null = null;
+    // When the list in flight was asked for: the gate's release for the
+    // first, the marker for a resync. A read of a row's own object that
+    // answered before it can miss a change the list carries.
+    let listedFrom = 0;
+    const positions = new Map<string, number>();
+    let indexedList: T[] | undefined;
+
+    // Give up on a resync that can no longer complete. What was staged is
+    // dropped rather than committed — a half-delivered burst is not a
+    // state — and the surface stops waiting on one, which it would
+    // otherwise do forever.
+    const abandonResync = () => {
+      staged = null;
+      setResyncing(false);
+    };
+
+    const teardown = async () => {
+      active = false;
+      abandonResync();
+      if (unlisten) {
+        unlisten();
+        unlisten = null;
+      }
+      if (streamId) {
+        const id = streamId;
+        streamId = null;
+        try {
+          await commands.unsubscribeResourceWatch(id);
+        } catch (err) {
+          console.error("Failed to unsubscribe resource watch:", err);
+        }
+      }
+    };
+
+    (async () => {
+      try {
+        const id = await subscribe();
+        if (!active) {
+          await commands.unsubscribeResourceWatch(id).catch(() => {});
+          return;
+        }
+        streamId = id;
+
+        const off = await listenResourceEvents<T>((event) => {
+          const payload = event.payload;
+          if (payload.stream_id !== id) return;
+          if (payload.changes.some((change) => change.op === "failed")) {
+            fail();
+            abandonResync();
+            onErrorRef.current?.(
+              payload.error ?? tRef.current("action", "resourceWatchFailed")
+            );
+            return;
+          }
+          if (payload.changes.length === 0) return;
+          // A `restarted` marker says the watcher is trying again; it is
+          // not the cluster answering. kube emits one before every list
+          // attempt, so a refused watch sends a marker between every pair
+          // of failures — and recovering on it put the list back on
+          // "live", stopped the polling that was standing in for the
+          // watch, and drew a resync that never syncs. The same rule the
+          // other side of the boundary applies in `watch::answered`.
+          const answered = payload.changes.some(
+            (change) => change.op !== "restarted"
+          );
+          // The marker still does its work — it opens the staging map the
+          // resync is collected into, and skipping that left the objects
+          // deleted while the watch was down in the cache for good. What
+          // it must not do is end the failure.
+          if (inFailedState && answered) {
+            inFailedState = false;
+            failedFor.current = null;
+            onRecoveredRef.current?.();
+          }
+
+          // Live changes accumulate and land as one cache write, so a
+          // batch is one render no matter how many objects moved.
+          let live: Array<ResourceChange<T>> = [];
+          for (const change of payload.changes) {
+            if (change.op === "restarted") {
+              listedFrom ||= Date.now();
+              staged = new Map();
+              // A watch that is failing announces every attempt; saying
+              // "resyncing" each time claims progress on a stream that is
+              // not making any. The failure is what the reader is shown.
+              setResyncing(!inFailedState);
+              // The resync's list is the whole truth; anything from
+              // before it is about to be superseded.
+              live = [];
+              continue;
+            }
+            if (change.op === "synced") {
+              const rows = staged;
+              staged = null;
+              setResyncing(false);
+              if (rows) {
+                const before =
+                  queryClient.getQueryData<Scoped<T>>(queryKey)?.rows.length;
+                if (
+                  recountRef.current &&
+                  before !== undefined &&
+                  before !== rows.size
+                )
+                  readSoon(queryClient, queryKeys.everyOverview(), COUNTS_MS);
+                const ranked = orderRef.current;
+                // Synced is every namespace of the stream answering, so
+                // nothing in the scope is unread any more.
+                queryClient.setQueryData<Scoped<T>>(queryKey, {
+                  rows: ranked
+                    ? [...rows.values()].sort(compareBy(ranked))
+                    : [...rows.values()],
+                  unread: [],
+                });
+                positions.clear();
+                indexedList = undefined;
+                if (behindRef.current)
+                  readBehind(
+                    queryClient,
+                    rows.values(),
+                    detailRef.current,
+                    listedFrom
+                  );
+                listedFrom = 0;
+              }
+              continue;
+            }
+            if (staged) {
+              stage(staged, change);
+            } else {
+              live.push(change);
+            }
+          }
+
+          if (live.length > 0) {
+            const changes = live;
+            let recounted = false;
+            const stored = queryClient.setQueryData<Scoped<T>>(
+              queryKey,
+              (prev) => {
+                if (prev?.rows !== indexedList) {
+                  positions.clear();
+                  prev?.rows.forEach((item, index) =>
+                    positions.set(identify(item), index)
+                  );
+                }
+                const rows = applyChanges(
+                  prev?.rows ?? [],
+                  changes,
+                  positions,
+                  orderRef.current
+                );
+                if (prev && rows === prev.rows) return prev;
+                recounted = rows.length !== (prev?.rows.length ?? 0);
+                return watched({ rows, unread: prev?.unread ?? [] });
+              }
+            );
+            indexedList = stored?.rows;
+            onChangeRef.current?.();
+            readAgain(
+              queryClient,
+              changes,
+              detailRef.current,
+              recounted && recountRef.current
+            );
+          }
+        });
+
+        // The bridge dropping events is this watch failing, whatever the
+        // stream itself is doing: a resync replaces the cache from a burst,
+        // so events lost in it are rows that never arrive — the list is not
+        // stale, it is short, and nothing polls it back while it believes it
+        // is live. Same treatment as a failed stream: say so, drop the badge,
+        // start polling again.
+        const offLagged = await listenEvent("event-bridge-lagged", (event) => {
+          fail();
+          // A resync missing an unknown number of its own rows is not a
+          // state to swap in — committing it would delete rows that exist.
+          abandonResync();
+          onErrorRef.current?.(
+            tRef.current("action", "eventBridgeLagged", {
+              n: event.payload.missed,
+            })
+          );
+        });
+
+        if (!active) {
+          off();
+          offLagged();
+          return;
+        }
+        unlisten = () => {
+          off();
+          offLagged();
+        };
+
+        // Listener installed — release the backend gate. A failure here means
+        // the session was already torn down (race with cleanup): log, no crash.
+        try {
+          listedFrom = Date.now();
+          await commands.resourceWatchSubscribed(id);
+        } catch (err) {
+          if (active) {
+            console.error("Failed to subscribe resource watch:", err);
+          }
+        }
+      } catch (err) {
+        if (active) {
+          console.error("Failed to start resource watch:", err);
+          // No stream is coming, so whoever waits on one has to be told.
+          fail();
+          onErrorRef.current?.(
+            errorToShow(err) || tRef.current("action", "resourceWatchFailed")
+          );
+        }
+      }
+    })();
+
+    return () => {
+      void teardown();
+    };
+    // queryKey is compared by reference on purpose. Consumers pass a stable,
+    // memoised key (`queryKeys.resources(...)` inside a useMemo); when the
+    // namespace or kind changes the reference changes too, and re-subscribing
+    // is correct — the watch belongs to that key.
+    // `renewals`: a watch is handed a `kube::Client` once and holds it, so a
+    // background renewal leaves this one on credentials about to be refused.
+  }, [enabled, subscribe, queryClient, queryKey, renewals]);
+
+  return { resyncing };
+}
+
+const DETAIL_MS = 250;
+/** The overview is the costliest read in the app: twice a second at most. */
+const COUNTS_MS = 500;
+
+const due = new WeakMap<QueryClient, Set<string>>();
+
+/**
+ * Reads `queryKey` again once a burst of changes settles. A read in flight
+ * may have left before the change, so it is waited for rather than cut
+ * short, which under steady churn would never let one finish.
+ */
+function readSoon(client: QueryClient, queryKey: QueryKey, settleMs: number) {
+  const pending = due.get(client) ?? new Set<string>();
+  due.set(client, pending);
+  const id = hashKey(queryKey);
+  if (pending.has(id)) return;
+  pending.add(id);
+  setTimeout(() => {
+    pending.delete(id);
+    if (client.isFetching({ queryKey }) > 0) {
+      readSoon(client, queryKey, settleMs);
+      return;
+    }
+    // A hidden window re-reads on its way back; until then it is only stale.
+    const visible = useWindowActivity.getState().visible;
+    void client.invalidateQueries(
+      { queryKey, refetchType: visible ? "active" : "none" },
+      { cancelRefetch: false }
+    );
+  }, settleMs);
+}
+
+/**
+ * The panels polling a row the watch saw change, and the overview's counts
+ * beside a list that grew or shrank: both lagged the list by a poll.
+ */
+function readAgain<T>(
+  client: QueryClient,
+  changes: Array<ResourceChange<T>>,
+  detail: ((row: T) => readonly QueryKey[]) | undefined,
+  recounted: boolean
+) {
+  if (detail)
+    for (const { resource } of changes) {
+      if (!resource) continue;
+      for (const key of detail(resource))
+        if (client.getQueryState(key)) readSoon(client, key, DETAIL_MS);
+    }
+  if (recounted) readSoon(client, queryKeys.everyOverview(), COUNTS_MS);
+}
+
+/**
+ * The panels reading a row a list has just delivered, where their read
+ * answered before the list was asked for: a change between the two arrives
+ * in the list and never as a change of its own. Sam's pod page, opened 0.4 s
+ * before its pod went Running, said ContainerCreating with "live" for 2 s.
+ */
+function readBehind<T>(
+  client: QueryClient,
+  rows: Iterable<T>,
+  detail: ((row: T) => readonly QueryKey[]) | undefined,
+  listedFrom: number
+) {
+  if (!detail) return;
+  for (const row of rows)
+    for (const key of detail(row)) {
+      const state = client.getQueryState(key);
+      if (
+        state &&
+        Math.max(state.dataUpdatedAt, state.errorUpdatedAt) <= listedFrom
+      )
+        readSoon(client, key, DETAIL_MS);
+    }
+}
+
+/** Name plus namespace, which is what identifies a row in a list. */
+function identify<T extends { name: string; namespace?: string | null }>(
+  item: T
+): string {
+  return `${item.namespace ?? ""}\0${item.name}`;
+}
+
+function stage<T extends { name: string; namespace?: string | null }>(
+  rows: Map<string, T>,
+  change: ResourceChange<T>
+) {
+  const incoming = change.resource;
+  if (!incoming) return;
+  if (change.op === "deleted") rows.delete(identify(incoming));
+  else rows.set(identify(incoming), incoming);
+}
+
+/** The order a list arrives in: by namespace, then by name, as the API keys it. */
+function before<T extends { name: string; namespace?: string | null }>(
+  a: T,
+  b: T
+): boolean {
+  const left = a.namespace ?? "";
+  const right = b.namespace ?? "";
+  return left === right ? a.name < b.name : left < right;
+}
+
+function compareBy<T>(order: (a: T, b: T) => boolean) {
+  return (a: T, b: T) => (order(a, b) ? -1 : order(b, a) ? 1 : 0);
+}
+
+/** Where a new row goes in a list kept in `order`, found in O(log N) reads. */
+function sortedIndex<T>(
+  rows: T[],
+  row: T,
+  order: (a: T, b: T) => boolean
+): number {
+  let low = 0;
+  let high = rows.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (order(rows[middle], row)) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+// Lookup and replacement touch only changes; immutable publication, an
+// insert's shift and ordered deletion still copy O(N) array slots. A new row
+// goes where the list would have put it, not at the end, and a row whose
+// change moves it in a list of its own order leaves its old place for that.
+function applyChanges<T extends { name: string; namespace?: string | null }>(
+  list: T[],
+  changes: Array<ResourceChange<T>>,
+  positions: Map<string, number>,
+  order?: (a: T, b: T) => boolean
+): T[] {
+  let next: T[] | undefined;
+  let deleted = false;
+  for (const change of changes) {
+    const incoming = change.resource;
+    if (!incoming) continue;
+    const key = identify(incoming);
+    let index = positions.get(key);
+    if (change.op === "deleted") {
+      if (index === undefined) continue;
+      positions.delete(key);
+      deleted = true;
+    } else {
+      const held = index === undefined ? undefined : (next ?? list)[index];
+      if (held === incoming) continue;
+      if (
+        order &&
+        held !== undefined &&
+        (order(held, incoming) || order(incoming, held))
+      ) {
+        positions.delete(key);
+        deleted = true;
+        index = undefined;
+      }
+      next ??= list.slice();
+      if (index === undefined) {
+        const at = sortedIndex(next, incoming, order ?? before);
+        next.splice(at, 0, incoming);
+        for (const [other, position] of positions)
+          if (position >= at) positions.set(other, position + 1);
+        positions.set(key, at);
+      } else {
+        next[index] = incoming;
+      }
+    }
+  }
+  if (deleted) {
+    const rows = next ?? list;
+    const slots: Array<string | undefined> = new Array(rows.length);
+    for (const [key, index] of positions) slots[index] = key;
+    const kept: T[] = [];
+    for (let index = 0; index < slots.length; index++) {
+      const key = slots[index];
+      if (key === undefined) continue;
+      positions.set(key, kept.length);
+      kept.push(rows[index]);
+    }
+    next = kept;
+  }
+  return next ?? list;
+}

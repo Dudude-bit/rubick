@@ -1,0 +1,423 @@
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+
+const whole = vi.hoisted(() => ({
+  podCount: 3 as number | null,
+  refused: false,
+}));
+
+vi.mock("@/hooks/useClusterSummary", () => ({
+  useClusterSummary: () => ({
+    namespaces: [],
+    podCount: whole.podCount,
+    refused: whole.refused,
+    namespaceList: "listed",
+    isLoading: false,
+  }),
+}));
+
+/** What needs attention on screen, and across the cluster when asked for it. */
+const attentions = vi.hoisted(() => ({
+  here: null as unknown,
+  cluster: null as unknown,
+  askedCluster: 0,
+}));
+
+vi.mock("@/hooks/useAttention", () => ({
+  useAttention: ({ scope }: { scope?: readonly string[] } = {}) => {
+    if (scope) attentions.askedCluster += 1;
+    return scope ? attentions.cluster : attentions.here;
+  },
+}));
+
+const attentionOf = (total: number, complete = true) => ({
+  items: [],
+  total,
+  checks: [],
+  complete,
+  worst: total > 0 ? "err" : null,
+});
+
+/** The overview of whatever scope the window is on, per test. */
+const scoped = vi.hoisted(() => ({
+  data: undefined as unknown,
+  isPlaceholderData: false,
+}));
+
+vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useClusterOverview")>()),
+  useScopedOverview: () => scoped,
+}));
+
+const overviewOf = (
+  pods: number | null,
+  problems: number,
+  unread: {
+    kind: string;
+    namespace: string;
+    code: string;
+    message: string;
+  }[] = []
+) => {
+  const complete = !unread.some((entry) => entry.kind === "Pod");
+  return {
+    counts: { pods: complete ? pods : null },
+    pods:
+      pods === null
+        ? null
+        : {
+            read: {
+              running: pods,
+              pending: 0,
+              succeeded: 0,
+              failed: 0,
+              unknown: 0,
+            },
+            complete,
+          },
+    problems: Array.from({ length: problems }, () => ({})),
+    problemsTruncated: 0,
+    unconfirmed: [],
+    unread,
+  };
+};
+
+let renewal = "scheduled";
+vi.mock("@/hooks/useCredentialRenewal", () => ({
+  useRenewal: () => renewal,
+}));
+
+import { TooltipProvider } from "@/components/ui/tooltip";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useDeepLinkStore } from "@/stores/deepLinkStore";
+import { StatusBar } from "./StatusBar";
+
+beforeEach(() => {
+  renewal = "scheduled";
+  whole.podCount = 3;
+  whole.refused = false;
+  attentions.askedCluster = 0;
+  attentions.here = attentionOf(0);
+  attentions.cluster = attentionOf(0);
+  scoped.data = overviewOf(3, 0);
+  scoped.isPlaceholderData = false;
+  useClusterStore.setState({
+    namespaceScope: [],
+    currentContext: "prod",
+    isConnected: true,
+    connectedThrough: "direct",
+    isLoading: false,
+    isAuthenticating: false,
+    error: null,
+    errorContext: null,
+    pendingContext: null,
+  });
+});
+
+describe("the link the window was opened from", () => {
+  /** Floating over the page it hid the log footer and toasts; fails if the strip stops carrying the note. */
+  it("is noted in the strip, not over the page", () => {
+    useDeepLinkStore.setState({
+      arrival: {
+        status: "live",
+        link: { context: "prod", path: "/c/prod/pods", capturedAt: null },
+      },
+    });
+    const { container } = render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    const note = screen.getByRole("status");
+    expect(container.querySelector("footer")?.contains(note)).toBe(true);
+    useDeepLinkStore.setState({ arrival: null });
+  });
+});
+
+describe("the strip at the narrowest window", () => {
+  const live = () =>
+    useDeepLinkStore.setState({
+      arrival: {
+        status: "live",
+        link: { context: "prod", path: "/c/prod/pods", capturedAt: null },
+      },
+    });
+  const strip = () =>
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    ).container.querySelector("footer")!;
+
+  /**
+   * In Russian at 1024 wide every item wrapped onto a clipped second line.
+   * Fails if the strip may wrap a line or grow past its one row.
+   */
+  it("keeps every item on its one line", () => {
+    expect(strip()).toHaveClass("h-6", "overflow-hidden", "whitespace-nowrap");
+  });
+
+  /**
+   * The hints are what gives way first, and the note is the one item there
+   * that never wraps out of sight, only truncates past a readable start.
+   * Fails if the note stops leading its zone or loses its floor.
+   */
+  it("lets the hints give way before the link note", () => {
+    live();
+    const footer = strip();
+    const hints = screen.getByTestId("status-hints");
+    expect(hints).toHaveClass(
+      "flex-1",
+      "flex-wrap",
+      "flex-row-reverse",
+      "overflow-hidden",
+      "has-[[data-link-note]]:min-w-44"
+    );
+    expect(hints.firstElementChild).toBe(screen.getByRole("status"));
+    expect(hints).toHaveTextContent("Ctrl+K search");
+    expect(footer.firstElementChild).toBe(hints);
+    useDeepLinkStore.setState({ arrival: null });
+  });
+
+  /**
+   * With a proxy session, a sign-in hint and a dozen stalls the problem count
+   * was pushed off the edge. Fails if the count joins a zone that gives way.
+   */
+  it("gives way with the controls and never with the count", () => {
+    strip();
+    const controls = screen.getByTestId("status-controls");
+    expect(controls).toHaveClass("flex-wrap", "overflow-hidden", "min-w-0");
+    expect(controls).toContainElement(
+      screen.getByRole("button", { name: /theme/i })
+    );
+    const counts = screen.getByTestId("scope-counts");
+    expect(controls).not.toContainElement(counts);
+    expect(screen.getByTestId("status-hints")).not.toContainElement(counts);
+  });
+});
+
+describe("which way the session goes", () => {
+  /** A session through kubectl is a different session: no deadline of its own, and kubectl's plugin doing the talking. The bar has to say so or the reader debugs the wrong path. */
+  it("names the proxy when the app's own credentials were refused", () => {
+    useClusterStore.setState({ connectedThrough: "kubectl_proxy" });
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    expect(screen.getByText("through kubectl proxy")).toBeInTheDocument();
+  });
+
+  it("says nothing about the path when it is the ordinary one", () => {
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    expect(screen.queryByText("through kubectl proxy")).toBeNull();
+    expect(screen.getByText("3 pods")).toBeInTheDocument();
+  });
+});
+
+describe("what will interrupt the reader next", () => {
+  /**
+   * The one renewal state worth a permanent chip: it predicts the sign-in
+   * screen. The quiet states must not light it, or the line stops being read.
+   */
+  it("warns only when renewing quietly turned out to need a person", () => {
+    renewal = "needsYou";
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    expect(screen.getByText("sign-in needed")).toBeInTheDocument();
+  });
+
+  /** `ranOut` predicts the same interruption and so lights the same chip. */
+  it("warns when the plugin kept handing back what it already had", () => {
+    renewal = "ranOut";
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    expect(screen.getByText("sign-in needed")).toBeInTheDocument();
+  });
+
+  it.each([
+    "scheduled",
+    "noDeadline",
+    "passed",
+    "failed",
+    "delegated",
+    "unknown",
+  ])("says nothing while renewal is %s", (state) => {
+    renewal = state;
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+    expect(screen.queryByText("sign-in needed")).toBeNull();
+  });
+});
+
+describe("what the problem count counts", () => {
+  const bar = () =>
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    );
+
+  /**
+   * Lena chose lena-sandbox and the bar kept saying "18 problems" about
+   * other teams. Fails if the count stops following the scope, or stops
+   * saying which scope it counts.
+   */
+  it("counts the namespace the window is on and names it", () => {
+    whole.podCount = 72;
+    attentions.cluster = attentionOf(18);
+    scoped.data = overviewOf(2, 0);
+    useClusterStore.setState({ namespaceScope: ["lena-sandbox"] });
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveTextContent("2 pods");
+    expect(counts).toHaveTextContent("0 problems");
+    expect(counts).toHaveTextContent("in lena-sandbox");
+    expect(counts).not.toHaveTextContent("18 problems");
+  });
+
+  /** Fails if the cluster-wide figure is lost rather than moved behind a hover. */
+  it("keeps the whole cluster's figure on hover", async () => {
+    whole.podCount = 72;
+    attentions.cluster = attentionOf(18);
+    scoped.data = overviewOf(2, 0);
+    useClusterStore.setState({ namespaceScope: ["lena-sandbox"] });
+    bar();
+
+    await userEvent.hover(screen.getByTestId("scope-counts"));
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(/Across the whole cluster: 72 pods · 18 problems/)
+      ).not.toHaveLength(0)
+    );
+  });
+
+  /**
+   * Hovering asked a one-namespace token for every Service, Ingress,
+   * autoscaler and claim in the cluster, refused each time. Fails if the
+   * whole cluster is asked once it refused this connection.
+   */
+  it("asks the whole cluster nothing on hover once it refused", async () => {
+    whole.podCount = null;
+    whole.refused = true;
+    useClusterStore.setState({ namespaceScope: ["team-checkout"] });
+    bar();
+
+    await userEvent.hover(screen.getByTestId("scope-counts"));
+    await waitFor(() =>
+      expect(
+        screen.getAllByText(/whole cluster could not be read/i)
+      ).not.toHaveLength(0)
+    );
+    expect(attentions.askedCluster).toBe(0);
+  });
+
+  /**
+   * The previous scope's answer stands in while this one is read; under this
+   * scope's name it would count the wrong namespaces. Fails if it is shown.
+   */
+  it("shows no count while the scope's own answer is still on its way", () => {
+    scoped.data = overviewOf(40, 5);
+    scoped.isPlaceholderData = true;
+    useClusterStore.setState({ namespaceScope: ["lena-sandbox"] });
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).not.toHaveTextContent("40 pods");
+    expect(counts).toHaveTextContent("not counted");
+  });
+
+  /**
+   * The Overview's own total, not the backend's pod-and-workload one: the
+   * bar said 0 beside a namespace whose Services had no endpoints. Fails if
+   * the bar counts anything but what the panel heads.
+   */
+  it("counts what the Needs attention panel counts", () => {
+    scoped.data = overviewOf(4, 0);
+    attentions.here = attentionOf(4);
+    bar();
+
+    expect(screen.getByTestId("scope-counts")).toHaveTextContent("4 problems");
+  });
+
+  /**
+   * Marco on team-blind and team-checkout: one namespace refusing its pods
+   * read as "not counted in team-blind, team-checkout". Fails if the
+   * problems that were counted are dropped, or the pods are summed from the
+   * namespace that answered, or the refusal stops saying where it was.
+   */
+  it("counts what was read and names where the pods were refused", () => {
+    scoped.data = overviewOf(null, 0, [
+      {
+        kind: "Pod",
+        namespace: "team-blind",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+      },
+    ]);
+    attentions.here = attentionOf(2, false);
+    useClusterStore.setState({
+      namespaceScope: ["team-blind", "team-checkout"],
+    });
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveTextContent("pods not counted in team-blind");
+    expect(counts).toHaveTextContent("2+ problems");
+    expect(counts).toHaveTextContent("in team-blind, team-checkout");
+    expect(counts).not.toHaveTextContent(/\d+ pods/);
+  });
+
+  /**
+   * Marco with both namespaces: the Overview tiles now count team-checkout's
+   * 4 pods and the strip said only that pods went uncounted. Fails if the bar
+   * drops the pods it counted, or states them as the scope's whole.
+   */
+  it("counts the pods that were read beside where they were not", () => {
+    scoped.data = overviewOf(4, 0, [
+      {
+        kind: "Pod",
+        namespace: "team-blind",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+      },
+    ]);
+    attentions.here = attentionOf(2, false);
+    useClusterStore.setState({
+      namespaceScope: ["team-blind", "team-checkout"],
+    });
+    bar();
+
+    expect(screen.getByTestId("scope-counts")).toHaveTextContent(
+      /^4 pods·pods not counted in team-blind·2\+ problems/
+    );
+  });
+
+  /**
+   * A kind the list could not read makes a zero a partial answer. Fails if
+   * the bar prints a bare "0 problems" over a scope it did not finish reading.
+   */
+  it("says when the count did not cover everything", () => {
+    attentions.here = attentionOf(0, false);
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveTextContent("not all checked");
+    expect(counts).not.toHaveTextContent("0 problems");
+  });
+});
