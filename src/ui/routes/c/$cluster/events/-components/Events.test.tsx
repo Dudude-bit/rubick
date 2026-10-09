@@ -1599,3 +1599,72 @@ describe("what the page offers Share", () => {
     );
   });
 });
+
+describe("a feed beside a peek", () => {
+  /** jsdom lays nothing out: the page alone is `width` pixels wide. */
+  function pageOf(width: number) {
+    const original = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "clientWidth"
+    );
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.hasAttribute("data-events-page") ? width : 0;
+      },
+    });
+    restoreLayout.push(() => {
+      if (original)
+        Object.defineProperty(HTMLElement.prototype, "clientWidth", original);
+    });
+  }
+
+  /**
+   * Lena at 1024 with a peek open: the toolbar stacked six rows deep and left
+   * eleven rows of events. Fails if the type and the limit stay laid out in a
+   * row on a narrow page, if picking Warnings from the menu that holds them
+   * stops narrowing the feed, or if that menu's button stops saying so.
+   */
+  it("folds the type and the limit into one menu that names what it narrowed", async () => {
+    pageOf(300);
+    listEvents.mockResolvedValue([
+      { ...event("prod", 0), type: "Warning", reason: "BackOff" },
+      event("prod", 1),
+    ]);
+    await renderWithRouter(
+      <ScreenShareProvider>
+        <Events />
+      </ScreenShareProvider>,
+      eventsAt("list")
+    );
+    await screen.findByText("1 warning event · 1 normal event");
+    expect(screen.queryByRole("button", { name: "Warnings" })).toBeNull();
+    expect(
+      screen.queryByRole("combobox", { name: "Events fetched" })
+    ).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Share this screen" })
+    ).not.toHaveTextContent("Share");
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Feed settings" })
+    );
+    await userEvent.click(
+      screen.getByRole("menuitemradio", { name: "Warnings" })
+    );
+    await waitFor(() => expect(asked().at(-1)?.event_type).toBe("Warning"));
+    expect(
+      screen.getByRole("button", { name: "Feed settings: Warnings" })
+    ).toHaveTextContent("Warnings");
+  });
+
+  /** Fails if a page with room loses its row of type buttons to the menu. */
+  it("keeps the type in a row where the page has room", async () => {
+    pageOf(900);
+    await mount("list");
+    expect(
+      await screen.findByRole("button", { name: "Warnings" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Feed settings/ })).toBeNull();
+  });
+});

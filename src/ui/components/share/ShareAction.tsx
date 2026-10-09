@@ -3,6 +3,7 @@ import { Share2, type LucideIcon } from "lucide-react";
 
 import { DetailAction } from "@/components/object/detail-blocks";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { useAppInfo } from "@/hooks/useAppInfo";
 import { useLocationHref } from "@/hooks/useLocationHref";
 import { useObjectReport, type ObjectSubject } from "@/hooks/useObjectReport";
@@ -70,7 +71,7 @@ export function ShareScreenAction({
   look = "button",
 }: {
   screen: ScreenSubject;
-  look?: "button" | "detail";
+  look?: "button" | "detail" | "icon";
 }) {
   const t = useT();
   const locale = useLocale();
@@ -156,12 +157,16 @@ export function ShareScreenAction({
         <Button
           size="sm"
           variant="ghost"
-          className="h-7 gap-1.5 px-2 text-xs text-fg-mut"
+          className={cn(
+            "h-7 gap-1.5 text-xs text-fg-mut",
+            look === "icon" ? "w-7 px-0" : "px-2"
+          )}
           onClick={() => setOpen(true)}
           title={t("share", "shareScreen")}
+          aria-label={look === "icon" ? t("share", "shareScreen") : undefined}
         >
           <Share2 aria-hidden="true" className="h-3.5 w-3.5" />
-          {t("share", "share")}
+          {look !== "icon" && t("share", "share")}
         </Button>
       )}
       <ShareDialog report={report} open={open} onOpenChange={setOpen} />

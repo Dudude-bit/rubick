@@ -204,8 +204,12 @@ const CELL_PADDING = "px-2.5 py-2 group-data-[density=compact]/table:py-[3px]";
 const CLIP_TEXT =
   "relative overflow-hidden text-ellipsis whitespace-nowrap [&>a]:max-w-full [&>span]:max-w-full";
 
-/** Held open: a lane that appears mid-layout is left out of a flex item's height, and covers its last row. */
-const SIDEWAYS_LANE = { overflowX: "scroll" } as const;
+/**
+ * Held open: a lane that appears mid-layout is left out of a flex item's
+ * height, and covers its last row. Set below the rows by a gap, or its thumb
+ * reads as lying on the last one.
+ */
+const SIDEWAYS_LANE = { overflowX: "scroll", paddingBottom: 6 } as const;
 
 /** The first column stays put while a wide table scrolls under it, so every row still says which object it is. */
 const PINNED = "sticky left-0 z-[1] bg-canvas";
@@ -870,7 +874,7 @@ function DataTableInner<TData extends RowData>({
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const [portWidth, attachPort, port] = usePortWidth(scrollRef);
   // Floors are measured text: drawn again once the fonts they are measured in arrive.
-  const [, fontsArrived] = React.useReducer((n: number) => n + 1, 0);
+  const [fonts, fontsArrived] = React.useReducer((n: number) => n + 1, 0);
   React.useEffect(() => {
     if (document.fonts?.status !== "loading") return;
     let live = true;
@@ -880,12 +884,28 @@ function DataTableInner<TData extends RowData>({
     };
   }, []);
 
+  // Per column, from every row the table holds rather than the ones a
+  // search leaves, so typing does not move the columns.
+  const bounds = React.useMemo(() => {
+    void [fonts, columnsWithActions];
+    return new Map(
+      table.getAllFlatColumns().map((column) => [
+        column.id,
+        {
+          floor: columnFloor(column.columnDef, t, data),
+          ideal: columnIdeal(column.columnDef, t, data),
+        },
+      ])
+    );
+  }, [table, columnsWithActions, data, t, fonts]);
+
   // Only the columns actually on screen count, so hiding one hands its room
   // to the rest instead of leaving a gap.
   const specs = table.getVisibleFlatColumns().map((column) => ({
     size: column.getSize(),
-    floor: columnFloor(column.columnDef, t),
-    ideal: columnIdeal(column.columnDef, t),
+    floor: bounds.get(column.id)?.floor ?? 0,
+    ideal: bounds.get(column.id)?.ideal ?? 0,
+    fixed: CONTROL_COLUMNS.has(column.id),
   }));
   const layout = tableLayout(specs, portWidth);
 

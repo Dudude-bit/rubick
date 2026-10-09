@@ -5,6 +5,7 @@ import type { DeploymentInfo } from "@/generated/types";
 import { commands } from "@/lib/commands";
 import { ResourceType } from "@/lib/resource-registry";
 import { matchDeploymentPods, type ResourceMetrics } from "@/lib/metrics";
+import { widestText } from "@/lib/text-width";
 import {
   createNameColumn,
   createNamespaceColumn,
@@ -30,6 +31,7 @@ export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
     id: "strategy",
     header: columnHeader("columns", "strategy"),
     meta: {
+      floor: () => widestText(["RollingUpdate", "Recreate"], "sans", 6.6) + 20,
       share: (row: DeploymentInfoWithMetrics) =>
         row.strategy || "RollingUpdate",
     },

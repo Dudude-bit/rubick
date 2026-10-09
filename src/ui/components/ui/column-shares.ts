@@ -17,6 +17,8 @@ export interface ColumnSpec {
   floor?: number;
   /** A higher floor it keeps while every column's fits the port. */
   ideal?: number;
+  /** Holds controls, not text: drawn at its floor while the table scrolls. */
+  fixed?: boolean;
 }
 
 /**
@@ -69,14 +71,66 @@ export function tableLayout(columns: ColumnSpec[], port: number) {
   );
   const roomy = ideal.reduce((sum, px) => sum + px, 0) <= port;
   const span = port > 0 ? Math.max(port, floors) : 0;
+  if (span > port) return scrolledToEnd(columns, port);
   return {
     span,
-    scrolls: span > port,
+    scrolls: false,
     shares: columnShares(
       roomy
         ? columns.map((column, index) => ({ ...column, floor: ideal[index] }))
         : columns,
       span
     ),
+  };
+}
+
+/** What a column shows of itself beside the pinned one, past which it reads as text and not as a stray glyph. */
+const SLIVER_PX = 64;
+
+/**
+ * A table wider than its port, every column at its floor. Scrolled to the
+ * end, the column before the last ones that fit beside the pinned first one
+ * showed a sliver: a stray ")" of a restart count, "a…" of a message. Where
+ * less than half of it shows, and under {@link SLIVER_PX}, the last columns
+ * take that width instead and the column is wholly under the pinned one.
+ */
+function scrolledToEnd(columns: ColumnSpec[], port: number) {
+  const widths = columns.map((column) => column.floor ?? 0);
+  const room = port - widths[0];
+  let start = widths.length;
+  let tail = 0;
+  while (start > 1 && tail + widths[start - 1] <= room) {
+    start -= 1;
+    tail += widths[start];
+  }
+  const sliver = room - tail;
+  const ends = widths.slice(start).map((_, at) => start + at);
+  const takers = ends.filter((index) => !columns[index].fixed);
+  const growing = takers.length > 0 ? takers : ends;
+  const sizes = growing.reduce((sum, index) => sum + columns[index].size, 0);
+  if (
+    start > 1 &&
+    sliver > 0 &&
+    sliver < Math.min(SLIVER_PX, widths[start - 1] / 2)
+  ) {
+    let left = sliver;
+    growing.forEach((index, at) => {
+      const own =
+        at === growing.length - 1
+          ? left
+          : Math.floor(
+              sizes > 0
+                ? (sliver * columns[index].size) / sizes
+                : sliver / growing.length
+            );
+      widths[index] += own;
+      left -= own;
+    });
+  }
+  const span = widths.reduce((sum, width) => sum + width, 0);
+  return {
+    span,
+    scrolls: true,
+    shares: widths.map((width) => (width / span) * 100),
   };
 }

@@ -616,6 +616,8 @@ export const en = {
     showTimeline: "Timeline",
     hideTimeline: "Hide timeline",
     storyWindow: "Window",
+    storyOrder: "Order",
+    feedOptions: "Feed settings",
     showInaccessibleNamespaces: "Show them",
     connectToForward: "Connect to a cluster to start port-forwarding.",
     siteHasItAt: "{site} has it at {url}",

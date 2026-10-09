@@ -42,7 +42,7 @@ interface Column {
   meta?: {
     share?: unknown;
     label?: unknown;
-    floor?: number | ((t: T) => number);
+    floor?: number | ((t: T, rows: readonly never[]) => number);
   };
 }
 
@@ -177,16 +177,21 @@ const ACTIONS = {
   meta: { floor: actionsColumnSize(4) },
 };
 
-/** What `DataTable` lays a list out by: its sizes, and the floors under them. */
-const drawn = (columns: Column[], t: T = en) =>
+/** What `DataTable` lays a list out by: its sizes, and the floors under them for `rows`. */
+const drawn = (columns: Column[], t: T = en, rows: readonly unknown[] = []) =>
   [...columns, ACTIONS].map((c) => ({
     size: c.size ?? 150,
-    floor: columnFloor(c, t),
+    floor: columnFloor(c, t, rows),
   }));
 
 /** Each column's pixels in a port `port` wide, and whether the port has to scroll. */
-const laidOut = (columns: Column[], port: number, t: T = en) => {
-  const layout = tableLayout(drawn(columns, t), port);
+const laidOut = (
+  columns: Column[],
+  port: number,
+  t: T = en,
+  rows: readonly unknown[] = []
+) => {
+  const layout = tableLayout(drawn(columns, t, rows), port);
   return {
     ...layout,
     px: layout.shares.map((share) => (share / 100) * layout.span),
@@ -296,7 +301,9 @@ describe("every list at the windows it is drawn in", () => {
    * Fixed layout shares a table's width out in per cent, and per cent of a
    * table that cannot be wider than its port are a cut. Fails if a list whose
    * floors add up to more than the port stops asking for the width they need,
-   * or asks for more than they need when they fit.
+   * asks for more when they fit, or ends its sideways scroll on a sliver of
+   * a column beside the pinned one: Lena read a stray ")" of a restart count
+   * there.
    */
   it.each(
     PAGES.flatMap(([page, columns]) =>
@@ -307,10 +314,25 @@ describe("every list at the windows it is drawn in", () => {
     (_page, _language, columns, t) => {
       const floors = drawn(columns, t).reduce((sum, c) => sum + c.floor, 0);
       for (const port of PORTS) {
-        const { span, scrolls, shares } = laidOut(columns, port, t);
+        const { span, scrolls, shares, px } = laidOut(columns, port, t);
         expect(scrolls).toBe(floors > port);
-        expect(span).toBe(Math.max(port, floors));
         expect(shares.reduce((sum, share) => sum + share, 0)).toBeCloseTo(100);
+        if (!scrolls) {
+          expect(span).toBe(port);
+          continue;
+        }
+        expect(span).toBeGreaterThanOrEqual(floors);
+        const room = port - px[0];
+        const ends = px.map((_, at) =>
+          px.slice(at).reduce((sum, width) => sum + width, 0)
+        );
+        const first = ends.findIndex((end, at) => at > 1 && end <= room + 0.01);
+        if (first < 0) continue;
+        const sliver = room - ends[first];
+        expect(
+          sliver < 0.01 || sliver >= Math.min(64, px[first - 1] / 2),
+          `${sliver} at ${port}`
+        ).toBe(true);
       }
     }
   );
@@ -506,6 +528,70 @@ describe("a value a cell says in words", () => {
       Math.ceil(
         "9964→9964".length * 7.2 + 4 + "envoy-metrics · TCP".length * 6.2 + 20
       )
+    );
+  });
+});
+
+describe("a short value a row holds, in a 1024px window in Russian", () => {
+  /** The port a 1024px window leaves a list, less the sidebar and gutters. */
+  const PORT_1024 = 784;
+  const at = (columns: Column[], id: string) =>
+    columns.findIndex((c) => nameOf(c) === id);
+
+  /** Lena read "v1.35...." for v1.35.5+k3s1 on Nodes. Fails if the Version column can be drawn narrower than the longest version a node reports. */
+  it("draws a k3s kubelet version whole on Nodes", () => {
+    const rows = [
+      { name: "k3d-rubick-live-agent-0", version: "v1.35.5+k3s1" },
+      { name: "k3d-rubick-live-server-0", version: "v1.35.5+k3s1" },
+    ];
+    const columns = nodes(new Map());
+    const { px } = laidOut(columns, PORT_1024, ru, rows);
+    expect(px[at(columns, "version")]).toBeGreaterThanOrEqual(
+      "v1.35.5+k3s1".length * 6.6 + 20
+    );
+  });
+
+  /** Lena read "Rolling..." for RollingUpdate on Deployments. Fails if the Strategy column can be drawn narrower than either strategy's name. */
+  it.each([
+    ["English", en],
+    ["Russian", ru],
+  ] as const)("draws RollingUpdate whole on Deployments in %s", (_l, t) => {
+    const columns = deployments();
+    const { px } = laidOut(columns, PORT_1024, t);
+    expect(px[at(columns, "strategy")]).toBeGreaterThanOrEqual(
+      "RollingUpdate".length * 6.6 + 20
+    );
+  });
+
+  /** Lena read "k3d-ru…ent-0" on Pods. Fails if the Node column can be drawn narrower than the node names its rows hold. */
+  it("draws a k3d node name whole on Pods", () => {
+    const shown = (pods as Column[]).filter((c) => nameOf(c) !== "namespace");
+    const rows = [
+      { name: "cart-667846ff79-4f68h", nodeName: "k3d-rubick-live-agent-0" },
+      { name: "never-placed-75dcb67599-w9npx", nodeName: null },
+    ];
+    const { px } = laidOut(shown, PORT_1024, ru, rows);
+    expect(px[at(shown, "node")]).toBeGreaterThanOrEqual(
+      "k3d-rubick-live-agent-0".length * 7.2 + 38
+    );
+  });
+
+  /**
+   * Every list gave its Name column 280px while its names were 10 to 20
+   * glyphs. Fails if the Name floor keeps room its rows' names never use, or
+   * stops holding the longest of them, or 31 glyphs of a longer one.
+   */
+  it("holds the Name column to the longest name its rows hold", () => {
+    const name =
+      (deployments() as Column[]).find((c) => c.accessorKey === "name") ?? {};
+    const short = ["cart", "checkout", "payments", "recommendations"].map(
+      (each) => ({ name: each })
+    );
+    expect(columnFloor(name, ru, short)).toBe(
+      Math.ceil("recommendations".length * 7.2 + 2 * (14 + 4) + 20)
+    );
+    expect(columnFloor(name, ru, [{ name: "x".repeat(60) }, ...short])).toBe(
+      NAME_CELL_PX
     );
   });
 });

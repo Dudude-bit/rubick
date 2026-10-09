@@ -20,6 +20,7 @@ import type { AnyRouter } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
 import { Eye } from "lucide-react";
 
+import { actionsColumnSize } from "./column-shares";
 import { buildTableRows } from "./data-table-rows";
 import { DataTable } from "./data-table";
 import type { RowGrouping } from "./row-grouping";
@@ -1220,6 +1221,40 @@ describe("column widths", () => {
     }
   });
 
+  /**
+   * Lena read "v1.35...." for v1.35.5+k3s1: a floor written for the usual
+   * value cannot know what a cluster says. Fails if a floor that reads the
+   * rows is not handed every row the table holds.
+   */
+  it("hands a floor that reads the rows every row the table holds", async () => {
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    const byName = {
+      ...columns[0],
+      size: 300,
+      meta: {
+        floor: (_t: unknown, rows: readonly Item[]) =>
+          Math.max(0, ...rows.map((row) => row.name.length * 100)),
+      },
+    };
+    try {
+      await wrap(
+        <DataTable<Item>
+          columns={[byName, { ...columns[1], size: 100 }]}
+          data={[...DATA, { name: "long-one", namespace: "ns" }]}
+        />
+      );
+      expect(screen.getByRole("table").style.minWidth).not.toBe("");
+      expect(
+        (Number.parseFloat(widthOf("Name")) / 100) *
+          Number.parseFloat(screen.getByRole("table").style.minWidth)
+      ).toBeGreaterThanOrEqual(800);
+    } finally {
+      width.mockRestore();
+    }
+  });
+
   /** Fails if the port is only measured on first render, which on every list that loads first left the floors unapplied and its headers cut. */
   it("applies its floors when the table arrives after the loading skeleton", async () => {
     const columnsOf = [
@@ -1242,7 +1277,7 @@ describe("column widths", () => {
     }
   });
 
-  /** Fails if the port's sideways scrollbar goes back to WebKit's overlay or opens mid-layout: either lies over the last visible row and eats its clicks. */
+  /** Fails if the port's sideways scrollbar goes back to WebKit's overlay, opens mid-layout, or sits flush under the last row: Lena read the Nodes thumb as lying on the second row. */
   it("holds the sideways scrollbar in a lane of its own, only when the table scrolls", async () => {
     const columnsOf = [
       { ...columns[0], size: 300, meta: { floor: 300 } },
@@ -1256,6 +1291,7 @@ describe("column widths", () => {
       await wrap(<DataTable<Item> columns={columnsOf} data={DATA} />);
       expect(port().classList.contains("scrollbar-lane")).toBe(true);
       expect(port().style.overflowX).toBe("scroll");
+      expect(port().style.paddingBottom).toBe("6px");
     } finally {
       narrow.mockRestore();
     }
@@ -1718,6 +1754,44 @@ describe("column widths", () => {
    * taking a name column's share of the table for two 20px icons — which is
    * what the default did, on every list that has quick actions at all.
    */
+  /**
+   * Scrolled to the end, Lena's Pods showed a stray ")" of a restart count
+   * beside the pinned Name. Fails if a table ends its sideways scroll on a
+   * sliver of a column, or hands that sliver's width to the row's buttons.
+   */
+  it("ends a sideways scroll on whole columns, the buttons at their own width", async () => {
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    try {
+      await wrap(
+        <DataTable<Item>
+          columns={[
+            { ...columns[0], size: 300, meta: { floor: 300 } },
+            { ...columns[1], size: 100, meta: { floor: 150 } },
+            {
+              id: "age",
+              header: "Age",
+              size: 80,
+              meta: { floor: 100 },
+              cell: () => "1m",
+            },
+          ]}
+          data={DATA}
+          quickActions={[{ icon: Eye, label: "Look", onClick: () => {} }]}
+        />
+      );
+      const span = Number.parseFloat(screen.getByRole("table").style.minWidth);
+      const px = headers().map(
+        (header) => (Number.parseFloat(header.style.width) / 100) * span
+      );
+      expect(px[2] + px[3]).toBeCloseTo(500 - 300);
+      expect(px[3]).toBeCloseTo(actionsColumnSize(1));
+    } finally {
+      width.mockRestore();
+    }
+  });
+
   it("sizes the generated actions column from what is in it", async () => {
     const action = (label: string) => ({
       icon: Eye,

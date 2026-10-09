@@ -37,7 +37,9 @@ function laidOut(
     })),
     width
   );
-  const px = layout.shares.map((share) => (share / 100) * layout.span);
+  const px = layout.shares.map(
+    (share) => Math.round(share * layout.span * 10) / 1000
+  );
   const of = (id: string) => px[columns.findIndex((c) => c.id === id)];
   return {
     reason: of("reason"),

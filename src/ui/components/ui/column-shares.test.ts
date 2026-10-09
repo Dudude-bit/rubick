@@ -56,14 +56,59 @@ describe("tableLayout", () => {
    */
   it("is as wide as the floors when they outgrow the port", () => {
     const layout = tableLayout(
-      [{ size: 300, floor: 600 }, { size: 100, floor: 300 }, { size: 100 }],
+      [
+        { size: 300, floor: 600 },
+        { size: 100, floor: 300 },
+        { size: 100, floor: 200 },
+      ],
       800
     );
-    expect(layout.span).toBe(900);
+    expect(layout.span).toBe(1100);
     expect(layout.scrolls).toBe(true);
-    expect((layout.shares[0] / 100) * 900).toBeCloseTo(600);
-    expect((layout.shares[1] / 100) * 900).toBeCloseTo(300);
-    expect(layout.shares[2]).toBe(0);
+    expect((layout.shares[0] / 100) * 1100).toBeCloseTo(600);
+    expect((layout.shares[1] / 100) * 1100).toBeCloseTo(300);
+    expect((layout.shares[2] / 100) * 1100).toBeCloseTo(200);
+  });
+
+  /**
+   * Scrolled to the end, Lena's Pods showed a stray ")" of a restart count
+   * beside the pinned Name, and Dana's Events "a…" of a message beside the
+   * pinned Reason. Fails if the columns that end the table stop taking a
+   * sliver's width so the column before them is wholly under the pinned one,
+   * or if the row's buttons take any of it.
+   */
+  it("ends a sideways scroll on whole columns, not a sliver of one", () => {
+    const layout = tableLayout(
+      [
+        { size: 300, floor: 280 },
+        { size: 140, floor: 136 },
+        { size: 170, floor: 204 },
+        { size: 80, floor: 62 },
+        { size: 122, floor: 122, fixed: true },
+      ],
+      674
+    );
+    const px = layout.shares.map((share) => (share / 100) * layout.span);
+    expect(layout.scrolls).toBe(true);
+    expect(px[2] + px[3] + px[4]).toBeCloseTo(674 - 280);
+    expect(px[1]).toBeCloseTo(136);
+    expect(px[4]).toBeCloseTo(122);
+    expect(px[2] + px[3]).toBeCloseTo(204 + 62 + 6);
+  });
+
+  /** Fails if a column that shows enough of itself to read at the end is pushed under the pinned one by widening the last ones past use. */
+  it("leaves a column that shows more than a sliver where it is", () => {
+    const layout = tableLayout(
+      [
+        { size: 300, floor: 280 },
+        { size: 140, floor: 136 },
+        { size: 170, floor: 204 },
+        { size: 80, floor: 62 },
+        { size: 122, floor: 122, fixed: true },
+      ],
+      660
+    );
+    expect(layout.span).toBe(280 + 136 + 204 + 62 + 122);
   });
 
   /** Fails if a table nobody has measured yet is called scrolling, and widened to its floors, before it has a port. */
