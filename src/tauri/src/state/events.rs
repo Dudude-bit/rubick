@@ -462,6 +462,15 @@ pub enum AppEvent {
     /// lost events is short rather than stale, so every watch treats this
     /// as a failure and resumes polling.
     EventBridgeLagged { missed: u64 },
+    /// The overview's watched stores for `context` changed: in `namespaces`
+    /// where a namespaced object did, and across the cluster where a node did.
+    /// At most one a second per cluster, so a reader that reads the overview
+    /// again on it reads no faster than that.
+    OverviewChanged {
+        context: String,
+        namespaces: Vec<String>,
+        cluster: bool,
+    },
 }
 
 impl AppEvent {
@@ -493,6 +502,7 @@ impl AppEvent {
             AppEvent::PodRowsDone { .. } => "pod-rows-done",
             AppEvent::PodRowsFailed { .. } => "pod-rows-failed",
             AppEvent::EventBridgeLagged { .. } => "event-bridge-lagged",
+            AppEvent::OverviewChanged { .. } => "overview-changed",
         }
     }
 
@@ -672,6 +682,11 @@ mod tests {
                 message: "refused".into(),
             },
             AppEvent::EventBridgeLagged { missed: 12 },
+            AppEvent::OverviewChanged {
+                context: "k3d-rubick".into(),
+                namespaces: vec!["shop".into()],
+                cluster: false,
+            },
             AppEvent::TerminalSessions { sessions: vec![] },
         ]
     }
@@ -701,6 +716,7 @@ mod tests {
             AppEvent::PodRowsFailed { .. } => 20,
             AppEvent::EventBridgeLagged { .. } => 21,
             AppEvent::TerminalSessions { .. } => 22,
+            AppEvent::OverviewChanged { .. } => 23,
         }
     }
 
@@ -709,7 +725,7 @@ mod tests {
     fn every_variant_has_a_sample() {
         let mut seen: Vec<usize> = every_variant().iter().map(sample_index).collect();
         seen.sort_unstable();
-        assert_eq!(seen, (0..=22).collect::<Vec<_>>());
+        assert_eq!(seen, (0..=23).collect::<Vec<_>>());
     }
 
     /// Every `AppEvent` payload must be a flat object — no `type`

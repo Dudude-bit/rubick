@@ -5,7 +5,11 @@ import { scopeIn, scopeLabel } from "@/lib/namespace-scope";
 import { openNamespacePicker } from "@/lib/read-deadline";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
-import { useScopedOverview } from "@/hooks/useClusterOverview";
+import {
+  useFollowedOverview,
+  useScopedOverview,
+} from "@/hooks/useClusterOverview";
+import { DataFreshness } from "@/components/ui/realtime/data-freshness";
 import { useAttention } from "@/hooks/useAttention";
 import { attentionFigure, unreadWhere, type Attention } from "@/lib/attention";
 import { ClusterFrontDoor } from "../../../-components/ClusterFrontDoor";
@@ -83,7 +87,14 @@ export function ClusterOverview() {
   const { isConnected, namespaceScope } = useClusterStore();
   const { data: clusterInfo } = useClusterInfo();
 
-  const { data: overview, isLoading, error, refetch } = useScopedOverview();
+  const {
+    data: overview,
+    isLoading,
+    error,
+    refetch,
+    freshness,
+  } = useScopedOverview();
+  const following = useFollowedOverview(overview);
   const attention = useAttention({ refresh: "slow" });
   // The list pages name where a refused list can be read; the page that
   // tells a reader to open a namespace names the same ones.
@@ -181,7 +192,13 @@ export function ClusterOverview() {
 
   return (
     <div className="flex flex-col gap-[22px] animate-in fade-in duration-200">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        <DataFreshness
+          dataUpdatedAt={freshness.dataUpdatedAt}
+          live={following}
+          slowed={freshness.slowed}
+          stale={freshness.stale}
+        />
         <ShareScreenAction screen={screen} />
       </div>
       {pinned}

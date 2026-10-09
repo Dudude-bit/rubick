@@ -324,6 +324,66 @@ describe("a crash-looping pod caught while its container is up", () => {
     ).toBeGreaterThan(0);
     expect(screen.getByText("Running").className).toContain("text-err");
   });
+
+  /**
+   * Sam's checkout page said "app starts and then exits, over and over" up
+   * and backing off, and "app exited with 1" the instant a run ended: one
+   * loop told two ways. Fails if the exit that just ended a run of the loop
+   * drops the loop framing, or stops naming that exit beneath it.
+   */
+  it("keeps the loop framing the instant a run ends, with that exit as its detail", async () => {
+    const until = new Date(Date.now() + 60_000).toISOString();
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod")
+        return {
+          ...POD,
+          status: { ...POD.status, display: "Error", loopingUntil: until },
+          containers: [
+            {
+              name: "app",
+              image: "busybox:1.36",
+              ready: false,
+              started: false,
+              phase: "app",
+              state: {
+                type: "terminated",
+                termination: {
+                  exitCode: 1,
+                  signal: null,
+                  reason: "Error",
+                  message: null,
+                  startedAt: new Date(Date.now() - 6_000).toISOString(),
+                  finishedAt: new Date(Date.now() - 2_000).toISOString(),
+                },
+              },
+              lastTerminated: null,
+              restartCount: 57,
+              loopingUntil: until,
+              ports: [],
+              resources: { requests: {}, limits: {} },
+              env: [],
+              envFrom: [],
+            },
+          ],
+        };
+      if (command === "get_replicaset") return REPLICA_SET;
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+
+    expect(
+      screen.getAllByText("app starts and then exits, over and over").length
+    ).toBeGreaterThan(0);
+    expect(screen.queryByText("app exited with 1")).toBeNull();
+    expect(
+      screen.getAllByText(/the last run ended Error · exit 1/).length
+    ).toBeGreaterThan(0);
+  });
 });
 
 describe("a pod the scheduler has not placed yet", () => {

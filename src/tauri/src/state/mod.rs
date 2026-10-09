@@ -119,6 +119,8 @@ impl AppState {
         let drain_manager = Arc::new(crate::drain::DrainManager::new(event_tx.clone()));
         let renew_manager = Arc::new(crate::auth::renew::RenewManager::new());
 
+        let overview_cache = Arc::new(crate::overview::OverviewCache::announcing(event_tx.clone()));
+
         let search_manager = Arc::new(crate::search::SearchManager::new(
             event_tx.clone(),
             client_manager.clone(),
@@ -145,7 +147,7 @@ impl AppState {
             connect_generation: AtomicU64::new(0),
             debug_operations: DashMap::new(),
             perf: Arc::new(perf::PerfCounters::default()),
-            overview_cache: Arc::new(crate::overview::OverviewCache::default()),
+            overview_cache,
             metrics_unserved: crate::metrics::Unserved::default(),
             ownership: Arc::new(crate::ownership::OwnershipIndexes::default()),
         })

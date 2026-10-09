@@ -188,6 +188,8 @@ fn normalized(kind: &str) -> &'static str {
 /// What the answer is built into.
 struct Neighbourhood {
     subject: Option<ObjectRef>,
+    subject_uid: Option<String>,
+    read_at: Option<chrono::DateTime<chrono::Utc>>,
     edges: Vec<ConnectionEdge>,
     stops: Vec<ChainStop>,
     published: Vec<ServicePublished>,
@@ -199,6 +201,8 @@ impl Neighbourhood {
     fn new() -> Self {
         Self {
             subject: None,
+            subject_uid: None,
+            read_at: None,
             edges: Vec::new(),
             stops: Vec::new(),
             published: Vec::new(),
@@ -228,6 +232,8 @@ impl Neighbourhood {
             .ok_or_else(|| Error::Internal("connections built without a subject".to_string()))?;
         Ok(ResourceConnections {
             subject,
+            subject_uid: self.subject_uid,
+            read_at: self.read_at,
             edges: self.edges,
             stops: self.stops,
             published: self.published,

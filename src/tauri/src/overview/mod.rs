@@ -28,7 +28,10 @@ use kube::runtime::WatchStreamExt;
 use kube::{Api, Client, Resource};
 use parking_lot::Mutex;
 use serde::de::DeserializeOwned;
+use tokio::sync::{broadcast, Notify};
 use tokio_util::sync::CancellationToken;
+
+use crate::state::AppEvent;
 
 /// Errors in a row before a kind counts as broken and the cache stops serving.
 const BROKEN_STREAK: u32 = 3;
@@ -56,6 +59,50 @@ pub struct OverviewCache {
     refused: Arc<DashSet<String>>,
     /// Per cluster, the counts it refused: not asked again until a reconnect.
     refused_counts: DashMap<String, Arc<RefusedCounts>>,
+    /// Where a change the stores took is announced, so a screen showing the
+    /// overview reads it again then rather than a ten-second poll later.
+    events: Option<broadcast::Sender<AppEvent>>,
+}
+
+/// The fastest a cluster's changes are announced. Changes inside it are
+/// gathered into the next announcement, never dropped.
+const ANNOUNCE_EVERY: Duration = Duration::from_secs(1);
+
+/// What changed in a cluster's stores since it was last announced.
+#[derive(Default)]
+struct Changes {
+    touched: Mutex<Touched>,
+    pending: Notify,
+}
+
+#[derive(Default, Debug, PartialEq, Eq)]
+struct Touched {
+    namespaces: BTreeSet<String>,
+    cluster: bool,
+}
+
+impl Changes {
+    /// An object added, changed or removed; a list a watch resyncs from is
+    /// not news about any of them.
+    fn note<K: Resource>(&self, event: &watcher::Event<K>) {
+        let (watcher::Event::Apply(object) | watcher::Event::Delete(object)) = event else {
+            return;
+        };
+        {
+            let mut touched = self.touched.lock();
+            match &object.meta().namespace {
+                Some(namespace) => {
+                    touched.namespaces.insert(namespace.clone());
+                }
+                None => touched.cluster = true,
+            }
+        }
+        self.pending.notify_one();
+    }
+
+    fn take(&self) -> Touched {
+        std::mem::take(&mut *self.touched.lock())
+    }
 }
 
 /// The kinds, by reach and plural, a cluster refused to count.
@@ -174,6 +221,15 @@ fn by_name<K: kube::Resource>(mut items: Vec<Arc<K>>) -> Vec<Arc<K>> {
 }
 
 impl OverviewCache {
+    /// A cache that announces the changes its stores take on `events`.
+    #[must_use]
+    pub fn announcing(events: broadcast::Sender<AppEvent>) -> Self {
+        Self {
+            events: Some(events),
+            ..Self::default()
+        }
+    }
+
     /// The stores' contents for `context`, or `None` when they cannot be
     /// trusted: not started and in cooldown, still filling past the wait,
     /// or a watch is broken. `None` means "list instead".
@@ -296,6 +352,7 @@ impl OverviewCache {
             clusters: self.clusters.clone(),
             cooldown: self.cooldown.clone(),
             refused: self.refused.clone(),
+            changes: Arc::new(Changes::default()),
         };
         let watcher_config = || {
             WatcherConfig::default()
@@ -337,6 +394,9 @@ impl OverviewCache {
         );
 
         cluster.spawn_reaper(IDLE_AFTER);
+        if let Some(events) = &self.events {
+            cluster.spawn_announcer(events.clone());
+        }
         tracing::info!(context, "overview watches started");
         ClusterWatch {
             pods,
@@ -398,6 +458,7 @@ struct WatchConfigs {
     clusters: Arc<DashMap<String, Arc<ClusterWatch>>>,
     cooldown: Arc<DashMap<String, Instant>>,
     refused: Arc<DashSet<String>>,
+    changes: Arc<Changes>,
 }
 
 impl WatchConfigs {
@@ -419,6 +480,7 @@ impl WatchConfigs {
         let clusters = self.clusters.clone();
         let cooldown = self.cooldown.clone();
         let refused = self.refused.clone();
+        let changes = self.changes.clone();
         tokio::spawn(async move {
             let events = reflector::reflector(
                 writer,
@@ -434,7 +496,10 @@ impl WatchConfigs {
                     next = events.next() => next,
                 };
                 match next {
-                    Some(Ok(event)) => health.lock().saw(kind, &event),
+                    Some(Ok(event)) => {
+                        health.lock().saw(kind, &event);
+                        changes.note(&event);
+                    }
                     Some(Err(error)) if crate::error::watch_refused(&error) => {
                         // A one-namespace token was refused all seven kinds, ten times each, every five minutes.
                         tracing::warn!(
@@ -474,6 +539,38 @@ impl WatchConfigs {
             }
         });
         store
+    }
+
+    /// Announces what the stores took, at most once every [`ANNOUNCE_EVERY`]
+    /// and only while they serve: a broken store is listed instead, and an
+    /// announcement would only make that listing more frequent.
+    fn spawn_announcer(&self, events: broadcast::Sender<AppEvent>) {
+        let changes = self.changes.clone();
+        let health = self.health.clone();
+        let stop = self.stop.clone();
+        let context = self.context.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    biased;
+                    () = stop.cancelled() => break,
+                    () = changes.pending.notified() => {}
+                }
+                let touched = changes.take();
+                if health.lock().serves() {
+                    let _ = events.send(AppEvent::OverviewChanged {
+                        context: context.clone(),
+                        namespaces: touched.namespaces.into_iter().collect(),
+                        cluster: touched.cluster,
+                    });
+                }
+                tokio::select! {
+                    biased;
+                    () = stop.cancelled() => break,
+                    () = tokio::time::sleep(ANNOUNCE_EVERY) => {}
+                }
+            }
+        });
     }
 
     /// Stops the cluster's watches once nothing has asked for them in `idle`.
@@ -591,6 +688,95 @@ pub fn strip_event(event: &mut Event) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn in_namespace(namespace: Option<&str>) -> Pod {
+        let mut pod = Pod::default();
+        pod.metadata.name = Some("checkout-k6j2n".to_string());
+        pod.metadata.namespace = namespace.map(str::to_string);
+        pod
+    }
+
+    /// Sam's Overview read "41 of 62 ready" for six seconds after kubectl was
+    /// back at 40: it was read every ten seconds while the stores under it
+    /// knew at once. Fails if a change is not announced, if two inside a
+    /// second are announced apart or lost, if a resync counts as a change, or
+    /// if a cache that stopped serving still announces.
+    #[tokio::test]
+    async fn changes_are_announced_at_most_once_a_second_and_only_while_served() {
+        let (tx, mut rx) = broadcast::channel(16);
+        let cluster = WatchConfigs {
+            context: "k3d-rubick".to_string(),
+            health: Arc::new(Mutex::new(Health::new(KINDS))),
+            stop: CancellationToken::new(),
+            clusters: Arc::default(),
+            cooldown: Arc::default(),
+            refused: Arc::default(),
+            changes: Arc::new(Changes::default()),
+        };
+        cluster.spawn_announcer(tx);
+        let said = |event: AppEvent| match event {
+            AppEvent::OverviewChanged {
+                context,
+                namespaces,
+                cluster,
+            } => (context, namespaces, cluster),
+            other => panic!("not an overview change: {other:?}"),
+        };
+
+        cluster
+            .changes
+            .note(&watcher::Event::InitApply(in_namespace(Some("shop"))));
+        cluster
+            .changes
+            .note(&watcher::Event::Apply(in_namespace(Some("shop"))));
+        let first = tokio::time::timeout(Duration::from_millis(500), rx.recv())
+            .await
+            .expect("announced at once")
+            .expect("an event");
+        assert_eq!(
+            said(first),
+            ("k3d-rubick".to_string(), vec!["shop".to_string()], false)
+        );
+
+        cluster
+            .changes
+            .note(&watcher::Event::Delete(in_namespace(Some("team-blind"))));
+        cluster
+            .changes
+            .note(&watcher::Event::Apply(in_namespace(None)));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(600), rx.recv())
+                .await
+                .is_err(),
+            "a second announcement inside the second"
+        );
+        let gathered = tokio::time::timeout(Duration::from_millis(1500), rx.recv())
+            .await
+            .expect("announced when the second is up")
+            .expect("an event");
+        assert_eq!(
+            said(gathered),
+            (
+                "k3d-rubick".to_string(),
+                vec!["team-blind".to_string()],
+                true
+            )
+        );
+
+        for _ in 0..BROKEN_STREAK {
+            cluster.health.lock().failed("Pod");
+        }
+        cluster
+            .changes
+            .note(&watcher::Event::Apply(in_namespace(Some("shop"))));
+        assert!(
+            tokio::time::timeout(Duration::from_millis(1500), rx.recv())
+                .await
+                .is_err(),
+            "a cache that is not serving announced a change"
+        );
+        cluster.stop.cancel();
+    }
 
     /// One broken watch is enough: an overview built from four fresh stores and one stale one is one stale overview.
     #[test]

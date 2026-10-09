@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::resources::serialization::OwnerReference;
 
-use super::pod_display::is_sidecar;
+use super::pod_display::{container_looping_until, container_restarting_until, is_sidecar};
 use crate::utils::Moment;
 
 /// Extract owner references from Kubernetes metadata
@@ -269,6 +269,12 @@ pub struct ContainerInfo {
     /// instead of finding out from an error.
     pub last_terminated: Option<TerminationInfo>,
     pub restart_count: i32,
+    /// This container's own share of `PodStatusInfo::looping_until`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub looping_until: Option<DateTime<Utc>>,
+    /// This container's own share of `PodStatusInfo::restarting_until`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub restarting_until: Option<DateTime<Utc>>,
     pub ports: Vec<ContainerPortInfo>,
     /// Its own requests and limits, not the pod's sum.
     pub resources: super::deployment::DeploymentContainerResources,
@@ -350,6 +356,8 @@ impl ContainerInfo {
             state,
             last_terminated,
             restart_count,
+            looping_until: container_status.and_then(container_looping_until),
+            restarting_until: container_status.and_then(container_restarting_until),
             ports,
             resources: super::deployment::DeploymentContainerResources::of(container),
             env: extract_env_vars(container),

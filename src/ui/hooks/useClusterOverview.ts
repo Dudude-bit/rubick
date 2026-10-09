@@ -1,4 +1,10 @@
+import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+
 import { commands } from "@/lib/commands";
+import { listenEvent } from "@/lib/events";
+import { useSurfaceVisible } from "@/lib/surface-visibility";
+import { useWindowActivity } from "@/lib/window-activity";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { ofSameCluster } from "@/lib/previous-answer";
 import { queryKeys } from "@/lib/query-keys";
@@ -81,4 +87,49 @@ export function useClusterOverview(scope: readonly string[], enabled = true) {
  */
 export function useScopedOverview() {
   return useClusterOverview(useClusterStore((s) => s.namespaceScope));
+}
+
+/**
+ * Whether the overview on screen is read again within a second of a change
+ * the backend's watch-fed stores took in its scope, rather than on the
+ * ten-second poll alone: Sam's read "41 of 62 pods ready" six seconds after
+ * kubectl was back at 40. Only while it is served from those stores, the one
+ * read cheap enough to repeat that often, and only while it is seen.
+ */
+export function useFollowedOverview(
+  overview: ClusterOverview | undefined
+): boolean {
+  const client = useQueryClient();
+  const context = useClusterStore((s) => s.currentContext);
+  const scope = useClusterStore((s) => s.namespaceScope);
+  const surface = useSurfaceVisible();
+  const shown = useWindowActivity((s) => s.visible);
+  const following =
+    surface && shown && !!context && overview?.servedFrom === "watch";
+  useEffect(() => {
+    if (!following) return;
+    const key = queryKeys.clusterOverview(context, scope);
+    let left = false;
+    let leave: (() => void) | undefined;
+    void listenEvent("overview-changed", ({ payload }) => {
+      if (payload.context !== context) return;
+      const inScope =
+        scope.length === 0 ||
+        payload.cluster ||
+        payload.namespaces.some((namespace) => scope.includes(namespace));
+      if (inScope)
+        void client.invalidateQueries(
+          { queryKey: key, exact: true },
+          { cancelRefetch: false }
+        );
+    }).then((unlisten) => {
+      if (left) unlisten();
+      else leave = unlisten;
+    });
+    return () => {
+      left = true;
+      leave?.();
+    };
+  }, [following, context, scope, client]);
+  return following;
 }

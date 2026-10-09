@@ -41,6 +41,51 @@ export function loopState(
   return status.exitUnreported ? "unreported" : "clear";
 }
 
+/** Until the moment `restarting_until` in `pod_display.rs` ships: exits after short runs, inside the hour. */
+export function restartingNow(
+  status: { restartingUntil?: string | null },
+  now: number = Date.now()
+): boolean {
+  if (!status.restartingUntil) return false;
+  const until = Date.parse(status.restartingUntil);
+  return !Number.isNaN(until) && now < until;
+}
+
+/**
+ * Whether a pod's restart count is news, drawn amber, rather than history:
+ * looping, restarted with no exit reported, or exiting after short runs
+ * inside the hour. Restarts that each ended a long run, a cluster restart
+ * above all, are history, as the Overview reads them.
+ */
+export function restartsAreNews(
+  pod: {
+    restartCount: number;
+    status: {
+      display: string;
+      loopingUntil?: string | null;
+      exitUnreported?: boolean;
+      restartingUntil?: string | null;
+    };
+  },
+  now: number = Date.now()
+): boolean {
+  return (
+    pod.restartCount > 0 &&
+    (loopState(pod.status, now) !== "clear" || restartingNow(pod.status, now))
+  );
+}
+
+/** The same for one container: one that is up again after exits it ended in long runs is history too. */
+export function containerRestartsAreNews(
+  container: ContainerInfo,
+  now: number = Date.now()
+): boolean {
+  if (container.restartCount === 0) return false;
+  if (container.state.type !== "running" || !lastTermination(container))
+    return true;
+  return loopingNow(container, now) || restartingNow(container, now);
+}
+
 /**
  * The container whose exit that was: restarted twice or more, latest exit
  * first, or the one restarted most where the kubelet reports no exit.

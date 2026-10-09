@@ -714,4 +714,15 @@ describe("the word a row's reason is printed in", () => {
       "В цикле падений"
     );
   });
+
+  /**
+   * Sam's Needs attention read "Restarting" in English beside Russian rows:
+   * the Overview's word for exits after short runs is the app's, not the
+   * kubelet's. Fails if it goes back to the raw code.
+   */
+  it("words restarts the app read off short runs as its own", () => {
+    expect(reasonWord({ kind: "Pod", reason: "Restarting" }, ru)).toBe(
+      "Перезапускается"
+    );
+  });
 });

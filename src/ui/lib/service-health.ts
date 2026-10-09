@@ -242,6 +242,35 @@ export const serviceVerdictLabels = (t: T) => [
   t("nav", "notChecked"),
 ];
 
+/** One neighbourhood read, and when it answered: no older than its lists were asked for. */
+export interface ReadAnswer {
+  data: ResourceConnections;
+  at: number;
+}
+
+/**
+ * Whether a neighbourhood read can speak for the Service on screen. One about
+ * another Service of the same name cannot, nor one that found no pod carrying
+ * the selector while the Service's own pod watch has since seen one: a read
+ * older than what is known is a read not taken yet. Sam's big-pull page drew
+ * "1 ready" from the Service deleted before it, and "No pod carries
+ * app=big-pull" for seconds while its pod was being created.
+ */
+export function speaksFor(
+  answer: ReadAnswer,
+  service: { name: string; uid: string | undefined },
+  watched: { pods: number; at: number } | undefined
+): boolean {
+  const { data } = answer;
+  if (data.subject.name !== service.name) return false;
+  if (service.uid && data.subjectUid && data.subjectUid !== service.uid)
+    return false;
+  const none =
+    publishedFor(data, data.subject)?.stop?.reason === "selectsNothing";
+  const read = data.readAt ? Date.parse(data.readAt) : answer.at;
+  return !(none && watched && watched.pods > 0 && read < watched.at);
+}
+
 /** A Service's verdict from its neighbourhood, the answer its trace draws. */
 export function healthFromConnections(
   data: ResourceConnections | undefined,

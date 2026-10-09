@@ -36,8 +36,10 @@ import type {
   ContainerInfo,
   ContainerPhase,
   DeploymentContainerInfo,
+  TerminationInfo,
 } from "@/generated/types";
 import { describeProbe, PROBE_LABEL } from "@/lib/probe-words";
+import { containerRestartsAreNews, loopingNow } from "@/lib/crash-loop";
 import { declaredQuantity } from "@/lib/metric-format";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
@@ -288,6 +290,20 @@ function probeRows(
   });
 }
 
+/**
+ * A failed exit is red while it is the container's state or the run it backs
+ * off from. Once the container is running and ready again it is history:
+ * amber while its loop goes on, neutral after.
+ */
+function exitTone(
+  container: ContainerInfo,
+  death: TerminationInfo
+): KeyValue["tone"] {
+  if (death.exitCode === 0) return undefined;
+  if (container.state.type !== "running" || !container.ready) return "err";
+  return loopingNow(container) ? "warn" : undefined;
+}
+
 function ContainerBlock({
   container,
   step,
@@ -325,7 +341,7 @@ function ContainerBlock({
     items.push({
       label: t("columns", "restarts"),
       value: container.restartCount,
-      tone: container.restartCount > 0 ? "warn" : undefined,
+      tone: containerRestartsAreNews(container) ? "warn" : undefined,
     });
     // A container that restarts is one that died, and the count alone
     // never said of what. The heading carries the state word, so this row
@@ -339,7 +355,7 @@ function ContainerBlock({
       items.push({
         label: t("columns", "lastExit"),
         value: `${describeTermination(death)}${when ? ` · ${when}` : ""}`,
-        tone: death.exitCode === 0 ? undefined : "err",
+        tone: exitTone(container, death),
       });
     }
     if (container.ports.length > 0) {

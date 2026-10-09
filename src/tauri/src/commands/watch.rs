@@ -32,6 +32,7 @@ use k8s_openapi::api::core::v1::{
     ConfigMap, Endpoints, Event, Namespace, Node, PersistentVolume, PersistentVolumeClaim, Pod,
     Secret, Service,
 };
+use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::api::networking::v1::Ingress;
 use k8s_openapi::api::storage::v1::StorageClass;
 use tauri::State;
@@ -298,8 +299,50 @@ pub async fn subscribe_owned_pod_watch(
     ))
 }
 
+/// What one Service publishes: the `EndpointSlices` its controller labels
+/// with its name, watched as the API server narrows them, so a page sees an
+/// address turn ready when the slice says so rather than a poll later.
+#[tauri::command]
+pub async fn subscribe_service_slice_watch(
+    namespace: String,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    crate::validation::validate_namespace(&namespace)?;
+    let client = current_client(&state)?;
+    Ok(state
+        .watch_manager
+        .subscribe_narrowed::<EndpointSlice, _, _>(
+            client,
+            "EndpointSlice",
+            Some(&namespace),
+            slices_of(&name)?,
+            |slice| {
+                Some(WatchedName {
+                    name: slice.metadata.name.clone().unwrap_or_default(),
+                    namespace: slice.metadata.namespace.clone(),
+                })
+            },
+        ))
+}
+
+fn slices_of(service: &str) -> Result<Narrow> {
+    crate::validation::validate_dns_label(service)?;
+    Ok(Narrow::labels(format!(
+        "kubernetes.io/service-name={service}"
+    )))
+}
+
+/// A watched object by name alone, for a watch whose reader only re-reads on
+/// its changes.
+#[derive(serde::Serialize)]
+struct WatchedName {
+    name: String,
+    namespace: Option<String>,
+}
+
 /// Where the pods of `kind` `name` are watched, and by what. Every selector
-/// these kinds carry is immutable, so it is read once, at subscribe.
+/// these kinds carry is read once, at subscribe.
 async fn pods_of(
     client: &kube::Client,
     kind: &str,
@@ -343,6 +386,18 @@ async fn pods_of(
                 .get(name)
                 .await?;
             Selector::Query(owner.spec.as_ref().and_then(|s| s.selector.as_ref())).query_text()
+        }
+        // The one selector here that can change; the page subscribes again
+        // when the one it reads does.
+        "Service" => {
+            let service: Service = kube::Api::namespaced(client.clone(), &namespace)
+                .get(name)
+                .await?;
+            let selector = service
+                .spec
+                .and_then(|spec| spec.selector)
+                .unwrap_or_default();
+            Selector::Equality(&selector).query_text()
         }
         other => {
             return Err(Error::Internal(format!(
@@ -539,6 +594,51 @@ mod tests {
         let refused = pods_of(&client, "Deployment", Some("shop".into()), "checkout").await;
 
         assert!(refused.is_err(), "got {refused:?}");
+    }
+
+    /// The Service page follows the pods its selector picks, as the cluster
+    /// matches them. Fails if a Service is refused, its selector is not the
+    /// narrowing, or one with no selector is watched as its whole namespace.
+    #[tokio::test]
+    async fn a_services_pods_are_watched_by_its_selector_and_none_without_one() {
+        let service = |selector: serde_json::Value| {
+            serde_json::json!({
+                "apiVersion": "v1", "kind": "Service",
+                "metadata": { "name": "big-pull", "namespace": "shop" },
+                "spec": { "selector": selector },
+            })
+            .to_string()
+        };
+        let (client, _) = server(vec![(
+            "/api/v1/namespaces/shop/services/big-pull",
+            200,
+            service(serde_json::json!({ "app": "big-pull" })),
+        )])
+        .await;
+        let watched = pods_of(&client, "Service", Some("shop".into()), "big-pull")
+            .await
+            .expect("a selector");
+        assert_eq!(watched.1, Narrow::labels("app=big-pull".into()));
+
+        let (client, _) = server(vec![(
+            "/api/v1/namespaces/shop/services/big-pull",
+            200,
+            service(serde_json::json!({})),
+        )])
+        .await;
+        let none = pods_of(&client, "Service", Some("shop".into()), "big-pull").await;
+        assert!(matches!(none, Err(Error::InvalidInput(_))), "got {none:?}");
+    }
+
+    /// Fails if a Service's slices are not narrowed to the label its
+    /// controller writes, or a name that is not one is put into a selector.
+    #[test]
+    fn a_services_slices_are_watched_by_the_label_naming_it() {
+        assert_eq!(
+            slices_of("big-pull").expect("a name"),
+            Narrow::labels("kubernetes.io/service-name=big-pull".into())
+        );
+        assert!(slices_of("big-pull,app=x").is_err());
     }
 
     /// Fails if a kind with no pods of its own is watched as if it had some.

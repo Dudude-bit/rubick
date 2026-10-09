@@ -6796,6 +6796,7 @@ export const en = {
     retrying: "Retrying",
     crashLooping: "Crash-looping",
     crashLoopingCounted: { other: "Crash-looping" },
+    restarting: "Restarting",
     stalledCounted: { other: "Stalled" },
     degradedCounted: { other: "Degraded" },
     idleCounted: { other: "Idle" },
@@ -7120,8 +7121,8 @@ export const en = {
     },
     eventsSeen: { one: "happened once", other: "happened {n} times" },
     namespacesHidden: {
-      one: "{n} namespace hidden: no access",
-      other: "{n} namespaces hidden: no access",
+      one: "{n} namespace hidden: nothing in it may be listed",
+      other: "{n} namespaces hidden: nothing in them may be listed",
     },
     endpointsAcrossSlices: "{endpoints} across {slices}",
     endpointsCount: { one: "{n} endpoint", other: "{n} endpoints" },

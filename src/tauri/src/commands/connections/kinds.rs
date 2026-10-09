@@ -419,6 +419,8 @@ pub(super) async fn service_connections(
 
     let subject = service_ref(svc, ns);
     out.subject = Some(subject.clone());
+    out.subject_uid.clone_from(&svc.metadata.uid);
+    out.read_at = Some(snapshot.taken_at);
 
     note_reach(svc, &subject, &snapshot, out, true);
     idle_behind(&subject, out);

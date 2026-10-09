@@ -16,8 +16,9 @@ use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::resources::node_budget::holds_reservation;
 use crate::resources::{
-    backing_off, condition_is_true, crash_looping, job_state, looping_until, pending_since,
-    pod_start, stuck_reason, within_pending_grace, PodStart, Rollout,
+    backing_off, condition_is_true, crash_looping, exit_unreported, job_state, looping_until,
+    pending_since, pod_start, restarting_until, stuck_reason, within_pending_grace, PodStart,
+    Rollout,
 };
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
@@ -73,21 +74,6 @@ const MAX_PROBLEMS: usize = 50;
 /// A pod that restarted a few times hours ago is noise; one climbing past
 /// this is worth a look before it starts flapping.
 const RESTART_ATTENTION_THRESHOLD: i32 = 5;
-
-/// How recently the last restart has to have been for the pod to still count
-/// as restarting.
-///
-/// The comment above says a pod that restarted hours ago is noise, and the
-/// rule did not implement it: a restart count is a running total that never
-/// falls, so once a pod crossed the threshold it was reported for the rest
-/// of its life. Somebody rebooted a bare-metal cluster, every pod on it
-/// restarted, and two days later the Overview badge still said one problem
-/// about a pod that was `Running`, `7/7 ready` and had not restarted since.
-///
-/// An hour is far longer than a crash loop takes to come round again —
-/// `CrashLoopBackOff` caps its wait at five minutes — so nothing that is
-/// actually flapping escapes, and an incident that is over stops being news.
-const RESTART_RECENT_SECONDS: i64 = 3600;
 
 /// This app's word for a pod it reads as crash-looping while the kubelet says
 /// something else at this instant: `Running` between crashes, `Error` as one
@@ -552,12 +538,11 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
         });
     }
 
-    // Undated restarts still report, the way an undated Pending pod does:
-    // not knowing when it happened is not evidence that it is over.
-    let restarted_recently = last_restart_at
-        .is_none_or(|at| now - at < chrono::Duration::seconds(RESTART_RECENT_SECONDS));
+    // Unreported exits still report, the way an undated Pending pod does:
+    // not knowing how a run ended is not evidence that it is over.
+    let restarting = exit_unreported(pod) || restarting_until(pod).is_some_and(|until| now < until);
 
-    if restarts >= RESTART_ATTENTION_THRESHOLD && phase == "Running" && restarted_recently {
+    if restarts >= RESTART_ATTENTION_THRESHOLD && phase == "Running" && restarting {
         return Some(ClusterProblem {
             severity: ProblemSeverity::Warning,
             kind: "Pod".to_string(),
@@ -2921,6 +2906,58 @@ mod tests {
         let problems = pod_problems(&[restarted_pod("undated", now, 7, None)], now);
         assert_eq!(problems.len(), 1);
         assert_eq!(problems[0].reason, "Restarting");
+    }
+
+    /// Sam's log-demo pods sat in Needs attention as "Restarting, 15
+    /// restarts": five containers, each restarted three times with its
+    /// cluster after runs of hours, Running and Ready since. Fails if
+    /// restarts that each ended a long run are a problem, or the same count
+    /// made of short runs inside the hour stops being one.
+    #[test]
+    fn restarts_that_each_ended_a_long_run_are_history_not_a_problem() {
+        let now = Utc::now();
+        let container = |name: &str, run_seconds: i64| ContainerStatus {
+            name: name.to_string(),
+            restart_count: 3,
+            ready: true,
+            started: Some(true),
+            state: Some(ContainerState {
+                running: Some(ContainerStateRunning {
+                    started_at: Some(at(now, 6 * 60)),
+                }),
+                ..Default::default()
+            }),
+            last_state: Some(ContainerState {
+                terminated: Some(ContainerStateTerminated {
+                    exit_code: 255,
+                    reason: Some("Unknown".to_string()),
+                    started_at: Some(at(now, 6 * 60 + 7 + run_seconds)),
+                    finished_at: Some(at(now, 6 * 60 + 7)),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let restarted_with = |run_seconds: i64| {
+            pod(
+                "log-demo",
+                PodStatus {
+                    phase: Some("Running".to_string()),
+                    container_statuses: Some(
+                        ["a", "b", "c", "d", "e"]
+                            .iter()
+                            .map(|name| container(name, run_seconds))
+                            .collect(),
+                    ),
+                    ..Default::default()
+                },
+            )
+        };
+        assert!(pod_problems(&[restarted_with(2 * 3600)], now).is_empty());
+        let flapping = pod_problems(&[restarted_with(4)], now);
+        assert_eq!(flapping.len(), 1);
+        assert_eq!(flapping[0].reason, "Restarting");
     }
 
     /// One restart, however recent, is not a loop: a node reboot gives every

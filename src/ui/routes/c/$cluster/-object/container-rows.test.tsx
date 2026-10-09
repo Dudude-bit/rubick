@@ -124,6 +124,51 @@ describe("a running pod's containers on the Containers tab", () => {
     expect(screen.getByText("cpu 5m · memory 16Mi")).toBeInTheDocument();
   });
 
+  /**
+   * Marco's healthy checkout-api read "Last exit: Unknown · exit 255" in red,
+   * the one red thing on a pod that was Running and ready: the exit was its
+   * cluster restarting. Fails if a past exit of a container running and
+   * ready again is red, if one in a loop still going on is not amber, or if
+   * the exit a container is backing off from stops being red.
+   */
+  it("draws a past exit of a container up and ready again as history", async () => {
+    const restarted = {
+      ...oomKilled,
+      name: "api",
+      ready: true,
+      started: true,
+      state: { type: "running" },
+      lastTerminated: {
+        exitCode: 255,
+        signal: null,
+        reason: "Unknown",
+        message: null,
+        startedAt: null,
+        finishedAt: null,
+      },
+      restartCount: 2,
+    } satisfies ContainerInfo;
+    const looping = {
+      ...restarted,
+      name: "worker",
+      loopingUntil: new Date(Date.now() + 60_000).toISOString(),
+    } satisfies ContainerInfo;
+    await renderWithRouter(
+      <ContainerRows
+        pod={{
+          containers: [restarted, looping, oomKilled],
+          initContainers: [],
+        }}
+        namespace="shop"
+        podName="checkout-api-h6x2v"
+      />
+    );
+    const [history, loop] = screen.getAllByText("Unknown · exit 255");
+    expect(history).toHaveClass("text-fg");
+    expect(loop).toHaveClass("text-warn");
+    expect(screen.getByText("OOMKilled · exit 137")).toHaveClass("text-err");
+  });
+
   /** Lena read "memory 8Mi" here and "8 МиБ" in the peek for the same limit; fails if the tab prints the manifest's spelling again. */
   it("spells requests and limits the way the peek does", async () => {
     useLocaleStore.setState({ choice: "ru" });

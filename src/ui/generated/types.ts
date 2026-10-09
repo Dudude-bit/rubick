@@ -902,6 +902,7 @@ export interface OwnRule {
 export interface NamespaceAccess {
   namespace: string;
   allowed: boolean | null;
+  otherLists: boolean | null;
 }
 
 export interface ListAccess {
@@ -1397,6 +1398,8 @@ export interface CatalogEntry {
 
 export interface ResourceConnections {
   subject: ObjectRef;
+  subjectUid?: string;
+  readAt?: string;
   edges: ConnectionEdge[];
   stops: ChainStop[];
   published: ServicePublished[];
@@ -2041,6 +2044,7 @@ export interface PodRowStatus {
   display: string;
   loopingUntil?: string;
   exitUnreported: boolean;
+  restartingUntil?: string;
 }
 
 export interface FileEntry {
@@ -2169,6 +2173,8 @@ export interface ContainerInfo {
   state: ContainerState;
   lastTerminated: TerminationInfo | null;
   restartCount: number;
+  loopingUntil?: string;
+  restartingUntil?: string;
   ports: ContainerPortInfo[];
   resources: DeploymentContainerResources;
   env: EnvVarInfo[];
@@ -2190,6 +2196,7 @@ export interface PodStatusInfo {
   reason: string | null;
   loopingUntil?: string;
   exitUnreported: boolean;
+  restartingUntil?: string;
 }
 
 export interface DeploymentInfo {
@@ -2861,7 +2868,13 @@ export type AppEvent =
       unread: UnreadNamespace[];
     }
   | { channel: "pod-rows-failed"; stream_id: string; message: string }
-  | { channel: "event-bridge-lagged"; missed: number };
+  | { channel: "event-bridge-lagged"; missed: number }
+  | {
+      channel: "overview-changed";
+      context: string;
+      namespaces: string[];
+      cluster: boolean;
+    };
 
 export type PodStart =
   | { state: "settled" }

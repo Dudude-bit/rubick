@@ -83,3 +83,56 @@ export function useOwnedPodsWatch(
     recount: false,
   });
 }
+
+/**
+ * The pods a Service's selector picks and the slices it publishes, watched as
+ * the API server narrows them while its verdict is on screen: each change
+ * reads `reads` again, so a pod turning Ready shows when its slice says so,
+ * not seven seconds later on a poll.
+ */
+export function useServiceWatch(
+  namespace: string | null | undefined,
+  name: string | undefined,
+  selector: string | null | undefined,
+  reads: readonly QueryKey[]
+): void {
+  const connected = useClusterStore((s) => s.isConnected);
+  const visible = useSurfaceVisible();
+  const on = connected && visible && !!namespace && !!name;
+  const podsKey = useMemo(
+    () => queryKeys.serviceWatch("pods", namespace, name, selector),
+    [namespace, name, selector]
+  );
+  const slicesKey = useMemo(
+    () => queryKeys.serviceWatch("slices", namespace, name),
+    [namespace, name]
+  );
+  const subscribePods = useCallback(
+    () =>
+      commands.subscribeOwnedPodWatch(
+        ResourceType.Service,
+        namespace ?? null,
+        name ?? ""
+      ),
+    [namespace, name]
+  );
+  const subscribeSlices = useCallback(
+    () => commands.subscribeServiceSliceWatch(namespace ?? "", name ?? ""),
+    [namespace, name]
+  );
+  const detail = () => reads;
+  useResourceWatch({
+    enabled: on && !!selector,
+    subscribe: subscribePods,
+    queryKey: podsKey,
+    detail,
+    recount: false,
+  });
+  useResourceWatch({
+    enabled: on,
+    subscribe: subscribeSlices,
+    queryKey: slicesKey,
+    detail,
+    recount: false,
+  });
+}
