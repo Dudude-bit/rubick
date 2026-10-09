@@ -326,10 +326,11 @@ const objRef = (kind: string, name: string, namespace: string): ObjectRef => ({
 });
 
 function buildConnections(
-  edges: ResourceConnections["edges"] = []
+  edges: ResourceConnections["edges"] = [],
+  subject = objRef("Service", "frontend", "storefront")
 ): ResourceConnections {
   return {
-    subject: objRef("Service", "frontend", "storefront"),
+    subject,
     edges,
     stops: [],
     published: [],
@@ -2489,13 +2490,16 @@ describe("PeekPanel traffic chain", () => {
 
   it("puts the Service in front above a Pod, and nothing below it", async () => {
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
-      buildConnections([
-        {
-          from: objRef("Service", "crash-svc", "k8s-gui-test"),
-          to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
-          relation: { verb: "selects", selector: "app=crash" },
-        },
-      ])
+      buildConnections(
+        [
+          {
+            from: objRef("Service", "crash-svc", "k8s-gui-test"),
+            to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
+            relation: { verb: "selects", selector: "app=crash" },
+          },
+        ],
+        objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test")
+      )
     );
     await wrap(POD_PEEK);
 
@@ -2515,13 +2519,16 @@ describe("PeekPanel traffic chain", () => {
    */
   it("asks the vendors about the Services in front of a Pod", async () => {
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
-      buildConnections([
-        {
-          from: objRef("Service", "crash-svc", "k8s-gui-test"),
-          to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
-          relation: { verb: "selects", selector: "app=crash" },
-        },
-      ])
+      buildConnections(
+        [
+          {
+            from: objRef("Service", "crash-svc", "k8s-gui-test"),
+            to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
+            relation: { verb: "selects", selector: "app=crash" },
+          },
+        ],
+        objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test")
+      )
     );
     servicesRoutesSpy.mockImplementation((services: unknown[]) =>
       services.length === 0
@@ -2569,13 +2576,16 @@ describe("PeekPanel traffic chain", () => {
    */
   it("stacks parallel ways in at one level rather than chaining them", async () => {
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
-      buildConnections([
-        {
-          from: objRef("Service", "crash-svc", "k8s-gui-test"),
-          to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
-          relation: { verb: "selects", selector: "app=crash" },
-        },
-      ])
+      buildConnections(
+        [
+          {
+            from: objRef("Service", "crash-svc", "k8s-gui-test"),
+            to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
+            relation: { verb: "selects", selector: "app=crash" },
+          },
+        ],
+        objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test")
+      )
     );
     servicesRoutesSpy.mockImplementation((services: unknown[]) =>
       services.length === 0

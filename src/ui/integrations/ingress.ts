@@ -269,6 +269,8 @@ export function backingOf(
 export interface BackingLists {
   services: ServiceInfo[];
   published: ServicePublished[];
+  /** When the lists were asked for, where the read says. */
+  readAt?: string;
 }
 
 /** A minute: routing changes with a deploy, not by the second. */
@@ -282,10 +284,16 @@ export const ROUTING_STALE = 60_000;
  * Traefik's page and then at nginx's should not pay for the same two
  * cluster-wide reads twice.
  */
+export const backingListsKey = (context: string | null) => [
+  context,
+  "routing",
+  "backing",
+];
+
 export function useBackingLists(enabled = true) {
   const context = useClusterStore((state) => state.currentContext);
   return useQuery({
-    queryKey: [context, "routing", "backing"],
+    queryKey: backingListsKey(context),
     queryFn: (): Promise<BackingLists> => commands.listServiceBacking(null),
     staleTime: ROUTING_STALE,
     enabled,

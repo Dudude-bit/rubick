@@ -18,6 +18,8 @@ pub(super) async fn pod_connections(
 
     let subject = pod_ref(pod, ns);
     out.subject = Some(subject.clone());
+    out.subject_uid.clone_from(&pod.metadata.uid);
+    out.read_at = Some(snapshot.taken_at);
 
     if let Some(spec) = pod.spec.as_ref() {
         uses_from_spec(ns, &subject, spec, &snapshot.claims, out);
@@ -254,6 +256,8 @@ pub(super) async fn workload_connections(
         },
     );
     out.subject = Some(subject.clone());
+    out.subject_uid.clone_from(&uid);
+    out.read_at = Some(snapshot.taken_at);
 
     if let Some(spec) = template.spec.as_ref() {
         uses_from_spec(ns, &subject, spec, &snapshot.claims, out);
@@ -510,6 +514,8 @@ pub(super) async fn ingress_connections(
 
     let subject = ingress_ref(ing, ns);
     out.subject = Some(subject.clone());
+    out.subject_uid.clone_from(&ing.metadata.uid);
+    out.read_at = Some(snapshot.taken_at);
 
     for tls in ing.spec.iter().flat_map(|spec| spec.tls.iter().flatten()) {
         let Some(secret) = &tls.secret_name else {
@@ -1427,6 +1433,55 @@ mod set_rollout_tests {
         match page.subject.facts {
             Some(ObjectFacts::Workload { rollout, .. }) => rollout,
             other => panic!("a workload's facts, not {other:?}"),
+        }
+    }
+
+    /// Sam's big-pull Deployment page drew the old Deployment's pod as "1
+    /// published" after the name was made again, and a red "No pod carries"
+    /// from lists read before its pod was made: its page could tell neither,
+    /// as only a Service's answer named the uid it read and when its lists
+    /// were asked. Fails if a workload's or a pod's answer leaves either out.
+    #[tokio::test]
+    async fn a_workloads_and_a_pods_answer_name_their_uid_and_when_their_lists_were_asked() {
+        let set = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "StatefulSet",
+            "metadata": { "name": "web", "namespace": "shop", "uid": "web-uid" },
+            "spec": {
+                "replicas": 1,
+                "serviceName": "web",
+                "selector": { "matchLabels": { "app": "web" } },
+                "template": { "metadata": { "labels": { "app": "web" } } },
+            },
+        });
+        let mut web_0 = pod("web-0", true, "");
+        web_0["metadata"]["uid"] = "web-0-uid".into();
+        let pods = serde_json::json!({
+            "apiVersion": "v1", "kind": "List", "metadata": {}, "items": [web_0],
+        });
+        let (client, _) = server(vec![
+            (
+                "/apis/apps/v1/namespaces/shop/statefulsets/web",
+                200,
+                set.to_string(),
+            ),
+            ("/api/v1/namespaces/shop/pods", 200, pods.to_string()),
+        ])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+        let asked = chrono::Utc::now();
+
+        for (kind, name, uid) in [
+            ("StatefulSet", "web", "web-uid"),
+            ("Pod", "web-0", "web-0-uid"),
+        ] {
+            let answer = connections_of(&ctx, kind, name, None)
+                .await
+                .expect("the neighbourhood");
+            assert_eq!(answer.subject_uid.as_deref(), Some(uid), "{kind}");
+            assert!(
+                answer.read_at.is_some_and(|at| at >= asked),
+                "{kind} names when its lists were asked"
+            );
         }
     }
 

@@ -16,6 +16,7 @@ import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
 import { useWorkloadPods } from "../../-components/workload-pods";
 import { workloadRole } from "@/lib/workload-status";
 import { TrafficChain } from "../../../-object/TrafficChain";
+import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
@@ -46,7 +47,7 @@ import { PinAction } from "../../-components/PinAction";
 import { useAsk } from "../../../-object/useAsk";
 import { useResourceDetail, useResourceMutation } from "@/hooks";
 import { useDaemonSetShare } from "./useDaemonSetShare";
-import { useObjectConnections } from "@/hooks/useConnections";
+import { useChainAnswer } from "@/hooks/useChainAnswer";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
@@ -116,11 +117,8 @@ export function DaemonSetDetail() {
     }
   );
 
-  const connections = useObjectConnections(
-    ResourceType.DaemonSet,
-    name,
-    namespace
-  );
+  const chain = useChainAnswer(ResourceType.DaemonSet, name, namespace);
+  const connections = chain.read;
 
   // The DaemonSet publishes its own selector, in the API's own text form —
   // so a set-based one reaches the API server as written, where rebuilding
@@ -178,7 +176,7 @@ export function DaemonSetDetail() {
     ResourceType.DaemonSet,
     namespace,
     name,
-    [podsKey],
+    [podsKey, chain.key],
     !!labelSelector
   );
 
@@ -453,6 +451,7 @@ export function DaemonSetDetail() {
 
   return (
     <>
+      <ChainWatches services={chain.services} reads={[chain.key]} />
       <ResourceDetailLayout
         freshness={freshness}
         resource={daemonSet}

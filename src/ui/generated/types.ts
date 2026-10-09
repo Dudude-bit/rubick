@@ -365,6 +365,7 @@ export interface NearMiss {
 export interface ServiceBacking {
   services: ServiceInfo[];
   published: ServicePublished[];
+  readAt: string;
 }
 
 export interface ServicePublished {

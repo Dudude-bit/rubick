@@ -171,6 +171,8 @@ pub async fn list_service_endpoints(
 pub struct ServiceBacking {
     pub services: Vec<ServiceInfo>,
     pub published: Vec<ServicePublished>,
+    /// When its lists were asked for: an answer read from them is no newer.
+    pub read_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// The Services and their answers from one list of each — what every routing
@@ -181,10 +183,12 @@ pub async fn list_service_backing(
     state: State<'_, AppState>,
 ) -> Result<ServiceBacking> {
     let ctx = ResourceContext::for_list(&state, namespace)?;
+    let read_at = chrono::Utc::now();
     let (services, published) = published_in(&ctx).await?;
     Ok(ServiceBacking {
         services: services.iter().map(ServiceInfo::from).collect(),
         published,
+        read_at,
     })
 }
 
@@ -788,6 +792,7 @@ mod tests {
         let whole = wire_len(&ServiceBacking {
             services: services.iter().map(ServiceInfo::from).collect(),
             published: published.clone(),
+            read_at: chrono::Utc::now(),
         });
         let compact = wire_len(&Scoped::whole(health_inputs_of(&services, published)));
         eprintln!(

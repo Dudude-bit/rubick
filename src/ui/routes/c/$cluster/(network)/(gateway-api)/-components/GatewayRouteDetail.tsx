@@ -37,8 +37,10 @@ import { useResourceDetail } from "@/hooks";
 import { useT } from "@/i18n/useT";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { useGatewayRouteShare } from "./useGatewayRouteShare";
-import { backingFrom, backingOf, useBackingLists } from "@/integrations";
-import { describeStop } from "@/lib/connections";
+import { backingOf } from "@/integrations";
+import { useRouteBacking } from "./useRouteBacking";
+import { ChainWatches } from "../../../-object/ChainWatches";
+import { describeStop, stopMood, type StopMood } from "@/lib/connections";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
 import { sayMatch } from "@/lib/route-match";
@@ -46,9 +48,17 @@ import { ResourceType, type ResourceKind } from "@/lib/resource-registry";
 import type { RouteInfo, RouteRuleInfo } from "@/generated/types";
 import { None } from "@/components/ui/none";
 
+/** A backend's stop as the chain colours it: only a fault is red. */
+const STOP_TEXT: Record<StopMood, string> = {
+  fault: "text-err",
+  coming: "text-info",
+  idle: "text-fg-mut",
+  unchecked: "text-fg-mut",
+};
+
 function RuleRows({ route }: { route: RouteInfo }) {
   const t = useT();
-  const backing = useBackingLists();
+  const backing = useRouteBacking(route, false).sources;
 
   return (
     <Section>
@@ -119,7 +129,7 @@ function RuleRows({ route }: { route: RouteInfo }) {
                                 name: route.name,
                                 namespace: route.namespace,
                               },
-                              backingFrom(backing.data, backing.error)
+                              backing
                             )
                           : null;
                       return (
@@ -178,12 +188,18 @@ function RuleRows({ route }: { route: RouteInfo }) {
                                 {t("action", "readingInline")}
                               </span>
                             ) : state.stop ? (
-                              <span className="text-err">
+                              <span className={STOP_TEXT[stopMood(state.stop)]}>
                                 {describeStop(state.stop, t).title}
                               </span>
                             ) : state.service?.type === "ExternalName" ? (
                               <span className="text-fg-mut">
                                 {t("empty", "resolvesElsewhereExternal")}
+                              </span>
+                            ) : state.ready === 0 && state.draining > 0 ? (
+                              <span className="text-warn">
+                                {t("count", "nDraining", {
+                                  n: state.draining,
+                                })}
                               </span>
                             ) : (
                               <span className="text-ok">
@@ -238,6 +254,7 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
   const events = useObjectEvents(kind, name, namespace, {
     refresh: "overview",
   });
+  const backing = useRouteBacking(route, true);
 
   if (!route && !isLoading && !error) {
     return null;
@@ -317,31 +334,34 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
   ];
 
   return (
-    <ResourceDetailLayout
-      freshness={freshness}
-      resource={route}
-      share={share}
-      isLoading={isLoading}
-      error={error}
-      resourceKind={kind}
-      title={route?.name || ""}
-      namespace={route?.namespace}
-      createdAt={route?.createdAt}
-      onBack={goBack}
-      tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      delivery={deliveryQuery}
-      actions={
-        <DeleteAction
-          kind={kind}
-          name={route?.name || ""}
-          namespace={route?.namespace}
-          detail={route}
-          intercept={intercept("Delete")}
-          mutation={deleteMutation}
-        />
-      }
-    />
+    <>
+      <ChainWatches services={backing.services} reads={[backing.key]} />
+      <ResourceDetailLayout
+        freshness={freshness}
+        resource={route}
+        share={share}
+        isLoading={isLoading}
+        error={error}
+        resourceKind={kind}
+        title={route?.name || ""}
+        namespace={route?.namespace}
+        createdAt={route?.createdAt}
+        onBack={goBack}
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        delivery={deliveryQuery}
+        actions={
+          <DeleteAction
+            kind={kind}
+            name={route?.name || ""}
+            namespace={route?.namespace}
+            detail={route}
+            intercept={intercept("Delete")}
+            mutation={deleteMutation}
+          />
+        }
+      />
+    </>
   );
 }

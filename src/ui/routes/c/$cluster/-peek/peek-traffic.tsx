@@ -2,7 +2,8 @@ import { useMemo, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
-import { useConnections } from "@/hooks/useConnections";
+import { useChainAnswer } from "@/hooks/useChainAnswer";
+import { useConnections, type ConnectionsRead } from "@/hooks/useConnections";
 import { useServiceAnswer } from "@/hooks/useServiceAnswer";
 import { useProxyBehind, useServicesRoutes } from "@/hooks/useServiceRoutes";
 import { CopyableAddress, CopyableValue } from "@/components/ui/copyable-value";
@@ -27,6 +28,7 @@ import {
   RESOURCE_NAME_SHELL,
 } from "@/components/object/ResourceName";
 import { PeekHeading } from "./peek-heading";
+import { ChainWatches } from "../-object/ChainWatches";
 import { useT } from "@/i18n/useT";
 import { errorToShow } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
@@ -45,6 +47,29 @@ import { queryKeys } from "@/lib/query-keys";
  * Two flat headings used to say that order in words, and read as prose.
  */
 export function PeekTraffic({ target }: { target: PeekTarget }) {
+  const isServiceish = target.kind === "Service" || target.kind === "Endpoints";
+  // A Service's own Status row beside this follows it; any other object's
+  // chain is followed here, under every Service in front of it.
+  const chain = useChainAnswer(
+    target.kind,
+    isServiceish ? undefined : target.name,
+    target.namespace ?? ""
+  );
+  return (
+    <>
+      <ChainWatches services={chain.services} reads={[chain.key]} />
+      <TrafficPath target={target} chain={chain.read} />
+    </>
+  );
+}
+
+function TrafficPath({
+  target,
+  chain,
+}: {
+  target: PeekTarget;
+  chain: ConnectionsRead;
+}) {
   const t = useT();
   const namespace = target.namespace ?? "";
   const service = { namespace, name: target.name };
@@ -54,8 +79,8 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
   // their pages use. A Service and its Endpoints share a name by contract,
   // which is what lets the Endpoints panel ask about its Service.
   const query = useConnections(
-    isServiceish ? "Service" : target.kind,
-    target.name,
+    "Service",
+    isServiceish ? target.name : undefined,
     namespace
   );
   // The Status row beside this follows the Service; this draws its answer.
@@ -65,7 +90,7 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
     query,
     false
   );
-  const conns = isServiceish ? answer.read : query;
+  const conns = isServiceish ? answer.read : chain;
   const behind = useProxyBehind(target.kind === "Service" ? service : null);
 
   const edges = conns.data?.edges ?? [];

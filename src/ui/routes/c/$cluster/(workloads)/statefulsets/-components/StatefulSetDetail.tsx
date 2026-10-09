@@ -21,6 +21,7 @@ import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { TrafficChain } from "../../../-object/TrafficChain";
+import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
@@ -54,7 +55,7 @@ import { useStatefulSetShare } from "./useStatefulSetShare";
 import { setReplicaSegments } from "./set-replicas";
 import { useStartsClock } from "../../-components/replica-gap";
 import { useWorkloadPods } from "../../-components/workload-pods";
-import { useObjectConnections } from "@/hooks/useConnections";
+import { useChainAnswer } from "@/hooks/useChainAnswer";
 import {
   CountBlock,
   FactBlock,
@@ -96,11 +97,8 @@ export function StatefulSetDetail() {
     guardedOf(ResourceType.StatefulSet, namespace || null)
   ).patch;
 
-  const connections = useObjectConnections(
-    ResourceType.StatefulSet,
-    name,
-    namespace
-  );
+  const chain = useChainAnswer(ResourceType.StatefulSet, name, namespace);
+  const connections = chain.read;
 
   const podsKey = queryKeys.ownedPods(
     ResourceType.StatefulSet,
@@ -159,7 +157,7 @@ export function StatefulSetDetail() {
     ResourceType.StatefulSet,
     namespace,
     name,
-    [podsKey],
+    [podsKey, chain.key],
     !!statefulSet
   );
 
@@ -468,6 +466,7 @@ export function StatefulSetDetail() {
 
   return (
     <>
+      <ChainWatches services={chain.services} reads={[chain.key]} />
       <ResourceDetailLayout
         freshness={freshness}
         resource={statefulSet}

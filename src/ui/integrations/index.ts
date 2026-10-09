@@ -1152,11 +1152,17 @@ export type { VendorPeekBody, VendorPeekGroup } from "./peek";
 // would break the seam the lint rule keeps.
 export {
   backingFrom,
+  backingListsKey,
   backingOf,
   useBackingLists,
   ROUTING_STALE,
 } from "./ingress";
-export type { Backing, BackingSources, ServiceStop } from "./ingress";
+export type {
+  Backing,
+  BackingLists,
+  BackingSources,
+  ServiceStop,
+} from "./ingress";
 export { RoutingMap } from "./routing-map";
 export type { MapEdge, MapNode, MapTone, RoutingMapData } from "./routing-map";
 

@@ -902,6 +902,43 @@ describe("routeTraces", () => {
     expect(trace.steps[6].state).toBe("err");
   });
 
+  /**
+   * A route in front of a Deployment making its first pod drew the
+   * endpoints step red, the "coming up" every other screen gave that
+   * Service turned into a break. Fails if pods on their way stop the path,
+   * or if the route is called serving before one is ready.
+   */
+  it("leaves the verdict undecided, not broken, while the pods behind the Service are on their way", () => {
+    const coming = published("healthy", 0);
+    const [trace] = routeTraces(
+      route("healthy"),
+      sources({
+        backing: {
+          services: [service("healthy")],
+          published: [
+            {
+              ...coming,
+              notReady: 0,
+              stop: {
+                reason: "podsBeingMade",
+                service: coming.service,
+                selector: "app=healthy",
+                workloads: [{ ...coming.service, kind: "Deployment" }],
+              },
+            },
+          ],
+          backingKnown: true,
+          backingError: null,
+        },
+      }),
+      t
+    );
+
+    expect(trace.stopStep).toBeNull();
+    expect(trace.steps[6]).toMatchObject({ state: "warn", pending: true });
+    expect(trace.servingKnown).toBe(false);
+  });
+
   it("reads a redirect-only route as configuration, not breakage", () => {
     const redirect = route("redirect", {
       rules: [

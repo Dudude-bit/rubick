@@ -27,7 +27,7 @@ import type {
   TcpProbe,
 } from "@/generated/types";
 import { backingOf, type Backing, type BackingSources } from "@/integrations";
-import { describeStop } from "@/lib/connections";
+import { describeStop, stopMood } from "@/lib/connections";
 import type { T } from "@/i18n/useT";
 import { saidOf, statusesFor, verdictOf } from "@/lib/route-verdict";
 
@@ -1122,11 +1122,16 @@ function backendSteps(
   );
   if (down) {
     const stop = describeStop(down.state.stop!, t);
+    // Pods on their way are not a broken path, nor are pods nobody could
+    // read: the first is undecided until they are ready, the second unknown.
+    const mood = stopMood(down.state.stop!);
     return [
       backendStep,
       {
         id: "endpoints",
-        state: "err",
+        state:
+          mood === "coming" ? "warn" : mood === "unchecked" ? "blind" : "err",
+        pending: mood === "coming" || undefined,
         say: `${down.backend.name}: ${stop.title}`,
         who: "yours",
         short: stop.title,

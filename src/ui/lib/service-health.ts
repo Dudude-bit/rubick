@@ -289,27 +289,21 @@ const readTime = ({ data, at }: ReadAnswer) =>
   data.readAt ? Date.parse(data.readAt) : at;
 
 /**
- * Whether a neighbourhood read can speak for the object on screen. One about
- * another object of the same name cannot, nor one that, about any Service it
- * names, found no pod carrying the selector while that Service's pod watch is
- * still listing them or has since seen one, or stops it at a fault while a
- * slice it publishes has changed since: a read older than what is known is a
- * read not taken yet. Sam's big-pull page drew "1 ready" from the Service
- * deleted before it, "No pod carries app=big-pull" while its pod was being
+ * Whether what a read says each Service publishes can stand, read at `read`:
+ * not where, about any Service it names, it found no pod carrying the
+ * selector while that Service's pod watch is still listing them or has since
+ * seen one, or stops it at a fault while a slice it publishes has changed
+ * since. A read older than what is known is a read not taken yet. Sam's
+ * big-pull drew "No pod carries app=big-pull" while its pod was being
  * created, and "publishes no endpoint" from a read whose pods were listed
  * after the pod was Ready and whose slices before its address was written.
  */
-export function speaksFor(
-  answer: ReadAnswer,
-  subject: { name: string; uid: string | undefined },
+export function publishedSpeaks(
+  published: readonly Pick<ServicePublished, "service" | "stop">[],
+  read: number,
   seen: SeenOf
 ): boolean {
-  const { data } = answer;
-  if (data.subject.name !== subject.name) return false;
-  if (subject.uid && data.subjectUid && data.subjectUid !== subject.uid)
-    return false;
-  const read = readTime(answer);
-  return data.published.every(({ service, stop }) => {
+  return published.every(({ service, stop }) => {
     const watched = stop ? seen(service) : undefined;
     if (!stop || !watched) return true;
     if (stopMood(stop) === "fault" && read < watched.changed) return false;
@@ -320,8 +314,28 @@ export function speaksFor(
   });
 }
 
+/**
+ * Whether a neighbourhood read can speak for the object on screen: not one
+ * about another object of the same name, which drew "1 ready" from the
+ * Service deleted before big-pull, nor one {@link publishedSpeaks} holds back.
+ */
+export function speaksFor(
+  answer: ReadAnswer,
+  subject: { name: string; uid: string | undefined },
+  seen: SeenOf
+): boolean {
+  const { data } = answer;
+  if (data.subject.name !== subject.name) return false;
+  if (subject.uid && data.subjectUid && data.subjectUid !== subject.uid)
+    return false;
+  return publishedSpeaks(data.published, readTime(answer), seen);
+}
+
 /** Whether a read waits on a pod watch that has not listed yet, whose list reads it again. */
-export function waitsOnList(data: ResourceConnections, seen: SeenOf): boolean {
+export function waitsOnList(
+  data: { published: readonly Pick<ServicePublished, "service" | "stop">[] },
+  seen: SeenOf
+): boolean {
   return data.published.some(
     ({ service, stop }) =>
       stop?.reason === "selectsNothing" && seen(service)?.pods === "listing"
