@@ -246,6 +246,48 @@ describe("the traffic chain", () => {
       );
     });
 
+    /**
+     * Sam's pod delete: "this Deployment" named its old pod, draining, for
+     * the whole 28 s while its replacement was published. Fails if the hop
+     * names the slice's first address before its own pod taking traffic.
+     */
+    it("names its own pod taking traffic before its own draining one", () => {
+      const hop = hopOf(
+        [owns("big-pull-67577558d6-4hdt2"), owns("big-pull-67577558d6-z2wbp")],
+        [draining, endpointOf("big-pull-67577558d6-z2wbp")],
+        { ready: 1, draining: 1 }
+      );
+      expect(hop.first?.name).toBe("big-pull-67577558d6-z2wbp");
+      expect(hop.summary).toBe(
+        "and 1 more · across the Service: 1 published · 1 draining"
+      );
+    });
+
+    /** Sam's Service page named the draining pod first over its replacement. Fails if a Service's own chain keeps the slice's order. */
+    it("names on a Service's own chain an address taking traffic first", () => {
+      const last = trafficChains(
+        connections(
+          svc,
+          [],
+          [],
+          [],
+          [
+            publishes(
+              "big-pull",
+              { ready: 1, draining: 1 },
+              {
+                endpoints: [draining, endpointOf("big-pull-67577558d6-z2wbp")],
+              }
+            ),
+          ]
+        ),
+        t
+      )[0]?.hops.at(-1);
+      if (last?.at !== "published")
+        throw new Error("expected the published hop");
+      expect(last.first?.name).toBe("big-pull-67577558d6-z2wbp");
+    });
+
     /** Fails if pods nobody could read are taken for none of its own. */
     it("names the first address as before where its pods were not read", () => {
       const hop = hopOf([], [draining], { draining: 1 }, [

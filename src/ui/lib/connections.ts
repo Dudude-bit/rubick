@@ -45,6 +45,7 @@ import type {
   Relation,
   IngressClassBinding,
   NearSelector,
+  PublishedEndpoint,
   ResourceConnections,
   ServicePublished,
   TlsCertificate,
@@ -850,6 +851,11 @@ function serviceHop(object: ObjectRef, self: boolean, t: T): ChainHopObject {
   };
 }
 
+/** Taking traffic before draining before neither, a terminating one last of its kind: the order a hop names them in. */
+const endpointRank = (endpoint: PublishedEndpoint) =>
+  (endpoint.ready ? 0 : endpoint.serving ? 2 : 4) +
+  (endpoint.terminating ? 1 : 0);
+
 /**
  * What the Service hands to kube-proxy, counted.
  *
@@ -863,11 +869,13 @@ function publishedHop(
   t: T,
   own: ReadonlySet<string> | null
 ): ChainHopPublished {
-  const listed = own
-    ? published.endpoints.filter(
-        (endpoint) => endpoint.target && own.has(refKey(endpoint.target))
-      )
-    : published.endpoints;
+  const listed = (
+    own
+      ? published.endpoints.filter(
+          (endpoint) => endpoint.target && own.has(refKey(endpoint.target))
+        )
+      : [...published.endpoints]
+  ).sort((a, b) => endpointRank(a) - endpointRank(b));
   const first = listed[0];
   const rest = (own ? listed.length : endpointCount(published)) - 1;
   const counts = join(

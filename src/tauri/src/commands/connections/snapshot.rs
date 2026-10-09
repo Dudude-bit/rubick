@@ -698,7 +698,7 @@ mod refused_list_tests {
         let svc_ref = service_ref(&svc, "shop");
         let mut out = Neighbourhood::new();
 
-        note_reach(&svc, &svc_ref, &all_refused(), &mut out, true);
+        note_reach(&svc, &svc_ref, &all_refused(), &mut out, Carry::Whole);
 
         assert!(
             !out.stops
@@ -722,7 +722,7 @@ mod refused_list_tests {
             ..all_refused()
         };
 
-        note_reach(&svc, &svc_ref, &answered, &mut out, true);
+        note_reach(&svc, &svc_ref, &answered, &mut out, Carry::Whole);
 
         assert!(
             out.stops
@@ -757,7 +757,7 @@ mod refused_list_tests {
         };
         let mut out = Neighbourhood::new();
 
-        note_reach(&svc, &svc_ref, &snapshot, &mut out, true);
+        note_reach(&svc, &svc_ref, &snapshot, &mut out, Carry::Whole);
         idle_behind(&svc_ref, &mut out);
 
         assert!(
