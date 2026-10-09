@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { Filter, Plug, Waypoints } from "lucide-react";
 
 import type { ShareContribution } from "@/components/share/contribution";
-import type { ConnectionsQuery } from "@/hooks/useConnections";
+import type { ConnectionsRead } from "@/hooks/useConnections";
 import { clusterIpText } from "@/lib/cluster-ip";
 import { describeStop } from "@/lib/connections";
 import { iconSvg } from "@/lib/icon-svg";
@@ -139,7 +139,7 @@ export function serviceSelectorSection(
 }
 
 export function servicePublishedSection(
-  connections: ConnectionsQuery,
+  connections: ConnectionsRead,
   t: T
 ): PlacedSection {
   const unread = connections.error
@@ -199,7 +199,7 @@ export function servicePublishedSection(
  */
 export function useServiceShare(
   service: ServiceInfo | undefined,
-  connections: ConnectionsQuery
+  connections: ConnectionsRead
 ): () => ShareContribution {
   const t = useT();
   return useCallback((): ShareContribution => {

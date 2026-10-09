@@ -1,10 +1,11 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import type { ResourceConnections, Scoped } from "@/generated/types";
 import {
   useConnectionsKey,
   type ConnectionsQuery,
+  type ConnectionsRead,
 } from "@/hooks/useConnections";
 import { useServiceWatch } from "@/hooks/usePodWatch";
 import { useReadUid } from "@/hooks/useReadUid";
@@ -21,6 +22,12 @@ export interface ServiceAnswer {
   current: ResourceConnections | undefined;
   /** An answer about this name that cannot: another Service's, or older than what its watch has seen. */
   stale: boolean;
+  /**
+   * The neighbourhood as every reader of the Service draws it, its status,
+   * its trace, its tabs and its report alike: an answer that cannot speak
+   * for it is one still being read, never a verdict.
+   */
+  read: ConnectionsRead;
 }
 
 /**
@@ -39,7 +46,7 @@ export function useServiceAnswer(
 ): ServiceAnswer {
   const client = useQueryClient();
   const key = useConnectionsKey(ResourceType.Service, name, namespace);
-  const { data, error, dataUpdatedAt } = query;
+  const { data, error, dataUpdatedAt, isPending, refetch } = query;
   const facts = data?.subject.facts;
   const selector = facts?.kind === "service" ? facts.selector : null;
   useServiceWatch(namespace, follow ? name : undefined, selector, [key]);
@@ -74,5 +81,17 @@ export function useServiceAnswer(
       );
   }, [follow, stale, data, uid, client, key]);
 
-  return { current, stale };
+  const shownError = stale ? null : error;
+  const pending = !current && (isPending || stale);
+  const read = useMemo<ConnectionsRead>(
+    () => ({
+      data: current,
+      error: shownError,
+      isPending: pending,
+      refetch,
+    }),
+    [current, shownError, pending, refetch]
+  );
+
+  return { current, stale, read };
 }

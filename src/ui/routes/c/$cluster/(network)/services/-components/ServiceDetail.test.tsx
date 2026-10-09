@@ -151,3 +151,83 @@ it("follows the Service's slices on every tab, and turns Endpoints with them", a
     name: "big-pull",
   });
 });
+
+const noPodYet = (readAt: string): ResourceConnections => {
+  const answer = neighbourhood(0);
+  const stop = {
+    reason: "selectsNothing" as const,
+    service: answer.subject,
+    selector: "app=big-pull",
+    near: null,
+  };
+  return {
+    ...answer,
+    readAt,
+    stops: [stop],
+    published: [{ ...answer.published[0], notReady: 0, stop }],
+  };
+};
+
+function sendTo(
+  stream: string,
+  ...changes: Array<{ op: string; resource?: unknown }>
+) {
+  for (const handler of handlers)
+    handler({
+      payload: {
+        channel: "resource-event",
+        stream_id: stream,
+        changes: changes.map((change) => ({ resource: null, ...change })),
+        error: null,
+      },
+    });
+}
+
+/**
+ * Sam's big-pull page drew red "No pod carries app=big-pull" in its trace
+ * for up to 0.66 s while its Status row beside it said "still reading" and
+ * kubectl already had the pod. Fails if the trace, or any other reader on
+ * the page, draws a verdict from an answer the Status holds back.
+ */
+it("draws no verdict anywhere on the page while its Status is still reading", async () => {
+  let release: (value: ResourceConnections) => void = () => {};
+  let asked = 0;
+  vi.mocked(invoke).mockImplementation(async (command: string) => {
+    if (command === "get_service") return SERVICE;
+    if (command === "get_resource_connections")
+      return asked++ === 0
+        ? noPodYet(new Date(Date.now() - 5_000).toISOString())
+        : new Promise<ResourceConnections>((resolve) => (release = resolve));
+    if (command === "subscribe_owned_pod_watch") return "pods-stream";
+    if (command === "subscribe_service_slice_watch") return "slices-stream";
+    return undefined;
+  });
+  await renderWithRouter(<ServiceDetail />, {
+    at: "/c/k3d-rubick/services/shop/big-pull",
+    route: "/c/$cluster/services/$namespace/$name",
+  });
+  expect(await screen.findAllByText(/No pod carries/)).toHaveLength(2);
+  await waitFor(() =>
+    expect(invoke).toHaveBeenCalledWith("resource_watch_subscribed", {
+      streamId: "pods-stream",
+    })
+  );
+
+  sendTo(
+    "pods-stream",
+    { op: "restarted" },
+    {
+      op: "applied",
+      resource: { name: "big-pull-6d9f7-x2", namespace: "shop" },
+    },
+    { op: "synced" }
+  );
+
+  expect(await screen.findByText("still reading")).toBeInTheDocument();
+  expect(screen.queryByText(/No pod carries/)).toBeNull();
+  expect(screen.queryByText("no endpoints")).toBeNull();
+  await waitFor(() => expect(asked).toBe(2));
+
+  release({ ...neighbourhood(1), readAt: new Date().toISOString() });
+  expect(await screen.findByText("1 ready")).toBeInTheDocument();
+});
