@@ -85,3 +85,24 @@ describe("the node's requested formula in Russian", () => {
     expect(text).toContain("по 42 подам");
   });
 });
+
+describe("the table at the narrowest window", () => {
+  /**
+   * At 1024 wide Lena read "578 / МиБ" and "metrics-server не / установлен"
+   * over two lines each. Fails if a cell may wrap again, or if the headings
+   * lose the room they give up first.
+   */
+  it("keeps every figure on one line and lets only a heading wrap", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    cpuRow();
+    const table = screen.getByRole("table");
+    expect(table).toHaveClass("whitespace-nowrap");
+    for (const cell of within(table).getAllByRole("cell")) {
+      expect(cell.className).not.toMatch(/whitespace-(normal|pre-line)/);
+    }
+    expect(table.querySelector("thead")).toHaveClass(
+      "[&_th]:whitespace-normal"
+    );
+    expect(table.parentElement).toHaveClass("overflow-auto");
+  });
+});

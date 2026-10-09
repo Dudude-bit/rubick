@@ -101,8 +101,10 @@ export function NodeResources({
               })}
         </p>
       )}
-      <Table>
-        <TableHeader>
+      {/* A narrow window wraps a heading and then scrolls; a figure never
+          parts from its unit. */}
+      <Table className="whitespace-nowrap">
+        <TableHeader className="[&_th]:whitespace-normal">
           <TableRow>
             <TableHead>{t("columns", "resource")}</TableHead>
             <TableHead className="text-right">
