@@ -11,6 +11,7 @@ import { Unknown } from "@/components/ui/unknown";
 import type { OwnRules } from "@/generated/types";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
+import { parts } from "@/i18n/parts";
 import { useT } from "@/i18n/useT";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
@@ -34,7 +35,13 @@ export function MyAccess() {
     <div className="flex max-w-4xl flex-col gap-[18px]">
       <SectionHeader
         title={t("myAccess", "title")}
-        description={t("myAccess", "description")}
+        description={parts(t("myAccess", "description"), {
+          command: (
+            <span className="whitespace-nowrap font-mono">
+              kubectl auth can-i --list
+            </span>
+          ),
+        })}
       />
       {scope.length > 1 && (
         <div

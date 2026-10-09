@@ -64,6 +64,19 @@ describe("what the signed-in user may do", () => {
   });
 
   /**
+   * At 1024 wide Lena read "can-i -" on one line and "-list" on the next.
+   * Fails if the command may break inside, or the sentence loses it.
+   */
+  it("keeps kubectl auth can-i --list whole in the description", async () => {
+    await renderWithRouter(<MyAccess />);
+    const command = await screen.findByText("kubectl auth can-i --list");
+    expect(command).toHaveClass("whitespace-nowrap");
+    expect(command.parentElement?.textContent).toBe(
+      "The rules the cluster says apply to you, ClusterRoleBindings included, as kubectl auth can-i --list prints them."
+    );
+  });
+
+  /**
    * Rights are per namespace: an answer for one picked at random would be
    * read as the answer for all. Fails if the page asks without a namespace.
    */
