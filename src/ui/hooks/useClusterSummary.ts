@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { useAttention } from "@/hooks/useAttention";
 import {
@@ -9,8 +9,11 @@ import {
 import { namespaceAttention, type NamespaceAttention } from "@/lib/attention";
 import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
+import { whole } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
+import { useRightsAsked } from "@/lib/refusals";
 import { STALE_TIMES } from "@/lib/refresh";
+import { ResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 
 export interface NamespaceScope {
@@ -39,24 +42,40 @@ export interface ClusterSummary {
   isLoading: boolean;
 }
 
-/** The cluster's namespaces, and whether the list could be read at all. */
+/**
+ * The cluster's namespaces, and whether the list can be read now: the
+ * Namespaces page's own entry, so the two never disagree, its watch keeps
+ * both current, and its latest read decides. Rights change, so when the
+ * reader says they may have, the list is asked again.
+ */
 export function useNamespaceList() {
   const isConnected = useClusterStore((s) => s.isConnected);
-  const { data, error, isLoading } = useQuery({
-    queryKey: queryKeys.namespaces(),
-    queryFn: () => commands.listNamespaces(),
+  const rightsAsked = useRightsAsked();
+  const { data, error, isLoading, refetch } = useQuery({
+    queryKey: queryKeys.resources(ResourceType.Namespace, null),
+    queryFn: () => commands.listNamespaces().then(whole),
     enabled: isConnected,
     staleTime: STALE_TIMES.slow,
-    placeholderData: keepPreviousData,
   });
-  const state: NamespaceListState = data
-    ? "listed"
-    : error
-      ? isRefusal(error)
-        ? "refused"
-        : "failed"
+  const asked = useRef(rightsAsked);
+  useEffect(() => {
+    if (asked.current === rightsAsked) return;
+    asked.current = rightsAsked;
+    void refetch({ cancelRefetch: false });
+  }, [rightsAsked, refetch]);
+  const state: NamespaceListState = error
+    ? isRefusal(error)
+      ? "refused"
+      : "failed"
+    : data
+      ? "listed"
       : "pending";
-  return { data, state, isLoading };
+  // Names a refusal took back are not offered; a failed read keeps its last.
+  return {
+    data: state === "refused" ? undefined : data?.rows,
+    state,
+    isLoading,
+  };
 }
 
 /**

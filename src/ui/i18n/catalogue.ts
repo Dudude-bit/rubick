@@ -4243,8 +4243,16 @@ export const en = {
       one: "{n} namespace is the most one window reads at once.",
       other: "{n} namespaces is the most one window reads at once.",
     },
-    namespaceScopeCount:
-      "{n} of {limit} namespaces; every list is narrowed to them.",
+    namespaceScopeCount: {
+      one: "{n} namespace selected, up to {limit} at once; every list is narrowed to it.",
+      other:
+        "{n} namespaces selected, up to {limit} at once; every list is narrowed to them.",
+    },
+    namespaceScopeOfListed: {
+      one: "{selected} of {n} namespace selected, up to {limit} at once; every list is narrowed to them.",
+      other:
+        "{selected} of {n} namespaces selected, up to {limit} at once; every list is narrowed to them.",
+    },
     namespaceMultiHint:
       "{click}-click or {enter}, or the box, to watch up to {limit} at once.",
     whatCanIDoIn: "What can I do in {namespace}?",
