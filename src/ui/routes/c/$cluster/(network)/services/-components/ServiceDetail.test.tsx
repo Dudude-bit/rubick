@@ -206,12 +206,14 @@ it("draws no verdict anywhere on the page while its Status is still reading", as
     at: "/c/k3d-rubick/services/shop/big-pull",
     route: "/c/$cluster/services/$namespace/$name",
   });
-  expect(await screen.findAllByText(/No pod carries/)).toHaveLength(2);
   await waitFor(() =>
     expect(invoke).toHaveBeenCalledWith("resource_watch_subscribed", {
       streamId: "pods-stream",
     })
   );
+  await waitFor(() => expect(asked).toBe(1));
+  expect(screen.getByText("still reading")).toBeInTheDocument();
+  expect(screen.queryByText(/No pod carries/)).toBeNull();
 
   sendTo(
     "pods-stream",

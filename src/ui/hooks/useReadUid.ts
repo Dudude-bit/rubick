@@ -9,7 +9,7 @@ import {
 import { queryKeys } from "@/lib/query-keys";
 
 /** One field of the object's read on its page or peek, from the entry they share, without asking for it. */
-function useReadOf<T extends string | number | undefined>(
+function useReadOf<T extends string | number | null | undefined>(
   kind: string,
   namespace: string | null | undefined,
   name: string | null | undefined,
@@ -46,6 +46,29 @@ export function useReadUid(
     const uid =
       read && typeof read === "object" && "uid" in read ? read.uid : undefined;
     return typeof uid === "string" && uid !== "" ? uid : undefined;
+  });
+}
+
+/**
+ * The label selector its page or peek has read, written as the API server's
+ * query text: undefined until one of them has, `null` for none.
+ */
+export function useReadSelector(
+  kind: string,
+  namespace: string | null | undefined,
+  name: string | null | undefined
+): string | null | undefined {
+  return useReadOf(kind, namespace, name, (state) => {
+    const read = state?.data;
+    if (!read || typeof read !== "object" || !("selector" in read))
+      return undefined;
+    const selector = read.selector;
+    if (!selector || typeof selector !== "object") return undefined;
+    const text = Object.entries(selector as Record<string, string>)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      .map(([key, value]) => `${key}=${value}`)
+      .join(",");
+    return text || null;
   });
 }
 

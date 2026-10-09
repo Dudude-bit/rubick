@@ -1,14 +1,18 @@
 import { useEffect, useMemo, useRef } from "react";
-import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 
-import type { ResourceConnections, Scoped } from "@/generated/types";
+import type { ResourceConnections } from "@/generated/types";
 import {
   useConnectionsKey,
   type ConnectionsQuery,
   type ConnectionsRead,
 } from "@/hooks/useConnections";
 import { useServiceWatch } from "@/hooks/usePodWatch";
-import { useReadThereAt, useReadUid } from "@/hooks/useReadUid";
+import {
+  useReadSelector,
+  useReadThereAt,
+  useReadUid,
+} from "@/hooks/useReadUid";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
@@ -49,17 +53,26 @@ export function useServiceAnswer(
   const { data, error, dataUpdatedAt, errorUpdatedAt, isPending, refetch } =
     query;
   const facts = data?.subject.facts;
-  const selector = facts?.kind === "service" ? facts.selector : null;
-  useServiceWatch(namespace, follow ? name : undefined, selector, [key]);
   const uid = useReadUid(ResourceType.Service, namespace, name);
   const held = useReadThereAt(ResourceType.Service, namespace, name);
-  const pods = useQuery<Scoped<unknown>>({
-    queryKey: queryKeys.serviceWatch("pods", namespace, name, selector),
-    queryFn: skipToken,
-  });
-  const watched = pods.data
-    ? { pods: pods.data.rows.length, at: pods.dataUpdatedAt }
-    : undefined;
+  // The Service's own read names its selector before any answer does, so its
+  // pods are being listed by the time the first answer about them lands.
+  const readSelector = useReadSelector(ResourceType.Service, namespace, name);
+  const watched = useServiceWatch(
+    namespace,
+    name,
+    {
+      uid: uid ?? data?.subjectUid ?? undefined,
+      selector:
+        readSelector === undefined
+          ? facts?.kind === "service"
+            ? facts.selector
+            : null
+          : readSelector,
+    },
+    [key],
+    follow
+  );
   const notFound = isResourceNotFoundError(error);
   const current =
     data &&
@@ -75,11 +88,14 @@ export function useServiceAnswer(
     ? held > 0
     : !!data && !current && data.subject.name === name;
 
+  const another = !!uid && !!data?.subjectUid && data.subjectUid !== uid;
+  // Held only until the pod watch has listed: its list answers it, not a read.
+  const listing = !notFound && !another && watched === "listing";
   const asked = useRef<unknown>(null);
   useEffect(() => {
     const created = errorUpdatedAt < held;
     const seen = notFound ? `${created}/${errorUpdatedAt}` : data;
-    if (!follow || !stale || asked.current === seen) return;
+    if (!follow || !stale || listing || asked.current === seen) return;
     asked.current = seen;
     if (notFound)
       void client.invalidateQueries({
@@ -88,8 +104,7 @@ export function useServiceAnswer(
           : queryKeys.detail(ResourceType.Service, namespace, name),
         exact: true,
       });
-    else if (uid && data?.subjectUid && data.subjectUid !== uid)
-      void client.resetQueries({ queryKey: key, exact: true });
+    else if (another) void client.resetQueries({ queryKey: key, exact: true });
     else
       setTimeout(
         () => void client.invalidateQueries({ queryKey: key, exact: true }),
@@ -98,11 +113,12 @@ export function useServiceAnswer(
   }, [
     follow,
     stale,
+    listing,
     notFound,
     errorUpdatedAt,
     held,
     data,
-    uid,
+    another,
     client,
     key,
     namespace,

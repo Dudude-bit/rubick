@@ -242,6 +242,13 @@ export const serviceVerdictLabels = (t: T) => [
   t("nav", "notChecked"),
 ];
 
+/**
+ * What a Service's pod watch can say of its pods: how many it lists and when
+ * that last changed, that it is still listing them, or nothing, where none
+ * is running or it failed.
+ */
+export type PodsSeen = { pods: number; at: number } | "listing" | undefined;
+
 /** One neighbourhood read, and when it answered: no older than its lists were asked for. */
 export interface ReadAnswer {
   data: ResourceConnections;
@@ -251,15 +258,15 @@ export interface ReadAnswer {
 /**
  * Whether a neighbourhood read can speak for the Service on screen. One about
  * another Service of the same name cannot, nor one that found no pod carrying
- * the selector while the Service's own pod watch has since seen one: a read
- * older than what is known is a read not taken yet. Sam's big-pull page drew
- * "1 ready" from the Service deleted before it, and "No pod carries
- * app=big-pull" for seconds while its pod was being created.
+ * the selector while the Service's own pod watch is still listing them or has
+ * since seen one: a read older than what is known is a read not taken yet.
+ * Sam's big-pull page drew "1 ready" from the Service deleted before it, and
+ * "No pod carries app=big-pull" while its pod was being created.
  */
 export function speaksFor(
   answer: ReadAnswer,
   service: { name: string; uid: string | undefined },
-  watched: { pods: number; at: number } | undefined
+  watched: PodsSeen
 ): boolean {
   const { data } = answer;
   if (data.subject.name !== service.name) return false;
@@ -267,8 +274,10 @@ export function speaksFor(
     return false;
   const none =
     publishedFor(data, data.subject)?.stop?.reason === "selectsNothing";
+  if (!none || !watched) return true;
+  if (watched === "listing") return false;
   const read = data.readAt ? Date.parse(data.readAt) : answer.at;
-  return !(none && watched && watched.pods > 0 && read < watched.at);
+  return !(watched.pods > 0 && read < watched.at);
 }
 
 /** A Service's verdict from its neighbourhood, the answer its trace draws. */
