@@ -351,6 +351,7 @@ fn main() {
             commands::terminal::terminal_input,
             commands::terminal::terminal_resize,
             commands::terminal::close_terminal,
+            commands::terminal::list_terminal_sessions,
             commands::terminal::terminal_subscribed,
             commands::terminal::open_pod_shell,
             // Resource watch (replaces 2s polling for migrated lists)
@@ -523,10 +524,14 @@ fn main() {
         // must not outlive the window.
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
-                app_handle
-                    .state::<AppState>()
-                    .client_manager
-                    .shutdown_proxies();
+                let state = app_handle.state::<AppState>();
+                state.client_manager.shutdown_proxies();
+                // A shell left behind keeps running in the container.
+                tauri::async_runtime::block_on(
+                    state
+                        .terminal_manager
+                        .close_all(std::time::Duration::from_secs(6)),
+                );
             }
         });
 }

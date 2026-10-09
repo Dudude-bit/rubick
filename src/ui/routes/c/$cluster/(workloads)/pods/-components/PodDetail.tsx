@@ -116,7 +116,10 @@ import {
   terminationWhen,
 } from "@/lib/pod-status";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
+import {
+  heardSessions,
+  useTerminalSessionStore,
+} from "@/stores/terminalSessionStore";
 import { asksFor, useShellAskStore } from "@/stores/shellAskStore";
 import type {
   ContainerInfo,
@@ -711,8 +714,11 @@ export function PodDetail() {
   // A shell the reader opened and left is invisible the moment they click
   // Logs. The store already knows it is there; the dot is how the tab says so.
   const shellSession = useTerminalSessionStore((state) =>
-    state.sessions.find(
-      (session) => session.podName === name && session.namespace === namespace
+    heardSessions(state).find(
+      (session) =>
+        session.pod === name &&
+        session.namespace === namespace &&
+        session.context === currentContext
     )
   );
 
@@ -996,7 +1002,7 @@ export function PodDetail() {
             mark: shellSession
               ? liveMark(
                   t("empty", "sessionAttachedTo", {
-                    container: shellSession.containerName,
+                    container: shellSession.container,
                   })
                 )
               : undefined,

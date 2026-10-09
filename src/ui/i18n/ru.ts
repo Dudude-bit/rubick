@@ -1621,6 +1621,9 @@ export const ru: Catalogue = {
     idle: "активность",
     ports: "Порты",
     terminals: "Терминалы",
+    endShell: "Завершить оболочку в {pod}",
+    readingTerminals: "Читается список открытых терминалов",
+    terminalsUnread: "Не удалось прочитать список открытых терминалов",
     jobs: "Задачи",
     // Three forms, and the plural rule picks between them by the number:
     // 1 проброс, 2 проброса, 5 пробросов, 21 проброс.
@@ -6554,8 +6557,6 @@ export const ru: Catalogue = {
     connectToViewTerminals: "Подключитесь к кластеру, чтобы видеть терминалы",
     noTerminalsOnContext: "На {context} нет открытых терминалов",
     openFromPodPage: "Откройте терминал со страницы любого пода.",
-    sessionsHaveErrors:
-      "В некоторых сессиях ошибки. Откройте сессию, чтобы переподключиться.",
     noIngressClassNamed: "В этом кластере нет IngressClass с именем {name}",
     ingressNamesNoClass:
       "Этот Ingress не указывает класс, а класса по умолчанию в кластере нет",

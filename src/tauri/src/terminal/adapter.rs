@@ -1,6 +1,7 @@
 //! Terminal adapter trait and common types
 
 use crate::error::Result;
+use crate::terminal::session::SessionTarget;
 
 /// Terminal adapter trait - abstraction for different terminal session types
 #[async_trait::async_trait]
@@ -34,5 +35,11 @@ pub trait TerminalAdapter: Send + Sync {
     /// only for the adapters that say so.
     fn may_still_deliver(&self) -> bool {
         false
+    }
+
+    /// The container this runs in, for the list of shells the app holds.
+    /// `None` for a process on this machine, which is nobody's shell.
+    fn target(&self) -> Option<SessionTarget> {
+        None
     }
 }

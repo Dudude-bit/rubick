@@ -8,8 +8,6 @@ import { normalizeTauriError, ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { describeTermination } from "@/lib/pod-status";
 import { listenForStreamFailure } from "@/lib/stream-failure";
 import { listenEvent } from "@/lib/events";
-import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
-import { useClusterStore } from "@/stores/clusterStore";
 import { useT } from "@/i18n/useT";
 
 export interface PodTerminalProps {
@@ -40,9 +38,6 @@ export function PodTerminal({
   const [ended, setEnded] = useState(false);
   const connectAttemptRef = useRef(0);
   const sessionIdRef = useRef<string | null>(null);
-
-  const currentContext = useClusterStore((state) => state.currentContext);
-  const { addSession, removeSession } = useTerminalSessionStore();
 
   // Keep sessionIdRef in sync
   useEffect(() => {
@@ -81,16 +76,6 @@ export function PodTerminal({
       setSessionId(sid);
       setEnded(false);
       setIsConnecting(false);
-
-      // Add to activity tracking
-      addSession({
-        id: sid,
-        context: currentContext ?? "unknown",
-        podName,
-        namespace,
-        containerName,
-        status: "connected",
-      });
     } catch (err) {
       console.error("Failed to open shell:", err);
       if (connectAttemptRef.current === attemptId) {
@@ -98,16 +83,15 @@ export function PodTerminal({
         setIsConnecting(false);
       }
     }
-  }, [namespace, podName, containerName, currentContext, addSession]);
+  }, [namespace, podName, containerName]);
 
   // Disconnect from pod
   const disconnect = useCallback(async () => {
     if (sessionId) {
-      removeSession(sessionId);
       await commands.closeTerminal(sessionId);
       setSessionId(null);
     }
-  }, [sessionId, removeSession]);
+  }, [sessionId]);
 
   // A session that dies on its own. `openPodShell` hands back an id
   // before the exec upgrade has been answered, so a rejected handshake
@@ -126,20 +110,16 @@ export function PodTerminal({
       else unlistens.push(fn);
     };
 
-    // The shell exiting ends the session for Activity, the footer and the
-    // tab mark too; the pane keeps its scrollback under "Ended".
+    // The pane keeps its scrollback under "Ended".
     void listenEvent("terminal-closed", (event) => {
       const sid = sessionIdRef.current;
       if (!sid || event.payload.session_id !== sid) return;
-      removeSession(sid);
       setEnded(true);
     }).then(keep);
 
     listenForStreamFailure(
       () => sessionIdRef.current,
       (failure) => {
-        const sid = sessionIdRef.current;
-        if (sid) removeSession(sid);
         sessionIdRef.current = null;
         setSessionId(null);
         setIsConnecting(false);
@@ -158,7 +138,7 @@ export function PodTerminal({
       disposed = true;
       unlistens.forEach((fn) => fn());
     };
-  }, [removeSession]);
+  }, []);
 
   // Initial connection: fire-and-forget async session startup, which
   // ends up calling setSessionId inside. Genuine side-effect (talks
@@ -169,10 +149,7 @@ export function PodTerminal({
     // Cleanup on unmount - use ref to get current sessionId
     return () => {
       const sid = sessionIdRef.current;
-      if (sid) {
-        removeSession(sid);
-        commands.closeTerminal(sid).catch(() => {});
-      }
+      if (sid) commands.closeTerminal(sid).catch(() => {});
     };
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, []);

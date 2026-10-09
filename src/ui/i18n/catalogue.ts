@@ -1606,6 +1606,9 @@ export const en = {
     idle: "activity",
     ports: "Ports",
     terminals: "Terminals",
+    endShell: "End the shell in {pod}",
+    readingTerminals: "Reading the open terminals",
+    terminalsUnread: "Could not read the open terminals",
     jobs: "Jobs",
     portForwards: { one: "{n} port forward", other: "{n} port forwards" },
     terminalCount: { one: "{n} terminal", other: "{n} terminals" },
@@ -5936,7 +5939,6 @@ export const en = {
     connectToViewTerminals: "Connect to a cluster to view terminals",
     noTerminalsOnContext: "No terminal sessions open on {context}",
     openFromPodPage: "Open one from any pod's detail page.",
-    sessionsHaveErrors: "Some sessions have errors. Open one to reconnect.",
     noIngressClassNamed: "No IngressClass named {name} in this cluster",
     ingressNamesNoClass:
       "This Ingress names no class, and this cluster has no default one",

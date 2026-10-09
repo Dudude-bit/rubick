@@ -3,6 +3,7 @@
 use crate::commands::helpers::ResourceContext;
 use crate::error::Result;
 use crate::state::AppState;
+use crate::terminal::{SessionTarget, TerminalSessionInfo};
 use tauri::State;
 
 /// Send input to terminal session
@@ -35,6 +36,14 @@ pub fn close_terminal(session_id: String, state: State<'_, AppState>) -> Result<
     state.terminal_manager.close_session(&session_id)
 }
 
+/// Every shell the backend holds open in a container: what Activity and the
+/// status bar count, read from the one place that knows.
+#[tauri::command]
+#[must_use]
+pub fn list_terminal_sessions(state: State<'_, AppState>) -> Vec<TerminalSessionInfo> {
+    state.terminal_manager.list()
+}
+
 /// Signal that the frontend has registered its `terminal-output` and
 /// `terminal-closed` listeners and is ready to receive events. The
 /// backend I/O loop blocks on this signal before reading from the
@@ -57,6 +66,7 @@ pub async fn open_pod_shell(
 ) -> Result<String> {
     let ctx = ResourceContext::for_command(&state, Some(namespace.clone()))?;
     let client = ctx.client.clone();
+    let context = state.get_current_context().unwrap_or_default();
 
     // Get container name if not provided
     let container_name = if let Some(c) = container {
@@ -69,28 +79,25 @@ pub async fn open_pod_shell(
             .unwrap_or_default()
     };
 
-    // Create adapter and session
-    // Use provided shell or smart shell detection
-    let shell_command = if let Some(shell) = shell {
-        vec![shell]
-    } else {
-        // Smart shell detection: try fish, then zsh, then bash, then sh
-        // We use /bin/sh as the entrypoint to execute the detection logic
-        let smart_command = "if command -v fish >/dev/null 2>&1; then exec fish; elif command -v zsh >/dev/null 2>&1; then exec zsh; elif command -v bash >/dev/null 2>&1; then exec bash; else exec sh; fi";
-        vec![
-            "/bin/sh".to_string(),
-            "-c".to_string(),
-            smart_command.to_string(),
-        ]
-    };
+    let manager = state.client_manager.clone();
+    let fresh_context = context.clone();
+    let adapter = crate::terminal::PodExecAdapter::new(
+        client,
+        SessionTarget {
+            context,
+            namespace,
+            pod,
+            container: container_name,
+        },
+        shell.as_deref(),
+    )
+    .with_fresh_client(Box::new(move || {
+        manager
+            .get_client(&fresh_context)
+            .map(|client| (*client).clone())
+    }));
 
-    let adapter =
-        crate::terminal::PodExecAdapter::new(client, namespace, pod, container_name, shell_command);
-
-    let session_id = state
-        .terminal_manager
-        .create_session(Box::new(adapter))
-        .await?;
+    let session_id = state.terminal_manager.create_session(Box::new(adapter))?;
 
     Ok(session_id)
 }

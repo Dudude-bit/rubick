@@ -133,6 +133,7 @@ import type {
   StorageClassInfo,
   StreamLogConfig,
   TcpProbe,
+  TerminalSessionInfo,
   ThemeConfig,
   TlsCertificate,
   UpdaterConfig,
@@ -403,6 +404,10 @@ export async function terminalResize(
 
 export async function closeTerminal(sessionId: string): Promise<void> {
   return invoke<void>("close_terminal", { sessionId });
+}
+
+export async function listTerminalSessions(): Promise<TerminalSessionInfo[]> {
+  return invoke<TerminalSessionInfo[]>("list_terminal_sessions");
 }
 
 export async function terminalSubscribed(sessionId: string): Promise<void> {

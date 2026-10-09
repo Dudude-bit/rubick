@@ -1,6 +1,8 @@
 use crate::error::{Error, Result};
 use crate::state::{readable_cause, AppEvent, StreamFailureKind};
-use crate::terminal::session::{TerminalInput, TerminalSession, TerminalState};
+use crate::terminal::session::{
+    TerminalInput, TerminalSession, TerminalSessionInfo, TerminalState,
+};
 use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::sync::broadcast;
@@ -71,15 +73,39 @@ impl TerminalManager {
         }
     }
 
-    /// Close a session
+    /// Ask a session to end. It stays listed, as closing, until its task has
+    /// hung up the process and let go of the stream: a shell is not closed
+    /// because the pane asked, it is closed when the far side has ended.
     pub fn close_session(&self, id: &str) -> Result<()> {
-        if let Some((_, mut session)) = self.sessions.remove(id) {
-            session.close();
-            Ok(())
-        } else {
-            // Already closed or not found, just return Ok
-            Ok(())
+        let listed = self
+            .sessions
+            .get_mut(id)
+            .is_some_and(|mut session| session.close() && session.is_listed());
+        if listed {
+            announce(&self.sessions, &self.event_tx);
         }
+        Ok(())
+    }
+
+    /// Every shell this app holds open in a container, oldest first.
+    #[must_use]
+    pub fn list(&self) -> Vec<TerminalSessionInfo> {
+        listed(&self.sessions)
+    }
+
+    /// End every session and wait, up to `within`, for them to hang up: on the
+    /// way out, a shell left in a container is a process nobody can reach.
+    pub async fn close_all(&self, within: tokio::time::Duration) {
+        let ids: Vec<String> = self.sessions.iter().map(|e| e.key().clone()).collect();
+        for id in &ids {
+            let _ = self.close_session(id);
+        }
+        let _ = tokio::time::timeout(within, async {
+            while !self.sessions.is_empty() {
+                tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await;
     }
 
     /// Release the subscribe gate for a session, signalling that the
@@ -111,27 +137,38 @@ impl TerminalManager {
     /// The caller is responsible for creating the appropriate adapter.
     ///
     /// Returns the `session_id` for tracking.
-    pub async fn create_session(
+    pub fn create_session(
         &self,
         mut adapter: Box<dyn crate::terminal::TerminalAdapter>,
     ) -> Result<String> {
         let session_id = uuid::Uuid::new_v4().to_string();
         let (session, mut input_rx, mut cancel_rx, subscribe_rx) =
-            TerminalSession::new(session_id.clone());
+            TerminalSession::new(session_id.clone(), adapter.target());
 
         let event_tx = self.event_tx.clone();
         let session_state = session.state.clone();
-
-        // Update state to connecting
-        {
-            let mut state = session_state.write().await;
-            *state = TerminalState::Connecting;
-        }
+        let is_listed = session.is_listed();
+        *session_state.write() = TerminalState::Connecting;
 
         self.sessions.insert(session_id.clone(), session);
+        if is_listed {
+            announce(&self.sessions, &self.event_tx);
+        }
+        // Removes the session and says so, once its task is done with it.
+        let ended = {
+            let sessions = self.sessions.clone();
+            let event_tx = self.event_tx.clone();
+            move |id: &str| {
+                sessions.remove(id);
+                if is_listed {
+                    announce(&sessions, &event_tx);
+                }
+            }
+        };
 
         let session_id_clone = session_id.clone();
         let sessions = self.sessions.clone();
+        let announcer = self.event_tx.clone();
 
         // Spawn task with adapter ownership
         tokio::spawn(async move {
@@ -145,11 +182,19 @@ impl TerminalManager {
             // of the blank pane into the void.
             let connect_error = adapter.connect().await.err();
 
-            *session_state.write().await = if connect_error.is_some() {
-                TerminalState::Error
-            } else {
-                TerminalState::Connected
-            };
+            {
+                let mut state = session_state.write();
+                if *state != TerminalState::Closing {
+                    *state = if connect_error.is_some() {
+                        TerminalState::Error
+                    } else {
+                        TerminalState::Connected
+                    };
+                }
+            }
+            if is_listed {
+                announce(&sessions, &announcer);
+            }
 
             // Wait for the frontend to signal it has registered its
             // event listeners. The cancel channel is armed too, so a
@@ -173,7 +218,7 @@ impl TerminalManager {
             if let Some(e) = connect_error {
                 tracing::error!("Failed to connect adapter: {}", e);
                 let _ = adapter.close().await;
-                sessions.remove(&session_id_clone);
+                ended(&session_id_clone);
 
                 if gate != Gate::Cancelled {
                     let kind = StreamFailureKind::classify(&e);
@@ -211,8 +256,8 @@ impl TerminalManager {
                     session_id_clone
                 );
                 let _ = adapter.close().await;
-                *session_state.write().await = TerminalState::Disconnected;
-                sessions.remove(&session_id_clone);
+                *session_state.write() = TerminalState::Disconnected;
+                ended(&session_id_clone);
                 let _ = event_tx.send(AppEvent::TerminalClosed {
                     session_id: session_id_clone,
                     status: None,
@@ -332,11 +377,18 @@ impl TerminalManager {
                 send_output(&event_tx, &session_id_clone, output.finish());
             }
 
-            // Cleanup
+            // A shell that ended on its own goes straight to closing; one the
+            // reader closed is already there.
+            let asked_to_close = *session_state.read() == TerminalState::Closing;
+            if !asked_to_close {
+                *session_state.write() = TerminalState::Closing;
+                if is_listed {
+                    announce(&sessions, &announcer);
+                }
+            }
             let _ = adapter.close().await;
-            *session_state.write().await = TerminalState::Disconnected;
-
-            sessions.remove(&session_id_clone);
+            *session_state.write() = TerminalState::Disconnected;
+            ended(&session_id_clone);
 
             let _ = event_tx.send(AppEvent::TerminalClosed {
                 session_id: session_id_clone,
@@ -434,6 +486,23 @@ fn send_output(event_tx: &broadcast::Sender<AppEvent>, session_id: &str, data: S
     });
 }
 
+fn listed(sessions: &DashMap<String, TerminalSession>) -> Vec<TerminalSessionInfo> {
+    let mut all: Vec<TerminalSessionInfo> = sessions
+        .iter()
+        .filter_map(|entry| entry.value().info())
+        .collect();
+    all.sort_by(|a, b| a.opened_at.cmp(&b.opened_at).then(a.id.cmp(&b.id)));
+    all
+}
+
+/// The whole list, every time it changes: a count kept by adding and
+/// subtracting on the other side is a count that drifts.
+fn announce(sessions: &DashMap<String, TerminalSession>, event_tx: &broadcast::Sender<AppEvent>) {
+    let _ = event_tx.send(AppEvent::TerminalSessions {
+        sessions: listed(sessions),
+    });
+}
+
 /// Tell the frontend a session stopped on its own. Send failures are
 /// ignored: no receiver means no window left to inform.
 fn emit_failure(
@@ -495,7 +564,6 @@ mod tests {
         let manager = TerminalManager::new(event_tx);
         let session_id = manager
             .create_session(Box::new(adapter))
-            .await
             .expect("create_session");
         manager.mark_subscribed(&session_id).expect("subscribed");
         tokio::time::timeout(Duration::from_secs(5), async {
@@ -603,7 +671,6 @@ mod tests {
         let manager = TerminalManager::new(event_tx);
         let session_id = manager
             .create_session(Box::new(TalksThenBreaks { step: 0 }))
-            .await
             .expect("create_session");
         manager.mark_subscribed(&session_id).expect("subscribed");
 
@@ -659,7 +726,6 @@ mod tests {
         let (said, spoken) = tokio::sync::oneshot::channel();
         let session_id = manager
             .create_session(Box::new(TalksThenRefusesInput { said: Some(said) }))
-            .await
             .expect("create_session");
         manager.mark_subscribed(&session_id).expect("subscribed");
         spoken.await.expect("the shell spoke");
@@ -828,7 +894,6 @@ mod tests {
             .create_session(Box::new(GoneButStillTalking::console(
                 b"{\"kind\":\"ExecCredential\"}",
             )))
-            .await
             .expect("create_session");
         manager.mark_subscribed(&session_id).expect("subscribed");
 
@@ -867,7 +932,6 @@ mod tests {
         adapter.console = false;
         let session_id = manager
             .create_session(Box::new(adapter))
-            .await
             .expect("create_session");
         manager.mark_subscribed(&session_id).expect("subscribed");
 
@@ -909,7 +973,6 @@ mod tests {
         adapter.payload_at = 3;
         let session_id = manager
             .create_session(Box::new(adapter))
-            .await
             .expect("create_session");
         manager.mark_subscribed(&session_id).expect("subscribed");
 
@@ -950,7 +1013,6 @@ mod tests {
         adapter.writes_fail = true;
         let session_id = manager
             .create_session(Box::new(adapter))
-            .await
             .expect("create_session");
         manager.mark_subscribed(&session_id).expect("subscribed");
         manager
@@ -984,7 +1046,6 @@ mod tests {
 
         let _session_id = manager
             .create_session(Box::new(adapter))
-            .await
             .expect("create_session");
 
         // Give the spawned task plenty of time to run connect() and
@@ -1007,7 +1068,6 @@ mod tests {
 
         let session_id = manager
             .create_session(Box::new(adapter))
-            .await
             .expect("create_session");
 
         // Confirm the gate is holding (no events while we wait).
@@ -1083,7 +1143,6 @@ mod tests {
             .create_session(Box::new(FailingConnectAdapter(Error::Terminal(
                 "Failed to exec: failed to upgrade to a WebSocket connection: 500".into(),
             ))))
-            .await
             .expect("create_session returns an id even though the connect will fail");
 
         let early = tokio::time::timeout(Duration::from_millis(150), event_rx.recv()).await;
@@ -1131,7 +1190,6 @@ mod tests {
             .create_session(Box::new(FailingConnectAdapter(Error::Terminal(
                 "Failed to exec: ApiError: pods \"api-0\" not found: NotFound".into(),
             ))))
-            .await
             .expect("create_session");
 
         manager
@@ -1153,6 +1211,172 @@ mod tests {
             }
             other => panic!("expected StreamFailed, got {other:?}"),
         }
+    }
+
+    /// A shell in a container: listed, and as slow to hang up as the test
+    /// says, so the test can watch it closing.
+    struct ListedShell {
+        closed: Arc<AtomicBool>,
+        hang_up: Option<tokio::sync::oneshot::Receiver<()>>,
+        hang_up_takes: Duration,
+    }
+
+    impl ListedShell {
+        fn new() -> (Self, Arc<AtomicBool>) {
+            let closed = Arc::new(AtomicBool::new(false));
+            (
+                Self {
+                    closed: closed.clone(),
+                    hang_up: None,
+                    hang_up_takes: Duration::ZERO,
+                },
+                closed,
+            )
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl TerminalAdapter for ListedShell {
+        async fn connect(&mut self) -> Result<()> {
+            Ok(())
+        }
+        async fn read_output(&mut self) -> Result<Option<Vec<u8>>> {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+            Ok(None)
+        }
+        async fn write_input(&mut self, _data: &[u8]) -> Result<()> {
+            Ok(())
+        }
+        async fn resize(&mut self, _cols: u16, _rows: u16) -> Result<()> {
+            Ok(())
+        }
+        async fn close(&mut self) -> Result<()> {
+            if let Some(hang_up) = self.hang_up.take() {
+                let _ = hang_up.await;
+            }
+            tokio::time::sleep(self.hang_up_takes).await;
+            self.closed.store(true, Ordering::SeqCst);
+            Ok(())
+        }
+        fn is_running(&self) -> bool {
+            !self.closed.load(Ordering::SeqCst)
+        }
+        fn target(&self) -> Option<crate::terminal::SessionTarget> {
+            Some(crate::terminal::SessionTarget {
+                context: "acme-staging".into(),
+                namespace: "shop".into(),
+                pod: "cart-4f68h".into(),
+                container: "app".into(),
+            })
+        }
+    }
+
+    async fn eventually(what: &str, done: impl Fn() -> bool) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !done() {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| panic!("never: {what}"));
+    }
+
+    fn last_list(event_rx: &mut broadcast::Receiver<AppEvent>) -> Option<Vec<TerminalSessionInfo>> {
+        let mut last = None;
+        while let Ok(event) = event_rx.try_recv() {
+            if let AppEvent::TerminalSessions { sessions } = event {
+                last = Some(sessions);
+            }
+        }
+        last
+    }
+
+    /// Dana closed the page and Activity said no terminals while `sh` ran on
+    /// in the pod. A shell is listed until its task has hung it up and let
+    /// go, then it is gone from the list and from what the window was told.
+    /// Fails if the entry goes at the ask, or stays after the task ends.
+    #[tokio::test]
+    async fn a_closed_shell_is_listed_until_it_has_hung_up_and_then_is_gone() {
+        let (event_tx, mut event_rx) = broadcast::channel(256);
+        let manager = TerminalManager::new(event_tx);
+        let (mut shell, closed) = ListedShell::new();
+        let (release, held) = tokio::sync::oneshot::channel();
+        shell.hang_up = Some(held);
+        let id = manager.create_session(Box::new(shell)).expect("session");
+        manager.mark_subscribed(&id).expect("subscribed");
+        eventually("connected", || {
+            manager.list().first().map(|s| s.state) == Some(TerminalState::Connected)
+        })
+        .await;
+        assert_eq!(manager.list()[0].pod, "cart-4f68h");
+
+        manager.close_session(&id).expect("close");
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert_eq!(
+            manager.list().iter().map(|s| s.state).collect::<Vec<_>>(),
+            vec![TerminalState::Closing],
+            "a shell still hanging up is still a shell"
+        );
+        assert_eq!(
+            last_list(&mut event_rx).map(|list| list.len()),
+            Some(1),
+            "the window was told it is closing"
+        );
+
+        release.send(()).expect("hang up");
+        eventually("gone from the registry", || manager.list().is_empty()).await;
+        assert!(closed.load(Ordering::SeqCst), "the adapter was closed");
+        assert_eq!(manager.session_count(), 0);
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        assert_eq!(last_list(&mut event_rx), Some(vec![]));
+    }
+
+    /// The pane went away before it ever attached. Fails if that path skips
+    /// the hang-up or leaves the entry behind.
+    #[tokio::test]
+    async fn a_shell_closed_before_its_pane_attached_is_hung_up_too() {
+        let (event_tx, _event_rx) = broadcast::channel(256);
+        let manager = TerminalManager::new(event_tx);
+        let (shell, closed) = ListedShell::new();
+        let id = manager.create_session(Box::new(shell)).expect("session");
+
+        manager.close_session(&id).expect("close");
+
+        eventually("gone from the registry", || manager.list().is_empty()).await;
+        assert!(closed.load(Ordering::SeqCst));
+    }
+
+    /// Quitting the app is leaving every page at once. Fails if it returns
+    /// before the shells have hung up.
+    #[tokio::test]
+    async fn closing_everything_waits_for_every_shell_to_hang_up() {
+        let (event_tx, _event_rx) = broadcast::channel(256);
+        let manager = TerminalManager::new(event_tx);
+        let (mut first, first_closed) = ListedShell::new();
+        let (mut second, second_closed) = ListedShell::new();
+        first.hang_up_takes = Duration::from_millis(100);
+        second.hang_up_takes = Duration::from_millis(100);
+        let first = manager.create_session(Box::new(first)).expect("one");
+        manager.create_session(Box::new(second)).expect("two");
+        manager.mark_subscribed(&first).expect("subscribed");
+
+        manager.close_all(Duration::from_secs(5)).await;
+
+        assert!(first_closed.load(Ordering::SeqCst));
+        assert!(second_closed.load(Ordering::SeqCst));
+        assert!(manager.list().is_empty());
+    }
+
+    /// A credential plugin's console is this machine's process, not a shell
+    /// in anyone's container. Fails if Activity would count it.
+    #[tokio::test]
+    async fn a_console_on_this_machine_is_not_listed() {
+        let (event_tx, mut event_rx) = broadcast::channel(256);
+        let manager = TerminalManager::new(event_tx);
+        let (adapter, _reads, _delivered) = CountingAdapter::new(b"token");
+        manager.create_session(Box::new(adapter)).expect("session");
+        assert!(manager.list().is_empty());
+        assert_eq!(last_list(&mut event_rx), None);
     }
 
     #[test]

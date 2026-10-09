@@ -10,3 +10,4 @@ pub mod session;
 pub use adapter::TerminalAdapter;
 pub use adapters::{AuthExecAdapter, PodExecAdapter};
 pub use manager::TerminalManager;
+pub use session::{SessionTarget, TerminalSessionInfo, TerminalState};
