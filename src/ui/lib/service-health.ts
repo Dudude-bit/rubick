@@ -84,6 +84,19 @@ export function serviceHealthOf(
 }
 
 /**
+ * Whether nothing a Service publishes serves and the pods every workload
+ * behind it waits on were not read: an address of it not ready is then not
+ * known to be a fault, and every reader of its Endpoints object draws it so.
+ */
+export function podsUnreadOf(published: PublishedCounts | undefined): boolean {
+  return (
+    !!published &&
+    servingCount(published) === 0 &&
+    waitingOn(published.stop) === "podsUnread"
+  );
+}
+
+/**
  * What a Service serving nothing waits on, whether or not its slices list an
  * address yet: a pod pulling its image has none, and is as much coming up as
  * one that has an address and is not ready.

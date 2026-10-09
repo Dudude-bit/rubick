@@ -2,10 +2,11 @@ import { screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vite-plus/test";
 
 import { DataTable } from "@/components/ui/data-table";
-import type { EndpointsInfo } from "@/generated/types";
+import type { EndpointsInfo, ServicePublished } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { renderWithRouter } from "@/test/render";
+import { Backing } from "../../-components/service-backing";
 import { columns } from "./EndpointsList";
 
 /** unready-demo as `list_endpoints_in` returns it: two pods failing readiness. */
@@ -67,5 +68,68 @@ describe("the Endpoints list's IPs column", () => {
     expect(share(unreadyDemo, translate.bind(null, "en") as T).text).toBe(
       "192.168.0.100 (not ready), 192.168.1.187 (not ready)"
     );
+  });
+});
+
+describe("the Endpoints list's Endpoints column", () => {
+  const service = {
+    kind: "Service",
+    name: "unready-demo",
+    namespace: "k8s-gui-test",
+    existence: "present" as const,
+    facts: null,
+  };
+  const published = (
+    why: "podsUnread" | "failingReadiness"
+  ): ServicePublished => ({
+    service,
+    source: "slices",
+    slices: 1,
+    ready: 0,
+    draining: 0,
+    notReady: 2,
+    unrouted: 0,
+    unroutedReady: 0,
+    ports: [],
+    endpoints: [],
+    whole: true,
+    unpublished: [],
+    stop: {
+      reason: "noneReady",
+      service,
+      selector: "app=unready-demo",
+      pods: 2,
+      why,
+    },
+  });
+  const listed = (why: "podsUnread" | "failingReadiness") =>
+    renderWithRouter(
+      <Backing.Provider
+        value={{ published: () => published(why), why: () => null }}
+      >
+        <DataTable columns={columns()} data={[unreadyDemo]} />
+      </Backing.Provider>
+    );
+
+  /**
+   * Marco's ledger, pods unread: its row drew an amber "1 not ready" while
+   * its page and peek said grey "none ready" with the not-read mark. Fails
+   * if the row draws a fault's colour, or loses the mark, there.
+   */
+  it("draws addresses not ready with the not-read mark while the Service's pods are unread", async () => {
+    await listed("podsUnread");
+    const pill = screen.getByText("2 not ready");
+    expect(pill).not.toHaveClass("text-warn");
+    expect(
+      within(pill).getByRole("img", { name: "pods not read" })
+    ).toBeInTheDocument();
+  });
+
+  /** Fails if addresses its pods do explain lose the amber the page draws them in. */
+  it("draws addresses not ready amber once the Service's pods were read", async () => {
+    await listed("failingReadiness");
+    const pill = screen.getByText("2 not ready");
+    expect(pill).toHaveClass("text-warn");
+    expect(within(pill).queryByRole("img")).toBeNull();
   });
 });

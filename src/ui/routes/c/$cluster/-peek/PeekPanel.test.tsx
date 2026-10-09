@@ -2647,7 +2647,7 @@ describe("PeekPanel traffic chain", () => {
    * service" beside a Status saying its pods were not read, while the object
    * listed the pod's address as not ready. Fails if the header draws a
    * verdict the Service does not, or the address listed not ready is
-   * dropped from the count.
+   * dropped from the count or drawn amber, a fault nobody could confirm.
    */
   it("draws an Endpoints peek whose pods were not read without a fault, and lists its address not ready", async () => {
     const service = objRef("Service", "frontend", "storefront");
@@ -2706,7 +2706,10 @@ describe("PeekPanel traffic chain", () => {
     expect(
       screen.getByRole("link", { name: /frontend-76bccd5b44-499fh/ })
     ).toBeInTheDocument();
-    expect(screen.getByText("not ready")).toHaveClass("text-warn");
+    expect(screen.getByText("not ready")).not.toHaveClass("text-warn");
+    expect(
+      screen.getAllByRole("img", { name: "pods not read" }).length
+    ).toBeGreaterThan(0);
   });
 
   it("names the Service an Endpoints publishes for, above it", async () => {

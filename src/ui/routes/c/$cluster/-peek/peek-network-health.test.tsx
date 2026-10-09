@@ -213,6 +213,86 @@ describe("the peek draws a network object's verdict as its page does", () => {
     expect(screen.queryByText("no endpoints")).toBeNull();
   });
 
+  describe("an Endpoints peek's addresses not ready", () => {
+    const unready = {
+      name: "web",
+      namespace: "net",
+      createdAt: null,
+      subsets: [
+        {
+          addresses: [],
+          notReadyAddresses: [
+            {
+              ip: "10.42.1.182",
+              hostname: null,
+              nodeName: "agent-0",
+              targetRef: { kind: "Pod", name: "web-499fh", namespace: "net" },
+            },
+          ],
+          ports: [],
+        },
+      ],
+    } as unknown as EndpointsInfo;
+    const answered = (why: "podsUnread" | "failingReadiness") => {
+      answer.connections = () =>
+        Promise.resolve(
+          connections([
+            {
+              ...EMPTY_SLICE,
+              unrouted: 0,
+              unroutedReady: 0,
+              notReady: 1,
+              stop: {
+                reason: "noneReady",
+                service: EMPTY_SLICE.service,
+                selector: "app=web",
+                pods: 1,
+                why,
+              },
+            },
+          ])
+        );
+      const items = resolveSource(target("Endpoints"))
+        .summarise(unready, target("Endpoints"), t)
+        .groups.flatMap((group) => group.items);
+      return renderWithRouter(
+        <>
+          {items.find((item) => item.label === "Not ready")?.value}
+          {
+            items.find(
+              (item) =>
+                item.label !== "Not ready" &&
+                item.label !== "Status" &&
+                item.label !== "Ports"
+            )?.value
+          }
+        </>
+      );
+    };
+
+    /**
+     * Marco's ledger, pods unread: the peek's header said grey "none ready"
+     * while its Not ready count and its pod row were amber. Fails if either
+     * draws a fault's colour, or loses the not-read mark, while the pods
+     * were not read.
+     */
+    it("draws them without amber, with the not-read mark, while the pods are unread", async () => {
+      await answered("podsUnread");
+      expect(
+        await screen.findAllByRole("img", { name: "pods not read" })
+      ).toHaveLength(2);
+      expect(screen.getByText("not ready")).not.toHaveClass("text-warn");
+      expect(screen.getByText("1")).not.toHaveClass("text-warn");
+    });
+
+    /** Fails if addresses its pods do explain lose their amber. */
+    it("draws them amber once the pods were read", async () => {
+      await answered("failingReadiness");
+      expect(await screen.findByText("not ready")).toHaveClass("text-warn");
+      expect(screen.queryByRole("img", { name: "pods not read" })).toBeNull();
+    });
+  });
+
   /** An Ingress whose class nothing serves says so in its peek. */
   it("names the missing controller on the Ingress peek", async () => {
     await renderWithRouter(

@@ -19,7 +19,11 @@ function backendsOf(endpoints: EndpointsInfo): Backend[] {
   ]);
 }
 
-export function endpointsStats(endpoints: EndpointsInfo, t: T): ReportStat[] {
+export function endpointsStats(
+  endpoints: EndpointsInfo,
+  t: T,
+  podsUnread: boolean
+): ReportStat[] {
   const backends = backendsOf(endpoints);
   const ready = backends.filter((b) => b.ready).length;
   const notReady = backends.length - ready;
@@ -29,7 +33,8 @@ export function endpointsStats(endpoints: EndpointsInfo, t: T): ReportStat[] {
     {
       label: t("columns", "notReadyCount"),
       value: String(notReady),
-      role: notReady > 0 ? "warn" : undefined,
+      role: notReady > 0 ? (podsUnread ? "neutral" : "warn") : undefined,
+      unread: notReady > 0 && podsUnread,
     },
     { label: t("columns", "ports"), value: String(ports.length) },
   ];
@@ -37,7 +42,8 @@ export function endpointsStats(endpoints: EndpointsInfo, t: T): ReportStat[] {
 
 export function endpointsAddressesSection(
   endpoints: EndpointsInfo,
-  t: T
+  t: T,
+  podsUnread: boolean
 ): PlacedSection {
   const backends = backendsOf(endpoints);
   return {
@@ -59,7 +65,8 @@ export function endpointsAddressesSection(
           { text: address.ip, mono: true },
           {
             text: ready ? t("empty", "readyOne") : t("empty", "notReadyOne"),
-            role: ready ? "ok" : "err",
+            role: ready ? "ok" : podsUnread ? "neutral" : "err",
+            unread: !ready && podsUnread,
           },
           address.targetRef
             ? {
@@ -90,17 +97,20 @@ export function endpointsAddressesSection(
 
 /**
  * What the Endpoints page adds to Share: how many addresses answer and how
- * many do not, and the addresses themselves with the pod each one names.
+ * many do not, and the addresses themselves with the pod each one names,
+ * those not ready without a fault's colour where the Service's pods were
+ * not read to say why.
  */
 export function useEndpointsShare(
-  endpoints: EndpointsInfo | undefined
+  endpoints: EndpointsInfo | undefined,
+  podsUnread: boolean
 ): () => ShareContribution {
   const t = useT();
   return useCallback((): ShareContribution => {
     if (!endpoints) return {};
     return {
-      stats: endpointsStats(endpoints, t),
-      sections: [endpointsAddressesSection(endpoints, t)],
+      stats: endpointsStats(endpoints, t, podsUnread),
+      sections: [endpointsAddressesSection(endpoints, t, podsUnread)],
     };
-  }, [endpoints, t]);
+  }, [endpoints, t, podsUnread]);
 }

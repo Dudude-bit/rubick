@@ -23,6 +23,7 @@ import { None } from "@/components/ui/none";
 import { AddressesCell } from "./EndpointAddresses";
 import { NoEndpoints } from "./NoEndpoints";
 import { BackingAround } from "../../-components/ServiceBacking";
+import { NotReadyPill } from "./NotReadyPill";
 
 /** Every address the object holds: an unready one is still an address. */
 const addressesOf = (endpoints: EndpointsInfo) =>
@@ -99,13 +100,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
           {notReadyCount > 0 && (
             <Tooltip disableHoverableContent={false}>
               <TooltipTrigger>
-                <Badge variant="warning">
-                  <T
-                    section="count"
-                    k="nNotReady"
-                    values={{ n: notReadyCount }}
-                  />
-                </Badge>
+                <NotReadyPill endpoints={row.original} n={notReadyCount} />
               </TooltipTrigger>
               <TooltipContent>
                 <div className="space-y-1 text-xs">

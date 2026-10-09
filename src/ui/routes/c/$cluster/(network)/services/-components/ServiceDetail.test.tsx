@@ -212,7 +212,7 @@ it("draws no verdict anywhere on the page while its Status is still reading", as
     })
   );
   await waitFor(() => expect(asked).toBe(1));
-  expect(screen.getByText("still reading")).toBeInTheDocument();
+  expect(screen.getAllByText("still reading")).toHaveLength(2);
   expect(screen.queryByText(/No pod carries/)).toBeNull();
 
   sendTo(
@@ -225,13 +225,13 @@ it("draws no verdict anywhere on the page while its Status is still reading", as
     { op: "synced" }
   );
 
-  expect(await screen.findByText("still reading")).toBeInTheDocument();
+  expect(await screen.findAllByText("still reading")).toHaveLength(2);
   expect(screen.queryByText(/No pod carries/)).toBeNull();
   expect(screen.queryByText("no endpoints")).toBeNull();
   await waitFor(() => expect(asked).toBe(2));
 
   release({ ...neighbourhood(1), readAt: new Date().toISOString() });
-  expect(await screen.findByText("1 ready")).toBeInTheDocument();
+  expect(await screen.findAllByText("1 ready")).toHaveLength(2);
 });
 
 /**
@@ -257,7 +257,7 @@ it("says the Service no longer exists the moment its watch sees it deleted", asy
     at: "/c/k3d-rubick/services/shop/big-pull",
     route: "/c/$cluster/services/$namespace/$name",
   });
-  expect(await screen.findByText("1 ready")).toBeInTheDocument();
+  expect((await screen.findAllByText("1 ready")).length).toBeGreaterThan(0);
   await waitFor(() =>
     expect(invoke).toHaveBeenCalledWith("resource_watch_subscribed", {
       streamId: "object-stream",
@@ -314,4 +314,24 @@ it("says live in its header while its own watch feeds it, and not once that watc
   sendTo("object-stream", { op: "failed" });
   expect(await screen.findByText("polling")).toBeInTheDocument();
   expect(screen.queryByText("live")).toBeNull();
+});
+
+/**
+ * Marco's ledger: the Service's page header carried no verdict at all while
+ * its peek's header, and its Deployment's and Endpoints' pages, carried the
+ * grey one. Fails if the page's header draws no verdict, or another than its
+ * Status row's.
+ */
+it("draws in its header the verdict its Status row and its peek draw", async () => {
+  vi.mocked(invoke).mockImplementation(async (command: string) => {
+    if (command === "get_service") return SERVICE;
+    if (command === "get_resource_connections") return neighbourhood(1);
+    return undefined;
+  });
+  await renderWithRouter(<ServiceDetail />, {
+    at: "/c/k3d-rubick/services/shop/big-pull",
+    route: "/c/$cluster/services/$namespace/$name",
+  });
+
+  expect(await screen.findAllByText("1 ready")).toHaveLength(2);
 });

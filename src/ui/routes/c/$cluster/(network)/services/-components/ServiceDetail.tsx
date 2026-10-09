@@ -288,6 +288,7 @@ export function ServiceDetail() {
       title={service?.name || ""}
       namespace={service?.namespace}
       createdAt={service?.createdAt}
+      statusBadge={service && <ServiceVerdict read={read} compact />}
       badges={
         service && (
           <span className="text-[11px] text-fg-mut">{service.type}</span>
