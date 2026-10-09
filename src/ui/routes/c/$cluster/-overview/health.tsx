@@ -4,7 +4,7 @@ import { CircleSlash, Loader2, Lock, TriangleAlert } from "lucide-react";
 
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Composition } from "@/components/object/detail-blocks";
-import { ResourceMessage } from "@/components/object/ResourceMessage";
+import { Prose, ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useShareSection } from "@/components/share/screen-share";
@@ -137,8 +137,11 @@ function AttentionDetailText({ item }: { item: AttentionItem }) {
         }}
       />
     );
-  if (detail.says === "ours") return <>{detail.text}</>;
-  return <>{composedDetail(detail, t)}</>;
+  return (
+    <Prose
+      text={detail.says === "ours" ? detail.text : composedDetail(detail, t)}
+    />
+  );
 }
 
 /** The class an Ingress under the missing-class line lacks, in place of the line's sentence. */

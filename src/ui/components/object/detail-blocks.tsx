@@ -248,7 +248,9 @@ function ConditionRow({
         {condition.reason && detail !== condition.reason && (
           <span className="font-mono">{condition.reason} </span>
         )}
-        {detail && <ResourceMessage message={detail} subject={subject} />}
+        {detail && (
+          <ResourceMessage message={detail} subject={subject} oneLine />
+        )}
         {held && (
           <span className="text-fg-fnt" title={stamp}>
             <T section="count" k="heldFor" values={{ age }} />
@@ -702,7 +704,11 @@ const EventRow = memo(function EventRow({
         {event.message && (
           <span className="text-fg-fnt">
             {showObject ? ": " : ""}
-            <ResourceMessage message={event.message} subject={subject} />
+            <ResourceMessage
+              message={event.message}
+              subject={subject}
+              oneLine
+            />
           </span>
         )}
       </span>

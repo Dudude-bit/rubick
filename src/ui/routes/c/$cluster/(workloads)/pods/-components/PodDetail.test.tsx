@@ -396,7 +396,9 @@ describe("a pod the scheduler has not placed yet", () => {
     expect(tone("Unschedulable")).toContain("text-info");
     expect(tone("unscheduled")).toContain("text-info");
     expect(tone("0 of 1 ready")).toContain("text-info");
-    expect(screen.getAllByText(SAID).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText((_, node) => node?.textContent === SAID).length
+    ).toBeGreaterThan(0);
     const conditions = () => screen.getByRole("tab", { name: /^Conditions/ });
     expect(conditions()).toHaveAccessibleName(
       "Conditions: Waiting to be placed on a node"

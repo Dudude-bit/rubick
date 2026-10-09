@@ -92,7 +92,11 @@ function MessageCell({ row }: { row: { original: EventInfo } }) {
   return (
     <span className="text-fg-fnt" title={event.message ?? undefined}>
       {event.message ? (
-        <ResourceMessage message={event.message} subject={subjectOf(event)} />
+        <ResourceMessage
+          message={event.message}
+          subject={subjectOf(event)}
+          oneLine
+        />
       ) : (
         <None />
       )}
