@@ -60,8 +60,10 @@ const NOT_FOUND = Object.assign(new Error('pods "api-7bcd" not found'), {
 const PATH = "/c/prod/pods/default/api-7bcd";
 
 /** Mounted at a route, because the hook reads the name out of the path. */
-async function detail(fetchResource: (name: string) => Promise<Pod>) {
-  const client = testQueryClient();
+async function detail(
+  fetchResource: (name: string) => Promise<Pod>,
+  client = testQueryClient()
+) {
   const result = {} as {
     current: UseResourceDetailResult<Pod>;
     owners: Owner[] | undefined;
@@ -197,6 +199,68 @@ describe("a detail page whose object is deleted", () => {
     await waitFor(() => expect(result.current.error).toBe(NOT_FOUND));
     expect(result.current.name).toBe("web-0");
     expect(result.owners).toBeUndefined();
+  });
+});
+
+describe("a detail page whose object is made again under its name", () => {
+  const KEY = queryKeys.detail("Pod", "default", "api-7bcd");
+
+  /**
+   * Sam closed big-pull's page after deleting it, applied it again and
+   * opened the page: for a frame it said "This Deployment no longer exists"
+   * from the deletion before. Fails if a NotFound answered before the page
+   * opened is drawn while the page's own read is on its way.
+   */
+  it("draws no NotFound from before it opened while its own read is on its way", async () => {
+    const client = testQueryClient();
+    client.setQueryData(KEY, { name: "api-7bcd" });
+    await client
+      .fetchQuery({ queryKey: KEY, queryFn: () => Promise.reject(NOT_FOUND) })
+      .catch(() => undefined);
+    let release: (pod: Pod) => void = () => {};
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockReturnValueOnce(new Promise<Pod>((resolve) => (release = resolve)));
+
+    const { result } = await detail(fetch, client);
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    expect(result.current.error).toBeNull();
+    expect(result.current.isLoading).toBe(true);
+    expect(result.current.resource).toBeUndefined();
+
+    await act(async () => release({ name: "api-7bcd" }));
+    await waitFor(() => expect(result.current.resource).toBeDefined());
+  });
+
+  /**
+   * Once the watch on its name lists the object again, a page still holding
+   * the NotFound is behind it. Fails if "no longer exists" is drawn beside
+   * an object the watch has seen since.
+   */
+  it("draws no NotFound once the watch on its name has seen the object since", async () => {
+    let release: (pod: Pod) => void = () => {};
+    const fetch = vi
+      .fn<(name: string) => Promise<Pod>>()
+      .mockResolvedValueOnce({ name: "api-7bcd" })
+      .mockRejectedValueOnce(NOT_FOUND)
+      .mockReturnValue(new Promise<Pod>((resolve) => (release = resolve)));
+    const client = testQueryClient();
+    const { result } = await detail(fetch, client);
+    await waitFor(() => expect(result.current.resource).toBeDefined());
+    result.current.refetch();
+    await waitFor(() => expect(result.current.error).toBe(NOT_FOUND));
+
+    await act(async () => {
+      client.setQueryData(queryKeys.objectWatch("Pod", "default", "api-7bcd"), {
+        rows: [{ name: "api-7bcd", namespace: "default" }],
+        unread: [],
+      });
+    });
+
+    await waitFor(() => expect(result.current.error).toBeNull());
+    expect(result.current.isLoading).toBe(true);
+    await act(async () => release({ name: "api-7bcd" }));
+    await waitFor(() => expect(result.current.resource).toBeDefined());
   });
 });
 
