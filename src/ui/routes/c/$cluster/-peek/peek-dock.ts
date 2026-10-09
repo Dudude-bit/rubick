@@ -1,4 +1,9 @@
-import { createContext, useContext, type CSSProperties } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  type CSSProperties,
+} from "react";
 
 import { usePeek } from "@/hooks/usePeek";
 import { usePeekWidth } from "./peek-width";
@@ -23,4 +28,18 @@ export function usePeekDock(): CSSProperties | undefined {
   const { target } = usePeek();
   const { width } = usePeekWidth();
   return target ? { marginRight: width } : undefined;
+}
+
+/** The box only clips. A focus that scrolled it, into a peek still sliding in, pushed the page and the peek 97 px left. */
+export function useHostUnscrolled(): void {
+  const host = useContext(PeekHost);
+  useEffect(() => {
+    if (!host) return;
+    const pin = () => {
+      host.scrollLeft = 0;
+      host.scrollTop = 0;
+    };
+    host.addEventListener("scroll", pin);
+    return () => host.removeEventListener("scroll", pin);
+  }, [host]);
 }

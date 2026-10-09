@@ -10,7 +10,7 @@ import { usePeekWidth } from "./peek-width";
 import { SurfaceVisibility, useSurfaceVisible } from "@/lib/surface-visibility";
 import { cn } from "@/lib/utils";
 import { peekLanding } from "../-object/attachment";
-import { usePeekHost } from "./peek-dock";
+import { useHostUnscrolled, usePeekHost } from "./peek-dock";
 import { usePeekEscape } from "./peek-escape";
 
 /** The sheet's `data-[state=closed]:duration-300`, with room to finish. */
@@ -44,6 +44,7 @@ export function PeekPanel() {
   // pods with Logs open should stay on Logs rather than resetting each time.
   const [requestedTab, setRequestedTab] = useState<PeekTabId>("overview");
   usePeekEscape(!!target, close);
+  useHostUnscrolled();
 
   // After the window has drawn, so the body is not what delays it — and
   // before the first click, so the first peek opens whole.

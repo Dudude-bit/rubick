@@ -22,7 +22,10 @@ export function useAppSearchValue<K extends keyof AppSearch>(
   } as never) as AppSearch[K] | undefined;
 }
 
-/** Writes part of the query in place, keeping the rest of it. */
+/**
+ * Writes part of the query in place, keeping the rest of it and every scroll
+ * box where it is: the router's restore put each back where it was before.
+ */
 export function useSetSearch(): (
   patch: Partial<AppSearch>,
   options?: { replace?: boolean }
@@ -39,6 +42,7 @@ export function useSetSearch(): (
           return next;
         },
         replace: options?.replace ?? true,
+        resetScroll: false,
       } as Parameters<typeof navigate>[0]),
     [navigate]
   );

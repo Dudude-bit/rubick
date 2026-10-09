@@ -1136,7 +1136,9 @@ function ControllerTab({
           <p className="text-[11px] text-fg-fnt">
             {parts(t("empty", "startedWithFlag"), {
               flag: (
-                <span className="font-mono">--controller-class={flag}</span>
+                <span className="whitespace-nowrap font-mono">
+                  --controller-class={flag}
+                </span>
               ),
             })}
           </p>

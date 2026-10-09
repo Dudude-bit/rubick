@@ -4861,7 +4861,7 @@ export const en = {
   myAccess: {
     title: "What you may do",
     description:
-      "The rules the cluster says apply to you, ClusterRoleBindings included, as kubectl auth can-i --list prints them.",
+      "The rules the cluster says apply to you, ClusterRoleBindings included, as {command} prints them.",
     perNamespace:
       "Rules are granted per namespace, so there is no one answer for every namespace. Choose one, and this page answers for it.",
     couldNotAsk: "Could not ask the cluster what you may do in {namespace}.",

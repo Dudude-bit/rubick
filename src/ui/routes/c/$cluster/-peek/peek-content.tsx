@@ -229,7 +229,7 @@ export function PeekContent({
       // the page and Escape closes without the reader aiming first.
       onOpenAutoFocus={(event) => {
         event.preventDefault();
-        contentRef.current?.focus();
+        contentRef.current?.focus({ preventScroll: true });
       }}
       aria-describedby={undefined}
       style={{ width }}
@@ -435,7 +435,7 @@ function PeekResizeHandle({
         // Keeps the drag from selecting the text behind it; focus has to be
         // asked for explicitly once the default is gone.
         event.preventDefault();
-        event.currentTarget.focus();
+        event.currentTarget.focus({ preventScroll: true });
       }}
       onPointerMove={(event) => {
         if (drag.current) onPreview(widthAt(event));

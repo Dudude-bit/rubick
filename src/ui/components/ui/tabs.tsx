@@ -2,7 +2,14 @@ import * as React from "react";
 import * as TabsPrimitive from "@radix-ui/react-tabs";
 import { cn } from "@/lib/utils";
 
-const Tabs = TabsPrimitive.Root;
+/** Arrows move the focus and Enter or Space opens: a tab can start a shell or a stream, and walking past one must not. */
+const Tabs = React.forwardRef<
+  React.ElementRef<typeof TabsPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof TabsPrimitive.Root>
+>(({ activationMode = "manual", ...props }, ref) => (
+  <TabsPrimitive.Root ref={ref} activationMode={activationMode} {...props} />
+));
+Tabs.displayName = TabsPrimitive.Root.displayName;
 
 const TabsList = React.forwardRef<
   React.ElementRef<typeof TabsPrimitive.List>,

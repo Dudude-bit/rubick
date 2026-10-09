@@ -1,8 +1,17 @@
-import { act } from "@testing-library/react";
+import {
+  createMemoryHistory,
+  createRootRoute,
+  createRoute,
+  createRouter,
+  Outlet,
+  RouterProvider,
+} from "@tanstack/react-router";
+import { act, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
+import { appSearch } from "@/lib/app-search";
 import { renderWithRouter } from "@/test/render";
-import { useSearchParam } from "./useSearchParam";
+import { useSearchParam, useSetSearch } from "./useSearchParam";
 
 async function mountAt(at: string) {
   const result = {} as { current: ReturnType<typeof useSearchParam> };
@@ -41,5 +50,52 @@ describe("a query parameter as state", () => {
     await vi.waitFor(() =>
       expect(router.state.location.searchStr).toBe("?tab=routes")
     );
+  });
+});
+
+describe("a query written in place", () => {
+  /**
+   * Lena's second pick from "ещё N" opened its tab and left it off screen:
+   * the strip scrolled to it while the write was drawn, and the router then
+   * put the strip back where it was. Fails if a box scrolled during the
+   * write is moved back afterwards.
+   */
+  it("leaves a box scrolled while it is drawn where it was scrolled to", async () => {
+    let write: ReturnType<typeof useSetSearch> = () => {};
+    function Page() {
+      write = useSetSearch();
+      return <div data-testid="strip" />;
+    }
+    const root = createRootRoute({ component: Outlet });
+    const router = createRouter({
+      routeTree: root.addChildren([
+        createRoute({
+          getParentRoute: () => root,
+          path: "/c/$cluster/$",
+          validateSearch: appSearch,
+          component: Page,
+        }),
+      ]),
+      history: createMemoryHistory({
+        initialEntries: ["/c/prod/pods/shop/web"],
+      }),
+      scrollRestoration: true,
+    });
+    await act(() => router.load());
+    render(<RouterProvider router={router} />);
+    const strip = await screen.findByTestId("strip");
+    strip.scrollLeft = 100;
+    strip.dispatchEvent(new Event("scroll"));
+    const stop = router.subscribe("onBeforeLoad", () => {
+      strip.scrollLeft = 300;
+    });
+
+    act(() => write({ tab: "yaml" }));
+    await vi.waitFor(() =>
+      expect(router.state.location.searchStr).toBe("?tab=yaml")
+    );
+    await act(() => router.load());
+    stop();
+    expect(strip.scrollLeft).toBe(300);
   });
 });

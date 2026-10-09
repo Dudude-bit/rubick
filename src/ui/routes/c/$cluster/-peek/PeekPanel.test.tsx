@@ -910,6 +910,46 @@ describe("PeekPanel", () => {
     host.remove();
   });
 
+  /**
+   * Dana reopened a peek with Enter just after Escape, and the page and the
+   * peek sat 97 px left with the page's edge cut off: the panel's focus
+   * scrolled the page's box toward a panel still sliding in. Fails if the
+   * panel takes the focus with a scroll.
+   */
+  it("takes the focus without scrolling the page's box toward itself", async () => {
+    const focus = vi.spyOn(HTMLElement.prototype, "focus");
+    try {
+      await wrap(POD_PEEK);
+      const dialog = await screen.findByRole("dialog");
+      await waitFor(() => expect(dialog).toHaveFocus());
+      const onDialog = focus.mock.calls.filter(
+        (_, i) => focus.mock.contexts[i] === dialog
+      );
+      expect(onDialog).not.toHaveLength(0);
+      for (const [options] of onDialog)
+        expect(options).toEqual({ preventScroll: true });
+    } finally {
+      focus.mockRestore();
+    }
+  });
+
+  /** Fails if anything that does scroll the page's box leaves the page and the peek shifted. */
+  it("puts the page's box back if anything scrolls it", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await wrap(
+      POD_PEEK,
+      <PeekHost.Provider value={host}>
+        <PeekPanel />
+      </PeekHost.Provider>
+    );
+    await screen.findByRole("dialog");
+    host.scrollLeft = 97;
+    fireEvent.scroll(host);
+    expect(host.scrollLeft).toBe(0);
+    host.remove();
+  });
+
   it("replaces its contents when a reference inside it is clicked", async () => {
     await wrap(POD_PEEK);
     await userEvent.click(
