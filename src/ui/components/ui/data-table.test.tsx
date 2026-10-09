@@ -32,7 +32,8 @@ import {
   TooltipTrigger,
 } from "./tooltip";
 import { helmReleaseLink, hrefOf, objectLink } from "@/lib/links";
-import { renderWithRouter } from "@/test/render";
+import { usePeek } from "@/hooks/usePeek";
+import { renderWithRouter, settle } from "@/test/render";
 import { useShortcuts } from "@/routes/c/$cluster/-shell/useShortcuts";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { useObjectMenuStore } from "@/stores/objectMenuStore";
@@ -2357,6 +2358,35 @@ describe("the search box", () => {
     await waitFor(() => expect(search()).toHaveValue(""));
     // The rows follow the box a render later, through the deferred value.
     await waitFor(() => expect(screen.getByText("a-1")).toBeInTheDocument());
+  });
+});
+
+describe("typing in the search box", () => {
+  /**
+   * Every name link in a list read the whole query to learn the peek, so a
+   * keystroke that wrote `?q=` drew them all again, and the shell's dock with
+   * them. Fails if a reader of the peek is drawn again by the filter.
+   */
+  it("does not draw a reader of the peek again", async () => {
+    let draws = 0;
+    function PeekReader() {
+      usePeek();
+      draws += 1;
+      return null;
+    }
+    await wrap(
+      <>
+        <DataTable<Item> columns={columns} data={DATA} searchParam="q" />
+        <PeekReader />
+      </>
+    );
+    const before = draws;
+    for (const value of ["a", "a-", "a-1"]) {
+      fireEvent.change(search(), { target: { value } });
+      await goesTo(`/c/prod/pods?q=${value}`);
+    }
+    await settle(router);
+    expect(draws).toBe(before);
   });
 });
 

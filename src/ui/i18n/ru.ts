@@ -2872,6 +2872,15 @@ export const ru: Catalogue = {
     sourceLongTask: "Подвисание: окно не отвечало 50 мс или дольше.",
     sourceFrameGap:
       "Подвисание: окно нарисовало кадр с опозданием на 50 мс или больше.",
+    happeningLabel: "Что происходило",
+    stallMs: "{ms} мс",
+    inputTyping: "Ввод в поле «{field}»",
+    inputTypingUnnamed: "Ввод в поле",
+    inputKey: "Клавиша {key}",
+    inputClick: "Нажатие на «{target}»",
+    inputClickUnnamed: "Нажатие",
+    inputNone:
+      "Перед этим ничего не нажимали: работа самого приложения, например пачка watch или пришедший ответ",
     listsLabel: "Большие списки на экране",
     listRows: {
       one: "{n} строка {label}",
@@ -5348,6 +5357,10 @@ export const ru: Catalogue = {
   },
   attached: {
     openedFrom: "Открыто из {object}, который относится сюда.",
+    replicaSetsListedHere:
+      "У ReplicaSet нет своего списка, поэтому открыт список Deployment. Каждый ReplicaSet есть на вкладке «{tab}» того Deployment, которому он принадлежит.",
+    gatewayClassesListedHere:
+      "У GatewayClass нет своего списка, поэтому открыт список Gateway. Каждый Gateway называет свой GatewayClass в столбце «{column}».",
     openOwn: "Открыть его отдельно",
     targetMissing: "Не открыто на цели: {kind} {name} не существует.",
     targetUnread:

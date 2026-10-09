@@ -20,6 +20,8 @@ import {
   rowSortingFeature,
   tableFeatures,
   type CellData,
+  type Column,
+  type TableFeatures,
   type CellContext as VendorCellContext,
   type ColumnDef as VendorColumnDef,
   type Row as VendorRow,
@@ -103,3 +105,32 @@ export type CellContext<
   TData extends RowData,
   TValue extends CellData = CellData,
 > = VendorCellContext<TableStack, TData, TValue>;
+
+const searchableIn = new WeakMap<object, Map<string, boolean>>();
+
+/**
+ * Whether the search box reads a column: the vendor's own rule, a first value
+ * that is a string or a number, asked once per data. The vendor asks before
+ * it looks for an accessor, so for a column without one it walked every row
+ * for a value that never comes, on each keystroke: 10 000 pods, once per
+ * such column.
+ */
+export function searchableColumn<
+  TFeatures extends TableFeatures,
+  TData extends RowData,
+  TValue extends CellData = CellData,
+>(column: Column<TFeatures, TData, TValue>): boolean {
+  if (!column.accessorFn) return false;
+  const rows = column.table.getCoreRowModel().flatRows;
+  let known = searchableIn.get(rows);
+  if (!known) searchableIn.set(rows, (known = new Map()));
+  let answer = known.get(column.id);
+  if (answer === undefined) {
+    const value = rows
+      .find((row) => row.getValue(column.id) != null)
+      ?.getValue(column.id);
+    answer = typeof value === "string" || typeof value === "number";
+    known.set(column.id, answer);
+  }
+  return answer;
+}

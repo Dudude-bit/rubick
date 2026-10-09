@@ -3,6 +3,7 @@ import type { AnyRouter, LinkOptions } from "@tanstack/react-router";
 import {
   getResourceDefinition,
   isResourceType,
+  listedElsewhere,
   listSegment,
   toKind,
   toPlural,
@@ -152,10 +153,11 @@ export function listLink(
   kind: string,
   search?: Record<string, string>
 ): AppLink {
+  const elsewhere = listedElsewhere(kind);
   return {
     to: "/c/$cluster/$resource",
     params: inCluster({ resource: listSegment(kind) }),
-    search,
+    search: elsewhere ? { ...search, listOf: toPlural(elsewhere) } : search,
   } as AppLink;
 }
 

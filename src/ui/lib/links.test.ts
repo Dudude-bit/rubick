@@ -133,6 +133,34 @@ describe("every kind the registry knows", () => {
   });
 });
 
+describe("a kind with no list of its own", () => {
+  /**
+   * Lena clicked ReplicaSet in API resources, and the deep link to
+   * replicasets, and landed on Deployments with no word of why. Fails if
+   * either way in stops saying which kind was asked for.
+   */
+  it.each([
+    ["ReplicaSet", "replicasets", "deployments"],
+    ["GatewayClass", "gatewayclasses", "gateways"],
+  ])(
+    "says %s was asked for, by its link and by its address",
+    async (kind, plural, lands) => {
+      const router = at(`/c/prod/${plural}`);
+      await router.load();
+      const landed = `/c/prod/${lands}?listOf=${plural}`;
+      expect(router.state.location.href).toBe(landed);
+      expect(hrefOf(listLink(kind))).toBe(landed);
+    }
+  );
+
+  /** Fails if a kind with a list of its own is sent there with a note it does not need. */
+  it("adds nothing to a kind that has its own list", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    expect(hrefOf(listLink("Deployment"))).toBe("/c/prod/deployments");
+  });
+});
+
 describe("a served kind's list", () => {
   /** A kind the registry holds opens its own page; a namesake in another group does not. */
   it("opens the registry's page only for that very kind", async () => {

@@ -2721,6 +2721,15 @@ export const en = {
       "A stall is a moment the window could not respond for 50 ms or more.",
     sourceFrameGap:
       "A stall is a moment the window drew a frame 50 ms or more late.",
+    happeningLabel: "What was happening",
+    stallMs: "{ms} ms",
+    inputTyping: "Typing in “{field}”",
+    inputTypingUnnamed: "Typing in a field",
+    inputKey: "Key {key}",
+    inputClick: "Click on “{target}”",
+    inputClickUnnamed: "A click",
+    inputNone:
+      "No input just before it: the app's own work, such as a watch batch or an answer arriving",
     listsLabel: "Big lists on screen",
     listRows: {
       one: "{n} row of {label}",
@@ -4813,6 +4822,10 @@ export const en = {
   // An object whose meaning belongs to one parent, opened there or not.
   attached: {
     openedFrom: "Opened from {object}, which belongs here.",
+    replicaSetsListedHere:
+      "ReplicaSets have no list of their own, so this is the Deployments list. Each ReplicaSet is on the {tab} tab of the Deployment that owns it.",
+    gatewayClassesListedHere:
+      "GatewayClasses have no list of their own, so this is the Gateways list. Each Gateway names its GatewayClass in the {column} column.",
     openOwn: "Open it on its own page",
     targetMissing: "Not opened on its target: {kind} {name} does not exist.",
     targetUnread:

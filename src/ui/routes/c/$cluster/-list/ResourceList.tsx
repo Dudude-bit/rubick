@@ -56,6 +56,7 @@ import {
 } from "@/lib/namespace-scope";
 import type { ListQuery, Scoped, UnreadNamespace } from "@/generated/types";
 import { UnreadNamespaces } from "./UnreadNamespaces";
+import { ListedHere } from "./ListedHere";
 import { StaleRows } from "./StaleRows";
 import { RefusalWayOut, UnreadList } from "./UnreadList";
 import { useListRefusal } from "./useListRefusal";
@@ -564,6 +565,7 @@ export function ResourceList<
           stale={stale || (failed !== null && !isRefusal(failed))}
         />
       )}
+      {!embedded && <ListedHere kind={listKind} />}
       {headerContent}
       {stale && (
         <StaleRows

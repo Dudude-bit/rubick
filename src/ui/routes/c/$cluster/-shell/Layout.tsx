@@ -6,7 +6,7 @@ import { ScopeTabs } from "./ScopeTabs";
 import { StatusBar } from "./StatusBar";
 import { CommandPalette } from "./CommandPalette";
 import { PeekPanel } from "../-peek/PeekPanel";
-import { usePeekDock } from "../-peek/peek-dock";
+import { PeekHost, usePeekDock } from "../-peek/peek-dock";
 import { useYamlEditorStore } from "@/stores/yamlEditorStore";
 import { PageSkeleton } from "@/components/ui/skeleton";
 import { clusterColor } from "@/lib/cluster-identity";
@@ -51,6 +51,7 @@ export function Layout({ page }: { page?: React.ReactNode } = {}) {
   const { hue } = useClusterMark(currentContext);
   const { critical } = useCritical();
   const dock = usePeekDock();
+  const [peekHost, setPeekHost] = useState<HTMLElement | null>(null);
   useScopeTabs();
   useCopyLink();
   useShortcuts();
@@ -94,20 +95,25 @@ export function Layout({ page }: { page?: React.ReactNode } = {}) {
         <Sidebar />
         <div className="flex flex-1 flex-col overflow-hidden">
           <ScopeTabs />
-          <main
-            className="flex-1 overflow-auto scrollbar-thin p-4"
-            style={dock}
+          <div
+            ref={setPeekHost}
+            className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
           >
-            {/* `h-full` is what lets a page opt out of the page scroll: a page
+            <main
+              className="flex-1 overflow-auto scrollbar-thin p-4"
+              style={dock}
+            >
+              {/* `h-full` is what lets a page opt out of the page scroll: a page
                 that sizes itself to this box exactly fills it and this
                 container never gets anything to scroll. Pages taller than it
                 overflow as before. */}
-            <div className="h-full animate-in fade-in duration-200">
-              <Suspense fallback={<PageSkeleton className="p-0" />}>
-                <PageArea page={page} />
-              </Suspense>
-            </div>
-          </main>
+              <div className="h-full animate-in fade-in duration-200">
+                <Suspense fallback={<PageSkeleton className="p-0" />}>
+                  <PageArea page={page} />
+                </Suspense>
+              </div>
+            </main>
+          </div>
           <StatusBar />
         </div>
       </div>
@@ -117,7 +123,9 @@ export function Layout({ page }: { page?: React.ReactNode } = {}) {
       <WhatsNew />
       {/* Outside the outlet: one instance, and it survives the route change
           that `Open full page` performs. */}
-      <PeekPanel />
+      <PeekHost.Provider value={peekHost}>
+        <PeekPanel />
+      </PeekHost.Provider>
     </div>
   );
 }

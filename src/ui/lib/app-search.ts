@@ -25,6 +25,8 @@ export interface AppSearch {
   in?: string;
   /** The namespace a link scopes the window to on arrival. */
   namespace?: string;
+  /** The plural of a kind with no list of its own, on the list that shows it instead. */
+  listOf?: string;
 }
 
 const KEYS: ReadonlyArray<keyof AppSearch> = [
@@ -44,6 +46,7 @@ const KEYS: ReadonlyArray<keyof AppSearch> = [
   "selector",
   "in",
   "namespace",
+  "listOf",
 ];
 
 export function appSearch(raw: Record<string, unknown>): AppSearch {

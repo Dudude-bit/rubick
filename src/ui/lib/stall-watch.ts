@@ -1,10 +1,22 @@
 import { startFrameWatch, type TaskSink } from "@/lib/perf-frames";
 import { rowsOf, type PerfReport, type PerfSample } from "@/lib/perf";
 
-/** A main-thread stall: how long, and when it ended. */
+/** What the reader did last: a key in a field, a key elsewhere, a press on something. */
+export type StallInput =
+  | { kind: "typing"; field: string | null; at: number }
+  | { kind: "key"; key: string; at: number }
+  | { kind: "click"; target: string | null; at: number };
+
+/**
+ * A main-thread stall: how long, when it ended, the address the window was
+ * on, and the reader's input that came just before it, or `null` where none
+ * did and the app was working on its own.
+ */
 export interface Stall {
   ms: number;
   at: number;
+  where: string | null;
+  input: StallInput | null;
 }
 
 /** One backend answer worth remembering: which command, how many rows. */
@@ -39,6 +51,60 @@ export const BIG_LIST_ROWS = 1_000;
 /** Under this an answer is not the reason for anything. */
 export const BIG_ANSWER_ROWS = 1_000;
 const KEEP = 200;
+/** How long before a stall began an input still counts as what set it off. */
+export const INPUT_LEAD_MS = 500;
+const LABEL_CHARS = 40;
+
+const FIELD = "input, textarea, select, [contenteditable]";
+const PRESSABLE =
+  'button, a, [role="button"], [role="tab"], [role="menuitem"], [role="option"], [role="row"], [data-row-index], label';
+
+const words = (text: string | null | undefined): string | null => {
+  const flat = text?.replace(/\s+/g, " ").trim();
+  if (!flat) return null;
+  return flat.length > LABEL_CHARS
+    ? `${flat.slice(0, LABEL_CHARS - 1)}…`
+    : flat;
+};
+
+const nameOf = (element: Element): string | null =>
+  words(
+    element.getAttribute("aria-label") ??
+      element.getAttribute("placeholder") ??
+      element.getAttribute("title") ??
+      element.textContent
+  );
+
+/** An input event as the stall sheet says it. A typed character is never kept, only the field it went into. */
+export function describeInput(
+  event: Event | KeyboardEvent,
+  at: number
+): StallInput | null {
+  const target =
+    typeof Element !== "undefined" && event.target instanceof Element
+      ? event.target
+      : null;
+  if ("key" in event) {
+    if (["Shift", "Control", "Alt", "Meta"].includes(event.key)) return null;
+    const field = target?.closest(FIELD);
+    if (field) return { kind: "typing", field: nameOf(field), at };
+    const chord = [
+      event.ctrlKey && "Ctrl",
+      event.altKey && "Alt",
+      event.metaKey && "Meta",
+      event.shiftKey && event.key.length > 1 && "Shift",
+      event.key === " " ? "Space" : event.key,
+    ].filter(Boolean);
+    return { kind: "key", key: chord.join("+"), at };
+  }
+  const pressed = target?.closest(PRESSABLE) ?? target;
+  return { kind: "click", target: pressed ? nameOf(pressed) : null, at };
+}
+
+const here = (): string | null =>
+  typeof window === "undefined"
+    ? null
+    : `${window.location.pathname}${window.location.search}`;
 /** How long a change waits for the rest of its burst before listeners hear of it. */
 export const REPAINT_MS = 250;
 
@@ -55,11 +121,15 @@ export class StallWatch {
   private lists = new Map<string, OpenList>();
   private listeners = new Set<() => void>();
   private pending: ReturnType<typeof setTimeout> | null = null;
+  private input: StallInput | null = null;
   source: PerfReport["taskSource"] = "none";
 
-  constructor(private now: () => number = () => performance.now()) {}
+  constructor(
+    private now: () => number = () => performance.now(),
+    private where: () => string | null = here
+  ) {}
 
-  /** The frame watch, pointed here instead of at the recorder. */
+  /** The frame watch, pointed here instead of at the recorder, and the reader's input beside it. */
   start(host?: Parameters<typeof startFrameWatch>[1]): () => void {
     const sink: TaskSink = {
       record: (sample: PerfSample) => this.noteStall(sample.ms, sample.at),
@@ -67,11 +137,31 @@ export class StallWatch {
     };
     const stop = startFrameWatch(sink, host);
     this.source = sink.taskSource;
-    return stop;
+    const heard = (event: Event) => {
+      const input = describeInput(event, this.now());
+      if (input) this.input = input;
+    };
+    const options = { capture: true, passive: true };
+    const into = typeof window === "undefined" ? null : window;
+    into?.addEventListener("keydown", heard, options);
+    into?.addEventListener("pointerdown", heard, options);
+    return () => {
+      stop();
+      into?.removeEventListener("keydown", heard, options);
+      into?.removeEventListener("pointerdown", heard, options);
+    };
+  }
+
+  noteInput(input: StallInput): void {
+    this.input = input;
   }
 
   noteStall(ms: number, at: number = this.now()): void {
-    this.stalls.push({ ms, at });
+    const input =
+      this.input && this.input.at >= at - ms - INPUT_LEAD_MS
+        ? this.input
+        : null;
+    this.stalls.push({ ms, at, where: this.where(), input });
     if (this.stalls.length > KEEP) this.stalls.shift();
     this.notify();
   }
@@ -100,6 +190,7 @@ export class StallWatch {
   reset(): void {
     this.stalls = [];
     this.answers = [];
+    this.input = null;
     this.lists.clear();
     this.notify();
   }

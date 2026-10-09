@@ -148,6 +148,82 @@ describe("MostLikelyPanel", () => {
     expect(panel.textContent).not.toContain("no Service in this namespace");
   });
 
+  /**
+   * Sam opened checkout the moment it exited: the panel asked for the run
+   * before the one that had just ended, the node had already dropped that
+   * one, and it said the log of app was gone while kubectl logs printed it.
+   * Fails if a container sitting on its exit is read for the run before,
+   * or one backing off or up between crashes is not.
+   */
+  it.each([
+    [
+      "has just exited",
+      { type: "terminated", reason: "Error", exitCode: 1 },
+      false,
+    ],
+    ["is backing off", { type: "waiting", reason: "CrashLoopBackOff" }, true],
+    ["is up between crashes", { type: "running" }, true],
+  ])(
+    "reads the run that holds the last exit when the container %s",
+    async (_, state, previous) => {
+      const looping = {
+        ...crashing,
+        status: {
+          ...crashing.status,
+          loopingExitAt: new Date(Date.now() - 5_000).toISOString(),
+        },
+        containers: [{ ...crashing.containers[0], state }],
+      } as PodInfo;
+      await mount(looping);
+      await screen.findByTestId("most-likely");
+      await waitFor(() =>
+        expect(commands.getPodLogs).toHaveBeenCalledWith(
+          "payments-7b6d9c5f4-x8k2p",
+          "shop",
+          "app",
+          40,
+          null,
+          previous
+        )
+      );
+    }
+  );
+
+  /**
+   * An OOMKilled container backing off was read for its current run, which
+   * has not started: the kubelet refuses that with "waiting to start", and
+   * the lines before the kill were one run back. Fails if it reads the
+   * current run again.
+   */
+  it("reads the run before for a container killed for memory and backing off", async () => {
+    const killed = {
+      ...crashing,
+      containers: [
+        {
+          ...crashing.containers[0],
+          lastTerminated: {
+            ...crashing.containers[0].lastTerminated!,
+            reason: "OOMKilled",
+            exitCode: 137,
+          },
+          resources: { requests: {}, limits: { memory: "64Mi" } },
+        },
+      ],
+    } as PodInfo;
+    await mount(killed);
+    await screen.findByTestId("most-likely");
+    await waitFor(() =>
+      expect(commands.getPodLogs).toHaveBeenCalledWith(
+        "payments-7b6d9c5f4-x8k2p",
+        "shop",
+        "app",
+        40,
+        null,
+        true
+      )
+    );
+  });
+
   /** A refused log read is a line, not a missing panel. */
   it("names the container whose log it could not read", async () => {
     vi.mocked(commands.getPodLogs).mockRejectedValueOnce(

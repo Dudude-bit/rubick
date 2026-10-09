@@ -3,6 +3,7 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   BIG_ANSWER_ROWS,
   BIG_LIST_ROWS,
+  INPUT_LEAD_MS,
   STALL_WINDOW_MS,
   StallWatch,
 } from "./stall-watch";
@@ -84,5 +85,29 @@ describe("StallWatch", () => {
     watch.noteList("pods", "pods", 4_000);
     watch.noteList("pods", "pods", 12);
     expect(watch.report().lists).toEqual([]);
+  });
+
+  /**
+   * Dana's sheet said "6 stalls, the longest 215 ms" and nothing about what
+   * was going on. Fails if a stall forgets the address, takes an input from
+   * long before it as its cause, or loses the one just before it.
+   */
+  it("keeps with each stall the address and the input that came just before it", () => {
+    let now = 10_000;
+    const watch = new StallWatch(
+      () => now,
+      () => "/c/acme-staging/pods?q=pod-1"
+    );
+    watch.noteInput({ kind: "typing", field: "Search...", at: now });
+    now += 300;
+    watch.noteStall(215);
+    now += INPUT_LEAD_MS + 1_000;
+    watch.noteStall(80);
+    const [typed, alone] = watch.report().stalls;
+    expect(typed).toMatchObject({
+      where: "/c/acme-staging/pods?q=pod-1",
+      input: { kind: "typing", field: "Search..." },
+    });
+    expect(alone.input).toBeNull();
   });
 });

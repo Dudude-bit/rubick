@@ -115,6 +115,20 @@ export function containerSucceeded(container: ReadinessContainer): boolean {
   );
 }
 
+/**
+ * Whether the last exit's output is in the run before the current one. A
+ * container that is *waiting* is backing off from a death whose output
+ * belongs to the run before this one: the current run has printed nothing
+ * yet and may not have started at all. A container that is terminated is
+ * still sitting on the output that killed it, and the run before it may
+ * already be gone from the node.
+ */
+export function readsPreviousRun(container: ContainerInfo): boolean {
+  return (
+    container.lastTerminated !== null && container.state.type !== "terminated"
+  );
+}
+
 export function containerFailed(container: ContainerInfo): boolean {
   const { state } = container;
   if (state.type === "terminated") return !containerSucceeded(container);

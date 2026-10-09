@@ -66,6 +66,9 @@ import { PeekTabBody } from "./PeekTabs";
 import { PeekHeading } from "./peek-heading";
 import { PeekTraffic } from "./peek-traffic";
 import { TabGlyph, TabMark } from "@/components/object/tab-marks";
+import { usePeekHost } from "./peek-dock";
+import { usePodWatch } from "@/hooks/usePodWatch";
+import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { usePeekWidth } from "./peek-width";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
@@ -102,6 +105,7 @@ export function PeekContent({
   const contentRef = useRef<HTMLDivElement>(null);
   const namespace = target.namespace ?? null;
   const { width, min, max, preview, commit } = usePeekWidth();
+  const host = usePeekHost();
 
   const source = useMemo(() => resolveSource(target), [target]);
 
@@ -115,6 +119,12 @@ export function PeekContent({
   });
 
   const gone = error !== null && errorCode(error) === ERROR_CODES.NOT_FOUND;
+  const visible = useSurfaceVisible();
+  usePodWatch(
+    namespace,
+    target.name,
+    !gone && visible && toKind(target.kind) === ResourceType.Pod
+  );
   // The Overview fetch is also what a tab is marked from, so the strip is
   // built after it rather than beside it. A gone object has nothing left to
   // read but the Overview that says so.
@@ -205,7 +215,10 @@ export function PeekContent({
       ref={contentRef}
       side="right"
       showOverlay={false}
+      container={host.container}
+      data-peek=""
       onKeyDown={handleKeyDown}
+      onEscapeKeyDown={(event) => event.preventDefault()}
       // Without a scrim Radix would still close on any outside pointerdown,
       // including the one that picks the next row. Closing here and letting
       // that row's own click reopen the panel is a flicker for no gain; the
@@ -220,7 +233,10 @@ export function PeekContent({
       }}
       aria-describedby={undefined}
       style={{ width }}
-      className="flex max-w-none flex-col gap-0 p-0 sm:max-w-none"
+      className={cn(
+        "flex max-w-none flex-col gap-0 p-0 sm:max-w-none",
+        host.position
+      )}
     >
       <PeekResizeHandle
         width={width}

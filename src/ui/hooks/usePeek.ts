@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from "react";
-import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
+import { useAppSearchValue, useSetSearch } from "@/hooks/useSearchParam";
 import { ResourceType, toKind, toPlural } from "@/lib/resource-registry";
 
 export interface PeekTarget {
@@ -103,8 +103,8 @@ export function peekOfRow<Row>(
  * after a round trip.
  */
 export function usePeek() {
-  const { peek, peekVia } = useAppSearch();
-  const raw = peek ?? null;
+  const raw = useAppSearchValue("peek") ?? null;
+  const peekVia = useAppSearchValue("peekVia");
   const setSearch = useSetSearch();
 
   const target = useMemo<PeekTarget | null>(() => {
