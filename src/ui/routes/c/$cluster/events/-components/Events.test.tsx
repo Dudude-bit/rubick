@@ -65,6 +65,7 @@ import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
 import { startWindowActivity } from "@/lib/window-activity";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { useLocaleStore } from "@/stores/localeStore";
 import type { EventFilters, EventInfo } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
@@ -149,6 +150,7 @@ beforeEach(() => {
   subscribeEventWatch.mockReset();
   subscribeEventWatch.mockRejectedValue(WATCH_REFUSED);
   vi.mocked(commands.resourceWatchSubscribed).mockClear();
+  useDisplaySettingsStore.setState({ eventsView: "stories" });
   useClusterStore.setState((s) => ({
     isConnected: true,
     currentNamespace: "",
@@ -1438,6 +1440,39 @@ describe("stories", () => {
     await userEvent.click(screen.getByRole("tab", { name: "All events" }));
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
     expect(document.body.textContent).toContain("BackOff");
+  });
+
+  /**
+   * Dana chose All events, went elsewhere, and found Stories again each time
+   * Events was opened from the sidebar. Fails if an address that names no
+   * view forgets the one the reader chose last, or overrides one it names.
+   */
+  it("opens on the view the reader chose last when the address names none", async () => {
+    listEvents.mockResolvedValue([warning("prod", "api-7b6d9c5f4-x8k2p", 0)]);
+    const selected = () =>
+      screen
+        .getAllByRole("tab")
+        .find((tab) => tab.getAttribute("aria-selected") === "true")
+        ?.textContent;
+    const first = await renderWithRouter(<Events />, {
+      at: "/c/prod/events",
+      route: "/c/$cluster/events",
+    });
+    await screen.findByRole("article", { name: /api/ });
+    await userEvent.click(screen.getByRole("tab", { name: "All events" }));
+    first.unmount();
+
+    const again = await renderWithRouter(<Events />, {
+      at: "/c/prod/events",
+      route: "/c/$cluster/events",
+    });
+    await waitFor(() => expect(selected()).toBe("All events"));
+    expect(screen.queryByRole("article")).not.toBeInTheDocument();
+    again.unmount();
+
+    await renderWithRouter(<Events />, eventsAt("stories"));
+    expect(await screen.findByRole("article", { name: /api/ })).toBeVisible();
+    expect(selected()).toBe("Stories");
   });
 });
 

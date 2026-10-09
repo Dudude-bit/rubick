@@ -58,6 +58,10 @@ import { listQueryFor, ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn, formatTimeUnit } from "@/lib/utils";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
+import {
+  useDisplaySettingsStore,
+  type EventsView,
+} from "@/stores/displaySettingsStore";
 import type { EventFilters, EventInfo, Scoped } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
@@ -73,8 +77,6 @@ const TYPE_FILTERS: Array<{
 ];
 
 const LIMITS = ["200", "500", "1000", "2000", "all"] as const;
-
-type View = "stories" | "list";
 
 const ORDERS: Array<{ value: StoryOrder; label: keyof typeof en.action }> = [
   { value: "warningsFirst", label: "warningsFirst" },
@@ -163,7 +165,10 @@ export function Events() {
   const [eventLimit, setEventLimit] = useState<string>("500");
   const { view: viewParam, range, q: query = "" } = useAppSearch();
   const setSearch = useSetSearch();
-  const view: View = viewParam === "list" ? "list" : "stories";
+  const remembered = useDisplaySettingsStore((state) => state.eventsView);
+  const setRemembered = useDisplaySettingsStore((state) => state.setEventsView);
+  const view: EventsView =
+    viewParam === "list" || viewParam === "stories" ? viewParam : remembered;
   const window: StoryWindow = isWindow(range) ? range : "1h";
   const [order, setOrder] = useState<StoryOrder>("warningsFirst");
   // In the address, like every other list's search: a term carried here from
@@ -436,11 +441,10 @@ export function Events() {
                       type="button"
                       role="tab"
                       aria-selected={view === candidate}
-                      onClick={() =>
-                        setSearch({
-                          view: candidate === "stories" ? undefined : "list",
-                        })
-                      }
+                      onClick={() => {
+                        setRemembered(candidate);
+                        setSearch({ view: candidate });
+                      }}
                       className={cn(
                         "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
                         view === candidate ? "bg-sel text-fg" : "text-fg-mut"
