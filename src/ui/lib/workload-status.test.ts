@@ -196,13 +196,33 @@ describe("a set's verdict with its pods asked", () => {
     const now = Date.parse(setCorpus.now);
     for (const { name, rollout, pods } of setCorpus.cases) {
       const deadlines = (pods ?? []).flatMap((pod) =>
-        pod.state === "starting" ? [Date.parse(pod.until)] : []
+        pod.state === "starting" || pod.state === "up"
+          ? [Date.parse(pod.until)]
+          : []
       );
       expect(
         withStarts(rollout, pods, lastRunOut(deadlines, now)),
         name
       ).toEqual(withStarts(rollout, pods, now));
     }
+  });
+});
+
+describe("a list's clock", () => {
+  /**
+   * A row whose pod has just come up reads coming up until that window runs
+   * out. Fails if that instant is not one the list wakes at, leaving the row
+   * blue past it until something else redraws the list.
+   */
+  it("wakes when a pod that has just come up runs out of its window", () => {
+    const starts = startsOf([
+      {
+        namespace: "shop",
+        start: { state: "up", until: "2026-10-08T10:09:59Z" },
+        workload: { kind: "Deployment", name: "big-pull" },
+      },
+    ]);
+    expect(starts.deadlines).toEqual([Date.parse("2026-10-08T10:09:59Z")]);
   });
 });
 

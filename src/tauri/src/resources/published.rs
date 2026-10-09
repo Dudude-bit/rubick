@@ -954,7 +954,7 @@ pub fn waiting_on(
             .then_some(NotServing::PodsUnread);
     };
     let starting = pods.iter().all(|pod| match super::pod_start(pod) {
-        PodStart::Settled => true,
+        PodStart::Settled | PodStart::Up { .. } => true,
         PodStart::Starting { until } => until > now,
         PodStart::Failing => false,
     });

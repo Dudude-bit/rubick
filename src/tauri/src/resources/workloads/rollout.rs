@@ -338,6 +338,9 @@ pub fn daemonset_rollout(set: &DaemonSet) -> Rollout {
 pub enum PodStart {
     /// Ready, finished, or on its way out: nothing about it is still to come.
     Settled,
+    /// Ready from its first run: until `until` its controller not counting it
+    /// available yet is the start finishing, not a fault.
+    Up { until: DateTime<Utc> },
     /// Not ready and showing no fault; once `until` passes, the wait is the fault.
     Starting { until: DateTime<Utc> },
     /// Not ready, and showing why it will not be: a stuck container, a
@@ -359,10 +362,16 @@ pub fn pod_start(pod: &Pod) -> PodStart {
         Some("Failed") => return PodStart::Failing,
         _ => {}
     }
+    let restarted = restarts(pod).0 > 0;
     if condition_is_true(status, "Ready") {
-        return PodStart::Settled;
+        return match ready_since(pod) {
+            Some(at) if !restarted => PodStart::Up {
+                until: at + chrono::Duration::seconds(START_GRACE_SECONDS),
+            },
+            _ => PodStart::Settled,
+        };
     }
-    if stuck_reason(pod).is_some() || restarts(pod).0 > 0 {
+    if stuck_reason(pod).is_some() || restarted {
         return PodStart::Failing;
     }
     // The overview calls a pod Pending past this grace a problem, so the set
@@ -380,10 +389,23 @@ pub fn pod_start(pod: &Pod) -> PodStart {
     })
 }
 
+/// When a pod turned Ready, or was made where its condition is undated.
+fn ready_since(pod: &Pod) -> Option<DateTime<Utc>> {
+    pod.status
+        .as_ref()
+        .and_then(|s| s.conditions.as_ref())
+        .and_then(|cs| cs.iter().find(|c| c.type_ == "Ready"))
+        .and_then(|c| c.last_transition_time.as_ref())
+        .or(pod.metadata.creation_timestamp.as_ref())
+        .map(Moment::moment)
+}
+
 /// A workload short of available pods, with none available yet, or whose
 /// newest spec its controller has not read, is coming up while some of its
-/// pods are still starting and none shows a fault; otherwise it stays as it
-/// read.
+/// pods are still starting and none shows a fault, or while more of them
+/// have just come up than it counts available; otherwise it stays as it
+/// read. Sam's big-pull read red "Not available" for the moment between its
+/// pod turning Ready and its controller saying so.
 ///
 /// `src/contracts/set-rollout-conformance.json` holds the answers, and
 /// `withStarts` in `src/ui/lib/workload-status.ts` owes the same ones.
@@ -397,14 +419,16 @@ pub fn with_starts<'a>(
         return rollout;
     };
     let mut coming = false;
+    let mut up = 0;
     for start in starts {
         match start {
             PodStart::Settled => {}
+            PodStart::Up { until } => up += i32::from(*until > now),
             PodStart::Starting { until } if *until > now => coming = true,
             PodStart::Starting { .. } | PodStart::Failing => return rollout,
         }
     }
-    if coming {
+    if coming || up > available {
         Rollout::ComingUp { available, desired }
     } else {
         rollout
@@ -1453,7 +1477,10 @@ mod tests {
         failed.status.as_mut().expect("a status").phase = Some("Failed".to_string());
         assert_eq!(pod_start(&failed), PodStart::Failing);
 
-        assert_eq!(pod_start(&serving("web-0")), PodStart::Settled);
+        assert!(matches!(
+            pod_start(&serving("web-0")),
+            PodStart::Up { until } if until < Utc::now()
+        ));
         let mut leaving = creating("web-1");
         leaving.metadata.deletion_timestamp = leaving.metadata.creation_timestamp.clone();
         assert_eq!(pod_start(&leaving), PodStart::Settled);
@@ -1544,6 +1571,66 @@ mod tests {
                 short
             );
         }
+    }
+
+    /// Sam's big-pull read red "Not available (`MinimumReplicasUnavailable`)"
+    /// for the moment between its only pod turning Ready and its controller
+    /// counting it available. Fails if a pod just come up leaves that
+    /// verdict Unavailable, or one Ready since long ago or after a restart is
+    /// taken for the start finishing.
+    #[test]
+    fn a_fresh_deployment_whose_only_pod_just_turned_ready_is_coming_up() {
+        let fresh = deployment(
+            &Counts {
+                desired: 1,
+                existing: 1,
+                updated: 1,
+                available: 0,
+            },
+            vec![
+                condition("Available", "False", "MinimumReplicasUnavailable", ""),
+                condition("Progressing", "True", "ReplicaSetUpdated", ""),
+            ],
+        );
+        let down = deployment_rollout(&fresh);
+        assert!(matches!(down, Rollout::Unavailable { .. }), "{down:?}");
+        let ready_since = |seconds_ago: i64| {
+            let mut pod = serving("big-pull-mgdwc");
+            pod.status
+                .as_mut()
+                .expect("a status")
+                .conditions
+                .as_mut()
+                .expect("conditions")[0]
+                .last_transition_time =
+                serde_json::from_value(serde_json::json!(at(seconds_ago))).expect("a time");
+            pod
+        };
+        let now = Utc::now();
+
+        assert_eq!(
+            with_pods(down.clone(), &[ready_since(1)], now),
+            Rollout::ComingUp {
+                available: 0,
+                desired: 1
+            }
+        );
+        assert_eq!(
+            with_pods(down.clone(), &[ready_since(START_GRACE_SECONDS + 1)], now),
+            down
+        );
+        let mut restarted = ready_since(1);
+        restarted
+            .status
+            .as_mut()
+            .expect("a status")
+            .container_statuses = Some(vec![serde_json::from_value(serde_json::json!({
+            "name": "app", "image": "app", "imageID": "", "ready": true,
+            "restartCount": 2, "state": { "running": {} },
+        }))
+        .expect("a container status")]);
+        assert_eq!(pod_start(&restarted), PodStart::Settled);
+        assert_eq!(with_pods(down.clone(), &[restarted], now), down);
     }
 
     /// Dana's dana-slow, fresh at 0/1 with its only pod Running and waiting
