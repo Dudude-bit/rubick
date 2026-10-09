@@ -53,6 +53,8 @@ export interface TerminalProps {
   onSize?: (cols: number, rows: number) => void;
   /** `false` where the session outlives the pane and its parent ends it. */
   ownsSession?: boolean;
+  /** What the close button does, in the words of whatever the session is. */
+  closeLabel?: string;
 }
 
 /**
@@ -66,6 +68,7 @@ export function Terminal({
   replay,
   onSize,
   ownsSession = true,
+  closeLabel,
 }: TerminalProps) {
   const t = useT();
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -310,7 +313,7 @@ export function Terminal({
               variant="ghost"
               size="icon"
               onClick={onClose}
-              aria-label={t("action", "closeTerminal")}
+              aria-label={closeLabel ?? t("action", "closeTerminal")}
             >
               ×
             </Button>

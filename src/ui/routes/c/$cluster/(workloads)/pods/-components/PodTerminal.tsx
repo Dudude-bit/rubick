@@ -312,6 +312,7 @@ export function PodTerminal({
         onSize={onSize}
         replay={replay}
         ownsSession={false}
+        closeLabel={t("activity", "endShell", { pod: podName })}
       />
     </div>
   );

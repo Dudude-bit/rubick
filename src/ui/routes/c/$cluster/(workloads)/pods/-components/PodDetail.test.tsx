@@ -194,7 +194,7 @@ describe("a pod page whose pod is deleted while it is open", () => {
     await advance(0);
     fireEvent.mouseDown(screen.getByRole("tab", { name: /^Shell/ }));
     await advance(0);
-    expect(screen.queryByText(/shell session ended/)).toBeNull();
+    expect(screen.queryByText(/shell ended/)).toBeNull();
 
     gone = true;
     for (let read = 0; read < 2; read++) {
@@ -204,7 +204,7 @@ describe("a pod page whose pod is deleted while it is open", () => {
 
     expect(screen.getByText("This Pod no longer exists.")).toBeInTheDocument();
     expect(
-      screen.getByText(/shell session ended: its pod was deleted/)
+      screen.getByText(/shell ended: its pod was deleted/)
     ).toBeInTheDocument();
   });
 
@@ -219,7 +219,7 @@ describe("a pod page whose pod is deleted while it is open", () => {
     await advance(REFRESH_INTERVALS.resourceDetail);
     await advance(0);
     expect(screen.getByText("This Pod no longer exists.")).toBeInTheDocument();
-    expect(screen.queryByText(/shell session ended/)).toBeNull();
+    expect(screen.queryByText(/shell ended/)).toBeNull();
   });
 });
 

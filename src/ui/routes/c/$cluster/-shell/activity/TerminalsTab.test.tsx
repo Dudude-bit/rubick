@@ -31,7 +31,7 @@ afterEach(() => {
   vi.mocked(invoke).mockImplementation(async () => undefined);
 });
 
-describe("Activity's terminals", () => {
+describe("Activity's shells", () => {
   /**
    * Dana left the pages of two shells; Activity said none were open while
    * both still ran. Fails if a shell the backend holds without a pane is
@@ -141,12 +141,12 @@ describe("Activity's terminals", () => {
   it("tells an unread list from an empty one", async () => {
     useClusterStore.setState({ currentContext: "acme-staging" });
     await renderWithRouter(<TerminalsTab />);
-    expect(screen.getByText("Reading the open terminals")).toBeInTheDocument();
+    expect(screen.getByText("Reading the open shells")).toBeInTheDocument();
     expect(screen.queryByText("No shells are open")).toBeNull();
 
     useTerminalSessionStore.setState({ failed: "the bridge is down" });
     expect(
-      await screen.findByText("Could not read the open terminals")
+      await screen.findByText("Could not read the open shells")
     ).toBeInTheDocument();
     expect(screen.getByText("the bridge is down")).toBeInTheDocument();
   });
@@ -166,6 +166,6 @@ describe("Activity's terminals", () => {
 
     expect(
       screen.getByRole("button", { name: "Activity panel" })
-    ).toHaveTextContent("2 terminals");
+    ).toHaveTextContent("2 shells");
   });
 });

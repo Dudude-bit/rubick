@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router";
-import { Terminal, AlertCircle, X } from "lucide-react";
+import { SquareTerminal, AlertCircle, X } from "lucide-react";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
@@ -74,7 +74,7 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
       />
     ) : (
       <ActivityEmpty
-        icon={Terminal}
+        icon={SquareTerminal}
         title={t("activity", "readingTerminals")}
       />
     );
@@ -85,7 +85,7 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
   if (sessions.length === 0) {
     return (
       <ActivityEmpty
-        icon={Terminal}
+        icon={SquareTerminal}
         title={t("empty", "noShellsOpen")}
         hint={t("empty", "openFromPodPage")}
       />

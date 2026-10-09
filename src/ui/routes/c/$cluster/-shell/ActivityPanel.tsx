@@ -5,7 +5,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Activity, Bell, Network, Terminal } from "lucide-react";
+import { Activity, Bell, Network, SquareTerminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import {
@@ -35,7 +35,7 @@ const TABS: Array<{
   icon: typeof Network;
 }> = [
   { id: "ports", label: "ports", icon: Network },
-  { id: "terminals", label: "terminals", icon: Terminal },
+  { id: "terminals", label: "terminals", icon: SquareTerminal },
   { id: "watching", label: "watching", icon: Bell },
 ];
 

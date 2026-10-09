@@ -45,11 +45,13 @@ vi.mock("@/components/terminal/Terminal", async () => {
       onSize,
       replay,
       onClose,
+      closeLabel,
     }: {
       sessionId: string | null;
       onSize?: (cols: number, rows: number) => void;
       replay?: () => string;
       onClose?: () => void;
+      closeLabel?: string;
     }) => {
       pane.close = onClose;
       useEffect(() => {
@@ -61,6 +63,7 @@ vi.mock("@/components/terminal/Terminal", async () => {
           data-testid="terminal-stub"
           data-session-id={sessionId ?? ""}
           data-replay={sessionId ? (replay?.() ?? "") : ""}
+          data-close-label={closeLabel ?? ""}
         />
       );
     },
@@ -273,6 +276,15 @@ describe("a shell the reader exited", () => {
     await renderConnected();
 
     expect(commands.openPodShell).toHaveBeenCalledTimes(1);
+  });
+
+  /** Lena met the same shell as "Терминал" and "Оболочка". Fails if its × calls it anything but a shell. */
+  it("calls its close button ending the shell", async () => {
+    await renderConnected();
+    expect(screen.getByTestId("terminal-stub")).toHaveAttribute(
+      "data-close-label",
+      "End the shell in log-demo-7f9"
+    );
   });
 
   /** Ending it is the reader's own act. Fails if × leaves the shell kept or running. */

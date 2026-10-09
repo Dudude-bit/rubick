@@ -19,9 +19,9 @@ describe("what the activity trigger calls itself", () => {
     expect(activityLabel({ ...none, ports: 3 })).toBe("3 port forwards");
   });
 
-  it("names terminals the same way", () => {
-    expect(activityLabel({ ...none, terminals: 1 })).toBe("1 terminal");
-    expect(activityLabel({ ...none, terminals: 2 })).toBe("2 terminals");
+  it("names shells the same way", () => {
+    expect(activityLabel({ ...none, terminals: 1 })).toBe("1 shell");
+    expect(activityLabel({ ...none, terminals: 2 })).toBe("2 shells");
   });
 
   it("names watches when they are the only thing running", () => {

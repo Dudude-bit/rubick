@@ -5,7 +5,7 @@ import {
   Network,
   RefreshCw,
   Scale,
-  Terminal,
+  SquareTerminal,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
@@ -288,7 +288,7 @@ function podActions(pod: PodInfo | undefined, t: T): PeekAction[] {
     {
       id: "shell",
       label: t("action", "shell"),
-      icon: Terminal,
+      icon: SquareTerminal,
       reason: shellReason,
     },
     {
