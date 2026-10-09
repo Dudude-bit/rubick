@@ -11,6 +11,7 @@ import {
   History,
 } from "lucide-react";
 
+import { Unknown } from "@/components/ui/unknown";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { RolloutBadge, RolloutSummary } from "../../../-object/RolloutSummary";
 import { Button } from "@/components/ui/button";
@@ -38,7 +39,7 @@ import { PodListCard } from "../../../-object/PodListCard";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
   conditionsMark,
-  countMark,
+  readCountMark,
   kindGlyph,
   podsMark,
   viewGlyph,
@@ -147,7 +148,11 @@ export function DeploymentDetail() {
 
   const connections = useConnections(ResourceType.Deployment, name, namespace);
 
-  const { data: revisions = [] } = useLiveQuery({
+  const {
+    data: revisionsRead,
+    error: revisionsError,
+    refetch: refetchRevisions,
+  } = useLiveQuery({
     queryKey: queryKeys.deploymentReplicaSets(namespace, name),
     queryFn: () => commands.getDeploymentReplicasets(name!, namespace || null),
     enabled: !!namespace && !!name,
@@ -155,6 +160,7 @@ export function DeploymentDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
+  const revisions = revisionsRead ?? [];
 
   // For the banner only. The Usage block reads the same query through the
   // same key, so this costs one fetch between them.
@@ -297,7 +303,12 @@ export function DeploymentDetail() {
     refresh: "slow",
   });
 
-  const share = useDeploymentShare(deployment, revisions, pods, podsError);
+  const share = useDeploymentShare(
+    deployment,
+    revisionsError ? null : revisions,
+    pods,
+    podsError
+  );
 
   if (!deployment && !isLoading && !error) {
     return null;
@@ -448,8 +459,16 @@ export function DeploymentDetail() {
       glyph: kindGlyph(ResourceType.ReplicaSet),
       // A count rather than a severity: an old revision at zero is what a
       // rollout leaves behind, not a fault.
-      mark: countMark(revisions.length),
-      content: (
+      mark: revisionsError
+        ? readCountMark(null, t("empty", "revisionsUnread"))
+        : readCountMark(revisionsRead ? revisionsRead.length : null, null),
+      content: revisionsError ? (
+        <Unknown
+          question={t("empty", "revisionsUnread")}
+          error={revisionsError}
+          onRetry={() => void refetchRevisions()}
+        />
+      ) : (
         <RevisionRows
           revisions={revisions}
           onRollback={(rs) => rollback.offer(revisionOfReplicaSet(rs))}

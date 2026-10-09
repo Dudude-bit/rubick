@@ -6878,6 +6878,9 @@ export const ru: Catalogue = {
     readingWhatServicePublishes: "Читаем, что публикует этот Service…",
     couldNotReadWhatServicePublishes:
       "Не удалось прочитать, что публикует этот Service:",
+    publishedUnread: "Не удалось прочитать, что публикует этот Service.",
+    revisionsUnread: "Не удалось прочитать ReplicaSet этого Deployment.",
+    helmHistoryUnread: "Не удалось прочитать историю этого релиза.",
     noAnswer: "нет ответа",
     registeredByHand: "добавлен вручную",
     stillReading: "Всё ещё читаем {label} в {scope}",
@@ -8725,6 +8728,12 @@ export const ru: Catalogue = {
       few: "из {n} узлов",
       many: "из {n} узлов",
       other: "из {n} узлов",
+    },
+    kindsNotLookedAt: {
+      one: "{n} вид не проверялся",
+      few: "{n} вида не проверялись",
+      many: "{n} видов не проверялись",
+      other: "{n} вида не проверялись",
     },
     moreNotDrawn: {
       one: "Ещё {n} адрес не показан, но счётчики выше учитывают всё.",

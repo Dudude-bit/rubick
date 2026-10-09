@@ -59,11 +59,12 @@ export function deploymentStatsOf(
  * the image tags that changed between them.
  */
 export function revisionsSection(
-  revisions: readonly ReplicaSetInfo[],
+  /** `null` when the ReplicaSets could not be read. */
+  revisions: readonly ReplicaSetInfo[] | null,
   capturedAt: string,
   t: T
 ): PlacedSection {
-  const rows = revisions.map((rs) => {
+  const rows = (revisions ?? []).map((rs) => {
     const tags = rs.containers
       .map((c) => parseImageRef(c.image)?.tag)
       .filter((tag): tag is string => Boolean(tag))
@@ -92,7 +93,8 @@ export function revisionsSection(
     order: ORDER.own,
     title: t("nav", "revisions"),
     icon: iconSvg(kindIcon("ReplicaSet")),
-    count: revisions.length,
+    count: revisions?.length ?? null,
+    unread: revisions ? null : t("empty", "revisionsUnread"),
     body: {
       type: "table",
       columns: [
@@ -114,7 +116,8 @@ export function revisionsSection(
  */
 export function useDeploymentShare(
   deployment: DeploymentInfo | undefined,
-  revisions: readonly ReplicaSetInfo[],
+  /** `null` when the ReplicaSets could not be read. */
+  revisions: readonly ReplicaSetInfo[] | null,
   pods: readonly PodInfo[],
   podsError: unknown
 ): (frame: ShareFrame) => ShareContribution {
@@ -138,7 +141,7 @@ export function useDeploymentShare(
           deployment.rollout,
           t
         ),
-        stats: deploymentStatsOf(deployment, revisions, t),
+        stats: deploymentStatsOf(deployment, revisions ?? [], t),
         sections: [
           templateContainersSection(deployment, t),
           revisionsSection(revisions, frame.capturedAt, t),

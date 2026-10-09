@@ -36,6 +36,7 @@ import { TrafficChain } from "../../../-object/TrafficChain";
 import { BalancerAddress } from "../../../-object/BalancerAddress";
 import { ClusterIpValue } from "../../../-object/ClusterIpValue";
 import { ServiceHealthView } from "../../../-object/health-views";
+import { endpointsMark } from "./endpoints-mark";
 import { PublishedEndpoints } from "./PublishedEndpoints";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { useResourceDetail } from "@/hooks";
@@ -43,7 +44,6 @@ import { useConnections } from "@/hooks/useConnections";
 import { useServiceShare } from "./useServiceShare";
 import { ResourceType } from "@/lib/resource-registry";
 import { deliveryOfKind } from "@/lib/delivery";
-import { publishedFor } from "@/lib/published";
 import { commands } from "@/lib/commands";
 import type { ServiceInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -79,9 +79,6 @@ export function ServiceDetail() {
 
   const connections = useConnections(ResourceType.Service, name, namespace);
   const subject = connections.data?.subject ?? null;
-  const published = connections.data
-    ? publishedFor(connections.data, connections.data.subject)
-    : undefined;
   const share = useServiceShare(service, connections);
   const deliveryQuery = deliveryOfKind(ResourceType.Service, service);
   const intercept = useDeliveryIntercept(deliveryQuery);
@@ -245,7 +242,7 @@ export function ServiceDetail() {
       id: "endpoints",
       label: "Endpoints",
       glyph: viewGlyph(Waypoints),
-      mark: countMark(published ? published.ready + published.draining : 0),
+      mark: endpointsMark(connections, subject, t),
       content: subject ? (
         <PublishedEndpoints query={connections} service={subject} />
       ) : null,

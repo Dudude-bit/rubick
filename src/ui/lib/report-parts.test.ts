@@ -102,6 +102,35 @@ describe("graphSections", () => {
   });
 
   /**
+   * Marco's ledger: the Share dialog said "Connections 0" over five kinds
+   * the app never looked at. Fails if a count beside kinds not looked at is
+   * handed over as the whole.
+   */
+  it("says the count is part where some kinds were not looked at", () => {
+    const why = {
+      says: "unanswered",
+      version: "v1",
+      said: "forbidden",
+    } as const;
+    const connections = graphSections(
+      read({
+        notLookedAt: [
+          { kind: "Pod", why },
+          { kind: "Ingress", why },
+        ],
+      }),
+      t,
+      false
+    ).sections.find((section) => section.id === "connections")!;
+    expect(connections.partial).toBe("count.kindsNotLookedAt(n=2)");
+    expect(
+      graphSections(read(), t, false).sections.find(
+        (section) => section.id === "connections"
+      )!.partial
+    ).toBeNull();
+  });
+
+  /**
    * An empty chain and a chain nobody could read are opposite answers. The
    * file printed "Nothing here." for both, so a colleague concluded nothing
    * is wired to this pod at the moment the page said it could not read.

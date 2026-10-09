@@ -28,6 +28,8 @@ import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { ConnectClusterEmptyState } from "@/components/ui/connect-cluster-empty-state";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DangerousConfirmDialog } from "@/components/ui/dangerous-confirm-dialog";
+import type { HelmRevision } from "@/generated/types";
+import { Unknown } from "@/components/ui/unknown";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import {
@@ -43,6 +45,7 @@ import { useToast } from "@/components/ui/use-toast";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
   countMark,
+  readCountMark,
   viewGlyph,
   type DetailTab,
 } from "@/components/object/detail-tab";
@@ -92,6 +95,8 @@ function valuesAsYaml(values: unknown, empty: string): string {
   }
 }
 
+const NO_HISTORY: HelmRevision[] = [];
+
 export function HelmDetail() {
   const t = useT();
   const { source, namespace, name } = useParams({ strict: false });
@@ -131,7 +136,12 @@ export function HelmDetail() {
     enabled: isConnected && !!namespace && !!name && isNative,
   });
 
-  const { data: history = [], isLoading: historyLoading } = useQuery({
+  const {
+    data: historyRead,
+    error: historyError,
+    isLoading: historyLoading,
+    refetch: refetchHistory,
+  } = useQuery({
     queryKey: queryKeys.helm.history(namespace, name),
     queryFn: async () => {
       if (!namespace || !name) return [];
@@ -139,6 +149,7 @@ export function HelmDetail() {
     },
     enabled: isConnected && !!namespace && !!name && isNative,
   });
+  const history = historyRead ?? NO_HISTORY;
 
   const rollbackMutation = useMutation({
     mutationFn: async (revision: number) => {
@@ -296,7 +307,9 @@ export function HelmDetail() {
       id: "history",
       label: t("action", "history"),
       glyph: viewGlyph(History),
-      mark: countMark(history.length),
+      mark: historyError
+        ? readCountMark(null, t("empty", "helmHistoryUnread"))
+        : readCountMark(historyRead ? historyRead.length : null, null),
       content: (
         <Section>
           <SectionHeader
@@ -310,7 +323,13 @@ export function HelmDetail() {
                 : history.length || undefined
             }
           />
-          {historyLoading ? (
+          {historyError ? (
+            <Unknown
+              question={t("empty", "helmHistoryUnread")}
+              error={historyError}
+              onRetry={() => void refetchHistory()}
+            />
+          ) : historyLoading ? (
             <p className="text-xs text-fg-fnt">
               {t("empty", "readingHistory")}
             </p>

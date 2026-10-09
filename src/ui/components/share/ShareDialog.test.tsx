@@ -214,6 +214,30 @@ describe("ShareDialog", () => {
   });
 
   /**
+   * Marco's ledger: the dialog listed "Connections 0" over kinds the app
+   * never looked at. Fails if a count the file calls part is listed as the
+   * whole.
+   */
+  it("lists a count the file calls part as a floor", () => {
+    mount({
+      ...report,
+      sections: [
+        {
+          id: "connections",
+          title: "Connections",
+          icon: "",
+          count: 0,
+          partial: "5 kinds not looked at",
+          body: { type: "connections", groups: [] },
+        },
+      ],
+    });
+    expect(screen.getByText("Connections").parentElement).toHaveTextContent(
+      "Connections 0+"
+    );
+  });
+
+  /**
    * A container that printed a password prints it into the file too; the
    * redaction takes out what it recognises and no more. "No Secret value,
    * ever" over those lines was a promise nothing kept.

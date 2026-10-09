@@ -22,6 +22,8 @@ import { useCapabilities, type RelatedObject } from "@/integrations";
 import { groupOf, useCrdIndex } from "@/hooks/useCrdIndex";
 import { crdInGroup } from "@/lib/links";
 import type { CustomResourceDetailInfo } from "@/generated/types";
+import { readCountMark } from "@/components/object/detail-tab";
+import type { T } from "@/i18n/useT";
 
 /** A related object with its address worked out, which is what a row needs. */
 export interface RelatedRef extends RelatedObject {
@@ -128,4 +130,12 @@ export function useRelatedObjects(
     isPending: enabled && query.isPending,
     error: (query.error as Error) ?? null,
   };
+}
+
+/** The objects the panel lists, and a floor where an integration could not answer. */
+export function relatedMark(query: RelatedObjects, kind: string, t: T) {
+  return readCountMark(
+    query.related.length || null,
+    query.error ? t("empty", "relatedShortBy", { kind }) : null
+  );
 }

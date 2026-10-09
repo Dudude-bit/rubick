@@ -99,6 +99,19 @@ export const countMark = (
   of,
 });
 
+/**
+ * A count of what one read holds, and never a number it has not given:
+ * nothing while it is on its way, a ring where it went unread with nothing
+ * to show, and a floor (`3+`) where part of it went unread.
+ */
+export function readCountMark(
+  count: number | null,
+  unread: string | null
+): DetailTabMark | undefined {
+  if (unread === null) return count === null ? undefined : countMark(count);
+  return count ? countMark(`${count}+`) : { shows: "unchecked", says: unread };
+}
+
 export const severityMark = (
   tone: "err" | "warn",
   says: string

@@ -6255,6 +6255,9 @@ export const en = {
     readingWhatServicePublishes: "Reading what this Service publishes…",
     couldNotReadWhatServicePublishes:
       "Could not read what this Service publishes:",
+    publishedUnread: "Could not read what this Service publishes.",
+    revisionsUnread: "Could not read this Deployment's ReplicaSets.",
+    helmHistoryUnread: "Could not read this release's history.",
     noAnswer: "no answer",
     registeredByHand: "registered by hand",
     stillReading: "Still reading {label} in {scope}",
@@ -7576,6 +7579,10 @@ export const en = {
     nodesReady: "{n} {of} ready",
     ofPods: { one: "of {n} pod", other: "of {n} pods" },
     ofNodes: { one: "of {n} node", other: "of {n} nodes" },
+    kindsNotLookedAt: {
+      one: "{n} kind not looked at",
+      other: "{n} kinds not looked at",
+    },
     moreNotDrawn: {
       one: "{n} more not drawn; the counts above are the whole of it.",
       other: "{n} more not drawn; the counts above are the whole of it.",

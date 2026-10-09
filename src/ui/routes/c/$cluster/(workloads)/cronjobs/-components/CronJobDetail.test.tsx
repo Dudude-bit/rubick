@@ -198,6 +198,20 @@ describe("CronJobDetail", () => {
     );
   });
 
+  /**
+   * The Jobs tab wore "0" while the list of runs was still on its way, a
+   * number the read had not given. Fails if a pending list is counted.
+   */
+  it("wears no number on the Jobs tab while the runs are still being read", async () => {
+    vi.mocked(commands.listJobs).mockImplementationOnce(
+      () => new Promise(() => {})
+    );
+    await renderPage();
+    expect(screen.getByRole("tab", { name: /Jobs/ }).textContent).not.toMatch(
+      /\d/
+    );
+  });
+
   /** The other side: a list that was read and is empty says so. */
   it("says on the Jobs tab that a CronJob with no runs has not run", async () => {
     mockDetail(buildCronJob(), "jobs");

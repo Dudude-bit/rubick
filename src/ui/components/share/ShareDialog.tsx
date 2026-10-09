@@ -297,7 +297,11 @@ export function ShareDialog({
                   <li key={section.id}>
                     <span className="text-fg">{section.title}</span>{" "}
                     <span className="tabular-nums text-fg-fnt">
-                      {section.unread ? "?" : (section.count ?? "")}
+                      {section.unread
+                        ? "?"
+                        : section.partial && section.count != null
+                          ? `${section.count}+`
+                          : (section.count ?? "")}
                     </span>
                   </li>
                 ))}
