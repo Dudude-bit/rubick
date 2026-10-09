@@ -289,6 +289,16 @@ pub struct ReasonCount {
     pub count: usize,
 }
 
+/// What the lists of one kind that answered hold.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Census<T> {
+    pub read: T,
+    /// False when a namespace in scope did not answer, which `unread` names:
+    /// `read` is then part of the scope, not its total.
+    pub complete: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClusterOverview {
@@ -317,14 +327,14 @@ pub struct ClusterOverview {
     /// Objects per kind in the requested scope, for the sidebar and the
     /// composition bars.
     pub counts: ResourceCounts,
-    /// Phase breakdown of the pods in the requested scope; `None` when a
-    /// namespace in it refused them.
-    pub pods: Option<PodComposition>,
-    /// Jobs per word the Jobs list prints; `None` when the list was refused.
-    pub jobs: Option<Vec<ReasonCount>>,
+    /// Phase breakdown of the pods read in the requested scope; `None` when
+    /// no pod list in it answered.
+    pub pods: Option<Census<PodComposition>>,
+    /// Jobs per word the Jobs list prints; `None` when no Job list answered.
+    pub jobs: Option<Census<Vec<ReasonCount>>>,
     /// Deployments per rollout word the Deployments list prints; `None` when
-    /// the list was refused.
-    pub deployments: Option<Vec<ReasonCount>>,
+    /// no Deployment list answered.
+    pub deployments: Option<Census<Vec<ReasonCount>>>,
     /// False when the metrics API is unavailable, so the UI can say so
     /// instead of rendering an empty usage bar that reads as "idle".
     pub metrics_available: bool,
@@ -554,6 +564,23 @@ fn pods_unread_in(unread: &[OverviewUnread], namespace: Option<&str>) -> bool {
         entry.kind == "Pod"
             && (entry.namespace.is_none() || entry.namespace.as_deref() == namespace)
     })
+}
+
+/// Whether the lists of `kind` that answered are the whole scope; `None`
+/// where none did.
+fn census_of(unread: &[OverviewUnread], kind: &str, scope: Option<&[String]>) -> Option<bool> {
+    let missing: Vec<Option<&str>> = unread
+        .iter()
+        .filter(|entry| entry.kind == kind)
+        .map(|entry| entry.namespace.as_deref())
+        .collect();
+    let answered = match scope {
+        None => !missing.contains(&None),
+        Some(names) => names
+            .iter()
+            .any(|name| !missing.contains(&Some(name.as_str()))),
+    };
+    answered.then_some(missing.is_empty())
 }
 
 /// A workload's verdict with its own pods asked, or the controller's alone
@@ -1296,8 +1323,7 @@ struct OverviewInputs<'a> {
     deployments: &'a [Arc<Deployment>],
     stateful_sets: &'a [Arc<StatefulSet>],
     daemon_sets: &'a [Arc<DaemonSet>],
-    /// `None` when a namespace in scope refused its Job list.
-    jobs: Option<&'a [Arc<Job>]>,
+    jobs: &'a [Arc<Job>],
     /// The workload, Job and Node lists that were not read, and where.
     unread: &'a [OverviewUnread],
     events: &'a [Arc<Event>],
@@ -1358,7 +1384,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         unread,
         input.now,
     ));
-    problems.extend(job_problems(input.jobs.into_iter().flat_map(refs)));
+    problems.extend(job_problems(refs(input.jobs)));
     problems.extend(node_problems(refs(nodes)));
     let problems = fold_job_runs(problems, refs(input.scoped_pods));
     // Scoped, the breakdown restates the selection, under a heading that
@@ -1378,10 +1404,11 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         deployments: read("Deployment").then_some(input.deployments.len()),
         stateful_sets: read("StatefulSet").then_some(input.stateful_sets.len()),
         daemon_sets: read("DaemonSet").then_some(input.daemon_sets.len()),
-        jobs: input.jobs.map(<[Arc<Job>]>::len),
+        jobs: read("Job").then_some(input.jobs.len()),
         nodes: input.nodes_known.then_some(input.nodes.len()),
         ..input.counts.clone()
     };
+    let census = |kind: &str| census_of(unread, kind, input.scope);
 
     ClusterOverview {
         problems,
@@ -1392,9 +1419,18 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         warnings: recent_warnings(refs(input.events)),
         warnings_known: input.events_known,
         counts,
-        pods: pods_known.then(|| pod_composition(refs(input.scoped_pods), input.now)),
-        jobs: input.jobs.map(|jobs| job_composition(refs(jobs))),
-        deployments: read("Deployment").then(|| count_codes(rollouts.iter().map(Rollout::code))),
+        pods: census("Pod").map(|complete| Census {
+            read: pod_composition(refs(input.scoped_pods), input.now),
+            complete,
+        }),
+        jobs: census("Job").map(|complete| Census {
+            read: job_composition(refs(input.jobs)),
+            complete,
+        }),
+        deployments: census("Deployment").map(|complete| Census {
+            read: count_codes(rollouts.iter().map(Rollout::code)),
+            complete,
+        }),
         namespaces,
         metrics_available,
         served_from: input.served_from,
@@ -1599,7 +1635,7 @@ fn from_snapshot(snapshot: &Snapshot, scope: Option<&[String]>, sides: Sides) ->
         deployments: &scoped.deployments,
         stateful_sets: &scoped.stateful_sets,
         daemon_sets: &scoped.daemon_sets,
-        jobs: Some(&scoped.jobs),
+        jobs: &scoped.jobs,
         unread: &[],
         events: &scoped.events,
         events_known: true,
@@ -1662,7 +1698,7 @@ struct Gathered {
     deployments: Vec<Arc<Deployment>>,
     stateful_sets: Vec<Arc<StatefulSet>>,
     daemon_sets: Vec<Arc<DaemonSet>>,
-    jobs: Option<Vec<Arc<Job>>>,
+    jobs: Vec<Arc<Job>>,
     events: Vec<Arc<Event>>,
     events_known: bool,
     unread: Vec<OverviewUnread>,
@@ -1699,23 +1735,20 @@ impl Listed {
 /// Every kind feeds problems as well as counts: the problems of the
 /// namespaces that answered stand, the count goes unknown, and the refusal is
 /// carried by kind and namespace. Only a scope where no workload list
-/// answered anywhere fails, with its pods' refusal. Jobs are a count and a
-/// composition, both unknown when any namespace refused. Events are what
+/// answered anywhere fails, with its pods' refusal. Events are what
 /// answered, said to be part.
 fn gather(parts: Vec<Listed>) -> Result<Gathered> {
     let answered = parts.iter().any(Listed::answered);
-    let jobs_known = parts.iter().all(|part| part.jobs.is_ok());
     let mut gathered = Gathered {
         pods: Vec::new(),
         deployments: Vec::new(),
         stateful_sets: Vec::new(),
         daemon_sets: Vec::new(),
-        jobs: None,
+        jobs: Vec::new(),
         events: Vec::new(),
         events_known: parts.iter().all(|part| part.events_known),
         unread: Vec::new(),
     };
-    let mut jobs = Vec::new();
     for part in parts {
         let reach = part.reach.as_deref();
         let unread = &mut gathered.unread;
@@ -1745,10 +1778,9 @@ fn gather(parts: Vec<Listed>) -> Result<Gathered> {
             &mut gathered.daemon_sets,
             unread,
         );
-        take("Job", reach, part.jobs, &mut jobs, unread);
+        take("Job", reach, part.jobs, &mut gathered.jobs, unread);
         gathered.events.extend(arcs(part.events));
     }
-    gathered.jobs = jobs_known.then_some(jobs);
     Ok(gathered)
 }
 
@@ -1834,7 +1866,7 @@ async fn by_listing(
         stateful_sets: &listed.stateful_sets,
         daemon_sets: &listed.daemon_sets,
         unread: &unread,
-        jobs: listed.jobs.as_deref(),
+        jobs: &listed.jobs,
         events: &listed.events,
         events_known: listed.events_known,
         usage_by_node: sides.usage_by_node,
@@ -1964,7 +1996,7 @@ mod tests {
             stateful_sets: &[],
             daemon_sets: &[],
             unread: &[],
-            jobs: Some(&[]),
+            jobs: &[],
             events: &[],
             events_known: true,
             usage_by_node: None,
@@ -2035,7 +2067,7 @@ mod tests {
             stateful_sets: &[],
             daemon_sets: &[],
             unread: &[],
-            jobs: Some(&[]),
+            jobs: &[],
             events: &[],
             events_known: true,
             usage_by_node: None,
@@ -2056,7 +2088,10 @@ mod tests {
         );
         // The workloads the user could read are still on the screen.
         assert_eq!(result.counts.pods, Some(2));
-        assert_eq!(result.pods.expect("every pod list answered").running, 2);
+        assert_eq!(
+            result.pods.expect("every pod list answered").read.running,
+            2
+        );
     }
 
     /// A missing metrics-server comes back as `Ok` with a `NotInstalled`
@@ -2111,7 +2146,7 @@ mod tests {
             stateful_sets: &[],
             daemon_sets: &[],
             unread: &[],
-            jobs: Some(&[]),
+            jobs: &[],
             events: &[],
             events_known: true,
             usage_by_node: usage_index(Some(node_metrics_response(
@@ -2221,7 +2256,7 @@ mod tests {
             stateful_sets: &[],
             daemon_sets: &[],
             unread: &[],
-            jobs: Some(&[]),
+            jobs: &[],
             events: &[],
             events_known: true,
             usage_by_node: None,
@@ -3110,7 +3145,7 @@ mod tests {
                 ),
                 OverviewUnread::of("Job", None, &Error::PermissionDenied("jobs".into())),
             ],
-            jobs: None,
+            jobs: &[],
             events: &[],
             events_known: true,
             usage_by_node: None,
@@ -3156,7 +3191,7 @@ mod tests {
             stateful_sets: &[],
             daemon_sets: &[],
             unread: &[],
-            jobs: Some(&arcs(jobs)),
+            jobs: &arcs(jobs),
             events: &[],
             events_known: true,
             usage_by_node: None,
@@ -3452,7 +3487,7 @@ mod tests {
             stateful_sets: &arcs(stateful_sets.to_vec()),
             daemon_sets: &arcs(daemon_sets.to_vec()),
             unread: &[],
-            jobs: Some(&arcs(jobs.to_vec())),
+            jobs: &arcs(jobs.to_vec()),
             events: &[],
             events_known: true,
             usage_by_node: None,
@@ -3659,7 +3694,7 @@ mod tests {
                 stateful_sets: &[],
                 daemon_sets: &[],
                 unread: &[],
-                jobs: Some(&[]),
+                jobs: &[],
                 events: &[],
                 events_known: true,
                 usage_by_node: None,
@@ -3769,7 +3804,7 @@ mod tests {
             stateful_sets: &[],
             daemon_sets: &[],
             unread: &[],
-            jobs: Some(&arcs(vec![job("reports-1", true), job("reports-2", false)])),
+            jobs: &arcs(vec![job("reports-1", true), job("reports-2", false)]),
             events: &[],
             events_known: true,
             usage_by_node: None,
@@ -4371,7 +4406,10 @@ mod across_namespaces {
         assert_eq!(pods[0].namespace.as_deref(), Some(STAGING));
         assert_eq!(pods[0].code, "PERMISSION_DENIED");
         assert_eq!(overview.counts.pods, None, "not prod's pods as the scope's");
-        assert!(overview.pods.is_none());
+        let pods = overview.pods.expect("prod's pod list answered");
+        assert!(!pods.complete, "prod's pods drawn as the scope's");
+        assert_eq!(pods.read.running, 1);
+        assert_eq!(pods.read.crash_looping, 1);
         assert!(overview
             .problems
             .iter()
@@ -4384,10 +4422,13 @@ mod across_namespaces {
         assert_eq!(overview.counts.deployments, Some(1));
         assert_eq!(
             overview.deployments,
-            Some(vec![ReasonCount {
-                reason: "Unavailable".to_string(),
-                count: 1,
-            }])
+            Some(Census {
+                read: vec![ReasonCount {
+                    reason: "Unavailable".to_string(),
+                    count: 1,
+                }],
+                complete: true,
+            })
         );
     }
 
@@ -4443,22 +4484,52 @@ mod across_namespaces {
         assert!(overview.namespaces.is_empty());
     }
 
-    /// The rule the counts follow, for the one kind whose bar needs status.
-    /// A token that can list Jobs in one namespace and not another must not
-    /// get a composition that silently omits the rest.
+    /// A token that can list Jobs in one namespace and not another read as
+    /// one that could list none: prod's Jobs, and their failures, were gone.
+    /// Fails if the composition is not prod's alone, if it is not marked as
+    /// part, if the total is stated, or if prod's failed Job is not a problem.
     #[tokio::test]
-    async fn a_jobs_total_is_unknown_when_one_namespace_refused_its_jobs() {
+    async fn the_jobs_a_namespace_answered_are_counted_as_part_when_another_refused() {
         let overview = Cluster::new()
             .items(
                 "/apis/batch/v1/namespaces/prod/jobs",
-                vec![job("backup", PROD, Some("Complete"))],
+                vec![
+                    job("backup", PROD, Some("Complete")),
+                    job("report", PROD, Some("Failed")),
+                ],
             )
+            .refuse("/apis/batch/v1/namespaces/staging/jobs")
+            .listed()
+            .await;
+
+        let jobs = overview.jobs.expect("prod's Job list answered");
+        assert!(!jobs.complete);
+        assert_eq!(jobs.read.iter().map(|e| e.count).sum::<usize>(), 2);
+        assert_eq!(overview.counts.jobs, None);
+        assert!(overview
+            .problems
+            .iter()
+            .any(|p| p.kind == "Job" && p.name == "report"));
+        assert!(overview
+            .unread
+            .iter()
+            .any(|e| e.kind == "Job" && e.namespace.as_deref() == Some(STAGING)));
+    }
+
+    /// A kind no namespace of the scope answered has nothing to draw, not
+    /// an empty composition. Fails if a Job list refused everywhere becomes
+    /// a census of zero Jobs.
+    #[tokio::test]
+    async fn a_kind_refused_in_every_namespace_of_the_scope_has_no_census() {
+        let overview = Cluster::new()
+            .refuse("/apis/batch/v1/namespaces/prod/jobs")
             .refuse("/apis/batch/v1/namespaces/staging/jobs")
             .listed()
             .await;
 
         assert!(overview.jobs.is_none());
         assert_eq!(overview.counts.jobs, None);
+        assert!(overview.pods.is_some_and(|pods| pods.complete));
     }
 
     /// A Deployment list is problems as well as a count. The rows prod could
@@ -4480,6 +4551,9 @@ mod across_namespaces {
             .iter()
             .any(|p| p.kind == "Deployment" && p.name == "api"));
         assert_eq!(overview.counts.deployments, None);
+        let deployments = overview.deployments.expect("prod answered");
+        assert!(!deployments.complete);
+        assert_eq!(deployments.read.iter().map(|e| e.count).sum::<usize>(), 1);
     }
 
     fn stateful_set_down(name: &str, namespace: &str) -> Value {
@@ -4602,12 +4676,16 @@ mod across_namespaces {
             .await;
 
         let pods = overview.pods.expect("both namespaces answered");
+        assert!(pods.complete);
+        let pods = pods.read;
         assert_eq!(pods.running, 5);
         assert_eq!(pods.crash_looping, 1);
         assert_eq!(pods.pending, 1);
         assert_eq!(pods.succeeded, 1);
         assert_eq!(pods.failed, 1);
         let jobs = overview.jobs.expect("both namespaces answered");
+        assert!(jobs.complete);
+        let jobs = jobs.read;
         let count = |code: &str| {
             jobs.iter()
                 .find(|e| e.reason == code)

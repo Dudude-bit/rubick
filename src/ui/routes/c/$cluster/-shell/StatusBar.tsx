@@ -23,6 +23,7 @@ import { cn } from "@/lib/utils";
 import { useShownPath } from "@/lib/hide-paths";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useThemeStore } from "@/stores/themeStore";
+import { podTotal } from "../-overview/health-share";
 import { ActivityPanel } from "./ActivityPanel";
 import { LinkOpenedNote } from "./DeepLinkBanner";
 import { StallIndicator } from "./StallIndicator";
@@ -85,7 +86,7 @@ export function StatusBar() {
   // would count the wrong namespaces.
   const here =
     scoped.data && !scoped.isPlaceholderData && attention
-      ? { pods: scoped.data.counts.pods, unread: scoped.data.unread, attention }
+      ? { pods: scoped.data.pods, unread: scoped.data.unread, attention }
       : null;
   // The two worth a line that is always up — both predict the sign-in screen,
   // and they differ in why. Everything else is quiet, and a chip that is
@@ -211,9 +212,15 @@ export function StatusBar() {
                   </span>
                 ) : (
                   <>
-                    {here.pods !== null ? (
-                      <span>{t("cluster", "podCount", { n: here.pods })}</span>
-                    ) : (
+                    {here.pods && (
+                      <span>
+                        {t("cluster", "podCount", {
+                          n: podTotal(here.pods.read),
+                        })}
+                      </span>
+                    )}
+                    {here.pods && !here.pods.complete && <span>·</span>}
+                    {!here.pods?.complete && (
                       <span className="text-fg-fnt">
                         {t("cluster", "podsNotCounted", {
                           where: podsUnreadIn(here.unread, t),

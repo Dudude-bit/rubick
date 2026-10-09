@@ -4288,6 +4288,7 @@ export const en = {
     whatCanIDo: "What can I do here?",
     countsUnread: "not counted",
     podsNotCounted: "pods not counted {where}",
+    notReadWhere: "not read {where}",
     countsIn: "in {scope}",
     countsInAll: "in all namespaces",
     countsInMany: { one: "in {n} namespace", other: "in {n} namespaces" },
@@ -6407,6 +6408,7 @@ export const en = {
     noLabelsOnNode:
       "No labels on this node, not even the kubernetes.io/* set kubelet registers, which usually means the object was not read.",
     noneInScope: "none in scope",
+    noneWhereRead: "none where it could be read",
     nothingBroken: "nothing broken",
     nothingRunning: "nothing running",
     usagePodsNotRead:

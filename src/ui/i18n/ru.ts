@@ -4776,6 +4776,7 @@ export const ru: Catalogue = {
     whatCanIDo: "Что мне здесь можно?",
     countsUnread: "не посчитано",
     podsNotCounted: "поды не посчитаны {where}",
+    notReadWhere: "не прочитано {where}",
     countsIn: "в {scope}",
     countsInAll: "во всех пространствах имён",
     countsInMany: {
@@ -7028,6 +7029,7 @@ export const ru: Catalogue = {
     noLabelsOnNode:
       "На этом узле нет меток, даже набора kubernetes.io/*, который регистрирует kubelet; обычно это значит, что объект не был прочитан.",
     noneInScope: "в этой области нет",
+    noneWhereRead: "нет там, где удалось прочитать",
     nothingBroken: "ничего не сломано",
     nothingRunning: "ничего не запущено",
     usagePodsNotRead:

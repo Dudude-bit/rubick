@@ -1852,9 +1852,9 @@ export interface ClusterOverview {
   warningsKnown: boolean;
   namespaces: NamespaceLoad[];
   counts: ResourceCounts;
-  pods: PodComposition | null;
-  jobs: ReasonCount[] | null;
-  deployments: ReasonCount[] | null;
+  pods: Census<PodComposition> | null;
+  jobs: Census<ReasonCount[]> | null;
+  deployments: Census<ReasonCount[]> | null;
   metricsAvailable: boolean;
   servedFrom: OverviewSource;
   unread: OverviewUnread[];
@@ -1882,6 +1882,11 @@ export interface PodComposition {
 export interface ReasonCount {
   reason: string;
   count: number;
+}
+
+export interface Census<T> {
+  read: T;
+  complete: boolean;
 }
 
 export interface ResourceCounts {

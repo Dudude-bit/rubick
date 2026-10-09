@@ -7,7 +7,7 @@
 //!       cargo test --test live live_overview_scope:: -- --ignored --nocapture
 
 use k8s_gui_lib::commands::overview::{
-    cluster_overview, ClusterOverview, PodComposition, ResourceCounts,
+    cluster_overview, Census, ClusterOverview, PodComposition, ReasonCount, ResourceCounts,
 };
 use k8s_gui_lib::AppState;
 use std::collections::{BTreeMap, BTreeSet};
@@ -87,30 +87,28 @@ fn differences(whole: &ClusterOverview, parts: &[ClusterOverview]) -> Vec<String
             wrong.push("a cluster fact differs from a part's".to_string());
         }
     }
-    let phases = |pods: &PodComposition| (pods.running, pods.failed);
+    let phases = |pods: &Census<PodComposition>| {
+        pods.complete
+            .then_some((pods.read.running, pods.read.failed))
+    };
     let summed: Option<(usize, usize)> = parts
         .iter()
-        .map(|p| p.pods.as_ref().map(phases))
+        .map(|p| p.pods.as_ref().and_then(phases))
         .try_fold((0, 0), |(running, failed), part| {
             part.map(|(r, f)| (running + r, failed + f))
         });
-    if whole.pods.as_ref().map(phases) != summed {
+    if whole.pods.as_ref().and_then(phases) != summed {
         wrong.push("pod composition is not the parts' sum".to_string());
     }
+    let job_total = |jobs: &Census<Vec<ReasonCount>>| {
+        jobs.complete
+            .then(|| jobs.read.iter().map(|e| e.count).sum::<usize>())
+    };
     let jobs: Option<usize> = parts
         .iter()
-        .map(|p| {
-            p.jobs
-                .as_ref()
-                .map(|j| j.iter().map(|e| e.count).sum::<usize>())
-        })
+        .map(|p| p.jobs.as_ref().and_then(job_total))
         .sum();
-    if whole
-        .jobs
-        .as_ref()
-        .map(|j| j.iter().map(|e| e.count).sum::<usize>())
-        != jobs
-    {
+    if whole.jobs.as_ref().and_then(job_total) != jobs {
         wrong.push("jobs are not the parts' sum".to_string());
     }
     if parts.iter().all(|p| p.problems_truncated == 0) && whole.problems_truncated == 0 {
