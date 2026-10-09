@@ -188,3 +188,41 @@ it("opens no stream for a surface off screen", async () => {
   await waitFor(() => expect(hook.result.current).toBeDefined());
   expect(commands.subscribeOwnedPodWatch).not.toHaveBeenCalled();
 });
+
+/**
+ * The Deployment header kept "Unavailable 0/2 ready, polled 25s ago" beside
+ * a row saying 1/1 ready: the watch read the pods again and not the object
+ * whose counts its controller rewrote on the same change. Fails if a pod
+ * change leaves the workload's own object to its poll.
+ */
+it("reads the workload's own object again when one of its pods changes", async () => {
+  const client = testQueryClient();
+  const getDeployment = vi
+    .fn()
+    .mockResolvedValueOnce({ ready: 0 })
+    .mockResolvedValue({ ready: 1 });
+  const hook = renderHook(
+    () => {
+      useOwnedPodsWatch("Deployment", "shop", "checkout", [OWNED], true);
+      return useQuery({
+        queryKey: queryKeys.detail("Deployment", "shop", "checkout"),
+        queryFn: getDeployment,
+        staleTime: Infinity,
+      }).data;
+    },
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    }
+  );
+  await waitFor(() =>
+    expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("pod-stream")
+  );
+  await waitFor(() => expect(hook.result.current).toEqual({ ready: 0 }));
+
+  send("applied", { ...POD, phase: "Running" });
+
+  await waitFor(() => expect(hook.result.current).toEqual({ ready: 1 }));
+  expect(getDeployment).toHaveBeenCalledTimes(2);
+});
