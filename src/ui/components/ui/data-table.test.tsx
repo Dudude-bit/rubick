@@ -1772,6 +1772,40 @@ describe("the row's quick actions", () => {
   });
 
   /**
+   * Dana scrolled the Events table past Age into a blank band: a span
+   * positioned for screen readers far along a cut message was held by the
+   * port, not by the cell clipping it, and the port grew to reach it. Fails
+   * if a clipped cell is not the box its positioned contents are held in.
+   */
+  it("holds what is positioned inside a clipped cell within that cell, pinned or not", async () => {
+    const positioned = /\b(relative|sticky)\b/;
+    await withActions();
+    expect(screen.getByText("a-1").closest("td")?.className).toMatch(
+      positioned
+    );
+    cleanup();
+    const narrow = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(200);
+    try {
+      await wrap(
+        <DataTable<Item>
+          columns={[
+            { ...columns[0], size: 300, meta: { floor: 300 } },
+            { ...columns[1], size: 100, meta: { floor: 300 } },
+          ]}
+          data={DATA}
+        />
+      );
+      for (const cell of document.querySelectorAll("td"))
+        expect(cell.className).toMatch(positioned);
+      expect(screen.getByText("a-1").closest("td")).toHaveClass("sticky");
+    } finally {
+      narrow.mockRestore();
+    }
+  });
+
+  /**
    * Revealed by CSS, and that is the point: the state-driven version
    * re-rendered every cell in the table each time the pointer crossed a row
    * boundary. On a list that also re-reads itself every two seconds the

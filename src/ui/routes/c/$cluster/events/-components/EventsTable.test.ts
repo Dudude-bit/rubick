@@ -13,6 +13,7 @@ const {
   everyNamespace: EVERY_NAMESPACE,
   oneNamespace: ONE_NAMESPACE,
   objectPx: OBJECT_CELL_PX,
+  messagePx: messageCellPx,
 } = EVENT_COLUMNS;
 
 const en: T = (section, key, values) => translate("en", section, key, values);
@@ -38,7 +39,11 @@ function laidOut(
   );
   const px = layout.shares.map((share) => (share / 100) * layout.span);
   const of = (id: string) => px[columns.findIndex((c) => c.id === id)];
-  return { reason: of("reason"), object: of("object") };
+  return {
+    reason: of("reason"),
+    object: of("object"),
+    message: of("message"),
+  };
 }
 
 /** 12px JetBrains Mono, both marks with their gaps, and a cell's padding. */
@@ -63,6 +68,24 @@ describe("the Events table with a peek open at 1024", () => {
         const { reason, object } = laidOut(columns, port(1024, true), t);
         expect(object).toBeGreaterThanOrEqual(OBJECT_CELL_PX);
         expect(reason + object).toBeLessThanOrEqual(port(1024, true));
+      }
+    }
+  );
+
+  /**
+   * Dana scrolled to Message beside a peek and read "Conta…", "Job h…" and
+   * "Back-…": the column was as wide as its header. Fails if a message can
+   * be drawn narrower than its opening words.
+   */
+  it.each(TABLES)(
+    "keeps a message's opening words readable, %s",
+    (_scope, columns) => {
+      for (const t of [en, ru]) {
+        const { message } = laidOut(columns, port(1024, true), t);
+        expect(message).toBeGreaterThanOrEqual(messageCellPx());
+        expect(messageCellPx()).toBeGreaterThanOrEqual(
+          "Back-off restart".length * 6
+        );
       }
     }
   );

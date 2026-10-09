@@ -197,10 +197,12 @@ const CELL_PADDING = "px-2.5 py-2 group-data-[density=compact]/table:py-[3px]";
 
 /**
  * Text cells clip, because the table is fixed-layout; the actions cell does
- * not, or its buttons lose the hit area that hangs over the padding.
+ * not, or its buttons lose the hit area that hangs over the padding. A clip
+ * holds only what is positioned inside it, so the cell is the box: a
+ * screen-reader span far along a cut message otherwise stretched the port.
  */
 const CLIP_TEXT =
-  "overflow-hidden text-ellipsis whitespace-nowrap [&>a]:max-w-full [&>span]:max-w-full";
+  "relative overflow-hidden text-ellipsis whitespace-nowrap [&>a]:max-w-full [&>span]:max-w-full";
 
 /** Held open: a lane that appears mid-layout is left out of a flex item's height, and covers its last row. */
 const SIDEWAYS_LANE = { overflowX: "scroll" } as const;
