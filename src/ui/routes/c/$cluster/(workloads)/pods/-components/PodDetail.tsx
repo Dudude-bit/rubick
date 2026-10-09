@@ -60,6 +60,7 @@ import { ResourceRef } from "@/components/object/ResourceRef";
 import { MostLikelyPanel } from "./MostLikelyPanel";
 import { PodStatusBadge } from "./PodStatusBadge";
 import { usePodShare } from "./usePodShare";
+import { usePodWaiting } from "./usePodWaiting";
 import { VolumeRows } from "./volume-rows";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
@@ -126,7 +127,7 @@ interface PodProblem {
   /** A sentence, not a node: the tab strip puts it in an accessible name. */
   headline: string;
   detail: ReactNode;
-  tone: "err" | "warn";
+  tone: "err" | "warn" | "info";
   /** The tab that holds the rest of the story. */
   tab: "containers" | "conditions";
 }
@@ -224,6 +225,7 @@ function crashLoop(
  */
 function podProblem(
   pod: PodInfo | null | undefined,
+  waiting: boolean,
   t: ReturnType<typeof useT>
 ): PodProblem | null {
   if (!pod || pod.status.phase === "Succeeded") return null;
@@ -296,11 +298,13 @@ function podProblem(
     "ContainersReady",
   ]);
   if (condition) {
+    // Inside its wait the scheduler's words are news about a pod still
+    // coming, as the badge beside them says, and turn into a fault with it.
     return {
       reason: condition.reason ?? condition.type,
       headline:
         condition.type === "PodScheduled"
-          ? t("empty", "noNodeWillTakePod")
+          ? t("empty", waiting ? "waitingForNode" : "noNodeWillTakePod")
           : t("empty", "conditionIsStatus", {
               type: condition.type,
               status: condition.status,
@@ -311,7 +315,11 @@ function podProblem(
           subject={{ kind: "Pod", name: pod.name, namespace: pod.namespace }}
         />
       ),
-      tone: condition.reason === "Unschedulable" ? "err" : "warn",
+      tone: waiting
+        ? "info"
+        : condition.reason === "Unschedulable"
+          ? "err"
+          : "warn",
       tab: "conditions",
     };
   }
@@ -420,6 +428,8 @@ export function PodDetail() {
     refresh: "slow",
   });
   const pod = useKnownLoop(read, podEvents.data);
+  const waiting = usePodWaiting(pod);
+  const notUpTone = waiting ? ("info" as const) : ("warn" as const);
 
   const share = usePodShare(pod, podEvents.data ?? [], podEvents.error);
   const nodeIsSpot = useNodePlacement(pod?.nodeName)?.spot ?? false;
@@ -599,7 +609,7 @@ export function PodDetail() {
       ) : (
         t("empty", "unscheduled")
       ),
-      tone: pod?.nodeName ? undefined : "warn",
+      tone: pod?.nodeName ? undefined : notUpTone,
     },
     // Said in words as well as in the mark, because the mark alone would read
     // as a warning about this pod. "It will be evicted at some point and that
@@ -645,12 +655,12 @@ export function PodDetail() {
             total: podReadiness(pod).total,
           })
         : t("empty", "unknownLower"),
-      tone: pod && !podReadiness(pod).allReady ? ("warn" as const) : undefined,
+      tone: pod && !podReadiness(pod).allReady ? notUpTone : undefined,
     },
     serviceAccountRow(pod?.serviceAccountName, pod?.namespace, t),
   ];
 
-  const problem = useMemo(() => podProblem(pod, t), [pod, t]);
+  const problem = useMemo(() => podProblem(pod, waiting, t), [pod, waiting, t]);
 
   // A shell the reader opened and left is invisible the moment they click
   // Logs. The store already knows it is there; the dot is how the tab says so.
@@ -992,7 +1002,10 @@ export function PodDetail() {
             id: "conditions",
             label: t("columns", "conditions"),
             glyph: viewGlyph(BadgeCheck),
-            mark: conditionsMark(pod?.status.conditions, t),
+            mark:
+              problem?.tab === "conditions" && problem.tone === "info"
+                ? severityMark(problem.tone, problem.headline)
+                : conditionsMark(pod?.status.conditions, t),
             content: (
               <Section>
                 <SectionHeader

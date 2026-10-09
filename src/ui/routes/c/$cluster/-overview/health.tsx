@@ -60,6 +60,7 @@ import type {
 } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
 import { formatCount } from "@/lib/count";
+import { allocatedPercent } from "@/lib/node-amount";
 
 /**
  * The unit rides along dimmed and a size smaller, so the number keeps the
@@ -718,7 +719,8 @@ function PressureRow({
         {used}
         <Unit>/</Unit>
         {total}
-        <Unit>{unit}</Unit> · {Math.round(share * 100)}
+        <Unit>{unit}</Unit> ·{" "}
+        {allocatedPercent(pressure.requested, pressure.allocatable) ?? 0}
         <Unit>%</Unit>
       </span>
     </div>

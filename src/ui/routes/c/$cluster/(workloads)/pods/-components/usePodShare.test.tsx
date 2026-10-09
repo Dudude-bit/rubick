@@ -19,7 +19,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-import type { PodInfo } from "@/generated/types";
+import type { EventInfo, PodInfo } from "@/generated/types";
 import { translate } from "@/i18n";
 import { useHintSettingsStore } from "@/stores/hintSettingsStore";
 import { logViewKey, offerLogView } from "../../../-logs/shared-view";
@@ -254,5 +254,43 @@ describe("the caption over a long log", () => {
     expect(
       translate("ru", "share", "logsTail", { n: 505, shown: 500 })
     ).toContain("из 505 строк");
+  });
+});
+
+describe("the verdict Share writes for a pod the scheduler has not placed", () => {
+  const unplaced = (secondsLeft: number) =>
+    ({
+      ...pod,
+      nodeName: null,
+      restartCount: 0,
+      status: { phase: "Pending", display: "Pending", ready: false },
+      containers: [],
+      start: {
+        state: "starting",
+        until: new Date(Date.now() + secondsLeft * 1000).toISOString(),
+      },
+    }) as unknown as PodInfo;
+  const scheduling = [
+    {
+      reason: "FailedScheduling",
+      type: "Warning",
+      message: "0/2 nodes are available",
+      count: 1,
+      lastTimestamp: null,
+    },
+  ] as unknown as EventInfo[];
+  const verdictOf = (secondsLeft: number) =>
+    renderHook(() => usePodShare(unplaced(secondsLeft), scheduling, null), {
+      wrapper,
+    }).result.current(frame()).verdict;
+
+  /**
+   * The page said "Most likely: no node fits it" of a pod still inside its
+   * wait, and Share wrote the same sentence into the file. Fails if the file
+   * calls the wait a fault, or keeps waiting once it has run out.
+   */
+  it("says it is not placed yet inside the wait, and that no node fits it after", () => {
+    expect(verdictOf(15)).toMatch(/^Not placed yet/);
+    expect(verdictOf(-1)).toMatch(/^Most likely: no node fits it/);
   });
 });

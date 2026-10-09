@@ -8,7 +8,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { inCores, nodeAmount } from "@/lib/node-amount";
+import { allocatedPercent, inCores, nodeAmount } from "@/lib/node-amount";
 import { cn } from "@/lib/utils";
 import type { NodeBudget, ResourceBudget } from "@/generated/types";
 import { useT } from "@/i18n/useT";
@@ -29,8 +29,8 @@ interface NodeResourcesProps {
 }
 
 function share(value: number, of: number | null): string | null {
-  if (of === null || of <= 0) return null;
-  return `${Math.round((value / of) * 100)}%`;
+  const percent = of === null ? null : allocatedPercent(value, of);
+  return percent === null ? null : `${percent}%`;
 }
 
 /**

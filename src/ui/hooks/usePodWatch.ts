@@ -47,7 +47,9 @@ export function usePodWatch(
 /**
  * The pods a workload's page or peek, or a node's page, lists, watched as
  * the API server narrows them: each change reads `reads` again, so a row
- * there turns when the Pods list's row does rather than on a poll.
+ * there turns when the Pods list's row does rather than on a poll, and a
+ * workload's own object with them, whose counts its controller rewrites on
+ * the same change.
  */
 export function useOwnedPodsWatch(
   kind: string,
@@ -76,7 +78,8 @@ export function useOwnedPodsWatch(
     enabled: enabled && visible && connected && !!name && (node || !!namespace),
     subscribe,
     queryKey,
-    detail: () => reads,
+    detail: () =>
+      node ? reads : [...reads, queryKeys.detail(kind, namespace, name)],
     recount: false,
   });
 }

@@ -12,7 +12,7 @@ import { yamlTab } from "../../../-object/yaml-tab";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
-import { replicaGap, useStartsClock } from "../../-components/replica-gap";
+import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
@@ -174,6 +174,10 @@ export function DaemonSetDetail() {
   const current = daemonSet?.current ?? 0;
   const ready = daemonSet?.ready ?? 0;
   const startsNow = useStartsClock(podsError ? null : pods);
+  const split = useMemo(
+    () => replicaSplit(current, ready, podsError ? null : pods, startsNow, t),
+    [current, ready, pods, podsError, startsNow, t]
+  );
   const upToDate = daemonSet?.upToDate ?? 0;
   const available = daemonSet?.available ?? 0;
 
@@ -218,15 +222,10 @@ export function DaemonSetDetail() {
                       segments={[
                         {
                           label: t("count", "readyWord"),
-                          count: ready,
+                          count: split.ready,
                           tone: "ok",
                         },
-                        ...replicaGap(
-                          Math.max(0, current - ready),
-                          podsError ? null : pods,
-                          startsNow,
-                          t
-                        ),
+                        ...split.gap,
                         {
                           label: t("count", "notScheduledSegment"),
                           count: Math.max(0, desired - current),
@@ -425,10 +424,9 @@ export function DaemonSetDetail() {
       deliveryQuery,
       desired,
       current,
-      ready,
+      split,
       upToDate,
       available,
-      startsNow,
       t,
     ]
   );

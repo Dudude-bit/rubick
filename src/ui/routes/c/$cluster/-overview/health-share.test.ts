@@ -2,7 +2,9 @@ import { describe, expect, it } from "vite-plus/test";
 
 import type { ResourcePressure } from "@/generated/types";
 import { parseMemory } from "@/lib/k8s-quantity";
-import { cpuRatio, memoryRatio } from "./health-share";
+import { translate } from "@/i18n";
+import type { T } from "@/i18n/useT";
+import { cpuRatio, memoryRatio, schedulerShare } from "./health-share";
 
 const pressure = (requested: number, allocatable: number) =>
   ({ requested, allocatable, usage: null }) as ResourcePressure;
@@ -40,5 +42,24 @@ describe("the scheduler headroom figures", () => {
         "en"
       )
     ).toEqual({ used: "0.8", total: "3.9", unit: "Gi" });
+  });
+});
+
+describe("the scheduler headroom share", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+
+  /**
+   * The node page cuts a share down as kubectl describe node does; the
+   * Overview rounded the same reservation up a point. Fails if it rounds.
+   */
+  it("is cut down to whole per cent as the node page cuts it", () => {
+    const section = schedulerShare(
+      { cpu: pressure(465, 1000), memory: pressure(32, 2048) },
+      t
+    );
+    const texts = JSON.stringify(section.body);
+    expect(texts).toContain("· 46%");
+    expect(texts).toContain("· 1%");
+    expect(texts).not.toContain("· 47%");
   });
 });

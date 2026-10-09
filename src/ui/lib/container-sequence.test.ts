@@ -130,6 +130,46 @@ describe("containerSequence on a pod held in init", () => {
     expect(migrate.note).toContain("9 attempts");
     expect(migrate.note).toContain("in Logs");
   });
+
+  /**
+   * A step that has just exited again sits terminated with the run before
+   * in `lastTerminated`; dating "last" from that said minutes where the
+   * exit was seconds old. Fails if the age is read from the run before.
+   */
+  it("dates the failed step's last attempt by the exit it sits in", () => {
+    const now = Date.now();
+    const at = (secondsAgo: number) =>
+      new Date(now - secondsAgo * 1000).toISOString();
+    const groups = containerSequence(
+      [
+        container("migrate", {
+          phase: "init",
+          state: {
+            type: "terminated",
+            termination: termination({
+              exitCode: 1,
+              reason: "Error",
+              finishedAt: at(4),
+            }),
+          },
+          lastTerminated: termination({
+            exitCode: 1,
+            reason: "Error",
+            finishedAt: at(300),
+          }),
+          restartCount: 9,
+        }),
+        container("app", {
+          state: { type: "waiting", reason: "PodInitializing" },
+        }),
+      ],
+      t
+    );
+    const migrate = groups.find((group) => group.phase === "init")!.steps[0];
+
+    expect(migrate.mark).toBe("failed");
+    expect(migrate.note).toContain("last 4s ago");
+  });
 });
 
 /**

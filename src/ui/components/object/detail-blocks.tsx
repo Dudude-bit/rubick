@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { ButtonHTMLAttributes, ReactElement, ReactNode } from "react";
-import { EyeOff, type LucideIcon } from "lucide-react";
+import { Clock, EyeOff, type LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
 import {
@@ -269,7 +269,8 @@ export interface ProblemSummaryProps {
   detail?: ReactNode;
   /** The way to the tab that holds the rest of it. */
   action?: ReactNode;
-  tone?: "err" | "warn";
+  /** `info` for a state still inside its wait: coming, not wrong. */
+  tone?: "err" | "warn" | "info";
 }
 
 /**
@@ -291,9 +292,16 @@ export function ProblemSummary({
   const color = TONE_TEXT[tone];
   return (
     <div className="flex items-start gap-2">
-      <span className={cn("mt-[3px] text-[9px]", color)} aria-hidden="true">
-        ▲
-      </span>
+      {tone === "info" ? (
+        <Clock
+          className={cn("mt-[3px] h-3 w-3 flex-none", color)}
+          aria-hidden="true"
+        />
+      ) : (
+        <span className={cn("mt-[3px] text-[9px]", color)} aria-hidden="true">
+          ▲
+        </span>
+      )}
       <div className="min-w-0 flex-1">
         <p className={cn("text-[13px] font-semibold tracking-tight", color)}>
           {headline}

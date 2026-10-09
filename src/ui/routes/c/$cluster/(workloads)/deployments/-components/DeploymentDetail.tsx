@@ -33,7 +33,7 @@ import { yamlTab } from "../../../-object/yaml-tab";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
-import { replicaGap, useStartsClock } from "../../-components/replica-gap";
+import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
@@ -327,7 +327,13 @@ export function DeploymentDetail() {
 
   const replicas = deployment?.replicas;
   const desired = replicas?.desired ?? 0;
-  const ready = replicas?.ready ?? 0;
+  const split = replicaSplit(
+    desired,
+    replicas?.ready ?? 0,
+    podsError ? null : pods,
+    startsNow,
+    t
+  );
 
   // Desired, ready, available and up-to-date are one count read four ways, and
   // as four rows the reader had to subtract them to find the gap the bar shows
@@ -370,15 +376,10 @@ export function DeploymentDetail() {
                   segments={[
                     {
                       label: t("count", "readyWord"),
-                      count: ready,
+                      count: split.ready,
                       tone: "ok",
                     },
-                    ...replicaGap(
-                      Math.max(0, desired - ready),
-                      podsError ? null : pods,
-                      startsNow,
-                      t
-                    ),
+                    ...split.gap,
                   ]}
                   emptyMessage={t("empty", "scaledToZero")}
                   note={t("count", "upToDateAvailable", {

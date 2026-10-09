@@ -2,6 +2,7 @@ import { Bell, Boxes, Gauge, Server, TriangleAlert } from "lucide-react";
 
 import type { CompositionSegment } from "@/components/object/detail-blocks";
 import { iconSvg } from "@/lib/icon-svg";
+import { allocatedPercent } from "@/lib/node-amount";
 import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { statusRole, type StatusRole } from "@/lib/status-role";
@@ -436,7 +437,7 @@ export function schedulerShare(
       label,
       values: [
         {
-          text: `${used}/${total}${unit} · ${Math.round(share * 100)}%`,
+          text: `${used}/${total}${unit} · ${allocatedPercent(pressure.requested, pressure.allocatable) ?? 0}%`,
           role: (share >= PRESSURE_WARN ? "warn" : undefined) as
             | StatusRole
             | undefined,

@@ -22,6 +22,14 @@ export function nodeAmount(
   }
 }
 
+/**
+ * A share of what a node can give, in whole per cent cut down as `kubectl
+ * describe node` cuts it: 32Mi of 2Gi is its 1%, never a rounded 2%.
+ */
+export function allocatedPercent(value: number, of: number): number | null {
+  return of > 0 ? Math.trunc((value / of) * 100) : null;
+}
+
 /** The four resources every kubelet reports, under the names it reports them. */
 export const NODE_RESOURCES = [
   { name: "cpu", key: "cpu", unit: "cpu" },

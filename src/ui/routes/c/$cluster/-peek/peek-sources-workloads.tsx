@@ -12,7 +12,7 @@ import {
 } from "@/lib/container-sequence";
 import { declaredQuantity } from "@/lib/metric-format";
 import { describeRestarts } from "@/lib/pod-status";
-import { podRole, podStatusTitle } from "@/lib/share/pod-status";
+import { insideWait, podRole, podStatusTitle } from "@/lib/share/pod-status";
 import { formatDate } from "@/lib/utils";
 import { jobEndRow } from "../-object/job-end";
 import { ImageRef } from "@/components/object/ImageRef";
@@ -100,6 +100,7 @@ function rolloutHeader(rollout: Rollout, t: Translate) {
 export const WORKLOAD_SOURCES: PeekSources = {
   Pod: source(commands.getPod, (pod, _target, t) => {
     const readiness = podReadiness(pod);
+    const notUp: KeyValueTone = insideWait(pod) ? "info" : "warn";
     return {
       status: pod.status.display,
       statusFrom: pod.nodeName,
@@ -115,7 +116,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
               value: pod.nodeName
                 ? ref("Node", pod.nodeName)
                 : t("empty", "unscheduled"),
-              tone: pod.nodeName ? undefined : "warn",
+              tone: pod.nodeName ? undefined : notUp,
             },
             {
               label: t("columns", "podIp"),
@@ -137,7 +138,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
                 ready: readiness.ready,
                 total: readiness.total,
               }),
-              tone: readiness.allReady ? undefined : "warn",
+              tone: readiness.allReady ? undefined : notUp,
             },
             // Only when it disagrees with the badge above. `Phase Running`
             // under a `Running` badge is the same word twice; `Phase
