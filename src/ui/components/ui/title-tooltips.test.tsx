@@ -14,7 +14,13 @@ import {
   screen,
 } from "@testing-library/react";
 
-import { TOOLTIP_CARD } from "./tooltip";
+import {
+  TOOLTIP_CARD,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "./tooltip";
 import { TitleTooltips } from "./title-tooltips";
 
 const tab = () => screen.getByRole("button", { name: "Events" });
@@ -149,5 +155,64 @@ describe("where the card sits", () => {
     );
     expect(side).toBe("top");
     expect(top + 22).toBeLessThanOrEqual(window.innerHeight - 30);
+  });
+});
+
+describe("one tooltip at a time", () => {
+  /**
+   * Dana pointed at busybox:1.36 inside a cut Events message: WebKit's own
+   * box for the link opened over the cell's card and hid half of it. Fails
+   * if the link's title is left to WebKit, or both cards are up at once.
+   */
+  it("hands over to a title inside the one shown, and back", async () => {
+    render(
+      <span data-testid="cell" title="Container image busybox:1.36 present">
+        Container image{" "}
+        <a href="#hub" title="Open busybox:1.36 on Docker Hub">
+          busybox:1.36
+        </a>
+      </span>
+    );
+    const cell = screen.getByTestId("cell");
+    const link = screen.getByRole("link");
+    fireEvent.pointerOver(cell);
+    await wait(700);
+    expect(card()?.textContent).toBe("Container image busybox:1.36 present");
+
+    fireEvent.pointerOver(link);
+    await wait(700);
+    expect(screen.getAllByRole("tooltip")).toHaveLength(1);
+    expect(card()?.textContent).toBe("Open busybox:1.36 on Docker Hub");
+    expect(link.hasAttribute("title")).toBe(false);
+    expect(cell.getAttribute("title")).toBe(
+      "Container image busybox:1.36 present"
+    );
+
+    fireEvent.pointerOut(link, { relatedTarget: cell });
+    fireEvent.pointerOver(cell);
+    await wait(700);
+    expect(card()?.textContent).toBe("Container image busybox:1.36 present");
+  });
+
+  /** A title card and an app tooltip covered each other; fails if either opens while the other stays up. */
+  it("closes an app tooltip as it opens, and gives way to one that opens", async () => {
+    render(
+      <TooltipProvider>
+        <Tooltip defaultOpen>
+          <TooltipTrigger>3 UI stalls</TooltipTrigger>
+          <TooltipContent>The main thread stalled</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+    expect(screen.getAllByText("The main thread stalled")).not.toHaveLength(0);
+
+    fireEvent.pointerOver(tab());
+    await wait(700);
+    expect(card()?.textContent).toBe("Events: 5");
+    expect(screen.queryByText("The main thread stalled")).toBeNull();
+
+    fireEvent.focus(screen.getByRole("button", { name: "3 UI stalls" }));
+    expect(screen.getAllByText("The main thread stalled")).not.toHaveLength(0);
+    expect(screen.queryByText("Events: 5")).toBeNull();
   });
 });

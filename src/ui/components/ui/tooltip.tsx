@@ -2,7 +2,22 @@ import * as React from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import { cn } from "@/lib/utils";
 
-const TooltipProvider = TooltipPrimitive.Provider;
+/**
+ * A tooltip leaves with the pointer: a hoverable card waits for a move that
+ * never comes at the window's edge. One with something to click in it opts
+ * back in with `disableHoverableContent={false}`.
+ */
+function TooltipProvider({
+  disableHoverableContent = true,
+  ...props
+}: React.ComponentProps<typeof TooltipPrimitive.Provider>) {
+  return (
+    <TooltipPrimitive.Provider
+      disableHoverableContent={disableHoverableContent}
+      {...props}
+    />
+  );
+}
 
 const Tooltip = TooltipPrimitive.Root;
 

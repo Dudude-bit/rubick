@@ -74,7 +74,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
       return (
         <div className="flex items-center gap-2">
           {readyCount > 0 && (
-            <Tooltip>
+            <Tooltip disableHoverableContent={false}>
               <TooltipTrigger>
                 <Badge variant="success">
                   <CircleDot className="h-2.5 w-2.5" aria-hidden="true" />
@@ -97,7 +97,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
             </Tooltip>
           )}
           {notReadyCount > 0 && (
-            <Tooltip>
+            <Tooltip disableHoverableContent={false}>
               <TooltipTrigger>
                 <Badge variant="warning">
                   <T
