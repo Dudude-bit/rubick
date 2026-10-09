@@ -1,7 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
+import { keepNativeMenuForText } from "@/lib/native-menu";
 
 /** What the authorizer answers about each namespace, per test. */
 const nsAccess = vi.hoisted(() => ({
@@ -1389,5 +1396,36 @@ describe("the new tab button", () => {
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  /**
+   * The app withholds the webview's own menu on every right click, and did it
+   * before the button saw the event, so the button's menu never opened while
+   * its tooltip promised it. Fails if the guard claims the event first.
+   */
+  it("opens its cluster menu on a right click while the webview's menu is withheld", async () => {
+    const stop = keepNativeMenuForText();
+    try {
+      useClusterStore.setState({
+        contexts: [{ name: "k3d-dev" }, { name: "prod-eu" }] as ContextInfo[],
+      });
+      useScopeTabStore.setState({
+        tabs: [tab({ id: "a", href: "/c/k3d-dev" })],
+        activeId: "a",
+        pendingHref: null,
+      });
+      await mount();
+      const button = screen.getByRole("button", {
+        name: "New tab. Menu key opens it on another cluster.",
+      });
+
+      const shown = fireEvent.contextMenu(button);
+
+      expect(shown).toBe(false);
+      const menu = await screen.findByRole("menu");
+      expect(within(menu).getByText("prod-eu")).toBeInTheDocument();
+    } finally {
+      stop();
+    }
   });
 });
