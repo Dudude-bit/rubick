@@ -152,6 +152,39 @@ export const queryKeys = {
     namespace: string | null | undefined,
     name: string | undefined
   ): (string | null | undefined)[] => ["pod-watch", home(namespace), name],
+  /** What the watch on the pods one page lists holds: only its bookkeeping. */
+  ownedPodWatch: (
+    kind: string,
+    namespace: string | null | undefined,
+    name: string | undefined
+  ): (string | null | undefined)[] => [
+    "owned-pod-watch",
+    kind,
+    home(namespace),
+    name,
+  ],
+  /** The pods on one node, found by `spec.nodeName` on the server. */
+  nodePods: (name: string | undefined): (string | undefined)[] => [
+    "node",
+    "pods",
+    name,
+  ],
+  /** The scheduler's promise on one node, summed over the pods placed there. */
+  nodeBudget: (name: string | undefined): (string | undefined)[] => [
+    "node",
+    "budget",
+    name,
+  ],
+  /**
+   * One object's neighbourhood. `routeReads` is the Gateway API read
+   * versions the backend drew route hops with, `null` where none is served.
+   */
+  connections: (
+    kind: string,
+    namespace: string | null | undefined,
+    name: string | undefined,
+    routeReads: string[] | null
+  ): unknown[] => ["connections", kind, namespace ?? null, name, routeReads],
 
   /**
    * `list_namespaces` as a plain read. Not the Namespaces page's list, which

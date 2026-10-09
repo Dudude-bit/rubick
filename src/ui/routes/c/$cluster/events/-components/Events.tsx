@@ -37,6 +37,7 @@ import { eventsSection } from "@/lib/report-parts";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { errorToShow, isRefusal, normalizeTauriError } from "@/lib/error-utils";
+import { useRefusedAt } from "@/lib/refusals";
 import { spanWords } from "@/i18n/say";
 import { filterEvents } from "@/lib/event-filter";
 import { byNewest, newerEvent } from "@/lib/event-order";
@@ -285,6 +286,7 @@ export function Events() {
   );
   // Refused now, the feed is refused, whatever an earlier read showed.
   const refused = failed !== null && isRefusal(failed);
+  const refusedAt = useRefusedAt(refused ? failed : null);
   const { pool, windowFull } = useMemo(() => {
     if (refused) return { pool: NO_EVENTS, windowFull: false };
     if (!fromWatch) {
@@ -564,6 +566,7 @@ export function Events() {
               live={watching && !watch.resyncing}
               slowed={!fromWatch && freshness.slowed}
               stale={stale || (nothingRead && !isRefusal(failed))}
+              refusedAt={refused ? refusedAt : undefined}
             />
             <ShareScreenAction
               screen={{ title: "Events", namespace: currentNamespace }}

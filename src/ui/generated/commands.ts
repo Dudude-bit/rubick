@@ -940,6 +940,18 @@ export async function subscribeObjectWatch(
   return invoke<string>("subscribe_object_watch", { kind, namespace, name });
 }
 
+export async function subscribeOwnedPodWatch(
+  kind: string,
+  namespace: string | null,
+  name: string
+): Promise<string> {
+  return invoke<string>("subscribe_owned_pod_watch", {
+    kind,
+    namespace,
+    name,
+  });
+}
+
 export async function subscribeCustomObjectWatch(
   group: string,
   version: string,

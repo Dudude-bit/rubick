@@ -20,6 +20,7 @@
  */
 
 import { memo } from "react";
+import { Lock } from "lucide-react";
 
 import {
   Tooltip,
@@ -54,6 +55,12 @@ export interface DataFreshnessProps {
   slowed?: boolean;
   /** The last read failed: what is on screen, if anything, is from one before it. Wins over live. */
   stale?: boolean;
+  /**
+   * The cluster refused the last read: when, or `null` where that is not
+   * known. Nothing asks a refused read again on its own, so it is neither
+   * live nor polled, and its age is the refusal's, not the last answer's.
+   */
+  refusedAt?: number | null;
   className?: string;
 }
 
@@ -87,9 +94,19 @@ const STATES = {
     dot: "border border-warn",
     note: "freshStaleNote",
   },
+  refused: {
+    label: "freshRefused",
+    dot: null,
+    note: "freshRefusedNote",
+  },
 } as const;
 
-const AGED = new Set<string>(["freshSlowed", "freshOffline", "freshStale"]);
+const AGED = new Set<string>([
+  "freshSlowed",
+  "freshOffline",
+  "freshStale",
+  "freshRefused",
+]);
 
 /** "5 с назад", not a bare "5 с" a reader has to guess the meaning of. */
 function AgeOnFace({ stamp }: { stamp: string }) {
@@ -108,13 +125,13 @@ function Ghost({ text }: { text: string }) {
 function Reserve() {
   const t = useT();
   const age = t("action", "agoSuffix", { age: formatTimeUnit(59, "minute") });
-  return Object.values(STATES).map(({ label }) => (
+  return Object.values(STATES).map(({ label, dot }) => (
     <span
       key={label}
       aria-hidden="true"
       className="invisible col-start-1 row-start-1 inline-flex items-center gap-1.5"
     >
-      <span className="w-1.5 shrink-0" />
+      <span className={cn("shrink-0", dot === null ? "w-2.5" : "w-1.5")} />
       <Ghost text={t("cluster", label)} />
       {AGED.has(label) && (
         <>
@@ -131,27 +148,32 @@ export const DataFreshness = memo(function DataFreshness({
   live = false,
   slowed = false,
   stale = false,
+  refusedAt,
   className,
 }: DataFreshnessProps) {
   const t = useT();
   const isConnected = useClusterStore((s) => s.isConnected);
+  const refused = refusedAt !== undefined;
 
   // Nothing has arrived yet, so there is no freshness to report — the
   // screen's own loading state is saying it, unless the read already failed.
   const neverRead = !dataUpdatedAt;
-  if (neverRead && (!stale || !isConnected)) return null;
+  if (neverRead && (!(stale || refused) || !isConnected)) return null;
 
   const state = !isConnected
     ? "offline"
-    : stale
-      ? "stale"
-      : live
-        ? "live"
-        : slowed
-          ? "slowed"
-          : "polling";
+    : refused
+      ? "refused"
+      : stale
+        ? "stale"
+        : live
+          ? "live"
+          : slowed
+            ? "slowed"
+            : "polling";
   const { label, dot, note } = STATES[state];
-  const stamp = neverRead ? "" : new Date(dataUpdatedAt).toISOString();
+  const at = state === "refused" ? refusedAt : neverRead ? null : dataUpdatedAt;
+  const stamp = at ? new Date(at).toISOString() : "";
 
   return (
     <Tooltip>
@@ -164,13 +186,24 @@ export const DataFreshness = memo(function DataFreshness({
         >
           <Reserve />
           <span className="col-start-1 row-start-1 inline-flex items-center gap-1.5">
-            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
-            <span className={cn(state === "stale" && "text-warn")}>
+            {dot === null ? (
+              <Lock
+                className="h-2.5 w-2.5 shrink-0 text-warn"
+                aria-hidden="true"
+              />
+            ) : (
+              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} />
+            )}
+            <span
+              className={cn(
+                (state === "stale" || state === "refused") && "text-warn"
+              )}
+            >
               {t("cluster", label)}
             </span>
             {/* The readings where how old the data is changes what the
                 reader should do with it carry the age on their face. */}
-            {AGED.has(label) && !neverRead && (
+            {AGED.has(label) && stamp !== "" && (
               <>
                 <span aria-hidden="true">·</span>
                 <AgeOnFace stamp={stamp} />
@@ -180,8 +213,11 @@ export const DataFreshness = memo(function DataFreshness({
         </div>
       </TooltipTrigger>
       <TooltipContent side="bottom">
-        {t("cluster", neverRead ? "freshNeverReadNote" : note)}
-        {state !== "offline" && !neverRead && (
+        {t(
+          "cluster",
+          neverRead && state !== "refused" ? "freshNeverReadNote" : note
+        )}
+        {state !== "offline" && state !== "refused" && !neverRead && (
           <>
             {" "}
             {t("cluster", "lastRead")}{" "}

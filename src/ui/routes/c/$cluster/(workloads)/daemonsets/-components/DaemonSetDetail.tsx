@@ -46,6 +46,7 @@ import { useDaemonSetShare } from "./useDaemonSetShare";
 import { useConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
+import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -118,6 +119,12 @@ export function DaemonSetDetail() {
   // so a set-based one reaches the API server as written, where rebuilding
   // it from match labels dropped it and listed nothing.
   const labelSelector = daemonSet?.selector || null;
+  const podsKey = queryKeys.ownedPods(
+    ResourceType.DaemonSet,
+    namespace,
+    name,
+    labelSelector
+  );
 
   // The failure travels. It used to be caught and turned into an empty
   // array, which the card then reported as "no pods for this workload" — a
@@ -129,12 +136,7 @@ export function DaemonSetDetail() {
     isPending: podsPending,
     refetch: refetchPods,
   } = useLiveQuery({
-    queryKey: queryKeys.ownedPods(
-      ResourceType.DaemonSet,
-      namespace,
-      name,
-      labelSelector
-    ),
+    queryKey: podsKey,
     queryFn: async () => {
       if (!namespace) return [];
       try {
@@ -156,6 +158,13 @@ export function DaemonSetDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
+  useOwnedPodsWatch(
+    ResourceType.DaemonSet,
+    namespace,
+    name,
+    [podsKey],
+    !!labelSelector
+  );
 
   const deliveryQuery = deliveryOfKind(ResourceType.DaemonSet, daemonSet);
   const intercept = useDeliveryIntercept(deliveryQuery);

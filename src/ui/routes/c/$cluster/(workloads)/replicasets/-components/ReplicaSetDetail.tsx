@@ -33,6 +33,7 @@ import { useResourceDetail } from "@/hooks";
 import { useReplicaSetShare } from "./useReplicaSetShare";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
+import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { deliveryOfKind } from "@/lib/delivery";
 import { objectLink } from "@/lib/links";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -69,18 +70,26 @@ export function ReplicaSetDetail() {
     defaultTab: "overview",
   });
 
+  const podsKey = queryKeys.ownedPods(ResourceType.ReplicaSet, namespace, name);
   const {
     data: pods = [],
     error: podsError,
     isPending: podsPending,
   } = useLiveQuery({
-    queryKey: ["replicaset-pods", namespace, name],
+    queryKey: podsKey,
     queryFn: () => commands.getReplicasetPods(name!, namespace || null),
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
+  useOwnedPodsWatch(
+    ResourceType.ReplicaSet,
+    namespace,
+    name,
+    [podsKey],
+    !!replicaSet
+  );
 
   const owner = replicaSet?.ownerReferences.find(
     (ref) => ref.controller && ref.kind === ResourceType.Deployment

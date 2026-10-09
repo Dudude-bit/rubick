@@ -49,6 +49,50 @@ pub struct WatchManager {
 /// under the five minutes kube used to enforce from the client side.
 const WATCH_TIMEOUT_SECS: u32 = 290;
 
+/// What the API server narrows a watch to, so only the objects asked about
+/// cross the wire: one by name, or those a selector picks.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Narrow {
+    labels: Option<String>,
+    fields: Option<String>,
+}
+
+impl Narrow {
+    #[must_use]
+    pub fn labels(selector: String) -> Self {
+        Self {
+            labels: Some(selector),
+            fields: None,
+        }
+    }
+
+    #[must_use]
+    pub fn fields(selector: String) -> Self {
+        Self {
+            labels: None,
+            fields: Some(selector),
+        }
+    }
+
+    fn named(name: Option<String>) -> Self {
+        Self {
+            labels: None,
+            fields: name.map(|name| format!("metadata.name={name}")),
+        }
+    }
+
+    fn config(&self) -> WatcherConfig {
+        let mut config = WatcherConfig::default().timeout(WATCH_TIMEOUT_SECS);
+        if let Some(labels) = &self.labels {
+            config = config.labels(labels);
+        }
+        if let Some(fields) = &self.fields {
+            config = config.fields(fields);
+        }
+        config
+    }
+}
+
 impl WatchManager {
     #[must_use]
     pub fn new(event_tx: broadcast::Sender<AppEvent>) -> Self {
@@ -166,10 +210,13 @@ impl WatchManager {
         U: Serialize,
     {
         Ok(match scope_of(scope)? {
-            None => self.spawn_watcher(api(None), kind_label, None, transform),
-            Some(names) if names.len() == 1 => {
-                self.spawn_watcher(api(Some(&names[0])), kind_label, None, transform)
-            }
+            None => self.spawn_watcher(api(None), kind_label, Narrow::default(), transform),
+            Some(names) if names.len() == 1 => self.spawn_watcher(
+                api(Some(&names[0])),
+                kind_label,
+                Narrow::default(),
+                transform,
+            ),
             Some(names) => {
                 let members = names
                     .into_iter()
@@ -206,7 +253,35 @@ impl WatchManager {
         U: Serialize,
     {
         let api: Api<K> = Api::namespaced(client, namespace);
-        self.spawn_watcher(api, kind_label, Some(name), transform)
+        self.spawn_watcher(api, kind_label, Narrow::named(Some(name)), transform)
+    }
+
+    /// The objects of a namespaced kind that `narrow` picks, in one namespace
+    /// or, where `namespace` is `None`, across the cluster.
+    pub fn subscribe_narrowed<K, F, U>(
+        &self,
+        client: Client,
+        kind_label: &str,
+        namespace: Option<&str>,
+        narrow: Narrow,
+        transform: F,
+    ) -> String
+    where
+        K: kube::Resource<DynamicType = (), Scope = NamespaceResourceScope>
+            + Clone
+            + std::fmt::Debug
+            + serde::de::DeserializeOwned
+            + Send
+            + Sync
+            + 'static,
+        F: Fn(&K) -> Option<U> + Send + Sync + 'static,
+        U: Serialize,
+    {
+        let api: Api<K> = match namespace {
+            Some(namespace) => Api::namespaced(client, namespace),
+            None => Api::all(client),
+        };
+        self.spawn_watcher(api, kind_label, narrow, transform)
     }
 
     /// One cluster-scoped object by name; see `subscribe_object`.
@@ -229,7 +304,7 @@ impl WatchManager {
         U: Serialize,
     {
         let api: Api<K> = Api::all(client);
-        self.spawn_watcher(api, kind_label, Some(name), transform)
+        self.spawn_watcher(api, kind_label, Narrow::named(Some(name)), transform)
     }
 
     /// Subscribe to changes on a runtime-discovered custom resource.
@@ -254,7 +329,7 @@ impl WatchManager {
             Some(ns) => Api::namespaced_with(client, &ns, api_resource),
             None => Api::all_with(client, api_resource),
         };
-        self.spawn_watcher(api, kind_label, name, transform)
+        self.spawn_watcher(api, kind_label, Narrow::named(name), transform)
     }
 
     /// Cluster-scoped sibling of `subscribe`. For resources like
@@ -278,7 +353,7 @@ impl WatchManager {
         U: Serialize,
     {
         let api: Api<K> = Api::all(client);
-        self.spawn_watcher(api, kind_label, None, transform)
+        self.spawn_watcher(api, kind_label, Narrow::default(), transform)
     }
 
     /// Shared spawn loop for both subscribe variants: the session-table
@@ -294,7 +369,7 @@ impl WatchManager {
         &self,
         api: Api<K>,
         kind_label: &str,
-        name: Option<String>,
+        narrow: Narrow,
         transform: F,
     ) -> String
     where
@@ -332,11 +407,7 @@ impl WatchManager {
             // re-lists, which is what recycles one that has gone quiet. Until
             // `read_timeout` was removed from the client, kube's own 295-second
             // socket timer did this by accident; now it is asked for.
-            let mut config = WatcherConfig::default().timeout(WATCH_TIMEOUT_SECS);
-            if let Some(name) = &name {
-                config = config.fields(&format!("metadata.name={name}"));
-            }
-            let mut stream = watcher(api, config).boxed();
+            let mut stream = watcher(api, narrow.config()).boxed();
 
             // Surface watcher failures (RBAC denial, network hiccups) to the
             // frontend as a `Failed` event after a streak of consecutive

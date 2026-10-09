@@ -20,6 +20,7 @@ import {
 } from "@/lib/delivery";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { isRefusal, verbatim } from "@/lib/error-utils";
+import { useRefusedAt } from "@/lib/refusals";
 import {
   isReadDeadline,
   LIST_DEADLINE_SECONDS,
@@ -334,6 +335,7 @@ export function ResourceList<
   const failed = (shouldUseQuery ? queryResult.error : externalError) ?? null;
   // A refusal is about who asks now, so rows an earlier read showed go with it.
   const refused = failed !== null && isRefusal(failed);
+  const refusedAt = useRefusedAt(refused ? failed : null);
 
   // The answer is already the selection's; narrowing guards a caller whose
   // `data` is wider than it.
@@ -563,6 +565,7 @@ export function ResourceList<
           live={live && !resyncing && !refused}
           slowed={externalSlowed ?? (!live && queryResult.freshness.slowed)}
           stale={stale || (failed !== null && !isRefusal(failed))}
+          refusedAt={refused ? refusedAt : undefined}
         />
       )}
       {!embedded && <ListedHere kind={listKind} />}

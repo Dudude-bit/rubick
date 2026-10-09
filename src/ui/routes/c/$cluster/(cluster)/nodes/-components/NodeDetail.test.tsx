@@ -42,6 +42,9 @@ vi.mock("@/lib/commands", () => ({
     uncordonNode: vi.fn(async () => undefined),
     startNodeDrain: vi.fn(async () => "drain-1"),
     checkAccess: vi.fn(),
+    subscribeOwnedPodWatch: vi.fn(async () => "node-pods"),
+    resourceWatchSubscribed: vi.fn(async () => undefined),
+    unsubscribeResourceWatch: vi.fn(async () => undefined),
   },
 }));
 
@@ -50,6 +53,7 @@ vi.mock("../../../-debug", () => ({
     open ? <div data-testid="debug-dialog" /> : null,
 }));
 
+import { listen } from "@tauri-apps/api/event";
 import { useResourceDetail } from "@/hooks";
 import { commands } from "@/lib/commands";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -481,6 +485,107 @@ describe("the pods on the node", () => {
     expect(screen.getByRole("tab", { name: /Pods/ })).not.toHaveTextContent(
       "50"
     );
+  });
+});
+
+describe("a pod on the node changing", () => {
+  let dispatch: ((event: { payload: unknown }) => void) | null = null;
+  const changed = () =>
+    dispatch?.({
+      payload: {
+        channel: "resource-event",
+        stream_id: "node-pods",
+        changes: [
+          {
+            op: "applied",
+            resource: { name: "checkout-1", namespace: "shop" },
+          },
+        ],
+        error: null,
+      },
+    });
+  const open = (activeTab: string) =>
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...defaultUseResourceDetailReturn(buildNode()),
+      activeTab,
+    } as never);
+
+  beforeEach(() => {
+    dispatch = null;
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === "resource-event") dispatch = handler as typeof dispatch;
+      return () => {};
+    });
+    vi.mocked(commands.subscribeOwnedPodWatch).mockClear();
+    vi.mocked(commands.getResourceConnections).mockClear();
+    vi.mocked(commands.listPods).mockClear();
+    vi.mocked(commands.resourceWatchSubscribed).mockClear();
+    budgetMock.mockImplementation(async () => buildBudget());
+    onNode.pods = [];
+    onNode.connections = {
+      subject: {
+        kind: "Node",
+        name: "test-node-1",
+        namespace: null,
+        existence: "present",
+        facts: null,
+      },
+      edges: [],
+      stops: [],
+      published: [],
+      notLookedAt: [],
+    };
+    useClusterStore.setState({ isConnected: true });
+  });
+
+  /**
+   * Sam's node Connections said a crash-looping pod was up between crashes
+   * 1.7 s late and kept saying it 6 s after it exited: the neighbourhood was
+   * re-read on an eight-second poll. Fails if a pod on this node changing
+   * does not read it again while its tab is open.
+   */
+  it("reads What runs here again while Connections is open", async () => {
+    open("connections");
+    await renderPage();
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("node-pods")
+    );
+    expect(commands.subscribeOwnedPodWatch).toHaveBeenCalledWith(
+      "Node",
+      null,
+      "test-node-1"
+    );
+    await waitFor(() =>
+      expect(commands.getResourceConnections).toHaveBeenCalledTimes(1)
+    );
+
+    changed();
+
+    await waitFor(() =>
+      expect(commands.getResourceConnections).toHaveBeenCalledTimes(2)
+    );
+  });
+
+  /** Fails if the Pods tab's rows wait for a poll after one of them changed. */
+  it("reads the Pods tab again while it is open", async () => {
+    open("pods");
+    await renderPage();
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("node-pods")
+    );
+    await waitFor(() => expect(commands.listPods).toHaveBeenCalledTimes(1));
+
+    changed();
+
+    await waitFor(() => expect(commands.listPods).toHaveBeenCalledTimes(2));
+  });
+
+  /** The neighbourhood is a read across the cluster: fails if a tab that draws no pod pays for one. */
+  it("watches nothing while neither tab is open", async () => {
+    open("overview");
+    await renderPage();
+    await screen.findByText("10.0.0.5");
+    expect(commands.subscribeOwnedPodWatch).not.toHaveBeenCalled();
   });
 });
 

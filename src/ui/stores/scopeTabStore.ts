@@ -92,6 +92,11 @@ interface ScopeTabState {
   pendingHref: string | null;
   /** The pending route takes the place of the one on screen, as Back does. */
   pendingReplace: boolean;
+  /**
+   * The window was launched with a link, which owns the route and scope the
+   * restored session would have put back. The tabs are still restored.
+   */
+  linked: boolean;
 
   openTab: (options?: {
     href?: string;
@@ -108,6 +113,8 @@ interface ScopeTabState {
   activateIndex: (index: number) => Promise<void>;
   /** Re-apply the active tab's scope, e.g. once the kubeconfig has loaded. */
   resumeActive: () => Promise<void>;
+  /** The link the window was launched with takes the active tab, not the route restored for it. */
+  yieldToLink: (link: { context: string; path: string }) => void;
   recordHref: (href: string) => void;
   /** The router went from one route to a new one in the active tab. */
   pushed: (from: string, to: string) => void;
@@ -230,6 +237,7 @@ export const useScopeTabStore = create<ScopeTabState>()(
       activeId: initialTab.id,
       pendingHref: null,
       pendingReplace: false,
+      linked: false,
 
       openTab: async ({ href, context, namespace, background } = {}) => {
         const live = useClusterStore.getState();
@@ -292,10 +300,24 @@ export const useScopeTabStore = create<ScopeTabState>()(
       },
 
       resumeActive: async () => {
-        const { tabs, activeId } = get();
+        const { tabs, activeId, linked } = get();
+        // The link's route connects its own cluster and narrows its own scope.
+        if (linked) return;
         const active = tabs.find((tab) => tab.id === activeId);
         if (active) await applyScope(active);
       },
+
+      yieldToLink: ({ context, path }) =>
+        set((state) => ({
+          tabs: state.tabs.map((tab) =>
+            tab.id === state.activeId
+              ? { ...tab, context, href: path, missing: false }
+              : tab
+          ),
+          pendingHref: null,
+          pendingReplace: false,
+          linked: true,
+        })),
 
       closeTab: async (id: string) => {
         const { tabs, activeId } = get();

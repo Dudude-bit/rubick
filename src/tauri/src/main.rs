@@ -374,6 +374,7 @@ fn main() {
             commands::watch::subscribe_storageclass_watch,
             commands::watch::subscribe_custom_resource_watch,
             commands::watch::subscribe_object_watch,
+            commands::watch::subscribe_owned_pod_watch,
             commands::watch::subscribe_custom_object_watch,
             commands::watch::resource_watch_subscribed,
             commands::watch::unsubscribe_resource_watch,

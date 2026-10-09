@@ -107,6 +107,7 @@ vi.mock("@/lib/commands", () => ({
     listRoleBindingsIn: vi.fn(() => new Promise(() => {})),
     listClusterRoleBindings: vi.fn(() => new Promise(() => {})),
     subscribeObjectWatch: vi.fn(async () => "pod-stream"),
+    subscribeOwnedPodWatch: vi.fn(async () => "owned-pods"),
     resourceWatchSubscribed: vi.fn(async () => undefined),
     unsubscribeResourceWatch: vi.fn(async () => undefined),
   },
@@ -1071,6 +1072,67 @@ describe("a pod's peek over a page no list's watch carries it on", () => {
     await wrap("/c/prod/events?peek=configmaps/k8s-gui-test/app-config");
     await screen.findByText("nginx.conf");
     expect(commands.subscribeObjectWatch).not.toHaveBeenCalled();
+  });
+});
+
+describe("a workload's peek Pods tab", () => {
+  beforeEach(() => {
+    mockCluster();
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+  });
+  afterEach(() => {
+    vi.mocked(listen).mockImplementation(async () => () => {});
+    useClusterStore.setState({ currentContext: null, isConnected: false });
+  });
+
+  /**
+   * Sam's Deployment Pods tab said CrashLoopBackOff through every window the
+   * Pods list said Running: the tab only polled. Fails if the peek's tab does
+   * not follow its own pods' watch, or waits for a poll after one changed.
+   */
+  it("reads the rows again when the watch on the Deployment's pods sees one change", async () => {
+    let dispatch: ((event: { payload: unknown }) => void) | null = null;
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === "resource-event") dispatch = handler as typeof dispatch;
+      return () => {};
+    });
+    vi.mocked(commands.getDeployment).mockResolvedValue({
+      name: "checkout",
+      namespace: "shop",
+      replicas: { desired: 1, ready: 0, updated: 1, available: 0 },
+      rollout: { state: "ready" },
+      containers: [],
+      initContainers: [],
+      ownerReferences: [],
+      createdAt: null,
+    } as never);
+    vi.mocked(commands.getDeploymentPods).mockResolvedValue([buildPod()]);
+    await wrap("/c/prod/events?peek=deployments/shop/checkout");
+    await openTab("Pods");
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith(
+        "owned-pods"
+      )
+    );
+    expect(commands.subscribeOwnedPodWatch).toHaveBeenCalledWith(
+      "Deployment",
+      "shop",
+      "checkout"
+    );
+    const reads = vi.mocked(commands.getDeploymentPods).mock.calls.length;
+
+    dispatch!({
+      payload: {
+        stream_id: "owned-pods",
+        changes: [{ op: "applied", resource: buildPod() }],
+        error: null,
+      },
+    });
+    await waitFor(() =>
+      expect(vi.mocked(commands.getDeploymentPods).mock.calls.length).toBe(
+        reads + 1
+      )
+    );
   });
 });
 

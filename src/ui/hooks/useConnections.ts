@@ -8,10 +8,14 @@
  */
 
 import { commands } from "@/lib/commands";
+import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
-import type { ResourceConnections } from "@/generated/types";
+import type {
+  GatewayApiDetection,
+  ResourceConnections,
+} from "@/generated/types";
 
 export type ConnectionsQuery = ReturnType<typeof useConnections>;
 
@@ -42,13 +46,7 @@ export function useConnections(
   // a chain answered before the scan landed must not stay cached as the
   // whole answer once the cluster turns out to speak Gateway API.
   const gateway = useGatewayApi().data ?? null;
-  const queryKey = [
-    "connections",
-    kind,
-    namespace ?? null,
-    name,
-    gateway?.installed ? gateway.kinds.map((k) => k.readVersion) : null,
-  ];
+  const queryKey = keyOf(kind, name, namespace, gateway);
   return useLiveQuery<ResourceConnections>({
     queryKey,
     queryFn: () =>
@@ -69,4 +67,27 @@ export function useConnections(
     refresh,
     retry: false,
   });
+}
+
+/** The key {@link useConnections} reads one neighbourhood under, for a watch that reads it again. */
+export function useConnectionsKey(
+  kind: string,
+  name: string | undefined,
+  namespace: string | null | undefined
+) {
+  return keyOf(kind, name, namespace, useGatewayApi().data ?? null);
+}
+
+function keyOf(
+  kind: string,
+  name: string | undefined,
+  namespace: string | null | undefined,
+  gateway: GatewayApiDetection | null
+) {
+  return queryKeys.connections(
+    kind,
+    namespace,
+    name,
+    gateway?.installed ? gateway.kinds.map((k) => k.readVersion) : null
+  );
 }
