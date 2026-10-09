@@ -35,7 +35,8 @@ function pageOf(shell: KeptShell): string {
 /**
  * Holds every kept shell to its owner: buffers what it prints for the pane
  * that attaches next, lets go of one that ended, and ends one whose tab
- * closed or left the pod's page, which `onLeftPage` is told about.
+ * closed or landed on a page that is not the pod's, which `onLeftPage` is
+ * told about.
  */
 export function keepShells(
   router: AnyRouter,
@@ -48,17 +49,29 @@ export function keepShells(
     useKeptShellStore.getState().forget(payload.session_id)
   );
 
-  const onPage = (shell: KeptShell) => {
-    const { resolvedLocation, location } = router.state;
-    return plain((resolvedLocation ?? location).pathname) === pageOf(shell);
+  // The bridge settles a tab as soon as the router starts for its route,
+  // while the page left behind is still the resolved one.
+  const landedOn = () => {
+    const { status, resolvedLocation } = router.state;
+    if (
+      status !== "idle" ||
+      resolvedLocation?.href !== router.latestLocation.href
+    )
+      return null;
+    return plain(resolvedLocation.pathname);
   };
   const settle = () => {
     for (;;) {
       const { tabs, activeId, pendingHref } = useScopeTabStore.getState();
       const stranded = strandedShell(
         useKeptShellStore.getState().shells,
-        { ids: tabs.map((tab) => tab.id), activeId, pendingHref },
-        onPage
+        {
+          ids: tabs.map((tab) => tab.id),
+          activeId,
+          pendingHref,
+          landedOn: landedOn(),
+        },
+        pageOf
       );
       if (!stranded) return;
       void endShell(stranded.shell.id);

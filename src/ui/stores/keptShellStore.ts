@@ -100,24 +100,27 @@ export type Stranded = { shell: KeptShell; why: "tabClosed" | "leftPage" };
 
 /**
  * The first kept shell its owner has let go of, if any: its tab is gone, or
- * its tab is the one on screen, has arrived, and is no longer on the pod's
- * page. A tab on its way somewhere is judged when it lands.
+ * its tab is the one on screen, has landed, and stands on a page that is not
+ * the pod's. A tab on its way somewhere is judged when it lands, and so is a
+ * window whose router is still between two routes (`landedOn` null).
  */
 export function strandedShell(
   shells: KeptShell[],
-  tabs: {
+  at: {
     ids: readonly string[];
     activeId: string;
     pendingHref: string | null;
+    landedOn: string | null;
   },
-  onPage: (shell: KeptShell) => boolean
+  pageOf: (shell: KeptShell) => string
 ): Stranded | null {
   for (const shell of shells) {
-    if (!tabs.ids.includes(shell.tab)) return { shell, why: "tabClosed" };
+    if (!at.ids.includes(shell.tab)) return { shell, why: "tabClosed" };
     if (
-      shell.tab === tabs.activeId &&
-      tabs.pendingHref === null &&
-      !onPage(shell)
+      shell.tab === at.activeId &&
+      at.pendingHref === null &&
+      at.landedOn !== null &&
+      at.landedOn !== pageOf(shell)
     )
       return { shell, why: "leftPage" };
   }

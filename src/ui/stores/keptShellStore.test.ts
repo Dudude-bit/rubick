@@ -17,19 +17,21 @@ const shell = (tab: string, pod = "cart-4f68h"): KeptShell => ({
   container: "app",
 });
 
-const onCart = (each: KeptShell) => each.pod === "cart-4f68h";
-const tabs = (activeId: string, pendingHref: string | null = null) => ({
-  ids: ["a", "b"],
-  activeId,
-  pendingHref,
-});
+const CART = "/c/acme-staging/pods/shop/cart-4f68h";
+const pageOf = (each: KeptShell) =>
+  `/c/${each.context}/pods/${each.namespace}/${each.pod}`;
+const tabs = (
+  activeId: string,
+  pendingHref: string | null = null,
+  landedOn: string | null = CART
+) => ({ ids: ["a", "b"], activeId, pendingHref, landedOn });
 
 beforeEach(() => useKeptShellStore.setState({ shells: [] }));
 
 describe("which kept shell its owner has let go of", () => {
   /** Fails if a parked tab's shell is ended, which is what Dana lost on every tab switch. */
   it("keeps the shell of a tab that is not on screen, wherever that tab is", () => {
-    expect(strandedShell([shell("a", "elsewhere")], tabs("b"), onCart)).toBe(
+    expect(strandedShell([shell("a", "elsewhere")], tabs("b"), pageOf)).toBe(
       null
     );
   });
@@ -40,20 +42,31 @@ describe("which kept shell its owner has let go of", () => {
       strandedShell(
         [shell("a", "elsewhere")],
         tabs("a", "/c/acme-staging/pods/shop/elsewhere"),
-        onCart
+        pageOf
       )
     ).toBe(null);
   });
 
+  /**
+   * The bridge settles a tab the moment the router starts for its route,
+   * while the router still reports the page being left. Fails if a shell is
+   * judged by that page, which ended Dana's on every click back to its tab.
+   */
+  it("keeps the shell of a tab on screen while the window is between two routes", () => {
+    expect(strandedShell([shell("a")], tabs("a", null, null), pageOf)).toBe(
+      null
+    );
+  });
+
   /** Fails if a shell is ended under a reader still on its page. */
   it("keeps the shell of a tab on screen and on its pod", () => {
-    expect(strandedShell([shell("a")], tabs("a"), onCart)).toBe(null);
+    expect(strandedShell([shell("a")], tabs("a"), pageOf)).toBe(null);
   });
 
   /** Fails if a tab that moved off the pod keeps its shell, or ends it without a reason to say. */
   it("ends the shell of a tab on screen that left the pod, as a page left", () => {
     const left = shell("a", "elsewhere");
-    expect(strandedShell([left], tabs("a"), onCart)).toEqual({
+    expect(strandedShell([left], tabs("a"), pageOf)).toEqual({
       shell: left,
       why: "leftPage",
     });
@@ -62,7 +75,7 @@ describe("which kept shell its owner has let go of", () => {
   /** Fails if a closed tab's shell outlives it, parked or not. */
   it("ends the shell of a tab that is gone", () => {
     const orphan = shell("closed");
-    expect(strandedShell([orphan], tabs("a"), onCart)).toEqual({
+    expect(strandedShell([orphan], tabs("a"), pageOf)).toEqual({
       shell: orphan,
       why: "tabClosed",
     });
