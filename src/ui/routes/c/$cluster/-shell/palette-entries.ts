@@ -273,6 +273,8 @@ export type Entry =
     }
   /** Reads every other kind the current cluster serves too. */
   | { id: string; kind: "search-more"; count: number }
+  /** Reads every namespace, where the window is narrowed to some. */
+  | { id: string; kind: "search-all-namespaces" }
   /** Opens the actions of the object the page on screen is about. */
   | { id: string; kind: "page-actions"; target: ActionTarget }
   /** Whose actions the list is showing. */
@@ -374,6 +376,7 @@ function emptyHint({
   working,
   answered,
   notSearched,
+  narrowedTo,
   t,
 }: {
   query: string;
@@ -381,6 +384,7 @@ function emptyHint({
   working: boolean;
   answered: number;
   notSearched: number;
+  narrowedTo?: string;
   t: T;
 }): { text: ReactNode; tone: HintTone } {
   const total = clusters.length;
@@ -418,7 +422,9 @@ function emptyHint({
   if (done.some((cluster) => cluster.unreadable.length > 0)) {
     return {
       tone: "unread",
-      text: t("empty", "nothingMatchesInReadable", { query }),
+      text: narrowedTo
+        ? t("empty", "nothingMatchesInReadableIn", { query, scope: narrowedTo })
+        : t("empty", "nothingMatchesInReadable", { query }),
     };
   }
   if (done.length < total) {
@@ -437,10 +443,10 @@ function emptyHint({
       text: t("count", "noObjectOnClusters", { query, n: total }),
     };
   }
-  const searched = t("count", "noObjectInKinds", {
-    query,
-    n: done[0].searched.length,
-  });
+  const n = done[0].searched.length;
+  const searched = narrowedTo
+    ? t("count", "noObjectInKindsIn", { query, n, scope: narrowedTo })
+    : t("count", "noObjectInKinds", { query, n });
   return {
     tone: "empty",
     text:
@@ -480,6 +486,8 @@ export interface PaletteState {
   everything?: boolean;
   /** The window's namespaces, as the scope picker names them. */
   scopeLabel?: string;
+  /** The window's namespaces inside a sentence, absent where the search reads all of them. */
+  narrowedTo?: string;
   /** The object the page on screen is about, and its actions once read. */
   page?: PageActions;
   t: T;
@@ -548,6 +556,7 @@ export function buildPaletteEntries({
   unreadGroups = 0,
   everything = false,
   scopeLabel = "",
+  narrowedTo,
   page,
   t,
 }: PaletteState): Entry[] {
@@ -895,6 +904,9 @@ export function buildPaletteEntries({
       served: counted ? kinds.length : null,
       unreadGroups: own ? unreadGroups : 0,
     });
+    if (own && narrowedTo) {
+      out.push({ id: "search-all-ns", kind: "search-all-namespaces" });
+    }
     const more = notSearched?.length ?? 0;
     if (own && !everything && more > 0 && cluster.status === "done") {
       out.push({ id: "search-more", kind: "search-more", count: more });
@@ -917,6 +929,7 @@ export function buildPaletteEntries({
         answered,
         notSearched:
           own && kinds.length > 0 ? notSearchedOf(kinds, own).length : 0,
+        narrowedTo: own ? narrowedTo : undefined,
         t,
       }),
     });

@@ -1174,6 +1174,7 @@ export const en = {
     hintScopeToIt: "scope to it",
     hintUseAsScope: "scope to it",
     hintOpenList: "open its list",
+    searchAllNamespaces: "Search all namespaces",
     hintComplete: "complete",
     hintRun: "run",
     hintActions: "actions",
@@ -6515,6 +6516,8 @@ export const en = {
     nothingMatchesQuery: "Nothing matches “{query}”.",
     nothingMatchesInReadable:
       "No object matches “{query}” in the kinds that could be read.",
+    nothingMatchesInReadableIn:
+      "No object in {scope} matches “{query}” in the kinds that could be read.",
     noHelmHistory: "No history: Helm keeps none for this release.",
     nothingRoutesThroughController:
       "Nothing routes through this controller, so there is no shape to draw.",
@@ -7609,6 +7612,11 @@ export const en = {
     noObjectInKinds: {
       one: "No object matches “{query}” in the {n} kind searched.",
       other: "No object matches “{query}” in the {n} kinds searched.",
+    },
+    noObjectInKindsIn: {
+      one: "No object in {scope} matches “{query}” in the {n} kind searched.",
+      other:
+        "No object in {scope} matches “{query}” in the {n} kinds searched.",
     },
     noObjectOnClusters: {
       one: "No object matches “{query}” in the kinds searched on {n} cluster.",

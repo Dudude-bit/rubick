@@ -1168,6 +1168,7 @@ export const ru: Catalogue = {
     hintScopeToIt: "искать в нём",
     hintUseAsScope: "выбрать областью",
     hintOpenList: "открыть список",
+    searchAllNamespaces: "Искать во всех пространствах имён",
     hintComplete: "дополнить",
     hintRun: "выполнить",
     hintActions: "действия",
@@ -7135,6 +7136,8 @@ export const ru: Catalogue = {
     nothingMatchesQuery: "По запросу «{query}» ничего не найдено.",
     nothingMatchesInReadable:
       "В тех видах ресурсов, что удалось прочитать, объектов по запросу «{query}» нет.",
+    nothingMatchesInReadableIn:
+      "В {scope} объектов по запросу «{query}» нет в тех видах ресурсов, что удалось прочитать.",
     noHelmHistory: "Истории нет: Helm не хранит её для этого релиза.",
     nothingRoutesThroughController:
       "Через этот контроллер ничего не проходит, поэтому рисовать нечего.",
@@ -8734,6 +8737,13 @@ export const ru: Catalogue = {
       many: "В {n} видах ресурсов, где искали, объектов по запросу «{query}» нет.",
       other:
         "В {n} вида ресурсов, где искали, объектов по запросу «{query}» нет.",
+    },
+    noObjectInKindsIn: {
+      one: "В {scope} объектов по запросу «{query}» нет: искали в {n} виде ресурсов.",
+      few: "В {scope} объектов по запросу «{query}» нет: искали в {n} видах ресурсов.",
+      many: "В {scope} объектов по запросу «{query}» нет: искали в {n} видах ресурсов.",
+      other:
+        "В {scope} объектов по запросу «{query}» нет: искали в {n} вида ресурсов.",
     },
     noObjectOnClusters: {
       one: "Объектов по запросу «{query}» нет в тех видах ресурсов, где искали, на {n} кластере.",

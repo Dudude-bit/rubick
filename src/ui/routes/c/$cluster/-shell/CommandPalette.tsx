@@ -17,6 +17,7 @@ import {
   Ban,
   CircleDashed,
   FolderOpen,
+  FolderSearch,
   ListPlus,
   Lock,
   ScanSearch,
@@ -140,6 +141,7 @@ export function CommandPalette() {
   const [recentItems, setRecentItems] = useState<RecentItem[]>([]);
   const [opening, setOpening] = useState("");
   const [everything, setEverything] = useState(false);
+  const [allNamespaces, setAllNamespaces] = useState(false);
   const [actionsOf, setActionsOf] = useState<ActionsOf | null>(null);
   const [actionText, setActionText] = useState("");
   // The object an action ran on stays mounted after the palette closes, so
@@ -199,6 +201,7 @@ export function CommandPalette() {
   const query = text.trim();
   const hasQuery = query.length > 0;
   const scoped = scope.kind !== "current";
+  const wholeCluster = scoped || allNamespaces;
 
   const scopeContexts = useMemo(() => {
     if (scope.kind === "context") return [scope.context];
@@ -213,7 +216,7 @@ export function CommandPalette() {
     contexts: requestContexts,
     // Another cluster's namespaces are not this one's, so a scoped search
     // is a whole-cluster search; the unscoped one keeps today's filter.
-    namespace: scoped ? null : currentNamespace || null,
+    namespace: wholeCluster ? null : currentNamespace || null,
     connect: wake !== null,
     attempt: wake?.attempt ?? 0,
     // A retry is a question asked again, so it lists again too.
@@ -276,13 +279,13 @@ export function CommandPalette() {
     // them, so a window narrowed to several has to keep what it wants here —
     // the same rule the lists follow. A scoped search keeps every hit:
     // another cluster's namespaces are not this one's.
-    for (const hit of scoped ? hits : namespaceScope.narrow(hits)) {
+    for (const hit of wholeCluster ? hits : namespaceScope.narrow(hits)) {
       const bucket = grouped.get(hit.context) ?? new Map<string, SearchHit>();
       bucket.set(hitKey(hit), hit);
       grouped.set(hit.context, bucket);
     }
     return grouped;
-  }, [hits, scoped, namespaceScope]);
+  }, [hits, wholeCluster, namespaceScope]);
 
   const answered = shownClusters.filter(hasAnswered).length;
   const unreadGroups = catalog.data?.unread.length;
@@ -305,7 +308,13 @@ export function CommandPalette() {
         kinds: catalog.data?.entries,
         unreadGroups,
         everything,
-        scopeLabel: namespaceScope.label,
+        scopeLabel: allNamespaces
+          ? t("cluster", "allNamespaces")
+          : namespaceScope.label,
+        narrowedTo:
+          allNamespaces || namespaceScope.isAll
+            ? undefined
+            : namespaceScope.inWords,
         page: pageActions,
         t,
       }),
@@ -323,7 +332,10 @@ export function CommandPalette() {
       catalog.data?.entries,
       unreadGroups,
       everything,
+      allNamespaces,
       namespaceScope.label,
+      namespaceScope.isAll,
+      namespaceScope.inWords,
       pageActions,
       t,
     ]
@@ -610,6 +622,10 @@ export function CommandPalette() {
           setEverything(true);
           inputRef.current?.focus();
           return;
+        case "search-all-namespaces":
+          setAllNamespaces(true);
+          inputRef.current?.focus();
+          return;
         case "page-actions":
           showActions(entry.target, entry.id);
           return;
@@ -776,6 +792,7 @@ export function CommandPalette() {
       setScope({ kind: "current" });
       setWake(null);
       setEverything(false);
+      setAllNamespaces(false);
       setActionsOf(null);
       setActionText("");
       setSelectedId(null);
@@ -1379,6 +1396,16 @@ function EntryRow({
           <ListPlus className="h-3.5 w-3.5 flex-none text-info" />
           <span className="min-w-0 truncate">
             {t("count", "searchKindsToo", { n: entry.count })}
+          </span>
+          <Kbd shortcut="↵" className="ml-auto flex-none" />
+        </Row>
+      );
+    case "search-all-namespaces":
+      return (
+        <Row {...shared}>
+          <FolderSearch className="h-3.5 w-3.5 flex-none text-info" />
+          <span className="min-w-0 truncate">
+            {t("action", "searchAllNamespaces")}
           </span>
           <Kbd shortcut="↵" className="ml-auto flex-none" />
         </Row>
