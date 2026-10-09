@@ -10,6 +10,7 @@ vi.mock("@/hooks", async (importOriginal) => ({
 import { useResourceDetail } from "@/hooks";
 import type { AccessQuery, DeploymentInfo } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
+import { forgetRefusals } from "@/lib/refusals";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter, testQueryClient } from "@/test/render";
 import { DeploymentDetail } from "./DeploymentDetail";
@@ -49,6 +50,7 @@ const replicaSets = vi.hoisted(() => ({
 }));
 
 beforeEach(() => {
+  forgetRefusals();
   useClusterStore.setState({ isConnected: true, currentContext: "prod" });
   vi.mocked(useResourceDetail).mockReturnValue({
     name: "ledger",
@@ -294,6 +296,42 @@ describe("the Revisions tab", () => {
     expect(tab).toHaveAccessibleName(
       "Revisions: Could not read this Deployment's ReplicaSets."
     );
+  });
+
+  /**
+   * Sam opened big-pull's page before applying it: the Revisions tab kept
+   * "Could not read this Deployment's ReplicaSets: deployments.apps
+   * big-pull not found" beside the Deployment Ready 1/1 until he asked
+   * again. Fails if a NotFound from before the page read its Deployment is
+   * drawn once it has, or is not asked again.
+   */
+  it("reads a NotFound from before the Deployment was made as still reading, and asks again", async () => {
+    let asked = 0;
+    replicaSets.answer = () => {
+      asked += 1;
+      return asked === 1
+        ? Promise.reject({
+            code: "NOT_FOUND",
+            message: 'deployments.apps "ledger" not found',
+          })
+        : new Promise(() => {});
+    };
+    const client = testQueryClient();
+    await open(client);
+    expect(
+      await screen.findByText("Could not read this Deployment's ReplicaSets.")
+    ).toBeInTheDocument();
+
+    read(client);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Could not read this Deployment's ReplicaSets.")
+      ).toBeNull()
+    );
+    await waitFor(() => expect(asked).toBe(2));
+    expect(screen.getByText("reading…")).toBeInTheDocument();
+    expect(screen.queryByText("This Deployment has no ReplicaSets")).toBeNull();
   });
 
   /** Fails if a list still on its way is counted as none. */

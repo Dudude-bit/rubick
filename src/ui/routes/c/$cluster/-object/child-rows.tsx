@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { CircleX, Lock } from "lucide-react";
+import { CircleX, Loader2, Lock } from "lucide-react";
 
 import { ROLE_DOT, statusRole, type StatusRole } from "@/lib/status-role";
 import { objectLink } from "@/lib/links";
@@ -89,6 +89,7 @@ export function ChildRows({
   /** What was being listed, for the failure line. */
   label,
   onRetry,
+  pending = false,
 }: {
   rows: ChildRow[];
   emptyMessage?: string;
@@ -96,6 +97,8 @@ export function ChildRows({
   label?: string;
   /** Ask the read again, refused or failed. */
   onRetry?: () => void;
+  /** The read has not answered for this object yet: no rows is not none. */
+  pending?: boolean;
 }) {
   const t = useT();
   const reserve = useStatusReserve(rows);
@@ -131,6 +134,20 @@ export function ChildRows({
           <ReadAgain error={error} onRetry={onRetry} className="mt-1.5" />
         )}
       </div>
+    );
+  }
+  if (rows.length === 0 && pending) {
+    return (
+      <p
+        data-read="reading"
+        className="flex items-center gap-1.5 px-1.5 py-1 text-xs text-fg-mut"
+      >
+        <Loader2
+          className="h-3 w-3 flex-none animate-spin text-info"
+          aria-hidden="true"
+        />
+        {t("action", "readingInline")}
+      </p>
     );
   }
   if (rows.length === 0) {
@@ -232,11 +249,13 @@ function ChildRowItem({ row, reserve }: { row: ChildRow; reserve: number }) {
 export function RevisionRows({
   revisions,
   emptyMessage,
+  pending,
   onRollback,
   rollbackDenied,
 }: {
   revisions: ReplicaSetInfo[];
   emptyMessage?: string;
+  pending?: boolean;
   /** Offered on every older revision. */
   onRollback?: (rs: ReplicaSetInfo) => void;
   /** Why the cluster will not take a rollback from this user. */
@@ -246,6 +265,7 @@ export function RevisionRows({
   return (
     <ChildRows
       emptyMessage={emptyMessage ?? t("empty", "deploymentHasNoReplicaSets")}
+      pending={pending}
       rows={revisions.map((rs) => {
         const { desired, ready } = rs.replicas;
         const live = rs.revision !== null && rs.revision === rs.currentRevision;

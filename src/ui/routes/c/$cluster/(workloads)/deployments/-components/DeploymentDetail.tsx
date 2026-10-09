@@ -83,6 +83,7 @@ import { PinAction } from "../../-components/PinAction";
 import { useResourceMutation, useResourceDetail } from "@/hooks";
 import { useDeploymentShare } from "./useDeploymentShare";
 import { useChainAnswer } from "@/hooks/useChainAnswer";
+import { useHeldRead } from "@/hooks/useHeldRead";
 import { useMetrics } from "@/hooks/useMetrics";
 import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { commands } from "@/lib/commands";
@@ -170,18 +171,27 @@ export function DeploymentDetail() {
     !!deployment
   );
 
-  const {
-    data: revisionsRead,
-    error: revisionsError,
-    refetch: refetchRevisions,
-  } = useLiveQuery({
-    queryKey: queryKeys.deploymentReplicaSets(namespace, name),
+  const revisionsKey = queryKeys.deploymentReplicaSets(namespace, name);
+  const revisionsQuery = useLiveQuery({
+    queryKey: revisionsKey,
     queryFn: () => commands.getDeploymentReplicasets(name!, namespace || null),
     enabled: !!namespace && !!name,
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
+  const {
+    data: revisionsRead,
+    error: revisionsError,
+    isPending: revisionsPending,
+    refetch: refetchRevisions,
+  } = useHeldRead(
+    ResourceType.Deployment,
+    namespace,
+    name,
+    revisionsQuery,
+    revisionsKey
+  );
   const revisions = revisionsRead ?? [];
 
   // For the banner only. The Usage block reads the same query through the
@@ -474,6 +484,7 @@ export function DeploymentDetail() {
       content: (
         <PodListCard
           pods={pods}
+          pending={podsPending}
           error={podsError}
           onRetry={() => void refetchPods()}
         />
@@ -497,6 +508,7 @@ export function DeploymentDetail() {
       ) : (
         <RevisionRows
           revisions={revisions}
+          pending={revisionsPending}
           onRollback={(rs) => rollback.offer(revisionOfReplicaSet(rs))}
           rollbackDenied={rollback.denied}
         />

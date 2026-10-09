@@ -378,6 +378,7 @@ export function StatefulSetDetail() {
         content: (
           <PodListCard
             pods={pods}
+            pending={podsPending}
             error={podsError}
             onRetry={() => void refetchPods()}
           />

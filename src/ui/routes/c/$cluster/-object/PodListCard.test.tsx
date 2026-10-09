@@ -23,6 +23,7 @@ const card = (props: {
   pods: PodInfo[];
   error?: Error | null;
   onRetry?: () => void;
+  pending?: boolean;
 }) => renderWithRouter(<PodListCard {...props} />, { at: "/c/prod" });
 
 const pod = (name: string): PodInfo =>
@@ -34,6 +35,19 @@ const pod = (name: string): PodInfo =>
     containers: [{ name: "web", ready: true, state: { type: "running" } }],
     initContainers: [],
   }) as unknown as PodInfo;
+
+describe("a pod list not read yet", () => {
+  /**
+   * The Deployment made again under its name holds its pods as still
+   * reading until a read made for it answers. Fails if that wait reads as a
+   * workload owning no pods.
+   */
+  it("says it is still reading, not that the workload owns none", async () => {
+    await card({ pods: [], pending: true });
+    expect(screen.queryByText(/no pods/i)).toBeNull();
+    expect(screen.getByText("reading…")).toBeTruthy();
+  });
+});
 
 describe("a pod list that could not be read", () => {
   it("does not claim the workload owns no pods", async () => {
