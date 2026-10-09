@@ -1,5 +1,4 @@
-import { createContext, useContext, useMemo, useState } from "react";
-import { ArrowUpToLine } from "lucide-react";
+import { createContext, useContext, useMemo } from "react";
 
 import { DataTable } from "@/components/ui/data-table";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -11,12 +10,12 @@ import type { EventInfo } from "@/generated/types";
 import { columnHeader } from "@/i18n/column-header";
 import { eventReasonMark } from "@/lib/event-reason";
 import { cn, formatDate } from "@/lib/utils";
-import { useT } from "@/i18n/useT";
 import { hrefOf, objectLink } from "@/lib/links";
 import type { PeekTarget } from "@/hooks/usePeek";
 import { eventLanding } from "../../-object/attachment";
 import { useRowMenu } from "../../-list/useRowMenu";
-import { useHeldRows } from "./held-rows";
+import { useHeldRows } from "../../-list/held-rows";
+import { HeldUpdates } from "../../-list/HeldUpdates";
 import { AGE_CELL_PX, AGE_LABEL, ageOrder } from "../../-list/columns";
 import { AgeHeader } from "@/components/ui/sortable-header";
 
@@ -198,20 +197,8 @@ const Waiting = createContext<{ n: number; show: () => void }>({
 
 /** Reads the count through context, so a batch held back redraws this button and not the table. */
 function ShowWaiting() {
-  const t = useT();
   const { n, show } = useContext(Waiting);
-  if (n === 0) return null;
-  return (
-    <button
-      type="button"
-      onClick={show}
-      title={t("hints", "eventsHeld")}
-      className="inline-flex h-6 items-center gap-1.5 rounded px-1.5 text-[11px] text-info transition-colors hover:bg-hover"
-    >
-      <ArrowUpToLine className="h-3 w-3" aria-hidden="true" />
-      {t("count", "eventsWaiting", { n })}
-    </button>
-  );
+  return <HeldUpdates n={n} onShow={show} />;
 }
 
 const SHOW_WAITING = <ShowWaiting />;
@@ -219,22 +206,27 @@ const NO_QUICK_ACTIONS: never[] = [];
 
 /**
  * The All events view: a table that draws only the rows on screen, and holds
- * still while the pointer is on it so a click lands on the row it aimed at.
+ * still while `held` so a click lands on the row it aimed at.
  */
 export function EventsTable({
   events,
   showNamespace,
   emptyMessage,
   question,
+  held,
 }: {
   events: EventInfo[];
   showNamespace: boolean;
   emptyMessage: string;
   /** What the rows answer; a new one is drawn at once, held or not. */
   question: string;
+  held: boolean;
 }) {
-  const [pointed, setPointed] = useState(false);
-  const { shown, waiting, show } = useHeldRows(events, pointed, question);
+  const { shown, waiting, show } = useHeldRows(
+    events,
+    held && events.length > 0,
+    question
+  );
   const rowMenu = useRowMenu<EventInfo>({
     kind: "Event",
     getRowHref: hrefOfEvent,
@@ -261,11 +253,7 @@ export function EventsTable({
     [showNamespace, shown, emptyMessage, rowMenu.open]
   );
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col"
-      onPointerEnter={() => setPointed(true)}
-      onPointerLeave={() => setPointed(false)}
-    >
+    <div className="flex min-h-0 flex-1 flex-col">
       <Waiting.Provider value={waitingValue}>{table}</Waiting.Provider>
       {rowMenu.element(NO_QUICK_ACTIONS)}
     </div>

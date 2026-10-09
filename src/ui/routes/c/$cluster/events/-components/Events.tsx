@@ -25,7 +25,7 @@ import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW } from "@/components/object/detail-blocks";
 import { EventsTable } from "./EventsTable";
 import { StoryCard } from "./StoryCard";
-import { useHeldOrder } from "./held-rows";
+import { useHeldOrder } from "../../-list/held-rows";
 import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
 import { useListRefusal } from "../../-list/useListRefusal";
 import { StaleRows } from "../../-list/StaleRows";
@@ -58,6 +58,10 @@ import { listQueryFor, ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn, formatTimeUnit } from "@/lib/utils";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
+import {
+  useDisplaySettingsStore,
+  type EventsView,
+} from "@/stores/displaySettingsStore";
 import type { EventFilters, EventInfo, Scoped } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import type { en } from "@/i18n/catalogue";
@@ -73,8 +77,6 @@ const TYPE_FILTERS: Array<{
 ];
 
 const LIMITS = ["200", "500", "1000", "2000", "all"] as const;
-
-type View = "stories" | "list";
 
 const ORDERS: Array<{ value: StoryOrder; label: keyof typeof en.action }> = [
   { value: "warningsFirst", label: "warningsFirst" },
@@ -163,7 +165,10 @@ export function Events() {
   const [eventLimit, setEventLimit] = useState<string>("500");
   const { view: viewParam, range, q: query = "" } = useAppSearch();
   const setSearch = useSetSearch();
-  const view: View = viewParam === "list" ? "list" : "stories";
+  const remembered = useDisplaySettingsStore((state) => state.eventsView);
+  const setRemembered = useDisplaySettingsStore((state) => state.setEventsView);
+  const view: EventsView =
+    viewParam === "list" || viewParam === "stories" ? viewParam : remembered;
   const window: StoryWindow = isWindow(range) ? range : "1h";
   const [order, setOrder] = useState<StoryOrder>("warningsFirst");
   // In the address, like every other list's search: a term carried here from
@@ -331,6 +336,8 @@ export function Events() {
         : [],
     [view, matching, storyOptions, order]
   );
+  // The whole screen, header included: Dana read the rows with the pointer on
+  // the view switch, and they moved before it reached the one she aimed at.
   const [pointed, setPointed] = useState(false);
   const shownStories = useHeldOrder(
     stories,
@@ -406,6 +413,8 @@ export function Events() {
         "flex flex-col gap-2 animate-in fade-in duration-200",
         listed && "h-full min-h-0"
       )}
+      onPointerEnter={() => setPointed(true)}
+      onPointerLeave={() => setPointed(false)}
     >
       <SectionHeader
         title="Events"
@@ -436,11 +445,10 @@ export function Events() {
                       type="button"
                       role="tab"
                       aria-selected={view === candidate}
-                      onClick={() =>
-                        setSearch({
-                          view: candidate === "stories" ? undefined : "list",
-                        })
-                      }
+                      onClick={() => {
+                        setRemembered(candidate);
+                        setSearch({ view: candidate });
+                      }}
                       className={cn(
                         "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
                         view === candidate ? "bg-sel text-fg" : "text-fg-mut"
@@ -624,11 +632,7 @@ export function Events() {
                       })}
               </p>
             ) : (
-              <div
-                className="flex flex-col gap-2 p-1.5"
-                onPointerEnter={() => setPointed(true)}
-                onPointerLeave={() => setPointed(false)}
-              >
+              <div className="flex flex-col gap-2 p-1.5">
                 {shownStories.map((story) => (
                   <StoryCard
                     key={story.key}
@@ -647,6 +651,7 @@ export function Events() {
               events={events}
               showNamespace={!currentNamespace}
               question={[cacheKey, eventType, eventLimit, query].join("\n")}
+              held={pointed}
               // A feed filtered down to nothing has not told the reader
               // their scope is quiet — it has told them their query missed.
               // Three states, not two: the scope is quiet, the query

@@ -289,6 +289,44 @@ describe("a tab strip wider than the page", () => {
     expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
     expect(screen.getByRole("tablist").className).not.toContain("mask-image");
   });
+
+  /**
+   * Lena picked YAML from "ещё 5" with the mouse and its ring stayed, through
+   * a deep link too: WebKit rings the focus the menu hands back as if a key
+   * had brought it. Fails if a pick by pointer leaves the button ringed, or a
+   * pick by keyboard leaves it without one.
+   */
+  it("rings the more button after a pick only when a key made it", async () => {
+    laidOut({
+      overview: [0, 80],
+      logs: [96, 180],
+      events: [196, 260],
+      yaml: [276, 320],
+    });
+    render(
+      <DetailTabs tabs={four} activeTab="overview" onTabChange={() => {}} />
+    );
+    const more = screen.getByRole("button", { name: /more tabs/ });
+    expect(more.className).not.toContain("focus-visible:ring");
+
+    await userEvent.click(more);
+    await userEvent.click(screen.getByRole("menuitem", { name: "YAML" }));
+    expect(more).toHaveFocus();
+    expect(more).not.toHaveAttribute("data-ring");
+
+    await userEvent.keyboard("{Enter}");
+    await screen.findByRole("menuitem", { name: "Events" });
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    expect(more).toHaveFocus();
+    expect(more).toHaveAttribute("data-ring", "true");
+
+    await userEvent.keyboard("{Enter}");
+    await userEvent.click(
+      await screen.findByRole("menuitem", { name: "YAML" })
+    );
+    expect(more).toHaveFocus();
+    expect(more).not.toHaveAttribute("data-ring");
+  });
 });
 
 describe("a tab strip that scrolls", () => {

@@ -51,10 +51,10 @@ export function YamlTabContent({
           the rhythm, and the line the title used to occupy says something
           the reader did not already know. */}
       <div className="flex flex-none items-center gap-2 pb-2">
-        <p className="text-[11px] text-fg-fnt">
+        <p className="min-w-0 text-[11px] text-fg-fnt">
           {note ?? t("empty", "yamlNoteDefault")}
         </p>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex flex-none items-center gap-1">
           {resourceKind && resourceName && (
             <YamlEditorAction
               title={t("action", "editResourceTitle", {

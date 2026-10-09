@@ -101,7 +101,8 @@ describe("a reference in a peek row", () => {
     const link = await screen.findByRole("link");
     expect(link).toHaveClass("max-w-full", "min-w-0");
     expect(screen.getByTestId("resource-ref-stem").parentElement).toHaveClass(
-      "truncate"
+      "overflow-hidden"
     );
+    expect(screen.getByTestId("resource-ref-cut")).toBeInTheDocument();
   });
 });

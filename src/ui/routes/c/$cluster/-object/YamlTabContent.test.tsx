@@ -35,4 +35,18 @@ describe("the YAML tab", () => {
       expect(note.textContent).toContain(field);
     }
   });
+
+  /**
+   * At 1000 wide Lena's YAML header broke "Изменить YAML" onto two lines
+   * beside a wrapped note. Fails if an action's label can break, or the
+   * actions give up their width to the note instead of the note wrapping.
+   */
+  it("keeps the actions on one line and lets the note wrap beside them", async () => {
+    renderWithProviders(<YamlTabContent yaml={APPLIABLE} onCopy={() => {}} />);
+
+    const copy = await screen.findByRole("button", { name: "Copy" });
+    expect(copy).toHaveClass("whitespace-nowrap");
+    expect(copy.parentElement).toHaveClass("flex-none");
+    expect(screen.getByText(/as you would apply it/)).toHaveClass("min-w-0");
+  });
 });

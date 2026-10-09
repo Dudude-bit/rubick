@@ -1322,6 +1322,63 @@ describe("what Needs attention says it checked", () => {
    * Lena read "...поэтому н…" and "...никто не подхваты…" with nothing to
    * hover. Fails if a cut detail sentence stops carrying its whole text.
    */
+  /**
+   * At 1024 Marco's checkout-worker row read "team-…": the reason, which is
+   * the point of the row, was cut to nothing. Fails if the row's sentence is
+   * truncated to one line again, or the name in it is left unbounded.
+   */
+  it("wraps a row's reason under its object rather than cutting it", async () => {
+    await panel(
+      attentionFrom([
+        {
+          ...problem,
+          detail: {
+            says: "said",
+            text: "couldn't find key DB_PASSWORD in Secret team-checkout/checkout-db",
+          },
+        },
+      ])
+    );
+    const said = screen.getByTestId("attention-said");
+    expect(said).toHaveTextContent("couldn't find key DB_PASSWORD");
+    expect(said).not.toHaveClass("truncate");
+    expect(said).toHaveClass("wrap-break-word");
+    expect(said.closest('[role="link"]')).toHaveClass("items-baseline");
+    expect(within(said).getAllByRole("link")[0]).toHaveClass("max-w-full");
+  });
+
+  /**
+   * "HorizontalPodAutos…" in the Not checked block at 1400 and in Russian.
+   * Fails if a kind's name there can be cut, or its column stops being as
+   * wide as the longest name in it.
+   */
+  it("never cuts a kind's name in the kinds not checked", async () => {
+    await panel(
+      attentionFrom([], {
+        autoscalers: {
+          data: {
+            rows: [],
+            unread: [
+              {
+                namespace: "team-blind",
+                code: "PERMISSION_DENIED",
+                message:
+                  'horizontalpodautoscalers.autoscaling is forbidden: User "marco" cannot list resource "horizontalpodautoscalers" in API group "autoscaling" in the namespace "team-blind"',
+              },
+            ],
+          },
+          error: null,
+        },
+      })
+    );
+    const unchecked = screen.getByTestId("attention-unchecked");
+    const kind = within(unchecked).getByText("HorizontalPodAutoscalers");
+    expect(kind).toHaveClass("whitespace-nowrap");
+    expect(kind.closest(".truncate")).toBeNull();
+    expect(unchecked.querySelector("ul")?.className).toContain("max-content");
+    expect(kind.closest("li")).toHaveClass("grid-cols-subgrid");
+  });
+
   it("keeps a detail sentence its row cuts readable on hover", async () => {
     const sentence =
       "IngressClass traefik is served by nothing in this cluster, so nothing picks this Ingress up";

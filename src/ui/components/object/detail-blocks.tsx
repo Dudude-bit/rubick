@@ -88,7 +88,7 @@ export function DetailAction({
       disabled={!blocked && (disabled || busy)}
       aria-disabled={blocked || undefined}
       className={cn(
-        "flex h-6 items-center gap-1.5 rounded px-1.5 text-[11px] transition-colors disabled:pointer-events-none disabled:opacity-40",
+        "flex h-6 items-center gap-1.5 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors disabled:pointer-events-none disabled:opacity-40",
         danger ? "text-err" : "text-fg-mut",
         blocked
           ? "cursor-default opacity-40"

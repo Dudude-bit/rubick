@@ -5,7 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { useLocation } from "@tanstack/react-router";
 import type { AnyRouter } from "@tanstack/react-router";
 import { ResourceRef } from "./ResourceRef";
-import { ResourceName, RESOURCE_NAME_SIZE } from "./ResourceName";
+import { nameCut, ResourceName, RESOURCE_NAME_SIZE } from "./ResourceName";
+import { splitName } from "@/lib/resource-identity";
 import {
   useDisplaySettingsStore,
   type ResourceColouring,
@@ -648,6 +649,125 @@ function measure(element: Element, scrollWidth: number, clientWidth: number) {
 }
 
 describe("a name cut short", () => {
+  /** What a box `w` characters wide shows of a reference, worked out from the widths the stylesheet is given. */
+  function drawn(kind: string, name: string, w: number) {
+    const { stem, tail } = splitName(name);
+    const parts = nameCut({
+      name,
+      stem,
+      generated: tail !== "",
+      before: 0,
+      label: kind.length + 1,
+    });
+    const head = parts.head.at(w);
+    const end = parts.end?.at(w) ?? 0;
+    return `${parts.label.at(w) > 0 ? `${kind}/` : ""}${name.slice(0, head)}${
+      parts.cut.at(w) > 0 ? "…" : ""
+    }${end > 0 ? name.slice(-end) : ""}`;
+  }
+
+  /**
+   * With a peek open the Events list drew `Replica… 558d6`: the kind and the
+   * name were cut as one string. Fails if the kind label is ever drawn in
+   * part, at any width.
+   */
+  it("draws the kind label whole or not at all", () => {
+    const { label } = nameCut({
+      name: "big-pull-67577558d6",
+      stem: "big-pull",
+      generated: true,
+      before: 0,
+      label: "ReplicaSet/".length,
+    });
+    for (let w = 1; w <= 40; w += 0.25)
+      expect([0, 11], `at ${w}ch`).toContain(label.at(w));
+  });
+
+  /**
+   * The same column cut a pod to `Pod/che… k6j2n`, three characters of its
+   * name. Fails if a column that holds the first segment and the pod's own
+   * suffix gives either of them up, or keeps the kind instead.
+   */
+  it("keeps a generated name's first segment and its last five characters", () => {
+    expect(drawn("ReplicaSet", "big-pull-67577558d6", 14)).toBe(
+      "big-pull…558d6"
+    );
+    expect(drawn("Pod", "checkout-7596d7fc77-k6j2n", 14)).toBe(
+      "checkout…k6j2n"
+    );
+    expect(drawn("Node", "k3d-rubick-live-server-0", 14)).toBe(
+      "k3d-rubi…ver-0"
+    );
+    expect(drawn("ReplicaSet", "big-pull-67577558d6", 29)).toBe(
+      "big-pull-67577558d6"
+    );
+    expect(drawn("ReplicaSet", "big-pull-67577558d6", 30)).toBe(
+      "ReplicaSet/big-pull-67577558d6"
+    );
+  });
+
+  /** A name with nothing generated in it keeps its start, as any cut text does. */
+  it("cuts a name with nothing generated in it at its end", () => {
+    expect(
+      drawn("ClusterRole", "system:controller:clusterrole-aggregation", 20)
+    ).toBe("system:controller:c…");
+  });
+
+  /**
+   * A gap opened between the ellipsis and the tail, `recommen… -685f…`,
+   * where the start was cut at a fraction of a character. Fails if any part
+   * is not a whole number of characters, if the parts of a cut name leave a
+   * character's room unused, or if they overrun the box.
+   */
+  it("fills the box in whole characters, with nothing between the ellipsis and the end", () => {
+    const name = "recommendation-api-685f64b65d-bjc2c";
+    const { stem, tail } = splitName(name);
+    const parts = nameCut({
+      name,
+      stem,
+      generated: tail !== "",
+      before: 0,
+      label: 4,
+    });
+    for (let w = 5; w <= 42; w += 0.25) {
+      const widths = [parts.label, parts.head, parts.cut, parts.end!].map(
+        (part) => part.at(w)
+      );
+      for (const width of widths) expect(Number.isInteger(width)).toBe(true);
+      const used = widths.reduce((sum, width) => sum + width, 0);
+      expect(used, `at ${w}ch`).toBeLessThanOrEqual(w + 0.07);
+      if (parts.cut.at(w) > 0) expect(used, `at ${w}ch`).toBe(Math.floor(w));
+    }
+  });
+
+  /**
+   * The kind used to sit inside the box that is cut. Fails if it moves back
+   * in, or if the end drawn after the ellipsis puts the name in the text a
+   * second time, for a copy, a search or a screen reader to find.
+   */
+  it("keeps the kind out of the part that is cut, and the name in the text once", async () => {
+    await wrap(
+      <ResourceRef
+        kind="ReplicaSet"
+        name="big-pull-67577558d6"
+        namespace="shop"
+      />
+    );
+    const label = screen.getByTestId("resource-ref-label");
+    const head = screen.getByTestId("resource-ref-head");
+    expect(label).toHaveTextContent("ReplicaSet/");
+    expect(head).not.toHaveTextContent("ReplicaSet");
+    expect(head).toHaveTextContent("big-pull-67577558d6");
+    expect(screen.getByTestId("resource-ref-name")).toHaveTextContent(
+      /^ReplicaSet\/big-pull-67577558d6$/
+    );
+    for (const id of ["resource-ref-cut", "resource-ref-end"])
+      expect(screen.getByTestId(id)).toHaveAttribute("aria-hidden", "true");
+    const end = screen.getByTestId("resource-ref-end").firstElementChild;
+    expect(end).toHaveAttribute("data-stem", "big-pull");
+    expect(end).toHaveAttribute("data-tail", "-67577558d6");
+  });
+
   /** A ClusterRoleBinding's roleRef and subject ended in an ellipsis in the peek, and the whole name was on the full page only. */
   it("says the whole name on hover", async () => {
     await wrap(
@@ -659,9 +779,7 @@ describe("a name cut short", () => {
       />
     );
     const box = screen.getByTestId("resource-ref-name");
-    const [stem, tail] = [...box.children];
-    measure(stem, 320, 140);
-    measure(tail, 0, 0);
+    measure(screen.getByTestId("resource-ref-head"), 320, 140);
 
     fireEvent.mouseEnter(box);
 
@@ -670,55 +788,12 @@ describe("a name cut short", () => {
     );
   });
 
-  /**
-   * With a peek open the Events list drew a Job's pod as "-29858782-c8…":
-   * the stem shrank to nothing and the tail lost its end, so the row named
-   * no object. Fails if a narrow column can take the name's first characters,
-   * or cuts the tail from its end rather than its start.
-   */
-  it("keeps the start and the end of a name, cutting the middle", async () => {
-    await wrap(
-      <ResourceName kind="Pod" name="reports-29858782-c8xkz" showKind={false} />
-    );
-    const box = screen.getByTestId("resource-ref-name");
-    const [lead, tail] = [...box.children] as HTMLElement[];
-    expect(box.style.getPropertyValue("--keep")).toBe("min(7ch, 60%)");
-    expect(lead.style.minWidth).toBe("var(--keep)");
-    expect(tail.className).toContain("max-w-[calc(100%-var(--keep,0px))]");
-    expect(tail.className).toContain("[direction:rtl]");
-    expect(tail.firstElementChild).toHaveAttribute("dir", "ltr");
-    expect(tail).toHaveTextContent("-29858782-c8xkz");
-  });
-
-  /** Fails if a cut name shows two ellipses, or none, where its middle went. */
-  it("marks the cut with one ellipsis, the lead's when it is the longer", async () => {
-    const { unmount } = await wrap(
-      <ResourceName kind="Pod" name="web-7596d7fc77-xl4m8" showKind={false} />
-    );
-    expect(screen.getByTestId("resource-ref-tail").className).toContain(
-      "text-ellipsis"
-    );
-    unmount();
-    await wrap(
-      <ResourceName
-        kind="Pod"
-        name="recommendations-685f64b65d-bjc2c"
-        showKind={false}
-      />
-    );
-    expect(
-      screen.getByTestId("resource-ref-name").style.getPropertyValue("--keep")
-    ).toBe("min(8ch, 60%)");
-    expect(screen.getByTestId("resource-ref-tail").className).toContain(
-      "text-clip"
-    );
-  });
-
   /** A tooltip repeating a name that is already whole is noise on every row of every list. */
   it("says nothing extra over a name drawn whole", async () => {
     await wrap(<ResourceName kind="ClusterRole" name="cluster-admin" />);
     const box = screen.getByTestId("resource-ref-name");
-    for (const part of box.children) measure(part, 90, 90);
+    measure(screen.getByTestId("resource-ref-head"), 90, 90);
+    measure(screen.getByTestId("resource-ref-cut"), 7, 0);
 
     fireEvent.mouseEnter(box);
 

@@ -19,6 +19,8 @@ export type ResourceColouring = "full" | "minimal" | "off";
  */
 export type DensityStripMode = "full" | "band" | "off";
 
+export type EventsView = "stories" | "list";
+
 /**
  * Bounds for the peek panel's width.
  *
@@ -40,6 +42,9 @@ export interface DisplaySettingsState {
   setPeekWidth: (width: number) => void;
   densityStrip: DensityStripMode;
   setDensityStrip: (mode: DensityStripMode) => void;
+  /** Where Events opens when its address does not say. */
+  eventsView: EventsView;
+  setEventsView: (view: EventsView) => void;
 }
 
 export const useDisplaySettingsStore = create<DisplaySettingsState>()(
@@ -61,6 +66,8 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>()(
         }),
       densityStrip: "full",
       setDensityStrip: (mode) => set({ densityStrip: mode }),
+      eventsView: "stories",
+      setEventsView: (view) => set({ eventsView: view }),
     }),
     {
       name: "display-settings",

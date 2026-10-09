@@ -72,8 +72,11 @@ function Unit({ children }: { children: React.ReactNode }) {
 }
 
 // The 240px reason track holds Init:CreateContainerConfigError, mark and gap.
+// Baselines, not centres: a detail that wraps keeps the marks on its first line.
 const ROW =
-  "grid grid-cols-[10px_240px_minmax(0,1fr)_60px_74px_46px] items-center gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs";
+  "grid grid-cols-[10px_240px_minmax(0,1fr)_60px_74px_46px] items-baseline gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs";
+const MARK = "mt-0.5 h-3 w-3 self-start justify-self-center";
+const SAID = "line-clamp-4 min-w-0 wrap-break-word text-fg-mid";
 
 /**
  * A 60x14 trend line for one problem row.
@@ -161,10 +164,7 @@ function UnservedRow({
   const SeverityIcon = ROLE_ICON.err;
   return (
     <div className={ROW} data-testid="attention-unserved">
-      <SeverityIcon
-        className={cn("h-3 w-3 justify-self-center", ROLE_TEXT.err)}
-        aria-hidden="true"
-      />
+      <SeverityIcon className={cn(MARK, ROLE_TEXT.err)} aria-hidden="true" />
       <span className="inline-flex min-w-0 items-baseline gap-1 font-mono font-medium text-err">
         <CircleSlash
           className="h-2.5 w-2.5 flex-none self-center"
@@ -172,10 +172,7 @@ function UnservedRow({
         />
         <span className="truncate">{t("readings", "healthNoController")}</span>
       </span>
-      <span
-        className="truncate text-fg-mid"
-        title={t("empty", "nothingPickedThemUp")}
-      >
+      <span className={SAID} title={t("empty", "nothingPickedThemUp")}>
         {t("count", "ingressesUnserved", { n: members, classes: className })}
       </span>
       <span />
@@ -212,10 +209,7 @@ function AttentionRow({
     <>
       {/* Shape carries the severity alongside the colour: a red/green
        *  deficiency must not flatten the only ranking on this screen. */}
-      <SeverityIcon
-        className={cn("h-3 w-3 justify-self-center", tone)}
-        aria-hidden="true"
-      />
+      <SeverityIcon className={cn(MARK, tone)} aria-hidden="true" />
       {marked ? (
         <ClassMarker name={marked.name} />
       ) : (
@@ -234,12 +228,13 @@ function AttentionRow({
           </span>
         </span>
       )}
-      <span className="truncate text-fg-mid">
+      <span className={SAID} data-testid="attention-said">
         <ResourceRef
           kind={item.kind}
           name={item.name}
           namespace={item.namespace}
           showKind={false}
+          className="max-w-full"
         />
         {elsewhere && (
           <>
@@ -249,11 +244,15 @@ function AttentionRow({
               name={item.opens.name}
               namespace={item.opens.namespace}
               showKind={false}
+              className="max-w-full"
             />
           </>
         )}
         {item.namespace && (
-          <span className="text-fg-fnt"> · {item.namespace}</span>
+          <span className="whitespace-nowrap text-fg-fnt">
+            {" "}
+            · {item.namespace}
+          </span>
         )}
         {item.foldedPods !== null && (
           <span className="text-fg-mut"> · {foldedWords(item, t)}</span>
@@ -271,7 +270,7 @@ function AttentionRow({
       </span>
       <Sparkline
         rising={item.kind === "Pod" && restarts > 0}
-        className={tone}
+        className={cn("mt-px self-start", tone)}
       />
       <span className="text-right font-mono text-fg-mut">
         {restarts > 0 ? (
@@ -283,7 +282,7 @@ function AttentionRow({
           <span className="text-fg-fnt">·</span>
         )}
       </span>
-      <span className="text-right text-[11px] text-fg-fnt">
+      <span className="text-right text-[11px] leading-4 text-fg-fnt">
         {item.since === null ? "·" : formatAge(item.since, t)}
       </span>
     </>
@@ -370,10 +369,10 @@ function CheckRow({ check }: { check: AttentionCheck }) {
   // on hover, where kubectl's words can be checked against it.
   const verb = refused && said ? parseRefusal(said)?.verb : undefined;
   return (
-    <li className="grid grid-cols-[10px_150px_minmax(0,1fr)] items-baseline gap-2.5 px-1.5 py-[3px] text-xs">
+    <li className="col-span-full grid grid-cols-subgrid items-baseline py-[3px] text-xs">
       <Icon
         className={cn(
-          "h-3 w-3 self-center justify-self-center",
+          MARK,
           reading
             ? "animate-spin text-info"
             : refused
@@ -382,14 +381,17 @@ function CheckRow({ check }: { check: AttentionCheck }) {
         )}
         aria-hidden="true"
       />
-      <span className="inline-flex min-w-0 items-baseline gap-1 font-mono text-fg-mid">
+      <span className="inline-flex items-baseline gap-1 whitespace-nowrap font-mono text-fg-mid">
         <KindIcon
           kind={check.kind}
           className="h-2.5 w-2.5 flex-none self-center"
         />
-        <span className="truncate">{getDisplayPlural(check.kind)}</span>
+        {getDisplayPlural(check.kind)}
       </span>
-      <span className="min-w-0 truncate text-fg-mut" title={said ?? undefined}>
+      <span
+        className="min-w-0 wrap-break-word text-fg-mut"
+        title={said ?? undefined}
+      >
         {reading
           ? t("cluster", "attentionStillReading")
           : refused
@@ -579,7 +581,7 @@ export function AttentionPanel({
             <p className="px-1.5 pb-0.5 text-[11px] text-fg-fnt">
               {t("cluster", "attentionNotChecked")}
             </p>
-            <ul>
+            <ul className="grid grid-cols-[10px_max-content_minmax(0,1fr)] gap-x-2.5 px-1.5">
               {unchecked.map((check) => (
                 <CheckRow key={check.kind} check={check} />
               ))}
