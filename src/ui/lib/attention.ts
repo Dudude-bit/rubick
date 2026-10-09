@@ -145,7 +145,7 @@ export function reasonWord(
 ): string {
   if (ROLLOUT_KINDS.has(item.kind) && isRolloutCode(item.reason))
     return rolloutWord(item.reason, t);
-  return item.kind === "Job"
+  return item.kind === "Job" || item.kind === "Pod"
     ? (ownStatusWord(item.reason, t) ?? item.reason)
     : item.reason;
 }

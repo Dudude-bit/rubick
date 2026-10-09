@@ -213,7 +213,11 @@ export function podSegments(pods: PodComposition, t: T): Segment[] {
   return [
     { label: "Running", count: podsServing(pods), tone: "ok" },
     { label: "NotReady", count: pods.notReady, tone: "warn" },
-    { label: "CrashLoop", count: pods.crashLooping, tone: "err" },
+    {
+      label: t("statusWords", "crashLoopingCounted", { n: pods.crashLooping }),
+      count: pods.crashLooping,
+      tone: "err",
+    },
     ...pods.stuck.map(({ reason, count }): Segment => ({
       label: reason,
       count,

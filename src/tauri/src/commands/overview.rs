@@ -16,8 +16,8 @@ use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::resources::node_budget::holds_reservation;
 use crate::resources::{
-    condition_is_true, crash_looping, job_state, pending_since, stuck_reason, within_pending_grace,
-    Rollout,
+    backing_off, condition_is_true, crash_looping, job_state, pending_since, stuck_reason,
+    within_pending_grace, Rollout,
 };
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
@@ -88,6 +88,12 @@ const RESTART_ATTENTION_THRESHOLD: i32 = 5;
 /// `CrashLoopBackOff` caps its wait at five minutes — so nothing that is
 /// actually flapping escapes, and an incident that is over stops being news.
 const RESTART_RECENT_SECONDS: i64 = 3600;
+
+/// This app's word for a pod it reads as crash-looping while the kubelet says
+/// something else at this instant: `Running` between crashes, `Error` as one
+/// ends. Printed as the kubelet's `CrashLoopBackOff`, it put a status kubectl
+/// never showed on a pod that had restarted with its node.
+pub const CRASH_LOOPING: &str = "CrashLooping";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -458,13 +464,19 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
 
     // Before the waiting reason, so the row reads the same at every instant
     // of the back-off cycle rather than turning amber while the container is up.
+    // The kubelet's word only while the kubelet says it; otherwise this app's.
     if crash_looping(pod, now) {
         return Some(ClusterProblem {
             severity: ProblemSeverity::Critical,
             kind: "Pod".to_string(),
             name,
             namespace,
-            reason: "CrashLoopBackOff".to_string(),
+            reason: if backing_off(pod) {
+                "CrashLoopBackOff"
+            } else {
+                CRASH_LOOPING
+            }
+            .to_string(),
             detail: Some(ProblemDetail::Restarts { n: restarts }),
             since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
             restarts: Some(restarts),
@@ -2594,7 +2606,8 @@ mod tests {
     /// checkout pods between crashes and `3 CrashLoop` a minute later, and
     /// their Needs attention rows went from red `CrashLoopBackOff` to amber
     /// "Restarting" and back. Fails if the two instants of one crash loop
-    /// are counted or read differently.
+    /// are counted or ranked differently, or the row puts the kubelet's
+    /// `CrashLoopBackOff` on the instant the kubelet says `Running`.
     #[test]
     fn a_crash_loop_counts_and_reads_the_same_whether_its_container_is_up_or_waiting() {
         let now = Utc::now();
@@ -2616,7 +2629,10 @@ mod tests {
             ..Default::default()
         });
 
-        for (instant, pod) in [("up", &up), ("backing off", &backing_off)] {
+        for (instant, pod, word) in [
+            ("up", &up, CRASH_LOOPING),
+            ("backing off", &backing_off, "CrashLoopBackOff"),
+        ] {
             let composition = pod_composition([pod], now);
             assert_eq!(
                 (composition.running, composition.crash_looping),
@@ -2625,7 +2641,7 @@ mod tests {
             );
             let problems = pod_problems([pod], now);
             assert_eq!(problems.len(), 1, "{instant}");
-            assert_eq!(problems[0].reason, "CrashLoopBackOff", "{instant}");
+            assert_eq!(problems[0].reason, word, "{instant}");
             assert_eq!(problems[0].severity, ProblemSeverity::Critical, "{instant}");
             assert_eq!(
                 problems[0].detail,

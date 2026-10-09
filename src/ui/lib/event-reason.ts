@@ -109,6 +109,7 @@ const REASONS: Record<EventFamily, readonly string[]> = {
     "ContainerGCFailed",
     "OOMKilling",
     "CrashLoopBackOff",
+    "CrashLooping",
   ],
   scheduling: [
     "Scheduled",

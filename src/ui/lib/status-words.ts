@@ -39,9 +39,11 @@ export function rolloutCountedWord(
 }
 
 /**
- * A Job's words that this app composed, not the cluster: `Suspended` is how
- * it reads `spec.suspend: true` and `Retrying` a verdict from its counts.
- * Complete and Failed are its conditions and stay as written.
+ * Words this app composed, not the cluster: a Job's `Suspended` is how it
+ * reads `spec.suspend: true` and `Retrying` a verdict from its counts, and a
+ * pod's `CrashLooping` the loop read off its exits while the kubelet says
+ * something else. Complete, Failed and `CrashLoopBackOff` are the cluster's
+ * and stay as written.
  */
 export function ownStatusWord(code: string, t: T): string | undefined {
   switch (code) {
@@ -49,6 +51,8 @@ export function ownStatusWord(code: string, t: T): string | undefined {
       return t("statusWords", "suspended");
     case "Retrying":
       return t("statusWords", "retrying");
+    case "CrashLooping":
+      return t("statusWords", "crashLooping");
     default:
       return undefined;
   }

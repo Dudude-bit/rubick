@@ -6786,6 +6786,8 @@ export const en = {
     stalled: "Stalled",
     degraded: "Degraded",
     retrying: "Retrying",
+    crashLooping: "Crash-looping",
+    crashLoopingCounted: { other: "Crash-looping" },
     stalledCounted: { other: "Stalled" },
     degradedCounted: { other: "Degraded" },
     idleCounted: { other: "Idle" },

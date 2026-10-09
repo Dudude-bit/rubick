@@ -1062,7 +1062,7 @@ describe("what Needs attention says it checked", () => {
     expect(summary).not.toHaveTextContent("Healthy");
     expect(summary).toHaveTextContent("5 of 13 pods ready");
     expect(summary).toHaveTextContent(
-      "(1 CrashLoop, 3 Pending, 2 Failed, 2 Completed)"
+      "(1 Crash-looping, 3 Pending, 2 Failed, 2 Completed)"
     );
     expect(summary.querySelector(".bg-err")).not.toBeNull();
     expect(summary.querySelector(".bg-ok")).toBeNull();
@@ -1090,7 +1090,7 @@ describe("what Needs attention says it checked", () => {
     const summary = screen.getByTestId("attention-summary");
     expect(summary).toHaveTextContent("5 of 14 pods ready");
     expect(summary).toHaveTextContent(
-      "(1 NotReady, 3 CrashLoop, 1 Pending, 4 Failed)"
+      "(1 NotReady, 3 Crash-looping, 1 Pending, 4 Failed)"
     );
   });
 

@@ -7407,6 +7407,13 @@ export const ru: Catalogue = {
     stalled: "Застрял",
     degraded: "Деградировал",
     retrying: "Повторяет попытку",
+    crashLooping: "В цикле падений",
+    crashLoopingCounted: {
+      one: "в цикле падений",
+      few: "в цикле падений",
+      many: "в цикле падений",
+      other: "в цикле падений",
+    },
     stalledCounted: {
       one: "застрял",
       few: "застряли",
