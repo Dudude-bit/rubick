@@ -1615,7 +1615,7 @@ fn next_change<'a>(
         .flat_map(|pod| {
             let start = match pod_start(pod) {
                 PodStart::Starting { until } => Some(until),
-                PodStart::Settled | PodStart::Failing => None,
+                PodStart::Settled | PodStart::Up { .. } | PodStart::Failing => None,
             };
             [start, looping_until(pod)]
         })

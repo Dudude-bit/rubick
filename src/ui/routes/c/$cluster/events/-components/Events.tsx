@@ -101,6 +101,28 @@ const TYPE_FILTERS: Array<{
 
 const LIMITS = ["200", "500", "1000", "2000", "all"] as const;
 
+type EventType = "Warning" | "Normal";
+
+/**
+ * What an empty feed says when its type filter is on: Lena's warnings in
+ * net read "No events in net yet" beside 80 normal ones.
+ */
+const TYPE_EMPTIED = {
+  Warning: {
+    hiding: "noWarningsInScopeHiding",
+    filtered: "noWarningsInScopeFiltered",
+    window: "noWarningsInWindowFiltered",
+  },
+  Normal: {
+    hiding: "noNormalInScopeHiding",
+    filtered: "noNormalInScopeFiltered",
+    window: "noNormalInWindowFiltered",
+  },
+} as const satisfies Record<
+  EventType,
+  Record<"hiding" | "filtered" | "window", keyof typeof en.empty>
+>;
+
 const ORDERS: Array<{ value: StoryOrder; label: keyof typeof en.action }> = [
   { value: "warningsFirst", label: "warningsFirst" },
   { value: "newest", label: "newestFirst" },
@@ -368,19 +390,31 @@ export function Events() {
   // Refused now, the feed is refused, whatever an earlier read showed.
   const refused = failed !== null && isRefusal(failed);
   const refusedAt = useRefusedAt(refused ? failed : null);
-  const { pool, windowFull } = useMemo(() => {
-    if (refused) return { pool: NO_EVENTS, windowFull: false };
+  // `others` is what the type filter left out, where the read held it: a
+  // polled read asked the cluster for the one type alone.
+  const { pool, windowFull, others } = useMemo(() => {
+    if (refused) return { pool: NO_EVENTS, windowFull: false, others: null };
     if (!fromWatch) {
       const rows = polled ?? [];
-      return { pool: rows, windowFull: limit !== null && rows.length >= limit };
+      return {
+        pool: rows,
+        windowFull: limit !== null && rows.length >= limit,
+        others: null,
+      };
     }
     const all = kept ?? [];
     const typed =
       eventType === "all" ? all : all.filter((e) => e.type === eventType);
+    const others = all.length - typed.length;
     return limit !== null && typed.length > limit
-      ? { pool: typed.slice(0, limit), windowFull: true }
-      : { pool: typed, windowFull: false };
+      ? { pool: typed.slice(0, limit), windowFull: true, others }
+      : { pool: typed, windowFull: false, others };
   }, [refused, fromWatch, polled, kept, eventType, limit]);
+  // No event of any type is the quiet scope, filter or not.
+  const typeEmptied =
+    eventType === "all" || others === 0
+      ? null
+      : TYPE_EMPTIED[eventType as EventType];
 
   // Narrowed before the cut, not after it. The limit buys a pool of the
   // latest N; searching what is left after the cut would search the newest
@@ -726,7 +760,7 @@ export function Events() {
                         range: spanWords(WINDOW_MS[window], t),
                         n: eventLimit,
                       })
-                    : t("empty", "noStoriesInWindow", {
+                    : t("empty", typeEmptied?.window ?? "noStoriesInWindow", {
                         scope: scope.inWords,
                         range: spanWords(WINDOW_MS[window], t),
                       })}
@@ -772,7 +806,16 @@ export function Events() {
                         scope: scope.inWords,
                         query: query.trim(),
                       })
-                  : t("empty", "noEventsInScope", { scope: scope.inWords })
+                  : !typeEmptied
+                    ? t("empty", "noEventsInScope", { scope: scope.inWords })
+                    : others === null
+                      ? t("empty", typeEmptied.filtered, {
+                          scope: scope.inWords,
+                        })
+                      : t("empty", typeEmptied.hiding, {
+                          scope: scope.inWords,
+                          n: others,
+                        })
               }
             />
           )}

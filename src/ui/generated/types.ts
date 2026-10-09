@@ -2898,6 +2898,7 @@ export type AppEvent =
 
 export type PodStart =
   | { state: "settled" }
+  | { state: "up"; until: string }
   | { state: "starting"; until: string }
   | { state: "failing" };
 

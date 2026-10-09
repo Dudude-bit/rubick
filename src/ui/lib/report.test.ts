@@ -42,6 +42,7 @@ const ICONS: ReportIcons = {
   },
   verdict: svg("verdict"),
   notRead: svg("not-read"),
+  refused: svg("refused"),
   open: svg("open"),
   shield: svg("shield"),
 };
@@ -428,6 +429,47 @@ describe("renderReport", () => {
     expect(html.split(`${marked}Unavailable · pods not read`)).toHaveLength(3);
     expect(html).toContain(
       '<span class="role neutral"><svg data-icon="neutral"></svg>Idle'
+    );
+  });
+
+  /**
+   * Marco's team-blind file drew ledger, whose pods were not read, and eight
+   * refused kinds with the same plain neutral circle, where the screen draws
+   * the not-read eye and the lock. Fails if a finding's own mark is dropped.
+   */
+  it("draws a finding not read with the not-read mark, and a refused one with the lock", () => {
+    const html = renderReport(
+      report({
+        sections: [
+          section("unchecked", {
+            type: "findings",
+            items: [
+              {
+                title: "its pods were not read",
+                detail: null,
+                role: "neutral",
+                mark: "notRead",
+              },
+              {
+                title: "Pods: list is forbidden in team-blind",
+                detail: null,
+                role: "neutral",
+                mark: "refused",
+              },
+              { title: "Jobs: could not be read", detail: null, role: "warn" },
+            ],
+          }),
+        ],
+      })
+    );
+    expect(html).toContain(
+      '<div class="find"><span class="role neutral"><svg data-icon="not-read"></svg></span><span>its pods were not read'
+    );
+    expect(html).toContain(
+      '<div class="find"><span class="role neutral"><svg data-icon="refused"></svg></span><span>Pods: list is forbidden'
+    );
+    expect(html).toContain(
+      '<div class="find"><span class="role warn"><svg data-icon="warn"></svg></span><span>Jobs'
     );
   });
 

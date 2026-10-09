@@ -274,6 +274,48 @@ describe("the Pods tab", () => {
       /\d/
     );
   });
+  /**
+   * Sam's quick delete and apply: "Pods 0" and "No pods for this workload"
+   * for two seconds beside a header reading Ready 1/1, from a list asked a
+   * moment before the ReplicaSet was made. Fails if none read before the
+   * page's read of a Deployment that counts a pod ready is drawn as none,
+   * or is not asked again.
+   */
+  it("counts none read before the Deployment it holds counts a pod ready as still reading, and asks again", async () => {
+    let asked = 0;
+    answering(
+      () => new Promise(() => {}),
+      () => {
+        asked += 1;
+        return asked === 1
+          ? Promise.resolve({ uid: "uid", pods: [] })
+          : new Promise(() => {});
+      }
+    );
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...vi.mocked(useResourceDetail)(
+        {} as Parameters<typeof useResourceDetail>[0]
+      ),
+      activeTab: "pods",
+    });
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+    expect(
+      await screen.findByText("No pods for this workload")
+    ).toBeInTheDocument();
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    read(client);
+
+    await waitFor(() =>
+      expect(screen.queryByText("No pods for this workload")).toBeNull()
+    );
+    expect(screen.getByRole("tab", { name: /Pods/ }).textContent).not.toMatch(
+      /\d/
+    );
+    await waitFor(() => expect(asked).toBe(2));
+  });
 });
 
 describe("the Revisions tab", () => {
@@ -332,6 +374,40 @@ describe("the Revisions tab", () => {
     await waitFor(() => expect(asked).toBe(2));
     expect(screen.getByText("reading…")).toBeInTheDocument();
     expect(screen.queryByText("This Deployment has no ReplicaSets")).toBeNull();
+  });
+
+  /**
+   * Sam's quick delete and apply: "Revisions 0" over "This Deployment has
+   * no ReplicaSets" for two seconds beside a header reading Ready 1/1, from
+   * a list asked a moment before the ReplicaSet was made. Fails if none
+   * read before the page's read of a Deployment that counts its pods is
+   * drawn as none, or is not asked again.
+   */
+  it("reads none from before the Deployment it holds counts pods as still reading, and asks again", async () => {
+    let asked = 0;
+    replicaSets.answer = () => {
+      asked += 1;
+      return asked === 1 ? Promise.resolve([]) : new Promise(() => {});
+    };
+    const client = testQueryClient();
+    await open(client);
+    expect(
+      await screen.findByText("This Deployment has no ReplicaSets")
+    ).toBeInTheDocument();
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    read(client);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("This Deployment has no ReplicaSets")
+      ).toBeNull()
+    );
+    expect(screen.getByText("reading…")).toBeInTheDocument();
+    expect(
+      screen.getByRole("tab", { name: /Revisions/ }).textContent
+    ).not.toMatch(/\d/);
+    await waitFor(() => expect(asked).toBe(2));
   });
 
   /** Fails if a list still on its way is counted as none. */

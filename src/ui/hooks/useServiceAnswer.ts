@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 
 import {
+  useConnections,
   useConnectionsKey,
   type ConnectionsQuery,
 } from "@/hooks/useConnections";
@@ -8,7 +9,8 @@ import { useHeldAnswer, type HeldAnswer } from "@/hooks/useHeldAnswer";
 import { useServiceWatch } from "@/hooks/usePodWatch";
 import { useReadSelector, useReadUid } from "@/hooks/useReadUid";
 import { ResourceType } from "@/lib/resource-registry";
-import type { SeenOf } from "@/lib/service-health";
+import { publishedFor } from "@/lib/published";
+import { podsUnreadOf, type SeenOf } from "@/lib/service-health";
 
 export type ServiceAnswer = HeldAnswer;
 
@@ -64,5 +66,18 @@ export function useServiceAnswer(
     key,
     seen,
     follow
+  );
+}
+
+/** Whether a Service's pods were not read to say why none of its addresses is ready, from the answer its verdict on the same surface reads. */
+export function useServicePodsUnread(
+  name: string,
+  namespace: string | null
+): boolean {
+  const query = useConnections(ResourceType.Service, name, namespace);
+  const { data } = useServiceAnswer(name, namespace, query, false).read;
+  return useMemo(
+    () => podsUnreadOf(data && publishedFor(data, data.subject)),
+    [data]
   );
 }

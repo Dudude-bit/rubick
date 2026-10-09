@@ -26,6 +26,7 @@ import {
   PRESSURE_WARN,
   attentionShare,
   schedulerShare,
+  uncheckedShare,
   warningsShare,
   workloadCards,
   workloadsShare,
@@ -37,13 +38,13 @@ import {
   checkRefused,
   foldedWords,
   reasonWord,
+  refusedVerb,
   unreadWhere,
   type Attention,
   type AttentionLine,
   type AttentionCheck,
   type AttentionItem,
 } from "@/lib/attention";
-import { parseRefusal } from "@/lib/refusal";
 import { ERROR_CODES } from "@/lib/error-utils";
 import { listLink, objectLink } from "@/lib/links";
 import {
@@ -398,7 +399,7 @@ function CheckRow({ check }: { check: AttentionCheck }) {
   const named = check.unread.some((entry) => entry.namespace);
   // A refusal reads as what was refused and where; the server's sentence is
   // on hover, where kubectl's words can be checked against it.
-  const verb = refused && said ? parseRefusal(said)?.verb : undefined;
+  const verb = refusedVerb(check);
   return (
     <li className="col-span-full grid grid-cols-subgrid items-baseline py-[3px] text-xs">
       <Icon
@@ -549,6 +550,7 @@ export function AttentionPanel({
 }) {
   const t = useT();
   useShareSection("overview-problems", () => attentionShare(attention, t));
+  useShareSection("overview-unchecked", () => uncheckedShare(attention, t));
   const { items, total, complete, worst } = attention;
   const expanded = useAttentionExpanded((state) => state.expanded);
   const setExpanded = useAttentionExpanded((state) => state.setExpanded);

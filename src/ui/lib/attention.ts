@@ -22,6 +22,7 @@ import type {
 import type { T } from "@/i18n/useT";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { autoscalerVerdict } from "@/lib/governance";
+import { parseRefusal } from "@/lib/refusal";
 import { isRolloutCode, ownStatusWord, rolloutWord } from "@/lib/status-words";
 import { ingressHealthWords, type IngressHealth } from "@/lib/ingress-health";
 import { serviceHealthOf, serviceHealthWords } from "@/lib/service-health";
@@ -80,6 +81,29 @@ export const checkRefused = (check: AttentionCheck): boolean =>
   check.state === "unread" &&
   check.unread.length > 0 &&
   check.unread.every((entry) => entry.code === ERROR_CODES.PERMISSION);
+
+/** The API verb a refused check was refused, out of the server's own sentence. */
+export const refusedVerb = (check: AttentionCheck): string | undefined => {
+  const said = check.unread.find((entry) => entry.message)?.message;
+  return checkRefused(check) && said ? parseRefusal(said)?.verb : undefined;
+};
+
+/** What a check not read says of itself, as Not checked words it: still reading, refused and where, or failed. */
+export function checkSaid(check: AttentionCheck, t: T): string {
+  const refused = checkRefused(check);
+  const verb = refusedVerb(check);
+  const word =
+    check.state === "reading"
+      ? t("cluster", "attentionStillReading")
+      : refused
+        ? verb
+          ? t("cluster", "attentionForbidden", { verb })
+          : t("cluster", "attentionRefused")
+        : t("cluster", "attentionFailed");
+  return refused || check.unread.some((entry) => entry.namespace)
+    ? `${word} ${unreadWhere(check.unread, t)}`
+    : word;
+}
 
 export interface Attention {
   /** Worst first, then the longest broken (undated first, as the backend ranks). */

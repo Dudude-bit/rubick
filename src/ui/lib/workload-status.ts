@@ -202,7 +202,8 @@ function podsCanExplain(
 /**
  * A workload short of available pods, with none available yet, or whose
  * newest spec its controller has not read, is coming up while some of its
- * pods are still starting and none shows a fault; otherwise it stays as it
+ * pods are still starting and none shows a fault, or while more of them
+ * have just come up than it counts available; otherwise it stays as it
  * read. Pods that were not read (`null`) leave such a verdict the
  * controller's alone. `with_starts` in `rollout.rs` answers the page, the
  * peek and Needs attention, and `src/contracts/set-rollout-conformance.json`
@@ -217,13 +218,18 @@ export function withStarts(
   if (!counts) return rollout;
   if (!starts) return { state: "podsUnread", controller: rollout };
   let coming = false;
+  let up = 0;
   for (const start of starts) {
     if (start.state === "settled") continue;
+    if (start.state === "up") {
+      if (Date.parse(start.until) > now) up += 1;
+      continue;
+    }
     if (start.state === "failing" || Date.parse(start.until) <= now)
       return rollout;
     coming = true;
   }
-  return coming
+  return coming || up > counts.available
     ? {
         state: "comingUp",
         available: counts.available,
@@ -259,7 +265,7 @@ export function startsOf(
     const starts = byWorkload.get(key);
     if (starts) starts.push(pod.start);
     else byWorkload.set(key, [pod.start]);
-    if (pod.start.state === "starting")
+    if (pod.start.state === "starting" || pod.start.state === "up")
       deadlines.push(Date.parse(pod.start.until));
   }
   return {

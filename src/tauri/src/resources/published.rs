@@ -151,7 +151,8 @@ pub struct ServicePublished {
     pub unrouted_ready: i32,
     pub ports: Vec<PublishedPort>,
     /// Every published endpoint where the reader is on the Service's own
-    /// page, and the first alone where a chain hop only needs a name.
+    /// page, and where a chain hop only needs a name, the subject's own or
+    /// the first taking traffic.
     pub endpoints: Vec<PublishedEndpoint>,
     /// Whether `endpoints` is all of them.
     pub whole: bool,
@@ -252,13 +253,43 @@ impl ServicePublished {
         self
     }
 
-    /// Trim to what a chain hop needs: the counts, and one name.
+    /// Trim to what a chain hop needs: the counts, and one name, an address
+    /// taking traffic before one draining and that before one taking none.
+    /// Sam's Service page named its draining pod over the one that replaced it.
     #[must_use]
-    pub fn summary(mut self) -> Self {
-        self.whole = self.endpoints.len() <= 1;
-        self.endpoints.truncate(1);
+    pub fn summary(self) -> Self {
+        self.summary_keeping(|_| false)
+    }
+
+    /// [`Self::summary`], keeping every address `own` picks where it picks
+    /// any: a workload's chain names its own pods, which the Service's first
+    /// address need not be.
+    #[must_use]
+    pub fn summary_keeping(mut self, own: impl Fn(&PublishedEndpoint) -> bool) -> Self {
+        let listed = self.endpoints.len();
+        self.endpoints.sort_by_key(PublishedEndpoint::rank);
+        if self.endpoints.iter().any(&own) {
+            self.endpoints.retain(|endpoint| own(endpoint));
+        } else {
+            self.endpoints.truncate(1);
+        }
+        self.whole = self.endpoints.len() == listed;
         self.unpublished.clear();
         self
+    }
+}
+
+impl PublishedEndpoint {
+    /// Where it stands among the Service's addresses, first to name.
+    fn rank(&self) -> (u8, bool) {
+        let state = if self.ready {
+            0
+        } else if self.serving {
+            1
+        } else {
+            2
+        };
+        (state, self.terminating)
     }
 }
 
@@ -923,7 +954,7 @@ pub fn waiting_on(
             .then_some(NotServing::PodsUnread);
     };
     let starting = pods.iter().all(|pod| match super::pod_start(pod) {
-        PodStart::Settled => true,
+        PodStart::Settled | PodStart::Up { .. } => true,
         PodStart::Starting { until } => until > now,
         PodStart::Failing => false,
     });
@@ -1238,6 +1269,73 @@ mod tests {
             published.unpublished[0].unnamed_ports,
             vec!["http".to_string()]
         );
+    }
+
+    fn drained_and_replaced() -> ServicePublished {
+        let svc = service("big-pull", vec![port("http", IntOrString::Int(8080))]);
+        let state = |ready: bool| EndpointConditions {
+            ready: Some(ready),
+            serving: Some(true),
+            terminating: Some(!ready),
+        };
+        let slices = [slice(
+            "big-pull-jsvkv",
+            "big-pull",
+            Some(vec![http_port()]),
+            vec![
+                endpoint("10.42.1.242", "big-pull-84b6h", state(false)),
+                endpoint("10.42.1.243", "big-pull-mgdwc", state(true)),
+            ],
+        )];
+        from_slices(
+            &svc,
+            svc_ref("big-pull"),
+            &slices.iter().collect::<Vec<_>>(),
+            &[],
+        )
+    }
+
+    fn named(published: &ServicePublished) -> Vec<&str> {
+        published
+            .endpoints
+            .iter()
+            .filter_map(|endpoint| endpoint.target.as_ref().map(|t| t.name.as_str()))
+            .collect()
+    }
+
+    /// Sam's Service page named the draining pod first for the whole drain,
+    /// the one replacing it behind "and 1 more". Fails if a chain's one name
+    /// is the slice's first address rather than one taking traffic.
+    #[test]
+    fn a_summary_names_an_address_taking_traffic_before_a_draining_one() {
+        let summary = drained_and_replaced().summary();
+        assert_eq!(named(&summary), ["big-pull-mgdwc"]);
+        assert!(!summary.whole);
+        assert_eq!((summary.ready, summary.draining), (1, 1));
+    }
+
+    /// Sam's big-pull made again while its old pod drained: "none of its
+    /// pods published" for 27 s over a Service sending to its own new pod,
+    /// as the one address kept was the old pod's. Fails if a workload's own
+    /// published pods are trimmed away for the Service's first address, or
+    /// another's is kept in place of its own.
+    #[test]
+    fn a_summary_for_a_workload_keeps_every_address_of_its_own_pods() {
+        let of = |names: &'static [&'static str]| {
+            move |endpoint: &PublishedEndpoint| {
+                endpoint
+                    .target
+                    .as_ref()
+                    .is_some_and(|target| names.contains(&target.name.as_str()))
+            }
+        };
+        let both =
+            drained_and_replaced().summary_keeping(of(&["big-pull-84b6h", "big-pull-mgdwc"]));
+        assert_eq!(named(&both), ["big-pull-mgdwc", "big-pull-84b6h"]);
+        assert!(both.whole);
+
+        let draining = drained_and_replaced().summary_keeping(of(&["big-pull-84b6h"]));
+        assert_eq!(named(&draining), ["big-pull-84b6h"]);
     }
 
     /// Where the pods were not read, the stop counts ready pods from the

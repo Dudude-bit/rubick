@@ -6,7 +6,11 @@ import { ClickableServicePort } from "@/components/ui/clickable-port";
 import { commands } from "@/lib/commands";
 import { BalancerAddress } from "../-object/BalancerAddress";
 import { ClusterIpValue } from "../-object/ClusterIpValue";
-import { IngressHealthView, ServiceHealthView } from "../-object/health-views";
+import {
+  IngressHealthView,
+  ServiceHealthView,
+  ServiceNotReady,
+} from "../-object/health-views";
 import { ReachCell, ResolvedPeers } from "../-object/network-policy-cells";
 import { notGovernedSentence, portText, reachOf } from "@/lib/network-policy";
 import type { PolicyDirection } from "@/generated/types";
@@ -386,9 +390,17 @@ export const NETWORK_SOURCES: PeekSources = {
             },
             {
               label: t("columns", "notReadyCount"),
-              value: notReady.length,
+              value: notReady.length ? (
+                <ServiceNotReady
+                  name={endpoints.name}
+                  namespace={target.namespace ?? null}
+                >
+                  {notReady.length}
+                </ServiceNotReady>
+              ) : (
+                0
+              ),
               mono: true,
-              tone: notReady.length ? "warn" : undefined,
             },
             {
               label: t("columns", "ports"),
@@ -421,8 +433,13 @@ export const NETWORK_SOURCES: PeekSources = {
                     )
                   : (address.hostname ?? <None />)}
                 {!ready && (
-                  <span className="text-[11px] text-warn">
-                    {t("readings", "epNotReady")}
+                  <span className="text-[11px]">
+                    <ServiceNotReady
+                      name={endpoints.name}
+                      namespace={target.namespace ?? null}
+                    >
+                      {t("readings", "epNotReady")}
+                    </ServiceNotReady>
                   </span>
                 )}
               </span>

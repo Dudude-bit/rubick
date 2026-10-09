@@ -7,7 +7,7 @@ import { Skeleton, TextSkeleton } from "@/components/ui/skeleton";
 import { YamlEditor } from "../-yaml";
 import { LogViewer } from "../-logs/LogViewer";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
-import { useHeldOwner } from "@/hooks/useHeldRead";
+import { useHeldOwner, useReadBehind } from "@/hooks/useHeldRead";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
@@ -401,6 +401,16 @@ function fetchOwnedPods(
   }
 }
 
+/** How many pods the peek's own read of a workload counts ready. */
+function readyOf(kind: string | null, detail: unknown) {
+  if (kind === "DaemonSet")
+    return (detail as DaemonSetDetailInfo | undefined)?.ready;
+  if (kind === "Deployment" || kind === "StatefulSet")
+    return (detail as { replicas?: { ready: number } } | undefined)?.replicas
+      ?.ready;
+  return undefined;
+}
+
 function PeekPodsTab({
   target,
   detail,
@@ -460,7 +470,18 @@ function PeekPodsTab({
     },
     podsKey
   );
-  const data = other ? undefined : Array.isArray(read) ? read : read?.pods;
+  const listed = other ? undefined : Array.isArray(read) ? read : read?.pods;
+  const behind = useReadBehind(
+    kind ?? target.kind,
+    namespace,
+    target.name,
+    {
+      at: dataUpdatedAt,
+      contradicted: listed?.length === 0 && (readyOf(kind, detail) ?? 0) > 0,
+    },
+    podsKey
+  );
+  const data = behind ? undefined : listed;
   useOwnedPodsWatch(
     kind ?? target.kind,
     namespace,

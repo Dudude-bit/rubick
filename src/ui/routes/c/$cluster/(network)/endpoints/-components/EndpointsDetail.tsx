@@ -10,20 +10,21 @@ import { Section, SectionHeader } from "@/components/ui/section";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { yamlTab } from "../../../-object/yaml-tab";
-import { Info, Plug, Waypoints } from "lucide-react";
+import { EyeOff, Info, Plug, Waypoints } from "lucide-react";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
-import { ServiceVerdict } from "../../../-object/health-views";
+import { NotReadyMark, ServiceVerdict } from "../../../-object/health-views";
 import { useResourceDetail } from "@/hooks";
 import { useEndpointsShare } from "./useEndpointsShare";
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useConnections } from "@/hooks/useConnections";
 import { useServiceAnswer } from "@/hooks/useServiceAnswer";
-import { healthFromConnections } from "@/lib/service-health";
+import { podsUnreadOf } from "@/lib/service-health";
+import { publishedFor } from "@/lib/published";
 import { ResourceType } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
 import { legacyNote, publishedSummary } from "@/lib/published";
@@ -79,7 +80,6 @@ export function EndpointsDetail() {
   const published = slices.data?.find(
     (entry) => entry.service.name === (endpoints?.name ?? name)
   );
-  const share = useEndpointsShare(endpoints);
 
   // The Service's verdict, as its peek draws it in the same place: with its
   // pods unread, a not-ready address is not known to be a fault.
@@ -93,9 +93,12 @@ export function EndpointsDetail() {
   ).read;
   const podsUnread = useMemo(
     () =>
-      healthFromConnections(verdict.data, verdict.error).state === "podsUnread",
-    [verdict.data, verdict.error]
+      podsUnreadOf(
+        verdict.data && publishedFor(verdict.data, verdict.data.subject)
+      ),
+    [verdict.data]
   );
+  const share = useEndpointsShare(endpoints, podsUnread);
 
   const subsets = endpoints?.subsets ?? [];
   const backends: Backend[] = subsets.flatMap((subset, index) => [
@@ -133,11 +136,13 @@ export function EndpointsDetail() {
     },
     {
       label: t("columns", "notReadyCount"),
-      value: totalNotReady,
+      value:
+        totalNotReady > 0 ? (
+          <NotReadyMark podsUnread={podsUnread}>{totalNotReady}</NotReadyMark>
+        ) : (
+          totalNotReady
+        ),
       mono: true,
-      // An endpoints object with backends that are not ready is the reason a
-      // service is dropping traffic, so this row is the one that gets colour.
-      tone: totalNotReady > 0 ? "warn" : undefined,
     },
     { label: t("columns", "ports"), value: allPorts.length, mono: true },
     ...(published
@@ -216,7 +221,18 @@ export function EndpointsDetail() {
                       />
                     </TableCell>
                     <TableCell>
-                      <StatusBadge status={ready ? "Ready" : "NotReady"}>
+                      <StatusBadge
+                        status={ready ? "Ready" : "NotReady"}
+                        roleOverride={
+                          !ready && podsUnread ? "neutral" : undefined
+                        }
+                        glyph={!ready && podsUnread ? EyeOff : undefined}
+                        title={
+                          !ready && podsUnread
+                            ? t("empty", "podsNotRead")
+                            : undefined
+                        }
+                      >
                         {ready
                           ? t("empty", "readyOne")
                           : t("empty", "notReadyOne")}

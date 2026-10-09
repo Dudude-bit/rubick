@@ -82,6 +82,32 @@ export function useHeldOwner(
 }
 
 /**
+ * Whether a read about the object a page or peek holds is contradicted by
+ * their newer read of the object itself, and so behind it rather than an
+ * answer: asked again, once per answer. Sam's big-pull page said "Pods 0"
+ * and "no ReplicaSets" for two seconds beside a header reading Ready 1/1,
+ * from lists asked a moment before the ReplicaSet was made.
+ */
+export function useReadBehind(
+  kind: string,
+  namespace: string | null | undefined,
+  name: string | undefined,
+  read: { at: number; contradicted: boolean },
+  key: QueryKey
+): boolean {
+  const client = useQueryClient();
+  const held = useReadThereAt(kind, namespace, name);
+  const behind = read.contradicted && read.at < held;
+  const asked = useRef(0);
+  useEffect(() => {
+    if (!behind || asked.current === read.at) return;
+    asked.current = read.at;
+    void client.invalidateQueries({ queryKey: key, exact: true });
+  });
+  return behind;
+}
+
+/**
  * A read about the object a page holds, drawn as still reading where it
  * answered NotFound beside it, and asked again (see {@link useHeldNotFound}).
  * Sam's big-pull Deployment page said "Could not read what connects to this:

@@ -7,6 +7,7 @@ import type {
   ResourceConnections,
   ServicePublished,
 } from "@/generated/types";
+import { ROLE_TEXT } from "@/lib/status-role";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 import { EndpointsDetail } from "./EndpointsDetail";
@@ -128,4 +129,43 @@ it("draws a not-ready address in amber once its pods were read", async () => {
   await open();
 
   expect(await headerCounts()).toHaveClass("text-warn");
+});
+
+/**
+ * Marco's ledger, pods unread: beside the grey header, its Backends row was
+ * an amber "Not ready" with a warning icon. Fails if the row draws a fault's
+ * colour or loses the not-read mark while the pods were not read.
+ */
+it("draws a not-ready address's row with the not-read mark while the pods are unread", async () => {
+  why = "podsUnread";
+  await open();
+
+  const badge = await screen.findByText("Not ready");
+  expect(badge).toHaveClass(ROLE_TEXT.neutral);
+  expect(badge.querySelector("svg")).toHaveClass("lucide-eye-off");
+});
+
+/** Fails if a not-ready address its pods do explain loses its amber row. */
+it("draws a not-ready address's row amber once its pods were read", async () => {
+  why = "failingReadiness";
+  await open();
+
+  expect(await screen.findByText("Not ready")).toHaveClass(ROLE_TEXT.warn);
+});
+
+/**
+ * Marco's ledger, pods unread: its Overview's "Not ready 1" was amber beside
+ * a grey Status. Fails if the count draws a fault's colour or loses the
+ * not-read mark while the pods were not read.
+ */
+it("draws the Overview's not-ready count with the not-read mark while the pods are unread", async () => {
+  why = "podsUnread";
+  await renderWithRouter(<EndpointsDetail />, {
+    at: "/c/prod/endpoints/team-blind/ledger?tab=overview",
+    route: "/c/$cluster/endpoints/$namespace/$name",
+  });
+
+  const mark = await screen.findByRole("img", { name: "pods not read" });
+  expect(mark.parentElement).toHaveTextContent("1");
+  expect(mark.parentElement).not.toHaveClass("text-warn");
 });

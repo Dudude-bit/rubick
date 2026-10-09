@@ -441,6 +441,28 @@ describe("unreadLines", () => {
       "Pods on this node: Pods tab not opened",
     ]);
   });
+
+  /**
+   * Marco's team-blind Overview file listed eight refused kinds and then
+   * said "Everything this report names was read", the dialog "Not read 0".
+   * Fails if what a section names as not read stays out of the summary.
+   */
+  it("says what a section names as not read, each on its own line", () => {
+    expect(
+      unreadLines([
+        {
+          ...section("Not checked", null),
+          notRead: [
+            "Pods: list is forbidden in team-blind",
+            "Nodes: list is forbidden across the cluster",
+          ],
+        },
+      ])
+    ).toEqual([
+      "Pods: list is forbidden in team-blind",
+      "Nodes: list is forbidden across the cluster",
+    ]);
+  });
 });
 
 describe("changesSection", () => {

@@ -33,7 +33,14 @@ pub(super) async fn pod_connections(
         }
     }
 
-    traffic_into(ns, &subject, pod.labels(), &snapshot, out);
+    traffic_into(
+        ns,
+        &subject,
+        pod.labels(),
+        std::slice::from_ref(&pod),
+        &snapshot,
+        out,
+    );
     owner_chain(
         ctx,
         ns,
@@ -295,7 +302,7 @@ pub(super) async fn workload_connections(
 
     // The template's labels, not the selector: an Ingress reaches the pods
     // this workload creates, and it is their labels a Service tests.
-    traffic_into(ns, &subject, &template.labels, &snapshot, out);
+    traffic_into(ns, &subject, &template.labels, &mine, &snapshot, out);
     owner_chain(
         ctx,
         ns,
@@ -434,7 +441,7 @@ pub(super) async fn service_connections(
     out.subject_uid.clone_from(&svc.metadata.uid);
     out.read_at = Some(snapshot.taken_at);
 
-    note_reach(svc, &subject, &snapshot, out, true);
+    note_reach(svc, &subject, &snapshot, out, Carry::Whole);
     idle_behind(&subject, out);
     routes_into(ns, &subject, &snapshot, out);
     gateway_traffic_into(
@@ -551,7 +558,7 @@ pub(super) async fn ingress_connections(
                     if !reached.insert(service.clone()) {
                         continue;
                     }
-                    note_reach(svc, &svc_ref, &snapshot, out, false);
+                    note_reach(svc, &svc_ref, &snapshot, out, Carry::Named(&[]));
                     workloads_behind(ctx, ns, &service_selector(svc), &snapshot, out).await?;
                 } else {
                     let (backend, stops) = absent_backend(&service, ns, snapshot.services.is_ok());
@@ -1637,6 +1644,122 @@ mod set_rollout_tests {
             .map(|edge| edge.to.name.as_str())
             .collect();
         assert_eq!(drawn, ["big-pull-67577558d6-tg86l"]);
+    }
+
+    /// Sam's big-pull made again while its old pod drained: its chain said
+    /// "none of its pods published" for 27 s over a Service already sending
+    /// to its new pod, the slice listing the old one first and the answer
+    /// keeping one address. Fails if a workload's answer carries the
+    /// Service's first address in place of its own published pod.
+    #[tokio::test]
+    async fn a_deployment_made_again_carries_its_own_published_pod_past_the_old_one_draining() {
+        let deployment = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": { "name": "big-pull", "namespace": "shop", "uid": "second" },
+            "spec": {
+                "replicas": 1,
+                "selector": { "matchLabels": { "app": "web" } },
+                "template": { "metadata": { "labels": { "app": "web" } } },
+            },
+        });
+        let owned = |name: &str, set: &str| {
+            let mut pod = pod(name, true, "");
+            pod["metadata"]["ownerReferences"] = serde_json::json!([{
+                "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                "name": "big-pull-67577558d6", "uid": set, "controller": true,
+            }]);
+            pod
+        };
+        let mut old = owned("big-pull-67577558d6-84b6h", "rs-first");
+        old["metadata"]["deletionTimestamp"] = serde_json::json!(chrono::Utc::now().to_rfc3339());
+        let pods = serde_json::json!({
+            "apiVersion": "v1", "kind": "List", "metadata": {},
+            "items": [old, owned("big-pull-67577558d6-mgdwc", "rs-second")],
+        });
+        let sets = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "ReplicaSetList", "metadata": {},
+            "items": [{
+                "metadata": {
+                    "name": "big-pull-67577558d6", "namespace": "shop", "uid": "rs-second",
+                    "ownerReferences": [{
+                        "apiVersion": "apps/v1", "kind": "Deployment",
+                        "name": "big-pull", "uid": "second", "controller": true,
+                    }],
+                },
+            }],
+        });
+        let services = serde_json::json!({
+            "apiVersion": "v1", "kind": "ServiceList", "metadata": {},
+            "items": [{
+                "metadata": { "name": "big-pull", "namespace": "shop" },
+                "spec": {
+                    "selector": { "app": "web" },
+                    "ports": [{ "port": 80, "targetPort": 8080 }],
+                },
+            }],
+        });
+        let address = |ip: &str, pod: &str, ready: bool| {
+            serde_json::json!({
+                "addresses": [ip],
+                "conditions": { "ready": ready, "serving": true, "terminating": !ready },
+                "targetRef": { "kind": "Pod", "name": pod, "namespace": "shop" },
+            })
+        };
+        let slices = serde_json::json!({
+            "apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSliceList", "metadata": {},
+            "items": [{
+                "metadata": {
+                    "name": "big-pull-jsvkv", "namespace": "shop",
+                    "labels": { "kubernetes.io/service-name": "big-pull" },
+                },
+                "addressType": "IPv4",
+                "ports": [{ "port": 8080, "protocol": "TCP" }],
+                "endpoints": [
+                    address("10.42.1.242", "big-pull-67577558d6-84b6h", false),
+                    address("10.42.1.243", "big-pull-67577558d6-mgdwc", true),
+                ],
+            }],
+        });
+        let (client, _) = server(vec![
+            (
+                "/apis/apps/v1/namespaces/shop/deployments/big-pull",
+                200,
+                deployment.to_string(),
+            ),
+            ("/api/v1/namespaces/shop/pods", 200, pods.to_string()),
+            (
+                "/apis/apps/v1/namespaces/shop/replicasets",
+                200,
+                sets.to_string(),
+            ),
+            (
+                "/api/v1/namespaces/shop/services",
+                200,
+                services.to_string(),
+            ),
+            (
+                "/apis/discovery.k8s.io/v1/namespaces/shop/endpointslices",
+                200,
+                slices.to_string(),
+            ),
+        ])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+        let page = connections_of(&ctx, "Deployment", "big-pull", None)
+            .await
+            .expect("the neighbourhood");
+        let published = page
+            .published
+            .iter()
+            .find(|entry| entry.service.name == "big-pull")
+            .expect("what the Service publishes");
+        let named: Vec<&str> = published
+            .endpoints
+            .iter()
+            .filter_map(|endpoint| endpoint.target.as_ref().map(|t| t.name.as_str()))
+            .collect();
+        assert_eq!(named, ["big-pull-67577558d6-mgdwc"]);
+        assert_eq!((published.ready, published.draining), (1, 1));
     }
 
     /// The `StatefulSet`'s Connections tab and the services built on it read

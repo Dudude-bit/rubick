@@ -42,6 +42,7 @@ pub(super) fn traffic_into(
     ns: &str,
     target: &ObjectRef,
     labels: &BTreeMap<String, String>,
+    own: &[&Pod],
     snapshot: &Snapshot,
     out: &mut Neighbourhood,
 ) {
@@ -73,7 +74,7 @@ pub(super) fn traffic_into(
             target.clone(),
             Relation::Selects { selector: text },
         );
-        note_reach(svc, &svc_ref, snapshot, out, false);
+        note_reach(svc, &svc_ref, snapshot, out, Carry::Named(own));
         routes_into(ns, &svc_ref, snapshot, out);
         gateway_traffic_into(
             ns,
@@ -266,6 +267,16 @@ pub(super) fn routes_into(
     }
 }
 
+/// How much of what a Service publishes an answer carries.
+#[derive(Clone, Copy)]
+pub(super) enum Carry<'a> {
+    /// Every address, and the pods it does not publish.
+    Whole,
+    /// The counts and the addresses a chain names: these pods', where it
+    /// publishes any, or else the first taking traffic.
+    Named(&'a [&'a Pod]),
+}
+
 /// What this Service publishes, and where the path stops if it does.
 ///
 /// The last hop is the Service's own slices, not one `Selects` edge per
@@ -278,7 +289,7 @@ pub(super) fn routes_into(
 /// what it publishes is still read and still drawn, because a slice is a
 /// slice however it got written.
 ///
-/// `detail` is whether the reader is on this Service's own page, where the
+/// `carry` is [`Carry::Whole`] on this Service's own page, where the
 /// endpoint rows and the pods it does not publish are the point rather than a
 /// payload every other page would carry for nothing.
 pub(super) fn note_reach(
@@ -286,7 +297,7 @@ pub(super) fn note_reach(
     svc_ref: &ObjectRef,
     snapshot: &Snapshot,
     out: &mut Neighbourhood,
-    detail: bool,
+    carry: Carry<'_>,
 ) {
     if out
         .published
@@ -316,10 +327,13 @@ pub(super) fn note_reach(
         .with_workloads(svc, &makers, pods, chrono::Utc::now())
         .with_near_miss(svc, snapshot.pods());
     let stop = published.stop.clone();
-    out.published.push(if detail {
-        published
-    } else {
-        published.summary()
+    out.published.push(match carry {
+        Carry::Whole => published,
+        Carry::Named(own) => published.summary_keeping(|endpoint| {
+            endpoint.target.as_ref().is_some_and(|target| {
+                target.kind == "Pod" && own.iter().any(|pod| pod.name_any() == target.name)
+            })
+        }),
     });
     if let Some(stop) = stop {
         out.stops.push(stop);
@@ -902,6 +916,7 @@ mod tests {
             "team-checkout",
             &pod,
             &labels,
+            &[],
             &snapshot(services),
             &mut out,
         );
