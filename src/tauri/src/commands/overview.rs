@@ -289,6 +289,16 @@ pub struct ReasonCount {
     pub count: usize,
 }
 
+/// How many workloads one rollout word holds, and whether it is the
+/// controller's word alone because their pods could not be read.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RolloutCount {
+    pub reason: String,
+    pub count: usize,
+    pub pods_unread: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClusterOverview {
@@ -322,9 +332,10 @@ pub struct ClusterOverview {
     pub pods: Option<PodComposition>,
     /// Jobs per word the Jobs list prints; `None` when the list was refused.
     pub jobs: Option<Vec<ReasonCount>>,
-    /// Deployments per rollout word the Deployments list prints; `None` when
-    /// the list was refused.
-    pub deployments: Option<Vec<ReasonCount>>,
+    /// Deployments per rollout word the Deployments list prints, the words
+    /// only the controller's counts stand behind apart; `None` when the list
+    /// was refused.
+    pub deployments: Option<Vec<RolloutCount>>,
     /// False when the metrics API is unavailable, so the UI can say so
     /// instead of rendering an empty usage bar that reads as "idle".
     pub metrics_available: bool,
@@ -1096,6 +1107,30 @@ fn count_codes<'a>(codes: impl IntoIterator<Item = &'a str>) -> Vec<ReasonCount>
     counts
 }
 
+/// How many verdicts each word covers, a word whose pods went unread counted
+/// apart from the same word with them read.
+fn count_rollouts(rollouts: &[Rollout]) -> Vec<RolloutCount> {
+    let mut counts: Vec<RolloutCount> = Vec::new();
+    for rollout in rollouts {
+        let (reason, pods_unread) = (
+            rollout.code(),
+            matches!(rollout, Rollout::PodsUnread { .. }),
+        );
+        match counts
+            .iter_mut()
+            .find(|entry| entry.reason == reason && entry.pods_unread == pods_unread)
+        {
+            Some(entry) => entry.count += 1,
+            None => counts.push(RolloutCount {
+                reason: reason.to_string(),
+                count: 1,
+                pods_unread,
+            }),
+        }
+    }
+    counts
+}
+
 fn job_composition<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> Vec<ReasonCount> {
     count_codes(jobs.into_iter().map(|job| job_state(job).code()))
 }
@@ -1394,7 +1429,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         counts,
         pods: pods_known.then(|| pod_composition(refs(input.scoped_pods), input.now)),
         jobs: input.jobs.map(|jobs| job_composition(refs(jobs))),
-        deployments: read("Deployment").then(|| count_codes(rollouts.iter().map(Rollout::code))),
+        deployments: read("Deployment").then(|| count_rollouts(&rollouts)),
         namespaces,
         metrics_available,
         served_from: input.served_from,
@@ -3875,16 +3910,42 @@ mod tests {
         .map(|d| rollout_with_pods(d, &owned, &[], Utc::now()))
         .collect();
 
+        let count = |reason: &str, count: usize| RolloutCount {
+            reason: reason.to_string(),
+            count,
+            pods_unread: false,
+        };
         assert_eq!(
-            count_codes(rollouts.iter().map(Rollout::code)),
+            count_rollouts(&rollouts),
+            vec![count("Idle", 2), count("Paused", 1)]
+        );
+    }
+
+    /// Marco's ledger: its pods refused, the Overview's Deployments bar drew
+    /// it red Unavailable while every other screen drew the controller's word
+    /// grey and unread. Fails if an unread verdict shares a count with the
+    /// same word read.
+    #[test]
+    fn deployment_census_counts_a_word_its_pods_left_unconfirmed_apart() {
+        let unavailable = || Rollout::Unavailable {
+            reason: None,
+            message: None,
+            available: 0,
+            desired: 1,
+        };
+        let counts = count_rollouts(&[unavailable(), unavailable().pods_unread()]);
+        assert_eq!(
+            counts,
             vec![
-                ReasonCount {
-                    reason: "Idle".to_string(),
-                    count: 2
+                RolloutCount {
+                    reason: "Unavailable".to_string(),
+                    count: 1,
+                    pods_unread: false,
                 },
-                ReasonCount {
-                    reason: "Paused".to_string(),
-                    count: 1
+                RolloutCount {
+                    reason: "Unavailable".to_string(),
+                    count: 1,
+                    pods_unread: true,
                 },
             ]
         );
@@ -4384,9 +4445,10 @@ mod across_namespaces {
         assert_eq!(overview.counts.deployments, Some(1));
         assert_eq!(
             overview.deployments,
-            Some(vec![ReasonCount {
+            Some(vec![RolloutCount {
                 reason: "Unavailable".to_string(),
                 count: 1,
+                pods_unread: true,
             }])
         );
     }

@@ -384,6 +384,53 @@ describe("renderReport", () => {
     expect(html).toContain("<title>Pods</title>");
   });
 
+  /**
+   * Marco's shared ledger said "Unavailable · pods not read" beside the grey
+   * circle every neutral word gets, where the app drew the not-read mark.
+   * Fails if a verdict nobody could confirm, in the header or a cell, loses
+   * that mark, or a confirmed one gains it.
+   */
+  it("draws a verdict nobody could confirm with the not-read mark", () => {
+    const html = renderReport(
+      report({
+        status: {
+          text: "Unavailable · pods not read",
+          role: "neutral",
+          unread: true,
+        },
+        sections: [
+          section("table", {
+            type: "table",
+            columns: ["Name", "Status"],
+            rows: [
+              {
+                cells: [
+                  { text: "ledger" },
+                  {
+                    text: "Unavailable · pods not read",
+                    role: "neutral",
+                    unread: true,
+                  },
+                ],
+              },
+              { cells: [{ text: "api" }, { text: "Idle", role: "neutral" }] },
+            ],
+            more: null,
+          }),
+        ],
+      })
+    );
+    const marked =
+      '<span class="role neutral"><svg data-icon="not-read"></svg>';
+    expect(html).toContain(
+      `${marked}Unavailable · pods not read</span><span class="chip">`
+    );
+    expect(html.split(`${marked}Unavailable · pods not read`)).toHaveLength(3);
+    expect(html).toContain(
+      '<span class="role neutral"><svg data-icon="neutral"></svg>Idle'
+    );
+  });
+
   /** A condition is read by its role, not by whether its status says True. */
   it("draws each condition with the role the app gives it", () => {
     const html = renderReport(

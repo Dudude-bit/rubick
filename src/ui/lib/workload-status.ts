@@ -59,14 +59,15 @@ export function workloadRole(rollout: Rollout): StatusRole {
 export function rolloutVerdict(
   rollout: Rollout,
   t: T
-): { text: string; role: StatusRole } {
+): { text: string; role: StatusRole; unread: boolean } {
   const word = workloadWord(rollout, t);
+  const unread = rollout.state === "podsUnread";
   return {
-    text:
-      rollout.state === "podsUnread"
-        ? `${word} · ${t("readings", "rolloutPodsUnreadShort")}`
-        : word,
+    text: unread
+      ? `${word} · ${t("readings", "rolloutPodsUnreadShort")}`
+      : word,
     role: workloadRole(rollout),
+    unread,
   };
 }
 
@@ -317,5 +318,6 @@ export function rolloutStatusOf(
   return {
     text: rolloutLine(rollout, t) ? `${verdict.text} · ${count}` : count,
     role: verdict.role,
+    unread: verdict.unread,
   };
 }

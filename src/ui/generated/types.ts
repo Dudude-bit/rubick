@@ -1854,7 +1854,7 @@ export interface ClusterOverview {
   counts: ResourceCounts;
   pods: PodComposition | null;
   jobs: ReasonCount[] | null;
-  deployments: ReasonCount[] | null;
+  deployments: RolloutCount[] | null;
   metricsAvailable: boolean;
   servedFrom: OverviewSource;
   unread: OverviewUnread[];
@@ -1882,6 +1882,12 @@ export interface PodComposition {
 export interface ReasonCount {
   reason: string;
   count: number;
+}
+
+export interface RolloutCount {
+  reason: string;
+  count: number;
+  podsUnread: boolean;
 }
 
 export interface ResourceCounts {

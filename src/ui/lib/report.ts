@@ -41,6 +41,8 @@ export interface ReportValue {
   /** ISO time, drawn for a person; `text` is ignored. */
   at?: string;
   role?: StatusRole;
+  /** A verdict nobody could confirm: drawn with the not-read mark, not the role's. */
+  unread?: boolean;
   ref?: ReportRef;
   mono?: boolean;
   quiet?: boolean;
@@ -214,7 +216,7 @@ export interface Report {
   capturedAt: string;
   appVersion: string;
   colouring: ReportColouring;
-  status: { text: string; role: StatusRole } | null;
+  status: { text: string; role: StatusRole; unread?: boolean } | null;
   chips: { icon: string; text: string }[];
   stats: ReportStat[];
   /** The app's own sentence, already worded and already hedged. */
@@ -469,15 +471,21 @@ function refHtml(
   return `<span class="ref">${glyph}<span class="name">${namespace}${prefix}${stem}${tail}</span></span>`;
 }
 
-function roleHtml(role: StatusRole, text: string, icons: ReportIcons) {
-  return `<span class="role ${role}">${icons.roles[role]}${e(text)}</span>`;
+function roleHtml(
+  role: StatusRole,
+  text: string,
+  icons: ReportIcons,
+  unread = false
+) {
+  return `<span class="role ${role}">${unread ? icons.notRead : icons.roles[role]}${e(text)}</span>`;
 }
 
 function valueHtml(value: ReportValue, ctx: Ctx): string {
   if (value.ref) return refHtml(value.ref, ctx);
   if (value.at)
     return `<time datetime="${e(value.at)}">${e(when(value.at, ctx.words.lang))}</time>`;
-  if (value.role) return roleHtml(value.role, value.text, ctx.icons);
+  if (value.role)
+    return roleHtml(value.role, value.text, ctx.icons, value.unread);
   const cls = [value.mono ? "mono" : "", value.quiet ? "q" : ""]
     .filter(Boolean)
     .join(" ");
@@ -803,7 +811,12 @@ export function renderReport(report: Report): string {
     `<h1>${heading}</h1>`,
     `<div class="chips">${
       report.status
-        ? roleHtml(report.status.role, report.status.text, icons)
+        ? roleHtml(
+            report.status.role,
+            report.status.text,
+            icons,
+            report.status.unread
+          )
         : ""
     }${report.chips
       .map((chip) => `<span class="chip">${chip.icon}${e(chip.text)}</span>`)
