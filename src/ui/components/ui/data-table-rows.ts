@@ -16,8 +16,10 @@ export function buildTableRows<TData extends RowData>(
   rows: Row<TData>[],
   grouping: RowGrouping<TData> | null
 ) {
-  // One caption per group, rows beneath it in first-seen order. Flat, so the
-  // keyboard-nav index stays the visual position and does not skip captions.
+  // One caption per group, groups by name so a page reads the same whatever
+  // order its namespaces were picked in, rows beneath each in the table's
+  // order. Flat, so the keyboard-nav index stays the visual position and does
+  // not skip captions.
   const items: BodyItem<TData>[] = [];
   // Where each data row sits among those lines. The two numberings come apart
   // wherever a caption is inserted, and the virtualiser counts lines while the
@@ -45,7 +47,9 @@ export function buildTableRows<TData extends RowData>(
     // No caption over these: the data did not say which group they are in,
     // and a heading reading "ungrouped" would turn that silence into a claim.
     for (const row of ungrouped) pushRow(row, index++);
-    for (const [key, groupRows] of groups) {
+    for (const [key, groupRows] of [...groups].sort(([a], [b]) =>
+      a.localeCompare(b, undefined, { numeric: true })
+    )) {
       items.push({
         key: `group-${key}`,
         caption: grouping.caption(

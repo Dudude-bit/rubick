@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vite-plus/test";
 import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
 import { listPodRows } from "@/lib/pod-rows";
+import { askedAgainFirst } from "@/lib/refusals";
 import { setTransport, transport } from "@/lib/transport";
 import { fakeTransport } from "@/lib/transport/fake";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -118,6 +119,24 @@ describe("a read the cluster refused on this connection", () => {
     expect(await refusedIn(["team-checkout"])).toBe("failed");
     expect(await refusedIn(["team-checkout"])).toBe("failed");
     expect(asked).toHaveLength(2);
+  });
+
+  /**
+   * Marco came back to Namespaces and its refusal said "13m ago": the memory
+   * answered the visit. Fails if a read asked again is answered from memory,
+   * if its new refusal is not the one kept, or if the asks after it reach the
+   * cluster.
+   */
+  it("asks the cluster again inside askAgain and keeps the new refusal for the asks after it", async () => {
+    await refusedIn(["team-checkout"]);
+    const first = askedAgainFirst();
+    expect(await first(() => refusedIn(["team-checkout"]))).toBe("refused");
+    expect(await first(() => refusedIn(["team-checkout"]))).toBe("refused");
+    expect(await refusedIn(["team-checkout"])).toBe("refused");
+    expect(asked).toEqual([
+      'daemonsets ["team-checkout"]',
+      'daemonsets ["team-checkout"]',
+    ]);
   });
 
   /** An action is the reader's to try again: a delete refused once is sent again when asked. */

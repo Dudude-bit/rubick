@@ -570,6 +570,13 @@ export function PodDetail() {
     [ask, setActiveTab]
   );
 
+  const askAgain = useCallback(
+    (tab: string) => {
+      if (RUNS_IN_CONTAINER.has(tab)) ask(tab);
+    },
+    [ask]
+  );
+
   // The URL's `?shell=` is about this route, so it needs no pod key of its
   // own; a choice made by clicking does.
   const choice = shellChoice?.pod === podKey ? shellChoice : null;
@@ -771,6 +778,7 @@ export function PodDetail() {
         onBack={() => router.history.back()}
         activeTab={activeTab}
         onTabChange={openTab}
+        onTabAgain={askAgain}
         statusBadge={
           pod?.status.display ? (
             <PodStatusBadge pod={pod} silence={silence} />

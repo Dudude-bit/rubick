@@ -15,6 +15,7 @@ import { useRightsAsked } from "@/lib/refusals";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
+import type { ClusterOverview } from "@/generated/types";
 
 export interface NamespaceScope {
   name: string;
@@ -90,11 +91,21 @@ export function useNamespaceList() {
  * on every screen, and while it was shut it asked a namespace-only token
  * for the whole cluster every ten seconds, and was refused every time.
  * Nor is the whole cluster asked once it refused this connection, or once
- * the namespace list did; the window's own namespace is counted from its
+ * the namespace list did; the window's own namespaces are counted from its
  * own overview instead. `problems` asks for Needs attention as well, which
  * reads four more lists across the cluster: only the picker shows it.
  */
 const WHOLE_CLUSTER: readonly string[] = [];
+
+/** One namespace's pods in an overview of several, `null` where they were not read: one refused leaves the others counted. */
+const podsReadIn = (overview: ClusterOverview, name: string) =>
+  overview.unread.some(
+    (entry) =>
+      entry.kind === "Pod" &&
+      (entry.namespace === null || entry.namespace === name)
+  )
+    ? null
+    : (overview.namespaces.find((ns) => ns.name === name)?.podCount ?? 0);
 
 export function useClusterSummary({
   enabled = true,
@@ -114,17 +125,17 @@ export function useClusterSummary({
   const overview = refused ? undefined : whole;
 
   const windowScope = useClusterStore((s) => s.namespaceScope);
-  const alone = refused && windowScope.length === 1 ? windowScope : null;
+  const ownScope = refused && windowScope.length > 0 ? windowScope : null;
   const { data: own } = useClusterOverview(
-    alone ?? WHOLE_CLUSTER,
-    enabled && alone !== null
+    ownScope ?? WHOLE_CLUSTER,
+    enabled && ownScope !== null
   );
   const wholeAttention = useAttention({
     scope: WHOLE_CLUSTER,
     enabled: problems && enabled && namespaceList !== "pending" && !refused,
   });
   const ownAttention = useAttention({
-    enabled: problems && enabled && alone !== null,
+    enabled: problems && enabled && ownScope !== null,
   });
 
   return useMemo(() => {
@@ -137,13 +148,18 @@ export function useClusterSummary({
     const pods = new Map(
       (podsKnown ? overview.namespaces : []).map((ns) => [ns.name, ns.podCount])
     );
-    if (!known && alone && own?.counts.pods != null)
-      pods.set(alone[0], own.counts.pods);
+    if (!known && ownScope && own)
+      for (const name of ownScope) {
+        const count =
+          ownScope.length === 1 ? own.counts.pods : podsReadIn(own, name);
+        if (count != null) pods.set(name, count);
+      }
     // The Overview's own count, so the picker never says a third number.
     const problemsOf = (name: string): NamespaceAttention | null => {
       if (known)
         return wholeAttention && namespaceAttention(wholeAttention, name);
-      if (alone?.[0] !== name || !ownAttention) return null;
+      if (!ownScope?.includes(name) || !ownAttention) return null;
+      if (ownScope.length > 1) return namespaceAttention(ownAttention, name);
       const { total, complete, worst } = ownAttention;
       return { total, complete, worst };
     };
@@ -176,7 +192,7 @@ export function useClusterSummary({
     };
   }, [
     overview,
-    alone,
+    ownScope,
     own,
     wholeAttention,
     ownAttention,

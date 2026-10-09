@@ -226,6 +226,7 @@ interface ResourceDetailLayoutProps {
   tabs: DetailTab[];
   activeTab: string;
   onTabChange: (tab: string) => void;
+  onTabAgain?: (tab: string) => void;
   /** Where a kind the registry does not hold is served, for its owners. */
   served?: ServedResource | null;
 }
@@ -263,6 +264,7 @@ export function ResourceDetailLayout({
   tabs: pageTabs,
   activeTab,
   onTabChange,
+  onTabAgain,
   served,
 }: ResourceDetailLayoutProps) {
   const t = useT();
@@ -420,6 +422,7 @@ export function ResourceDetailLayout({
           tabs={tabs}
           activeTab={activeTab}
           onTabChange={onTabChange}
+          onTabAgain={onTabAgain}
           subject={`${resourceKind}/${namespace ?? ""}/${title}`}
           actions={
             <>

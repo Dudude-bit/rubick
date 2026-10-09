@@ -100,7 +100,9 @@ export function CopyableValue({
       className={cn(
         // Never wider than its cell: past the edge the cell's own ellipsis
         // draws after the hidden mark and reads as "..".
-        "group -mx-1 inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm px-1 font-mono",
+        "group inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm font-mono",
+        // In prose WebKit undersized the box by this margin and broke the image at a hyphen.
+        !quietMark && "-mx-1 px-1",
         "hover:underline hover:decoration-dotted hover:underline-offset-2",
         "focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
         className

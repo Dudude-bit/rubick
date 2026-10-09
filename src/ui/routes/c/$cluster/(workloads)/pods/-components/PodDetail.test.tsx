@@ -924,6 +924,27 @@ describe("a pod page runs nothing in the container until the reader asks on it",
   );
 
   /**
+   * Dana landed on Shell by Back and clicked the Shell tab twice: the offer
+   * says a click on the tab starts one, and nothing started. Fails if a click
+   * on the tab already open does not ask, as the button does.
+   */
+  it.each([
+    ["Shell", "?tab=shell", "open_pod_shell cart-a"],
+    ["Files", "?tab=files", "container_working_dir cart-a"],
+  ])(
+    "starts on a click on the %s tab it landed on",
+    async (tab, search, exec) => {
+      await arrive(`/c/prod/pods/shop/cart-a${search}`);
+      expect(execs()).toEqual([]);
+
+      fireEvent.click(screen.getByRole("tab", { name: new RegExp(`^${tab}`) }));
+      await advance(0);
+      await advance(0);
+      expect(execs()).toContain(exec);
+    }
+  );
+
+  /**
    * Files lists by exec; a link may name the tab. Fails if arriving lists, or
    * if the offer does not say a click on the tab is what reads.
    */

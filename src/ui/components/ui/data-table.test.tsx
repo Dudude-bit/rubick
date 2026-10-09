@@ -984,6 +984,33 @@ describe("row grouping", () => {
     );
   });
 
+  /**
+   * Marco's Deployments list put team-blind first on one visit and
+   * team-checkout first on the next, in the order he had picked them. Fails
+   * if the groups follow the order the rows arrived in.
+   */
+  it("draws the groups in name order, whatever order the rows arrive in", async () => {
+    await grouped(
+      [
+        { name: "checkout-api", namespace: "team-checkout" },
+        { name: "ledger", namespace: "team-blind" },
+        { name: "checkout-worker", namespace: "team-checkout" },
+      ],
+      { keyOf: (row) => row.namespace, caption: (key) => `in ${key}` }
+    );
+    const lines = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((tr) => tr.querySelector("td")?.textContent);
+    expect(lines).toEqual([
+      "in team-blind",
+      "ledger",
+      "in team-checkout",
+      "checkout-api",
+      "checkout-worker",
+    ]);
+  });
+
   /** A caption saying the same word on every row below it is one column of noise. */
   it("hides the column the caption has taken over", async () => {
     const withNamespace: ColumnDef<Item>[] = [
@@ -1772,6 +1799,40 @@ describe("the row's quick actions", () => {
   });
 
   /**
+   * Dana scrolled the Events table past Age into a blank band: a span
+   * positioned for screen readers far along a cut message was held by the
+   * port, not by the cell clipping it, and the port grew to reach it. Fails
+   * if a clipped cell is not the box its positioned contents are held in.
+   */
+  it("holds what is positioned inside a clipped cell within that cell, pinned or not", async () => {
+    const positioned = /\b(relative|sticky)\b/;
+    await withActions();
+    expect(screen.getByText("a-1").closest("td")?.className).toMatch(
+      positioned
+    );
+    cleanup();
+    const narrow = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(200);
+    try {
+      await wrap(
+        <DataTable<Item>
+          columns={[
+            { ...columns[0], size: 300, meta: { floor: 300 } },
+            { ...columns[1], size: 100, meta: { floor: 300 } },
+          ]}
+          data={DATA}
+        />
+      );
+      for (const cell of document.querySelectorAll("td"))
+        expect(cell.className).toMatch(positioned);
+      expect(screen.getByText("a-1").closest("td")).toHaveClass("sticky");
+    } finally {
+      narrow.mockRestore();
+    }
+  });
+
+  /**
    * Revealed by CSS, and that is the point: the state-driven version
    * re-rendered every cell in the table each time the pointer crossed a row
    * boundary. On a list that also re-reads itself every two seconds the
@@ -1989,13 +2050,13 @@ describe("a list past the virtualisation threshold", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Sort" }));
     fireEvent.click(screen.getByRole("button", { name: "Sort" }));
-    expect(rowAt(0)).toHaveTextContent("pod-499");
+    expect(rowAt(0)).toHaveTextContent(/^pod-450$/);
     fireEvent.keyDown(rowAt(0)!, { key: "ArrowDown" });
-    expect(document.activeElement).toHaveTextContent("pod-449");
+    expect(document.activeElement).toHaveTextContent(/^pod-400$/);
     expect(document.activeElement).toHaveAttribute("data-row-index", "1");
     fireEvent.keyDown(document.activeElement!, { key: "End" });
     fireEvent.scroll(scrollPort()!);
-    expect(document.activeElement).toHaveTextContent("pod-0");
+    expect(document.activeElement).toHaveTextContent(/^pod-49$/);
     expect(document.activeElement).toHaveAttribute("data-row-index", "499");
   });
 

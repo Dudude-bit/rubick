@@ -66,7 +66,7 @@ function ReasonCell({ row }: { row: { original: EventInfo } }) {
 const landingOf = (event: EventInfo) =>
   eventLanding(event.involvedObject.kind, event);
 
-/** A link to where the Event belongs; the row's whitespace is the peek. */
+/** A link to where the Event belongs; the row's whitespace is the peek. The glyph alone says the kind, on every row. */
 function ObjectCell({ row }: { row: { original: EventInfo } }) {
   const subject = subjectOf(row.original);
   const landing = landingOf(row.original);
@@ -75,6 +75,7 @@ function ObjectCell({ row }: { row: { original: EventInfo } }) {
       kind={subject.kind}
       name={subject.name}
       namespace={subject.namespace}
+      showKind={false}
       linkOptions={landing}
       opens={landing ? "page" : "peek"}
     />
@@ -137,6 +138,9 @@ const COMMON_REASONS = [
 /** The longest word in a reason Kubernetes writes: a narrower column wraps between words and never inside one. */
 const LONGEST_REASON_WORD = ["Unschedulable"] as const;
 
+/** A cell's padding and a message's opening words: more than "Conta…", and little enough that a common reason keeps its one line. */
+const messageCellPx = () => widestText(["Back-off restart"], "sans", 6.5) + 20;
+
 /** The kind glyph and its gap, a cell's padding, and 15 glyphs: `checkout-…xl4m8`, a name's first part and its generated end. */
 const OBJECT_CELL_PX = Math.ceil(10 + 4 + 20 + 15 * 7.2);
 
@@ -173,6 +177,7 @@ const NAMESPACE: ColumnDef<EventInfo> = {
 const MESSAGE: ColumnDef<EventInfo> = {
   id: "message",
   size: 560,
+  meta: { floor: messageCellPx },
   accessorFn: (event) => event.message ?? "",
   enableSorting: false,
   header: columnHeader("columns", "message"),
@@ -208,6 +213,7 @@ export const EVENT_COLUMNS = {
   everyNamespace: EVERY_NAMESPACE,
   oneNamespace: ONE_NAMESPACE,
   objectPx: OBJECT_CELL_PX,
+  messagePx: messageCellPx,
 };
 
 const uidOf = (event: EventInfo) => event.uid;

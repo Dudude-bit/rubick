@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 
 import { cn } from "@/lib/utils";
+import { TITLE_SET } from "@/components/ui/title-tooltips";
 import { KindIcon } from "./KindIcon";
 import { splitName, identHue, kindHue } from "@/lib/resource-identity";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
@@ -242,6 +243,8 @@ export function ResourceName({
           )
             ? `${namespace ? `${namespace}/` : ""}${showKind ? `${kind}/` : ""}${name}`
             : "";
+          if (box.title)
+            box.dispatchEvent(new Event(TITLE_SET, { bubbles: true }));
         }}
       >
         {namespace && (

@@ -458,7 +458,9 @@ describe("a scope one namespace of which refused its pods", () => {
     expect(screen.getByText("Pods").parentElement).toHaveTextContent(
       "not read"
     );
-    expect(screen.getByText("in team-blind")).toBeInTheDocument();
+    const where = screen.getByText("team-blind");
+    expect(where).toHaveClass("inline-block");
+    expect(where.parentElement).toHaveTextContent(/^in team-blind$/);
     expect(screen.getByText("Deployment").parentElement).toHaveTextContent("1");
   });
 
@@ -555,7 +557,28 @@ describe("a scope one namespace of which refused its pods", () => {
     expect(overall).toHaveTextContent("pods not counted in team-blind");
     const unchecked = screen.getByTestId("attention-unchecked");
     expect(unchecked).toHaveTextContent("Pods");
-    expect(unchecked).toHaveTextContent("may not list in team-blind");
+    expect(unchecked).toHaveTextContent("list is forbidden in team-blind");
+  });
+
+  /**
+   * Marco in Russian at 1080: the overall row ended "в пространстве имён
+   * team-" and "blind" began the next line. Fails if a namespace in the
+   * overall row or in Not checked can break inside.
+   */
+  it("never breaks a namespace inside the overall row or Not checked", async () => {
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([], { overview } as Partial<AttentionInputs>)}
+        pods={null}
+        podsUnread={[refusedPods]}
+        nodes={[]}
+        nodesKnown={false}
+      />
+    );
+    for (const id of ["attention-overall", "attention-unchecked"])
+      expect(
+        within(screen.getByTestId(id)).getByText("team-blind")
+      ).toHaveClass("inline-block");
   });
 
   /**
@@ -678,7 +701,8 @@ describe("a scope one namespace of which refused its pods", () => {
       "whitespace-nowrap"
     );
     expect(screen.getByText("1 Completed)")).toHaveClass("whitespace-nowrap");
-    const qualifier = screen.getByText("pods not counted in team-blind");
+    const qualifier = within(overall).getByText("team-blind").parentElement!;
+    expect(qualifier).toHaveTextContent(/^pods not counted in team-blind$/);
     expect(qualifier.closest(".truncate, .whitespace-nowrap")).toBeNull();
   });
 
@@ -1015,7 +1039,7 @@ describe("what Needs attention says it checked", () => {
     );
     const unchecked = screen.getByTestId("attention-unchecked");
     expect(unchecked).toHaveTextContent("Services");
-    expect(unchecked).toHaveTextContent("may not list in net");
+    expect(unchecked).toHaveTextContent("list is forbidden in net");
     expect(unchecked.querySelector("[title]")?.getAttribute("title")).toBe(
       'services is forbidden: User "sam" cannot list resource "services" in API group "" in the namespace "net"'
     );
@@ -1063,10 +1087,10 @@ describe("what Needs attention says it checked", () => {
     );
 
     const unchecked = screen.getByTestId("attention-unchecked");
-    expect(unchecked).toHaveTextContent("may not list in team-checkout");
-    expect(unchecked).toHaveTextContent("may not list across the cluster");
+    expect(unchecked).toHaveTextContent("list is forbidden in team-checkout");
+    expect(unchecked).toHaveTextContent("list is forbidden across the cluster");
     expect(unchecked).not.toHaveTextContent(
-      /forbidden|ApiError|Kubernetes API error/
+      /forbidden:|cannot list|ApiError|Kubernetes API error/
     );
     const hovers = [...unchecked.querySelectorAll("[title]")].map((at) =>
       at.getAttribute("title")

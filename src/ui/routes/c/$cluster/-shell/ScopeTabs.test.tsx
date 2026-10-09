@@ -241,8 +241,7 @@ describe("what a tab says", () => {
         if (at === each) break;
       }
     }
-    const floor = (el: HTMLElement) =>
-      Number(/\bmin-w-(\d+)\b/.exec(el.className)?.[1]);
+    const floor = (el: HTMLElement) => parseFloat(el.style.minWidth);
     expect(floor(tabs()[2])).toBeGreaterThan(floor(tabs()[0]));
 
     await userEvent.click(
@@ -265,6 +264,121 @@ describe("what a tab says", () => {
     });
     await mount();
     expect(tabs()[0]).not.toHaveAttribute("title");
+  });
+});
+
+describe("a strip with more tabs than room", () => {
+  const ROUTES = ["pods", "deployments", "services", "events", "nodes"];
+  const six = (active: string) => {
+    useScopeTabStore.setState({
+      tabs: [
+        ...ROUTES.map((route, index) =>
+          tab({ id: `t${index}`, href: `/c/k3d-dev/${route}` })
+        ),
+        tab({ id: "cart", href: "/c/k3d-dev/pods/shop/cart-667846ff79-4f68h" }),
+      ],
+      activeId: active,
+      pendingHref: null,
+    });
+  };
+  /** The strip and its menu are 1000px: four tabs at their 228px floor and the menu. */
+  const roomOf1000 = () =>
+    vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        return this.hasAttribute("data-scope-room") ? 1000 : 0;
+      });
+  /** The menu's tabs stay mounted to be measured, out of sight: what the strip draws is the rest. */
+  const drawn = () =>
+    screen
+      .getAllByRole("tab")
+      .filter((each) => !each.hasAttribute("data-overflow"));
+  const inStrip = () =>
+    drawn().map((each) => each.getAttribute("aria-label")?.split(" · ").at(-1));
+  const menuItems = async () => {
+    await userEvent.click(screen.getByRole("button", { name: /do not fit/ }));
+    return screen.getAllByRole("menuitem");
+  };
+
+  /**
+   * Dana at 1440 with six tabs: the fifth sat cut under Search with no
+   * close button and the sixth was off screen, with nothing saying so.
+   * Fails if a tab is drawn cut, or one that does not fit is not offered by
+   * name, or a tab in the strip has no close button.
+   */
+  it("shows each tab whole in the strip or by name in the menu", async () => {
+    six("t0");
+    const width = roomOf1000();
+    try {
+      await mount();
+      expect(inStrip()).toEqual(["Pods", "Deployments", "Services", "Events"]);
+      for (const each of drawn())
+        expect(
+          within(each).getByRole("button", { name: /^Close / })
+        ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "2 more tabs do not fit" })
+      ).toHaveTextContent("2 more");
+      expect((await menuItems()).map((item) => item.textContent)).toEqual([
+        "All namespaces /Nodes",
+        "All namespaces /cart-667846ff79-4f68h",
+      ]);
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  /**
+   * Dana's deep link landed on the cart tab, which sat half under Search
+   * with no tab on screen marked open. Fails if the open tab can be the one
+   * the strip leaves out, or a tab picked from the menu does not open.
+   */
+  it("keeps the open tab in the strip, and opens the one picked from the menu", async () => {
+    six("cart");
+    const width = roomOf1000();
+    try {
+      await mount();
+      expect(inStrip()).toEqual([
+        "Pods",
+        "Deployments",
+        "Services",
+        "cart-667846ff79-4f68h",
+      ]);
+      const items = await menuItems();
+      await userEvent.click(items[0]);
+      expect(useScopeTabStore.getState().activeId).toBe("t3");
+      expect(inStrip()).toContain("Events");
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  /**
+   * Two cart pods read "cart-6678…" and "cart-6678…". Fails if a cut
+   * object route can lose the end that tells two pods of one ReplicaSet
+   * apart, or if the name stops being in the text once, whole.
+   */
+  it("keeps the generated end of an object route it cuts", async () => {
+    six("cart");
+    await mount();
+    const name = screen
+      .getByRole("tab", { name: /cart-667846ff79-4f68h/ })
+      .querySelector("[data-route-name]")!;
+    const [head, cut, end] = [...name.children] as HTMLElement[];
+    expect(name).toHaveClass("font-mono");
+    expect(head).toHaveTextContent(/^cart-667846ff79-4f68h$/);
+    expect(cut).toHaveAttribute("aria-hidden", "true");
+    expect(end).toHaveAttribute("aria-hidden", "true");
+    expect(end.style.width).toContain("ch");
+    expect(end.firstElementChild).toHaveAttribute(
+      "data-name",
+      "cart-667846ff79-4f68h"
+    );
+    expect(
+      screen
+        .getByRole("tab", { name: /Pods$/ })
+        .querySelector("[data-route-name]")
+    ).toBeNull();
   });
 });
 
@@ -477,7 +591,38 @@ describe("watching several namespaces at once", () => {
     await user.click(screen.getByRole("button", { name: /show them/i }));
     expect(
       within(list).getByRole("option", { name: /^ns-2,/ })
-    ).toHaveAccessibleName(/may not list pods/);
+    ).toHaveAccessibleName(/pod list forbidden/);
+  });
+
+  /**
+   * Marco unchecked kube-system, where nothing may be listed, and its row
+   * vanished under the pointer for a "1 namespace hidden" line. Fails if a
+   * row drawn in this opening leaves it, or is not hidden at the next.
+   */
+  it("keeps a row it drew while the list is open, and hides it at the next opening", async () => {
+    const user = userEvent.setup();
+    nsAccess.answers = [
+      { namespace: "ns-2", allowed: false, otherLists: false },
+    ];
+    await draw(["ns-0", "ns-2"]);
+    await openPicker(user);
+    await waitFor(() =>
+      expect(rowFor("ns-2")).toHaveAccessibleName(/pod list forbidden/)
+    );
+
+    await user.keyboard("{Control>}");
+    await user.click(rowFor("ns-2"));
+    await user.keyboard("{/Control}");
+    expect(scope()).toEqual(["ns-0"]);
+    expect(rowFor("ns-2")).toHaveAttribute("aria-selected", "false");
+    expect(screen.queryByText(/hidden/)).toBeNull();
+
+    await user.keyboard("{Escape}");
+    await openPicker(user);
+    expect(screen.queryByRole("option", { name: /^ns-2,/ })).toBeNull();
+    expect(
+      screen.getByText("1 namespace hidden: nothing in it may be listed")
+    ).toBeInTheDocument();
   });
 
   /**
@@ -499,11 +644,11 @@ describe("watching several namespaces at once", () => {
     await waitFor(() =>
       expect(
         within(list).getByRole("option", { name: /^ns-2,/ })
-      ).toHaveAccessibleName(/may not list pods/)
+      ).toHaveAccessibleName(/pod list forbidden/)
     );
     expect(
       within(list).getByRole("option", { name: /^ns-5,/ })
-    ).toHaveAccessibleName(/may not list pods/);
+    ).toHaveAccessibleName(/pod list forbidden/);
     expect(screen.queryByText(/hidden/)).toBeNull();
   });
 
@@ -829,6 +974,35 @@ describe("a token that may not list namespaces", () => {
   });
 
   /**
+   * Marco typed kube-system, added it, and unchecked it: the row went from
+   * under the pointer. Fails if a namespace the reader added and took back
+   * leaves the list while it is open.
+   */
+  it("keeps a typed namespace's row after it is unchecked again", async () => {
+    const user = userEvent.setup();
+    nsAccess.answers = [
+      { namespace: "kube-system", allowed: false, otherLists: false },
+    ];
+    await mount();
+    const list = await openPicker(user);
+
+    await user.keyboard("kube-system{Control>}{Enter}{/Control}");
+    expect(scope()).toEqual(["kube-system"]);
+    await user.clear(screen.getByRole("combobox"));
+    await user.keyboard("{Control>}");
+    await user.click(
+      within(list).getByRole("option", { name: /^kube-system/ })
+    );
+    await user.keyboard("{/Control}");
+
+    expect(scope()).toEqual([]);
+    expect(
+      within(list).getByRole("option", { name: /^kube-system/ })
+    ).toHaveAttribute("aria-selected", "false");
+    expect(screen.queryByText(/namespace hidden/)).toBeNull();
+  });
+
+  /**
    * Marco on team-checkout typed team-blind, a recent namespace where he may
    * list nothing: the row hid behind "1 namespace hidden", and
    * neither Enter nor Ctrl+Enter took it. Fails if a namespace typed in full
@@ -860,7 +1034,7 @@ describe("a token that may not list namespaces", () => {
     await user.keyboard("team-blind");
     expect(
       within(list).getByRole("option", { name: /^team-blind/ })
-    ).toHaveAccessibleName("team-blind, may not list pods");
+    ).toHaveAccessibleName("team-blind, pod list forbidden");
     expect(screen.queryByText(/namespace hidden/)).toBeNull();
 
     await user.keyboard("{Control>}{Enter}{/Control}");

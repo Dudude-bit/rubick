@@ -421,13 +421,16 @@ function CheckRow({ check }: { check: AttentionCheck }) {
           ? t("cluster", "attentionStillReading")
           : refused
             ? verb
-              ? parts(t("cluster", "attentionMayNot"), {
+              ? parts(t("cluster", "attentionForbidden"), {
                   verb: <span className="font-mono text-fg-mid">{verb}</span>,
                 })
               : t("cluster", "attentionRefused")
             : t("cluster", "attentionFailed")}
         {(named || refused) && (
-          <span className="text-fg-fnt"> {unreadWhere(check.unread, t)}</span>
+          <span className="text-fg-fnt">
+            {" "}
+            <Prose text={unreadWhere(check.unread, t)} />
+          </span>
         )}
         {said && !refused && (
           <span className="font-mono text-[11px] text-fg-fnt">
@@ -617,9 +620,11 @@ export function AttentionPanel({
               <>
                 {(pods || nodesLine) && " "}
                 <UnreadMark unread={podsUnread}>
-                  {t("cluster", "podsNotCounted", {
-                    where: unreadWhere(podsUnread, t),
-                  })}
+                  <Prose
+                    text={t("cluster", "podsNotCounted", {
+                      where: unreadWhere(podsUnread, t),
+                    })}
+                  />
                 </UnreadMark>
               </>
             )}
@@ -728,15 +733,17 @@ export function WorkloadsPanel({
               note={
                 card.unread.length > 0 ? (
                   <UnreadMark unread={card.unread}>
-                    {partial
-                      ? parts(t("cluster", "notReadWhere"), {
-                          where: (
-                            <span className="inline-block max-w-full">
-                              {unreadWhere(card.unread, t)}
-                            </span>
-                          ),
-                        })
-                      : unreadWhere(card.unread, t)}
+                    {partial ? (
+                      parts(t("cluster", "notReadWhere"), {
+                        where: (
+                          <span className="inline-block max-w-full">
+                            {unreadWhere(card.unread, t)}
+                          </span>
+                        ),
+                      })
+                    ) : (
+                      <Prose text={unreadWhere(card.unread, t)} />
+                    )}
                   </UnreadMark>
                 ) : undefined
               }

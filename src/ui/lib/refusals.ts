@@ -100,6 +100,37 @@ function carries(error: unknown, kept: unknown): boolean {
   return false;
 }
 
+let askingAgain = false;
+
+/** Runs `ask` with the kept refusals of the reads it starts dropped, so the cluster answers them afresh. */
+export function askAgain<T>(ask: () => T): T {
+  askingAgain = true;
+  try {
+    return ask();
+  } finally {
+    askingAgain = false;
+  }
+}
+
+/** A wrapper that runs its first `ask` through {@link askAgain} and every later one as it is. */
+export function askedAgainFirst() {
+  let first = true;
+  return <T>(ask: () => T): T => {
+    if (!first) return ask();
+    first = false;
+    return askAgain(ask);
+  };
+}
+
+/** Drops `read`'s kept refusal when it is started inside {@link askAgain}. */
+export function forgetIfAskedAgain(read: string): void {
+  const { reads } = useRefusals.getState();
+  if (!askingAgain || !reads.has(read)) return;
+  const kept = new Map(reads);
+  kept.delete(read);
+  useRefusals.setState({ reads: kept });
+}
+
 /** The reader says their rights may have changed: every refused read is asked once more. */
 export function forgetRefusals(): void {
   useRefusals.setState((s) => ({

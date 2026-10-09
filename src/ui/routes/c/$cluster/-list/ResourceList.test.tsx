@@ -37,7 +37,7 @@ import {
   useScreenSections,
 } from "@/components/share/screen-share";
 import type { PlacedSection } from "@/lib/report-parts";
-import { commands } from "@/lib/commands";
+import { commands, wrapCommand } from "@/lib/commands";
 import { currentConnection, forgetRefusals, noteRefusal } from "@/lib/refusals";
 import { ResourceList } from "./ResourceList";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
@@ -331,6 +331,42 @@ describe("a list whose re-read is refused", () => {
       expect(screen.queryByText("2m ago")).not.toBeInTheDocument();
       expect(screen.queryByText("polled less often")).not.toBeInTheDocument();
       expect(screen.queryByText("polling")).not.toBeInTheDocument();
+    } finally {
+      forgetRefusals();
+    }
+  });
+});
+
+describe("a list refused on an earlier visit", () => {
+  /**
+   * Marco came back to Namespaces and its header said "refused · 13m ago":
+   * the visit was answered by the refusal kept from the last one. Fails if a
+   * visit does not ask the cluster once more, or asks it more than once.
+   */
+  it("asks the cluster once more on a visit, and dates the refusal by it", async () => {
+    let asked = 0;
+    const listNamespaces = wrapCommand(async () => {
+      asked += 1;
+      throw {
+        code: "PERMISSION_DENIED",
+        message: "namespaces is forbidden: RBAC",
+      };
+    }, "listNamespaces");
+    const clock = vi
+      .spyOn(Date, "now")
+      .mockReturnValue(Date.now() - 13 * 60_000);
+    await listNamespaces().catch(() => {});
+    clock.mockRestore();
+    try {
+      await list({
+        queryKey: ["namespaces-visit"],
+        queryFn: () => listNamespaces() as Promise<Scoped<Item>>,
+      });
+
+      expect(await screen.findByText("refused")).toBeVisible();
+      expect(screen.getByText(/^\d+s ago$/)).toBeVisible();
+      expect(screen.queryByText("13m ago")).not.toBeInTheDocument();
+      expect(asked).toBe(2);
     } finally {
       forgetRefusals();
     }
