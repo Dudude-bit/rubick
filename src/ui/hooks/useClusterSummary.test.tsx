@@ -287,6 +287,58 @@ describe("counts once the whole cluster refused", () => {
       result.current.namespaces.find((ns) => ns.name === "shop")
     ).toMatchObject({ podCount: null, problems: null });
   });
+
+  /**
+   * Marco checked team-blind beside team-checkout, and team-checkout's
+   * "3 · 3+ problems" turned into "from kubeconfig". Fails if a second
+   * selected namespace takes the counts from the first, or if the one whose
+   * pods were refused is given a count.
+   */
+  it("counts every selected namespace from the window's own overview, each on its own", async () => {
+    useClusterStore.setState({
+      namespaceScope: ["team-checkout", "team-blind"],
+    });
+    getClusterOverview.mockImplementation(async (scope) => {
+      if (scope === null) throw "pods is forbidden (code: 403)";
+      return {
+        namespaces: [{ name: "team-checkout", podCount: 3, problemCount: 2 }],
+        problems: [
+          { namespace: "team-checkout" },
+          { namespace: "team-checkout" },
+        ],
+        problemsTruncated: 0,
+        unread: [
+          {
+            kind: "Pod",
+            namespace: "team-blind",
+            code: "PERMISSION_DENIED",
+            message: "pods is forbidden",
+          },
+        ],
+        counts: { pods: null },
+      } as never;
+    });
+    listNamespaces.mockResolvedValue([
+      { name: "team-checkout" },
+      { name: "team-blind" },
+    ] as never);
+
+    const { result } = renderHook(() => useClusterSummary({ problems: true }), {
+      wrapper,
+    });
+
+    await waitFor(() =>
+      expect(
+        result.current.namespaces.find((ns) => ns.name === "team-checkout")
+      ).toMatchObject({ podCount: 3, problems: { total: 2 } })
+    );
+    expect(
+      result.current.namespaces.find((ns) => ns.name === "team-blind")
+    ).toMatchObject({
+      podCount: null,
+      problems: { total: 0, complete: false },
+    });
+  });
 });
 
 describe("the count beside a namespace and the count on its Overview", () => {
