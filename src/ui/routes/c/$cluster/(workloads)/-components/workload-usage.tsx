@@ -13,6 +13,7 @@
  */
 import type { EmptyKey } from "../../-usage/usage-chart";
 import { useMemo } from "react";
+import { EyeOff } from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { UsageBlock } from "../../-usage/usage-block";
@@ -51,6 +52,10 @@ export interface WorkloadUsageProps {
   template: WorkloadTemplate | null | undefined;
   /** Every pod the page found, exited ones included. */
   pods: readonly PodInfo[];
+  /** The pod read failed; with no pods left from an earlier read, whether any runs is not known. */
+  podsError?: unknown;
+  /** The pod read has not answered yet. */
+  podsPending?: boolean;
   /**
    * Why there is nothing to measure, in this kind's own words — a Job that
    * finished and a CronJob between runs are both at zero for reasons a reader
@@ -68,11 +73,14 @@ export function WorkloadUsage({
   namespace,
   template,
   pods,
+  podsError,
+  podsPending = false,
   idle,
   connections,
   noLimitNote,
 }: WorkloadUsageProps) {
   const t = useT();
+  const unread = Boolean(podsError) && pods.length === 0;
   // A template whose quantities would not parse has no sums to give, and
   // its missing limits are not "none declared".
   const replica = template?.replica?.known ? template.replica : null;
@@ -87,6 +95,7 @@ export function WorkloadUsage({
     includeNodes: false,
     enabled: running.length > 0,
   });
+  const past = useCapabilityState("usage.history");
 
   const withMetrics = useMemo(
     () => mergePodsWithMetrics(running, podMetrics),
@@ -112,10 +121,12 @@ export function WorkloadUsage({
       ? { kind: "workload", namespace, owner: name, ownerKind: kind }
       : undefined;
 
+  if (unread || podsPending) {
+    return <PodsUnknownUsage kind={kind} unread={unread} />;
+  }
+
   // The one case metrics-server and a Prometheus disagree about. Both are
   // right that nothing is running; only one of them still holds what ran.
-  const past = useCapabilityState("usage.history");
-
   if (running.length === 0) {
     if (past.state !== "ready" || scope === undefined) {
       return <IdleUsage says={idle} />;
@@ -187,6 +198,33 @@ function IdleUsage({ says }: { says: string }) {
       <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
         {says} {t("empty", "usageIdleNote")}
       </p>
+    </Section>
+  );
+}
+
+/** The pods were not read, or not yet: whether any run is not known, so nothing is said to. */
+function PodsUnknownUsage({ kind, unread }: { kind: string; unread: boolean }) {
+  const t = useT();
+  return (
+    <Section>
+      <SectionHeader
+        title={t("columns", "usage")}
+        count={
+          unread ? (
+            <span className="inline-flex items-center gap-1">
+              <EyeOff className="h-3 w-3" aria-hidden="true" />
+              {t("empty", "podsNotRead")}
+            </span>
+          ) : (
+            t("readings", "healthStillReading")
+          )
+        }
+      />
+      {unread && (
+        <p className="px-1.5 pt-1 text-[11px] leading-snug text-fg-fnt">
+          {t("empty", "usagePodsNotRead", { kind })}
+        </p>
+      )}
     </Section>
   );
 }

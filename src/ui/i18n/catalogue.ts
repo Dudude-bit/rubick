@@ -6378,6 +6378,8 @@ export const en = {
     noneInScope: "none in scope",
     nothingBroken: "nothing broken",
     nothingRunning: "nothing running",
+    usagePodsNotRead:
+      "Usage is summed from this {kind}'s pods, and they could not be read, so what they use is not known.",
     usageIdleNote:
       "Usage is summed from running pods, and metrics-server keeps nothing about a pod that has exited, so there is no line rather than a line at zero.",
     kindScaledToZero: "This {kind} is scaled to zero.",

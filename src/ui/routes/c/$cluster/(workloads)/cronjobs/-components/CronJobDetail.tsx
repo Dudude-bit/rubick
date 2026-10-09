@@ -225,7 +225,11 @@ export function CronJobDetail() {
   // The refusal is carried rather than swallowed: an empty list from a 403
   // reads as "this CronJob has run nothing", which is the one thing the pane
   // may not say on a read that did not happen.
-  const { data: pods = [], error: podsError } = useLiveQuery({
+  const {
+    data: pods = [],
+    error: podsError,
+    isPending: podsPending,
+  } = useLiveQuery({
     queryKey: ["cronjob-pods", namespace, name],
     queryFn: async () => {
       if (!name || !namespace) return [];
@@ -346,6 +350,8 @@ export function CronJobDetail() {
                   namespace={cronJob?.namespace || namespace}
                   template={cronJob}
                   pods={pods}
+                  podsError={podsError}
+                  podsPending={podsPending}
                   idle={
                     cronJob?.suspend
                       ? t("empty", "cronJobSuspended")
@@ -461,6 +467,7 @@ export function CronJobDetail() {
       refetchJobs,
       pods,
       podsError,
+      podsPending,
       yaml,
       copyYaml,
       namespace,

@@ -126,6 +126,7 @@ export function DeploymentDetail() {
   const {
     data: pods = [],
     error: podsError,
+    isPending: podsPending,
     refetch: refetchPods,
   } = useLiveQuery({
     queryKey: queryKeys.ownedPods(ResourceType.Deployment, namespace, name),
@@ -372,6 +373,8 @@ export function DeploymentDetail() {
                 namespace={deployment?.namespace || namespace}
                 template={deployment}
                 pods={pods}
+                podsError={podsError}
+                podsPending={podsPending}
                 idle={
                   desired === 0
                     ? t("empty", "kindScaledToZero", {
@@ -430,7 +433,7 @@ export function DeploymentDetail() {
       id: toPlural(ResourceType.Pod),
       label: t("columns", "pods"),
       glyph: kindGlyph(ResourceType.Pod),
-      mark: podsMark(pods, t),
+      mark: podsMark(pods, t, { error: podsError, pending: podsPending }),
       content: (
         <PodListCard
           pods={pods}

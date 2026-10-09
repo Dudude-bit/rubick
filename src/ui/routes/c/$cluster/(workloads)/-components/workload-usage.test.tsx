@@ -107,6 +107,58 @@ describe("WorkloadUsage with nothing running", () => {
   });
 });
 
+describe("WorkloadUsage whose pods were not read", () => {
+  beforeEach(() => {
+    useUsageHistoryStore.getState().clear();
+    vi.mocked(commands.getPodsMetrics).mockReset();
+  });
+
+  /**
+   * Marco's ledger: its pods were refused and the Usage block said "nothing
+   * running. None of this Deployment's pods is running", a claim about pods
+   * nobody had read. Fails if a refused read is said as none running, or
+   * loses the mark that says the pods were not read.
+   */
+  it("says the pods were not read instead of that none runs", () => {
+    view({
+      kind: "Deployment",
+      podsError: new Error("pods is forbidden"),
+      idle: "None of this Deployment's pods is running.",
+    });
+    expect(screen.queryByText(/nothing running/i)).toBeNull();
+    expect(screen.queryByText(/None of this Deployment/)).toBeNull();
+    const count = screen.getByTestId("section-count");
+    expect(count).toHaveTextContent("pods not read");
+    expect(count.querySelector("svg")).toHaveClass("lucide-eye-off");
+    expect(
+      screen.getByText(
+        /summed from this Deployment's pods, and they could not be read/
+      )
+    ).toBeInTheDocument();
+    expect(commands.getPodsMetrics).not.toHaveBeenCalled();
+  });
+
+  /** The first second of every visit said nothing was running. Fails if a read still on its way is said as none running. */
+  it("says it is still reading while the pods have not answered", () => {
+    view({ podsPending: true });
+    expect(screen.queryByText(/nothing running/i)).toBeNull();
+    expect(screen.getByTestId("section-count")).toHaveTextContent(
+      "still reading"
+    );
+  });
+
+  /** Fails if a failed re-read hides pods the last read found. */
+  it("keeps the pods a read found before the next one failed", () => {
+    view({
+      kind: "Job",
+      pods: [pod("job-demo-abc", "Succeeded")],
+      podsError: new Error("timeout"),
+      idle: "This Job has finished.",
+    });
+    expect(screen.getByText(/This Job has finished/i)).toBeInTheDocument();
+  });
+});
+
 describe("WorkloadUsage with nothing running and a supplier that kept it", () => {
   /** Two readings a minute apart, which is a line rather than a dot. */
   const window = {

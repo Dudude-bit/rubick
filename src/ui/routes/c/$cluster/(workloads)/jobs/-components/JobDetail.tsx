@@ -71,7 +71,11 @@ export function JobDetail() {
   // The refusal is carried rather than swallowed: an empty list from a 403
   // reads as "this Job ran no pods", which is the one thing the pane may not
   // say on a read that did not happen.
-  const { data: pods = [], error: podsError } = useLiveQuery({
+  const {
+    data: pods = [],
+    error: podsError,
+    isPending: podsPending,
+  } = useLiveQuery({
     queryKey: queryKeys.ownedPods(ResourceType.Job, namespace, name),
     queryFn: async () => {
       if (!name || !namespace) return [];
@@ -181,6 +185,8 @@ export function JobDetail() {
                   namespace={job?.namespace || namespace}
                   template={job}
                   pods={pods}
+                  podsError={podsError}
+                  podsPending={podsPending}
                   idle={
                     job?.completionTime
                       ? t("empty", "jobFinished")
@@ -230,9 +236,13 @@ export function JobDetail() {
         id: toPlural(ResourceType.Pod),
         label: t("columns", "pods"),
         glyph: kindGlyph(ResourceType.Pod),
-        mark: podsMark(pods, t),
+        mark: podsMark(pods, t, { error: podsError, pending: podsPending }),
         content: (
-          <PodListCard pods={pods} emptyMessage={t("empty", "noPodsForJob")} />
+          <PodListCard
+            pods={pods}
+            error={podsError}
+            emptyMessage={t("empty", "noPodsForJob")}
+          />
         ),
       },
       {
@@ -290,6 +300,7 @@ export function JobDetail() {
       job,
       pods,
       podsError,
+      podsPending,
       yaml,
       copyYaml,
       namespace,
