@@ -272,3 +272,62 @@ it("draws no verdict for a Service the cluster says is gone", async () => {
 
   await waitFor(() => expect(screen.queryByText("1 ready")).toBeNull());
 });
+
+const NOT_FOUND = {
+  code: "NOT_FOUND",
+  message: "Resource not found: Service/big-pull in namespace shop",
+};
+
+/**
+ * Sam's page showed "not checked / Resource not found: Service/big-pull"
+ * for half a second beside the ClusterIP of the Service it had just read:
+ * the neighbourhood was asked before the Service was created. Fails if a
+ * NotFound older than the page's own read of the Service is drawn, or the
+ * neighbourhood is not read again at once.
+ */
+it("reads a NotFound older than the Service its page holds as still reading, and reads again", async () => {
+  let release: (value: ResourceConnections) => void = () => {};
+  commands.getResourceConnections
+    .mockRejectedValueOnce(NOT_FOUND)
+    .mockReturnValueOnce(
+      new Promise<ResourceConnections>((resolve) => (release = resolve))
+    );
+  draw();
+  expect(await screen.findByText("not checked")).toBeInTheDocument();
+
+  client.setQueryData(queryKeys.detail("Service", "shop", "big-pull"), {
+    uid: "big-pull-uid",
+  });
+
+  expect(await screen.findByText("still reading")).toBeInTheDocument();
+  expect(screen.queryByText("not checked")).toBeNull();
+  await waitFor(() =>
+    expect(commands.getResourceConnections).toHaveBeenCalledTimes(2)
+  );
+  release(COMING_UP());
+  expect(await screen.findByText("coming up")).toBeInTheDocument();
+  expect(commands.getResourceConnections).toHaveBeenCalledTimes(2);
+});
+
+/**
+ * After kubectl delete the same page kept the old Service beside "Resource
+ * not found" for 25 s. Fails if a NotFound newer than the page's read is
+ * drawn as a verdict, or does not send the page to read its Service again.
+ */
+it("reads a NotFound newer than the Service its page holds as still reading, and asks the page to look again", async () => {
+  const detail = queryKeys.detail("Service", "shop", "big-pull");
+  client.setQueryData(detail, { uid: "big-pull-uid" });
+  commands.getResourceConnections
+    .mockResolvedValueOnce(READY())
+    .mockRejectedValue(NOT_FOUND);
+  draw();
+  expect(await screen.findByText("1 ready")).toBeInTheDocument();
+
+  await client.invalidateQueries({ queryKey: ["connections"] });
+
+  expect(await screen.findByText("still reading")).toBeInTheDocument();
+  expect(screen.queryByText("not checked")).toBeNull();
+  await waitFor(() =>
+    expect(client.getQueryState(detail)?.isInvalidated).toBe(true)
+  );
+});
