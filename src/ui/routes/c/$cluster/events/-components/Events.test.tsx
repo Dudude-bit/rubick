@@ -771,6 +771,57 @@ describe("a feed a watch keeps", () => {
   });
 
   /**
+   * Lena's net, Warnings chosen: "No events in net yet" over 80 normal
+   * events the filter was hiding. Fails if a feed the type filter emptied
+   * says the scope is quiet, or stops saying how many it hides.
+   */
+  it("says the type filter emptied the list, and how many it hides, not that the scope is quiet", async () => {
+    await watched();
+    burst([dated("prod", 0), dated("prod", 1), dated("prod", 2)]);
+    await screen.findByText("3 normal events");
+
+    await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
+
+    expect(
+      await screen.findByText(
+        /^No warnings in .*; the type filter hides 3 other events\.$/
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No events in .* yet/)).toBeNull();
+  });
+
+  /** Fails if the stories of a feed the type filter emptied say nothing happened in the window. */
+  it("says the type filter emptied the stories, not that nothing happened", async () => {
+    await watched("stories");
+    const recent = (index: number) => ({
+      ...dated("prod", index),
+      lastTimestamp: new Date(Date.now() - (index + 1) * 1000).toISOString(),
+    });
+    burst([recent(0), recent(1)]);
+    await screen.findByText(/2 normal events/);
+
+    await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
+
+    expect(
+      await screen.findByText(
+        /^No warnings in .* in the last 1 hour; the type filter leaves every other event out\.$/
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Nothing happened in/)).toBeNull();
+  });
+
+  /** Fails if a scope with no event of any type is blamed on the filter. */
+  it("says a scope with no event at all is quiet, filter or not", async () => {
+    await watched();
+    burst([]);
+    await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
+
+    expect(
+      await screen.findByText(/^No events in .* yet\.$/)
+    ).toBeInTheDocument();
+  });
+
+  /**
    * Several namespaces are one stream, watched a namespace each by the
    * backend. Fails if the scope is narrowed to one or read cluster-wide.
    */
@@ -1179,6 +1230,33 @@ describe("narrowing the feed", () => {
       expect(document.body.textContent).toContain("needle-pod")
     );
     expect(document.body.textContent).not.toContain("prod-pod-0");
+  });
+
+  /**
+   * Where no watch runs the cluster is asked for warnings alone, so how many
+   * others there are is not known. Fails if the empty list then claims the
+   * scope is quiet, or counts what was never read.
+   */
+  it("says a polled feed's type filter left the rest out without counting it", async () => {
+    useClusterStore.setState({
+      namespaceScope: ["prod"],
+      currentNamespace: "prod",
+    });
+    listEvents.mockImplementation(async (filters: EventFilters | null) =>
+      filters?.event_type === "Warning" ? [] : feed("prod", 5)
+    );
+    await mount();
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("prod-pod-0")
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
+
+    expect(
+      await screen.findByText(
+        "No warnings in prod; the type filter leaves every other event out."
+      )
+    ).toBeInTheDocument();
   });
 
   /**

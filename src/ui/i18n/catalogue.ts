@@ -5584,6 +5584,22 @@ export const en = {
     renewsAutomatically: "renews automatically {when}",
     renewalNotFinished: "Renewal has not finished",
     noEventsInScope: "No events in {scope} yet.",
+    noWarningsInScopeHiding: {
+      one: "No warnings in {scope}; the type filter hides {n} other event.",
+      other: "No warnings in {scope}; the type filter hides {n} other events.",
+    },
+    noNormalInScopeHiding: {
+      one: "No normal events in {scope}; the type filter hides {n} warning.",
+      other: "No normal events in {scope}; the type filter hides {n} warnings.",
+    },
+    noWarningsInScopeFiltered:
+      "No warnings in {scope}; the type filter leaves every other event out.",
+    noNormalInScopeFiltered:
+      "No normal events in {scope}; the type filter leaves every warning out.",
+    noWarningsInWindowFiltered:
+      "No warnings in {scope} in the last {range}; the type filter leaves every other event out.",
+    noNormalInWindowFiltered:
+      "No normal events in {scope} in the last {range}; the type filter leaves every warning out.",
     noEventsMatch:
       "No event in {scope} matches “{query}”. The filter reads the reason, the object, its namespace and the message.",
     drainExplained:
