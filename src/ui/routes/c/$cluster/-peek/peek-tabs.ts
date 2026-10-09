@@ -66,15 +66,15 @@ const YAML: PeekTabDefinition = {
   glyph: viewGlyph(Braces),
 };
 
-/** The kinds whose children are worth listing, and what those children are. */
-const CHILDREN_LABEL = {
-  Deployment: "Pods",
-  StatefulSet: "Pods",
-  DaemonSet: "Pods",
-  Job: "Pods",
+/** The kinds whose children are worth listing, and the kind those children are. */
+const CHILD_KIND = {
+  Deployment: ResourceType.Pod,
+  StatefulSet: ResourceType.Pod,
+  DaemonSet: ResourceType.Pod,
+  Job: ResourceType.Pod,
   // A CronJob owns Jobs, not Pods — its pods are two hops away and belong to
   // whichever run produced them. Listing the runs is the honest answer.
-  CronJob: "Jobs",
+  CronJob: ResourceType.Job,
 } as const;
 
 export function peekTabsFor(
@@ -130,12 +130,13 @@ export function peekTabsFor(
       glyph: viewGlyph(Table2),
       mark: keyed ? countMark(keyed.dataKeys.length) : undefined,
     });
-  } else if (resolved && resolved in CHILDREN_LABEL) {
-    const label = CHILDREN_LABEL[resolved as keyof typeof CHILDREN_LABEL];
+  } else if (resolved && resolved in CHILD_KIND) {
+    const child = CHILD_KIND[resolved as keyof typeof CHILD_KIND];
     middle.push({
       id: "children",
-      label,
-      glyph: kindGlyph(label === "Jobs" ? ResourceType.Job : ResourceType.Pod),
+      // The word the same tab has on the object's own page.
+      label: child === ResourceType.Job ? "Jobs" : t("columns", "pods"),
+      glyph: kindGlyph(child),
     });
   }
 

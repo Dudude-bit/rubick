@@ -38,6 +38,19 @@ describe("peekTabsFor", () => {
     expect(labels("CronJob")).toEqual(["Overview", "Jobs", "YAML"]);
   });
 
+  /** Lena read "Pods" in the Deployment peek beside "Поды" on the page; fails if the peek spells the tab its own way again. */
+  it("names a controller's pods tab with the word its page uses", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const tabs = peekTabsFor("Deployment", ru).map((tab) => tab.label);
+    expect(tabs).toEqual([
+      translate("ru", "nav", "overview"),
+      translate("ru", "columns", "pods"),
+      "YAML",
+    ]);
+    expect(tabs[1]).toBe("Поды");
+  });
+
   it("reads the plural form a peek URL carries", () => {
     expect(labels("pods")).toEqual(["Overview", "Logs", "Containers", "YAML"]);
     expect(labels("configmaps")).toEqual(["Overview", "Data", "YAML"]);

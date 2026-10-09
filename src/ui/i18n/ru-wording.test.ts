@@ -41,6 +41,13 @@ describe("Russian written as a person says it", () => {
     );
   });
 
+  /** Lena found "admission control" left in English mid-sentence on Ваш доступ; fails if the caveat drops back to the English term. */
+  it("names admission control in Russian in the access caveat", () => {
+    const caveat = translate("ru", "myAccess", "caveat");
+    expect(caveat).not.toMatch(/admission/i);
+    expect(caveat).toContain("контроллеры допуска");
+  });
+
   /** Lena read the Owns tab as "Owner", the opposite of what it lists; fails if the tab is a word for an owner or a verb again. */
   it("names the Owns tab for what it lists, a noun beside its Owners counterpart", () => {
     const tab = translate("ru", "owns", "tab");
