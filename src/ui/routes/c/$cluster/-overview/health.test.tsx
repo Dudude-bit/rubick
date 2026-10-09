@@ -590,6 +590,48 @@ describe("a scope one namespace of which refused its pods", () => {
   });
 
   /**
+   * Sam's Overview said "8 of 15 pods ready" above a Workloads card saying
+   * "6 Running · 3 Crash-looping", both read at one moment: two of the
+   * crash-loopers were up between crashes. Fails if the row leaves the
+   * reader to guess why the two numbers differ, or says so when they agree.
+   */
+  it("says how many of the ready pods are only up between crashes", async () => {
+    const shop = (ready: number): Census<PodComposition> => ({
+      read: {
+        running: 9,
+        pending: 2,
+        succeeded: 0,
+        failed: 4,
+        unknown: 0,
+        crashLooping: 3,
+        notReady: 0,
+        ready,
+        stuck: [{ reason: "ImagePullBackOff", count: 1 }],
+        starting: 0,
+      },
+      complete: true,
+    });
+    const row = async (ready: number) => {
+      cleanup();
+      await wrap(
+        <AttentionPanel
+          attention={attentionFrom([])}
+          pods={shop(ready)}
+          podsUnread={[]}
+          nodes={[]}
+          nodesKnown={false}
+        />
+      );
+      return screen.getByTestId("attention-overall");
+    };
+
+    expect(await row(8)).toHaveTextContent(
+      "8 of 15 pods ready, 2 of them only between crashes (3 Crash-looping,"
+    );
+    expect(await row(6)).not.toHaveTextContent(/between crashes/);
+  });
+
+  /**
    * Fails if the overall row states the pods team-checkout answered as the
    * scope's, or drops them because team-blind refused.
    */

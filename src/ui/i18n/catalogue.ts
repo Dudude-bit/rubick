@@ -7627,6 +7627,10 @@ export const en = {
     annotations: { one: "{n} annotation", other: "{n} annotations" },
     clustersAnswered: "{n} of {total} clusters answered",
     podsReady: "{n} {of} ready",
+    readyBetweenCrashes: {
+      one: "{n} of them only between crashes",
+      other: "{n} of them only between crashes",
+    },
     nodesReady: "{n} {of} ready",
     ofPods: { one: "of {n} pod", other: "of {n} pods" },
     ofNodes: { one: "of {n} node", other: "of {n} nodes" },

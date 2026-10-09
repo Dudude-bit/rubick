@@ -8796,6 +8796,12 @@ export const ru: Catalogue = {
     },
     clustersAnswered: "ответили {n} из {total}",
     podsReady: "готово {n} {of}",
+    readyBetweenCrashes: {
+      one: "из них {n} готов только между падениями",
+      few: "из них {n} готовы только между падениями",
+      many: "из них {n} готовы только между падениями",
+      other: "из них {n} готовы только между падениями",
+    },
     nodesReady: "готово {n} {of}",
     ofPods: {
       one: "из {n} пода",
