@@ -66,7 +66,7 @@ function ReasonCell({ row }: { row: { original: EventInfo } }) {
 const landingOf = (event: EventInfo) =>
   eventLanding(event.involvedObject.kind, event);
 
-/** A link to where the Event belongs; the row's whitespace is the peek. */
+/** A link to where the Event belongs; the row's whitespace is the peek. The glyph alone says the kind, on every row. */
 function ObjectCell({ row }: { row: { original: EventInfo } }) {
   const subject = subjectOf(row.original);
   const landing = landingOf(row.original);
@@ -75,6 +75,7 @@ function ObjectCell({ row }: { row: { original: EventInfo } }) {
       kind={subject.kind}
       name={subject.name}
       namespace={subject.namespace}
+      showKind={false}
       linkOptions={landing}
       opens={landing ? "page" : "peek"}
     />

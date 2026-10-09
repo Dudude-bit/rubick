@@ -13,6 +13,8 @@ const EDGE_PX = 8;
 const CURSOR_PX = 20;
 /** What Radix announces as one of its tooltips opens, and every open one closes on. */
 export const TOOLTIP_OPEN = "tooltip.open";
+/** Sent from an element that wrote its title under a pointer already resting on it. */
+export const TITLE_SET = "title.set";
 
 interface ShownTitle {
   text: string;
@@ -172,6 +174,7 @@ function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
 
   const listeners: [EventTarget, string, (event: Event) => void][] = [
     [document, "pointerover", over],
+    [document, TITLE_SET, over],
     [document, "pointerout", out],
     [document, "pointerdown", hush],
     [document, "contextmenu", hush],

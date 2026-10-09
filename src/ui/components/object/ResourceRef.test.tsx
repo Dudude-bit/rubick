@@ -16,6 +16,7 @@ import { useObjectMenuStore } from "@/stores/objectMenuStore";
 import { objectLink } from "@/lib/links";
 import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
 import { renderWithRouter } from "@/test/render";
+import { TitleTooltips } from "@/components/ui/title-tooltips";
 
 /** Where the click landed: the peek is a query parameter, not component state. */
 function LocationProbe() {
@@ -786,6 +787,36 @@ describe("a name cut short", () => {
     expect(box.getAttribute("title")).toBe(
       "kube-system/clusterrole-aggregation-controller"
     );
+  });
+
+  /**
+   * Lena hovered "checkout…xl4m8" in the Events table and no tooltip came:
+   * the app takes a title over as the pointer arrives, and this one is
+   * written a moment later. Fails if a title the name writes under a resting
+   * pointer is not drawn in the app's card.
+   */
+  it("draws the whole name in the app's card under a pointer already on it", async () => {
+    await wrap(
+      <>
+        <TitleTooltips />
+        <ResourceName
+          kind="Pod"
+          name="checkout-7596d7fc77-xl4m8"
+          showKind={false}
+        />
+      </>
+    );
+    const box = screen.getByTestId("resource-ref-name");
+    const head = screen.getByTestId("resource-ref-head");
+    measure(head, 180, 60);
+
+    fireEvent.pointerOver(head);
+    fireEvent.mouseEnter(box);
+
+    expect(box).not.toHaveAttribute("title");
+    expect(
+      await screen.findByRole("tooltip", {}, { timeout: 2000 })
+    ).toHaveTextContent("checkout-7596d7fc77-xl4m8");
   });
 
   /** A tooltip repeating a name that is already whole is noise on every row of every list. */

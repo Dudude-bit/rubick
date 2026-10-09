@@ -422,6 +422,30 @@ describe("a feed a watch keeps", () => {
   });
 
   /**
+   * Dana's Object column read "Pod/init-demo" on one row and a glyph with
+   * "checkout…xl4m8" on the next. Fails if a name short enough to leave room
+   * draws the kind as a word where the others draw only the glyph.
+   */
+  it("draws every object as its kind glyph and its name, short or cut", async () => {
+    await watched();
+    burst([
+      {
+        ...dated("shop", 0),
+        involvedObject: {
+          kind: "Pod",
+          name: "init-demo",
+          namespace: "shop",
+          uid: null,
+        },
+      },
+    ]);
+    await waitFor(() => expect(drawnRows()).toBe(1));
+    const link = within(rowAt(0)!).getByRole("link", { name: "Pod init-demo" });
+    expect(within(link).getByTestId("resource-ref-icon")).toBeInTheDocument();
+    expect(within(link).queryByTestId("resource-ref-label")).toBeNull();
+  });
+
+  /**
    * Sam's Event about the HPA cart ended on the Deployment cart, with none of
    * the HPA's events. Fails if the row's link lets an attached kind go on to
    * its parent.
