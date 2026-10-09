@@ -275,7 +275,7 @@ export function Events() {
   // A watch that failed leaves its rows on screen until a poll answers.
   const fromWatch = watching || (polled === undefined && kept !== undefined);
   // The read can fail, and until now nothing here asked. An empty feed then
-  // drew the quiet-scope sentence — which for the stories tab went as far as
+  // drew the quiet-scope sentence, which for the stories tab went as far as
   // "the read succeeded and returned no events", a claim about a request that
   // came back 403. In a fan-out one refused namespace is enough: the rest may
   // have answered, but what is on screen is no longer the scope's whole story.

@@ -323,7 +323,7 @@ export function ResourceList<
 
   // Read at last. A failed list used to render `resources = []` with
   // `isLoading` already false, so the table printed "No resources of this type
-  // in the current scope" — a cluster that could not be read and one that is
+  // in the current scope": a cluster that could not be read and one that is
   // genuinely empty looked identical, and an expired token said every list in
   // the app was empty. The error only replaces the table when there is nothing
   // to show: a refetch that fails keeps the rows it already had, the same rule
