@@ -62,6 +62,7 @@ import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { PinAction } from "../../-components/PinAction";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
+import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
@@ -95,6 +96,11 @@ export function StatefulSetDetail() {
 
   const connections = useConnections(ResourceType.StatefulSet, name, namespace);
 
+  const podsKey = queryKeys.ownedPods(
+    ResourceType.StatefulSet,
+    namespace,
+    name
+  );
   // The failure travels rather than becoming an empty list; see the same
   // change on the DaemonSet page.
   const {
@@ -103,7 +109,7 @@ export function StatefulSetDetail() {
     isPending: podsPending,
     refetch: refetchPods,
   } = useLiveQuery({
-    queryKey: queryKeys.ownedPods(ResourceType.StatefulSet, namespace, name),
+    queryKey: podsKey,
     queryFn: async () => {
       if (!name || !namespace) return [];
       try {
@@ -134,6 +140,13 @@ export function StatefulSetDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
+  useOwnedPodsWatch(
+    ResourceType.StatefulSet,
+    namespace,
+    name,
+    [podsKey],
+    !!statefulSet
+  );
 
   const deliveryQuery = deliveryOfKind(ResourceType.StatefulSet, statefulSet);
   const intercept = useDeliveryIntercept(deliveryQuery);

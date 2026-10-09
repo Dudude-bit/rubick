@@ -38,6 +38,7 @@ import { useResourceDetail } from "@/hooks";
 import { useJobShare } from "./useJobShare";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
+import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
@@ -68,6 +69,7 @@ export function JobDetail() {
     defaultTab: "overview",
   });
 
+  const podsKey = queryKeys.ownedPods(ResourceType.Job, namespace, name);
   // The refusal is carried rather than swallowed: an empty list from a 403
   // reads as "this Job ran no pods", which is the one thing the pane may not
   // say on a read that did not happen.
@@ -76,7 +78,7 @@ export function JobDetail() {
     error: podsError,
     isPending: podsPending,
   } = useLiveQuery({
-    queryKey: queryKeys.ownedPods(ResourceType.Job, namespace, name),
+    queryKey: podsKey,
     queryFn: async () => {
       if (!name || !namespace) return [];
       return await commands.listPods({
@@ -94,6 +96,7 @@ export function JobDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
+  useOwnedPodsWatch(ResourceType.Job, namespace, name, [podsKey], !!job);
 
   const deliveryQuery = deliveryOfKind(ResourceType.Job, job);
   const intercept = useDeliveryIntercept(deliveryQuery);

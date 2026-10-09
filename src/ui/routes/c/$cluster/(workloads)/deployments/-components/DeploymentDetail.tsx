@@ -79,6 +79,7 @@ import { useResourceMutation, useResourceDetail } from "@/hooks";
 import { useDeploymentShare } from "./useDeploymentShare";
 import { useConnections } from "@/hooks/useConnections";
 import { useMetrics } from "@/hooks/useMetrics";
+import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError } from "@/lib/error-utils";
@@ -123,13 +124,14 @@ export function DeploymentDetail() {
     guardedOf(ResourceType.Deployment, namespace || null)
   ).patch;
 
+  const podsKey = queryKeys.ownedPods(ResourceType.Deployment, namespace, name);
   const {
     data: pods = [],
     error: podsError,
     isPending: podsPending,
     refetch: refetchPods,
   } = useLiveQuery({
-    queryKey: queryKeys.ownedPods(ResourceType.Deployment, namespace, name),
+    queryKey: podsKey,
     queryFn: async () => {
       try {
         if (!name) return [];
@@ -144,6 +146,13 @@ export function DeploymentDetail() {
     refresh: "resourceList",
     refetchOnWindowFocus: false,
   });
+  useOwnedPodsWatch(
+    ResourceType.Deployment,
+    namespace,
+    name,
+    [podsKey],
+    !!deployment
+  );
 
   const connections = useConnections(ResourceType.Deployment, name, namespace);
 

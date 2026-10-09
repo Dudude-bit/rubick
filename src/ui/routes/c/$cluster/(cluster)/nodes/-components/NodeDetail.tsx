@@ -56,6 +56,8 @@ import {
 } from "@/lib/share/node-share";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
+import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
+import { queryKeys } from "@/lib/query-keys";
 import { useMetrics } from "@/hooks/useMetrics";
 import { commands } from "@/lib/commands";
 import { parseCPU, parseMemory } from "@/lib/k8s-quantity";
@@ -157,7 +159,7 @@ export function NodeDetail() {
   // The scheduler's promise on this machine, summed in Rust over the pods
   // here; unknown the moment one namespace refuses to list them.
   const budget = useLiveQuery({
-    queryKey: ["node", "budget", name],
+    queryKey: queryKeys.nodeBudget(name),
     queryFn: () => commands.nodeResourceBudget(name ?? ""),
     enabled: !!node && !!name,
     staleTime: STALE_TIMES.resourceDetail,
@@ -170,8 +172,9 @@ export function NodeDetail() {
 
   // The real pod rows, filtered by `spec.nodeName` on the server. Asked for
   // only while the tab is open: a node can carry a hundred of them.
+  const podsKey = queryKeys.nodePods(name);
   const podsOnThisNode = useLiveQuery({
-    queryKey: ["node", "pods", name],
+    queryKey: podsKey,
     queryFn: () =>
       commands.listPods({
         namespace: null,
@@ -186,6 +189,15 @@ export function NodeDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
+  // The pods here, live, while the tab that draws each one's state is open.
+  const followed = activeTab === "pods" ? [podsKey] : [];
+  useOwnedPodsWatch(
+    ResourceType.Node,
+    null,
+    name,
+    followed,
+    !!node && followed.length > 0
+  );
 
   const actions = useNodeActions();
   const debugDenied = useNodeDebugDenied(useNodeDebugNamespace());

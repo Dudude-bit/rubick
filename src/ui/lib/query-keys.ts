@@ -152,6 +152,29 @@ export const queryKeys = {
     namespace: string | null | undefined,
     name: string | undefined
   ): (string | null | undefined)[] => ["pod-watch", home(namespace), name],
+  /** What the watch on the pods one page lists holds: only its bookkeeping. */
+  ownedPodWatch: (
+    kind: string,
+    namespace: string | null | undefined,
+    name: string | undefined
+  ): (string | null | undefined)[] => [
+    "owned-pod-watch",
+    kind,
+    home(namespace),
+    name,
+  ],
+  /** The pods on one node, found by `spec.nodeName` on the server. */
+  nodePods: (name: string | undefined): (string | undefined)[] => [
+    "node",
+    "pods",
+    name,
+  ],
+  /** The scheduler's promise on one node, summed over the pods placed there. */
+  nodeBudget: (name: string | undefined): (string | undefined)[] => [
+    "node",
+    "budget",
+    name,
+  ],
 
   /**
    * `list_namespaces` as a plain read. Not the Namespaces page's list, which

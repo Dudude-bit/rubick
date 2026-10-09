@@ -8,6 +8,7 @@ import { YamlEditor } from "../-yaml";
 import { LogViewer } from "../-logs/LogViewer";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
@@ -412,23 +413,32 @@ function PeekPodsTab({
       ? (detail as DaemonSetDetailInfo | undefined)?.selector
       : undefined;
 
+  const podsKey = queryKeys.ownedPods(
+    kind ?? target.kind,
+    namespace,
+    target.name,
+    selector
+  );
+  // A DaemonSet's selector arrives with the Overview fetch; asking before it
+  // lands would list the whole namespace.
+  const ready = !!namespace && (kind !== "DaemonSet" || !!selector);
   const { data, error, isPending, isFetching, refetch } = useLiveQuery({
-    queryKey: queryKeys.ownedPods(
-      kind ?? target.kind,
-      namespace,
-      target.name,
-      selector
-    ),
+    queryKey: podsKey,
     queryFn: () => fetchOwnedPods(target, namespace!, detail),
-    // A DaemonSet's selector arrives with the Overview fetch; asking before
-    // it lands would list the whole namespace.
-    enabled: !!namespace && (kind !== "DaemonSet" || !!selector),
+    enabled: ready,
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
     placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
     retry: false,
   });
+  useOwnedPodsWatch(
+    kind ?? target.kind,
+    namespace,
+    target.name,
+    [podsKey],
+    ready
+  );
 
   if (error) {
     return (

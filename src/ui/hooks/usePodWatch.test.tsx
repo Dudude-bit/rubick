@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 vi.mock("@/lib/commands", () => ({
   commands: {
     subscribeObjectWatch: vi.fn(async () => "pod-stream"),
+    subscribeOwnedPodWatch: vi.fn(async () => "pod-stream"),
     resourceWatchSubscribed: vi.fn(async () => undefined),
     unsubscribeResourceWatch: vi.fn(async () => undefined),
   },
@@ -15,9 +16,10 @@ vi.mock("@/lib/commands", () => ({
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
+import { SurfaceVisibility } from "@/lib/surface-visibility";
 import { useWindowActivity } from "@/lib/window-activity";
 import { testQueryClient } from "@/test/render";
-import { usePodWatch } from "./usePodWatch";
+import { useOwnedPodsWatch, usePodWatch } from "./usePodWatch";
 
 const POD = { name: "checkout-55cbfdc66-nnbgp", namespace: "shop" };
 
@@ -105,4 +107,84 @@ it("opens no stream while it is turned off", async () => {
   const { hook } = mount(false);
   await waitFor(() => expect(hook.result.current).toBeDefined());
   expect(commands.subscribeObjectWatch).not.toHaveBeenCalled();
+});
+
+const OWNED = queryKeys.ownedPods("Deployment", "shop", "checkout");
+
+function mountOwned({
+  kind = "Deployment",
+  visible = true,
+}: { kind?: string; visible?: boolean } = {}) {
+  const client = testQueryClient();
+  const listPods = vi
+    .fn()
+    .mockResolvedValueOnce([{ ...POD, display: "CrashLoopBackOff" }])
+    .mockResolvedValue([{ ...POD, display: "Running" }]);
+  const hook = renderHook(
+    () => {
+      useOwnedPodsWatch(kind, "shop", "checkout", [OWNED], true);
+      return useQuery({
+        queryKey: OWNED,
+        queryFn: listPods,
+        staleTime: Infinity,
+      }).data;
+    },
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>
+          <SurfaceVisibility.Provider value={visible}>
+            {children}
+          </SurfaceVisibility.Provider>
+        </QueryClientProvider>
+      ),
+    }
+  );
+  return { hook, listPods };
+}
+
+/**
+ * Sam watched the Deployment's Pods tab say CrashLoopBackOff through every
+ * Running window while the Pods list turned: the tab only polled. Fails if
+ * the watch on the Deployment's pods seeing one change does not read the
+ * tab's rows again.
+ */
+it("reads a workload's pods again when the watch on them sees one change", async () => {
+  const { hook, listPods } = mountOwned();
+  await waitFor(() =>
+    expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("pod-stream")
+  );
+  expect(commands.subscribeOwnedPodWatch).toHaveBeenCalledWith(
+    "Deployment",
+    "shop",
+    "checkout"
+  );
+  await waitFor(() =>
+    expect(hook.result.current).toMatchObject([{ display: "CrashLoopBackOff" }])
+  );
+
+  send("applied", { ...POD, phase: "Running" });
+
+  await waitFor(() =>
+    expect(hook.result.current).toMatchObject([{ display: "Running" }])
+  );
+  expect(listPods).toHaveBeenCalledTimes(2);
+});
+
+/** A node's pods are in every namespace. Fails if the node's watch is asked for one. */
+it("asks for a node's pods in no namespace", async () => {
+  mountOwned({ kind: "Node" });
+  await waitFor(() =>
+    expect(commands.subscribeOwnedPodWatch).toHaveBeenCalledWith(
+      "Node",
+      null,
+      "checkout"
+    )
+  );
+});
+
+/** Fails if a peek or tab kept mounted off screen holds a stream open for nobody. */
+it("opens no stream for a surface off screen", async () => {
+  const { hook } = mountOwned({ visible: false });
+  await waitFor(() => expect(hook.result.current).toBeDefined());
+  expect(commands.subscribeOwnedPodWatch).not.toHaveBeenCalled();
 });

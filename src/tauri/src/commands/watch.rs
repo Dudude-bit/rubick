@@ -18,13 +18,15 @@
 //!      / `createWorkloadListPage` config.
 
 use crate::error::{Error, Result};
+use crate::resources::Selector;
 use crate::resources::{
     ConfigMapInfo, CronJobInfo, DaemonSetInfo, DeploymentInfo, EndpointsInfo, EventInfo,
     IngressInfo, JobInfo, NamespaceInfo, NodeInfo, PersistentVolumeClaimInfo, PersistentVolumeInfo,
     PodInfo, PodRow, SecretInfo, ServiceInfo, StatefulSetInfo, StorageClassInfo,
 };
 use crate::state::AppState;
-use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
+use crate::watch::Narrow;
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, ReplicaSet, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::{
     ConfigMap, Endpoints, Event, Namespace, Node, PersistentVolume, PersistentVolumeClaim, Pod,
@@ -266,6 +268,84 @@ pub async fn subscribe_object_watch(
     Ok(id)
 }
 
+/// The pods one page lists: a controller's, by the selector it claims them
+/// with, or a node's, by where they run. The API server narrows the watch, so
+/// a page follows its own pods and not every pod in their namespace.
+#[tauri::command]
+pub async fn subscribe_owned_pod_watch(
+    kind: String,
+    namespace: Option<String>,
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<String> {
+    let client = current_client(&state)?;
+    let (namespace, narrow) = pods_of(&client, &kind, namespace, &name).await?;
+    Ok(state.watch_manager.subscribe_narrowed::<Pod, _, _>(
+        client,
+        "Pod",
+        namespace.as_deref(),
+        narrow,
+        |o| Some(PodInfo::from(o)),
+    ))
+}
+
+/// Where the pods of `kind` `name` are watched, and by what. Every selector
+/// these kinds carry is immutable, so it is read once, at subscribe.
+async fn pods_of(
+    client: &kube::Client,
+    kind: &str,
+    namespace: Option<String>,
+    name: &str,
+) -> Result<(Option<String>, Narrow)> {
+    crate::validation::validate_dns_subdomain(name)?;
+    if kind == "Node" {
+        return Ok((None, Narrow::fields(format!("spec.nodeName={name}"))));
+    }
+    let namespace = namespace
+        .ok_or_else(|| Error::Internal(format!("{kind} is namespaced; a namespace is required")))?;
+    crate::validation::validate_namespace(&namespace)?;
+    let selector = match kind {
+        "Deployment" => {
+            let owner: Deployment = kube::Api::namespaced(client.clone(), &namespace)
+                .get(name)
+                .await?;
+            Selector::Query(owner.spec.as_ref().map(|s| &s.selector)).query_text()
+        }
+        "ReplicaSet" => {
+            let owner: ReplicaSet = kube::Api::namespaced(client.clone(), &namespace)
+                .get(name)
+                .await?;
+            Selector::Query(owner.spec.as_ref().map(|s| &s.selector)).query_text()
+        }
+        "StatefulSet" => {
+            let owner: StatefulSet = kube::Api::namespaced(client.clone(), &namespace)
+                .get(name)
+                .await?;
+            Selector::Query(owner.spec.as_ref().map(|s| &s.selector)).query_text()
+        }
+        "DaemonSet" => {
+            let owner: DaemonSet = kube::Api::namespaced(client.clone(), &namespace)
+                .get(name)
+                .await?;
+            Selector::Query(owner.spec.as_ref().map(|s| &s.selector)).query_text()
+        }
+        "Job" => {
+            let owner: Job = kube::Api::namespaced(client.clone(), &namespace)
+                .get(name)
+                .await?;
+            Selector::Query(owner.spec.as_ref().and_then(|s| s.selector.as_ref())).query_text()
+        }
+        other => {
+            return Err(Error::Internal(format!(
+                "no owned-pod watch for kind {other}"
+            )))
+        }
+    };
+    let selector =
+        selector.ok_or_else(|| Error::InvalidInput(format!("{kind} {name} has no selector")))?;
+    Ok((Some(namespace), Narrow::labels(selector)))
+}
+
 /// Watch a single custom resource by name; the CRD coordinates come from
 /// the integration that knows them.
 #[tauri::command]
@@ -335,4 +415,133 @@ pub async fn subscribe_gateway_route_watch(
                 &crate::commands::gateway::with_types(obj.clone(), &stamp),
             ))
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::client::served::test_server::server;
+
+    fn deployment() -> String {
+        serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": { "name": "checkout", "namespace": "shop" },
+            "spec": {
+                "selector": {
+                    "matchLabels": { "app": "checkout" },
+                    "matchExpressions": [{ "key": "tier", "operator": "In", "values": ["web"] }],
+                },
+                "template": { "metadata": { "labels": { "app": "checkout", "tier": "web" } } },
+            },
+        })
+        .to_string()
+    }
+
+    /// The Deployment's Pods tab follows the pods its own read lists. Fails if
+    /// the watch drops the set-based half of the selector, or watches the
+    /// whole namespace instead.
+    #[tokio::test]
+    async fn a_deployments_pods_are_watched_by_its_whole_selector() {
+        let (client, _) = server(vec![(
+            "/apis/apps/v1/namespaces/shop/deployments/checkout",
+            200,
+            deployment(),
+        )])
+        .await;
+
+        let watched = pods_of(&client, "Deployment", Some("shop".into()), "checkout")
+            .await
+            .expect("a selector");
+
+        assert_eq!(
+            watched,
+            (
+                Some("shop".to_string()),
+                Narrow::labels("app=checkout,tier in (web)".into())
+            )
+        );
+    }
+
+    /// A Job is read by the selector the controller gave it, so its pods are
+    /// followed whatever they are named. Fails if a Job resolves to nothing.
+    #[tokio::test]
+    async fn a_jobs_pods_are_watched_by_the_selector_its_controller_set() {
+        let job = serde_json::json!({
+            "apiVersion": "batch/v1", "kind": "Job",
+            "metadata": { "name": "migrate", "namespace": "shop" },
+            "spec": {
+                "selector": { "matchLabels": { "batch.kubernetes.io/controller-uid": "u1" } },
+                "template": { "spec": { "containers": [] } },
+            },
+        })
+        .to_string();
+        let (client, _) = server(vec![(
+            "/apis/batch/v1/namespaces/shop/jobs/migrate",
+            200,
+            job,
+        )])
+        .await;
+
+        let watched = pods_of(&client, "Job", Some("shop".into()), "migrate")
+            .await
+            .expect("a selector");
+
+        assert_eq!(
+            watched.1,
+            Narrow::labels("batch.kubernetes.io/controller-uid=u1".into())
+        );
+    }
+
+    /// A node's pods live in every namespace. Fails if the node page's watch is
+    /// scoped to one, or narrowed by labels a node does not have.
+    #[tokio::test]
+    async fn a_nodes_pods_are_watched_across_the_cluster_by_where_they_run() {
+        let (client, hits) = server(vec![]).await;
+
+        let watched = pods_of(&client, "Node", None, "k3d-rubick-live-server-0")
+            .await
+            .expect("a node narrows by field");
+
+        assert_eq!(
+            watched,
+            (
+                None,
+                Narrow::fields("spec.nodeName=k3d-rubick-live-server-0".into())
+            )
+        );
+        assert!(hits.lock().unwrap().is_empty(), "a node needs no read");
+    }
+
+    /// An owner the cluster refuses to show leaves nothing to narrow by, and
+    /// says so rather than watching every pod in the namespace.
+    #[tokio::test]
+    async fn an_owner_that_cannot_be_read_is_not_watched_as_its_namespace() {
+        let (client, _) = server(vec![(
+            "/apis/apps/v1/namespaces/shop/deployments/checkout",
+            403,
+            serde_json::json!({
+                "kind": "Status", "apiVersion": "v1", "status": "Failure",
+                "reason": "Forbidden", "code": 403,
+            })
+            .to_string(),
+        )])
+        .await;
+
+        let refused = pods_of(&client, "Deployment", Some("shop".into()), "checkout").await;
+
+        assert!(refused.is_err(), "got {refused:?}");
+    }
+
+    /// Fails if a kind with no pods of its own is watched as if it had some.
+    #[tokio::test]
+    async fn a_kind_that_owns_no_pods_is_refused_by_name() {
+        let (client, _) = server(vec![]).await;
+
+        let refused = pods_of(&client, "ConfigMap", Some("shop".into()), "settings").await;
+
+        assert!(
+            matches!(&refused, Err(Error::Internal(message)) if message.contains("ConfigMap")),
+            "got {refused:?}"
+        );
+    }
 }
