@@ -5717,10 +5717,10 @@ export const en = {
     shellNotPermitted: "No shell with this access",
     shellWaits: "No shell is running here yet",
     shellWaitsBody:
-      "A shell is a live process in {container}. It starts only when you ask, never because the page was opened from a link or a restored tab.",
+      "A shell is a live process in {container}, so only a click starts one: on the {tab} tab or on the button below. Opening the page by a link, a restored tab or Back starts nothing.",
     filesWait: "The files have not been read yet",
     filesWaitBody:
-      "Each folder is read by running a command in the container. That happens only when you ask, never because the page was opened from a link or a restored tab.",
+      "Each folder is read by running a command in the container, so only a click reads them: on the {tab} tab or on the button below. Opening the page by a link, a restored tab or Back reads nothing.",
     noShellAttached: "No shell is attached",
     shellSessionEnded:
       "The session was ended. Choosing a container above opens a new one; nothing is running here in the meantime.",

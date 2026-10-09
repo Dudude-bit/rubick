@@ -1074,7 +1074,9 @@ export function PodDetail() {
               <StartOnAsk
                 icon={FolderOpen}
                 headline={t("empty", "filesWait")}
-                body={t("empty", "filesWaitBody")}
+                body={t("empty", "filesWaitBody", {
+                  tab: t("columns", "files"),
+                })}
                 action={t("action", "readFiles")}
                 onStart={() => ask("files")}
               />
