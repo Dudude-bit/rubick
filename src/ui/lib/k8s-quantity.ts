@@ -177,10 +177,3 @@ export function formatBytes(
       : formatDecimal(bytes / 1024 ** scale, decimals, locale, trim);
   return translate(locale, "cluster", SIZE_KEYS[scale], { n });
 }
-
-/** A Kubernetes byte quantity for a person; one that does not parse is returned as written. */
-export function formatKubernetesBytes(value: string): string {
-  const bytes = parseQuantity(value);
-  if (bytes === null || isNaN(bytes)) return value;
-  return formatBytes(bytes, { trim: true });
-}

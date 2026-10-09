@@ -141,3 +141,20 @@ describe("the Russian word for a drain", () => {
     expect(found).toEqual([]);
   });
 });
+
+describe("the Russian name for a disruption budget", () => {
+  /**
+   * Lena read "Бюджет простоя" on a pod's Links tab and "бюджеты прерываний"
+   * in the drain dialog, for one PodDisruptionBudget. Fails if a second name
+   * for it comes back anywhere.
+   */
+  it("is бюджет прерываний wherever it is named", () => {
+    expect(translate("ru", "nav", "disruptionBudget")).toBe(
+      "Бюджет прерываний"
+    );
+    const other = strings().filter(([, text]) =>
+      /бюджет\S*\s+простоя/i.test(text)
+    );
+    expect(other).toEqual([]);
+  });
+});

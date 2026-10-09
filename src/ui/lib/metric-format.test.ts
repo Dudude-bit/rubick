@@ -105,6 +105,7 @@ describe("declaredQuantity", () => {
     expect(declaredQuantity("memory", "32Mi")).toBe("32Mi");
     expect(declaredQuantity("memory", "268435456")).toBe("256Mi");
     expect(declaredQuantity("ephemeral-storage", "2147483648")).toBe("2Gi");
+    expect(declaredQuantity("storage", "1073741824")).toBe("1Gi");
     expect(declaredQuantity("hugepages-2Mi", "4194304")).toBe("4Mi");
     expect(declaredQuantity("nvidia.com/gpu", "1")).toBe("1");
     expect(declaredQuantity("memory", "lots")).toBe("lots");

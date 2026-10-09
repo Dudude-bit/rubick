@@ -15,6 +15,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { AnyRouter } from "@tanstack/react-router";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -38,6 +39,7 @@ import { renderWithRouter, settle } from "@/test/render";
 import { useShortcuts } from "@/routes/c/$cluster/-shell/useShortcuts";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { useObjectMenuStore } from "@/stores/objectMenuStore";
+import { openMenusFromKeys } from "@/lib/native-menu";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import {
@@ -862,6 +864,7 @@ describe("the row's menu", () => {
     wrap(
       <>
         <Shortcuts />
+        <button type="button">New tab</button>
         <DataTable<Item>
           columns={[
             ...columns,
@@ -918,22 +921,58 @@ describe("the row's menu", () => {
     expect(useObjectMenuStore.getState().target?.name).toBe("worker-1");
   });
 
-  /** The keyboard's way in: the Menu key on the focused row. */
-  it("opens on the Menu key on the focused row", async () => {
-    const onRowMenu = vi.fn();
-    await table(onRowMenu);
-    fireEvent.keyDown(rowAt(1)!, { key: "ContextMenu" });
-    expect(onRowMenu).toHaveBeenCalledWith(DATA[1], { x: 0, y: 0 });
+  /**
+   * The keyboard's way in: the Menu key on the focused row, under the row.
+   * Fails if the row opens nothing, opens it twice, or at the window's corner.
+   */
+  it("opens once under the focused row on the Menu key", async () => {
+    const stop = openMenusFromKeys();
+    try {
+      const onRowMenu = vi.fn();
+      await table(onRowMenu);
+      const row = rowAt(1)!;
+      vi.spyOn(row, "getBoundingClientRect").mockReturnValue({
+        ...row.getBoundingClientRect(),
+        left: 230,
+        bottom: 203,
+      });
+      row.focus();
+
+      await userEvent.keyboard("{ContextMenu}");
+
+      expect(onRowMenu).toHaveBeenCalledTimes(1);
+      expect(onRowMenu).toHaveBeenCalledWith(DATA[1], { x: 230, y: 203 });
+    } finally {
+      stop();
+    }
   });
 
-  /** Shift+F10 from anywhere on the page, for the selected row. */
-  it("opens on Shift+F10 for the selected row with the focus elsewhere", async () => {
+  /**
+   * Dana pressed the Menu key on the focused new tab button and the Events
+   * list opened its selected row's menu instead, at the window's corner.
+   * Fails if a row's menu answers a key pressed outside the table.
+   */
+  it("leaves the selected row's menu shut while the focus is outside the table", async () => {
     const onRowMenu = vi.fn();
     await table(onRowMenu);
-    fireEvent.keyDown(document.body, { key: "ArrowDown" });
-    (document.activeElement as HTMLElement).blur();
-    fireEvent.keyDown(document.body, { key: "F10", shiftKey: true });
-    expect(onRowMenu).toHaveBeenCalledWith(DATA[0], { x: 0, y: 0 });
+    // After the list's own keys: the app's shell registers them first.
+    const stop = openMenusFromKeys();
+    try {
+      fireEvent.keyDown(document.body, { key: "ArrowDown" });
+      expect(rowAt(0)).toHaveAttribute("aria-selected", "true");
+      const outside = screen.getByRole("button", { name: "New tab" });
+      const opened = vi.fn();
+      outside.addEventListener("contextmenu", opened);
+      outside.focus();
+
+      await userEvent.keyboard("{Shift>}{F10}{/Shift}");
+      await userEvent.keyboard("{ContextMenu}");
+
+      expect(onRowMenu).not.toHaveBeenCalled();
+      expect(opened).toHaveBeenCalledTimes(2);
+    } finally {
+      stop();
+    }
   });
 });
 

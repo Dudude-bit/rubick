@@ -14,7 +14,6 @@
 import { isBuiltInGroup, type AppLink } from "@/lib/links";
 import type { T } from "@/i18n/useT";
 import { covers, expiryOf } from "./certificates";
-import { formatKubernetesBytes } from "./k8s-quantity";
 import { isScalable } from "./resource-registry";
 import { groupMounts } from "./mounts";
 import { rolloutLine, rolloutVerdict } from "./workload-status";
@@ -51,6 +50,7 @@ import type {
   Unread,
   Usage,
 } from "@/generated/types";
+import { declaredQuantity } from "./metric-format";
 
 function sameObject(a: ObjectRef, b: ObjectRef): boolean {
   return (
@@ -193,7 +193,11 @@ function describeFacts(facts: ObjectFacts | null, t: T): string | null {
   if (!facts) return null;
   switch (facts.kind) {
     case "claim":
-      return join(facts.capacity, facts.storageClass, facts.phase);
+      return join(
+        facts.capacity && declaredQuantity("storage", facts.capacity),
+        facts.storageClass,
+        facts.phase
+      );
     case "pod":
       return upBetweenCrashes({ status: facts })
         ? join(facts.display, t("readings", "upBetweenCrashes"))
@@ -247,7 +251,7 @@ function nodeCapacity(
 ): string {
   return join(
     facts.cpu && `${facts.cpu} CPU`,
-    facts.memory && formatKubernetesBytes(facts.memory),
+    facts.memory && declaredQuantity("memory", facts.memory),
     !facts.schedulable && t("readings", "nodeCordonedWord")
   );
 }

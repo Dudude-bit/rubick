@@ -110,10 +110,6 @@ export function ConfigMapDetail() {
     };
   }, [configMap, configMapData, configMapDataError, t]);
 
-  if (!configMap && !isLoading && !error) {
-    return null;
-  }
-
   const dataKeys = configMap?.dataKeys ?? [];
   const labels = configMap?.labels ?? {};
   const annotations = configMap?.annotations ?? {};

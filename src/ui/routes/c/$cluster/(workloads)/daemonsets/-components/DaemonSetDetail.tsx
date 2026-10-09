@@ -459,10 +459,6 @@ export function DaemonSetDetail() {
     ]
   );
 
-  if (!daemonSet && !isLoading && !error) {
-    return null;
-  }
-
   return (
     <>
       <ChainWatches services={chain.services} reads={[chain.key]} />

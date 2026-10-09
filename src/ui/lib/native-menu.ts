@@ -14,6 +14,40 @@ export function keepNativeMenuForText(): () => void {
   return () => window.removeEventListener("contextmenu", onMenu);
 }
 
+export const isMenuKey = (event: { key: string; shiftKey: boolean }) =>
+  event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey);
+
+/** Opens `element`'s own menu under it, where a keyboard has no pointer to open it at. */
+export function openMenuOn(element: Element): void {
+  const box = element.getBoundingClientRect();
+  element.dispatchEvent(
+    new MouseEvent("contextmenu", {
+      bubbles: true,
+      cancelable: true,
+      clientX: box.left,
+      clientY: box.bottom,
+    })
+  );
+}
+
+/**
+ * The Menu key and Shift+F10 open the focused control's menu, under it. Left
+ * to the webview, the event went to whatever lay under the control's corner,
+ * so the new tab button never opened its menu. A key a control already
+ * answered, and a field's own menu, are left alone.
+ */
+export function openMenusFromKeys(): () => void {
+  const onKey = (event: KeyboardEvent) => {
+    if (event.defaultPrevented || !isMenuKey(event)) return;
+    const focused = document.activeElement;
+    if (wantsNativeMenu(focused)) return;
+    event.preventDefault();
+    if (focused && focused !== document.body) openMenuOn(focused);
+  };
+  window.addEventListener("keydown", onKey);
+  return () => window.removeEventListener("keydown", onKey);
+}
+
 const EDITABLE =
   'input, textarea, [contenteditable]:not([contenteditable="false"]), .cm-editor, .xterm';
 

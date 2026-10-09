@@ -3,6 +3,7 @@ import { Database } from "lucide-react";
 import type { PersistentVolumeInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { iconSvg } from "@/lib/icon-svg";
+import { declaredQuantity } from "@/lib/metric-format";
 import type { ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { statusRole, type StatusRole } from "@/lib/status-role";
@@ -28,7 +29,14 @@ export function pvFactsSection(pv: PersistentVolumeInfo, t: T): PlacedSection {
   const rows: { label: string; values: ReportValue[] }[] = [
     {
       label: t("columns", "capacity"),
-      values: [{ text: pv.capacity ?? t("empty", "noneLower"), mono: true }],
+      values: [
+        {
+          text: pv.capacity
+            ? declaredQuantity("storage", pv.capacity)
+            : t("empty", "noneLower"),
+          mono: true,
+        },
+      ],
     },
     {
       label: t("columns", "accessModes"),

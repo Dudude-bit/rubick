@@ -323,10 +323,6 @@ export function JobDetail() {
     ]
   );
 
-  if (!job && !isLoading && !error) {
-    return null;
-  }
-
   return (
     <ResourceDetailLayout
       freshness={freshness}

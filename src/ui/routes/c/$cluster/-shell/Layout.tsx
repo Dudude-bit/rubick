@@ -107,7 +107,7 @@ export function Layout({ page }: { page?: React.ReactNode } = {}) {
                 that sizes itself to this box exactly fills it and this
                 container never gets anything to scroll. Pages taller than it
                 overflow as before. */}
-              <div className="h-full animate-in fade-in duration-200">
+              <div className="h-full">
                 <Suspense fallback={<PageSkeleton className="p-0" />}>
                   <PageArea page={page} />
                 </Suspense>

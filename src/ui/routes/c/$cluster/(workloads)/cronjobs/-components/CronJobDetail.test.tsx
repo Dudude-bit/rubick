@@ -152,10 +152,11 @@ describe("CronJobDetail", () => {
     expect(screen.getByText("no run has succeeded yet")).toBeInTheDocument();
   });
 
-  it("renders nothing when the CronJob is absent and nothing is in flight", async () => {
+  /** A read with no answer yet drew a blank pane; fails if it draws anything but the placeholder. */
+  it("draws its placeholder while no read of the CronJob has answered", async () => {
     mockDetail(undefined);
-    const { container } = await renderPage();
-    expect(container.firstChild).toBeNull();
+    await renderPage();
+    expect(screen.getByTestId("detail-skeleton")).toBeInTheDocument();
   });
 
   /**

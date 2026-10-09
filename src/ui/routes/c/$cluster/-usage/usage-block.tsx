@@ -37,6 +37,7 @@ import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { sayWords, type Saying } from "@/i18n/say";
 import type { EmptyKey } from "./usage-chart";
+import { declaredQuantity } from "@/lib/metric-format";
 
 export interface UsageBlockProps {
   /** "Usage" on a workload, "Headroom" on a node. */
@@ -678,7 +679,12 @@ function StorageRow({
             <span />
             <span className="text-[11px] text-fg-fnt">
               <span className="text-fg-mid">{claim.name}</span>
-              {[claim.capacity, claim.storageClass, claim.phase, ...claim.paths]
+              {[
+                claim.capacity && declaredQuantity("storage", claim.capacity),
+                claim.storageClass,
+                claim.phase,
+                ...claim.paths,
+              ]
                 .filter(Boolean)
                 .map((part) => ` · ${part}`)
                 .join("")}

@@ -362,7 +362,7 @@ export function NodeList() {
   if (view === "utilisation") {
     return (
       <>
-        <div className="flex h-full min-h-0 flex-col gap-4 animate-in fade-in duration-200">
+        <div className="flex h-full min-h-0 flex-col gap-4">
           <ResourceListHeader
             title={NODES_TITLE}
             count={nodesForTrends.data?.rows.length}

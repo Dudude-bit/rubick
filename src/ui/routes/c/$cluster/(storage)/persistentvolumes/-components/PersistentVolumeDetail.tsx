@@ -23,6 +23,7 @@ import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
+import { declaredQuantity } from "@/lib/metric-format";
 
 export function PersistentVolumeDetail() {
   const t = useT();
@@ -53,7 +54,7 @@ export function PersistentVolumeDetail() {
   const facts: KeyValue[] = [
     {
       label: t("columns", "capacity"),
-      value: pv?.capacity ?? <None />,
+      value: pv?.capacity ? declaredQuantity("storage", pv.capacity) : <None />,
       mono: true,
     },
     {
@@ -152,7 +153,7 @@ export function PersistentVolumeDetail() {
         pv && (
           <>
             <span className="font-mono text-[11px] text-fg-mut">
-              {pv.capacity}
+              {pv.capacity && declaredQuantity("storage", pv.capacity)}
             </span>
             <span className="text-[11px] text-fg-fnt">
               {pv.accessModes.join(" · ") || t("empty", "noAccessModes")}

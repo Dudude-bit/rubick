@@ -70,7 +70,7 @@ function TableSkeleton({
   );
 
   return (
-    <div className="animate-in fade-in duration-200" aria-hidden>
+    <div aria-hidden>
       {showSearch && <Skeleton className="mb-2 h-7 w-40" />}
       <div className="flex items-center border-b border-hair py-1">
         {Array.from({ length: columns }).map((_, column) => (
@@ -150,7 +150,7 @@ function DetailSkeleton({
   showHeader = true,
 }: DetailSkeletonProps) {
   return (
-    <div className="space-y-4 animate-in fade-in duration-200" aria-hidden>
+    <div data-testid="detail-skeleton" className="space-y-4" aria-hidden>
       {showHeader && <Skeleton className="h-3.5 w-64" />}
 
       <div className="flex gap-1">
@@ -239,12 +239,7 @@ interface PageSkeletonProps {
 
 function PageSkeleton({ className }: PageSkeletonProps) {
   return (
-    <div
-      className={cn(
-        "space-y-6 animate-in fade-in duration-200 px-4 py-3.5",
-        className
-      )}
-    >
+    <div className={cn("space-y-6 px-4 py-3.5", className)}>
       <HeaderSkeleton />
       <StatsSkeleton count={4} />
       <TableSkeleton columns={5} rows={6} showSearch={false} />

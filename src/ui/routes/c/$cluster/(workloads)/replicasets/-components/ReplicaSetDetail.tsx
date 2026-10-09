@@ -338,10 +338,6 @@ export function ReplicaSetDetail() {
     }),
   ];
 
-  if (!replicaSet && !isLoading && !error) {
-    return null;
-  }
-
   return (
     <ResourceDetailLayout
       freshness={freshness}

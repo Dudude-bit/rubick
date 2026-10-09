@@ -49,13 +49,14 @@ export function formatQuantity(
   return `${Math.round(value)}${unit ?? ""}`;
 }
 
-/** A request or limit as every reader spells it; one with no unit of its own, or that does not parse, as written. */
+/** A request, a limit or a volume's size as every reader spells it; one with no unit of its own, or that does not parse, as written. */
 export function declaredQuantity(resource: string, raw: string): string {
   const value = parseQuantity(raw);
   if (value === null) return raw;
   if (resource === "cpu") return formatCPU(value * 1000);
   if (
     resource === "memory" ||
+    resource === "storage" ||
     resource === "ephemeral-storage" ||
     resource.startsWith("hugepages-")
   )

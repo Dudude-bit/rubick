@@ -343,10 +343,6 @@ export function DeploymentDetail() {
   );
   const startsNow = useStartsClock(splitPods);
 
-  if (!deployment && !isLoading && !error) {
-    return null;
-  }
-
   const replicas = deployment?.replicas;
   const desired = replicas?.desired ?? 0;
   const split = replicaSplit(

@@ -309,6 +309,10 @@ export function ResourceDetailLayout({
     return () => window.removeEventListener(DETAIL_TAB_OPEN, onOpen);
   }, [tabs, onTabChange]);
 
+  // No object and no failure is a read still to come, as the peek draws it:
+  // a read reset or called off sits there with nothing fetching.
+  const reading = isLoading || (!resource && !error);
+
   // The banner belongs above these returns, not below them. An alert that
   // names an object this cluster does not have lands on exactly the error
   // page — the case the feature was built for — and the banner was mounted
@@ -324,12 +328,12 @@ export function ResourceDetailLayout({
         now={resource && !error ? statusBadge : undefined}
         readAt={freshness?.dataUpdatedAt}
         error={error ? errorToShow(error) : undefined}
-        reading={isLoading}
+        reading={reading}
       />
     </>
   );
 
-  if (isLoading) {
+  if (reading) {
     return (
       <>
         {banner}
@@ -370,7 +374,7 @@ export function ResourceDetailLayout({
           // chrome — identity, then the strip — and the mock's whole gain is
           // that the two read as one band. The 22px rhythm still belongs to
           // the blocks, which the open tab's panel now owns.
-          "flex flex-col gap-3 animate-in fade-in duration-200",
+          "flex flex-col gap-3",
           surface && "h-full min-h-0"
         )}
       >

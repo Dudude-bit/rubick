@@ -290,7 +290,8 @@ describe("NodeDetail", () => {
     expect(button).toBeEnabled();
   });
 
-  it("returns null (renders nothing meaningful) when no node + no loading + no error", async () => {
+  /** A read with no answer yet drew a blank pane; fails if it draws anything but the placeholder. */
+  it("draws its placeholder while no read of the node has answered", async () => {
     vi.mocked(useResourceDetail).mockReturnValue({
       ...defaultUseResourceDetailReturn(buildNode()),
       resource: undefined,
@@ -298,8 +299,8 @@ describe("NodeDetail", () => {
       error: null,
     } as unknown as ReturnType<typeof useResourceDetail>);
 
-    const { container } = await renderPage();
-    expect(container.firstChild).toBeNull();
+    await renderPage();
+    expect(screen.getByTestId("detail-skeleton")).toBeInTheDocument();
   });
 });
 

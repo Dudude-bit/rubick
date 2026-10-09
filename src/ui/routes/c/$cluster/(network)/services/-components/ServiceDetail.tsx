@@ -86,10 +86,6 @@ export function ServiceDetail() {
   const [forwardOpen, setForwardOpen] = useState(false);
   const forwardDenied = usePodDenied(namespace || null).portForward;
 
-  if (!service && !isLoading && !error) {
-    return null;
-  }
-
   const ports = service?.ports ?? [];
   const externalIps = service?.externalIps ?? [];
 

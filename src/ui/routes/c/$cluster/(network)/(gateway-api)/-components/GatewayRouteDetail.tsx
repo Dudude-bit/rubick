@@ -256,10 +256,6 @@ export function GatewayRouteDetail({ kind }: { kind: ResourceKind }) {
   });
   const backing = useRouteBacking(route, true);
 
-  if (!route && !isLoading && !error) {
-    return null;
-  }
-
   const facts: KeyValue[] = [
     {
       label: t("columns", "hostnames"),
