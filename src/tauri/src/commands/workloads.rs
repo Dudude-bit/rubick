@@ -3,10 +3,10 @@
 use crate::error::Result;
 use crate::resources::{
     runs_for, with_pods, CronJobDetailInfo, CronJobInfo, DaemonSetDetailInfo, DaemonSetInfo,
-    JobDetailInfo, JobInfo, Rollout, Selector, StatefulSetDetailInfo, StatefulSetInfo,
+    JobDetailInfo, JobInfo, Owners, Rollout, Selector, StatefulSetDetailInfo, StatefulSetInfo,
 };
 use crate::state::AppState;
-use k8s_openapi::api::apps::v1::{DaemonSet, StatefulSet};
+use k8s_openapi::api::apps::v1::{DaemonSet, ReplicaSet, StatefulSet};
 use k8s_openapi::api::batch::v1::{CronJob, Job};
 use k8s_openapi::api::core::v1::Pod;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::{LabelSelector, ObjectMeta};
@@ -35,21 +35,33 @@ pub(crate) async fn with_own_pods(
     let Some(query) = Selector::Query(selector).query_text() else {
         return rollout.pods_unread();
     };
-    let Ok(pods) = ctx
-        .namespaced_api::<Pod>()
-        .list(&ListParams::default().labels(&query))
-        .await
-    else {
+    let params = ListParams::default().labels(&query);
+    let deployment = kind == "Deployment";
+    let (pods_api, sets_api) = (
+        ctx.namespaced_api::<Pod>(),
+        ctx.namespaced_api::<ReplicaSet>(),
+    );
+    let (pods, sets) = tokio::join!(pods_api.list(&params), async {
+        if deployment {
+            sets_api.list(&params).await.ok()
+        } else {
+            None
+        }
+    });
+    let Ok(pods) = pods else {
         return rollout.pods_unread();
     };
-    let own = pods.items.iter().filter(|pod| {
-        runs_for(
-            pod,
-            kind,
+    let uid = workload.uid.as_deref();
+    let owners = if deployment {
+        Owners::of_deployment(
             workload.name.as_deref().unwrap_or_default(),
-            workload.uid.as_deref(),
+            uid,
+            sets.as_ref().map(|sets| sets.items.as_slice()),
         )
-    });
+    } else {
+        Owners::of(uid)
+    };
+    let own = pods.items.iter().filter(|pod| runs_for(pod, &owners));
     with_pods(rollout, own, chrono::Utc::now())
 }
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -69,7 +69,8 @@ import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
-import type { StatefulSetDetailInfo } from "@/generated/types";
+import type { PodInfo, StatefulSetDetailInfo } from "@/generated/types";
+import { controlledBy } from "@/lib/controlled-by";
 import { useT } from "@/i18n/useT";
 
 export function StatefulSetDetail() {
@@ -138,6 +139,10 @@ export function StatefulSetDetail() {
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
+    select: useCallback(
+      (pods: PodInfo[]) => controlledBy(pods, statefulSet?.uid),
+      [statefulSet?.uid]
+    ),
   });
   const {
     pods,

@@ -3,7 +3,7 @@
 //! the peek, the page, the overview and the connections graph.
 
 use chrono::{DateTime, Utc};
-use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, StatefulSet};
+use k8s_openapi::api::apps::v1::{DaemonSet, Deployment, ReplicaSet, StatefulSet};
 use k8s_openapi::api::core::v1::Pod;
 use serde::{Deserialize, Serialize};
 
@@ -454,20 +454,63 @@ pub fn workload_of(pod: &Pod) -> Option<(&str, &str)> {
         .map(|o| (o.kind.as_str(), o.name.as_str()))
 }
 
-/// Whether a pod is one of the workload's own, as its verdict counts them:
-/// a Deployment's by name through its `ReplicaSets`, any other's by uid.
-#[must_use]
-pub fn runs_for(pod: &Pod, kind: &str, name: &str, uid: Option<&str>) -> bool {
-    if kind == "Deployment" {
-        return deployment_of(pod) == Some(name);
+/// The controllers whose pods are a workload's own.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Owners<'a> {
+    /// By uid: the workload's own, or for a Deployment the `ReplicaSets` it
+    /// controls. A Deployment made again under its name makes a `ReplicaSet`
+    /// of the same name, and the pods of the one deleted before it carry the
+    /// old one's uid.
+    Uids(Vec<&'a str>),
+    /// A Deployment whose `ReplicaSets` could not be read: by their names.
+    Named(&'a str),
+}
+
+impl<'a> Owners<'a> {
+    /// A Deployment's, out of the `ReplicaSets` read in its namespace, or by
+    /// name where they were not.
+    #[must_use]
+    pub fn of_deployment(
+        name: &'a str,
+        uid: Option<&'a str>,
+        sets: Option<&'a [ReplicaSet]>,
+    ) -> Self {
+        match (uid, sets) {
+            (Some(uid), Some(sets)) => Self::Uids(
+                sets.iter()
+                    .filter(|set| {
+                        set.metadata
+                            .owner_references
+                            .iter()
+                            .flatten()
+                            .any(|o| o.controller == Some(true) && o.uid == uid)
+                    })
+                    .filter_map(|set| set.metadata.uid.as_deref())
+                    .collect(),
+            ),
+            _ => Self::Named(name),
+        }
     }
-    uid.is_some_and(|uid| {
-        pod.metadata
+
+    /// Any other workload's: its own uid.
+    #[must_use]
+    pub fn of(uid: Option<&'a str>) -> Self {
+        Self::Uids(uid.into_iter().collect())
+    }
+}
+
+/// Whether a pod is one of the workload's own, as its verdict counts them.
+#[must_use]
+pub fn runs_for(pod: &Pod, owners: &Owners<'_>) -> bool {
+    match owners {
+        Owners::Uids(uids) => pod
+            .metadata
             .owner_references
             .iter()
             .flatten()
-            .any(|o| o.controller == Some(true) && o.uid == uid)
-    })
+            .any(|o| o.controller == Some(true) && uids.contains(&o.uid.as_str())),
+        Owners::Named(name) => deployment_of(pod) == Some(name),
+    }
 }
 
 #[cfg(test)]
@@ -882,12 +925,57 @@ mod tests {
         let cart = owned("cart-9df89489c", Some("9df89489c"));
         assert_eq!(deployment_of(&cart), Some("cart"));
         assert_eq!(workload_of(&cart), Some(("Deployment", "cart")));
-        assert!(runs_for(&cart, "Deployment", "cart", None));
+        assert!(runs_for(&cart, &Owners::Named("cart")));
         let api = owned("cart-api-5d4c8f7b9", Some("5d4c8f7b9"));
-        assert!(!runs_for(&api, "Deployment", "cart", None));
+        assert!(!runs_for(&api, &Owners::Named("cart")));
         let bare = owned("cart-legacy", None);
         assert_eq!(deployment_of(&bare), None);
         assert_eq!(workload_of(&bare), Some(("ReplicaSet", "cart-legacy")));
+    }
+
+    /// Sam deleted big-pull and applied it again: the new Deployment made a
+    /// `ReplicaSet` of the same name, and the old one's terminating pod was
+    /// credited to it while its own new pod was not shown. Fails if a pod is
+    /// matched to a Deployment by its `ReplicaSet`'s name where the
+    /// `ReplicaSets` were read, or if one the Deployment controls is missed.
+    #[test]
+    fn a_pod_runs_for_a_deployment_only_through_a_replica_set_it_controls() {
+        let owned = |name: &str, set_uid: &str| -> Pod {
+            pod(serde_json::json!({
+                "metadata": {
+                    "name": name,
+                    "labels": { "app": "big-pull", POD_TEMPLATE_HASH: "67577558d6" },
+                    "ownerReferences": [{
+                        "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                        "name": "big-pull-67577558d6", "uid": set_uid, "controller": true,
+                    }],
+                },
+            }))
+        };
+        let set: ReplicaSet = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "big-pull-67577558d6",
+                "uid": "rs-second",
+                "ownerReferences": [{
+                    "apiVersion": "apps/v1", "kind": "Deployment",
+                    "name": "big-pull", "uid": "second", "controller": true,
+                }],
+            },
+        }))
+        .expect("replica set parses");
+        let sets = [set];
+        let owners = Owners::of_deployment("big-pull", Some("second"), Some(&sets));
+
+        assert!(runs_for(
+            &owned("big-pull-67577558d6-86jls", "rs-second"),
+            &owners
+        ));
+        let old = owned("big-pull-67577558d6-5s4hz", "rs-first");
+        assert!(!runs_for(&old, &owners));
+        assert!(runs_for(
+            &old,
+            &Owners::of_deployment("big-pull", Some("second"), None)
+        ));
     }
 
     /// Pods of the old template still being replaced while the controller

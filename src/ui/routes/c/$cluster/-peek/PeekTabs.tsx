@@ -13,6 +13,7 @@ import { fetchResourceYaml } from "@/hooks/useResourceYaml";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import { ReadAgain } from "@/components/ui/read-again";
+import { controlledBy } from "@/lib/controlled-by";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
 import { toKind } from "@/lib/resource-registry";
@@ -422,6 +423,9 @@ function PeekPodsTab({
   // A DaemonSet's selector arrives with the Overview fetch; asking before it
   // lands would list the whole namespace.
   const ready = !!namespace && (kind !== "DaemonSet" || !!selector);
+  // A Deployment's own are its ReplicaSets', which the backend matches.
+  const uid =
+    kind === "Deployment" ? undefined : (detail as { uid?: string })?.uid;
   const { data, error, isPending, isFetching, refetch } = useLiveQuery({
     queryKey: podsKey,
     queryFn: () => fetchOwnedPods(target, namespace!, detail),
@@ -431,6 +435,7 @@ function PeekPodsTab({
     placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
     retry: false,
+    select: useCallback((pods: PodInfo[]) => controlledBy(pods, uid), [uid]),
   });
   useOwnedPodsWatch(
     kind ?? target.kind,

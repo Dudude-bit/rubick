@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use chrono::{DateTime, Utc};
 
-use k8s_openapi::api::apps::v1::{Deployment, StatefulSet};
+use k8s_openapi::api::apps::v1::{Deployment, ReplicaSet, StatefulSet};
 use k8s_openapi::api::core::v1::{Endpoints, Pod, Service, ServicePort};
 use k8s_openapi::api::discovery::v1::{Endpoint, EndpointSlice};
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
@@ -30,7 +30,7 @@ use super::connections::{ChainStop, Existence, NearMiss, NotServing, ObjectFacts
 use super::selector::Selector;
 use super::types::pod_display::display_status;
 use super::types::{condition_is_true, crash_looping};
-use super::{PodStart, Rollout};
+use super::{Owners, PodStart, Rollout};
 
 /// The label the endpoint controllers put on every slice they write, and the
 /// only stated link from a slice back to its Service.
@@ -755,12 +755,14 @@ pub struct PodMaker<'a> {
     pub replicas: i32,
     /// Its verdict from its counts and conditions, before its pods are asked.
     pub rollout: Rollout,
-    pub uid: Option<&'a str>,
+    /// The controllers whose pods are its own.
+    pub owners: Owners<'a>,
 }
 
 impl<'a> PodMaker<'a> {
+    /// `sets` are the `ReplicaSets` read in its namespace, `None` where they were not.
     #[must_use]
-    pub fn deployment(deployment: &'a Deployment) -> Option<Self> {
+    pub fn deployment(deployment: &'a Deployment, sets: Option<&'a [ReplicaSet]>) -> Option<Self> {
         let spec = deployment.spec.as_ref()?;
         let status = deployment.status.as_ref();
         let rollout = super::deployment_rollout(deployment);
@@ -776,7 +778,11 @@ impl<'a> PodMaker<'a> {
             labels: spec.template.metadata.as_ref()?.labels.as_ref()?,
             replicas: spec.replicas.unwrap_or(1),
             rollout,
-            uid: deployment.metadata.uid.as_deref(),
+            owners: Owners::of_deployment(
+                deployment.metadata.name.as_deref().unwrap_or_default(),
+                deployment.metadata.uid.as_deref(),
+                sets,
+            ),
         })
     }
 
@@ -797,17 +803,22 @@ impl<'a> PodMaker<'a> {
             labels: spec.template.metadata.as_ref()?.labels.as_ref()?,
             replicas: spec.replicas.unwrap_or(1),
             rollout,
-            uid: set.metadata.uid.as_deref(),
+            owners: Owners::of(set.metadata.uid.as_deref()),
         })
     }
 }
 
-/// Every Deployment and `StatefulSet` here, as the rule reads them.
+/// Every Deployment and `StatefulSet` here, as the rule reads them, with the
+/// `ReplicaSets` read beside them, `None` where they were not.
 #[must_use]
-pub fn makers<'a>(deployments: &'a [Deployment], sets: &'a [StatefulSet]) -> Vec<PodMaker<'a>> {
+pub fn makers<'a>(
+    deployments: &'a [Deployment],
+    sets: &'a [StatefulSet],
+    replica_sets: Option<&'a [ReplicaSet]>,
+) -> Vec<PodMaker<'a>> {
     deployments
         .iter()
-        .filter_map(PodMaker::deployment)
+        .filter_map(|deployment| PodMaker::deployment(deployment, replica_sets))
         .chain(sets.iter().filter_map(PodMaker::stateful_set))
         .collect()
 }
@@ -916,9 +927,10 @@ pub fn waiting_on(
         PodStart::Failing => false,
     });
     let coming = picked.iter().all(|maker| {
-        let own = pods.iter().copied().filter(|pod| {
-            super::runs_for(pod, &maker.workload.kind, &maker.workload.name, maker.uid)
-        });
+        let own = pods
+            .iter()
+            .copied()
+            .filter(|pod| super::runs_for(pod, &maker.owners));
         matches!(
             super::with_pods(maker.rollout.clone(), own, now),
             Rollout::ComingUp { .. }
@@ -1705,7 +1717,7 @@ mod tests {
         let said = |deployments: &[Deployment]| {
             let makers: Vec<PodMaker> = deployments
                 .iter()
-                .filter_map(PodMaker::deployment)
+                .filter_map(|deployment| PodMaker::deployment(deployment, None))
                 .collect();
             from_slices(&svc, svc_ref("web"), &[], &[])
                 .with_stop(&svc, Some(&[]))
@@ -1752,7 +1764,7 @@ mod tests {
         let said = |deployments: &[Deployment]| {
             let makers: Vec<PodMaker> = deployments
                 .iter()
-                .filter_map(PodMaker::deployment)
+                .filter_map(|deployment| PodMaker::deployment(deployment, None))
                 .collect();
             from_slices(&svc, svc_ref("web"), &[], &[])
                 .with_stop(&svc, Some(&[]))
@@ -1820,7 +1832,10 @@ mod tests {
     fn a_service_read_from_its_endpoints_alone_is_not_called_idle() {
         let svc = selecting("web");
         let parked = [deployment("web", "web", 0)];
-        let makers: Vec<PodMaker> = parked.iter().filter_map(PodMaker::deployment).collect();
+        let makers: Vec<PodMaker> = parked
+            .iter()
+            .filter_map(|deployment| PodMaker::deployment(deployment, None))
+            .collect();
         let stop = from_slices(&svc, svc_ref("web"), &[], &[])
             .with_stop(&svc, None)
             .with_makers(&svc, &makers)
@@ -2225,7 +2240,7 @@ mod tests {
         let svc = selecting("web");
         let makers: Vec<PodMaker> = deployments
             .iter()
-            .filter_map(PodMaker::deployment)
+            .filter_map(|deployment| PodMaker::deployment(deployment, None))
             .collect();
         let slices = [not_ready_slice()];
         let published = from_slices(
@@ -2296,7 +2311,7 @@ mod tests {
         let svc = selecting("web");
         let makers: Vec<PodMaker> = deployments
             .iter()
-            .filter_map(PodMaker::deployment)
+            .filter_map(|deployment| PodMaker::deployment(deployment, None))
             .collect();
         from_slices(&svc, svc_ref("web"), &[], pods.unwrap_or_default())
             .with_stop(&svc, pods)

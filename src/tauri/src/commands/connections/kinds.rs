@@ -239,10 +239,19 @@ pub(super) async fn workload_connections(
         if !pods_read {
             return rollout.pods_unread();
         }
+        let owners = if kind == "Deployment" {
+            crate::resources::Owners::of_deployment(
+                name,
+                uid.as_deref(),
+                snapshot.replica_sets.as_deref().ok(),
+            )
+        } else {
+            crate::resources::Owners::of(uid.as_deref())
+        };
         let own = mine
             .iter()
             .copied()
-            .filter(|pod| crate::resources::runs_for(pod, kind, name, uid.as_deref()));
+            .filter(|pod| crate::resources::runs_for(pod, &owners));
         crate::resources::with_pods(rollout, own, chrono::Utc::now())
     });
 

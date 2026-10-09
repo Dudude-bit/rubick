@@ -21,7 +21,7 @@ pub use replicaset::{
 };
 pub use rollout::{
     daemonset_rollout, deployment_of, deployment_rollout, pod_start, runs_for, statefulset_rollout,
-    with_pods, with_starts, workload_of, PodStart, Rollout,
+    with_pods, with_starts, workload_of, Owners, PodStart, Rollout,
 };
 pub use rollout_plan::{daemonset_plan, deployment_plan, statefulset_plan, RolloutPlan};
 pub use statefulset::{StatefulSetDetailInfo, StatefulSetInfo, StatefulSetReplicaInfo};

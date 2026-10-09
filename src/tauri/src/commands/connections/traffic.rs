@@ -868,6 +868,7 @@ mod tests {
             budgets: Ok(Vec::new()),
             deployments: Ok(Vec::new()),
             stateful_sets: Ok(Vec::new()),
+            replica_sets: Ok(Vec::new()),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
             taken_at: chrono::Utc::now(),

@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -54,7 +54,8 @@ import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { normalizeTauriError } from "@/lib/error-utils";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
-import type { DaemonSetDetailInfo } from "@/generated/types";
+import type { DaemonSetDetailInfo, PodInfo } from "@/generated/types";
+import { controlledBy } from "@/lib/controlled-by";
 import { useT } from "@/i18n/useT";
 
 export function DaemonSetDetail() {
@@ -157,6 +158,10 @@ export function DaemonSetDetail() {
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
+    select: useCallback(
+      (pods: PodInfo[]) => controlledBy(pods, daemonSet?.uid),
+      [daemonSet?.uid]
+    ),
   });
   const {
     pods,

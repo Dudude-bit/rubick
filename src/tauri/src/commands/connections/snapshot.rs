@@ -28,6 +28,9 @@ pub(super) struct Snapshot {
     /// workloads scaled to zero. A refusal leaves that unsaid and nothing else.
     pub(super) deployments: Read<Deployment>,
     pub(super) stateful_sets: Read<StatefulSet>,
+    /// Which pods are a Deployment's own: those its `ReplicaSets` control, by
+    /// uid. A refusal reads them off the `ReplicaSets`' names instead.
+    pub(super) replica_sets: Read<ReplicaSet>,
     /// What every Service in the namespace publishes, in one list keyed by
     /// the `kubernetes.io/service-name` label — the same shape the Services
     /// and the Ingresses are read under.
@@ -294,6 +297,7 @@ impl Snapshot {
         let slices_api = ctx.namespaced_api::<EndpointSlice>();
         let deployments_api = ctx.namespaced_api::<Deployment>();
         let sets_api = ctx.namespaced_api::<StatefulSet>();
+        let replica_sets_api = ctx.namespaced_api::<ReplicaSet>();
         let (
             pods,
             services,
@@ -304,6 +308,7 @@ impl Snapshot {
             slices,
             deployments,
             stateful_sets,
+            replica_sets,
         ) = tokio::join!(
             pods_api.list(&params),
             services_api.list(&params),
@@ -314,6 +319,7 @@ impl Snapshot {
             slices_api.list(&params),
             deployments_api.list(&params),
             sets_api.list(&params),
+            replica_sets_api.list(&params),
         );
         let slices = read_live(slices)?;
         // The one read that is not in the join, and deliberately: it is the
@@ -334,6 +340,7 @@ impl Snapshot {
             budgets: read_live(budgets)?,
             deployments: read_live(deployments)?,
             stateful_sets: read_live(stateful_sets)?,
+            replica_sets: read_live(replica_sets)?,
             slices,
             legacy,
             taken_at,
@@ -380,6 +387,7 @@ impl Snapshot {
         published::makers(
             self.deployments.as_deref().unwrap_or_default(),
             self.stateful_sets.as_deref().unwrap_or_default(),
+            self.replica_sets.as_deref().ok(),
         )
     }
 
@@ -651,6 +659,7 @@ mod refused_list_tests {
             budgets: Err(REFUSED.to_string()),
             deployments: Err(REFUSED.to_string()),
             stateful_sets: Err(REFUSED.to_string()),
+            replica_sets: Err(REFUSED.to_string()),
             slices: Err(REFUSED.to_string()),
             legacy: Err(REFUSED.to_string()),
             taken_at: chrono::Utc::now(),
@@ -811,6 +820,7 @@ mod refused_list_tests {
             budgets: Ok(Vec::new()),
             deployments: Ok(Vec::new()),
             stateful_sets: Ok(Vec::new()),
+            replica_sets: Ok(Vec::new()),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
             taken_at: chrono::Utc::now(),
