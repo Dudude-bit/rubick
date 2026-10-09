@@ -17,8 +17,16 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+import { listen } from "@tauri-apps/api/event";
+
+import { forgetChannels } from "@/lib/events";
+import { useWindowActivity } from "@/lib/window-activity";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useClusterOverview, useScopedOverview } from "./useClusterOverview";
+import {
+  useClusterOverview,
+  useFollowedOverview,
+  useScopedOverview,
+} from "./useClusterOverview";
 
 const overview = (pods: number) => ({ counts: { pods } }) as never;
 
@@ -136,5 +144,76 @@ describe("useScopedOverview", () => {
     await waitFor(() => expect(result.current.data).toEqual(overview(11)));
     expect(getClusterOverview).toHaveBeenCalledTimes(1);
     expect(getClusterOverview).toHaveBeenCalledWith(["prod", "staging"]);
+  });
+});
+
+describe("an overview served from the watched stores", () => {
+  let announce: ((event: { payload: unknown }) => void) | null = null;
+  const changed = (namespaces: string[], cluster = false) =>
+    act(() =>
+      announce?.({
+        payload: {
+          channel: "overview-changed",
+          context: "prod-eu",
+          namespaces,
+          cluster,
+        },
+      })
+    );
+
+  beforeEach(() => {
+    forgetChannels();
+    announce = null;
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === "overview-changed") announce = handler as typeof announce;
+      return () => {};
+    });
+    useWindowActivity.setState({ visible: true });
+  });
+
+  function follow(servedFrom: "watch" | "list") {
+    getClusterOverview.mockResolvedValue({ servedFrom, counts: { pods: 40 } });
+    return renderHook(
+      () => {
+        const query = useScopedOverview();
+        return useFollowedOverview(query.data);
+      },
+      { wrapper }
+    );
+  }
+
+  /**
+   * Sam's Overview read "41 of 62 pods ready" for six seconds after kubectl
+   * was back at 40, on a ten-second poll over stores that knew at once.
+   * Fails if a change the stores announce in the window's scope is not read
+   * again, or one elsewhere is.
+   */
+  it("reads again when its stores announce a change in its scope, and only then", async () => {
+    useClusterStore.setState({ namespaceScope: ["shop"] });
+    const { result } = follow("watch");
+    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(announce).not.toBeNull());
+    const reads = getClusterOverview.mock.calls.length;
+
+    changed(["team-blind"]);
+    await new Promise((settle) => setTimeout(settle, 50));
+    expect(getClusterOverview).toHaveBeenCalledTimes(reads);
+
+    changed(["shop"]);
+    await waitFor(() =>
+      expect(getClusterOverview).toHaveBeenCalledTimes(reads + 1)
+    );
+    changed([], true);
+    await waitFor(() =>
+      expect(getClusterOverview).toHaveBeenCalledTimes(reads + 2)
+    );
+  });
+
+  /** Fails if an overview listed rather than served from the stores claims to follow them, or listens for them. */
+  it("does not follow an overview that was listed", async () => {
+    const { result } = follow("list");
+    await waitFor(() => expect(getClusterOverview).toHaveBeenCalled());
+    expect(result.current).toBe(false);
+    expect(announce).toBeNull();
   });
 });

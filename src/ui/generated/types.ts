@@ -2868,7 +2868,13 @@ export type AppEvent =
       unread: UnreadNamespace[];
     }
   | { channel: "pod-rows-failed"; stream_id: string; message: string }
-  | { channel: "event-bridge-lagged"; missed: number };
+  | { channel: "event-bridge-lagged"; missed: number }
+  | {
+      channel: "overview-changed";
+      context: string;
+      namespaces: string[];
+      cluster: boolean;
+    };
 
 export type PodStart =
   | { state: "settled" }
