@@ -25,7 +25,15 @@ const REFUSED = {
     'pods is forbidden: User "system:serviceaccount:team-checkout:marco" cannot list resource "pods" in API group "" at the cluster scope',
 };
 
-const cluster = { namespaces: "refused" as "refused" | "listed" };
+const cluster = {
+  namespaces: "refused" as "refused" | "listed",
+  /** Each namespace's pods, where an answer for several breaks them out. */
+  breakdown: null as null | Array<{
+    name: string;
+    podCount: number | null;
+    problemCount: number;
+  }>,
+};
 
 // Behind the real command wrapper, which is what remembers a refusal.
 const overviewScopes: Array<string[] | null> = [];
@@ -48,11 +56,11 @@ setTransport(
       overviewScopes.push(scope);
       if (scope === null) throw REFUSED;
       return {
-        namespaces: [],
+        namespaces: cluster.breakdown ?? [],
         problems: [{ namespace: "team-checkout" }],
         problemsTruncated: 0,
         unread: [],
-        counts: { pods: 4 },
+        counts: { pods: cluster.breakdown ? null : 4 },
       };
     },
     list_service_health_inputs: () => ({ rows: [], unread: [] }),
@@ -73,6 +81,7 @@ beforeEach(() => {
   overviewScopes.length = 0;
   localStorage.clear();
   cluster.namespaces = "refused";
+  cluster.breakdown = null;
   useNamespaceRecencyStore.setState({ recent: {} });
   attempt += 1;
   useClusterStore.setState({
@@ -153,6 +162,40 @@ describe("the namespace picker for a reader of one namespace", () => {
     await wait(60_000);
 
     expect(wholeClusterAsks()).toBe(1);
+  });
+});
+
+describe("a namespace the window has moved off", () => {
+  /**
+   * Marco's team-checkout read "3 · 3+ problems" while it was the scope and
+   * "from kubeconfig" with no count once the window was on team-blind. Fails
+   * if a namespace the picker offers without a list loses its count when it
+   * is not the one selected.
+   */
+  it("keeps its count when the window is on another namespace", async () => {
+    cluster.breakdown = [
+      { name: "team-blind", podCount: null, problemCount: 0 },
+      { name: "team-checkout", podCount: 3, problemCount: 1 },
+    ];
+    useClusterStore.setState({
+      namespaceScope: ["team-blind"],
+      currentNamespace: "team-blind",
+    });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    await renderWithRouter(<ScopeTabs />, {
+      at: "/c/acme-staging",
+      route: "$",
+    });
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+    await user.click(
+      within(screen.getAllByRole("tab")[0]).getByText(/team-blind/)
+    );
+    await act(() => vi.advanceTimersByTimeAsync(1_000));
+
+    const row = await screen.findByRole("option", { name: /^team-checkout/ });
+    expect(row).toHaveAccessibleName(/^team-checkout, 3 pods/);
+    expect(within(row).queryByText("from kubeconfig")).toBeNull();
+    expect(overviewScopes).toContainEqual(["team-blind", "team-checkout"]);
   });
 });
 
