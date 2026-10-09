@@ -1,5 +1,5 @@
 import type { T } from "@/i18n/useT";
-import { formatBytes, formatCPU } from "@/lib/k8s-quantity";
+import { formatBytes, formatCPU, parseQuantity } from "@/lib/k8s-quantity";
 import type { ReportValue } from "@/lib/report";
 
 /**
@@ -47,6 +47,20 @@ export function formatQuantity(
   if (kind === "memory") return formatBytes(value, { trim: true });
   if (kind === "throughput") return `${formatBytes(value, { trim: true })}/s`;
   return `${Math.round(value)}${unit ?? ""}`;
+}
+
+/** A request or limit as every reader spells it; one with no unit of its own, or that does not parse, as written. */
+export function declaredQuantity(resource: string, raw: string): string {
+  const value = parseQuantity(raw);
+  if (value === null) return raw;
+  if (resource === "cpu") return formatCPU(value * 1000);
+  if (
+    resource === "memory" ||
+    resource === "ephemeral-storage" ||
+    resource.startsWith("hugepages-")
+  )
+    return formatBytes(value, { trim: true });
+  return raw;
 }
 
 export type UsageRole = "ok" | "warn" | "err";

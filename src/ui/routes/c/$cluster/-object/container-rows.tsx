@@ -38,6 +38,7 @@ import type {
   DeploymentContainerInfo,
 } from "@/generated/types";
 import { describeProbe, PROBE_LABEL } from "@/lib/probe-words";
+import { declaredQuantity } from "@/lib/metric-format";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 
@@ -69,7 +70,9 @@ function isRuntime(
 function quantities(record: Record<string, string>): string | null {
   const entries = Object.entries(record);
   if (entries.length === 0) return null;
-  return entries.map(([key, value]) => `${key} ${value}`).join(" · ");
+  return entries
+    .map(([key, value]) => `${key} ${declaredQuantity(key, value)}`)
+    .join(" · ");
 }
 
 /**
