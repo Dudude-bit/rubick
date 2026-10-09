@@ -5,13 +5,14 @@ import type { IngressInfo } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
 
 const answers = vi.hoisted(() => ({
+  ingresses: (): Promise<unknown> => Promise.resolve([shop]),
   backing: (): Promise<unknown> => Promise.resolve({}),
   deployments: (): Promise<unknown> => Promise.resolve([]),
 }));
 
 vi.mock("@/lib/commands", () => ({
   commands: {
-    listIngresses: () => Promise.resolve([shop]),
+    listIngresses: () => answers.ingresses(),
     listCustomResources: () => Promise.resolve([]),
     resolveIngressClass: () =>
       Promise.resolve({
@@ -97,6 +98,7 @@ async function openOn(tab: string) {
 }
 
 beforeEach(() => {
+  answers.ingresses = () => Promise.resolve([shop]);
   answers.deployments = () => Promise.resolve([]);
   answers.backing = () =>
     Promise.reject(
@@ -183,5 +185,17 @@ describe("what the Traefik tabs hand to Share", () => {
       );
       expect(points?.unread).toBeTruthy();
     });
+  });
+});
+
+describe("the Middlewares tab", () => {
+  /** It wore "0" while the routes naming them were still being read. Fails if a read on its way is counted. */
+  it("wears no number while the routes are still being read", async () => {
+    answers.ingresses = () => new Promise(() => {});
+    await openOn("routes");
+
+    expect(
+      screen.getByRole("tab", { name: /Middlewares/ }).textContent
+    ).not.toMatch(/\d/);
   });
 });

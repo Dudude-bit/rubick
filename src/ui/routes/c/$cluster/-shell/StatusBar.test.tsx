@@ -53,13 +53,34 @@ vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
 const overviewOf = (
   pods: number | null,
   problems: number,
-  unread: unknown[] = []
-) => ({
-  counts: { pods },
-  problems: Array.from({ length: problems }, () => ({})),
-  problemsTruncated: 0,
-  unread,
-});
+  unread: {
+    kind: string;
+    namespace: string;
+    code: string;
+    message: string;
+  }[] = []
+) => {
+  const complete = !unread.some((entry) => entry.kind === "Pod");
+  return {
+    counts: { pods: complete ? pods : null },
+    pods:
+      pods === null
+        ? null
+        : {
+            read: {
+              running: pods,
+              pending: 0,
+              succeeded: 0,
+              failed: 0,
+              unknown: 0,
+            },
+            complete,
+          },
+    problems: Array.from({ length: problems }, () => ({})),
+    problemsTruncated: 0,
+    unread,
+  };
+};
 
 let renewal = "scheduled";
 vi.mock("@/hooks/useCredentialRenewal", () => ({
@@ -359,6 +380,31 @@ describe("what the problem count counts", () => {
     expect(counts).toHaveTextContent("2+ problems");
     expect(counts).toHaveTextContent("in team-blind, team-checkout");
     expect(counts).not.toHaveTextContent(/\d+ pods/);
+  });
+
+  /**
+   * Marco with both namespaces: the Overview tiles now count team-checkout's
+   * 4 pods and the strip said only that pods went uncounted. Fails if the bar
+   * drops the pods it counted, or states them as the scope's whole.
+   */
+  it("counts the pods that were read beside where they were not", () => {
+    scoped.data = overviewOf(4, 0, [
+      {
+        kind: "Pod",
+        namespace: "team-blind",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+      },
+    ]);
+    attentions.here = attentionOf(2, false);
+    useClusterStore.setState({
+      namespaceScope: ["team-blind", "team-checkout"],
+    });
+    bar();
+
+    expect(screen.getByTestId("scope-counts")).toHaveTextContent(
+      /^4 pods·pods not counted in team-blind·2\+ problems/
+    );
   });
 
   /**

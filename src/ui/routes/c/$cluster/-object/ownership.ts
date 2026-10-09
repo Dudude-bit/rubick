@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 
-import type { KindReading, NotRead } from "@/generated/types";
+import type { KindReading, NotRead, Reading } from "@/generated/types";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { commands } from "@/lib/commands";
@@ -80,21 +80,33 @@ export const readWhereTheyLive = (
   namespace !== null &&
   reading.namespaces.includes(namespace);
 
+/** Which readings mean the index never watches the kind. A new one fails the compiler. */
+const LEFT_OUT: Record<Reading["says"], boolean> = {
+  syncing: false,
+  stale: false,
+  refused: false,
+  partial: false,
+  failed: false,
+  unlistable: true,
+  unwatchable: true,
+  skipped: true,
+};
+
+/** A kind the index leaves out: no list, no watch, or Events. */
+export const leftOut = ({ reading }: KindReading): boolean =>
+  LEFT_OUT[reading.says];
+
 /**
- * Kinds whose dependents could still be there unseen. A kind that cannot be
- * listed stores no objects, and events are left out because nothing owns
- * them; both are still named wherever every unread kind is listed.
+ * Kinds whose dependents could still be there unseen. The garbage collector
+ * tracks only kinds it can list and watch, and events are left out because
+ * nothing owns them; both are still named wherever every unread kind is
+ * listed.
  */
 export function mightHold(
   reading: KindReading,
   namespace: string | null = null
 ): boolean {
-  const { says } = reading.reading;
-  return (
-    says !== "unlistable" &&
-    says !== "skipped" &&
-    !readWhereTheyLive(reading, namespace)
-  );
+  return !leftOut(reading) && !readWhereTheyLive(reading, namespace);
 }
 
 /** The kinds whose delete takes what they hold, which no ownerReference names. */

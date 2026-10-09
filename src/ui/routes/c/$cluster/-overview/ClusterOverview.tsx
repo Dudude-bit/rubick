@@ -7,7 +7,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useAttention } from "@/hooks/useAttention";
-import { attentionFigure, type Attention } from "@/lib/attention";
+import { attentionFigure, unreadWhere, type Attention } from "@/lib/attention";
 import { ClusterFrontDoor } from "../../../-components/ClusterFrontDoor";
 import { MyServices } from "./MyServices";
 import { ShareScreenAction } from "@/components/share/ShareAction";
@@ -40,6 +40,7 @@ function overviewStats(
   t: T
 ): ReportStat[] {
   const { pods } = overview;
+  const podsUnread = overview.unread.filter((entry) => entry.kind === "Pod");
   const stats: ReportStat[] = [
     {
       label: t("action", "needsAttention"),
@@ -49,8 +50,14 @@ function overviewStats(
     {
       label: "Pods",
       value: pods
-        ? `${podsServing(pods)}/${podTotal(pods)}`
+        ? `${podsServing(pods.read)}/${podTotal(pods.read)}`
         : t("empty", "notReadLower"),
+      note:
+        podsUnread.length > 0
+          ? t("cluster", "podsNotCounted", {
+              where: unreadWhere(podsUnread, t),
+            })
+          : null,
     },
   ];
   if (overview.nodesKnown)
@@ -182,6 +189,7 @@ export function ClusterOverview() {
         <AttentionPanel
           attention={attention}
           pods={overview.pods}
+          podsUnread={overview.unread.filter((entry) => entry.kind === "Pod")}
           nodes={overview.nodes}
           nodesKnown={overview.nodesKnown}
         />

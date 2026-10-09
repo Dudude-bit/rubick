@@ -25,6 +25,7 @@ import { ROLLOUT_CODES } from "@/lib/workload-status";
 import { JOB } from "@/lib/status-meaning";
 import type { T } from "@/i18n/useT";
 import type {
+  Census,
   ClusterOverview,
   ClusterProblem,
   IngressHealthInput,
@@ -79,16 +80,19 @@ function attentionFrom(
   );
 }
 
-const RUNNING: PodComposition = {
-  running: 1,
-  pending: 0,
-  succeeded: 0,
-  failed: 0,
-  unknown: 0,
-  crashLooping: 0,
-  notReady: 0,
-  stuck: [],
-  starting: 0,
+const RUNNING: Census<PodComposition> = {
+  read: {
+    running: 1,
+    pending: 0,
+    succeeded: 0,
+    failed: 0,
+    unknown: 0,
+    crashLooping: 0,
+    notReady: 0,
+    stuck: [],
+    starting: 0,
+  },
+  complete: true,
 };
 
 const problem: ClusterProblem = {
@@ -115,6 +119,7 @@ describe("the overview's two event panels", () => {
         <AttentionPanel
           attention={attentionFrom([problem])}
           pods={RUNNING}
+          podsUnread={[]}
           nodes={[]}
           nodesKnown={true}
         />
@@ -184,6 +189,7 @@ describe("the detail line on a problem row", () => {
       <AttentionPanel
         attention={attentionFrom([problem])}
         pods={RUNNING}
+        podsUnread={[]}
         nodes={[]}
         nodesKnown={true}
       />
@@ -250,6 +256,7 @@ describe("the reason on a problem row", () => {
             { ...stalled, kind: "Pod", name: "cart-0", reason: "OOMKilled" },
           ])}
           pods={RUNNING}
+          podsUnread={[]}
           nodes={[]}
           nodesKnown={true}
         />
@@ -285,6 +292,7 @@ describe("the Needs attention heading", () => {
       <AttentionPanel
         attention={attention}
         pods={RUNNING}
+        podsUnread={[]}
         nodes={[]}
         nodesKnown={true}
       />
@@ -297,17 +305,7 @@ describe("the Needs attention heading", () => {
 });
 
 describe("the healthy line when the node read was refused", () => {
-  const pods = {
-    running: 1,
-    pending: 0,
-    succeeded: 0,
-    failed: 0,
-    unknown: 0,
-    crashLooping: 0,
-    notReady: 0,
-    stuck: [],
-    starting: 0,
-  };
+  const pods = RUNNING;
 
   /**
    * A namespace-scoped token cannot read the cluster's nodes, so "N of M
@@ -320,6 +318,7 @@ describe("the healthy line when the node read was refused", () => {
       <AttentionPanel
         attention={attentionFrom([])}
         pods={pods}
+        podsUnread={[]}
         nodes={[]}
         nodesKnown={false}
       />
@@ -331,6 +330,7 @@ describe("the healthy line when the node read was refused", () => {
       <AttentionPanel
         attention={attentionFrom([])}
         pods={pods}
+        podsUnread={[]}
         nodes={[]}
         nodesKnown={true}
       />
@@ -341,22 +341,56 @@ describe("the healthy line when the node read was refused", () => {
 });
 
 describe("a scope one namespace of which refused its pods", () => {
-  const refusedPods = {
-    kind: "Pod",
+  const refusedIn = (kind: string, plural: string) => ({
+    kind,
     namespace: "team-blind",
     code: "PERMISSION_DENIED",
-    message:
-      'pods is forbidden: User "system:serviceaccount:team-checkout:marco" cannot list resource "pods" in API group "" in the namespace "team-blind"',
-  };
+    message: `${plural} is forbidden: User "system:serviceaccount:team-checkout:marco" cannot list resource "${plural}" in API group "" in the namespace "team-blind"`,
+  });
+  const refusedPods = refusedIn("Pod", "pods");
   const overview = {
     counts: { pods: null, deployments: 1, nodes: null, jobs: null },
     pods: null,
     jobs: null,
-    deployments: [{ reason: "Unavailable", count: 1, podsUnread: true }],
+    deployments: {
+      read: [{ reason: "Unavailable", count: 1, podsUnread: true }],
+      complete: true,
+    },
     nodes: [],
     problems: [],
     problemsTruncated: 0,
     unread: [refusedPods],
+  } as unknown as ClusterOverview;
+
+  /** Marco's team-checkout read in full beside team-blind, which refused its pods and Jobs. */
+  const beside = {
+    counts: { pods: null, deployments: 3, nodes: null, jobs: null },
+    pods: {
+      read: {
+        running: 2,
+        pending: 1,
+        succeeded: 1,
+        failed: 0,
+        unknown: 0,
+        crashLooping: 0,
+        notReady: 0,
+        stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
+        starting: 0,
+      },
+      complete: false,
+    },
+    jobs: { read: [{ reason: "Complete", count: 1 }], complete: false },
+    deployments: {
+      read: [
+        { reason: "Ready", count: 1 },
+        { reason: "Unavailable", count: 2 },
+      ],
+      complete: true,
+    },
+    nodes: [],
+    problems: [],
+    problemsTruncated: 0,
+    unread: [refusedPods, refusedIn("Job", "jobs")],
   } as unknown as ClusterOverview;
 
   /**
@@ -404,22 +438,98 @@ describe("a scope one namespace of which refused its pods", () => {
     expect(screen.getByText("Deployment").parentElement).toHaveTextContent("1");
   });
 
-  /** Fails if the healthy line states "0 of 0 pods ready" for pods nobody read. */
-  it("drops the pods clause from the healthy line", async () => {
+  /**
+   * Marco with team-checkout and team-blind: the Pods and Jobs tiles said
+   * "not read" and dropped team-checkout's 4 pods and its Job, which were
+   * read. Fails if a tile draws what one namespace answered as nothing, or
+   * as the scope's whole total with no word that team-blind was not read.
+   */
+  it("draws what the namespaces that answered hold and says where the rest was not read", async () => {
+    await wrap(
+      <WorkloadsPanel overview={beside} scope="team-checkout, team-blind" />
+    );
+
+    const pods = screen.getByText("Pods").closest("div")!.parentElement!;
+    expect(pods).toHaveTextContent("4");
+    expect(pods).toHaveTextContent("2 Running");
+    expect(pods).toHaveTextContent("not read in team-blind");
+    expect(pods).not.toHaveTextContent("not readable with this access");
+    const jobs = screen.getByText("Job").closest("div")!.parentElement!;
+    expect(jobs).toHaveTextContent("1 Complete");
+    expect(jobs).toHaveTextContent("not read in team-blind");
+    const deployments = screen
+      .getByText("Deployments")
+      .closest("div")!.parentElement!;
+    expect(deployments).toHaveTextContent("3");
+    expect(deployments).not.toHaveTextContent("team-blind");
+    expect(screen.getAllByText("not read in team-blind")).toHaveLength(2);
+  });
+
+  /**
+   * A tile with nothing in the namespaces that answered said "none in
+   * scope" while another namespace of the scope was never read. Fails if a
+   * partial zero claims the scope.
+   */
+  it("says none where it could be read for a partial zero", async () => {
+    await wrap(
+      <WorkloadsPanel
+        overview={
+          {
+            ...beside,
+            jobs: { read: [], complete: false },
+          } as ClusterOverview
+        }
+        scope="team-checkout, team-blind"
+      />
+    );
+
+    const jobs = screen.getByText("Jobs").closest("div")!.parentElement!;
+    expect(jobs).toHaveTextContent("none where it could be read");
+    expect(jobs).not.toHaveTextContent("none in scope");
+  });
+
+  /**
+   * Marco: the overall row was a red dot and the word "overall" with nothing
+   * beside it once team-blind refused its pods. Fails if the line states
+   * "0 of 0 pods ready" for pods nobody read, or says nothing at all.
+   */
+  it("says the pods went uncounted where nothing was counted", async () => {
     await wrap(
       <AttentionPanel
         attention={attentionFrom([], { overview } as Partial<AttentionInputs>)}
         pods={null}
+        podsUnread={[refusedPods]}
         nodes={[]}
         nodesKnown={false}
       />
     );
-    expect(screen.getByTestId("attention-summary")).not.toHaveTextContent(
-      /pods ready/
-    );
+    const overall = screen.getByTestId("attention-overall");
+    expect(overall).not.toHaveTextContent(/pods ready/);
+    expect(overall).toHaveTextContent("pods not counted in team-blind");
     const unchecked = screen.getByTestId("attention-unchecked");
     expect(unchecked).toHaveTextContent("Pods");
     expect(unchecked).toHaveTextContent("may not list in team-blind");
+  });
+
+  /**
+   * Fails if the overall row states the pods team-checkout answered as the
+   * scope's, or drops them because team-blind refused.
+   */
+  it("states the pods it counted and where it could not count", async () => {
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([], {
+          overview: beside,
+        } as Partial<AttentionInputs>)}
+        pods={beside.pods}
+        podsUnread={[refusedPods]}
+        nodes={[]}
+        nodesKnown={false}
+      />
+    );
+    expect(screen.getByTestId("attention-overall")).toHaveTextContent(
+      "2 of 4 pods ready (1 CreateContainerConfigError, 1 Completed) · pods not counted in team-blind"
+    );
   });
 
   /** Share said "could not be read" for a refusal, and nowhere said where. */
@@ -438,6 +548,17 @@ describe("a scope one namespace of which refused its pods", () => {
     const rows = workloads.body.type === "facts" ? workloads.body.rows : [];
     expect(rows.find((row) => row.label === "Pods")?.values).toEqual([
       { text: t("share", "scrNotReadable") },
+      { text: "in team-blind", quiet: true },
+    ]);
+  });
+
+  /** Fails if Share drops what was read, or files it as the scope's whole. */
+  it("hands Share what was read and where the rest was not", () => {
+    const workloads = workloadsShare(beside, t);
+    const rows = workloads.body.type === "facts" ? workloads.body.rows : [];
+    expect(rows.find((row) => row.label === "Jobs")?.values).toEqual([
+      { text: "1 Complete", role: "neutral" },
+      { text: "not read in team-blind", quiet: true },
     ]);
   });
 });
@@ -503,13 +624,16 @@ describe("the census legend in Russian", () => {
     counts: { deployments: 8, nodes: 1, jobs: 0 },
     pods: RUNNING,
     jobs: null,
-    deployments: [
-      { reason: "Ready", count: 2 },
-      { reason: "Idle", count: 2 },
-      { reason: "Stalled", count: 1 },
-      { reason: "Degraded", count: 2 },
-      { reason: "Unavailable", count: 1 },
-    ],
+    deployments: {
+      read: [
+        { reason: "Ready", count: 2 },
+        { reason: "Idle", count: 2 },
+        { reason: "Stalled", count: 1 },
+        { reason: "Degraded", count: 2 },
+        { reason: "Unavailable", count: 1 },
+      ],
+      complete: true,
+    },
     nodes: [],
     problems: [
       flagged("Stalled"),
@@ -518,6 +642,7 @@ describe("the census legend in Russian", () => {
       flagged("Unavailable"),
     ],
     problemsTruncated: 0,
+    unread: [],
   } as unknown as ClusterOverview;
   const ru: T = (section, key, values) => translate("ru", section, key, values);
 
@@ -634,20 +759,11 @@ describe("what the panels offer Share", () => {
   it("says a refused count could not be read instead of drawing it as none", () => {
     const overview = {
       counts: { deployments: 1, nodes: null, jobs: 0 },
-      pods: {
-        running: 1,
-        pending: 0,
-        succeeded: 0,
-        failed: 0,
-        unknown: 0,
-        crashLooping: 0,
-        notReady: 0,
-        stuck: [],
-        starting: 0,
-      },
+      pods: RUNNING,
       jobs: null,
       nodes: [],
       problems: [],
+      unread: [],
     } as unknown as ClusterOverview;
     const section = workloadsShare(overview, t);
     expect(section.body.type).toBe("facts");
@@ -707,11 +823,12 @@ describe("what the panels offer Share", () => {
 });
 
 describe("what Needs attention says it checked", () => {
-  const panel = (attention: Attention, pods: PodComposition = RUNNING) =>
+  const panel = (attention: Attention, pods: PodComposition = RUNNING.read) =>
     wrap(
       <AttentionPanel
         attention={attention}
-        pods={pods}
+        pods={{ read: pods, complete: true }}
+        podsUnread={[]}
         nodes={[]}
         nodesKnown={true}
       />
@@ -1298,6 +1415,7 @@ describe("Ingresses asking for an IngressClass the cluster does not have", () =>
       <AttentionPanel
         attention={read}
         pods={RUNNING}
+        podsUnread={[]}
         nodes={[]}
         nodesKnown={true}
       />

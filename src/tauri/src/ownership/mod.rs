@@ -69,8 +69,10 @@ pub enum Reading {
     Failed {
         message: String,
     },
-    /// Discovery offers no list or watch on it.
+    /// Discovery offers no list of it.
     Unlistable,
+    /// Discovery offers a list of it and no watch.
+    Unwatchable,
     /// Left out on purpose.
     Skipped,
 }
@@ -104,6 +106,20 @@ pub enum Holds {
 
 const DEFINITIONS: (&str, &str) = ("apiextensions.k8s.io", "customresourcedefinitions");
 const NAMESPACES: (&str, &str) = ("", "namespaces");
+
+/// Why a served kind is never watched, by the verbs discovery offers it with.
+fn unwatched(group: &str, plural: &str, verbs: &[String]) -> Option<Reading> {
+    let offers = |verb: &str| verbs.iter().any(|offered| offered == verb);
+    if SKIPPED.contains(&(group, plural)) {
+        Some(Reading::Skipped)
+    } else if !offers("list") {
+        Some(Reading::Unlistable)
+    } else if !offers("watch") {
+        Some(Reading::Unwatchable)
+    } else {
+        None
+    }
+}
 
 fn is(key: &KindKey, (group, plural): (&str, &str)) -> bool {
     key.group == group && key.plural == plural
@@ -207,16 +223,7 @@ impl OwnershipIndexes {
                 group: entry.group.clone(),
                 plural: entry.plural.clone(),
             };
-            let reading = if SKIPPED.contains(&(entry.group.as_str(), entry.plural.as_str())) {
-                Some(Reading::Skipped)
-            } else if !(entry.verbs.iter().any(|v| v == "list")
-                && entry.verbs.iter().any(|v| v == "watch"))
-            {
-                Some(Reading::Unlistable)
-            } else {
-                None
-            };
-            if let Some(reading) = reading {
+            if let Some(reading) = unwatched(&entry.group, &entry.plural, &entry.verbs) {
                 index.unwatched.lock().insert(key, (entry.kind, reading));
                 continue;
             }
@@ -821,6 +828,37 @@ mod tests {
         };
         let (_, holds) = cascade_in(&widgets(), "crd", &not_read, |_| None, None);
         assert_eq!(objects(holds).2, Some(refused));
+    }
+
+    /// `ComponentStatus` is offered get and list and no watch, and was called
+    /// a kind that cannot be listed while kubectl lists it. Fails if a kind
+    /// with a list is said to have none, or if a kind with no list is said to
+    /// lack only a watch.
+    #[test]
+    fn a_kind_is_left_out_for_the_verb_it_lacks() {
+        let verbs = |offered: &[&str]| -> Vec<String> {
+            offered.iter().map(|verb| (*verb).to_string()).collect()
+        };
+        assert_eq!(
+            unwatched("", "componentstatuses", &verbs(&["get", "list"])),
+            Some(Reading::Unwatchable)
+        );
+        assert_eq!(
+            unwatched(
+                "authorization.k8s.io",
+                "selfsubjectaccessreviews",
+                &verbs(&["create"])
+            ),
+            Some(Reading::Unlistable)
+        );
+        assert_eq!(
+            unwatched("", "events", &verbs(&["get", "list", "watch"])),
+            Some(Reading::Skipped)
+        );
+        assert_eq!(
+            unwatched("apps", "deployments", &verbs(&["get", "list", "watch"])),
+            None
+        );
     }
 
     /// A kind the index never watched has not been counted, whatever the

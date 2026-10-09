@@ -339,11 +339,11 @@ describe("watching several namespaces at once", () => {
       within(list).getByRole("option", { name: /^ns-0,/ })
     ).toBeInTheDocument();
 
-    // The footer says how many, and offers to show them.
+    // The footer says how many, and offers to show them, each saying why.
     await user.click(screen.getByRole("button", { name: /show them/i }));
     expect(
       within(list).getByRole("option", { name: /^ns-2,/ })
-    ).toBeInTheDocument();
+    ).toHaveAccessibleName(/may not list pods/);
   });
 
   /**
@@ -665,6 +665,45 @@ describe("a token that may not list namespaces", () => {
       within(list).getByRole("option", { name: "team-shared, recent" })
     );
     expect(scope()).toEqual(["team-shared"]);
+  });
+
+  /**
+   * Marco on team-checkout typed team-blind, a recent namespace whose pods
+   * he may not list: the row hid behind "1 namespace hidden: no access", and
+   * neither Enter nor Ctrl+Enter took it. Fails if a namespace typed in full
+   * is hidden, loses the words saying what it refuses, or cannot be picked
+   * from the keyboard.
+   */
+  it("offers a refused namespace typed in full, says so, and takes it on Enter", async () => {
+    const user = userEvent.setup();
+    nsAccess.answers = [{ namespace: "team-blind", allowed: false }];
+    useNamespaceRecencyStore.setState({
+      recent: { "k3d-dev": ["team-blind"] },
+    });
+    useClusterStore.setState({
+      contexts: [],
+      namespaceScope: ["team-checkout"],
+      currentNamespace: "team-checkout",
+    });
+    await mount();
+    await user.click(within(tabs()[0]).getByText("team-checkout"));
+    const list = screen.getByRole("listbox", { name: "Namespaces" });
+    await waitFor(() =>
+      expect(
+        within(list).queryByRole("option", { name: /^team-blind/ })
+      ).toBeNull()
+    );
+
+    await user.keyboard("team-blind");
+    expect(
+      within(list).getByRole("option", { name: /^team-blind/ })
+    ).toHaveAccessibleName("team-blind, may not list pods");
+    expect(screen.queryByText(/hidden: no access/)).toBeNull();
+
+    await user.keyboard("{Control>}{Enter}{/Control}");
+    expect(scope()).toEqual(["team-checkout", "team-blind"]);
+    await user.keyboard("{Enter}");
+    expect(scope()).toEqual(["team-blind"]);
   });
 
   /** Fails if a name the API server would reject could become the scope. */

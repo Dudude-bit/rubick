@@ -23,8 +23,7 @@ import { noteDenied, useDenied } from "@/lib/access";
 import { viewGlyph, type DetailTab } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { RelatedPanel } from "../RelatedPanel";
-import { countMark } from "@/components/object/detail-tab";
-import { useRelatedObjects } from "../useRelatedObjects";
+import { relatedMark, useRelatedObjects } from "../useRelatedObjects";
 import { KeyValueSection, type KeyValue } from "../detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
@@ -447,9 +446,7 @@ export function CustomResourceDetail({
       // A view rather than a kind, the same as every other Connections tab:
       // it opens onto whatever kinds this object happens to name.
       glyph: viewGlyph(Link2),
-      mark: related.related.length
-        ? countMark(related.related.length)
-        : undefined,
+      mark: relatedMark(related, crdInfo?.kind ?? "these", t),
       content: <RelatedPanel query={related} kind={crdInfo?.kind ?? "these"} />,
     },
     eventsTab(events, t, { kind: crdInfo?.kind ?? "", name }),

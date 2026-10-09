@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { CircleSlash, Loader2, Lock, TriangleAlert } from "lucide-react";
 
@@ -12,10 +12,7 @@ import {
   composedDetail,
   detailWords,
   cpuRatio,
-  deploymentSegments,
-  jobSegments,
   memoryRatio,
-  nodeSegments,
   nodesShare,
   podSegments,
   podsServing,
@@ -24,6 +21,7 @@ import {
   attentionShare,
   schedulerShare,
   warningsShare,
+  workloadCards,
   workloadsShare,
   type Ratio,
 } from "./health-share";
@@ -40,6 +38,7 @@ import {
   type AttentionItem,
 } from "@/lib/attention";
 import { parseRefusal } from "@/lib/refusal";
+import { ERROR_CODES } from "@/lib/error-utils";
 import { listLink, objectLink } from "@/lib/links";
 import {
   ROLE_DOT,
@@ -50,8 +49,10 @@ import {
 import { cn, formatAge } from "@/lib/utils";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
+  Census,
   ClusterOverview,
   NodeSummary,
+  OverviewUnread,
   PodComposition,
   ResourcePressure,
   SchedulerPressure,
@@ -437,12 +438,15 @@ function notRunning(pods: PodComposition, t: T): string {
 export function AttentionPanel({
   attention,
   pods,
+  podsUnread,
   nodes,
   nodesKnown,
 }: {
   attention: Attention;
-  /** `null` when a namespace in scope refused its pods: no total to state. */
-  pods: PodComposition | null;
+  /** `null` when no pod list in scope answered: no count to state. */
+  pods: Census<PodComposition> | null;
+  /** Where the pods went unread, said beside whatever was counted. */
+  podsUnread: readonly OverviewUnread[];
   nodes: NodeSummary[];
   /** False when the node list was refused: the "N nodes ready" half of the
    *  summary is unknown, not "0 of 0", so it is left off. */
@@ -460,7 +464,31 @@ export function AttentionPanel({
   const cut = total - items.length;
   const unchecked = attention.checks.filter((check) => check.state !== "read");
   const readyNodes = nodes.filter((n) => n.ready).length;
-  const down = pods && notRunning(pods, t);
+  const down = pods && notRunning(pods.read, t);
+  const overall: React.ReactNode[] = [];
+  if (pods)
+    overall.push(
+      <>
+        {t("count", "podsReady", {
+          n: formatCount(podsServing(pods.read)),
+          of: t("count", "ofPods", { n: podTotal(pods.read) }),
+        })}
+        {down && <> ({down})</>}
+      </>
+    );
+  if (!pods || podsUnread.length > 0)
+    overall.push(
+      <UnreadMark unread={podsUnread}>
+        {t("cluster", "podsNotCounted", { where: unreadWhere(podsUnread, t) })}
+      </UnreadMark>
+    );
+  if (nodesKnown)
+    overall.push(
+      t("count", "nodesReady", {
+        n: readyNodes,
+        of: t("count", "ofNodes", { n: nodes.length }),
+      })
+    );
   const summaryRole: StatusRole = worst ?? (complete ? "ok" : "neutral");
 
   return (
@@ -514,25 +542,16 @@ export function AttentionPanel({
           <span className="truncate font-mono font-medium text-fg-mut">
             {t("cluster", SUMMARY_LABEL[summaryRole])}
           </span>
-          <span className="truncate text-fg-fnt">
-            {pods && (
-              <>
-                {t("count", "podsReady", {
-                  n: formatCount(podsServing(pods)),
-                  of: t("count", "ofPods", { n: podTotal(pods) }),
-                })}
-                {down && <> ({down})</>}
-              </>
-            )}
-            {nodesKnown && (
-              <>
-                {pods && " · "}
-                {t("count", "nodesReady", {
-                  n: readyNodes,
-                  of: t("count", "ofNodes", { n: nodes.length }),
-                })}
-              </>
-            )}
+          <span
+            className="truncate text-fg-fnt"
+            data-testid="attention-overall"
+          >
+            {overall.map((part, index) => (
+              <Fragment key={index}>
+                {index > 0 && " · "}
+                {part}
+              </Fragment>
+            ))}
           </span>
           <span />
           <span />
@@ -575,6 +594,32 @@ export function AttentionPending() {
   );
 }
 
+/** Words about where a kind went unread, behind the mark of why: refused or failed. */
+function UnreadMark({
+  unread,
+  children,
+}: {
+  unread: readonly OverviewUnread[];
+  children: React.ReactNode;
+}) {
+  const refused = unread.every(
+    (entry) => entry.code === ERROR_CODES.PERMISSION
+  );
+  const Icon = refused ? Lock : TriangleAlert;
+  return (
+    <span title={unread.find((entry) => entry.message)?.message}>
+      <Icon
+        className={cn(
+          "mr-1 inline-block h-2.5 w-2.5 align-[-1px]",
+          refused ? "text-fg-mut" : "text-warn"
+        )}
+        aria-hidden="true"
+      />
+      {children}
+    </span>
+  );
+}
+
 /** Composition of what this scope is made of. */
 export function WorkloadsPanel({
   overview,
@@ -584,8 +629,7 @@ export function WorkloadsPanel({
   scope: string;
 }) {
   const t = useT();
-  const { counts, pods, jobs, nodes, problemsTruncated } = overview;
-  const podCount = pods && podTotal(pods);
+  const { problemsTruncated } = overview;
   useShareSection("overview-workloads", () => workloadsShare(overview, t));
 
   return (
@@ -601,41 +645,32 @@ export function WorkloadsPanel({
         }
       />
       <div className="grid grid-cols-4 gap-[22px]">
-        <Composition
-          total={podCount}
-          label={podCount === 1 ? "Pod" : "Pods"}
-          emptyMessage={t("empty", "noneInScope")}
-          segments={pods ? podSegments(pods, t) : []}
-          note={
-            pods
-              ? undefined
-              : unreadWhere(
-                  overview.unread.filter((entry) => entry.kind === "Pod"),
-                  t
-                )
-          }
-        />
-        <Composition
-          total={counts.deployments}
-          label={counts.deployments === 1 ? "Deployment" : "Deployments"}
-          emptyMessage={t("empty", "noneInScope")}
-          segments={deploymentSegments(overview.deployments, t)}
-        />
-        <Composition
-          // `counts.nodes` is null when the node read was refused, so the bar
-          // reads "— / not readable" like the other refused counts rather than
-          // "0 Nodes". `nodes` is empty then, so its segments fall away.
-          total={counts.nodes}
-          label={counts.nodes === 1 ? "Node" : "Nodes"}
-          emptyMessage={t("empty", "noneInScope")}
-          segments={nodeSegments(nodes)}
-        />
-        <Composition
-          total={counts.jobs}
-          label={counts.jobs === 1 ? "Job" : "Jobs"}
-          emptyMessage={t("empty", "noneInScope")}
-          segments={jobSegments(jobs, t)}
-        />
+        {workloadCards(overview, t).map((card) => {
+          const partial = card.total !== null && card.unread.length > 0;
+          return (
+            <Composition
+              key={card.kind}
+              total={card.total}
+              label={card.total === 1 ? card.kind : getDisplayPlural(card.kind)}
+              emptyMessage={t(
+                "empty",
+                partial ? "noneWhereRead" : "noneInScope"
+              )}
+              segments={card.segments}
+              note={
+                card.unread.length > 0 ? (
+                  <UnreadMark unread={card.unread}>
+                    {partial
+                      ? t("cluster", "notReadWhere", {
+                          where: unreadWhere(card.unread, t),
+                        })
+                      : unreadWhere(card.unread, t)}
+                  </UnreadMark>
+                ) : undefined
+              }
+            />
+          );
+        })}
       </div>
     </Section>
   );

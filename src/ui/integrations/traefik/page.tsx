@@ -44,6 +44,7 @@ import { ResourceRef } from "@/components/object/ResourceRef";
 import { RenewalNote } from "@/components/object/IssuanceChain";
 import {
   countMark,
+  readCountMark,
   severityMark,
   viewGlyph,
   type DetailTab,
@@ -231,7 +232,7 @@ export default function TraefikPage() {
       mark:
         unused > 0
           ? severityMark("warn", t("count", "middlewaresUnused", { n: unused }))
-          : countMark(uses.length),
+          : readCountMark(sources ? uses.length : null, null),
       content: <MiddlewaresTab uses={uses} />,
     },
     {

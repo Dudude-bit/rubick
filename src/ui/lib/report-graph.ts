@@ -234,6 +234,10 @@ export function graphSections(
         icon: iconSvg(Link2),
         count: data ? connectionCount(data) : null,
         unread,
+        partial:
+          data && data.notLookedAt.length > 0
+            ? t("count", "kindsNotLookedAt", { n: data.notLookedAt.length })
+            : null,
         body: { type: "connections", groups },
       },
     ],

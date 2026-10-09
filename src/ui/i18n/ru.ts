@@ -4780,6 +4780,7 @@ export const ru: Catalogue = {
     whatCanIDo: "Что мне здесь можно?",
     countsUnread: "не посчитано",
     podsNotCounted: "поды не посчитаны {where}",
+    notReadWhere: "не прочитано {where}",
     countsIn: "в {scope}",
     countsInAll: "во всех пространствах имён",
     countsInMany: {
@@ -4795,6 +4796,7 @@ export const ru: Catalogue = {
     nsRecent: "недавнее",
     nsAsTyped: "нажмите Enter",
     nsNotListed: "нет в списке",
+    nsPodsRefused: "поды недоступны",
     readingKubeconfig: "Читаем ваш kubeconfig…",
     connectACluster: "Подключите кластер",
     pickOneToStart: "в вашем kubeconfig. Выберите один, чтобы начать.",
@@ -5327,6 +5329,7 @@ export const ru: Catalogue = {
     partial: "прочитано только в {namespaces}",
     readFailed: "ошибка",
     unlistable: "нельзя получить списком",
+    unwatchable: "нельзя следить",
     skipped: "пропущено",
   },
   cascade: {
@@ -6889,6 +6892,9 @@ export const ru: Catalogue = {
     readingWhatServicePublishes: "Читаем, что публикует этот Service…",
     couldNotReadWhatServicePublishes:
       "Не удалось прочитать, что публикует этот Service:",
+    publishedUnread: "Не удалось прочитать, что публикует этот Service.",
+    revisionsUnread: "Не удалось прочитать ReplicaSet этого Deployment.",
+    helmHistoryUnread: "Не удалось прочитать историю этого релиза.",
     noAnswer: "нет ответа",
     registeredByHand: "добавлен вручную",
     stillReading: "Всё ещё читаем {label} в {scope}",
@@ -7041,6 +7047,7 @@ export const ru: Catalogue = {
     noLabelsOnNode:
       "На этом узле нет меток, даже набора kubernetes.io/*, который регистрирует kubelet; обычно это значит, что объект не был прочитан.",
     noneInScope: "в этой области нет",
+    noneWhereRead: "нет там, где удалось прочитать",
     nothingBroken: "ничего не сломано",
     nothingRunning: "ничего не запущено",
     usagePodsNotRead:
@@ -8746,6 +8753,12 @@ export const ru: Catalogue = {
       few: "из {n} узлов",
       many: "из {n} узлов",
       other: "из {n} узлов",
+    },
+    kindsNotLookedAt: {
+      one: "{n} вид не проверялся",
+      few: "{n} вида не проверялись",
+      many: "{n} видов не проверялись",
+      other: "{n} вида не проверялись",
     },
     moreNotDrawn: {
       one: "Ещё {n} адрес не показан, но счётчики выше учитывают всё.",

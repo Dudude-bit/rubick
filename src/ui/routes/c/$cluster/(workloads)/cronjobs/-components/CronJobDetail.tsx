@@ -22,7 +22,7 @@ import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
-  countMark,
+  readCountMark,
   kindGlyph,
   viewGlyph,
 } from "@/components/object/detail-tab";
@@ -53,7 +53,7 @@ import { matchCronJobPods } from "@/lib/metrics";
 import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate, formatTimeUnit } from "@/lib/utils";
-import type { CronJobDetailInfo } from "@/generated/types";
+import type { CronJobDetailInfo, JobInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
@@ -139,6 +139,8 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
   );
 }
 
+const NO_JOBS: JobInfo[] = [];
+
 export function CronJobDetail() {
   const t = useT();
   const {
@@ -193,7 +195,7 @@ export function CronJobDetail() {
   // A refused list is carried, not read as "no runs": the peek already
   // said "could not read this CronJob's runs" beside a page claiming none.
   const {
-    data: jobs = [],
+    data: jobsRead,
     error: jobsError,
     refetch: refetchJobs,
   } = useLiveQuery({
@@ -215,6 +217,7 @@ export function CronJobDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
+  const jobs = jobsRead ?? NO_JOBS;
 
   // A CronJob's pods are two hops away — its runs own them — so they are
   // asked for only while the controller says a run is in flight. Between
@@ -399,7 +402,9 @@ export function CronJobDetail() {
         id: toPlural(ResourceType.Job),
         label: "Jobs",
         glyph: kindGlyph(ResourceType.Job),
-        mark: jobsError ? undefined : countMark(jobs.length),
+        mark: jobsError
+          ? readCountMark(null, t("empty", "couldNotReadCronJobRuns"))
+          : readCountMark(jobsRead ? jobsRead.length : null, null),
         content: (
           <Section>
             <SectionHeader
@@ -463,6 +468,7 @@ export function CronJobDetail() {
       events,
       cronJob,
       jobs,
+      jobsRead,
       jobsError,
       refetchJobs,
       pods,

@@ -272,7 +272,10 @@ describe("what an object owns", () => {
    * they stop being named with why.
    */
   it("names the kinds left out apart from those that could hide a dependent", async () => {
-    const unwatched = (kind: string, says: "unlistable" | "skipped") => ({
+    const unwatched = (
+      kind: string,
+      says: "unlistable" | "unwatchable" | "skipped"
+    ) => ({
       kind,
       group: kind === "Event" ? "" : "authorization.k8s.io",
       plural: `${kind.toLowerCase()}s`,
@@ -284,7 +287,8 @@ describe("what an object owns", () => {
         notRead: {
           kinds: [
             unwatched("Event", "skipped"),
-            ...["Binding", "ComponentStatus", "TokenReview"].map((kind) =>
+            unwatched("ComponentStatus", "unwatchable"),
+            ...["Binding", "TokenReview"].map((kind) =>
               unwatched(kind, "unlistable")
             ),
           ],
@@ -302,7 +306,39 @@ describe("what an object owns", () => {
       "108 kinds served; Events and kinds that cannot be watched are left out"
     );
     expect(chipOf("Event")).toHaveTextContent("left out");
-    expect(chipOf("ComponentStatus")).toHaveTextContent("cannot be listed");
+    expect(chipOf("Binding")).toHaveTextContent("cannot be listed");
+  });
+
+  /**
+   * Dana: ComponentStatus wore "cannot be listed" on every Owns tab while
+   * kubectl get cs listed it; its verbs are get and list, and only a watch is
+   * missing. Fails if a kind is left out under a verb it has.
+   */
+  it("says a kind with a list and no watch cannot be watched", async () => {
+    answers.dependents = () =>
+      Promise.resolve({
+        dependents: [],
+        notRead: {
+          kinds: [
+            {
+              kind: "ComponentStatus",
+              group: "",
+              plural: "componentstatuses",
+              reading: { says: "unwatchable" },
+            },
+          ],
+          groups: [],
+          watched: 60,
+        },
+      });
+    await renderWithRouter(<OwnsPanel uid="d" namespace="shop" />);
+
+    expect(
+      await screen.findByText("Read 60 of 60 kinds that can be watched")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/not read in full/)).toBeNull();
+    expect(chipOf("ComponentStatus")).toHaveTextContent("cannot be watched");
+    expect(chipOf("ComponentStatus")).not.toHaveTextContent("cannot be listed");
   });
 
   /** Asking starts a cluster-wide index; a tab nobody opened must not. */
@@ -427,7 +463,10 @@ describe("what deleting an object takes with it", () => {
    * and what is left out.
    */
   it("says what its total counts and how it stands to the kinds served", async () => {
-    const unwatched = (kind: string, says: "unlistable" | "skipped") => ({
+    const unwatched = (
+      kind: string,
+      says: "unlistable" | "unwatchable" | "skipped"
+    ) => ({
       kind,
       group: "",
       plural: `${kind.toLowerCase()}s`,
@@ -439,9 +478,10 @@ describe("what deleting an object takes with it", () => {
         notRead: {
           kinds: [
             ...syncing(72),
-            ...["Binding", "TokenReview", "ComponentStatus"].map((kind) =>
+            ...["Binding", "TokenReview"].map((kind) =>
               unwatched(kind, "unlistable")
             ),
+            unwatched("ComponentStatus", "unwatchable"),
             unwatched("Event", "skipped"),
           ],
           groups: [],
@@ -460,6 +500,8 @@ describe("what deleting an object takes with it", () => {
         "76 kinds served; Events and kinds that cannot be watched are left out"
       )
     ).toBeInTheDocument();
+    expect(chipOf("ComponentStatus")).toHaveTextContent("cannot be watched");
+    expect(chipOf("Binding")).toHaveTextContent("cannot be listed");
   });
 
   /** Once listed, what failed stays named: reading ending is not reading all. */

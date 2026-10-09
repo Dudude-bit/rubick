@@ -5,11 +5,25 @@ import { connectionCount } from "@/lib/connections";
 import type { DeliveryQuery } from "@/integrations";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import {
-  countMark,
+  readCountMark,
   viewGlyph,
   type DetailTab,
 } from "@/components/object/detail-tab";
 import { ConnectionsPanel } from "./ConnectionsPanel";
+
+/** The objects the tab draws, and a floor where it says some kinds were not looked at. */
+export function connectionsMark(query: ConnectionsQuery, t: T) {
+  if (query.error)
+    return readCountMark(null, t("empty", "couldNotReadWhatConnects"));
+  if (!query.data) return undefined;
+  const { notLookedAt } = query.data;
+  return readCountMark(
+    connectionCount(query.data),
+    notLookedAt.length > 0
+      ? t("count", "kindsNotLookedAt", { n: notLookedAt.length })
+      : null
+  );
+}
 
 /**
  * The Connections tab, identical on the ten pages that have one.
@@ -34,7 +48,7 @@ export function connectionsTab(
     glyph: viewGlyph(Link2),
     // Deliberately not counting the delivery edge: the mark stands for how
     // many objects are behind the tab, and a commit is not one of them.
-    mark: query.data ? countMark(connectionCount(query.data)) : undefined,
+    mark: connectionsMark(query, t),
     content: <ConnectionsPanel query={query} delivery={delivery ?? null} />,
   };
 }

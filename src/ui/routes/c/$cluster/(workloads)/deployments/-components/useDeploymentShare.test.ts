@@ -73,6 +73,13 @@ describe("what the Deployment page adds to Share", () => {
     expect(revisionStat?.ref).toMatchObject({ stem: "payments-6f9d8c" });
   });
 
+  /** A refused ReplicaSet list went into the file as no revisions. Fails if Share says none for a list nobody read. */
+  it("says the revisions could not be read rather than listing none", () => {
+    const section = revisionsSection(null, "2026-09-25T12:00:00Z", t);
+    expect(section.count).toBeNull();
+    expect(section.unread).toBe("empty.revisionsUnread");
+  });
+
   /** Every ReplicaSet the Revisions tab lists, with the tag that changed between them. */
   it("lists both revisions with their ready count and image tag", () => {
     const section = revisionsSection(revisions, "2026-09-25T12:00:00Z", t);

@@ -21,6 +21,7 @@ import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
   ClusterOverview,
   NodeSummary,
+  OverviewUnread,
   ProblemDetail,
   PodComposition,
   ReasonCount,
@@ -319,16 +320,68 @@ export function nodeSegments(nodes: NodeSummary[]): Segment[] {
   ];
 }
 
-/** One composition row: what this scope has of one kind, or that the count could not be read. */
+/** One card of the Workloads grid: what was read of a kind, and where it was not. */
+export interface WorkloadCard {
+  kind: string;
+  /** What the lists that answered hold; `null` when none answered. */
+  total: number | null;
+  segments: Segment[];
+  /** Where the kind went unread. Beside a total, that total is only part. */
+  unread: OverviewUnread[];
+}
+
+const sum = (reasons: readonly ReasonCount[]) =>
+  reasons.reduce((n, reason) => n + reason.count, 0);
+
+/** The four cards, read once for the panel and for Share alike. */
+export function workloadCards(overview: ClusterOverview, t: T): WorkloadCard[] {
+  const { pods, deployments, jobs, nodes, counts, unread } = overview;
+  const missed = (kind: string) =>
+    unread.filter((entry) => entry.kind === kind);
+  return [
+    {
+      kind: "Pod",
+      total: pods && podTotal(pods.read),
+      segments: pods ? podSegments(pods.read, t) : [],
+      unread: missed("Pod"),
+    },
+    {
+      kind: "Deployment",
+      total: deployments && sum(deployments.read),
+      segments: deploymentSegments(deployments?.read ?? null, t),
+      unread: missed("Deployment"),
+    },
+    {
+      kind: "Node",
+      total: counts.nodes,
+      segments: nodeSegments(nodes),
+      unread: [],
+    },
+    {
+      kind: "Job",
+      total: jobs && sum(jobs.read),
+      segments: jobSegments(jobs?.read ?? null, t),
+      unread: missed("Job"),
+    },
+  ];
+}
+
+/** One composition row: what this scope has of one kind, and where it could not be read. */
 function compositionRow(
-  label: string,
-  total: number | null,
-  segments: Segment[],
+  card: WorkloadCard,
   t: T
 ): { label: string; values: ReportValue[] } {
-  if (total === null)
-    return { label, values: [{ text: t("share", "scrNotReadable") }] };
-  const values = segments
+  const label = getDisplayPlural(card.kind);
+  const where = card.unread.length > 0 ? unreadWhere(card.unread, t) : null;
+  if (card.total === null)
+    return {
+      label,
+      values: [
+        { text: t("share", "scrNotReadable") },
+        ...(where ? [{ text: where, quiet: true }] : []),
+      ],
+    };
+  const values = card.segments
     .filter((segment) => segment.count > 0)
     .map((segment): ReportValue => ({
       text: `${segment.count} ${segment.label}`,
@@ -337,13 +390,23 @@ function compositionRow(
     }));
   return {
     label,
-    values: values.length > 0 ? values : [{ text: t("empty", "noneInScope") }],
+    values: [
+      ...(values.length > 0
+        ? values
+        : [
+            {
+              text: t("empty", where ? "noneWhereRead" : "noneInScope"),
+            },
+          ]),
+      ...(where
+        ? [{ text: t("cluster", "notReadWhere", { where }), quiet: true }]
+        : []),
+    ],
   };
 }
 
 /** What the workload composition grid draws, as one row per kind. */
 export function workloadsShare(overview: ClusterOverview, t: T): PlacedSection {
-  const { counts, pods, jobs, nodes } = overview;
   return {
     id: "overview-workloads",
     order: ORDER.own,
@@ -351,22 +414,7 @@ export function workloadsShare(overview: ClusterOverview, t: T): PlacedSection {
     icon: iconSvg(Boxes),
     body: {
       type: "facts",
-      rows: [
-        compositionRow(
-          "Pods",
-          pods && podTotal(pods),
-          pods ? podSegments(pods, t) : [],
-          t
-        ),
-        compositionRow(
-          "Deployments",
-          counts.deployments,
-          deploymentSegments(overview.deployments, t),
-          t
-        ),
-        compositionRow("Nodes", counts.nodes, nodeSegments(nodes), t),
-        compositionRow("Jobs", counts.jobs, jobSegments(jobs, t), t),
-      ],
+      rows: workloadCards(overview, t).map((card) => compositionRow(card, t)),
     },
   };
 }

@@ -1852,9 +1852,9 @@ export interface ClusterOverview {
   warningsKnown: boolean;
   namespaces: NamespaceLoad[];
   counts: ResourceCounts;
-  pods: PodComposition | null;
-  jobs: ReasonCount[] | null;
-  deployments: RolloutCount[] | null;
+  pods: Census<PodComposition> | null;
+  jobs: Census<ReasonCount[]> | null;
+  deployments: Census<RolloutCount[]> | null;
   metricsAvailable: boolean;
   servedFrom: OverviewSource;
   unread: OverviewUnread[];
@@ -1888,6 +1888,11 @@ export interface RolloutCount {
   reason: string;
   count: number;
   podsUnread: boolean;
+}
+
+export interface Census<T> {
+  read: T;
+  complete: boolean;
 }
 
 export interface ResourceCounts {
@@ -2497,6 +2502,7 @@ export type Reading =
   | { says: "partial"; namespaces: string[] }
   | { says: "failed"; message: string }
   | { says: "unlistable" }
+  | { says: "unwatchable" }
   | { says: "skipped" };
 
 export type ProbeHandler =

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 vi.mock("@/hooks", async (importOriginal) => ({
@@ -6,8 +6,18 @@ vi.mock("@/hooks", async (importOriginal) => ({
   useResourceDetail: vi.fn(),
 }));
 
+/** Commands a test answers itself; every other one answers null. */
+const answers = vi.hoisted(
+  () => ({}) as Record<string, (...args: unknown[]) => Promise<unknown>>
+);
+
 vi.mock("@/lib/commands", () => ({
-  commands: new Proxy({}, { get: () => vi.fn(async () => null) }),
+  commands: new Proxy(
+    {},
+    {
+      get: (_, name: string) => answers[name] ?? vi.fn(async () => null),
+    }
+  ),
 }));
 
 import { useResourceDetail } from "@/hooks";
@@ -109,5 +119,38 @@ describe("a Gateway's listener rows", () => {
   it("still names the condition that broke it", async () => {
     await open(edge([said("ResolvedRefs", "False", "InvalidCertificateRef")]));
     expect(screen.getByText(/InvalidCertificateRef/)).toBeTruthy();
+  });
+});
+
+describe("a Gateway's Routes tab", () => {
+  afterEach(() => {
+    for (const name of Object.keys(answers)) delete answers[name];
+  });
+
+  /**
+   * The tab wore "0" while the routes across the cluster were still being
+   * read. Fails if a list still on its way is counted as none.
+   */
+  it("wears no number while the routes are still being read", async () => {
+    answers.detectGatewayApi = async () => ({
+      installed: true,
+      bundleVersion: "v1.2.0",
+      channel: "standard",
+      mixedBundle: false,
+      kinds: [
+        {
+          kind: "HTTPRoute",
+          plural: "httproutes",
+          versions: ["v1"],
+          readVersion: "v1",
+        },
+      ],
+    });
+    answers.listGatewayRoutes = () => new Promise(() => {});
+    await open(edge([said("Accepted", "True", "Accepted")]));
+
+    expect(screen.getByRole("tab", { name: /Routes/ }).textContent).not.toMatch(
+      /\d/
+    );
   });
 });

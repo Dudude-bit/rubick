@@ -634,6 +634,8 @@ interface NamespaceOption {
   closed: boolean;
   /** Why a row the namespace list did not name is offered at all. */
   source?: NamespaceSource;
+  /** The authorizer refused this user the namespace's pods. */
+  refused?: boolean;
 }
 
 /** Where an offered namespace came from, when not from the list. */
@@ -772,11 +774,14 @@ function NamespacePopover({
       : null;
 
   // A namespace the authorizer firmly refused is not offered. Never one the
-  // review could not reach (absent = unknown, kept) and never a selected one
-  // (hiding it would strand a scope the window is on); a reveal brings them
-  // back.
+  // review could not reach (absent = unknown, kept), never a selected one
+  // (hiding it would strand a scope the window is on), and never the one the
+  // reader typed in full; a reveal brings the rest back.
   const usable = (name: string) =>
-    showBlocked || access.get(name) !== false || scope.includes(name);
+    showBlocked ||
+    access.get(name) !== false ||
+    scope.includes(name) ||
+    name === typedName;
   const shown = visible.filter((ns) => usable(ns.name));
   const hiddenCount = visible.length - shown.length;
 
@@ -813,6 +818,7 @@ function NamespacePopover({
       selected: scope.includes(ns.name),
       closed: full && !scope.includes(ns.name),
       source: ns.source,
+      refused: access.get(ns.name) === false,
     })),
     ...(typed === null
       ? []
@@ -1063,7 +1069,11 @@ function NamespaceRow({
   onToggle: () => void;
 }) {
   const t = useT();
-  const note = row.source ? t("cluster", SOURCE_NOTE[row.source]) : null;
+  const note = row.refused
+    ? t("cluster", "nsPodsRefused")
+    : row.source
+      ? t("cluster", SOURCE_NOTE[row.source])
+      : null;
   const pods =
     row.podCount === null
       ? t("empty", "unknownLower")
@@ -1121,7 +1131,14 @@ function NamespaceRow({
       <span className={cn("truncate", row.mono && "font-mono")}>
         {row.label}
       </span>
-      {note !== null && <span className="text-[11px] text-fg-fnt">{note}</span>}
+      {note !== null && (
+        <span className="inline-flex items-center gap-1 text-[11px] text-fg-fnt">
+          {row.refused && (
+            <Lock aria-hidden="true" className="h-2.5 w-2.5 flex-none" />
+          )}
+          {note}
+        </span>
+      )}
       <span
         className={cn(
           "font-mono text-[11px]",

@@ -31,7 +31,7 @@ import { yamlTab } from "../../../../-object/yaml-tab";
 import { eventsTab } from "../../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { ResourceDetailLayout } from "../../../../-object/ResourceDetailLayout";
-import { countMark, viewGlyph } from "@/components/object/detail-tab";
+import { readCountMark, viewGlyph } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
@@ -452,10 +452,12 @@ export function GatewayDetail() {
       // A refused cluster-wide route read is unknown, not zero: no tab digit
       // and no header count while the body says "could not read", the same way
       // the routes list page and the sidebar treat it.
-      mark:
-        routes.isError && attached.length === 0
-          ? undefined
-          : countMark(attached.length),
+      mark: readCountMark(
+        routes.data && !(routes.isError && attached.length === 0)
+          ? attached.length
+          : null,
+        null
+      ),
       content: (
         <Section>
           <SectionHeader
