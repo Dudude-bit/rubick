@@ -5024,6 +5024,7 @@ export const en = {
     },
     goneMark: "gone",
     goneTitle: "This {kind} no longer exists.",
+    absentTitle: "This {kind} does not exist.",
     goneReplacedBy:
       "{kind} {owner} owned it and replaces what it loses: open it to find what runs now.",
     goneOwnedBy: "{kind} {owner} owned it.",

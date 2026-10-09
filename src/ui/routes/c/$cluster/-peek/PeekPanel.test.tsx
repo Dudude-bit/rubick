@@ -1681,12 +1681,16 @@ describe("PeekPanel on an object that is gone", () => {
     );
   });
 
-  /** Never read, its owners are unknown, and an unknown is not "nothing owned it". */
+  /**
+   * Never read, its owners are unknown, and an unknown is not "nothing owned
+   * it". Nor is it known to have existed: Sam's Service page, opened before
+   * the Service was made, said it no longer existed.
+   */
   it("names no owner, and claims none, for a pod gone before the first read", async () => {
     vi.mocked(commands.getPod).mockRejectedValue(notFound());
     await wrap(POD_PEEK);
     expect(
-      await screen.findByText("This Pod no longer exists.")
+      await screen.findByText("This Pod does not exist.")
     ).toBeInTheDocument();
     expect(screen.queryByText(/Nothing owned it/)).toBeNull();
     expect(screen.queryByText(/owned it/)).toBeNull();

@@ -5558,6 +5558,7 @@ export const ru: Catalogue = {
     },
     goneMark: "удалён",
     goneTitle: "Объекта {kind} больше нет.",
+    absentTitle: "Объекта {kind} с таким именем нет.",
     goneReplacedBy:
       "Им владел {kind} {owner}, он и создаёт замену: откройте его, чтобы найти то, что работает сейчас.",
     goneOwnedBy: "Им владел {kind} {owner}.",

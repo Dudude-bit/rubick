@@ -15,7 +15,8 @@ import { OwnerRef } from "../-peek/OwnerRef";
 
 /**
  * A replaced pod's read is a 404, and the raw ApiError said only that. The
- * last read still names who owned it, and so who made what runs now.
+ * last read still names who owned it, and so who made what runs now. With no
+ * read to go by, nothing says it ever existed, so it is not said to be gone.
  */
 export function GoneNotice({
   kind,
@@ -37,7 +38,7 @@ export function GoneNotice({
     <Alert className={className}>
       <Ghost aria-hidden="true" />
       <AlertTitle className="text-fg">
-        {t("empty", "goneTitle", { kind })}
+        {t("empty", owners ? "goneTitle" : "absentTitle", { kind })}
       </AlertTitle>
       <AlertDescription className="space-y-1.5">
         {owner ? (
