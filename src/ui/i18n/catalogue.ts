@@ -4791,6 +4791,7 @@ export const en = {
     partial: "read only in {namespaces}",
     readFailed: "failed",
     unlistable: "cannot be listed",
+    unwatchable: "cannot be watched",
     skipped: "left out",
   },
   // What deleting an object takes with it.

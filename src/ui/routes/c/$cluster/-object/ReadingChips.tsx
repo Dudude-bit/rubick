@@ -3,6 +3,7 @@ import {
   Ban,
   ChevronRight,
   Clock,
+  EyeOff,
   Filter,
   ListChecks,
   Loader2,
@@ -15,7 +16,7 @@ import type { KindReading, NotRead, Reading } from "@/generated/types";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useT } from "@/i18n/useT";
 import { cn, formatWhen } from "@/lib/utils";
-import { listing } from "./ownership";
+import { leftOut, listing } from "./ownership";
 
 type Says = Reading["says"];
 
@@ -33,6 +34,7 @@ const LOOK: Record<
       | "partial"
       | "readFailed"
       | "unlistable"
+      | "unwatchable"
       | "skipped";
   }
 > = {
@@ -42,6 +44,7 @@ const LOOK: Record<
   partial: { icon: Filter, tone: "text-warn", key: "partial" },
   failed: { icon: AlertTriangle, tone: "text-err", key: "readFailed" },
   unlistable: { icon: Ban, tone: "text-fg-fnt", key: "unlistable" },
+  unwatchable: { icon: EyeOff, tone: "text-fg-fnt", key: "unwatchable" },
   skipped: { icon: MinusCircle, tone: "text-fg-fnt", key: "skipped" },
 };
 
@@ -114,12 +117,9 @@ export function ReadingChips({
   );
 }
 
-const unwatched = ({ reading }: KindReading) =>
-  reading.says === "unlistable" || reading.says === "skipped";
-
 function totalsOf(notRead: NotRead) {
   const total = Math.max(notRead.watched, listing(notRead));
-  return { total, served: total + notRead.kinds.filter(unwatched).length };
+  return { total, served: total + notRead.kinds.filter(leftOut).length };
 }
 
 /**
@@ -156,7 +156,7 @@ export function ReadTotals({
             />
           </summary>
           <div className="mt-1.5">
-            <ReadingChips kinds={notRead.kinds.filter(unwatched)} />
+            <ReadingChips kinds={notRead.kinds.filter(leftOut)} />
           </div>
         </details>
       )}

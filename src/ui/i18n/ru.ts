@@ -5324,6 +5324,7 @@ export const ru: Catalogue = {
     partial: "прочитано только в {namespaces}",
     readFailed: "ошибка",
     unlistable: "нельзя получить списком",
+    unwatchable: "нельзя следить",
     skipped: "пропущено",
   },
   cascade: {

@@ -2488,6 +2488,7 @@ export type Reading =
   | { says: "partial"; namespaces: string[] }
   | { says: "failed"; message: string }
   | { says: "unlistable" }
+  | { says: "unwatchable" }
   | { says: "skipped" };
 
 export type ProbeHandler =
