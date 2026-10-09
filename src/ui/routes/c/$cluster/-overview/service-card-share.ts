@@ -32,7 +32,7 @@ function stateValue(state: ServiceState, t: T): ReportValue {
       });
       if (!state.rollout) return { text: count, role: "warn" };
       const verdict = rolloutVerdict(state.rollout, t);
-      return { text: `${verdict.text} · ${count}`, role: verdict.role };
+      return { ...verdict, text: `${verdict.text} · ${count}` };
     }
     case "gone":
       return { text: t("services", "gone"), role: "err" };

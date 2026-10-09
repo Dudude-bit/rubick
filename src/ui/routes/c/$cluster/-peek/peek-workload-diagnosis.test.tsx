@@ -134,3 +134,50 @@ describe("the peek says what the workload's page says first", () => {
     expect(line.textContent).toContain("has timed out progressing");
   });
 });
+
+describe("the peek's Replicas line", () => {
+  const replicasTone = (rollout: DeploymentInfo["rollout"]) =>
+    WORKLOAD_SOURCES.Deployment!.summarise(
+      deployment({
+        replicas: { desired: 1, ready: 0, available: 0, updated: 1 },
+        rollout,
+      }),
+      target,
+      t
+    )
+      .groups?.flatMap((group) => group.items)
+      .find((item) => item.label === "columns.replicas")?.tone;
+
+  /**
+   * big-pull's peek said blue "Pods coming up" above an amber "0 of 1
+   * ready". Fails if a count its own verdict calls coming up is a warning,
+   * one its pods left unread takes a colour, or a real shortfall loses its
+   * amber.
+   */
+  it("reads a short count in the verdict's own terms", () => {
+    expect(replicasTone({ state: "comingUp", available: 0, desired: 1 })).toBe(
+      "info"
+    );
+    expect(
+      replicasTone({
+        state: "podsUnread",
+        controller: {
+          state: "unavailable",
+          reason: null,
+          message: null,
+          available: 0,
+          desired: 1,
+        },
+      })
+    ).toBeUndefined();
+    expect(
+      replicasTone({
+        state: "unavailable",
+        reason: null,
+        message: null,
+        available: 0,
+        desired: 1,
+      })
+    ).toBe("warn");
+  });
+});

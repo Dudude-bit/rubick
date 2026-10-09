@@ -1854,7 +1854,7 @@ export interface ClusterOverview {
   counts: ResourceCounts;
   pods: PodComposition | null;
   jobs: ReasonCount[] | null;
-  deployments: ReasonCount[] | null;
+  deployments: RolloutCount[] | null;
   metricsAvailable: boolean;
   servedFrom: OverviewSource;
   unread: OverviewUnread[];
@@ -1882,6 +1882,12 @@ export interface PodComposition {
 export interface ReasonCount {
   reason: string;
   count: number;
+}
+
+export interface RolloutCount {
+  reason: string;
+  count: number;
+  podsUnread: boolean;
 }
 
 export interface ResourceCounts {
@@ -2017,6 +2023,7 @@ export interface PodRowStatus {
   phase: string;
   display: string;
   loopingExitAt?: string;
+  exitUnreported?: boolean;
 }
 
 export interface FileEntry {
@@ -2165,6 +2172,7 @@ export interface PodStatusInfo {
   message: string | null;
   reason: string | null;
   loopingExitAt?: string;
+  exitUnreported?: boolean;
 }
 
 export interface DeploymentInfo {
@@ -2311,7 +2319,12 @@ export type ChainStop =
       selector: string;
       workloads: ObjectRef[];
     }
-  | { reason: "publishesNothingYet"; service: ObjectRef; selector: string }
+  | {
+      reason: "publishesNothingYet";
+      service: ObjectRef;
+      selector: string;
+      podsUnread: boolean;
+    }
   | {
       reason: "noneReady";
       service: ObjectRef;
@@ -2360,6 +2373,7 @@ export type ObjectFacts =
       display: string;
       ready: boolean;
       loopingExitAt: string | null;
+      exitUnreported: boolean;
     }
   | {
       kind: "workload";

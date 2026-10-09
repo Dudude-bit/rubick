@@ -12,6 +12,7 @@ import { yamlTab } from "../../../-object/yaml-tab";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
+import { replicaGap, useStartsClock } from "../../-components/replica-gap";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
@@ -172,6 +173,7 @@ export function DaemonSetDetail() {
   const desired = daemonSet?.desired ?? 0;
   const current = daemonSet?.current ?? 0;
   const ready = daemonSet?.ready ?? 0;
+  const startsNow = useStartsClock(podsError ? null : pods);
   const upToDate = daemonSet?.upToDate ?? 0;
   const available = daemonSet?.available ?? 0;
 
@@ -219,11 +221,12 @@ export function DaemonSetDetail() {
                           count: ready,
                           tone: "ok",
                         },
-                        {
-                          label: t("count", "notReadyWord"),
-                          count: Math.max(0, current - ready),
-                          tone: "warn",
-                        },
+                        ...replicaGap(
+                          Math.max(0, current - ready),
+                          podsError ? null : pods,
+                          startsNow,
+                          t
+                        ),
                         {
                           label: t("count", "notScheduledSegment"),
                           count: Math.max(0, desired - current),
@@ -425,6 +428,7 @@ export function DaemonSetDetail() {
       ready,
       upToDate,
       available,
+      startsNow,
       t,
     ]
   );

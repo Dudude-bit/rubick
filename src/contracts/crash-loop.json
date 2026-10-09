@@ -1,3 +1,136 @@
 {
-  "windowSeconds": 900
+  "windowSeconds": 900,
+  "cases": [
+    {
+      "name": "a running container that restarted with no last exit reported",
+      "now": "2026-10-09T04:37:47Z",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": true,
+          "restartCount": 15,
+          "state": { "running": { "startedAt": "2026-10-09T04:37:43Z" } }
+        }
+      ],
+      "display": "Running",
+      "loopingExitAt": null,
+      "looping": false,
+      "exitUnreported": true
+    },
+    {
+      "name": "the kubelet backing off with no last exit reported",
+      "now": "2026-10-09T04:37:47Z",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": false,
+          "restartCount": 15,
+          "state": { "waiting": { "reason": "CrashLoopBackOff" } }
+        }
+      ],
+      "display": "CrashLoopBackOff",
+      "loopingExitAt": null,
+      "looping": true,
+      "exitUnreported": true
+    },
+    {
+      "name": "exited a moment ago with no last exit reported: the current exit is the last",
+      "now": "2026-10-09T04:37:52Z",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": false,
+          "restartCount": 15,
+          "state": {
+            "terminated": {
+              "exitCode": 1,
+              "reason": "Error",
+              "startedAt": "2026-10-09T04:37:43Z",
+              "finishedAt": "2026-10-09T04:37:47Z"
+            }
+          }
+        }
+      ],
+      "display": "Error",
+      "loopingExitAt": "2026-10-09T04:37:47Z",
+      "looping": true,
+      "exitUnreported": false
+    },
+    {
+      "name": "up between crashes with the last exit reported",
+      "now": "2026-10-09T04:37:47Z",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": true,
+          "restartCount": 9,
+          "state": { "running": { "startedAt": "2026-10-09T04:37:43Z" } },
+          "lastState": {
+            "terminated": {
+              "exitCode": 1,
+              "reason": "Error",
+              "startedAt": "2026-10-09T04:32:39Z",
+              "finishedAt": "2026-10-09T04:32:43Z"
+            }
+          }
+        }
+      ],
+      "display": "Running",
+      "loopingExitAt": "2026-10-09T04:32:43Z",
+      "looping": true,
+      "exitUnreported": false
+    },
+    {
+      "name": "settled long after its last reported exit",
+      "now": "2026-10-09T04:37:47Z",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": true,
+          "restartCount": 9,
+          "state": { "running": { "startedAt": "2026-10-09T03:00:00Z" } },
+          "lastState": {
+            "terminated": {
+              "exitCode": 1,
+              "reason": "Error",
+              "startedAt": "2026-10-09T02:59:50Z",
+              "finishedAt": "2026-10-09T02:59:59Z"
+            }
+          }
+        }
+      ],
+      "display": "Running",
+      "loopingExitAt": "2026-10-09T02:59:59Z",
+      "looping": false,
+      "exitUnreported": false
+    },
+    {
+      "name": "never restarted",
+      "now": "2026-10-09T04:37:47Z",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": true,
+          "restartCount": 0,
+          "state": { "running": { "startedAt": "2026-10-09T03:00:00Z" } }
+        }
+      ],
+      "display": "Running",
+      "loopingExitAt": null,
+      "looping": false,
+      "exitUnreported": false
+    }
+  ]
 }

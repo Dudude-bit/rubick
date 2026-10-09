@@ -1,6 +1,6 @@
 import { memo } from "react";
 import type { ButtonHTMLAttributes, ReactElement, ReactNode } from "react";
-import type { LucideIcon } from "lucide-react";
+import { EyeOff, type LucideIcon } from "lucide-react";
 
 import { UnitValue } from "@/components/ui/metric-value";
 import {
@@ -399,6 +399,8 @@ export interface CompositionSegment {
   label: string;
   count: number;
   tone: CompositionTone;
+  /** Counted from what nobody could confirm: drawn with the not-read mark. */
+  unread?: boolean;
 }
 
 const SEGMENT_BAR: Record<CompositionTone, string> = {
@@ -484,7 +486,16 @@ export function Composition({
           </span>
         ) : (
           visible.map((segment) => (
-            <span key={segment.label} className={SEGMENT_LEGEND[segment.tone]}>
+            <span
+              key={segment.label}
+              className={cn(
+                SEGMENT_LEGEND[segment.tone],
+                segment.unread && "inline-flex items-center gap-1"
+              )}
+            >
+              {segment.unread && (
+                <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
+              )}
               {segment.count} {segment.label}
             </span>
           ))

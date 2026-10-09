@@ -352,12 +352,40 @@ describe("a scope one namespace of which refused its pods", () => {
     counts: { pods: null, deployments: 1, nodes: null, jobs: null },
     pods: null,
     jobs: null,
-    deployments: [{ reason: "Unavailable", count: 1 }],
+    deployments: [{ reason: "Unavailable", count: 1, podsUnread: true }],
     nodes: [],
     problems: [],
     problemsTruncated: 0,
     unread: [refusedPods],
   } as unknown as ClusterOverview;
+
+  /**
+   * Marco's ledger: its pods refused, and the Deployments bar drew it red
+   * "1 Unavailable" beside a list, a page and a peek drawing it grey with
+   * the not-read mark. Fails if the census paints the controller's word in
+   * its own colour, drops the mark, or Share's row loses either.
+   */
+  it("draws a verdict its pods left unconfirmed grey with the not-read mark", async () => {
+    await wrap(<WorkloadsPanel overview={overview} scope="team-blind" />);
+    const segment = screen.getByText(/1 Unavailable/);
+    expect(segment).toHaveTextContent("1 Unavailable · pods not read");
+    expect(segment).toHaveClass("text-fg-fnt");
+    expect(segment).not.toHaveClass("text-err");
+    expect(segment.querySelector("svg")).toHaveClass("lucide-eye-off");
+
+    const rows = workloadsShare(overview, t).body;
+    const deployments =
+      rows.type === "facts"
+        ? rows.rows.find((row) => row.label === "Deployments")
+        : undefined;
+    expect(deployments?.values).toEqual([
+      {
+        text: "1 Unavailable · pods not read",
+        role: "neutral",
+        unread: true,
+      },
+    ]);
+  });
 
   /**
    * Marco's two namespaces: the overview was one refusal for both. Read,
@@ -424,13 +452,13 @@ describe("the Deployments tile", () => {
   it("counts every Deployment under the word the list prints", () => {
     const segments = deploymentSegments(
       [
-        { reason: "Idle", count: 2 },
-        { reason: "Stalled", count: 1 },
-        { reason: "Ready", count: 4 },
-        { reason: "Progressing", count: 1 },
-        { reason: "Paused", count: 1 },
-        { reason: "Unavailable", count: 2 },
-        { reason: "Degraded", count: 1 },
+        { reason: "Idle", count: 2, podsUnread: false },
+        { reason: "Stalled", count: 1, podsUnread: false },
+        { reason: "Ready", count: 4, podsUnread: false },
+        { reason: "Progressing", count: 1, podsUnread: false },
+        { reason: "Paused", count: 1, podsUnread: false },
+        { reason: "Unavailable", count: 2, podsUnread: false },
+        { reason: "Degraded", count: 1, podsUnread: false },
       ],
       t
     );
@@ -893,7 +921,10 @@ describe("what Needs attention says it checked", () => {
       ["Pending", 1, "warn"],
     ]);
     expect(
-      deploymentSegments([{ reason: "Progressing", count: 1 }], t)[0].tone
+      deploymentSegments(
+        [{ reason: "Progressing", count: 1, podsUnread: false }],
+        t
+      )[0].tone
     ).toBe("pending");
   });
 

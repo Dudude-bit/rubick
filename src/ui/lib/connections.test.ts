@@ -13,6 +13,7 @@ import {
   describeStop,
   describeUsages,
   hopTone,
+  stopUnder,
   trafficChains,
   type RoutedIngress,
 } from "./connections";
@@ -49,6 +50,7 @@ const pod = (name: string, ready: boolean): ObjectRef =>
     display: ready ? "Running" : "NotReady",
     ready,
     loopingExitAt: null,
+    exitUnreported: false,
   });
 
 const service = (name: string, selector: string | null): ObjectRef =>
@@ -947,6 +949,62 @@ describe("the traffic chain", () => {
   });
 
   /**
+   * Marco's ledger with no address listed at all: the slices say nothing is
+   * published, the pods were not read, and the chain drew a red fault
+   * beside the Deployment's grey unread verdict. Fails if that stop breaks
+   * its path, loses its unread mood or note, or one behind no workload stops
+   * being a fault.
+   */
+  it("draws a stop with nothing published and its pods unread as not checked", () => {
+    const front = service("ledger", "app=ledger");
+    const subject = ref("Deployment", "ledger", {
+      kind: "workload",
+      replicas: 1,
+      readyReplicas: 0,
+      rollout: null,
+      revision: null,
+      current: null,
+    });
+    const chainOf = (podsUnread: boolean) => {
+      const stop = {
+        reason: "publishesNothingYet" as const,
+        service: front,
+        selector: "app=ledger",
+        podsUnread,
+      };
+      const [path] = trafficChains(
+        connections(
+          subject,
+          [
+            {
+              from: front,
+              to: subject,
+              relation: { verb: "selects", selector: "app=ledger" },
+            },
+          ],
+          [stop]
+        ),
+        t
+      );
+      return { path, hop: path.hops.at(-1)!, under: stopUnder(stop) };
+    };
+
+    const unread = chainOf(true);
+    expect(unread.hop).toMatchObject({
+      mood: "unchecked",
+      title: "Nothing is published behind app=ledger yet",
+      note: t("nav", "stopPodsUnreadNote"),
+    });
+    expect(unread.path.broken).toBe(false);
+    expect(unread.under).toBe("podsNotRead");
+
+    const nobody = chainOf(false);
+    expect(nobody.hop).toMatchObject({ mood: "fault" });
+    expect(nobody.path.broken).toBe(true);
+    expect(nobody.under).toBe("stopNothingPublishedYet");
+  });
+
+  /**
    * The Service page of hello-web at zero said in red that no pod carries
    * app=hello-web and counted Connections 0, while the Deployment named the
    * Service. Fails if the backend's idle stop is drawn as a fault, or the
@@ -1466,6 +1524,7 @@ describe("a node, which is the same edge read from the other end", () => {
           display: "Running",
           ready: false,
           loopingExitAt: new Date(Date.now() - secondsAgo * 1000).toISOString(),
+          exitUnreported: false,
         },
       },
       to: node(),
@@ -1477,6 +1536,35 @@ describe("a node, which is the same edge read from the other end", () => {
       )?.rows[0].detail;
     expect(detail(at(5))).toBe("Running · up between crashes");
     expect(detail(at(3600))).toBe("Running");
+  });
+
+  /**
+   * Sam's checkout pod with fifteen restarts read plain Running while the
+   * kubelet reported no last exit. Fails if Connections calls such a pod
+   * Running and nothing more, or says it of one never restarted.
+   */
+  it("says a restarted pod's last exit was not reported where the kubelet gave none", () => {
+    const placedPod = (exitUnreported: boolean): ConnectionEdge => ({
+      from: {
+        ...pod("checkout-fwk7g", true),
+        facts: {
+          kind: "pod",
+          phase: "Running",
+          display: "Running",
+          ready: true,
+          loopingExitAt: null,
+          exitUnreported,
+        },
+      },
+      to: node(),
+      relation: { verb: "runsOn" },
+    });
+    const detail = (edge: ConnectionEdge) =>
+      connectionGroups(connections(node(), [edge]), t).find(
+        (group) => group.key === "placed"
+      )?.rows[0].detail;
+    expect(detail(placedPod(true))).toBe("Running · last exit not reported");
+    expect(detail(placedPod(false))).toBe("Running");
   });
 
   /** The tally was an English template literal under a Russian title. */

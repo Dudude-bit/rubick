@@ -7,7 +7,7 @@
  * a tab that opens onto Pods is the same tab in both, so it is drawn here
  * once and both ask for it.
  */
-import { CircleDashed } from "lucide-react";
+import { CircleDashed, EyeOff } from "lucide-react";
 
 import { kindHue } from "@/lib/resource-identity";
 import {
@@ -49,14 +49,11 @@ export function TabMark({
       </span>
     );
   }
-  // A hollow ring rather than a disc, which is how "not checked" is drawn
-  // everywhere else in this app: present, uncoloured, clearly not an answer.
+  // The mark every other screen gives what nobody could read: present,
+  // uncoloured, clearly not an answer.
   if (mark.shows === "unchecked") {
     return (
-      <span
-        aria-hidden="true"
-        className={cn(DOT, "border border-fg-fnt bg-transparent")}
-      />
+      <EyeOff aria-hidden="true" className="h-3 w-3 flex-none text-fg-fnt" />
     );
   }
   if (mark.shows === "severity") {

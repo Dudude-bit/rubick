@@ -24,6 +24,7 @@ import {
   FactBlock,
   WorkloadOverview,
 } from "../../-components/workload-overview";
+import { replicaGap, useStartsClock } from "../../-components/replica-gap";
 import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -110,6 +111,7 @@ export function ReplicaSetDetail() {
   const desired = replicas?.desired ?? 0;
   const current = replicas?.current ?? 0;
   const ready = replicas?.ready ?? 0;
+  const startsNow = useStartsClock(podsError ? null : pods);
 
   const revision = replicaSet?.revision ?? null;
   const currentRevision = replicaSet?.currentRevision ?? null;
@@ -217,11 +219,12 @@ export function ReplicaSetDetail() {
                       count: ready,
                       tone: "ok",
                     },
-                    {
-                      label: t("count", "startingSegment"),
-                      count: Math.max(0, current - ready),
-                      tone: "warn",
-                    },
+                    ...replicaGap(
+                      Math.max(0, current - ready),
+                      podsError ? null : pods,
+                      startsNow,
+                      t
+                    ),
                     {
                       label: t("count", "notCreatedSegment"),
                       count: Math.max(0, desired - current),

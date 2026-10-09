@@ -27,9 +27,9 @@ export type ServiceHealth =
   | { state: "ready"; serving: number }
   | { state: "partly"; serving: number; total: number }
   | { state: "noneReady"; published: PublishedCounts }
-  /** None ready, and every workload behind it is still starting its pods. */
+  /** None ready or none listed, and every workload behind it is still starting its pods. */
   | { state: "comingUp"; published: PublishedCounts }
-  /** None ready, and the pods every workload behind it waits on were not read. */
+  /** None ready or none listed, and the pods every workload behind it waits on were not read. */
   | { state: "podsUnread"; published: PublishedCounts }
   | { state: "noEndpoints"; published: PublishedCounts }
   /** No pods by intent: every workload behind it is scaled to zero. */
@@ -71,16 +71,25 @@ export function serviceHealthOf(
       ? { state: "ready", serving }
       : { state: "partly", serving, total };
   }
-  if (listed > 0) {
-    const why = published.stop?.reason === "noneReady" && published.stop.why;
-    return {
-      state: why === "comingUp" || why === "podsUnread" ? why : "noneReady",
-      published,
-    };
-  }
+  const waiting = waitingOn(published.stop);
+  if (listed > 0) return { state: waiting ?? "noneReady", published };
   return published.stop?.reason === "scaledToZero"
     ? { state: "idle", stop: published.stop }
-    : { state: "noEndpoints", published };
+    : { state: waiting ?? "noEndpoints", published };
+}
+
+/**
+ * What a Service serving nothing waits on, whether or not its slices list an
+ * address yet: a pod pulling its image has none, and is as much coming up as
+ * one that has an address and is not ready.
+ */
+function waitingOn(
+  stop: ChainStop | null | undefined
+): "comingUp" | "podsUnread" | null {
+  if (stop?.reason === "publishesNothingYet")
+    return stop.podsUnread ? "podsUnread" : null;
+  if (stop?.reason !== "noneReady") return null;
+  return stop.why === "comingUp" || stop.why === "podsUnread" ? stop.why : null;
 }
 
 export interface Verdict {
@@ -118,9 +127,13 @@ function stopReason(published: PublishedCounts, t: T): string | null {
       asked: askedPorts(stop.unnamedPorts, t),
     });
   const title = describeStop(stop, t).title;
-  return stop.reason === "noneReady"
-    ? `${title}: ${t("empty", NONE_READY_CAUSE[stop.why])}`
-    : title;
+  const why =
+    stop.reason === "noneReady"
+      ? stop.why
+      : stop.reason === "publishesNothingYet" && stop.podsUnread
+        ? "podsUnread"
+        : null;
+  return why ? `${title}: ${t("empty", NONE_READY_CAUSE[why])}` : title;
 }
 
 export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
@@ -161,7 +174,10 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
     case "podsUnread":
       return {
         code: health.state,
-        label: t("empty", "stopNoneReady"),
+        label:
+          endpointCount(health.published) > 0
+            ? t("empty", "stopNoneReady")
+            : t("readings", "healthNoEndpoints"),
         role: "neutral",
         reason: stopReason(health.published, t),
         glyph: EyeOff,

@@ -14,6 +14,7 @@ import {
   sourceNote,
 } from "@/lib/published";
 import type { ReportStat } from "@/lib/report";
+import { serviceHealthOf, serviceHealthWords } from "@/lib/service-health";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { useT, type T } from "@/i18n/useT";
 import type { ServiceInfo, ServicePublished } from "@/generated/types";
@@ -37,6 +38,19 @@ export function serviceStats(
   if (published) {
     const total = endpointCount(published);
     const idle = published.stop?.reason === "scaledToZero";
+    const health = serviceHealthOf(
+      {
+        type: service.type,
+        selectorless: Object.keys(service.selector).length === 0,
+      },
+      published,
+      null
+    );
+    // Waiting on its workload's pods is the page's verdict, not a fault.
+    const waiting =
+      health.state === "comingUp" || health.state === "podsUnread"
+        ? serviceHealthWords(health, t)
+        : null;
     stats.push({
       label: t("nav", "published"),
       value: `${published.ready}/${total}`,
@@ -45,19 +59,24 @@ export function serviceStats(
       // because neither list could be read, is not one the controller wrote.
       role: idle
         ? "neutral"
-        : total === 0
-          ? "warn"
-          : published.source === "podReadiness"
-            ? "neutral"
-            : published.ready === total
-              ? "ok"
-              : "warn",
+        : waiting
+          ? waiting.role
+          : total === 0
+            ? "warn"
+            : published.source === "podReadiness"
+              ? "neutral"
+              : published.ready === total
+                ? "ok"
+                : "warn",
+      unread: health.state === "podsUnread" || undefined,
       note:
         idle && published.stop
           ? describeStop(published.stop, t).title
-          : total === 0
-            ? t("empty", "servicePublishesNothing")
-            : sourceNote(published, t),
+          : waiting
+            ? waiting.reason
+            : total === 0
+              ? t("empty", "servicePublishesNothing")
+              : sourceNote(published, t),
     });
   }
   return stats;

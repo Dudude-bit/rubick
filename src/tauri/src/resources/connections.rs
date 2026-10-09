@@ -128,6 +128,9 @@ pub enum ObjectFacts {
         /// See `PodStatusInfo::looping_exit_at`.
         #[serde(rename = "loopingExitAt")]
         looping_exit_at: Option<DateTime<Utc>>,
+        /// See `PodStatusInfo::exit_unreported`.
+        #[serde(rename = "exitUnreported", default)]
+        exit_unreported: bool,
     },
     Workload {
         replicas: i32,
@@ -425,6 +428,10 @@ pub enum ChainStop {
     PublishesNothingYet {
         service: ObjectRef,
         selector: String,
+        /// Every workload behind it waits on pods that could not be read to
+        /// say whether they are still starting.
+        #[serde(rename = "podsUnread", default)]
+        pods_unread: bool,
     },
     /// The Service's pods exist and not one of them is ready, so nothing it
     /// publishes takes traffic and the address refuses connections.

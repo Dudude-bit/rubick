@@ -207,8 +207,9 @@ impl ServicePublished {
         self
     }
 
-    /// None of its addresses ready, said as [`waiting_on`] reads the
-    /// workloads behind it; any other stop stands.
+    /// None of its addresses ready, or none published with its pods unread,
+    /// said as [`waiting_on`] reads the workloads behind it; any other stop
+    /// stands.
     #[must_use]
     pub fn with_workloads(
         mut self,
@@ -217,10 +218,17 @@ impl ServicePublished {
         pods: Option<&[&Pod]>,
         now: DateTime<Utc>,
     ) -> Self {
-        if let Some(ChainStop::NoneReady { why, .. }) = self.stop.as_mut() {
-            if let Some(wait) = waiting_on(service, makers, pods, now) {
-                *why = wait;
+        match self.stop.as_mut() {
+            Some(ChainStop::NoneReady { why, .. }) => {
+                if let Some(wait) = waiting_on(service, makers, pods, now) {
+                    *why = wait;
+                }
             }
+            Some(ChainStop::PublishesNothingYet { pods_unread, .. }) if pods.is_none() => {
+                *pods_unread =
+                    waiting_on(service, makers, None, now) == Some(NotServing::PodsUnread);
+            }
+            _ => {}
         }
         self
     }
@@ -324,6 +332,7 @@ pub(crate) fn pod_ref(pod: &Pod, ns: &str) -> ObjectRef {
         display: super::types::pod_display::display_status(pod),
         ready: condition_is_true(pod.status.as_ref(), "Ready"),
         looping_exit_at: super::types::pod_display::looping_exit(pod),
+        exit_unreported: super::types::pod_display::exit_unreported(pod),
     })
 }
 
@@ -679,6 +688,7 @@ pub fn service_stop(
         return Some(ChainStop::PublishesNothingYet {
             service: at,
             selector: text,
+            pods_unread: false,
         });
     };
     if selected.is_empty() {
@@ -2066,6 +2076,45 @@ mod tests {
             )),
             Some(NotServing::Starting)
         );
+    }
+
+    /// The stop of a Service whose slices list no address at all, behind
+    /// these Deployments, with these pods where they were read.
+    fn empty_stop(deployments: &[Deployment], pods: Option<&[&Pod]>) -> Option<ChainStop> {
+        let svc = selecting("web");
+        let makers: Vec<PodMaker> = deployments
+            .iter()
+            .filter_map(PodMaker::deployment)
+            .collect();
+        from_slices(&svc, svc_ref("web"), &[], pods.unwrap_or_default())
+            .with_stop(&svc, pods)
+            .with_workloads(&svc, &makers, pods, chrono::Utc::now())
+            .stop
+    }
+
+    /// Sam's big-pull: its pod pulling an image had no address yet, so the
+    /// slices listed none, and the Service read red no endpoints under its
+    /// own "still starting". Fails if a Service with nothing published is
+    /// not said to wait on a workload coming up, or on one whose pods were
+    /// not read, or if one behind no workload, or a stalled one, is let off.
+    #[test]
+    fn a_service_with_no_address_yet_waits_on_its_workload_as_one_with_none_ready_does() {
+        let pulling = web_pod("ContainerCreating", 30);
+        assert!(matches!(
+            empty_stop(&[starving(false)], Some(&[&pulling])),
+            Some(ChainStop::NoneReady {
+                why: NotServing::ComingUp,
+                pods: 1,
+                ..
+            })
+        ));
+        let unread = |deployments: &[Deployment]| match empty_stop(deployments, None) {
+            Some(ChainStop::PublishesNothingYet { pods_unread, .. }) => pods_unread,
+            other => panic!("{other:?}"),
+        };
+        assert!(unread(&[starving(false)]));
+        assert!(!unread(&[starving(true)]));
+        assert!(!unread(&[]));
     }
 
     /// A pending pod has no IP yet. Would break if its row went back to a

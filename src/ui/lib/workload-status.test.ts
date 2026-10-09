@@ -131,10 +131,12 @@ describe("the word a workload's rollout comes to", () => {
     expect(rolloutStatusOf(2, 2, { state: "ready" }, t)).toEqual({
       text: "count.slashReady",
       role: "ok",
+      unread: false,
     });
     expect(rolloutStatusOf(2, 2, EVERY[1], t)).toEqual({
       text: "statusWords.stalled · count.slashReady",
       role: "err",
+      unread: false,
     });
   });
 
@@ -149,6 +151,7 @@ describe("the word a workload's rollout comes to", () => {
     expect(rolloutStatusOf(0, 2, EVERY[1], ru)).toEqual({
       text: "Застрял · 0/2 готовы",
       role: "err",
+      unread: false,
     });
     expect(rolloutWord({ state: "short", available: 2, desired: 3 }, ru)).toBe(
       "Деградировал"
@@ -243,10 +246,12 @@ describe("a verdict whose pods were not read", () => {
     expect(rolloutVerdict(unread, t)).toEqual({
       text: "Unavailable · readings.rolloutPodsUnreadShort",
       role: "neutral",
+      unread: true,
     });
     expect(rolloutStatusOf(0, 1, unread, t)).toEqual({
       text: "Unavailable · readings.rolloutPodsUnreadShort · count.slashReady",
       role: "neutral",
+      unread: true,
     });
   });
 

@@ -134,9 +134,12 @@ export function describeRestarts(
   pod: {
     restartCount: number;
     lastRestartAt: string | null;
+    status?: { exitUnreported?: boolean };
   },
   t: T
 ): string {
+  if (pod.status?.exitUnreported && !pod.lastRestartAt)
+    return t("count", "restartsExitUnreported", { n: pod.restartCount });
   if (pod.restartCount === 0 || !pod.lastRestartAt) {
     return t("count", "restartsPlain", { n: pod.restartCount });
   }

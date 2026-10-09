@@ -10,6 +10,7 @@
  */
 
 import { loopingContainer, loopingNow } from "@/lib/crash-loop";
+import { lastTermination } from "@/lib/pod-status";
 import type {
   ContainerInfo,
   EventInfo,
@@ -182,7 +183,7 @@ export function troubleOf(pod: PodInfo, events: EventInfo[]): Trouble | null {
     return {
       reason: "crashLoop",
       container: crashing.name,
-      exit: crashing.lastTerminated,
+      exit: lastTermination(crashing),
       restarts: crashing.restartCount,
     };
   }
@@ -1033,10 +1034,18 @@ export function agentReport(input: AgentReportInput): string {
             : "unknown";
     out.push(`Container ${container.name}: ${word}`);
     out.push(`  image ${container.image}`);
-    if (container.lastTerminated) {
-      const exit = container.lastTerminated;
+    const exit = lastTermination(container);
+    const exitWords = (run: TerminationInfo) =>
+      `code ${run.exitCode}${run.reason ? ` ${run.reason}` : ""}${run.finishedAt ? `, ${run.finishedAt}` : ""}`;
+    if (exit) {
       out.push(
-        `  last exit: code ${exit.exitCode}${exit.reason ? ` ${exit.reason}` : ""}${exit.finishedAt ? `, ${exit.finishedAt}` : ""} · restarts ${container.restartCount}`
+        `  last exit: ${exitWords(exit)} · restarts ${container.restartCount}`
+      );
+      if (exit !== container.lastTerminated && container.lastTerminated)
+        out.push(`  exit before it: ${exitWords(container.lastTerminated)}`);
+    } else if (container.restartCount > 0) {
+      out.push(
+        `  last exit: not reported by the kubelet · restarts ${container.restartCount}`
       );
     }
   }

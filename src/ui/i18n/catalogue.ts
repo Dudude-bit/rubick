@@ -3751,6 +3751,7 @@ export const en = {
       "{word} by the controller's counts alone: its pods could not be read, so whether they are still starting is not known",
     rolloutPodsUnreadShort: "pods not read",
     upBetweenCrashes: "up between crashes",
+    exitUnreported: "last exit not reported",
     hpaPinnedAt: "pinned at {n}",
     hpaRange: { one: "{min} to {n} replica", other: "{min} to {n} replicas" },
     hpaCannotReach: "{name} cannot reach what it scales",
@@ -5385,6 +5386,13 @@ export const en = {
       other:
         "{n} restarts so far. What it printed before it last died is in Logs.",
     },
+    restartedExitUnreported:
+      "{container} restarted, and its last exit is not reported",
+    restartsExitUnreportedDetail: {
+      one: "{n} restart so far. The kubelet does not report how the last run ended, so whether it is still crash-looping is not known. What it printed before it last exited is in Logs.",
+      other:
+        "{n} restarts so far. The kubelet does not report how the last run ended, so whether it is still crash-looping is not known. What it printed before it last exited is in Logs.",
+    },
     cannotBeBuilt: "{container} cannot be built from this spec",
     missingConfigMapSecretOrVolume:
       "A ConfigMap, Secret or volume the container names is missing, or has no such key.",
@@ -6807,6 +6815,10 @@ export const en = {
       "the containers run, but the pod fails its readiness check, so Services send it no traffic.",
     betweenCrashes:
       "Up between crashes: a container keeps exiting, and the kubelet keeps starting it again.",
+    exitUnreported:
+      "Restarted, and the kubelet reports no last exit, so whether a container is still crash-looping is not known.",
+    pendingTooLong:
+      "Pending past the wait a pod is given before it counts as a problem: a minute for a node to take it, ten minutes to start once one has.",
     containerStatusUnknown:
       "the container's state was lost, usually after the node restarted.",
     deadlineExceeded:
@@ -7135,6 +7147,10 @@ export const en = {
       other: "{n} restarts, last {ago} ago",
     },
     restartsPlain: { one: "{n} restart", other: "{n} restarts" },
+    restartsExitUnreported: {
+      one: "{n} restart, last exit not reported",
+      other: "{n} restarts, last exit not reported",
+    },
     podsMatchAllReady: {
       one: "{n} pod matches its selector and it is Ready",
       other: "{n} pods match its selector and all of them are Ready",
@@ -7494,6 +7510,7 @@ export const en = {
     },
     readySegment: "ready",
     startingSegment: "starting",
+    failingSegment: "failing",
     notCreatedSegment: "not created",
     fromEndpoint: "from {endpoint}",
     watchingFromNow: "watching from now",

@@ -263,3 +263,84 @@ describe("a pod up between the crashes of a loop", () => {
     }
   );
 });
+
+describe("a pod that restarted with no exit reported", () => {
+  const checkout = (exitUnreported: boolean) => ({
+    name: "checkout-7596d7fc77-fwk7g",
+    namespace: "shop",
+    restartCount: 15,
+    lastRestartAt: null,
+    status: { display: "Running", phase: "Running", exitUnreported },
+    containers: [
+      {
+        name: "app",
+        ready: true,
+        started: true,
+        phase: "app" as const,
+        state: { type: "running" as const },
+      },
+    ],
+    initContainers: [],
+  });
+
+  /**
+   * Sam's checkout pod, fifteen restarts and no lastState from the kubelet,
+   * read green Running with no word about either. Fails if the list or the
+   * peek draws it green, drops the sentence saying the last exit is not
+   * reported, or the peek's restarts row stops saying so.
+   */
+  it("is amber on every surface and says the last exit is not reported", () => {
+    const pod = checkout(true);
+    render(<>{statusCell(pod)}</>);
+    expect(screen.getByText("Running").className).toContain("text-warn");
+    expect(
+      screen.getByTitle(/the kubelet reports no last exit/)
+    ).toBeInTheDocument();
+    const peek = WORKLOAD_SOURCES.Pod!.summarise(
+      pod as unknown as PodInfo,
+      { kind: "Pod", name: pod.name, namespace: pod.namespace },
+      t
+    );
+    expect(peek.statusRole).toBe("warn");
+    const restarts = peek.groups
+      ?.flatMap((group) => group.items)
+      .find((item) => item.label === t("columns", "restarts"));
+    expect(restarts?.value).toBe("15 restarts, last exit not reported");
+    expect(podRole(checkout(false), null)).toBe("ok");
+  });
+});
+
+describe("a pod Pending past the wait it is given", () => {
+  const neverPlaced = (secondsLeft: number) => ({
+    name: "never-placed-5d8f7c9b6-x2x9q",
+    namespace: "shop",
+    status: { display: "Pending", phase: "Pending" },
+    start: {
+      state: "starting" as const,
+      until: new Date(Date.now() + secondsLeft * 1000).toISOString(),
+    },
+    containers: [],
+    initContainers: [],
+  });
+
+  /**
+   * Sam's never-placed pod stayed blue Pending on the Pods list and its page
+   * at two and a half minutes while the Overview tile had counted it amber
+   * since its first minute ran out. Fails if the list or the peek keeps a
+   * pod blue past its wait, or turns one amber inside it.
+   */
+  it("turns amber on the list and the peek the moment its wait runs out", () => {
+    render(<>{statusCell(neverPlaced(-90))}</>);
+    expect(screen.getByText("Pending").className).toContain("text-warn");
+    expect(screen.getByTitle(/Pending past the wait/)).toBeInTheDocument();
+    const peek = (pod: ReturnType<typeof neverPlaced>) =>
+      WORKLOAD_SOURCES.Pod!.summarise(
+        pod as unknown as PodInfo,
+        { kind: "Pod", name: pod.name, namespace: pod.namespace },
+        t
+      ).statusRole;
+    expect(peek(neverPlaced(-90))).toBe("warn");
+    expect(peek(neverPlaced(30))).toBe("pending");
+    expect(podRole(neverPlaced(30), null)).toBe("pending");
+  });
+});

@@ -4,32 +4,64 @@ import { silenceNote, type NodeSilence } from "@/lib/node-reporting";
 import type { ReportValue } from "@/lib/report";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { podStatusMeaning } from "@/lib/status-meaning";
-import { loopingNow } from "@/lib/crash-loop";
+import { loopState } from "@/lib/crash-loop";
+import type { PodStart } from "@/generated/types";
 
-export type PodBadgeInput = ReadinessLists & {
-  status: { display: string; loopingExitAt?: string };
+type LoopStatus = {
+  display: string;
+  loopingExitAt?: string | null;
+  exitUnreported?: boolean;
 };
 
+export type PodBadgeInput = ReadinessLists & {
+  status: LoopStatus & { phase?: string };
+  start?: PodStart;
+};
+
+/**
+ * A Pending pod past the wait `pending_grace` gives it, a minute unplaced
+ * and ten once placed: the instant the Overview stops counting it as
+ * starting and counts it Pending in amber.
+ */
+export const pendingTooLong = (
+  pod: Pick<PodBadgeInput, "status" | "start">,
+  now: number = Date.now()
+) =>
+  pod.status.phase === "Pending" &&
+  pod.start !== undefined &&
+  pod.start.state !== "settled" &&
+  !(pod.start.state === "starting" && Date.parse(pod.start.until) > now);
+
 /** A word that would read healthy, said in the seconds a crash-looping container is up. */
-export const upBetweenCrashes = (pod: {
-  status: { display: string; loopingExitAt?: string | null };
-}) => statusRole(pod.status.display) === "ok" && loopingNow(pod.status);
+export const upBetweenCrashes = (pod: { status: LoopStatus }) =>
+  statusRole(pod.status.display) === "ok" &&
+  loopState(pod.status) === "looping";
+
+/** A word that would read healthy, said of a pod that restarted with no exit reported. */
+export const exitUnreported = (pod: { status: LoopStatus }) =>
+  statusRole(pod.status.display) === "ok" &&
+  loopState(pod.status) === "unreported";
 
 /**
  * The colour of a pod's word on every screen. kubectl prints `Running` for a
  * pod whose readiness probe fails, and no Service sends it traffic, so that
- * word is amber here, not green, and red for a pod caught up between the
- * crashes of a loop. On a node that stopped reporting it is the kubelet's
- * last word, and loses its colour.
+ * word is amber here, not green; red for a pod caught up between the
+ * crashes of a loop, and amber for one that restarted while the kubelet
+ * reports no exit to tell. On a node that stopped reporting it is the
+ * kubelet's last word, and loses its colour.
  */
 export function podRole(
   pod: PodBadgeInput,
-  silence: NodeSilence | null
+  silence: NodeSilence | null,
+  now: number = Date.now()
 ): StatusRole {
   if (silence) return "neutral";
   if (upBetweenCrashes(pod)) return "err";
   const role = statusRole(pod.status.display);
-  return role === "ok" && !podReadiness(pod).allReady ? "warn" : role;
+  if (role === "pending" && pendingTooLong(pod, now)) return "warn";
+  return role === "ok" && (!podReadiness(pod).allReady || exitUnreported(pod))
+    ? "warn"
+    : role;
 }
 
 /** What a pod's word means on hover, the one sentence every screen that draws it gives. */
@@ -48,6 +80,10 @@ export function podStatusTitle(
         podReadiness(pod)
       ),
       upBetweenCrashes(pod) && t("statusMeaning", "betweenCrashes"),
+      exitUnreported(pod) && t("statusMeaning", "exitUnreported"),
+      statusRole(pod.status.display) === "pending" &&
+        pendingTooLong(pod) &&
+        t("statusMeaning", "pendingTooLong"),
     ]
       .filter(Boolean)
       .join("\n") || undefined

@@ -25,6 +25,7 @@ import type {
   PodComposition,
   ReasonCount,
   ResourcePressure,
+  RolloutCount,
   SchedulerPressure,
   WarningGroup,
 } from "@/generated/types";
@@ -272,12 +273,25 @@ function wordSegments(
     }));
 }
 
-/** Deployments by the rollout word the list and Needs attention print, each counted apart. */
+/**
+ * Deployments by the rollout word the list and Needs attention print, each
+ * counted apart. A word only the controller's counts stand behind, its pods
+ * unread, is drawn as the list draws it: grey, with the not-read mark.
+ */
 export function deploymentSegments(
-  deployments: ReasonCount[] | null,
+  deployments: RolloutCount[] | null,
   t: T
 ): Segment[] {
-  return wordSegments(deployments, DEPLOYMENT_ORDER, t);
+  const read = (deployments ?? []).filter((entry) => !entry.podsUnread);
+  const unread = (deployments ?? [])
+    .filter((entry) => entry.podsUnread)
+    .map(({ reason, count }): Segment => ({
+      label: `${ownCountedWord(reason, count, t) ?? reason} · ${t("readings", "rolloutPodsUnreadShort")}`,
+      count,
+      tone: "neutral",
+      unread: true,
+    }));
+  return [...wordSegments(read, DEPLOYMENT_ORDER, t), ...unread];
 }
 
 /** Jobs by the word the Jobs list prints. */
@@ -319,6 +333,7 @@ function compositionRow(
     .map((segment): ReportValue => ({
       text: `${segment.count} ${segment.label}`,
       role: segment.tone,
+      unread: segment.unread,
     }));
   return {
     label,
