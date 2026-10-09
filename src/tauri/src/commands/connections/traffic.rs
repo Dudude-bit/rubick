@@ -308,10 +308,12 @@ pub(super) fn note_reach(
     // Only the first is "no pod carries this"; for the second the rule gets
     // `None` and says what the endpoints alone can.
     let pods = snapshot.pods.is_ok().then_some(selected.as_slice());
+    let makers = snapshot.makers();
     let published = snapshot
         .published_of(svc, svc_ref.clone(), &selected)
         .with_stop(svc, pods)
-        .with_makers(svc, &snapshot.makers())
+        .with_makers(svc, &makers)
+        .with_workloads(svc, &makers, pods, chrono::Utc::now())
         .with_near_miss(svc, snapshot.pods());
     let stop = published.stop.clone();
     out.published.push(if detail {

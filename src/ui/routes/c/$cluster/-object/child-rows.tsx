@@ -36,6 +36,8 @@ export interface ChildRow {
   status: string;
   /** Words for a status this app made up rather than read; `status` still picks the colour. */
   statusLabel?: string;
+  /** What the word means on hover, as the list and the page give it. */
+  statusTitle?: string;
   /**
    * Draw the status without its colour, keeping the word.
    *
@@ -182,7 +184,7 @@ function ChildRowItem({ row }: { row: ChildRow }) {
           namespace={row.namespace}
           showKind={false}
         />
-        <span className={cn("text-[11px]", WORD[role])}>
+        <span className={cn("text-[11px]", WORD[role])} title={row.statusTitle}>
           {row.statusLabel ?? row.status}
         </span>
       </span>

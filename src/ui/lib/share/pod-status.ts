@@ -3,6 +3,7 @@ import { podReadiness, type ReadinessLists } from "@/lib/container-sequence";
 import { silenceNote, type NodeSilence } from "@/lib/node-reporting";
 import type { ReportValue } from "@/lib/report";
 import { statusRole, type StatusRole } from "@/lib/status-role";
+import { podStatusMeaning } from "@/lib/status-meaning";
 import { loopingNow } from "@/lib/crash-loop";
 
 export type PodBadgeInput = ReadinessLists & {
@@ -10,8 +11,9 @@ export type PodBadgeInput = ReadinessLists & {
 };
 
 /** A word that would read healthy, said in the seconds a crash-looping container is up. */
-export const upBetweenCrashes = (pod: PodBadgeInput) =>
-  statusRole(pod.status.display) === "ok" && loopingNow(pod.status);
+export const upBetweenCrashes = (pod: {
+  status: { display: string; loopingExitAt?: string | null };
+}) => statusRole(pod.status.display) === "ok" && loopingNow(pod.status);
 
 /**
  * The colour of a pod's word on every screen. kubectl prints `Running` for a
@@ -28,6 +30,28 @@ export function podRole(
   if (upBetweenCrashes(pod)) return "err";
   const role = statusRole(pod.status.display);
   return role === "ok" && !podReadiness(pod).allReady ? "warn" : role;
+}
+
+/** What a pod's word means on hover, the one sentence every screen that draws it gives. */
+export function podStatusTitle(
+  pod: PodBadgeInput & { status: { phase: string } },
+  silence: NodeSilence | null,
+  t: T
+): string | undefined {
+  if (silence) return silenceNote(silence, t);
+  return (
+    [
+      podStatusMeaning(
+        pod.status.display,
+        pod.status.phase,
+        t,
+        podReadiness(pod)
+      ),
+      upBetweenCrashes(pod) && t("statusMeaning", "betweenCrashes"),
+    ]
+      .filter(Boolean)
+      .join("\n") || undefined
+  );
 }
 
 /** A pod's status as every screen draws it, coloured by {@link podRole}. */

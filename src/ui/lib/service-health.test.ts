@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
+import { EyeOff } from "lucide-react";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
@@ -171,14 +172,22 @@ describe("one verdict for a Service on every surface", () => {
    * Lena read "2 пода несут app=unready-demo" in the Services tooltip and on
    * the Overview, where a native says "у 2 подов метка app=unready-demo". Fails if the clause
    * after the colon repeats the verdict instead of naming a cause, or the
-   * place that knows one.
+   * place that knows one. Where only the slices were read, the count is
+   * theirs and the sentence says so: Marco read "1 pod carries" about a pod
+   * nobody had read.
    */
   it.each([
-    ["failingReadiness", "не проходят проверку готовности"],
-    ["inSlices", "причину покажет страница Service"],
+    [
+      "failingReadiness",
+      "У 2 подов метка app=unready-demo, и ни один не готов: не проходят проверку готовности",
+    ],
+    [
+      "inSlices",
+      "Эндпоинты для app=unready-demo называют 2 адреса, и ни один не готов: причину покажет страница Service",
+    ],
   ] as const)(
     "follows none ready with a cause when the pods are %s",
-    (why, cause) => {
+    (why, sentence) => {
       const ru: T = (section, key, values) =>
         translate("ru", section, key, values);
       const health = serviceHealthOf(
@@ -195,9 +204,7 @@ describe("one verdict for a Service on every surface", () => {
         }),
         null
       );
-      expect(serviceHealthWords(health, ru).reason).toBe(
-        `У 2 подов метка app=unready-demo, и ни один не готов: ${cause}`
-      );
+      expect(serviceHealthWords(health, ru).reason).toBe(sentence);
     }
   );
 
@@ -334,5 +341,55 @@ describe("one verdict for a Service on every surface", () => {
       state: "unknown",
       why: null,
     });
+  });
+});
+
+describe("a Service whose workloads wait on their pods", () => {
+  const waiting = (why: "comingUp" | "podsUnread") =>
+    serviceHealthOf(
+      SELECTING,
+      published({
+        notReady: 1,
+        stop: {
+          reason: "noneReady",
+          service: SERVICE,
+          selector: "app=ledger",
+          pods: 1,
+          why,
+        },
+      }),
+      null
+    );
+
+  /**
+   * Marco's ledger: the slices said its one address was not ready, its pods
+   * could not be read, and the Service drew a red fault beside its
+   * Deployment's grey unread verdict. Fails if it takes a colour, loses the
+   * EyeOff mark, or stops saying the pods were not read.
+   */
+  it("reads none ready without a fault's colour where the pods were not read", () => {
+    const words = serviceHealthWords(waiting("podsUnread"), t);
+    expect(waiting("podsUnread").state).toBe("podsUnread");
+    expect(words.label).toBe("none ready");
+    expect(words.role).toBe("neutral");
+    expect(words.glyph).toBe(EyeOff);
+    expect(words.reason).toBe(
+      "The endpoints list 1 address for app=ledger, and it is not ready: pods not read, so whether they are starting is not known"
+    );
+  });
+
+  /**
+   * A Service in front of a Deployment pulling its first image read red
+   * none ready while the Deployment read coming up. Fails if the two
+   * disagree, or the Service is drawn as a fault.
+   */
+  it("reads coming up where its workloads are still starting their pods", () => {
+    const words = serviceHealthWords(waiting("comingUp"), t);
+    expect(waiting("comingUp").state).toBe("comingUp");
+    expect(words.label).toBe("coming up");
+    expect(words.role).toBe("pending");
+    expect(words.reason).toBe(
+      "1 pod carries app=ledger, and it is not ready: still starting"
+    );
   });
 });

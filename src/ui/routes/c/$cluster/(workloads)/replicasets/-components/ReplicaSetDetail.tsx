@@ -69,7 +69,11 @@ export function ReplicaSetDetail() {
     defaultTab: "overview",
   });
 
-  const { data: pods = [], error: podsError } = useLiveQuery({
+  const {
+    data: pods = [],
+    error: podsError,
+    isPending: podsPending,
+  } = useLiveQuery({
     queryKey: ["replicaset-pods", namespace, name],
     queryFn: () => commands.getReplicasetPods(name!, namespace || null),
     enabled: !!namespace && !!name,
@@ -253,7 +257,7 @@ export function ReplicaSetDetail() {
       id: toPlural(ResourceType.Pod),
       label: t("columns", "pods"),
       glyph: kindGlyph(ResourceType.Pod),
-      mark: podsMark(pods, t),
+      mark: podsMark(pods, t, { error: podsError, pending: podsPending }),
       content: (
         <PodListCard
           pods={pods}

@@ -266,6 +266,7 @@ export function PeekContent({
             <StatusBadge
               status={summary.status}
               roleOverride={silence ? "neutral" : summary.statusRole}
+              glyph={silence ? undefined : summary.statusGlyph}
               title={
                 silence
                   ? silenceNote(silence, t)

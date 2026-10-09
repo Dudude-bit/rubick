@@ -126,6 +126,7 @@ export function DaemonSetDetail() {
   const {
     data: pods = [],
     error: podsError,
+    isPending: podsPending,
     refetch: refetchPods,
   } = useLiveQuery({
     queryKey: queryKeys.ownedPods(
@@ -249,6 +250,8 @@ export function DaemonSetDetail() {
                   namespace={daemonSet?.namespace || namespace}
                   template={daemonSet}
                   pods={pods}
+                  podsError={podsError}
+                  podsPending={podsPending}
                   idle={
                     desired === 0
                       ? t("empty", "daemonSetNoNodeMatches")
@@ -333,7 +336,7 @@ export function DaemonSetDetail() {
         id: toPlural(ResourceType.Pod),
         label: t("columns", "pods"),
         glyph: kindGlyph(ResourceType.Pod),
-        mark: podsMark(pods, t),
+        mark: podsMark(pods, t, { error: podsError, pending: podsPending }),
         content: (
           <PodListCard
             pods={pods}
@@ -400,6 +403,7 @@ export function DaemonSetDetail() {
       daemonSet,
       pods,
       podsError,
+      podsPending,
       refetchPods,
       yaml,
       copyYaml,

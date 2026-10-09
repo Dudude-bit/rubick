@@ -139,7 +139,15 @@ export function conditionsMark(
  * A controller reports `2/3 ready` in its header and says nothing about
  * *which* pod, so the tab that holds the answer is where the fault belongs.
  */
-export function podsMark(pods: readonly PodInfo[], t: T): DetailTabMark {
+export function podsMark(
+  pods: readonly PodInfo[],
+  t: T,
+  read: { error?: unknown; pending?: boolean } = {}
+): DetailTabMark | undefined {
+  // The tab's body says the read failed exactly when it has no rows to show.
+  if (read.error && pods.length === 0)
+    return { shows: "unchecked", says: t("empty", "couldNotReadWorkloadPods") };
+  if (read.pending) return undefined;
   const failing = pods.filter(
     (pod) => statusRole(pod.status.display) === "err"
   );

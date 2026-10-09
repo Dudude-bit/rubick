@@ -117,6 +117,10 @@ export const ru: Catalogue = {
       "Они не готовы по разным причинам. Вкладка Endpoints у этого Service называет состояние каждого.",
     stopOtherNote:
       "Почему, сказано в их собственном статусе. Вкладка Endpoints у этого Service называет состояние каждого.",
+    stopComingUpNote:
+      "Нагрузка за ним запускается: её поды на подходе, и готового адреса у них пока нет. Это сбой, только если они так и не станут готовыми, когда ожидание истечёт.",
+    stopPodsUnreadNote:
+      "Поды здесь прочитать не удалось, поэтому неизвестно, запускаются ли они ещё. Нагрузка за ним показывает только вердикт контроллера.",
     stopInSlicesNote:
       "Все адреса за этим Service есть в его срезах, и ни один не обслуживает. Поды здесь не читались, поэтому в каком они состоянии, не сказано.",
     stopRouteNotAcceptedTitle: "{gateway} не принимает этот маршрут",
@@ -4179,6 +4183,7 @@ export const ru: Catalogue = {
     rolloutPodsUnread:
       "{word} только по счётчикам контроллера: поды прочитать не удалось, поэтому неизвестно, запускаются ли они ещё",
     rolloutPodsUnreadShort: "поды не прочитаны",
+    upBetweenCrashes: "запущен между падениями",
     hpaPinnedAt: "закреплено на {n}",
     hpaRange: {
       one: "от {min} до {n} реплики",
@@ -4534,9 +4539,15 @@ export const ru: Catalogue = {
     healthBackendDown: "{name} не принимает трафик",
     healthNoController: "нет контроллера",
     healthNoEndpoints: "нет эндпоинтов",
+    healthComingUp: "запускается",
     healthIdle: "простаивает",
     healthBackendIdle:
       "У {name} нет подов намеренно: нагрузка за ним масштабирована до нуля",
+    healthBackendStarting: "{name} запускается: его поды ещё стартуют",
+    healthBackendStartingShort: "бэкенд запускается",
+    healthBackendUnconfirmed:
+      "У {name} нет готовых адресов, а его поды прочитать не удалось, поэтому неизвестно, запускаются ли они ещё",
+    healthBackendUnconfirmedShort: "бэкенд не проверен",
     healthBackendIdleShort: "бэкенд простаивает",
     healthMissingBackend: "нет бэкенда",
     healthMissingTlsSecret: "нет Secret для TLS",
@@ -5968,6 +5979,10 @@ export const ru: Catalogue = {
     causeFailingReadiness: "не проходят проверку готовности",
     causeSeveral: "по разным причинам",
     causeOwnStatus: "причину называет их собственный статус",
+    causeComingUp: "ещё запускаются",
+    causePodsUnread:
+      "поды не прочитаны, поэтому неизвестно, запускаются ли они",
+    stopComingUp: "запускаются",
     causeOnServicePage: "причину покажет страница Service",
     stopNoPortToSendTo: "нет порта, куда отправлять",
     everyRequest503:
@@ -7002,6 +7017,8 @@ export const ru: Catalogue = {
     noneInScope: "в этой области нет",
     nothingBroken: "ничего не сломано",
     nothingRunning: "ничего не запущено",
+    usagePodsNotRead:
+      "Потребление суммируется по подам этого {kind}, а их прочитать не удалось, поэтому сколько они потребляют, неизвестно.",
     usageIdleNote:
       "Потребление суммируется по запущенным подам, а metrics-server ничего не хранит о завершившемся поде, поэтому линии нет вовсе, а не линия на нуле.",
     kindScaledToZero: "{kind} масштабирован до нуля.",
@@ -7373,6 +7390,12 @@ export const ru: Catalogue = {
       few: "приостановлены",
       many: "приостановлены",
       other: "приостановлены",
+    },
+    startingCounted: {
+      one: "запускается",
+      few: "запускаются",
+      many: "запускаются",
+      other: "запускаются",
     },
     waitingCounted: {
       one: "ожидает",
@@ -7874,6 +7897,12 @@ export const ru: Catalogue = {
       one: "{n} под подходит под его селектор, из них Ready: {ready}",
       few: "{n} пода подходят под его селектор, из них Ready: {ready}",
       other: "{n} подов подходят под его селектор, из них Ready: {ready}",
+    },
+    endpointsNoneReady: {
+      one: "Эндпоинты для {selector} называют {n} адрес, и он не готов",
+      few: "Эндпоинты для {selector} называют {n} адреса, и ни один не готов",
+      many: "Эндпоинты для {selector} называют {n} адресов, и ни один не готов",
+      other: "Эндпоинты для {selector} называют {n} адреса, и ни один не готов",
     },
     podsCarryNotReady: {
       one: "У {n} пода метка {selector}, и он не готов",

@@ -3,10 +3,12 @@
  *
  * The page, the peek, the Endpoints object and the Services list all draw
  * it from here, from what the Service publishes. The state comes from the
- * published counts alone, which every reader holds, so a list reading the
- * slices and a page that also listed the pods give the same badge; the page
- * only adds a sharper reason.
+ * published counts, which every reader holds, and from whether the
+ * workloads behind a Service with none ready are only waiting on their pods,
+ * which both backend readers ask alike; the page only adds a sharper reason.
  */
+
+import { EyeOff, type LucideIcon } from "lucide-react";
 
 import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
@@ -25,6 +27,10 @@ export type ServiceHealth =
   | { state: "ready"; serving: number }
   | { state: "partly"; serving: number; total: number }
   | { state: "noneReady"; published: PublishedCounts }
+  /** None ready, and every workload behind it is still starting its pods. */
+  | { state: "comingUp"; published: PublishedCounts }
+  /** None ready, and the pods every workload behind it waits on were not read. */
+  | { state: "podsUnread"; published: PublishedCounts }
   | { state: "noEndpoints"; published: PublishedCounts }
   /** No pods by intent: every workload behind it is scaled to zero. */
   | { state: "idle"; stop: Extract<ChainStop, { reason: "scaledToZero" }> }
@@ -65,7 +71,13 @@ export function serviceHealthOf(
       ? { state: "ready", serving }
       : { state: "partly", serving, total };
   }
-  if (listed > 0) return { state: "noneReady", published };
+  if (listed > 0) {
+    const why = published.stop?.reason === "noneReady" && published.stop.why;
+    return {
+      state: why === "comingUp" || why === "podsUnread" ? why : "noneReady",
+      published,
+    };
+  }
   return published.stop?.reason === "scaledToZero"
     ? { state: "idle", stop: published.stop }
     : { state: "noEndpoints", published };
@@ -77,6 +89,8 @@ export interface Verdict {
   label: string;
   role: StatusRole;
   reason: string | null;
+  /** A mark of its own in place of the role's glyph. */
+  glyph?: LucideIcon;
 }
 
 /** What follows "none of them is ready": a cause, never the same words again. */
@@ -90,6 +104,8 @@ const NONE_READY_CAUSE: Record<NotServing, keyof typeof en.empty> = {
   mixed: "causeSeveral",
   other: "causeOwnStatus",
   inSlices: "causeOnServicePage",
+  comingUp: "causeComingUp",
+  podsUnread: "causePodsUnread",
 };
 
 function stopReason(published: PublishedCounts, t: T): string | null {
@@ -134,6 +150,21 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
         label: t("empty", "stopNoneReady"),
         role: "err",
         reason: stopReason(health.published, t),
+      };
+    case "comingUp":
+      return {
+        code: health.state,
+        label: t("readings", "healthComingUp"),
+        role: "pending",
+        reason: stopReason(health.published, t),
+      };
+    case "podsUnread":
+      return {
+        code: health.state,
+        label: t("empty", "stopNoneReady"),
+        role: "neutral",
+        reason: stopReason(health.published, t),
+        glyph: EyeOff,
       };
     case "noEndpoints":
       return {
@@ -186,6 +217,7 @@ export const serviceVerdictLabels = (t: T) => [
   t("count", "nReady", { n: 99 }),
   t("count", "readyOfTotal", { ready: 99, total: 99 }),
   t("empty", "stopNoneReady"),
+  t("readings", "healthComingUp"),
   t("readings", "healthNoEndpoints"),
   t("readings", "healthIdle"),
   t("readings", "healthDnsAlias"),

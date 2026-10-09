@@ -100,6 +100,7 @@ export function StatefulSetDetail() {
   const {
     data: pods = [],
     error: podsError,
+    isPending: podsPending,
     refetch: refetchPods,
   } = useLiveQuery({
     queryKey: queryKeys.ownedPods(ResourceType.StatefulSet, namespace, name),
@@ -267,6 +268,8 @@ export function StatefulSetDetail() {
                   namespace={statefulSet?.namespace || namespace}
                   template={statefulSet}
                   pods={pods}
+                  podsError={podsError}
+                  podsPending={podsPending}
                   idle={
                     desired === 0
                       ? t("empty", "kindScaledToZero", {
@@ -338,7 +341,7 @@ export function StatefulSetDetail() {
         id: toPlural(ResourceType.Pod),
         label: t("columns", "pods"),
         glyph: kindGlyph(ResourceType.Pod),
-        mark: podsMark(pods, t),
+        mark: podsMark(pods, t, { error: podsError, pending: podsPending }),
         content: (
           <PodListCard
             pods={pods}
@@ -413,6 +416,7 @@ export function StatefulSetDetail() {
       statefulSet,
       pods,
       podsError,
+      podsPending,
       refetchPods,
       yaml,
       copyYaml,

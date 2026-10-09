@@ -48,6 +48,7 @@ const pod = (name: string, ready: boolean): ObjectRef =>
     phase: "Running",
     display: ready ? "Running" : "NotReady",
     ready,
+    loopingExitAt: null,
   });
 
 const service = (name: string, selector: string | null): ObjectRef =>
@@ -857,7 +858,7 @@ describe("the traffic chain", () => {
     const idle = chainOf({ state: "idle" });
     expect(idle.stop).toMatchObject({
       at: "stop",
-      idle: true,
+      mood: "idle",
       title: "No pods by intent: hello-web is scaled to zero",
     });
     expect(hopTone(idle.stop)).toBe("on");
@@ -865,11 +866,84 @@ describe("the traffic chain", () => {
 
     const short = chainOf({ state: "short", available: 0, desired: 2 });
     expect(short.stop).toMatchObject({
-      idle: false,
+      mood: "fault",
       title: "No pod carries app=hello-web",
     });
     expect(hopTone(short.stop)).toBe("bad");
     expect(short.path.broken).toBe(true);
+  });
+
+  /**
+   * Marco's ledger page drew "1 pod carries app=ledger, and it is not ready"
+   * in red, counted from the slices while the pods were not read, under a
+   * Deployment whose own verdict was the controller's alone. Fails if a
+   * stop counted from the slices claims the pods were looked at, if one
+   * waiting on unread pods or on pods still starting is drawn as a fault or
+   * breaks its path, or if a plain fault stops being one.
+   */
+  it("draws a stop waiting on its pods by what it waits on, and counts the slices' addresses as theirs", () => {
+    const front = service("ledger", "app=ledger");
+    const subject = ref("Deployment", "ledger", {
+      kind: "workload",
+      replicas: 1,
+      readyReplicas: 0,
+      rollout: null,
+      revision: null,
+      current: null,
+    });
+    const chainOf = (why: NotServing) => {
+      const [path] = trafficChains(
+        connections(
+          subject,
+          [
+            {
+              from: front,
+              to: subject,
+              relation: { verb: "selects", selector: "app=ledger" },
+            },
+          ],
+          [
+            {
+              reason: "noneReady",
+              service: front,
+              selector: "app=ledger",
+              pods: 1,
+              why,
+            },
+          ]
+        ),
+        t
+      );
+      return { path, stop: path.hops.at(-1)! };
+    };
+
+    const unread = chainOf("podsUnread");
+    expect(unread.stop).toMatchObject({
+      mood: "unchecked",
+      title: "The endpoints list 1 address for app=ledger, and it is not ready",
+    });
+    expect(hopTone(unread.stop)).toBe("unknown");
+    expect(unread.path.broken).toBe(false);
+
+    const coming = chainOf("comingUp");
+    expect(coming.stop).toMatchObject({
+      mood: "coming",
+      title: "1 pod carries app=ledger, and it is not ready",
+    });
+    expect(hopTone(coming.stop)).toBe("info");
+    expect(coming.path.broken).toBe(false);
+
+    expect(chainOf("inSlices").stop).toMatchObject({
+      mood: "fault",
+      title: "The endpoints list 1 address for app=ledger, and it is not ready",
+    });
+    const crashing = chainOf("crashLooping");
+    expect(crashing.stop).toMatchObject({
+      mood: "fault",
+      title: "1 pod carries app=ledger, and it is not ready",
+    });
+    expect(hopTone(crashing.stop)).toBe("bad");
+    expect(crashing.path.broken).toBe(true);
   });
 
   /**
@@ -911,7 +985,7 @@ describe("the traffic chain", () => {
     const stop = path.hops.at(-1)!;
     expect(stop).toMatchObject({
       at: "stop",
-      idle: true,
+      mood: "idle",
       title: "No pods by intent: hello-web is scaled to zero",
     });
     expect(hopTone(stop)).toBe("on");
@@ -1374,6 +1448,35 @@ describe("a node, which is the same edge read from the other end", () => {
     expect(here?.caption).toBe(
       "3 pods across 2 namespaces, of the 110 this node will take · 4 CPU · 8Gi"
     );
+  });
+
+  /**
+   * A Node's and a workload's Connections drew a crash-looping pod caught
+   * between crashes as a plain Running, where the Pods list says it is up
+   * between crashes. Fails if the row drops what the list says, or says it
+   * of a pod whose last exit is past the loop's window.
+   */
+  it("says a pod is up between crashes where the Pods list does", () => {
+    const at = (secondsAgo: number): ConnectionEdge => ({
+      from: {
+        ...pod("checkout-wz5f8", false),
+        facts: {
+          kind: "pod",
+          phase: "Running",
+          display: "Running",
+          ready: false,
+          loopingExitAt: new Date(Date.now() - secondsAgo * 1000).toISOString(),
+        },
+      },
+      to: node(),
+      relation: { verb: "runsOn" },
+    });
+    const detail = (edge: ConnectionEdge) =>
+      connectionGroups(connections(node(), [edge]), t).find(
+        (group) => group.key === "placed"
+      )?.rows[0].detail;
+    expect(detail(at(5))).toBe("Running · up between crashes");
+    expect(detail(at(3600))).toBe("Running");
   });
 
   /** The tally was an English template literal under a Russian title. */

@@ -17,6 +17,8 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use chrono::{DateTime, Utc};
+
 use k8s_openapi::api::apps::v1::{Deployment, StatefulSet};
 use k8s_openapi::api::core::v1::{Endpoints, Pod, Service, ServicePort};
 use k8s_openapi::api::discovery::v1::{Endpoint, EndpointSlice};
@@ -28,6 +30,7 @@ use super::connections::{ChainStop, Existence, NearMiss, NotServing, ObjectFacts
 use super::selector::Selector;
 use super::types::pod_display::display_status;
 use super::types::{condition_is_true, crash_looping};
+use super::{PodStart, Rollout};
 
 /// The label the endpoint controllers put on every slice they write, and the
 /// only stated link from a slice back to its Service.
@@ -204,6 +207,24 @@ impl ServicePublished {
         self
     }
 
+    /// None of its addresses ready, said as [`waiting_on`] reads the
+    /// workloads behind it; any other stop stands.
+    #[must_use]
+    pub fn with_workloads(
+        mut self,
+        service: &Service,
+        makers: &[PodMaker<'_>],
+        pods: Option<&[&Pod]>,
+        now: DateTime<Utc>,
+    ) -> Self {
+        if let Some(ChainStop::NoneReady { why, .. }) = self.stop.as_mut() {
+            if let Some(wait) = waiting_on(service, makers, pods, now) {
+                *why = wait;
+            }
+        }
+        self
+    }
+
     /// A selector matching no pod, with the pods in its namespace that carry
     /// the most of it named beside it.
     #[must_use]
@@ -302,6 +323,7 @@ pub(crate) fn pod_ref(pod: &Pod, ns: &str) -> ObjectRef {
         // The status word alone, not a whole PodInfo built to read one field.
         display: super::types::pod_display::display_status(pod),
         ready: condition_is_true(pod.status.as_ref(), "Ready"),
+        looping_exit_at: super::types::pod_display::looping_exit(pod),
     })
 }
 
@@ -671,11 +693,17 @@ pub fn service_stop(
         .filter(|pod| condition_is_true(pod.status.as_ref(), "Ready"))
         .count();
     if published.not_ready > 0 || ready_pods == 0 {
+        let why = not_serving(selected);
         return Some(ChainStop::NoneReady {
             service: at,
             selector: text,
-            pods: count(selected.len()),
-            why: not_serving(selected),
+            // Ready pods the slices call not ready: the count is the slices'.
+            pods: if why == NotServing::InSlices {
+                published.not_ready
+            } else {
+                count(selected.len())
+            },
+            why,
         });
     }
     Some(ChainStop::PublishesNothing {
@@ -693,6 +721,9 @@ pub struct PodMaker<'a> {
     pub workload: ObjectRef,
     pub labels: &'a BTreeMap<String, String>,
     pub replicas: i32,
+    /// Its verdict from its counts and conditions, before its pods are asked.
+    pub rollout: Rollout,
+    pub uid: Option<&'a str>,
 }
 
 impl<'a> PodMaker<'a> {
@@ -700,6 +731,7 @@ impl<'a> PodMaker<'a> {
     pub fn deployment(deployment: &'a Deployment) -> Option<Self> {
         let spec = deployment.spec.as_ref()?;
         let status = deployment.status.as_ref();
+        let rollout = super::deployment_rollout(deployment);
         Some(Self {
             workload: maker_ref(
                 "Deployment",
@@ -707,10 +739,12 @@ impl<'a> PodMaker<'a> {
                 deployment.namespace(),
                 status.and_then(|s| s.replicas).unwrap_or(0),
                 status.and_then(|s| s.ready_replicas).unwrap_or(0),
-                super::deployment_rollout(deployment),
+                rollout.clone(),
             ),
             labels: spec.template.metadata.as_ref()?.labels.as_ref()?,
             replicas: spec.replicas.unwrap_or(1),
+            rollout,
+            uid: deployment.metadata.uid.as_deref(),
         })
     }
 
@@ -718,6 +752,7 @@ impl<'a> PodMaker<'a> {
     pub fn stateful_set(set: &'a StatefulSet) -> Option<Self> {
         let spec = set.spec.as_ref()?;
         let status = set.status.as_ref();
+        let rollout = super::statefulset_rollout(set);
         Some(Self {
             workload: maker_ref(
                 "StatefulSet",
@@ -725,10 +760,12 @@ impl<'a> PodMaker<'a> {
                 set.namespace(),
                 status.map_or(0, |s| s.replicas),
                 status.and_then(|s| s.ready_replicas).unwrap_or(0),
-                super::statefulset_rollout(set),
+                rollout.clone(),
             ),
             labels: spec.template.metadata.as_ref()?.labels.as_ref()?,
             replicas: spec.replicas.unwrap_or(1),
+            rollout,
+            uid: set.metadata.uid.as_deref(),
         })
     }
 }
@@ -778,6 +815,60 @@ pub fn scaled_to_zero(service: &Service, makers: &[PodMaker<'_>]) -> Option<Vec<
         return None;
     }
     Some(picked.iter().map(|maker| maker.workload.clone()).collect())
+}
+
+/// What a Service none of whose addresses is ready is waiting on, where every
+/// workload behind it waits on its own pods: `ComingUp` with the pods read,
+/// each still starting or settled and every workload coming up, as its own
+/// page reads it; `PodsUnread` with them not read, every workload's verdict
+/// being one its pods could have changed. `None` keeps the stop a fault: no
+/// workload behind it, or one whose verdict needs no pods to be a fault.
+#[must_use]
+pub fn waiting_on(
+    service: &Service,
+    makers: &[PodMaker<'_>],
+    pods: Option<&[&Pod]>,
+    now: DateTime<Utc>,
+) -> Option<NotServing> {
+    let selector = service
+        .spec
+        .as_ref()
+        .and_then(|s| s.selector.clone())
+        .unwrap_or_default();
+    let query = Selector::Equality(&selector);
+    let picked: Vec<&PodMaker> = makers
+        .iter()
+        .filter(|maker| maker.replicas > 0 && query.matches(maker.labels) == Some(true))
+        .collect();
+    if picked.is_empty() {
+        return None;
+    }
+    let Some(pods) = pods else {
+        return picked
+            .iter()
+            .all(|maker| {
+                matches!(
+                    maker.rollout.clone().pods_unread(),
+                    Rollout::PodsUnread { .. } | Rollout::ComingUp { .. }
+                )
+            })
+            .then_some(NotServing::PodsUnread);
+    };
+    let starting = pods.iter().all(|pod| match super::pod_start(pod) {
+        PodStart::Settled => true,
+        PodStart::Starting { until } => until > now,
+        PodStart::Failing => false,
+    });
+    let coming = picked.iter().all(|maker| {
+        let own = pods.iter().copied().filter(|pod| {
+            super::runs_for(pod, &maker.workload.kind, &maker.workload.name, maker.uid)
+        });
+        matches!(
+            super::with_pods(maker.rollout.clone(), own, now),
+            Rollout::ComingUp { .. }
+        )
+    });
+    (starting && coming).then_some(NotServing::ComingUp)
 }
 
 /// The pods that carry the most of a Service's selector without carrying all
@@ -1817,6 +1908,164 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    /// Ready pods the slices still call not ready: the stop counted the pods
+    /// where its words say the slices spoke. Fails if the count is not the
+    /// slices' own.
+    #[test]
+    fn pods_ready_where_the_slices_say_not_count_the_slices_addresses() {
+        let svc = selecting("web");
+        let pods = [ready(pod("a", Some("http"))), ready(pod("b", Some("http")))];
+        let refs: Vec<&Pod> = pods.iter().collect();
+        assert!(matches!(
+            stop_of(&svc, &[not_ready_slice()], Some(&refs)),
+            Some(ChainStop::NoneReady {
+                why: NotServing::InSlices,
+                pods: 1,
+                ..
+            })
+        ));
+    }
+
+    fn starving(stalled: bool) -> Deployment {
+        let mut conditions = vec![serde_json::json!({
+            "type": "Available", "status": "False", "reason": "MinimumReplicasUnavailable"
+        })];
+        if stalled {
+            conditions.push(serde_json::json!({
+                "type": "Progressing", "status": "False", "reason": "ProgressDeadlineExceeded"
+            }));
+        }
+        serde_json::from_value(serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": {"name": "web", "namespace": "k8s-gui-test", "generation": 1},
+            "spec": {
+                "replicas": 1,
+                "selector": {"matchLabels": {"app": "web"}},
+                "template": {"metadata": {"labels": {"app": "web"}}, "spec": {"containers": []}}
+            },
+            "status": {
+                "observedGeneration": 1, "replicas": 1, "updatedReplicas": 1,
+                "availableReplicas": 0, "conditions": conditions
+            }
+        }))
+        .expect("deployment parses")
+    }
+
+    fn web_pod(waiting: &str, scheduled_seconds_ago: i64) -> Pod {
+        let at = chrono::Utc::now() - chrono::Duration::seconds(scheduled_seconds_ago);
+        serde_json::from_value(serde_json::json!({
+            "apiVersion": "v1", "kind": "Pod",
+            "metadata": {
+                "name": "web-abc12-x", "namespace": "k8s-gui-test",
+                "creationTimestamp": at.to_rfc3339(),
+                "labels": {"app": "web", "pod-template-hash": "abc12"},
+                "ownerReferences": [{
+                    "apiVersion": "apps/v1", "kind": "ReplicaSet", "name": "web-abc12",
+                    "uid": "rs-uid", "controller": true
+                }]
+            },
+            "spec": {"nodeName": "n1", "containers": [{"name": "web"}]},
+            "status": {
+                "phase": "Pending",
+                "conditions": [{
+                    "type": "PodScheduled", "status": "True",
+                    "lastTransitionTime": at.to_rfc3339()
+                }],
+                "containerStatuses": [{
+                    "name": "web", "image": "web", "imageID": "", "ready": false,
+                    "restartCount": 0, "state": {"waiting": {"reason": waiting}}
+                }]
+            }
+        }))
+        .expect("pod parses")
+    }
+
+    fn not_ready_slice() -> EndpointSlice {
+        slice(
+            "web-1",
+            "web",
+            Some(vec![http_port()]),
+            vec![endpoint(
+                "10.0.0.1",
+                "web-abc12-x",
+                EndpointConditions {
+                    ready: Some(false),
+                    serving: Some(false),
+                    ..Default::default()
+                },
+            )],
+        )
+    }
+
+    fn wait_of(deployments: &[Deployment], pods: Option<&[&Pod]>) -> Option<NotServing> {
+        let svc = selecting("web");
+        let makers: Vec<PodMaker> = deployments
+            .iter()
+            .filter_map(PodMaker::deployment)
+            .collect();
+        let slices = [not_ready_slice()];
+        let published = from_slices(
+            &svc,
+            svc_ref("web"),
+            &slices_of(&slices, "web"),
+            pods.unwrap_or_default(),
+        )
+        .with_stop(&svc, pods)
+        .with_workloads(&svc, &makers, pods, chrono::Utc::now());
+        match published.stop {
+            Some(ChainStop::NoneReady { why, .. }) => Some(why),
+            _ => None,
+        }
+    }
+
+    /// Marco's ledger: the slices said its one address was not ready, its
+    /// pods could not be read, and the Service read a red fault while its
+    /// Deployment read the controller's word alone. Fails if a Service whose
+    /// every workload waits on unread pods is not said to wait on them, or if
+    /// a workload past its deadline, or none at all, is let off.
+    #[test]
+    fn a_service_whose_workload_waits_on_unread_pods_says_so() {
+        assert_eq!(
+            wait_of(&[starving(false)], None),
+            Some(NotServing::PodsUnread)
+        );
+        assert_eq!(wait_of(&[starving(true)], None), Some(NotServing::InSlices));
+        assert_eq!(wait_of(&[], None), Some(NotServing::InSlices));
+    }
+
+    /// The Service in front of a Deployment whose pod is still pulling its
+    /// image read red none ready while the Deployment read coming up. Fails
+    /// if that pod does not make the Service coming up too, or if a pod that
+    /// will not start, one past its wait, or a stuck pod of no workload's
+    /// that the selector also picks, does.
+    #[test]
+    fn a_service_whose_workload_is_coming_up_is_coming_up() {
+        let read = |pod: &Pod| wait_of(&[starving(false)], Some(&[pod]));
+        let pulling = web_pod("ContainerCreating", 30);
+        let mut stray = web_pod("ImagePullBackOff", 30);
+        stray.metadata.name = Some("stray".to_string());
+        stray.metadata.owner_references = None;
+        assert_eq!(
+            wait_of(&[starving(false)], Some(&[&pulling, &stray])),
+            Some(NotServing::Starting)
+        );
+        assert_eq!(
+            read(&web_pod("ContainerCreating", 30)),
+            Some(NotServing::ComingUp)
+        );
+        assert_eq!(
+            read(&web_pod("ImagePullBackOff", 30)),
+            Some(NotServing::Starting)
+        );
+        assert_eq!(
+            read(&web_pod(
+                "ContainerCreating",
+                crate::resources::START_GRACE_SECONDS + 60
+            )),
+            Some(NotServing::Starting)
+        );
     }
 
     /// A pending pod has no IP yet. Would break if its row went back to a

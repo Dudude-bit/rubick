@@ -24,6 +24,8 @@ import { ORDER, refOf, type PlacedSection } from "./report-parts";
 /** The chain's tone as the file draws it: a working hop carries none. */
 const ROLE_OF_TONE: Record<HopTone, ReportHop["tone"]> = {
   on: null,
+  info: null,
+  unknown: null,
   warn: "warn",
   bad: "err",
 };
@@ -129,7 +131,7 @@ export function trafficOf(
     const said = chainStopHop(stop, conns.subject, t);
     if (drawn.has(said.title)) continue;
     paths.push({
-      broken: !said.idle,
+      broken: said.mood === "fault",
       hops: [
         {
           ref: refOf(stopSubject(stop)),

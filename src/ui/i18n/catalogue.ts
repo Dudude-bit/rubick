@@ -138,6 +138,10 @@ export const en = {
       "They are not Ready for more than one reason. The Service's Endpoints tab names the state of each one.",
     stopOtherNote:
       "Their own status says why. The Service's Endpoints tab names the state of each one.",
+    stopComingUpNote:
+      "The workload behind it is coming up: its pods are on their way and have no ready address yet. It is a fault only if they are still not ready when the wait runs out.",
+    stopPodsUnreadNote:
+      "The pods could not be read here, so whether they are still starting is not known. The workload behind it reads the controller's verdict alone.",
     stopInSlicesNote:
       "Every address behind this Service is in its slices and not one is serving. The pods were not read here, so which state they are in is not said.",
     stopRouteNotAcceptedTitle: "{gateway} does not accept this route",
@@ -3737,6 +3741,7 @@ export const en = {
     rolloutPodsUnread:
       "{word} by the controller's counts alone: its pods could not be read, so whether they are still starting is not known",
     rolloutPodsUnreadShort: "pods not read",
+    upBetweenCrashes: "up between crashes",
     hpaPinnedAt: "pinned at {n}",
     hpaRange: { one: "{min} to {n} replica", other: "{min} to {n} replicas" },
     hpaCannotReach: "{name} cannot reach what it scales",
@@ -4051,9 +4056,15 @@ export const en = {
     healthBackendDown: "{name} takes no traffic",
     healthNoController: "no controller",
     healthNoEndpoints: "no endpoints",
+    healthComingUp: "coming up",
     healthIdle: "idle",
     healthBackendIdle:
       "{name} has no pods by intent: what runs behind it is scaled to zero",
+    healthBackendStarting: "{name} is coming up: its pods are still starting",
+    healthBackendStartingShort: "backend coming up",
+    healthBackendUnconfirmed:
+      "{name} has no ready address, and its pods could not be read to tell whether they are still starting",
+    healthBackendUnconfirmedShort: "backend not checked",
     healthBackendIdleShort: "backend idle",
     healthMissingBackend: "missing backend",
     healthMissingTlsSecret: "missing TLS Secret",
@@ -5393,6 +5404,9 @@ export const en = {
     causeFailingReadiness: "they fail their readiness probe",
     causeSeveral: "for more than one reason",
     causeOwnStatus: "their own status says why",
+    causeComingUp: "still starting",
+    causePodsUnread: "pods not read, so whether they are starting is not known",
+    stopComingUp: "coming up",
     causeOnServicePage: "the Service's page says why",
     stopNoPortToSendTo: "no port to send to",
     everyRequest503:
@@ -6382,6 +6396,8 @@ export const en = {
     noneInScope: "none in scope",
     nothingBroken: "nothing broken",
     nothingRunning: "nothing running",
+    usagePodsNotRead:
+      "Usage is summed from this {kind}'s pods, and they could not be read, so what they use is not known.",
     usageIdleNote:
       "Usage is summed from running pods, and metrics-server keeps nothing about a pod that has exited, so there is no line rather than a line at zero.",
     kindScaledToZero: "This {kind} is scaled to zero.",
@@ -6730,6 +6746,7 @@ export const en = {
     idleCounted: { other: "Idle" },
     retryingCounted: { other: "Retrying" },
     suspendedCounted: { other: "Suspended" },
+    startingCounted: { other: "Starting" },
     waitingCounted: { other: "Waiting" },
   },
   statusMeaning: {
@@ -7109,6 +7126,11 @@ export const en = {
     podsMatchSomeReady: {
       one: "{n} pod matches its selector and {ready} of them are Ready",
       other: "{n} pods match its selector and {ready} of them are Ready",
+    },
+    endpointsNoneReady: {
+      one: "The endpoints list {n} address for {selector}, and it is not ready",
+      other:
+        "The endpoints list {n} addresses for {selector}, and none of them is ready",
     },
     podsCarryNotReady: {
       one: "{n} pod carries {selector}, and it is not ready",

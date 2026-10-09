@@ -18,6 +18,7 @@ import { formatKubernetesBytes } from "./k8s-quantity";
 import { isScalable } from "./resource-registry";
 import { groupMounts } from "./mounts";
 import { rolloutLine, rolloutVerdict } from "./workload-status";
+import { upBetweenCrashes } from "./share/pod-status";
 import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
 import { ingressAddressOf, type IngressAddress } from "./ingress-health";
@@ -194,7 +195,9 @@ function describeFacts(facts: ObjectFacts | null, t: T): string | null {
     case "claim":
       return join(facts.capacity, facts.storageClass, facts.phase);
     case "pod":
-      return facts.display;
+      return upBetweenCrashes({ status: facts })
+        ? join(facts.display, t("readings", "upBetweenCrashes"))
+        : facts.display;
     case "workload": {
       if (facts.revision === null) {
         const counted = t("count", "readyOfTotal", {
@@ -294,11 +297,18 @@ export function describeExistence(
   return null;
 }
 
-export type HopTone = "on" | "warn" | "bad";
+export type HopTone = "on" | "info" | "unknown" | "warn" | "bad";
+
+const STOP_TONE: Record<StopMood, HopTone> = {
+  fault: "bad",
+  idle: "on",
+  coming: "info",
+  unchecked: "unknown",
+};
 
 /** How the chain draws a hop, on the page and in a shared file alike. */
 export function hopTone(hop: ChainHop): HopTone {
-  if (hop.at === "stop") return hop.idle ? "on" : "bad";
+  if (hop.at === "stop") return STOP_TONE[hop.mood];
   // A hop the app could not look up is not a hop it found. The Services
   // list being refused hands the chain a backend with `notChecked`, and
   // drawing it in the ordinary tone made it indistinguishable from a
@@ -330,6 +340,8 @@ const NONE_READY_UNDER: Record<NotServing, keyof typeof en.empty> = {
   mixed: "stopNoneReady",
   other: "stopNoneReady",
   inSlices: "stopNoneReady",
+  comingUp: "stopComingUp",
+  podsUnread: "podsNotRead",
 };
 
 /** What a stopped path says in the column, in four words or fewer. */
@@ -363,7 +375,15 @@ const NONE_READY_NOTE: Record<NotServing, keyof typeof en.nav> = {
   mixed: "stopMixedNote",
   other: "stopOtherNote",
   inSlices: "stopInSlicesNote",
+  comingUp: "stopComingUpNote",
+  podsUnread: "stopPodsUnreadNote",
 };
+
+/** Where a none-ready count comes from: the slices' addresses, or the pods the selector picked. */
+const SLICES_COUNTED: ReadonlySet<NotServing> = new Set([
+  "inSlices",
+  "podsUnread",
+]);
 
 /** The named targetPorts no container declares, as the Service asks for them. */
 export function askedPorts(names: string[], t: T): string {
@@ -443,10 +463,13 @@ export function describeStop(
       };
     case "noneReady":
       return {
-        title: t("count", "podsCarryNotReady", {
-          n: stop.pods,
-          selector: stop.selector,
-        }),
+        title: t(
+          "count",
+          SLICES_COUNTED.has(stop.why)
+            ? "endpointsNoneReady"
+            : "podsCarryNotReady",
+          { n: stop.pods, selector: stop.selector }
+        ),
         note: t("nav", NONE_READY_NOTE[stop.why]),
       };
     case "routeNotAccepted":
@@ -545,12 +568,25 @@ export interface ChainHopPublished {
   tone: "on" | "warn";
 }
 
+/**
+ * What a stop is: a fault; nothing running by intent (the subject is scaled
+ * to zero); pods still coming up; or pods nobody could read to say which.
+ */
+export type StopMood = "fault" | "idle" | "coming" | "unchecked";
+
 export interface ChainHopStop {
   at: "stop";
   title: string;
   note: string;
-  /** Nothing runs here by intent: the subject is scaled to zero. */
-  idle: boolean;
+  mood: StopMood;
+}
+
+/** The mood of a stop no subject turns idle. */
+function stopMood(stop: ChainStop): StopMood {
+  if (stop.reason === "scaledToZero") return "idle";
+  if (stop.reason !== "noneReady") return "fault";
+  if (stop.why === "comingUp") return "coming";
+  return stop.why === "podsUnread" ? "unchecked" : "fault";
 }
 
 /** Three names at most, and how many more. */
@@ -583,16 +619,18 @@ export function chainStopHop(
   subject: ObjectRef,
   t: T
 ): ChainHopStop {
-  if (stop.reason === "scaledToZero")
-    return { at: "stop", idle: true, ...describeStop(stop, t) };
   if (
     stop.reason === "selectsNothing" &&
     subject.facts?.kind === "workload" &&
     subject.facts.rollout?.state === "idle"
   ) {
-    return { at: "stop", idle: true, ...scaledToZeroWords([subject.name], t) };
+    return {
+      at: "stop",
+      mood: "idle",
+      ...scaledToZeroWords([subject.name], t),
+    };
   }
-  return { at: "stop", idle: false, ...describeStop(stop, t) };
+  return { at: "stop", mood: stopMood(stop), ...describeStop(stop, t) };
 }
 
 /**
@@ -1058,7 +1096,7 @@ export function trafficChains(
       return {
         key: refKey(service),
         hops,
-        broken: (!!said && !said.idle) || routeBroken,
+        broken: said?.mood === "fault" || routeBroken,
       };
     })
     .filter((path) => path.hops.length > 1);

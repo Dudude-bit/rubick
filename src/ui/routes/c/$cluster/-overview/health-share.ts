@@ -198,9 +198,10 @@ export function podsServing(pods: PodComposition): number {
  * anyone with a nightly CronJob. Crash-loopers and pods failing readiness
  * are carved back out of Running: the phase says Running while they serve
  * nothing. A pod held in an error that waiting will not clear is carved out
- * of Pending under that error, the word the Pods list prints for it.
+ * of Pending under that error, the word the Pods list prints for it, and one
+ * still inside its wait as starting, which its workload says too.
  */
-export function podSegments(pods: PodComposition): Segment[] {
+export function podSegments(pods: PodComposition, t: T): Segment[] {
   const stuck = pods.stuck.reduce((n, held) => n + held.count, 0);
   return [
     { label: "Running", count: podsServing(pods), tone: "ok" },
@@ -211,7 +212,16 @@ export function podSegments(pods: PodComposition): Segment[] {
       count,
       tone: "err",
     })),
-    { label: "Pending", count: pods.pending - stuck, tone: "warn" },
+    {
+      label: t("statusWords", "startingCounted", { n: pods.starting }),
+      count: pods.starting,
+      tone: "pending",
+    },
+    {
+      label: "Pending",
+      count: pods.pending - stuck - pods.starting,
+      tone: "warn",
+    },
     { label: "Failed", count: pods.failed, tone: "err" },
     { label: "Completed", count: pods.succeeded, tone: "neutral" },
     { label: "Unknown", count: pods.unknown, tone: "neutral" },
@@ -222,7 +232,7 @@ const SEGMENT_TONE: Record<StatusRole, Segment["tone"]> = {
   ok: "ok",
   warn: "warn",
   err: "err",
-  pending: "neutral",
+  pending: "pending",
   neutral: "neutral",
 };
 
@@ -330,7 +340,7 @@ export function workloadsShare(overview: ClusterOverview, t: T): PlacedSection {
         compositionRow(
           "Pods",
           pods && podTotal(pods),
-          pods ? podSegments(pods) : [],
+          pods ? podSegments(pods, t) : [],
           t
         ),
         compositionRow(

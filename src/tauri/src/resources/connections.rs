@@ -125,6 +125,9 @@ pub enum ObjectFacts {
         /// puts this pod in its endpoints — the difference between reachable
         /// and merely running.
         ready: bool,
+        /// See `PodStatusInfo::looping_exit_at`.
+        #[serde(rename = "loopingExitAt")]
+        looping_exit_at: Option<DateTime<Utc>>,
     },
     Workload {
         replicas: i32,
@@ -487,6 +490,12 @@ pub enum NotServing {
     Other,
     /// Only the slices were read: the addresses are in them, none serving.
     InSlices,
+    /// Every workload behind it is coming up: its own pods are still
+    /// starting inside the wait its verdict allows, and none shows a fault.
+    ComingUp,
+    /// Only the slices were read, and every workload behind it waits on pods
+    /// that could not be read to say whether they are still starting.
+    PodsUnread,
 }
 
 /// One object's whole neighbourhood, in one answer.

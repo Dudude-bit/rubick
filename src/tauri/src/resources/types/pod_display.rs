@@ -282,6 +282,13 @@ pub fn pending_grace(pod: &Pod) -> i64 {
     }
 }
 
+/// Whether a Pending pod is still inside the wait [`pending_grace`] gives it.
+/// An undated pod is not: an unknown age is not evidence that it is young.
+#[must_use]
+pub fn within_pending_grace(pod: &Pod, now: DateTime<Utc>) -> bool {
+    pending_since(pod).is_some_and(|t| now - t < chrono::Duration::seconds(pending_grace(pod)))
+}
+
 /// Waiting-state reasons that mean the pod is stuck, not starting up.
 pub const STUCK_WAITING_REASONS: &[&str] = &[
     "CrashLoopBackOff",
@@ -740,9 +747,10 @@ mod tests {
     }
 
     /// Sam's checkout pod read green Running in its header between crashes
-    /// while the Overview said `CrashLoopBackOff`. The page and the list
-    /// measure the window from what the row ships; fails if the running
-    /// instant ships no exit, or a pod restarted once ships one.
+    /// while the Overview said `CrashLoopBackOff`. The page, the list and
+    /// Connections measure the window from what the row and the fact ship;
+    /// fails if the running instant ships no exit to any of them, or a pod
+    /// restarted once ships one.
     #[test]
     fn a_running_crash_looper_ships_the_exit_its_window_is_measured_from() {
         let now = Utc::now();
@@ -756,6 +764,10 @@ mod tests {
             crate::resources::PodRow::from(&up).status.looping_exit_at,
             Some(at)
         );
+        assert!(matches!(
+            crate::resources::published::pod_ref(&up, "shop").facts,
+            Some(crate::resources::ObjectFacts::Pod { looping_exit_at: Some(fact), .. }) if fact == at
+        ));
         let rebooted = looping(running(), exited(now, 30, "Unknown", 255), 1);
         assert_eq!(looping_exit(&rebooted), None);
     }

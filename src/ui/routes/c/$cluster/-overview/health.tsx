@@ -57,7 +57,7 @@ import type {
   SchedulerPressure,
   WarningGroup,
 } from "@/generated/types";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 import { formatCount } from "@/lib/count";
 
 /**
@@ -427,8 +427,8 @@ function capped(lines: AttentionLine[]): AttentionLine[] {
 }
 
 /** Not-running pods by phase, in the words the composition bar uses. */
-function notRunning(pods: PodComposition): string {
-  return podSegments(pods)
+function notRunning(pods: PodComposition, t: T): string {
+  return podSegments(pods, t)
     .filter((segment) => segment.label !== "Running" && segment.count > 0)
     .map((segment) => `${segment.count} ${segment.label}`)
     .join(", ");
@@ -460,7 +460,7 @@ export function AttentionPanel({
   const cut = total - items.length;
   const unchecked = attention.checks.filter((check) => check.state !== "read");
   const readyNodes = nodes.filter((n) => n.ready).length;
-  const down = pods && notRunning(pods);
+  const down = pods && notRunning(pods, t);
   const summaryRole: StatusRole = worst ?? (complete ? "ok" : "neutral");
 
   return (
@@ -605,7 +605,7 @@ export function WorkloadsPanel({
           total={podCount}
           label={podCount === 1 ? "Pod" : "Pods"}
           emptyMessage={t("empty", "noneInScope")}
-          segments={pods ? podSegments(pods) : []}
+          segments={pods ? podSegments(pods, t) : []}
           note={
             pods
               ? undefined
