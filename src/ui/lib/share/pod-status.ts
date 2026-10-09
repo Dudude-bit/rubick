@@ -5,6 +5,7 @@ import type { ReportValue } from "@/lib/report";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { podStatusMeaning } from "@/lib/status-meaning";
 import { loopState } from "@/lib/crash-loop";
+import type { PodStart } from "@/generated/types";
 
 type LoopStatus = {
   display: string;
@@ -12,7 +13,24 @@ type LoopStatus = {
   exitUnreported?: boolean;
 };
 
-export type PodBadgeInput = ReadinessLists & { status: LoopStatus };
+export type PodBadgeInput = ReadinessLists & {
+  status: LoopStatus & { phase?: string };
+  start?: PodStart;
+};
+
+/**
+ * A Pending pod past the wait `pending_grace` gives it, a minute unplaced
+ * and ten once placed: the instant the Overview stops counting it as
+ * starting and counts it Pending in amber.
+ */
+export const pendingTooLong = (
+  pod: Pick<PodBadgeInput, "status" | "start">,
+  now: number = Date.now()
+) =>
+  pod.status.phase === "Pending" &&
+  pod.start !== undefined &&
+  pod.start.state !== "settled" &&
+  !(pod.start.state === "starting" && Date.parse(pod.start.until) > now);
 
 /** A word that would read healthy, said in the seconds a crash-looping container is up. */
 export const upBetweenCrashes = (pod: { status: LoopStatus }) =>
@@ -34,11 +52,13 @@ export const exitUnreported = (pod: { status: LoopStatus }) =>
  */
 export function podRole(
   pod: PodBadgeInput,
-  silence: NodeSilence | null
+  silence: NodeSilence | null,
+  now: number = Date.now()
 ): StatusRole {
   if (silence) return "neutral";
   if (upBetweenCrashes(pod)) return "err";
   const role = statusRole(pod.status.display);
+  if (role === "pending" && pendingTooLong(pod, now)) return "warn";
   return role === "ok" && (!podReadiness(pod).allReady || exitUnreported(pod))
     ? "warn"
     : role;
@@ -61,6 +81,9 @@ export function podStatusTitle(
       ),
       upBetweenCrashes(pod) && t("statusMeaning", "betweenCrashes"),
       exitUnreported(pod) && t("statusMeaning", "exitUnreported"),
+      statusRole(pod.status.display) === "pending" &&
+        pendingTooLong(pod) &&
+        t("statusMeaning", "pendingTooLong"),
     ]
       .filter(Boolean)
       .join("\n") || undefined

@@ -18,6 +18,8 @@ import { jobEndRow } from "../-object/job-end";
 import { ImageRef } from "@/components/object/ImageRef";
 import type { T as Translate } from "@/i18n/useT";
 import type { ContainerPhase, Rollout } from "@/generated/types";
+import type { KeyValueTone } from "@/components/object/key-values";
+import { workloadRole } from "@/lib/workload-status";
 import {
   controlledBy,
   ref,
@@ -71,6 +73,16 @@ function prettyQuantity(
   kind: "cpu" | "memory"
 ): string | null {
   return value ? declaredQuantity(kind, value) : null;
+}
+
+/**
+ * A ready count short of wanted, in the verdict's own terms: blue while its
+ * pods are coming up, uncoloured where they went unread, amber otherwise.
+ */
+function shortTone(rollout: Rollout): KeyValueTone | undefined {
+  const role = workloadRole(rollout);
+  if (role === "pending") return "info";
+  return role === "neutral" ? undefined : "warn";
 }
 
 /** The header badge the page header draws for the same verdict. */
@@ -197,7 +209,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
             }),
             tone:
               deployment.replicas.ready < deployment.replicas.desired
-                ? "warn"
+                ? shortTone(deployment.rollout)
                 : undefined,
           },
           {
@@ -243,7 +255,9 @@ export const WORKLOAD_SOURCES: PeekSources = {
               total: set.replicas.desired,
             }),
             tone:
-              set.replicas.ready < set.replicas.desired ? "warn" : undefined,
+              set.replicas.ready < set.replicas.desired
+                ? shortTone(set.rollout)
+                : undefined,
           },
           {
             label: t("columns", "current"),
@@ -289,7 +303,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
               ready: set.ready,
               of: t("count", "ofNodes", { n: set.desired }),
             }),
-            tone: set.ready < set.desired ? "warn" : undefined,
+            tone: set.ready < set.desired ? shortTone(set.rollout) : undefined,
           },
           { label: t("columns", "current"), value: set.current, mono: true },
           {

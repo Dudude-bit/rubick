@@ -6814,6 +6814,8 @@ export const en = {
       "Up between crashes: a container keeps exiting, and the kubelet keeps starting it again.",
     exitUnreported:
       "Restarted, and the kubelet reports no last exit, so whether a container is still crash-looping is not known.",
+    pendingTooLong:
+      "Pending past the wait a pod is given before it counts as a problem: a minute for a node to take it, ten minutes to start once one has.",
     containerStatusUnknown:
       "the container's state was lost, usually after the node restarted.",
     deadlineExceeded:

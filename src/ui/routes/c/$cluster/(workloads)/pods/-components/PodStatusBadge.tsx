@@ -1,4 +1,5 @@
 import { StatusBadge } from "@/components/ui/status-badge";
+import { useNowReading } from "@/hooks/useNow";
 import { useT } from "@/i18n/useT";
 import type { NodeSilence } from "@/lib/node-reporting";
 import {
@@ -16,10 +17,12 @@ export function PodStatusBadge({
   silence: NodeSilence | null;
 }) {
   const t = useT();
+  // Read through the clock so a pod turns the moment its wait runs out.
+  const role = useNowReading(10_000, (now) => podRole(pod, silence, now));
   return (
     <StatusBadge
       status={pod.status.display}
-      roleOverride={podRole(pod, silence)}
+      roleOverride={role}
       title={podStatusTitle(pod, silence, t)}
     />
   );
