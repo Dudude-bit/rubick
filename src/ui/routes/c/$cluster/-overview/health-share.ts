@@ -287,7 +287,8 @@ export function deploymentSegments(
   const unread = (deployments ?? [])
     .filter((entry) => entry.podsUnread)
     .map(({ reason, count }): Segment => ({
-      label: `${ownCountedWord(reason, count, t) ?? reason} · ${t("readings", "rolloutPodsUnreadShort")}`,
+      label: ownCountedWord(reason, count, t) ?? reason,
+      qualifier: t("readings", "rolloutPodsUnreadShort"),
       count,
       tone: "neutral",
       unread: true,
@@ -384,7 +385,9 @@ function compositionRow(
   const values = card.segments
     .filter((segment) => segment.count > 0)
     .map((segment): ReportValue => ({
-      text: `${segment.count} ${segment.label}`,
+      text: [`${segment.count} ${segment.label}`, segment.qualifier]
+        .filter(Boolean)
+        .join(" · "),
       role: segment.tone,
       unread: segment.unread,
     }));

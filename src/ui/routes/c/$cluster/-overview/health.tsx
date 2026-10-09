@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { CircleSlash, Loader2, Lock, TriangleAlert } from "lucide-react";
 
@@ -59,6 +59,7 @@ import type {
   WarningGroup,
 } from "@/generated/types";
 import { useT, type T } from "@/i18n/useT";
+import { parts } from "@/i18n/parts";
 import { formatCount } from "@/lib/count";
 
 /**
@@ -465,30 +466,12 @@ export function AttentionPanel({
   const unchecked = attention.checks.filter((check) => check.state !== "read");
   const readyNodes = nodes.filter((n) => n.ready).length;
   const down = pods && notRunning(pods.read, t);
-  const overall: React.ReactNode[] = [];
-  if (pods)
-    overall.push(
-      <>
-        {t("count", "podsReady", {
-          n: formatCount(podsServing(pods.read)),
-          of: t("count", "ofPods", { n: podTotal(pods.read) }),
-        })}
-        {down && <> ({down})</>}
-      </>
-    );
-  if (!pods || podsUnread.length > 0)
-    overall.push(
-      <UnreadMark unread={podsUnread}>
-        {t("cluster", "podsNotCounted", { where: unreadWhere(podsUnread, t) })}
-      </UnreadMark>
-    );
-  if (nodesKnown)
-    overall.push(
-      t("count", "nodesReady", {
-        n: readyNodes,
-        of: t("count", "ofNodes", { n: nodes.length }),
-      })
-    );
+  const nodesLine =
+    nodesKnown &&
+    t("count", "nodesReady", {
+      n: readyNodes,
+      of: t("count", "ofNodes", { n: nodes.length }),
+    });
   const summaryRole: StatusRole = worst ?? (complete ? "ok" : "neutral");
 
   return (
@@ -531,10 +514,10 @@ export function AttentionPanel({
         {/* What is fine gets one muted line after the rows, never a panel of
          *  green checkmarks competing with them. Its dot is the list's
          *  verdict: green only when everything named was read clean. */}
-        <div className={ROW} data-testid="attention-summary">
+        <div className={cn(ROW, "items-start")} data-testid="attention-summary">
           <span
             className={cn(
-              "h-[7px] w-[7px] justify-self-center rounded-full",
+              "mt-[4.5px] h-[7px] w-[7px] justify-self-center rounded-full",
               ROLE_DOT[summaryRole]
             )}
             aria-hidden="true"
@@ -542,20 +525,48 @@ export function AttentionPanel({
           <span className="truncate font-mono font-medium text-fg-mut">
             {t("cluster", SUMMARY_LABEL[summaryRole])}
           </span>
+          {/* The counts give way in their details; the words that change
+              what the counts mean wrap below them and are never cut. */}
           <span
-            className="truncate text-fg-fnt"
+            className="col-span-4 flex min-w-0 flex-wrap items-baseline gap-x-2 text-fg-fnt"
             data-testid="attention-overall"
           >
-            {overall.map((part, index) => (
-              <Fragment key={index}>
-                {index > 0 && " · "}
-                {part}
-              </Fragment>
-            ))}
+            {(pods || nodesLine) && (
+              <span className="flex min-w-0 max-w-full items-baseline whitespace-nowrap">
+                {pods && (
+                  <span className="flex-none">
+                    {t("count", "podsReady", {
+                      n: formatCount(podsServing(pods.read)),
+                      of: t("count", "ofPods", { n: podTotal(pods.read) }),
+                    })}
+                  </span>
+                )}
+                {down && (
+                  <span
+                    className="min-w-0 truncate"
+                    data-testid="attention-overall-details"
+                  >
+                    &nbsp;({down})
+                  </span>
+                )}
+                {nodesLine && (
+                  <span className="flex-none">
+                    {pods && "\u00a0·\u00a0"}
+                    {nodesLine}
+                  </span>
+                )}
+              </span>
+            )}{" "}
+            {(!pods || podsUnread.length > 0) && (
+              <span className="min-w-0 max-w-full">
+                <UnreadMark unread={podsUnread}>
+                  {t("cluster", "podsNotCounted", {
+                    where: unreadWhere(podsUnread, t),
+                  })}
+                </UnreadMark>
+              </span>
+            )}
           </span>
-          <span />
-          <span />
-          <span />
         </div>
         {unchecked.length > 0 && (
           <div
@@ -661,8 +672,12 @@ export function WorkloadsPanel({
                 card.unread.length > 0 ? (
                   <UnreadMark unread={card.unread}>
                     {partial
-                      ? t("cluster", "notReadWhere", {
-                          where: unreadWhere(card.unread, t),
+                      ? parts(t("cluster", "notReadWhere"), {
+                          where: (
+                            <span className="inline-block max-w-full">
+                              {unreadWhere(card.unread, t)}
+                            </span>
+                          ),
                         })
                       : unreadWhere(card.unread, t)}
                   </UnreadMark>

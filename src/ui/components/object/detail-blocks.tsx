@@ -401,6 +401,8 @@ export interface CompositionSegment {
   tone: CompositionTone;
   /** Counted from what nobody could confirm: drawn with the not-read mark. */
   unread?: boolean;
+  /** Words that qualify the count, kept whole: they wrap onto their own line rather than break. */
+  qualifier?: string;
 }
 
 const SEGMENT_BAR: Record<CompositionTone, string> = {
@@ -485,20 +487,40 @@ export function Composition({
             {emptyMessage ?? <T section="empty" k="nothingScheduled" />}
           </span>
         ) : (
-          visible.map((segment) => (
-            <span
-              key={segment.label}
-              className={cn(
-                SEGMENT_LEGEND[segment.tone],
-                segment.unread && "inline-flex items-center gap-1"
-              )}
-            >
-              {segment.unread && (
-                <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
-              )}
-              {segment.count} {segment.label}
-            </span>
-          ))
+          visible.map((segment) =>
+            segment.qualifier ? (
+              <span
+                key={segment.label}
+                className={cn(
+                  SEGMENT_LEGEND[segment.tone],
+                  "inline-flex flex-wrap items-center gap-x-1.5"
+                )}
+              >
+                <span className="whitespace-nowrap">
+                  {segment.count} {segment.label}
+                </span>{" "}
+                <span className="inline-flex items-center gap-1 whitespace-nowrap">
+                  {segment.unread && (
+                    <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
+                  )}
+                  {segment.qualifier}
+                </span>
+              </span>
+            ) : (
+              <span
+                key={segment.label}
+                className={cn(
+                  SEGMENT_LEGEND[segment.tone],
+                  segment.unread && "inline-flex items-center gap-1"
+                )}
+              >
+                {segment.unread && (
+                  <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
+                )}
+                {segment.count} {segment.label}
+              </span>
+            )
+          )
         )}
       </div>
       {note && <p className="mt-1.5 text-[11px] text-fg-fnt">{note}</p>}

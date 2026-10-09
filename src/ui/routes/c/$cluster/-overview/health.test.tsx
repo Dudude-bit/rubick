@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter } from "@/test/render";
@@ -401,8 +401,8 @@ describe("a scope one namespace of which refused its pods", () => {
    */
   it("draws a verdict its pods left unconfirmed grey with the not-read mark", async () => {
     await wrap(<WorkloadsPanel overview={overview} scope="team-blind" />);
-    const segment = screen.getByText(/1 Unavailable/);
-    expect(segment).toHaveTextContent("1 Unavailable · pods not read");
+    const segment = screen.getByText("1 Unavailable").parentElement!;
+    expect(segment).toHaveTextContent("1 Unavailable pods not read");
     expect(segment).toHaveClass("text-fg-fnt");
     expect(segment).not.toHaveClass("text-err");
     expect(segment.querySelector("svg")).toHaveClass("lucide-eye-off");
@@ -462,7 +462,30 @@ describe("a scope one namespace of which refused its pods", () => {
       .closest("div")!.parentElement!;
     expect(deployments).toHaveTextContent("3");
     expect(deployments).not.toHaveTextContent("team-blind");
-    expect(screen.getAllByText("not read in team-blind")).toHaveLength(2);
+    expect(screen.getAllByText("in team-blind")).toHaveLength(2);
+  });
+
+  /**
+   * Marco in Russian at 1024: three tiles broke their not-read lines
+   * mid-phrase, "не прочитано в пространстве / имён team-blind" and
+   * "1 Unavailable · поды не / прочитаны". Fails if a tile can break inside
+   * the where, or inside the count or its qualifier, rather than between
+   * them.
+   */
+  it("wraps a tile's not-read words only between whole phrases", async () => {
+    await wrap(
+      <WorkloadsPanel overview={beside} scope="team-checkout, team-blind" />
+    );
+    for (const where of screen.getAllByText("in team-blind"))
+      expect(where).toHaveClass("inline-block", "max-w-full");
+
+    cleanup();
+    await wrap(<WorkloadsPanel overview={overview} scope="team-blind" />);
+    const count = screen.getByText("1 Unavailable");
+    const qualifier = screen.getByText("pods not read");
+    expect(count).toHaveClass("whitespace-nowrap");
+    expect(qualifier).toHaveClass("whitespace-nowrap");
+    expect(count.contains(qualifier)).toBe(false);
   });
 
   /**
@@ -527,9 +550,37 @@ describe("a scope one namespace of which refused its pods", () => {
         nodesKnown={false}
       />
     );
-    expect(screen.getByTestId("attention-overall")).toHaveTextContent(
-      "2 of 4 pods ready (1 CreateContainerConfigError, 1 Completed) · pods not counted in team-blind"
+    const overall = screen.getByTestId("attention-overall");
+    expect(overall).toHaveTextContent(
+      "2 of 4 pods ready (1 CreateContainerConfigError, 1 Completed)"
     );
+    expect(overall).toHaveTextContent("pods not counted in team-blind");
+  });
+
+  /**
+   * Marco in Russian at 1024: the overall row ended "(1
+   * CreateContainerConfigErr..." and the words saying team-blind's pods were
+   * not counted were the part cut off. Fails if the qualifier sits inside
+   * anything that truncates, or the details are not what gives way.
+   */
+  it("lets the details give way on the overall row and never the not-counted words", async () => {
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([], {
+          overview: beside,
+        } as Partial<AttentionInputs>)}
+        pods={beside.pods}
+        podsUnread={[refusedPods]}
+        nodes={[]}
+        nodesKnown={false}
+      />
+    );
+    const details = screen.getByTestId("attention-overall-details");
+    expect(details).toHaveClass("truncate");
+    expect(details).toHaveTextContent("(1 CreateContainerConfigError");
+    const qualifier = screen.getByText("pods not counted in team-blind");
+    expect(qualifier.closest(".truncate, .whitespace-nowrap")).toBeNull();
+    expect(screen.getByTestId("attention-overall")).toHaveClass("flex-wrap");
   });
 
   /** Share said "could not be read" for a refusal, and nowhere said where. */
