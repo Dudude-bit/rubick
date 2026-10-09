@@ -1,3 +1,5 @@
+import type { CSSProperties } from "react";
+
 import { cn } from "@/lib/utils";
 import { KindIcon } from "./KindIcon";
 import { splitName, identHue, kindHue } from "@/lib/resource-identity";
@@ -65,6 +67,9 @@ export interface ResourceNameProps {
   size?: ResourceNameSize;
 }
 
+/** How much of a name's start any column keeps: the start says what it is, the tail which one. */
+const KEEP_CHARS = 8;
+
 /** The box the parts expect: baseline-aligned, shrinkable, one gap. */
 export const RESOURCE_NAME_SHELL =
   "-mx-0.5 inline-flex min-w-0 items-baseline gap-1 rounded-[3px] px-0.5";
@@ -115,6 +120,12 @@ export function ResourceName({
       : colouring === "minimal"
         ? "text-fg-fnt"
         : "text-fg";
+  const lead =
+    (namespace ? namespace.length + 1 : 0) +
+    (showKind ? kind.length + 1 : 0) +
+    stem.length;
+  const kept = `min(${Math.min(lead, KEEP_CHARS)}ch, 60%)`;
+  const keep = tail ? ({ "--keep": kept } as CSSProperties) : undefined;
 
   return (
     <>
@@ -123,12 +134,9 @@ export function ResourceName({
         className={cn("h-2.5 w-2.5 self-center", iconClassName)}
         data-testid="resource-ref-icon"
       />
-      {/* The tail is the part that says *which* object this is — a pod's
-          generated suffix, a ReplicaSet's template hash — and truncating the
-          name as one run is what hid it. A long shared prefix then filled
-          the column and every row ended in the same ellipsis. Everything up
-          to the tail shrinks and ellipses; the tail does not shrink at all.
-          Where `splitName` finds no tail this is exactly what it was. */}
+      {/* The start says what the object is and the tail which one, so a
+          narrow column cuts the middle: the lead gives way down to its first
+          characters, then the tail loses its own start. */}
       <span
         className={cn(
           // `overflow-hidden` is not decoration: it is the clipping the
@@ -140,6 +148,7 @@ export function ResourceName({
           "flex min-w-0 overflow-hidden whitespace-nowrap font-mono",
           RESOURCE_NAME_SIZE[size]
         )}
+        style={keep}
         data-testid="resource-ref-name"
         onMouseEnter={(event) => {
           const box = event.currentTarget;
@@ -150,7 +159,7 @@ export function ResourceName({
             : "";
         }}
       >
-        <span className="truncate">
+        <span className="truncate" style={keep && { minWidth: "var(--keep)" }}>
           {namespace && (
             <span className="text-fg-fnt" data-testid="resource-ref-namespace">
               {namespace}/
@@ -181,14 +190,23 @@ export function ResourceName({
           </span>
         </span>
         <span
-          // Never shrinks, so the stem gives up its room first — but capped
-          // at the box, so a tail that alone exceeds it is ellipsised rather
-          // than cut mid-hash into something that reads like a whole name.
-          className={cn("max-w-full flex-none truncate", tailClass)}
-          style={tailStyle}
+          // Right to left, so a tail with no room keeps its end; whole
+          // characters, so the cut never shows half a glyph. The lead's own
+          // ellipsis marks the cut once the lead is longer than it keeps.
+          className={cn(
+            "max-w-[calc(100%-var(--keep,0px))] flex-none overflow-hidden whitespace-nowrap [direction:rtl]",
+            lead > KEEP_CHARS ? "text-clip" : "text-ellipsis",
+            tailClass
+          )}
+          style={{
+            ...tailStyle,
+            maxWidth: tail
+              ? `round(down, calc(100% - ${kept}), 1ch)`
+              : undefined,
+          }}
           data-testid="resource-ref-tail"
         >
-          {tail}
+          <span dir="ltr">{tail}</span>
         </span>
       </span>
     </>

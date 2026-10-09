@@ -670,6 +670,50 @@ describe("a name cut short", () => {
     );
   });
 
+  /**
+   * With a peek open the Events list drew a Job's pod as "-29858782-c8…":
+   * the stem shrank to nothing and the tail lost its end, so the row named
+   * no object. Fails if a narrow column can take the name's first characters,
+   * or cuts the tail from its end rather than its start.
+   */
+  it("keeps the start and the end of a name, cutting the middle", async () => {
+    await wrap(
+      <ResourceName kind="Pod" name="reports-29858782-c8xkz" showKind={false} />
+    );
+    const box = screen.getByTestId("resource-ref-name");
+    const [lead, tail] = [...box.children] as HTMLElement[];
+    expect(box.style.getPropertyValue("--keep")).toBe("min(7ch, 60%)");
+    expect(lead.style.minWidth).toBe("var(--keep)");
+    expect(tail.className).toContain("max-w-[calc(100%-var(--keep,0px))]");
+    expect(tail.className).toContain("[direction:rtl]");
+    expect(tail.firstElementChild).toHaveAttribute("dir", "ltr");
+    expect(tail).toHaveTextContent("-29858782-c8xkz");
+  });
+
+  /** Fails if a cut name shows two ellipses, or none, where its middle went. */
+  it("marks the cut with one ellipsis, the lead's when it is the longer", async () => {
+    const { unmount } = await wrap(
+      <ResourceName kind="Pod" name="web-7596d7fc77-xl4m8" showKind={false} />
+    );
+    expect(screen.getByTestId("resource-ref-tail").className).toContain(
+      "text-ellipsis"
+    );
+    unmount();
+    await wrap(
+      <ResourceName
+        kind="Pod"
+        name="recommendations-685f64b65d-bjc2c"
+        showKind={false}
+      />
+    );
+    expect(
+      screen.getByTestId("resource-ref-name").style.getPropertyValue("--keep")
+    ).toBe("min(8ch, 60%)");
+    expect(screen.getByTestId("resource-ref-tail").className).toContain(
+      "text-clip"
+    );
+  });
+
   /** A tooltip repeating a name that is already whole is noise on every row of every list. */
   it("says nothing extra over a name drawn whole", async () => {
     await wrap(<ResourceName kind="ClusterRole" name="cluster-admin" />);
