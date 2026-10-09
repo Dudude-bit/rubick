@@ -422,118 +422,123 @@ function ScopeTabItem({
             // own minimums because a flex item's intrinsic minimum is not
             // reliably the sum of its children's, and a tab narrower than
             // its own parts is a tab with its label written over itself —
-            // hence `overflow-hidden` as the backstop.
-            "flex max-w-104 shrink items-center gap-[5px] overflow-hidden rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
+            // hence the label clips as the backstop. The close button sits
+            // outside what clips, so no width can take it away.
+            "flex max-w-104 shrink items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
             // A lost cluster needs room for the one fact only this tab still
             // holds — the name it was pointed at — and for the word that says
             // it is gone.
-            tab.missing ? "min-w-84" : showName ? "min-w-70" : "min-w-54",
+            FLOOR[tab.missing ? "missing" : showName ? "named" : "plain"][
+              keepsShell ? 1 : 0
+            ],
             active ? "bg-sel text-fg-mut" : "text-fg-fnt hover:bg-hover"
           )}
         >
-          <ContextPopover
-            open={open === "ctx"}
-            onOpenChange={guard("ctx")}
-            activeContext={context}
-            onSelect={pickCluster}
-          >
-            {/* Right, not Down: the strip is walked with Left and Right, but
+          <span className="flex min-w-0 items-center gap-[5px] overflow-hidden">
+            <ContextPopover
+              open={open === "ctx"}
+              onOpenChange={guard("ctx")}
+              activeContext={context}
+              onSelect={pickCluster}
+            >
+              {/* Right, not Down: the strip is walked with Left and Right, but
                 this is the one segment where a menu is the point, and Down
                 is already spoken for by the `+` beside it. */}
-            <ClusterMenu context={context ?? ""} openKeys={["ArrowRight"]}>
-              <button
-                type="button"
-                aria-haspopup="menu"
-                className={cn(
-                  segClass(open === "ctx"),
-                  showName ? "min-w-16 shrink-6" : "flex-none",
-                  tab.missing && "min-w-26"
-                )}
-              >
-                {/* Only the dot carries the cluster colour here — the mark
+              <ClusterMenu context={context ?? ""} openKeys={["ArrowRight"]}>
+                <button
+                  type="button"
+                  aria-haspopup="menu"
+                  className={cn(
+                    segClass(open === "ctx"),
+                    showName ? "min-w-16 shrink-6" : "flex-none",
+                    tab.missing && "min-w-26"
+                  )}
+                >
+                  {/* Only the dot carries the cluster colour here, and the mark
                     stays at text contrast so the tab reads as one label and
                     the colour signal has a single owner. A cluster the
                     kubeconfig has lost gets a ring instead of a fill, so the
                     state survives with the hue taken away. */}
-                <span
-                  className={cn(
-                    "h-1.5 w-1.5 flex-none rounded-full",
-                    tab.missing && "border border-fg-fnt"
+                  <span
+                    className={cn(
+                      "h-1.5 w-1.5 flex-none rounded-full",
+                      tab.missing && "border border-fg-fnt"
+                    )}
+                    style={tab.missing ? undefined : { background: color }}
+                  />
+                  <ProviderMark
+                    provider={detectProvider(context ?? "")}
+                    className="h-[13px] w-[13px] flex-none"
+                  />
+                  {showName && (
+                    <span className="min-w-0 truncate">
+                      {alias ?? context ?? t("cluster", "noCluster")}
+                    </span>
                   )}
-                  style={tab.missing ? undefined : { background: color }}
-                />
-                <ProviderMark
-                  provider={detectProvider(context ?? "")}
-                  className="h-[13px] w-[13px] flex-none"
-                />
-                {showName && (
-                  <span className="min-w-0 truncate">
-                    {alias ?? context ?? t("cluster", "noCluster")}
-                  </span>
-                )}
-              </button>
-            </ClusterMenu>
-          </ContextPopover>
+                </button>
+              </ClusterMenu>
+            </ContextPopover>
 
-          {/* Not a suffix on the name but a state of the tab, in the same
+            {/* Not a suffix on the name but a state of the tab, in the same
               micro-label the context list uses for a provider. The tab
               cannot be made live and nothing about it is going to change
               until the kubeconfig does. */}
-          {tab.missing && (
-            <span className="flex-none rounded border border-hair px-1 text-[10px] uppercase leading-[13px] tracking-wider text-fg-fnt">
-              {t("cluster", "missingBadge")}
-            </span>
-          )}
-
-          <span aria-hidden="true" className="flex-none text-fg-fnt">
-            /
-          </span>
-
-          <NamespacePopover
-            open={open === "ns"}
-            onOpenChange={guard("ns")}
-            scope={scope}
-            onSelect={(next, keepOpen) => {
-              if (!keepOpen) setOpen(null);
-              setNamespaceScope(next);
-            }}
-          >
-            <button
-              type="button"
-              // A floor here as well as on the route: a namespace ground
-              // down to a bare chevron is not a shorter label, it is a
-              // segment that has stopped saying anything and kept its
-              // punctuation.
-              className={cn(segClass(open === "ns"), "min-w-14 shrink-6")}
-            >
-              <span className="min-w-0 truncate">{scopeLabel(scope, t)}</span>
-              <span aria-hidden="true" className="flex-none text-[9px]">
-                ▾
+            {tab.missing && (
+              <span className="flex-none rounded border border-hair px-1 text-[10px] uppercase leading-[13px] tracking-wider text-fg-fnt">
+                {t("cluster", "missingBadge")}
               </span>
-            </button>
-          </NamespacePopover>
+            )}
 
-          <span aria-hidden="true" className="flex-none text-fg-fnt">
-            /
-          </span>
+            <span aria-hidden="true" className="flex-none text-fg-fnt">
+              /
+            </span>
 
-          {/* The tab's name. One `/` throughout makes cluster, namespace and
+            <NamespacePopover
+              open={open === "ns"}
+              onOpenChange={guard("ns")}
+              scope={scope}
+              onSelect={(next, keepOpen) => {
+                if (!keepOpen) setOpen(null);
+                setNamespaceScope(next);
+              }}
+            >
+              <button
+                type="button"
+                // A floor here as well as on the route: a namespace ground
+                // down to a bare chevron is not a shorter label, it is a
+                // segment that has stopped saying anything and kept its
+                // punctuation.
+                className={cn(segClass(open === "ns"), "min-w-14 shrink-6")}
+              >
+                <span className="min-w-0 truncate">{scopeLabel(scope, t)}</span>
+                <span aria-hidden="true" className="flex-none text-[9px]">
+                  ▾
+                </span>
+              </button>
+            </NamespacePopover>
+
+            <span aria-hidden="true" className="flex-none text-fg-fnt">
+              /
+            </span>
+
+            {/* The tab's name. One `/` throughout makes cluster, namespace and
               page one path — the same trail a detail page draws — and the
               page end of it carries the strongest colour in the tab,
               because it is the part that says which tab this is. */}
-          {keepsShell && (
-            <SquareTerminal
-              className="h-3 w-3 flex-none text-ok"
-              aria-hidden="true"
-            />
-          )}
-          <span
-            className={cn(
-              "min-w-18 truncate shrink",
-              active ? "text-fg" : "text-fg-mut"
+            {keepsShell && (
+              <SquareTerminal
+                className="h-3 w-3 flex-none text-ok"
+                aria-hidden="true"
+              />
             )}
-          >
-            {route}
+            <span
+              className={cn(
+                "min-w-18 truncate shrink",
+                active ? "text-fg" : "text-fg-mut"
+              )}
+            >
+              {route}
+            </span>
           </span>
 
           <button
@@ -572,6 +577,16 @@ function ScopeTabItem({
     </Tooltip>
   );
 }
+
+/**
+ * A tab's floor, then the same with the shell glyph: the width of its parts
+ * at their own minimums in Inter at 12px, so the label never clips.
+ */
+const FLOOR = {
+  missing: ["min-w-89", "min-w-94"],
+  named: ["min-w-70", "min-w-74"],
+  plain: ["min-w-57", "min-w-61"],
+} as const;
 
 /** The open segment carries the fill: it is what says which of the two
  *  lists you are looking at while both stay visible. */
