@@ -2856,6 +2856,15 @@ export const ru: Catalogue = {
     sourceLongTask: "Подвисание: окно не отвечало 50 мс или дольше.",
     sourceFrameGap:
       "Подвисание: окно нарисовало кадр с опозданием на 50 мс или больше.",
+    happeningLabel: "Что происходило",
+    stallMs: "{ms} мс",
+    inputTyping: "Ввод в поле «{field}»",
+    inputTypingUnnamed: "Ввод в поле",
+    inputKey: "Клавиша {key}",
+    inputClick: "Нажатие на «{target}»",
+    inputClickUnnamed: "Нажатие",
+    inputNone:
+      "Перед этим ничего не нажимали: работа самого приложения, например пачка watch или пришедший ответ",
     listsLabel: "Большие списки на экране",
     listRows: {
       one: "{n} строка {label}",

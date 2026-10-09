@@ -101,4 +101,41 @@ describe("StallIndicator", () => {
     expect(button.className).toContain("text-warn");
     expect(button.className).not.toContain("text-err");
   });
+
+  /**
+   * The sheet named no culprit, so 215 ms could not be tied to the Pods
+   * filter. Fails if a stall stops saying the address it happened on and
+   * what the reader had just done, without the characters typed, or stops
+   * saying when nothing was done.
+   */
+  it("names the address and what the reader did just before each stall", () => {
+    const stop = stallWatch.start({
+      performance: { now: () => performance.now() },
+      requestAnimationFrame: () => 0,
+      cancelAnimationFrame: () => {},
+    });
+    window.history.replaceState(null, "", "/c/acme-staging/pods?q=pod-1");
+    render(
+      <>
+        <StallIndicator />
+        <input aria-label="Search..." defaultValue="pod-1" />
+      </>
+    );
+    fireEvent.keyDown(screen.getByLabelText("Search..."), { key: "1" });
+    stallWatch.noteStall(215);
+    stallWatch.noteInput({ kind: "key", key: "g", at: -10_000 });
+    stallWatch.noteStall(70);
+    repaint();
+    fireEvent.click(screen.getByRole("button", { name: "Why slow" }));
+
+    const lines = screen.getAllByRole("listitem");
+    expect(lines[1]).toHaveTextContent("215 ms");
+    expect(lines[1]).toHaveTextContent("/pods?q=pod-1");
+    expect(lines[1]).toHaveTextContent("Typing in “Search...”");
+    expect(lines[1]).not.toHaveTextContent("Typing in “1”");
+    expect(lines[0]).toHaveTextContent("70 ms");
+    expect(lines[0]).toHaveTextContent(/No input just before it/);
+    stop();
+    window.history.replaceState(null, "", "/");
+  });
 });

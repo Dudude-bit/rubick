@@ -1,4 +1,4 @@
-import { Turtle } from "lucide-react";
+import { Cpu, Keyboard, MousePointerClick, Turtle } from "lucide-react";
 import { useState } from "react";
 
 import {
@@ -15,7 +15,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { STALL_WARN, useStalls } from "./useStalls";
-import { useT } from "@/i18n/useT";
+import type { Stall, StallInput } from "@/lib/stall-watch";
+import { useT, type T } from "@/i18n/useT";
 import { cn } from "@/lib/utils";
 import { useSettingsStore } from "@/stores/settingsStore";
 
@@ -78,6 +79,21 @@ export function StallIndicator() {
                 : t("slow", "sourceLongTask")
             }
           />
+          <div>
+            <dt className="text-[10px] font-semibold uppercase tracking-[.07em] text-fg-fnt">
+              {t("slow", "happeningLabel")}
+            </dt>
+            <dd>
+              <ul className="mt-1 flex flex-col gap-1.5">
+                {report.stalls
+                  .slice(-SHOWN_STALLS)
+                  .reverse()
+                  .map((stall) => (
+                    <StallLine key={`${stall.at}-${stall.ms}`} stall={stall} />
+                  ))}
+              </ul>
+            </dd>
+          </div>
           <Fact
             label={t("slow", "listsLabel")}
             value={
@@ -132,6 +148,68 @@ export function StallIndicator() {
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+const SHOWN_STALLS = 6;
+
+/** The address inside the cluster, the way the reader would type it after the cluster. */
+function placeOf(where: string): string {
+  const inside = where.replace(/^\/c\/[^/?]+/, "") || "/";
+  try {
+    return decodeURIComponent(inside);
+  } catch {
+    return inside;
+  }
+}
+
+function inputWords(stall: Stall, t: T): string {
+  const input = stall.input;
+  if (!input) return t("slow", "inputNone");
+  if (input.kind === "key") return t("slow", "inputKey", { key: input.key });
+  if (input.kind === "typing")
+    return input.field
+      ? t("slow", "inputTyping", { field: input.field })
+      : t("slow", "inputTypingUnnamed");
+  return input.target
+    ? t("slow", "inputClick", { target: input.target })
+    : t("slow", "inputClickUnnamed");
+}
+
+const INPUT_ICON = {
+  key: Keyboard,
+  typing: Keyboard,
+  click: MousePointerClick,
+} satisfies Record<StallInput["kind"], typeof Keyboard>;
+
+function StallLine({ stall }: { stall: Stall }) {
+  const t = useT();
+  const Icon = stall.input ? INPUT_ICON[stall.input.kind] : Cpu;
+  return (
+    <li className="flex items-baseline gap-2.5">
+      <span
+        className={cn(
+          "w-12 flex-none text-right tabular-nums",
+          stall.ms >= STALL_WARN.longestMs ? "text-warn" : "text-fg"
+        )}
+      >
+        {t("slow", "stallMs", { ms: Math.round(stall.ms) })}
+      </span>
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        {stall.where !== null && (
+          <span
+            className="truncate font-mono text-[11px] text-fg-mid"
+            title={placeOf(stall.where)}
+          >
+            {placeOf(stall.where)}
+          </span>
+        )}
+        <span className="flex items-start gap-1 text-[11px] text-fg-mut">
+          <Icon className="mt-0.5 h-3 w-3 flex-none" aria-hidden />
+          <span>{inputWords(stall, t)}</span>
+        </span>
+      </span>
+    </li>
   );
 }
 

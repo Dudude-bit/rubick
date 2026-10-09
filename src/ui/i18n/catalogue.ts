@@ -2708,6 +2708,15 @@ export const en = {
       "A stall is a moment the window could not respond for 50 ms or more.",
     sourceFrameGap:
       "A stall is a moment the window drew a frame 50 ms or more late.",
+    happeningLabel: "What was happening",
+    stallMs: "{ms} ms",
+    inputTyping: "Typing in “{field}”",
+    inputTypingUnnamed: "Typing in a field",
+    inputKey: "Key {key}",
+    inputClick: "Click on “{target}”",
+    inputClickUnnamed: "A click",
+    inputNone:
+      "No input just before it: the app's own work, such as a watch batch or an answer arriving",
     listsLabel: "Big lists on screen",
     listRows: {
       one: "{n} row of {label}",

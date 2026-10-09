@@ -271,6 +271,8 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "not a shortcut: notices that the reader is here",
   "src/ui/routes/c/$cluster/-peek/peek-escape.ts":
     "esc closes the open peek ahead of the row or filter under it",
+  "src/ui/lib/stall-watch.ts":
+    "not a shortcut: remembers the last key for the Why slow sheet",
 };
 
 export function chordsOf(): Shortcut[] {
