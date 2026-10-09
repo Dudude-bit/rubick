@@ -1609,6 +1609,12 @@ export const en = {
     ports: "Ports",
     terminals: "Shells",
     endShell: "End the shell in {pod}",
+    shellIdle: "idle",
+    shellConnecting: "connecting",
+    shellConnected: "connected",
+    shellClosing: "ending",
+    shellDisconnected: "ended",
+    shellError: "error",
     shellEndedOnLeave: "Shell ended",
     shellEndedOnLeaveBody:
       "The shell in {target} was ended because its tab moved to another page.",
