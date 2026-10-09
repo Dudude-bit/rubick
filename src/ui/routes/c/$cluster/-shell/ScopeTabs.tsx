@@ -772,6 +772,9 @@ function NamespacePopover({
    *  while it is open, and toggles, leave every row where the pointer last
    *  saw it. A name that arrives later joins at the end. */
   const [order, setOrder] = useState<readonly string[]>([]);
+  /** Every row this opening has drawn: a toggle or a late answer about
+   *  access never takes one away while the list is open. */
+  const [drawn, setDrawn] = useState<readonly string[]>([]);
   /** Whether the namespaces the reader has no access to are being shown
    *  anyway — a per-open escape hatch, off again on close. */
   const [showBlocked, setShowBlocked] = useState(false);
@@ -784,6 +787,7 @@ function NamespacePopover({
     if (open) {
       setPinned(scope);
       setOrder([]);
+      setDrawn([]);
     } else {
       setFilter("");
       setCursor(-1);
@@ -809,7 +813,8 @@ function NamespacePopover({
     for (const name of seedScope(contextNamespace)) offer(name, "kubeconfig");
     for (const name of recent) offer(name, "recent");
   }
-  for (const name of scope) offer(name, listed ? "unlisted" : undefined);
+  for (const name of [...scope, ...drawn])
+    offer(name, listed ? "unlisted" : undefined);
 
   const access = useNamespaceAccess(offered.map((ns) => ns.name));
 
@@ -828,15 +833,21 @@ function NamespacePopover({
   // A namespace where nothing may be listed is not offered. Never one the
   // review could not reach (absent = unknown, kept), never one that refuses
   // pods and serves other lists (offered, saying what it refuses), never a
-  // selected one (hiding it would strand a scope the window is on), and never
-  // the one the reader typed in full; a reveal brings the rest back.
+  // selected one (hiding it would strand a scope the window is on), never
+  // the one the reader typed in full, and never one this opening has drawn;
+  // a reveal brings the rest back.
   const usable = (name: string) =>
     showBlocked ||
     !access.shut.has(name) ||
     scope.includes(name) ||
-    name === typedName;
+    name === typedName ||
+    drawn.includes(name);
   const shown = visible.filter((ns) => usable(ns.name));
   const hiddenCount = visible.length - shown.length;
+  const undrawn = shown
+    .map((ns) => ns.name)
+    .filter((name) => !drawn.includes(name));
+  if (open && !opening && undrawn.length > 0) setDrawn([...drawn, ...undrawn]);
 
   // Selected-at-open first, the rest after, each group keeping the summary's
   // own problem/pod/name order. A stable sort keyed only on membership does

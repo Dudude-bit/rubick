@@ -481,6 +481,37 @@ describe("watching several namespaces at once", () => {
   });
 
   /**
+   * Marco unchecked kube-system, where nothing may be listed, and its row
+   * vanished under the pointer for a "1 namespace hidden" line. Fails if a
+   * row drawn in this opening leaves it, or is not hidden at the next.
+   */
+  it("keeps a row it drew while the list is open, and hides it at the next opening", async () => {
+    const user = userEvent.setup();
+    nsAccess.answers = [
+      { namespace: "ns-2", allowed: false, otherLists: false },
+    ];
+    await draw(["ns-0", "ns-2"]);
+    await openPicker(user);
+    await waitFor(() =>
+      expect(rowFor("ns-2")).toHaveAccessibleName(/pod list forbidden/)
+    );
+
+    await user.keyboard("{Control>}");
+    await user.click(rowFor("ns-2"));
+    await user.keyboard("{/Control}");
+    expect(scope()).toEqual(["ns-0"]);
+    expect(rowFor("ns-2")).toHaveAttribute("aria-selected", "false");
+    expect(screen.queryByText(/hidden/)).toBeNull();
+
+    await user.keyboard("{Escape}");
+    await openPicker(user);
+    expect(screen.queryByRole("option", { name: /^ns-2,/ })).toBeNull();
+    expect(
+      screen.getByText("1 namespace hidden: nothing in it may be listed")
+    ).toBeInTheDocument();
+  });
+
+  /**
    * Marco's picker said "1 namespace hidden: no access" for team-blind, where
    * he may list Deployments, Services and Events and only pods are refused.
    * Fails if a namespace refusing pods and serving other lists, or one whose
@@ -826,6 +857,35 @@ describe("a token that may not list namespaces", () => {
       within(list).getByRole("option", { name: "team-shared, recent" })
     );
     expect(scope()).toEqual(["team-shared"]);
+  });
+
+  /**
+   * Marco typed kube-system, added it, and unchecked it: the row went from
+   * under the pointer. Fails if a namespace the reader added and took back
+   * leaves the list while it is open.
+   */
+  it("keeps a typed namespace's row after it is unchecked again", async () => {
+    const user = userEvent.setup();
+    nsAccess.answers = [
+      { namespace: "kube-system", allowed: false, otherLists: false },
+    ];
+    await mount();
+    const list = await openPicker(user);
+
+    await user.keyboard("kube-system{Control>}{Enter}{/Control}");
+    expect(scope()).toEqual(["kube-system"]);
+    await user.clear(screen.getByRole("combobox"));
+    await user.keyboard("{Control>}");
+    await user.click(
+      within(list).getByRole("option", { name: /^kube-system/ })
+    );
+    await user.keyboard("{/Control}");
+
+    expect(scope()).toEqual([]);
+    expect(
+      within(list).getByRole("option", { name: /^kube-system/ })
+    ).toHaveAttribute("aria-selected", "false");
+    expect(screen.queryByText(/namespace hidden/)).toBeNull();
   });
 
   /**
