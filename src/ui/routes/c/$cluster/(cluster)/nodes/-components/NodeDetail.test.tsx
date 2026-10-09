@@ -538,6 +538,34 @@ describe("a pod on the node changing", () => {
     useClusterStore.setState({ isConnected: true });
   });
 
+  /**
+   * Sam's node Connections said a crash-looping pod was up between crashes
+   * 1.7 s late and kept saying it 6 s after it exited: the neighbourhood was
+   * re-read on an eight-second poll. Fails if a pod on this node changing
+   * does not read it again while its tab is open.
+   */
+  it("reads What runs here again while Connections is open", async () => {
+    open("connections");
+    await renderPage();
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("node-pods")
+    );
+    expect(commands.subscribeOwnedPodWatch).toHaveBeenCalledWith(
+      "Node",
+      null,
+      "test-node-1"
+    );
+    await waitFor(() =>
+      expect(commands.getResourceConnections).toHaveBeenCalledTimes(1)
+    );
+
+    changed();
+
+    await waitFor(() =>
+      expect(commands.getResourceConnections).toHaveBeenCalledTimes(2)
+    );
+  });
+
   /** Fails if the Pods tab's rows wait for a poll after one of them changed. */
   it("reads the Pods tab again while it is open", async () => {
     open("pods");
@@ -552,7 +580,7 @@ describe("a pod on the node changing", () => {
     await waitFor(() => expect(commands.listPods).toHaveBeenCalledTimes(2));
   });
 
-  /** Fails if a tab that draws no pod holds a stream open. */
+  /** The neighbourhood is a read across the cluster: fails if a tab that draws no pod pays for one. */
   it("watches nothing while neither tab is open", async () => {
     open("overview");
     await renderPage();

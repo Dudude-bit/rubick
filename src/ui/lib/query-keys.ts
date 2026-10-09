@@ -175,6 +175,16 @@ export const queryKeys = {
     "budget",
     name,
   ],
+  /**
+   * One object's neighbourhood. `routeReads` is the Gateway API read
+   * versions the backend drew route hops with, `null` where none is served.
+   */
+  connections: (
+    kind: string,
+    namespace: string | null | undefined,
+    name: string | undefined,
+    routeReads: string[] | null
+  ): unknown[] => ["connections", kind, namespace ?? null, name, routeReads],
 
   /**
    * `list_namespaces` as a plain read. Not the Namespaces page's list, which

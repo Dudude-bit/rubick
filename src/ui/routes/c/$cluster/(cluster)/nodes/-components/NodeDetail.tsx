@@ -55,7 +55,7 @@ import {
   taintsSection,
 } from "@/lib/share/node-share";
 import { useResourceDetail } from "@/hooks";
-import { useConnections } from "@/hooks/useConnections";
+import { useConnections, useConnectionsKey } from "@/hooks/useConnections";
 import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { queryKeys } from "@/lib/query-keys";
 import { useMetrics } from "@/hooks/useMetrics";
@@ -146,6 +146,7 @@ export function NodeDetail() {
   // A Node is cluster-scoped, so its neighbourhood is read with no namespace
   // at all — the same query the drain dialog opens, and the same answer.
   const connections = useConnections(ResourceType.Node, name, null);
+  const connectionsKey = useConnectionsKey(ResourceType.Node, name, null);
 
   const { nodeMetrics, nodeStatus, nodeSampledAt } = useMetrics({
     includePods: false,
@@ -189,8 +190,15 @@ export function NodeDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
-  // The pods here, live, while the tab that draws each one's state is open.
-  const followed = activeTab === "pods" ? [podsKey] : [];
+  // The pods here, live, for the two tabs that draw each one's state. The
+  // neighbourhood is a read across the cluster, so it is asked again only
+  // while its tab is the one open.
+  const followed =
+    activeTab === "pods"
+      ? [podsKey]
+      : activeTab === "connections"
+        ? [connectionsKey]
+        : [];
   useOwnedPodsWatch(
     ResourceType.Node,
     null,
