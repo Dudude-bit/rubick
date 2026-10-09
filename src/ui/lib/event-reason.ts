@@ -234,3 +234,12 @@ export function eventReasonMark(reason: string | null): EventReasonMark {
     color: `hsl(${FAMILY_HUE[family]} var(--evt-s) var(--evt-l))`,
   };
 }
+
+/**
+ * A reason cut where it may break: between the words of its CamelCase, so
+ * `SuccessfulCreate` wraps as Successful, Create and never reads as `Succ…`.
+ * The pieces join back to the reason exactly.
+ */
+export function reasonWords(reason: string): string[] {
+  return reason.match(/[A-Z]+(?![a-z])|[A-Z]?[a-z0-9]+|[^A-Za-z0-9]+/g) ?? [];
+}

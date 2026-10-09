@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vite-plus/test";
 
-import { eventReasonMark, type EventFamily } from "./event-reason";
+import { eventReasonMark, reasonWords, type EventFamily } from "./event-reason";
 import { RESOURCE_REGISTRY } from "./resource-registry";
 
 /** One reason per family, and the family it has to land in. */
@@ -82,5 +82,37 @@ describe("eventReasonMark", () => {
   it("saturation and lightness stay in CSS so both themes track", () => {
     expect(eventReasonMark("Pulled").color).toContain("var(--evt-s)");
     expect(eventReasonMark("Pulled").color).toContain("var(--evt-l)");
+  });
+});
+
+describe("reasonWords", () => {
+  /** Dana read "Succ…" for both SuccessfulCreate and SuccessfulDelete; fails if a reason stops breaking between its own words. */
+  it("breaks a reason between the words of its CamelCase", () => {
+    expect(reasonWords("SuccessfulCreate")).toEqual(["Successful", "Create"]);
+    expect(reasonWords("FailedGetResourceMetric")).toEqual([
+      "Failed",
+      "Get",
+      "Resource",
+      "Metric",
+    ]);
+    expect(reasonWords("OOMKilling")).toEqual(["OOM", "Killing"]);
+    expect(reasonWords("NodeHasSufficientPID")).toEqual([
+      "Node",
+      "Has",
+      "Sufficient",
+      "PID",
+    ]);
+  });
+
+  /** Fails if a break point ever drops or adds a character of the cluster's word. */
+  it("joins back to the reason exactly", () => {
+    for (const reason of [
+      "Init:CreateContainerConfigError",
+      "BackOff",
+      "app-started_v2",
+      "CIDRNotAvailable",
+      "Pulled",
+    ])
+      expect(reasonWords(reason).join("")).toBe(reason);
   });
 });

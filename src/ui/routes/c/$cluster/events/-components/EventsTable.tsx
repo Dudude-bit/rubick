@@ -6,10 +6,12 @@ import { None } from "@/components/ui/none";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
+import { ReasonText } from "@/components/object/ReasonText";
 import type { EventInfo } from "@/generated/types";
 import { columnHeader } from "@/i18n/column-header";
 import { eventReasonMark } from "@/lib/event-reason";
 import { cn, formatDate } from "@/lib/utils";
+import { widestText } from "@/lib/text-width";
 import { hrefOf, objectLink } from "@/lib/links";
 import type { PeekTarget } from "@/hooks/usePeek";
 import { eventLanding } from "../../-object/attachment";
@@ -52,8 +54,11 @@ function ReasonCell({ row }: { row: { original: EventInfo } }) {
         {event.type}
         {family ? `, ${family}` : ""}:{" "}
       </span>
-      <Icon className="h-2.5 w-2.5 flex-none self-center" aria-hidden="true" />
-      <span className="truncate">{event.reason ?? <None />}</span>
+      <Icon
+        className="mt-[3px] h-2.5 w-2.5 flex-none self-start"
+        aria-hidden="true"
+      />
+      {event.reason ? <ReasonText reason={event.reason} /> : <None />}
     </span>
   );
 }
@@ -113,17 +118,40 @@ function AgeCell({ row }: { row: { original: EventInfo } }) {
   );
 }
 
+/** The severity mark and the family glyph, the gaps after each, and a cell's padding. */
+const reasonCellPx = (reasons: readonly string[]) =>
+  widestText(reasons, "mono", 7.2) + 10 + 6 + 10 + 6 + 20;
+
+/** What a cluster writes all day, held on one line wherever the table has room for it. */
+const COMMON_REASONS = [
+  "SuccessfulCreate",
+  "SuccessfulDelete",
+  "FailedScheduling",
+  "ScalingReplicaSet",
+] as const;
+
+/** The longest word in a reason Kubernetes writes: a narrower column wraps between words and never inside one. */
+const LONGEST_REASON_WORD = ["Unschedulable"] as const;
+
+/** The kind glyph and its gap, a cell's padding, and 15 glyphs: `checkout-…xl4m8`, a name's first part and its generated end. */
+const OBJECT_CELL_PX = Math.ceil(10 + 4 + 20 + 15 * 7.2);
+
 const REASON: ColumnDef<EventInfo> = {
   id: "reason",
   size: 210,
   accessorFn: (event) => event.reason ?? "",
   enableSorting: false,
+  meta: {
+    floor: () => reasonCellPx(LONGEST_REASON_WORD),
+    ideal: () => reasonCellPx(COMMON_REASONS),
+  },
   header: columnHeader("columns", "reason"),
   cell: ReasonCell,
 };
 const OBJECT: ColumnDef<EventInfo> = {
   id: "object",
   size: 300,
+  meta: { floor: OBJECT_CELL_PX },
   accessorFn: (event) =>
     `${event.involvedObject.kind}/${event.involvedObject.name}`,
   enableSorting: false,
@@ -169,6 +197,14 @@ const AGE: ColumnDef<EventInfo> = {
 
 const EVERY_NAMESPACE = [REASON, OBJECT, NAMESPACE, MESSAGE, COUNT, AGE];
 const ONE_NAMESPACE = [REASON, OBJECT, MESSAGE, COUNT, AGE];
+
+/** The columns as the layout reads them, for a test that lays the table out at a window's width. */
+// oxlint-disable-next-line react-refresh/only-export-components
+export const EVENT_COLUMNS = {
+  everyNamespace: EVERY_NAMESPACE,
+  oneNamespace: ONE_NAMESPACE,
+  objectPx: OBJECT_CELL_PX,
+};
 
 const uidOf = (event: EventInfo) => event.uid;
 

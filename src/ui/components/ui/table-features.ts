@@ -45,6 +45,8 @@ export interface AppColumnMeta {
   label?: HeaderSaying;
   /** Pixels the column is never drawn under, whatever the table's width; a function where it depends on the reader's language. */
   floor?: number | ((t: T) => number);
+  /** Pixels it is drawn at while the port has room for every column's. */
+  ideal?: number | ((t: T) => number);
 }
 
 /**

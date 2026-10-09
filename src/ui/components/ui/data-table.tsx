@@ -63,7 +63,7 @@ import {
 } from "./column-shares";
 import { controlAt } from "@/lib/row-control";
 import { holdTitles } from "@/lib/hold-titles";
-import { columnFloor } from "@/lib/column-label";
+import { columnFloor, columnIdeal } from "@/lib/column-label";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 
 import { cn } from "@/lib/utils";
@@ -883,6 +883,7 @@ function DataTableInner<TData extends RowData>({
   const specs = table.getVisibleFlatColumns().map((column) => ({
     size: column.getSize(),
     floor: columnFloor(column.columnDef, t),
+    ideal: columnIdeal(column.columnDef, t),
   }));
   const layout = tableLayout(specs, portWidth);
 
