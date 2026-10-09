@@ -3644,6 +3644,8 @@ export const en = {
       other: "{n} published",
     },
     stillTakingTraffic: ", still taking traffic",
+    noneOfItsPodsPublished: "none of its pods published",
+    acrossTheService: "across the Service: {counts}",
     delUnconfirmedMark: "{vendor} · {claim} · unconfirmed",
     delEditWhatApplies: "To change it for good, change what {name} applies.",
     delEditManifests: "To change it for good, edit the manifests under {path}.",
@@ -4411,6 +4413,10 @@ export const en = {
     attentionNothing: "nothing needs attention",
     attentionNoneFound: "nothing found in what could be checked",
     attentionNotChecked: "Not checked",
+    attentionUnconfirmed:
+      "its controller has said {word} for {age}; its pods were not read",
+    attentionUnconfirmedUndated:
+      "its controller says {word}; its pods were not read",
     attentionStillReading: "still reading",
     attentionRefused: "refused",
     attentionForbidden: "{verb} is forbidden",

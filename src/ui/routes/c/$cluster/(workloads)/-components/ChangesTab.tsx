@@ -23,6 +23,7 @@ import {
   useDeliveryIntercept,
 } from "../../-delivery/useDelivery";
 import { useRollback } from "../../-object/useRollback";
+import { useHeldRead } from "@/hooks/useHeldRead";
 import { useLiveQueries, useLiveQuery } from "@/hooks/useLiveQuery";
 import { useNow } from "@/hooks/useNow";
 import { useAppSearch } from "@/hooks/useSearchParam";
@@ -92,18 +93,19 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
   const now = useNow();
   const context = useClusterStore((s) => s.currentContext);
 
-  const revisions = useLiveQuery({
+  const revisionsKey = [
+    context,
+    "changes",
+    "revisions",
+    subject.kind,
+    subject.namespace,
+    subject.name,
+  ];
+  const revisionsRead = useLiveQuery({
     // A rollout is a deploy, not the cluster's own work: the same rate the
     // Helm history and the delivery owners are read at.
     refresh: "steady",
-    queryKey: [
-      context,
-      "changes",
-      "revisions",
-      subject.kind,
-      subject.namespace,
-      subject.name,
-    ],
+    queryKey: revisionsKey,
     queryFn: async (): Promise<Revision[]> => {
       try {
         if (subject.kind === "Deployment") {
@@ -120,10 +122,17 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
         );
         return list.map(revisionOfController);
       } catch (error) {
-        throw normalizeTauriError(error);
+        throw new Error(normalizeTauriError(error), { cause: error });
       }
     },
   });
+  const revisions = useHeldRead(
+    subject.kind,
+    subject.namespace,
+    subject.name,
+    revisionsRead,
+    revisionsKey
+  );
 
   const deliveryQuery = useMemo(
     () => deliveryOfKind(subject.kind, subject),

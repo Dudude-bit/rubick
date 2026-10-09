@@ -5,7 +5,7 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 
-import { useReadThereAt } from "@/hooks/useReadUid";
+import { useReadThereAt, useReadUid } from "@/hooks/useReadUid";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { queryKeys } from "@/lib/query-keys";
 
@@ -49,6 +49,36 @@ export function useHeldNotFound(
     void client.invalidateQueries({ queryKey: again, exact: true });
   });
   return back;
+}
+
+/**
+ * Whether a read that names the object it answered for, by uid, answered
+ * for another than the one its page or peek holds: the one deleted before
+ * it was made again under its name, or any while the object is not read
+ * yet. Asked again once it is: this read where it is the older, the object
+ * where the read is newer. Sam's big-pull page, the Deployment made again,
+ * listed the old one's terminating pod as its own, green "Running".
+ */
+export function useHeldOwner(
+  kind: string,
+  namespace: string | null | undefined,
+  name: string | undefined,
+  read: { answeredFor: string | undefined; at: number },
+  key: QueryKey
+): boolean {
+  const client = useQueryClient();
+  const uid = useReadUid(kind, namespace, name);
+  const held = useReadThereAt(kind, namespace, name);
+  const other = read.answeredFor !== undefined && read.answeredFor !== uid;
+  const asked = useRef<string | null>(null);
+  const seen = `${read.at}/${held}`;
+  const again = read.at < held ? key : queryKeys.detail(kind, namespace, name);
+  useEffect(() => {
+    if (!other || uid === undefined || asked.current === seen) return;
+    asked.current = seen;
+    void client.invalidateQueries({ queryKey: again, exact: true });
+  });
+  return other;
 }
 
 /**

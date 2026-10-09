@@ -280,6 +280,7 @@ export function ReplicaSetDetail() {
       content: (
         <PodListCard
           pods={pods}
+          pending={podsPending}
           // "No pods" on a superseded revision reads as a fault. It is the
           // ordinary end of a rollout, and the page has to say so.
           emptyMessage={emptyPods ? noPods : t("empty", "revisionHasNoPods")}

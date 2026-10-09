@@ -498,9 +498,11 @@ function Hop({
             {hop.first ? (
               <HopName object={hop.first} />
             ) : (
-              <span className="font-mono text-xs text-fg-mid">
-                {hop.address}
-              </span>
+              hop.address && (
+                <span className="font-mono text-xs text-fg-mid">
+                  {hop.address}
+                </span>
+              )
             )}
             <span
               className={cn(

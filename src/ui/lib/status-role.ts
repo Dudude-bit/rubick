@@ -80,7 +80,6 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "containercreating",
     "podinitializing",
     "schedulinggated",
-    "terminating",
     "pendinginstall",
     "pendingupgrade",
     "pendingrollback",
@@ -105,6 +104,10 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "paused",
     // A Job whose Pods failed while its controller still has retries left.
     "retrying",
+    // On its way out, not coming up: a pod still taking traffic while it
+    // drains, or a namespace held by a finalizer. The Service says draining
+    // in the same amber.
+    "terminating",
   ],
   err: [
     "error",

@@ -248,6 +248,7 @@ export function JobDetail() {
         content: (
           <PodListCard
             pods={pods}
+            pending={podsPending}
             error={podsError}
             emptyMessage={t("empty", "noPodsForJob")}
           />

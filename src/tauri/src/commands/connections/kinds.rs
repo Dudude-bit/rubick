@@ -225,12 +225,24 @@ pub(super) async fn workload_connections(
     let (template, uid) = template;
 
     let selector = Selector::Query(template.selector.as_ref());
+    let owners = if kind == "Deployment" {
+        crate::resources::Owners::of_deployment(
+            name,
+            uid.as_deref(),
+            snapshot.replica_sets.as_deref().ok(),
+        )
+    } else {
+        crate::resources::Owners::of(uid.as_deref())
+    };
     // As with a budget, the API server refuses a workload selector that
-    // cannot be built.
+    // cannot be built. Its own by uid: the old pods of one deleted under its
+    // name carry its labels.
     let mine: Vec<&Pod> = snapshot
         .pods()
         .iter()
-        .filter(|pod| selector.matches(pod.labels()) == Some(true))
+        .filter(|pod| {
+            selector.matches(pod.labels()) == Some(true) && crate::resources::runs_for(pod, &owners)
+        })
         .collect();
     // The workload's own pods decide whether its short count is a scale
     // coming up, as its page reads it.
@@ -239,20 +251,7 @@ pub(super) async fn workload_connections(
         if !pods_read {
             return rollout.pods_unread();
         }
-        let owners = if kind == "Deployment" {
-            crate::resources::Owners::of_deployment(
-                name,
-                uid.as_deref(),
-                snapshot.replica_sets.as_deref().ok(),
-            )
-        } else {
-            crate::resources::Owners::of(uid.as_deref())
-        };
-        let own = mine
-            .iter()
-            .copied()
-            .filter(|pod| crate::resources::runs_for(pod, &owners));
-        crate::resources::with_pods(rollout, own, chrono::Utc::now())
+        crate::resources::with_pods(rollout, mine.iter().copied(), chrono::Utc::now())
     });
 
     let subject = ObjectRef::new(kind, name, Some(ns.to_string()), Existence::Present).with_facts(
@@ -1568,6 +1567,76 @@ mod set_rollout_tests {
                 desired: 4
             })
         );
+    }
+
+    /// Sam's big-pull, deleted and applied again: its chain named the old
+    /// Deployment's draining pod under "this Deployment", first, and its
+    /// Connections tab listed it as one of its pods. Fails if a pod carrying
+    /// the labels but controlled by another Deployment's `ReplicaSet` is
+    /// drawn as the subject's.
+    #[tokio::test]
+    async fn a_deployment_made_again_draws_only_the_pods_its_own_replica_sets_control() {
+        let deployment = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": { "name": "big-pull", "namespace": "shop", "uid": "second" },
+            "spec": {
+                "replicas": 1,
+                "selector": { "matchLabels": { "app": "web" } },
+                "template": { "metadata": { "labels": { "app": "web" } } },
+            },
+        });
+        let owned = |name: &str, set: &str| {
+            let mut pod = pod(name, true, "");
+            pod["metadata"]["ownerReferences"] = serde_json::json!([{
+                "apiVersion": "apps/v1", "kind": "ReplicaSet",
+                "name": "big-pull-67577558d6", "uid": set, "controller": true,
+            }]);
+            pod
+        };
+        let pods = serde_json::json!({
+            "apiVersion": "v1", "kind": "List", "metadata": {},
+            "items": [
+                owned("big-pull-67577558d6-4hdt2", "rs-first"),
+                owned("big-pull-67577558d6-tg86l", "rs-second"),
+            ],
+        });
+        let sets = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "ReplicaSetList", "metadata": {},
+            "items": [{
+                "metadata": {
+                    "name": "big-pull-67577558d6", "namespace": "shop", "uid": "rs-second",
+                    "ownerReferences": [{
+                        "apiVersion": "apps/v1", "kind": "Deployment",
+                        "name": "big-pull", "uid": "second", "controller": true,
+                    }],
+                },
+            }],
+        });
+        let (client, _) = server(vec![
+            (
+                "/apis/apps/v1/namespaces/shop/deployments/big-pull",
+                200,
+                deployment.to_string(),
+            ),
+            ("/api/v1/namespaces/shop/pods", 200, pods.to_string()),
+            (
+                "/apis/apps/v1/namespaces/shop/replicasets",
+                200,
+                sets.to_string(),
+            ),
+        ])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+        let page = connections_of(&ctx, "Deployment", "big-pull", None)
+            .await
+            .expect("the neighbourhood");
+        let drawn: Vec<&str> = page
+            .edges
+            .iter()
+            .filter(|edge| edge.from.kind == "Deployment" && edge.to.kind == "Pod")
+            .map(|edge| edge.to.name.as_str())
+            .collect();
+        assert_eq!(drawn, ["big-pull-67577558d6-tg86l"]);
     }
 
     /// The `StatefulSet`'s Connections tab and the services built on it read

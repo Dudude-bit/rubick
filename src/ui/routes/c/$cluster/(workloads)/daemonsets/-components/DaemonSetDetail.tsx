@@ -377,6 +377,7 @@ export function DaemonSetDetail() {
         content: (
           <PodListCard
             pods={pods}
+            pending={podsPending}
             error={podsError}
             onRetry={() => void refetchPods()}
           />

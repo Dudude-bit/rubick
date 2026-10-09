@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use super::connections::{ChainStop, Existence, NearMiss, NotServing, ObjectFacts, ObjectRef};
 use super::selector::Selector;
 use super::types::pod_display::display_status;
-use super::types::{condition_is_true, crash_looping};
+use super::types::{condition_is_true, counts_ready, crash_looping};
 use super::{Owners, PodStart, Rollout};
 
 /// The label the endpoint controllers put on every slice they write, and the
@@ -354,7 +354,7 @@ pub(crate) fn pod_ref(pod: &Pod, ns: &str) -> ObjectRef {
             .unwrap_or_else(|| "Unknown".to_string()),
         // The status word alone, not a whole PodInfo built to read one field.
         display: super::types::pod_display::display_status(pod),
-        ready: condition_is_true(pod.status.as_ref(), "Ready"),
+        ready: counts_ready(pod),
         looping_until: super::types::pod_display::looping_until(pod),
         exit_unreported: super::types::pod_display::exit_unreported(pod),
     })
@@ -592,11 +592,15 @@ pub fn from_pod_readiness(
 ) -> ServicePublished {
     let ns = service.namespace().unwrap_or_default();
     let mut endpoints = Vec::new();
-    let (mut ready, mut not_ready) = (0, 0);
+    let (mut ready, mut draining, mut not_ready) = (0, 0, 0);
     for pod in pods {
-        let is_ready = condition_is_true(pod.status.as_ref(), "Ready");
+        let is_ready = counts_ready(pod);
+        let terminating = pod.metadata.deletion_timestamp.is_some();
+        let serving = condition_is_true(pod.status.as_ref(), "Ready");
         if is_ready {
             ready += 1;
+        } else if terminating && serving {
+            draining += 1;
         } else {
             not_ready += 1;
         }
@@ -604,8 +608,8 @@ pub fn from_pod_readiness(
             address: pod.status.as_ref().and_then(|status| status.pod_ip.clone()),
             target: Some(pod_ref(pod, &ns)),
             ready: is_ready,
-            serving: is_ready,
-            terminating: false,
+            serving,
+            terminating,
             node_name: pod.spec.as_ref().and_then(|spec| spec.node_name.clone()),
             zone: None,
             hint_zones: Vec::new(),
@@ -618,7 +622,7 @@ pub fn from_pod_readiness(
         source: EndpointSource::PodReadiness,
         slices: 0,
         ready,
-        draining: 0,
+        draining,
         not_ready,
         unrouted: 0,
         unrouted_ready: 0,
@@ -720,10 +724,7 @@ pub fn service_stop(
             near: None,
         });
     }
-    let ready_pods = selected
-        .iter()
-        .filter(|pod| condition_is_true(pod.status.as_ref(), "Ready"))
-        .count();
+    let ready_pods = selected.iter().filter(|pod| counts_ready(pod)).count();
     if published.not_ready > 0 || ready_pods == 0 {
         let why = not_serving(selected);
         return Some(ChainStop::NoneReady {
@@ -1035,7 +1036,7 @@ fn pod_not_serving(pod: &Pod) -> NotServing {
 fn not_serving(selected: &[&Pod]) -> NotServing {
     let reasons: BTreeSet<NotServing> = selected
         .iter()
-        .filter(|pod| !condition_is_true(pod.status.as_ref(), "Ready"))
+        .filter(|pod| !counts_ready(pod))
         .map(|pod| pod_not_serving(pod))
         .collect();
     let mut each = reasons.into_iter();
@@ -2353,5 +2354,30 @@ mod tests {
         let published = from_pod_readiness(&svc, svc_ref("web"), &[&waiting]);
 
         assert_eq!(published.endpoints[0].address, None);
+    }
+
+    /// A pod being deleted keeps `Ready` until its containers stop, and the
+    /// deduction drawn where no slice answers counted it ready beside the
+    /// slices' own word, draining. Fails if a pod on its way out is counted
+    /// ready, or loses the traffic it still takes.
+    #[test]
+    fn a_ready_pod_being_deleted_is_deduced_draining_not_ready() {
+        let svc = selecting("web");
+        let mut leaving = ready(pod("web-0", None));
+        leaving.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(chrono::Utc::now()).expect("now is a time"),
+        ));
+        let staying = ready(pod("web-1", None));
+        let published = from_pod_readiness(&svc, svc_ref("web"), &[&leaving, &staying]);
+
+        assert_eq!(
+            (published.ready, published.draining, published.not_ready),
+            (1, 1, 0)
+        );
+        let first = &published.endpoints[0];
+        assert_eq!(
+            (first.ready, first.serving, first.terminating),
+            (false, true, true)
+        );
     }
 }

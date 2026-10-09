@@ -40,7 +40,7 @@ import { translate, type Locale } from "@/i18n";
 import { currentLocale } from "@/stores/localeStore";
 import { byteScale, formatBytes } from "@/lib/k8s-quantity";
 import { splitUnit } from "@/lib/metric-format";
-import { formatDecimal } from "@/lib/utils";
+import { formatAge, formatDecimal } from "@/lib/utils";
 import { withRestartsBy } from "@/lib/pod-status";
 
 /**
@@ -163,6 +163,25 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
       detail: null,
       role: "neutral",
     });
+  for (const item of attention.unconfirmed)
+    items.push({
+      title:
+        item.since === null
+          ? t("cluster", "attentionUnconfirmedUndated", {
+              word: reasonWord(item, t),
+            })
+          : t("cluster", "attentionUnconfirmed", {
+              word: reasonWord(item, t),
+              age: formatAge(item.since, t),
+            }),
+      detail: detailWords(item.detail, t),
+      role: "neutral",
+      ref: refOf({
+        kind: item.kind,
+        name: item.name,
+        namespace: item.namespace,
+      }),
+    });
   for (const check of attention.checks) {
     if (check.state === "read") continue;
     const said =
@@ -197,9 +216,9 @@ export function podTotal(pods: PodComposition): number {
 
 type Segment = CompositionSegment;
 
-/** Pods up and ready: Running, minus the crash-looping and the not ready. */
+/** Pods up and ready: Running, minus the crash-looping, the not ready and the terminating. */
 export function podsServing(pods: PodComposition): number {
-  return pods.running - pods.crashLooping - pods.notReady;
+  return pods.running - pods.crashLooping - pods.notReady - pods.terminating;
 }
 
 /** Ready pods counted crash-looping rather than Running: up between crashes at the moment of the read. */
@@ -212,9 +231,9 @@ export function readyBetweenCrashes(pods: PodComposition): number {
  *
  * Phase separates a replica that is serving from a Job pod that ran and
  * finished; one "Healthy" bar over both overstates the running workload of
- * anyone with a nightly CronJob. Crash-loopers and pods failing readiness
- * are carved back out of Running: the phase says Running while they serve
- * nothing. A pod held in an error that waiting will not clear is carved out
+ * anyone with a nightly CronJob. Crash-loopers, pods failing readiness and
+ * pods being deleted are carved back out of Running: the phase says Running
+ * while they serve nothing, or drain. A pod held in an error that waiting will not clear is carved out
  * of Pending under that error, the word the Pods list prints for it. One
  * still inside its wait stays Pending, as its row says, and is qualified as
  * starting in blue, which its workload says too.
@@ -224,6 +243,7 @@ export function podSegments(pods: PodComposition, t: T): Segment[] {
   return [
     { label: "Running", count: podsServing(pods), tone: "ok" },
     { label: "NotReady", count: pods.notReady, tone: "warn" },
+    { label: "Terminating", count: pods.terminating, tone: "warn" },
     {
       label: t("statusWords", "crashLoopingCounted", { n: pods.crashLooping }),
       count: pods.crashLooping,

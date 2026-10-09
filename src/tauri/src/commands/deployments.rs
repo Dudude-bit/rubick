@@ -8,6 +8,7 @@ use crate::state::AppState;
 use k8s_openapi::api::apps::v1::{Deployment, ReplicaSet};
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::{Patch, PatchParams};
+use serde::Serialize;
 use tauri::State;
 
 /// List deployments with optional filters
@@ -128,13 +129,23 @@ pub async fn update_deployment_image(
     Ok(())
 }
 
+/// A Deployment's pods, and the uid of the Deployment they were read for: one
+/// made again under its name is another object, and a read of the old one's
+/// pods is not an answer about it.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentPods {
+    pub uid: String,
+    pub pods: Vec<PodInfo>,
+}
+
 /// Get deployment pods
 #[tauri::command]
 pub async fn get_deployment_pods(
     name: String,
     namespace: Option<String>,
     state: State<'_, AppState>,
-) -> Result<Vec<PodInfo>> {
+) -> Result<DeploymentPods> {
     deployment_pods(&state, name, namespace).await
 }
 
@@ -142,7 +153,7 @@ async fn deployment_pods(
     state: &AppState,
     name: String,
     namespace: Option<String>,
-) -> Result<Vec<PodInfo>> {
+) -> Result<DeploymentPods> {
     let ctx = ResourceContext::for_command(state, namespace)?;
 
     // Get the deployment to find its label selector
@@ -172,12 +183,16 @@ async fn deployment_pods(
         deployment.metadata.uid.as_deref(),
         sets.as_ref().map(|sets| sets.items.as_slice()),
     );
-    Ok(pods?
+    let pods = pods?
         .items
         .iter()
         .filter(|pod| matches!(owners, Owners::Named(_)) || runs_for(pod, &owners))
         .map(PodInfo::from)
-        .collect())
+        .collect();
+    Ok(DeploymentPods {
+        uid: deployment.metadata.uid.clone().unwrap_or_default(),
+        pods,
+    })
 }
 
 #[cfg(test)]
@@ -334,11 +349,13 @@ mod detail_tests {
             .expect("the pods");
         assert_eq!(
             listed
+                .pods
                 .iter()
                 .map(|pod| pod.name.as_str())
                 .collect::<Vec<_>>(),
             ["cart-9df89489c-a1"]
         );
+        assert_eq!(listed.uid, "cart");
     }
 
     /// The page fell back on the counts in silence when the pod list was

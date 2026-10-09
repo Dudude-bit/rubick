@@ -194,6 +194,7 @@ describe("a pod up and failing its readiness probe", () => {
       crashLooping: 0,
       notReady: 1,
       ready: 1,
+      terminating: 0,
       stuck: [],
       starting: 0,
     };

@@ -16,9 +16,9 @@ use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::resources::node_budget::holds_reservation;
 use crate::resources::{
-    backing_off, condition_is_true, crash_looping, exit_unreported, job_state, looping_until,
-    pending_since, pod_start, restarting_until, stuck_reason, within_pending_grace, PodStart,
-    Rollout,
+    backing_off, condition_is_true, counts_ready, crash_looping, exit_unreported, job_state,
+    looping_until, pending_since, pod_start, restarting_until, stuck_reason, within_pending_grace,
+    PodStart, Rollout,
 };
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
@@ -278,8 +278,11 @@ pub struct PodComposition {
     pub not_ready: usize,
     /// Pods whose `Ready` condition is true, the ones kubectl counts ready: a
     /// subset of `running` that `crash_looping` may overlap at the instant a
-    /// looping container is up.
+    /// looping container is up. A pod being deleted is not among them.
     pub ready: usize,
+    /// Also a subset of `running`, apart from the others: pods being deleted,
+    /// which kubectl prints `Terminating` while their containers stop.
+    pub terminating: usize,
     /// A subset of `pending`: pods whose container the kubelet holds in a
     /// reason that waiting will not clear, under the reason the Pods list and
     /// Needs attention print. Counted as Pending, a pod the list calls
@@ -328,6 +331,10 @@ pub struct ClusterOverview {
     /// How many problems were dropped by the cap, so the UI can say "+N more"
     /// rather than quietly understate an outage.
     pub problems_truncated: usize,
+    /// What a workload's controller states where its pods, unread, could have
+    /// changed it, ranked as `problems` are: named as not checked, never
+    /// counted with them.
+    pub unconfirmed: Vec<ClusterProblem>,
     pub scheduler: SchedulerPressure,
     /// Uncapped: node counts are bounded in practice (hundreds at worst, and
     /// unlike pods they do not multiply per workload), and a truncated node
@@ -671,19 +678,41 @@ fn rollout_with_pods(
     )
 }
 
+/// A verdict that is a problem as it stands.
+fn as_problem(rollout: &Rollout) -> Option<&Rollout> {
+    rollout.is_problem().then_some(rollout)
+}
+
+/// The problem a workload's controller states where its pods, unread, could
+/// have changed it: not counted, and not dropped either.
+fn unconfirmed(rollout: &Rollout) -> Option<&Rollout> {
+    match rollout {
+        Rollout::PodsUnread { controller } if controller.is_problem() => Some(controller),
+        _ => None,
+    }
+}
+
 fn deployment_problems<'a>(
     deployments: impl IntoIterator<Item = &'a Deployment>,
     owned: &HashMap<(&str, &str), Vec<&Pod>>,
     unread: &[OverviewUnread],
     now: DateTime<Utc>,
 ) -> Vec<ClusterProblem> {
+    deployments_saying(deployments, owned, unread, now, as_problem)
+}
+
+fn deployments_saying<'a>(
+    deployments: impl IntoIterator<Item = &'a Deployment>,
+    owned: &HashMap<(&str, &str), Vec<&Pod>>,
+    unread: &[OverviewUnread],
+    now: DateTime<Utc>,
+    pick: fn(&Rollout) -> Option<&Rollout>,
+) -> Vec<ClusterProblem> {
     deployments
         .into_iter()
         .filter_map(|d| {
-            let rollout = rollout_with_pods(d, owned, unread, now);
-            if !rollout.is_problem() {
-                return None;
-            }
+            let read = rollout_with_pods(d, owned, unread, now);
+            let rollout = pick(&read)?;
             let status = d.status.as_ref();
             let desired = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1);
             let ready = status.and_then(|s| s.ready_replicas).unwrap_or(0);
@@ -701,7 +730,7 @@ fn deployment_problems<'a>(
                     .cloned()
             });
             Some(ClusterProblem {
-                severity: rollout_severity(&rollout),
+                severity: rollout_severity(rollout),
                 kind: "Deployment".to_string(),
                 name: d.metadata.name.clone().unwrap_or_default(),
                 namespace: d.metadata.namespace.clone(),
@@ -791,19 +820,20 @@ fn stateful_set_problems<'a>(
     owned: &HashMap<&str, Vec<&Pod>>,
     unread: &[OverviewUnread],
     now: DateTime<Utc>,
+    pick: fn(&Rollout) -> Option<&Rollout>,
 ) -> Vec<ClusterProblem> {
     sets.into_iter()
         .filter_map(|set| {
             set_problem(
                 "StatefulSet",
                 &set.metadata,
-                &with_own_pods(
+                pick(&with_own_pods(
                     crate::resources::statefulset_rollout(set),
                     &set.metadata,
                     owned,
                     unread,
                     now,
-                ),
+                ))?,
                 set.status
                     .as_ref()
                     .and_then(|s| s.ready_replicas)
@@ -819,6 +849,7 @@ fn daemon_set_problems<'a>(
     owned: &HashMap<&str, Vec<&Pod>>,
     unread: &[OverviewUnread],
     now: DateTime<Utc>,
+    pick: fn(&Rollout) -> Option<&Rollout>,
 ) -> Vec<ClusterProblem> {
     sets.into_iter()
         .filter_map(|set| {
@@ -826,13 +857,13 @@ fn daemon_set_problems<'a>(
             set_problem(
                 "DaemonSet",
                 &set.metadata,
-                &with_own_pods(
+                pick(&with_own_pods(
                     crate::resources::daemonset_rollout(set),
                     &set.metadata,
                     owned,
                     unread,
                     now,
-                ),
+                ))?,
                 status.map_or(0, |s| s.number_ready),
                 status.map_or(0, |s| s.desired_number_scheduled),
             )
@@ -1135,13 +1166,15 @@ fn pod_composition<'a>(
         {
             "Running" => {
                 composition.running += 1;
-                if condition_is_true(pod.status.as_ref(), "Ready") {
-                    composition.ready += 1;
-                }
-                if crash_looping(pod, now) || stuck_reason(pod).is_some() {
+                if pod.metadata.deletion_timestamp.is_some() {
+                    composition.terminating += 1;
+                } else if crash_looping(pod, now) || stuck_reason(pod).is_some() {
                     composition.crash_looping += 1;
                 } else if !condition_is_true(pod.status.as_ref(), "Ready") {
                     composition.not_ready += 1;
+                }
+                if counts_ready(pod) {
+                    composition.ready += 1;
                 }
             }
             "Pending" => {
@@ -1484,13 +1517,37 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         &owned,
         unread,
         input.now,
+        as_problem,
     ));
     problems.extend(daemon_set_problems(
         refs(input.daemon_sets),
         &owned,
         unread,
         input.now,
+        as_problem,
     ));
+    let mut said = deployments_saying(
+        refs(input.deployments),
+        &by_deployment,
+        unread,
+        input.now,
+        unconfirmed,
+    );
+    said.extend(stateful_set_problems(
+        refs(input.stateful_sets),
+        &owned,
+        unread,
+        input.now,
+        unconfirmed,
+    ));
+    said.extend(daemon_set_problems(
+        refs(input.daemon_sets),
+        &owned,
+        unread,
+        input.now,
+        unconfirmed,
+    ));
+    let (unconfirmed, _) = rank_and_cap(said);
     problems.extend(job_problems(refs(input.jobs)));
     problems.extend(node_problems(refs(nodes)));
     let problems = fold_job_runs(problems, refs(input.scoped_pods));
@@ -1522,6 +1579,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     ClusterOverview {
         problems,
         problems_truncated,
+        unconfirmed,
         scheduler: aggregate.scheduler,
         nodes: aggregate.summaries,
         nodes_known: input.nodes_known,
@@ -3786,6 +3844,30 @@ mod tests {
         assert_eq!(composition.not_ready, unready_rows);
     }
 
+    /// Sam's old big-pull pod kept `Ready` while it terminated, and the
+    /// Overview drew it in the green Running segment and counted it ready.
+    /// Fails if a pod being deleted is counted serving, ready or not ready.
+    #[test]
+    fn a_running_pod_being_deleted_is_counted_terminating_not_ready() {
+        let mut leaving = search_pod(true);
+        leaving.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(Utc::now()).expect("now is a time"),
+        ));
+        let pods = [leaving, search_pod(true)];
+
+        let composition = pod_composition(&pods, Utc::now());
+
+        assert_eq!(
+            (
+                composition.running,
+                composition.terminating,
+                composition.ready,
+                composition.not_ready
+            ),
+            (2, 1, 1, 0)
+        );
+    }
+
     /// `team-checkout/checkout-worker` as the kubelet wrote it: scheduled,
     /// its container never created because a Secret it reads is missing.
     fn config_error_pod() -> Pod {
@@ -4857,6 +4939,8 @@ mod across_namespaces {
     /// readable namespace beside it read as refused. Fails if the refusal is
     /// not named where it happened, if the answered half is summed as the
     /// scope's pods, or if a workload there is judged by pods nobody read.
+    /// Marco's ledger then vanished from Needs attention: fails too if its
+    /// controller's Unavailable is not said beside the problems.
     #[tokio::test]
     async fn a_namespace_that_refuses_its_pods_is_named_and_the_rest_of_the_scope_stands() {
         let overview = Cluster::new()
@@ -4893,6 +4977,15 @@ mod across_namespaces {
             !overview.problems.iter().any(|p| p.name == "ledger"),
             "{:?}",
             overview.problems
+        );
+        assert_eq!(
+            overview
+                .unconfirmed
+                .iter()
+                .map(|p| (p.kind.as_str(), p.name.as_str(), p.reason.as_str()))
+                .collect::<Vec<_>>(),
+            [("Deployment", "ledger", "Unavailable")],
+            "the controller's word, said beside the problems"
         );
         assert_eq!(overview.counts.deployments, Some(1));
         assert_eq!(

@@ -16,6 +16,8 @@ interface PodListCardProps {
   /** The pod list failed to read. Not the same as owning no pods. */
   error?: Error | null;
   onRetry?: () => void;
+  /** Not read yet for this workload: not the same as owning no pods either. */
+  pending?: boolean;
 }
 
 /** The pods a workload owns. */
@@ -24,6 +26,7 @@ export function PodListCard({
   emptyMessage,
   error,
   onRetry,
+  pending,
 }: PodListCardProps) {
   const t = useT();
   // A pod on a node that stopped reporting keeps whatever the kubelet last
@@ -35,6 +38,7 @@ export function PodListCard({
       emptyMessage={emptyMessage ?? t("empty", "noPodsForWorkload")}
       error={error}
       onRetry={onRetry}
+      pending={pending}
       label={t("count", "podNoun", { n: 2 })}
       rows={pods.map((pod) => {
         const { ready, total } = podReadiness(pod);

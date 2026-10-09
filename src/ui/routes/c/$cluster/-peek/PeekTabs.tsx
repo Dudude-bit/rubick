@@ -7,6 +7,7 @@ import { Skeleton, TextSkeleton } from "@/components/ui/skeleton";
 import { YamlEditor } from "../-yaml";
 import { LogViewer } from "../-logs/LogViewer";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
+import { useHeldOwner } from "@/hooks/useHeldRead";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { fetchResourceYaml } from "@/hooks/useResourceYaml";
@@ -34,6 +35,7 @@ import type {
   ConfigMapInfo,
   CustomResourceDetailInfo,
   DaemonSetDetailInfo,
+  DeploymentPods,
   JobInfo,
   PodInfo,
   ConfigData,
@@ -367,7 +369,7 @@ function fetchOwnedPods(
   target: PeekTarget,
   namespace: string,
   detail: unknown
-): Promise<PodInfo[]> {
+): Promise<PodInfo[] | DeploymentPods> {
   switch (toKind(target.kind)) {
     case "Deployment":
       return commands.getDeploymentPods(target.name, namespace);
@@ -426,7 +428,14 @@ function PeekPodsTab({
   // A Deployment's own are its ReplicaSets', which the backend matches.
   const uid =
     kind === "Deployment" ? undefined : (detail as { uid?: string })?.uid;
-  const { data, error, isPending, isFetching, refetch } = useLiveQuery({
+  const {
+    data: read,
+    dataUpdatedAt,
+    error,
+    isPending,
+    isFetching,
+    refetch,
+  } = useLiveQuery({
     queryKey: podsKey,
     queryFn: () => fetchOwnedPods(target, namespace!, detail),
     enabled: ready,
@@ -435,8 +444,23 @@ function PeekPodsTab({
     placeholderData: keepPreviousData,
     refetchOnWindowFocus: false,
     retry: false,
-    select: useCallback((pods: PodInfo[]) => controlledBy(pods, uid), [uid]),
+    select: useCallback(
+      (read: PodInfo[] | DeploymentPods) =>
+        Array.isArray(read) ? controlledBy(read, uid) : read,
+      [uid]
+    ),
   });
+  const other = useHeldOwner(
+    kind ?? target.kind,
+    namespace,
+    target.name,
+    {
+      answeredFor: Array.isArray(read) ? undefined : read?.uid,
+      at: dataUpdatedAt,
+    },
+    podsKey
+  );
+  const data = other ? undefined : Array.isArray(read) ? read : read?.pods;
   useOwnedPodsWatch(
     kind ?? target.kind,
     namespace,

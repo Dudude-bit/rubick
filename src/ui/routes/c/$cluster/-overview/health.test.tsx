@@ -70,6 +70,7 @@ function attentionFrom(
       overview: {
         problems,
         problemsTruncated: 0,
+        unconfirmed: [],
         unread: [],
       } as unknown as ClusterOverview,
       services: { answered: [], unread: [] },
@@ -96,6 +97,7 @@ const RUNNING: Census<PodComposition> = {
     crashLooping: 0,
     notReady: 0,
     ready: 1,
+    terminating: 0,
     stuck: [],
     starting: 0,
   },
@@ -382,6 +384,7 @@ describe("a scope one namespace of which refused its pods", () => {
     nodes: [],
     problems: [],
     problemsTruncated: 0,
+    unconfirmed: [],
     unread: [refusedPods],
   } as unknown as ClusterOverview;
 
@@ -398,6 +401,7 @@ describe("a scope one namespace of which refused its pods", () => {
         crashLooping: 0,
         notReady: 0,
         ready: 2,
+        terminating: 0,
         stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
         starting: 0,
       },
@@ -414,6 +418,7 @@ describe("a scope one namespace of which refused its pods", () => {
     nodes: [],
     problems: [],
     problemsTruncated: 0,
+    unconfirmed: [],
     unread: [refusedPods, refusedIn("Job", "jobs")],
   } as unknown as ClusterOverview;
 
@@ -561,6 +566,54 @@ describe("a scope one namespace of which refused its pods", () => {
   });
 
   /**
+   * Marco's team-blind Overview said "nothing found in what could be
+   * checked" while ledger's controller had said Unavailable for hours, its
+   * pods refused. Fails if that verdict vanishes from Needs attention, or is
+   * counted as a problem nobody could confirm.
+   */
+  it("names a workload its controller calls Unavailable under Not checked, uncounted", async () => {
+    const said = {
+      ...overview,
+      unconfirmed: [
+        {
+          severity: "critical",
+          kind: "Deployment",
+          name: "ledger",
+          namespace: "team-blind",
+          reason: "Unavailable",
+          detail: {
+            says: "said",
+            text: "Deployment does not have minimum availability.",
+          },
+          since: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+          restarts: null,
+          foldedPods: null,
+        },
+      ],
+    } as unknown as ClusterOverview;
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([], {
+          overview: said,
+        } as Partial<AttentionInputs>)}
+        pods={null}
+        podsUnread={[refusedPods]}
+        nodes={[]}
+        nodesKnown={false}
+      />
+    );
+    expect(
+      screen.getByText("nothing found in what could be checked")
+    ).toBeInTheDocument();
+    const row = screen.getByTestId("attention-unconfirmed");
+    expect(row).toHaveTextContent("ledger");
+    expect(row).toHaveTextContent(
+      "its controller has said Unavailable for 3h; its pods were not read"
+    );
+    expect(screen.getByTestId("attention-unchecked")).toContainElement(row);
+  });
+
+  /**
    * Marco in Russian at 1080: the overall row ended "в пространстве имён
    * team-" and "blind" began the next line. Fails if a namespace in the
    * overall row or in Not checked can break inside.
@@ -629,6 +682,7 @@ describe("a scope one namespace of which refused its pods", () => {
         crashLooping: 3,
         notReady: 0,
         ready,
+        terminating: 0,
         stuck: [{ reason: "ImagePullBackOff", count: 1 }],
         starting: 0,
       },
@@ -816,6 +870,7 @@ describe("the census legend in Russian", () => {
       flagged("Unavailable"),
     ],
     problemsTruncated: 0,
+    unconfirmed: [],
     unread: [],
   } as unknown as ClusterOverview;
   const ru: T = (section, key, values) => translate("ru", section, key, values);
@@ -1068,6 +1123,7 @@ describe("what Needs attention says it checked", () => {
         overview: {
           problems: [],
           problemsTruncated: 0,
+          unconfirmed: [],
           unread: [
             {
               kind: "DaemonSet",
@@ -1141,6 +1197,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 1,
       notReady: 0,
       ready: 5,
+      terminating: 0,
       stuck: [],
       starting: 0,
     });
@@ -1170,6 +1227,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 3,
       notReady: 1,
       ready: 5,
+      terminating: 0,
       stuck: [],
       starting: 0,
     });
@@ -1179,6 +1237,31 @@ describe("what Needs attention says it checked", () => {
     expect(summary).toHaveTextContent(
       "(1 NotReady, 3 Crash-looping, 1 Pending, 4 Failed)"
     );
+  });
+
+  /**
+   * Sam's old big-pull pod kept Ready while it terminated, and the bar drew
+   * it in the green Running segment. Fails if a pod being deleted is drawn
+   * as one serving, or goes unsaid beside them.
+   */
+  it("says a pod being deleted is terminating, apart from the ones serving", async () => {
+    await panel(attentionFrom([{ ...problem, severity: "critical" }]), {
+      running: 2,
+      pending: 0,
+      succeeded: 0,
+      failed: 0,
+      unknown: 0,
+      crashLooping: 0,
+      notReady: 0,
+      ready: 1,
+      terminating: 1,
+      stuck: [],
+      starting: 0,
+    });
+
+    const summary = screen.getByTestId("attention-summary");
+    expect(summary).toHaveTextContent("1 of 2 pods ready");
+    expect(summary).toHaveTextContent("(1 Terminating)");
   });
 
   /**
@@ -1196,6 +1279,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 1,
       notReady: 0,
       ready: 3,
+      terminating: 0,
       stuck: [],
       starting: 0,
     });
@@ -1224,6 +1308,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 0,
       notReady: 0,
       ready: 2,
+      terminating: 0,
       stuck: [],
       starting: 2,
     };
@@ -1269,6 +1354,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 0,
       notReady: 0,
       ready: 2,
+      terminating: 0,
       stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
       starting: 0,
     };

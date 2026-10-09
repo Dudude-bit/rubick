@@ -1859,6 +1859,7 @@ export interface ControllerRevisionInfo {
 export interface ClusterOverview {
   problems: ClusterProblem[];
   problemsTruncated: number;
+  unconfirmed: ClusterProblem[];
   scheduler: SchedulerPressure;
   nodes: NodeSummary[];
   nodesKnown: boolean;
@@ -1902,6 +1903,7 @@ export interface PodComposition {
   crashLooping: number;
   notReady: number;
   ready: number;
+  terminating: number;
   stuck: ReasonCount[];
   starting: number;
 }
@@ -2204,6 +2206,11 @@ export interface PodStatusInfo {
   loopingUntil?: string;
   exitUnreported: boolean;
   restartingUntil?: string;
+}
+
+export interface DeploymentPods {
+  uid: string;
+  pods: PodInfo[];
 }
 
 export interface DeploymentInfo {

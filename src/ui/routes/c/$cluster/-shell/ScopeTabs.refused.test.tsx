@@ -59,6 +59,7 @@ setTransport(
         namespaces: cluster.breakdown ?? [],
         problems: [{ namespace: "team-checkout" }],
         problemsTruncated: 0,
+        unconfirmed: [],
         unread: [],
         counts: { pods: cluster.breakdown ? null : 4 },
       };

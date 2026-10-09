@@ -185,6 +185,7 @@ const FULL_OVERVIEW: ClusterOverviewData = {
   nextChangeAt: null,
   problems: [],
   problemsTruncated: 0,
+  unconfirmed: [],
   scheduler: {
     cpu: { requested: 1000, allocatable: 4000, usage: null },
     memory: { requested: 0, allocatable: 0, usage: null },
@@ -233,6 +234,7 @@ const FULL_OVERVIEW: ClusterOverviewData = {
       crashLooping: 0,
       notReady: 0,
       ready: 1,
+      terminating: 0,
       stuck: [],
       starting: 0,
     },

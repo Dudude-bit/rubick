@@ -114,8 +114,11 @@ const OWNED = queryKeys.ownedPods("Deployment", "shop", "checkout");
 function mountOwned({
   kind = "Deployment",
   visible = true,
-}: { kind?: string; visible?: boolean } = {}) {
+  uid = "first",
+}: { kind?: string; visible?: boolean; uid?: string | null } = {}) {
   const client = testQueryClient();
+  if (uid)
+    client.setQueryData(queryKeys.detail(kind, "shop", "checkout"), { uid });
   const listPods = vi
     .fn()
     .mockResolvedValueOnce([{ ...POD, display: "CrashLoopBackOff" }])
@@ -139,7 +142,7 @@ function mountOwned({
       ),
     }
   );
-  return { hook, listPods };
+  return { hook, listPods, client };
 }
 
 /**
@@ -199,8 +202,8 @@ it("reads the workload's own object again when one of its pods changes", async (
   const client = testQueryClient();
   const getDeployment = vi
     .fn()
-    .mockResolvedValueOnce({ ready: 0 })
-    .mockResolvedValue({ ready: 1 });
+    .mockResolvedValueOnce({ uid: "first", ready: 0 })
+    .mockResolvedValue({ uid: "first", ready: 1 });
   const hook = renderHook(
     () => {
       useOwnedPodsWatch("Deployment", "shop", "checkout", [OWNED], true);
@@ -219,10 +222,41 @@ it("reads the workload's own object again when one of its pods changes", async (
   await waitFor(() =>
     expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("pod-stream")
   );
-  await waitFor(() => expect(hook.result.current).toEqual({ ready: 0 }));
+  await waitFor(() =>
+    expect(hook.result.current).toEqual({ uid: "first", ready: 0 })
+  );
 
   send("applied", { ...POD, phase: "Running" });
 
-  await waitFor(() => expect(hook.result.current).toEqual({ ready: 1 }));
+  await waitFor(() =>
+    expect(hook.result.current).toEqual({ uid: "first", ready: 1 })
+  );
   expect(getDeployment).toHaveBeenCalledTimes(2);
+});
+
+/**
+ * Sam opened big-pull's page while the Deployment did not exist and applied
+ * it: the watch on its pods, refused at subscribe, never came back, and the
+ * Pods tab polled. Fails if a workload made again under its name keeps the
+ * stream of the one before it, or if one is asked for before it is read.
+ */
+it("watches the pods of the object read, and again when it is made again", async () => {
+  const { client } = mountOwned({ uid: null });
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(commands.subscribeOwnedPodWatch).not.toHaveBeenCalled();
+
+  client.setQueryData(queryKeys.detail("Deployment", "shop", "checkout"), {
+    uid: "first",
+  });
+  await waitFor(() =>
+    expect(commands.subscribeOwnedPodWatch).toHaveBeenCalledTimes(1)
+  );
+
+  client.setQueryData(queryKeys.detail("Deployment", "shop", "checkout"), {
+    uid: "second",
+  });
+  await waitFor(() =>
+    expect(commands.subscribeOwnedPodWatch).toHaveBeenCalledTimes(2)
+  );
+  expect(commands.unsubscribeResourceWatch).toHaveBeenCalled();
 });

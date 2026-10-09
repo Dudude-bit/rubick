@@ -5,10 +5,13 @@ import {
   type UseQueryResult,
 } from "@tanstack/react-query";
 
-import { useHeldRead } from "@/hooks/useHeldRead";
+import { useHeldOwner, useHeldRead } from "@/hooks/useHeldRead";
 import { useReadThereAt } from "@/hooks/useReadUid";
 
 type Pod = { status: { ready: boolean; display: string } };
+
+/** Pods read with the uid of the object they were read for. */
+type Owned<P> = { uid: string; pods: P[] };
 
 const NONE: never[] = [];
 
@@ -18,7 +21,8 @@ const readyIn = (pods: readonly Pod[]) =>
 
 /**
  * A workload page's own pods as every reader on it draws them: a NotFound
- * beside the workload the page holds is still reading, and the Replicas bar
+ * beside the workload the page holds is still reading, and so are pods read
+ * for another object of its name (see {@link useHeldOwner}), and the Replicas bar
  * is split by them only where they can speak beside the header. A read taken
  * before the page's read of the workload that counts another number ready
  * than its controller (`counted`) cannot, and is asked again: Sam's big-pull
@@ -29,7 +33,7 @@ export function useWorkloadPods<P extends Pod>(
   namespace: string | null | undefined,
   name: string | undefined,
   query: Pick<
-    UseQueryResult<P[]>,
+    UseQueryResult<P[] | Owned<P>>,
     | "data"
     | "dataUpdatedAt"
     | "error"
@@ -43,8 +47,21 @@ export function useWorkloadPods<P extends Pod>(
   const client = useQueryClient();
   const read = useHeldRead(kind, namespace, name, query, key);
   const held = useReadThereAt(kind, namespace, name);
-  const pods: P[] = read.data ?? NONE;
-  const unread = !!read.error || read.isPending || read.data === undefined;
+  const { data } = read;
+  const other = useHeldOwner(
+    kind,
+    namespace,
+    name,
+    {
+      answeredFor: Array.isArray(data) ? undefined : data?.uid,
+      at: query.dataUpdatedAt,
+    },
+    key
+  );
+  const listed = other ? undefined : Array.isArray(data) ? data : data?.pods;
+  const pods: P[] = listed ?? NONE;
+  const pending = read.isPending || other;
+  const unread = !!read.error || pending || listed === undefined;
   const at = query.dataUpdatedAt;
   const behind =
     !unread && counted !== undefined && at < held && readyIn(pods) !== counted;
@@ -57,7 +74,7 @@ export function useWorkloadPods<P extends Pod>(
   return {
     pods,
     error: read.error,
-    isPending: read.isPending,
+    isPending: pending,
     refetch: read.refetch,
     /** What the Replicas bar splits by, or null where it is the controller's alone. */
     split: unread || behind ? null : pods,

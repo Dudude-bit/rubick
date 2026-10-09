@@ -78,6 +78,7 @@ const overviewOf = (
           },
     problems: Array.from({ length: problems }, () => ({})),
     problemsTruncated: 0,
+    unconfirmed: [],
     unread,
   };
 };

@@ -4088,6 +4088,8 @@ export const ru: Catalogue = {
       other: "{n} адреса опубликовано",
     },
     stillTakingTraffic: ", всё ещё принимает трафик",
+    noneOfItsPodsPublished: "ни один его под не опубликован",
+    acrossTheService: "по всему Service: {counts}",
     delUnconfirmedMark: "{vendor} · {claim} · не подтверждено",
     delEditWhatApplies:
       "Чтобы изменить насовсем, поменяйте то, что применяет {name}.",
@@ -4932,6 +4934,9 @@ export const ru: Catalogue = {
     attentionNothing: "ничего не требует внимания",
     attentionNoneFound: "в проверенном ничего не найдено",
     attentionNotChecked: "Не проверено",
+    attentionUnconfirmed:
+      "контроллер говорит {word} уже {age}; поды не прочитаны",
+    attentionUnconfirmedUndated: "контроллер говорит {word}; поды не прочитаны",
     attentionStillReading: "ещё читается",
     attentionRefused: "доступ запрещён",
     attentionForbidden: "запрос {verb} запрещён",

@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 
 import type { Scoped } from "@/generated/types";
+import { useReadUid } from "@/hooks/useReadUid";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { commands } from "@/lib/commands";
 import { ERROR_CODES } from "@/lib/error-utils";
@@ -58,7 +59,9 @@ export function usePodWatch(
  * the API server narrows them: each change reads `reads` again, so a row
  * there turns when the Pods list's row does rather than on a poll, and a
  * workload's own object with them, whose counts its controller rewrites on
- * the same change.
+ * the same change. Watched per object read, as the backend reads its
+ * selector once, at subscribe, and refuses one not there: a page opened on
+ * a deleted Deployment watched nothing once it was made again.
  */
 export function useOwnedPodsWatch(
   kind: string,
@@ -70,9 +73,10 @@ export function useOwnedPodsWatch(
   const connected = useClusterStore((s) => s.isConnected);
   const visible = useSurfaceVisible();
   const node = kind === ResourceType.Node;
+  const read = useReadUid(kind, namespace, name, !node);
   const queryKey = useMemo(
-    () => queryKeys.ownedPodWatch(kind, node ? null : namespace, name),
-    [kind, node, namespace, name]
+    () => queryKeys.ownedPodWatch(kind, node ? null : namespace, name, read),
+    [kind, node, namespace, name, read]
   );
   const subscribe = useCallback(
     () =>
@@ -84,7 +88,12 @@ export function useOwnedPodsWatch(
     [kind, node, namespace, name]
   );
   useResourceWatch({
-    enabled: enabled && visible && connected && !!name && (node || !!namespace),
+    enabled:
+      enabled &&
+      visible &&
+      connected &&
+      !!name &&
+      (node || (!!namespace && !!read)),
     subscribe,
     queryKey,
     detail: () =>

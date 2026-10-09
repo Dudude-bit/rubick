@@ -32,6 +32,7 @@ const { REFRESH_INTERVALS, STALE_TIMES } = await import("@/lib/refresh");
 const OVERVIEW = {
   problems: [],
   problemsTruncated: 0,
+  unconfirmed: [],
   unread: [],
 } as unknown as ClusterOverview;
 
