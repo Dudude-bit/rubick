@@ -555,7 +555,7 @@ describe("a scope one namespace of which refused its pods", () => {
     expect(overall).toHaveTextContent("pods not counted in team-blind");
     const unchecked = screen.getByTestId("attention-unchecked");
     expect(unchecked).toHaveTextContent("Pods");
-    expect(unchecked).toHaveTextContent("may not list in team-blind");
+    expect(unchecked).toHaveTextContent("list is forbidden in team-blind");
   });
 
   /**
@@ -973,7 +973,7 @@ describe("what Needs attention says it checked", () => {
     );
     const unchecked = screen.getByTestId("attention-unchecked");
     expect(unchecked).toHaveTextContent("Services");
-    expect(unchecked).toHaveTextContent("may not list in net");
+    expect(unchecked).toHaveTextContent("list is forbidden in net");
     expect(unchecked.querySelector("[title]")?.getAttribute("title")).toBe(
       'services is forbidden: User "sam" cannot list resource "services" in API group "" in the namespace "net"'
     );
@@ -1021,10 +1021,10 @@ describe("what Needs attention says it checked", () => {
     );
 
     const unchecked = screen.getByTestId("attention-unchecked");
-    expect(unchecked).toHaveTextContent("may not list in team-checkout");
-    expect(unchecked).toHaveTextContent("may not list across the cluster");
+    expect(unchecked).toHaveTextContent("list is forbidden in team-checkout");
+    expect(unchecked).toHaveTextContent("list is forbidden across the cluster");
     expect(unchecked).not.toHaveTextContent(
-      /forbidden|ApiError|Kubernetes API error/
+      /forbidden:|cannot list|ApiError|Kubernetes API error/
     );
     const hovers = [...unchecked.querySelectorAll("[title]")].map((at) =>
       at.getAttribute("title")

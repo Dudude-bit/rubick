@@ -477,7 +477,7 @@ describe("watching several namespaces at once", () => {
     await user.click(screen.getByRole("button", { name: /show them/i }));
     expect(
       within(list).getByRole("option", { name: /^ns-2,/ })
-    ).toHaveAccessibleName(/may not list pods/);
+    ).toHaveAccessibleName(/pod list forbidden/);
   });
 
   /**
@@ -499,11 +499,11 @@ describe("watching several namespaces at once", () => {
     await waitFor(() =>
       expect(
         within(list).getByRole("option", { name: /^ns-2,/ })
-      ).toHaveAccessibleName(/may not list pods/)
+      ).toHaveAccessibleName(/pod list forbidden/)
     );
     expect(
       within(list).getByRole("option", { name: /^ns-5,/ })
-    ).toHaveAccessibleName(/may not list pods/);
+    ).toHaveAccessibleName(/pod list forbidden/);
     expect(screen.queryByText(/hidden/)).toBeNull();
   });
 
@@ -860,7 +860,7 @@ describe("a token that may not list namespaces", () => {
     await user.keyboard("team-blind");
     expect(
       within(list).getByRole("option", { name: /^team-blind/ })
-    ).toHaveAccessibleName("team-blind, may not list pods");
+    ).toHaveAccessibleName("team-blind, pod list forbidden");
     expect(screen.queryByText(/namespace hidden/)).toBeNull();
 
     await user.keyboard("{Control>}{Enter}{/Control}");
