@@ -3728,6 +3728,7 @@ export const en = {
     rolloutPodsUnread:
       "{word} by the controller's counts alone: its pods could not be read, so whether they are still starting is not known",
     rolloutPodsUnreadShort: "pods not read",
+    upBetweenCrashes: "up between crashes",
     hpaPinnedAt: "pinned at {n}",
     hpaRange: { one: "{min} to {n} replica", other: "{min} to {n} replicas" },
     hpaCannotReach: "{name} cannot reach what it scales",

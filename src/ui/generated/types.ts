@@ -2351,7 +2351,13 @@ export type ObjectFacts =
     }
   | { kind: "ingress"; className: string | null }
   | { kind: "gateway"; className: string }
-  | { kind: "pod"; phase: string; display: string; ready: boolean }
+  | {
+      kind: "pod";
+      phase: string;
+      display: string;
+      ready: boolean;
+      loopingExitAt: string | null;
+    }
   | {
       kind: "workload";
       replicas: number;

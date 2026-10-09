@@ -4167,6 +4167,7 @@ export const ru: Catalogue = {
     rolloutPodsUnread:
       "{word} только по счётчикам контроллера: поды прочитать не удалось, поэтому неизвестно, запускаются ли они ещё",
     rolloutPodsUnreadShort: "поды не прочитаны",
+    upBetweenCrashes: "запущен между падениями",
     hpaPinnedAt: "закреплено на {n}",
     hpaRange: {
       one: "от {min} до {n} реплики",

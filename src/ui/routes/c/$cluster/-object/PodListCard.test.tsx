@@ -114,3 +114,26 @@ describe("what a pod row says about its containers", () => {
     }
   });
 });
+
+describe("a pod caught up between crashes", () => {
+  /**
+   * The Pods tab of a workload or node drew the crash-looping pod's Running
+   * in red with nothing to say why, where the list and the page explain it.
+   * Fails if the row's word stops carrying the sentence they give.
+   */
+  it("explains its red Running on hover, as the list and the page do", async () => {
+    const looping = {
+      ...pod("checkout-wz5f8"),
+      status: {
+        phase: "Running",
+        display: "Running",
+        loopingExitAt: new Date(Date.now() - 5_000).toISOString(),
+      },
+    } as unknown as PodInfo;
+    await card({ pods: [looping] });
+    expect(screen.getByText("Running")).toHaveAttribute(
+      "title",
+      expect.stringMatching(/Up between crashes: a container keeps exiting/)
+    );
+  });
+});

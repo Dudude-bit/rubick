@@ -18,6 +18,7 @@ import { formatKubernetesBytes } from "./k8s-quantity";
 import { isScalable } from "./resource-registry";
 import { groupMounts } from "./mounts";
 import { rolloutLine, rolloutVerdict } from "./workload-status";
+import { upBetweenCrashes } from "./share/pod-status";
 import { gitRevisionLink, type Delivery, type GitLink } from "@/integrations";
 import { delivered } from "./delivery";
 import { ingressAddressOf, type IngressAddress } from "./ingress-health";
@@ -194,7 +195,9 @@ function describeFacts(facts: ObjectFacts | null, t: T): string | null {
     case "claim":
       return join(facts.capacity, facts.storageClass, facts.phase);
     case "pod":
-      return facts.display;
+      return upBetweenCrashes({ status: facts })
+        ? join(facts.display, t("readings", "upBetweenCrashes"))
+        : facts.display;
     case "workload": {
       if (facts.revision === null) {
         const counted = t("count", "readyOfTotal", {

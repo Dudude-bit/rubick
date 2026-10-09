@@ -9,7 +9,7 @@ export const CRASH_LOOP_WINDOW_MS = shared.windowSeconds * 1000;
  * measured from the exit the backend ships as `crash_looping` measures it.
  */
 export function loopingNow(
-  status: { loopingExitAt?: string },
+  status: { loopingExitAt?: string | null },
   now: number = Date.now()
 ): boolean {
   if (!status.loopingExitAt) return false;

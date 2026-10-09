@@ -13,8 +13,7 @@ import {
 import { parseCPU, parseMemory, parseQuantity } from "@/lib/k8s-quantity";
 import { formatQuantity } from "@/lib/metric-format";
 import { describeRestarts } from "@/lib/pod-status";
-import { podRole } from "@/lib/share/pod-status";
-import { podStatusMeaning } from "@/lib/status-meaning";
+import { podRole, podStatusTitle } from "@/lib/share/pod-status";
 import { formatDate } from "@/lib/utils";
 import { jobEndRow } from "../-object/job-end";
 import { ImageRef } from "@/components/object/ImageRef";
@@ -103,12 +102,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
       status: pod.status.display,
       statusFrom: pod.nodeName,
       statusRole: podRole(pod, null),
-      statusTitle: podStatusMeaning(
-        pod.status.display,
-        pod.status.phase,
-        t,
-        readiness
-      ),
+      statusTitle: podStatusTitle(pod, null, t),
       createdAt: pod.createdAt,
       groups: [
         {

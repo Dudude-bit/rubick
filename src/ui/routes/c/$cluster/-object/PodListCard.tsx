@@ -1,6 +1,6 @@
 import { podReadiness } from "@/lib/container-sequence";
 import { silenceOf } from "@/lib/node-reporting";
-import { podRole } from "@/lib/share/pod-status";
+import { podRole, podStatusTitle } from "@/lib/share/pod-status";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { ResourceType } from "@/lib/resource-registry";
 import { ChildRows } from "./child-rows";
@@ -43,6 +43,7 @@ export function PodListCard({
           namespace: pod.namespace,
           status: pod.status?.display || "Unknown",
           role: podRole(pod, null),
+          statusTitle: podStatusTitle(pod, silenceOf(pod.nodeName, silent), t),
           unverified: silenceOf(pod.nodeName, silent) !== null,
           detail: (
             <>

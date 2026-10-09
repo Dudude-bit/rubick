@@ -526,6 +526,36 @@ describe("PeekPanel", () => {
     );
   });
 
+  /**
+   * Sam's checkout pod read red Running with the between-crashes sentence on
+   * the list, the page and the Logs header, and only the phase's meaning in
+   * the peek. Fails if the peek explains the word apart from those three.
+   */
+  it("says a pod is up between crashes on its badge, as the list and the page do", async () => {
+    vi.mocked(commands.getPod).mockResolvedValue(
+      buildPod({
+        status: {
+          phase: "Running",
+          display: "Running",
+          ready: false,
+          conditions: [],
+          message: null,
+          reason: null,
+          loopingExitAt: new Date(Date.now() - 5_000).toISOString(),
+        },
+      })
+    );
+    await wrap(POD_PEEK);
+    const badge = await within(screen.getByRole("dialog")).findByText(
+      "Running",
+      { selector: "header span" }
+    );
+    expect(badge).toHaveClass(ROLE_TEXT.err);
+    expect(badge.closest("[title]")?.getAttribute("title")).toMatch(
+      /^Running: placed on a node[^\n]*\n(.*\n)?Up between crashes: a container keeps exiting/
+    );
+  });
+
   it("shows the summary and this object's events once they arrive", async () => {
     await wrap(POD_PEEK);
     expect(await screen.findByText("CrashLoopBackOff")).toBeInTheDocument();

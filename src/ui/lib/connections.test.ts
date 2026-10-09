@@ -48,6 +48,7 @@ const pod = (name: string, ready: boolean): ObjectRef =>
     phase: "Running",
     display: ready ? "Running" : "NotReady",
     ready,
+    loopingExitAt: null,
   });
 
 const service = (name: string, selector: string | null): ObjectRef =>
@@ -1374,6 +1375,35 @@ describe("a node, which is the same edge read from the other end", () => {
     expect(here?.caption).toBe(
       "3 pods across 2 namespaces, of the 110 this node will take · 4 CPU · 8Gi"
     );
+  });
+
+  /**
+   * A Node's and a workload's Connections drew a crash-looping pod caught
+   * between crashes as a plain Running, where the Pods list says it is up
+   * between crashes. Fails if the row drops what the list says, or says it
+   * of a pod whose last exit is past the loop's window.
+   */
+  it("says a pod is up between crashes where the Pods list does", () => {
+    const at = (secondsAgo: number): ConnectionEdge => ({
+      from: {
+        ...pod("checkout-wz5f8", false),
+        facts: {
+          kind: "pod",
+          phase: "Running",
+          display: "Running",
+          ready: false,
+          loopingExitAt: new Date(Date.now() - secondsAgo * 1000).toISOString(),
+        },
+      },
+      to: node(),
+      relation: { verb: "runsOn" },
+    });
+    const detail = (edge: ConnectionEdge) =>
+      connectionGroups(connections(node(), [edge]), t).find(
+        (group) => group.key === "placed"
+      )?.rows[0].detail;
+    expect(detail(at(5))).toBe("Running · up between crashes");
+    expect(detail(at(3600))).toBe("Running");
   });
 
   /** The tally was an English template literal under a Russian title. */

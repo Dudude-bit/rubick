@@ -147,7 +147,13 @@ describe("what is not published", () => {
     name,
     namespace: "k8s-gui-test",
     existence: "present",
-    facts: { kind: "pod", phase: "Running", display: "Running", ready },
+    facts: {
+      kind: "pod",
+      phase: "Running",
+      display: "Running",
+      ready,
+      loopingExitAt: null,
+    },
   });
 
   /** The finding worth the feature, on one pod rather than the whole
