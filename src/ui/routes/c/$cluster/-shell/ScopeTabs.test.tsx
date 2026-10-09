@@ -1264,3 +1264,48 @@ describe("the count beside a namespace", () => {
     expect(within(list).getByText("4 · not all checked")).toBeInTheDocument();
   });
 });
+
+describe("a picker open on one tab", () => {
+  /**
+   * Dana clicked another tab with a namespace picker open, three times, and
+   * nothing moved: the click opened the tab, then the picker, closing on
+   * the same click, took the window back to its own tab. Fails if a tab left
+   * with its picker open keeps the picker, or its closing activates the tab.
+   */
+  it("shuts when another tab is opened, without taking the window back", async () => {
+    const user = userEvent.setup();
+    useScopeTabStore.setState({
+      tabs: [
+        tab({
+          id: "a",
+          href: "/c/k3d-dev/pods",
+          namespace: "shop",
+          scope: ["shop"],
+        }),
+        tab({
+          id: "b",
+          href: "/c/k3d-dev/events",
+          namespace: "lena",
+          scope: ["lena"],
+        }),
+      ],
+      activeId: "a",
+      pendingHref: null,
+    });
+    useClusterStore.setState({
+      currentNamespace: "shop",
+      namespaceScope: ["shop"],
+    });
+    await mount("/c/k3d-dev/pods");
+    await user.click(within(tabs()[0]).getByText("shop"));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    // The clicked tab's own handler runs first; the picker hears the click after.
+    await act(() => useScopeTabStore.getState().activateTab("b"));
+    await user.keyboard("{Escape}");
+
+    expect(useScopeTabStore.getState().activeId).toBe("b");
+    expect(tabs()[1]).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});

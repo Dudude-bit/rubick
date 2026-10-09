@@ -593,6 +593,13 @@ function ScopeTabItem({
   const navigate = useNavigate();
 
   const [open, setOpen] = useState<"ctx" | "ns" | null>(null);
+  // A picker belongs to the scope on screen, so it shuts when its tab stops
+  // being the open one: a click on another tab, or Ctrl+Tab from inside it.
+  const [wasActive, setWasActive] = useState(active);
+  if (active !== wasActive) {
+    setWasActive(active);
+    if (!active) setOpen(null);
+  }
   const [tip, setTip] = useState(false);
   const mark = useClusterMark(context);
   const alias = mark.alias?.trim();
