@@ -275,6 +275,8 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "not a shortcut: remembers the last key for the Why slow sheet",
   "src/ui/components/object/DetailTabs.tsx":
     "not a shortcut: bare arrows, Home and End walk the tab strip; a chord passes through",
+  "src/ui/lib/native-menu.ts":
+    "Menu and shift+F10 open the focused control's context menu",
 };
 
 export function chordsOf(): Shortcut[] {
