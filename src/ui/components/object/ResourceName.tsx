@@ -53,11 +53,10 @@ export interface ResourceNameProps {
   kind: string;
   name: string;
   /**
-   * Drawn as a dim `namespace/` prefix inside the name's own box, so it
-   * truncates and highlights with the name instead of wrapping beside it
-   * as a loose word. For the surfaces where two objects wear one name and
-   * the namespace is the identity; most columns already say it and pass
-   * nothing.
+   * Drawn as a dim `namespace/` prefix inside the name's own box, never cut,
+   * so it highlights with the name instead of wrapping beside it as a loose
+   * word. For the surfaces where two objects wear one name and the namespace
+   * is the identity; most columns already say it and pass nothing.
    */
   namespace?: string | null;
   /** Off where the surrounding column, or the breadcrumb, already says it. */
@@ -67,12 +66,103 @@ export interface ResourceNameProps {
   size?: ResourceNameSize;
 }
 
-/** How much of a name's start any column keeps: the start says what it is, the tail which one. */
-const KEEP_CHARS = 8;
-
 /** The box the parts expect: baseline-aligned, shrinkable, one gap. */
 export const RESOURCE_NAME_SHELL =
   "-mx-0.5 inline-flex min-w-0 items-baseline gap-1 rounded-[3px] px-0.5";
+
+/** A pod's own suffix is five characters, so a cut generated name keeps at least its last five. */
+const END_CHARS = 5;
+/** Turns a shortfall of any fraction of a pixel into a whole width. */
+const STEP = 9999;
+/** The half pixel the stylesheet forgives, in characters of the row size. */
+const SLACK = 0.07;
+
+/** A width as CSS resolved against the name's box, and the same width worked out for a box `w` characters wide. */
+export interface Width {
+  css: string;
+  at: (w: number) => number;
+}
+
+const chars = (n: number): Width => ({ css: `${n}ch`, at: () => n });
+const less = (a: Width, n: number): Width => ({
+  css: `${a.css} - ${n}ch`,
+  at: (w) => a.at(w) - n,
+});
+const roomAfter = (n: number): Width => ({
+  css: `round(down, 100% - ${n}ch, 1ch)`,
+  at: (w) => Math.floor(w - n),
+});
+const clamp = (lo: Width, value: Width, hi: Width): Width => ({
+  css: `clamp(${lo.css}, ${value.css}, ${hi.css})`,
+  at: (w) => Math.max(lo.at(w), Math.min(value.at(w), hi.at(w))),
+});
+const larger = (a: Width, b: Width): Width => ({
+  css: `max(${a.css}, ${b.css})`,
+  at: (w) => Math.max(a.at(w), b.at(w)),
+});
+/** `then` while the box holds `need` characters, nothing once it does not. */
+const fitting = (need: number, then: Width): Width => ({
+  css: `clamp(0px, (100% - ${need}ch + 0.5px) * ${STEP}, ${then.css})`,
+  at: (w) => (w + SLACK >= need ? Math.max(0, then.at(w)) : 0),
+});
+/** `then` once the box is short of `need` characters, nothing while it is not. */
+const short = (need: number, then: Width): Width => ({
+  css: `clamp(0px, (${need}ch - 100% - 0.5px) * ${STEP}, ${then.css})`,
+  at: (w) => (w + SLACK < need ? Math.max(0, then.at(w)) : 0),
+});
+
+export interface NameCut {
+  box: number;
+  label: Width;
+  head: Width;
+  cut: Width;
+  end: Width | null;
+}
+
+/**
+ * The width of each part of a name too long for its box, in whole characters
+ * of the mono face: the kind label whole or gone, the start of the name up to
+ * its generated segments, one ellipsis, and the end of the name. Whole
+ * characters on both sides of the ellipsis keep a gap from opening beside it.
+ */
+// oxlint-disable-next-line react-refresh/only-export-components
+export function nameCut({
+  name,
+  stem,
+  generated,
+  before,
+  label,
+}: {
+  name: string;
+  stem: string;
+  generated: boolean;
+  /** Characters drawn ahead of the name that are never cut. */
+  before: number;
+  /** Characters of the kind label, dropped whole where the name needs them. */
+  label: number;
+}): NameCut {
+  const whole = before + name.length;
+  const room = roomAfter(before);
+  const keepEnd = generated ? Math.min(END_CHARS, name.length - 1) : 0;
+  const prefer = generated ? stem.length : name.length;
+  const head = clamp(
+    chars(Math.min(3, prefer)),
+    less(room, keepEnd + 1),
+    chars(prefer)
+  );
+  return {
+    box: whole + label,
+    label: fitting(whole + label, chars(label)),
+    head: larger(head, fitting(whole, chars(name.length))),
+    cut: short(whole, chars(1)),
+    end: generated
+      ? short(whole, {
+          css: `${room.css} - ${head.css} - 1ch`,
+          at: (w) => room.at(w) - head.at(w) - 1,
+        })
+      : null,
+  };
+}
 
 export function ResourceName({
   kind,
@@ -96,10 +186,11 @@ export function ResourceName({
   // the tail the splitter finds is the ordinal `-0` — two characters of colour
   // on a thirty-character string. Where the tail is that thin, or absent, the
   // name itself is the identity and the whole of it is tinted.
-  const identityStyle =
+  const identity =
     colouring === "full"
-      ? { color: `hsl(${identHue(kind, name)} var(--ident-s) var(--ident-l))` }
+      ? `hsl(${identHue(kind, name)} var(--ident-s) var(--ident-l))`
       : undefined;
+  const identityStyle = identity ? { color: identity } : undefined;
   const tailCarriesIdentity = tail.length > 2;
   const stemStyle = tailCarriesIdentity ? undefined : identityStyle;
   const tailStyle = identityStyle;
@@ -120,12 +211,13 @@ export function ResourceName({
       : colouring === "minimal"
         ? "text-fg-fnt"
         : "text-fg";
-  const lead =
-    (namespace ? namespace.length + 1 : 0) +
-    (showKind ? kind.length + 1 : 0) +
-    stem.length;
-  const kept = `min(${Math.min(lead, KEEP_CHARS)}ch, 60%)`;
-  const keep = tail ? ({ "--keep": kept } as CSSProperties) : undefined;
+  const widths = nameCut({
+    name,
+    stem,
+    generated: tail !== "",
+    before: namespace ? namespace.length + 1 : 0,
+    label: showKind ? kind.length + 1 : 0,
+  });
 
   return (
     <>
@@ -134,53 +226,56 @@ export function ResourceName({
         className={cn("h-2.5 w-2.5 self-center", iconClassName)}
         data-testid="resource-ref-icon"
       />
-      {/* The start says what the object is and the tail which one, so a
-          narrow column cuts the middle: the lead gives way down to its first
-          characters, then the tail loses its own start. */}
       <span
         className={cn(
-          // `overflow-hidden` is not decoration: it is the clipping the
-          // single `truncate` used to do for the whole name. Without it a
-          // tail that cannot shrink paints outside its box — over the copy
-          // mark in a list cell, over the next column, and into a scrollbar
-          // in the peek. Narrower than the tail it is now cut instead, which
-          // only happens below any width a column can be dragged to.
-          "flex min-w-0 overflow-hidden whitespace-nowrap font-mono",
+          "flex min-w-0 max-w-full overflow-hidden whitespace-nowrap font-mono",
           RESOURCE_NAME_SIZE[size]
         )}
-        style={keep}
+        style={{ width: `${widths.box}ch` }}
         data-testid="resource-ref-name"
         onMouseEnter={(event) => {
           const box = event.currentTarget;
           box.title = [...box.children].some(
-            (part) => part.scrollWidth > part.clientWidth
+            (part) =>
+              !part.hasAttribute("aria-hidden") &&
+              part.scrollWidth > part.clientWidth
           )
             ? `${namespace ? `${namespace}/` : ""}${showKind ? `${kind}/` : ""}${name}`
             : "";
         }}
       >
-        <span className="truncate" style={keep && { minWidth: "var(--keep)" }}>
-          {namespace && (
-            <span className="text-fg-fnt" data-testid="resource-ref-namespace">
-              {namespace}/
+        {namespace && (
+          <span
+            className="flex-none text-fg-fnt"
+            data-testid="resource-ref-namespace"
+          >
+            {namespace}/
+          </span>
+        )}
+        {showKind && (
+          <span
+            className="flex-none overflow-hidden"
+            style={{ width: widths.label.css }}
+            data-testid="resource-ref-label"
+          >
+            <span
+              className={cn(colouring !== "full" && "text-fg-mut")}
+              style={colouring === "full" ? kindStyle : undefined}
+              data-testid="resource-ref-kind"
+            >
+              {kind}
             </span>
-          )}
+            <span className="text-fg-fnt">/</span>
+          </span>
+        )}
+        <span
+          className="flex-none overflow-hidden"
+          style={{ width: widths.head.css }}
+          data-testid="resource-ref-head"
+        >
           {/* The kind reaches a screen reader either way — when it is shown as
             an icon only, the text still has to name it. */}
-          {showKind ? (
-            <>
-              <span
-                className={cn(colouring !== "full" && "text-fg-mut")}
-                style={colouring === "full" ? kindStyle : undefined}
-                data-testid="resource-ref-kind"
-              >
-                {kind}
-              </span>
-              <span className="text-fg-fnt">/</span>
-            </>
-          ) : (
-            <span className="sr-only">{kind} </span>
-          )}
+          {!showKind && <span className="sr-only">{kind} </span>}
           <span
             className={stemClass}
             style={stemStyle}
@@ -188,26 +283,54 @@ export function ResourceName({
           >
             {stem}
           </span>
+          <span
+            className={tailClass}
+            style={tailStyle}
+            data-testid="resource-ref-tail"
+          >
+            {tail}
+          </span>
         </span>
         <span
-          // Right to left, so a tail with no room keeps its end; whole
-          // characters, so the cut never shows half a glyph. The lead's own
-          // ellipsis marks the cut once the lead is longer than it keeps.
-          className={cn(
-            "max-w-[calc(100%-var(--keep,0px))] flex-none overflow-hidden whitespace-nowrap [direction:rtl]",
-            lead > KEEP_CHARS ? "text-clip" : "text-ellipsis",
-            tailClass
-          )}
-          style={{
-            ...tailStyle,
-            maxWidth: tail
-              ? `round(down, calc(100% - ${kept}), 1ch)`
-              : undefined,
-          }}
-          data-testid="resource-ref-tail"
-        >
-          <span dir="ltr">{tail}</span>
-        </span>
+          aria-hidden="true"
+          className="flex-none overflow-hidden text-fg-fnt before:content-['…']"
+          style={{ width: widths.cut.css }}
+          data-testid="resource-ref-cut"
+        />
+        {widths.end && (
+          // Drawn by the stylesheet, so the name is in the text once: a reader,
+          // a copy and a search each find it whole in the head.
+          <span
+            aria-hidden="true"
+            className="flex-none overflow-hidden [direction:rtl]"
+            style={{ width: widths.end.css }}
+            data-testid="resource-ref-end"
+          >
+            <span
+              dir="ltr"
+              data-stem={stem}
+              data-tail={tail}
+              className={cn(
+                "before:content-[attr(data-stem)] after:content-[attr(data-tail)]",
+                stemStyle
+                  ? "before:text-[color:var(--ident)]"
+                  : stemClass === "text-fg-mut"
+                    ? "before:text-fg-mut"
+                    : "before:text-fg",
+                tailStyle
+                  ? "after:text-[color:var(--ident)]"
+                  : tailClass === "text-fg-fnt"
+                    ? "after:text-fg-fnt"
+                    : "after:text-fg"
+              )}
+              style={
+                identity
+                  ? ({ "--ident": identity } as CSSProperties)
+                  : undefined
+              }
+            />
+          </span>
+        )}
       </span>
     </>
   );

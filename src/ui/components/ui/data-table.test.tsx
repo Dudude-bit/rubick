@@ -330,6 +330,37 @@ describe("DataTable rows", () => {
   });
 
   /**
+   * A reference to a kind nothing routes is drawn as a span, which the cell
+   * left its whole width, so its name was clipped with no ellipsis. Fails if
+   * such a reference stops being bounded by the cell.
+   */
+  it("bounds a reference that is not a link by the cell as well", async () => {
+    await wrap(
+      <DataTable<Item>
+        columns={[
+          ...columns,
+          {
+            id: "release",
+            header: "Release",
+            cell: () => (
+              <ResourceRef
+                kind="HelmRelease"
+                name="traefik"
+                namespace="kube-system"
+              />
+            ),
+          },
+        ]}
+        data={DATA}
+        getRowHref={href}
+      />
+    );
+    const cell = screen.getAllByTestId("resource-ref-name")[0].closest("td");
+    expect(cell?.firstElementChild?.tagName).toBe("SPAN");
+    expect(cell).toHaveClass("[&>span]:max-w-full");
+  });
+
+  /**
    * Issue #178: the name in a row peeked and the whitespace beside it went
    * to the page, and nobody could tell which they would get. Now both peek,
    * and the page is a double click. Would break if the row went back to

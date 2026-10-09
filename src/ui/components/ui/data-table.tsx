@@ -200,7 +200,7 @@ const CELL_PADDING = "px-2.5 py-2 group-data-[density=compact]/table:py-[3px]";
  * not, or its buttons lose the hit area that hangs over the padding.
  */
 const CLIP_TEXT =
-  "overflow-hidden text-ellipsis whitespace-nowrap [&>a]:max-w-full";
+  "overflow-hidden text-ellipsis whitespace-nowrap [&>a]:max-w-full [&>span]:max-w-full";
 
 /** Held open: a lane that appears mid-layout is left out of a flex item's height, and covers its last row. */
 const SIDEWAYS_LANE = { overflowX: "scroll" } as const;
