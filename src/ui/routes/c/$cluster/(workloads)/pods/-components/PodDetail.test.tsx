@@ -23,6 +23,7 @@ import { useKeptShellStore, type KeptShell } from "@/stores/keptShellStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { keepShells } from "@/hooks/useKeptShells";
 import type { AnyRouter } from "@tanstack/react-router";
+import { parseDeepLink } from "@/lib/deep-link";
 import { PodDetail } from "./PodDetail";
 
 vi.mock("@/components/terminal/Terminal", async () => {
@@ -947,6 +948,28 @@ describe("a pod page runs nothing in the container until the reader asks on it",
       expect(execs()).toContain(exec);
     }
   );
+
+  /**
+   * Dana's link with `?tab=shell` landed on Overview while `?tab=logs` landed
+   * on Logs. Fails if the link loses its tab on the way in, or if landing on
+   * Shell starts anything.
+   */
+  it("lands a link that names Shell on its offer, and starts nothing", async () => {
+    const link = parseDeepLink(
+      "rubick://open/c/prod/pods/shop/cart-a?tab=shell&t=2026-10-09T15:00:00Z"
+    );
+    await arrive(link!.path);
+    await advance(10_000);
+
+    expect(screen.getByRole("tab", { name: /^Shell/ })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(
+      screen.getByRole("button", { name: "Start a shell in app" })
+    ).toBeInTheDocument();
+    expect(execs()).toEqual([]);
+  });
 
   /**
    * Dana ended a shell with its x and clicked the Shell tab: nothing started,

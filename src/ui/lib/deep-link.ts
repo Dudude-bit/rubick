@@ -17,16 +17,13 @@ export const DEEP_LINK_SCHEME = "rubick";
 const HOST = "open";
 
 /**
- * The only query params an arriving link may carry — the ones that pick a
+ * The only query params an arriving link may carry: the ones that pick a
  * *view*, never one that makes the destination *act*.
  *
  * A link is untrusted (it comes from a chat message or a report), and it
- * opens on arrival with no click. `?shell=<container>` and `?tab=shell` both
- * make the pod page open an exec session into a container the moment it
- * mounts — a real change to the cluster from a link somebody was handed. So
- * this is an allowlist, not a blocklist: only these view-selection params
- * survive parsing, `shell` is not among them, and the `shell` *tab* is
- * dropped even though `tab` is allowed. A param the app grows later stays out
+ * opens on arrival with no click. A tab is a view: the pod page's Shell and
+ * Files land on an offer and run nothing until the reader clicks. So this is
+ * an allowlist, not a blocklist, and a param the app grows later stays out
  * until it is proven safe to open unattended.
  */
 const SAFE_PARAMS = new Set(["tab", "vendor", "type", "namespace"]);
@@ -38,19 +35,6 @@ export interface DeepLink {
   path: string;
   /** When the link was made, if it says. */
   capturedAt: Date | null;
-}
-
-/**
- * A query value as the router will read it. Its default parser JSON-parses
- * every value it can, so `?tab="shell"` is the shell tab to it, quotes and
- * all, and a check on the literal text would wave it through.
- */
-function asTheRouterReads(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
 }
 
 /** One segment percent-encoded exactly once, whether or not it came encoded. */
@@ -98,13 +82,9 @@ export function parseDeepLink(raw: string): DeepLink | null {
   if ([context, ...segments].some((s) => s === "." || s === "..")) return null;
   const params = new URLSearchParams(url.search);
   const stamp = params.get("t");
-  // Keep only the view-selection params, and never the shell tab — an
-  // arriving link opens unattended and must land on something read-only.
   const safe = new URLSearchParams();
   for (const [key, value] of params) {
-    if (!SAFE_PARAMS.has(key)) continue;
-    if (key === "tab" && asTheRouterReads(value) === "shell") continue;
-    safe.set(key, value);
+    if (SAFE_PARAMS.has(key)) safe.set(key, value);
   }
   const capturedAt = stamp ? new Date(stamp) : null;
   const search = safe.toString();
