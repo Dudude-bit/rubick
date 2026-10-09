@@ -69,6 +69,7 @@ export function useClusterOverview(scope: readonly string[], enabled = true) {
         ? undefined
         : ofSameCluster<ClusterOverview>(currentContext),
     refresh: "overview",
+    changesAt: (overview) => overview.nextChangeAt,
   });
 }
 

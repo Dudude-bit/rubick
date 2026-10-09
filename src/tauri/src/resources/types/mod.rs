@@ -30,8 +30,9 @@ pub use pod::{
     VolumeObjectRef,
 };
 pub use pod_display::{
-    backing_off, condition_is_true, crash_looping, pending_grace, pending_since, restarts,
-    stuck_reason, within_pending_grace, PENDING_GRACE_SECONDS, START_GRACE_SECONDS,
+    backing_off, condition_is_true, crash_looping, looping_until, pending_grace, pending_since,
+    restarts, stuck_reason, within_pending_grace, CRASH_LOOP_WINDOW_SECONDS, PENDING_GRACE_SECONDS,
+    START_GRACE_SECONDS,
 };
 pub use pod_row::{PodRow, PodRowStatus, PodWorkload, RowContainer};
 pub use probe::{ContainerProbes, ProbeHandler, ProbeInfo};

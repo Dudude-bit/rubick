@@ -1867,6 +1867,7 @@ export interface ClusterOverview {
   deployments: Census<RolloutCount[]> | null;
   metricsAvailable: boolean;
   servedFrom: OverviewSource;
+  nextChangeAt: string | null;
   unread: OverviewUnread[];
 }
 

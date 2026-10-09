@@ -16,8 +16,8 @@ use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::resources::node_budget::holds_reservation;
 use crate::resources::{
-    backing_off, condition_is_true, crash_looping, job_state, pending_since, pod_start,
-    stuck_reason, within_pending_grace, PodStart, Rollout,
+    backing_off, condition_is_true, crash_looping, job_state, looping_until, pending_since,
+    pod_start, stuck_reason, within_pending_grace, PodStart, Rollout,
 };
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
@@ -361,6 +361,11 @@ pub struct ClusterOverview {
     pub metrics_available: bool,
     /// Whether this answer came from the watch-fed stores or from listing.
     pub served_from: OverviewSource,
+    /// The first moment after this answer that a verdict in it turns on the
+    /// clock alone: a pod's wait running out, or its crash loop lapsing. The
+    /// reader asks again then, so the Overview turns with the pod's own page
+    /// rather than on its next poll.
+    pub next_change_at: Option<DateTime<Utc>>,
     /// The kinds whose problems this answer could not look for, and why.
     pub unread: Vec<OverviewUnread>,
 }
@@ -1494,8 +1499,27 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         namespaces,
         metrics_available,
         served_from: input.served_from,
+        next_change_at: next_change(refs(input.scoped_pods), input.now),
         unread: unread.to_vec(),
     }
+}
+
+/// The earliest wait or crash loop among `pods` still to run out after `now`.
+fn next_change<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    pods.into_iter()
+        .flat_map(|pod| {
+            let start = match pod_start(pod) {
+                PodStart::Starting { until } => Some(until),
+                PodStart::Settled | PodStart::Failing => None,
+            };
+            [start, looping_until(pod)]
+        })
+        .flatten()
+        .filter(|at| *at > now)
+        .min()
 }
 
 /// Get everything the overview screen needs in one round trip.
@@ -2768,6 +2792,29 @@ mod tests {
             assert_eq!(problems[0].severity, ProblemSeverity::Critical, "{instant}");
             assert_eq!(problems[0].reason, word.unwrap_or("Pending"), "{instant}");
         }
+    }
+
+    /// Sam's Overview turned amber six seconds after the unplaced pod's own
+    /// page did, on its next poll. Fails if the answer does not name the
+    /// moment its first wait runs out or crash loop lapses, or names one
+    /// already past.
+    #[test]
+    fn the_answer_names_the_moment_its_first_verdict_turns_on_the_clock() {
+        let now = Utc::now();
+        let waiting = pending_pod("never-placed", now, 20);
+        let looping = restarted_pod("checkout", now, 9, Some(20));
+        let late = pending_pod("long-gone", now, 600);
+        let at = |seconds: i64| Some((now + chrono::Duration::seconds(seconds)).timestamp());
+
+        assert_eq!(
+            next_change([&waiting, &looping, &late], now).map(|t| t.timestamp()),
+            at(PENDING_GRACE_SECONDS - 20)
+        );
+        assert_eq!(
+            next_change([&looping, &late], now).map(|t| t.timestamp()),
+            at(crate::resources::CRASH_LOOP_WINDOW_SECONDS - 20)
+        );
+        assert_eq!(next_change([&late], now), None);
     }
 
     /// kubectl counts a crash-looping pod ready in the seconds its container

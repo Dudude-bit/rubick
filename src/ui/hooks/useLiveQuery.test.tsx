@@ -739,3 +739,35 @@ describe("a cluster that is down while the reader is still at the screen", () =>
     expect(renders - before.renders).toBe(1);
   });
 });
+
+describe("an answer that says when it stops being true", () => {
+  function Turning({ at }: { at: number }) {
+    useLiveQuery<{ turnsAt: string | null }>({
+      queryKey: ["turning"],
+      queryFn: async () => {
+        reads++;
+        return { turnsAt: reads === 1 ? new Date(at).toISOString() : null };
+      },
+      refresh: "unserved",
+      staleTime: 0,
+      changesAt: (answer) => answer.turnsAt,
+    });
+    return null;
+  }
+
+  /**
+   * Sam's Overview turned amber six seconds after the pod's own page, on its
+   * next poll. Fails if a query whose answer names the moment it turns is
+   * not read again at that moment, or is read before it.
+   */
+  it("is read again the moment it turns, not on its next poll", async () => {
+    wrap(<Turning at={Date.now() + 5_000} />);
+    await settle();
+    expect(reads).toBe(1);
+
+    await advance(4_999);
+    expect(reads).toBe(1);
+    await advance(1);
+    expect(reads).toBe(2);
+  });
+});

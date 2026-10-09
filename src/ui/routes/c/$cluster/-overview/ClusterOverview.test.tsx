@@ -182,6 +182,7 @@ describe("what stands when the cluster-wide read does not", () => {
 
 const FULL_OVERVIEW: ClusterOverviewData = {
   servedFrom: "list",
+  nextChangeAt: null,
   problems: [],
   problemsTruncated: 0,
   scheduler: {

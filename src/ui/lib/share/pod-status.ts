@@ -44,6 +44,16 @@ export const pendingTooLong = (
   pod.start.state !== "settled" &&
   !insideWait(pod, now);
 
+/** The moments a pod's colour can turn on the clock alone: its wait running out, its loop lapsing. */
+export function podDeadlines(
+  pod: Pick<PodBadgeInput, "status" | "start">
+): number[] {
+  return [
+    pod.start?.state === "starting" ? Date.parse(pod.start.until) : NaN,
+    Date.parse(pod.status.loopingUntil ?? ""),
+  ].filter(Number.isFinite);
+}
+
 /** A word that would read healthy, said in the seconds a crash-looping container is up. */
 export const upBetweenCrashes = (pod: { status: LoopStatus }) =>
   statusRole(pod.status.display) === "ok" &&

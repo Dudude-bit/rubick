@@ -1,7 +1,8 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { useWindowActivity } from "@/lib/window-activity";
+import { lastRunOut } from "@/lib/workload-status";
 
 interface Clock {
   subscribe: (onTick: () => void) => () => void;
@@ -112,5 +113,44 @@ export function useNowReading<T extends string | number>(
   return useSyncExternalStore(
     surfaceVisible && windowVisible ? rate.subscribe : stopped,
     () => read(Date.now())
+  );
+}
+
+/** The longest delay `setTimeout` keeps; anything longer fires at once. */
+export const LONGEST_TIMEOUT_MS = 2_147_483_647;
+
+/**
+ * The latest of `deadlines` already past, read again the moment the next one
+ * passes: a verdict that turns at a deadline turns then, on every screen that
+ * holds it, and not on whichever tick of a shared clock comes after.
+ */
+export function useLastPassed(deadlines: readonly number[]): number {
+  const surfaceVisible = useSurfaceVisible();
+  const windowVisible = useWindowActivity((state) => state.visible);
+  const key = deadlines.filter(Number.isFinite).join(",");
+  const held = useMemo(() => (key ? key.split(",").map(Number) : []), [key]);
+  const subscribe = useCallback(
+    (onPass: () => void) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const arm = () => {
+        const now = Date.now();
+        const next = Math.min(...held.filter((at) => at > now));
+        if (!Number.isFinite(next)) return;
+        timer = setTimeout(
+          () => {
+            onPass();
+            arm();
+          },
+          Math.min(next - now, LONGEST_TIMEOUT_MS)
+        );
+      };
+      arm();
+      return () => clearTimeout(timer);
+    },
+    [held]
+  );
+  return useSyncExternalStore(
+    surfaceVisible && windowVisible ? subscribe : stopped,
+    () => lastRunOut(held, Date.now())
   );
 }
