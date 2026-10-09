@@ -6,14 +6,8 @@ import { parts } from "@/i18n/parts";
 import { ROLE_ICON } from "@/lib/status-role";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
-import { workloadStatusMeaning } from "@/lib/status-meaning";
-import { ownStatusWord } from "@/lib/status-words";
-import {
-  rolloutLine,
-  workloadRole,
-  workloadStatus,
-  type RolloutLine,
-} from "@/lib/workload-status";
+import { rolloutLine, type RolloutLine } from "@/lib/workload-status";
+import { rolloutBadge } from "./rollout-badge";
 import type { MessageSubject } from "@/lib/message-refs";
 import type { Rollout } from "@/generated/types";
 
@@ -68,26 +62,15 @@ export function RolloutSummary({
 
 /** The verdict's word, with its sentence on hover for a surface with no room for it. */
 export function RolloutBadge({ rollout }: { rollout: Rollout }) {
-  const t = useT();
-  const line = rolloutLine(rollout, t);
-  const status = workloadStatus(rollout);
+  const badge = rolloutBadge(rollout, useT());
   return (
     <StatusBadge
-      status={status}
-      roleOverride={workloadRole(rollout)}
-      glyph={rollout.state === "podsUnread" ? EyeOff : undefined}
-      title={
-        line
-          ? [
-              line.text,
-              line.said && t("readings", "controllerSaid", { said: line.said }),
-            ]
-              .filter(Boolean)
-              .join(". ")
-          : workloadStatusMeaning(status, t)
-      }
+      status={badge.status}
+      roleOverride={badge.role}
+      glyph={badge.glyph}
+      title={badge.title}
     >
-      {ownStatusWord(status, t)}
+      {badge.label}
     </StatusBadge>
   );
 }

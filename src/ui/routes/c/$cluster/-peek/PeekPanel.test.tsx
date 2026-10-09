@@ -76,6 +76,8 @@ vi.mock("@/lib/commands", () => ({
     getConfigmap: vi.fn(),
     getConfigmapData: vi.fn(),
     getDeployment: vi.fn(),
+    getStatefulset: vi.fn(),
+    getDaemonset: vi.fn(),
     getDeploymentPods: vi.fn(),
     getReplicaset: vi.fn(),
     getDeploymentReplicasets: vi.fn(),
@@ -118,6 +120,7 @@ status:
 
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
+import { ROLE_TEXT } from "@/lib/status-role";
 import { REFRESH_INTERVALS } from "@/lib/refresh";
 import { useWindowActivity } from "@/lib/window-activity";
 import { renderWithRouter } from "@/test/render";
@@ -861,6 +864,57 @@ describe("PeekPanel reads what the detail pages read", () => {
       "Rollout stalled"
     );
   });
+
+  /**
+   * Marco's ledger: the page header and the row under the peek's own header
+   * said the pods were not read, and the peek's header badge drew the
+   * generic hollow Unavailable with its fault meaning. Fails if a set
+   * kind's peek header loses the EyeOff mark, takes a colour, or explains
+   * the word without saying the pods were not read.
+   */
+  it.each([
+    ["Deployment", "deployments", commands.getDeployment],
+    ["StatefulSet", "statefulsets", commands.getStatefulset],
+    ["DaemonSet", "daemonsets", commands.getDaemonset],
+  ])(
+    "draws a %s whose pods were not read as its page header does",
+    async (_kind, path, getter) => {
+      vi.mocked(getter).mockResolvedValue({
+        name: "ledger",
+        namespace: "team-blind",
+        replicas: { desired: 1, ready: 0, updated: 1, available: 0 },
+        desired: 1,
+        ready: 0,
+        current: 1,
+        upToDate: 1,
+        available: 0,
+        rollout: {
+          state: "podsUnread",
+          controller: {
+            state: "unavailable",
+            reason: "MinimumReplicasUnavailable",
+            message: null,
+            available: 0,
+            desired: 1,
+          },
+        },
+        containers: [],
+        initContainers: [],
+        ownerReferences: [],
+        createdAt: null,
+      } as never);
+      await wrap(`/c/prod/events?peek=${path}/team-blind/ledger`);
+      const header = await within(screen.getByRole("dialog")).findByText(
+        "Unavailable",
+        { selector: "header span" }
+      );
+      expect(header).toHaveClass(ROLE_TEXT.neutral);
+      expect(header.querySelector("svg")).toHaveClass("lucide-eye-off");
+      expect(header.closest("[title]")?.getAttribute("title")).toMatch(
+        /^Unavailable by the controller's counts alone: its pods could not be read/
+      );
+    }
+  );
 });
 
 describe("PeekPanel tab strip", () => {

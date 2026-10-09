@@ -1,6 +1,6 @@
 import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
-import { workloadRole, workloadStatus } from "@/lib/workload-status";
 import { WorkloadDiagnosis } from "./peek-workload-diagnosis";
+import { rolloutBadge } from "../-object/rollout-badge";
 
 import { CopyableAddress } from "@/components/ui/copyable-value";
 import { commands } from "@/lib/commands";
@@ -19,7 +19,7 @@ import { formatDate } from "@/lib/utils";
 import { jobEndRow } from "../-object/job-end";
 import { ImageRef } from "@/components/object/ImageRef";
 import type { T as Translate } from "@/i18n/useT";
-import type { ContainerPhase } from "@/generated/types";
+import type { ContainerPhase, Rollout } from "@/generated/types";
 import {
   controlledBy,
   ref,
@@ -82,6 +82,18 @@ function prettyQuantity(
     kind === "cpu" ? parseCPU(value) : parseMemory(value),
     kind
   );
+}
+
+/** The header badge the page header draws for the same verdict. */
+function rolloutHeader(rollout: Rollout, t: Translate) {
+  const badge = rolloutBadge(rollout, t);
+  return {
+    status: badge.status,
+    statusLabel: badge.label,
+    statusRole: badge.role,
+    statusGlyph: badge.glyph,
+    statusTitle: badge.title,
+  };
 }
 
 export const WORKLOAD_SOURCES: PeekSources = {
@@ -179,9 +191,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   }),
 
   Deployment: source(commands.getDeployment, (deployment, _target, t) => ({
-    status: workloadStatus(deployment.rollout),
-    statusLabel: ownStatusWord(workloadStatus(deployment.rollout), t),
-    statusRole: workloadRole(deployment.rollout),
+    ...rolloutHeader(deployment.rollout, t),
     createdAt: deployment.createdAt,
     lead: (
       <WorkloadDiagnosis
@@ -228,9 +238,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   })),
 
   StatefulSet: source(commands.getStatefulset, (set, _target, t) => ({
-    status: workloadStatus(set.rollout),
-    statusLabel: ownStatusWord(workloadStatus(set.rollout), t),
-    statusRole: workloadRole(set.rollout),
+    ...rolloutHeader(set.rollout, t),
     createdAt: set.createdAt,
     lead: (
       <WorkloadDiagnosis
@@ -277,9 +285,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
   })),
 
   DaemonSet: source(commands.getDaemonset, (set, _target, t) => ({
-    status: workloadStatus(set.rollout),
-    statusLabel: ownStatusWord(workloadStatus(set.rollout), t),
-    statusRole: workloadRole(set.rollout),
+    ...rolloutHeader(set.rollout, t),
     createdAt: set.createdAt,
     lead: (
       <WorkloadDiagnosis

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
 import type { T as Translate } from "@/i18n/useT";
@@ -53,6 +54,8 @@ export interface PeekSummary {
   statusRole?: StatusRole;
   /** What the badge means, where the word alone does not say it all. */
   statusTitle?: string;
+  /** A mark of its own in place of the role's glyph, as the page header draws it. */
+  statusGlyph?: LucideIcon;
   createdAt?: string | null;
   /** For the kinds whose API hands back a rendered age instead of a stamp. */
   groups: PeekGroup[];
