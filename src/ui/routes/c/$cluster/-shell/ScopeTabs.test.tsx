@@ -82,6 +82,42 @@ async function mount(at = "/c/k3d-dev") {
 
 const tabs = () => screen.getAllByRole("tab");
 
+/**
+ * jsdom lays nothing out, so the strip is given a room `room` pixels wide,
+ * each part it may cut 7px a character up to the width written on it, and
+ * each tab its parts and 100px of dot, slashes and close button.
+ */
+function layout(room: number) {
+  const cut = (part: Element) => {
+    const natural = (part.textContent ?? "").length * 7;
+    const max = parseFloat((part as HTMLElement).style.maxWidth);
+    return Number.isNaN(max) ? natural : Math.min(natural, max);
+  };
+  const rect = vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockImplementation(function (this: HTMLElement) {
+      const width = this.hasAttribute("data-cut")
+        ? cut(this)
+        : this.hasAttribute("data-scope-tab")
+          ? 100 +
+            [...this.querySelectorAll("[data-cut]")].reduce(
+              (sum, part) => sum + cut(part),
+              0
+            )
+          : 0;
+      return { width, height: 0, top: 0, left: 0, right: width } as DOMRect;
+    });
+  const client = vi
+    .spyOn(HTMLElement.prototype, "clientWidth", "get")
+    .mockImplementation(function (this: HTMLElement) {
+      return this.hasAttribute("data-scope-room") ? room : 0;
+    });
+  return () => {
+    rect.mockRestore();
+    client.mockRestore();
+  };
+}
+
 beforeEach(() => {
   localStorage.clear();
   summary.namespaces = [];
@@ -241,8 +277,6 @@ describe("what a tab says", () => {
         if (at === each) break;
       }
     }
-    const floor = (el: HTMLElement) => parseFloat(el.style.minWidth);
-    expect(floor(tabs()[2])).toBeGreaterThan(floor(tabs()[0]));
 
     await userEvent.click(
       within(tabs()[2]).getByRole("button", { name: /^Close / })
@@ -281,13 +315,8 @@ describe("a strip with more tabs than room", () => {
       pendingHref: null,
     });
   };
-  /** The strip and its menu are 1000px: four tabs at their 228px floor and the menu. */
-  const roomOf1000 = () =>
-    vi
-      .spyOn(HTMLElement.prototype, "clientWidth", "get")
-      .mockImplementation(function (this: HTMLElement) {
-        return this.hasAttribute("data-scope-room") ? 1000 : 0;
-      });
+  /** The strip and its menu are 1100px: four tabs at their floors and the menu. */
+  const roomOf1100 = () => layout(1100);
   /** The menu's tabs stay mounted to be measured, out of sight: what the strip draws is the rest. */
   const drawn = () =>
     screen
@@ -308,7 +337,7 @@ describe("a strip with more tabs than room", () => {
    */
   it("shows each tab whole in the strip or by name in the menu", async () => {
     six("t0");
-    const width = roomOf1000();
+    const width = roomOf1100();
     try {
       await mount();
       expect(inStrip()).toEqual(["Pods", "Deployments", "Services", "Events"]);
@@ -324,7 +353,7 @@ describe("a strip with more tabs than room", () => {
         "All namespaces /cart-667846ff79-4f68h",
       ]);
     } finally {
-      width.mockRestore();
+      width();
     }
   });
 
@@ -335,7 +364,7 @@ describe("a strip with more tabs than room", () => {
    */
   it("keeps the open tab in the strip, and opens the one picked from the menu", async () => {
     six("cart");
-    const width = roomOf1000();
+    const width = roomOf1100();
     try {
       await mount();
       expect(inStrip()).toEqual([
@@ -349,7 +378,68 @@ describe("a strip with more tabs than room", () => {
       expect(useScopeTabStore.getState().activeId).toBe("t3");
       expect(inStrip()).toContain("Events");
     } finally {
-      width.mockRestore();
+      width();
+    }
+  });
+
+  /**
+   * Lena at 1024 with payments-578dcb4559-rf746 open read the tab beside it
+   * as "team-check… / Обзор", blank room before its close button. Fails if
+   * a namespace short enough to read whole is cut while the long object name
+   * beside it still has characters to give, or the long name is cut under
+   * the floor that keeps its start and its generated end.
+   */
+  it("cuts the long object name and never the short namespace beside it", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({
+          id: "pay",
+          href: "/c/k3d-dev/pods/shop/payments-578dcb4559-rf746",
+        }),
+        tab({ id: "home", namespace: "team-checkout", href: "/c/k3d-dev" }),
+      ],
+      activeId: "pay",
+      pendingHref: null,
+    });
+    useClusterStore.setState({
+      currentNamespace: "shop",
+      namespaceScope: ["shop"],
+    });
+    const restore = layout(500);
+    try {
+      await mount();
+      const [pay, home] = tabs();
+      const scopeOf = (each: HTMLElement) =>
+        within(each).getByText(/^(shop|team-checkout)$/);
+      expect(scopeOf(home).style.maxWidth).toBe("");
+      expect(scopeOf(pay).style.maxWidth).toBe("");
+      const name = pay.querySelector<HTMLElement>("[data-route-name]")!;
+      expect(parseFloat(name.style.maxWidth)).toBeLessThan(
+        "payments-578dcb4559-rf746".length * 7
+      );
+      expect(parseFloat(name.style.maxWidth)).toBeGreaterThanOrEqual(72);
+      expect(home).not.toHaveAttribute("data-overflow");
+    } finally {
+      restore();
+    }
+  });
+
+  /**
+   * Dana clicked Events and the shell tab beside it dropped into the menu,
+   * so her next click on its place opened cart-crjnn. Fails if opening a
+   * tab that is already in the strip changes which tabs the strip shows.
+   */
+  it("keeps the same tabs in the strip when one of them is opened", async () => {
+    six("cart");
+    const width = roomOf1100();
+    try {
+      await mount();
+      const before = inStrip();
+      await userEvent.click(screen.getByRole("tab", { name: /Pods$/ }));
+      expect(useScopeTabStore.getState().activeId).toBe("t0");
+      expect(inStrip()).toEqual(before);
+    } finally {
+      width();
     }
   });
 

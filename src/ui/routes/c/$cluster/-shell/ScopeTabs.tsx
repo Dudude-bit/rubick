@@ -25,7 +25,7 @@ import { ClusterRow } from "@/components/cluster/ClusterRow";
 import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
 import { ProviderMark } from "@/components/ui/provider-mark";
-import { fitTabs } from "@/components/object/tab-fit";
+import { fitStrip } from "@/components/object/tab-fit";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -113,11 +113,11 @@ import {
  *    every tab while the strip holds one cluster, since the sidebar has just
  *    said it and the dot still guards the mistake.
  *
- * Width is the Firefox rule, not the Chrome one: natural width, shrinking
- * together as the strip fills, stopping at a floor wide enough to still read
- * a route. Past that a tab is whole in the strip or named in the menu beside
- * it, never cut under Search: the open one first, then the rest in order
- * while they fit. Nothing stretches, so one tab is one tab's worth of chrome.
+ * Each tab is as wide as its own label up to a cap, nothing stretches, and
+ * a short name is never cut: as the strip fills, the longest names give up
+ * characters first, down to a floor that still reads. Past that a tab is
+ * whole in the strip or named in the menu beside it, and the tabs in the
+ * strip stay put while the open one is among them.
  */
 export function ScopeTabs() {
   const t = useT();
@@ -127,9 +127,6 @@ export function ScopeTabs() {
 
   const tabs = useScopeTabStore((s) => s.tabs);
   const activeId = useScopeTabStore((s) => s.activeId);
-  const shellTabs = useKeptShellStore((s) =>
-    s.shells.map((shell) => shell.tab).join("\n")
-  );
 
   const roomRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
@@ -155,19 +152,11 @@ export function ScopeTabs() {
 
   const multiCluster =
     new Set(shown.map((tab) => tab.context).filter(Boolean)).size > 1;
-  const kept = new Set(shellTabs.split("\n"));
-  const floors = shown.map((tab) =>
-    !tab.context && !tab.missing
-      ? null
-      : FLOOR[tab.missing ? "missing" : multiCluster ? "named" : "plain"][
-          kept.has(tab.id) ? 1 : 0
-        ]
-  );
   const hidden = useHiddenTabs({
     room: roomRef,
     strip: stripRef,
     menu: menuRef,
-    floors,
+    ids: shown.map((tab) => tab.id),
     open: shown.findIndex((tab) => tab.id === activeId),
   });
 
@@ -193,7 +182,6 @@ export function ScopeTabs() {
               active={tab.id === activeId}
               namesCluster={multiCluster}
               closable={shown.length > 1}
-              floor={floors[index]}
               overflow={hidden[index]}
             />
           ))}
@@ -226,56 +214,114 @@ export function ScopeTabs() {
 const GAP_PX = 4;
 /** The menu before it has been drawn once: "ещё 10" and its chevron. */
 const MENU_PX = 64;
+/** The widest a tab is drawn, however long its label. */
+const TAB_CAP_PX = 416;
 
 /**
- * Which tabs the menu holds: each tab is counted at its floor, the width it
- * can shrink to with its label whole, and a tab without one at its own width.
+ * The least each part of a label is cut to, in pixels: a part shorter than
+ * its floor is never cut. An object's name keeps `pay…rf746`, its start and
+ * its generated end; a namespace keeps `team-checkout`.
+ */
+const CUT_FLOOR = { cluster: 56, scope: 96, page: 96, object: 72 } as const;
+
+/**
+ * Which tabs the menu holds. Each part marked `data-cut` is measured at its
+ * own width, the fit decides at the parts' floors, and the parts of the
+ * tabs it shows get back the width it leaves, written straight onto them
+ * because a width the next render draws from is a frame late.
  */
 function useHiddenTabs({
   room,
   strip,
   menu,
-  floors,
+  ids,
   open,
 }: {
   room: React.RefObject<HTMLDivElement | null>;
   strip: React.RefObject<HTMLDivElement | null>;
   menu: React.RefObject<HTMLButtonElement | null>;
-  floors: readonly (number | null)[];
+  ids: readonly string[];
   open: number;
 }): boolean[] {
   const [hidden, setHidden] = useState<boolean[]>([]);
-  // A string, because `floors` is a new array on every render.
-  const floorsKey = floors.join(",");
+  const inStrip = useRef<ReadonlySet<string> | null>(null);
+  const idsKey = ids.join("\n");
   const menuShown = hidden.some(Boolean);
   useLayoutEffect(() => {
     const box = room.current;
     const list = strip.current;
     if (!box || !list) return;
-    const stated = floorsKey.split(",").map((px) => (px ? Number(px) : null));
+    const order = idsKey.split("\n");
     const measure = () => {
       if (box.clientWidth === 0) return;
       const tabs = [...list.querySelectorAll<HTMLElement>("[data-scope-tab]")];
-      const shown = fitTabs({
-        widths: tabs.map(
-          (tab, index) => stated[index] ?? tab.getBoundingClientRect().width
-        ),
+      const cuts = tabs.map((tab) => [
+        ...tab.querySelectorAll<HTMLElement>("[data-cut]"),
+      ]);
+      for (const part of cuts.flat()) part.style.maxWidth = "";
+      const measured = tabs.map((tab, index) => {
+        const parts = cuts[index].map((part) => {
+          const natural = part.getBoundingClientRect().width;
+          return {
+            natural,
+            floor: Math.min(natural, Number(part.dataset.cut)),
+          };
+        });
+        const cuttable = parts.reduce((sum, part) => sum + part.natural, 0);
+        return {
+          chrome: tab.getBoundingClientRect().width - cuttable,
+          parts,
+        };
+      });
+      const before = inStrip.current;
+      const fit = fitStrip({
+        tabs: measured,
         room: box.clientWidth,
         gap: GAP_PX,
         menu: (menu.current?.getBoundingClientRect().width || MENU_PX) + GAP_PX,
         open,
+        cap: TAB_CAP_PX,
+        shown: before ? order.map((id) => before.has(id)) : undefined,
       });
-      const next = shown.map((fits) => !fits);
+      cuts.forEach((parts, index) =>
+        parts.forEach((part, at) => {
+          const width = fit.widths[index][at];
+          if (width < measured[index].parts[at].natural - 0.5)
+            part.style.maxWidth = `${width}px`;
+        })
+      );
+      inStrip.current = new Set(order.filter((_, index) => fit.shown[index]));
+      const next = fit.shown.map((fits) => !fits);
       setHidden((prev) => (prev.join() === next.join() ? prev : next));
     };
     measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(box);
-    if (menu.current) observer.observe(menu.current);
-    return () => observer.disconnect();
-  }, [room, strip, menu, floorsKey, open, menuShown]);
-  return floors.map((_, index) => hidden[index] ?? false);
+    let live = true;
+    if (document.fonts?.status === "loading")
+      void document.fonts.ready.then(() => live && measure());
+    // A label that changes under a tab, a namespace picked or a shell
+    // started, changes nothing the strip's own size would report.
+    const mutations =
+      typeof MutationObserver === "undefined"
+        ? undefined
+        : new MutationObserver(measure);
+    mutations?.observe(list, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+    const resizes =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(measure);
+    resizes?.observe(box);
+    if (menu.current) resizes?.observe(menu.current);
+    return () => {
+      live = false;
+      mutations?.disconnect();
+      resizes?.disconnect();
+    };
+  }, [room, strip, menu, idsKey, open, menuShown]);
+  return ids.map((_, index) => hidden[index] ?? false);
 }
 
 /** Every tab the strip cannot show whole, one click away, the open one marked. */
@@ -399,16 +445,19 @@ function RouteName({ name, className }: { name: string; className?: string }) {
   const { stem, tail } = splitName(name);
   if (!tail)
     return (
-      <span className={cn("min-w-18 shrink truncate", className)}>{name}</span>
+      <span data-cut={CUT_FLOOR.page} className={cn("truncate", className)}>
+        {name}
+      </span>
     );
   const cut = nameCut({ name, stem, generated: true, before: 0, label: 0 });
   return (
     <span
       className={cn(
-        "flex min-w-18 max-w-full shrink overflow-hidden whitespace-nowrap font-mono",
+        "flex overflow-hidden whitespace-nowrap font-mono",
         className
       )}
       style={{ width: `${cut.box}ch` }}
+      data-cut={CUT_FLOOR.object}
       data-route-name
     >
       <span
@@ -521,7 +570,6 @@ function ScopeTabItem({
   active,
   namesCluster,
   closable,
-  floor,
   overflow,
 }: {
   tab: ScopeTab;
@@ -530,8 +578,6 @@ function ScopeTabItem({
   namesCluster: boolean;
   /** The strip has somewhere to fall back to if this tab goes. */
   closable: boolean;
-  /** The width its parts need at their own minimums; `null` for a tab drawn at its own width. */
-  floor: number | null;
   /** In the menu, not the strip: out of sight and out of the way, still measured. */
   overflow: boolean;
 }) {
@@ -669,7 +715,6 @@ function ScopeTabItem({
           data-active={active}
           data-scope-tab
           data-overflow={overflow || undefined}
-          style={{ minWidth: floor ?? undefined }}
           onClick={() => {
             if (!active) activateTab(tab.id);
           }}
@@ -681,18 +726,10 @@ function ScopeTabItem({
             closeTab(tab.id);
           }}
           className={cn(
-            // Natural width, no growing, a cap a long object name reaches
-            // and a floor it stops at: an empty strip is not a reason to
-            // stretch a tab, and a contested one gives up characters before
-            // it gives up tabs. Below the floor a tab goes to the menu.
-            //
-            // The floor is stated rather than left to the segments' own
-            // minimums because a flex item's intrinsic minimum is not
-            // reliably the sum of its children's, and a tab narrower than
-            // its own parts is a tab with its label written over itself —
-            // hence the label clips as the backstop. The close button sits
-            // outside what clips, so no width can take it away.
-            "flex max-w-104 shrink items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
+            // As wide as its label: the strip cuts the parts marked
+            // `data-cut`, never the tab, so no tab holds empty room. The
+            // label clips as a backstop; the close button sits outside it.
+            "flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
             OVERFLOW,
             active ? "bg-sel text-fg-mut" : "text-fg-fnt hover:bg-hover"
           )}
@@ -711,11 +748,7 @@ function ScopeTabItem({
                 <button
                   type="button"
                   aria-haspopup="menu"
-                  className={cn(
-                    segClass(open === "ctx"),
-                    showName ? "min-w-16 shrink-6" : "flex-none",
-                    tab.missing && "min-w-26"
-                  )}
+                  className={cn(segClass(open === "ctx"), "flex-none")}
                 >
                   {/* Only the dot carries the cluster colour here, and the mark
                     stays at text contrast so the tab reads as one label and
@@ -734,7 +767,7 @@ function ScopeTabItem({
                     className="h-[13px] w-[13px] flex-none"
                   />
                   {showName && (
-                    <span className="min-w-0 truncate">
+                    <span data-cut={CUT_FLOOR.cluster} className="truncate">
                       {alias ?? context ?? t("cluster", "noCluster")}
                     </span>
                   )}
@@ -767,13 +800,11 @@ function ScopeTabItem({
             >
               <button
                 type="button"
-                // A floor here as well as on the route: a namespace ground
-                // down to a bare chevron is not a shorter label, it is a
-                // segment that has stopped saying anything and kept its
-                // punctuation.
-                className={cn(segClass(open === "ns"), "min-w-14 shrink-6")}
+                className={cn(segClass(open === "ns"), "flex-none")}
               >
-                <span className="min-w-0 truncate">{scopeLabel(scope, t)}</span>
+                <span data-cut={CUT_FLOOR.scope} className="truncate">
+                  {scopeLabel(scope, t)}
+                </span>
                 <span aria-hidden="true" className="flex-none text-[9px]">
                   ▾
                 </span>
@@ -836,18 +867,6 @@ function ScopeTabItem({
     </Tooltip>
   );
 }
-
-/**
- * A tab's floor in pixels, then the same with the shell glyph: the width of
- * its parts at their own minimums in Inter at 12px, so the label never clips.
- * A lost cluster needs room for the name it was pointed at and the word that
- * says it is gone.
- */
-const FLOOR = {
-  missing: [356, 376],
-  named: [280, 296],
-  plain: [228, 244],
-} as const;
 
 const OVERFLOW = "data-[overflow=true]:invisible data-[overflow=true]:absolute";
 
