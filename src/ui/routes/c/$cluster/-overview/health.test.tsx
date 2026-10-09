@@ -20,8 +20,11 @@ import {
   type AttentionInputs,
 } from "@/lib/attention";
 import { translate } from "@/i18n";
-import { ownCountedWord, ownStatusWord } from "@/lib/status-words";
-import { ROLLOUT_CODES } from "@/lib/workload-status";
+import {
+  ownCountedWord,
+  ownStatusWord,
+  rolloutCountedWord,
+} from "@/lib/status-words";
 import { JOB } from "@/lib/status-meaning";
 import type { T } from "@/i18n/useT";
 import type {
@@ -699,11 +702,11 @@ describe("the census legend in Russian", () => {
 
   /**
    * Lena switched to Russian and the Overview census still read "1 Stalled"
-   * and "2 Degraded" under a list that said Застрял and Деградировал. Fails
-   * if the legend goes back to the English code, or words a status the
-   * cluster owns (Unavailable, Available).
+   * and "2 Degraded"; then Marco's read "1 Ready  1 застрял  1 Unavailable".
+   * Every rollout word is the app's verdict, none a value a Deployment's
+   * status holds. Fails if any goes back to the English code.
    */
-  it("words the app's own verdicts and leaves the cluster's statuses as written", async () => {
+  it("words every rollout verdict in the reader's language", async () => {
     useLocaleStore.setState({ choice: "ru" });
     try {
       await wrap(<WorkloadsPanel overview={overview} scope="prod" />);
@@ -711,13 +714,15 @@ describe("the census legend in Russian", () => {
       expect(
         Array.from(legend?.children ?? []).map((item) => item.textContent)
       ).toEqual([
-        "2 Ready",
+        "2 готовы",
         "2 простаивают",
         "2 деградировали",
-        "1 Unavailable",
+        "1 недоступен",
         "1 застрял",
       ]);
-      expect(screen.queryByText(/Stalled|Degraded/)).toBeNull();
+      expect(
+        screen.queryByText(/Ready|Stalled|Degraded|Unavailable/)
+      ).toBeNull();
     } finally {
       useLocaleStore.setState({ choice: null });
     }
@@ -729,22 +734,21 @@ describe("the census legend in Russian", () => {
     const rows = section.body.type === "facts" ? section.body.rows : [];
     const deployments = rows.find((row) => row.label === "Deployments");
     expect(deployments?.values.map((value) => value.text)).toEqual([
-      "2 Ready",
+      "2 готовы",
       "2 простаивают",
       "2 деградировали",
-      "1 Unavailable",
+      "1 недоступен",
       "1 застрял",
     ]);
   });
 
   /**
-   * A verdict added to the flagged set is worded by `ownStatusWord` for the
-   * badge; without a counted form the legend would print its English code
-   * beside Russian ones. Fails the day that happens.
+   * A Job word worded by `ownStatusWord` for the badge but without a counted
+   * form would print its English code in the legend beside Russian ones.
+   * Fails the day that happens.
    */
-  it("has a counted word for every verdict the app words", () => {
-    const codes = [...Object.values(ROLLOUT_CODES), ...Object.keys(JOB)];
-    const unworded = codes.filter(
+  it("has a counted word for every Job word the app words", () => {
+    const unworded = Object.keys(JOB).filter(
       (code) =>
         ownStatusWord(code, ru) !== undefined &&
         ownCountedWord(code, 2, ru) === undefined
@@ -759,7 +763,7 @@ describe("the census legend in Russian", () => {
     [5, "застряли"],
     [21, "застрял"],
   ])("agrees with %i in number", (n, word) => {
-    expect(ownCountedWord("Stalled", n, ru)).toBe(word);
+    expect(rolloutCountedWord("Stalled", n, ru)).toBe(word);
   });
 });
 

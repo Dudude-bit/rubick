@@ -6780,6 +6780,14 @@ export const en = {
     suspendedCounted: { other: "Suspended" },
     startingCounted: { other: "Starting" },
     waitingCounted: { other: "Waiting" },
+    ready: "Ready",
+    progressing: "Progressing",
+    unavailable: "Unavailable",
+    paused: "Paused",
+    readyCounted: { other: "Ready" },
+    progressingCounted: { other: "Progressing" },
+    unavailableCounted: { other: "Unavailable" },
+    pausedCounted: { other: "Paused" },
   },
   statusMeaning: {
     phasePending:

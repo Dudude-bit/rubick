@@ -5,7 +5,12 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { columnFloor } from "@/lib/column-label";
 import { serviceVerdictLabels } from "@/lib/service-health";
-import { cronStatusWord, ownStatusWord } from "@/lib/status-words";
+import {
+  cronStatusWord,
+  isRolloutCode,
+  ownStatusWord,
+  rolloutWord,
+} from "@/lib/status-words";
 
 import { AGE_CELL_PX, NAME_CELL_PX, NODE_CELL_PX } from "./columns";
 
@@ -383,12 +388,16 @@ describe("the status column of a workload and a Job", () => {
     "Running",
     "Pending",
   ];
+  const word = (code: string, t: T) =>
+    isRolloutCode(code)
+      ? rolloutWord(code, t)
+      : (ownStatusWord(code, t) ?? code);
   const widest = (codes: string[], t: T) =>
-    Math.max(...codes.map((code) => (ownStatusWord(code, t) ?? code).length));
+    Math.max(...codes.map((code) => word(code, t).length));
 
   /**
-   * "Повторяет попытку" and "Деградировал" are longer than the English words
-   * the columns were sized for. Fails if a status column can be drawn narrower
+   * "Повторяет попытку", "Деградировал" and "Развёртывается" are longer than
+   * the English words the columns were sized for. Fails if a status column can be drawn narrower
    * than its widest word, the mark and the padding in either language.
    */
   it.each([

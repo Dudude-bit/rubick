@@ -41,9 +41,9 @@ describe("the rollout badge on hover", () => {
   it("says what Ready means when there is no rollout sentence to show", async () => {
     useLocaleStore.setState({ choice: "ru" });
     await renderWithRouter(<RolloutBadge rollout={{ state: "ready" }} />);
-    expect(screen.getByText("Ready")).toHaveAttribute(
+    expect(screen.getByText("Готов")).toHaveAttribute(
       "title",
-      "Ready: все нужные реплики запущены и доступны."
+      "Готов: все нужные реплики запущены и доступны."
     );
   });
 });

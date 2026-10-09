@@ -2,7 +2,7 @@ import type { PodRow, PodStart, Rollout } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import type { Tone } from "@/lib/tone";
 import { statusRole, type StatusRole } from "@/lib/status-role";
-import { ownStatusWord } from "@/lib/status-words";
+import { rolloutWord } from "@/lib/status-words";
 
 /**
  * The one word a workload's rollout comes to, on every screen that draws it.
@@ -73,8 +73,7 @@ export function rolloutVerdict(
 
 /** The verdict as the reader's language words it; `workloadStatus` stays the code `statusRole` reads. */
 export function workloadWord(rollout: Rollout, t: T): string {
-  const code = workloadStatus(rollout);
-  return ownStatusWord(code, t) ?? code;
+  return rolloutWord(workloadStatus(rollout), t);
 }
 
 /** The states the overview lists as needing attention; the shared file holds the two equal. */

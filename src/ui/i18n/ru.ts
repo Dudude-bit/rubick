@@ -7437,6 +7437,34 @@ export const ru: Catalogue = {
       many: "ожидают",
       other: "ожидают",
     },
+    ready: "Готов",
+    progressing: "Развёртывается",
+    unavailable: "Недоступен",
+    paused: "На паузе",
+    readyCounted: {
+      one: "готов",
+      few: "готовы",
+      many: "готовы",
+      other: "готовы",
+    },
+    progressingCounted: {
+      one: "развёртывается",
+      few: "развёртываются",
+      many: "развёртываются",
+      other: "развёртываются",
+    },
+    unavailableCounted: {
+      one: "недоступен",
+      few: "недоступны",
+      many: "недоступны",
+      other: "недоступны",
+    },
+    pausedCounted: {
+      one: "на паузе",
+      few: "на паузе",
+      many: "на паузе",
+      other: "на паузе",
+    },
   },
   statusMeaning: {
     phasePending:

@@ -95,7 +95,7 @@ describe("a meaning line begins with the word the badge prints", () => {
   it("uses the reader's word for the app's own verdicts and the cluster's word for the rest", async () => {
     await loadLocale("ru");
     expect(workloadStatusMeaning("Stalled", ru)).toMatch(/^Застрял: /);
-    expect(workloadStatusMeaning("Unavailable", ru)).toMatch(/^Unavailable: /);
+    expect(workloadStatusMeaning("Unavailable", ru)).toMatch(/^Недоступен: /);
     expect(statusMeaning("Job", "Retrying", ru)).toMatch(
       /^Повторяет попытку: /
     );

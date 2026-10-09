@@ -157,7 +157,7 @@ describe("the word a workload's rollout comes to", () => {
       "Деградировал"
     );
     expect(rolloutWord(EVERY[0], ru)).toBe("Простаивает");
-    expect(rolloutWord(EVERY[2], ru)).toBe("Unavailable");
+    expect(rolloutWord(EVERY[2], ru)).toBe("Недоступен");
   });
 });
 
@@ -244,12 +244,12 @@ describe("a verdict whose pods were not read", () => {
   /** A shared report and a list's share read the colour too. Fails if either paints the unchecked verdict red or drops the mark. */
   it("is shared neutral, marked as unchecked", () => {
     expect(rolloutVerdict(unread, t)).toEqual({
-      text: "Unavailable · readings.rolloutPodsUnreadShort",
+      text: "statusWords.unavailable · readings.rolloutPodsUnreadShort",
       role: "neutral",
       unread: true,
     });
     expect(rolloutStatusOf(0, 1, unread, t)).toEqual({
-      text: "Unavailable · readings.rolloutPodsUnreadShort · count.slashReady",
+      text: "statusWords.unavailable · readings.rolloutPodsUnreadShort · count.slashReady",
       role: "neutral",
       unread: true,
     });

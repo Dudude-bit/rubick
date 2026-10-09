@@ -674,9 +674,10 @@ describe("the word a row's reason is printed in", () => {
   const ru: T = (section, key, values) => translate("ru", section, key, values);
 
   /**
-   * A Stalled Deployment's row read "Stalled" in a Russian panel. The app's
-   * own verdicts are the reader's language; a pod's reason is the kubelet's
-   * and is matched against kubectl, so it stays as written.
+   * A Stalled Deployment's row read "Stalled" in a Russian panel, and an
+   * Unavailable one "Unavailable". Every rollout verdict is the app's and
+   * the reader's language; a pod's reason is the kubelet's and is matched
+   * against kubectl, so it stays as written.
    */
   it("words a workload's verdict and leaves the cluster's own reasons alone", () => {
     expect(reasonWord({ kind: "Deployment", reason: "Stalled" }, ru)).toBe(
@@ -686,7 +687,13 @@ describe("the word a row's reason is printed in", () => {
       "Деградировал"
     );
     expect(reasonWord({ kind: "Deployment", reason: "Unavailable" }, ru)).toBe(
-      "Unavailable"
+      "Недоступен"
+    );
+    expect(
+      reasonWord({ kind: "Deployment", reason: "ProgressDeadlineExceeded" }, ru)
+    ).toBe("ProgressDeadlineExceeded");
+    expect(reasonWord({ kind: "Job", reason: "Retrying" }, ru)).toBe(
+      "Повторяет попытку"
     );
     expect(reasonWord({ kind: "Pod", reason: "Degraded" }, ru)).toBe(
       "Degraded"
