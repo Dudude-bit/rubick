@@ -12,7 +12,10 @@ import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
 import { hrefOf, objectLink } from "@/lib/links";
 import { ResourceType } from "@/lib/resource-registry";
-import { ResourceRef } from "@/components/object/ResourceRef";
+import {
+  RESOURCE_NAME_SHELL,
+  ResourceName,
+} from "@/components/object/ResourceName";
 import type { TerminalSessionInfo, TerminalState } from "@/generated/types";
 import {
   ACTIVITY_ROW,
@@ -96,10 +99,8 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
     <div className="pb-3">
       <ActivityGroup title={t("activity", "sessions")} count={sessions.length}>
         {sessions.map((session) => (
-          // A `role="link"` div rather than a button, because the pod name
-          // inside it is a real anchor now and an anchor cannot live in a
-          // button. Same split the resource tables use: the row opens the
-          // page, the name opens the peek.
+          // One place to go from anywhere on the row, the pod name included:
+          // back to the shell. A div because End is a button inside it.
           <div
             key={session.id}
             role="link"
@@ -109,7 +110,7 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
               "w-full cursor-pointer text-left hover:bg-hover"
             )}
             onClick={(event) => {
-              if ((event.target as HTMLElement).closest("a, button")) return;
+              if ((event.target as HTMLElement).closest("button")) return;
               handleNavigateToShell(session);
             }}
             onKeyDown={(event) => {
@@ -129,18 +130,16 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
             />
             <span className="min-w-0 flex-1">
               <span className="block truncate">
-                {/* The peek reads the cluster on screen, so a pod in another
-                    one is named, not linked; the row still goes there. */}
-                {session.context === currentContext ? (
-                  <ResourceRef
-                    kind={ResourceType.Pod}
-                    name={session.pod}
-                    namespace={session.namespace}
-                    showKind={false}
-                  />
-                ) : (
-                  <span className="font-mono text-fg">{session.pod}</span>
-                )}
+                <span className={RESOURCE_NAME_SHELL}>
+                  <span className="sr-only">{session.pod}</span>
+                  <span aria-hidden="true" className="contents">
+                    <ResourceName
+                      kind={ResourceType.Pod}
+                      name={session.pod}
+                      showKind={false}
+                    />
+                  </span>
+                </span>
               </span>
               <span className="block truncate font-mono text-[11px] text-fg-fnt">
                 {session.context !== currentContext && `${session.context} · `}

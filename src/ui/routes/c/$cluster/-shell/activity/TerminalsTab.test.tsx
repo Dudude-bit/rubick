@@ -8,6 +8,7 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useKeptShellStore } from "@/stores/keptShellStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { useActivityPanelStore } from "@/stores/activityPanelStore";
 import { ActivityPanel } from "../ActivityPanel";
 import { TerminalsTab } from "./TerminalsTab";
 
@@ -25,6 +26,7 @@ const shell = (
 });
 
 afterEach(() => {
+  useActivityPanelStore.setState({ open: false, tab: "ports" });
   useTerminalSessionStore.setState({ sessions: null, failed: null });
   useKeptShellStore.setState({ shells: [] });
   useClusterStore.setState({ currentContext: null });
@@ -68,31 +70,21 @@ describe("Activity's shells", () => {
     expect(screen.queryByText("No shells are open")).toBeNull();
   });
 
-  /**
-   * The way back to a parked shell is its own tab, on its Shell tab; the tab
-   * on screen stays where it is. Fails if the row navigates the tab on
-   * screen, which would end any shell that tab keeps.
-   */
-  it("takes the reader back to the tab that keeps the shell, on its Shell tab", async () => {
+  /** Two tabs on one cluster, the parked one keeping a shell on cart-4f68h. */
+  async function keptByOwner(onClose = vi.fn()) {
     useClusterStore.setState({ currentContext: "acme-staging" });
+    const parked = (id: string, href: string) => ({
+      id,
+      context: "acme-staging",
+      namespace: "",
+      scope: [],
+      href,
+      missing: false,
+    });
     useScopeTabStore.setState({
       tabs: [
-        {
-          id: "here",
-          context: "acme-staging",
-          namespace: "",
-          scope: [],
-          href: "/c/acme-staging/events",
-          missing: false,
-        },
-        {
-          id: "owner",
-          context: "acme-staging",
-          namespace: "",
-          scope: [],
-          href: "/c/acme-staging/pods/shop/cart-4f68h?tab=logs",
-          missing: false,
-        },
+        parked("here", "/c/acme-staging/events"),
+        parked("owner", "/c/acme-staging/pods/shop/cart-4f68h?tab=logs"),
       ],
       activeId: "here",
       pendingHref: null,
@@ -106,12 +98,12 @@ describe("Activity's shells", () => {
       container: "app",
     });
     useTerminalSessionStore.setState({ sessions: [shell("cart-4f68h")] });
-    await renderWithRouter(<TerminalsTab />, { at: "/c/acme-staging/events" });
+    return renderWithRouter(<TerminalsTab onClose={onClose} />, {
+      at: "/c/acme-staging/events",
+    });
+  }
 
-    fireEvent.click(
-      screen.getByRole("link", { name: /shop · app · connected/ })
-    );
-
+  const backOnShellTab = () => {
     const tabs = useScopeTabStore.getState();
     expect(tabs.activeId).toBe("owner");
     expect(tabs.pendingHref).toBe(
@@ -120,6 +112,37 @@ describe("Activity's shells", () => {
     expect(tabs.tabs.find((tab) => tab.id === "here")?.href).toBe(
       "/c/acme-staging/events"
     );
+  };
+
+  /**
+   * The way back to a parked shell is its own tab, on its Shell tab; the tab
+   * on screen stays where it is. Fails if the row navigates the tab on
+   * screen, which would end any shell that tab keeps.
+   */
+  it("takes the reader back to the tab that keeps the shell, on its Shell tab", async () => {
+    await keptByOwner();
+
+    fireEvent.click(
+      screen.getByRole("link", { name: /shop · app · connected/ })
+    );
+
+    backOnShellTab();
+  });
+
+  /**
+   * Dana clicked the pod name in the row: a peek opened over the tab on
+   * screen and Activity stayed open. Fails if the name does anything but
+   * what the rest of the row does.
+   */
+  it("goes back to the shell from the pod name too, closing Activity and opening no peek", async () => {
+    const closeActivity = vi.fn();
+    const { router } = await keptByOwner(closeActivity);
+
+    fireEvent.click(screen.getByTestId("resource-ref-name"));
+
+    backOnShellTab();
+    expect(closeActivity).toHaveBeenCalled();
+    expect(router.state.location.search).not.toHaveProperty("peek");
   });
 
   /** A shell with no page left needs ending from here. */
@@ -149,6 +172,22 @@ describe("Activity's shells", () => {
       await screen.findByText("Could not read the open shells")
     ).toBeInTheDocument();
     expect(screen.getByText("the bridge is down")).toBeInTheDocument();
+  });
+
+  /**
+   * The status bar read "1 shell" and opened Activity on Port forwards.
+   * Fails if the trigger opens anywhere but on what its label names.
+   */
+  it("opens on Shells when shells are what the status bar names", async () => {
+    useTerminalSessionStore.setState({ sessions: [shell("cart-4f68h")] });
+    await renderWithRouter(<ActivityPanel />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Activity panel" }));
+
+    expect(await screen.findByRole("tab", { name: /Shells/ })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
   });
 
   /**
