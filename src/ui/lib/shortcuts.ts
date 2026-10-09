@@ -273,6 +273,8 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "esc closes the open peek ahead of the row or filter under it",
   "src/ui/lib/stall-watch.ts":
     "not a shortcut: remembers the last key for the Why slow sheet",
+  "src/ui/components/object/DetailTabs.tsx":
+    "not a shortcut: bare arrows, Home and End walk the tab strip; a chord passes through",
 };
 
 export function chordsOf(): Shortcut[] {
