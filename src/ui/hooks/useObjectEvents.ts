@@ -1,4 +1,8 @@
+import { useCallback, useSyncExternalStore } from "react";
+import { hashKey, notifyManager, useQueryClient } from "@tanstack/react-query";
+
 import { commands } from "@/lib/commands";
+import type { EventInfo } from "@/generated/types";
 import { queryKeys } from "@/lib/query-keys";
 import type { RefreshRate } from "@/lib/refresh";
 import { ResourceType } from "@/lib/resource-registry";
@@ -14,7 +18,56 @@ export type ObjectEventsQuery = ReturnType<typeof useObjectEvents>;
 export const eventsOfEveryObject = (kind: string) =>
   kind === ResourceType.Namespace;
 
-/** One object's events, newest first: the peek, the object's page and Share read the same answer. */
+/**
+ * The events of the object with `uid`, where it is known: an event that names
+ * a uid is about that incarnation alone, and one with none is kept by name.
+ */
+export function ofIncarnation(
+  events: EventInfo[] | undefined,
+  uid: string | undefined
+): EventInfo[] | undefined {
+  if (!uid || !events) return events;
+  const own = events.filter(
+    (event) => !event.involvedObject.uid || event.involvedObject.uid === uid
+  );
+  return own.length === events.length ? events : own;
+}
+
+/** The uid of the object its page or peek has read, from the entry they share. */
+function useReadUid(
+  kind: string,
+  namespace: string | null | undefined,
+  name: string | null | undefined,
+  enabled: boolean
+): string | undefined {
+  const client = useQueryClient();
+  const hash = hashKey(queryKeys.detail(kind, namespace, name ?? undefined));
+  // Batched with the query observers' own notifications: a render forced in
+  // the middle of the cache's dispatch left the page's read a poll behind.
+  const subscribe = useCallback(
+    (notify: () => void) => {
+      const later = notifyManager.batchCalls(notify);
+      return client.getQueryCache().subscribe((event) => {
+        if (event.query.queryHash === hash) later();
+      });
+    },
+    [client, hash]
+  );
+  return useSyncExternalStore(subscribe, () => {
+    if (!enabled) return undefined;
+    const read = client.getQueryCache().get(hash)?.state.data;
+    const uid =
+      read && typeof read === "object" && "uid" in read ? read.uid : undefined;
+    return typeof uid === "string" && uid !== "" ? uid : undefined;
+  });
+}
+
+/**
+ * One object's events, newest first: the peek, the object's page and Share
+ * read the same answer. Once the object itself has been read, only its own
+ * incarnation's: wd-demo deleted and created twice listed fifteen events,
+ * eleven of them about the pods before it.
+ */
 export function useObjectEvents(
   kind: string,
   name: string | null | undefined,
@@ -23,6 +76,11 @@ export function useObjectEvents(
 ) {
   const everyObject = eventsOfEveryObject(kind);
   const scope = everyObject ? name : namespace;
+  const uid = useReadUid(kind, namespace, name, !everyObject);
+  const select = useCallback(
+    (events: EventInfo[]) => ofIncarnation(events, uid) ?? events,
+    [uid]
+  );
   return useLiveQuery({
     queryKey: [...queryKeys.events(scope ?? null), "object", kind, name ?? ""],
     queryFn: () =>
@@ -35,6 +93,7 @@ export function useObjectEvents(
         limit: OBJECT_EVENTS_READ,
       }),
     enabled: enabled && !!name,
+    select,
     refresh,
     retry: false,
   });
