@@ -4087,6 +4087,8 @@ export const en = {
     healthNoEndpoints: "no endpoints",
     healthComingUp: "coming up",
     healthIdle: "idle",
+    healthDrainingWhy:
+      "None of its addresses is ready, so its traffic goes to the ones still finishing their connections until they are gone",
     healthBackendIdle:
       "{name} has no pods by intent: what runs behind it is scaled to zero",
     healthBackendStarting: "{name} is coming up: its pods are still starting",

@@ -85,6 +85,7 @@ const BACKEND_PROBLEM: Record<
 > = {
   ready: null,
   partly: null,
+  draining: null,
   noneReady: "backendDown",
   noEndpoints: "backendDown",
   comingUp: "backendStarting",

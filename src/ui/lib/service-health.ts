@@ -24,8 +24,10 @@ import { endpointCount, publishedFor, servingCount } from "@/lib/published";
 import type { StatusRole } from "@/lib/status-role";
 
 export type ServiceHealth =
-  | { state: "ready"; serving: number }
-  | { state: "partly"; serving: number; total: number }
+  | { state: "ready"; ready: number }
+  | { state: "partly"; ready: number; draining: number; total: number }
+  /** Nothing ready: what it serves goes to addresses still finishing their connections. */
+  | { state: "draining"; draining: number; total: number }
   | { state: "noneReady"; published: PublishedCounts }
   /** None ready or none listed, and every workload behind it is still starting its pods. */
   | { state: "comingUp"; published: PublishedCounts }
@@ -67,9 +69,11 @@ export function serviceHealthOf(
   const total = listed + published.unrouted;
   if (service.selectorless && total === 0) return { state: "selectorless" };
   if (serving > 0) {
-    return serving === total
-      ? { state: "ready", serving }
-      : { state: "partly", serving, total };
+    const { ready, draining } = published;
+    if (ready === total) return { state: "ready", ready };
+    return ready > 0
+      ? { state: "partly", ready, draining, total }
+      : { state: "draining", draining, total };
   }
   const waiting = waitingOn(published.stop);
   if (listed > 0) return { state: waiting ?? "noneReady", published };
@@ -141,7 +145,7 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
     case "ready":
       return {
         code: health.state,
-        label: t("count", "nReady", { n: health.serving }),
+        label: t("count", "nReady", { n: health.ready }),
         role: "ok",
         reason: null,
       };
@@ -149,13 +153,27 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
       return {
         code: health.state,
         label: t("count", "readyOfTotal", {
-          ready: health.serving,
+          ready: health.ready,
           total: health.total,
         }),
         role: "warn",
-        reason: t("count", "addressesTakeNoTraffic", {
-          n: health.total - health.serving,
-        }),
+        reason: [
+          health.draining > 0 &&
+            t("readings", "drainingCount", { n: health.draining }),
+          health.total > health.ready + health.draining &&
+            t("count", "addressesTakeNoTraffic", {
+              n: health.total - health.ready - health.draining,
+            }),
+        ]
+          .filter(Boolean)
+          .join(", "),
+      };
+    case "draining":
+      return {
+        code: health.state,
+        label: t("readings", "drainingCount", { n: health.draining }),
+        role: "warn",
+        reason: t("readings", "healthDrainingWhy"),
       };
     case "noneReady":
       return {
@@ -232,6 +250,7 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
 export const serviceVerdictLabels = (t: T) => [
   t("count", "nReady", { n: 99 }),
   t("count", "readyOfTotal", { ready: 99, total: 99 }),
+  t("readings", "drainingCount", { n: 99 }),
   t("empty", "stopNoneReady"),
   t("readings", "healthComingUp"),
   t("readings", "healthNoEndpoints"),

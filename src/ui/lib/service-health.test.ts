@@ -266,10 +266,45 @@ describe("one verdict for a Service on every surface", () => {
       published({ ready: 1, unrouted: 1 }),
       null
     );
-    expect(health).toEqual({ state: "partly", serving: 1, total: 2 });
+    expect(health).toEqual({
+      state: "partly",
+      ready: 1,
+      draining: 0,
+      total: 2,
+    });
     const words = serviceHealthWords(health, t);
     expect(words.role).toBe("warn");
     expect(words.label).toBe("1 of 2 ready");
+  });
+
+  /**
+   * Sam's big-pull right after delete and apply: the old pod's endpoint
+   * ready false, serving true, terminating true, kubectl endpoints <none>,
+   * and the headline said "1 ready" in green. Fails if a draining address is
+   * counted ready again.
+   */
+  it("counts a Service down to a draining address as draining, never ready", () => {
+    const health = serviceHealthOf(SELECTING, published({ draining: 1 }), null);
+    expect(health).toEqual({ state: "draining", draining: 1, total: 1 });
+    const words = serviceHealthWords(health, t);
+    expect(words.label).toBe("1 draining");
+    expect(words.role).toBe("warn");
+  });
+
+  /**
+   * A second later the new pod was ready beside the old one draining, and
+   * the headline said "2 ready". Fails if the draining one joins the ready.
+   */
+  it("says one of two ready with the draining one named apart", () => {
+    const health = serviceHealthOf(
+      SELECTING,
+      published({ ready: 1, draining: 1 }),
+      null
+    );
+    const words = serviceHealthWords(health, t);
+    expect(words.label).toBe("1 of 2 ready");
+    expect(words.role).toBe("warn");
+    expect(words.reason).toBe("1 draining");
   });
 
   it("calls a Service ready when every address serves", () => {

@@ -4572,6 +4572,8 @@ export const ru: Catalogue = {
     healthNoEndpoints: "нет эндпоинтов",
     healthComingUp: "запускается",
     healthIdle: "простаивает",
+    healthDrainingWhy:
+      "Ни один его адрес не готов, поэтому трафик идёт на те, что дорабатывают свои соединения, пока они не исчезнут",
     healthBackendIdle:
       "У {name} нет подов намеренно: нагрузка за ним масштабирована до нуля",
     healthBackendStarting: "{name} запускается: его поды ещё стартуют",
