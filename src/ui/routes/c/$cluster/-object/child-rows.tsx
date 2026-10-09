@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { CircleX, Lock } from "lucide-react";
 
@@ -98,6 +98,7 @@ export function ChildRows({
   onRetry?: () => void;
 }) {
   const t = useT();
+  const reserve = useStatusReserve(rows);
   if (rows.length === 0 && error) {
     const refused = isRefusal(error);
     return (
@@ -142,13 +143,28 @@ export function ChildRows({
   return (
     <div>
       {rows.map((row) => (
-        <ChildRowItem key={`${row.namespace ?? ""}/${row.name}`} row={row} />
+        <ChildRowItem
+          key={`${row.namespace ?? ""}/${row.name}`}
+          row={row}
+          reserve={reserve}
+        />
       ))}
     </div>
   );
 }
 
-function ChildRowItem({ row }: { row: ChildRow }) {
+/** The widest status these rows have shown, kept while they are on screen: a pod flipping between CrashLoopBackOff and Running cut its name and gave it back. */
+function useStatusReserve(rows: ChildRow[]): number {
+  const now = Math.max(
+    0,
+    ...rows.map((row) => (row.statusLabel ?? row.status).length)
+  );
+  const [widest, setWidest] = useState(now);
+  if (now > widest) setWidest(now);
+  return Math.max(widest, now);
+}
+
+function ChildRowItem({ row, reserve }: { row: ChildRow; reserve: number }) {
   const navigate = useNavigate();
   const link = objectLink(row);
   const role = row.unverified
@@ -184,13 +200,20 @@ function ChildRowItem({ row }: { row: ChildRow }) {
           namespace={row.namespace}
           showKind={false}
         />
-        <span className={cn("text-[11px]", WORD[role])} title={row.statusTitle}>
+        <span
+          className={cn("flex-none text-[11px]", WORD[role])}
+          style={{ minWidth: `${reserve}ch` }}
+          title={row.statusTitle}
+          data-testid="child-row-status"
+        >
           {row.statusLabel ?? row.status}
         </span>
       </span>
-      <span className="text-right text-[11px] text-fg-mut">{row.detail}</span>
+      <span className="text-right text-[11px] tabular-nums text-fg-mut">
+        {row.detail}
+      </span>
       <span
-        className="text-right text-[11px] text-fg-fnt"
+        className="text-right text-[11px] tabular-nums text-fg-fnt"
         title={formatDate(row.timestamp ?? null) ?? undefined}
       >
         {row.timestamp ? age : <None />}

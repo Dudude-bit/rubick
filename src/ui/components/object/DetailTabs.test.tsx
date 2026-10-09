@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { useState } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Braces, Info, ScrollText, Activity } from "lucide-react";
 
@@ -55,6 +55,79 @@ describe("DetailTabs", () => {
     );
     expect(screen.getByRole("tab", { name: "Overview" }).className).toContain(
       "focus-visible:ring-inset"
+    );
+  });
+
+  /**
+   * WebKit matches no :focus-visible for a focus that began with a click,
+   * the arrows' focus after it included, so Dana and Lena walked the strip
+   * blind. Fails if the tab the arrows reach wears no ring, or a click alone
+   * draws one.
+   */
+  it("rings the tab the arrows reach after a click, and not the clicked one", () => {
+    render(
+      <DetailTabs tabs={tabs} activeTab="overview" onTabChange={() => {}} />
+    );
+    const overview = screen.getByRole("tab", { name: "Overview" });
+    fireEvent.pointerDown(overview);
+    overview.focus();
+    expect(overview).not.toHaveAttribute("data-ring");
+
+    fireEvent.keyDown(overview, { key: "ArrowRight" });
+    const logs = screen.getByRole("tab", { name: "Logs" });
+    expect(logs).toHaveFocus();
+    expect(logs).toHaveAttribute("data-ring", "true");
+    expect(logs.className).toContain("data-[ring=true]:ring-1");
+    expect(overview).not.toHaveAttribute("data-ring");
+  });
+
+  /**
+   * WebKitGTK names Shift+Tab "Unidentified", so Radix never let go of the
+   * strip and Shift+Tab then Tab landed on "ещё N". Fails if the strip is
+   * more than one Tab stop, or the stop is not the focused tab inside it and
+   * the open tab outside it.
+   */
+  it("keeps the strip one Tab stop: the focused tab inside it, the open one outside", async () => {
+    render(
+      <>
+        <button type="button">Back</button>
+        <DetailTabs
+          tabs={tabs}
+          activeTab="overview"
+          onTabChange={() => {}}
+          actions={<button type="button">Delete</button>}
+        />
+      </>
+    );
+    const stops = () =>
+      [screen.getByRole("tablist"), ...screen.getAllByRole("tab")].filter(
+        (el) => el.tabIndex >= 0
+      );
+    const overview = screen.getByRole("tab", { name: "Overview" });
+    const logs = screen.getByRole("tab", { name: "Logs" });
+    expect(stops()).toEqual([overview]);
+
+    overview.focus();
+    fireEvent.keyDown(overview, { key: "ArrowRight" });
+    expect(stops()).toEqual([logs]);
+
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveFocus();
+    expect(stops()).toEqual([overview]);
+
+    await userEvent.tab({ shift: true });
+    expect(overview).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    expect(screen.getByRole("button", { name: "Back" })).toHaveFocus();
+  });
+
+  /** WebKit starts Shift+Tab from the node a click lands on, and from a label inside the tab that was the tab again. */
+  it("takes a click on the label on the tab itself", () => {
+    render(
+      <DetailTabs tabs={tabs} activeTab="overview" onTabChange={() => {}} />
+    );
+    expect(screen.getByRole("tab", { name: "Logs" }).className).toContain(
+      "*:pointer-events-none"
     );
   });
 
@@ -174,6 +247,34 @@ describe("a tab strip wider than the page", () => {
     expect(onTabChange).toHaveBeenCalledWith("yaml");
   });
 
+  /**
+   * Lena's open YAML sat inside "5 more" and nothing said so. Fails if the
+   * more button holding the open tab looks like any other, or its menu does
+   * not mark which item is open.
+   */
+  it("marks the more button and the open tab inside it", async () => {
+    laidOut({
+      overview: [0, 80],
+      logs: [96, 180],
+      events: [196, 260],
+      yaml: [276, 320],
+    });
+    render(<DetailTabs tabs={four} activeTab="yaml" onTabChange={() => {}} />);
+    const more = screen.getByRole("button", {
+      name: "2 more tabs do not fit. The open tab, YAML, is one of them",
+    });
+    expect(more).toHaveAttribute("data-holds-open", "true");
+
+    await userEvent.click(more);
+    expect(screen.getByRole("menuitem", { name: "YAML" })).toHaveAttribute(
+      "aria-current",
+      "true"
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Events" })
+    ).not.toHaveAttribute("aria-current");
+  });
+
   /** A strip that shows every tab must not grow a control for nothing. */
   it("offers nothing more when every tab fits", () => {
     laidOut({
@@ -267,7 +368,55 @@ describe("a tab strip that scrolls", () => {
     fireEvent.scroll(strip());
   };
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  /**
+   * After a resize Lena's open YAML sat inside "5 more", and a page brought
+   * back into sight kept the scroll it had. Fails if a strip that changes
+   * size leaves the open tab out of view.
+   */
+  it("brings the open tab back into view when the strip is resized", () => {
+    scrolling();
+    const resized: ResizeObserverCallback[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resized.push(callback);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    render(<Page start="yaml" />);
+    expect(strip().scrollLeft).toBe(120);
+    scrolledTo(0);
+
+    act(() => resized.forEach((resize) => resize([], {} as ResizeObserver)));
+    expect(strip().scrollLeft).toBe(120);
+  });
+
+  /** Fails if a strip the arrows walked away from the open tab does not bring it back once the focus leaves. */
+  it("brings the open tab back when the focus leaves the strip", () => {
+    scrolling();
+    render(
+      <>
+        <Page start="yaml" />
+        <button type="button">Elsewhere</button>
+      </>
+    );
+    const yaml = screen.getByRole("tab", { name: "YAML" });
+    yaml.focus();
+    fireEvent.keyDown(yaml, { key: "Home" });
+    expect(strip().scrollLeft).toBe(0);
+
+    act(() => screen.getByRole("button", { name: "Elsewhere" }).focus());
+    expect(strip().scrollLeft).toBe(120);
+  });
 
   /**
    * Lena's first pick from "ещё N" scrolled its tab into view and every

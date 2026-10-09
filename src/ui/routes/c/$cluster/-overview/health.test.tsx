@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter } from "@/test/render";
@@ -20,8 +20,11 @@ import {
   type AttentionInputs,
 } from "@/lib/attention";
 import { translate } from "@/i18n";
-import { ownCountedWord, ownStatusWord } from "@/lib/status-words";
-import { ROLLOUT_CODES } from "@/lib/workload-status";
+import {
+  ownCountedWord,
+  ownStatusWord,
+  rolloutCountedWord,
+} from "@/lib/status-words";
 import { JOB } from "@/lib/status-meaning";
 import type { T } from "@/i18n/useT";
 import type {
@@ -401,8 +404,8 @@ describe("a scope one namespace of which refused its pods", () => {
    */
   it("draws a verdict its pods left unconfirmed grey with the not-read mark", async () => {
     await wrap(<WorkloadsPanel overview={overview} scope="team-blind" />);
-    const segment = screen.getByText(/1 Unavailable/);
-    expect(segment).toHaveTextContent("1 Unavailable · pods not read");
+    const segment = screen.getByText("1 Unavailable").parentElement!;
+    expect(segment).toHaveTextContent("1 Unavailable pods not read");
     expect(segment).toHaveClass("text-fg-fnt");
     expect(segment).not.toHaveClass("text-err");
     expect(segment.querySelector("svg")).toHaveClass("lucide-eye-off");
@@ -462,7 +465,30 @@ describe("a scope one namespace of which refused its pods", () => {
       .closest("div")!.parentElement!;
     expect(deployments).toHaveTextContent("3");
     expect(deployments).not.toHaveTextContent("team-blind");
-    expect(screen.getAllByText("not read in team-blind")).toHaveLength(2);
+    expect(screen.getAllByText("in team-blind")).toHaveLength(2);
+  });
+
+  /**
+   * Marco in Russian at 1024: three tiles broke their not-read lines
+   * mid-phrase, "не прочитано в пространстве / имён team-blind" and
+   * "1 Unavailable · поды не / прочитаны". Fails if a tile can break inside
+   * the where, or inside the count or its qualifier, rather than between
+   * them.
+   */
+  it("wraps a tile's not-read words only between whole phrases", async () => {
+    await wrap(
+      <WorkloadsPanel overview={beside} scope="team-checkout, team-blind" />
+    );
+    for (const where of screen.getAllByText("in team-blind"))
+      expect(where).toHaveClass("inline-block", "max-w-full");
+
+    cleanup();
+    await wrap(<WorkloadsPanel overview={overview} scope="team-blind" />);
+    const count = screen.getByText("1 Unavailable");
+    const qualifier = screen.getByText("pods not read");
+    expect(count).toHaveClass("whitespace-nowrap");
+    expect(qualifier).toHaveClass("whitespace-nowrap");
+    expect(count.contains(qualifier)).toBe(false);
   });
 
   /**
@@ -512,6 +538,37 @@ describe("a scope one namespace of which refused its pods", () => {
   });
 
   /**
+   * Marco's Not checked block read "нет права на list", half Russian and
+   * half API. Fails if the Russian line loses the verb as the API spells it,
+   * or the verb stops reading as a term.
+   */
+  it("names the refused verb as the API spells it, inside a Russian sentence", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      await wrap(
+        <AttentionPanel
+          attention={attentionFrom([], {
+            overview,
+          } as Partial<AttentionInputs>)}
+          pods={null}
+          podsUnread={[refusedPods]}
+          nodes={[]}
+          nodesKnown={false}
+        />
+      );
+      const unchecked = screen.getByTestId("attention-unchecked");
+      expect(unchecked).toHaveTextContent(
+        "запрос list запрещён в пространстве имён team-blind"
+      );
+      expect(within(unchecked).getAllByText("list")[0]).toHaveClass(
+        "font-mono"
+      );
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
+  });
+
+  /**
    * Fails if the overall row states the pods team-checkout answered as the
    * scope's, or drops them because team-blind refused.
    */
@@ -527,9 +584,37 @@ describe("a scope one namespace of which refused its pods", () => {
         nodesKnown={false}
       />
     );
-    expect(screen.getByTestId("attention-overall")).toHaveTextContent(
-      "2 of 4 pods ready (1 CreateContainerConfigError, 1 Completed) · pods not counted in team-blind"
+    const overall = screen.getByTestId("attention-overall");
+    expect(overall).toHaveTextContent(
+      "2 of 4 pods ready (1 CreateContainerConfigError, 1 Completed)"
     );
+    expect(overall).toHaveTextContent("pods not counted in team-blind");
+  });
+
+  /**
+   * Marco in Russian at 1024: the overall row ended "(1
+   * CreateContainerConfigErr..." and the words saying team-blind's pods were
+   * not counted were the part cut off. Fails if the qualifier sits inside
+   * anything that truncates, or the details are not what gives way.
+   */
+  it("lets the details give way on the overall row and never the not-counted words", async () => {
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([], {
+          overview: beside,
+        } as Partial<AttentionInputs>)}
+        pods={beside.pods}
+        podsUnread={[refusedPods]}
+        nodes={[]}
+        nodesKnown={false}
+      />
+    );
+    const details = screen.getByTestId("attention-overall-details");
+    expect(details).toHaveClass("truncate");
+    expect(details).toHaveTextContent("(1 CreateContainerConfigError");
+    const qualifier = screen.getByText("pods not counted in team-blind");
+    expect(qualifier.closest(".truncate, .whitespace-nowrap")).toBeNull();
+    expect(screen.getByTestId("attention-overall")).toHaveClass("flex-wrap");
   });
 
   /** Share said "could not be read" for a refusal, and nowhere said where. */
@@ -648,11 +733,11 @@ describe("the census legend in Russian", () => {
 
   /**
    * Lena switched to Russian and the Overview census still read "1 Stalled"
-   * and "2 Degraded" under a list that said Застрял and Деградировал. Fails
-   * if the legend goes back to the English code, or words a status the
-   * cluster owns (Unavailable, Available).
+   * and "2 Degraded"; then Marco's read "1 Ready  1 застрял  1 Unavailable".
+   * Every rollout word is the app's verdict, none a value a Deployment's
+   * status holds. Fails if any goes back to the English code.
    */
-  it("words the app's own verdicts and leaves the cluster's statuses as written", async () => {
+  it("words every rollout verdict in the reader's language", async () => {
     useLocaleStore.setState({ choice: "ru" });
     try {
       await wrap(<WorkloadsPanel overview={overview} scope="prod" />);
@@ -660,13 +745,15 @@ describe("the census legend in Russian", () => {
       expect(
         Array.from(legend?.children ?? []).map((item) => item.textContent)
       ).toEqual([
-        "2 Ready",
+        "2 готовы",
         "2 простаивают",
         "2 деградировали",
-        "1 Unavailable",
+        "1 недоступен",
         "1 застрял",
       ]);
-      expect(screen.queryByText(/Stalled|Degraded/)).toBeNull();
+      expect(
+        screen.queryByText(/Ready|Stalled|Degraded|Unavailable/)
+      ).toBeNull();
     } finally {
       useLocaleStore.setState({ choice: null });
     }
@@ -678,22 +765,21 @@ describe("the census legend in Russian", () => {
     const rows = section.body.type === "facts" ? section.body.rows : [];
     const deployments = rows.find((row) => row.label === "Deployments");
     expect(deployments?.values.map((value) => value.text)).toEqual([
-      "2 Ready",
+      "2 готовы",
       "2 простаивают",
       "2 деградировали",
-      "1 Unavailable",
+      "1 недоступен",
       "1 застрял",
     ]);
   });
 
   /**
-   * A verdict added to the flagged set is worded by `ownStatusWord` for the
-   * badge; without a counted form the legend would print its English code
-   * beside Russian ones. Fails the day that happens.
+   * A Job word worded by `ownStatusWord` for the badge but without a counted
+   * form would print its English code in the legend beside Russian ones.
+   * Fails the day that happens.
    */
-  it("has a counted word for every verdict the app words", () => {
-    const codes = [...Object.values(ROLLOUT_CODES), ...Object.keys(JOB)];
-    const unworded = codes.filter(
+  it("has a counted word for every Job word the app words", () => {
+    const unworded = Object.keys(JOB).filter(
       (code) =>
         ownStatusWord(code, ru) !== undefined &&
         ownCountedWord(code, 2, ru) === undefined
@@ -708,7 +794,7 @@ describe("the census legend in Russian", () => {
     [5, "застряли"],
     [21, "застрял"],
   ])("agrees with %i in number", (n, word) => {
-    expect(ownCountedWord("Stalled", n, ru)).toBe(word);
+    expect(rolloutCountedWord("Stalled", n, ru)).toBe(word);
   });
 });
 

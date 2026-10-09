@@ -14,7 +14,7 @@ export function createRolloutColumn<
     id: "status",
     header: columnHeader("columns", "status"),
     meta: {
-      floor: statusCellPx(12),
+      floor: statusCellPx(14),
       share: (row: Row, t) => rolloutVerdict(row.rollout, t),
     },
     cell: ({ row }) => <RolloutBadge rollout={row.original.rollout} />,

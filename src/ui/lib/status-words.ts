@@ -1,28 +1,52 @@
+import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
+import type { WorkloadStatus } from "@/lib/workload-status";
+
+type Word = keyof typeof en.statusWords;
 
 /**
- * The words a status carries that this app composed, not the cluster.
- *
- * `Suspended` is how a Job or CronJob reads `spec.suspend: true`, `Waiting`
- * a rollout whose generation the controller has not observed, and `Idle`,
- * `Stalled`, `Degraded` and `Retrying` the verdicts the app reaches from the
- * conditions and counts: none is a value any object's status holds, so they
- * are the reader's language to word. Every other status stays as the cluster
- * wrote it. The code is still what `statusRole` looks up; this is only the
- * label.
+ * A rollout's verdict, every one the app's own: a Deployment's,
+ * StatefulSet's or DaemonSet's status holds none of these words. The cluster
+ * writes the Available and Progressing conditions and their reasons, which
+ * stay as written wherever they are shown. The code is still what
+ * `statusRole` looks up; this is only the label, and its count's form.
+ */
+const ROLLOUT_WORDS: Record<WorkloadStatus, [Word, Word]> = {
+  Ready: ["ready", "readyCounted"],
+  Progressing: ["progressing", "progressingCounted"],
+  Idle: ["idle", "idleCounted"],
+  Stalled: ["stalled", "stalledCounted"],
+  Unavailable: ["unavailable", "unavailableCounted"],
+  Paused: ["paused", "pausedCounted"],
+  Waiting: ["waiting", "waitingCounted"],
+  Degraded: ["degraded", "degradedCounted"],
+};
+
+export const isRolloutCode = (code: string): code is WorkloadStatus =>
+  Object.hasOwn(ROLLOUT_WORDS, code);
+
+export function rolloutWord(code: WorkloadStatus, t: T): string {
+  return t("statusWords", ROLLOUT_WORDS[code][0]);
+}
+
+/** For a legend that counts, agreeing with the number: "2 застряли" where a badge says "Застрял". */
+export function rolloutCountedWord(
+  code: WorkloadStatus,
+  n: number,
+  t: T
+): string {
+  return t("statusWords", ROLLOUT_WORDS[code][1], { n });
+}
+
+/**
+ * A Job's words that this app composed, not the cluster: `Suspended` is how
+ * it reads `spec.suspend: true` and `Retrying` a verdict from its counts.
+ * Complete and Failed are its conditions and stay as written.
  */
 export function ownStatusWord(code: string, t: T): string | undefined {
   switch (code) {
     case "Suspended":
       return t("statusWords", "suspended");
-    case "Waiting":
-      return t("statusWords", "waiting");
-    case "Idle":
-      return t("statusWords", "idle");
-    case "Stalled":
-      return t("statusWords", "stalled");
-    case "Degraded":
-      return t("statusWords", "degraded");
     case "Retrying":
       return t("statusWords", "retrying");
     default:
@@ -30,25 +54,17 @@ export function ownStatusWord(code: string, t: T): string | undefined {
   }
 }
 
-/** The same words for a legend that counts, which agrees with the number: "2 застряли" where a badge says "Застрял". */
+/** The same words for a legend that counts. */
 export function ownCountedWord(
   code: string,
   n: number,
   t: T
 ): string | undefined {
   switch (code) {
-    case "Stalled":
-      return t("statusWords", "stalledCounted", { n });
-    case "Degraded":
-      return t("statusWords", "degradedCounted", { n });
-    case "Idle":
-      return t("statusWords", "idleCounted", { n });
     case "Retrying":
       return t("statusWords", "retryingCounted", { n });
     case "Suspended":
       return t("statusWords", "suspendedCounted", { n });
-    case "Waiting":
-      return t("statusWords", "waitingCounted", { n });
     default:
       return undefined;
   }

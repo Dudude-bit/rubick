@@ -2,7 +2,7 @@ import type { en } from "@/i18n/catalogue";
 import type { T } from "@/i18n/useT";
 import type { PodReadiness } from "@/lib/container-sequence";
 import { toKind } from "@/lib/resource-registry";
-import { ownStatusWord } from "@/lib/status-words";
+import { ownStatusWord, rolloutWord } from "@/lib/status-words";
 import type { WorkloadStatus } from "@/lib/workload-status";
 
 /**
@@ -157,7 +157,7 @@ export function workloadStatusMeaning(
 ): string | undefined {
   if (!Object.hasOwn(WORKLOAD, status)) return undefined;
   return line(
-    ownStatusWord(status, t) ?? status,
+    rolloutWord(status as WorkloadStatus, t),
     t("statusMeaning", WORKLOAD[status as WorkloadStatus])
   );
 }

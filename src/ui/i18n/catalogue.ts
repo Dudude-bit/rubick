@@ -719,6 +719,7 @@ export const en = {
       one: "{n} more tab does not fit",
       other: "{n} more tabs do not fit",
     },
+    tabsMoreHoldsOpen: "The open tab, {tab}, is one of them",
     manifestCopiedNamed: "{name} manifest copied",
     kindManifest: "{kind} manifest",
     suspendedLower: "suspended",
@@ -6792,6 +6793,14 @@ export const en = {
     suspendedCounted: { other: "Suspended" },
     startingCounted: { other: "Starting" },
     waitingCounted: { other: "Waiting" },
+    ready: "Ready",
+    progressing: "Progressing",
+    unavailable: "Unavailable",
+    paused: "Paused",
+    readyCounted: { other: "Ready" },
+    progressingCounted: { other: "Progressing" },
+    unavailableCounted: { other: "Unavailable" },
+    pausedCounted: { other: "Paused" },
   },
   statusMeaning: {
     phasePending:

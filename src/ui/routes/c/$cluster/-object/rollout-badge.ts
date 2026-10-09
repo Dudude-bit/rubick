@@ -2,7 +2,7 @@ import { EyeOff } from "lucide-react";
 
 import type { T } from "@/i18n/useT";
 import { workloadStatusMeaning } from "@/lib/status-meaning";
-import { ownStatusWord } from "@/lib/status-words";
+import { rolloutWord } from "@/lib/status-words";
 import {
   rolloutLine,
   workloadRole,
@@ -16,7 +16,7 @@ export function rolloutBadge(rollout: Rollout, t: T) {
   const status = workloadStatus(rollout);
   return {
     status,
-    label: ownStatusWord(status, t),
+    label: rolloutWord(status, t),
     role: workloadRole(rollout),
     glyph: rollout.state === "podsUnread" ? EyeOff : undefined,
     title: line

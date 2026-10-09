@@ -6,7 +6,11 @@ import { allocatedPercent } from "@/lib/node-amount";
 import type { ReportEventRow, ReportFinding, ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { statusRole, type StatusRole } from "@/lib/status-role";
-import { ownCountedWord } from "@/lib/status-words";
+import {
+  isRolloutCode,
+  ownCountedWord,
+  rolloutCountedWord,
+} from "@/lib/status-words";
 import type { WorkloadStatus } from "@/lib/workload-status";
 import type { JobStatus } from "@/lib/status-meaning";
 import {
@@ -263,17 +267,22 @@ const JOB_ORDER: Record<JobStatus, number> = {
 function wordSegments(
   counts: ReasonCount[] | null,
   order: Record<string, number>,
-  t: T
+  word: (code: string, n: number) => string | undefined
 ): Segment[] {
   const rank = (code: string) => order[code] ?? Number.MAX_SAFE_INTEGER;
   return [...(counts ?? [])]
     .sort((a, b) => rank(a.reason) - rank(b.reason))
     .map(({ reason, count }) => ({
-      label: ownCountedWord(reason, count, t) ?? reason,
+      label: word(reason, count) ?? reason,
       count,
       tone: SEGMENT_TONE[statusRole(reason)],
     }));
 }
+
+const rolloutCounted =
+  (t: T) =>
+  (code: string, n: number): string | undefined =>
+    isRolloutCode(code) ? rolloutCountedWord(code, n, t) : undefined;
 
 /**
  * Deployments by the rollout word the list and Needs attention print, each
@@ -288,17 +297,21 @@ export function deploymentSegments(
   const unread = (deployments ?? [])
     .filter((entry) => entry.podsUnread)
     .map(({ reason, count }): Segment => ({
-      label: `${ownCountedWord(reason, count, t) ?? reason} · ${t("readings", "rolloutPodsUnreadShort")}`,
+      label: rolloutCounted(t)(reason, count) ?? reason,
+      qualifier: t("readings", "rolloutPodsUnreadShort"),
       count,
       tone: "neutral",
       unread: true,
     }));
-  return [...wordSegments(read, DEPLOYMENT_ORDER, t), ...unread];
+  return [
+    ...wordSegments(read, DEPLOYMENT_ORDER, rolloutCounted(t)),
+    ...unread,
+  ];
 }
 
 /** Jobs by the word the Jobs list prints. */
 export function jobSegments(jobs: ReasonCount[] | null, t: T): Segment[] {
-  return wordSegments(jobs, JOB_ORDER, t);
+  return wordSegments(jobs, JOB_ORDER, (code, n) => ownCountedWord(code, n, t));
 }
 
 export function nodeSegments(nodes: NodeSummary[]): Segment[] {
@@ -385,7 +398,9 @@ function compositionRow(
   const values = card.segments
     .filter((segment) => segment.count > 0)
     .map((segment): ReportValue => ({
-      text: `${segment.count} ${segment.label}`,
+      text: [`${segment.count} ${segment.label}`, segment.qualifier]
+        .filter(Boolean)
+        .join(" · "),
       role: segment.tone,
       unread: segment.unread,
     }));
