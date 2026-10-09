@@ -97,15 +97,14 @@ export function useNamespaceList() {
  */
 const WHOLE_CLUSTER: readonly string[] = [];
 
-/** One namespace's pods in an overview of several, `null` where they were not read: one refused leaves the others counted. */
+/**
+ * One namespace's pods in an overview of several, `null` where they were not
+ * read: one refused leaves the others counted, and a namespace the answer
+ * does not break out is not one with none. Marco's team-checkout read "0"
+ * beside an Overview counting 3 when no breakdown came back.
+ */
 const podsReadIn = (overview: ClusterOverview, name: string) =>
-  overview.unread.some(
-    (entry) =>
-      entry.kind === "Pod" &&
-      (entry.namespace === null || entry.namespace === name)
-  )
-    ? null
-    : (overview.namespaces.find((ns) => ns.name === name)?.podCount ?? 0);
+  overview.namespaces.find((ns) => ns.name === name)?.podCount ?? null;
 
 export function useClusterSummary({
   enabled = true,
@@ -173,7 +172,11 @@ export function useClusterSummary({
     const namespaces = names
       .map((name) => ({
         name,
-        podCount: pods.get(name) ?? (podsKnown ? 0 : null),
+        podCount: pods.has(name)
+          ? (pods.get(name) ?? null)
+          : podsKnown
+            ? 0
+            : null,
         problems: problemsOf(name),
       }))
       .sort(

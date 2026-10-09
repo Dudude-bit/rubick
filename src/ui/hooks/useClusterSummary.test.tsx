@@ -301,7 +301,10 @@ describe("counts once the whole cluster refused", () => {
     getClusterOverview.mockImplementation(async (scope) => {
       if (scope === null) throw "pods is forbidden (code: 403)";
       return {
-        namespaces: [{ name: "team-checkout", podCount: 3, problemCount: 2 }],
+        namespaces: [
+          { name: "team-checkout", podCount: 3, problemCount: 2 },
+          { name: "team-blind", podCount: null, problemCount: 0 },
+        ],
         problems: [
           { namespace: "team-checkout" },
           { namespace: "team-checkout" },
@@ -339,6 +342,54 @@ describe("counts once the whole cluster refused", () => {
       problems: { total: 0, complete: false },
     });
   });
+});
+
+/**
+ * Marco's team-checkout read "0 · 3+ problems" beside an Overview counting 3
+ * pods: the answer for the two namespaces broke neither out, and the picker
+ * took a namespace missing from the breakdown for one with none. Fails if a
+ * selected namespace the answer does not break out is given a count.
+ */
+it("counts no selected namespace the window's overview does not break out", async () => {
+  useClusterStore.setState({
+    namespaceScope: ["team-checkout", "team-blind"],
+  });
+  getClusterOverview.mockImplementation(async (scope) => {
+    if (scope === null) throw "pods is forbidden (code: 403)";
+    return {
+      namespaces: [],
+      problems: [],
+      problemsTruncated: 0,
+      unread: [
+        {
+          kind: "Pod",
+          namespace: "team-blind",
+          code: "PERMISSION_DENIED",
+          message: "pods is forbidden",
+        },
+      ],
+      counts: { pods: null },
+    } as never;
+  });
+  listNamespaces.mockResolvedValue([
+    { name: "team-checkout" },
+    { name: "team-blind" },
+  ] as never);
+
+  const { result } = renderHook(() => useClusterSummary({ problems: true }), {
+    wrapper,
+  });
+
+  await waitFor(() =>
+    expect(
+      result.current.namespaces.find((ns) => ns.name === "team-checkout")
+        ?.problems
+    ).toBeTruthy()
+  );
+  expect(
+    result.current.namespaces.find((ns) => ns.name === "team-checkout")
+      ?.podCount
+  ).toBeNull();
 });
 
 describe("the count beside a namespace and the count on its Overview", () => {

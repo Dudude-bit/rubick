@@ -1931,7 +1931,7 @@ export interface ResourceCounts {
 
 export interface NamespaceLoad {
   name: string;
-  podCount: number;
+  podCount: number | null;
   problemCount: number;
 }
 
