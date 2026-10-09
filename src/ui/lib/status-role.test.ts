@@ -52,6 +52,14 @@ describe("statusRole", () => {
       expect(statusRole(s)).toBe("warn");
   });
 
+  /** Sam's old big-pull pod read green while it drained under a Deployment
+   *  made again in its place, and blue would call it coming up. Fails if a
+   *  pod on its way out takes any colour but the amber its Service's
+   *  "draining" has. */
+  it("draws a pod being deleted in amber, as its Service's draining", () => {
+    expect(statusRole("Terminating")).toBe("warn");
+  });
+
   it("maps failures", () => {
     for (const s of [
       "Error",

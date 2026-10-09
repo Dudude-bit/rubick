@@ -16,9 +16,9 @@ use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::resources::node_budget::holds_reservation;
 use crate::resources::{
-    backing_off, condition_is_true, crash_looping, exit_unreported, job_state, looping_until,
-    pending_since, pod_start, restarting_until, stuck_reason, within_pending_grace, PodStart,
-    Rollout,
+    backing_off, condition_is_true, counts_ready, crash_looping, exit_unreported, job_state,
+    looping_until, pending_since, pod_start, restarting_until, stuck_reason, within_pending_grace,
+    PodStart, Rollout,
 };
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
@@ -278,8 +278,11 @@ pub struct PodComposition {
     pub not_ready: usize,
     /// Pods whose `Ready` condition is true, the ones kubectl counts ready: a
     /// subset of `running` that `crash_looping` may overlap at the instant a
-    /// looping container is up.
+    /// looping container is up. A pod being deleted is not among them.
     pub ready: usize,
+    /// Also a subset of `running`, apart from the others: pods being deleted,
+    /// which kubectl prints `Terminating` while their containers stop.
+    pub terminating: usize,
     /// A subset of `pending`: pods whose container the kubelet holds in a
     /// reason that waiting will not clear, under the reason the Pods list and
     /// Needs attention print. Counted as Pending, a pod the list calls
@@ -1135,13 +1138,15 @@ fn pod_composition<'a>(
         {
             "Running" => {
                 composition.running += 1;
-                if condition_is_true(pod.status.as_ref(), "Ready") {
-                    composition.ready += 1;
-                }
-                if crash_looping(pod, now) || stuck_reason(pod).is_some() {
+                if pod.metadata.deletion_timestamp.is_some() {
+                    composition.terminating += 1;
+                } else if crash_looping(pod, now) || stuck_reason(pod).is_some() {
                     composition.crash_looping += 1;
                 } else if !condition_is_true(pod.status.as_ref(), "Ready") {
                     composition.not_ready += 1;
+                }
+                if counts_ready(pod) {
+                    composition.ready += 1;
                 }
             }
             "Pending" => {
@@ -3784,6 +3789,30 @@ mod tests {
             .filter(|row| row.containers.iter().any(|c| !c.ready))
             .count();
         assert_eq!(composition.not_ready, unready_rows);
+    }
+
+    /// Sam's old big-pull pod kept `Ready` while it terminated, and the
+    /// Overview drew it in the green Running segment and counted it ready.
+    /// Fails if a pod being deleted is counted serving, ready or not ready.
+    #[test]
+    fn a_running_pod_being_deleted_is_counted_terminating_not_ready() {
+        let mut leaving = search_pod(true);
+        leaving.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(Utc::now()).expect("now is a time"),
+        ));
+        let pods = [leaving, search_pod(true)];
+
+        let composition = pod_composition(&pods, Utc::now());
+
+        assert_eq!(
+            (
+                composition.running,
+                composition.terminating,
+                composition.ready,
+                composition.not_ready
+            ),
+            (2, 1, 1, 0)
+        );
     }
 
     /// `team-checkout/checkout-worker` as the kubelet wrote it: scheduled,

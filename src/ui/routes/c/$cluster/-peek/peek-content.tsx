@@ -749,7 +749,10 @@ function NamespaceContents({ namespace }: { namespace: string }) {
     retry: false,
   });
 
-  const notReady = pods.data?.filter((pod) => !pod.status.ready).length ?? 0;
+  const notReady =
+    pods.data?.filter(
+      (pod) => !pod.status.ready && pod.status.display !== "Terminating"
+    ).length ?? 0;
   const starts = useMemo(
     () => (pods.data ? startsOf(pods.data) : null),
     [pods.data]

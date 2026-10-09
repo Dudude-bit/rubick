@@ -96,6 +96,7 @@ const RUNNING: Census<PodComposition> = {
     crashLooping: 0,
     notReady: 0,
     ready: 1,
+    terminating: 0,
     stuck: [],
     starting: 0,
   },
@@ -398,6 +399,7 @@ describe("a scope one namespace of which refused its pods", () => {
         crashLooping: 0,
         notReady: 0,
         ready: 2,
+        terminating: 0,
         stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
         starting: 0,
       },
@@ -629,6 +631,7 @@ describe("a scope one namespace of which refused its pods", () => {
         crashLooping: 3,
         notReady: 0,
         ready,
+        terminating: 0,
         stuck: [{ reason: "ImagePullBackOff", count: 1 }],
         starting: 0,
       },
@@ -1141,6 +1144,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 1,
       notReady: 0,
       ready: 5,
+      terminating: 0,
       stuck: [],
       starting: 0,
     });
@@ -1170,6 +1174,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 3,
       notReady: 1,
       ready: 5,
+      terminating: 0,
       stuck: [],
       starting: 0,
     });
@@ -1179,6 +1184,31 @@ describe("what Needs attention says it checked", () => {
     expect(summary).toHaveTextContent(
       "(1 NotReady, 3 Crash-looping, 1 Pending, 4 Failed)"
     );
+  });
+
+  /**
+   * Sam's old big-pull pod kept Ready while it terminated, and the bar drew
+   * it in the green Running segment. Fails if a pod being deleted is drawn
+   * as one serving, or goes unsaid beside them.
+   */
+  it("says a pod being deleted is terminating, apart from the ones serving", async () => {
+    await panel(attentionFrom([{ ...problem, severity: "critical" }]), {
+      running: 2,
+      pending: 0,
+      succeeded: 0,
+      failed: 0,
+      unknown: 0,
+      crashLooping: 0,
+      notReady: 0,
+      ready: 1,
+      terminating: 1,
+      stuck: [],
+      starting: 0,
+    });
+
+    const summary = screen.getByTestId("attention-summary");
+    expect(summary).toHaveTextContent("1 of 2 pods ready");
+    expect(summary).toHaveTextContent("(1 Terminating)");
   });
 
   /**
@@ -1196,6 +1226,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 1,
       notReady: 0,
       ready: 3,
+      terminating: 0,
       stuck: [],
       starting: 0,
     });
@@ -1224,6 +1255,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 0,
       notReady: 0,
       ready: 2,
+      terminating: 0,
       stuck: [],
       starting: 2,
     };
@@ -1269,6 +1301,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 0,
       notReady: 0,
       ready: 2,
+      terminating: 0,
       stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
       starting: 0,
     };

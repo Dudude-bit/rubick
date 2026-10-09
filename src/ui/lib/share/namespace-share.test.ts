@@ -7,8 +7,8 @@ import { namespaceLabelsSection, namespaceStatusOf } from "./namespace-share";
 const t: T = (section, key, values) => translate("en", section, key, values);
 
 describe("a namespace's status in the file", () => {
-  /** Terminating is the state people open this page to diagnose. */
-  it("reads Terminating as pending, not as a fault", () => {
+  /** Terminating is the state people open this page to diagnose, and the page draws it amber. */
+  it("reads Terminating in amber, as its page does, not as a fault", () => {
     const status = namespaceStatusOf({
       name: "shop",
       uid: "u1",
@@ -16,7 +16,7 @@ describe("a namespace's status in the file", () => {
       labels: {},
       createdAt: null,
     });
-    expect(status.role).toBe("pending");
+    expect(status.role).toBe("warn");
   });
 });
 

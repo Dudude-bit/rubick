@@ -11,7 +11,8 @@ use crate::utils::format_cpu;
 
 use super::common::{extract_owner_references, ConditionInfo, ContainerInfo};
 use super::pod_display::{
-    display_status, exit_unreported, looping_until, restarting_until, restarts, restarts_by,
+    counts_ready, display_status, exit_unreported, looping_until, restarting_until, restarts,
+    restarts_by,
 };
 use crate::utils::Moment;
 
@@ -436,11 +437,7 @@ impl PodStatusInfo {
             };
         };
 
-        let ready = status.conditions.as_ref().is_some_and(|conds| {
-            conds
-                .iter()
-                .any(|c| c.type_ == "Ready" && c.status == "True")
-        });
+        let ready = counts_ready(pod);
 
         let conditions = status
             .conditions

@@ -233,6 +233,7 @@ const FULL_OVERVIEW: ClusterOverviewData = {
       crashLooping: 0,
       notReady: 0,
       ready: 1,
+      terminating: 0,
       stuck: [],
       starting: 0,
     },

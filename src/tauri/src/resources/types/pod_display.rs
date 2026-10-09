@@ -64,6 +64,14 @@ pub fn condition_is_true(status: Option<&PodStatus>, type_: &str) -> bool {
     })
 }
 
+/// Whether a pod counts ready: its `Ready` condition, and no deletion begun.
+/// A pod on its way out keeps `Ready` until its containers stop, while
+/// kubectl prints it `Terminating` and its slices already call it not ready.
+#[must_use]
+pub fn counts_ready(pod: &Pod) -> bool {
+    pod.metadata.deletion_timestamp.is_none() && condition_is_true(pod.status.as_ref(), "Ready")
+}
+
 fn last_terminated(cs: &ContainerStatus) -> Option<&ContainerStateTerminated> {
     cs.last_state.as_ref()?.terminated.as_ref()
 }
@@ -679,6 +687,30 @@ mod tests {
         ));
         p.status.as_mut().unwrap().container_statuses = Some(vec![status("app", running(), true)]);
         assert_eq!(display_status(&p), "Terminating");
+    }
+
+    /// Sam's old big-pull pod, deleted and still `Ready` while it stopped,
+    /// was drawn green "Running" and counted ready under the Deployment made
+    /// again in its place. Fails if a pod being deleted counts ready, on its
+    /// page, its row's facts or anywhere `PodInfo` is read.
+    #[test]
+    fn a_pod_being_deleted_never_counts_ready() {
+        let mut p = pod("Running");
+        p.status.as_mut().unwrap().conditions = Some(vec![PodCondition {
+            type_: "Ready".to_string(),
+            status: "True".to_string(),
+            ..Default::default()
+        }]);
+        p.status.as_mut().unwrap().container_statuses = Some(vec![status("app", running(), true)]);
+        assert!(counts_ready(&p));
+        p.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(Utc::now())
+                .expect("an instant this test wrote itself"),
+        ));
+        assert!(!counts_ready(&p));
+        let info = super::super::PodInfo::from(&p);
+        assert_eq!(info.status.display, "Terminating");
+        assert!(!info.status.ready);
     }
 
     /// Dana deleted `shop/cart-9df89489c-nrql9` and its peek said `Completed`
