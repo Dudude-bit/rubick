@@ -270,6 +270,10 @@ pub struct PodComposition {
     /// `Ready`, so no Service sends it traffic. kubectl prints `Running` and
     /// `0/1` for it; counted as running, the Overview called it fine.
     pub not_ready: usize,
+    /// Pods whose `Ready` condition is true, the ones kubectl counts ready: a
+    /// subset of `running` that `crash_looping` may overlap at the instant a
+    /// looping container is up.
+    pub ready: usize,
     /// A subset of `pending`: pods whose container the kubelet holds in a
     /// reason that waiting will not clear, under the reason the Pods list and
     /// Needs attention print. Counted as Pending, a pod the list calls
@@ -1093,6 +1097,9 @@ fn pod_composition<'a>(
         {
             "Running" => {
                 composition.running += 1;
+                if condition_is_true(pod.status.as_ref(), "Ready") {
+                    composition.ready += 1;
+                }
                 if crash_looping(pod, now) || stuck_reason(pod).is_some() {
                     composition.crash_looping += 1;
                 } else if !condition_is_true(pod.status.as_ref(), "Ready") {
@@ -2626,6 +2633,70 @@ mod tests {
                 "{instant}"
             );
         }
+    }
+
+    /// Sam's Overview called orders-db-0 `CrashLoopBackOff` and read "3 of
+    /// 15 pods ready" while kubectl had 6: the pod had run 2 h 20 m, exited
+    /// once with its node and been Ready since. Fails if one exit after a
+    /// long run is counted, listed or ranked as a crash loop, or a Ready pod
+    /// is left out of the ready count.
+    #[test]
+    fn a_pod_restarted_once_with_its_node_is_ready_and_not_crash_looping() {
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "orders-db-0", "namespace": "shop" },
+            "spec": { "containers": [{ "name": "db" }] },
+            "status": {
+                "phase": "Running",
+                "conditions": [{ "type": "Ready", "status": "True" }],
+                "containerStatuses": [{
+                    "name": "db", "image": "postgres:16", "imageID": "",
+                    "ready": true, "started": true, "restartCount": 2,
+                    "state": { "running": { "startedAt": "2026-10-09T08:25:11Z" } },
+                    "lastState": { "terminated": {
+                        "exitCode": 255, "reason": "Unknown",
+                        "startedAt": "2026-10-09T06:04:34Z",
+                        "finishedAt": "2026-10-09T08:25:05Z",
+                    } },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote");
+        let now = DateTime::parse_from_rfc3339("2026-10-09T08:39:00Z")
+            .expect("now")
+            .with_timezone(&Utc);
+        let composition = pod_composition([&pod], now);
+        assert_eq!(
+            (
+                composition.running,
+                composition.crash_looping,
+                composition.ready
+            ),
+            (1, 0, 1)
+        );
+        assert!(pod_problems([&pod], now).is_empty());
+    }
+
+    /// kubectl counts a crash-looping pod ready in the seconds its container
+    /// is up and Ready. Fails if the ready count leaves such a pod out, or
+    /// counts one whose `Ready` condition is false.
+    #[test]
+    fn the_ready_count_is_the_pods_whose_ready_condition_is_true() {
+        let now = Utc::now();
+        let mut up = restarted_pod("checkout", now, 9, Some(20));
+        up.status.as_mut().unwrap().conditions = Some(vec![PodCondition {
+            type_: "Ready".to_string(),
+            status: "True".to_string(),
+            ..Default::default()
+        }]);
+        let composition = pod_composition([&up, &search_pod(false), &search_pod(true)], now);
+        assert_eq!(
+            (
+                composition.running,
+                composition.crash_looping,
+                composition.ready
+            ),
+            (3, 1, 2)
+        );
     }
 
     /// The distinction the field exists for. A row that quotes the cluster

@@ -556,7 +556,7 @@ describe("PeekPanel", () => {
           conditions: [],
           message: null,
           reason: null,
-          loopingExitAt: new Date(Date.now() - 5_000).toISOString(),
+          loopingUntil: new Date(Date.now() + 60_000).toISOString(),
         },
       })
     );

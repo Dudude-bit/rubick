@@ -9,7 +9,7 @@ import type { PodStart } from "@/generated/types";
 
 type LoopStatus = {
   display: string;
-  loopingExitAt?: string | null;
+  loopingUntil?: string | null;
   exitUnreported?: boolean;
 };
 

@@ -6,6 +6,7 @@ import type { PodComposition, PodInfo, RowContainer } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { podRole, podStatusValue } from "@/lib/share/pod-status";
+import { CRASH_LOOP_WINDOW_MS } from "@/lib/crash-loop";
 import { WORKLOAD_SOURCES } from "../../../-peek/peek-sources-workloads";
 import { podSegments, podsServing } from "../../../-overview/health-share";
 import { columns } from "./PodList";
@@ -188,6 +189,7 @@ describe("a pod up and failing its readiness probe", () => {
       unknown: 0,
       crashLooping: 0,
       notReady: 1,
+      ready: 1,
       stuck: [],
       starting: 0,
     };
@@ -210,7 +212,9 @@ describe("a pod up between the crashes of a loop", () => {
     status: {
       display: "Running",
       phase: "Running",
-      loopingExitAt: new Date(Date.now() - secondsAgo * 1000).toISOString(),
+      loopingUntil: new Date(
+        Date.now() + CRASH_LOOP_WINDOW_MS - secondsAgo * 1000
+      ).toISOString(),
     },
     containers: [
       {

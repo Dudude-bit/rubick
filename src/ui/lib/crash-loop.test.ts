@@ -14,7 +14,7 @@ interface Case {
   name: string;
   now: string;
   display: string;
-  loopingExitAt: string | null;
+  loopingUntil: string | null;
   looping: boolean;
   exitUnreported: boolean;
 }
@@ -37,7 +37,7 @@ describe("the crash-loop window", () => {
     (_, c) => {
       const status = {
         display: c.display,
-        loopingExitAt: c.loopingExitAt ?? undefined,
+        loopingUntil: c.loopingUntil ?? undefined,
         exitUnreported: c.exitUnreported,
       };
       expect(loopState(status, Date.parse(c.now))).toBe(
@@ -46,15 +46,15 @@ describe("the crash-loop window", () => {
     }
   );
 
-  /** Fails if a pod with no recent loop is called one, or one inside the
-   *  window is not. */
-  it("reads a loop only inside the window from its last exit", () => {
+  /** Fails if a pod whose loop has lapsed is called one, or one before
+   *  that moment is not. */
+  it("reads a loop only until the moment the backend ships", () => {
     const now = Date.parse("2026-10-08T20:45:50Z");
-    const ago = (ms: number) => ({
-      loopingExitAt: new Date(now - ms).toISOString(),
+    const lapses = (ms: number) => ({
+      loopingUntil: new Date(now + ms).toISOString(),
     });
-    expect(loopingNow(ago(60_000), now)).toBe(true);
-    expect(loopingNow(ago(CRASH_LOOP_WINDOW_MS + 1), now)).toBe(false);
+    expect(loopingNow(lapses(60_000), now)).toBe(true);
+    expect(loopingNow(lapses(0), now)).toBe(false);
     expect(loopingNow({}, now)).toBe(false);
   });
 });
@@ -67,7 +67,7 @@ describe("a loop the kubelet stopped reporting the exit of", () => {
     status: {
       display: string;
       exitUnreported: boolean;
-      loopingExitAt?: string;
+      loopingUntil?: string;
     };
   } = {
     uid: "fwk7g",
@@ -93,13 +93,13 @@ describe("a loop the kubelet stopped reporting the exit of", () => {
       {
         uid: "fwk7g",
         restartCount: 14,
-        status: { display: "Running", loopingExitAt: "2026-10-09T04:32:43Z" },
+        status: { display: "Running", loopingUntil: "2026-10-09T04:42:43Z" },
       },
       null,
       now
     );
     const carried = withKnownLoop(unreported, seen, []);
-    expect(carried.status.loopingExitAt).toBe("2026-10-09T04:32:43Z");
+    expect(carried.status.loopingUntil).toBe("2026-10-09T04:42:43.000Z");
     expect(loopState(carried.status, now)).toBe("looping");
 
     const evented = withKnownLoop(unreported, null, [
@@ -133,7 +133,7 @@ describe("a loop the kubelet stopped reporting the exit of", () => {
     const first = seenLoop(backingOff, null, now);
     expect(first).toEqual({
       uid: "fwk7g",
-      at: new Date(now).toISOString(),
+      until: new Date(now + CRASH_LOOP_WINDOW_MS).toISOString(),
       restarts: 15,
     });
     expect(seenLoop(backingOff, first, now + 5_000)).toBe(first);

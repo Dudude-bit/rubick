@@ -15,7 +15,7 @@
         }
       ],
       "display": "Running",
-      "loopingExitAt": null,
+      "loopingUntil": null,
       "looping": false,
       "exitUnreported": true
     },
@@ -33,7 +33,7 @@
         }
       ],
       "display": "CrashLoopBackOff",
-      "loopingExitAt": null,
+      "loopingUntil": null,
       "looping": true,
       "exitUnreported": true
     },
@@ -58,7 +58,7 @@
         }
       ],
       "display": "Error",
-      "loopingExitAt": "2026-10-09T04:37:47Z",
+      "loopingUntil": "2026-10-09T04:52:47Z",
       "looping": true,
       "exitUnreported": false
     },
@@ -84,7 +84,7 @@
         }
       ],
       "display": "Running",
-      "loopingExitAt": "2026-10-09T04:32:43Z",
+      "loopingUntil": "2026-10-09T04:42:43Z",
       "looping": true,
       "exitUnreported": false
     },
@@ -110,7 +110,7 @@
         }
       ],
       "display": "Running",
-      "loopingExitAt": "2026-10-09T02:59:59Z",
+      "loopingUntil": "2026-10-09T03:05:00Z",
       "looping": false,
       "exitUnreported": false
     },
@@ -128,8 +128,170 @@
         }
       ],
       "display": "Running",
-      "loopingExitAt": null,
+      "loopingUntil": null,
       "looping": false,
+      "exitUnreported": false
+    },
+    {
+      "name": "moments after its node restarted, ending a run of hours",
+      "now": "2026-10-09T08:25:20Z",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": true,
+          "restartCount": 2,
+          "state": { "running": { "startedAt": "2026-10-09T08:25:11Z" } },
+          "lastState": {
+            "terminated": {
+              "exitCode": 255,
+              "reason": "Unknown",
+              "startedAt": "2026-10-09T06:04:34Z",
+              "finishedAt": "2026-10-09T08:25:05Z"
+            }
+          }
+        }
+      ],
+      "display": "Running",
+      "loopingUntil": null,
+      "looping": false,
+      "exitUnreported": false
+    },
+    {
+      "name": "fourteen minutes after its node restarted, ending a run of hours",
+      "now": "2026-10-09T08:39:00Z",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": true,
+          "restartCount": 2,
+          "state": { "running": { "startedAt": "2026-10-09T08:25:11Z" } },
+          "lastState": {
+            "terminated": {
+              "exitCode": 255,
+              "reason": "Unknown",
+              "startedAt": "2026-10-09T06:04:34Z",
+              "finishedAt": "2026-10-09T08:25:05Z"
+            }
+          }
+        }
+      ],
+      "display": "Running",
+      "loopingUntil": null,
+      "looping": false,
+      "exitUnreported": false
+    },
+    {
+      "name": "a real loop, up for seconds between runs of seconds",
+      "now": "2026-10-09T08:41:24Z",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": true,
+          "restartCount": 25,
+          "state": { "running": { "startedAt": "2026-10-09T08:41:21Z" } },
+          "lastState": {
+            "terminated": {
+              "exitCode": 1,
+              "reason": "Error",
+              "startedAt": "2026-10-09T08:36:17Z",
+              "finishedAt": "2026-10-09T08:36:21Z"
+            }
+          }
+        }
+      ],
+      "display": "Running",
+      "loopingUntil": "2026-10-09T08:46:21Z",
+      "looping": true,
+      "exitUnreported": false
+    },
+    {
+      "name": "a real loop, the moment its run of seconds ends",
+      "now": "2026-10-09T08:41:26Z",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": false,
+          "restartCount": 25,
+          "state": {
+            "terminated": {
+              "exitCode": 1,
+              "reason": "Error",
+              "startedAt": "2026-10-09T08:41:21Z",
+              "finishedAt": "2026-10-09T08:41:25Z"
+            }
+          },
+          "lastState": {
+            "terminated": {
+              "exitCode": 1,
+              "reason": "Error",
+              "startedAt": "2026-10-09T08:36:17Z",
+              "finishedAt": "2026-10-09T08:36:21Z"
+            }
+          }
+        }
+      ],
+      "display": "Error",
+      "loopingUntil": "2026-10-09T08:56:25Z",
+      "looping": true,
+      "exitUnreported": false
+    },
+    {
+      "name": "a loop that stopped: up longer than the longest back-off since its last short run",
+      "now": "2026-10-09T04:37:47Z",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": true,
+          "restartCount": 9,
+          "state": { "running": { "startedAt": "2026-10-09T04:30:00Z" } },
+          "lastState": {
+            "terminated": {
+              "exitCode": 1,
+              "reason": "Error",
+              "startedAt": "2026-10-09T04:24:50Z",
+              "finishedAt": "2026-10-09T04:24:54Z"
+            }
+          }
+        }
+      ],
+      "display": "Running",
+      "loopingUntil": "2026-10-09T04:35:00Z",
+      "looping": false,
+      "exitUnreported": false
+    },
+    {
+      "name": "a run that never began, which the kubelet dates from the epoch",
+      "now": "2026-10-09T04:37:50Z",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": false,
+          "restartCount": 3,
+          "state": {
+            "terminated": {
+              "exitCode": 128,
+              "reason": "StartError",
+              "startedAt": "1970-01-01T00:00:00Z",
+              "finishedAt": "2026-10-09T04:37:47Z"
+            }
+          }
+        }
+      ],
+      "display": "StartError",
+      "loopingUntil": "2026-10-09T04:52:47Z",
+      "looping": true,
       "exitUnreported": false
     }
   ]

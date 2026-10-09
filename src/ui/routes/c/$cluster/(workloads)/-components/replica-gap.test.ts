@@ -3,7 +3,6 @@ import { describe, expect, it } from "vite-plus/test";
 import type { PodStart } from "@/generated/types";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import { CRASH_LOOP_WINDOW_MS } from "@/lib/crash-loop";
 import { replicaSplit } from "./replica-gap";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -11,7 +10,7 @@ const t: T = (section, key, values) => translate("en", section, key, values);
 const NOW = Date.parse("2026-10-09T07:09:04Z");
 const pod = (
   start: PodStart,
-  status: { display: string; ready: boolean; loopingExitAt?: string } = {
+  status: { display: string; ready: boolean; loopingUntil?: string } = {
     display: "Pending",
     ready: false,
   }
@@ -28,7 +27,7 @@ const upBetweenCrashes = pod(
   {
     display: "Running",
     ready: true,
-    loopingExitAt: new Date(NOW - 20_000).toISOString(),
+    loopingUntil: new Date(NOW + 60_000).toISOString(),
   }
 );
 
@@ -70,13 +69,13 @@ describe("a Replicas bar", () => {
       [1, "ready", "ok"],
       [1, "failing", "err"],
     ]);
-    const over = new Date(NOW - CRASH_LOOP_WINDOW_MS - 1_000).toISOString();
+    const over = new Date(NOW - 1_000).toISOString();
     expect(
       drawn(
         replicaSplit(
           1,
           0,
-          [pod(ready.start, { ...ready.status, loopingExitAt: over })],
+          [pod(ready.start, { ...ready.status, loopingUntil: over })],
           NOW,
           t
         )

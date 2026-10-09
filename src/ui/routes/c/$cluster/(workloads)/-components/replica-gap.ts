@@ -2,14 +2,14 @@ import type { CompositionSegment } from "@/components/object/detail-blocks";
 import type { PodStart, PodStatusInfo } from "@/generated/types";
 import { useNowReading } from "@/hooks/useNow";
 import type { T } from "@/i18n/useT";
-import { CRASH_LOOP_WINDOW_MS, loopState } from "@/lib/crash-loop";
+import { loopState } from "@/lib/crash-loop";
 import { lastRunOut } from "@/lib/workload-status";
 
 type Counted = {
   start: PodStart;
   status: Pick<
     PodStatusInfo,
-    "display" | "ready" | "loopingExitAt" | "exitUnreported"
+    "display" | "ready" | "loopingUntil" | "exitUnreported"
   >;
 };
 
@@ -78,9 +78,7 @@ export function useStartsClock(pods: readonly Counted[] | null): number {
     lastRunOut(
       (pods ?? []).flatMap(({ start, status }) => [
         ...(start.state === "starting" ? [Date.parse(start.until)] : []),
-        ...(status.loopingExitAt
-          ? [Date.parse(status.loopingExitAt) + CRASH_LOOP_WINDOW_MS]
-          : []),
+        ...(status.loopingUntil ? [Date.parse(status.loopingUntil)] : []),
       ]),
       now
     )

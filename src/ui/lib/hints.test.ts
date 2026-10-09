@@ -188,7 +188,13 @@ describe("troubleOf", () => {
     expect(troubleOf(up, [])).toBeNull();
     expect(
       troubleOf(
-        { ...up, status: { ...up.status, loopingExitAt: exit.finishedAt } },
+        {
+          ...up,
+          status: {
+            ...up.status,
+            loopingUntil: new Date(Date.now() + 60_000).toISOString(),
+          },
+        },
         []
       )
     ).toMatchObject({ reason: "crashLoop", container: "app", restarts: 6 });

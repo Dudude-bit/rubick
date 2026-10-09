@@ -216,6 +216,14 @@ pub fn display_status(pod: &Pod) -> String {
 /// only once a container has run for ten, so a loop comes round inside this.
 pub const CRASH_LOOP_WINDOW_SECONDS: i64 = 15 * 60;
 
+/// The kubelet's longest back-off between two starts: a container up this
+/// long since its last exit has outlasted any wait a loop puts between runs.
+pub const CRASH_LOOP_SETTLE_SECONDS: i64 = 5 * 60;
+
+/// A run the kubelet forgets its back-off after. An exit that ended a run
+/// this long is one exit, a node or runtime restart most often, not a loop.
+pub const LONG_RUN_SECONDS: i64 = 10 * 60;
+
 /// Whether this pod is crash-looping, read the same in every phase of the
 /// kubelet's back-off cycle.
 ///
@@ -223,37 +231,72 @@ pub const CRASH_LOOP_WINDOW_SECONDS: i64 = 15 * 60;
 /// kubelet waits, `Error` or `OOMKilled` the moment the container dies, and
 /// `Running` for the seconds it is up. Counted by that word, the same pod is
 /// healthy on one read and crash-looping on the next. A container waiting in
-/// `CrashLoopBackOff`, or one that has restarted twice or more and last exited
-/// inside the back-off window, is crash-looping whichever instant this is.
+/// `CrashLoopBackOff`, or one still inside [`looping_until`], is
+/// crash-looping whichever instant this is.
 #[must_use]
 pub fn crash_looping(pod: &Pod, now: DateTime<Utc>) -> bool {
-    let Some(status) = running_status(pod) else {
-        return false;
-    };
-    let waiting = status.container_statuses.iter().flatten().any(|cs| {
-        cs.state
-            .as_ref()
-            .and_then(|s| s.waiting.as_ref())
-            .and_then(|w| w.reason.as_deref())
-            == Some("CrashLoopBackOff")
-    });
-    waiting
-        || looping_exit(pod)
-            .is_some_and(|at| now - at < chrono::Duration::seconds(CRASH_LOOP_WINDOW_SECONDS))
+    running_status(pod).is_some()
+        && (backing_off(pod) || looping_until(pod).is_some_and(|until| now < until))
 }
 
-/// When the latest exit of a container that has restarted twice or more
-/// ended, on a running pod: what [`crash_looping`] measures its window from,
-/// shipped so a reader with its own clock measures the same window.
+/// Whether the kubelet itself says a container of this pod is in
+/// `CrashLoopBackOff`, rather than the app reading a loop off its exits.
 #[must_use]
-pub fn looping_exit(pod: &Pod) -> Option<DateTime<Utc>> {
+pub fn backing_off(pod: &Pod) -> bool {
+    pod.status
+        .as_ref()
+        .and_then(|s| s.container_statuses.as_ref())
+        .into_iter()
+        .flatten()
+        .any(|cs| {
+            cs.state
+                .as_ref()
+                .and_then(|s| s.waiting.as_ref())
+                .and_then(|w| w.reason.as_deref())
+                == Some("CrashLoopBackOff")
+        })
+}
+
+/// Until when a running pod counts as crash-looping by its exits, read without
+/// a clock so a watched row stays true: the reader compares it with its own.
+///
+/// Only a container restarted twice or more counts, and only for an exit that
+/// ended a short run, or one whose length the kubelet did not report. It
+/// counts for [`CRASH_LOOP_WINDOW_SECONDS`] after that exit, and no longer
+/// than [`CRASH_LOOP_SETTLE_SECONDS`] into a run that has stayed up since.
+#[must_use]
+pub fn looping_until(pod: &Pod) -> Option<DateTime<Utc>> {
     running_status(pod)?
         .container_statuses
         .iter()
         .flatten()
         .filter(|cs| cs.restart_count >= 2)
-        .filter_map(|cs| latest_exit(cs)?.finished_at.as_ref().map(Moment::moment))
+        .filter_map(loop_lasts_until)
         .max()
+}
+
+fn loop_lasts_until(cs: &ContainerStatus) -> Option<DateTime<Utc>> {
+    let exit = latest_exit(cs)?;
+    let ended = exit.finished_at.as_ref()?.moment();
+    // The kubelet writes the epoch as the start of a run that never began.
+    let began = exit
+        .started_at
+        .as_ref()
+        .map(Moment::moment)
+        .filter(|at| at.timestamp() > 0);
+    if began.is_some_and(|at| ended - at >= chrono::Duration::seconds(LONG_RUN_SECONDS)) {
+        return None;
+    }
+    let window = ended + chrono::Duration::seconds(CRASH_LOOP_WINDOW_SECONDS);
+    let up = cs
+        .state
+        .as_ref()
+        .and_then(|s| s.running.as_ref())
+        .and_then(|r| r.started_at.as_ref())
+        .map(Moment::moment);
+    Some(up.map_or(window, |at| {
+        window.min(at + chrono::Duration::seconds(CRASH_LOOP_SETTLE_SECONDS))
+    }))
 }
 
 /// Whether a running pod has a container that restarted while neither its
@@ -813,28 +856,105 @@ mod tests {
 
     /// Sam's checkout pod read green Running in its header between crashes
     /// while the Overview said `CrashLoopBackOff`. The page, the list and
-    /// Connections measure the window from what the row and the fact ship;
-    /// fails if the running instant ships no exit to any of them, or a pod
-    /// restarted once ships one.
+    /// Connections compare their own clock with what the row and the fact
+    /// ship; fails if the running instant ships no moment to any of them, or
+    /// a pod restarted once ships one.
     #[test]
-    fn a_running_crash_looper_ships_the_exit_its_window_is_measured_from() {
+    fn a_running_crash_looper_ships_the_moment_its_loop_lapses() {
         let now = Utc::now();
         let up = looping(running(), exited(now, 20, "Error", 1), 9);
-        let at = looping_exit(&up).expect("the last exit is shipped");
+        let until = looping_until(&up).expect("the moment is shipped");
         assert_eq!(
-            at.timestamp(),
-            (now - chrono::Duration::seconds(20)).timestamp()
+            until.timestamp(),
+            (now - chrono::Duration::seconds(20)
+                + chrono::Duration::seconds(CRASH_LOOP_WINDOW_SECONDS))
+            .timestamp()
         );
         assert_eq!(
-            crate::resources::PodRow::from(&up).status.looping_exit_at,
-            Some(at)
+            crate::resources::PodRow::from(&up).status.looping_until,
+            Some(until)
         );
         assert!(matches!(
             crate::resources::published::pod_ref(&up, "shop").facts,
-            Some(crate::resources::ObjectFacts::Pod { looping_exit_at: Some(fact), .. }) if fact == at
+            Some(crate::resources::ObjectFacts::Pod { looping_until: Some(fact), .. }) if fact == until
         ));
         let rebooted = looping(running(), exited(now, 30, "Unknown", 255), 1);
-        assert_eq!(looping_exit(&rebooted), None);
+        assert_eq!(looping_until(&rebooted), None);
+    }
+
+    fn run(
+        mut exit: ContainerStateTerminated,
+        now: DateTime<Utc>,
+        seconds_ago: i64,
+    ) -> ContainerStateTerminated {
+        exit.started_at = Some(Time(
+            crate::utils::moment::as_cluster_time(now - chrono::Duration::seconds(seconds_ago))
+                .expect("an instant this test wrote itself"),
+        ));
+        exit
+    }
+
+    fn up_since(now: DateTime<Utc>, seconds_ago: i64) -> ContainerState {
+        ContainerState {
+            running: Some(ContainerStateRunning {
+                started_at: Some(Time(
+                    crate::utils::moment::as_cluster_time(
+                        now - chrono::Duration::seconds(seconds_ago),
+                    )
+                    .expect("an instant this test wrote itself"),
+                )),
+            }),
+            ..Default::default()
+        }
+    }
+
+    /// Sam's orders-db-0 ran 2 h 20 m, exited once with its node and read as
+    /// a crash loop for the next quarter hour. Fails if one exit that ended a
+    /// long run counts as a loop at any moment after it.
+    #[test]
+    fn one_exit_after_a_long_run_is_not_a_crash_loop() {
+        let now = Utc::now();
+        for up in [6, 14 * 60] {
+            let restarted = looping(
+                up_since(now, up),
+                run(
+                    exited(now, up + 6, "Unknown", 255),
+                    now,
+                    up + 6 + 2 * 3600 + 20 * 60,
+                ),
+                2,
+            );
+            assert_eq!(looping_until(&restarted), None, "up {up}s");
+            assert!(!crash_looping(&restarted, now), "up {up}s");
+        }
+    }
+
+    /// Fails if a container that has stayed up past the longest back-off
+    /// still counts as looping, or one up for seconds between short runs
+    /// does not.
+    #[test]
+    fn a_loop_ends_once_a_run_outlasts_the_longest_back_off() {
+        let now = Utc::now();
+        let between = looping(
+            up_since(now, 4),
+            run(exited(now, 300, "Error", 1), now, 304),
+            9,
+        );
+        assert!(crash_looping(&between, now));
+        let stopped = looping(
+            up_since(now, CRASH_LOOP_SETTLE_SECONDS + 60),
+            run(
+                exited(now, CRASH_LOOP_SETTLE_SECONDS + 70, "Error", 1),
+                now,
+                CRASH_LOOP_SETTLE_SECONDS + 74,
+            ),
+            9,
+        );
+        assert!(!crash_looping(&stopped, now));
+        assert_eq!(
+            looping_until(&stopped).map(|t| t.timestamp()),
+            Some((now - chrono::Duration::seconds(60)).timestamp())
+        );
     }
 
     /// The frontend measures the same window from the same file; fails if one
@@ -868,8 +988,8 @@ mod tests {
             let row = crate::resources::PodRow::from(&pod);
             assert_eq!(row.status.display, case["display"], "{name}");
             assert_eq!(
-                serde_json::to_value(row.status.looping_exit_at).expect("value"),
-                case["loopingExitAt"],
+                serde_json::to_value(row.status.looping_until).expect("value"),
+                case["loopingUntil"],
                 "{name}"
             );
             assert_eq!(row.status.exit_unreported, case["exitUnreported"], "{name}");

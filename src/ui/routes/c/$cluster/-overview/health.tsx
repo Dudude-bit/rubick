@@ -15,7 +15,6 @@ import {
   memoryRatio,
   nodesShare,
   podSegments,
-  podsServing,
   podTotal,
   PRESSURE_WARN,
   attentionShare,
@@ -539,7 +538,7 @@ export function AttentionPanel({
                 {pods && (
                   <span className="flex-none">
                     {t("count", "podsReady", {
-                      n: formatCount(podsServing(pods.read)),
+                      n: formatCount(pods.read.ready),
                       of: t("count", "ofPods", { n: podTotal(pods.read) }),
                     })}
                   </span>

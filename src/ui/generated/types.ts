@@ -1896,6 +1896,7 @@ export interface PodComposition {
   unknown: number;
   crashLooping: number;
   notReady: number;
+  ready: number;
   stuck: ReasonCount[];
   starting: number;
 }
@@ -2037,7 +2038,7 @@ export interface TerminationInfo {
 export interface PodRowStatus {
   phase: string;
   display: string;
-  loopingExitAt?: string;
+  loopingUntil?: string;
   exitUnreported: boolean;
 }
 
@@ -2186,7 +2187,7 @@ export interface PodStatusInfo {
   conditions: ConditionInfo[];
   message: string | null;
   reason: string | null;
-  loopingExitAt?: string;
+  loopingUntil?: string;
   exitUnreported: boolean;
 }
 
@@ -2311,7 +2312,7 @@ export type ObjectFacts =
       phase: string;
       display: string;
       ready: boolean;
-      loopingExitAt: string | null;
+      loopingUntil: string | null;
       exitUnreported: boolean;
     }
   | {

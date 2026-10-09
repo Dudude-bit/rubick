@@ -127,7 +127,7 @@ describe("a pod caught up between crashes", () => {
       status: {
         phase: "Running",
         display: "Running",
-        loopingExitAt: new Date(Date.now() - 5_000).toISOString(),
+        loopingUntil: new Date(Date.now() + 60_000).toISOString(),
       },
     } as unknown as PodInfo;
     await card({ pods: [looping] });

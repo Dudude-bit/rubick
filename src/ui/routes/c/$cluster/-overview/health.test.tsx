@@ -92,6 +92,7 @@ const RUNNING: Census<PodComposition> = {
     unknown: 0,
     crashLooping: 0,
     notReady: 0,
+    ready: 1,
     stuck: [],
     starting: 0,
   },
@@ -377,6 +378,7 @@ describe("a scope one namespace of which refused its pods", () => {
         unknown: 0,
         crashLooping: 0,
         notReady: 0,
+        ready: 2,
         stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
         starting: 0,
       },
@@ -1051,6 +1053,7 @@ describe("what Needs attention says it checked", () => {
       unknown: 0,
       crashLooping: 1,
       notReady: 0,
+      ready: 5,
       stuck: [],
       starting: 0,
     });
@@ -1079,6 +1082,7 @@ describe("what Needs attention says it checked", () => {
       unknown: 0,
       crashLooping: 3,
       notReady: 1,
+      ready: 5,
       stuck: [],
       starting: 0,
     });
@@ -1087,6 +1091,30 @@ describe("what Needs attention says it checked", () => {
     expect(summary).toHaveTextContent("5 of 14 pods ready");
     expect(summary).toHaveTextContent(
       "(1 NotReady, 3 CrashLoop, 1 Pending, 4 Failed)"
+    );
+  });
+
+  /**
+   * Sam's Overview read "3 of 15 pods ready" while kubectl had 6 ready.
+   * Fails if the line counts ready anything but the pods whose Ready
+   * condition is true, as kubectl does.
+   */
+  it("counts ready the pods kubectl counts ready", async () => {
+    await panel(attentionFrom([{ ...problem, severity: "critical" }]), {
+      running: 3,
+      pending: 0,
+      succeeded: 0,
+      failed: 0,
+      unknown: 0,
+      crashLooping: 1,
+      notReady: 0,
+      ready: 3,
+      stuck: [],
+      starting: 0,
+    });
+
+    expect(screen.getByTestId("attention-summary")).toHaveTextContent(
+      "3 of 3 pods ready"
     );
   });
 
@@ -1106,6 +1134,7 @@ describe("what Needs attention says it checked", () => {
       unknown: 0,
       crashLooping: 0,
       notReady: 0,
+      ready: 2,
       stuck: [],
       starting: 2,
     };
@@ -1145,6 +1174,7 @@ describe("what Needs attention says it checked", () => {
       unknown: 0,
       crashLooping: 0,
       notReady: 0,
+      ready: 2,
       stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
       starting: 0,
     };
