@@ -11,16 +11,32 @@ use std::time::{Duration, Instant};
 
 use k8s_gui_lib::state::{AppEvent, AppState};
 use k8s_gui_lib::terminal::{PodExecAdapter, SessionTarget, TerminalManager};
+use tokio::io::AsyncReadExt;
+
+type Pods = kube::Api<k8s_openapi::api::core::v1::Pod>;
+
+/// The tests share one container, so they take turns: one test's shell must
+/// not be counted as another's leftover.
+static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// Every `sh` in the container before this run opened one.
+static BEFORE_THE_RUN: tokio::sync::OnceCell<Vec<u32>> = tokio::sync::OnceCell::const_new();
+
+/// The pid of every `sh` in the container but the one asking. `read` and `[`
+/// are builtins, so the probe forks nothing that could be counted.
+const LIST_SHELLS: &str = r#"for p in /proc/[0-9]*; do { read -r c < "$p/comm"; } 2>/dev/null && [ "$c" = sh ] && [ "${p#/proc/}" != "$$" ] && echo "${p#/proc/}"; done"#;
 
 struct Shell {
     manager: TerminalManager,
     id: String,
     events: tokio::sync::broadcast::Receiver<AppEvent>,
-    pods: kube::Api<k8s_openapi::api::core::v1::Pod>,
+    pods: Pods,
     pod: String,
+    _turn: tokio::sync::MutexGuard<'static, ()>,
 }
 
 async fn shell() -> Shell {
+    let turn = ONE_AT_A_TIME.lock().await;
     let context =
         std::env::var("K8S_GUI_INIT_CONTEXT").unwrap_or_else(|_| "kind-rubick-gui".to_string());
     let namespace =
@@ -43,6 +59,7 @@ async fn shell() -> Shell {
     // and a connect that fails reports the moment the gate is released.
     let events = state.event_tx.subscribe();
     let pods = kube::Api::namespaced((*client).clone(), &namespace);
+    BEFORE_THE_RUN.get_or_init(|| shells_in(&pods, &pod)).await;
     let adapter = PodExecAdapter::new(
         (*client).clone(),
         SessionTarget {
@@ -62,6 +79,67 @@ async fn shell() -> Shell {
         events,
         pods,
         pod,
+        _turn: turn,
+    }
+}
+
+async fn shells_in(pods: &Pods, pod: &str) -> Vec<u32> {
+    let params = kube::api::AttachParams::default()
+        .container("main")
+        .stdout(true)
+        .stderr(false);
+    let mut probe = pods
+        .exec(pod, ["/bin/sh", "-c", LIST_SHELLS], &params)
+        .await
+        .expect("probe");
+    let mut said = String::new();
+    if let Some(mut stdout) = probe.stdout() {
+        stdout.read_to_string(&mut said).await.expect("read");
+    }
+    if let Some(status) = probe.take_status() {
+        let _ = status.await;
+    }
+    let mut pids: Vec<u32> = said.lines().filter_map(|l| l.trim().parse().ok()).collect();
+    pids.sort_unstable();
+    pids
+}
+
+impl Shell {
+    /// Close the shell, wait for the hang-up, and fail if any `sh` this run
+    /// started is still in the container. Read a few times, a second apart:
+    /// another test's short exec passes, a shell left behind stays.
+    async fn end(&self) {
+        assert!(
+            self.manager
+                .close_and_wait(&self.id, Duration::from_secs(15))
+                .await,
+            "the shell was not hung up within 15 s"
+        );
+        assert!(
+            self.manager.list().is_empty(),
+            "the registry still lists it"
+        );
+        let before = BEFORE_THE_RUN.get().expect("read before the first shell");
+        let mut left: Vec<u32> = Vec::new();
+        for read in 0..4 {
+            if read > 0 {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+            let now: Vec<u32> = shells_in(&self.pods, &self.pod)
+                .await
+                .into_iter()
+                .filter(|pid| !before.contains(pid))
+                .collect();
+            left = if read == 0 {
+                now
+            } else {
+                left.into_iter().filter(|pid| now.contains(pid)).collect()
+            };
+            if left.is_empty() {
+                return;
+            }
+        }
+        panic!("sh left running in {} by this run: {left:?}", self.pod);
     }
 }
 
@@ -86,15 +164,13 @@ async fn until(
     (said, count)
 }
 
+/// `seq 1 300000` and two thousand Cyrillic lines, through the same path the
+/// pane reads. Fails if a line is lost, reordered or split into U+FFFD.
 #[tokio::test]
 #[ignore = "needs a live cluster and a pod with a shell"]
 async fn a_busy_shell_reaches_the_pane_quickly_and_whole() {
-    let Shell {
-        manager,
-        id,
-        mut events,
-        ..
-    } = shell().await;
+    let mut shell = shell().await;
+    let (manager, id) = (&shell.manager, shell.id.clone());
 
     let started = Instant::now();
     manager
@@ -103,7 +179,7 @@ async fn a_busy_shell_reaches_the_pane_quickly_and_whole() {
         .expect("input");
     let (said, events_seen) = tokio::time::timeout(
         Duration::from_secs(120),
-        until(&mut events, "SEQ-2-DONE\r\n"),
+        until(&mut shell.events, "SEQ-2-DONE\r\n"),
     )
     .await
     .expect("within two minutes");
@@ -134,7 +210,7 @@ async fn a_busy_shell_reaches_the_pane_quickly_and_whole() {
         .expect("input");
     let (said, _) = tokio::time::timeout(
         Duration::from_secs(60),
-        until(&mut events, "CYR-2-DONE\r\n"),
+        until(&mut shell.events, "CYR-2-DONE\r\n"),
     )
     .await
     .expect("within a minute");
@@ -146,27 +222,28 @@ async fn a_busy_shell_reaches_the_pane_quickly_and_whole() {
     let broken = said.matches('\u{fffd}').count();
     println!("привет-мир ×2000: {broken} replacement characters");
     assert_eq!(broken, 0);
+    shell.end().await;
 }
 
 /// Dana closed two shells and both `sh` processes were still in their pods
 /// minutes later: dropping the exec stream does not end what it started.
+/// The k3d run left two more, from the tests beside this one, so this also
+/// fails if any `sh` the run started is still there.
 #[tokio::test]
 #[ignore = "needs a live cluster and a pod with a shell"]
 async fn a_closed_shell_is_not_left_running_in_the_container() {
-    let Shell {
-        manager,
-        id,
-        mut events,
-        pods,
-        pod,
-    } = shell().await;
-    manager
-        .send_input(&id, "echo PID-$$-END\n")
+    let mut shell = shell().await;
+    shell
+        .manager
+        .send_input(&shell.id, "echo PID-$$-END\n")
         .await
         .expect("input");
-    let (said, _) = tokio::time::timeout(Duration::from_secs(30), until(&mut events, "-END\r\n"))
-        .await
-        .expect("the shell answers");
+    let (said, _) = tokio::time::timeout(
+        Duration::from_secs(30),
+        until(&mut shell.events, "-END\r\n"),
+    )
+    .await
+    .expect("the shell answers");
     let pid: u32 = said
         .rsplit("PID-")
         .next()
@@ -178,28 +255,19 @@ async fn a_closed_shell_is_not_left_running_in_the_container() {
         "the mark reached the pane: {said:?}"
     );
 
-    manager.close_session(&id).expect("close");
-    tokio::time::timeout(Duration::from_secs(15), async {
-        loop {
-            if let AppEvent::TerminalClosed { session_id, .. } =
-                events.recv().await.expect("the bus")
-            {
-                if session_id == id {
-                    return;
-                }
-            }
-        }
-    })
-    .await
-    .expect("the session ends");
-    assert!(manager.list().is_empty(), "the registry still lists it");
+    shell.end().await;
 
     let params = kube::api::AttachParams::default()
         .container("main")
         .stdout(true)
         .stderr(false);
-    let mut probe = pods
-        .exec(&pod, ["/bin/sh", "-c", &format!("kill -0 {pid}")], &params)
+    let mut probe = shell
+        .pods
+        .exec(
+            &shell.pod,
+            ["/bin/sh", "-c", &format!("kill -0 {pid}")],
+            &params,
+        )
         .await
         .expect("probe");
     let status = probe
@@ -210,7 +278,8 @@ async fn a_closed_shell_is_not_left_running_in_the_container() {
     assert_ne!(
         status.status.as_deref(),
         Some("Success"),
-        "pid {pid} is still running in {pod}"
+        "pid {pid} is still running in {}",
+        shell.pod
     );
 }
 
@@ -220,12 +289,7 @@ async fn a_closed_shell_is_not_left_running_in_the_container() {
 #[tokio::test]
 #[ignore = "needs a live cluster and a pod with a shell"]
 async fn a_shell_opened_at_the_pane_size_prints_one_prompt() {
-    let Shell {
-        manager,
-        id,
-        mut events,
-        ..
-    } = shell().await;
+    let mut shell = shell().await;
     let heard = |events: &mut tokio::sync::broadcast::Receiver<AppEvent>| {
         let mut said = String::new();
         while let Ok(event) = events.try_recv() {
@@ -236,11 +300,19 @@ async fn a_shell_opened_at_the_pane_size_prints_one_prompt() {
         said
     };
     tokio::time::sleep(Duration::from_secs(2)).await;
-    let first = heard(&mut events);
+    let first = heard(&mut shell.events);
     assert!(!first.trim().is_empty(), "the shell printed a prompt");
 
-    manager.resize_session(&id, 120, 40).await.expect("resize");
+    shell
+        .manager
+        .resize_session(&shell.id, 120, 40)
+        .await
+        .expect("resize");
     tokio::time::sleep(Duration::from_secs(2)).await;
-    assert_eq!(heard(&mut events), "", "the same size drew another prompt");
-    manager.close_session(&id).expect("close");
+    assert_eq!(
+        heard(&mut shell.events),
+        "",
+        "the same size drew another prompt"
+    );
+    shell.end().await;
 }
