@@ -97,6 +97,12 @@ export const ru: Catalogue = {
     stopScaledToZero: "Подов нет намеренно: {name} масштабирован до нуля",
     stopScaledToZeroSeveral:
       "Подов нет намеренно: {names} масштабированы до нуля",
+    stopPodsBeingMade:
+      "Подов с меткой {selector} пока нет: {name} создаёт свои поды",
+    stopPodsBeingMadeSeveral:
+      "Подов с меткой {selector} пока нет: {names} создают свои поды",
+    stopPodsBeingMadeNote:
+      "Их только что запросили, и адреса у них пока нет, поэтому подключения к этому адресу пока отклоняются. Это сбой, только если поды так и не появятся.",
     stopNearMissNote:
       "Ближе всех: {pods}. Подключения к этому адресу отклоняются, пока ни один под не подходит под весь селектор: добавьте метку {lacks} в их шаблон или уберите её из селектора.",
     stopScaledToZeroNote:
@@ -6012,6 +6018,7 @@ export const ru: Catalogue = {
     stopNoServiceToSendTo: "нет service, куда отправлять",
     stopSelectorMatchesNothing: "селектор ничего не находит",
     stopScaledToZeroUnder: "масштабирован до нуля",
+    stopPodsBeingMadeUnder: "поды создаются",
     stopNothingPublishedYet: "пока ничего не опубликовано",
     stopRunningNoneReady: "работают, но ни один не готов",
     stopNotScheduled: "не размещены на узле",

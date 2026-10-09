@@ -4,6 +4,7 @@ import { EyeOff } from "lucide-react";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type { ObjectRef, ServicePublished } from "@/generated/types";
+import { chainStopHop } from "./connections";
 import {
   healthFromConnections,
   serviceHealthOf,
@@ -413,6 +414,30 @@ describe("a Service whose workloads wait on their pods", () => {
     expect(words.reason).toBe(
       "The endpoints list 1 address for app=ledger, and it is not ready: pods not read, so whether they are starting is not known"
     );
+  });
+
+  /**
+   * Sam's big-pull read red "No pod carries app=big-pull" for a tenth of a
+   * second from a read that listed the pods just before its Deployment made
+   * the first. Fails if a workload making its pods leaves the Service a
+   * fault, on its badge or on its chain.
+   */
+  it("reads coming up, not no endpoints, while its workload is making its pods", () => {
+    const stop = {
+      reason: "podsBeingMade" as const,
+      service: SERVICE,
+      selector: "app=big-pull",
+      workloads: [{ ...SERVICE, kind: "Deployment", name: "big-pull" }],
+    };
+    const health = serviceHealthOf(SELECTING, published({ stop }), null);
+    expect(health.state).toBe("comingUp");
+    const words = serviceHealthWords(health, t);
+    expect(words.label).toBe("coming up");
+    expect(words.role).toBe("pending");
+    expect(words.reason).toBe(
+      "No pod carries app=big-pull yet: big-pull is making its pods"
+    );
+    expect(chainStopHop(stop, SERVICE, t)).toMatchObject({ mood: "coming" });
   });
 
   /**

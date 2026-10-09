@@ -357,6 +357,8 @@ export function stopUnder(
       return "stopSelectorMatchesNothing";
     case "scaledToZero":
       return "stopScaledToZeroUnder";
+    case "podsBeingMade":
+      return "stopPodsBeingMadeUnder";
     case "publishesNothingYet":
       return stop.podsUnread ? "podsNotRead" : "stopNothingPublishedYet";
     case "noneReady":
@@ -455,6 +457,22 @@ export function describeStop(
         stop.workloads.map((workload) => workload.name),
         t
       );
+    case "podsBeingMade": {
+      const names = stop.workloads.map((workload) => workload.name);
+      return {
+        title:
+          names.length === 1
+            ? t("nav", "stopPodsBeingMade", {
+                selector: stop.selector,
+                name: names[0],
+              })
+            : t("nav", "stopPodsBeingMadeSeveral", {
+                selector: stop.selector,
+                names: names.join(", "),
+              }),
+        note: t("nav", "stopPodsBeingMadeNote"),
+      };
+    }
     // Said by a reader holding the endpoints and no pod list: it knows
     // nothing arrives and cannot say whether that is a selector matching
     // nothing or pods that have no address yet.
@@ -591,6 +609,7 @@ export interface ChainHopStop {
 /** The mood of a stop no subject turns idle. */
 export function stopMood(stop: ChainStop): StopMood {
   if (stop.reason === "scaledToZero") return "idle";
+  if (stop.reason === "podsBeingMade") return "coming";
   if (stop.reason === "publishesNothingYet")
     return stop.podsUnread ? "unchecked" : "fault";
   if (stop.reason !== "noneReady") return "fault";

@@ -91,6 +91,7 @@ export function serviceHealthOf(
 function waitingOn(
   stop: ChainStop | null | undefined
 ): "comingUp" | "podsUnread" | null {
+  if (stop?.reason === "podsBeingMade") return "comingUp";
   if (stop?.reason === "publishesNothingYet")
     return stop.podsUnread ? "podsUnread" : null;
   if (stop?.reason !== "noneReady") return null;

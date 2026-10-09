@@ -420,6 +420,16 @@ pub enum ChainStop {
         selector: String,
         workloads: Vec<ObjectRef>,
     },
+    /// The selector matches no pod yet, and a Deployment or `StatefulSet`
+    /// whose pods it would pick asks for some and reports no fault: its pods
+    /// are being made. The window between a workload's create and its first
+    /// pod, where [`ChainStop::SelectsNothing`] sent the reader to labels
+    /// that were fine.
+    PodsBeingMade {
+        service: ObjectRef,
+        selector: String,
+        workloads: Vec<ObjectRef>,
+    },
     /// The Service publishes no endpoint, and this reader cannot say why.
     ///
     /// The honest stop for a surface built from the endpoints alone. It knows

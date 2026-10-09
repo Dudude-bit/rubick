@@ -187,7 +187,9 @@ impl ServicePublished {
     }
 
     /// A selector matching no pod, said as [`ChainStop::ScaledToZero`] where
-    /// [`scaled_to_zero`] finds every workload behind it asking for none.
+    /// [`scaled_to_zero`] finds every workload behind it asking for none, and
+    /// as [`ChainStop::PodsBeingMade`] where [`being_made`] finds one making
+    /// its pods.
     #[must_use]
     pub fn with_makers(mut self, service: &Service, makers: &[PodMaker<'_>]) -> Self {
         if let Some(ChainStop::SelectsNothing {
@@ -196,10 +198,17 @@ impl ServicePublished {
             ..
         }) = &self.stop
         {
+            let (service_at, selector) = (at.clone(), selector.clone());
             if let Some(workloads) = scaled_to_zero(service, makers) {
                 self.stop = Some(ChainStop::ScaledToZero {
-                    service: at.clone(),
-                    selector: selector.clone(),
+                    service: service_at,
+                    selector,
+                    workloads,
+                });
+            } else if let Some(workloads) = being_made(service, makers) {
+                self.stop = Some(ChainStop::PodsBeingMade {
+                    service: service_at,
+                    selector,
                     workloads,
                 });
             }
@@ -838,6 +847,30 @@ pub fn scaled_to_zero(service: &Service, makers: &[PodMaker<'_>]) -> Option<Vec<
         return None;
     }
     Some(picked.iter().map(|maker| maker.workload.clone()).collect())
+}
+
+/// The workloads whose pods a Service's selector picks that ask for some and
+/// report no fault, where there are any: with no pod carrying the selector,
+/// theirs are still being made. A paused or stuck one makes none.
+#[must_use]
+pub fn being_made(service: &Service, makers: &[PodMaker<'_>]) -> Option<Vec<ObjectRef>> {
+    let selector = service
+        .spec
+        .as_ref()
+        .and_then(|s| s.selector.clone())
+        .unwrap_or_default();
+    let query = Selector::Equality(&selector);
+    let making: Vec<ObjectRef> = makers
+        .iter()
+        .filter(|maker| {
+            maker.replicas > 0
+                && query.matches(maker.labels) == Some(true)
+                && !maker.rollout.is_problem()
+                && !matches!(maker.rollout, Rollout::Paused | Rollout::Idle)
+        })
+        .map(|maker| maker.workload.clone())
+        .collect();
+    (!making.is_empty()).then_some(making)
 }
 
 /// What a Service none of whose addresses is ready is waiting on, where every
@@ -1703,9 +1736,81 @@ mod tests {
                 deployment("web", "web", 0),
                 deployment("web-canary", "web", 1)
             ]),
-            Some(ChainStop::SelectsNothing { .. })
+            Some(ChainStop::PodsBeingMade { .. })
         ));
         assert!(matches!(said(&[]), Some(ChainStop::SelectsNothing { .. })));
+    }
+
+    /// Sam's big-pull: a read that listed the pods a moment before the
+    /// Deployment made its first drew red "No pod carries app=big-pull" for
+    /// a tenth of a second. Fails if a workload asking for pods and stating
+    /// no fault leaves the labels blamed, or if one its controller calls
+    /// stuck, or one paused, is said to be making its pods.
+    #[test]
+    fn a_service_whose_workload_is_making_its_pods_is_not_blamed_on_its_labels() {
+        let svc = selecting("web");
+        let said = |deployments: &[Deployment]| {
+            let makers: Vec<PodMaker> = deployments
+                .iter()
+                .filter_map(PodMaker::deployment)
+                .collect();
+            from_slices(&svc, svc_ref("web"), &[], &[])
+                .with_stop(&svc, Some(&[]))
+                .with_makers(&svc, &makers)
+                .stop
+        };
+        let stated = |paused: bool, status: serde_json::Value| -> Deployment {
+            serde_json::from_value(serde_json::json!({
+                "apiVersion": "apps/v1", "kind": "Deployment",
+                "metadata": {"name": "web", "namespace": "k8s-gui-test", "generation": 1},
+                "spec": {
+                    "replicas": 1,
+                    "paused": paused,
+                    "selector": {"matchLabels": {"app": "web"}},
+                    "template": {"metadata": {"labels": {"app": "web"}}, "spec": {"containers": []}}
+                },
+                "status": status,
+            }))
+            .expect("deployment parses")
+        };
+
+        let made = said(&[deployment("web", "web", 1)]);
+        let Some(ChainStop::PodsBeingMade {
+            workloads,
+            selector,
+            ..
+        }) = made
+        else {
+            panic!("a workload just asked for pods is making them, got {made:?}");
+        };
+        assert_eq!(selector, "app=web");
+        assert_eq!(
+            workloads
+                .iter()
+                .map(|w| (w.kind.as_str(), w.name.as_str()))
+                .collect::<Vec<_>>(),
+            [("Deployment", "web")]
+        );
+
+        let refused = stated(
+            false,
+            serde_json::json!({
+                "observedGeneration": 1,
+                "conditions": [
+                    {"type": "Available", "status": "False", "reason": "MinimumReplicasUnavailable"},
+                    {"type": "ReplicaFailure", "status": "True", "reason": "FailedCreate"},
+                ],
+            }),
+        );
+        assert!(matches!(
+            said(&[refused]),
+            Some(ChainStop::SelectsNothing { .. })
+        ));
+        let paused = stated(true, serde_json::json!({"observedGeneration": 1}));
+        assert!(matches!(
+            said(&[paused]),
+            Some(ChainStop::SelectsNothing { .. })
+        ));
     }
 
     /// Only a selector that matched no pod is turned idle: endpoints alone
