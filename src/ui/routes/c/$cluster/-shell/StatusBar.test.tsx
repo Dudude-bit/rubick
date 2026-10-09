@@ -108,6 +108,68 @@ describe("the link the window was opened from", () => {
   });
 });
 
+describe("the strip at the narrowest window", () => {
+  const live = () =>
+    useDeepLinkStore.setState({
+      arrival: {
+        status: "live",
+        link: { context: "prod", path: "/c/prod/pods", capturedAt: null },
+      },
+    });
+  const strip = () =>
+    render(
+      <TooltipProvider>
+        <StatusBar />
+      </TooltipProvider>
+    ).container.querySelector("footer")!;
+
+  /**
+   * In Russian at 1024 wide every item wrapped onto a clipped second line.
+   * Fails if the strip may wrap a line or grow past its one row.
+   */
+  it("keeps every item on its one line", () => {
+    expect(strip()).toHaveClass("h-6", "overflow-hidden", "whitespace-nowrap");
+  });
+
+  /**
+   * The hints are what gives way first, and the note is the one item there
+   * that never wraps out of sight, only truncates past a readable start.
+   * Fails if the note stops leading its zone or loses its floor.
+   */
+  it("lets the hints give way before the link note", () => {
+    live();
+    const footer = strip();
+    const hints = screen.getByTestId("status-hints");
+    expect(hints).toHaveClass(
+      "flex-1",
+      "flex-wrap",
+      "flex-row-reverse",
+      "overflow-hidden",
+      "has-[[data-link-note]]:min-w-44"
+    );
+    expect(hints.firstElementChild).toBe(screen.getByRole("status"));
+    expect(hints).toHaveTextContent("Ctrl+K search");
+    expect(footer.firstElementChild).toBe(hints);
+    useDeepLinkStore.setState({ arrival: null });
+  });
+
+  /**
+   * With a proxy session, a sign-in hint and a dozen stalls the problem count
+   * was pushed off the edge. Fails if the count joins a zone that gives way.
+   */
+  it("gives way with the controls and never with the count", () => {
+    strip();
+    const controls = screen.getByTestId("status-controls");
+    expect(controls).toHaveClass("flex-wrap", "overflow-hidden", "min-w-0");
+    expect(controls).toContainElement(
+      screen.getByRole("button", { name: /theme/i })
+    );
+    const counts = screen.getByTestId("scope-counts");
+    expect(controls).not.toContainElement(counts);
+    expect(screen.getByTestId("status-hints")).not.toContainElement(counts);
+  });
+});
+
 describe("which way the session goes", () => {
   /** A session through kubectl is a different session: no deadline of its own, and kubectl's plugin doing the talking. The bar has to say so or the reader debugs the wrong path. */
   it("names the proxy when the app's own credentials were refused", () => {

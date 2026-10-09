@@ -1,12 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
 import { Link2, TriangleAlert, X } from "lucide-react";
-
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 import { Button } from "@/components/ui/button";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -142,25 +136,26 @@ function LiveNote({ capturedAt }: { capturedAt: Date | null }) {
   const text = capturedAt
     ? t("cluster", "linkOpenedAt", { when: formatWhen(capturedAt) })
     : t("cluster", "linkOpened");
+  const [sentence, cut] = useCut(text);
   return (
     <span
       role="status"
       data-testid="link-opened"
+      data-link-note=""
       onMouseEnter={() => setHeld(true)}
       onMouseLeave={() => setHeld(false)}
       onFocus={() => setHeld(true)}
       onBlur={() => setHeld(false)}
-      className="flex min-w-0 items-center gap-1.5 text-fg-mid"
+      className="flex h-6 min-w-0 items-center gap-1.5 text-fg-mid"
     >
       <Link2 className="h-3 w-3 flex-none text-info" aria-hidden="true" />
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <span className="min-w-0 truncate">{text}</span>
-        </TooltipTrigger>
-        <TooltipContent side="top" align="start" className="max-w-[420px]">
-          {text}
-        </TooltipContent>
-      </Tooltip>
+      <span
+        ref={sentence}
+        title={cut ? text : undefined}
+        className="min-w-0 truncate"
+      >
+        {text}
+      </span>
       <button
         type="button"
         onClick={dismiss}
@@ -171,4 +166,20 @@ function LiveNote({ capturedAt }: { capturedAt: Date | null }) {
       </button>
     </span>
   );
+}
+
+/** Whether the text no longer fits its box, so the whole of it is offered on hover and only then. */
+function useCut(text: string) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [cut, setCut] = useState(false);
+  useLayoutEffect(() => {
+    const box = ref.current;
+    if (!box) return;
+    const measure = () => setCut(box.scrollWidth > box.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, [text]);
+  return [ref, cut] as const;
 }
