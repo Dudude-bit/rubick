@@ -1,6 +1,7 @@
 import * as React from "react";
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
 
+import { openMenuOn } from "@/lib/native-menu";
 import { cn } from "@/lib/utils";
 
 /**
@@ -26,12 +27,11 @@ const ContextMenuPortal = ContextMenuPrimitive.Portal;
 /**
  * The trigger, plus a way in that does not need a mouse.
  *
- * Windows and most Linux desktops turn Shift+F10 and the Menu key into a
- * `contextmenu` event by themselves, but not every keyboard has that key,
- * and a right-click-only affordance is not an affordance for everyone. Down
- * is the same key that opens a `<select>`, which is why it is the default —
- * but a trigger sitting inside a list Down already walks has to name its
- * own key, hence `openKeys`.
+ * Shift+F10 and the Menu key open it through `openMenusFromKeys`, but not
+ * every keyboard has that key, and a right-click-only affordance is not an
+ * affordance for everyone. Down is the same key that opens a `<select>`,
+ * which is why it is the default, but a trigger sitting inside a list Down
+ * already walks has to name its own key, hence `openKeys`.
  *
  * Synthesising the event is the only route: `ContextMenu.Root` has no
  * controlled `open`. It is dispatched at the trigger's own bottom-left,
@@ -56,18 +56,6 @@ const ContextMenuTrigger = React.forwardRef<
     { onKeyDown, onClick, openKeys = ["ArrowDown"], openOnClick, ...props },
     ref
   ) => {
-    const openAtBottomLeft = (element: HTMLElement) => {
-      const box = element.getBoundingClientRect();
-      element.dispatchEvent(
-        new MouseEvent("contextmenu", {
-          bubbles: true,
-          cancelable: true,
-          clientX: box.left,
-          clientY: box.bottom,
-        })
-      );
-    };
-
     return (
       <ContextMenuPrimitive.Trigger
         ref={ref}
@@ -75,13 +63,13 @@ const ContextMenuTrigger = React.forwardRef<
         onClick={(event) => {
           onClick?.(event);
           if (!openOnClick || event.defaultPrevented) return;
-          openAtBottomLeft(event.currentTarget);
+          openMenuOn(event.currentTarget);
         }}
         onKeyDown={(event) => {
           onKeyDown?.(event);
           if (event.defaultPrevented || !openKeys.includes(event.key)) return;
           event.preventDefault();
-          openAtBottomLeft(event.currentTarget);
+          openMenuOn(event.currentTarget);
         }}
         {...props}
       />

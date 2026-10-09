@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
-import { keepNativeMenuForText } from "@/lib/native-menu";
+import { keepNativeMenuForText, openMenusFromKeys } from "@/lib/native-menu";
 
 /** What the authorizer answers about each namespace, per test. */
 const nsAccess = vi.hoisted(() => ({
@@ -1428,4 +1428,44 @@ describe("the new tab button", () => {
       stop();
     }
   });
+
+  /**
+   * Dana focused the button and pressed the Menu key, then Shift+F10: the
+   * webview aimed both at whatever lay under the button's corner, and nothing
+   * opened. Fails if either key on the focused button leaves its menu shut.
+   */
+  it.each([
+    ["the Menu key", "{ContextMenu}"],
+    ["Shift+F10", "{Shift>}{F10}{/Shift}"],
+  ])(
+    "opens its cluster menu on %s while it has the focus",
+    async (_key, keys) => {
+      const stops = [keepNativeMenuForText(), openMenusFromKeys()];
+      try {
+        useClusterStore.setState({
+          contexts: [{ name: "k3d-dev" }, { name: "prod-eu" }] as ContextInfo[],
+        });
+        useScopeTabStore.setState({
+          tabs: [tab({ id: "a", href: "/c/k3d-dev" })],
+          activeId: "a",
+          pendingHref: null,
+        });
+        await mount();
+        act(() =>
+          screen
+            .getByRole("button", {
+              name: "New tab. Menu key opens it on another cluster.",
+            })
+            .focus()
+        );
+
+        await userEvent.keyboard(keys);
+
+        const menu = await screen.findByRole("menu");
+        expect(within(menu).getByText("prod-eu")).toBeInTheDocument();
+      } finally {
+        for (const stop of stops) stop();
+      }
+    }
+  );
 });

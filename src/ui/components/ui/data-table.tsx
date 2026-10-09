@@ -35,6 +35,7 @@ import {
 import { readLinkIntent, useLinkGesture } from "@/hooks/useLinkGesture";
 import { stallWatch } from "@/lib/stall-watch";
 import { claimListKeys } from "@/lib/list-keys";
+import { isMenuKey } from "@/lib/native-menu";
 import { revealInScroller } from "@/lib/reveal";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { peekOfRow, usePeek, type PeekTarget } from "@/hooks/usePeek";
@@ -569,9 +570,6 @@ function navTarget(key: string, from: number, rowCount: number): number | null {
 }
 
 const VIM_KEYS: Record<string, string> = { j: "ArrowDown", k: "ArrowUp" };
-
-const isMenuKey = (event: { key: string; shiftKey: boolean }) =>
-  event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey);
 
 /**
  * Widgets that walk with Up and Down themselves; the list leaves those keys
@@ -1133,11 +1131,6 @@ function DataTableInner<TData extends RowData>({
     }
     const row = ordered[selectedIndex];
     if (!row) return false;
-    if (isMenuKey(event)) {
-      if (!openMenu(selectedIndex)) return false;
-      event.preventDefault();
-      return true;
-    }
     if (event.key === "Escape") {
       event.preventDefault();
       clearSelection();
