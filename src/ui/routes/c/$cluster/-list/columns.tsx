@@ -24,6 +24,7 @@ import type { ResourceKind } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { CopyName } from "../-object/CopyName";
 import { None } from "@/components/ui/none";
+import { declaredQuantity } from "@/lib/metric-format";
 
 interface WithCreatedAt {
   createdAt?: string | null;
@@ -326,9 +327,13 @@ export function createCapacityColumn<
     size: 100,
     accessorKey: "capacity",
     header: columnHeader("columns", "capacity"),
+    meta: {
+      share: (row: Row) =>
+        row.capacity ? declaredQuantity("storage", row.capacity) : null,
+    },
     cell: ({ row }) =>
       row.original.capacity ? (
-        <UnitValue value={row.original.capacity} />
+        <UnitValue value={declaredQuantity("storage", row.original.capacity)} />
       ) : (
         <None />
       ),

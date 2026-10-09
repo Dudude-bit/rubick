@@ -21,6 +21,7 @@ import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
 import { ResourceType } from "@/lib/resource-registry";
 import type { PersistentVolumeClaimInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { declaredQuantity } from "@/lib/metric-format";
 
 export function PersistentVolumeClaimDetail() {
   const t = useT();
@@ -65,7 +66,9 @@ export function PersistentVolumeClaimDetail() {
   const facts: KeyValue[] = [
     {
       label: t("columns", "capacity"),
-      value: pvc?.capacity || t("empty", "notProvisionedYet"),
+      value: pvc?.capacity
+        ? declaredQuantity("storage", pvc.capacity)
+        : t("empty", "notProvisionedYet"),
       mono: !!pvc?.capacity,
       tone: pvc?.capacity ? undefined : "warn",
     },
@@ -158,7 +161,7 @@ export function PersistentVolumeClaimDetail() {
           <>
             {pvc.capacity && (
               <span className="font-mono text-[11px] text-fg-mut">
-                {pvc.capacity}
+                {declaredQuantity("storage", pvc.capacity)}
               </span>
             )}
             <span className="text-[11px] text-fg-fnt">

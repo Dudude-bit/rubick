@@ -68,7 +68,7 @@ export const ru: Catalogue = {
       "перечислены по имени, чтобы отсутствующая группа не читалась как пустая",
     deliveredBy: "Доставлено",
     deliveredFromPath: "из {path}",
-    disruptionBudget: "Бюджет простоя",
+    disruptionBudget: "Бюджет прерываний",
     autoscaling: "Автомасштабирование",
     tlsCertificate: "Сертификат TLS",
     configuration: "Конфигурация",
@@ -6748,7 +6748,7 @@ export const ru: Catalogue = {
     healthySigningNothing:
       "Он в порядке, но его не называет ни один Certificate, поэтому он ничего не подписывает.",
     noneLower: "нет",
-    clusterIpHeadless: "None (headless)",
+    clusterIpHeadless: "None (без виртуального IP)",
     clusterIpHeadlessWhy:
       "clusterIP: None. У headless-сервиса нет виртуального IP: его DNS-имя отвечает адресами самих подов.",
     notEvaluatedLower: "не вычислено",

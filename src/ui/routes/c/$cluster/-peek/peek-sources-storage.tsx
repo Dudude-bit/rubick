@@ -2,6 +2,7 @@ import { None } from "@/components/ui/none";
 import { commands } from "@/lib/commands";
 import { ClaimRef } from "../-object/storage-refs";
 import { list, ref, source, type PeekSources } from "./peek-sources-kit";
+import { declaredQuantity } from "@/lib/metric-format";
 
 export const CONFIG_STORAGE_SOURCES: PeekSources = {
   ConfigMap: source(commands.getConfigmap, (configMap, _target, t) => ({
@@ -55,7 +56,9 @@ export const CONFIG_STORAGE_SOURCES: PeekSources = {
           items: [
             {
               label: t("columns", "capacity"),
-              value: claim.capacity || t("empty", "notProvisionedYet"),
+              value: claim.capacity
+                ? declaredQuantity("storage", claim.capacity)
+                : t("empty", "notProvisionedYet"),
               mono: !!claim.capacity,
               tone: claim.capacity ? undefined : "warn",
             },
@@ -94,7 +97,9 @@ export const CONFIG_STORAGE_SOURCES: PeekSources = {
           items: [
             {
               label: t("columns", "capacity"),
-              value: volume.capacity || t("empty", "nothingReportedYet"),
+              value: volume.capacity
+                ? declaredQuantity("storage", volume.capacity)
+                : t("empty", "nothingReportedYet"),
               mono: !!volume.capacity,
               tone: volume.capacity ? undefined : "warn",
             },

@@ -15,6 +15,7 @@ import {
 } from "@/components/object/detail-tab";
 import { useNow } from "@/hooks/useNow";
 import { objectLink } from "@/lib/links";
+import { declaredQuantity } from "@/lib/metric-format";
 import { ResourceType } from "@/lib/resource-registry";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn, formatSince } from "@/lib/utils";
@@ -459,7 +460,7 @@ function ClusterRow({
             </Fact>
             <Fact label={t("nav", "storage")}>
               {cluster.racks.length > 0 && cluster.racks[0].capacity
-                ? `${cluster.racks.reduce((n, r) => n + r.members, 0)} × ${cluster.racks[0].capacity}`
+                ? `${cluster.racks.reduce((n, r) => n + r.members, 0)} × ${declaredQuantity("storage", cluster.racks[0].capacity)}`
                 : t("operators", "notDeclared")}
             </Fact>
           </div>

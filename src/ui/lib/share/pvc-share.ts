@@ -3,6 +3,7 @@ import { Database } from "lucide-react";
 import type { PersistentVolumeClaimInfo } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { iconSvg } from "@/lib/icon-svg";
+import { declaredQuantity } from "@/lib/metric-format";
 import type { ReportValue } from "@/lib/report";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { statusRole, type StatusRole } from "@/lib/status-role";
@@ -22,7 +23,7 @@ export function pvcFactsSection(
       label: t("columns", "capacity"),
       values: [
         pvc.capacity
-          ? { text: pvc.capacity, mono: true }
+          ? { text: declaredQuantity("storage", pvc.capacity), mono: true }
           : { text: t("empty", "notProvisionedYet"), role: "warn" },
       ],
     },

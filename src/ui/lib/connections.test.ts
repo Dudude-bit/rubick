@@ -2,6 +2,7 @@ import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vite-plus/test";
 import { CRASH_LOOP_WINDOW_MS } from "@/lib/crash-loop";
+import { useLocaleStore } from "@/stores/localeStore";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -2273,5 +2274,76 @@ describe("what a delete leaves pointing at the object", () => {
     expect(found.map((dependent) => dependent.object.kind)).toEqual([
       "HorizontalPodAutoscaler",
     ]);
+  });
+});
+
+describe("a Links tab in Russian", () => {
+  const ru: T = (section, key, values) => translate("ru", section, key, values);
+
+  /**
+   * Lena read "1Gi" on a pod's storage row beside "2 ГиБ" on the node page,
+   * "ClusterIP · None (headless)" half in English, and "Бюджет простоя" for
+   * what the drain dialog calls бюджет прерываний. Fails if any of the three
+   * comes back.
+   */
+  it("spells a size, a headless Service and a disruption budget as the rest of the app does", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      const subject = ref("Pod", "stateful-demo-0");
+      const headless = service("stateful-demo", "app=stateful-demo");
+      const rows = connectionGroups(
+        connections(subject, [
+          {
+            from: subject,
+            to: ref("PersistentVolumeClaim", "data-stateful-demo-0", {
+              kind: "claim",
+              phase: "Bound",
+              capacity: "1Gi",
+              storageClass: "local-path",
+            }),
+            relation: {
+              verb: "uses",
+              usages: [
+                {
+                  how: "mount",
+                  container: "nginx",
+                  path: "/usr/share/nginx/html",
+                  readOnly: false,
+                  subPath: null,
+                  volume: "data",
+                  projected: false,
+                },
+              ],
+            },
+          },
+          {
+            from: {
+              ...headless,
+              facts: { ...headless.facts, clusterIp: "None" } as ObjectFacts,
+            },
+            to: subject,
+            relation: { verb: "selects", selector: "app=stateful-demo" },
+          },
+          {
+            from: ref("PodDisruptionBudget", "pdb-stateful-demo"),
+            to: subject,
+            relation: { verb: "governs", selector: "app=stateful-demo" },
+          },
+        ]),
+        ru
+      ).flatMap((group) => group.rows);
+      const row = (name: string) =>
+        rows.find((candidate) => candidate.object?.name === name);
+
+      expect(row("data-stateful-demo-0")?.detail).toBe(
+        "1 ГиБ · local-path · Bound"
+      );
+      expect(row("stateful-demo")?.detail).toBe(
+        "ClusterIP · None (без виртуального IP) · выбирает app=stateful-demo"
+      );
+      expect(row("pdb-stateful-demo")?.label).toBe("Бюджет прерываний");
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 });
