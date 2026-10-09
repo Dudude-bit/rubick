@@ -55,7 +55,10 @@ import {
   taintsSection,
 } from "@/lib/share/node-share";
 import { useResourceDetail } from "@/hooks";
-import { useConnections, useConnectionsKey } from "@/hooks/useConnections";
+import {
+  useConnectionsKey,
+  useObjectConnections,
+} from "@/hooks/useConnections";
 import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { queryKeys } from "@/lib/query-keys";
 import { useMetrics } from "@/hooks/useMetrics";
@@ -145,7 +148,7 @@ export function NodeDetail() {
 
   // A Node is cluster-scoped, so its neighbourhood is read with no namespace
   // at all — the same query the drain dialog opens, and the same answer.
-  const connections = useConnections(ResourceType.Node, name, null);
+  const connections = useObjectConnections(ResourceType.Node, name, null);
   const connectionsKey = useConnectionsKey(ResourceType.Node, name, null);
 
   const { nodeMetrics, nodeStatus, nodeSampledAt } = useMetrics({

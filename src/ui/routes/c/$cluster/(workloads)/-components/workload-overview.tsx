@@ -30,7 +30,7 @@ import { KeyValueList } from "../../-object/detail-kv";
 import { governanceRows } from "./governance";
 import { FindingLine } from "../../-object/FindingLine";
 import type { KeyValue } from "@/components/object/key-values";
-import type { ConnectionsQuery } from "@/hooks/useConnections";
+import type { ConnectionsRead } from "@/hooks/useConnections";
 
 export interface WorkloadOverviewProps {
   /**
@@ -94,7 +94,7 @@ export interface CountBlockProps {
    * it contributes is rows; a kind nothing governs passes nothing and gets
    * no empty rows for the absence.
    */
-  governance?: ConnectionsQuery;
+  governance?: ConnectionsRead;
 }
 
 /**

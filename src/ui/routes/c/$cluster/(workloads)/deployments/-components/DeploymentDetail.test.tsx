@@ -1,4 +1,4 @@
-import { screen } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
@@ -9,8 +9,9 @@ vi.mock("@/hooks", async (importOriginal) => ({
 
 import { useResourceDetail } from "@/hooks";
 import type { AccessQuery, DeploymentInfo } from "@/generated/types";
+import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
-import { renderWithRouter } from "@/test/render";
+import { renderWithRouter, testQueryClient } from "@/test/render";
 import { DeploymentDetail } from "./DeploymentDetail";
 
 const ledger = {
@@ -80,11 +81,145 @@ beforeEach(() => {
   });
 });
 
-const open = () =>
+const open = (client = testQueryClient()) =>
   renderWithRouter(<DeploymentDetail />, {
     at: "/c/prod/deployments/team-blind/ledger",
     route: "/c/$cluster/deployments/$namespace/$name",
+    client,
   });
+
+/** The answers below for two commands, every other one as `beforeEach` gives it. */
+function answering(
+  connections: () => Promise<unknown>,
+  pods: () => Promise<unknown> = () => Promise.resolve([])
+) {
+  const base = vi.mocked(invoke).getMockImplementation()!;
+  vi.mocked(invoke).mockImplementation(async (command, args) => {
+    if (command === "get_resource_connections") return connections();
+    if (command === "get_deployment_pods") return pods();
+    return base(command, args);
+  });
+}
+
+const CREATING = {
+  name: "ledger-6d9f7-x2",
+  namespace: "team-blind",
+  uid: "pod-uid",
+  status: {
+    phase: "Pending",
+    display: "ContainerCreating",
+    exitUnreported: false,
+    ready: false,
+    loopingUntil: null,
+    conditions: [],
+    message: null,
+    reason: null,
+  },
+  nodeName: "k3d-agent-0",
+  podIp: null,
+  hostIp: null,
+  containers: [],
+  initContainers: [],
+  labels: {},
+  annotations: {},
+  createdAt: null,
+  restartCount: 0,
+  lastRestartAt: null,
+  cpuRequests: null,
+  cpuLimits: null,
+  memoryRequests: null,
+  memoryLimits: null,
+  ownerReferences: [],
+  volumes: [],
+  serviceAccountName: null,
+  start: {
+    state: "starting",
+    until: new Date(Date.now() + 600_000).toISOString(),
+  },
+  workload: null,
+};
+
+const onOverview = () =>
+  vi.mocked(useResourceDetail).mockReturnValue({
+    ...vi.mocked(useResourceDetail)(
+      {} as Parameters<typeof useResourceDetail>[0]
+    ),
+    activeTab: "overview",
+  });
+
+/** The page's own read of the Deployment landing, which is what the page holds. */
+const read = (client: ReturnType<typeof testQueryClient>) =>
+  client.setQueryData(
+    queryKeys.detail("Deployment", "team-blind", "ledger"),
+    ledger
+  );
+
+describe("the Overview", () => {
+  /**
+   * Sam's big-pull page said "Could not read what connects to this:
+   * Resource not found: Deployment/big-pull" beside the Deployment it had
+   * just read as Ready: the neighbourhood was asked before it was created.
+   * Fails if a NotFound older than the page's read of its Deployment is
+   * drawn, or is not asked again.
+   */
+  it("reads a NotFound older than the Deployment it holds as still reading, and asks again", async () => {
+    let asked = 0;
+    answering(() => {
+      asked += 1;
+      return asked === 1
+        ? Promise.reject({
+            code: "NOT_FOUND",
+            message:
+              "Resource not found: Deployment/ledger in namespace team-blind",
+          })
+        : new Promise(() => {});
+    });
+    onOverview();
+    const client = testQueryClient();
+    await open(client);
+    expect(
+      await screen.findByText("Could not read what connects to this.")
+    ).toBeInTheDocument();
+
+    read(client);
+
+    await waitFor(() =>
+      expect(
+        screen.queryByText("Could not read what connects to this.")
+      ).toBeNull()
+    );
+    await waitFor(() => expect(asked).toBe(2));
+  });
+
+  /**
+   * At 17:31:09.163 the same page's header said Ready while its Replicas bar
+   * still said blue "1 starting": the pods were read before the Deployment
+   * was. Fails if a pods read older than the page's read of its Deployment
+   * splits the bar against the header, or is not asked again.
+   */
+  it("splits its Replicas bar by no pods read before the Deployment that count another number ready", async () => {
+    let asked = 0;
+    answering(
+      () => new Promise(() => {}),
+      () => {
+        asked += 1;
+        return asked === 1
+          ? Promise.resolve([CREATING])
+          : new Promise(() => {});
+      }
+    );
+    onOverview();
+    const client = testQueryClient();
+    await open(client);
+    expect(await screen.findByText("1 starting")).toBeInTheDocument();
+
+    read(client);
+
+    expect(await screen.findByText("1 ready")).toBeInTheDocument();
+    expect(screen.queryByText("1 starting")).toBeNull();
+    await waitFor(() => expect(asked).toBe(2));
+  });
+});
 
 describe("the Revisions tab", () => {
   /**

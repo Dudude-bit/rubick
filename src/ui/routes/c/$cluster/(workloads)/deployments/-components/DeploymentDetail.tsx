@@ -34,6 +34,8 @@ import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
+import { useWorkloadPods } from "../../-components/workload-pods";
+import { workloadRole } from "@/lib/workload-status";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
@@ -79,7 +81,7 @@ import { recordToKeyValues } from "@/components/object/key-values";
 import { PinAction } from "../../-components/PinAction";
 import { useResourceMutation, useResourceDetail } from "@/hooks";
 import { useDeploymentShare } from "./useDeploymentShare";
-import { useConnections } from "@/hooks/useConnections";
+import { useObjectConnections } from "@/hooks/useConnections";
 import { useMetrics } from "@/hooks/useMetrics";
 import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { commands } from "@/lib/commands";
@@ -127,12 +129,7 @@ export function DeploymentDetail() {
   ).patch;
 
   const podsKey = queryKeys.ownedPods(ResourceType.Deployment, namespace, name);
-  const {
-    data: pods = [],
-    error: podsError,
-    isPending: podsPending,
-    refetch: refetchPods,
-  } = useLiveQuery({
+  const podsQuery = useLiveQuery({
     queryKey: podsKey,
     queryFn: async () => {
       try {
@@ -148,6 +145,20 @@ export function DeploymentDetail() {
     refresh: "resourceList",
     refetchOnWindowFocus: false,
   });
+  const {
+    pods,
+    error: podsError,
+    isPending: podsPending,
+    refetch: refetchPods,
+    split: splitPods,
+  } = useWorkloadPods(
+    ResourceType.Deployment,
+    namespace,
+    name,
+    podsQuery,
+    podsKey,
+    deployment?.replicas.ready
+  );
   useOwnedPodsWatch(
     ResourceType.Deployment,
     namespace,
@@ -156,7 +167,11 @@ export function DeploymentDetail() {
     !!deployment
   );
 
-  const connections = useConnections(ResourceType.Deployment, name, namespace);
+  const connections = useObjectConnections(
+    ResourceType.Deployment,
+    name,
+    namespace
+  );
 
   const {
     data: revisionsRead,
@@ -319,7 +334,7 @@ export function DeploymentDetail() {
     pods,
     podsError
   );
-  const startsNow = useStartsClock(podsError ? null : pods);
+  const startsNow = useStartsClock(splitPods);
 
   if (!deployment && !isLoading && !error) {
     return null;
@@ -330,9 +345,10 @@ export function DeploymentDetail() {
   const split = replicaSplit(
     desired,
     replicas?.ready ?? 0,
-    podsError ? null : pods,
+    splitPods,
     startsNow,
-    t
+    t,
+    !!deployment && workloadRole(deployment.rollout) === "pending"
   );
 
   // Desired, ready, available and up-to-date are one count read four ways, and

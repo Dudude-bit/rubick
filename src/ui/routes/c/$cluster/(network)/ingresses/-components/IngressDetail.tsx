@@ -34,7 +34,7 @@ import { connectionsTab } from "../../../-object/connections-tab";
 import { useOneIngressHealth } from "@/hooks/useIngressHealth";
 import { useResourceDetail } from "@/hooks";
 import { Link } from "@tanstack/react-router";
-import { useConnections } from "@/hooks/useConnections";
+import { useObjectConnections } from "@/hooks/useConnections";
 import { useIngressShare } from "./useIngressShare";
 import { IngressAccess } from "./IngressAccess";
 import { generateAccessUrls } from "./access-urls";
@@ -152,7 +152,11 @@ export function IngressDetail() {
         ? "unknown"
         : "no";
 
-  const connections = useConnections(ResourceType.Ingress, name, namespace);
+  const connections = useObjectConnections(
+    ResourceType.Ingress,
+    name,
+    namespace
+  );
   const tlsSecretNames = tlsConfigs.flatMap((config) =>
     config.secretName ? [config.secretName] : []
   );

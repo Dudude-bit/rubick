@@ -8,13 +8,9 @@ import {
   type ConnectionsRead,
 } from "@/hooks/useConnections";
 import { useServiceWatch } from "@/hooks/usePodWatch";
-import {
-  useReadSelector,
-  useReadThereAt,
-  useReadUid,
-} from "@/hooks/useReadUid";
+import { useHeldNotFound } from "@/hooks/useHeldRead";
+import { useReadSelector, useReadUid } from "@/hooks/useReadUid";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
-import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 import { speaksFor } from "@/lib/service-health";
 
@@ -50,11 +46,9 @@ export function useServiceAnswer(
 ): ServiceAnswer {
   const client = useQueryClient();
   const key = useConnectionsKey(ResourceType.Service, name, namespace);
-  const { data, error, dataUpdatedAt, errorUpdatedAt, isPending, refetch } =
-    query;
+  const { data, error, dataUpdatedAt, isPending, refetch } = query;
   const facts = data?.subject.facts;
   const uid = useReadUid(ResourceType.Service, namespace, name);
-  const held = useReadThereAt(ResourceType.Service, namespace, name);
   // The Service's own read names its selector before any answer does, so its
   // pods are being listed by the time the first answer about them lands.
   const readSelector = useReadSelector(ResourceType.Service, namespace, name);
@@ -74,6 +68,14 @@ export function useServiceAnswer(
     follow
   );
   const notFound = isResourceNotFoundError(error);
+  const notFoundHeld = useHeldNotFound(
+    ResourceType.Service,
+    namespace,
+    name,
+    query,
+    key,
+    follow
+  );
   const current =
     data &&
     name &&
@@ -81,11 +83,8 @@ export function useServiceAnswer(
     speaksFor({ data, at: dataUpdatedAt }, { name, uid }, watched)
       ? data
       : undefined;
-  // A NotFound beside a Service its page holds is one of the two reads behind
-  // the other: the neighbourhood asked before it was created, or the page's
-  // own read from before it was deleted. Either is read again, not drawn.
   const stale = notFound
-    ? held > 0
+    ? notFoundHeld
     : !!data && !current && data.subject.name === name;
 
   const another = !!uid && !!data?.subjectUid && data.subjectUid !== uid;
@@ -93,37 +92,16 @@ export function useServiceAnswer(
   const listing = !notFound && !another && watched === "listing";
   const asked = useRef<unknown>(null);
   useEffect(() => {
-    const created = errorUpdatedAt < held;
-    const seen = notFound ? `${created}/${errorUpdatedAt}` : data;
-    if (!follow || !stale || listing || asked.current === seen) return;
-    asked.current = seen;
-    if (notFound)
-      void client.invalidateQueries({
-        queryKey: created
-          ? key
-          : queryKeys.detail(ResourceType.Service, namespace, name),
-        exact: true,
-      });
-    else if (another) void client.resetQueries({ queryKey: key, exact: true });
+    if (!follow || !stale || notFound || listing || asked.current === data)
+      return;
+    asked.current = data;
+    if (another) void client.resetQueries({ queryKey: key, exact: true });
     else
       setTimeout(
         () => void client.invalidateQueries({ queryKey: key, exact: true }),
         FRESH_READ_MS
       );
-  }, [
-    follow,
-    stale,
-    listing,
-    notFound,
-    errorUpdatedAt,
-    held,
-    data,
-    another,
-    client,
-    key,
-    namespace,
-    name,
-  ]);
+  }, [follow, stale, listing, notFound, data, another, client, key]);
 
   const shownError = stale ? null : error;
   const pending = !current && (isPending || stale);

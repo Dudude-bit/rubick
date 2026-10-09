@@ -25,18 +25,22 @@ export interface ReplicaSplit {
  * row paints it; still inside the wait its start allows, in blue; and the
  * rest not ready, in amber. The controller's counts lag the pods, so where
  * the page holds them they only bound the split. Pods that were not read
- * leave all of it to the controller.
+ * leave all of it to the controller. A replica no pod read accounts for is
+ * starting while the header's verdict is still `waiting` on its pods, as
+ * the header says it is.
  */
 export function replicaSplit(
   made: number,
   counted: number,
   pods: readonly Counted[] | null,
   now: number,
-  t: T
+  t: T,
+  waiting = false
 ): ReplicaSplit {
   let ready = Math.min(counted, made);
   let starting = 0;
   let failing = 0;
+  let unaccounted = made - ready;
   if (pods !== null) {
     ready = 0;
     for (const { start, status } of pods) {
@@ -49,7 +53,10 @@ export function replicaSplit(
     ready = Math.min(ready, made);
     failing = Math.min(failing, made - ready);
     starting = Math.min(starting, made - ready - failing);
+    unaccounted = Math.max(0, made - pods.length);
   }
+  if (waiting)
+    starting += Math.min(unaccounted, made - ready - starting - failing);
   return {
     ready,
     gap: [

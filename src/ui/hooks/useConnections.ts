@@ -11,6 +11,7 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
+import { useHeldRead } from "@/hooks/useHeldRead";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import type {
   GatewayApiDetection,
@@ -96,4 +97,19 @@ function keyOf(
     name,
     gateway?.installed ? gateway.kinds.map((k) => k.readVersion) : null
   );
+}
+
+/**
+ * {@link useConnections} about the object its page holds: a NotFound beside
+ * it is still reading, and asked again (see `useHeldRead`).
+ */
+export function useObjectConnections(
+  kind: string,
+  name: string | undefined,
+  namespace: string | null | undefined,
+  enabled = true
+): ConnectionsRead {
+  const query = useConnections(kind, name, namespace, enabled);
+  const key = useConnectionsKey(kind, name, namespace);
+  return useHeldRead(kind, namespace, name, query, key);
 }
