@@ -80,6 +80,7 @@ import { listQueryFor, ResourceType, toPlural } from "@/lib/resource-registry";
 import { cn, formatTimeUnit } from "@/lib/utils";
 import { useNamespaceScope } from "@/hooks/useNamespaceScope";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useLocale } from "@/stores/localeStore";
 import {
   useDisplaySettingsStore,
   type EventsView,
@@ -182,23 +183,44 @@ const keyOfStory = (story: Story) => story.key;
 const TOGGLE =
   "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover";
 
-/** Under this, as beside a peek at 1024, the feed's settings fold into one menu: laid out in a row they stacked six deep. */
-const NARROW_PX = 640;
-
-/** Whether `node` is laid out narrower than `below`; not until it has been laid out at all. */
-function useNarrow(node: HTMLElement | null, below: number) {
-  const [narrow, setNarrow] = useState(false);
+/**
+ * Whether the toolbar, laid out in one row, is wider than the page, so the
+ * feed's settings fold into one menu. Measured unfolded for each `layout`
+ * rather than against a fixed width: beside a peek at 1440 the English page
+ * was wider than the old 640 and its toolbar still stacked three rows.
+ */
+function useFolded(
+  page: HTMLElement | null,
+  bar: HTMLElement | null,
+  layout: string
+) {
+  const [width, setWidth] = useState(0);
+  const [need, setNeed] = useState<{ layout: string; px: number } | null>(null);
   useLayoutEffect(() => {
-    if (!node) return;
-    const read = () =>
-      setNarrow(node.clientWidth > 0 && node.clientWidth < below);
+    if (!page) return;
+    const read = () => setWidth(page.clientWidth);
     read();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(read);
-    observer.observe(node);
+    observer.observe(page);
     return () => observer.disconnect();
-  }, [node, below]);
-  return narrow;
+  }, [page]);
+  const folded = width > 0 && need?.layout === layout && need.px > width;
+  useLayoutEffect(() => {
+    if (!bar || folded) return;
+    const read = () => {
+      const px = bar.scrollWidth;
+      setNeed((last) =>
+        last?.layout === layout && last.px === px ? last : { layout, px }
+      );
+    };
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(read);
+    observer.observe(bar);
+    return () => observer.disconnect();
+  }, [bar, folded, layout]);
+  return folded;
 }
 
 const limitWords = (limit: string, t: ReturnType<typeof useT>) =>
@@ -227,7 +249,8 @@ export function Events() {
   const setWindow = (next: StoryWindow) =>
     setSearch({ range: next === "1h" ? undefined : next });
   const [page, setPage] = useState<HTMLDivElement | null>(null);
-  const narrow = useNarrow(page, NARROW_PX);
+  const [bar, setBar] = useState<HTMLDivElement | null>(null);
+  const locale = useLocale();
   const now = useNow();
 
   const limit = eventLimit === "all" ? null : Number(eventLimit);
@@ -433,6 +456,7 @@ export function Events() {
   const normalCount = counted.length - warningCount;
   const showSkeleton = isLoading && events.length === 0;
   const nothingRead = failed !== null && pool.length === 0;
+  const narrow = useFolded(page, bar, `${view} ${locale} ${nothingRead}`);
   const listed = view === "list" && !showSkeleton && !(failed && !stale);
 
   useShareSection("events", () => [
@@ -490,7 +514,14 @@ export function Events() {
           )
         }
         actions={
-          <>
+          <div
+            ref={setBar}
+            data-events-bar
+            className={cn(
+              "flex items-center justify-end gap-1",
+              narrow ? "flex-wrap" : "flex-nowrap"
+            )}
+          >
             {!nothingRead && (
               <>
                 <span
@@ -651,7 +682,7 @@ export function Events() {
               screen={{ title: "Events", namespace: currentNamespace }}
               look={narrow ? "icon" : "button"}
             />
-          </>
+          </div>
         }
       />
       <Section className={cn(listed && "min-h-0")}>

@@ -1611,22 +1611,26 @@ describe("what the page offers Share", () => {
 });
 
 describe("a feed beside a peek", () => {
-  /** jsdom lays nothing out: the page alone is `width` pixels wide. */
-  function pageOf(width: number) {
-    const original = Object.getOwnPropertyDescriptor(
-      HTMLElement.prototype,
-      "clientWidth"
-    );
-    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
-      configurable: true,
-      get(this: HTMLElement) {
-        return this.hasAttribute("data-events-page") ? width : 0;
-      },
-    });
-    restoreLayout.push(() => {
-      if (original)
-        Object.defineProperty(HTMLElement.prototype, "clientWidth", original);
-    });
+  /**
+   * jsdom lays nothing out: the page alone is `width` pixels wide, and its
+   * toolbar in one row is `bar`, about what English list controls take.
+   */
+  function pageOf(width: number, bar = 620) {
+    const sizes = [
+      ["clientWidth", "data-events-page", width],
+      ["scrollWidth", "data-events-bar", bar],
+    ] as const;
+    for (const [property, owner, size] of sizes) {
+      Object.defineProperty(HTMLElement.prototype, property, {
+        configurable: true,
+        get(this: HTMLElement) {
+          return this.hasAttribute(owner) ? size : 0;
+        },
+      });
+      restoreLayout.push(
+        () => delete (HTMLElement.prototype as Partial<HTMLElement>)[property]
+      );
+    }
   }
 
   /**
@@ -1736,6 +1740,21 @@ describe("a feed beside a peek", () => {
     expect(
       screen.getByText(/^Only the latest 500 were read\./)
     ).toBeInTheDocument();
+  });
+
+  /**
+   * Dana's English toolbar beside a peek at 1440 stacked three rows and
+   * pushed Share onto one of its own: the page was wider than the fixed fold
+   * width, and narrower than its controls in a row. Fails if the fold waits
+   * for a width rather than for the controls not fitting.
+   */
+  it("folds wherever its controls in a row are wider than the page", async () => {
+    pageOf(690, 700);
+    await mount("list");
+    expect(
+      await screen.findByRole("button", { name: "Feed settings" })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Warnings" })).toBeNull();
   });
 
   /** Fails if a page with room loses its row of type buttons to the menu. */
