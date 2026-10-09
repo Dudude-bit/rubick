@@ -78,6 +78,8 @@ export interface Freshness {
   slowed: boolean;
   /** Not being re-read at all, because the surface is off screen. */
   paused: boolean;
+  /** A watch keeps it up to date: set by whoever holds one, never by the poll. */
+  live?: boolean;
   /** What it is actually re-reading at, for anything that wants to say so. */
   everyMs: number | false;
   /** The last read failed, and what is on screen is from the one before it. */

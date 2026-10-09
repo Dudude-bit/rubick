@@ -51,6 +51,8 @@ export interface ResourceDetailHeaderProps {
   onBack: () => void;
   /** Timestamp of the last successful fetch, from React Query. */
   dataUpdatedAt?: number;
+  /** A watch on the object keeps it up to date. */
+  live?: boolean;
   /** Polled, and backed off past its rate because nothing is changing. */
   slowed?: boolean;
   /** The last read failed, and the object on screen is from the one before it. */
@@ -170,6 +172,7 @@ export function ResourceDetailHeader({
   createdAt,
   onBack,
   dataUpdatedAt,
+  live,
   slowed,
   stale,
   served,
@@ -257,6 +260,7 @@ export function ResourceDetailHeader({
       <div className="ml-auto flex flex-none items-center">
         <DataFreshness
           dataUpdatedAt={dataUpdatedAt}
+          live={live}
           slowed={slowed}
           stale={stale}
         />

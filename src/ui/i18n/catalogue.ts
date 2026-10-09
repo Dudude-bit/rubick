@@ -4218,9 +4218,9 @@ export const en = {
     // The object menu copies a link to the row that was right-clicked,
     // which is not where the reader is standing.
     objectLinkCopied: "Copied a link to {name}",
-    linkOpened: "Opened from a link. You are looking at it live.",
+    linkOpened: "Opened from a link. You are looking at the cluster now.",
     linkOpenedAt:
-      "Opened from a link captured {when}. You are looking at it live, not at what it showed then.",
+      "Opened from a link captured {when}. You are looking at the cluster now, not at what it showed then.",
     linkContextMissing:
       "This link points at cluster {context}, which is not in this kubeconfig. Nothing was opened.",
     linkContextMissingKnown:

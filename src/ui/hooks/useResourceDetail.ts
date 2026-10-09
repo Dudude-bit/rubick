@@ -181,7 +181,7 @@ export function useResourceDetail<T>(
     queryKeys.detail(resourceKind, namespace, name),
     queryKeys.manifest(resourceKind, namespace, name)
   );
-  useObjectWatch(
+  const live = useObjectWatch(
     resourceKind,
     namespace,
     name,
@@ -245,7 +245,7 @@ export function useResourceDetail<T>(
     isLoading,
     error,
     refetch,
-    freshness,
+    freshness: live ? { ...freshness, live } : freshness,
     yaml,
     isLoadingYaml,
     copyYaml,

@@ -275,3 +275,41 @@ it("says the Service no longer exists the moment its watch sees it deleted", asy
     await screen.findByText("This Service no longer exists.")
   ).toBeInTheDocument();
 });
+
+/**
+ * Sam's page said "polled less often" in its header while the link note
+ * below it said he was looking at it live. Fails if a page its own watch
+ * feeds does not say live, or keeps saying it once the watch has failed.
+ */
+it("says live in its header while its own watch feeds it, and not once that watch fails", async () => {
+  vi.mocked(invoke).mockImplementation(async (command: string) => {
+    if (command === "get_service") return SERVICE;
+    if (command === "get_resource_connections") return neighbourhood(1);
+    if (command === "subscribe_object_watch") return "object-stream";
+    if (command === "subscribe_owned_pod_watch") return "pods-stream";
+    if (command === "subscribe_service_slice_watch") return "slices-stream";
+    return undefined;
+  });
+  await renderWithRouter(<ServiceDetail />, {
+    at: "/c/k3d-rubick/services/shop/big-pull",
+    route: "/c/$cluster/services/$namespace/$name",
+  });
+  expect(await screen.findByText("polling")).toBeInTheDocument();
+  await waitFor(() =>
+    expect(invoke).toHaveBeenCalledWith("resource_watch_subscribed", {
+      streamId: "object-stream",
+    })
+  );
+
+  sendTo(
+    "object-stream",
+    { op: "restarted" },
+    { op: "applied", resource: SERVICE },
+    { op: "synced" }
+  );
+  expect(await screen.findByText("live")).toBeInTheDocument();
+
+  sendTo("object-stream", { op: "failed" });
+  expect(await screen.findByText("polling")).toBeInTheDocument();
+  expect(screen.queryByText("live")).toBeNull();
+});
