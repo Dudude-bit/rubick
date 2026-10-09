@@ -260,10 +260,13 @@ export function EventsTable({
   emptyMessage,
   question,
   held,
+  cutAt,
 }: {
   events: EventInfo[];
   showNamespace: boolean;
   emptyMessage: string;
+  /** The read stopped at this many events, so older ones are not listed. */
+  cutAt?: number;
   /** What the rows answer; a new one is drawn at once, held or not. */
   question: string;
   held: boolean;
@@ -293,10 +296,11 @@ export function EventsTable({
         rowLabel="events"
         widthsKey="events-feed"
         emptyMessage={emptyMessage}
+        cutAt={cutAt}
         toolbar={SHOW_WAITING}
       />
     ),
-    [showNamespace, shown, emptyMessage, rowMenu.open]
+    [showNamespace, shown, emptyMessage, cutAt, rowMenu.open]
   );
   return (
     <div className="flex min-h-0 flex-1 flex-col">

@@ -1,18 +1,5 @@
-import {
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  vi,
-} from "vite-plus/test";
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -23,46 +10,6 @@ import { DeepLinkBanner, LINK_NOTE_MS, LinkOpenedNote } from "./DeepLinkBanner";
 
 const PATH = "/c/acme/deployments/lena-sandbox/hello-web";
 const setNamespaceScope = vi.fn(async () => {});
-
-async function arrive(scope: string[]) {
-  useClusterStore.setState({
-    currentContext: "acme",
-    isConnected: true,
-    namespaceScope: scope,
-    setNamespaceScope,
-  });
-  useDeepLinkStore.setState({
-    arrival: {
-      status: "live",
-      link: { context: "acme", path: PATH, capturedAt: null },
-    },
-  });
-  await renderWithRouter(<DeepLinkBanner />, {
-    at: PATH,
-    route: "/c/$cluster/deployments/$namespace/$name",
-  });
-}
-
-beforeEach(() => setNamespaceScope.mockClear());
-
-describe("a link that opens an object in another namespace", () => {
-  /** The pill stayed on kube-system beside a page in lena-sandbox. */
-  it("moves the scope to the object's namespace", async () => {
-    await arrive(["kube-system"]);
-    await waitFor(() =>
-      expect(setNamespaceScope).toHaveBeenCalledWith(["lena-sandbox"])
-    );
-  });
-
-  /** All namespaces already shows it, and narrowing would hide the rest. */
-  it.each([[[]], [["lena-sandbox", "shop"]]])(
-    "leaves a scope that already holds it (%j)",
-    async (scope: string[]) => {
-      await arrive(scope);
-      expect(setNamespaceScope).not.toHaveBeenCalled();
-    }
-  );
-});
 
 describe("the note a live link leaves", () => {
   function arriveLive() {

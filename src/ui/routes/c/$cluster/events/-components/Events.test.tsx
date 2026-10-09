@@ -1079,7 +1079,8 @@ describe("what the limit is counted against", () => {
    * Lena's "64 warnings" beside the Warnings filter's 122: the first counted
    * the warnings among the latest 500 events of every type, the second
    * every warning, since the filter narrows the read itself. Fails if a
-   * count read inside the limit's cut does not say so, or a whole one does.
+   * count read inside the limit's cut does not say so, or a whole one does,
+   * and the same of the warning beside the table (Lena's 141 of 141).
    */
   it("says the warnings it counts are among the latest 500 only where the read was cut", async () => {
     useClusterStore.setState({
@@ -1100,9 +1101,18 @@ describe("what the limit is counted against", () => {
         "63 warning events · 437 normal events · of the latest 500"
       )
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/^Only the latest 500 were read\./)
+    ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
     expect(await screen.findByText("122 warning events")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText(/^Only the latest/)).toBeNull()
+    );
+    expect(
+      screen.getByText(/ rows\. To trim the list, narrow the scope or search$/)
+    ).not.toHaveClass("text-warn");
   }, 30_000);
 
   /**
@@ -1655,7 +1665,59 @@ describe("a feed beside a peek", () => {
     await waitFor(() => expect(asked().at(-1)?.event_type).toBe("Warning"));
     expect(
       screen.getByRole("button", { name: "Feed settings: Warnings" })
-    ).toHaveTextContent("Warnings");
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * With Warnings and a limit the button's words took a row of their own and
+   * the toolbar grew to three. Fails if the button draws the words rather
+   * than how many settings differ, or its tooltip stops naming them.
+   */
+  it("counts on its button what it narrowed, and names it in the tooltip", async () => {
+    pageOf(300);
+    await mount("list");
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Feed settings" })
+    );
+    await user.click(screen.getByRole("menuitemradio", { name: "Warnings" }));
+    await user.click(
+      screen.getByRole("button", { name: "Feed settings: Warnings" })
+    );
+    await user.click(screen.getByRole("menuitemradio", { name: "Latest 200" }));
+
+    const button = await screen.findByRole("button", {
+      name: "Feed settings: Warnings, Latest 200",
+    });
+    expect(button).toHaveTextContent(/^2$/);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    act(() => button.blur());
+    act(() => button.focus());
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Feed settings: Warnings, Latest 200"
+    );
+  });
+
+  /**
+   * Lena's "Feed settings" tooltip stayed over the toolbar after every pick,
+   * until she clicked somewhere else: the menu hands the focus back to its
+   * button, and a tooltip opened by focus stays. Fails if it opens then.
+   */
+  it("does not pin its tooltip on the focus a pick hands back", async () => {
+    pageOf(300);
+    await mount("list");
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Feed settings" })
+    );
+    await user.click(screen.getByRole("menuitemradio", { name: "Warnings" }));
+
+    const button = screen.getByRole("button", {
+      name: "Feed settings: Warnings",
+    });
+    await waitFor(() => expect(button).toHaveFocus());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
   /** Fails if a page with room loses its row of type buttons to the menu. */

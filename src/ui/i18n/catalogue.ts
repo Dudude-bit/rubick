@@ -3105,9 +3105,11 @@ export const en = {
       other: "{n} rows, from the namespaces that answered",
     },
     longListTrim: {
-      one: "{n} row. Narrow the scope or search to trim",
-      other: "{n} rows. Narrow the scope or search to trim",
+      one: "{n} row. To trim the list, narrow the scope or search",
+      other: "{n} rows. To trim the list, narrow the scope or search",
     },
+    listCutAt:
+      "Only the latest {n} were read. To see older ones, narrow the scope or raise the limit",
     limitWord: "limit",
     capacityWord: "capacity",
     usageShareOf: "{percent}% of {noun}",

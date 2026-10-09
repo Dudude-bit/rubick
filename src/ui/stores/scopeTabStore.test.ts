@@ -209,6 +209,38 @@ describe("opening", () => {
     const ids = state().tabs.map((t) => t.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  /**
+   * Dana opened a link to the team-checkout namespace from a lena-sandbox tab
+   * and the new tab read "lena-sandbox / team-checkout". Fails if a tab opened
+   * at an object outside the scope it inherits keeps that scope, in front or
+   * behind.
+   */
+  it.each([false, true])(
+    "opens a tab at an object outside the scope on the object's namespace (behind: %s)",
+    async (background) => {
+      liveScope("prod", ["shop"]);
+      seed([tab({ id: "a", context: "prod", href: "/c/prod/events" })]);
+      await state().openTab({
+        href: "/c/prod/namespaces/team-checkout",
+        background,
+      });
+      expect(state().tabs[1]).toMatchObject({
+        scope: ["team-checkout"],
+        namespace: "team-checkout",
+      });
+      expect(useClusterStore.getState().namespaceScope).toEqual(
+        background ? ["shop"] : ["team-checkout"]
+      );
+    }
+  );
+
+  /** Fails if a tab opened at an object the inherited scope holds is narrowed. */
+  it("keeps the inherited scope where it holds the object", async () => {
+    liveScope("prod", ["shop", "web"]);
+    await state().openTab({ href: "/c/prod/pods/web/api-1", background: true });
+    expect(state().tabs[1].scope).toEqual(["shop", "web"]);
+  });
 });
 
 describe("closing", () => {
@@ -673,6 +705,47 @@ describe("surviving a restart", () => {
     await useScopeTabStore.persist.rehydrate();
     expect(state().tabs[0].href).toBe("/c/prod");
     expect(state().pendingHref).toBe("/c/prod");
+  });
+
+  /**
+   * Lena's restored tab read "shop / wd-demo" over a pod in lena-sandbox.
+   * Fails if a tab parked on an object outside its scope comes back drawing
+   * that scope, or would apply it on activation.
+   */
+  it("restores a tab parked on an object outside its scope in the object's namespace", async () => {
+    localStorage.setItem(
+      "scope-tabs",
+      JSON.stringify({
+        state: {
+          tabs: [
+            {
+              id: "scope-1",
+              context: "prod",
+              namespace: "shop",
+              scope: ["shop"],
+              href: "/c/prod/pods/lena-sandbox/wd-demo",
+              missing: false,
+            },
+            {
+              id: "scope-2",
+              context: "prod",
+              namespace: "",
+              scope: [],
+              href: "/c/prod/pods/lena-sandbox/wd-demo",
+              missing: false,
+            },
+          ],
+          activeId: "scope-1",
+        },
+        version: 2,
+      })
+    );
+    await useScopeTabStore.persist.rehydrate();
+    expect(state().tabs.map((each) => tabScope(each))).toEqual([
+      ["lena-sandbox"],
+      [],
+    ]);
+    expect(state().tabs[0].namespace).toBe("lena-sandbox");
   });
 
   /** A tab that never had a cluster asks for nothing; the window boots at its front door. */

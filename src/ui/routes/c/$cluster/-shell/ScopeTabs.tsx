@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import {
   AlertCircle,
   Check,
@@ -50,6 +50,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useTriggerTooltip } from "@/components/ui/use-trigger-tooltip";
 import {
   useClusterSummary,
   type NamespaceListState,
@@ -69,11 +70,12 @@ import {
 } from "@/lib/cluster-identity";
 import {
   SCOPE_LIMIT,
+  inScope,
   isNamespaceName,
   scopeLabel,
   seedScope,
 } from "@/lib/namespace-scope";
-import { pageLink } from "@/lib/links";
+import { namespaceShownBy, pageLink, retargetHref } from "@/lib/links";
 import { splitName } from "@/lib/resource-identity";
 import { nameCut } from "@/components/object/ResourceName";
 import { formatShortcut } from "@/lib/platform";
@@ -419,7 +421,8 @@ function HiddenScopeTab({
           {alias ?? tab.context ?? t("cluster", "noCluster")} /
         </span>
       )}
-      <span className="min-w-0 truncate text-fg-mut">
+      {/* Whole, as in the strip: the object name beside it gives up the width. */}
+      <span className="flex-none text-fg-mut">
         {scopeLabel(tabScope(tab), t)} /
       </span>
       {keepsShell && (
@@ -428,7 +431,7 @@ function HiddenScopeTab({
           aria-hidden="true"
         />
       )}
-      <RouteName name={tabRouteLabel(tab.href, t)} />
+      <RouteName name={tabRouteLabel(tab.href, t)} className="min-w-0" />
       {open && (
         <Check className="ml-auto h-3 w-3 flex-none" aria-hidden="true" />
       )}
@@ -506,11 +509,11 @@ function NewTabButton() {
   const currentContext = useClusterStore((s) => s.currentContext);
   const openTab = useScopeTabStore((s) => s.openTab);
   const [menu, setMenu] = useState(false);
-  const [tip, setTip] = useState(false);
+  const tip = useTriggerTooltip(menu);
 
   return (
     <ContextMenu onOpenChange={setMenu}>
-      <Tooltip open={tip && !menu} onOpenChange={setTip}>
+      <Tooltip {...tip.tooltip}>
         <TooltipTrigger asChild>
           <ContextMenuTrigger asChild>
             <button
@@ -533,7 +536,10 @@ function NewTabButton() {
         </TooltipContent>
       </Tooltip>
 
-      <ContextMenuContent className="w-[244px]">
+      <ContextMenuContent
+        className="w-[244px]"
+        onCloseAutoFocus={tip.onCloseAutoFocus}
+      >
         <ContextMenuLabel>{t("action", "newTabOn")}</ContextMenuLabel>
         {contexts.length === 0 && (
           <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
@@ -588,9 +594,20 @@ function ScopeTabItem({
   const openCluster = useOpenCluster();
   const activateTab = useScopeTabStore((s) => s.activateTab);
   const closeTab = useScopeTabStore((s) => s.closeTab);
+  const router = useRouter();
+  const navigate = useNavigate();
 
   const [open, setOpen] = useState<"ctx" | "ns" | null>(null);
-  const [tip, setTip] = useState(false);
+  // A picker belongs to the scope on screen, so it shuts when its tab stops
+  // being the open one: a click on another tab, or Ctrl+Tab from inside it.
+  const [wasActive, setWasActive] = useState(active);
+  if (active !== wasActive) {
+    setWasActive(active);
+    if (!active) setOpen(null);
+  }
+  // The tooltip stands down while a picker is open rather than floating over
+  // the list the reader is trying to read.
+  const tip = useTriggerTooltip(open !== null);
   const mark = useClusterMark(context);
   const alias = mark.alias?.trim();
   const color = clusterColor(context, mark.hue);
@@ -636,6 +653,16 @@ function ScopeTabItem({
     setOpen(null);
     if (next === context) return;
     openCluster(next);
+  };
+
+  // An object outside the scope just picked gives way to its list, as it
+  // does to a cluster switch: the tab would name a namespace it is not in.
+  const pickScope = (next: string[], keepOpen: boolean) => {
+    if (!keepOpen) setOpen(null);
+    void setNamespaceScope(next);
+    const { pathname } = router.state.location;
+    if (context && !inScope(next, namespaceShownBy(pathname)))
+      void navigate({ href: retargetHref(pathname, context) });
   };
 
   // A tab with no cluster keeps its place — it is where a cluster gets
@@ -703,10 +730,7 @@ function ScopeTabItem({
   }
 
   return (
-    // Controlled, so the tooltip stands down while a picker is open rather
-    // than floating over the list the reader is trying to read — which is
-    // what the native `title` did and could not be told not to.
-    <Tooltip open={tip && open === null} onOpenChange={setTip}>
+    <Tooltip {...tip.tooltip}>
       <TooltipTrigger asChild>
         <div
           role="tab"
@@ -738,6 +762,7 @@ function ScopeTabItem({
             <ContextPopover
               open={open === "ctx"}
               onOpenChange={guard("ctx")}
+              onCloseAutoFocus={tip.onCloseAutoFocus}
               activeContext={context}
               onSelect={pickCluster}
             >
@@ -792,11 +817,9 @@ function ScopeTabItem({
             <NamespacePopover
               open={open === "ns"}
               onOpenChange={guard("ns")}
+              onCloseAutoFocus={tip.onCloseAutoFocus}
               scope={scope}
-              onSelect={(next, keepOpen) => {
-                if (!keepOpen) setOpen(null);
-                setNamespaceScope(next);
-              }}
+              onSelect={pickScope}
             >
               <button
                 type="button"
@@ -883,12 +906,14 @@ function ContextPopover({
   children,
   open,
   onOpenChange,
+  onCloseAutoFocus,
   onSelect,
   activeContext,
 }: {
   children: React.ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: () => void;
   onSelect: (context: string) => void;
   activeContext?: string | null;
 }) {
@@ -905,7 +930,10 @@ function ContextPopover({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-[244px] p-1">
+      <PopoverContent
+        className="w-[244px] p-1"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <div
           role="listbox"
           aria-label={t("nav", "cluster")}
@@ -1019,12 +1047,14 @@ function NamespacePopover({
   children,
   open,
   onOpenChange,
+  onCloseAutoFocus,
   scope,
   onSelect,
 }: {
   children: React.ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus: () => void;
   scope: string[];
   onSelect: (namespaces: string[], keepOpen: boolean) => void;
 }) {
@@ -1263,7 +1293,10 @@ function NamespacePopover({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-[268px] p-0">
+      <PopoverContent
+        className="w-[268px] p-0"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <div className="flex items-center gap-[7px] border-b border-hair px-2.5 py-2 text-fg-fnt">
           <Search aria-hidden="true" className="h-3 w-3 flex-none" />
           <input

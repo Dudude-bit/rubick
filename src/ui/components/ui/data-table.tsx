@@ -133,6 +133,8 @@ interface DataTableProps<TData extends RowData> {
   widthsKey?: string;
   /** The rows are not the whole of what was asked for, so no total. */
   partial?: boolean;
+  /** The read stopped at this many objects, so older ones are not among the rows. */
+  cutAt?: number;
   /** Offers the rows on screen to this screen's Share. */
   share?: TableShare;
   /** The page's own list: it answers the list keys wherever the focus is. */
@@ -607,6 +609,7 @@ function DataTableInner<TData extends RowData>({
   rowNoun,
   widthsKey,
   partial = false,
+  cutAt,
   share,
   pageKeys = false,
   onRowMenu,
@@ -1322,15 +1325,25 @@ function DataTableInner<TData extends RowData>({
             </div>
           )}
           <div className="flex items-center gap-2">
-            {/* The list is whole and only a screenful of it is drawn. It
-              stays because "why is this list slow" and "why is my pod not
-              here" have the same answer often enough — narrow the scope or
-              the search. */}
-            {isLong && (
-              <div className="flex items-center gap-1.5 text-[11px] text-fg-fnt">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                <span>{t("readings", "longListTrim", { n: data.length })}</span>
+            {/* A warning only where rows are missing. A long list that is
+              whole is only advice: "why is this list slow" and "why is my
+              pod not here" have the same answer often enough. */}
+            {cutAt !== undefined ? (
+              <div className="flex items-center gap-1.5 text-[11px] text-fg-mut">
+                <AlertTriangle
+                  className="h-3.5 w-3.5 shrink-0 text-warn"
+                  aria-hidden="true"
+                />
+                <span>
+                  {t("readings", "listCutAt", { n: formatCount(cutAt) })}
+                </span>
               </div>
+            ) : (
+              isLong && (
+                <span className="text-[11px] text-fg-fnt">
+                  {t("readings", "longListTrim", { n: data.length })}
+                </span>
+              )
             )}
             <Tooltip>
               <TooltipTrigger asChild>

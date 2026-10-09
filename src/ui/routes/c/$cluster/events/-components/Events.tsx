@@ -40,6 +40,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useTriggerTooltip } from "@/components/ui/use-trigger-tooltip";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataFreshness } from "@/components/ui/realtime";
@@ -719,6 +720,7 @@ export function Events() {
               showNamespace={!currentNamespace}
               question={[cacheKey, eventType, eventLimit, query].join("\n")}
               held={pointed}
+              cutAt={windowFull && limit !== null ? limit : undefined}
               // A feed filtered down to nothing has not told the reader
               // their scope is quiet — it has told them their query missed.
               // Three states, not two: the scope is quiet, the query
@@ -812,8 +814,9 @@ const windowWords = (window: StoryWindow) =>
 
 /**
  * The feed's type and limit, and a story's window and order, in one menu
- * where the page is too narrow for them in a row. Its trigger names whatever
- * differs from the defaults, so a narrowed feed never looks like the whole.
+ * where the page is too narrow for them in a row. Its trigger counts what
+ * differs from the defaults and its tooltip names it, so a narrowed feed
+ * never looks like the whole.
  */
 function FeedOptions({
   view,
@@ -848,16 +851,17 @@ function FeedOptions({
       : null,
   ].filter((said): said is string => said !== null);
   const label = t("action", "feedOptions");
+  const said = changed.length > 0 ? `${label}: ${changed.join(", ")}` : label;
+  const [menu, setMenu] = useState(false);
+  const tip = useTriggerTooltip(menu);
   return (
-    <DropdownMenu>
-      <Tooltip>
+    <DropdownMenu onOpenChange={setMenu}>
+      <Tooltip {...tip.tooltip}>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
             <button
               type="button"
-              aria-label={
-                changed.length > 0 ? `${label}: ${changed.join(", ")}` : label
-              }
+              aria-label={said}
               className={cn(
                 TOGGLE,
                 "inline-flex items-center gap-1",
@@ -868,13 +872,21 @@ function FeedOptions({
                 className="h-3 w-3 shrink-0"
                 aria-hidden="true"
               />
-              {changed.length > 0 && <span>{changed.join(" · ")}</span>}
+              {/* How many, not which: the words took a row of their own
+                  beside a peek. The tooltip and the menu name them. */}
+              {changed.length > 0 && (
+                <span className="tabular-nums">{changed.length}</span>
+              )}
             </button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
-        <TooltipContent side="bottom">{label}</TooltipContent>
+        <TooltipContent side="bottom">{said}</TooltipContent>
       </Tooltip>
-      <DropdownMenuContent align="end" className="min-w-[200px]">
+      <DropdownMenuContent
+        align="end"
+        className="min-w-[200px]"
+        onCloseAutoFocus={tip.onCloseAutoFocus}
+      >
         <DropdownMenuLabel>{t("action", "eventType")}</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={eventType} onValueChange={onEventType}>
           {TYPE_FILTERS.map((filter) => (

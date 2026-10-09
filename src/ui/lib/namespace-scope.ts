@@ -213,6 +213,18 @@ export function inScope(
   return scope.includes(namespace);
 }
 
+/**
+ * The scope a page showing one object in `namespace` is read under: one that
+ * holds it stays, any other moves to that namespace alone, so the tab never
+ * names a namespace the page is not in.
+ */
+export function scopeShowing(
+  scope: string[],
+  namespace: string | null
+): string[] {
+  return inScope(scope, namespace) ? scope : [namespace as string];
+}
+
 /** What the scope is called, for a tab strip and a page description. */
 export function scopeLabel(scope: readonly string[], t: T): string {
   if (scope.length === 0) return t("cluster", "allNamespaces");

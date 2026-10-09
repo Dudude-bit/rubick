@@ -8,7 +8,6 @@ import { useDeepLinkStore } from "@/stores/deepLinkStore";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useT } from "@/i18n/useT";
 import { formatWhen } from "@/lib/utils";
-import { useArrivalScope } from "./useArrivalScope";
 
 /** One spelling of a path, whichever of its characters arrived encoded. */
 const plain = (path: string) => {
@@ -29,7 +28,6 @@ export function DeepLinkBanner() {
   const arrival = useDeepLinkStore((s) => s.arrival);
   const dismiss = useDeepLinkStore((s) => s.dismiss);
   const openSettings = useSettingsStore((s) => s.openSettings);
-  const live = useLiveArrival();
 
   // Leaving the page the link opened is reading the banner; it should not
   // follow the reader around the app.
@@ -43,10 +41,6 @@ export function DeepLinkBanner() {
       dismiss();
     }
   }, [arrival, arrivedAt, pathname, dismiss]);
-  useArrivalScope(
-    arrival,
-    live && arrivedAt !== null && plain(pathname) === plain(arrivedAt)
-  );
 
   if (!arrival) return null;
 
