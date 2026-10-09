@@ -1,6 +1,9 @@
 export type Theme = "light" | "dark" | "system";
 
 const KEY = "rubick.theme";
+/** The class under which a theme switch fades the colour of words and glyphs too, and for how long. */
+const FADE = "theme-fade";
+const FADE_MS = 200;
 
 /**
  * The theme last applied, kept in localStorage so the first frame is
@@ -28,8 +31,15 @@ export function applyTheme(theme: Theme): void {
         : "light"
       : theme;
   const root = document.documentElement;
+  const switching = root.classList.contains(
+    resolved === "dark" ? "light" : "dark"
+  );
   root.classList.remove("light", "dark");
   root.classList.add(resolved);
+  if (switching) {
+    root.classList.add(FADE);
+    window.setTimeout(() => root.classList.remove(FADE), FADE_MS);
+  }
   root.style.colorScheme = resolved;
   root.style.backgroundColor = "hsl(var(--canvas))";
   localStorage.setItem(KEY, theme);
