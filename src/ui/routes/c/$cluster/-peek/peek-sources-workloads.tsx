@@ -10,8 +10,7 @@ import {
   PHASE_LABEL,
   type ContainerLists,
 } from "@/lib/container-sequence";
-import { parseCPU, parseMemory, parseQuantity } from "@/lib/k8s-quantity";
-import { formatQuantity } from "@/lib/metric-format";
+import { declaredQuantity } from "@/lib/metric-format";
 import { describeRestarts } from "@/lib/pod-status";
 import { podRole } from "@/lib/share/pod-status";
 import { podStatusMeaning } from "@/lib/status-meaning";
@@ -67,21 +66,12 @@ function images(
   ];
 }
 
-/**
- * A requests/limits value the way a person reads it: "268435456" is a
- * manifest's spelling, "256Mi" is an answer. Anything unparseable is shown
- * as written — the author's words beat a guess.
- */
+/** A request or limit as the Containers tab spells it, or nothing when none is set. */
 function prettyQuantity(
   value: string | null,
   kind: "cpu" | "memory"
 ): string | null {
-  if (!value) return null;
-  if (parseQuantity(value) === null) return value;
-  return formatQuantity(
-    kind === "cpu" ? parseCPU(value) : parseMemory(value),
-    kind
-  );
+  return value ? declaredQuantity(kind, value) : null;
 }
 
 export const WORKLOAD_SOURCES: PeekSources = {

@@ -96,24 +96,38 @@ export function StatusBar() {
   const connecting = isLoading || isAuthenticating;
 
   return (
-    <footer className="flex h-6 flex-none items-center gap-3.5 border-t border-hair px-3 text-[11px] text-fg-fnt">
-      <span>
-        {"↵"} {t("action", "hintOpen")}
-      </span>
-      <span>
-        {"↑↓"} {t("action", "hintMove")}
-      </span>
-      <span>
-        {formatShortcut("mod+K")} {t("action", "hintSearch")}
-      </span>
-
-      <div className="flex min-w-0 flex-1">
+    <footer className="flex h-6 flex-none items-center gap-3.5 overflow-hidden whitespace-nowrap border-t border-hair px-3 text-[11px] text-fg-fnt">
+      {/* Gives way first. A hint with no room wraps onto the clipped second
+          line; reversed, so the note never does and truncates only once every
+          hint has gone. The empty item holds line one when there is no note. */}
+      <div
+        data-testid="status-hints"
+        className="flex h-6 min-w-0 flex-1 flex-row-reverse flex-wrap items-center justify-end gap-x-3.5 overflow-hidden has-[[data-link-note]]:min-w-44"
+      >
         <LinkOpenedNote />
+        <span aria-hidden="true" className="-ml-3.5 h-6" />
+        <span className="leading-6">
+          {formatShortcut("mod+K")} {t("action", "hintSearch")}
+        </span>
+        <span className="leading-6">
+          {"↑↓"} {t("action", "hintMove")}
+        </span>
+        <span className="leading-6">
+          {"↵"} {t("action", "hintOpen")}
+        </span>
       </div>
 
-      <StallIndicator />
-      <ActivityPanel />
-      <ThemeControl />
+      {/* Gives way next, the theme first, so the counts never do. The empty
+          item holds line one, so a control that cannot fit wraps too. */}
+      <div
+        data-testid="status-controls"
+        className="flex h-6 min-w-0 flex-wrap items-center justify-end gap-x-3.5 overflow-hidden"
+      >
+        <span aria-hidden="true" className="-mr-3.5 h-6" />
+        <StallIndicator />
+        <ActivityPanel />
+        <ThemeControl />
+      </div>
       {/* The app's own chrome to the left, the cluster's health to the right. */}
       <span aria-hidden="true" className="h-3 w-px flex-none bg-hair" />
 

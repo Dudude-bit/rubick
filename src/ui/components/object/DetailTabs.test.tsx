@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { render, screen } from "@testing-library/react";
-import { Info, ScrollText } from "lucide-react";
+import userEvent from "@testing-library/user-event";
+import { Braces, Info, ScrollText, Activity } from "lucide-react";
 
 import { DetailTabs } from "./DetailTabs";
 import type { DetailTab } from "./detail-tab";
@@ -56,7 +57,7 @@ describe("DetailTabs", () => {
         actions={<button type="button">Delete</button>}
       />
     );
-    const row = screen.getByRole("tablist").parentElement;
+    const row = screen.getByRole("tablist").parentElement?.parentElement;
     expect(row?.className).toContain("flex-wrap");
     const actions = screen.getByText("Delete").closest("div");
     expect(actions?.className).toContain("ml-auto");
@@ -70,5 +71,96 @@ describe("DetailTabs", () => {
     const list = screen.getByRole("tablist");
     expect(list.className).toContain("overflow-x-auto");
     expect(list.className).not.toContain("truncate");
+  });
+});
+
+describe("a tab strip wider than the page", () => {
+  const four: DetailTab[] = [
+    ...tabs,
+    {
+      id: "events",
+      label: "Events",
+      content: <p>the events panel</p>,
+      glyph: { names: "view", icon: Activity },
+    },
+    {
+      id: "yaml",
+      label: "YAML",
+      content: <p>the yaml panel</p>,
+      glyph: { names: "view", icon: Braces },
+    },
+  ];
+
+  /** Where each tab sits, against a strip spanning 0 to 200. */
+  function laidOut(spans: Record<string, [number, number]>) {
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const tab = this.getAttribute("data-tab");
+        const [left, right] =
+          this.getAttribute("role") === "tablist"
+            ? [0, 200]
+            : tab
+              ? spans[tab]
+              : [0, 0];
+        return {
+          left,
+          right,
+          top: 0,
+          bottom: 32,
+          width: right - left,
+          height: 32,
+          x: left,
+          y: 0,
+          toJSON: () => ({}),
+        } as DOMRect;
+      }
+    );
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  /**
+   * At 1024 wide Lena's pod page stopped after "Проверка сети", and
+   * Условия, События, Зависимые and YAML had no way in. Fails if a tab
+   * the strip cannot show is not offered by name, or picking it does not
+   * open it.
+   */
+  it("names every tab it cannot show and opens the one picked", async () => {
+    laidOut({
+      overview: [0, 80],
+      logs: [96, 180],
+      events: [196, 260],
+      yaml: [276, 320],
+    });
+    const onTabChange = vi.fn();
+    render(
+      <DetailTabs tabs={four} activeTab="overview" onTabChange={onTabChange} />
+    );
+    const more = screen.getByRole("button", {
+      name: "2 more tabs do not fit",
+    });
+    expect(more).toHaveTextContent("2 more");
+    expect(screen.getByRole("tablist").className).toContain("mask-image");
+
+    await userEvent.click(more);
+    const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
+    expect(items).toEqual(["Events", "YAML"]);
+    await userEvent.click(screen.getByRole("menuitem", { name: "YAML" }));
+    expect(onTabChange).toHaveBeenCalledWith("yaml");
+  });
+
+  /** A strip that shows every tab must not grow a control for nothing. */
+  it("offers nothing more when every tab fits", () => {
+    laidOut({
+      overview: [0, 40],
+      logs: [56, 90],
+      events: [106, 150],
+      yaml: [166, 200],
+    });
+    render(
+      <DetailTabs tabs={four} activeTab="overview" onTabChange={() => {}} />
+    );
+    expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
+    expect(screen.getByRole("tablist").className).not.toContain("mask-image");
   });
 });

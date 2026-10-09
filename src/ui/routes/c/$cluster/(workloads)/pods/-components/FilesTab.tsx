@@ -17,6 +17,7 @@ import {
   Folder,
   HardDrive,
   House,
+  SearchX,
   Square,
 } from "lucide-react";
 
@@ -216,6 +217,12 @@ export function FilesTab({
     () => (filter ? sorted.filter((e) => matches(e, filter)) : sorted),
     [sorted, filter]
   );
+  const narrowing = filter.trim() !== "";
+  const filterRef = useRef<HTMLInputElement>(null);
+  const clearFilter = () => {
+    setFilter("");
+    filterRef.current?.focus();
+  };
 
   // The preview execs into the container, and every selection is one exec.
   // Holding ArrowDown down a directory opened one session per keypress, all
@@ -396,6 +403,11 @@ export function FilesTab({
           ))}
         </span>
         <Status state={state} onStop={stop} />
+        {narrowing && state.phase !== "idle" && (
+          <span data-testid="files-shown" className="text-fg-mut">
+            {t("files", "shownOf", { shown: rows.length, n: entries.length })}
+          </span>
+        )}
       </div>
 
       {via && (
@@ -468,6 +480,7 @@ export function FilesTab({
           />
           {(entries.length > 0 || state.phase === "reading") && (
             <input
+              ref={filterRef}
               autoComplete="off"
               autoCorrect="off"
               autoCapitalize="off"
@@ -586,6 +599,17 @@ export function FilesTab({
                 onOpen={open}
                 canGoUp={path !== "/"}
                 onUp={up}
+                after={
+                  narrowing &&
+                  rows.length === 0 &&
+                  entries.length > 0 && (
+                    <NoMatch
+                      filter={filter.trim()}
+                      reading={state.phase === "reading"}
+                      onClear={clearFilter}
+                    />
+                  )
+                }
               />
             )}
             <p className="border-t border-hair px-3 py-1 text-[10px] text-fg-fnt">
@@ -621,6 +645,35 @@ function useDebounced<T>(value: T, ms: number): T {
     return () => clearTimeout(id);
   }, [value, ms]);
   return settled;
+}
+
+/** A filter that hides every name says so, with the way back. */
+function NoMatch({
+  filter,
+  reading,
+  onClear,
+}: {
+  filter: string;
+  reading: boolean;
+  onClear: () => void;
+}) {
+  const t = useT();
+  return (
+    <p
+      role="status"
+      className="flex items-center gap-2 px-3 py-3 text-xs text-fg-mut"
+    >
+      <SearchX className="h-3.5 w-3.5 flex-none text-fg-fnt" aria-hidden />
+      {t("files", reading ? "noNameMatchesYet" : "noNameMatches", { filter })}
+      <button
+        type="button"
+        onClick={onClear}
+        className="text-info hover:underline focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+      >
+        {t("files", "clearFilter")}
+      </button>
+    </p>
+  );
 }
 
 function Sentence({ children }: { children: React.ReactNode }) {
@@ -781,6 +834,7 @@ function Rows({
   onOpen,
   canGoUp,
   onUp,
+  after,
 }: {
   rows: FileEntry[];
   path: string;
@@ -791,6 +845,7 @@ function Rows({
   onOpen: (entry: FileEntry) => void;
   canGoUp: boolean;
   onUp: () => void;
+  after?: React.ReactNode;
 }) {
   const t = useT();
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -910,6 +965,7 @@ function Rows({
           );
         })}
       </div>
+      {after}
     </div>
   );
 }

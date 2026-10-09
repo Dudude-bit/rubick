@@ -11,6 +11,8 @@ const GAP_PX = 4;
 const EDGE_PX = 8;
 /** The arrow pointer's height below its hot spot, which the card must not sit under. */
 const CURSOR_PX = 20;
+/** What Radix announces as one of its tooltips opens, and every open one closes on. */
+export const TOOLTIP_OPEN = "tooltip.open";
 
 interface ShownTitle {
   text: string;
@@ -36,11 +38,15 @@ function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
   let x = 0;
   let y = 0;
   let parkedAt: { x: number; y: number } | null = null;
+  let announcing = false;
 
   const reveal = () => {
     if (!owner || quiet || !held || !owner.isConnected) return;
     visible = true;
     show({ text: held, anchor: owner.getBoundingClientRect(), x, y });
+    announcing = true;
+    document.dispatchEvent(new CustomEvent(TOOLTIP_OPEN));
+    announcing = false;
   };
   const hide = () => {
     window.clearTimeout(timer);
@@ -83,7 +89,15 @@ function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
 
   const over = (event: Event) => {
     const target = event.target instanceof Element ? event.target : null;
-    if (owner && target && owner.contains(target)) return;
+    // A title inside the one held is the nearer one, and takes over from it.
+    const nearer = target?.closest("[title]");
+    if (
+      owner &&
+      target &&
+      owner.contains(target) &&
+      !(nearer && nearer !== owner && owner.contains(nearer))
+    )
+      return;
     release();
     if (event instanceof MouseEvent) {
       x = event.clientX;
@@ -140,6 +154,13 @@ function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
     [document, "wheel", hush],
     [document, "scroll", hush],
     [window, "blur", release],
+    [
+      document,
+      TOOLTIP_OPEN,
+      () => {
+        if (!announcing) hide();
+      },
+    ],
   ];
   for (const [on, type, handle] of listeners) {
     on.addEventListener(type, handle, { capture: true, passive: true });

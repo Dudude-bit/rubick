@@ -710,6 +710,11 @@ export const en = {
     invalidPort: "Invalid port",
     invalidPortHint: "Please enter port numbers from 1 to 65535",
     updating: "updating…",
+    tabsMore: "{n} more",
+    tabsMoreLabel: {
+      one: "{n} more tab does not fit",
+      other: "{n} more tabs do not fit",
+    },
     manifestCopiedNamed: "{name} manifest copied",
     kindManifest: "{kind} manifest",
     suspendedLower: "suspended",
@@ -2096,6 +2101,10 @@ export const en = {
       "Container {container} has restarted since this listing (restart {restarts}). Anything written outside a mount is gone with it.",
     readNewContainer: "Read the new container",
     filterNamesReading: "filter names…",
+    shownOf: "{shown} of {n} shown",
+    noNameMatches: "No name here contains “{filter}”.",
+    noNameMatchesYet: "No name read so far contains “{filter}”.",
+    clearFilter: "Clear the filter",
     filterNames: {
       one: "filter {n} name…",
       other: "filter {n} names…",

@@ -125,6 +125,39 @@ describe("the note a live link leaves", () => {
     expect(useDeepLinkStore.getState().arrival).toBeNull();
   });
 
+  /**
+   * At the narrowest window Lena saw the note shrink to its icon, and at a
+   * wide one Dana saw its whole sentence repeated above it. Fails if a cut
+   * sentence offers nothing on hover, or a whole one offers itself again.
+   */
+  it.each([
+    [400, 120, "the whole sentence"],
+    [120, 120, "nothing"],
+  ])(
+    "offers %i px of text in a %i px box %s on hover",
+    (scrollWidth, clientWidth) => {
+      const scroll = vi
+        .spyOn(HTMLElement.prototype, "scrollWidth", "get")
+        .mockReturnValue(scrollWidth);
+      const client = vi
+        .spyOn(HTMLElement.prototype, "clientWidth", "get")
+        .mockReturnValue(clientWidth);
+      try {
+        arriveLive();
+        renderNote();
+        const sentence = screen.getByText(
+          "Opened from a link. You are looking at it live."
+        );
+        expect(sentence.getAttribute("title")).toBe(
+          scrollWidth > clientWidth ? sentence.textContent : null
+        );
+      } finally {
+        scroll.mockRestore();
+        client.mockRestore();
+      }
+    }
+  );
+
   /** The page area must not draw a second copy over the page. */
   it("is not drawn by the page area", async () => {
     arriveLive();

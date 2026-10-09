@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
-import { formatQuantity, splitUnit, usageRole } from "@/lib/metric-format";
+import {
+  declaredQuantity,
+  formatQuantity,
+  splitUnit,
+  usageRole,
+} from "@/lib/metric-format";
 import { formatBytes, formatCPU } from "@/lib/k8s-quantity";
 
 describe("splitUnit", () => {
@@ -89,5 +94,19 @@ describe("throughput", () => {
   it("keeps the per-second, so traffic cannot be read as memory", () => {
     expect(formatQuantity(2 * 1024 * 1024, "throughput")).toBe("2Mi/s");
     expect(formatQuantity(2 * 1024 * 1024, "memory")).toBe("2Mi");
+  });
+});
+
+describe("declaredQuantity", () => {
+  /** The peek and the Containers tab printed one limit two ways; fails if a unit-bearing resource is left as the manifest wrote it. */
+  it("reads every resource that has a unit, and leaves the rest as written", () => {
+    expect(declaredQuantity("cpu", "100m")).toBe("100m");
+    expect(declaredQuantity("cpu", "1500m")).toBe("1.5");
+    expect(declaredQuantity("memory", "32Mi")).toBe("32Mi");
+    expect(declaredQuantity("memory", "268435456")).toBe("256Mi");
+    expect(declaredQuantity("ephemeral-storage", "2147483648")).toBe("2Gi");
+    expect(declaredQuantity("hugepages-2Mi", "4194304")).toBe("4Mi");
+    expect(declaredQuantity("nvidia.com/gpu", "1")).toBe("1");
+    expect(declaredQuantity("memory", "lots")).toBe("lots");
   });
 });

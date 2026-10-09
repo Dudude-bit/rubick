@@ -4,6 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type { AccessQuery, PodInfo } from "@/generated/types";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useLocaleStore } from "@/stores/localeStore";
+import { declaredQuantity } from "@/lib/metric-format";
 
 import type { ContainerInfo, DeploymentContainerInfo } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
@@ -120,6 +122,25 @@ describe("a running pod's containers on the Containers tab", () => {
     );
     expect(screen.getByText("memory 24Mi")).toBeInTheDocument();
     expect(screen.getByText("cpu 5m · memory 16Mi")).toBeInTheDocument();
+  });
+
+  /** Lena read "memory 8Mi" here and "8 МиБ" in the peek for the same limit; fails if the tab prints the manifest's spelling again. */
+  it("spells requests and limits the way the peek does", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      await renderWithRouter(
+        <ContainerRows
+          pod={{ containers: [oomKilled], initContainers: [] }}
+          namespace="shop"
+          podName="recommendations-5c68fb6c5c-tvlbm"
+        />
+      );
+      expect(declaredQuantity("memory", "24Mi")).toBe("24 МиБ");
+      expect(screen.getByText("memory 24 МиБ")).toBeInTheDocument();
+      expect(screen.getByText("cpu 5m · memory 16 МиБ")).toBeInTheDocument();
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 });
 

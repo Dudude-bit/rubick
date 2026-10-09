@@ -19,7 +19,7 @@ export function AddressesCell({
   if (addresses.length === 0) return <None />;
   const unready = addresses.some(({ ready }) => !ready);
   return (
-    <Tooltip>
+    <Tooltip disableHoverableContent={false}>
       <TooltipTrigger>
         <span
           className={cn(
