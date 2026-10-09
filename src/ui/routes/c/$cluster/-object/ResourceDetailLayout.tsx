@@ -391,6 +391,7 @@ export function ResourceDetailLayout({
           }
           onBack={onBack}
           dataUpdatedAt={freshness?.dataUpdatedAt}
+          live={freshness?.live}
           slowed={freshness?.slowed}
           stale={freshness?.stale}
         />

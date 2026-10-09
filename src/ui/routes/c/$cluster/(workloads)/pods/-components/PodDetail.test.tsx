@@ -12,6 +12,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import type { EventInfo, PodInfo, ReplicaSetInfo } from "@/generated/types";
 import { REFRESH_INTERVALS } from "@/lib/refresh";
+import { terminationAt } from "@/lib/pod-status";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useWindowActivity } from "@/lib/window-activity";
 import { renderWithRouter } from "@/test/render";
@@ -383,6 +384,69 @@ describe("a crash-looping pod caught while its container is up", () => {
     expect(
       screen.getAllByText(/the last run ended Error · exit 1/).length
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("the age of a crash-looping pod's last exit", () => {
+  /**
+   * Sam's checkout page said "the last run ended Error · exit 1, 2s ago" for
+   * minutes while the Restarts row beside it ticked to "last 1m ago": the
+   * age was formatted once, when the pod was read. Fails if the headline's
+   * age, or the Containers tab's, stops moving with the clock between reads.
+   */
+  it("moves with the clock on the headline and the Containers tab alike", async () => {
+    const until = new Date(Date.now() + 600_000).toISOString();
+    const exit = {
+      exitCode: 1,
+      signal: null,
+      reason: "Error",
+      message: null,
+      startedAt: new Date(Date.now() - 6_000).toISOString(),
+      finishedAt: new Date(Date.now() - 2_000).toISOString(),
+    };
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod")
+        return {
+          ...POD,
+          restartCount: 72,
+          lastRestartAt: exit.finishedAt,
+          status: { ...POD.status, display: "Error", loopingUntil: until },
+          containers: [
+            {
+              name: "app",
+              image: "busybox:1.36",
+              ready: false,
+              started: false,
+              phase: "app",
+              state: { type: "terminated", termination: exit },
+              lastTerminated: null,
+              restartCount: 72,
+              loopingUntil: until,
+              ports: [],
+              resources: { requests: {}, limits: {} },
+              env: [],
+              envFrom: [],
+            },
+          ],
+        };
+      if (command === "get_replicaset") return REPLICA_SET;
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}?tab=containers`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+    const ages = () =>
+      screen
+        .getAllByTitle(terminationAt(exit) ?? "")
+        .map((age) => age.textContent);
+    expect(ages()).toEqual(["2s ago", "2s ago", "2s ago"]);
+
+    await advance(70_000);
+
+    expect(ages()).toEqual(["1m ago", "1m ago", "1m ago"]);
   });
 });
 

@@ -28,7 +28,7 @@ import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useT } from "@/i18n/useT";
 import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { useRememberOwners } from "./useLastOwners";
-import { useReturnWatch } from "./useReturnWatch";
+import { useObjectWatch } from "./useObjectWatch";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -181,7 +181,7 @@ export function useResourceDetail<T>(
     queryKeys.detail(resourceKind, namespace, name),
     queryKeys.manifest(resourceKind, namespace, name)
   );
-  useReturnWatch(
+  const live = useObjectWatch(
     resourceKind,
     namespace,
     name,
@@ -245,7 +245,7 @@ export function useResourceDetail<T>(
     isLoading,
     error,
     refetch,
-    freshness,
+    freshness: live ? { ...freshness, live } : freshness,
     yaml,
     isLoadingYaml,
     copyYaml,

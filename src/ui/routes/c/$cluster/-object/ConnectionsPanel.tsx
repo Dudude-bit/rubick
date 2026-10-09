@@ -24,7 +24,7 @@ import {
   type ConnRow,
   type OutsideEnd,
 } from "@/lib/connections";
-import type { ConnectionsQuery } from "@/hooks/useConnections";
+import type { ConnectionsRead } from "@/hooks/useConnections";
 import { useDelivery } from "../-delivery/useDelivery";
 import { openExternal } from "@/lib/open-external";
 import type { DeliveryQuery } from "@/integrations";
@@ -209,7 +209,7 @@ function ConnectionsPanelInner({
   query,
   delivery,
 }: {
-  query: ConnectionsQuery;
+  query: ConnectionsRead;
   delivery?: DeliveryQuery | null;
 }) {
   const t = useT();

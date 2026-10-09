@@ -19,6 +19,12 @@ import type {
 
 export type ConnectionsQuery = ReturnType<typeof useConnections>;
 
+/** What a surface draws a neighbourhood from: the query, or an answer held back from it. */
+export type ConnectionsRead = Pick<
+  ConnectionsQuery,
+  "data" | "error" | "isPending" | "refetch"
+>;
+
 export function useConnections(
   kind: string,
   name: string | undefined,

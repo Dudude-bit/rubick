@@ -27,7 +27,7 @@ import {
   WarningsPanel,
   WorkloadsPanel,
 } from "./health";
-import { podTotal } from "./health-share";
+import { podTotal, readyBetweenCrashes } from "./health-share";
 import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
 import type { ReportStat } from "@/lib/report";
 import { useT, type T } from "@/i18n/useT";
@@ -61,7 +61,11 @@ function overviewStats(
           ? t("cluster", "podsNotCounted", {
               where: unreadWhere(podsUnread, t),
             })
-          : null,
+          : pods && readyBetweenCrashes(pods.read) > 0
+            ? t("count", "readyBetweenCrashes", {
+                n: readyBetweenCrashes(pods.read),
+              })
+            : null,
     },
   ];
   if (overview.nodesKnown)

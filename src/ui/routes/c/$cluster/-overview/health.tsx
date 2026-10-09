@@ -16,6 +16,7 @@ import {
   nodesShare,
   podSegments,
   podTotal,
+  readyBetweenCrashes,
   PRESSURE_WARN,
   attentionShare,
   schedulerShare,
@@ -500,6 +501,9 @@ export function AttentionPanel({
   const unchecked = attention.checks.filter((check) => check.state !== "read");
   const readyNodes = nodes.filter((n) => n.ready).length;
   const down = pods ? notRunning(pods.read, t) : [];
+  // The Workloads card counts these crash-looping, not Running: said here, so
+  // the two numbers for one moment read as one.
+  const between = pods ? readyBetweenCrashes(pods.read) : 0;
   const nodesLine =
     nodesKnown &&
     t("count", "nodesReady", {
@@ -575,7 +579,16 @@ export function AttentionPanel({
                   n: formatCount(pods.read.ready),
                   of: t("count", "ofPods", { n: podTotal(pods.read) }),
                 })}
+                {between > 0 && ","}
               </span>
+            )}
+            {between > 0 && (
+              <>
+                {" "}
+                <span className="whitespace-nowrap">
+                  {t("count", "readyBetweenCrashes", { n: between })}
+                </span>
+              </>
             )}
             {down.length > 0 && (
               <span data-testid="attention-overall-details">

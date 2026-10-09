@@ -19,12 +19,18 @@ export function loopingNow(
   return !Number.isNaN(until) && now < until;
 }
 
+/** The words kubectl prints while the kubelet backs off an app container, or the init container a pod is held on. */
+const BACKING_OFF: ReadonlySet<string> = new Set([
+  "CrashLoopBackOff",
+  "Init:CrashLoopBackOff",
+]);
+
 /**
  * Where a pod stands in a crash loop, by what its row ships: crashing, at
- * any instant of the back-off; restarted with no exit the kubelet still
- * reports, which is not health; or clear. `crash_looping` and
- * `exit_unreported` in `pod_display.rs` answer the cases in
- * `src/contracts/crash-loop.json` the same way.
+ * any instant of the back-off, its init container's included; restarted
+ * with no exit the kubelet still reports, which is not health; or clear.
+ * `crash_looping` and `exit_unreported` in `pod_display.rs` answer the
+ * cases in `src/contracts/crash-loop.json` the same way.
  */
 export type LoopState = "looping" | "unreported" | "clear";
 
@@ -36,7 +42,7 @@ export function loopState(
   },
   now: number = Date.now()
 ): LoopState {
-  if (status.display === "CrashLoopBackOff" || loopingNow(status, now))
+  if (BACKING_OFF.has(status.display) || loopingNow(status, now))
     return "looping";
   return status.exitUnreported ? "unreported" : "clear";
 }

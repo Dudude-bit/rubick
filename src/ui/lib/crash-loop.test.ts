@@ -23,6 +23,8 @@ interface Case {
   looping: boolean;
   exitUnreported: boolean;
   containerStatuses: { restartCount: number }[];
+  /** The pod's count where it is not its one app container's: an init container's while the pod is held on it. */
+  restartCount?: number;
 }
 
 const shared = JSON.parse(
@@ -68,14 +70,10 @@ describe("the crash-loop window", () => {
       const restarting =
         c.restartingUntil !== null && now < Date.parse(c.restartingUntil);
       expect(restartingNow(status, now)).toBe(restarting);
-      expect(
-        restartsAreNews(
-          { restartCount: c.containerStatuses[0].restartCount, status },
-          now
-        )
-      ).toBe(
-        c.containerStatuses[0].restartCount > 0 &&
-          (c.looping || c.exitUnreported || restarting)
+      const restartCount =
+        c.restartCount ?? c.containerStatuses[0].restartCount;
+      expect(restartsAreNews({ restartCount, status }, now)).toBe(
+        restartCount > 0 && (c.looping || c.exitUnreported || restarting)
       );
     }
   );

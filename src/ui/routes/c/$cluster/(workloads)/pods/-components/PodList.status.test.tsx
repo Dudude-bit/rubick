@@ -313,7 +313,8 @@ describe("a pod that restarted with no exit reported", () => {
     const restarts = peek.groups
       ?.flatMap((group) => group.items)
       .find((item) => item.label === t("columns", "restarts"));
-    expect(restarts?.value).toBe("15 restarts, last exit not reported");
+    const { container } = render(<>{restarts?.value}</>);
+    expect(container.textContent).toBe("15 restarts, last exit not reported");
     expect(podRole(checkout(false), null)).toBe("ok");
   });
 });

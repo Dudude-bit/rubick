@@ -78,13 +78,14 @@ import { usePodReplacementSearch } from "./usePodReplacementSearch";
 import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
-import { usePodWatch } from "@/hooks/usePodWatch";
 import { silenceOf } from "@/lib/node-reporting";
 import { useConnections } from "@/hooks/useConnections";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { eventsTab } from "../../../-object/events-tab";
 import { useNodePlacement } from "./useNodePlacement";
 import { SpotMark } from "../../../-object/spot-mark";
+import { ExitWords, RestartsWords } from "../../../-object/ExitAgo";
+import { parts } from "@/i18n/parts";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
@@ -112,12 +113,7 @@ import {
   withKnownLoop,
   type SeenLoop,
 } from "@/lib/crash-loop";
-import {
-  describeRestarts,
-  describeTermination,
-  lastTermination,
-  terminationWhen,
-} from "@/lib/pod-status";
+import { describeTermination, lastTermination } from "@/lib/pod-status";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
   heardSessions,
@@ -224,12 +220,10 @@ function crashLoop(
     reason,
     headline: t("empty", "startsAndExits", { container: container.name }),
     detail: last
-      ? t("empty", "crashRestartsWithLastRun", {
-          n: container.restartCount,
-          how: `${describeTermination(last)}${
-            terminationWhen(last, t) ? `, ${terminationWhen(last, t)}` : ""
-          }`,
-        })
+      ? parts(
+          t("empty", "crashRestartsWithLastRun", { n: container.restartCount }),
+          { how: <ExitWords termination={last} between=", " /> }
+        )
       : t("empty", "crashRestartsNoLastRun", { n: container.restartCount }),
     tone: "err",
   };
@@ -455,7 +449,6 @@ export function PodDetail() {
 
   // A gone pod is the page's whole answer; nothing else about it is asked.
   const gone = isResourceNotFoundError(error);
-  usePodWatch(namespace, name, !gone);
   const connections = useConnections(ResourceType.Pod, name, namespace, !gone);
   // The pod's own events, for the "most likely" sentence: read here rather
   // than inside the panel so a refusal reaches it as a line, not a crash.
@@ -725,7 +718,7 @@ export function PodDetail() {
     },
     {
       label: t("columns", "restarts"),
-      value: pod ? describeRestarts(pod, t) : 0,
+      value: pod ? <RestartsWords pod={pod} /> : 0,
       tone: pod && restartsAreNews(pod) ? "warn" : undefined,
     },
     // Where the raw phase stays reachable — "the pod really is in phase

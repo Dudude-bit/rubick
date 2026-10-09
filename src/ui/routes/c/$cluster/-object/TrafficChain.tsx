@@ -44,7 +44,7 @@ import {
   type HopTone,
   type StopMood,
 } from "@/lib/connections";
-import type { ConnectionsQuery } from "@/hooks/useConnections";
+import type { ConnectionsRead } from "@/hooks/useConnections";
 import type { Issuance } from "@/hooks/useCertificateIssuance";
 import { edgeKey, useServiceEdge, type ServiceEdges } from "./useServiceEdge";
 import {
@@ -540,7 +540,7 @@ export function TrafficChain({
   issuance,
   controller,
 }: {
-  query: ConnectionsQuery;
+  query: ConnectionsRead;
   /**
    * The certificates behind this Ingress's TLS Secrets, where the page has
    * read them. Absent, the chain draws exactly what it drew before — the

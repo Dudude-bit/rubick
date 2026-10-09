@@ -4,11 +4,11 @@ import type {
   ContainerPhase,
   ContainerPortInfo,
   DeploymentContainerInfo,
+  TerminationInfo,
 } from "@/generated/types";
 import {
   containerStatus,
   lastTermination,
-  terminationWhen,
   type ContainerStatus,
 } from "@/lib/pod-status";
 import { formatDuration } from "@/lib/utils";
@@ -40,6 +40,8 @@ export interface ContainerStep {
   status: ContainerStatus;
   /** The one sentence the state on its own cannot say, or nothing. */
   note: string | null;
+  /** The exit a `{when}` left in the note is the age of, drawn at render on the clock. */
+  exit: TerminationInfo | null;
 }
 
 export interface ContainerGroup {
@@ -349,6 +351,24 @@ export function runDuration(
   return formatDuration((to - from) / 1000);
 }
 
+/** An exit the kubelet stamped, which a note can say the age of. */
+function dated(
+  termination: TerminationInfo | null
+): termination is TerminationInfo {
+  return !!termination?.finishedAt;
+}
+
+/** The exit a failed or finished step's note dates, where it has one. */
+function noteExit(
+  container: ContainerInfo,
+  mark: StepMark
+): TerminationInfo | null {
+  const dates =
+    mark === "failed" || (mark === "done" && container.phase !== "app");
+  const exit = dates ? lastTermination(container) : null;
+  return dated(exit) ? exit : null;
+}
+
 function noteFor(
   container: ContainerInfo,
   mark: StepMark,
@@ -360,11 +380,10 @@ function noteFor(
 
   if (mark === "failed") {
     const death = lastTermination(container);
-    const when = death ? terminationWhen(death, t) : null;
     if (container.restartCount > 0) {
       return t("readings", "logsAttemptsLast", {
         attempts: t("count", "attemptsCount", { n: container.restartCount }),
-        when: when ? t("readings", "logsLastWhen", { when }) : "",
+        when: dated(death) ? t("readings", "logsLastWhen") : "",
       });
     }
     return t("readings", "logsPrintedBeforeExit");
@@ -379,12 +398,11 @@ function noteFor(
     const took = termination
       ? runDuration(termination.startedAt, termination.finishedAt)
       : null;
-    const when = termination ? terminationWhen(termination, t) : null;
     // Said out loud because a finished container looks identical to a
     // silent one in a log pane, and Follow does nothing on either.
     return t("readings", "logsFinishedComplete", {
       took: took ? t("readings", "logsTook", { took }) : "",
-      when: when ? t("readings", "logsWhen", { when }) : "",
+      when: dated(termination) ? t("readings", "logsWhen") : "",
     });
   }
 
@@ -430,6 +448,7 @@ export function containerSequence(
       mark,
       status: containerStatus(container),
       note: noteFor(container, mark, blockedBy, t),
+      exit: noteExit(container, mark),
     };
   };
 

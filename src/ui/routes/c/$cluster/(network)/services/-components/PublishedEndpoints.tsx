@@ -38,8 +38,8 @@ import {
   unpublishedNote,
 } from "@/lib/published";
 import { useState } from "react";
-import type { ConnectionsQuery } from "@/hooks/useConnections";
-import type { ObjectRef, ServicePublished } from "@/generated/types";
+import type { ConnectionsRead } from "@/hooks/useConnections";
+import type { ServicePublished } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
@@ -54,13 +54,7 @@ const TONE: Record<"ok" | "warn" | "err", string> = {
   err: "text-err",
 };
 
-export function PublishedEndpoints({
-  query,
-  service,
-}: {
-  query: ConnectionsQuery;
-  service: ObjectRef;
-}) {
+export function PublishedEndpoints({ query }: { query: ConnectionsRead }) {
   const t = useT();
   const { data, isPending, error } = query;
 
@@ -79,7 +73,7 @@ export function PublishedEndpoints({
       </p>
     );
   }
-  const published = publishedFor(data, service);
+  const published = publishedFor(data, data.subject);
   if (!published) {
     return (
       <p className="text-xs text-fg-fnt">

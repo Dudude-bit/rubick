@@ -197,6 +197,11 @@ export function podsServing(pods: PodComposition): number {
   return pods.running - pods.crashLooping - pods.notReady;
 }
 
+/** Ready pods counted crash-looping rather than Running: up between crashes at the moment of the read. */
+export function readyBetweenCrashes(pods: PodComposition): number {
+  return Math.max(0, pods.ready - podsServing(pods));
+}
+
 /**
  * Pods by phase.
  *

@@ -3,7 +3,7 @@ import { Link2 } from "lucide-react";
 
 import { connectionCount } from "@/lib/connections";
 import type { DeliveryQuery } from "@/integrations";
-import type { ConnectionsQuery } from "@/hooks/useConnections";
+import type { ConnectionsRead } from "@/hooks/useConnections";
 import {
   readCountMark,
   viewGlyph,
@@ -12,7 +12,7 @@ import {
 import { ConnectionsPanel } from "./ConnectionsPanel";
 
 /** The objects the tab draws, and a floor where it says some kinds were not looked at. */
-export function connectionsMark(query: ConnectionsQuery, t: T) {
+export function connectionsMark(query: ConnectionsRead, t: T) {
   if (query.error)
     return readCountMark(null, t("empty", "couldNotReadWhatConnects"));
   if (!query.data) return undefined;
@@ -37,7 +37,7 @@ export function connectionsMark(query: ConnectionsQuery, t: T) {
  * answers what a collection's mark is for: whether this is worth opening.
  */
 export function connectionsTab(
-  query: ConnectionsQuery,
+  query: ConnectionsRead,
   t: T,
   /** The subject, so its off-cluster maker can be one of the edges. */
   delivery?: DeliveryQuery | null

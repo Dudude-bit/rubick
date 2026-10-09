@@ -6,7 +6,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useConnections } from "@/hooks/useConnections";
+import { useConnections, type ConnectionsRead } from "@/hooks/useConnections";
 import { useServiceAnswer } from "@/hooks/useServiceAnswer";
 import { ResourceType } from "@/lib/resource-registry";
 import { useOneIngressHealth } from "@/hooks/useIngressHealth";
@@ -64,26 +64,32 @@ export function VerdictBadge({
 }
 
 /**
- * The Service named here: the page, its peek and its Endpoints object. Its
- * pods and slices are followed live while it is on screen unless the page
- * around it follows them, and a read that cannot speak for it is not drawn.
+ * The Service named here, in its peek and on its Endpoints object. Its pods
+ * and slices are followed live while it is on screen, and a read that cannot
+ * speak for it is not drawn.
  */
 export function ServiceHealthView({
   name,
   namespace,
-  follow = true,
 }: {
   name: string;
   namespace: string | null;
-  follow?: boolean;
 }) {
-  const t = useT();
   const query = useConnections(ResourceType.Service, name, namespace);
-  const { current, stale } = useServiceAnswer(name, namespace, query, follow);
-  const { error } = query;
+  return (
+    <ServiceVerdict
+      read={useServiceAnswer(name, namespace, query, true).read}
+    />
+  );
+}
+
+/** A Service's verdict from the answer every other reader of it on that surface draws from. */
+export function ServiceVerdict({ read }: { read: ConnectionsRead }) {
+  const t = useT();
+  const { data, error } = read;
   const health = useMemo(
-    () => healthFromConnections(current, stale ? null : error),
-    [current, stale, error]
+    () => healthFromConnections(data, error),
+    [data, error]
   );
   return <VerdictBadge verdict={serviceHealthWords(health, t)} />;
 }

@@ -3,12 +3,8 @@ import { Download, RefreshCw } from "lucide-react";
 import type { ContainerInfo } from "@/generated/types";
 import { Button } from "@/components/ui/button";
 import { useNowSeconds } from "@/hooks/useNow";
-import {
-  describeTermination,
-  lastTermination,
-  terminationAt,
-  terminationWhen,
-} from "@/lib/pod-status";
+import { lastTermination, terminationAt } from "@/lib/pod-status";
+import { ExitAgo, ExitWords } from "../-object/ExitAgo";
 
 import type { FocusReason } from "./focus";
 import type { ContainerFailure } from "./hooks/useLogStream";
@@ -105,8 +101,6 @@ export function StreamFailureNotice({
     "follow-stopped": () =>
       t("empty", "nodeStoppedFollowing", { pod: podName, container }),
   };
-  const when = termination ? terminationWhen(termination, t) : null;
-
   return (
     <div
       role="alert"
@@ -137,8 +131,8 @@ export function StreamFailureNotice({
             data-testid="log-stream-termination"
             title={terminationAt(termination)}
           >
-            {t("empty", "itExited")} {describeTermination(termination)}
-            {when ? `, ${when}` : ""}
+            {t("empty", "itExited")}{" "}
+            <ExitWords termination={termination} between=", " />
             {info && info.restartCount > 0
               ? ` · ${t("count", "restartsSoFar", { n: info.restartCount })}`
               : ""}
@@ -462,7 +456,6 @@ export function FocusNotice({
 export function FinishedNotice({ container }: { container: ContainerInfo }) {
   const t = useT();
   const termination = lastTermination(container);
-  const when = termination ? terminationWhen(termination, t) : null;
   const kind =
     container.phase === "sidecar"
       ? t("empty", "aSidecar")
@@ -477,7 +470,12 @@ export function FinishedNotice({ container }: { container: ContainerInfo }) {
       {t("empty", "reading")}{" "}
       <span className="font-mono">{container.name}</span>, {kind}.{" "}
       {t("empty", "itFinished")}
-      {when ? ` ${when}` : ""}
+      {termination?.finishedAt && (
+        <>
+          {" "}
+          <ExitAgo termination={termination} />
+        </>
+      )}
       {t("empty", "soLogIsComplete")}
     </div>
   );

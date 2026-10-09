@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 
 import { useConnections } from "@/hooks/useConnections";
+import { useServiceAnswer } from "@/hooks/useServiceAnswer";
 import { useProxyBehind, useServicesRoutes } from "@/hooks/useServiceRoutes";
 import { CopyableAddress, CopyableValue } from "@/components/ui/copyable-value";
 import {
@@ -52,11 +53,19 @@ export function PeekTraffic({ target }: { target: PeekTarget }) {
   // The core's own edges and the vendors' routes, cached by the same keys
   // their pages use. A Service and its Endpoints share a name by contract,
   // which is what lets the Endpoints panel ask about its Service.
-  const conns = useConnections(
+  const query = useConnections(
     isServiceish ? "Service" : target.kind,
     target.name,
     namespace
   );
+  // The Status row beside this follows the Service; this draws its answer.
+  const answer = useServiceAnswer(
+    isServiceish ? target.name : undefined,
+    namespace,
+    query,
+    false
+  );
+  const conns = isServiceish ? answer.read : query;
   const behind = useProxyBehind(target.kind === "Service" ? service : null);
 
   const edges = conns.data?.edges ?? [];

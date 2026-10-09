@@ -26,12 +26,9 @@ import {
   type StepMark,
   type TemplateContainerLists,
 } from "@/lib/container-sequence";
-import {
-  containerStatus,
-  describeTermination,
-  lastTermination,
-  terminationWhen,
-} from "@/lib/pod-status";
+import { containerStatus, lastTermination } from "@/lib/pod-status";
+import { parts } from "@/i18n/parts";
+import { ExitAgo, ExitWords } from "./ExitAgo";
 import type {
   ContainerInfo,
   ContainerPhase,
@@ -351,10 +348,9 @@ function ContainerBlock({
     // already say all of it.
     const death = step?.mark === "done" ? null : lastTermination(container);
     if (death) {
-      const when = terminationWhen(death, t);
       items.push({
         label: t("columns", "lastExit"),
-        value: `${describeTermination(death)}${when ? ` · ${when}` : ""}`,
+        value: <ExitWords termination={death} between=" · " />,
         tone: exitTone(container, death),
       });
     }
@@ -428,7 +424,9 @@ function ContainerBlock({
             <span
               className={step.mark === "failed" ? "text-err" : "text-fg-fnt"}
             >
-              {step.note}
+              {parts(step.note, {
+                when: step.exit ? <ExitAgo termination={step.exit} /> : "",
+              })}
             </span>
           ) : undefined
         }

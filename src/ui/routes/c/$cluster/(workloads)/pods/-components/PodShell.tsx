@@ -9,7 +9,8 @@ import {
   shellTargets,
   whyNoShell,
 } from "@/lib/container-sequence";
-import { lastTermination, terminationWhen } from "@/lib/pod-status";
+import { lastTermination } from "@/lib/pod-status";
+import { ExitAgo } from "../../../-object/ExitAgo";
 import type { PodInfo } from "@/generated/types";
 
 import { PodTerminal } from "./PodTerminal";
@@ -137,7 +138,6 @@ function noShell(pod: PodInfo, t: T): NoShell {
   if (dead.length === all.length && all.length > 0) {
     const last = dead[dead.length - 1];
     const death = lastTermination(last);
-    const when = death ? terminationWhen(death, t) : null;
     return {
       headline,
       hint: null,
@@ -147,12 +147,16 @@ function noShell(pod: PodInfo, t: T): NoShell {
       },
       body: (
         <>
-          {parts(
-            t("empty", "everyContainerExited", {
-              when: when ? `, ${when}` : "",
-            }),
-            { container: <Mono>{last.name}</Mono> }
-          )}{" "}
+          {parts(t("empty", "everyContainerExited"), {
+            container: <Mono>{last.name}</Mono>,
+            when: death?.finishedAt ? (
+              <>
+                , <ExitAgo termination={death} />
+              </>
+            ) : (
+              ""
+            ),
+          })}{" "}
           {t("empty", "shellNeedsLiveProcessNoneLeft")}
         </>
       ),

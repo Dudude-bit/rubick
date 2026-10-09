@@ -146,7 +146,7 @@ describe("the note a live link leaves", () => {
         arriveLive();
         renderNote();
         const sentence = screen.getByText(
-          "Opened from a link. You are looking at it live."
+          "Opened from a link. You are looking at the cluster now."
         );
         expect(sentence.getAttribute("title")).toBe(
           scrollWidth > clientWidth ? sentence.textContent : null

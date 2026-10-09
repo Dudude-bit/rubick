@@ -2,7 +2,7 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
-import type { ConnectionsQuery } from "@/hooks/useConnections";
+import type { ConnectionsRead } from "@/hooks/useConnections";
 import type { ObjectRef, ServicePublished } from "@/generated/types";
 import { endpointsMark } from "./endpoints-mark";
 
@@ -55,7 +55,7 @@ const read = (published: ServicePublished[]) =>
     },
     error: null,
     isPending: false,
-  }) as unknown as ConnectionsQuery;
+  }) as unknown as ConnectionsRead;
 
 describe("the Endpoints tab's mark", () => {
   /**
@@ -64,7 +64,7 @@ describe("the Endpoints tab's mark", () => {
    * limit itself to.
    */
   it("counts every endpoint the tab lists, ready or not", () => {
-    expect(endpointsMark(read([notReady]), ledger, t)).toEqual({
+    expect(endpointsMark(read([notReady]), t)).toEqual({
       shows: "count",
       of: 1,
     });
@@ -74,21 +74,19 @@ describe("the Endpoints tab's mark", () => {
   it("wears no number for what it has not read", () => {
     expect(
       endpointsMark(
-        { data: undefined, error: null, isPending: true } as ConnectionsQuery,
-        ledger,
+        { data: undefined, error: null, isPending: true } as ConnectionsRead,
         t
       )
     ).toBeUndefined();
     expect(
       endpointsMark(
-        { data: undefined, error: new Error("forbidden") } as ConnectionsQuery,
-        ledger,
+        { data: undefined, error: new Error("forbidden") } as ConnectionsRead,
         t
       )
     ).toEqual({
       shows: "unchecked",
       says: "Could not read what this Service publishes.",
     });
-    expect(endpointsMark(read([]), ledger, t)).toBeUndefined();
+    expect(endpointsMark(read([]), t)).toBeUndefined();
   });
 });

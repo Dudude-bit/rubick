@@ -152,13 +152,13 @@ export const queryKeys = {
     namespace: string | null | undefined,
     name: string | undefined
   ): (string | null | undefined)[] => ["pod-watch", home(namespace), name],
-  /** What the watch on a gone page's name holds: whatever was created under it. */
-  returnWatch: (
+  /** What the watch on a page's name holds: the object, or nothing while it is gone. */
+  objectWatch: (
     kind: string,
     namespace: string | null | undefined,
     name: string | undefined
   ): (string | null | undefined)[] => [
-    "return-watch",
+    "object-watch",
     kind,
     home(namespace),
     name,

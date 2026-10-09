@@ -35,7 +35,7 @@ import { ServiceAccessInfo } from "../../-components";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { BalancerAddress } from "../../../-object/BalancerAddress";
 import { ClusterIpValue } from "../../../-object/ClusterIpValue";
-import { ServiceHealthView } from "../../../-object/health-views";
+import { ServiceVerdict } from "../../../-object/health-views";
 import { endpointsMark } from "./endpoints-mark";
 import { PublishedEndpoints } from "./PublishedEndpoints";
 import { connectionsTab } from "../../../-object/connections-tab";
@@ -79,9 +79,8 @@ export function ServiceDetail() {
   });
 
   const connections = useConnections(ResourceType.Service, name, namespace);
-  useServiceAnswer(name, namespace, connections, true);
-  const subject = connections.data?.subject ?? null;
-  const share = useServiceShare(service, connections);
+  const { read } = useServiceAnswer(name, namespace, connections, true);
+  const share = useServiceShare(service, read);
   const deliveryQuery = deliveryOfKind(ResourceType.Service, service);
   const intercept = useDeliveryIntercept(deliveryQuery);
   const [forwardOpen, setForwardOpen] = useState(false);
@@ -97,13 +96,7 @@ export function ServiceDetail() {
   const facts: KeyValue[] = [
     {
       label: t("columns", "status"),
-      value: name ? (
-        <ServiceHealthView
-          name={name}
-          namespace={namespace ?? null}
-          follow={false}
-        />
-      ) : null,
+      value: name ? <ServiceVerdict read={read} /> : null,
     },
     { label: t("columns", "type"), value: service?.type },
     ...(service?.type === "ExternalName"
@@ -160,7 +153,7 @@ export function ServiceDetail() {
         <>
           <KeyValueSection title="Service" items={facts} className="max-w-lg" />
 
-          <TrafficChain query={connections} />
+          <TrafficChain query={read} />
         </>
       ),
     },
@@ -175,7 +168,7 @@ export function ServiceDetail() {
         />
       ) : null,
     },
-    connectionsTab(connections, t, deliveryQuery),
+    connectionsTab(read, t, deliveryQuery),
     {
       id: "ports",
       label: t("columns", "ports"),
@@ -248,10 +241,8 @@ export function ServiceDetail() {
       id: "endpoints",
       label: "Endpoints",
       glyph: viewGlyph(Waypoints),
-      mark: endpointsMark(connections, subject, t),
-      content: subject ? (
-        <PublishedEndpoints query={connections} service={subject} />
-      ) : null,
+      mark: endpointsMark(read, t),
+      content: <PublishedEndpoints query={read} />,
     },
     {
       id: "labels",
