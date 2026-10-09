@@ -189,13 +189,16 @@ describe("a pod up and failing its readiness probe", () => {
       crashLooping: 0,
       notReady: 1,
       stuck: [],
+      starting: 0,
     };
 
     expect(podsServing(composition)).toBe(
       pods.filter((pod) => podRole(pod, null) === "ok").length
     );
     expect(
-      podSegments(composition).find((segment) => segment.label === "NotReady")
+      podSegments(composition, t).find(
+        (segment) => segment.label === "NotReady"
+      )
     ).toEqual({ label: "NotReady", count: 1, tone: "warn" });
   });
 });

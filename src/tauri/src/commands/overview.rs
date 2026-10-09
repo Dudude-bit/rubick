@@ -16,7 +16,7 @@ use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::resources::node_budget::holds_reservation;
 use crate::resources::{
-    condition_is_true, crash_looping, job_state, pending_grace, pending_since, stuck_reason,
+    condition_is_true, crash_looping, job_state, pending_since, stuck_reason, within_pending_grace,
     Rollout,
 };
 use crate::state::AppState;
@@ -275,6 +275,10 @@ pub struct PodComposition {
     /// Needs attention print. Counted as Pending, a pod the list calls
     /// `CreateContainerConfigError` read as merely slow to start.
     pub stuck: Vec<ReasonCount>,
+    /// A subset of `pending`, apart from `stuck`: pods still inside the wait
+    /// `pending_grace` gives them and showing no fault, which Needs attention
+    /// does not list and the workload running them counts as coming up.
+    pub starting: usize,
 }
 
 /// How many pods one reason holds.
@@ -484,12 +488,10 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             .conditions
             .as_ref()
             .and_then(|cs| cs.iter().find(|c| c.type_ == "PodScheduled"));
-        let pending_since = pending_since(pod);
-        // Undated pods fall through and get reported: an unknown age is not
-        // evidence that the pod is young.
-        if pending_since.is_some_and(|t| now - t < chrono::Duration::seconds(pending_grace(pod))) {
+        if within_pending_grace(pod, now) {
             return None;
         }
+        let pending_since = pending_since(pod);
         return Some(ClusterProblem {
             severity: ProblemSeverity::Critical,
             kind: "Pod".to_string(),
@@ -1024,6 +1026,8 @@ fn pod_composition<'a>(
                 composition.pending += 1;
                 if let Some((reason, _)) = stuck_reason(pod) {
                     *stuck.entry(reason).or_default() += 1;
+                } else if !crash_looping(pod, now) && within_pending_grace(pod, now) {
+                    composition.starting += 1;
                 }
             }
             "Succeeded" => composition.succeeded += 1,
@@ -2272,6 +2276,37 @@ mod tests {
 
         let names: Vec<_> = problems.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, vec!["stuck", "unschedulable"]);
+    }
+
+    /// Sam's big-pull, placed and pulling its image, read amber "Pending" on
+    /// the Overview's Pods tile while its page and its Deployment read coming
+    /// up. Fails if a pod Needs attention lets off is not counted as starting,
+    /// or one it lists, past its wait or held in an error, is.
+    #[test]
+    fn a_pending_pod_inside_its_wait_is_counted_starting_as_needs_attention_lets_it_off() {
+        let now = Utc::now();
+        let placed = |name: &str, pending_for: i64| {
+            let mut p = pending_pod(name, now, pending_for);
+            p.status
+                .as_mut()
+                .expect("a status")
+                .conditions
+                .as_mut()
+                .expect("conditions")[0]
+                .status = "True".to_string();
+            p
+        };
+        let pods = [
+            placed("big-pull", 90),
+            pending_pod("just-made", now, PENDING_GRACE_SECONDS - 10),
+            placed("stuck", START_GRACE_SECONDS + 10),
+            pending_pod("never-placed", now, PENDING_GRACE_SECONDS + 10),
+            config_error_pod(),
+        ];
+        let composition = pod_composition(&pods, now);
+        assert_eq!((composition.pending, composition.starting), (5, 2));
+        let listed = pod_problems(&pods, now).len();
+        assert_eq!(composition.pending - composition.starting, listed);
     }
 
     /// Without a `PodScheduled` condition the creation timestamp is the only

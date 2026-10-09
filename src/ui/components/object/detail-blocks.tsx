@@ -393,7 +393,7 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
   );
 }
 
-export type CompositionTone = "ok" | "warn" | "err" | "neutral";
+export type CompositionTone = "ok" | "pending" | "warn" | "err" | "neutral";
 
 export interface CompositionSegment {
   label: string;
@@ -403,6 +403,7 @@ export interface CompositionSegment {
 
 const SEGMENT_BAR: Record<CompositionTone, string> = {
   ok: "bg-ok",
+  pending: "bg-info",
   warn: "bg-warn",
   err: "bg-err",
   neutral: "bg-fg-fnt",
@@ -411,6 +412,7 @@ const SEGMENT_BAR: Record<CompositionTone, string> = {
 /** Only the abnormal segments carry colour; the healthy majority stays quiet. */
 const SEGMENT_LEGEND: Record<CompositionTone, string> = {
   ok: "text-fg-fnt",
+  pending: "text-info",
   warn: "text-warn",
   err: "text-err",
   neutral: "text-fg-fnt",

@@ -7366,6 +7366,12 @@ export const ru: Catalogue = {
       many: "приостановлены",
       other: "приостановлены",
     },
+    startingCounted: {
+      one: "запускается",
+      few: "запускаются",
+      many: "запускаются",
+      other: "запускаются",
+    },
     waitingCounted: {
       one: "ожидает",
       few: "ожидают",

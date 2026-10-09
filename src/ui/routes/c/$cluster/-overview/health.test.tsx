@@ -88,6 +88,7 @@ const RUNNING: PodComposition = {
   crashLooping: 0,
   notReady: 0,
   stuck: [],
+  starting: 0,
 };
 
 const problem: ClusterProblem = {
@@ -305,6 +306,7 @@ describe("the healthy line when the node read was refused", () => {
     crashLooping: 0,
     notReady: 0,
     stuck: [],
+    starting: 0,
   };
 
   /**
@@ -361,7 +363,7 @@ describe("the Deployments tile", () => {
 
     expect(segments).toEqual([
       { label: "Ready", count: 4, tone: "ok" },
-      { label: "Progressing", count: 1, tone: "neutral" },
+      { label: "Progressing", count: 1, tone: "pending" },
       { label: "Paused", count: 1, tone: "warn" },
       { label: "Idle", count: 2, tone: "neutral" },
       { label: "Degraded", count: 1, tone: "warn" },
@@ -536,6 +538,7 @@ describe("what the panels offer Share", () => {
         crashLooping: 0,
         notReady: 0,
         stuck: [],
+        starting: 0,
       },
       jobs: null,
       nodes: [],
@@ -741,6 +744,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 1,
       notReady: 0,
       stuck: [],
+      starting: 0,
     });
 
     const summary = screen.getByTestId("attention-summary");
@@ -768,6 +772,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 3,
       notReady: 1,
       stuck: [],
+      starting: 0,
     });
 
     const summary = screen.getByTestId("attention-summary");
@@ -775,6 +780,44 @@ describe("what Needs attention says it checked", () => {
     expect(summary).toHaveTextContent(
       "(1 NotReady, 3 CrashLoop, 1 Pending, 4 Failed)"
     );
+  });
+
+  /**
+   * Sam's big-pull, placed and pulling its image: the Pods tile and the
+   * overall line said "Pending" in amber while its page and its Deployment
+   * said coming up in blue, and the Deployments tile drew Progressing grey.
+   * Fails if a pod still inside its wait is counted with the ones past it,
+   * or either tile draws coming up in another colour than the badges do.
+   */
+  it("counts a pod still inside its wait as starting, apart from Pending", async () => {
+    const pods: PodComposition = {
+      running: 2,
+      pending: 3,
+      succeeded: 0,
+      failed: 0,
+      unknown: 0,
+      crashLooping: 0,
+      notReady: 0,
+      stuck: [],
+      starting: 2,
+    };
+    await panel(attentionFrom([{ ...problem, severity: "critical" }]), pods);
+
+    expect(screen.getByTestId("attention-summary")).toHaveTextContent(
+      "(2 Starting, 1 Pending)"
+    );
+    expect(
+      podSegments(pods, t)
+        .filter((segment) => segment.count > 0)
+        .map(({ label, count, tone }) => [label, count, tone])
+    ).toEqual([
+      ["Running", 2, "ok"],
+      ["Starting", 2, "pending"],
+      ["Pending", 1, "warn"],
+    ]);
+    expect(
+      deploymentSegments([{ reason: "Progressing", count: 1 }], t)[0].tone
+    ).toBe("pending");
   });
 
   /**
@@ -792,6 +835,7 @@ describe("what Needs attention says it checked", () => {
       crashLooping: 0,
       notReady: 0,
       stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
+      starting: 0,
     };
     await panel(attentionFrom([{ ...problem, severity: "critical" }]), pods);
 
@@ -802,7 +846,7 @@ describe("what Needs attention says it checked", () => {
     );
     expect(summary).not.toHaveTextContent("Pending");
     expect(
-      podSegments(pods)
+      podSegments(pods, t)
         .filter((segment) => segment.count > 0)
         .map(({ label, count, tone }) => [label, count, tone])
     ).toEqual([

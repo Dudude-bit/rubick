@@ -231,6 +231,7 @@ const FULL_OVERVIEW: ClusterOverviewData = {
     crashLooping: 0,
     notReady: 0,
     stuck: [],
+    starting: 0,
   },
   jobs: null,
   deployments: null,

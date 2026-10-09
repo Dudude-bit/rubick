@@ -444,8 +444,8 @@ function capped(lines: AttentionLine[]): AttentionLine[] {
 }
 
 /** Not-running pods by phase, in the words the composition bar uses. */
-function notRunning(pods: PodComposition): string {
-  return podSegments(pods)
+function notRunning(pods: PodComposition, t: T): string {
+  return podSegments(pods, t)
     .filter((segment) => segment.label !== "Running" && segment.count > 0)
     .map((segment) => `${segment.count} ${segment.label}`)
     .join(", ");
@@ -477,7 +477,7 @@ export function AttentionPanel({
   const unchecked = attention.checks.filter((check) => check.state !== "read");
   const serving = podsServing(pods);
   const readyNodes = nodes.filter((n) => n.ready).length;
-  const down = notRunning(pods);
+  const down = notRunning(pods, t);
   const summaryRole: StatusRole = worst ?? (complete ? "ok" : "neutral");
 
   return (
@@ -618,7 +618,7 @@ export function WorkloadsPanel({
           total={podCount}
           label={podCount === 1 ? "Pod" : "Pods"}
           emptyMessage={t("empty", "noneInScope")}
-          segments={podSegments(pods)}
+          segments={podSegments(pods, t)}
         />
         <Composition
           total={counts.deployments}

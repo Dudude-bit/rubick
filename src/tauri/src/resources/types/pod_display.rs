@@ -282,6 +282,13 @@ pub fn pending_grace(pod: &Pod) -> i64 {
     }
 }
 
+/// Whether a Pending pod is still inside the wait [`pending_grace`] gives it.
+/// An undated pod is not: an unknown age is not evidence that it is young.
+#[must_use]
+pub fn within_pending_grace(pod: &Pod, now: DateTime<Utc>) -> bool {
+    pending_since(pod).is_some_and(|t| now - t < chrono::Duration::seconds(pending_grace(pod)))
+}
+
 /// Waiting-state reasons that mean the pod is stuck, not starting up.
 pub const STUCK_WAITING_REASONS: &[&str] = &[
     "CrashLoopBackOff",

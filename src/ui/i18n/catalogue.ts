@@ -6728,6 +6728,7 @@ export const en = {
     idleCounted: { other: "Idle" },
     retryingCounted: { other: "Retrying" },
     suspendedCounted: { other: "Suspended" },
+    startingCounted: { other: "Starting" },
     waitingCounted: { other: "Waiting" },
   },
   statusMeaning: {

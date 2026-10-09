@@ -1876,6 +1876,7 @@ export interface PodComposition {
   crashLooping: number;
   notReady: number;
   stuck: ReasonCount[];
+  starting: number;
 }
 
 export interface ReasonCount {
