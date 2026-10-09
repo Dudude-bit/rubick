@@ -9,6 +9,14 @@ import { describeTermination } from "@/lib/pod-status";
 import { listenForStreamFailure } from "@/lib/stream-failure";
 import { listenEvent } from "@/lib/events";
 import { useT } from "@/i18n/useT";
+import { useClusterStore } from "@/stores/clusterStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
+import {
+  endShell,
+  keptOn,
+  scrollbackOf,
+  useKeptShellStore,
+} from "@/stores/keptShellStore";
 
 export interface PodTerminalProps {
   podName: string;
@@ -18,9 +26,9 @@ export interface PodTerminalProps {
 }
 
 /**
- * Pod-specific terminal wrapper.
- * Handles pod session creation, polling, and lifecycle management.
- * Uses the generic Terminal component for rendering.
+ * Pod-specific terminal wrapper: opens the shell, or attaches to the one this
+ * tab already keeps here, and ends it when the reader or the pod does. Going
+ * away does not end it; its tab does (`useKeptShells`).
  */
 export function PodTerminal({
   podName,
@@ -29,7 +37,16 @@ export function PodTerminal({
   onClose,
 }: PodTerminalProps) {
   const t = useT();
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [kept] = useState(() => {
+    const shell = keptOn(useKeptShellStore.getState().shells, {
+      tab: useScopeTabStore.getState().activeId,
+      context: useClusterStore.getState().currentContext,
+      namespace,
+      pod: podName,
+    });
+    return shell?.container === containerName ? shell.id : null;
+  });
+  const [sessionId, setSessionId] = useState<string | null>(kept);
   const [error, setError] = useState<string | null>(null);
   const [unavailableReason, setUnavailableReason] = useState<string | null>(
     null
@@ -37,7 +54,7 @@ export function PodTerminal({
   const [isConnecting, setIsConnecting] = useState(false);
   const [ended, setEnded] = useState(false);
   const connectAttemptRef = useRef(0);
-  const sessionIdRef = useRef<string | null>(null);
+  const sessionIdRef = useRef<string | null>(kept);
   // The shell opens at the pane's size, so it never has to be told one later.
   const sizeRef = useRef<{ cols: number; rows: number } | null>(null);
   const [measured, setMeasured] = useState(false);
@@ -81,6 +98,14 @@ export function PodTerminal({
         return;
       }
 
+      useKeptShellStore.getState().keep({
+        id: sid,
+        tab: useScopeTabStore.getState().activeId,
+        context: useClusterStore.getState().currentContext ?? "",
+        namespace,
+        pod: podName,
+        container: containerName,
+      });
       sessionIdRef.current = sid;
       setSessionId(sid);
       setEnded(false);
@@ -94,13 +119,12 @@ export function PodTerminal({
     }
   }, [namespace, podName, containerName]);
 
-  // Disconnect from pod
-  const disconnect = useCallback(async () => {
-    if (sessionId) {
-      await commands.closeTerminal(sessionId);
-      setSessionId(null);
-    }
-  }, [sessionId]);
+  const disconnect = useCallback(() => {
+    const sid = sessionIdRef.current;
+    if (!sid) return;
+    void endShell(sid);
+    setSessionId(null);
+  }, []);
 
   // A session that dies on its own. `openPodShell` hands back an id
   // before the exec upgrade has been answered, so a rejected handshake
@@ -149,18 +173,20 @@ export function PodTerminal({
     };
   }, []);
 
-  // Opens once the pane has its size. Leaving closes the session, and one
-  // still being opened is closed by `connect` when its id arrives.
+  // Opens once the pane has its size, unless there is a kept one to attach
+  // to. A shell still being opened when the pane goes is closed by `connect`
+  // when its id arrives; an open one stays with its tab.
   useEffect(() => {
-    if (!measured) return;
-    connect();
-    return () => {
-      connectAttemptRef.current += 1;
-      const sid = sessionIdRef.current;
-      if (sid) commands.closeTerminal(sid).catch(() => {});
-    };
+    if (measured && !kept) connect();
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [measured]);
+  useEffect(
+    () => () => {
+      connectAttemptRef.current += 1;
+    },
+    []
+  );
+  const replay = useCallback(() => scrollbackOf(sessionIdRef.current), []);
 
   // Poll for pod status while connected
   useEffect(() => {
@@ -284,6 +310,9 @@ export function PodTerminal({
         metadata={metadata}
         onClose={handleClose}
         onSize={onSize}
+        replay={replay}
+        ownsSession={false}
+        closeLabel={t("activity", "endShell", { pod: podName })}
       />
     </div>
   );

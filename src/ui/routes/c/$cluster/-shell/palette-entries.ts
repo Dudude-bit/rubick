@@ -10,7 +10,7 @@ import {
   Server,
   Settings,
   ShieldUser,
-  Terminal,
+  SquareTerminal,
 } from "lucide-react";
 
 import type { ActivityTab } from "@/stores/activityPanelStore";
@@ -203,7 +203,7 @@ const PANELS: Array<{
   icon: IconType;
 }> = [
   { tab: "ports", label: "panelPortForwards", icon: Network },
-  { tab: "terminals", label: "terminals", icon: Terminal },
+  { tab: "terminals", label: "terminals", icon: SquareTerminal },
 ];
 
 /**

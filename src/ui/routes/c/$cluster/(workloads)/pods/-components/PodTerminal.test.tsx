@@ -35,6 +35,7 @@ vi.mock("@/lib/commands", () => ({
 const pane = vi.hoisted(() => ({
   measure: null as null | (() => void),
   holdSize: false,
+  close: undefined as undefined | (() => void),
 }));
 vi.mock("@/components/terminal/Terminal", async () => {
   const { useEffect } = await import("react");
@@ -42,23 +43,41 @@ vi.mock("@/components/terminal/Terminal", async () => {
     Terminal: ({
       sessionId,
       onSize,
+      replay,
+      onClose,
+      closeLabel,
     }: {
       sessionId: string | null;
       onSize?: (cols: number, rows: number) => void;
+      replay?: () => string;
+      onClose?: () => void;
+      closeLabel?: string;
     }) => {
+      pane.close = onClose;
       useEffect(() => {
         pane.measure = () => onSize?.(132, 41);
         if (!pane.holdSize) pane.measure();
       }, [onSize]);
       return (
-        <div data-testid="terminal-stub" data-session-id={sessionId ?? ""} />
+        <div
+          data-testid="terminal-stub"
+          data-session-id={sessionId ?? ""}
+          data-replay={sessionId ? (replay?.() ?? "") : ""}
+          data-close-label={closeLabel ?? ""}
+        />
       );
     },
   };
 });
 
 import { commands } from "@/lib/commands";
+import { heard, useKeptShellStore } from "@/stores/keptShellStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { PodTerminal } from "./PodTerminal";
+
+const closePane = () => pane.close?.();
+
+beforeEach(() => useKeptShellStore.setState({ shells: [] }));
 
 const props = {
   podName: "log-demo-7f9",
@@ -190,10 +209,10 @@ describe("a shell the reader exited", () => {
   });
 
   /**
-   * Leaving the page is leaving the shell. Fails if the pane goes away and
-   * the session is left for nobody to close.
+   * The pane goes when its tab is parked; the shell is the reader's and stays
+   * with the tab. Fails if the pane ends it, or leaves it kept by nobody.
    */
-  it("closes its session when it goes away", async () => {
+  it("leaves its session with its tab when it goes away", async () => {
     const { unmount } = render(<PodTerminal {...props} />);
     await waitFor(() =>
       expect(screen.getByTestId("terminal-stub")).toHaveAttribute(
@@ -204,7 +223,81 @@ describe("a shell the reader exited", () => {
 
     unmount();
 
+    expect(commands.closeTerminal).not.toHaveBeenCalled();
+    expect(useKeptShellStore.getState().shells).toMatchObject([
+      {
+        id: "term-1",
+        tab: useScopeTabStore.getState().activeId,
+        pod: "log-demo-7f9",
+        container: "app",
+      },
+    ]);
+  });
+
+  /**
+   * Coming back to the page attaches to the shell the tab kept, with what it
+   * printed while nobody watched. Fails if a second shell is opened, or the
+   * pane starts blank.
+   */
+  it("attaches to the shell its tab kept, with what it printed meanwhile", async () => {
+    useKeptShellStore.getState().keep({
+      id: "term-kept",
+      tab: useScopeTabStore.getState().activeId,
+      context: "",
+      namespace: "default",
+      pod: "log-demo-7f9",
+      container: "app",
+    });
+    heard("term-kept", "/srv/app # ls\r\nindex.html\r\n/srv/app # ");
+
+    render(<PodTerminal {...props} />);
+
+    const pane = screen.getByTestId("terminal-stub");
+    expect(pane).toHaveAttribute("data-session-id", "term-kept");
+    expect(pane).toHaveAttribute(
+      "data-replay",
+      "/srv/app # ls\r\nindex.html\r\n/srv/app # "
+    );
+    await act(async () => {});
+    expect(commands.openPodShell).not.toHaveBeenCalled();
+  });
+
+  /** A shell kept for another container is not this pane's. */
+  it("opens its own shell when the kept one is in another container", async () => {
+    useKeptShellStore.getState().keep({
+      id: "term-sidecar",
+      tab: useScopeTabStore.getState().activeId,
+      context: "",
+      namespace: "default",
+      pod: "log-demo-7f9",
+      container: "sidecar",
+    });
+
+    await renderConnected();
+
+    expect(commands.openPodShell).toHaveBeenCalledTimes(1);
+  });
+
+  /** Lena met the same shell as "Терминал" and "Оболочка". Fails if its × calls it anything but a shell. */
+  it("calls its close button ending the shell", async () => {
+    await renderConnected();
+    expect(screen.getByTestId("terminal-stub")).toHaveAttribute(
+      "data-close-label",
+      "End the shell in log-demo-7f9"
+    );
+  });
+
+  /** Ending it is the reader's own act. Fails if × leaves the shell kept or running. */
+  it("ends the shell and lets go of it when the reader closes the pane", async () => {
+    await renderConnected();
+    expect(useKeptShellStore.getState().shells).toHaveLength(1);
+
+    act(() => {
+      closePane();
+    });
+
     expect(commands.closeTerminal).toHaveBeenCalledWith("term-1");
+    expect(useKeptShellStore.getState().shells).toEqual([]);
   });
 });
 

@@ -106,7 +106,8 @@ interface ScopeTabState {
     background?: boolean;
   }) => Promise<void>;
   closeTab: (id: string) => Promise<void>;
-  activateTab: (id: string) => Promise<void>;
+  /** `href`, when given, is where the tab opens instead of where it was left. */
+  activateTab: (id: string, href?: string) => Promise<void>;
   /** Step through the strip, wrapping at both ends. */
   activateRelative: (delta: number) => Promise<void>;
   /** Activate by position; negative counts from the end, as `Array.at` does. */
@@ -273,15 +274,18 @@ export const useScopeTabStore = create<ScopeTabState>()(
         await applyScope(tab);
       },
 
-      activateTab: async (id: string) => {
+      activateTab: async (id: string, href?: string) => {
         const { tabs, activeId } = get();
         if (id === activeId) return;
         const target = tabs.find((tab) => tab.id === id);
         if (!target) return;
+        const to = href ?? target.href;
         set({
-          tabs: parkActive(tabs, activeId),
+          tabs: parkActive(tabs, activeId).map((tab) =>
+            tab.id === id ? { ...tab, href: to } : tab
+          ),
           activeId: id,
-          pendingHref: target.href,
+          pendingHref: to,
         });
         await applyScope(target);
       },

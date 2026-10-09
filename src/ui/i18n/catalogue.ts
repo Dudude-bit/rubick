@@ -1111,6 +1111,7 @@ export const en = {
     newTabOn: "New tab on",
     closeTab: "Close tab",
     closeNamed: "Close {name}",
+    tabKeepsShell: "A shell is running in {target}. Closing this tab ends it.",
     filterNamespaces: "Filter namespaces",
     filterNamespacesPlaceholder: "Filter namespaces…",
     typeNamespacePlaceholder: "Type a namespace…",
@@ -1606,13 +1607,16 @@ export const en = {
     title: "Activity",
     idle: "activity",
     ports: "Ports",
-    terminals: "Terminals",
+    terminals: "Shells",
     endShell: "End the shell in {pod}",
-    readingTerminals: "Reading the open terminals",
-    terminalsUnread: "Could not read the open terminals",
+    shellEndedOnLeave: "Shell ended",
+    shellEndedOnLeaveBody:
+      "The shell in {target} was ended because its tab moved to another page.",
+    readingTerminals: "Reading the open shells",
+    terminalsUnread: "Could not read the open shells",
     jobs: "Jobs",
     portForwards: { one: "{n} port forward", other: "{n} port forwards" },
-    terminalCount: { one: "{n} terminal", other: "{n} terminals" },
+    terminalCount: { one: "{n} shell", other: "{n} shells" },
     watchCount: { one: "{n} watch", other: "{n} watches" },
     watching: "Watching",
     active: "{n} active",
@@ -5940,9 +5944,8 @@ export const en = {
     httpListenerOffSuffix:
       "and it names no certificate of any kind, so GKE builds neither listener.",
     manifestDeclaresNoObjects: "The stored manifest declares no objects.",
-    connectToViewTerminals: "Connect to a cluster to view terminals",
-    noTerminalsOnContext: "No terminal sessions open on {context}",
-    openFromPodPage: "Open one from any pod's detail page.",
+    noShellsOpen: "No shells are open",
+    openFromPodPage: "Start one on any pod's page.",
     noIngressClassNamed: "No IngressClass named {name} in this cluster",
     ingressNamesNoClass:
       "This Ingress names no class, and this cluster has no default one",
@@ -6093,8 +6096,7 @@ export const en = {
     notReportedLower: "not reported",
     printerNotReported:
       "The object has no status yet, so its controller has not reported {column}.",
-    shellEndedPodGone:
-      "The shell session ended: its pod was deleted, and the terminal went with it.",
+    shellEndedPodGone: "The shell ended: its pod was deleted.",
     printerNotEvaluated:
       "This app cannot evaluate the column's JSONPath, so this is not a reading of the object: {expression}",
     noLower: "no",
@@ -7032,7 +7034,7 @@ export const en = {
     myAccess: "my access, can i, permissions, rbac, auth can-i",
     settings: "preferences, options",
     ports: "port-forward, tunnel",
-    terminals: "shell, console",
+    terminals: "terminal, console",
   },
   count: {
     secondsShort: "{n} s",
@@ -7423,11 +7425,6 @@ export const en = {
       other: "Busiest slice {clock} with {lines} lines.",
     },
     andNMore: ", and {n} more",
-    openOnOtherClusters: {
-      one: "{n} open on another cluster. Open one here from any pod's detail page.",
-      other:
-        "{n} open on other clusters. Open one here from any pod's detail page.",
-    },
     acrossNamespaces: {
       one: "across {n} namespace",
       other: "across {n} namespaces",

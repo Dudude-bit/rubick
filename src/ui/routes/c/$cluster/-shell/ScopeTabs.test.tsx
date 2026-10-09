@@ -53,6 +53,7 @@ import { useClusterIdentityStore } from "@/stores/clusterIdentityStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore, type ScopeTab } from "@/stores/scopeTabStore";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
+import { useKeptShellStore } from "@/stores/keptShellStore";
 
 import { translate } from "@/i18n";
 import type { ContextInfo } from "@/generated/types";
@@ -162,6 +163,41 @@ describe("what a tab says", () => {
       "aria-label",
       "k3d-dev · kube-system · Nodes"
     );
+  });
+
+  /**
+   * Closing a tab ends the shell it keeps, so the tab says it keeps one,
+   * parked or not. Fails if a tab with a running shell looks like any other.
+   */
+  it("says which tab keeps a running shell, and that closing it ends the shell", async () => {
+    useScopeTabStore.setState({
+      tabs: [
+        tab({ id: "a", href: "/c/k3d-dev/pods" }),
+        tab({ id: "b", href: "/c/k3d-dev/pods/shop/cart-4f68h" }),
+      ],
+      activeId: "a",
+      pendingHref: null,
+    });
+    useKeptShellStore.setState({
+      shells: [
+        {
+          id: "term-1",
+          tab: "b",
+          context: "k3d-dev",
+          namespace: "shop",
+          pod: "cart-4f68h",
+          container: "app",
+        },
+      ],
+    });
+    await mount();
+
+    expect(tabs()[0].getAttribute("aria-label")).not.toMatch(/shell/);
+    expect(tabs()[1]).toHaveAttribute(
+      "aria-label",
+      "k3d-dev · all namespaces · cart-4f68h. A shell is running in cart-4f68h/app. Closing this tab ends it."
+    );
+    useKeptShellStore.setState({ shells: [] });
   });
 
   it("has no native title left to cover the pickers", async () => {

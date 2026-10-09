@@ -827,8 +827,8 @@ export const ru: Catalogue = {
     updateStrategy: "Стратегия обновления",
     debugWithCopy: "Отладить на копии этого пода",
     debugWithEphemeral: "Отладить эфемерным контейнером",
-    containerToAttach: "Контейнер, к которому подключить терминал",
-    attachShellTo: "Подключиться к {name} и закрыть открытую сессию",
+    containerToAttach: "Контейнер, к которому подключить оболочку",
+    attachShellTo: "Подключить оболочку к {name}, а открытую завершить",
     confirmByTyping: "Подтвердите действие, введя требуемый текст",
     typeWord: "Введите",
     toConfirm: "для подтверждения",
@@ -843,7 +843,7 @@ export const ru: Catalogue = {
     cordonFailed: "Не удалось закрыть узел для планирования: {error}",
     uncordonFailed: "Не удалось открыть узел для планирования: {error}",
     viewLogs: "Открыть логи",
-    shell: "Терминал",
+    shell: "Оболочка",
     unbound: "не привязан",
     upgradeRelease: "Обновить релиз",
     upgradeReleaseIn: "Обновление {name} в пространстве имён {namespace}",
@@ -1105,6 +1105,8 @@ export const ru: Catalogue = {
     newTabOn: "Новая вкладка на",
     closeTab: "Закрыть вкладку",
     closeNamed: "Закрыть {name}",
+    tabKeepsShell:
+      "В {target} запущена оболочка. Если закрыть вкладку, оболочка завершится.",
     filterNamespaces: "Фильтр пространств имён",
     filterNamespacesPlaceholder: "Фильтр пространств имён…",
     typeNamespacePlaceholder: "Введите пространство имён…",
@@ -1621,10 +1623,13 @@ export const ru: Catalogue = {
     title: "Активность",
     idle: "активность",
     ports: "Порты",
-    terminals: "Терминалы",
+    terminals: "Оболочки",
     endShell: "Завершить оболочку в {pod}",
-    readingTerminals: "Читается список открытых терминалов",
-    terminalsUnread: "Не удалось прочитать список открытых терминалов",
+    shellEndedOnLeave: "Оболочка завершена",
+    shellEndedOnLeaveBody:
+      "Оболочка в {target} завершена, потому что её вкладка перешла на другую страницу.",
+    readingTerminals: "Читается список открытых оболочек",
+    terminalsUnread: "Не удалось прочитать список открытых оболочек",
     jobs: "Задачи",
     // Three forms, and the plural rule picks between them by the number:
     // 1 проброс, 2 проброса, 5 пробросов, 21 проброс.
@@ -1642,10 +1647,10 @@ export const ru: Catalogue = {
     },
     watching: "Наблюдение",
     terminalCount: {
-      one: "{n} терминал",
-      few: "{n} терминала",
-      many: "{n} терминалов",
-      other: "{n} терминала",
+      one: "{n} оболочка",
+      few: "{n} оболочки",
+      many: "{n} оболочек",
+      other: "{n} оболочки",
     },
     active: "активных: {n}",
   },
@@ -6322,7 +6327,7 @@ export const ru: Catalogue = {
     filesWait: "Файлы пока не прочитаны",
     filesWaitBody:
       "Каждая папка читается командой, запущенной в контейнере. Это происходит только по вашей команде, а не при открытии страницы по ссылке или из восстановленной вкладки.",
-    noShellAttached: "Терминал не подключён",
+    noShellAttached: "Оболочка не подключена",
     shellSessionEnded:
       "Сессия завершена. Выберите контейнер выше, чтобы открыть новую; пока здесь ничего не выполняется.",
     pvUnbound: "не привязан: этот том никто не запрашивает",
@@ -6558,9 +6563,8 @@ export const ru: Catalogue = {
     httpListenerOffSuffix:
       "и он не называет никакого сертификата, поэтому GKE не строит ни одного слушателя.",
     manifestDeclaresNoObjects: "В сохранённом манифесте нет объектов.",
-    connectToViewTerminals: "Подключитесь к кластеру, чтобы видеть терминалы",
-    noTerminalsOnContext: "На {context} нет открытых терминалов",
-    openFromPodPage: "Откройте терминал со страницы любого пода.",
+    noShellsOpen: "Открытых оболочек нет",
+    openFromPodPage: "Запустите оболочку на странице любого пода.",
     noIngressClassNamed: "В этом кластере нет IngressClass с именем {name}",
     ingressNamesNoClass:
       "Этот Ingress не указывает класс, а класса по умолчанию в кластере нет",
@@ -6713,8 +6717,7 @@ export const ru: Catalogue = {
     notReportedLower: "не сообщено",
     printerNotReported:
       "У объекта ещё нет status, поэтому контроллер не сообщил {column}.",
-    shellEndedPodGone:
-      "Сеанс оболочки завершён: Pod удалён, а вместе с ним закрылся и терминал.",
+    shellEndedPodGone: "Оболочка завершена: Pod удалён.",
     printerNotEvaluated:
       "Приложение не умеет вычислять JSONPath этой колонки, поэтому значение не прочитано: {expression}",
     noLower: "нет",
@@ -8450,13 +8453,6 @@ export const ru: Catalogue = {
       other: "Самый плотный срез {clock}: {lines} строки.",
     },
     andNMore: ", и ещё {n}",
-    openOnOtherClusters: {
-      one: "{n} открыт на другом кластере. Здесь терминал можно открыть со страницы любого пода.",
-      few: "{n} открыто на других кластерах. Здесь терминал можно открыть со страницы любого пода.",
-      many: "{n} открыто на других кластерах. Здесь терминал можно открыть со страницы любого пода.",
-      other:
-        "{n} открыто на других кластерах. Здесь терминал можно открыть со страницы любого пода.",
-    },
     acrossNamespaces: {
       one: "в {n} пространстве имён",
       few: "в {n} пространствах имён",

@@ -4,7 +4,7 @@ import { None } from "@/components/ui/none";
 import { columnHeader } from "@/i18n/column-header";
 import { SortableHeader } from "@/components/ui/sortable-header";
 import { useNavigate } from "@tanstack/react-router";
-import { Eye, Trash2, Terminal, FileText } from "lucide-react";
+import { Eye, Trash2, SquareTerminal, FileText } from "lucide-react";
 import { useMemo } from "react";
 import {
   usePodsWithMetrics,
@@ -256,7 +256,7 @@ export function PodList() {
           ),
       },
       {
-        icon: Terminal,
+        icon: SquareTerminal,
         label: t("action", "shell"),
         onClick: (item) => {
           useShellAskStore.getState().askFor(item.namespace, item.name);

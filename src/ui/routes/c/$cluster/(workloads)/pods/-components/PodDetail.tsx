@@ -122,6 +122,8 @@ import {
   useTerminalSessionStore,
 } from "@/stores/terminalSessionStore";
 import { asksFor, useShellAskStore } from "@/stores/shellAskStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { endShell, keptOn, useKeptShellStore } from "@/stores/keptShellStore";
 import type {
   ContainerInfo,
   DebugResult,
@@ -541,6 +543,22 @@ export function PodDetail() {
     if (askedElsewhere) dropShellAsk();
   }, [askedElsewhere, dropShellAsk]);
 
+  // The shell this tab started here and kept while the reader was elsewhere:
+  // their ask, still standing, on the container they chose.
+  const tabId = useScopeTabStore((state) => state.activeId);
+  const kept = useKeptShellStore((state) =>
+    keptOn(state.shells, {
+      tab: tabId,
+      context: currentContext,
+      namespace,
+      pod: name,
+    })
+  );
+  if (kept && !askedTabs.has("shell")) {
+    setAsked({ pod: podKey, tabs: new Set([...askedTabs, "shell"]) });
+    setShellChoice({ pod: podKey, container: kept.container });
+  }
+
   const openTab = useCallback(
     (tab: string) => {
       if (RUNS_IN_CONTAINER.has(tab)) ask(tab);
@@ -556,6 +574,7 @@ export function PodDetail() {
   const shellEnded = choice !== null && choice.container === null;
 
   const openTerminal = (containerName: string) => {
+    if (kept && kept.container !== containerName) void endShell(kept.id);
     setShellChoice({ pod: podKey, container: containerName });
     openTab("shell");
   };
@@ -723,13 +742,11 @@ export function PodDetail() {
 
   // A shell the reader opened and left is invisible the moment they click
   // Logs. The store already knows it is there; the dot is how the tab says so.
+  // Only this tab's: another tab's shell on the same pod is not attached here.
   const shellSession = useTerminalSessionStore((state) =>
-    heardSessions(state).find(
-      (session) =>
-        session.pod === name &&
-        session.namespace === namespace &&
-        session.context === currentContext
-    )
+    kept
+      ? heardSessions(state).find((session) => session.id === kept.id)
+      : undefined
   );
 
   const deliveryQuery = deliveryOfKind(ResourceType.Pod, pod);

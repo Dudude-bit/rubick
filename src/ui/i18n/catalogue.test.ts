@@ -218,3 +218,28 @@ describe("Russian sentences that read machine-made or pointed at nothing", () =>
     expect(translate("en", "share", "shareThis")).toBe("Share this page");
   });
 });
+
+describe("the shell's name", () => {
+  /**
+   * Lena's container card offered "Терминал" beside a tab called "Оболочка",
+   * one shell under two names. Fails if the button, the tab, Activity and
+   * its count stop calling it the same thing in either language.
+   */
+  it.each([
+    ["en", "shell"],
+    ["ru", "оболоч"],
+  ] as const)(
+    "is one word in %s, wherever the shell is offered",
+    (locale, stem) => {
+      const say = (section: "action" | "columns" | "activity", key: string) =>
+        translate(locale, section as never, key as never, { n: 5 });
+      expect(say("action", "shell")).toBe(say("columns", "shell"));
+      for (const text of [
+        say("action", "shell"),
+        say("activity", "terminals"),
+        say("activity", "terminalCount"),
+      ])
+        expect(text.toLowerCase()).toContain(stem);
+    }
+  );
+});

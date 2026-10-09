@@ -87,6 +87,19 @@ impl TerminalManager {
         Ok(())
     }
 
+    /// Ask a session to end and wait, up to `within`, until its task has hung
+    /// the process up and let go of it. Whether it was gone in time.
+    pub async fn close_and_wait(&self, id: &str, within: tokio::time::Duration) -> bool {
+        let _ = self.close_session(id);
+        tokio::time::timeout(within, async {
+            while self.sessions.contains_key(id) {
+                tokio::time::sleep(tokio::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .is_ok()
+    }
+
     /// Every shell this app holds open in a container, oldest first.
     #[must_use]
     pub fn list(&self) -> Vec<TerminalSessionInfo> {
@@ -1365,6 +1378,33 @@ mod tests {
         assert!(first_closed.load(Ordering::SeqCst));
         assert!(second_closed.load(Ordering::SeqCst));
         assert!(manager.list().is_empty());
+    }
+
+    /// The live terminal tests ended while the hang-up was still on its way
+    /// and left `sh` in the container. Fails if closing and waiting returns
+    /// before the shell has been hung up and let go.
+    #[tokio::test]
+    async fn closing_and_waiting_returns_once_the_shell_has_hung_up() {
+        let (event_tx, _event_rx) = broadcast::channel(256);
+        let manager = TerminalManager::new(event_tx);
+        let (mut shell, closed) = ListedShell::new();
+        shell.hang_up_takes = Duration::from_millis(200);
+        let id = manager.create_session(Box::new(shell)).expect("session");
+        manager.mark_subscribed(&id).expect("subscribed");
+
+        assert!(manager.close_and_wait(&id, Duration::from_secs(5)).await);
+        assert!(closed.load(Ordering::SeqCst), "returned before the hang-up");
+        assert!(manager.list().is_empty());
+
+        let (mut stuck, _) = ListedShell::new();
+        stuck.hang_up_takes = Duration::from_secs(60);
+        let stuck = manager.create_session(Box::new(stuck)).expect("session");
+        assert!(
+            !manager
+                .close_and_wait(&stuck, Duration::from_millis(100))
+                .await,
+            "a hang-up still under way was reported as done"
+        );
     }
 
     /// A credential plugin's console is this machine's process, not a shell

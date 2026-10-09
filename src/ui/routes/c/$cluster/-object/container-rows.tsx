@@ -3,7 +3,7 @@ import {
   ImageIcon,
   Minus,
   ScrollText,
-  TerminalIcon,
+  SquareTerminal,
   X,
 } from "lucide-react";
 
@@ -430,7 +430,7 @@ function ContainerBlock({
             {runtime && onOpenShell && container.state.type === "running" && (
               <ReasonedAction
                 label={t("action", "shell")}
-                icon={TerminalIcon}
+                icon={SquareTerminal}
                 onClick={() => onOpenShell(container.name)}
                 reason={shellDenied}
               />

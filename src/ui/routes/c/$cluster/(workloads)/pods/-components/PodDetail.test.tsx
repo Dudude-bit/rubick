@@ -18,6 +18,10 @@ import { renderWithRouter } from "@/test/render";
 import { marcoReview } from "@/test/marco";
 import type { AccessQuery } from "@/generated/types";
 import { useShellAskStore } from "@/stores/shellAskStore";
+import { useKeptShellStore, type KeptShell } from "@/stores/keptShellStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
+import { keepShells } from "@/hooks/useKeptShells";
+import type { AnyRouter } from "@tanstack/react-router";
 import { PodDetail } from "./PodDetail";
 
 vi.mock("@/components/terminal/Terminal", async () => {
@@ -190,7 +194,7 @@ describe("a pod page whose pod is deleted while it is open", () => {
     await advance(0);
     fireEvent.mouseDown(screen.getByRole("tab", { name: /^Shell/ }));
     await advance(0);
-    expect(screen.queryByText(/shell session ended/)).toBeNull();
+    expect(screen.queryByText(/shell ended/)).toBeNull();
 
     gone = true;
     for (let read = 0; read < 2; read++) {
@@ -200,7 +204,7 @@ describe("a pod page whose pod is deleted while it is open", () => {
 
     expect(screen.getByText("This Pod no longer exists.")).toBeInTheDocument();
     expect(
-      screen.getByText(/shell session ended: its pod was deleted/)
+      screen.getByText(/shell ended: its pod was deleted/)
     ).toBeInTheDocument();
   });
 
@@ -215,7 +219,7 @@ describe("a pod page whose pod is deleted while it is open", () => {
     await advance(REFRESH_INTERVALS.resourceDetail);
     await advance(0);
     expect(screen.getByText("This Pod no longer exists.")).toBeInTheDocument();
-    expect(screen.queryByText(/shell session ended/)).toBeNull();
+    expect(screen.queryByText(/shell ended/)).toBeNull();
   });
 });
 
@@ -670,6 +674,15 @@ async function arrive(at: string) {
   return rendered;
 }
 
+/** The window's keeper of shells, as App runs it, and what it said on the way. */
+let stopKeeping: (() => void) | null = null;
+const leftPage: KeptShell[] = [];
+function keepingShells(router: AnyRouter) {
+  stopKeeping = keepShells(router, (shell) => leftPage.push(shell));
+}
+
+const terminal = () => screen.queryByTestId("terminal-stub");
+
 const clickTab = async (name: RegExp) => {
   fireEvent.mouseDown(screen.getByRole("tab", { name }));
   await advance(0);
@@ -677,8 +690,29 @@ const clickTab = async (name: RegExp) => {
 };
 
 describe("a pod page runs nothing in the container until the reader asks on it", () => {
+  afterEach(() => {
+    stopKeeping?.();
+    stopKeeping = null;
+    leftPage.length = 0;
+  });
+
   beforeEach(() => {
     useShellAskStore.getState().drop();
+    useKeptShellStore.setState({ shells: [] });
+    useScopeTabStore.setState({
+      tabs: [
+        {
+          id: "tab-1",
+          context: "prod",
+          namespace: "",
+          scope: [],
+          href: "/c/prod",
+          missing: false,
+        },
+      ],
+      activeId: "tab-1",
+      pendingHref: null,
+    });
     vi.mocked(invoke).mockImplementation(async (command: string, args) => {
       if (command === "get_pod")
         return running((args as { name: string }).name);
@@ -699,6 +733,7 @@ describe("a pod page runs nothing in the container until the reader asks on it",
    */
   it("does not open a shell on the next pod when the page is moved there by a link", async () => {
     const { router } = await arrive("/c/prod/pods/shop/cart-a");
+    keepingShells(router);
     await clickTab(/^Shell/);
     expect(execs()).toEqual(["open_pod_shell cart-a"]);
 
@@ -780,15 +815,22 @@ describe("a pod page runs nothing in the container until the reader asks on it",
     const { unmount } = await arrive("/c/prod/pods/shop/cart-a?shell=app");
     expect(execs()).toEqual(["open_pod_shell cart-a"]);
     unmount();
+    useKeptShellStore.setState({ shells: [] });
 
     await arrive("/c/prod/pods/shop/cart-a?shell=app");
     expect(execs()).toEqual(["open_pod_shell cart-a"]);
   });
 
-  /** Fails if leaving the page leaves the session open behind it. */
-  it("closes the session when the page goes away", async () => {
+  /**
+   * Leaving the pod in the same tab ends the shell, and says which. Fails if
+   * the session is left open behind the page, or ends without a word.
+   */
+  it("ends the shell and says so when its tab leaves the pod", async () => {
     const { router } = await arrive("/c/prod/pods/shop/cart-a");
+    keepingShells(router);
     await clickTab(/^Shell/);
+    expect(leftPage).toEqual([]);
+
     await act(() => router.navigate({ href: "/c/prod/events" }));
     await advance(0);
 
@@ -796,5 +838,121 @@ describe("a pod page runs nothing in the container until the reader asks on it",
     expect(invoke).toHaveBeenCalledWith("close_terminal", {
       sessionId: "term-1",
     });
+    expect(leftPage).toMatchObject([{ pod: "cart-a", container: "app" }]);
+  });
+
+  /**
+   * Dana flipped to another tab to look something up and her shell was gone
+   * within 3 s. Fails if parking the tab ends the shell, if coming back opens
+   * a second one, or if it lands on Start instead of the shell she had.
+   */
+  it("keeps the shell while its tab is parked, and comes back to the same one", async () => {
+    const { router } = await arrive("/c/prod/pods/shop/cart-a");
+    keepingShells(router);
+    await clickTab(/^Shell/);
+    const owner = useScopeTabStore.getState().activeId;
+
+    await act(async () => {
+      useScopeTabStore.setState((state) => ({
+        tabs: [...state.tabs, { ...state.tabs[0], id: "other" }],
+        activeId: "other",
+        pendingHref: "/c/prod/events",
+      }));
+      await router.navigate({ href: "/c/prod/events" });
+    });
+    await advance(0);
+    act(() => useScopeTabStore.setState({ pendingHref: null }));
+    await advance(0);
+    expect(screen.getByText("events page")).toBeInTheDocument();
+    expect(invoke).not.toHaveBeenCalledWith("close_terminal", {
+      sessionId: "term-1",
+    });
+    expect(leftPage).toEqual([]);
+
+    await act(async () => {
+      useScopeTabStore.setState({
+        activeId: owner,
+        pendingHref: "/c/prod/pods/shop/cart-a?tab=shell",
+      });
+      await router.navigate({ href: "/c/prod/pods/shop/cart-a?tab=shell" });
+      useScopeTabStore.setState({ pendingHref: null });
+    });
+    await advance(0);
+    await advance(0);
+
+    expect(execs()).toEqual(["open_pod_shell cart-a"]);
+    expect(terminal()).toHaveAttribute("data-session-id", "term-1");
+    expect(
+      screen.queryByRole("button", { name: "Start a shell in app" })
+    ).toBeNull();
+    expect(invoke).not.toHaveBeenCalledWith("close_terminal", {
+      sessionId: "term-1",
+    });
+  });
+
+  /**
+   * Picking another container in the chooser ends the shell that is open,
+   * as the chooser says. Fails if the old one stays kept and running.
+   */
+  it("ends the kept shell when the reader picks another container", async () => {
+    let opened = 0;
+    vi.mocked(invoke).mockImplementation(async (command: string, args) => {
+      if (command === "get_pod")
+        return {
+          ...running((args as { name: string }).name),
+          containers: [APP_CONTAINER, { ...APP_CONTAINER, name: "worker" }],
+        };
+      if (command === "open_pod_shell") return `term-${++opened}`;
+      if (command === "check_access")
+        return (args as { queries: AccessQuery[] }).queries.map((query) => ({
+          ...query,
+          allowed: true,
+        }));
+      return undefined;
+    });
+    await arrive("/c/prod/pods/shop/cart-a");
+    await clickTab(/^Shell/);
+    expect(terminal()).toHaveAttribute("data-session-id", "term-1");
+
+    fireEvent.click(screen.getByRole("radio", { name: /worker/ }));
+    await advance(0);
+    await advance(0);
+
+    expect(invoke).toHaveBeenCalledWith("close_terminal", {
+      sessionId: "term-1",
+    });
+    expect(terminal()).toHaveAttribute("data-session-id", "term-2");
+    expect(useKeptShellStore.getState().shells).toMatchObject([
+      { id: "term-2", container: "worker" },
+    ]);
+  });
+
+  /** Closing the tab that keeps a shell is its owner leaving. Fails if it stays open. */
+  it("ends a parked shell when its tab is closed, without a note", async () => {
+    const { router } = await arrive("/c/prod/pods/shop/cart-a");
+    keepingShells(router);
+    await clickTab(/^Shell/);
+    const owner = useScopeTabStore.getState().activeId;
+    act(() =>
+      useScopeTabStore.setState((state) => ({
+        tabs: [...state.tabs, { ...state.tabs[0], id: "other" }],
+        activeId: "other",
+      }))
+    );
+    expect(invoke).not.toHaveBeenCalledWith("close_terminal", {
+      sessionId: "term-1",
+    });
+
+    act(() =>
+      useScopeTabStore.setState((state) => ({
+        tabs: state.tabs.filter((tab) => tab.id !== owner),
+      }))
+    );
+
+    expect(invoke).toHaveBeenCalledWith("close_terminal", {
+      sessionId: "term-1",
+    });
+    expect(useKeptShellStore.getState().shells).toEqual([]);
+    expect(leftPage).toEqual([]);
   });
 });
