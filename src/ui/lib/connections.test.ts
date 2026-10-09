@@ -1943,7 +1943,7 @@ describe("where a pod's replica count is really set", () => {
       connectionGroups(connections(pod, [owns(deployment, pod)]), ru).find(
         (group) => group.key === "owners"
       )?.rows ?? [];
-    expect(rows[0].detail).toContain("Застрял · готовы 0 из 2");
+    expect(rows[0].detail).toContain("Застрял · готово 0 из 2");
     expect(rows[0].detail).not.toContain("Stalled");
   });
 

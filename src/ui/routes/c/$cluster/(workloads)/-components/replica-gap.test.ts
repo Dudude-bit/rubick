@@ -133,4 +133,30 @@ describe("a Replicas bar", () => {
       [1, "not ready", "warn"],
     ]);
   });
+
+  /**
+   * The legend prints the count before the label, and Lena's read "1
+   * запускаются" and "1 сбоят". Fails if a segment's words stop agreeing
+   * with its own count, or a DaemonSet's node takes a replica's gender.
+   */
+  it("words each segment in Russian by its own count", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const said = (split: ReturnType<typeof replicaSplit>) =>
+      split.gap
+        .filter((segment) => segment.count > 0)
+        .map(({ count, label }) => `${count} ${label}`);
+
+    expect(said(replicaSplit(2, 0, [starting(30), failing], NOW, ru))).toEqual([
+      "1 запускается",
+      "1 сбоит",
+    ]);
+    expect(
+      said(replicaSplit(5, 0, [failing, failing, starting(30)], NOW, ru))
+    ).toEqual(["1 запускается", "2 сбоят", "2 не готовы"]);
+    expect(said(replicaSplit(1, 0, null, NOW, ru))).toEqual(["1 не готова"]);
+    expect(said(replicaSplit(1, 0, null, NOW, ru, false, "node"))).toEqual([
+      "1 не готов",
+    ]);
+  });
 });

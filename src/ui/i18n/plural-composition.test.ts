@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
+import { ru } from "@/i18n/ru";
 import { rowNouns } from "@/lib/resource-registry";
 import { CODE_FILES } from "@/test/source-files";
 
@@ -48,5 +49,35 @@ describe("a count in words", () => {
     expect(say("ru", "persistent volumes", 21)).toBe(
       "21 объект PersistentVolume"
     );
+  });
+
+  /**
+   * A bar's legend prints "{count} {label}", and a label written once for
+   * every count read "1 запускаются" and "1 сбоят" in Lena's Replicas block.
+   * Fails if a segment's label is translated without its own count, or with
+   * words Russian cannot inflect.
+   */
+  it("words a bar segment by the segment's own count", () => {
+    const segment =
+      /label:\s*t\(\s*"(\w+)",\s*"(\w+)"\s*(?:,\s*\{([^}]*)\})?\s*\)\s*,\s*count:\s*([^,\n]+),/g;
+    const found: string[] = [];
+    const unbound: string[] = [];
+    for (const path of CODE_FILES) {
+      const text = readFileSync(path, "utf8");
+      for (const [, section, key, values = "", count] of text.matchAll(
+        segment
+      )) {
+        const id = `${section}.${key}`;
+        found.push(id);
+        const n = /\bn:\s*([^,}\n]+)/.exec(values)?.[1].trim();
+        const entry = (ru as Record<string, Record<string, unknown>>)[
+          section
+        ]?.[key];
+        if (n !== count.trim() || typeof entry !== "object")
+          unbound.push(`${path}: ${id}`);
+      }
+    }
+    expect(found.length).toBeGreaterThan(15);
+    expect(unbound).toEqual([]);
   });
 });

@@ -194,10 +194,13 @@ export function DaemonSetDetail() {
   const startsNow = useStartsClock(splitPods);
   const waiting = !!daemonSet && workloadRole(daemonSet.rollout) === "pending";
   const split = useMemo(
-    () => replicaSplit(current, ready, splitPods, startsNow, t, waiting),
+    () =>
+      replicaSplit(current, ready, splitPods, startsNow, t, waiting, "node"),
     [current, ready, splitPods, startsNow, t, waiting]
   );
   const upToDate = daemonSet?.upToDate ?? 0;
+  const outdated = Math.max(0, desired - upToDate);
+  const unscheduled = Math.max(0, desired - current);
   const available = daemonSet?.available ?? 0;
 
   const events = useObjectEvents(ResourceType.DaemonSet, name, namespace, {
@@ -240,14 +243,18 @@ export function DaemonSetDetail() {
                       label={t("count", "nodesWanted", { n: desired })}
                       segments={[
                         {
-                          label: t("count", "readyWord"),
+                          label: t("count", "nodesReadySegment", {
+                            n: split.ready,
+                          }),
                           count: split.ready,
                           tone: "ok",
                         },
                         ...split.gap,
                         {
-                          label: t("count", "notScheduledSegment"),
-                          count: Math.max(0, desired - current),
+                          label: t("count", "notScheduledSegment", {
+                            n: unscheduled,
+                          }),
+                          count: unscheduled,
                           tone: "err",
                         },
                       ]}
@@ -258,13 +265,13 @@ export function DaemonSetDetail() {
                       label={t("action", "onCurrentSpec")}
                       segments={[
                         {
-                          label: t("action", "barUpToDate"),
+                          label: t("action", "barUpToDate", { n: upToDate }),
                           count: upToDate,
                           tone: "ok",
                         },
                         {
-                          label: t("action", "barOutdated"),
-                          count: Math.max(0, desired - upToDate),
+                          label: t("action", "barOutdated", { n: outdated }),
+                          count: outdated,
                           tone: "warn",
                         },
                       ]}
@@ -442,9 +449,10 @@ export function DaemonSetDetail() {
       connections,
       deliveryQuery,
       desired,
-      current,
+      unscheduled,
       split,
       upToDate,
+      outdated,
       available,
       t,
     ]

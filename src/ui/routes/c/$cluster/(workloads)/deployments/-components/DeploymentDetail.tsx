@@ -389,7 +389,7 @@ export function DeploymentDetail() {
                   label={t("count", "replicasWanted", { n: desired })}
                   segments={[
                     {
-                      label: t("count", "readyWord"),
+                      label: t("count", "readySegment", { n: split.ready }),
                       count: split.ready,
                       tone: "ok",
                     },

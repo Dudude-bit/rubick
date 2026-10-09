@@ -121,6 +121,7 @@ export function ReplicaSetDetail() {
   const desired = replicas?.desired ?? 0;
   const current = replicas?.current ?? 0;
   const ready = replicas?.ready ?? 0;
+  const missing = Math.max(0, desired - current);
   const startsNow = useStartsClock(splitPods);
   const split = replicaSplit(current, ready, splitPods, startsNow, t);
 
@@ -226,14 +227,14 @@ export function ReplicaSetDetail() {
                   label={t("count", "replicasWanted", { n: desired })}
                   segments={[
                     {
-                      label: t("count", "readySegment"),
+                      label: t("count", "readySegment", { n: split.ready }),
                       count: split.ready,
                       tone: "ok",
                     },
                     ...split.gap,
                     {
-                      label: t("count", "notCreatedSegment"),
-                      count: Math.max(0, desired - current),
+                      label: t("count", "notCreatedSegment", { n: missing }),
+                      count: missing,
                       tone: "err",
                     },
                   ]}
