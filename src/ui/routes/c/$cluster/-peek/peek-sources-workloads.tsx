@@ -11,7 +11,7 @@ import {
   type ContainerLists,
 } from "@/lib/container-sequence";
 import { declaredQuantity } from "@/lib/metric-format";
-import { describeRestarts } from "@/lib/pod-status";
+import { RestartsWords } from "../-object/ExitAgo";
 import { restartsAreNews } from "@/lib/crash-loop";
 import { insideWait, podRole, podStatusTitle } from "@/lib/share/pod-status";
 import { formatDate } from "@/lib/utils";
@@ -130,7 +130,7 @@ export const WORKLOAD_SOURCES: PeekSources = {
             },
             {
               label: t("columns", "restarts"),
-              value: describeRestarts(pod, t),
+              value: <RestartsWords pod={pod} />,
               tone: restartsAreNews(pod) ? "warn" : undefined,
             },
             {

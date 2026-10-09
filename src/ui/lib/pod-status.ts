@@ -33,17 +33,6 @@ export function describeTermination(termination: TerminationInfo): string {
   return termination.reason ? `${termination.reason} · ${how}` : how;
 }
 
-/** "4m ago", or nothing when the API did not stamp the termination. */
-export function terminationWhen(
-  termination: TerminationInfo,
-  t: T
-): string | null {
-  if (!termination.finishedAt) return null;
-  return t("action", "agoSuffix", {
-    age: formatAge(termination.finishedAt, t),
-  });
-}
-
 /** The wall-clock stamp, for a `title` beside the relative age. */
 export function terminationAt(
   termination: TerminationInfo
@@ -131,20 +120,21 @@ export function containerStatus(container: {
 
 /** "653 restarts, last 4m ago" — the count on its own does not date itself. */
 export function describeRestarts(
-  pod: {
-    restartCount: number;
-    lastRestartAt: string | null;
-    status?: { exitUnreported?: boolean };
-  },
-  t: T
+  pod: RestartsOf,
+  t: T,
+  ago: string = formatAge(pod.lastRestartAt, t)
 ): string {
   if (pod.status?.exitUnreported && !pod.lastRestartAt)
     return t("count", "restartsExitUnreported", { n: pod.restartCount });
   if (pod.restartCount === 0 || !pod.lastRestartAt) {
     return t("count", "restartsPlain", { n: pod.restartCount });
   }
-  return t("count", "restartsWithLast", {
-    n: pod.restartCount,
-    ago: formatAge(pod.lastRestartAt, t),
-  });
+  return t("count", "restartsWithLast", { n: pod.restartCount, ago });
+}
+
+/** What `describeRestarts` reads of a pod. */
+export interface RestartsOf {
+  restartCount: number;
+  lastRestartAt: string | null;
+  status?: { exitUnreported?: boolean };
 }

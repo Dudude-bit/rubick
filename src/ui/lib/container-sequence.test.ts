@@ -168,7 +168,8 @@ describe("containerSequence on a pod held in init", () => {
     const migrate = groups.find((group) => group.phase === "init")!.steps[0];
 
     expect(migrate.mark).toBe("failed");
-    expect(migrate.note).toContain("last 4s ago");
+    expect(migrate.note).toContain("last {when}");
+    expect(migrate.exit?.finishedAt).toBe(at(4));
   });
 });
 
@@ -204,9 +205,10 @@ describe("containerSequence with a sidecar", () => {
   it("says a finished init container's log is complete, not quiet", () => {
     // Otherwise it is indistinguishable from a live container saying
     // nothing, down to Follow sitting there doing nothing.
-    expect(groups[0].steps[0].note).toMatch(
-      /^Finished in 4s, .+ ago\. Its log is complete\.$/
+    expect(groups[0].steps[0].note).toBe(
+      "Finished in 4s, {when}. Its log is complete."
     );
+    expect(groups[0].steps[0].exit).not.toBeNull();
   });
 
   it("lets the app group say the pod actually started", () => {
