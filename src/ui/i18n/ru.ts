@@ -693,6 +693,7 @@ export const ru: Catalogue = {
       many: "Ещё {n} вкладок не поместились",
       other: "Ещё {n} вкладки не поместились",
     },
+    tabsMoreHoldsOpen: "Среди них открытая вкладка: {tab}",
     manifestCopiedNamed: "Манифест {name} скопирован",
     kindManifest: "манифест {kind}",
     suspendedLower: "приостановлен",

@@ -9,7 +9,7 @@
  */
 
 import { useLayoutEffect, useRef, useState } from "react";
-import { ChevronDown } from "lucide-react";
+import { Check, ChevronDown } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -125,7 +125,8 @@ const NOTHING_CLIPPED: Clipped = { ids: [], before: false, after: false };
 
 function useClippedTabs(
   strip: React.RefObject<HTMLDivElement | null>,
-  ids: string
+  ids: string,
+  kept: React.RefObject<string>
 ): Clipped {
   const [clipped, setClipped] = useState(NOTHING_CLIPPED);
   useLayoutEffect(() => {
@@ -152,7 +153,10 @@ function useClippedTabs(
       );
     };
     measure();
-    const observer = new ResizeObserver(measure);
+    const observer = new ResizeObserver(() => {
+      revealTab(list, tabNamed(list, kept.current));
+      measure();
+    });
     observer.observe(list);
     for (const tab of list.querySelectorAll("[data-tab]"))
       observer.observe(tab);
@@ -161,43 +165,61 @@ function useClippedTabs(
       observer.disconnect();
       list.removeEventListener("scroll", measure);
     };
-  }, [strip, ids]);
+  }, [strip, ids, kept]);
   return clipped;
 }
 
-/** Every tab the strip cannot show, one click away and named. */
+/** Every tab the strip cannot show, one click away and named, the open one marked. */
 function HiddenTabs({
   tabs,
+  open,
   onPick,
 }: {
   tabs: DetailTab[];
+  open: DetailTab | undefined;
   onPick: (tab: string) => void;
 }) {
   const t = useT();
+  const label = t("action", "tabsMoreLabel", { n: tabs.length });
+  const says = open
+    ? `${label}. ${t("action", "tabsMoreHoldsOpen", { tab: open.label })}`
+    : label;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={t("action", "tabsMoreLabel", { n: tabs.length })}
-          className="flex flex-none items-center gap-1 border-b border-hair pl-2 text-xs text-fg-mut transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+          aria-label={says}
+          title={open ? says : undefined}
+          data-holds-open={open ? "true" : undefined}
+          className={cn(
+            "flex flex-none items-center gap-1 border-b pl-2 text-xs transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
+            open ? "border-fg font-medium text-fg" : "border-hair text-fg-mut"
+          )}
         >
           {t("action", "tabsMore", { n: tabs.length })}
           <ChevronDown className="h-3 w-3" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        {tabs.map((tab) => (
-          <DropdownMenuItem
-            key={tab.id}
-            onSelect={() => onPick(tab.id)}
-            className="gap-1.5"
-          >
-            <TabGlyph glyph={tab.glyph} isActive={false} />
-            {tab.label}
-            {tab.mark && <TabMark mark={tab.mark} isActive={false} />}
-          </DropdownMenuItem>
-        ))}
+        {tabs.map((tab) => {
+          const isOpen = tab.id === open?.id;
+          return (
+            <DropdownMenuItem
+              key={tab.id}
+              onSelect={() => onPick(tab.id)}
+              aria-current={isOpen ? "true" : undefined}
+              className={cn("gap-1.5", isOpen && "font-medium text-fg")}
+            >
+              <TabGlyph glyph={tab.glyph} isActive={isOpen} />
+              {tab.label}
+              {tab.mark && <TabMark mark={tab.mark} isActive={isOpen} />}
+              {isOpen && (
+                <Check className="ml-auto h-3 w-3" aria-hidden="true" />
+              )}
+            </DropdownMenuItem>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -269,10 +291,14 @@ export function DetailTabs({
   const stripRef = useRef<HTMLDivElement>(null);
   const [focused, setFocused] = useState<Focused | null>(null);
   const pointer = useRef(false);
+  // The Tab stop, and the tab the strip keeps in view through any scroll,
+  // resize or remount: the focused one inside it, the open one otherwise.
   const stop = focused?.id ?? current;
+  const kept = useRef(stop);
   const clipped = useClippedTabs(
     stripRef,
-    tabs.map((tab) => tab.id).join("\n")
+    tabs.map((tab) => tab.id).join("\n"),
+    kept
   );
   const fade =
     clipped.before && clipped.after
@@ -284,8 +310,9 @@ export function DetailTabs({
           : undefined;
 
   useLayoutEffect(() => {
-    revealTab(stripRef.current, tabNamed(stripRef.current, current));
-  }, [current]);
+    kept.current = stop;
+    revealTab(stripRef.current, tabNamed(stripRef.current, stop));
+  }, [stop]);
 
   return (
     <Tabs
@@ -351,6 +378,11 @@ export function DetailTabs({
           {clipped.ids.length > 0 && (
             <HiddenTabs
               tabs={tabs.filter((tab) => clipped.ids.includes(tab.id))}
+              open={
+                clipped.ids.includes(current)
+                  ? tabs.find((tab) => tab.id === current)
+                  : undefined
+              }
               onPick={(id) => {
                 revealTab(stripRef.current, tabNamed(stripRef.current, id));
                 onTabChange(id);

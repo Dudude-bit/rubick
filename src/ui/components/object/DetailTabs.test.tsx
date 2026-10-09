@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 import { useState } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Braces, Info, ScrollText, Activity } from "lucide-react";
 
@@ -247,6 +247,34 @@ describe("a tab strip wider than the page", () => {
     expect(onTabChange).toHaveBeenCalledWith("yaml");
   });
 
+  /**
+   * Lena's open YAML sat inside "5 more" and nothing said so. Fails if the
+   * more button holding the open tab looks like any other, or its menu does
+   * not mark which item is open.
+   */
+  it("marks the more button and the open tab inside it", async () => {
+    laidOut({
+      overview: [0, 80],
+      logs: [96, 180],
+      events: [196, 260],
+      yaml: [276, 320],
+    });
+    render(<DetailTabs tabs={four} activeTab="yaml" onTabChange={() => {}} />);
+    const more = screen.getByRole("button", {
+      name: "2 more tabs do not fit. The open tab, YAML, is one of them",
+    });
+    expect(more).toHaveAttribute("data-holds-open", "true");
+
+    await userEvent.click(more);
+    expect(screen.getByRole("menuitem", { name: "YAML" })).toHaveAttribute(
+      "aria-current",
+      "true"
+    );
+    expect(
+      screen.getByRole("menuitem", { name: "Events" })
+    ).not.toHaveAttribute("aria-current");
+  });
+
   /** A strip that shows every tab must not grow a control for nothing. */
   it("offers nothing more when every tab fits", () => {
     laidOut({
@@ -340,7 +368,55 @@ describe("a tab strip that scrolls", () => {
     fireEvent.scroll(strip());
   };
 
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  /**
+   * After a resize Lena's open YAML sat inside "5 more", and a page brought
+   * back into sight kept the scroll it had. Fails if a strip that changes
+   * size leaves the open tab out of view.
+   */
+  it("brings the open tab back into view when the strip is resized", () => {
+    scrolling();
+    const resized: ResizeObserverCallback[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          resized.push(callback);
+        }
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    render(<Page start="yaml" />);
+    expect(strip().scrollLeft).toBe(120);
+    scrolledTo(0);
+
+    act(() => resized.forEach((resize) => resize([], {} as ResizeObserver)));
+    expect(strip().scrollLeft).toBe(120);
+  });
+
+  /** Fails if a strip the arrows walked away from the open tab does not bring it back once the focus leaves. */
+  it("brings the open tab back when the focus leaves the strip", () => {
+    scrolling();
+    render(
+      <>
+        <Page start="yaml" />
+        <button type="button">Elsewhere</button>
+      </>
+    );
+    const yaml = screen.getByRole("tab", { name: "YAML" });
+    yaml.focus();
+    fireEvent.keyDown(yaml, { key: "Home" });
+    expect(strip().scrollLeft).toBe(0);
+
+    act(() => screen.getByRole("button", { name: "Elsewhere" }).focus());
+    expect(strip().scrollLeft).toBe(120);
+  });
 
   /**
    * Lena's first pick from "ещё N" scrolled its tab into view and every
