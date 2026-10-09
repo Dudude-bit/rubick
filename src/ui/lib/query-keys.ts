@@ -174,6 +174,23 @@ export const queryKeys = {
     home(namespace),
     name,
   ],
+  /**
+   * What the watches under a Service's verdict hold: the pods its selector
+   * picks, keyed by that selector so an edit to it subscribes again, or the
+   * slices it publishes.
+   */
+  serviceWatch: (
+    part: "pods" | "slices",
+    namespace: string | null | undefined,
+    name: string | undefined,
+    selector?: string | null
+  ): (string | null | undefined)[] => [
+    "service-watch",
+    part,
+    home(namespace),
+    name,
+    selector ?? null,
+  ],
   /** The pods on one node, found by `spec.nodeName` on the server. */
   nodePods: (name: string | undefined): (string | undefined)[] => [
     "node",

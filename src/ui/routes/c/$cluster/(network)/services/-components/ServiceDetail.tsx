@@ -41,6 +41,7 @@ import { PublishedEndpoints } from "./PublishedEndpoints";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { useResourceDetail } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
+import { useServiceAnswer } from "@/hooks/useServiceAnswer";
 import { useServiceShare } from "./useServiceShare";
 import { ResourceType } from "@/lib/resource-registry";
 import { deliveryOfKind } from "@/lib/delivery";
@@ -78,6 +79,7 @@ export function ServiceDetail() {
   });
 
   const connections = useConnections(ResourceType.Service, name, namespace);
+  useServiceAnswer(name, namespace, connections, true);
   const subject = connections.data?.subject ?? null;
   const share = useServiceShare(service, connections);
   const deliveryQuery = deliveryOfKind(ResourceType.Service, service);
@@ -96,7 +98,11 @@ export function ServiceDetail() {
     {
       label: t("columns", "status"),
       value: name ? (
-        <ServiceHealthView name={name} namespace={namespace ?? null} />
+        <ServiceHealthView
+          name={name}
+          namespace={namespace ?? null}
+          follow={false}
+        />
       ) : null,
     },
     { label: t("columns", "type"), value: service?.type },

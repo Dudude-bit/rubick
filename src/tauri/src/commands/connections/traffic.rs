@@ -870,6 +870,7 @@ mod tests {
             stateful_sets: Ok(Vec::new()),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
+            taken_at: chrono::Utc::now(),
             gateway_routes: Vec::new(),
             gateways: None,
             gateway_unread: Vec::new(),

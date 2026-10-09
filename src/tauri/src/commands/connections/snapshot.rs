@@ -36,6 +36,8 @@ pub(super) struct Snapshot {
     /// serves no `discovery.k8s.io/v1` at all, and a confident empty there
     /// would be the app inventing an outage out of its own API version.
     pub(super) legacy: Read<Endpoints>,
+    /// When the lists were asked for: an answer read from them is no newer.
+    pub(super) taken_at: chrono::DateTime<chrono::Utc>,
     /// The namespace's Gateway API routes, all five kinds in one list —
     /// empty where the caller brought no detection, or the cluster serves
     /// none of them. A kind whose list failed is in `gateway_unread`.
@@ -281,6 +283,7 @@ impl Snapshot {
         ctx: &ResourceContext,
         gateway: Option<&crate::resources::GatewayApiDetection>,
     ) -> Result<Self> {
+        let taken_at = chrono::Utc::now();
         let params = ListParams::default();
         let pods_api = ctx.namespaced_api::<Pod>();
         let services_api = ctx.namespaced_api::<Service>();
@@ -333,6 +336,7 @@ impl Snapshot {
             stateful_sets: read_live(stateful_sets)?,
             slices,
             legacy,
+            taken_at,
             gateway_routes,
             gateways,
             gateway_unread,
@@ -649,6 +653,7 @@ mod refused_list_tests {
             stateful_sets: Err(REFUSED.to_string()),
             slices: Err(REFUSED.to_string()),
             legacy: Err(REFUSED.to_string()),
+            taken_at: chrono::Utc::now(),
             gateways: None,
             gateway_routes: Vec::new(),
             gateway_unread: Vec::new(),
@@ -808,6 +813,7 @@ mod refused_list_tests {
             stateful_sets: Ok(Vec::new()),
             slices: Ok(Vec::new()),
             legacy: Err("the slices answered".to_string()),
+            taken_at: chrono::Utc::now(),
             gateway_routes: Vec::new(),
             gateways: None,
             gateway_unread: Vec::new(),
@@ -1081,6 +1087,30 @@ mod shared_tests {
             crate::resources::Unread::Unanswered { version, .. }
                 if version == "gateway.networking.k8s.io/v1"
         ));
+    }
+
+    /// Sam's big-pull page drew "1 ready" from the Service deleted before it
+    /// under the same name, and "No pod carries app=big-pull" from lists read
+    /// before its pod was made. Fails if a Service's answer stops naming the
+    /// uid it read or when its lists were asked for, which a page compares.
+    #[tokio::test]
+    async fn a_services_answer_names_the_uid_it_read() {
+        let service = serde_json::json!({ "metadata": {
+            "name": "big-pull", "namespace": NS, "uid": "second-big-pull",
+        } });
+        let list = serde_json::json!({ "apiVersion": "v1", "kind": "List", "metadata": {}, "items": [service] });
+        let (client, _) = server(with(SERVICES, (200, list.to_string()))).await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+
+        let answer = connections_through(Source::default(), &ctx, "Service", "big-pull", None)
+            .await
+            .expect("an answer");
+        assert_eq!(answer.subject_uid.as_deref(), Some("second-big-pull"));
+        assert!(answer.read_at.is_some_and(|at| at <= chrono::Utc::now()));
+        assert_eq!(
+            serde_json::to_value(&answer).expect("json")["subjectUid"],
+            "second-big-pull"
+        );
     }
 
     /// Only a read that began before the call is asked again: one of its own

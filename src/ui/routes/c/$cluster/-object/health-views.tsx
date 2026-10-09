@@ -7,6 +7,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useConnections } from "@/hooks/useConnections";
+import { useServiceAnswer } from "@/hooks/useServiceAnswer";
+import { ResourceType } from "@/lib/resource-registry";
 import { useOneIngressHealth } from "@/hooks/useIngressHealth";
 import { useT } from "@/i18n/useT";
 import { ingressHealthWords, type IngressInputs } from "@/lib/ingress-health";
@@ -61,21 +63,27 @@ export function VerdictBadge({
   );
 }
 
-/** The Service named here: the page, its peek and its Endpoints object. */
+/**
+ * The Service named here: the page, its peek and its Endpoints object. Its
+ * pods and slices are followed live while it is on screen unless the page
+ * around it follows them, and a read that cannot speak for it is not drawn.
+ */
 export function ServiceHealthView({
   name,
   namespace,
+  follow = true,
 }: {
   name: string;
   namespace: string | null;
+  follow?: boolean;
 }) {
   const t = useT();
-  const { data, error } = useConnections("Service", name, namespace);
-  // The last object's answer stands in while this one is read.
-  const mine = data?.subject.name === name ? data : undefined;
+  const query = useConnections(ResourceType.Service, name, namespace);
+  const { current, stale } = useServiceAnswer(name, namespace, query, follow);
+  const { error } = query;
   const health = useMemo(
-    () => healthFromConnections(mine, error),
-    [mine, error]
+    () => healthFromConnections(current, stale ? null : error),
+    [current, stale, error]
   );
   return <VerdictBadge verdict={serviceHealthWords(health, t)} />;
 }

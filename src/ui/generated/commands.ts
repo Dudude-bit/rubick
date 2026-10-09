@@ -962,6 +962,13 @@ export async function subscribeOwnedPodWatch(
   return invoke<string>("subscribe_owned_pod_watch", { kind, namespace, name });
 }
 
+export async function subscribeServiceSliceWatch(
+  namespace: string,
+  name: string
+): Promise<string> {
+  return invoke<string>("subscribe_service_slice_watch", { namespace, name });
+}
+
 export async function subscribeCustomObjectWatch(
   group: string,
   version: string,

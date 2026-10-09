@@ -513,6 +513,16 @@ pub enum NotServing {
 #[serde(rename_all = "camelCase")]
 pub struct ResourceConnections {
     pub subject: ObjectRef,
+    /// The uid of the subject this answer read, where the arm reads one: a
+    /// reader holding the object compares it, so an answer about an earlier
+    /// object of the same name is not drawn as this one's.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_uid: Option<String>,
+    /// When the lists this answer was drawn from were asked for, where the arm
+    /// reads them at one moment: a reader that has since seen a newer fact
+    /// knows the answer is older than it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub read_at: Option<chrono::DateTime<chrono::Utc>>,
     pub edges: Vec<ConnectionEdge>,
     /// Where a path into the subject stops. Empty means every path this call
     /// followed reaches something the Service publishes.

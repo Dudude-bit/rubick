@@ -1398,6 +1398,8 @@ export interface CatalogEntry {
 
 export interface ResourceConnections {
   subject: ObjectRef;
+  subjectUid?: string;
+  readAt?: string;
   edges: ConnectionEdge[];
   stops: ChainStop[];
   published: ServicePublished[];
