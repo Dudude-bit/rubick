@@ -231,3 +231,47 @@ it("draws no verdict anywhere on the page while its Status is still reading", as
   release({ ...neighbourhood(1), readAt: new Date().toISOString() });
   expect(await screen.findByText("1 ready")).toBeInTheDocument();
 });
+
+/**
+ * After kubectl delete, Sam's page kept big-pull, ClusterIP and tabs, for
+ * 25 s on a read that had backed off. Fails if the page does not watch its
+ * Service, or does not say it is gone the moment the watch sees it deleted.
+ */
+it("says the Service no longer exists the moment its watch sees it deleted", async () => {
+  let deleted = false;
+  vi.mocked(invoke).mockImplementation(async (command: string) => {
+    if (command === "get_service") {
+      if (deleted)
+        throw { code: "NOT_FOUND", message: 'services "big-pull" not found' };
+      return SERVICE;
+    }
+    if (command === "get_resource_connections") return neighbourhood(1);
+    if (command === "subscribe_object_watch") return "object-stream";
+    if (command === "subscribe_owned_pod_watch") return "pods-stream";
+    if (command === "subscribe_service_slice_watch") return "slices-stream";
+    return undefined;
+  });
+  await renderWithRouter(<ServiceDetail />, {
+    at: "/c/k3d-rubick/services/shop/big-pull",
+    route: "/c/$cluster/services/$namespace/$name",
+  });
+  expect(await screen.findByText("1 ready")).toBeInTheDocument();
+  await waitFor(() =>
+    expect(invoke).toHaveBeenCalledWith("resource_watch_subscribed", {
+      streamId: "object-stream",
+    })
+  );
+  sendTo(
+    "object-stream",
+    { op: "restarted" },
+    { op: "applied", resource: SERVICE },
+    { op: "synced" }
+  );
+
+  deleted = true;
+  sendTo("object-stream", { op: "deleted", resource: SERVICE });
+
+  expect(
+    await screen.findByText("This Service no longer exists.")
+  ).toBeInTheDocument();
+});
