@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useState,
+} from "react";
 import {
   hashKey,
   keepPreviousData,
@@ -18,7 +25,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search } from "lucide-react";
+import { Search, SlidersHorizontal } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataFreshness } from "@/components/ui/realtime";
@@ -157,6 +178,33 @@ function filtersFor(
 
 const keyOfStory = (story: Story) => story.key;
 
+const TOGGLE =
+  "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover";
+
+/** Under this, as beside a peek at 1024, the feed's settings fold into one menu: laid out in a row they stacked six deep. */
+const NARROW_PX = 640;
+
+/** Whether `node` is laid out narrower than `below`; not until it has been laid out at all. */
+function useNarrow(node: HTMLElement | null, below: number) {
+  const [narrow, setNarrow] = useState(false);
+  useLayoutEffect(() => {
+    if (!node) return;
+    const read = () =>
+      setNarrow(node.clientWidth > 0 && node.clientWidth < below);
+    read();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(read);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [node, below]);
+  return narrow;
+}
+
+const limitWords = (limit: string, t: ReturnType<typeof useT>) =>
+  limit === "all"
+    ? t("action", "noLimit")
+    : t("action", "latestN", { n: formatCount(Number(limit)) });
+
 export function Events() {
   const t = useT();
   const { isConnected, currentNamespace } = useClusterStore();
@@ -175,6 +223,10 @@ export function Events() {
   // another kind arrives as `?q=`, and a page that kept it in local state
   // showed every event while the address claimed it was filtered.
   const setQuery = (value: string) => setSearch({ q: value || undefined });
+  const setWindow = (next: StoryWindow) =>
+    setSearch({ range: next === "1h" ? undefined : next });
+  const [page, setPage] = useState<HTMLDivElement | null>(null);
+  const narrow = useNarrow(page, NARROW_PX);
   const now = useNow();
 
   const limit = eventLimit === "all" ? null : Number(eventLimit);
@@ -409,6 +461,8 @@ export function Events() {
 
   return (
     <div
+      ref={setPage}
+      data-events-page
       className={cn(
         "flex flex-col gap-2 animate-in fade-in duration-200",
         listed && "h-full min-h-0"
@@ -450,7 +504,7 @@ export function Events() {
                         setSearch({ view: candidate });
                       }}
                       className={cn(
-                        "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
+                        TOGGLE,
                         view === candidate ? "bg-sel text-fg" : "text-fg-mut"
                       )}
                     >
@@ -461,7 +515,7 @@ export function Events() {
                     </button>
                   ))}
                 </span>
-                {view === "stories" ? (
+                {view === "stories" && !narrow && (
                   <>
                     <div
                       className="flex items-center gap-0.5"
@@ -473,13 +527,10 @@ export function Events() {
                           key={candidate}
                           type="button"
                           aria-pressed={window === candidate}
-                          onClick={() =>
-                            setSearch({
-                              range: candidate === "1h" ? undefined : candidate,
-                            })
-                          }
+                          onClick={() => setWindow(candidate)}
                           className={cn(
-                            "h-6 whitespace-nowrap rounded px-1.5 font-mono text-[11px] transition-colors hover:bg-hover",
+                            TOGGLE,
+                            "font-mono",
                             window === candidate
                               ? "bg-sel text-fg"
                               : "text-fg-mut"
@@ -497,7 +548,7 @@ export function Events() {
                           aria-pressed={order === candidate.value}
                           onClick={() => setOrder(candidate.value)}
                           className={cn(
-                            "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
+                            TOGGLE,
                             order === candidate.value
                               ? "bg-sel text-fg"
                               : "text-fg-mut"
@@ -508,7 +559,7 @@ export function Events() {
                       ))}
                     </div>
                   </>
-                ) : null}
+                )}
                 {/* Same shape as the lists' search box: a text entry, not a
                   panel, so it only draws a background once it is in use. */}
                 <div className="flex h-6 items-center gap-1.5 rounded px-1.5 text-fg-fnt transition-colors hover:bg-hover focus-within:bg-hover">
@@ -523,50 +574,65 @@ export function Events() {
                     onChange={(event) => setQuery(event.target.value)}
                     aria-label={t("action", "filterEventsPlaceholder")}
                     placeholder={t("action", "filterEventsPlaceholder")}
-                    className="w-36 bg-transparent text-[11px] text-fg outline-hidden placeholder:text-fg-fnt"
+                    className={cn(
+                      "bg-transparent text-[11px] text-fg outline-hidden placeholder:text-fg-fnt",
+                      narrow ? "w-24" : "w-36"
+                    )}
                   />
                 </div>
-                <div
-                  className="flex items-center gap-0.5"
-                  role="group"
-                  aria-label={t("action", "eventType")}
-                >
-                  {TYPE_FILTERS.map((filter) => (
-                    <button
-                      key={filter.value}
-                      type="button"
-                      aria-pressed={eventType === filter.value}
-                      onClick={() => setEventType(filter.value)}
-                      className={cn(
-                        "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover",
-                        eventType === filter.value
-                          ? "bg-sel text-fg"
-                          : "text-fg-mut"
-                      )}
+                {narrow ? (
+                  <FeedOptions
+                    view={view}
+                    eventType={eventType}
+                    onEventType={setEventType}
+                    eventLimit={eventLimit}
+                    onEventLimit={setEventLimit}
+                    window={window}
+                    onWindow={setWindow}
+                    order={order}
+                    onOrder={setOrder}
+                  />
+                ) : (
+                  <>
+                    <div
+                      className="flex items-center gap-0.5"
+                      role="group"
+                      aria-label={t("action", "eventType")}
                     >
-                      {t("action", filter.label)}
-                    </button>
-                  ))}
-                </div>
-                <Select value={eventLimit} onValueChange={setEventLimit}>
-                  <SelectTrigger
-                    aria-label={t("action", "eventsFetched")}
-                    className="h-6 w-auto shrink-0 gap-1 whitespace-nowrap border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LIMITS.map((limit) => (
-                      <SelectItem key={limit} value={limit}>
-                        {limit === "all"
-                          ? t("action", "noLimit")
-                          : t("action", "latestN", {
-                              n: formatCount(Number(limit)),
-                            })}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                      {TYPE_FILTERS.map((filter) => (
+                        <button
+                          key={filter.value}
+                          type="button"
+                          aria-pressed={eventType === filter.value}
+                          onClick={() => setEventType(filter.value)}
+                          className={cn(
+                            TOGGLE,
+                            eventType === filter.value
+                              ? "bg-sel text-fg"
+                              : "text-fg-mut"
+                          )}
+                        >
+                          {t("action", filter.label)}
+                        </button>
+                      ))}
+                    </div>
+                    <Select value={eventLimit} onValueChange={setEventLimit}>
+                      <SelectTrigger
+                        aria-label={t("action", "eventsFetched")}
+                        className="h-6 w-auto shrink-0 gap-1 whitespace-nowrap border-0 bg-transparent px-1.5 text-[11px] text-fg-mut hover:bg-hover focus:ring-0 focus:ring-offset-0"
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LIMITS.map((limit) => (
+                          <SelectItem key={limit} value={limit}>
+                            {limitWords(limit, t)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </>
+                )}
               </>
             )}
             <DataFreshness
@@ -578,6 +644,7 @@ export function Events() {
             />
             <ShareScreenAction
               screen={{ title: "Events", namespace: currentNamespace }}
+              look={narrow ? "icon" : "button"}
             />
           </>
         }
@@ -742,6 +809,127 @@ const windowWords = (window: StoryWindow) =>
     Number.parseInt(window, 10),
     window.endsWith("m") ? "minute" : "hour"
   );
+
+/**
+ * The feed's type and limit, and a story's window and order, in one menu
+ * where the page is too narrow for them in a row. Its trigger names whatever
+ * differs from the defaults, so a narrowed feed never looks like the whole.
+ */
+function FeedOptions({
+  view,
+  eventType,
+  onEventType,
+  eventLimit,
+  onEventLimit,
+  window,
+  onWindow,
+  order,
+  onOrder,
+}: {
+  view: EventsView;
+  eventType: string;
+  onEventType: (next: string) => void;
+  eventLimit: string;
+  onEventLimit: (next: string) => void;
+  window: StoryWindow;
+  onWindow: (next: StoryWindow) => void;
+  order: StoryOrder;
+  onOrder: (next: StoryOrder) => void;
+}) {
+  const t = useT();
+  const type = TYPE_FILTERS.find((filter) => filter.value === eventType);
+  const sorted = ORDERS.find((candidate) => candidate.value === order);
+  const changed = [
+    type && type.value !== "all" ? t("action", type.label) : null,
+    eventLimit !== "500" ? limitWords(eventLimit, t) : null,
+    view === "stories" && window !== "1h" ? windowWords(window) : null,
+    view === "stories" && sorted && sorted.value !== "warningsFirst"
+      ? t("action", sorted.label)
+      : null,
+  ].filter((said): said is string => said !== null);
+  const label = t("action", "feedOptions");
+  return (
+    <DropdownMenu>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label={
+                changed.length > 0 ? `${label}: ${changed.join(", ")}` : label
+              }
+              className={cn(
+                TOGGLE,
+                "inline-flex items-center gap-1",
+                changed.length > 0 ? "bg-sel text-fg" : "text-fg-mut"
+              )}
+            >
+              <SlidersHorizontal
+                className="h-3 w-3 shrink-0"
+                aria-hidden="true"
+              />
+              {changed.length > 0 && <span>{changed.join(" · ")}</span>}
+            </button>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">{label}</TooltipContent>
+      </Tooltip>
+      <DropdownMenuContent align="end" className="min-w-[200px]">
+        <DropdownMenuLabel>{t("action", "eventType")}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={eventType} onValueChange={onEventType}>
+          {TYPE_FILTERS.map((filter) => (
+            <DropdownMenuRadioItem key={filter.value} value={filter.value}>
+              {t("action", filter.label)}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuLabel>{t("action", "eventsFetched")}</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={eventLimit} onValueChange={onEventLimit}>
+          {LIMITS.map((limit) => (
+            <DropdownMenuRadioItem key={limit} value={limit}>
+              {limitWords(limit, t)}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+        {view === "stories" && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>{t("action", "storyWindow")}</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={window}
+              onValueChange={(next) => isWindow(next) && onWindow(next)}
+            >
+              {STORY_WINDOWS.map((candidate) => (
+                <DropdownMenuRadioItem key={candidate} value={candidate}>
+                  {windowWords(candidate)}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>{t("action", "storyOrder")}</DropdownMenuLabel>
+            <DropdownMenuRadioGroup
+              value={order}
+              onValueChange={(next) => {
+                const picked = ORDERS.find((each) => each.value === next);
+                if (picked) onOrder(picked.value);
+              }}
+            >
+              {ORDERS.map((candidate) => (
+                <DropdownMenuRadioItem
+                  key={candidate.value}
+                  value={candidate.value}
+                >
+                  {t("action", candidate.label)}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
 
 function EventsSkeleton() {
   return (

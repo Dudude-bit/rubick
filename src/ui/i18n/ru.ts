@@ -586,6 +586,8 @@ export const ru: Catalogue = {
     showTimeline: "Хронология",
     hideTimeline: "Скрыть хронологию",
     storyWindow: "Окно",
+    storyOrder: "Порядок",
+    feedOptions: "Настройки ленты",
     showInaccessibleNamespaces: "Показать",
     connectToForward: "Подключитесь к кластеру, чтобы начать проброс портов.",
     siteHasItAt: "Есть на {site}: {url}",
