@@ -74,6 +74,28 @@ describe("ImageRef", () => {
     expect(text).toHaveClass("wrap-anywhere");
   });
 
+  /**
+   * Lena's ImagePullBackOff row read `"nginx:1.27.99-` beside a gap, and
+   * `alpine"` on the next line: WebKit sized the box held to one line without
+   * the button's negative margin and wrapped what fit. Fails if a reference
+   * inside a sentence carries that margin again.
+   */
+  it("carries no negative margin inside a sentence, and keeps it in a row", async () => {
+    await wrap(
+      <>
+        <ImageRef image="nginx:1.27.99-alpine" inline />
+        <ImageRef image="busybox:1.36" />
+      </>
+    );
+    const inline = screen.getByRole("button", {
+      name: "Copy image nginx:1.27.99-alpine",
+    });
+    expect(inline.className).not.toMatch(/(^|\s)-mx-/);
+    expect(
+      screen.getByRole("button", { name: "Copy image busybox:1.36" })
+    ).toHaveClass("-mx-1");
+  });
+
   it("still copies a reference it cannot split", async () => {
     await wrap(<ImageRef image="NOT A REF" />);
     expect(
