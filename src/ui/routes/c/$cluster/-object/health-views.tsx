@@ -29,6 +29,7 @@ export function VerdictBadge({
     <StatusBadge
       status={verdict.code}
       roleOverride={verdict.role}
+      glyph={verdict.glyph}
       wordOnHover={!tipped}
     >
       {verdict.label}

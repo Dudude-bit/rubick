@@ -8,6 +8,8 @@
  * an Ingress nobody could check is "not checked", never "serving".
  */
 
+import { EyeOff } from "lucide-react";
+
 import type { T } from "@/i18n/useT";
 import type { Known } from "@/lib/known";
 import type {
@@ -17,9 +19,11 @@ import type {
 } from "@/generated/types";
 import {
   serviceHealthOf,
+  type ServiceHealth,
   type ServiceHealthInput,
   type Verdict,
 } from "@/lib/service-health";
+import type { StatusRole } from "@/lib/status-role";
 
 /** One namespace's Services by name, as the Service verdict reads them. */
 export type NamespaceBacking = ReadonlyMap<string, ServiceHealthInput>;
@@ -45,6 +49,10 @@ export type IngressProblem =
   | { kind: "backendMissing"; service: string }
   | { kind: "tlsSecretMissing"; secret: string }
   | { kind: "backendDown"; service: string }
+  /** None ready, and every workload behind the backend is still starting its pods. */
+  | { kind: "backendStarting"; service: string }
+  /** None ready, and the pods the workloads behind the backend wait on were not read. */
+  | { kind: "backendUnconfirmed"; service: string }
   /** Every workload behind the backend is scaled to zero, on purpose. */
   | { kind: "backendIdle"; service: string };
 
@@ -67,6 +75,26 @@ export function backendNames(ingress: IngressInputs["ingress"]): string[] {
   return [...new Set(names.filter((name) => name !== ""))];
 }
 
+/** What each verdict of a backend Service says about the Ingress in front of it. */
+const BACKEND_PROBLEM: Record<
+  ServiceHealth["state"],
+  Exclude<
+    IngressProblem["kind"],
+    "noController" | "backendMissing" | "tlsSecretMissing"
+  > | null
+> = {
+  ready: null,
+  partly: null,
+  noneReady: "backendDown",
+  noEndpoints: "backendDown",
+  comingUp: "backendStarting",
+  podsUnread: "backendUnconfirmed",
+  idle: "backendIdle",
+  externalName: null,
+  selectorless: null,
+  unknown: null,
+};
+
 export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
   const { ingress, binding, backing, certificates } = inputs;
   const problems: IngressProblem[] = [];
@@ -87,11 +115,8 @@ export function ingressHealthOf(inputs: IngressInputs): IngressHealth {
         continue;
       }
       const health = serviceHealthOf(service, service, null);
-      if (health.state === "noEndpoints" || health.state === "noneReady") {
-        problems.push({ kind: "backendDown", service: name });
-      } else if (health.state === "idle") {
-        problems.push({ kind: "backendIdle", service: name });
-      }
+      const problem = BACKEND_PROBLEM[health.state];
+      if (problem) problems.push({ kind: problem, service: name });
     }
   }
 
@@ -183,6 +208,8 @@ const ORDER: IngressProblem["kind"][] = [
   "backendMissing",
   "tlsSecretMissing",
   "backendDown",
+  "backendStarting",
+  "backendUnconfirmed",
   "backendIdle",
 ];
 
@@ -198,6 +225,12 @@ function problemSentence(problem: IngressProblem, t: T): string {
       return t("readings", "healthNoTlsSecret", { name: problem.secret });
     case "backendDown":
       return t("readings", "healthBackendDown", { name: problem.service });
+    case "backendStarting":
+      return t("readings", "healthBackendStarting", { name: problem.service });
+    case "backendUnconfirmed":
+      return t("readings", "healthBackendUnconfirmed", {
+        name: problem.service,
+      });
     case "backendIdle":
       return t("readings", "healthBackendIdle", { name: problem.service });
   }
@@ -209,13 +242,28 @@ const PROBLEM_LABEL: Record<
   | "healthMissingBackend"
   | "healthMissingTlsSecret"
   | "healthBackendDownShort"
+  | "healthBackendStartingShort"
+  | "healthBackendUnconfirmedShort"
   | "healthBackendIdleShort"
 > = {
   noController: "healthNoController",
   backendMissing: "healthMissingBackend",
   tlsSecretMissing: "healthMissingTlsSecret",
   backendDown: "healthBackendDownShort",
+  backendStarting: "healthBackendStartingShort",
+  backendUnconfirmed: "healthBackendUnconfirmedShort",
   backendIdle: "healthBackendIdleShort",
+};
+
+/** The colour a problem is drawn in where it is the worst one. */
+const PROBLEM_ROLE: Record<IngressProblem["kind"], StatusRole> = {
+  noController: "err",
+  backendMissing: "err",
+  tlsSecretMissing: "err",
+  backendDown: "err",
+  backendStarting: "pending",
+  backendUnconfirmed: "neutral",
+  backendIdle: "neutral",
 };
 
 export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
@@ -232,7 +280,8 @@ export function ingressHealthWords(health: IngressHealth, t: T): Verdict {
     return {
       code: worst.kind,
       label: t("readings", PROBLEM_LABEL[worst.kind]),
-      role: worst.kind === "backendIdle" ? "neutral" : partial ? "warn" : "err",
+      role: partial ? "warn" : PROBLEM_ROLE[worst.kind],
+      glyph: worst.kind === "backendUnconfirmed" ? EyeOff : undefined,
       reason: `${problems.map((problem) => problemSentence(problem, t)).join(". ")}.`,
     };
   }

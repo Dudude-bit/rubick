@@ -2336,7 +2336,9 @@ export type NotServing =
   | "finished"
   | "mixed"
   | "other"
-  | "inSlices";
+  | "inSlices"
+  | "comingUp"
+  | "podsUnread";
 
 export type EndpointSource = "slices" | "legacyEndpoints" | "podReadiness";
 

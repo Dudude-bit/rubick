@@ -158,6 +158,40 @@ describe("TrafficChain", () => {
     expect(new Set([missing, empty, unready]).size).toBe(3);
   });
 
+  /**
+   * Marco's ledger page drew the Service's stop in red, a claim about a pod
+   * nobody had read, under a Deployment whose verdict was grey. Fails if a
+   * stop waiting on unread pods, or on pods still starting, takes the
+   * fault's red, or loses the mark that says which it is.
+   */
+  it.each([
+    ["podsUnread", "lucide-eye-off", "text-fg-mid"],
+    ["comingUp", "lucide-clock", "text-info"],
+  ] as const)(
+    "draws a stop waiting on %s pods apart from a fault",
+    async (why, icon, colour) => {
+      await wrap(
+        <TrafficChain
+          query={query(
+            answered([
+              {
+                reason: "noneReady",
+                service,
+                selector: "app=ledger",
+                pods: 1,
+                why,
+              },
+            ])
+          )}
+        />
+      );
+      const title = screen.getByText(/app=ledger, and it is not ready/);
+      expect(title).toHaveClass(colour);
+      expect(title).not.toHaveClass("text-err");
+      expect(title.querySelector("svg")).toHaveClass(icon);
+    }
+  );
+
   it("spends one line where there is nothing to draw", async () => {
     /** The whole feature has to be free on the pages that do not need it.
      *  A heading over an empty chain is two lines spent saying nothing is

@@ -14,7 +14,14 @@
 
 import { joinSayings, sayWords } from "@/i18n/say";
 import { Link } from "@tanstack/react-router";
-import { CircleSlash, PauseCircle, Unplug } from "lucide-react";
+import {
+  CircleSlash,
+  Clock,
+  EyeOff,
+  PauseCircle,
+  Unplug,
+  type LucideIcon,
+} from "lucide-react";
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
@@ -33,7 +40,9 @@ import {
   trafficChains,
   unservedIngresses,
   type ChainHop,
+  type ChainHopStop,
   type HopTone,
+  type StopMood,
 } from "@/lib/connections";
 import type { ConnectionsQuery } from "@/hooks/useConnections";
 import type { Issuance } from "@/hooks/useCertificateIssuance";
@@ -88,9 +97,38 @@ function HopName({ object }: { object: ObjectRef }) {
 // not to compete with the verdicts riding on it. Trouble keeps its hue.
 const NODE_TONE: Record<HopTone, string> = {
   on: "border-fg-mut",
+  info: "border-info",
+  unknown: "border-fg-fnt",
   warn: "border-warn",
   bad: "border-err",
 };
+
+/** How a stop's sentence is drawn: a fault in red, the rest by what they are. */
+const STOP_LOOK: Record<
+  StopMood,
+  { title: string; note: string; icon: LucideIcon | null }
+> = {
+  fault: { title: "text-err", note: "text-err/85", icon: null },
+  idle: { title: "text-fg-mid", note: "text-fg-mut", icon: PauseCircle },
+  coming: { title: "text-info", note: "text-fg-mut", icon: Clock },
+  unchecked: { title: "text-fg-mid", note: "text-fg-mut", icon: EyeOff },
+};
+
+function StopWords({ hop }: { hop: ChainHopStop }) {
+  const look = STOP_LOOK[hop.mood];
+  const Icon = look.icon;
+  return (
+    <>
+      <p className={cn("flex items-center gap-1.5 text-xs", look.title)}>
+        {Icon && <Icon className="h-3 w-3 flex-none" aria-hidden="true" />}
+        {hop.title}
+      </p>
+      {/* A repair is a paragraph, and a paragraph set to the width of a
+          1600px window is one nobody finishes reading. */}
+      <p className={cn("max-w-[92ch] text-[11px]", look.note)}>{hop.note}</p>
+    </>
+  );
+}
 
 /**
  * The dot and the run of line under it — the chain's spine. Shared with the
@@ -490,31 +528,7 @@ function Hop({
         {hop.at === "controller" && (
           <Controller binding={hop.binding} brief={brief} />
         )}
-        {hop.at === "stop" && (
-          <>
-            <p
-              className={cn(
-                "flex items-center gap-1.5 text-xs",
-                hop.idle ? "text-fg-mid" : "text-err"
-              )}
-            >
-              {hop.idle && (
-                <PauseCircle className="h-3 w-3 flex-none" aria-hidden="true" />
-              )}
-              {hop.title}
-            </p>
-            {/* A repair is a paragraph, and a paragraph set to the width of a
-                1600px window is one nobody finishes reading. */}
-            <p
-              className={cn(
-                "max-w-[92ch] text-[11px]",
-                hop.idle ? "text-fg-mut" : "text-err/85"
-              )}
-            >
-              {hop.note}
-            </p>
-          </>
-        )}
+        {hop.at === "stop" && <StopWords hop={hop} />}
       </div>
     </div>
   );

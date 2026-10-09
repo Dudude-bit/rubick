@@ -1540,4 +1540,91 @@ mod set_rollout_tests {
             })
         );
     }
+
+    /// Marco's ledger page: its pods refused, and the Service in front of it
+    /// read a red "1 pod carries app=ledger, and it is not ready" under the
+    /// Deployment's own unread verdict. Fails if the graph's stop for that
+    /// Service does not say the workload behind it waits on unread pods.
+    #[tokio::test]
+    async fn the_service_in_front_of_a_deployment_whose_pods_were_not_read_waits_on_them() {
+        let list = |kind: &str, items: serde_json::Value| {
+            serde_json::json!({ "apiVersion": "v1", "kind": kind, "metadata": {}, "items": items })
+                .to_string()
+        };
+        let ledger = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "Deployment",
+            "metadata": { "name": "ledger", "namespace": "shop", "uid": "ledger", "generation": 1 },
+            "spec": {
+                "replicas": 1,
+                "selector": { "matchLabels": { "app": "ledger" } },
+                "template": { "metadata": { "labels": { "app": "ledger" } } },
+            },
+            "status": {
+                "observedGeneration": 1, "replicas": 1, "updatedReplicas": 1,
+                "availableReplicas": 0,
+                "conditions": [{
+                    "type": "Available", "status": "False", "reason": "MinimumReplicasUnavailable"
+                }],
+            },
+        });
+        let service = serde_json::json!([{
+            "metadata": { "name": "ledger", "namespace": "shop" },
+            "spec": {
+                "type": "ClusterIP",
+                "selector": { "app": "ledger" },
+                "ports": [{ "port": 80, "targetPort": 8080, "protocol": "TCP" }],
+            },
+        }]);
+        let slice = serde_json::json!([{
+            "metadata": {
+                "name": "ledger-nkc5d", "namespace": "shop",
+                "labels": { "kubernetes.io/service-name": "ledger" },
+            },
+            "addressType": "IPv4",
+            "endpoints": [{
+                "addresses": ["192.168.0.9"],
+                "conditions": { "ready": false, "serving": false, "terminating": false },
+            }],
+            "ports": [{ "name": "", "port": 8080, "protocol": "TCP" }],
+        }]);
+        let (client, _) = server(vec![
+            (
+                "/apis/apps/v1/namespaces/shop/deployments/ledger",
+                200,
+                ledger.to_string(),
+            ),
+            (
+                "/apis/apps/v1/namespaces/shop/deployments",
+                200,
+                list("DeploymentList", serde_json::json!([ledger])),
+            ),
+            (
+                "/api/v1/namespaces/shop/services",
+                200,
+                list("ServiceList", service),
+            ),
+            (
+                "/apis/discovery.k8s.io/v1/namespaces/shop/endpointslices",
+                200,
+                list("EndpointSliceList", slice),
+            ),
+        ])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+        let page = connections_of(&ctx, "Deployment", "ledger", None)
+            .await
+            .expect("the neighbourhood");
+        assert!(
+            page.stops.iter().any(|stop| matches!(
+                stop,
+                ChainStop::NoneReady {
+                    why: crate::resources::NotServing::PodsUnread,
+                    pods: 1,
+                    ..
+                }
+            )),
+            "{:?}",
+            page.stops
+        );
+    }
 }

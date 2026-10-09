@@ -302,6 +302,87 @@ describe("what Needs attention lists beyond pods", () => {
     ).toMatchObject({ label: "backend idle", role: "neutral" });
   });
 
+  /**
+   * Marco's ledger: the status bar, the sidebar badge and Needs attention
+   * would count a Service whose workload waits on pods nobody could read,
+   * and one whose workload is still starting them, while the Deployment
+   * behind each counts as nothing. Fails if either Service, or an Ingress
+   * whose only backend is one of them, is counted, or if a Service that is
+   * simply down stops being one.
+   */
+  it("counts no problem for a Service, or an Ingress, whose workloads wait on their pods", () => {
+    const group = (
+      name: string,
+      why: "comingUp" | "podsUnread" | "crashLooping"
+    ): ServiceHealthGroup => ({
+      names: [name],
+      type: "ClusterIP",
+      selectorless: false,
+      ready: 0,
+      draining: 0,
+      notReady: 1,
+      unrouted: 0,
+      stop: {
+        reason: "noneReady",
+        service: {
+          kind: "Service",
+          name,
+          namespace: "net",
+          existence: "present",
+          facts: null,
+        },
+        selector: `app=${name}`,
+        pods: 1,
+        why,
+      },
+    });
+    const groups = [
+      group("ledger", "podsUnread"),
+      group("big-pull", "comingUp"),
+      group("crash", "crashLooping"),
+    ];
+    const healthOf = (row: IngressHealthInput) =>
+      ingressHealthOf({
+        ingress: row,
+        binding: {
+          known: true,
+          value: {
+            requested: "nginx",
+            resolved: "nginx",
+            controller: null,
+            viaDefault: false,
+            available: [],
+          },
+        },
+        backing: {
+          known: true,
+          value: new Map(groups.map((g) => [g.names[0], g] as const)),
+        },
+        certificates: new Map(),
+      });
+    const listed = attention({
+      services: { answered: [{ namespace: "net", groups }], unread: [] },
+      ingresses: {
+        data: {
+          rows: [ingress("books", "ledger"), ingress("pull", "big-pull")],
+          unread: [],
+        },
+        error: null,
+      },
+      ingressHealth: healthOf,
+    });
+
+    expect(listed.items.map((item) => [item.kind, item.name])).toEqual([
+      ["Service", "crash"],
+    ]);
+    expect(
+      ingressHealthWords(healthOf(ingress("books", "ledger")), t)
+    ).toMatchObject({ label: "backend not checked", role: "neutral" });
+    expect(
+      ingressHealthWords(healthOf(ingress("pull", "big-pull")), t)
+    ).toMatchObject({ label: "backend coming up", role: "pending" });
+  });
+
   /** An Ingress whose class nothing serves, read by the Ingresses list's own reader. */
   it("lists an Ingress no controller serves", () => {
     const backing: NamespaceBacking = new Map([

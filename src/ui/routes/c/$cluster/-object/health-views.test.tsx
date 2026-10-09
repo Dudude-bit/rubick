@@ -3,6 +3,9 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { translate } from "@/i18n";
+import { serviceHealthWords } from "@/lib/service-health";
+import { ROLE_TEXT } from "@/lib/status-role";
 import { VerdictBadge } from "./health-views";
 
 const NO_ENDPOINTS = {
@@ -43,5 +46,44 @@ describe("a verdict badge in a row", () => {
       "title",
       "no endpoints"
     );
+  });
+});
+
+describe("a Service's verdict whose pods were not read", () => {
+  /**
+   * The Services list, the peek and the page draw one badge each from this,
+   * and Marco's ledger wore the fault's red X there. Fails if the badge drops
+   * the verdict's own mark or its neutral colour.
+   */
+  it("wears the EyeOff mark in a neutral colour", () => {
+    const verdict = serviceHealthWords(
+      {
+        state: "podsUnread",
+        published: {
+          ready: 0,
+          draining: 0,
+          notReady: 1,
+          unrouted: 0,
+          stop: {
+            reason: "noneReady",
+            service: {
+              kind: "Service",
+              name: "ledger",
+              namespace: "team-blind",
+              existence: "present",
+              facts: null,
+            },
+            selector: "app=ledger",
+            pods: 1,
+            why: "podsUnread",
+          },
+        },
+      },
+      (section, key, values) => translate("en", section, key, values)
+    );
+    render(<VerdictBadge verdict={verdict} />);
+    const badge = screen.getByText("none ready");
+    expect(badge).toHaveClass(ROLE_TEXT.neutral);
+    expect(badge.querySelector("svg")).toHaveClass("lucide-eye-off");
   });
 });

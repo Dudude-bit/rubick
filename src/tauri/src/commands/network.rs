@@ -252,7 +252,8 @@ async fn health_inputs_in(
 /// none, never why; the pods it selects do, and its page reads them. Asked
 /// only for those Services, so a scope of healthy ones costs no more than
 /// before. One whose selector then matches no pod is asked, once per
-/// namespace, whether the workloads behind it are scaled to zero. A list that
+/// namespace, whether the workloads behind it are scaled to zero, and one
+/// with none ready whether they are only waiting on their pods. A list that
 /// fails leaves the answer it would have sharpened as it was.
 async fn with_unready_cause(
     client: &kube::Client,
@@ -279,20 +280,71 @@ async fn with_unready_cause(
                 .unwrap_or_default();
             let query = Selector::Equality(&selector).query_text();
             let (true, Some(query)) = (unexplained, query) else {
-                return published;
+                return (published, None);
             };
             let pods: kube::Api<Pod> =
                 kube::Api::namespaced(client.clone(), &svc.namespace().unwrap_or_default());
             match pods.list(&ListParams::default().labels(&query)).await {
                 Ok(list) => {
                     let selected: Vec<&Pod> = list.items.iter().collect();
-                    published.with_stop(svc, Some(&selected))
+                    let published = published.with_stop(svc, Some(&selected));
+                    (published, Some(list.items))
                 }
-                Err(_) => published,
+                Err(_) => (published, None),
             }
         });
-    let published = futures::future::join_all(asks).await;
+    let asked = futures::future::join_all(asks).await;
+    let published = explain_waits(client, services, asked).await;
     explain_empty_selectors(client, services, published).await
+}
+
+/// Whether the workloads behind a Service with none ready are only waiting
+/// on their pods, by [`published::waiting_on`]: one read of each kind per
+/// namespace that has such a Service. `pods` is what the selector picked,
+/// `None` where they were not read.
+async fn explain_waits(
+    client: &kube::Client,
+    services: &[Service],
+    asked: Vec<(ServicePublished, Option<Vec<Pod>>)>,
+) -> Vec<ServicePublished> {
+    let waiting: BTreeSet<String> = services
+        .iter()
+        .zip(&asked)
+        .filter(|(_, (published, _))| matches!(published.stop, Some(ChainStop::NoneReady { .. })))
+        .map(|(svc, _)| svc.namespace().unwrap_or_default())
+        .collect();
+    if waiting.is_empty() {
+        return asked.into_iter().map(|(published, _)| published).collect();
+    }
+    let reads = waiting.into_iter().map(|ns| async move {
+        let params = ListParams::default();
+        let deployments: kube::Api<Deployment> = kube::Api::namespaced(client.clone(), &ns);
+        let sets: kube::Api<StatefulSet> = kube::Api::namespaced(client.clone(), &ns);
+        let (deployments, sets) = tokio::join!(deployments.list(&params), sets.list(&params));
+        (ns, (items(deployments), items(sets)))
+    });
+    let read: HashMap<String, (Vec<Deployment>, Vec<StatefulSet>)> =
+        futures::future::join_all(reads).await.into_iter().collect();
+    let now = chrono::Utc::now();
+    services
+        .iter()
+        .zip(asked)
+        .map(
+            |(svc, (published, pods))| match read.get(&svc.namespace().unwrap_or_default()) {
+                Some((deployments, sets)) => {
+                    let selected: Option<Vec<&Pod>> =
+                        pods.as_ref().map(|pods| pods.iter().collect());
+                    published.with_workloads(
+                        svc,
+                        &published::makers(deployments, sets),
+                        selected.as_deref(),
+                        now,
+                    )
+                }
+                None => published,
+            },
+        )
+        .collect()
 }
 
 type Behind = (Vec<Deployment>, Vec<StatefulSet>, Vec<Pod>);
@@ -1016,6 +1068,77 @@ mod tests {
                 }
             ),
             "{stop:?}"
+        );
+    }
+
+    /// Marco's ledger in the shell's count: pods refused, and the Deployment
+    /// behind the Service waiting on them by its own counts. Fails if the list
+    /// reader stops asking the workloads behind a Service with none ready, or
+    /// lets one off whose Deployments it could not read.
+    #[tokio::test]
+    async fn a_service_whose_workload_waits_on_unread_pods_says_so_in_the_shells_count() {
+        use crate::client::served::test_server::{answering, failure};
+        let deployments = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "DeploymentList", "metadata": {},
+            "items": [{
+                "metadata": { "name": "unready-demo", "namespace": "k8s-gui-test", "generation": 1 },
+                "spec": {
+                    "replicas": 2,
+                    "selector": { "matchLabels": { "app": "unready-demo" } },
+                    "template": {
+                        "metadata": { "labels": { "app": "unready-demo" } },
+                        "spec": { "containers": [] }
+                    }
+                },
+                "status": {
+                    "observedGeneration": 1, "replicas": 2, "updatedReplicas": 2,
+                    "availableReplicas": 0,
+                    "conditions": [{
+                        "type": "Available", "status": "False",
+                        "reason": "MinimumReplicasUnavailable"
+                    }]
+                }
+            }]
+        })
+        .to_string();
+        let stop_with = |answer: (u16, String)| {
+            let base = unready_demo(failure(403, "Forbidden"));
+            async move {
+                let (client, _) = answering(move |path, n| match path {
+                    "/apis/apps/v1/namespaces/k8s-gui-test/deployments" => answer.clone(),
+                    _ => base(path, n),
+                })
+                .await;
+                health_inputs_in(client, Some("k8s-gui-test".to_string()))
+                    .await
+                    .expect("inputs")[0]
+                    .groups[0]
+                    .stop
+                    .clone()
+            }
+        };
+        let waiting = stop_with((200, deployments)).await;
+        assert!(
+            matches!(
+                waiting,
+                Some(ChainStop::NoneReady {
+                    why: NotServing::PodsUnread,
+                    pods: 2,
+                    ..
+                })
+            ),
+            "{waiting:?}"
+        );
+        let refused = stop_with(failure(403, "Forbidden")).await;
+        assert!(
+            matches!(
+                refused,
+                Some(ChainStop::NoneReady {
+                    why: NotServing::InSlices,
+                    ..
+                })
+            ),
+            "{refused:?}"
         );
     }
 
