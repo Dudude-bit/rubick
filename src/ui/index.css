@@ -383,9 +383,17 @@
   *,
   *::before,
   *::after {
-    transition-property: background-color, border-color, color, fill, stroke;
+    transition-property: background-color, border-color;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
     transition-duration: 150ms;
+  }
+
+  /* Words and glyphs change tone at once otherwise: an icon inherits its
+   * colour a fade behind its text, and drew a red clock beside blue words. */
+  .theme-fade *,
+  .theme-fade *::before,
+  .theme-fade *::after {
+    transition-property: background-color, border-color, color, fill, stroke;
   }
 
   @media (prefers-reduced-motion: reduce) {

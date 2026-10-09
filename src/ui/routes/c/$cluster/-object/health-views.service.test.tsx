@@ -28,7 +28,9 @@ import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useWindowActivity } from "@/lib/window-activity";
 import { testQueryClient } from "@/test/render";
-import { ServiceHealthView } from "./health-views";
+import { useConnections } from "@/hooks/useConnections";
+import { useServiceAnswer } from "@/hooks/useServiceAnswer";
+import { ServiceHealthView, ServiceVerdict } from "./health-views";
 
 const SUBJECT: ObjectRef = {
   kind: "Service",
@@ -121,6 +123,11 @@ function send(
 
 const POD = { name: "big-pull-6d9f7-x2", namespace: "shop" };
 
+const NOT_FOUND = {
+  code: "NOT_FOUND",
+  message: "Resource not found: Service/big-pull in namespace shop",
+};
+
 let client: QueryClient;
 
 beforeEach(() => {
@@ -197,7 +204,6 @@ it("holds back a read older than the pod its watch has seen, and reads again", a
     .mockResolvedValueOnce(NO_POD({ readAt: before }))
     .mockResolvedValueOnce(COMING_UP({ readAt: new Date().toISOString() }));
   draw();
-  expect(await screen.findByText("no endpoints")).toBeInTheDocument();
   await waitFor(() =>
     expect(commands.subscribeOwnedPodWatch).toHaveBeenCalledWith(
       "Service",
@@ -208,6 +214,8 @@ it("holds back a read older than the pod its watch has seen, and reads again", a
   await waitFor(() =>
     expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("pods-stream")
   );
+  expect(screen.getByText("still reading")).toBeInTheDocument();
+  expect(screen.queryByText("no endpoints")).toBeNull();
 
   send(
     "pods-stream",
@@ -225,6 +233,133 @@ it("holds back a read older than the pod its watch has seen, and reads again", a
   );
   await client.invalidateQueries({ queryKey: ["connections"] });
   expect(await screen.findByText("no endpoints")).toBeInTheDocument();
+});
+
+const BIG_PULL = { selector: { app: "big-pull" } };
+
+/**
+ * Opened before its pod was listed, Sam's page drew red "No pod carries
+ * app=big-pull" from a read the pod watch had not yet had a chance to
+ * contradict. Fails if a read that found no pod is drawn before the
+ * Service's pod watch has listed them, or is not drawn once they list none.
+ */
+it("draws no 'no pod' verdict before the Service's pods are listed, and draws it once they list none", async () => {
+  client.setQueryData(queryKeys.detail("Service", "shop", "big-pull"), {
+    ...BIG_PULL,
+    uid: "big-pull-uid",
+  });
+  commands.getResourceConnections.mockResolvedValue(
+    NO_POD({
+      subjectUid: "big-pull-uid",
+      readAt: new Date(Date.now() - 5_000).toISOString(),
+    })
+  );
+  draw();
+  await waitFor(() =>
+    expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("pods-stream")
+  );
+  await waitFor(() =>
+    expect(commands.getResourceConnections).toHaveBeenCalledTimes(1)
+  );
+  expect(screen.getByText("still reading")).toBeInTheDocument();
+  expect(screen.queryByText("no endpoints")).toBeNull();
+
+  send("pods-stream", { op: "restarted" }, { op: "synced" });
+
+  expect(await screen.findByText("no endpoints")).toBeInTheDocument();
+  expect(commands.getResourceConnections).toHaveBeenCalledTimes(1);
+});
+
+/**
+ * In three of six creates Sam's page, opened while big-pull was gone, drew
+ * red "No pod carries app=big-pull" for up to half a second after kubectl
+ * had the pod: the pod watch was asked for while no Service stood under the
+ * name, the backend refused it, and nothing asked again once one did. Fails
+ * if a Service made again under the name does not get a pod watch of its
+ * own, or a read older than the pod that watch lists is drawn.
+ */
+it("watches the pods of a Service made again under its name, and draws no 'no pod' from a read older than its pod", async () => {
+  const detail = queryKeys.detail("Service", "shop", "big-pull");
+  client.setQueryData(detail, { ...BIG_PULL, uid: "first" });
+  commands.subscribeOwnedPodWatch.mockRejectedValueOnce(NOT_FOUND);
+  commands.getResourceConnections
+    .mockResolvedValueOnce(READY({ subjectUid: "first" }))
+    .mockResolvedValueOnce(
+      NO_POD({
+        subjectUid: "second",
+        readAt: new Date(Date.now() - 1_000).toISOString(),
+      })
+    )
+    .mockResolvedValue(
+      COMING_UP({ subjectUid: "second", readAt: new Date().toISOString() })
+    );
+  draw();
+  expect(await screen.findByText("1 ready")).toBeInTheDocument();
+  await waitFor(() =>
+    expect(commands.subscribeOwnedPodWatch).toHaveBeenCalledTimes(1)
+  );
+
+  client.setQueryData(detail, { ...BIG_PULL, uid: "second" });
+
+  await waitFor(() =>
+    expect(commands.getResourceConnections).toHaveBeenCalledTimes(2)
+  );
+  await waitFor(() =>
+    expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("pods-stream")
+  );
+  expect(commands.subscribeOwnedPodWatch).toHaveBeenCalledTimes(2);
+  expect(screen.getByText("still reading")).toBeInTheDocument();
+
+  send(
+    "pods-stream",
+    { op: "restarted" },
+    { op: "applied", resource: POD },
+    { op: "synced" }
+  );
+
+  expect(await screen.findByText("coming up")).toBeInTheDocument();
+  expect(screen.queryByText("no endpoints")).toBeNull();
+});
+
+function Beside() {
+  const query = useConnections("Service", "big-pull", "shop");
+  return (
+    <ServiceVerdict
+      read={useServiceAnswer("big-pull", "shop", query, false).read}
+    />
+  );
+}
+
+/**
+ * A pod watch the cluster refuses never lists, and holding a read for it
+ * would leave the Service "still reading" for good; the peek's trace, which
+ * does not watch, would hold it while its status row drew it. Fails if a
+ * refused pod watch holds the read back, on the reader that watches or on
+ * the one beside it that does not.
+ */
+it("draws a read that found no pod where the pod watch was refused, on every reader of the Service alike", async () => {
+  client.setQueryData(queryKeys.detail("Service", "shop", "big-pull"), {
+    ...BIG_PULL,
+    uid: "big-pull-uid",
+  });
+  commands.subscribeOwnedPodWatch.mockRejectedValueOnce({
+    code: "PERMISSION_DENIED",
+    message: "pods is forbidden: cannot watch",
+  });
+  commands.getResourceConnections.mockResolvedValue(
+    NO_POD({ subjectUid: "big-pull-uid" })
+  );
+  render(
+    <QueryClientProvider client={client}>
+      <ServiceHealthView name="big-pull" namespace="shop" />
+      <Beside />
+    </QueryClientProvider>
+  );
+
+  await waitFor(() =>
+    expect(screen.getAllByText("no endpoints")).toHaveLength(2)
+  );
+  expect(screen.queryByText("still reading")).toBeNull();
 });
 
 /**
@@ -272,11 +407,6 @@ it("draws no verdict for a Service the cluster says is gone", async () => {
 
   await waitFor(() => expect(screen.queryByText("1 ready")).toBeNull());
 });
-
-const NOT_FOUND = {
-  code: "NOT_FOUND",
-  message: "Resource not found: Service/big-pull in namespace shop",
-};
 
 /**
  * Sam's page showed "not checked / Resource not found: Service/big-pull"

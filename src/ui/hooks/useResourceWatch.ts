@@ -59,6 +59,13 @@ interface UseResourceWatchOptions<T> {
   order?: (a: T, b: T) => boolean;
   /** Whether a list growing or shrinking re-reads the overview's counts. */
   recount?: boolean;
+  /**
+   * Whether a list delivered by the stream reads the panels in `detail` again
+   * where they answered before it was asked for: a change between the two
+   * arrives in the list, never as a change of its own. For a page's own
+   * watches, whose rows are few.
+   */
+  behind?: boolean;
 }
 
 export interface ResourceWatchState {
@@ -91,6 +98,7 @@ export function useResourceWatch<
   onRecovered,
   order,
   recount = true,
+  behind = false,
 }: UseResourceWatchOptions<T>): ResourceWatchState {
   const t = useT();
   const queryClient = useQueryClient();
@@ -107,6 +115,7 @@ export function useResourceWatch<
   const tRef = useRef(t);
   const orderRef = useRef(order);
   const recountRef = useRef(recount);
+  const behindRef = useRef(behind);
   useEffect(() => {
     onErrorRef.current = onError;
     onRecoveredRef.current = onRecovered;
@@ -114,7 +123,8 @@ export function useResourceWatch<
     tRef.current = t;
     orderRef.current = order;
     recountRef.current = recount;
-  }, [onError, onRecovered, detail, t, order, recount]);
+    behindRef.current = behind;
+  }, [onError, onRecovered, detail, t, order, recount, behind]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -132,6 +142,10 @@ export function useResourceWatch<
     // The rows a resync has delivered so far, held here rather than in
     // the cache until the backend says the burst is complete.
     let staged: Map<string, T> | null = null;
+    // When the list in flight was asked for: the gate's release for the
+    // first, the marker for a resync. A read of a row's own object that
+    // answered before it can miss a change the list carries.
+    let listedFrom = 0;
     const positions = new Map<string, number>();
     let indexedList: T[] | undefined;
 
@@ -208,6 +222,7 @@ export function useResourceWatch<
           let live: Array<ResourceChange<T>> = [];
           for (const change of payload.changes) {
             if (change.op === "restarted") {
+              listedFrom ||= Date.now();
               staged = new Map();
               // A watch that is failing announces every attempt; saying
               // "resyncing" each time claims progress on a stream that is
@@ -242,6 +257,14 @@ export function useResourceWatch<
                 });
                 positions.clear();
                 indexedList = undefined;
+                if (behindRef.current)
+                  readBehind(
+                    queryClient,
+                    rows.values(),
+                    detailRef.current,
+                    listedFrom
+                  );
+                listedFrom = 0;
               }
               continue;
             }
@@ -316,6 +339,7 @@ export function useResourceWatch<
         // Listener installed — release the backend gate. A failure here means
         // the session was already torn down (race with cleanup): log, no crash.
         try {
+          listedFrom = Date.now();
           await commands.resourceWatchSubscribed(id);
         } catch (err) {
           if (active) {
@@ -397,6 +421,30 @@ function readAgain<T>(
         if (client.getQueryState(key)) readSoon(client, key, DETAIL_MS);
     }
   if (recounted) readSoon(client, queryKeys.everyOverview(), COUNTS_MS);
+}
+
+/**
+ * The panels reading a row a list has just delivered, where their read
+ * answered before the list was asked for: a change between the two arrives
+ * in the list and never as a change of its own. Sam's pod page, opened 0.4 s
+ * before its pod went Running, said ContainerCreating with "live" for 2 s.
+ */
+function readBehind<T>(
+  client: QueryClient,
+  rows: Iterable<T>,
+  detail: ((row: T) => readonly QueryKey[]) | undefined,
+  listedFrom: number
+) {
+  if (!detail) return;
+  for (const row of rows)
+    for (const key of detail(row)) {
+      const state = client.getQueryState(key);
+      if (
+        state &&
+        Math.max(state.dataUpdatedAt, state.errorUpdatedAt) <= listedFrom
+      )
+        readSoon(client, key, DETAIL_MS);
+    }
 }
 
 /** Name plus namespace, which is what identifies a row in a list. */

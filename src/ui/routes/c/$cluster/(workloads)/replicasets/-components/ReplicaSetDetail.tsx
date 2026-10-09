@@ -25,6 +25,7 @@ import {
   WorkloadOverview,
 } from "../../-components/workload-overview";
 import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
+import { useWorkloadPods } from "../../-components/workload-pods";
 import { AlertsAbout } from "../../../-object/AlertsAbout";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { ResourceRef } from "@/components/object/ResourceRef";
@@ -72,11 +73,7 @@ export function ReplicaSetDetail() {
   });
 
   const podsKey = queryKeys.ownedPods(ResourceType.ReplicaSet, namespace, name);
-  const {
-    data: pods = [],
-    error: podsError,
-    isPending: podsPending,
-  } = useLiveQuery({
+  const podsQuery = useLiveQuery({
     queryKey: podsKey,
     queryFn: () => commands.getReplicasetPods(name!, namespace || null),
     enabled: !!namespace && !!name,
@@ -84,6 +81,19 @@ export function ReplicaSetDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
+  const {
+    pods,
+    error: podsError,
+    isPending: podsPending,
+    split: splitPods,
+  } = useWorkloadPods(
+    ResourceType.ReplicaSet,
+    namespace,
+    name,
+    podsQuery,
+    podsKey,
+    replicaSet?.replicas.ready
+  );
   useOwnedPodsWatch(
     ResourceType.ReplicaSet,
     namespace,
@@ -111,14 +121,8 @@ export function ReplicaSetDetail() {
   const desired = replicas?.desired ?? 0;
   const current = replicas?.current ?? 0;
   const ready = replicas?.ready ?? 0;
-  const startsNow = useStartsClock(podsError ? null : pods);
-  const split = replicaSplit(
-    current,
-    ready,
-    podsError ? null : pods,
-    startsNow,
-    t
-  );
+  const startsNow = useStartsClock(splitPods);
+  const split = replicaSplit(current, ready, splitPods, startsNow, t);
 
   const revision = replicaSet?.revision ?? null;
   const currentRevision = replicaSet?.currentRevision ?? null;

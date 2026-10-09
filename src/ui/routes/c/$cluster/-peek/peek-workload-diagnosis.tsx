@@ -1,4 +1,4 @@
-import { useConnections } from "@/hooks/useConnections";
+import { useObjectConnections } from "@/hooks/useConnections";
 import { useT } from "@/i18n/useT";
 import { governanceFindings } from "@/lib/governance-findings";
 import type { Rollout } from "@/generated/types";
@@ -24,7 +24,7 @@ export function WorkloadDiagnosis({
 }) {
   const t = useT();
   // The page's key, so an open page or the traffic block answers from cache.
-  const connections = useConnections(kind, name, namespace);
+  const connections = useObjectConnections(kind, name, namespace);
   const findings = governanceFindings(connections.data, t);
   return (
     <div className="flex flex-col pt-2" data-testid="workload-diagnosis">

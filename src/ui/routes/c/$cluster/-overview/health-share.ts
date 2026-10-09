@@ -41,6 +41,7 @@ import { currentLocale } from "@/stores/localeStore";
 import { byteScale, formatBytes } from "@/lib/k8s-quantity";
 import { splitUnit } from "@/lib/metric-format";
 import { formatDecimal } from "@/lib/utils";
+import { withRestartsBy } from "@/lib/pod-status";
 
 /**
  * The detail line, for the rows this app writes itself.
@@ -55,7 +56,11 @@ export function composedDetail(
 ): string {
   switch (detail.says) {
     case "restarts":
-      return t("readings", "problemRestarts", { n: detail.n });
+      return withRestartsBy(
+        t("readings", "problemRestarts", { n: detail.n }),
+        detail.by,
+        t
+      );
     case "replicasReady":
       return t("readings", "problemReplicasReady", {
         ready: detail.ready,

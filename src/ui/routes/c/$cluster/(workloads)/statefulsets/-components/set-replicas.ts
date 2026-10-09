@@ -1,7 +1,7 @@
 import type { CompositionSegment } from "@/components/object/detail-blocks";
 import type { Rollout } from "@/generated/types";
 import type { T } from "@/i18n/useT";
-import { NEEDS_ATTENTION } from "@/lib/workload-status";
+import { NEEDS_ATTENTION, workloadRole } from "@/lib/workload-status";
 import { replicaSplit } from "../../-components/replica-gap";
 
 /**
@@ -22,7 +22,14 @@ export function setReplicaSegments(
     Math.max(counts.current, pods?.length ?? 0)
   );
   const missing = Math.max(0, counts.desired - created);
-  const split = replicaSplit(created, counts.ready, pods, now, t);
+  const split = replicaSplit(
+    created,
+    counts.ready,
+    pods,
+    now,
+    t,
+    !!rollout && workloadRole(rollout) === "pending"
+  );
   return [
     {
       label: t("count", "readySegment", { n: split.ready }),

@@ -13,6 +13,8 @@ import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
+import { useWorkloadPods } from "../../-components/workload-pods";
+import { workloadRole } from "@/lib/workload-status";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
@@ -44,7 +46,7 @@ import { PinAction } from "../../-components/PinAction";
 import { useAsk } from "../../../-object/useAsk";
 import { useResourceDetail, useResourceMutation } from "@/hooks";
 import { useDaemonSetShare } from "./useDaemonSetShare";
-import { useConnections } from "@/hooks/useConnections";
+import { useObjectConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
@@ -114,7 +116,11 @@ export function DaemonSetDetail() {
     }
   );
 
-  const connections = useConnections(ResourceType.DaemonSet, name, namespace);
+  const connections = useObjectConnections(
+    ResourceType.DaemonSet,
+    name,
+    namespace
+  );
 
   // The DaemonSet publishes its own selector, in the API's own text form —
   // so a set-based one reaches the API server as written, where rebuilding
@@ -131,12 +137,7 @@ export function DaemonSetDetail() {
   // array, which the card then reported as "no pods for this workload" — a
   // claim about the cluster made from a question nobody answered, and the
   // reading somebody takes to mean their DaemonSet is down.
-  const {
-    data: pods = [],
-    error: podsError,
-    isPending: podsPending,
-    refetch: refetchPods,
-  } = useLiveQuery({
+  const podsQuery = useLiveQuery({
     queryKey: podsKey,
     queryFn: async () => {
       if (!namespace) return [];
@@ -159,6 +160,20 @@ export function DaemonSetDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
+  const {
+    pods,
+    error: podsError,
+    isPending: podsPending,
+    refetch: refetchPods,
+    split: splitPods,
+  } = useWorkloadPods(
+    ResourceType.DaemonSet,
+    namespace,
+    name,
+    podsQuery,
+    podsKey,
+    daemonSet?.ready
+  );
   useOwnedPodsWatch(
     ResourceType.DaemonSet,
     namespace,
@@ -173,10 +188,11 @@ export function DaemonSetDetail() {
   const desired = daemonSet?.desired ?? 0;
   const current = daemonSet?.current ?? 0;
   const ready = daemonSet?.ready ?? 0;
-  const startsNow = useStartsClock(podsError ? null : pods);
+  const startsNow = useStartsClock(splitPods);
+  const waiting = !!daemonSet && workloadRole(daemonSet.rollout) === "pending";
   const split = useMemo(
-    () => replicaSplit(current, ready, podsError ? null : pods, startsNow, t),
-    [current, ready, pods, podsError, startsNow, t]
+    () => replicaSplit(current, ready, splitPods, startsNow, t, waiting),
+    [current, ready, splitPods, startsNow, t, waiting]
   );
   const upToDate = daemonSet?.upToDate ?? 0;
   const available = daemonSet?.available ?? 0;

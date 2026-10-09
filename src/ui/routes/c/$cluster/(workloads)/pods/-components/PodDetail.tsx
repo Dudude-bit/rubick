@@ -79,7 +79,7 @@ import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { silenceOf } from "@/lib/node-reporting";
-import { useConnections } from "@/hooks/useConnections";
+import { useObjectConnections } from "@/hooks/useConnections";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { eventsTab } from "../../../-object/events-tab";
 import { useNodePlacement } from "./useNodePlacement";
@@ -447,7 +447,12 @@ export function PodDetail() {
 
   // A gone pod is the page's whole answer; nothing else about it is asked.
   const gone = isResourceNotFoundError(error);
-  const connections = useConnections(ResourceType.Pod, name, namespace, !gone);
+  const connections = useObjectConnections(
+    ResourceType.Pod,
+    name,
+    namespace,
+    !gone
+  );
   // The pod's own events, for the "most likely" sentence: read here rather
   // than inside the panel so a refusal reaches it as a line, not a crash.
   const podEvents = useObjectEvents("Pod", name, namespace, {

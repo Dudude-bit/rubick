@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vite-plus/test";
 
 import { translate } from "@/i18n";
-import type { Plural } from "./catalogue";
+import { en, type Plural } from "./catalogue";
 import { ru } from "./ru";
 
 const CARRYING = /(?<![\p{L}])нес(?:ёт|ут|ёшь|у|ли|ла|ло)(?![\p{L}])/iu;
@@ -54,5 +54,35 @@ describe("Russian written as a person says it", () => {
     expect(tab).toBe("Зависимые");
     expect(tab).not.toMatch(/владе/i);
     expect(translate("ru", "lineage", "label")).toBe("Владельцы");
+  });
+});
+
+describe("an open-ended count", () => {
+  /**
+   * Marco's Russian picker read "3+ проблемы", the form for exactly three:
+   * after "3+" the noun is counted as "more than three", in the genitive,
+   * whatever the number. Fails if a count written "{n}+" picks its noun by
+   * the number in either language, or Russian drops the genitive.
+   */
+  it("says its noun in one form whatever the number", () => {
+    const byNumber = [en, ru].flatMap((catalogue) =>
+      Object.entries(catalogue).flatMap(([section, keys]) =>
+        Object.entries(keys as Record<string, string | Plural>)
+          .filter(
+            ([, value]) =>
+              typeof value !== "string" &&
+              value.other.includes("{n}+") &&
+              Object.keys(value).length > 1
+          )
+          .map(([key]) => `${section}.${key}`)
+      )
+    );
+    expect(byNumber).toEqual([]);
+    expect(translate("ru", "cluster", "problemCountAtLeast", { n: 3 })).toBe(
+      "3+ проблем"
+    );
+    expect(translate("ru", "cluster", "problemCountAtLeast", { n: 1 })).toBe(
+      "1+ проблем"
+    );
   });
 });

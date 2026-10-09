@@ -53,7 +53,8 @@ import { useResourceDetail, useResourceMutation } from "@/hooks";
 import { useStatefulSetShare } from "./useStatefulSetShare";
 import { setReplicaSegments } from "./set-replicas";
 import { useStartsClock } from "../../-components/replica-gap";
-import { useConnections } from "@/hooks/useConnections";
+import { useWorkloadPods } from "../../-components/workload-pods";
+import { useObjectConnections } from "@/hooks/useConnections";
 import {
   CountBlock,
   FactBlock,
@@ -95,7 +96,11 @@ export function StatefulSetDetail() {
     guardedOf(ResourceType.StatefulSet, namespace || null)
   ).patch;
 
-  const connections = useConnections(ResourceType.StatefulSet, name, namespace);
+  const connections = useObjectConnections(
+    ResourceType.StatefulSet,
+    name,
+    namespace
+  );
 
   const podsKey = queryKeys.ownedPods(
     ResourceType.StatefulSet,
@@ -104,12 +109,7 @@ export function StatefulSetDetail() {
   );
   // The failure travels rather than becoming an empty list; see the same
   // change on the DaemonSet page.
-  const {
-    data: pods = [],
-    error: podsError,
-    isPending: podsPending,
-    refetch: refetchPods,
-  } = useLiveQuery({
+  const podsQuery = useLiveQuery({
     queryKey: podsKey,
     queryFn: async () => {
       if (!name || !namespace) return [];
@@ -141,6 +141,20 @@ export function StatefulSetDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
+  const {
+    pods,
+    error: podsError,
+    isPending: podsPending,
+    refetch: refetchPods,
+    split: splitPods,
+  } = useWorkloadPods(
+    ResourceType.StatefulSet,
+    namespace,
+    name,
+    podsQuery,
+    podsKey,
+    statefulSet?.replicas.ready
+  );
   useOwnedPodsWatch(
     ResourceType.StatefulSet,
     namespace,
@@ -229,7 +243,7 @@ export function StatefulSetDetail() {
   });
 
   const share = useStatefulSetShare(statefulSet, pods, podsError);
-  const startsNow = useStartsClock(podsError ? null : pods);
+  const startsNow = useStartsClock(splitPods);
 
   const tabs = useMemo(
     () => [
@@ -263,7 +277,7 @@ export function StatefulSetDetail() {
                     label={t("count", "replicasWanted", { n: desired })}
                     segments={setReplicaSegments(
                       { desired, current, ready },
-                      podsError ? null : pods,
+                      splitPods,
                       startsNow,
                       statefulSet?.rollout,
                       t
@@ -431,6 +445,7 @@ export function StatefulSetDetail() {
       t,
       statefulSet,
       pods,
+      splitPods,
       podsError,
       podsPending,
       refetchPods,

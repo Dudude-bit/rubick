@@ -1,5 +1,6 @@
 import type { T } from "@/i18n/useT";
 import type {
+  ContainerRestarts,
   ContainerPhase,
   ContainerState,
   PodInfo,
@@ -124,6 +125,10 @@ export function describeRestarts(
   t: T,
   ago: string = formatAge(pod.lastRestartAt, t)
 ): string {
+  return withRestartsBy(restartWords(pod, t, ago), pod.restartsBy, t);
+}
+
+function restartWords(pod: RestartsOf, t: T, ago: string): string {
   if (pod.status?.exitUnreported && !pod.lastRestartAt)
     return t("count", "restartsExitUnreported", { n: pod.restartCount });
   if (pod.restartCount === 0 || !pod.lastRestartAt) {
@@ -132,9 +137,28 @@ export function describeRestarts(
   return t("count", "restartsWithLast", { n: pod.restartCount, ago });
 }
 
+/**
+ * A pod's restart count with the containers behind it, where more than one
+ * restarted: "15 restarts: wait-for-db 5, migrate 10". Sam's init-demo page
+ * said 10, 15 and 17 restarts, five of them an init container's that had
+ * finished fine, and nothing said whose.
+ */
+export function withRestartsBy(
+  words: string,
+  by: readonly ContainerRestarts[] | null | undefined,
+  t: T
+): string {
+  if (!by || by.length < 2) return words;
+  return t("count", "restartsBy", {
+    restarts: words,
+    split: by.map(({ container, n }) => `${container} ${n}`).join(", "),
+  });
+}
+
 /** What `describeRestarts` reads of a pod. */
 export interface RestartsOf {
   restartCount: number;
   lastRestartAt: string | null;
+  restartsBy?: readonly ContainerRestarts[];
   status?: { exitUnreported?: boolean };
 }

@@ -468,58 +468,66 @@ pub fn pending_since(pod: &Pod) -> Option<DateTime<Utc>> {
         .map(Moment::moment)
 }
 
+/// The container statuses whose restarts kubectl counts: while a pod is still
+/// initializing, its init containers' own; after, its sidecars' and its app
+/// containers'. Not a plain walk of `containerStatuses`.
+fn counted(pod: &Pod) -> Vec<&ContainerStatus> {
+    let status = pod.status.as_ref();
+    let inits = status
+        .and_then(|s| s.init_container_statuses.as_deref())
+        .unwrap_or_default();
+    if blocking_init(pod).is_some() && !condition_is_true(status, "Initialized") {
+        return inits.iter().collect();
+    }
+    inits
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| sidecar_at(pod, *index))
+        .map(|(_, cs)| cs)
+        .chain(
+            status
+                .and_then(|s| s.container_statuses.as_deref())
+                .unwrap_or_default(),
+        )
+        .collect()
+}
+
 /// Restarts as kubectl counts them, and when the latest exit among them
 /// ended: the one a terminated container sits in, not the run before it.
-///
-/// Not a plain sum over `containerStatuses`: a sidecar's restarts count
-/// too, and while a pod is still initializing the number that matters is
-/// the init containers' own.
 #[must_use]
 pub fn restarts(pod: &Pod) -> (i32, Option<DateTime<Utc>>) {
-    fn note(slot: &mut Option<DateTime<Utc>>, cs: &ContainerStatus) {
+    let mut total = 0;
+    let mut last: Option<DateTime<Utc>> = None;
+    for cs in counted(pod) {
+        total += cs.restart_count;
         let exit = if cs.restart_count > 0 {
             latest_exit(cs)
         } else {
             last_terminated(cs)
         };
         if let Some(at) = exit.and_then(|t| t.finished_at.as_ref()) {
-            if slot.is_none_or(|current| current < at.moment()) {
-                *slot = Some(at.moment());
+            if last.is_none_or(|current| current < at.moment()) {
+                last = Some(at.moment());
             }
         }
     }
-
-    let status = pod.status.as_ref();
-    let mut total = 0;
-    let mut sidecar_total = 0;
-    let mut last: Option<DateTime<Utc>> = None;
-    let mut sidecar_last: Option<DateTime<Utc>> = None;
-
-    if let Some(statuses) = status.and_then(|s| s.init_container_statuses.as_ref()) {
-        for (index, cs) in statuses.iter().enumerate() {
-            total += cs.restart_count;
-            note(&mut last, cs);
-            if sidecar_at(pod, index) {
-                sidecar_total += cs.restart_count;
-                note(&mut sidecar_last, cs);
-            }
-        }
-    }
-
-    if blocking_init(pod).is_some() && !condition_is_true(status, "Initialized") {
-        return (total, last);
-    }
-
-    total = sidecar_total;
-    last = sidecar_last;
-    if let Some(statuses) = status.and_then(|s| s.container_statuses.as_ref()) {
-        for cs in statuses {
-            total += cs.restart_count;
-            note(&mut last, cs);
-        }
-    }
-
     (total, last)
+}
+
+/// The containers behind [`restarts`], each with its own count, where more
+/// than one of them restarted: one total over an init container that looped
+/// and one that finished fine read as three different numbers on one page.
+#[must_use]
+pub fn restarts_by(pod: &Pod) -> Option<Vec<super::ContainerRestarts>> {
+    let by: Vec<_> = counted(pod)
+        .into_iter()
+        .filter(|cs| cs.restart_count > 0)
+        .map(|cs| super::ContainerRestarts {
+            container: cs.name.clone(),
+            n: cs.restart_count,
+        })
+        .collect();
+    (by.len() > 1).then_some(by)
 }
 
 #[cfg(test)]
@@ -1115,5 +1123,59 @@ mod tests {
         let rebooted = looping(running(), exited(now, 30, "Unknown", 255), 1);
         assert!(!crash_looping(&settled, now));
         assert!(!crash_looping(&rebooted, now));
+    }
+
+    /// A pod whose one container restarted needs no split: its count is that
+    /// container's. Fails if one container's count is split, or a running
+    /// pod's split names an init container that finished long ago.
+    #[test]
+    fn restarts_are_split_by_container_only_where_more_than_one_restarted() {
+        let restarted = |name: &str, n: i32| ContainerStatus {
+            name: name.to_string(),
+            restart_count: n,
+            state: Some(ContainerState {
+                running: Some(ContainerStateRunning::default()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let mut running = pod("Running");
+        let status = running.status.as_mut().expect("a status");
+        status.conditions = Some(vec![PodCondition {
+            type_: "Initialized".to_string(),
+            status: "True".to_string(),
+            ..Default::default()
+        }]);
+        status.init_container_statuses = Some(vec![ContainerStatus {
+            state: Some(ContainerState {
+                terminated: Some(ContainerStateTerminated::default()),
+                ..Default::default()
+            }),
+            ..restarted("wait-for-db", 5)
+        }]);
+        status.container_statuses = Some(vec![restarted("app", 3)]);
+        assert_eq!(restarts(&running).0, 3);
+        assert_eq!(restarts_by(&running), None);
+
+        running
+            .status
+            .as_mut()
+            .and_then(|s| s.container_statuses.as_mut())
+            .expect("containers")
+            .push(restarted("proxy", 2));
+        assert_eq!(restarts(&running).0, 5);
+        assert_eq!(
+            restarts_by(&running),
+            Some(vec![
+                super::super::ContainerRestarts {
+                    container: "app".into(),
+                    n: 3
+                },
+                super::super::ContainerRestarts {
+                    container: "proxy".into(),
+                    n: 2
+                },
+            ])
+        );
     }
 }

@@ -40,6 +40,47 @@ describe("the theme the window opens in", () => {
   });
 });
 
+describe("a change of tone", () => {
+  /**
+   * Sam's Service went from red "no endpoints" to blue "coming up", and the
+   * clock beside the blue words was still red: the glyph inherits its colour
+   * a fade behind the text. Fails if words and glyphs fade their colour
+   * outside a theme switch.
+   */
+  it("is drawn at once, and only a theme switch fades the colour of words and glyphs", () => {
+    const css = readFileSync("src/ui/index.css", "utf8");
+    const faded = (selector: string) =>
+      new RegExp(`${selector}[^{]*\\{[^}]*transition-property:\\s*([^;]+);`)
+        .exec(css)?.[1]
+        .split(",")
+        .map((property) => property.trim());
+    expect(faded("\\*,\\s*\\*::before,\\s*\\*::after\\s*")).toEqual([
+      "background-color",
+      "border-color",
+    ]);
+    expect(faded("\\.theme-fade \\*,")).toEqual(
+      expect.arrayContaining(["color", "fill", "stroke"])
+    );
+  });
+
+  /** Fails if a switch between themes does not fade, or the fade outlives it. */
+  it("fades for the switch between themes alone, not on the first paint", () => {
+    vi.useFakeTimers();
+    const root = document.documentElement;
+    applyTheme("dark");
+    expect(root.classList.contains("theme-fade")).toBe(false);
+
+    applyTheme("light");
+    expect(root.classList.contains("theme-fade")).toBe(true);
+    vi.advanceTimersByTime(250);
+    expect(root.classList.contains("theme-fade")).toBe(false);
+
+    applyTheme("light");
+    expect(root.classList.contains("theme-fade")).toBe(false);
+    vi.useRealTimers();
+  });
+});
+
 const hex = (hsl: string) => {
   const [h, s, l] = hsl.split(/\s+/).map(parseFloat);
   const a = (s / 100) * Math.min(l / 100, 1 - l / 100);

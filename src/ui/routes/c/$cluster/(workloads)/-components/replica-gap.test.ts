@@ -110,4 +110,27 @@ describe("a Replicas bar", () => {
       drawn(replicaSplit(1, 0, [failing, starting(30), starting(30)], NOW, t))
     ).toEqual([[1, "failing", "err"]]);
   });
+
+  /**
+   * Sam's big-pull page said blue "Pods coming up" in its header over an
+   * amber "1 not ready" bar, its pods not read or not made yet. Fails if a
+   * replica no pod read accounts for is amber while the header waits on it,
+   * amber turns blue when it does not, or a pod read past its wait is let
+   * off as starting.
+   */
+  it("draws a replica no pod read accounts for as starting while the header waits on its pods", () => {
+    expect(drawn(replicaSplit(1, 0, null, NOW, t, true))).toEqual([
+      [1, "starting", "pending"],
+    ]);
+    expect(drawn(replicaSplit(2, 0, [], NOW, t, true))).toEqual([
+      [2, "starting", "pending"],
+    ]);
+    expect(drawn(replicaSplit(2, 0, [starting(-1)], NOW, t, true))).toEqual([
+      [1, "starting", "pending"],
+      [1, "not ready", "warn"],
+    ]);
+    expect(drawn(replicaSplit(1, 0, null, NOW, t, false))).toEqual([
+      [1, "not ready", "warn"],
+    ]);
+  });
 });

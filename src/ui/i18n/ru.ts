@@ -4890,18 +4890,8 @@ export const ru: Catalogue = {
       many: "{n} проблем",
       other: "{n} проблемы",
     },
-    problemCountPartial: {
-      one: "{n}+ проблема, проверено не всё",
-      few: "{n}+ проблемы, проверено не всё",
-      many: "{n}+ проблем, проверено не всё",
-      other: "{n}+ проблемы, проверено не всё",
-    },
-    problemCountAtLeast: {
-      one: "{n}+ проблема",
-      few: "{n}+ проблемы",
-      many: "{n}+ проблем",
-      other: "{n}+ проблемы",
-    },
+    problemCountPartial: { other: "{n}+ проблем, проверено не всё" },
+    problemCountAtLeast: { other: "{n}+ проблем" },
     problemsNotAllChecked: "проверено не всё",
     finishedOnNode: "Завершились здесь",
     finishedOnNodeNote:
@@ -7989,6 +7979,7 @@ export const ru: Catalogue = {
       few: "{n} перезапуска",
       other: "{n} перезапусков",
     },
+    restartsBy: "{restarts}: {split}",
     restartsExitUnreported: {
       one: "{n} перезапуск, о последнем завершении не сообщено",
       few: "{n} перезапуска, о последнем завершении не сообщено",
@@ -8681,12 +8672,7 @@ export const ru: Catalogue = {
       many: "{n} совпадений",
       other: "{n} совпадения",
     },
-    matchesCapped: {
-      one: "{n}+ совпадение · предел",
-      few: "{n}+ совпадения · предел",
-      many: "{n}+ совпадений · предел",
-      other: "{n}+ совпадения · предел",
-    },
+    matchesCapped: { other: "{n}+ совпадений · предел" },
     moreOnThisCluster: "ещё {n} на этом кластере",
     kindsSearchedByName: {
       one: "Поиск по имени в {n} виде ресурсов",

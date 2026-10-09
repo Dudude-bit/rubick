@@ -25,6 +25,7 @@ const neighbourhood: { current: ResourceConnections | undefined } = {
 
 vi.mock("@/hooks/useConnections", () => ({
   useConnections: () => ({ data: neighbourhood.current }),
+  useObjectConnections: () => ({ data: neighbourhood.current }),
 }));
 
 import { WORKLOAD_SOURCES } from "./peek-sources-workloads";

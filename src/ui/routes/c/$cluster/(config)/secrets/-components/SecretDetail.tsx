@@ -16,7 +16,7 @@ import { IssuanceSection } from "@/components/object/IssuanceChain";
 import { KeyValueSection } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { useResourceDetail } from "@/hooks";
-import { useConnections } from "@/hooks/useConnections";
+import { useObjectConnections } from "@/hooks/useConnections";
 import { useCertificateIssuance } from "@/hooks/useCertificateIssuance";
 import { useTlsCertificates } from "@/hooks/useTlsCertificates";
 import { commands } from "@/lib/commands";
@@ -55,7 +55,11 @@ export function SecretDetail() {
     refresh: "slow",
   });
 
-  const connections = useConnections(ResourceType.Secret, name, namespace);
+  const connections = useObjectConnections(
+    ResourceType.Secret,
+    name,
+    namespace
+  );
 
   const { data: secretData, isLoading: isDataLoading } = useQuery({
     queryKey: queryKeys.secretData(namespace, name),

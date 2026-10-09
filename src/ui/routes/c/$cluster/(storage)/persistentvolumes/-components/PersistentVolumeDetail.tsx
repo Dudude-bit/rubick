@@ -13,7 +13,7 @@ import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
 import { ClaimRef } from "../../../-object/storage-refs";
 import { useResourceDetail } from "@/hooks";
-import { useConnections } from "@/hooks/useConnections";
+import { useObjectConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { deliveryOfKind } from "@/lib/delivery";
 import { useDeliveryIntercept } from "../../../-delivery/useDelivery";
@@ -99,7 +99,11 @@ export function PersistentVolumeDetail() {
   // Cluster-scoped, and the claim it names is in a namespace of its own. The
   // block above links to that claim; this says whether it is still there and
   // what it says about itself, which a link cannot.
-  const connections = useConnections(ResourceType.PersistentVolume, name, null);
+  const connections = useObjectConnections(
+    ResourceType.PersistentVolume,
+    name,
+    null
+  );
 
   const share = useCallback((): ShareContribution => {
     if (!pv) return {};

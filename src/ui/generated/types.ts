@@ -1931,7 +1931,7 @@ export interface ResourceCounts {
 
 export interface NamespaceLoad {
   name: string;
-  podCount: number;
+  podCount: number | null;
   problemCount: number;
 }
 
@@ -1977,6 +1977,11 @@ export interface ClusterProblem {
   since: string | null;
   restarts: number | null;
   foldedPods: number | null;
+}
+
+export interface ContainerRestarts {
+  container: string;
+  n: number;
 }
 
 export interface TlsCertificate {
@@ -2127,6 +2132,7 @@ export interface PodInfo {
   createdAt: string | null;
   restartCount: number;
   lastRestartAt: string | null;
+  restartsBy?: ContainerRestarts[];
   cpuRequests: string | null;
   cpuLimits: string | null;
   memoryRequests: string | null;
@@ -2735,7 +2741,7 @@ export type OverviewSource = "watch" | "list";
 
 export type ProblemDetail =
   | { says: "said"; text: string }
-  | { says: "restarts"; n: number }
+  | { says: "restarts"; n: number; by: ContainerRestarts[] | null }
   | { says: "replicasReady"; ready: number; desired: number }
   | { says: "unschedulable" };
 

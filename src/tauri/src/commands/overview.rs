@@ -102,8 +102,13 @@ pub enum ProblemSeverity {
 pub enum ProblemDetail {
     /// The object's own words, quoted.
     Said { text: String },
-    /// A pod restarting more than the screen tolerates.
-    Restarts { n: i32 },
+    /// A pod restarting more than the screen tolerates, and the containers
+    /// behind the count where more than one of them restarted.
+    Restarts {
+        n: i32,
+        #[serde(default)]
+        by: Option<Vec<crate::resources::ContainerRestarts>>,
+    },
     /// A Deployment short of replicas whose own condition said nothing.
     ReplicasReady { ready: i32, desired: i32 },
     /// A node marked unschedulable.
@@ -114,6 +119,14 @@ impl ProblemDetail {
     /// The cluster's own message, where it wrote one.
     fn said(message: Option<String>) -> Option<Self> {
         message.map(|text| Self::Said { text })
+    }
+
+    /// `n` restarts of `pod`, with the containers behind them.
+    fn restarts(pod: &Pod, n: i32) -> Self {
+        Self::Restarts {
+            n,
+            by: crate::resources::restarts_by(pod),
+        }
     }
 }
 
@@ -199,7 +212,8 @@ pub struct WarningGroup {
 #[serde(rename_all = "camelCase")]
 pub struct NamespaceLoad {
     pub name: String,
-    pub pod_count: usize,
+    /// `None` where this namespace's pods were not read.
+    pub pod_count: Option<usize>,
     /// Counted before the list is cut to `MAX_PROBLEMS`: on a cluster with
     /// fifty critical problems elsewhere, a namespace with only warnings has
     /// problems, not none.
@@ -473,7 +487,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 CRASH_LOOPING
             }
             .to_string(),
-            detail: Some(ProblemDetail::Restarts { n: restarts }),
+            detail: Some(ProblemDetail::restarts(pod, restarts)),
             since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
             restarts: Some(restarts),
             folded_pods: None,
@@ -481,14 +495,25 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
     }
 
     if let Some((reason, message)) = stuck {
+        // An init container's loop reads as an app container's does beside
+        // it, not in the kubelet's back-off sentence with the pod's uid in it.
+        let looping = in_init && crash_looping(pod, now);
         return Some(ClusterProblem {
             severity: ProblemSeverity::Critical,
             kind: "Pod".to_string(),
             name,
             namespace,
             reason,
-            detail: ProblemDetail::said(message),
-            since: created,
+            detail: if looping {
+                Some(ProblemDetail::restarts(pod, restarts))
+            } else {
+                ProblemDetail::said(message)
+            },
+            since: if looping {
+                last_restart_at.map(|t| t.to_rfc3339()).or(created)
+            } else {
+                created
+            },
             restarts: Some(restarts),
             folded_pods: None,
         });
@@ -554,7 +579,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             name,
             namespace,
             reason: "Restarting".to_string(),
-            detail: Some(ProblemDetail::Restarts { n: restarts }),
+            detail: Some(ProblemDetail::restarts(pod, restarts)),
             // Dated by the restart, not by the pod. `since: created` put a
             // twelve-day-old date on something that happened minutes ago.
             since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
@@ -1260,10 +1285,37 @@ fn namespace_loads<'a>(
         .into_iter()
         .map(|(name, (pod_count, problem_count))| NamespaceLoad {
             name: name.to_string(),
-            pod_count,
+            pod_count: Some(pod_count),
             problem_count,
         })
         .collect();
+    loads.sort_by_key(|load| std::cmp::Reverse(load.pod_count));
+    loads
+}
+
+/// Each namespace of a scope of several, as the picker counts them: the
+/// pods read there, none included, or `None` where they were refused.
+fn scope_loads<'a>(
+    scope: &[String],
+    pods: impl IntoIterator<Item = &'a Pod>,
+    problems: &[ClusterProblem],
+    unread: &[OverviewUnread],
+) -> Vec<NamespaceLoad> {
+    let mut loads = namespace_loads(pods, problems);
+    for name in scope {
+        if !loads.iter().any(|load| &load.name == name) {
+            loads.push(NamespaceLoad {
+                name: name.clone(),
+                pod_count: Some(0),
+                problem_count: 0,
+            });
+        }
+    }
+    for load in &mut loads {
+        if pods_unread_in(unread, Some(&load.name)) {
+            load.pod_count = None;
+        }
+    }
     loads.sort_by_key(|load| std::cmp::Reverse(load.pod_count));
     loads
 }
@@ -1442,10 +1494,12 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     problems.extend(job_problems(refs(input.jobs)));
     problems.extend(node_problems(refs(nodes)));
     let problems = fold_job_runs(problems, refs(input.scoped_pods));
-    // Scoped, the breakdown restates the selection, under a heading that
-    // counts namespaces in the cluster. Drop it instead.
+    // One namespace's breakdown restates it; several are each the picker's.
     let namespaces = match input.scope {
         None if pods_known => namespace_loads(refs(input.scoped_pods), &problems),
+        Some(scope) if scope.len() > 1 => {
+            scope_loads(scope, refs(input.scoped_pods), &problems, unread)
+        }
         _ => Vec::new(),
     };
     let (problems, problems_truncated) = rank_and_cap(problems);
@@ -2294,7 +2348,7 @@ mod tests {
         ];
         let loads = namespace_loads(&pods, &[]);
         assert_eq!(loads[0].name, "busy");
-        assert_eq!(loads[0].pod_count, 2);
+        assert_eq!(loads[0].pod_count, Some(2));
         assert_eq!(loads[1].name, "quiet");
     }
 
@@ -2665,7 +2719,7 @@ mod tests {
             assert_eq!(problems[0].severity, ProblemSeverity::Critical, "{instant}");
             assert_eq!(
                 problems[0].detail,
-                Some(ProblemDetail::Restarts { n: 9 }),
+                Some(ProblemDetail::Restarts { n: 9, by: None }),
                 "{instant}"
             );
         }
@@ -2784,6 +2838,84 @@ mod tests {
         }
     }
 
+    /// Sam's Needs attention row for init-demo printed the kubelet's
+    /// "back-off 5m0s restarting failed container=migrate pod=init-demo_..."
+    /// with the pod's uid in it, beside rows reading "N restarts since
+    /// creation", and its 17 counted five restarts of wait-for-db, an init
+    /// container that had finished fine, with nothing saying so. Fails if an
+    /// init container's loop is worded in the kubelet's sentence, or its
+    /// count does not name the containers behind it.
+    #[test]
+    fn an_init_container_loop_is_worded_as_restarts_by_container() {
+        let now = Utc::now();
+        let ago = |seconds: i64| (now - chrono::Duration::seconds(seconds)).to_rfc3339();
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": {
+                "name": "init-demo", "namespace": "k8s-gui-test",
+                "creationTimestamp": ago(40_000),
+            },
+            "spec": {
+                "initContainers": [{ "name": "wait-for-db" }, { "name": "migrate" }, { "name": "seed" }],
+                "containers": [{ "name": "app" }],
+            },
+            "status": {
+                "phase": "Pending",
+                "conditions": [{ "type": "Initialized", "status": "False" }],
+                "initContainerStatuses": [
+                    {
+                        "name": "wait-for-db", "image": "busybox", "imageID": "", "ready": true,
+                        "restartCount": 5,
+                        "state": { "terminated": { "exitCode": 0, "reason": "Completed" } },
+                    },
+                    {
+                        "name": "migrate", "image": "busybox", "imageID": "", "ready": false,
+                        "restartCount": 12,
+                        "state": { "waiting": {
+                            "reason": "CrashLoopBackOff",
+                            "message": "back-off 5m0s restarting failed container=migrate pod=init-demo_k8s-gui-test(a7b8f832-8e5c-4f43-83e8-77fca11059e1)",
+                        } },
+                        "lastState": { "terminated": {
+                            "exitCode": 1, "reason": "Error",
+                            "startedAt": ago(130), "finishedAt": ago(120),
+                        } },
+                    },
+                    {
+                        "name": "seed", "image": "busybox", "imageID": "", "ready": false,
+                        "restartCount": 0, "state": { "waiting": { "reason": "PodInitializing" } },
+                    },
+                ],
+                "containerStatuses": [{
+                    "name": "app", "image": "busybox", "imageID": "", "ready": false,
+                    "restartCount": 0, "state": { "waiting": { "reason": "PodInitializing" } },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote");
+
+        let problems = pod_problems([&pod], now);
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].reason, "Init:CrashLoopBackOff");
+        let by = vec![
+            crate::resources::ContainerRestarts {
+                container: "wait-for-db".into(),
+                n: 5,
+            },
+            crate::resources::ContainerRestarts {
+                container: "migrate".into(),
+                n: 12,
+            },
+        ];
+        assert_eq!(
+            problems[0].detail,
+            Some(ProblemDetail::Restarts {
+                n: 17,
+                by: Some(by.clone())
+            })
+        );
+        assert_eq!(problems[0].since, Some(ago(120)));
+        assert_eq!(crate::resources::PodInfo::from(&pod).restarts_by, Some(by));
+    }
+
     /// Sam saw init-demo's init container exit 1 again and again with its
     /// restarts grey. Fails if the instant it is up between short failed
     /// runs reads as an ordinary wait rather than as the loop it is in.
@@ -2865,7 +2997,10 @@ mod tests {
         let now = Utc::now();
 
         let ours = pod_problems(&[restarted_pod("flapper", now, 7, Some(120))], now);
-        assert_eq!(ours[0].detail, Some(ProblemDetail::Restarts { n: 7 }));
+        assert_eq!(
+            ours[0].detail,
+            Some(ProblemDetail::Restarts { n: 7, by: None })
+        );
 
         let cordoned = node_problems(&[unschedulable_node("worker-1")]);
         assert_eq!(cordoned[0].detail, Some(ProblemDetail::Unschedulable));
@@ -5056,24 +5191,32 @@ mod across_namespaces {
         }
     }
 
-    /// The namespace breakdown is the picker's view of the whole cluster. A
-    /// scope's answer restating its own namespaces under a heading that
-    /// counts the cluster's would be built out of the selection.
+    /// Marco checked team-blind beside team-checkout and team-checkout's
+    /// picker row said "0" pods beside an Overview counting 3: a scope of
+    /// several had no breakdown, and the picker read its absence as none.
+    /// Fails if a scope of several does not count each of its namespaces,
+    /// or counts one whose pods were refused.
     #[tokio::test]
-    async fn a_scope_has_no_namespace_breakdown() {
+    async fn a_scope_of_several_counts_each_namespace_and_none_whose_pods_were_refused() {
         let overview = Cluster::new()
             .items(
                 "/api/v1/namespaces/prod/pods",
-                vec![pod("a", PROD, "Running")],
+                vec![pod("a", PROD, "Running"), pod("b", PROD, "Running")],
             )
-            .items(
-                "/api/v1/namespaces/staging/pods",
-                vec![pod("b", STAGING, "Running")],
-            )
+            .refuse("/api/v1/namespaces/staging/pods")
             .listed()
             .await;
 
-        assert!(overview.namespaces.is_empty());
+        let count = |name: &str| {
+            overview
+                .namespaces
+                .iter()
+                .find(|load| load.name == name)
+                .map(|load| load.pod_count)
+        };
+        assert_eq!(count(PROD), Some(Some(2)));
+        assert_eq!(count(STAGING), Some(None));
+        assert_eq!(overview.counts.pods, None);
     }
 
     /// Would break the warnings panel, which keys its rows by reason: two

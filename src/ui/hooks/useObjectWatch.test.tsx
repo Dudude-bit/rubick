@@ -49,9 +49,13 @@ afterEach(() => {
   useClusterStore.setState({ isConnected: false });
 });
 
-function mount(gone: boolean, kind = "Service") {
+function mount(
+  gone: boolean,
+  kind = "Service",
+  read: () => Promise<typeof SERVICE> = async () => SERVICE
+) {
   const client = testQueryClient();
-  const getService = vi.fn(async () => SERVICE);
+  const getService = vi.fn(read);
   renderHook(
     () => {
       useObjectWatch(kind, SERVICE.namespace, SERVICE.name, gone);
@@ -154,4 +158,60 @@ it("watches nothing for a kind with no watch by name", async () => {
   const unwatched = mount(true, "ConfigMap");
   await waitFor(() => expect(unwatched).toHaveBeenCalled());
   expect(commands.subscribeObjectWatch).not.toHaveBeenCalled();
+});
+
+/**
+ * Sam's pod page, opened 0.4 s before its pod went Running, said
+ * ContainerCreating with "live" for 2 s: the change fell between the page's
+ * read and the start of its watch, so it came in the watch's first list and
+ * never as a change. Fails if a page read that answered before its watch's
+ * list was asked for is not read again once that list arrives.
+ */
+it("reads a page's object again where its watch listed it after the page's read answered", async () => {
+  vi.mocked(commands.subscribeObjectWatch).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => setTimeout(() => resolve("object-stream"), 10))
+  );
+  const getService = mount(false);
+  await waitFor(() => expect(getService).toHaveBeenCalledTimes(1));
+  await waitFor(() =>
+    expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith(
+      "object-stream"
+    )
+  );
+
+  send(
+    { op: "restarted" },
+    { op: "applied", resource: SERVICE },
+    { op: "synced" }
+  );
+
+  await waitFor(() => expect(getService).toHaveBeenCalledTimes(2));
+});
+
+/** Fails if a page read that answered after its watch's list was asked for is read again for nothing. */
+it("reads nothing again for a page read that answered after its watch's list was asked for", async () => {
+  let answer: (value: typeof SERVICE) => void = () => {};
+  const getService = mount(
+    false,
+    "Service",
+    () => new Promise((resolve) => (answer = resolve))
+  );
+  await waitFor(() =>
+    expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith(
+      "object-stream"
+    )
+  );
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  answer(SERVICE);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+
+  send(
+    { op: "restarted" },
+    { op: "applied", resource: SERVICE },
+    { op: "synced" }
+  );
+
+  await new Promise((resolve) => setTimeout(resolve, 400));
+  expect(getService).toHaveBeenCalledTimes(1);
 });

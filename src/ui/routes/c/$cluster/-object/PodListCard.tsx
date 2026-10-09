@@ -2,6 +2,7 @@ import { podReadiness } from "@/lib/container-sequence";
 import { restartsAreNews } from "@/lib/crash-loop";
 import { silenceOf } from "@/lib/node-reporting";
 import { podRole, podStatusTitle } from "@/lib/share/pod-status";
+import { withRestartsBy } from "@/lib/pod-status";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { ResourceType } from "@/lib/resource-registry";
 import { ChildRows } from "./child-rows";
@@ -58,7 +59,11 @@ export function PodListCard({
                   className={restartsAreNews(pod) ? "text-warn" : "text-fg-mut"}
                 >
                   {" · "}
-                  {t("count", "restartsPlain", { n: restarts })}
+                  {withRestartsBy(
+                    t("count", "restartsPlain", { n: restarts }),
+                    pod.restartsBy,
+                    t
+                  )}
                 </span>
               )}
             </>

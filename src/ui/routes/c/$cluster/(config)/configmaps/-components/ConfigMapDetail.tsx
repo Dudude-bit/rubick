@@ -16,7 +16,7 @@ import { errorWords } from "@/i18n/say";
 import { KeyValueSection } from "../../../-object/detail-kv";
 import { recordToKeyValues } from "@/components/object/key-values";
 import { useResourceDetail } from "@/hooks";
-import { useConnections } from "@/hooks/useConnections";
+import { useObjectConnections } from "@/hooks/useConnections";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { deliveryOfKind } from "@/lib/delivery";
@@ -53,7 +53,11 @@ export function ConfigMapDetail() {
     refresh: "slow",
   });
 
-  const connections = useConnections(ResourceType.ConfigMap, name, namespace);
+  const connections = useObjectConnections(
+    ResourceType.ConfigMap,
+    name,
+    namespace
+  );
 
   const {
     data: configMapData,
