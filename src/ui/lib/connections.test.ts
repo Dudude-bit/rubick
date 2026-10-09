@@ -13,6 +13,7 @@ import {
   describeStop,
   describeUsages,
   hopTone,
+  stopUnder,
   trafficChains,
   type RoutedIngress,
 } from "./connections";
@@ -944,6 +945,62 @@ describe("the traffic chain", () => {
     });
     expect(hopTone(crashing.stop)).toBe("bad");
     expect(crashing.path.broken).toBe(true);
+  });
+
+  /**
+   * Marco's ledger with no address listed at all: the slices say nothing is
+   * published, the pods were not read, and the chain drew a red fault
+   * beside the Deployment's grey unread verdict. Fails if that stop breaks
+   * its path, loses its unread mood or note, or one behind no workload stops
+   * being a fault.
+   */
+  it("draws a stop with nothing published and its pods unread as not checked", () => {
+    const front = service("ledger", "app=ledger");
+    const subject = ref("Deployment", "ledger", {
+      kind: "workload",
+      replicas: 1,
+      readyReplicas: 0,
+      rollout: null,
+      revision: null,
+      current: null,
+    });
+    const chainOf = (podsUnread: boolean) => {
+      const stop = {
+        reason: "publishesNothingYet" as const,
+        service: front,
+        selector: "app=ledger",
+        podsUnread,
+      };
+      const [path] = trafficChains(
+        connections(
+          subject,
+          [
+            {
+              from: front,
+              to: subject,
+              relation: { verb: "selects", selector: "app=ledger" },
+            },
+          ],
+          [stop]
+        ),
+        t
+      );
+      return { path, hop: path.hops.at(-1)!, under: stopUnder(stop) };
+    };
+
+    const unread = chainOf(true);
+    expect(unread.hop).toMatchObject({
+      mood: "unchecked",
+      title: "Nothing is published behind app=ledger yet",
+      note: t("nav", "stopPodsUnreadNote"),
+    });
+    expect(unread.path.broken).toBe(false);
+    expect(unread.under).toBe("podsNotRead");
+
+    const nobody = chainOf(false);
+    expect(nobody.hop).toMatchObject({ mood: "fault" });
+    expect(nobody.path.broken).toBe(true);
+    expect(nobody.under).toBe("stopNothingPublishedYet");
   });
 
   /**

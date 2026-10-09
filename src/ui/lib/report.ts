@@ -52,6 +52,7 @@ export interface ReportStat {
   label: string;
   value: string;
   role?: StatusRole;
+  unread?: boolean;
   ref?: ReportRef;
   note?: string | null;
 }
@@ -755,7 +756,7 @@ function statsHtml(report: Report, ctx: Ctx): string {
           stat.ref
             ? refHtml(stat.ref, ctx, { kind: false })
             : stat.role
-              ? roleHtml(stat.role, stat.value, report.icons)
+              ? roleHtml(stat.role, stat.value, report.icons, stat.unread)
               : e(stat.value)
         }${stat.note ? `<span class="sub">${e(stat.note)}</span>` : ""}</dd></div>`
     )

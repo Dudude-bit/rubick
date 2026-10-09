@@ -425,6 +425,10 @@ pub enum ChainStop {
     PublishesNothingYet {
         service: ObjectRef,
         selector: String,
+        /// Every workload behind it waits on pods that could not be read to
+        /// say whether they are still starting.
+        #[serde(rename = "podsUnread", default)]
+        pods_unread: bool,
     },
     /// The Service's pods exist and not one of them is ready, so nothing it
     /// publishes takes traffic and the address refuses connections.

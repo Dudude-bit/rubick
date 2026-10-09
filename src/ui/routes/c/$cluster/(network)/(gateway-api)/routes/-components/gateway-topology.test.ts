@@ -310,6 +310,7 @@ describe("the gateway topology map", () => {
             reason: "publishesNothingYet",
             service: { kind: "Service", name: "promo", namespace: "gwtest" },
             selector: "app=promo",
+            podsUnread: false,
           },
         },
       ],

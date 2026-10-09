@@ -2317,7 +2317,12 @@ export type ChainStop =
       selector: string;
       workloads: ObjectRef[];
     }
-  | { reason: "publishesNothingYet"; service: ObjectRef; selector: string }
+  | {
+      reason: "publishesNothingYet";
+      service: ObjectRef;
+      selector: string;
+      podsUnread: boolean;
+    }
   | {
       reason: "noneReady";
       service: ObjectRef;

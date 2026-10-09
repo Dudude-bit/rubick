@@ -298,9 +298,10 @@ async fn with_unready_cause(
     explain_empty_selectors(client, services, published).await
 }
 
-/// Whether the workloads behind a Service with none ready are only waiting
-/// on their pods, by [`published::waiting_on`]: one read of each kind per
-/// namespace that has such a Service. `pods` is what the selector picked,
+/// Whether the workloads behind a Service with none ready, or with none
+/// published and its pods unread, are only waiting on their pods, by
+/// [`published::waiting_on`]: one read of each kind per namespace that has
+/// such a Service. `pods` is what the selector picked,
 /// `None` where they were not read.
 async fn explain_waits(
     client: &kube::Client,
@@ -310,7 +311,12 @@ async fn explain_waits(
     let waiting: BTreeSet<String> = services
         .iter()
         .zip(&asked)
-        .filter(|(_, (published, _))| matches!(published.stop, Some(ChainStop::NoneReady { .. })))
+        .filter(|(_, (published, _))| {
+            matches!(
+                published.stop,
+                Some(ChainStop::NoneReady { .. } | ChainStop::PublishesNothingYet { .. })
+            )
+        })
         .map(|(svc, _)| svc.namespace().unwrap_or_default())
         .collect();
     if waiting.is_empty() {
@@ -1074,7 +1080,8 @@ mod tests {
     /// Marco's ledger in the shell's count: pods refused, and the Deployment
     /// behind the Service waiting on them by its own counts. Fails if the list
     /// reader stops asking the workloads behind a Service with none ready, or
-    /// lets one off whose Deployments it could not read.
+    /// with no address at all, or lets one off whose Deployments it could not
+    /// read.
     #[tokio::test]
     async fn a_service_whose_workload_waits_on_unread_pods_says_so_in_the_shells_count() {
         use crate::client::served::test_server::{answering, failure};
@@ -1101,11 +1108,22 @@ mod tests {
             }]
         })
         .to_string();
-        let stop_with = |answer: (u16, String)| {
+        let empty = serde_json::json!({
+            "apiVersion": "discovery.k8s.io/v1", "kind": "EndpointSliceList",
+            "metadata": {}, "items": []
+        })
+        .to_string();
+        let stop_in = |answer: (u16, String), addressed: bool| {
             let base = unready_demo(failure(403, "Forbidden"));
+            let empty = empty.clone();
             async move {
                 let (client, _) = answering(move |path, n| match path {
                     "/apis/apps/v1/namespaces/k8s-gui-test/deployments" => answer.clone(),
+                    "/apis/discovery.k8s.io/v1/namespaces/k8s-gui-test/endpointslices"
+                        if !addressed =>
+                    {
+                        (200, empty.clone())
+                    }
                     _ => base(path, n),
                 })
                 .await;
@@ -1117,6 +1135,18 @@ mod tests {
                     .clone()
             }
         };
+        let stop_with = |answer: (u16, String)| stop_in(answer, true);
+        let unaddressed = stop_in((200, deployments.clone()), false).await;
+        assert!(
+            matches!(
+                unaddressed,
+                Some(ChainStop::PublishesNothingYet {
+                    pods_unread: true,
+                    ..
+                })
+            ),
+            "{unaddressed:?}"
+        );
         let waiting = stop_with((200, deployments)).await;
         assert!(
             matches!(

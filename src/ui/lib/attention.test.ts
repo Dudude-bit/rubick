@@ -383,6 +383,58 @@ describe("what Needs attention lists beyond pods", () => {
     ).toMatchObject({ label: "backend coming up", role: "pending" });
   });
 
+  /**
+   * Sam's big-pull: its pod pulling an image had no address yet, and Needs
+   * attention listed red "no endpoints" over its own "still starting". Fails
+   * if a Service with nothing listed whose workload is coming up, or whose
+   * pods were not read, is counted, or one behind no workload stops being.
+   */
+  it("counts no problem for a Service with no address yet whose workload waits on its pods", () => {
+    const ref = (name: string) => ({
+      kind: "Service",
+      name,
+      namespace: "shop",
+      existence: "present" as const,
+      facts: null,
+    });
+    const nothingYet = (name: string, podsUnread: boolean) => ({
+      reason: "publishesNothingYet" as const,
+      service: ref(name),
+      selector: `app=${name}`,
+      podsUnread,
+    });
+    const empty = (
+      name: string,
+      stop: ServiceHealthGroup["stop"]
+    ): ServiceHealthGroup => ({
+      names: [name],
+      type: "ClusterIP",
+      selectorless: false,
+      ready: 0,
+      draining: 0,
+      notReady: 0,
+      unrouted: 0,
+      stop,
+    });
+    const groups = [
+      empty("big-pull", {
+        reason: "noneReady",
+        service: ref("big-pull"),
+        selector: "app=big-pull",
+        pods: 1,
+        why: "comingUp",
+      }),
+      empty("ledger", nothingYet("ledger", true)),
+      empty("orphan", nothingYet("orphan", false)),
+    ];
+    const listed = attention({
+      services: { answered: [{ namespace: "shop", groups }], unread: [] },
+    });
+    expect(listed.items.map((item) => [item.name, item.reason])).toEqual([
+      ["orphan", "no endpoints"],
+    ]);
+  });
+
   /** An Ingress whose class nothing serves, read by the Ingresses list's own reader. */
   it("lists an Ingress no controller serves", () => {
     const backing: NamespaceBacking = new Map([

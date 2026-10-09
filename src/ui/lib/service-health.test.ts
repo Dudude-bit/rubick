@@ -67,6 +67,7 @@ describe("one verdict for a Service on every surface", () => {
           reason: "publishesNothingYet",
           service: SERVICE,
           selector: "app=topology-demo",
+          podsUnread: false,
         },
       }),
       null
@@ -238,6 +239,7 @@ describe("one verdict for a Service on every surface", () => {
           reason: "publishesNothingYet",
           service: SERVICE,
           selector: "app=tls-demo",
+          podsUnread: false,
         },
       }),
       null
@@ -391,5 +393,53 @@ describe("a Service whose workloads wait on their pods", () => {
     expect(words.reason).toBe(
       "1 pod carries app=ledger, and it is not ready: still starting"
     );
+  });
+
+  /**
+   * Sam's big-pull: its pod pulling an image had no address yet, so the
+   * slices listed none and the Services list, Needs attention and the page
+   * Status read red no endpoints above a blue "coming up" traffic block.
+   * Fails if a Service with nothing listed is drawn as a fault while its
+   * workload is coming up or its pods were not read, or if one behind no
+   * workload at all is let off.
+   */
+  it("reads a Service with no address yet by what its workload waits on", () => {
+    const empty = (stop: ServicePublished["stop"]) =>
+      serviceHealthOf(SELECTING, published({ stop }), null);
+    const coming = empty({
+      reason: "noneReady",
+      service: SERVICE,
+      selector: "app=big-pull",
+      pods: 1,
+      why: "comingUp",
+    });
+    expect(coming.state).toBe("comingUp");
+    const comingWords = serviceHealthWords(coming, t);
+    expect(comingWords.label).toBe("coming up");
+    expect(comingWords.role).toBe("pending");
+
+    const unread = empty({
+      reason: "publishesNothingYet",
+      service: SERVICE,
+      selector: "app=ledger",
+      podsUnread: true,
+    });
+    expect(unread.state).toBe("podsUnread");
+    const unreadWords = serviceHealthWords(unread, t);
+    expect(unreadWords.label).toBe("no endpoints");
+    expect(unreadWords.role).toBe("neutral");
+    expect(unreadWords.glyph).toBe(EyeOff);
+    expect(unreadWords.reason).toBe(
+      "Nothing is published behind app=ledger yet: pods not read, so whether they are starting is not known"
+    );
+
+    const nobody = empty({
+      reason: "publishesNothingYet",
+      service: SERVICE,
+      selector: "app=ledger",
+      podsUnread: false,
+    });
+    expect(nobody.state).toBe("noEndpoints");
+    expect(serviceHealthWords(nobody, t).role).toBe("err");
   });
 });

@@ -72,6 +72,7 @@ describe("what a route's backend is doing", () => {
       reason: "publishesNothingYet" as const,
       service: published().service,
       selector: "app=promo",
+      podsUnread: false,
     };
     const backend = { name: "app", namespace: "shop" };
 

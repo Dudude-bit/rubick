@@ -129,6 +129,38 @@ describe("what the Service report leads with", () => {
   });
 
   /**
+   * Sam's big-pull, shared while its pod pulled an image: the page said
+   * coming up and the file would lead with an amber "publishes nothing".
+   * Fails if a Service waiting on its workload's pods is drawn as an empty
+   * one, or one whose pods were not read loses the not-read mark.
+   */
+  it("says a Service with nothing yet behind a workload coming up is coming up", () => {
+    const stat = (stop: ServicePublished["stop"]) =>
+      serviceStats(service, published({ ready: 0, stop }), t).at(-1);
+    expect(
+      stat({
+        reason: "noneReady",
+        service: published().service,
+        selector: "app=checkout",
+        pods: 1,
+        why: "comingUp",
+      })
+    ).toMatchObject({
+      value: "0/0",
+      role: "pending",
+      note: "1 pod carries app=checkout, and it is not ready: still starting",
+    });
+    expect(
+      stat({
+        reason: "publishesNothingYet",
+        service: published().service,
+        selector: "app=checkout",
+        podsUnread: true,
+      })
+    ).toMatchObject({ value: "0/0", role: "neutral", unread: true });
+  });
+
+  /**
    * With neither EndpointSlices nor Endpoints readable, the count is
    * deduced from pods; it is not the controller's word, and says so.
    */
