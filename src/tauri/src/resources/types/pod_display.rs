@@ -366,20 +366,41 @@ pub const STUCK_WAITING_REASONS: &[&str] = &[
 /// Reason and message of the first container stuck in a back-off / image-pull
 /// loop rather than starting up. The single most common real incident, and the
 /// reason string the API gives for it is already precise.
+///
+/// While a pod is still initializing, the init container that holds it up is
+/// the one asked, in the `Init:` words kubectl prints for it, a run that
+/// failed included: the kubelet starts it again rather than giving up.
 #[must_use]
 pub fn stuck_reason(pod: &Pod) -> Option<(String, Option<String>)> {
-    pod.status
-        .as_ref()?
+    let status = pod.status.as_ref()?;
+    if status.phase.as_deref().is_none_or(|p| p == "Pending")
+        && !condition_is_true(Some(status), "Initialized")
+    {
+        if let Some((_, cs)) = blocking_init(pod) {
+            let failed = cs
+                .state
+                .as_ref()
+                .and_then(|s| s.terminated.as_ref())
+                .filter(|t| t.exit_code != 0)
+                .map(|t| (terminated_reason(t), t.message.clone()));
+            return failed
+                .or_else(|| stuck_waiting(cs))
+                .map(|(reason, message)| (format!("Init:{reason}"), message));
+        }
+    }
+    status
         .container_statuses
         .as_ref()?
         .iter()
-        .find_map(|c| {
-            let waiting = c.state.as_ref()?.waiting.as_ref()?;
-            let reason = waiting.reason.as_deref()?;
-            STUCK_WAITING_REASONS
-                .contains(&reason)
-                .then(|| (reason.to_string(), waiting.message.clone()))
-        })
+        .find_map(stuck_waiting)
+}
+
+fn stuck_waiting(cs: &ContainerStatus) -> Option<(String, Option<String>)> {
+    let waiting = cs.state.as_ref()?.waiting.as_ref()?;
+    let reason = waiting.reason.as_deref()?;
+    STUCK_WAITING_REASONS
+        .contains(&reason)
+        .then(|| (reason.to_string(), waiting.message.clone()))
 }
 
 /// When a Pending pod started waiting: its last scheduling decision, or its
