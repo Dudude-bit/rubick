@@ -768,16 +768,22 @@ function NamespacePopover({
    *  reader came to deselect sit at the top — pinned at open rather than live,
    *  so a row does not slide out from under the pointer as it is toggled. */
   const [pinned, setPinned] = useState<readonly string[]>([]);
+  /** The rows in the order this opening first drew them; counts that move
+   *  while it is open, and toggles, leave every row where the pointer last
+   *  saw it. A name that arrives later joins at the end. */
+  const [order, setOrder] = useState<readonly string[]>([]);
   /** Whether the namespaces the reader has no access to are being shown
    *  anyway — a per-open escape hatch, off again on close. */
   const [showBlocked, setShowBlocked] = useState(false);
   // On the prop, not on the popover's own close: a pick closes it from the
   // parent, which kept the last filter for the next open.
   const [wasOpen, setWasOpen] = useState(open);
-  if (open !== wasOpen) {
+  const opening = open !== wasOpen;
+  if (opening) {
     setWasOpen(open);
     if (open) {
       setPinned(scope);
+      setOrder([]);
     } else {
       setFilter("");
       setCursor(-1);
@@ -837,8 +843,19 @@ function NamespacePopover({
   // below still read the live `scope`, so the ceiling and the checkmarks
   // stay honest as the reader toggles.
   const pinnedSet = new Set(pinned);
+  const unranked = [...offered]
+    .sort(
+      (a, b) => Number(pinnedSet.has(b.name)) - Number(pinnedSet.has(a.name))
+    )
+    .map((ns) => ns.name)
+    .filter((name) => !order.includes(name));
+  if (open && !opening && unranked.length > 0)
+    setOrder([...order, ...unranked]);
+  const rank = new Map(
+    [...order, ...unranked].map((name, index) => [name, index])
+  );
   const ordered = [...shown].sort(
-    (a, b) => Number(pinnedSet.has(b.name)) - Number(pinnedSet.has(a.name))
+    (a, b) => (rank.get(a.name) ?? 0) - (rank.get(b.name) ?? 0)
   );
 
   const full = scope.length >= SCOPE_LIMIT;

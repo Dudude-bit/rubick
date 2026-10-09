@@ -409,6 +409,41 @@ describe("watching several namespaces at once", () => {
   });
 
   /**
+   * Lena aimed at "shop" and got "net": the rows moved between her looking
+   * and her clicking. Fails if counts that change while the list is open, or
+   * a namespace added to the selection, move any row under the pointer, or
+   * if the next opening stops putting the selection first.
+   */
+  it("holds every row still while the list is open, and reorders at the next opening", async () => {
+    const user = userEvent.setup();
+    await draw(["ns-0"]);
+    const list = await openPicker(user);
+    const names = () =>
+      within(list)
+        .getAllByRole("option")
+        .slice(1)
+        .map((option) => option.getAttribute("aria-label")?.split(",")[0]);
+    const before = names();
+    expect(before.slice(0, 3)).toEqual(["ns-0", "ns-1", "ns-2"]);
+
+    summary.namespaces = [...summary.namespaces].reverse();
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("{Control>}");
+    await user.click(rowFor("ns-4"));
+    await user.keyboard("{/Control}");
+    expect(scope()).toEqual(["ns-0", "ns-4"]);
+    expect(names()).toEqual(before);
+
+    await user.keyboard("{Escape}");
+    const again = await openPicker(user);
+    const reopened = within(again)
+      .getAllByRole("option")
+      .slice(1)
+      .map((option) => option.getAttribute("aria-label")?.split(",")[0]);
+    expect(reopened.slice(0, 3)).toEqual(["ns-4", "ns-0", "ns-5"]);
+  });
+
+  /**
    * #137: on a cluster split across teams the reader can see namespaces they
    * have no rights in. The picker stops offering the ones the authorizer
    * firmly refuses — until asked to show them. Fails if a refused namespace
