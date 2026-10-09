@@ -20,7 +20,7 @@ import {
 } from "@/lib/delivery";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { isRefusal, verbatim } from "@/lib/error-utils";
-import { useRefusedAt } from "@/lib/refusals";
+import { askedAgainFirst, useRefusedAt } from "@/lib/refusals";
 import {
   isReadDeadline,
   LIST_DEADLINE_SECONDS,
@@ -305,16 +305,20 @@ export function ResourceList<
       : setDeleteTarget;
 
   const shouldUseQuery = data === undefined && !!queryKey && !!queryFn;
+  // A visit asks a refused list once more, so the age it shows is this
+  // visit's; the polls after it are answered by the kept refusal.
+  const [visit] = useState(askedAgainFirst);
+  const read = queryFn && (() => visit(queryFn));
   const queryResult = useResource(
     (queryKey ?? ["resource-list"]) as string[],
-    queryFn
+    read
       ? live && queryKey
         ? async () =>
             keepWatched(
-              await queryFn(),
+              await read(),
               queryClient.getQueryData<Scoped<Row>>(queryKey)
             )
-        : queryFn
+        : read
       : async () => whole<Row>([]),
     {
       enabled: shouldUseQuery,

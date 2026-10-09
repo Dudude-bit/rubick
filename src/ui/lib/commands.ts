@@ -4,6 +4,7 @@ import { logInfo } from "@/lib/logger";
 import { measured, perf } from "@/lib/perf";
 import {
   currentConnection,
+  forgetIfAskedAgain,
   isRead,
   noteRefusal,
   readOf,
@@ -36,6 +37,7 @@ export function wrapCommand<T extends AsyncFn>(fn: T, commandName?: string): T {
   const reads = isRead(name);
   return (async (...args: Parameters<T>) => {
     const read = reads ? readOf(name, args) : null;
+    if (read !== null) forgetIfAskedAgain(read);
     const refused = read === null ? undefined : refusalOf(read);
     if (refused !== undefined) throw refused;
     const connection = currentConnection();
