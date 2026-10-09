@@ -1778,6 +1778,8 @@ export const en = {
       "Most likely: no node fits it. The scheduler gave the same answer {times}, so probably nothing about the nodes has changed since it first asked.",
     guessPendingVaried:
       "Most likely: no node fits it, and the scheduler's answer has changed over {attempts}, so the nodes are probably changing under it.",
+    notPlacedYet:
+      "Not placed yet: the scheduler has found no node for it so far, and it is still inside the wait a new pod gets, so this is not a fault yet.",
     guessUnknownUnread:
       "The pod's events could not be read, so what is probably wrong cannot be said from here. The container states below are all this app could look at.",
     guessProbeUnnamed:
@@ -5404,6 +5406,7 @@ export const en = {
     lastRunNotClean:
       "{how}: the last run of this container did not finish cleanly.",
     noNodeWillTakePod: "No node will take this pod",
+    waitingForNode: "Waiting to be placed on a node",
     conditionIsStatus: "{type} is {status}",
     thisPodFailed: "This pod failed",
     certificateExpired: "certificate expired",

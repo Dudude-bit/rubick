@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { Link } from "@tanstack/react-router";
-import { Copy, Search, Zap } from "lucide-react";
+import { Clock, Copy, Search, Zap, type LucideIcon } from "lucide-react";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import { openExternal } from "@/lib/open-external";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useHintSettingsStore } from "@/stores/hintSettingsStore";
 import { useHintChain } from "./useHintChain";
+import { usePodWaiting } from "./usePodWaiting";
 import { useT, type T } from "@/i18n/useT";
 import type { EventInfo, PodInfo } from "@/generated/types";
 
@@ -44,6 +45,15 @@ function usableEngine(url: string): string | null {
 
 const words = (saying: HintSaying, t: T): string => sayingWords(saying, t);
 
+/** A guess at a fault in amber; a pod still inside its wait in the blue of its badge. */
+const PANEL: Record<
+  "guess" | "waiting",
+  { frame: string; icon: LucideIcon; mark: string }
+> = {
+  guess: { frame: "border-warn/40", icon: Zap, mark: "text-warn" },
+  waiting: { frame: "border-info/40", icon: Clock, mark: "text-info" },
+};
+
 export function MostLikelyPanel({
   pod,
   events,
@@ -60,7 +70,11 @@ export function MostLikelyPanel({
   const copy = useCopyToClipboard();
   const settings = useHintSettingsStore();
   const context = useClusterStore((s) => s.currentContext) ?? "";
-  const trouble = useMemo(() => troubleOf(pod, events), [pod, events]);
+  const waiting = usePodWaiting(pod);
+  const trouble = useMemo(
+    () => troubleOf(pod, events, waiting),
+    [pod, events, waiting]
+  );
   const { chain, logLines, logContainer, previous } = useHintChain(
     pod,
     trouble,
@@ -127,14 +141,20 @@ export function MostLikelyPanel({
     copy(text, t("hints", "copiedForAgent", { n: text.length }));
   };
 
+  const look =
+    PANEL[
+      trouble?.reason === "pending" && trouble.waiting ? "waiting" : "guess"
+    ];
+  const Mark = look.icon;
+
   return (
     <section
-      className="rounded border border-warn/40 bg-canvas px-3 py-2 text-xs"
+      className={`rounded border ${look.frame} bg-canvas px-3 py-2 text-xs`}
       aria-label={t("hints", "mostLikely")}
       data-testid="most-likely"
     >
       <h3 className="flex items-center gap-1.5 font-medium text-fg">
-        <Zap className="h-3.5 w-3.5 text-warn" aria-hidden="true" />
+        <Mark className={`h-3.5 w-3.5 ${look.mark}`} aria-hidden="true" />
         {hint ? words(hint.headline, t) : t("hints", "guessUnknownUnread")}
       </h3>
       {(hint?.lines ?? []).map((line, index) => (

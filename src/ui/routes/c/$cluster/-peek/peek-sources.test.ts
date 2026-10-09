@@ -529,3 +529,80 @@ describe("a peek at a kind addressed by its plural and group", () => {
     );
   });
 });
+
+describe("the peek at a pod the scheduler has not placed", () => {
+  const unplaced = (secondsLeft: number) => ({
+    name: "never-placed-75dcb67599-hnznt",
+    namespace: "shop",
+    uid: "u",
+    status: {
+      phase: "Pending",
+      display: "Pending",
+      ready: false,
+      conditions: [],
+      message: null,
+      reason: null,
+    },
+    nodeName: null,
+    podIp: null,
+    containers: [
+      {
+        name: "app",
+        image: "busybox:1.36",
+        ready: false,
+        phase: "app",
+        state: { type: "waiting", reason: null },
+        lastTerminated: null,
+        restartCount: 0,
+      },
+    ],
+    initContainers: [],
+    restartCount: 0,
+    lastRestartAt: null,
+    ownerReferences: [],
+    cpuRequests: null,
+    cpuLimits: null,
+    memoryRequests: null,
+    memoryLimits: null,
+    createdAt: null,
+    start: {
+      state: "starting",
+      until: new Date(Date.now() + secondsLeft * 1000).toISOString(),
+    },
+  });
+  const target = { kind: "Pod", name: "never-placed", namespace: "shop" };
+  const rows = (secondsLeft: number) => {
+    const summary = resolveSource(target).summarise(
+      unplaced(secondsLeft),
+      target,
+      ((_section: string, key: string) => key) as never
+    );
+    const [placement] = summary.groups;
+    return {
+      role: summary.statusRole,
+      tones: placement.items.map((item) => [item.label, item.tone]),
+    };
+  };
+
+  /**
+   * Sam's peek at a 43 s old never-placed pod had a blue Pending badge over
+   * amber "unscheduled" and amber "0 of 1 ready". Fails if those rows call
+   * the wait a fault before the badge does, or stay blue after it turns.
+   */
+  it("paints its unplaced node and unready containers in the badge's blue, then amber with it", () => {
+    expect(rows(15)).toMatchObject({
+      role: "pending",
+      tones: expect.arrayContaining([
+        ["node", "info"],
+        ["containers", "info"],
+      ]),
+    });
+    expect(rows(-1)).toMatchObject({
+      role: "warn",
+      tones: expect.arrayContaining([
+        ["node", "warn"],
+        ["containers", "warn"],
+      ]),
+    });
+  });
+});

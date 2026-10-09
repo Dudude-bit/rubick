@@ -11,6 +11,7 @@
 
 import { loopingContainer, loopingNow } from "@/lib/crash-loop";
 import { lastTermination } from "@/lib/pod-status";
+import { insideWait } from "@/lib/share/pod-status";
 import type {
   ContainerInfo,
   EventInfo,
@@ -97,6 +98,8 @@ export type Trouble =
       message: string | null;
       count: number;
       sameEachTime: boolean;
+      /** Still inside the wait a new pod gets: the scheduler's answer, not yet a fault. */
+      waiting: boolean;
     }
   | {
       reason: "probeFailed";
@@ -143,7 +146,11 @@ function probeOf(
  * that will not pull, a volume that will not mount, a pod nothing will
  * schedule, a probe the kubelet keeps failing.
  */
-export function troubleOf(pod: PodInfo, events: EventInfo[]): Trouble | null {
+export function troubleOf(
+  pod: PodInfo,
+  events: EventInfo[],
+  waiting: boolean = insideWait(pod)
+): Trouble | null {
   const all = [...pod.initContainers, ...pod.containers];
   // Before the crash loop, not after it. A container killed for memory
   // under `restartPolicy: Always` spends nearly all its time in
@@ -205,9 +212,9 @@ export function troubleOf(pod: PodInfo, events: EventInfo[]): Trouble | null {
   // Only while something is still waiting on it. An hour-old FailedMount
   // on a pod that has been Running since put a permanent trouble panel,
   // in the present tense, on the Overview of a healthy pod.
-  const waiting = all.some((c) => c.state.type === "waiting");
+  const held = all.some((c) => c.state.type === "waiting");
   const mount =
-    waiting || pod.status.phase !== "Running"
+    held || pod.status.phase !== "Running"
       ? (latest(events, "FailedMount") ?? latest(events, "FailedAttachVolume"))
       : null;
   if (mount) {
@@ -226,6 +233,7 @@ export function troubleOf(pod: PodInfo, events: EventInfo[]): Trouble | null {
       message: last.message,
       count: scheduling.reduce((sum, e) => sum + occurrences(e), 0),
       sameEachTime: new Set(scheduling.map((e) => e.message ?? "")).size === 1,
+      waiting,
     };
   }
   const unhealthy = latest(events, "Unhealthy");
@@ -765,12 +773,16 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
         to: { kind: "object", objectKind: "Node", name: "", namespace: null },
       });
       return {
-        headline: {
-          key: trouble.sameEachTime ? "guessPendingSame" : "guessPendingVaried",
-          values: trouble.sameEachTime
-            ? { times: counted("countTimes", trouble.count) }
-            : { attempts: counted("countAttempts", trouble.count) },
-        },
+        headline: trouble.waiting
+          ? { key: "notPlacedYet" }
+          : {
+              key: trouble.sameEachTime
+                ? "guessPendingSame"
+                : "guessPendingVaried",
+              values: trouble.sameEachTime
+                ? { times: counted("countTimes", trouble.count) }
+                : { attempts: counted("countAttempts", trouble.count) },
+            },
         lines,
         checks,
       };

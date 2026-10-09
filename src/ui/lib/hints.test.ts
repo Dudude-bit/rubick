@@ -440,6 +440,56 @@ describe("troubleOf", () => {
   });
 });
 
+describe("a pod the scheduler has not placed", () => {
+  const unplaced = (secondsLeft: number) =>
+    pod({
+      nodeName: null,
+      status: {
+        phase: "Pending",
+        display: "Pending",
+        ready: false,
+        conditions: [],
+        message: null,
+        reason: null,
+      },
+      start: {
+        state: "starting",
+        until: new Date(Date.now() + secondsLeft * 1000).toISOString(),
+      },
+    });
+  const scheduler = [
+    event(
+      "FailedScheduling",
+      "0/2 nodes are available: 2 node(s) didn't match Pod's node affinity/selector."
+    ),
+  ];
+
+  /**
+   * Sam's never-placed pod, 45 s old, had a blue Pending badge over "Most
+   * likely: no node fits it", which Share and Copy for agent repeated. Fails
+   * if a pod inside its wait is given the fault's sentence, or one past it
+   * is let off with the waiting one.
+   */
+  it("says a pod inside its wait is not placed yet, and one past it that no node fits", () => {
+    const early = troubleOf(unplaced(15), scheduler)!;
+    expect(early).toMatchObject({ reason: "pending", waiting: true });
+    const said = hintFor(early, unplaced(15), NONE);
+    expect(said.headline.key).toBe("notPlacedYet");
+    expect(said.lines).toEqual([
+      {
+        key: "factSchedulerSaid",
+        values: { message: scheduler[0].message },
+      },
+    ]);
+
+    const late = troubleOf(unplaced(-1), scheduler)!;
+    expect(late).toMatchObject({ reason: "pending", waiting: false });
+    expect(hintFor(late, unplaced(-1), NONE).headline.key).toBe(
+      "guessPendingSame"
+    );
+  });
+});
+
 describe("addressIn", () => {
   it("classifies the last failed address: sidecar, in cluster, outside", () => {
     expect(

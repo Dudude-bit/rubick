@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { act, cleanup, screen, waitFor } from "@testing-library/react";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
@@ -27,7 +27,7 @@ vi.mock("@/lib/commands", () => ({
 
 import { commands } from "@/lib/commands";
 import { useHintSettingsStore } from "@/stores/hintSettingsStore";
-import type { PodInfo } from "@/generated/types";
+import type { EventInfo, PodInfo } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
 import { MostLikelyPanel } from "./MostLikelyPanel";
 
@@ -345,5 +345,96 @@ describe("MostLikelyPanel", () => {
     useHintSettingsStore.setState({ showPanel: false });
     await mount(crashing);
     expect(screen.queryByTestId("most-likely")).not.toBeInTheDocument();
+  });
+});
+
+describe("MostLikelyPanel on a pod the scheduler has not placed", () => {
+  const unplaced = (secondsLeft: number) =>
+    ({
+      ...crashing,
+      status: {
+        ...crashing.status,
+        phase: "Pending",
+        display: "Pending",
+      },
+      containers: [
+        {
+          ...crashing.containers[0],
+          state: { type: "waiting", reason: null },
+          lastTerminated: null,
+          restartCount: 0,
+        },
+      ],
+      restartCount: 0,
+      start: {
+        state: "starting",
+        until: new Date(Date.now() + secondsLeft * 1000).toISOString(),
+      },
+    }) as unknown as PodInfo;
+  const said =
+    "0/2 nodes are available: 2 node(s) didn't match Pod's node affinity/selector.";
+  const scheduling: EventInfo[] = [
+    {
+      name: "never-placed.1",
+      namespace: "shop",
+      uid: "e1",
+      type: "Warning",
+      reason: "FailedScheduling",
+      message: said,
+      source: "default-scheduler",
+      involvedObject: {
+        kind: "Pod",
+        name: "never-placed",
+        namespace: "shop",
+        uid: null,
+      },
+      count: 1,
+      firstTimestamp: null,
+      lastTimestamp: null,
+    },
+  ];
+  const copied = async (pod: PodInfo) => {
+    const writeText = vi.fn(async (_text: string) => {});
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    await renderWithRouter(
+      <MostLikelyPanel
+        pod={pod}
+        events={scheduling}
+        eventsError={null}
+        onOpenTab={() => {}}
+      />,
+      { at: "/c/test", route: "/c/$cluster" }
+    );
+    const panel = await screen.findByTestId("most-likely");
+    await act(async () =>
+      screen.getByRole("button", { name: /Copy for agent/ }).click()
+    );
+    return { panel, report: writeText.mock.calls[0]?.[0] ?? "" };
+  };
+
+  /**
+   * Sam's never-placed pod, 45 s old under a blue Pending badge, got an
+   * amber "Most likely: no node fits it", and Copy for agent said the same.
+   * Fails if a pod inside its wait is framed or worded as a fault, or one
+   * past it is not.
+   */
+  it("says it is not placed yet in blue inside the wait, and that no node fits it after", async () => {
+    const early = await copied(unplaced(15));
+    expect(early.panel.className).toContain("border-info/40");
+    expect(early.panel.textContent).toContain("Not placed yet");
+    expect(early.panel.textContent).toContain(`The scheduler said: ${said}`);
+    expect(early.panel.textContent).not.toContain("no node fits it");
+    expect(early.report).toContain("App's own guess: Not placed yet");
+    cleanup();
+
+    const late = await copied(unplaced(-1));
+    expect(late.panel.className).toContain("border-warn/40");
+    expect(late.panel.textContent).toContain("Most likely: no node fits it");
+    expect(late.report).toContain(
+      "App's own guess: Most likely: no node fits it"
+    );
   });
 });

@@ -8,6 +8,7 @@ import type {
 import { readLogView, logViewKey } from "../../../-logs/shared-view";
 import { logsToText } from "../../../-logs/types";
 import { useHintChain } from "./useHintChain";
+import { usePodWaiting } from "./usePodWaiting";
 import { hintFor, sayingWords, troubleOf } from "@/lib/hints";
 import { iconSvg } from "@/lib/icon-svg";
 import { parseImageRef } from "@/lib/image-ref";
@@ -192,9 +193,10 @@ export function usePodShare(
   eventsError: unknown
 ): (frame: ShareFrame) => ShareContribution {
   const t = useT();
+  const waiting = usePodWaiting(pod);
   const trouble = useMemo(
-    () => (pod ? troubleOf(pod, events) : null),
-    [pod, events]
+    () => (pod ? troubleOf(pod, events, waiting) : null),
+    [pod, events, waiting]
   );
   // The two settings the panel reads: turning «Most likely» off has to stop
   // the reading behind it too, and turning log lines off has to keep them

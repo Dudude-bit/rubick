@@ -19,9 +19,21 @@ export type PodBadgeInput = ReadinessLists & {
 };
 
 /**
- * A Pending pod past the wait `pending_grace` gives it, a minute unplaced
- * and ten once placed: the instant the Overview stops counting it as
- * starting and counts it Pending in amber.
+ * A Pending pod still inside the wait `pending_grace` gives it, a minute
+ * unplaced and ten once placed: whatever the scheduler has said of it so
+ * far, it is coming, not failing, and every reader paints it so.
+ */
+export const insideWait = (
+  pod: Pick<PodBadgeInput, "status" | "start">,
+  now: number = Date.now()
+) =>
+  pod.status.phase === "Pending" &&
+  pod.start?.state === "starting" &&
+  Date.parse(pod.start.until) > now;
+
+/**
+ * A Pending pod past that wait: the instant the Overview stops counting it
+ * as starting and counts it Pending in amber.
  */
 export const pendingTooLong = (
   pod: Pick<PodBadgeInput, "status" | "start">,
@@ -30,7 +42,7 @@ export const pendingTooLong = (
   pod.status.phase === "Pending" &&
   pod.start !== undefined &&
   pod.start.state !== "settled" &&
-  !(pod.start.state === "starting" && Date.parse(pod.start.until) > now);
+  !insideWait(pod, now);
 
 /** A word that would read healthy, said in the seconds a crash-looping container is up. */
 export const upBetweenCrashes = (pod: { status: LoopStatus }) =>

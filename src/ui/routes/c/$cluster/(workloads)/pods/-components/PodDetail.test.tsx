@@ -302,6 +302,94 @@ describe("a crash-looping pod caught while its container is up", () => {
   });
 });
 
+describe("a pod the scheduler has not placed yet", () => {
+  const SAID =
+    "0/2 nodes are available: 2 node(s) didn't match Pod's node affinity/selector.";
+
+  /**
+   * Sam's never-placed pod, 45 s into its 60 s wait, had a blue Pending
+   * badge beside a red Unschedulable and a red "No node will take this pod",
+   * over amber "unscheduled" and "0 of 1 ready". Fails if anything on the
+   * page calls the wait a fault before the badge does, or still calls it
+   * waiting once the wait has run out.
+   */
+  it("reads as waiting in blue inside the wait, and as a fault once it runs out", async () => {
+    const until = new Date(Date.now() + 15_000).toISOString();
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod")
+        return {
+          ...POD,
+          nodeName: null,
+          podIp: null,
+          hostIp: null,
+          status: {
+            phase: "Pending",
+            display: "Pending",
+            ready: false,
+            conditions: [
+              {
+                type: "PodScheduled",
+                status: "False",
+                reason: "Unschedulable",
+                message: SAID,
+                lastTransitionTime: null,
+              },
+            ],
+            message: null,
+            reason: null,
+          },
+          containers: [
+            {
+              name: "app",
+              image: "busybox:1.36",
+              ready: false,
+              started: false,
+              phase: "app",
+              state: { type: "waiting", reason: null },
+              lastTerminated: null,
+              restartCount: 0,
+              ports: [],
+              resources: { requests: {}, limits: {} },
+              env: [],
+              envFrom: [],
+            },
+          ],
+          start: { state: "starting", until },
+        };
+      if (command === "get_replicaset") return REPLICA_SET;
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+
+    const tone = (text: string) => screen.getAllByText(text)[0].className;
+    expect(tone("Waiting to be placed on a node")).toContain("text-info");
+    expect(screen.queryByText("No node will take this pod")).toBeNull();
+    expect(tone("Unschedulable")).toContain("text-info");
+    expect(tone("unscheduled")).toContain("text-info");
+    expect(tone("0 of 1 ready")).toContain("text-info");
+    expect(screen.getAllByText(SAID).length).toBeGreaterThan(0);
+    const conditions = () => screen.getByRole("tab", { name: /^Conditions/ });
+    expect(conditions()).toHaveAccessibleName(
+      "Conditions: Waiting to be placed on a node"
+    );
+    expect(conditions().querySelector(".bg-info")).not.toBeNull();
+
+    await advance(20_000);
+
+    expect(tone("No node will take this pod")).toContain("text-err");
+    expect(screen.queryByText("Waiting to be placed on a node")).toBeNull();
+    expect(tone("Unschedulable")).toContain("text-err");
+    expect(tone("unscheduled")).toContain("text-warn");
+    expect(tone("0 of 1 ready")).toContain("text-warn");
+    expect(conditions().querySelector(".bg-warn")).not.toBeNull();
+  });
+});
+
 describe("a pod that restarted while the kubelet reports no last exit", () => {
   const UNREPORTED = {
     ...POD,

@@ -41,8 +41,8 @@ export type DetailTabGlyph =
 export type DetailTabMark =
   /** The tab is a collection, and its size decides whether it is worth opening. */
   | { shows: "count"; of: number | string }
-  /** Something inside is failing — `says` is what the tab tells a reader who cannot see the colour. */
-  | { shows: "severity"; tone: "err" | "warn"; says: string }
+  /** Something inside is failing, or in `info` still coming; `says` is what the tab tells a reader who cannot see the colour. */
+  | { shows: "severity"; tone: "err" | "warn" | "info"; says: string }
   /**
    * Something inside could not be checked. Not a failure and not a clean
    * count: a tab whose page says "nobody looked" wore a plain number, which
@@ -113,7 +113,7 @@ export function readCountMark(
 }
 
 export const severityMark = (
-  tone: "err" | "warn",
+  tone: "err" | "warn" | "info",
   says: string
 ): DetailTabMark => ({ shows: "severity", tone, says });
 
