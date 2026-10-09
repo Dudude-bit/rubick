@@ -82,13 +82,8 @@ import {
   useRememberOwners,
   type Owner,
 } from "@/hooks/useLastOwners";
-import {
-  attentionOf,
-  lastRunOut,
-  rowsWithStarts,
-  startsOf,
-} from "@/lib/workload-status";
-import { useNowReading } from "@/hooks/useNow";
+import { attentionOf, rowsWithStarts, startsOf } from "@/lib/workload-status";
+import { useLastPassed } from "@/hooks/useNow";
 
 export function PeekContent({
   target,
@@ -741,9 +736,7 @@ function NamespaceContents({ namespace }: { namespace: string }) {
     () => (pods.data ? startsOf(pods.data) : null),
     [pods.data]
   );
-  const ranOut = useNowReading(10_000, (now) =>
-    starts ? lastRunOut(starts.deadlines, now) : 0
-  );
+  const ranOut = useLastPassed(starts?.deadlines ?? []);
   const verdicts = useMemo(
     () =>
       deployments.data &&

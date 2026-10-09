@@ -23,7 +23,7 @@ import {
   WarningsPanel,
   WorkloadsPanel,
 } from "./health";
-import { podTotal, podsServing } from "./health-share";
+import { podTotal } from "./health-share";
 import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
 import type { ReportStat } from "@/lib/report";
 import { useT, type T } from "@/i18n/useT";
@@ -50,7 +50,7 @@ function overviewStats(
     {
       label: "Pods",
       value: pods
-        ? `${podsServing(pods.read)}/${podTotal(pods.read)}`
+        ? `${pods.read.ready}/${podTotal(pods.read)}`
         : t("empty", "notReadLower"),
       note:
         podsUnread.length > 0

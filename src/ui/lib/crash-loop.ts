@@ -6,16 +6,17 @@ import { lastTermination } from "@/lib/pod-status";
 export const CRASH_LOOP_WINDOW_MS = shared.windowSeconds * 1000;
 
 /**
- * Whether a pod kubectl calls `Running` is up between the crashes of a loop,
- * measured from the exit the backend ships as `crash_looping` measures it.
+ * Whether a pod kubectl calls `Running` is up between the crashes of a loop:
+ * still before the moment `looping_until` in `pod_display.rs` ships, which
+ * `crash_looping` compares with its own clock the same way.
  */
 export function loopingNow(
-  status: { loopingExitAt?: string | null },
+  status: { loopingUntil?: string | null },
   now: number = Date.now()
 ): boolean {
-  if (!status.loopingExitAt) return false;
-  const at = Date.parse(status.loopingExitAt);
-  return !Number.isNaN(at) && now - at < CRASH_LOOP_WINDOW_MS;
+  if (!status.loopingUntil) return false;
+  const until = Date.parse(status.loopingUntil);
+  return !Number.isNaN(until) && now < until;
 }
 
 /**
@@ -30,7 +31,7 @@ export type LoopState = "looping" | "unreported" | "clear";
 export function loopState(
   status: {
     display: string;
-    loopingExitAt?: string | null;
+    loopingUntil?: string | null;
     exitUnreported?: boolean;
   },
   now: number = Date.now()
@@ -62,7 +63,7 @@ export function loopingContainer(
 /** A loop a screen saw on one pod, kept for a read that comes back without its exit. */
 export interface SeenLoop {
   uid: string;
-  at: string;
+  until: string;
   restarts: number;
 }
 
@@ -71,15 +72,16 @@ type LoopPod = {
   restartCount: number;
   status: {
     display: string;
-    loopingExitAt?: string | null;
+    loopingUntil?: string | null;
     exitUnreported?: boolean;
   };
 };
 
 /**
- * What to remember after this read: its exit, the moment the kubelet was
- * first seen backing off since the last restart, or what was remembered
- * before, kept as the same object when nothing new was seen.
+ * What to remember after this read: the moment its loop lapses, the window
+ * from when the kubelet was first seen backing off since the last restart,
+ * or what was remembered before, kept as the same object when nothing new
+ * was seen.
  */
 export function seenLoop(
   pod: LoopPod,
@@ -87,20 +89,20 @@ export function seenLoop(
   now: number = Date.now()
 ): SeenLoop | null {
   const same = previous?.uid === pod.uid;
-  const exit = pod.status.loopingExitAt;
-  if (exit)
+  const until = pod.status.loopingUntil;
+  if (until)
     return same &&
-      previous.at === exit &&
+      previous.until === until &&
       previous.restarts === pod.restartCount
       ? previous
-      : { uid: pod.uid, at: exit, restarts: pod.restartCount };
+      : { uid: pod.uid, until, restarts: pod.restartCount };
   if (
     pod.status.display === "CrashLoopBackOff" &&
     !(same && previous.restarts >= pod.restartCount)
   )
     return {
       uid: pod.uid,
-      at: new Date(now).toISOString(),
+      until: new Date(now + CRASH_LOOP_WINDOW_MS).toISOString(),
       restarts: pod.restartCount,
     };
   return previous;
@@ -109,10 +111,11 @@ export function seenLoop(
 const RESTARTING_FAILED = /restarting failed container/i;
 
 /**
- * A pod whose last exit the kubelet stopped reporting, measured from the
- * latest sign its loop goes on: a loop this screen saw on it with no fewer
- * restarts since, or the kubelet backing off a failed container of it. Any
- * other pod, and one with no such sign, comes back as it was.
+ * A pod whose last exit the kubelet stopped reporting, looping until the
+ * latest sign its loop goes on lapses: a loop this screen saw on it with no
+ * fewer restarts since, or the window from the kubelet backing off a failed
+ * container of it. Any other pod, and one with no such sign, comes back as
+ * it was.
  */
 export function withKnownLoop<P extends LoopPod>(
   pod: P,
@@ -123,18 +126,22 @@ export function withKnownLoop<P extends LoopPod>(
     lastTimestamp: string | null;
   }[]
 ): P {
-  if (!pod.status.exitUnreported || pod.status.loopingExitAt) return pod;
+  if (!pod.status.exitUnreported || pod.status.loopingUntil) return pod;
   const signs = [
-    seen?.uid === pod.uid && pod.restartCount >= seen.restarts ? seen.at : null,
+    seen?.uid === pod.uid && pod.restartCount >= seen.restarts
+      ? Date.parse(seen.until)
+      : NaN,
     ...events
       .filter(
         (event) =>
           event.reason === "BackOff" &&
           RESTARTING_FAILED.test(event.message ?? "")
       )
-      .map((event) => event.lastTimestamp),
-  ].filter((at): at is string => !!at && !Number.isNaN(Date.parse(at)));
+      .map(
+        (event) => Date.parse(event.lastTimestamp ?? "") + CRASH_LOOP_WINDOW_MS
+      ),
+  ].filter((until) => !Number.isNaN(until));
   if (signs.length === 0) return pod;
-  const at = signs.reduce((a, b) => (Date.parse(a) >= Date.parse(b) ? a : b));
-  return { ...pod, status: { ...pod.status, loopingExitAt: at } };
+  const until = new Date(Math.max(...signs)).toISOString();
+  return { ...pod, status: { ...pod.status, loopingUntil: until } };
 }

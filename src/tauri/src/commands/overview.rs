@@ -16,8 +16,8 @@ use crate::error::{Error, Result};
 use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::resources::node_budget::holds_reservation;
 use crate::resources::{
-    condition_is_true, crash_looping, job_state, pending_since, stuck_reason, within_pending_grace,
-    Rollout,
+    backing_off, condition_is_true, crash_looping, job_state, looping_until, pending_since,
+    pod_start, stuck_reason, within_pending_grace, PodStart, Rollout,
 };
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
@@ -88,6 +88,12 @@ const RESTART_ATTENTION_THRESHOLD: i32 = 5;
 /// `CrashLoopBackOff` caps its wait at five minutes — so nothing that is
 /// actually flapping escapes, and an incident that is over stops being news.
 const RESTART_RECENT_SECONDS: i64 = 3600;
+
+/// This app's word for a pod it reads as crash-looping while the kubelet says
+/// something else at this instant: `Running` between crashes, `Error` as one
+/// ends. Printed as the kubelet's `CrashLoopBackOff`, it put a status kubectl
+/// never showed on a pod that had restarted with its node.
+pub const CRASH_LOOPING: &str = "CrashLooping";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -270,6 +276,10 @@ pub struct PodComposition {
     /// `Ready`, so no Service sends it traffic. kubectl prints `Running` and
     /// `0/1` for it; counted as running, the Overview called it fine.
     pub not_ready: usize,
+    /// Pods whose `Ready` condition is true, the ones kubectl counts ready: a
+    /// subset of `running` that `crash_looping` may overlap at the instant a
+    /// looping container is up.
+    pub ready: usize,
     /// A subset of `pending`: pods whose container the kubelet holds in a
     /// reason that waiting will not clear, under the reason the Pods list and
     /// Needs attention print. Counted as Pending, a pod the list calls
@@ -351,6 +361,11 @@ pub struct ClusterOverview {
     pub metrics_available: bool,
     /// Whether this answer came from the watch-fed stores or from listing.
     pub served_from: OverviewSource,
+    /// The first moment after this answer that a verdict in it turns on the
+    /// clock alone: a pod's wait running out, or its crash loop lapsing. The
+    /// reader asks again then, so the Overview turns with the pod's own page
+    /// rather than on its next poll.
+    pub next_change_at: Option<DateTime<Utc>>,
     /// The kinds whose problems this answer could not look for, and why.
     pub unread: Vec<OverviewUnread>,
 }
@@ -454,13 +469,19 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
 
     // Before the waiting reason, so the row reads the same at every instant
     // of the back-off cycle rather than turning amber while the container is up.
+    // The kubelet's word only while the kubelet says it; otherwise this app's.
     if crash_looping(pod, now) {
         return Some(ClusterProblem {
             severity: ProblemSeverity::Critical,
             kind: "Pod".to_string(),
             name,
             namespace,
-            reason: "CrashLoopBackOff".to_string(),
+            reason: if backing_off(pod) {
+                "CrashLoopBackOff"
+            } else {
+                CRASH_LOOPING
+            }
+            .to_string(),
             detail: Some(ProblemDetail::Restarts { n: restarts }),
             since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
             restarts: Some(restarts),
@@ -510,7 +531,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             .conditions
             .as_ref()
             .and_then(|cs| cs.iter().find(|c| c.type_ == "PodScheduled"));
-        if within_pending_grace(pod, now) {
+        if still_starting(pod, now) {
             return None;
         }
         let pending_since = pending_since(pod);
@@ -553,6 +574,12 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
     }
 
     None
+}
+
+/// A Pending pod inside the wait it gets and showing no fault, a restart
+/// included, as the workload running it reads it.
+fn still_starting(pod: &Pod, now: DateTime<Utc>) -> bool {
+    within_pending_grace(pod, now) && !matches!(pod_start(pod), PodStart::Failing)
 }
 
 /// The pods each Deployment runs through its `ReplicaSets`, by namespace and name.
@@ -1093,6 +1120,9 @@ fn pod_composition<'a>(
         {
             "Running" => {
                 composition.running += 1;
+                if condition_is_true(pod.status.as_ref(), "Ready") {
+                    composition.ready += 1;
+                }
                 if crash_looping(pod, now) || stuck_reason(pod).is_some() {
                     composition.crash_looping += 1;
                 } else if !condition_is_true(pod.status.as_ref(), "Ready") {
@@ -1103,7 +1133,7 @@ fn pod_composition<'a>(
                 composition.pending += 1;
                 if let Some((reason, _)) = stuck_reason(pod) {
                     *stuck.entry(reason).or_default() += 1;
-                } else if !crash_looping(pod, now) && within_pending_grace(pod, now) {
+                } else if still_starting(pod, now) {
                     composition.starting += 1;
                 }
             }
@@ -1469,8 +1499,27 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         namespaces,
         metrics_available,
         served_from: input.served_from,
+        next_change_at: next_change(refs(input.scoped_pods), input.now),
         unread: unread.to_vec(),
     }
+}
+
+/// The earliest wait or crash loop among `pods` still to run out after `now`.
+fn next_change<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    now: DateTime<Utc>,
+) -> Option<DateTime<Utc>> {
+    pods.into_iter()
+        .flat_map(|pod| {
+            let start = match pod_start(pod) {
+                PodStart::Starting { until } => Some(until),
+                PodStart::Settled | PodStart::Failing => None,
+            };
+            [start, looping_until(pod)]
+        })
+        .flatten()
+        .filter(|at| *at > now)
+        .min()
 }
 
 /// Get everything the overview screen needs in one round trip.
@@ -2587,7 +2636,8 @@ mod tests {
     /// checkout pods between crashes and `3 CrashLoop` a minute later, and
     /// their Needs attention rows went from red `CrashLoopBackOff` to amber
     /// "Restarting" and back. Fails if the two instants of one crash loop
-    /// are counted or read differently.
+    /// are counted or ranked differently, or the row puts the kubelet's
+    /// `CrashLoopBackOff` on the instant the kubelet says `Running`.
     #[test]
     fn a_crash_loop_counts_and_reads_the_same_whether_its_container_is_up_or_waiting() {
         let now = Utc::now();
@@ -2609,7 +2659,10 @@ mod tests {
             ..Default::default()
         });
 
-        for (instant, pod) in [("up", &up), ("backing off", &backing_off)] {
+        for (instant, pod, word) in [
+            ("up", &up, CRASH_LOOPING),
+            ("backing off", &backing_off, "CrashLoopBackOff"),
+        ] {
             let composition = pod_composition([pod], now);
             assert_eq!(
                 (composition.running, composition.crash_looping),
@@ -2618,7 +2671,7 @@ mod tests {
             );
             let problems = pod_problems([pod], now);
             assert_eq!(problems.len(), 1, "{instant}");
-            assert_eq!(problems[0].reason, "CrashLoopBackOff", "{instant}");
+            assert_eq!(problems[0].reason, word, "{instant}");
             assert_eq!(problems[0].severity, ProblemSeverity::Critical, "{instant}");
             assert_eq!(
                 problems[0].detail,
@@ -2626,6 +2679,165 @@ mod tests {
                 "{instant}"
             );
         }
+    }
+
+    /// Sam's Overview called orders-db-0 `CrashLoopBackOff` and read "3 of
+    /// 15 pods ready" while kubectl had 6: the pod had run 2 h 20 m, exited
+    /// once with its node and been Ready since. Fails if one exit after a
+    /// long run is counted, listed or ranked as a crash loop, or a Ready pod
+    /// is left out of the ready count.
+    #[test]
+    fn a_pod_restarted_once_with_its_node_is_ready_and_not_crash_looping() {
+        let pod: Pod = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "orders-db-0", "namespace": "shop" },
+            "spec": { "containers": [{ "name": "db" }] },
+            "status": {
+                "phase": "Running",
+                "conditions": [{ "type": "Ready", "status": "True" }],
+                "containerStatuses": [{
+                    "name": "db", "image": "postgres:16", "imageID": "",
+                    "ready": true, "started": true, "restartCount": 2,
+                    "state": { "running": { "startedAt": "2026-10-09T08:25:11Z" } },
+                    "lastState": { "terminated": {
+                        "exitCode": 255, "reason": "Unknown",
+                        "startedAt": "2026-10-09T06:04:34Z",
+                        "finishedAt": "2026-10-09T08:25:05Z",
+                    } },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote");
+        let now = DateTime::parse_from_rfc3339("2026-10-09T08:39:00Z")
+            .expect("now")
+            .with_timezone(&Utc);
+        let composition = pod_composition([&pod], now);
+        assert_eq!(
+            (
+                composition.running,
+                composition.crash_looping,
+                composition.ready
+            ),
+            (1, 0, 1)
+        );
+        assert!(pod_problems([&pod], now).is_empty());
+    }
+
+    /// `shop/init-demo` with its init container crash-looping, created a
+    /// minute ago, at one instant of its back-off: waiting, just exited, or up.
+    fn init_demo(now: DateTime<Utc>, state: serde_json::Value) -> Pod {
+        let created = (now - chrono::Duration::seconds(60)).to_rfc3339();
+        serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "init-demo", "namespace": "shop", "creationTimestamp": created },
+            "spec": {
+                "nodeName": "node01",
+                "initContainers": [{ "name": "wait-for-db" }],
+                "containers": [{ "name": "app" }],
+            },
+            "status": {
+                "phase": "Pending",
+                "conditions": [
+                    { "type": "Initialized", "status": "False" },
+                    { "type": "PodScheduled", "status": "True", "lastTransitionTime": created },
+                ],
+                "initContainerStatuses": [{
+                    "name": "wait-for-db", "image": "busybox:1.36", "imageID": "",
+                    "ready": false, "restartCount": 3, "state": state,
+                }],
+                "containerStatuses": [{
+                    "name": "app", "image": "busybox:1.36", "imageID": "",
+                    "ready": false, "restartCount": 0,
+                    "state": { "waiting": { "reason": "PodInitializing" } },
+                }],
+            },
+        }))
+        .expect("a pod the kubelet wrote")
+    }
+
+    /// Dana's Overview counted init-demo under Pending while the Pods list
+    /// drew it red as `Init:CrashLoopBackOff`, and inside its first ten
+    /// minutes it would have counted as starting and listed nothing. Fails
+    /// if any instant of an init container's loop is counted as a wait, or
+    /// the backed-off one under another word than the list's.
+    #[test]
+    fn an_init_container_crash_looping_is_a_problem_at_every_instant() {
+        let now = Utc::now();
+        let backing_off = init_demo(
+            now,
+            serde_json::json!({ "waiting": { "reason": "CrashLoopBackOff", "message": "back-off 40s" } }),
+        );
+        let exited = init_demo(
+            now,
+            serde_json::json!({ "terminated": { "exitCode": 1, "reason": "Error" } }),
+        );
+        let up = init_demo(now, serde_json::json!({ "running": {} }));
+        assert_eq!(
+            crate::resources::PodRow::from(&backing_off).status.display,
+            "Init:CrashLoopBackOff"
+        );
+
+        for (instant, pod, word) in [
+            ("backing off", &backing_off, Some("Init:CrashLoopBackOff")),
+            ("exited", &exited, Some("Init:Error")),
+            ("up", &up, None),
+        ] {
+            let composition = pod_composition([pod], now);
+            assert_eq!(composition.starting, 0, "{instant}");
+            assert_eq!(
+                composition.stuck.first().map(|held| held.reason.as_str()),
+                word,
+                "{instant}"
+            );
+            let problems = pod_problems([pod], now);
+            assert_eq!(problems.len(), 1, "{instant}");
+            assert_eq!(problems[0].severity, ProblemSeverity::Critical, "{instant}");
+            assert_eq!(problems[0].reason, word.unwrap_or("Pending"), "{instant}");
+        }
+    }
+
+    /// Sam's Overview turned amber six seconds after the unplaced pod's own
+    /// page did, on its next poll. Fails if the answer does not name the
+    /// moment its first wait runs out or crash loop lapses, or names one
+    /// already past.
+    #[test]
+    fn the_answer_names_the_moment_its_first_verdict_turns_on_the_clock() {
+        let now = Utc::now();
+        let waiting = pending_pod("never-placed", now, 20);
+        let looping = restarted_pod("checkout", now, 9, Some(20));
+        let late = pending_pod("long-gone", now, 600);
+        let at = |seconds: i64| Some((now + chrono::Duration::seconds(seconds)).timestamp());
+
+        assert_eq!(
+            next_change([&waiting, &looping, &late], now).map(|t| t.timestamp()),
+            at(PENDING_GRACE_SECONDS - 20)
+        );
+        assert_eq!(
+            next_change([&looping, &late], now).map(|t| t.timestamp()),
+            at(crate::resources::CRASH_LOOP_WINDOW_SECONDS - 20)
+        );
+        assert_eq!(next_change([&late], now), None);
+    }
+
+    /// kubectl counts a crash-looping pod ready in the seconds its container
+    /// is up and Ready. Fails if the ready count leaves such a pod out, or
+    /// counts one whose `Ready` condition is false.
+    #[test]
+    fn the_ready_count_is_the_pods_whose_ready_condition_is_true() {
+        let now = Utc::now();
+        let mut up = restarted_pod("checkout", now, 9, Some(20));
+        up.status.as_mut().unwrap().conditions = Some(vec![PodCondition {
+            type_: "Ready".to_string(),
+            status: "True".to_string(),
+            ..Default::default()
+        }]);
+        let composition = pod_composition([&up, &search_pod(false), &search_pod(true)], now);
+        assert_eq!(
+            (
+                composition.running,
+                composition.crash_looping,
+                composition.ready
+            ),
+            (3, 1, 2)
+        );
     }
 
     /// The distinction the field exists for. A row that quotes the cluster

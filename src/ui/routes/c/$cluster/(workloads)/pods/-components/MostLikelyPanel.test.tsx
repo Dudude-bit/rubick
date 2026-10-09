@@ -170,7 +170,7 @@ describe("MostLikelyPanel", () => {
         ...crashing,
         status: {
           ...crashing.status,
-          loopingExitAt: new Date(Date.now() - 5_000).toISOString(),
+          loopingUntil: new Date(Date.now() + 60_000).toISOString(),
         },
         containers: [{ ...crashing.containers[0], state }],
       } as PodInfo;

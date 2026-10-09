@@ -15,7 +15,6 @@ import {
   memoryRatio,
   nodesShare,
   podSegments,
-  podsServing,
   podTotal,
   PRESSURE_WARN,
   attentionShare,
@@ -437,7 +436,11 @@ function capped(lines: AttentionLine[]): AttentionLine[] {
 function notRunning(pods: PodComposition, t: T): string {
   return podSegments(pods, t)
     .filter((segment) => segment.label !== "Running" && segment.count > 0)
-    .map((segment) => `${segment.count} ${segment.label}`)
+    .map((segment) =>
+      [`${segment.count} ${segment.label}`, segment.qualifier]
+        .filter(Boolean)
+        .join(" · ")
+    )
     .join(", ");
 }
 
@@ -541,7 +544,7 @@ export function AttentionPanel({
                 {pods && (
                   <span className="flex-none">
                     {t("count", "podsReady", {
-                      n: formatCount(podsServing(pods.read)),
+                      n: formatCount(pods.read.ready),
                       of: t("count", "ofPods", { n: podTotal(pods.read) }),
                     })}
                   </span>

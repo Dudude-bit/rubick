@@ -39,6 +39,7 @@ import {
   type RefreshRate,
 } from "@/lib/refresh";
 import { ERROR_CODES, errorCode, isRefusal } from "@/lib/error-utils";
+import { LONGEST_TIMEOUT_MS } from "@/hooks/useNow";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { useWindowActivity } from "@/lib/window-activity";
 
@@ -105,6 +106,11 @@ export type LiveQueryOptions<
    * query a watch stream keeps up to date.
    */
   refresh?: RefreshRate | false;
+  /**
+   * When the answer itself says it stops being true on the clock alone: it is
+   * read again at that moment, whatever the rate.
+   */
+  changesAt?: (data: TData) => string | null | undefined;
 };
 
 export type LiveQueryResult<TData, TError> = UseQueryResult<TData, TError> & {
@@ -393,7 +399,7 @@ export function useLiveQuery<
 >(
   options: LiveQueryOptions<TQueryFnData, TError, TData, TQueryKey>
 ): LiveQueryResult<TData, TError> {
-  const { refresh = "resourceList", ...queryOptions } = options;
+  const { refresh = "resourceList", changesAt, ...queryOptions } = options;
   const base = refresh === false ? false : REFRESH_INTERVALS[refresh];
   const enabled = queryOptions.enabled !== false;
 
@@ -530,6 +536,19 @@ export function useLiveQuery<
       }),
     [refetch, runs, countRuns]
   );
+
+  const turnsAt =
+    data === undefined ? NaN : Date.parse(changesAt?.(data) ?? "");
+  const readsAgain =
+    enabled && visible && !gone && !refused && !Number.isNaN(turnsAt);
+  useEffect(() => {
+    if (!readsAgain) return;
+    const timer = setTimeout(
+      () => void refetch({ cancelRefetch: false }),
+      Math.min(Math.max(0, turnsAt - Date.now()), LONGEST_TIMEOUT_MS)
+    );
+    return () => clearTimeout(timer);
+  }, [readsAgain, turnsAt, dataUpdatedAt, refetch]);
 
   const freshness: Freshness = {
     dataUpdatedAt,

@@ -346,7 +346,7 @@ pub(crate) fn pod_ref(pod: &Pod, ns: &str) -> ObjectRef {
         // The status word alone, not a whole PodInfo built to read one field.
         display: super::types::pod_display::display_status(pod),
         ready: condition_is_true(pod.status.as_ref(), "Ready"),
-        looping_exit_at: super::types::pod_display::looping_exit(pod),
+        looping_until: super::types::pod_display::looping_until(pod),
         exit_unreported: super::types::pod_display::exit_unreported(pod),
     })
 }

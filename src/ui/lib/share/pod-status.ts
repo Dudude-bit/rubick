@@ -9,7 +9,7 @@ import type { PodStart } from "@/generated/types";
 
 type LoopStatus = {
   display: string;
-  loopingExitAt?: string | null;
+  loopingUntil?: string | null;
   exitUnreported?: boolean;
 };
 
@@ -43,6 +43,16 @@ export const pendingTooLong = (
   pod.start !== undefined &&
   pod.start.state !== "settled" &&
   !insideWait(pod, now);
+
+/** The moments a pod's colour can turn on the clock alone: its wait running out, its loop lapsing. */
+export function podDeadlines(
+  pod: Pick<PodBadgeInput, "status" | "start">
+): number[] {
+  return [
+    pod.start?.state === "starting" ? Date.parse(pod.start.until) : NaN,
+    Date.parse(pod.status.loopingUntil ?? ""),
+  ].filter(Number.isFinite);
+}
 
 /** A word that would read healthy, said in the seconds a crash-looping container is up. */
 export const upBetweenCrashes = (pod: { status: LoopStatus }) =>
@@ -96,6 +106,7 @@ export function podStatusTitle(
       statusRole(pod.status.display) === "pending" &&
         pendingTooLong(pod) &&
         t("statusMeaning", "pendingTooLong"),
+      insideWait(pod) && t("statusMeaning", "pendingStarting"),
     ]
       .filter(Boolean)
       .join("\n") || undefined

@@ -1,6 +1,7 @@
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { describe, expect, it } from "vite-plus/test";
+import { CRASH_LOOP_WINDOW_MS } from "@/lib/crash-loop";
 
 /** The English catalogue — what these expectations are written in. */
 const t: T = (section, key, values) => translate("en", section, key, values);
@@ -49,7 +50,7 @@ const pod = (name: string, ready: boolean): ObjectRef =>
     phase: "Running",
     display: ready ? "Running" : "NotReady",
     ready,
-    loopingExitAt: null,
+    loopingUntil: null,
     exitUnreported: false,
   });
 
@@ -1523,7 +1524,9 @@ describe("a node, which is the same edge read from the other end", () => {
           phase: "Running",
           display: "Running",
           ready: false,
-          loopingExitAt: new Date(Date.now() - secondsAgo * 1000).toISOString(),
+          loopingUntil: new Date(
+            Date.now() + CRASH_LOOP_WINDOW_MS - secondsAgo * 1000
+          ).toISOString(),
           exitUnreported: false,
         },
       },
@@ -1552,7 +1555,7 @@ describe("a node, which is the same edge read from the other end", () => {
           phase: "Running",
           display: "Running",
           ready: true,
-          loopingExitAt: null,
+          loopingUntil: null,
           exitUnreported,
         },
       },

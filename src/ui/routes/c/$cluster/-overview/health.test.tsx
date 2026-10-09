@@ -92,6 +92,7 @@ const RUNNING: Census<PodComposition> = {
     unknown: 0,
     crashLooping: 0,
     notReady: 0,
+    ready: 1,
     stuck: [],
     starting: 0,
   },
@@ -377,6 +378,7 @@ describe("a scope one namespace of which refused its pods", () => {
         unknown: 0,
         crashLooping: 0,
         notReady: 0,
+        ready: 2,
         stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
         starting: 0,
       },
@@ -1051,6 +1053,7 @@ describe("what Needs attention says it checked", () => {
       unknown: 0,
       crashLooping: 1,
       notReady: 0,
+      ready: 5,
       stuck: [],
       starting: 0,
     });
@@ -1059,7 +1062,7 @@ describe("what Needs attention says it checked", () => {
     expect(summary).not.toHaveTextContent("Healthy");
     expect(summary).toHaveTextContent("5 of 13 pods ready");
     expect(summary).toHaveTextContent(
-      "(1 CrashLoop, 3 Pending, 2 Failed, 2 Completed)"
+      "(1 Crash-looping, 3 Pending, 2 Failed, 2 Completed)"
     );
     expect(summary.querySelector(".bg-err")).not.toBeNull();
     expect(summary.querySelector(".bg-ok")).toBeNull();
@@ -1079,6 +1082,7 @@ describe("what Needs attention says it checked", () => {
       unknown: 0,
       crashLooping: 3,
       notReady: 1,
+      ready: 5,
       stuck: [],
       starting: 0,
     });
@@ -1086,7 +1090,31 @@ describe("what Needs attention says it checked", () => {
     const summary = screen.getByTestId("attention-summary");
     expect(summary).toHaveTextContent("5 of 14 pods ready");
     expect(summary).toHaveTextContent(
-      "(1 NotReady, 3 CrashLoop, 1 Pending, 4 Failed)"
+      "(1 NotReady, 3 Crash-looping, 1 Pending, 4 Failed)"
+    );
+  });
+
+  /**
+   * Sam's Overview read "3 of 15 pods ready" while kubectl had 6 ready.
+   * Fails if the line counts ready anything but the pods whose Ready
+   * condition is true, as kubectl does.
+   */
+  it("counts ready the pods kubectl counts ready", async () => {
+    await panel(attentionFrom([{ ...problem, severity: "critical" }]), {
+      running: 3,
+      pending: 0,
+      succeeded: 0,
+      failed: 0,
+      unknown: 0,
+      crashLooping: 1,
+      notReady: 0,
+      ready: 3,
+      stuck: [],
+      starting: 0,
+    });
+
+    expect(screen.getByTestId("attention-summary")).toHaveTextContent(
+      "3 of 3 pods ready"
     );
   });
 
@@ -1096,8 +1124,10 @@ describe("what Needs attention says it checked", () => {
    * said coming up in blue, and the Deployments tile drew Progressing grey.
    * Fails if a pod still inside its wait is counted with the ones past it,
    * or either tile draws coming up in another colour than the badges do.
+   * Sam then read "Starting" here for the pod its page and the Pods list
+   * call Pending; fails if the tile or the line drops the phase they print.
    */
-  it("counts a pod still inside its wait as starting, apart from Pending", async () => {
+  it("counts a pod still inside its wait as Pending and starting, apart from the rest", async () => {
     const pods: PodComposition = {
       running: 2,
       pending: 3,
@@ -1106,22 +1136,28 @@ describe("what Needs attention says it checked", () => {
       unknown: 0,
       crashLooping: 0,
       notReady: 0,
+      ready: 2,
       stuck: [],
       starting: 2,
     };
     await panel(attentionFrom([{ ...problem, severity: "critical" }]), pods);
 
     expect(screen.getByTestId("attention-summary")).toHaveTextContent(
-      "(2 Starting, 1 Pending)"
+      "(2 Pending · starting, 1 Pending)"
     );
     expect(
       podSegments(pods, t)
         .filter((segment) => segment.count > 0)
-        .map(({ label, count, tone }) => [label, count, tone])
+        .map(({ label, qualifier, count, tone }) => [
+          label,
+          qualifier,
+          count,
+          tone,
+        ])
     ).toEqual([
-      ["Running", 2, "ok"],
-      ["Starting", 2, "pending"],
-      ["Pending", 1, "warn"],
+      ["Running", undefined, 2, "ok"],
+      ["Pending", "starting", 2, "pending"],
+      ["Pending", undefined, 1, "warn"],
     ]);
     expect(
       deploymentSegments(
@@ -1145,6 +1181,7 @@ describe("what Needs attention says it checked", () => {
       unknown: 0,
       crashLooping: 0,
       notReady: 0,
+      ready: 2,
       stuck: [{ reason: "CreateContainerConfigError", count: 1 }],
       starting: 0,
     };

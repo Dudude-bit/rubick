@@ -702,4 +702,16 @@ describe("the word a row's reason is printed in", () => {
       "CrashLoopBackOff"
     );
   });
+
+  /**
+   * Sam's and Marco's rows said `CrashLoopBackOff` for pods kubectl showed
+   * Running, a word the kubelet never wrote for them. Fails if the loop this
+   * app reads off a pod's exits is printed in the kubelet's word, or left
+   * untranslated.
+   */
+  it("words a crash loop the app read off the exits as its own", () => {
+    expect(reasonWord({ kind: "Pod", reason: "CrashLooping" }, ru)).toBe(
+      "В цикле падений"
+    );
+  });
 });

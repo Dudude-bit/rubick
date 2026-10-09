@@ -28,6 +28,7 @@ import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
 import { useT } from "@/i18n/useT";
 import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { useRememberOwners } from "./useLastOwners";
+import { useReturnWatch } from "./useReturnWatch";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -179,6 +180,12 @@ export function useResourceDetail<T>(
   useRereadWith(
     queryKeys.detail(resourceKind, namespace, name),
     queryKeys.manifest(resourceKind, namespace, name)
+  );
+  useReturnWatch(
+    resourceKind,
+    namespace,
+    name,
+    isResourceNotFoundError(readError)
   );
   const {
     data: yaml,

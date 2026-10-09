@@ -10,7 +10,7 @@ use crate::resources::serialization::OwnerReference;
 use crate::utils::format_cpu;
 
 use super::common::{extract_owner_references, ConditionInfo, ContainerInfo};
-use super::pod_display::{display_status, exit_unreported, looping_exit, restarts};
+use super::pod_display::{display_status, exit_unreported, looping_until, restarts};
 use crate::utils::Moment;
 
 /// Simplified pod information for frontend
@@ -393,9 +393,9 @@ pub struct PodStatusInfo {
     pub conditions: Vec<ConditionInfo>,
     pub message: Option<String>,
     pub reason: Option<String>,
-    /// See [`looping_exit`]; the reader measures the crash-loop window from it.
+    /// See [`looping_until`]; the reader compares it with its own clock.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub looping_exit_at: Option<DateTime<Utc>>,
+    pub looping_until: Option<DateTime<Utc>>,
     /// See [`exit_unreported`]: restarts with no exit to measure a loop
     /// from, which the reader must not draw as health.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -413,7 +413,7 @@ impl PodStatusInfo {
                 conditions: vec![],
                 message: None,
                 reason: None,
-                looping_exit_at: None,
+                looping_until: None,
                 exit_unreported: false,
             };
         };
@@ -437,7 +437,7 @@ impl PodStatusInfo {
             conditions,
             message: status.message.clone(),
             reason: status.reason.clone(),
-            looping_exit_at: looping_exit(pod),
+            looping_until: looping_until(pod),
             exit_unreported: exit_unreported(pod),
         }
     }

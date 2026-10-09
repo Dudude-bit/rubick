@@ -125,9 +125,9 @@ pub enum ObjectFacts {
         /// puts this pod in its endpoints — the difference between reachable
         /// and merely running.
         ready: bool,
-        /// See `PodStatusInfo::looping_exit_at`.
-        #[serde(rename = "loopingExitAt")]
-        looping_exit_at: Option<DateTime<Utc>>,
+        /// See `PodStatusInfo::looping_until`.
+        #[serde(rename = "loopingUntil")]
+        looping_until: Option<DateTime<Utc>>,
         /// See `PodStatusInfo::exit_unreported`.
         #[serde(rename = "exitUnreported", default)]
         exit_unreported: bool,

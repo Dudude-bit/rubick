@@ -37,10 +37,10 @@ import { getResourceRowId } from "@/lib/table-utils";
 import { toPlural, type ResourceKind } from "@/lib/resource-registry";
 import type { QuickAction } from "@/components/ui/quick-actions";
 import { useWatchedList } from "@/hooks/useWatchedList";
-import { useNowReading } from "@/hooks/useNow";
+import { useLastPassed } from "@/hooks/useNow";
 import { useT } from "@/i18n/useT";
 import type { Rollout } from "@/generated/types";
-import { lastRunOut, rowsWithStarts, startsOf } from "@/lib/workload-status";
+import { rowsWithStarts, startsOf } from "@/lib/workload-status";
 
 type Workload = { name: string; namespace: string };
 
@@ -144,9 +144,7 @@ export function createWorkloadListPage<T extends Workload>(
         config.rolloutFromPods && podsRead ? startsOf(pods, podsUnread) : null,
       [pods, podsRead, podsUnread]
     );
-    const ranOut = useNowReading(10_000, (now) =>
-      starts ? lastRunOut(starts.deadlines, now) : 0
-    );
+    const ranOut = useLastPassed(starts?.deadlines ?? []);
     const rows = useMemo(() => {
       const read = listQuery.data?.rows ?? [];
       return config.rolloutFromPods

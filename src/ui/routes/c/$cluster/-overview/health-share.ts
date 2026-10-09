@@ -205,22 +205,28 @@ export function podsServing(pods: PodComposition): number {
  * anyone with a nightly CronJob. Crash-loopers and pods failing readiness
  * are carved back out of Running: the phase says Running while they serve
  * nothing. A pod held in an error that waiting will not clear is carved out
- * of Pending under that error, the word the Pods list prints for it, and one
- * still inside its wait as starting, which its workload says too.
+ * of Pending under that error, the word the Pods list prints for it. One
+ * still inside its wait stays Pending, as its row says, and is qualified as
+ * starting in blue, which its workload says too.
  */
 export function podSegments(pods: PodComposition, t: T): Segment[] {
   const stuck = pods.stuck.reduce((n, held) => n + held.count, 0);
   return [
     { label: "Running", count: podsServing(pods), tone: "ok" },
     { label: "NotReady", count: pods.notReady, tone: "warn" },
-    { label: "CrashLoop", count: pods.crashLooping, tone: "err" },
+    {
+      label: t("statusWords", "crashLoopingCounted", { n: pods.crashLooping }),
+      count: pods.crashLooping,
+      tone: "err",
+    },
     ...pods.stuck.map(({ reason, count }): Segment => ({
       label: reason,
       count,
       tone: "err",
     })),
     {
-      label: t("statusWords", "startingCounted", { n: pods.starting }),
+      label: "Pending",
+      qualifier: t("statusWords", "startingCounted", { n: pods.starting }),
       count: pods.starting,
       tone: "pending",
     },

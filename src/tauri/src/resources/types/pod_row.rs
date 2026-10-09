@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 
 use super::common::{init_phase, state_of, ContainerPhase, ContainerState};
 use super::pod::{phase_of, resource_totals};
-use super::pod_display::{display_status, exit_unreported, looping_exit, restarts};
+use super::pod_display::{display_status, exit_unreported, looping_until, restarts};
 use crate::utils::Moment;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,9 +67,9 @@ pub struct PodRowStatus {
     pub phase: String,
     /// What `kubectl get pod` prints. See `pod_display`.
     pub display: String,
-    /// See `PodStatusInfo::looping_exit_at`.
+    /// See `PodStatusInfo::looping_until`.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub looping_exit_at: Option<DateTime<Utc>>,
+    pub looping_until: Option<DateTime<Utc>>,
     /// See `PodStatusInfo::exit_unreported`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub exit_unreported: bool,
@@ -137,7 +137,7 @@ impl From<&Pod> for PodRow {
             status: PodRowStatus {
                 phase: phase_of(pod),
                 display: display_status(pod),
-                looping_exit_at: looping_exit(pod),
+                looping_until: looping_until(pod),
                 exit_unreported: exit_unreported(pod),
             },
             node_name: spec.and_then(|s| s.node_name.clone()),

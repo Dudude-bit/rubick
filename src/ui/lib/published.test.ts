@@ -152,7 +152,7 @@ describe("what is not published", () => {
       phase: "Running",
       display: "Running",
       ready,
-      loopingExitAt: null,
+      loopingUntil: null,
       exitUnreported: false,
     },
   });

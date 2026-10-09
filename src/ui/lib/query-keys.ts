@@ -152,6 +152,17 @@ export const queryKeys = {
     namespace: string | null | undefined,
     name: string | undefined
   ): (string | null | undefined)[] => ["pod-watch", home(namespace), name],
+  /** What the watch on a gone page's name holds: whatever was created under it. */
+  returnWatch: (
+    kind: string,
+    namespace: string | null | undefined,
+    name: string | undefined
+  ): (string | null | undefined)[] => [
+    "return-watch",
+    kind,
+    home(namespace),
+    name,
+  ],
   /** What the watch on the pods one page lists holds: only its bookkeeping. */
   ownedPodWatch: (
     kind: string,

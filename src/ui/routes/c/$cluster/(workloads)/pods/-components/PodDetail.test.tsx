@@ -281,7 +281,10 @@ describe("a crash-looping pod caught while its container is up", () => {
       if (command === "get_pod")
         return {
           ...POD,
-          status: { ...POD.status, loopingExitAt: finishedAt },
+          status: {
+            ...POD.status,
+            loopingUntil: new Date(Date.now() + 60_000).toISOString(),
+          },
           containers: [
             {
               name: "app",

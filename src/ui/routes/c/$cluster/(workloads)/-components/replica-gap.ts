@@ -1,15 +1,14 @@
 import type { CompositionSegment } from "@/components/object/detail-blocks";
 import type { PodStart, PodStatusInfo } from "@/generated/types";
-import { useNowReading } from "@/hooks/useNow";
+import { useLastPassed } from "@/hooks/useNow";
 import type { T } from "@/i18n/useT";
-import { CRASH_LOOP_WINDOW_MS, loopState } from "@/lib/crash-loop";
-import { lastRunOut } from "@/lib/workload-status";
+import { loopState } from "@/lib/crash-loop";
 
 type Counted = {
   start: PodStart;
   status: Pick<
     PodStatusInfo,
-    "display" | "ready" | "loopingExitAt" | "exitUnreported"
+    "display" | "ready" | "loopingUntil" | "exitUnreported"
   >;
 };
 
@@ -74,15 +73,10 @@ export function replicaSplit(
  * waits, or the window a crash loop is counted in, runs out.
  */
 export function useStartsClock(pods: readonly Counted[] | null): number {
-  return useNowReading(10_000, (now) =>
-    lastRunOut(
-      (pods ?? []).flatMap(({ start, status }) => [
-        ...(start.state === "starting" ? [Date.parse(start.until)] : []),
-        ...(status.loopingExitAt
-          ? [Date.parse(status.loopingExitAt) + CRASH_LOOP_WINDOW_MS]
-          : []),
-      ]),
-      now
-    )
+  return useLastPassed(
+    (pods ?? []).flatMap(({ start, status }) => [
+      ...(start.state === "starting" ? [Date.parse(start.until)] : []),
+      ...(status.loopingUntil ? [Date.parse(status.loopingUntil)] : []),
+    ])
   );
 }

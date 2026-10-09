@@ -199,10 +199,12 @@ pub async fn subscribe_custom_resource_watch(
 
 // ----- One object -----
 
-/// Watch a single built-in object by name, for "tell me when" on it.
+/// Watch a single built-in object by name, for "tell me when" on it, and for
+/// a page whose object is gone to see it created again under that name.
 ///
-/// The kinds are the ones a person waits on: a rollout, a pod, a job, a node.
-/// Anything else is refused by name rather than watched as the wrong type.
+/// The kinds are the ones a person waits on: a rollout, a pod, a job, a node,
+/// a Service. Anything else is refused by name rather than watched as the
+/// wrong type.
 #[tauri::command]
 pub async fn subscribe_object_watch(
     kind: String,
@@ -255,6 +257,13 @@ pub async fn subscribe_object_watch(
             &namespaced(namespace)?,
             name,
             |o| Some(JobInfo::from(o)),
+        ),
+        "Service" => manager.subscribe_object::<Service, _, _>(
+            client,
+            "Service",
+            &namespaced(namespace)?,
+            name,
+            |o| Some(ServiceInfo::from(o)),
         ),
         "Node" => manager.subscribe_cluster_object::<Node, _, _>(client, "Node", name, |o| {
             Some(NodeInfo::from(o))

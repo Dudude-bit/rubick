@@ -5027,6 +5027,7 @@ export const en = {
     },
     goneMark: "gone",
     goneTitle: "This {kind} no longer exists.",
+    absentTitle: "This {kind} does not exist.",
     goneReplacedBy:
       "{kind} {owner} owned it and replaces what it loses: open it to find what runs now.",
     goneOwnedBy: "{kind} {owner} owned it.",
@@ -6787,12 +6788,14 @@ export const en = {
     stalled: "Stalled",
     degraded: "Degraded",
     retrying: "Retrying",
+    crashLooping: "Crash-looping",
+    crashLoopingCounted: { other: "Crash-looping" },
     stalledCounted: { other: "Stalled" },
     degradedCounted: { other: "Degraded" },
     idleCounted: { other: "Idle" },
     retryingCounted: { other: "Retrying" },
     suspendedCounted: { other: "Suspended" },
-    startingCounted: { other: "Starting" },
+    startingCounted: { other: "starting" },
     waitingCounted: { other: "Waiting" },
     ready: "Ready",
     progressing: "Progressing",
@@ -6849,6 +6852,8 @@ export const en = {
       "Restarted, and the kubelet reports no last exit, so whether a container is still crash-looping is not known.",
     pendingTooLong:
       "Pending past the wait a pod is given before it counts as a problem: a minute for a node to take it, ten minutes to start once one has.",
+    pendingStarting:
+      "Starting: still inside the wait a pod is given before it counts as a problem, so not a fault yet.",
     containerStatusUnknown:
       "the container's state was lost, usually after the node restarted.",
     deadlineExceeded:

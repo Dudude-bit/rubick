@@ -13,6 +13,7 @@ import { conditionRole } from "@/lib/condition-health";
 import { eventReasonMark } from "@/lib/event-reason";
 import type { MessageSubject } from "@/lib/message-refs";
 import { formatQuantity, usageRole } from "@/lib/metric-format";
+import { allocatedPercent } from "@/lib/node-amount";
 import { ROLE_ICON, ROLE_TEXT } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
@@ -390,7 +391,7 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
             {ratio !== null && (
               <>
                 {" · "}
-                {Math.round(ratio * 100)}
+                {allocatedPercent(usedNum, totalNum)}
                 <span className="text-[0.85em] text-fg-fnt">%</span>
               </>
             )}
@@ -479,7 +480,7 @@ export function Composition({
         {total != null &&
           visible.map((segment) => (
             <span
-              key={segment.label}
+              key={`${segment.label}/${segment.qualifier ?? ""}`}
               className={SEGMENT_BAR[segment.tone]}
               style={{ flex: segment.count }}
             />
@@ -498,7 +499,7 @@ export function Composition({
           visible.map((segment) =>
             segment.qualifier ? (
               <span
-                key={segment.label}
+                key={`${segment.label}/${segment.qualifier ?? ""}`}
                 className={cn(
                   SEGMENT_LEGEND[segment.tone],
                   "inline-flex flex-wrap items-center gap-x-1.5"
@@ -516,7 +517,7 @@ export function Composition({
               </span>
             ) : (
               <span
-                key={segment.label}
+                key={`${segment.label}/${segment.qualifier ?? ""}`}
                 className={cn(
                   SEGMENT_LEGEND[segment.tone],
                   segment.unread && "inline-flex items-center gap-1"
