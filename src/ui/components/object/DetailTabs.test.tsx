@@ -36,6 +36,23 @@ describe("DetailTabs", () => {
     expect(screen.getByText("the logs panel")).toBeInTheDocument();
   });
 
+  /** Radix reports no change for the tab already open, so a click on it reached nobody. */
+  it("tells the page about a click on the tab already open, and only that tab", () => {
+    const onTabAgain = vi.fn();
+    render(
+      <DetailTabs
+        tabs={tabs}
+        activeTab="logs"
+        onTabChange={() => {}}
+        onTabAgain={onTabAgain}
+      />
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Overview" }));
+    expect(onTabAgain).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("tab", { name: "Logs" }));
+    expect(onTabAgain).toHaveBeenCalledWith("logs");
+  });
+
   /** A clipped label reads as one letter; nothing here may shrink to get there. */
   it("never shrinks or truncates a tab label", () => {
     render(

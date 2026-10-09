@@ -59,6 +59,7 @@ function DetailTabTrigger({
   isStop,
   ring,
   overflow,
+  onAgain,
 }: {
   tab: DetailTab;
   isActive: boolean;
@@ -68,6 +69,7 @@ function DetailTabTrigger({
   ring: boolean;
   /** In the menu, not the strip: kept out of sight and out of the way, still measured. */
   overflow: boolean;
+  onAgain?: (tab: string) => void;
 }) {
   const says =
     tab.mark && tab.mark.shows !== "count"
@@ -86,6 +88,7 @@ function DetailTabTrigger({
       }
       aria-label={says ?? undefined}
       onKeyDown={stepFocus}
+      onClick={isActive && onAgain ? () => onAgain(tab.id) : undefined}
       tabIndex={isStop && !overflow ? 0 : -1}
       data-ring={ring ? "true" : undefined}
       data-overflow={overflow ? "true" : undefined}
@@ -313,10 +316,13 @@ export function DetailTabs({
   onTabChange,
   actions,
   subject = "",
+  onTabAgain,
 }: {
   tabs: DetailTab[];
   activeTab: string;
   onTabChange: (tab: string) => void;
+  /** A click on the tab already open, which Radix does not report as a change. */
+  onTabAgain?: (tab: string) => void;
   /** Controls belonging to the page, pinned to the right of the same row. */
   actions?: React.ReactNode;
   /** Which object the tabs are about; a new one starts with nothing opened. */
@@ -406,6 +412,7 @@ export function DetailTabs({
                 isStop={tab.id === stop}
                 ring={focused?.id === tab.id && focused.ring}
                 overflow={hidden.has(tab.id)}
+                onAgain={onTabAgain}
               />
             ))}
           </TabsList>
