@@ -105,6 +105,7 @@ import {
 import { statusRole } from "@/lib/status-role";
 import {
   loopingContainer,
+  loopingNow,
   loopState,
   restartsAreNews,
   seenLoop,
@@ -249,6 +250,10 @@ function podProblem(
 ): PodProblem | null {
   if (!pod || pod.status.phase === "Succeeded") return null;
 
+  const loop = loopState(pod.status);
+  const looping =
+    loop === "looping" ? loopingContainer(podContainers(pod)) : null;
+
   // Init containers included, and first: a pod in `Init:CrashLoopBackOff`
   // has app containers that all read `PodInitializing`, so scanning only
   // `.containers` found nothing wrong with the one pod whose trouble has
@@ -268,6 +273,13 @@ function podProblem(
     }
     if (state.type === "terminated" && state.termination.exitCode !== 0) {
       const { termination } = state;
+      // The exit that just ended a run of the loop is the loop's latest, and
+      // the loop is what the page has been saying all along.
+      if (loopingNow(container) || looping?.name === container.name)
+        return {
+          ...crashLoop(container, termination.reason ?? "Error", t),
+          tab: "containers",
+        };
       return {
         reason: termination.reason ?? "Error",
         headline: t("empty", "containerExitedWith", {
@@ -283,9 +295,6 @@ function podProblem(
     }
   }
 
-  const loop = loopState(pod.status);
-  const looping =
-    loop === "looping" ? loopingContainer(podContainers(pod)) : null;
   if (looping) {
     return {
       ...crashLoop(looping, pod.status.display, t),
