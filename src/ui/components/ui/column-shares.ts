@@ -15,6 +15,8 @@ export const actionsColumnSize = (count: number) =>
 export interface ColumnSpec {
   size: number;
   floor?: number;
+  /** A higher floor it keeps while every column's fits the port. */
+  ideal?: number;
 }
 
 /**
@@ -62,10 +64,19 @@ export function columnShares(columns: ColumnSpec[], width: number): number[] {
  */
 export function tableLayout(columns: ColumnSpec[], port: number) {
   const floors = columns.reduce((sum, column) => sum + (column.floor ?? 0), 0);
+  const ideal = columns.map((column) =>
+    Math.max(column.floor ?? 0, column.ideal ?? 0)
+  );
+  const roomy = ideal.reduce((sum, px) => sum + px, 0) <= port;
   const span = port > 0 ? Math.max(port, floors) : 0;
   return {
     span,
     scrolls: span > port,
-    shares: columnShares(columns, span),
+    shares: columnShares(
+      roomy
+        ? columns.map((column, index) => ({ ...column, floor: ideal[index] }))
+        : columns,
+      span
+    ),
   };
 }

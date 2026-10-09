@@ -34,6 +34,16 @@ const TONE: Record<TerminalState, string> = {
   error: "bg-err",
 };
 
+/** The shell page's own words for its state, lower-case in the row's line. */
+const SAYS = {
+  idle: "shellIdle",
+  connecting: "shellConnecting",
+  connected: "shellConnected",
+  closing: "shellClosing",
+  disconnected: "shellDisconnected",
+  error: "shellError",
+} as const satisfies Record<TerminalState, string>;
+
 interface TerminalsTabProps {
   onClose?: () => void;
 }
@@ -143,7 +153,8 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
               </span>
               <span className="block truncate font-mono text-[11px] text-fg-fnt">
                 {session.context !== currentContext && `${session.context} · `}
-                {session.namespace} · {session.container} · {session.state}
+                {session.namespace} · {session.container} ·{" "}
+                {t("activity", SAYS[session.state])}
               </span>
             </span>
             <RealtimeAge

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
-import { ResourceMessage } from "./ResourceMessage";
+import { Prose, ResourceMessage } from "./ResourceMessage";
 import { renderWithRouter } from "@/test/render";
 
 const wrap = (ui: ReactNode) =>
@@ -114,5 +114,69 @@ describe("ResourceMessage", () => {
         name: "Copy image registry.invalid/nope:v9",
       })
     ).toBeInTheDocument();
+  });
+
+  /**
+   * Marco at 1400 read "in Secret team-" at a line's end and
+   * "checkout/checkout-db" on the next. Fails if a name the cluster wrote can
+   * break inside, or holding it together changes a character of the text.
+   */
+  it("never breaks a name inside the cluster's sentence", async () => {
+    const message =
+      "couldn't find key DB_PASSWORD in Secret team-checkout/checkout-db";
+    const { container } = await wrap(
+      <ResourceMessage message={message} subject={IN_TEST_NS} />
+    );
+    expect(screen.getByText("team-checkout/checkout-db")).toHaveClass(
+      "inline-block"
+    );
+    expect(screen.getByText("DB_PASSWORD")).toHaveClass("inline-block");
+    expect(visible(container)).toBe(message);
+  });
+
+  /**
+   * Marco in Russian at 1024: a line ended on a lone opening quote and the
+   * ReplicaSet's name began the next. Fails if the quotes around a reference
+   * stop travelling with it, or are drawn twice.
+   */
+  it("keeps the quotes with the reference they enclose", async () => {
+    const message =
+      'ReplicaSet "stuck-demo-5b4cdbdd65" has timed out progressing.';
+    const { container } = await wrap(
+      <ResourceMessage
+        message={message}
+        subject={{ kind: "Deployment", name: "stuck-demo", ...IN_TEST_NS }}
+      />
+    );
+    const kept = screen
+      .getByRole("link", { name: "ReplicaSet stuck-demo-5b4cdbdd65" })
+      .closest(".inline-block") as HTMLElement;
+    expect(visible(kept)).toBe('"stuck-demo-5b4cdbdd65"');
+    expect(visible(container)).toBe(message);
+  });
+
+  /** A cut line has no break to prevent; fails if one holds its words in boxes the ellipsis would hide whole. */
+  it("holds nothing together on a line that is cut rather than wrapped", async () => {
+    const { container } = await wrap(
+      <ResourceMessage
+        message="couldn't find key DB_PASSWORD in Secret team-checkout/checkout-db"
+        oneLine
+      />
+    );
+    expect(container.querySelector(".inline-block")).toBeNull();
+  });
+});
+
+describe("Prose", () => {
+  /** Lena's Service rows break "app=topology-" from "demo"; fails if a selector or a ratio in the app's own sentence can break inside, or loses the comma after it. */
+  it("keeps selectors and ratios whole with their punctuation", async () => {
+    const { container } = await wrap(
+      <Prose text="2 pods carry app=topology-demo, and 0/2 are ready" />
+    );
+    expect(screen.getByText("app=topology-demo,")).toHaveClass("inline-block");
+    expect(screen.getByText("0/2")).toHaveClass("inline-block");
+    expect(container).toHaveTextContent(
+      "2 pods carry app=topology-demo, and 0/2 are ready"
+    );
   });
 });

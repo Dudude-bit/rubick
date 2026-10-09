@@ -1625,6 +1625,12 @@ export const ru: Catalogue = {
     ports: "Порты",
     terminals: "Оболочки",
     endShell: "Завершить оболочку в {pod}",
+    shellIdle: "ожидание",
+    shellConnecting: "подключение",
+    shellConnected: "подключено",
+    shellClosing: "завершается",
+    shellDisconnected: "завершено",
+    shellError: "ошибка",
     shellEndedOnLeave: "Оболочка завершена",
     shellEndedOnLeaveBody:
       "Оболочка в {target} завершена, потому что её вкладка перешла на другую страницу.",

@@ -72,4 +72,34 @@ describe("tableLayout", () => {
     expect(layout.scrolls).toBe(false);
     expect(layout.span).toBe(0);
   });
+
+  /** Fails if a column stops keeping its ideal width while every column's fits the port. */
+  it("keeps a column at its ideal while the port has room for every ideal", () => {
+    const layout = tableLayout(
+      [
+        { size: 100, floor: 100, ideal: 300 },
+        { size: 400, floor: 100 },
+      ],
+      600
+    );
+    expect((layout.shares[0] / 100) * layout.span).toBeCloseTo(300);
+  });
+
+  /**
+   * With a peek open the Events table had 296px, and a reason held at its
+   * one-line width left the Object column three letters. Fails if a port too
+   * narrow for every ideal stops falling back to the floors.
+   */
+  it("falls back to the floors once the ideals outgrow the port", () => {
+    const layout = tableLayout(
+      [
+        { size: 100, floor: 100, ideal: 300 },
+        { size: 100, floor: 250 },
+      ],
+      400
+    );
+    expect(layout.scrolls).toBe(false);
+    expect((layout.shares[1] / 100) * layout.span).toBeCloseTo(250);
+    expect((layout.shares[0] / 100) * layout.span).toBeCloseTo(150);
+  });
 });

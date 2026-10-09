@@ -45,11 +45,16 @@ export function headerFloor(column: LabelledColumn, t: T): number {
   return Math.ceil(drawn + (sortable ? SORT_MARK_PX : 0) + PADDING_PX);
 }
 
+const pixels = (declared: AppColumnMeta["floor"], t: T) =>
+  typeof declared === "function" ? declared(t) : (declared ?? 0);
+
 /** The narrowest a column is drawn: what its cells declare, and its header's words. */
 export function columnFloor(column: LabelledColumn, t: T): number {
-  const declared = (column.meta as AppColumnMeta | undefined)?.floor ?? 0;
-  return Math.max(
-    typeof declared === "function" ? declared(t) : declared,
-    headerFloor(column, t)
-  );
+  const meta = column.meta as AppColumnMeta | undefined;
+  return Math.max(pixels(meta?.floor, t), headerFloor(column, t));
+}
+
+/** The width a column keeps while the table has room for every column's. */
+export function columnIdeal(column: LabelledColumn, t: T): number {
+  return pixels((column.meta as AppColumnMeta | undefined)?.ideal, t);
 }

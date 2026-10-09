@@ -9,6 +9,7 @@ import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useKeptShellStore } from "@/stores/keptShellStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { useActivityPanelStore } from "@/stores/activityPanelStore";
+import { useLocaleStore } from "@/stores/localeStore";
 import { ActivityPanel } from "../ActivityPanel";
 import { TerminalsTab } from "./TerminalsTab";
 
@@ -49,8 +50,31 @@ describe("Activity's shells", () => {
     const rows = screen.getAllByRole("link", { name: /app ·/ });
     expect(rows.map((row) => row.textContent)).toEqual([
       expect.stringMatching(/cart-4f68h.*shop · app · connected/),
-      expect.stringMatching(/search-ztqf7.*shop · app · closing/),
+      expect.stringMatching(/search-ztqf7.*shop · app · ending/),
     ]);
+  });
+
+  /**
+   * Lena's Russian Activity said "connected" beside a shell page saying
+   * "Подключено". Fails if the row prints the backend's state word instead
+   * of the reader's language.
+   */
+  it("says a shell's state in the reader's language", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      useClusterStore.setState({ currentContext: "acme-staging" });
+      useTerminalSessionStore.setState({
+        sessions: [shell("cart-4f68h"), shell("search-ztqf7", "closing")],
+      });
+      await renderWithRouter(<TerminalsTab />);
+
+      const rows = screen.getAllByRole("link", { name: /app ·/ });
+      expect(rows[0]).toHaveTextContent(/shop · app · подключено/);
+      expect(rows[1]).toHaveTextContent(/shop · app · завершается/);
+      expect(rows[0]).not.toHaveTextContent("connected");
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 
   /**

@@ -19,6 +19,7 @@ import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { RealtimeAge } from "@/components/ui/realtime/realtime-age";
 import { ResourceMessage } from "./ResourceMessage";
+import { ReasonText } from "./ReasonText";
 import { ResourceRef } from "./ResourceRef";
 import { TONE_CLASS, type KeyValueTone } from "./key-values";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
@@ -247,7 +248,9 @@ function ConditionRow({
         {condition.reason && detail !== condition.reason && (
           <span className="font-mono">{condition.reason} </span>
         )}
-        {detail && <ResourceMessage message={detail} subject={subject} />}
+        {detail && (
+          <ResourceMessage message={detail} subject={subject} oneLine />
+        )}
         {held && (
           <span className="text-fg-fnt" title={stamp}>
             <T section="count" k="heldFor" values={{ age }} />
@@ -680,10 +683,10 @@ const EventRow = memo(function EventRow({
           {family ? `, ${family}` : ""}:{" "}
         </span>
         <Icon
-          className="h-2.5 w-2.5 flex-none self-center"
+          className="mt-[3px] h-2.5 w-2.5 flex-none self-start"
           aria-hidden="true"
         />
-        <span className="truncate">{event.reason ?? <None />}</span>
+        {event.reason ? <ReasonText reason={event.reason} /> : <None />}
       </span>
       {/* The row truncates, and an Event has no detail page to open, so the
        *  controller's own sentence is otherwise unreachable. */}
@@ -701,7 +704,11 @@ const EventRow = memo(function EventRow({
         {event.message && (
           <span className="text-fg-fnt">
             {showObject ? ": " : ""}
-            <ResourceMessage message={event.message} subject={subject} />
+            <ResourceMessage
+              message={event.message}
+              subject={subject}
+              oneLine
+            />
           </span>
         )}
       </span>

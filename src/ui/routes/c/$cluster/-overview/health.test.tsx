@@ -1,5 +1,5 @@
 import type { ReactElement } from "react";
-import { describe, expect, it } from "vite-plus/test";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -38,11 +38,14 @@ import type {
 } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
 import { ingressHealthOf } from "@/lib/ingress-health";
+import { useAttentionExpanded } from "./attention-expanded";
 
 const t: T = (section, key, values) => translate("en", section, key, values);
 
 const wrap = (ui: ReactElement) =>
   renderWithRouter(ui, { at: "/c/prod", route: "/c/$cluster" });
+
+beforeEach(() => useAttentionExpanded.setState({ expanded: false }));
 
 /** One sentence the scheduler writes, read by both panels. */
 const MESSAGE = "Scaled up replica set meshed-demo-65d47b457f to 1";
@@ -158,6 +161,22 @@ describe("the overview's two event panels", () => {
     await wrap(<WarningsPanel warnings={[warning]} known={false} />);
     expect(screen.getAllByText(/Not every events list/)).toHaveLength(2);
     expect(screen.getByText("ScalingReplicaSet")).toBeInTheDocument();
+  });
+
+  /**
+   * Marco's ledger BackOff row ended "...499fh_team-blind(9323a59c-531b-4f0d..."
+   * at 1400. Fails if a warning's sentence is cut to one line again instead of
+   * wrapping, or stops carrying its whole text on hover.
+   */
+  it("wraps a warning's sentence rather than cutting it", async () => {
+    const sample =
+      "Back-off restarting failed container app in pod ledger-76bccd5b44-499fh_team-blind(9323a59c-531b-4f0d-9c3e-7f5b1c2d8e90)";
+    await wrap(<WarningsPanel warnings={[{ ...warning, sample }]} known />);
+    const said = screen.getByTestId("warning-said");
+    expect(said).not.toHaveClass("truncate");
+    expect(said).toHaveClass("wrap-break-word");
+    expect(said).toHaveAttribute("title", sample);
+    expect(said.parentElement).toHaveClass("items-baseline");
   });
 
   it("draws nothing for warnings read and none found", async () => {
@@ -595,11 +614,11 @@ describe("a scope one namespace of which refused its pods", () => {
 
   /**
    * Marco in Russian at 1024: the overall row ended "(1
-   * CreateContainerConfigErr..." and the words saying team-blind's pods were
-   * not counted were the part cut off. Fails if the qualifier sits inside
-   * anything that truncates, or the details are not what gives way.
+   * CreateContainerConfigErr..." with team-blind's not-counted words cut off,
+   * and Lena read "4 F…" for 4 Failed. Fails if anything on the row can cut,
+   * or a count stops being held together with its words and its punctuation.
    */
-  it("lets the details give way on the overall row and never the not-counted words", async () => {
+  it("keeps every count on the overall row whole and breaks the line between them", async () => {
     await wrap(
       <AttentionPanel
         attention={attentionFrom([], {
@@ -611,12 +630,14 @@ describe("a scope one namespace of which refused its pods", () => {
         nodesKnown={false}
       />
     );
-    const details = screen.getByTestId("attention-overall-details");
-    expect(details).toHaveClass("truncate");
-    expect(details).toHaveTextContent("(1 CreateContainerConfigError");
+    const overall = screen.getByTestId("attention-overall");
+    expect(overall.querySelector(".truncate")).toBeNull();
+    expect(screen.getByText("(1 CreateContainerConfigError,")).toHaveClass(
+      "whitespace-nowrap"
+    );
+    expect(screen.getByText("1 Completed)")).toHaveClass("whitespace-nowrap");
     const qualifier = screen.getByText("pods not counted in team-blind");
     expect(qualifier.closest(".truncate, .whitespace-nowrap")).toBeNull();
-    expect(screen.getByTestId("attention-overall")).toHaveClass("flex-wrap");
   });
 
   /** Share said "could not be read" for a refusal, and nowhere said where. */
@@ -1322,11 +1343,11 @@ describe("what Needs attention says it checked", () => {
         { ...problem, kind: "Pod", reason: "CreateContainerConfigError" },
       ])
     );
-    const row = screen
+    const rows = screen
       .getByText("CreateContainerConfigError")
-      .closest('[role="link"]')!;
+      .closest('[role="link"]')!.parentElement!;
     const reasonPx = Number(
-      /grid-cols-\[10px_(\d+)px_/.exec(row.className)?.[1]
+      /grid-cols-\[auto_fit-content\((\d+)px\)_/.exec(rows.className)?.[1]
     );
     expect(reasonPx).toBeGreaterThanOrEqual(
       "Init:CreateContainerConfigError".length * 7.2 + 14
@@ -1454,11 +1475,12 @@ describe("what Needs attention says it checked", () => {
 
   /**
    * Sam's `web`: the age column said "Unknown" on every Service and Ingress
-   * row, and its label was capitalised unlike every verdict beside it. A row
-   * nothing dates gets the column's quiet dot. Fails if "Unknown" comes back
-   * or the label leaves the verdicts' case.
+   * row, and its label was capitalised unlike every verdict beside it. Lena
+   * then read the dots that replaced it as columns squeezed to nothing. A row
+   * nothing dates leaves the cell empty. Fails if "Unknown" or a dot comes
+   * back, or the label leaves the verdicts' case.
    */
-  it("draws an undated row's age as a dot, in the verdicts' own case", async () => {
+  it("leaves an undated row's age empty, in the verdicts' own case", async () => {
     await panel(
       attentionFrom([], {
         services: {
@@ -1485,7 +1507,30 @@ describe("what Needs attention says it checked", () => {
 
     const row = screen.getByText("no endpoints").closest('[role="link"]')!;
     expect(row).not.toHaveTextContent("Unknown");
-    expect(row.lastElementChild).toHaveTextContent("·");
+    expect(row.lastElementChild).toHaveTextContent(/^$/);
+    expect(row.lastElementChild?.previousElementSibling).toHaveTextContent(
+      /^$/
+    );
+  });
+
+  /**
+   * Lena at 1024 in k8s-gui-test: two columns of bare dots beside sentences
+   * clamped at four lines. Fails if the count, age and trend columns stop
+   * sizing to what their rows hold, a row stops sharing them, or the trend
+   * stops being the first to give way on a narrow panel.
+   */
+  it("gives the width of columns its rows leave empty to the sentence", async () => {
+    await panel(attentionFrom([{ ...problem, since: null }]));
+    const row = screen
+      .getByText("ScalingReplicaSet")
+      .closest('[role="link"]') as HTMLElement;
+    expect(row).toHaveClass("grid-cols-subgrid");
+    const rows = row.parentElement!;
+    expect(rows).toHaveClass("@container");
+    expect(rows.className).toContain("minmax(12rem,1fr)_auto_auto_auto]");
+    expect(
+      within(row).getByTestId("attention-trend").querySelector("svg")
+    ).toHaveClass("@max-[56rem]:hidden");
   });
 
   /** Fifty rows push the rest of the page off screen; the tail is a count and a way into each list. */
@@ -1529,6 +1574,32 @@ describe("what Needs attention says it checked", () => {
     expect(screen.getAllByRole("link", { name: /^Pod api-/ })).toHaveLength(14);
     expect(screen.queryByRole("button", { name: /more/ })).toBeNull();
     expect(screen.getByText("and 3 more")).toBeInTheDocument();
+  });
+
+  /**
+   * Sam opened the rows past the cap, left the Overview and came back to
+   * "and 49 more" every time. Fails if the panel forgets it was opened, or
+   * offers no way to close it again.
+   */
+  it("stays open when the reader comes back, until they show fewer", async () => {
+    const pods = Array.from({ length: 14 }, (_, at) => ({
+      ...problem,
+      kind: "Pod",
+      name: `api-${at}`,
+      severity: "critical" as const,
+    }));
+    const attention = attentionFrom(pods);
+    await panel(attention);
+    await userEvent.click(screen.getByRole("button", { name: "and 2 more" }));
+    cleanup();
+
+    await panel(attention);
+    expect(screen.getAllByRole("link", { name: /^Pod api-/ })).toHaveLength(14);
+    await userEvent.click(screen.getByRole("button", { name: "Show fewer" }));
+    expect(screen.getAllByRole("link", { name: /^Pod api-/ })).toHaveLength(12);
+    expect(
+      screen.getByRole("button", { name: "and 2 more" })
+    ).toBeInTheDocument();
   });
 });
 

@@ -24,6 +24,7 @@ import { CaptionScope } from "@/components/ui/section";
 import { SurfaceVisibility, useSurfaceVisible } from "@/lib/surface-visibility";
 import { TabGlyph, TabMark } from "./tab-marks";
 import { surfaceIsOpen, type DetailTab } from "./detail-tab";
+import { fitTabs } from "./tab-fit";
 
 const STEP: Record<string, (at: number, count: number) => number> = {
   ArrowLeft: (at, count) => (at - 1 + count) % count,
@@ -40,7 +41,11 @@ function stepFocus(event: React.KeyboardEvent<HTMLElement>) {
   if (!step || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey)
     return;
   const list = event.currentTarget.closest('[role="tablist"]');
-  const tabs = [...(list?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])];
+  const tabs = [
+    ...(list?.querySelectorAll<HTMLElement>(
+      '[role="tab"]:not([data-overflow])'
+    ) ?? []),
+  ];
   const at = tabs.indexOf(event.currentTarget);
   if (at < 0) return;
   event.preventDefault();
@@ -53,6 +58,7 @@ function DetailTabTrigger({
   isActive,
   isStop,
   ring,
+  overflow,
 }: {
   tab: DetailTab;
   isActive: boolean;
@@ -60,6 +66,8 @@ function DetailTabTrigger({
   isStop: boolean;
   /** WebKit gives a focus a click began no :focus-visible, the arrows' included. */
   ring: boolean;
+  /** In the menu, not the strip: kept out of sight and out of the way, still measured. */
+  overflow: boolean;
 }) {
   const says =
     tab.mark && tab.mark.shows !== "count"
@@ -78,12 +86,13 @@ function DetailTabTrigger({
       }
       aria-label={says ?? undefined}
       onKeyDown={stepFocus}
-      tabIndex={isStop ? 0 : -1}
+      tabIndex={isStop && !overflow ? 0 : -1}
       data-ring={ring ? "true" : undefined}
-      className="group -mb-px h-8 shrink-0 justify-start gap-1.5 whitespace-nowrap rounded-none border-b border-transparent px-0.5 text-xs font-normal text-fg-mut shadow-none transition-colors hover:bg-transparent hover:text-fg focus-visible:ring-inset *:pointer-events-none data-[ring=true]:ring-1 data-[ring=true]:ring-inset data-[ring=true]:ring-info data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
+      data-overflow={overflow ? "true" : undefined}
+      className="group -mb-px h-8 shrink-0 data-[overflow=true]:invisible data-[overflow=true]:absolute justify-start gap-1.5 whitespace-nowrap rounded-none border-b border-transparent px-0.5 text-xs font-normal text-fg-mut shadow-none transition-colors hover:bg-transparent hover:text-fg focus-visible:ring-inset *:pointer-events-none data-[ring=true]:ring-1 data-[ring=true]:ring-inset data-[ring=true]:ring-info data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
     >
       {/* A one-letter tab is unreadable, so nothing here shrinks or
-          truncates; the strip scrolls instead. */}
+          truncates; a tab that does not fit goes to the menu whole. */}
       <TabGlyph glyph={tab.glyph} isActive={isActive} />
       <span className="whitespace-nowrap">{tab.label}</span>
       {tab.mark && <TabMark mark={tab.mark} isActive={isActive} />}
@@ -128,59 +137,74 @@ function useOpenedTabs(
   return current.tabs;
 }
 
-/** The tabs the strip has scrolled out of sight, and on which side. */
-interface Clipped {
-  ids: string[];
-  before: boolean;
-  after: boolean;
+/** The strip's `gap-4`, which the fit counts between tabs. */
+const GAP_PX = 16;
+/** The menu before it has been drawn once: "ещё 10" and its chevron. */
+const MENU_PX = 64;
+
+/** The tabs the menu holds, and the width every tab together asks for. */
+interface Fit {
+  hidden: string[];
+  natural: number | null;
 }
 
-const NOTHING_CLIPPED: Clipped = { ids: [], before: false, after: false };
-
-function useClippedTabs(
-  strip: React.RefObject<HTMLDivElement | null>,
-  ids: string,
-  kept: React.RefObject<string>
-): Clipped {
-  const [clipped, setClipped] = useState(NOTHING_CLIPPED);
+function useFittedTabs({
+  room,
+  strip,
+  menu,
+  ids,
+  open,
+}: {
+  room: React.RefObject<HTMLDivElement | null>;
+  strip: React.RefObject<HTMLDivElement | null>;
+  menu: React.RefObject<HTMLButtonElement | null>;
+  ids: string;
+  open: string;
+}): Fit {
+  const [fit, setFit] = useState<Fit>({ hidden: [], natural: null });
+  const menuShown = fit.hidden.length > 0;
   useLayoutEffect(() => {
+    const box = room.current;
     const list = strip.current;
-    if (!list) return;
+    if (!box || !list) return;
     const measure = () => {
-      const box = list.getBoundingClientRect();
-      const next: Clipped = { ids: [], before: false, after: false };
-      for (const tab of list.querySelectorAll<HTMLElement>("[data-tab]")) {
-        const edge = tab.getBoundingClientRect();
-        const before = edge.left < box.left - 1;
-        const after = edge.right > box.right + 1;
-        if (!before && !after) continue;
-        next.ids.push(tab.dataset.tab ?? "");
-        next.before ||= before;
-        next.after ||= after;
-      }
-      setClipped((prev) =>
-        prev.ids.join("\n") === next.ids.join("\n") &&
-        prev.before === next.before &&
-        prev.after === next.after
+      // Not laid out, as inside a hidden panel: nothing is known to overflow.
+      if (box.clientWidth === 0) return;
+      const tabs = [...list.querySelectorAll<HTMLElement>("[data-tab]")];
+      const widths = tabs.map((tab) => tab.getBoundingClientRect().width);
+      const shown = fitTabs({
+        widths,
+        room: box.clientWidth,
+        gap: GAP_PX,
+        menu: menu.current?.getBoundingClientRect().width || MENU_PX,
+        open: tabs.findIndex((tab) => tab.dataset.tab === open),
+      });
+      const next: Fit = {
+        hidden: tabs
+          .filter((_, index) => !shown[index])
+          .map((tab) => tab.dataset.tab ?? ""),
+        natural: Math.ceil(
+          widths.reduce((sum, width) => sum + width, 0) +
+            GAP_PX * Math.max(0, widths.length - 1)
+        ),
+      };
+      setFit((prev) =>
+        prev.natural === next.natural &&
+        prev.hidden.join("\n") === next.hidden.join("\n")
           ? prev
           : next
       );
     };
     measure();
-    const observer = new ResizeObserver(() => {
-      revealTab(list, tabNamed(list, kept.current));
-      measure();
-    });
-    observer.observe(list);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
     for (const tab of list.querySelectorAll("[data-tab]"))
       observer.observe(tab);
-    list.addEventListener("scroll", measure, { passive: true });
-    return () => {
-      observer.disconnect();
-      list.removeEventListener("scroll", measure);
-    };
-  }, [strip, ids, kept]);
-  return clipped;
+    if (menu.current) observer.observe(menu.current);
+    return () => observer.disconnect();
+  }, [room, strip, menu, ids, open, menuShown]);
+  return fit;
 }
 
 /** Every tab the strip cannot show, one click away and named, the open one marked. */
@@ -188,10 +212,12 @@ function HiddenTabs({
   tabs,
   open,
   onPick,
+  buttonRef,
 }: {
   tabs: DetailTab[];
   open: DetailTab | undefined;
   onPick: (tab: string) => void;
+  buttonRef: React.RefObject<HTMLButtonElement | null>;
 }) {
   const t = useT();
   const label = t("action", "tabsMoreLabel", { n: tabs.length });
@@ -207,6 +233,7 @@ function HiddenTabs({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
+          ref={buttonRef}
           type="button"
           aria-label={says}
           title={open ? says : undefined}
@@ -269,35 +296,6 @@ function HiddenTabs({
   );
 }
 
-/** Fades the side the strip continues on, so a cut tab reads as more to come. */
-const FADE = {
-  before: "[mask-image:linear-gradient(to_right,transparent,black_32px)]",
-  after:
-    "[mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)]",
-  both: "[mask-image:linear-gradient(to_right,transparent,black_32px,black_calc(100%-32px),transparent)]",
-} as const;
-const FADE_PX = 32;
-
-/** Scrolls the strip alone until `tab` sits whole and clear of both fades. */
-function revealTab(strip: HTMLElement | null, tab: Element | null | undefined) {
-  if (!strip || !tab) return;
-  const box = strip.getBoundingClientRect();
-  const edge = tab.getBoundingClientRect();
-  const start = edge.left - box.left + strip.scrollLeft;
-  const end = edge.right - box.left + strip.scrollLeft;
-  let next = strip.scrollLeft;
-  if (end + FADE_PX > next + strip.clientWidth)
-    next = end + FADE_PX - strip.clientWidth;
-  if (start - FADE_PX < next) next = start - FADE_PX;
-  next = Math.max(0, Math.min(next, strip.scrollWidth - strip.clientWidth));
-  if (next !== strip.scrollLeft) strip.scrollLeft = next;
-}
-
-const tabNamed = (strip: HTMLElement | null, id: string) =>
-  [...(strip?.querySelectorAll<HTMLElement>("[data-tab]") ?? [])].find(
-    (tab) => tab.dataset.tab === id
-  );
-
 const tabOf = (target: EventTarget | null) =>
   target instanceof Element
     ? (target.closest<HTMLElement>("[data-tab]")?.dataset.tab ?? null)
@@ -335,31 +333,26 @@ export function DetailTabs({
   // the cluster for a panel nobody can see, and since the panel is mounted
   // nothing downstream can work that out for itself.
   const pageVisible = useSurfaceVisible();
+  const roomRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLButtonElement>(null);
   const [focused, setFocused] = useState<Focused | null>(null);
   const pointer = useRef(false);
-  // The Tab stop, and the tab the strip keeps in view through any scroll,
-  // resize or remount: the focused one inside it, the open one otherwise.
-  const stop = focused?.id ?? current;
-  const kept = useRef(stop);
-  const clipped = useClippedTabs(
-    stripRef,
-    tabs.map((tab) => tab.id).join("\n"),
-    kept
-  );
-  const fade =
-    clipped.before && clipped.after
-      ? FADE.both
-      : clipped.before
-        ? FADE.before
-        : clipped.after
-          ? FADE.after
-          : undefined;
-
-  useLayoutEffect(() => {
-    kept.current = stop;
-    revealTab(stripRef.current, tabNamed(stripRef.current, stop));
-  }, [stop]);
+  const fit = useFittedTabs({
+    room: roomRef,
+    strip: stripRef,
+    menu: menuRef,
+    ids: tabs.map((tab) => tab.id).join("\n"),
+    open: current,
+  });
+  const hidden = new Set(fit.hidden);
+  // The strip's one Tab stop: the focused tab inside it, the open one
+  // outside, or the first it shows when the menu holds the open one.
+  const stop =
+    focused?.id ??
+    (hidden.has(current)
+      ? tabs.find((tab) => !hidden.has(tab.id))?.id
+      : current);
 
   return (
     <Tabs
@@ -374,17 +367,19 @@ export function DetailTabs({
           by a pip — a control flush against a tab strip reads as another
           destination, and "Delete" must never be mistaken for a place to
           go. Tabs never shrink: when the actions do not fit they wrap to
-          their own row, and only tabs wider than the page scroll. */}
+          their own row, and a tab the row still cannot hold goes to the
+          menu whole. */}
       <div className="flex flex-wrap items-stretch gap-3">
-        <div className="flex min-w-0 flex-auto items-stretch">
+        {/* Asks for every tab's width, so the actions wrap before a tab
+            goes to the menu. */}
+        <div
+          ref={roomRef}
+          className="flex min-w-0 flex-auto items-stretch"
+          style={fit.natural === null ? undefined : { flexBasis: fit.natural }}
+        >
           <TabsList
             ref={stripRef}
             tabIndex={-1}
-            onWheel={(event) => {
-              const el = event.currentTarget;
-              if (el.scrollWidth <= el.clientWidth) return;
-              el.scrollLeft += event.deltaY || event.deltaX;
-            }}
             onPointerDown={() => {
               pointer.current = true;
             }}
@@ -396,21 +391,12 @@ export function DetailTabs({
               const id = tabOf(event.target);
               if (id) setFocused({ id, ring: !pointer.current });
               pointer.current = false;
-              revealTab(
-                event.currentTarget,
-                (event.target as Element).closest("[data-tab]")
-              );
             }}
             onBlur={(event) => {
               if (!event.currentTarget.contains(event.relatedTarget as Node))
                 setFocused(null);
             }}
-            className={cn(
-              // WebKit draws a scrollbar over the labels and takes their
-              // lower half's clicks; the fades and the menu say there is more.
-              "h-auto min-w-0 flex-1 justify-start gap-4 overflow-x-auto rounded-none border-b border-hair bg-transparent p-0 text-fg-mut scrollbar-none",
-              fade
-            )}
+            className="relative h-auto min-w-0 flex-1 justify-start gap-4 overflow-hidden rounded-none border-b border-hair bg-transparent p-0 text-fg-mut"
           >
             {tabs.map((tab) => (
               <DetailTabTrigger
@@ -419,21 +405,20 @@ export function DetailTabs({
                 isActive={tab.id === current}
                 isStop={tab.id === stop}
                 ring={focused?.id === tab.id && focused.ring}
+                overflow={hidden.has(tab.id)}
               />
             ))}
           </TabsList>
-          {clipped.ids.length > 0 && (
+          {hidden.size > 0 && (
             <HiddenTabs
-              tabs={tabs.filter((tab) => clipped.ids.includes(tab.id))}
+              tabs={tabs.filter((tab) => hidden.has(tab.id))}
               open={
-                clipped.ids.includes(current)
+                hidden.has(current)
                   ? tabs.find((tab) => tab.id === current)
                   : undefined
               }
-              onPick={(id) => {
-                revealTab(stripRef.current, tabNamed(stripRef.current, id));
-                onTabChange(id);
-              }}
+              onPick={onTabChange}
+              buttonRef={menuRef}
             />
           )}
         </div>

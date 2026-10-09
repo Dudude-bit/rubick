@@ -1,6 +1,19 @@
 import type { ReactElement } from "react";
-import { describe, expect, it, vi, beforeEach } from "vite-plus/test";
-import { act, screen, waitFor, within } from "@testing-library/react";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { useSettingsStore } from "@/stores/settingsStore";
@@ -303,6 +316,53 @@ describe("the counts at the end of each row", () => {
     await screen.findByText("3");
     expect(screen.queryByTestId("attention-unchecked-ring")).toBeNull();
     attention = null;
+  });
+});
+
+describe("a rail taller than the window", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  /** A rail 600px tall holding `content` pixels of rows. */
+  function railOf(content: number) {
+    vi.spyOn(Element.prototype, "scrollHeight", "get").mockImplementation(
+      function (this: Element) {
+        return this.tagName === "NAV" ? content : 0;
+      }
+    );
+    vi.spyOn(Element.prototype, "clientHeight", "get").mockImplementation(
+      function (this: Element) {
+        return this.tagName === "NAV" ? 600 : 0;
+      }
+    );
+  }
+
+  /**
+   * At 1024x800 Marco and Lena read a sliced "ACCESS" caption above the App
+   * block, as if the rail were broken. Fails if the edge the rail continues
+   * past stops fading, or a rail that fits wears a fade for nothing.
+   */
+  it("fades the edge it continues past, and only that one", async () => {
+    railOf(900);
+    await wrap(<Sidebar />);
+    const rail = screen.getByRole("navigation");
+    expect(rail.className).toContain(
+      "[mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]"
+    );
+
+    rail.scrollTop = 300;
+    fireEvent.scroll(rail);
+    expect(rail.className).toContain(
+      "[mask-image:linear-gradient(to_bottom,transparent,black_24px)]"
+    );
+  });
+
+  /** Fails if a rail with nothing past its edges is faded anyway. */
+  it("wears no fade when every row fits", async () => {
+    railOf(600);
+    await wrap(<Sidebar />);
+    expect(screen.getByRole("navigation").className).not.toContain(
+      "mask-image"
+    );
   });
 });
 
