@@ -193,6 +193,10 @@ pub struct NamespaceAccess {
     /// offered, or it would vanish from the picker as if the reader had been
     /// turned away from it.
     pub allowed: Option<bool>,
+    /// Asked only where pods were refused: whether anything else may be
+    /// listed there. Marco's team-blind refused pods and served Deployments,
+    /// Services and Events, and was hidden as if it served nothing.
+    pub other_lists: Option<bool>,
 }
 
 /// The one list a namespace is probed with: pods, the verb any grant that
@@ -231,12 +235,46 @@ pub async fn check_namespace_access(
         async move { ask(&api, attributes).await }
     }))
     .await;
+    let rules: Api<SelfSubjectRulesReview> = Api::all(ctx.client.clone());
+    let others = join_all(namespaces.iter().zip(&answers).map(|(namespace, allowed)| {
+        let rules = rules.clone();
+        async move {
+            if *allowed != Some(false) {
+                return None;
+            }
+            review(&rules, namespace)
+                .await
+                .ok()
+                .and_then(|answered| lists_something(&own_rules(namespace.clone(), answered)))
+        }
+    }))
+    .await;
 
     Ok(namespaces
         .into_iter()
         .zip(answers)
-        .map(|(namespace, allowed)| NamespaceAccess { namespace, allowed })
+        .zip(others)
+        .map(|((namespace, allowed), other_lists)| NamespaceAccess {
+            namespace,
+            allowed,
+            other_lists,
+        })
         .collect())
+}
+
+/// Whether the rules grant listing anything at all; unknown where none does
+/// and the authorizer said its rules were incomplete.
+fn lists_something(rules: &OwnRules) -> Option<bool> {
+    let lists = rules.rules.iter().any(|rule| {
+        !rule.resources.is_empty() && rule.verbs.iter().any(|verb| verb == "list" || verb == "*")
+    });
+    if lists {
+        Some(true)
+    } else if rules.incomplete {
+        None
+    } else {
+        Some(false)
+    }
 }
 
 /// The namespaces one kind has to be asked about.
@@ -305,14 +343,21 @@ pub async fn review_own_rules(namespace: String, state: State<'_, AppState>) -> 
     crate::validation::validate_dns_label(&namespace)?;
     let ctx = ResourceContext::for_list(&state, None)?;
     let api: Api<SelfSubjectRulesReview> = Api::all(ctx.client.clone());
+    let answered = review(&api, &namespace).await?;
+    Ok(own_rules(namespace, answered))
+}
+
+async fn review(
+    api: &Api<SelfSubjectRulesReview>,
+    namespace: &str,
+) -> kube::Result<Option<SubjectRulesReviewStatus>> {
     let review = SelfSubjectRulesReview {
         spec: SelfSubjectRulesReviewSpec {
-            namespace: Some(namespace.clone()),
+            namespace: Some(namespace.to_string()),
         },
         ..SelfSubjectRulesReview::default()
     };
-    let answered = api.create(&PostParams::default(), &review).await?;
-    Ok(own_rules(namespace, answered.status))
+    Ok(api.create(&PostParams::default(), &review).await?.status)
 }
 
 /// A review answered without a status said nothing, which is not "no rules".
@@ -371,6 +416,32 @@ mod tests {
         assert_eq!(rules.rules.len(), 2);
         assert_eq!(rules.rules[0].resources, ["pods"]);
         assert_eq!(rules.rules[1].non_resource_urls, ["/healthz"]);
+    }
+
+    /// Marco's team-blind refused pods and served Deployments and Services,
+    /// and the picker hid it as if nothing there could be read. Fails if a
+    /// namespace with any list allowed reads as shut, or an incomplete review
+    /// that shows none reads as shut rather than unknown.
+    #[test]
+    fn a_namespace_that_lists_anything_is_not_shut() {
+        let status = |incomplete: bool, rules: serde_json::Value| {
+            let status: SubjectRulesReviewStatus = serde_json::from_value(serde_json::json!({
+                "incomplete": incomplete,
+                "resourceRules": rules,
+                "nonResourceRules": [{ "nonResourceURLs": ["/api"], "verbs": ["get"] }],
+            }))
+            .expect("status");
+            own_rules("team-blind".to_string(), Some(status))
+        };
+        let basic = serde_json::json!([
+            { "apiGroups": ["authorization.k8s.io"], "resources": ["selfsubjectaccessreviews"], "verbs": ["create"] }
+        ]);
+        let deployments = serde_json::json!([
+            { "apiGroups": ["apps"], "resources": ["deployments"], "verbs": ["get", "list", "watch"] }
+        ]);
+        assert_eq!(lists_something(&status(false, deployments)), Some(true));
+        assert_eq!(lists_something(&status(false, basic.clone())), Some(false));
+        assert_eq!(lists_something(&status(true, basic)), None);
     }
 
     /// No status at all is an answer nobody gave, and must not read as no rules.

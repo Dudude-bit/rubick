@@ -819,13 +819,14 @@ function NamespacePopover({
       ? typedName
       : null;
 
-  // A namespace the authorizer firmly refused is not offered. Never one the
-  // review could not reach (absent = unknown, kept), never a selected one
-  // (hiding it would strand a scope the window is on), and never the one the
-  // reader typed in full; a reveal brings the rest back.
+  // A namespace where nothing may be listed is not offered. Never one the
+  // review could not reach (absent = unknown, kept), never one that refuses
+  // pods and serves other lists (offered, saying what it refuses), never a
+  // selected one (hiding it would strand a scope the window is on), and never
+  // the one the reader typed in full; a reveal brings the rest back.
   const usable = (name: string) =>
     showBlocked ||
-    access.get(name) !== false ||
+    !access.shut.has(name) ||
     scope.includes(name) ||
     name === typedName;
   const shown = visible.filter((ns) => usable(ns.name));
@@ -864,7 +865,7 @@ function NamespacePopover({
       selected: scope.includes(ns.name),
       closed: full && !scope.includes(ns.name),
       source: ns.source,
-      refused: access.get(ns.name) === false,
+      refused: access.pods.get(ns.name) === false,
     })),
     ...(typed === null
       ? []

@@ -902,6 +902,7 @@ export interface OwnRule {
 export interface NamespaceAccess {
   namespace: string;
   allowed: boolean | null;
+  otherLists: boolean | null;
 }
 
 export interface ListAccess {

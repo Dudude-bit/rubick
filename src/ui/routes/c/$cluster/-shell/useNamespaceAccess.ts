@@ -1,9 +1,10 @@
 /**
  * Which namespaces this user may actually use, asked before the picker offers
- * them — the wall {@link useListAccess} spares the nav, spared the picker. The
- * map only ever removes an offer, and only on a firm refusal: a namespace the
- * authorizer could not be asked about is absent, never `false`, so "could not
- * check" is never drawn as "turned away".
+ * them: the wall {@link useListAccess} spares the nav, spared the picker. An
+ * offer is only ever removed on a firm answer that nothing there may be
+ * listed: a namespace the authorizer could not be asked about is absent, never
+ * refused, so "could not check" is never drawn as "turned away", and one that
+ * refuses pods but serves other lists stays offered, saying what it refuses.
  */
 
 import { useQuery } from "@tanstack/react-query";
@@ -15,8 +16,12 @@ import { useClusterStore } from "@/stores/clusterStore";
 /** Rights change rarely, never within an open picker; matches useListAccess. */
 const REVIEW_FRESH_MS = 5 * 60 * 1000;
 
-/** Namespace name to whether the reader may use it; absent means unknown. */
-export type NamespaceAccessMap = Map<string, boolean>;
+export interface NamespaceAccessMap {
+  /** Namespace name to whether its pods may be listed; absent means unknown. */
+  pods: Map<string, boolean>;
+  /** The namespaces where nothing at all may be listed: the only ones hidden. */
+  shut: Set<string>;
+}
 
 export function useNamespaceAccess(names: string[]): NamespaceAccessMap {
   const currentContext = useClusterStore((s) => s.currentContext);
@@ -35,12 +40,15 @@ export function useNamespaceAccess(names: string[]): NamespaceAccessMap {
     retry: false,
   });
 
-  const map: NamespaceAccessMap = new Map();
+  const access: NamespaceAccessMap = { pods: new Map(), shut: new Set() };
   for (const answer of data ?? []) {
     // `null`/`undefined` are both "could not ask", and both stay out.
     if (answer.allowed !== null && answer.allowed !== undefined) {
-      map.set(answer.namespace, answer.allowed);
+      access.pods.set(answer.namespace, answer.allowed);
+    }
+    if (answer.allowed === false && answer.otherLists === false) {
+      access.shut.add(answer.namespace);
     }
   }
-  return map;
+  return access;
 }

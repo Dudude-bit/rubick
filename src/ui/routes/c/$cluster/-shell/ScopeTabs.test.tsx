@@ -5,7 +5,11 @@ import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
 
 /** What the authorizer answers about each namespace, per test. */
 const nsAccess = vi.hoisted(() => ({
-  answers: [] as Array<{ namespace: string; allowed: boolean | null }>,
+  answers: [] as Array<{
+    namespace: string;
+    allowed: boolean | null;
+    otherLists?: boolean | null;
+  }>,
 }));
 
 vi.mock("@/lib/commands", () => ({
@@ -410,13 +414,16 @@ describe("watching several namespaces at once", () => {
 
   /**
    * #137: on a cluster split across teams the reader can see namespaces they
-   * have no rights in. The picker stops offering the ones the authorizer
-   * firmly refuses — until asked to show them. Fails if a refused namespace
-   * is offered, or if the reveal stops bringing it back.
+   * have no rights in. The picker stops offering the ones where nothing may
+   * be listed, until asked to show them. Fails if such a namespace is
+   * offered, if the footer does not say what is refused, or if the reveal
+   * stops bringing it back.
    */
-  it("hides the namespaces the reader is refused, with a way to show them", async () => {
+  it("hides the namespaces where nothing may be listed, with a way to show them", async () => {
     const user = userEvent.setup();
-    nsAccess.answers = [{ namespace: "ns-2", allowed: false }];
+    nsAccess.answers = [
+      { namespace: "ns-2", allowed: false, otherLists: false },
+    ];
     await draw([]);
     const list = await openPicker(user);
 
@@ -428,11 +435,41 @@ describe("watching several namespaces at once", () => {
       within(list).getByRole("option", { name: /^ns-0,/ })
     ).toBeInTheDocument();
 
-    // The footer says how many, and offers to show them, each saying why.
+    // The footer says how many and what is refused, and offers to show them.
+    expect(
+      screen.getByText("1 namespace hidden: nothing in it may be listed")
+    ).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /show them/i }));
     expect(
       within(list).getByRole("option", { name: /^ns-2,/ })
     ).toHaveAccessibleName(/may not list pods/);
+  });
+
+  /**
+   * Marco's picker said "1 namespace hidden: no access" for team-blind, where
+   * he may list Deployments, Services and Events and only pods are refused.
+   * Fails if a namespace refusing pods and serving other lists, or one whose
+   * other lists could not be asked about, is hidden or loses the words
+   * saying it refuses pods.
+   */
+  it("offers a namespace that refuses only pods, saying so", async () => {
+    const user = userEvent.setup();
+    nsAccess.answers = [
+      { namespace: "ns-2", allowed: false, otherLists: true },
+      { namespace: "ns-5", allowed: false, otherLists: null },
+    ];
+    await draw([]);
+    const list = await openPicker(user);
+
+    await waitFor(() =>
+      expect(
+        within(list).getByRole("option", { name: /^ns-2,/ })
+      ).toHaveAccessibleName(/may not list pods/)
+    );
+    expect(
+      within(list).getByRole("option", { name: /^ns-5,/ })
+    ).toHaveAccessibleName(/may not list pods/);
+    expect(screen.queryByText(/hidden/)).toBeNull();
   });
 
   /**
@@ -757,15 +794,17 @@ describe("a token that may not list namespaces", () => {
   });
 
   /**
-   * Marco on team-checkout typed team-blind, a recent namespace whose pods
-   * he may not list: the row hid behind "1 namespace hidden: no access", and
+   * Marco on team-checkout typed team-blind, a recent namespace where he may
+   * list nothing: the row hid behind "1 namespace hidden", and
    * neither Enter nor Ctrl+Enter took it. Fails if a namespace typed in full
    * is hidden, loses the words saying what it refuses, or cannot be picked
    * from the keyboard.
    */
   it("offers a refused namespace typed in full, says so, and takes it on Enter", async () => {
     const user = userEvent.setup();
-    nsAccess.answers = [{ namespace: "team-blind", allowed: false }];
+    nsAccess.answers = [
+      { namespace: "team-blind", allowed: false, otherLists: false },
+    ];
     useNamespaceRecencyStore.setState({
       recent: { "k3d-dev": ["team-blind"] },
     });
@@ -787,7 +826,7 @@ describe("a token that may not list namespaces", () => {
     expect(
       within(list).getByRole("option", { name: /^team-blind/ })
     ).toHaveAccessibleName("team-blind, may not list pods");
-    expect(screen.queryByText(/hidden: no access/)).toBeNull();
+    expect(screen.queryByText(/namespace hidden/)).toBeNull();
 
     await user.keyboard("{Control>}{Enter}{/Control}");
     expect(scope()).toEqual(["team-checkout", "team-blind"]);
