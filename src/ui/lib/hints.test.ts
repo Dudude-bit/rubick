@@ -125,6 +125,7 @@ const crashing = () =>
     status: {
       phase: "Running",
       display: "CrashLoopBackOff",
+      exitUnreported: false,
       ready: false,
       conditions: [],
       message: null,
@@ -273,6 +274,7 @@ describe("troubleOf", () => {
       status: {
         phase: "Running",
         display: "CrashLoopBackOff",
+        exitUnreported: false,
         ready: false,
         conditions: [],
         message: null,
@@ -401,6 +403,7 @@ describe("troubleOf", () => {
         status: {
           phase: "Pending",
           display: "Pending",
+          exitUnreported: false,
           ready: false,
           conditions: [],
           message: null,
@@ -419,6 +422,7 @@ describe("troubleOf", () => {
         status: {
           phase: "Pending",
           display: "Pending",
+          exitUnreported: false,
           ready: false,
           conditions: [],
           message: null,
@@ -447,6 +451,7 @@ describe("a pod the scheduler has not placed", () => {
       status: {
         phase: "Pending",
         display: "Pending",
+        exitUnreported: false,
         ready: false,
         conditions: [],
         message: null,

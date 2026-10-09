@@ -197,6 +197,7 @@ describe("PodShell when there is nothing to attach to", () => {
     status: {
       phase: "Pending",
       display: "Init:CrashLoopBackOff",
+      exitUnreported: false,
       ready: false,
       conditions: [],
       message: null,
@@ -324,6 +325,7 @@ describe("PodShell where the cluster refuses this user", () => {
           status: {
             phase: "Pending",
             display: "Init:0/1",
+            exitUnreported: false,
             ready: false,
             conditions: [],
             message: null,

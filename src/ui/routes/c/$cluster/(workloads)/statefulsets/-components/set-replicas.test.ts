@@ -12,7 +12,7 @@ const shape = (segments: ReturnType<typeof setReplicaSegments>) =>
 const NOW = Date.parse("2026-10-09T04:00:00Z");
 const pod = (display: string, ready: boolean) => ({
   start: { state: "settled" as const },
-  status: { display, ready },
+  status: { display, ready, exitUnreported: false },
 });
 
 describe("a StatefulSet's Replicas bar", () => {

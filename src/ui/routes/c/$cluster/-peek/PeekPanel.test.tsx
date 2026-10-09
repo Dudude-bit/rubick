@@ -551,6 +551,7 @@ describe("PeekPanel", () => {
         status: {
           phase: "Running",
           display: "Running",
+          exitUnreported: false,
           ready: false,
           conditions: [],
           message: null,
@@ -1380,6 +1381,7 @@ describe("PeekPanel tabs", () => {
         status: {
           phase: "Pending",
           display: "Pending",
+          exitUnreported: false,
           ready: false,
           conditions: [],
           message: "0/3 nodes are available: insufficient cpu.",
@@ -1916,6 +1918,7 @@ const PENDING_POD = buildPod({
   status: {
     phase: "Pending",
     display: "Pending",
+    exitUnreported: false,
     ready: false,
     conditions: [],
     message: "0/3 nodes are available: insufficient cpu.",
@@ -1945,6 +1948,7 @@ const RUNNING_POD = buildPod({
   status: {
     phase: "Running",
     display: "Running",
+    exitUnreported: false,
     ready: true,
     conditions: [],
     message: null,

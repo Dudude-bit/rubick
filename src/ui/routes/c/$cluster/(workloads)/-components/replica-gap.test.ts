@@ -15,7 +15,7 @@ const pod = (
     display: "Pending",
     ready: false,
   }
-) => ({ start, status });
+) => ({ start, status: { exitUnreported: false, ...status } });
 const starting = (secondsLeft: number) =>
   pod({
     state: "starting",

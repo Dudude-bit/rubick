@@ -190,6 +190,7 @@ describe("why a pod action cannot run", () => {
     status: {
       phase: "Pending",
       display: "Pending",
+      exitUnreported: false,
       ready: false,
       conditions: [],
       message: "0/3 nodes are available: insufficient cpu.",
@@ -222,6 +223,7 @@ describe("why a pod action cannot run", () => {
       status: {
         phase: "Succeeded",
         display: "Completed",
+        exitUnreported: false,
         ready: false,
         conditions: [],
         message: null,
@@ -256,6 +258,7 @@ describe("why a pod action cannot run", () => {
       status: {
         phase: "Running",
         display: "Error",
+        exitUnreported: false,
         ready: false,
         conditions: [],
         message: null,
