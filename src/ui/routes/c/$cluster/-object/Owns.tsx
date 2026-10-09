@@ -11,8 +11,8 @@ import { errorToShow } from "@/lib/error-utils";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { cn } from "@/lib/utils";
 import { segmentOf } from "@/lib/access-kinds";
-import { listing, readWhereTheyLive, useDependents } from "./ownership";
-import { ReadingChips, ReadingProgress } from "./ReadingChips";
+import { listing, mightHold, useDependents } from "./ownership";
+import { ReadingChips, ReadingProgress, ReadTotals } from "./ReadingChips";
 
 /**
  * What this object owns, as a tree that opens a level at a time. Read only
@@ -160,7 +160,11 @@ function Children({
   );
 }
 
-/** Every kind the index could not vouch for, folded behind a count. */
+/**
+ * How much of the cluster the answer covers, as Delete says it: the kinds
+ * that could still hold a dependent unseen, folded behind their count, apart
+ * from the ones no dependent can be in.
+ */
 function NotReadSummary({
   notRead,
   namespace,
@@ -169,25 +173,28 @@ function NotReadSummary({
   namespace: string | null;
 }) {
   const t = useT();
-  const kinds = notRead.kinds.filter(
-    (reading) => !readWhereTheyLive(reading, namespace)
+  const kinds = notRead.kinds.filter((reading) =>
+    mightHold(reading, namespace)
   );
-  if (kinds.length === 0 && notRead.groups.length === 0) return null;
+  const unread = kinds.length + notRead.groups.length;
   return (
-    <details className="group text-xs">
-      <summary className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-md px-1 py-0.5 text-fg-mut hover:bg-hover hover:text-fg">
-        <ChevronRight
-          className="h-3 w-3 transition-transform duration-200 group-open:rotate-90 motion-reduce:transition-none"
-          aria-hidden="true"
-        />
-        <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
-        {t("count", "kindsNotRead", {
-          n: kinds.length + notRead.groups.length,
-        })}
-      </summary>
-      <div className="mt-2 pl-1">
-        <ReadingChips kinds={kinds} groups={notRead.groups} />
-      </div>
-    </details>
+    <div className="flex flex-col gap-1.5 text-xs">
+      <ReadTotals notRead={notRead} unread={kinds.length} />
+      {unread > 0 && (
+        <details className="group" data-testid="not-read-in-full">
+          <summary className="inline-flex cursor-pointer select-none items-center gap-1.5 rounded-md px-1 py-0.5 text-warn hover:bg-hover">
+            <ChevronRight
+              className="h-3 w-3 transition-transform duration-200 group-open:rotate-90 motion-reduce:transition-none"
+              aria-hidden="true"
+            />
+            <EyeOff className="h-3.5 w-3.5" aria-hidden="true" />
+            {t("count", "kindsNotRead", { n: unread })}
+          </summary>
+          <div className="mt-2 pl-1">
+            <ReadingChips kinds={kinds} groups={notRead.groups} />
+          </div>
+        </details>
+      )}
+    </div>
   );
 }

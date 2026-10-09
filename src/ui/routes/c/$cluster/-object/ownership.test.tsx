@@ -264,6 +264,47 @@ describe("what an object owns", () => {
     expect(screen.queryByText("ConfigMap")).toBeNull();
   });
 
+  /**
+   * Lena, cluster-admin: "10 kinds not read in full" under every Deployment,
+   * ReplicaSet and Pod. They were the two Events kinds, left out on purpose,
+   * and the eight review and binding kinds discovery offers no list of; none
+   * can hold a dependent. Fails if they are counted as a gap again, or if
+   * they stop being named with why.
+   */
+  it("names the kinds left out apart from those that could hide a dependent", async () => {
+    const unwatched = (kind: string, says: "unlistable" | "skipped") => ({
+      kind,
+      group: kind === "Event" ? "" : "authorization.k8s.io",
+      plural: `${kind.toLowerCase()}s`,
+      reading: { says },
+    });
+    answers.dependents = () =>
+      Promise.resolve({
+        dependents: [dependent("ReplicaSet", "cart-9df89489c", 2)],
+        notRead: {
+          kinds: [
+            unwatched("Event", "skipped"),
+            ...["Binding", "ComponentStatus", "TokenReview"].map((kind) =>
+              unwatched(kind, "unlistable")
+            ),
+          ],
+          groups: [],
+          watched: 104,
+        },
+      });
+    await renderWithRouter(<OwnsPanel uid="d" namespace="shop" />);
+
+    expect(
+      await screen.findByText("Read 104 of 104 kinds that can be watched")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/not read in full/)).toBeNull();
+    expect(screen.getByTestId("left-out")).toHaveTextContent(
+      "108 kinds served; Events and kinds that cannot be watched are left out"
+    );
+    expect(chipOf("Event")).toHaveTextContent("left out");
+    expect(chipOf("ComponentStatus")).toHaveTextContent("cannot be listed");
+  });
+
   /** Asking starts a cluster-wide index; a tab nobody opened must not. */
   it("asks nothing while its tab is off screen", async () => {
     answers.dependents = () =>
