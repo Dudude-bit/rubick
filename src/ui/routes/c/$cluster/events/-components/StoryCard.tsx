@@ -16,6 +16,7 @@ import {
   type TimelineEntry,
 } from "@/lib/event-stories";
 import { cn } from "@/lib/utils";
+import { lastTermination } from "@/lib/pod-status";
 import { controlAt } from "@/lib/row-control";
 import { readLinkIntent } from "@/hooks/useLinkGesture";
 import { usePeek } from "@/hooks/usePeek";
@@ -26,6 +27,7 @@ import { useT } from "@/i18n/useT";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
 import type { en } from "@/i18n/catalogue";
+import type { TerminationInfo } from "@/generated/types";
 
 const STATE_LABEL: Record<StoryState, keyof typeof en.readings> = {
   stillHappening: "storyStillHappening",
@@ -334,19 +336,20 @@ function Timeline({ story }: { story: Story }) {
   const marks: StatusMark[] = statuses.flatMap((status, index) => {
     const pod = status.data;
     if (!pod) return [];
-    return pod.containers.flatMap((container) => {
-      const exit = container.lastTerminated;
-      if (!exit?.finishedAt) return [];
-      return [
-        {
+    return pod.containers.flatMap((container) =>
+      [...new Set([lastTermination(container), container.lastTerminated])]
+        .filter(
+          (exit): exit is TerminationInfo & { finishedAt: string } =>
+            !!exit?.finishedAt
+        )
+        .map((exit) => ({
           at: Date.parse(exit.finishedAt),
           container: container.name,
           exitCode: exit.exitCode,
           reason: exit.reason,
           pod: pods[index].name,
-        },
-      ];
-    });
+        }))
+    );
   });
   const unread = statuses.filter((s) => s.isError).length;
   const entries = withStatusMarks(timelineOf(story), marks);

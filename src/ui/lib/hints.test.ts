@@ -1120,6 +1120,72 @@ describe("agentReport", () => {
     expect(report).toContain("BackOff x9");
     expect(report.startsWith("# Rubick 4.9.2 · context prod-eu-1")).toBe(true);
   });
+
+  /**
+   * Sam copied checkout while its container sat terminated: the report said
+   * "terminated, exit 1 (Error)" over "last exit" at the run before, five
+   * minutes older. Fails if the run that just ended is not the last exit,
+   * if the one before it is lost, or if a restarted container whose exit
+   * the kubelet did not report reads as never having exited.
+   */
+  it("names the run that just ended as the last exit, and says when none is reported", () => {
+    const base = crashing();
+    const terminated = pod({
+      ...base,
+      status: { ...base.status, display: "Error" },
+      containers: [
+        {
+          ...base.containers[0],
+          state: {
+            type: "terminated",
+            termination: {
+              exitCode: 1,
+              signal: null,
+              reason: "Error",
+              message: null,
+              startedAt: "2026-09-08T10:43:55Z",
+              finishedAt: "2026-09-08T10:43:59Z",
+            },
+          },
+        },
+      ],
+    });
+    const report = (subject: PodInfo) =>
+      agentReport({
+        version: "4.21.2",
+        context: "acme-staging",
+        at: "2026-09-08T10:44:00Z",
+        pod: subject,
+        trouble: null,
+        logLines: [],
+        logContainer: null,
+        logPrevious: false,
+        events: [],
+        chain: NONE,
+        mounts: [],
+        guess: null,
+      });
+    const copied = report(terminated);
+    expect(copied).toContain(
+      "  last exit: code 1 Error, 2026-09-08T10:43:59Z · restarts 14"
+    );
+    expect(copied).toContain(
+      "  exit before it: code 1 Error, 2026-09-08T10:38:51Z"
+    );
+    const unreported = pod({
+      ...base,
+      containers: [
+        {
+          ...base.containers[0],
+          state: { type: "running" },
+          lastTerminated: null,
+        },
+      ],
+    });
+    expect(report(unreported)).toContain(
+      "  last exit: not reported by the kubelet · restarts 14"
+    );
+  });
 });
 
 describe("redact", () => {
