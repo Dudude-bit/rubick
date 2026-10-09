@@ -72,16 +72,17 @@ export function useWatchedList<
       if (failed.current === subscription) return;
       failed.current = subscription;
       setFailedFor(subscription);
+      const refused = isRefusal(message);
+      if (refused) {
+        const read = readOf("watch", [subscription]);
+        if (read !== null) noteRefusal(read, message, currentConnection());
+      }
       if (typeof reportFailure === "function") {
         reportFailure(message);
         return;
       }
       // A refused watch is the list's own refusal, which the page states.
-      if (isRefusal(message)) {
-        const read = readOf("watch", [subscription]);
-        if (read !== null) noteRefusal(read, message, currentConnection());
-        return;
-      }
+      if (refused) return;
       toast({
         title: t("action", "realtimeUnavailable"),
         description: t("action", "fallingBackToPolling", {

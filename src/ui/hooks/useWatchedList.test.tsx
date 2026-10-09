@@ -171,6 +171,27 @@ describe("a list kept current by a watch", () => {
     expect(toast).toHaveBeenCalledTimes(2);
   });
 
+  /**
+   * The Gateway routes report their own failures, and a refusal reported
+   * that way was never kept: every visit subscribed the refused watch again.
+   * Fails if such a watch is subscribed again on the connection that
+   * refused it.
+   */
+  it("does not subscribe again a refused watch whose caller reports it itself", () => {
+    const report = vi.fn();
+    const first = watched(true, report);
+    act(() =>
+      callbacks.onError?.(
+        'ApiError: httproutes.gateway.networking.k8s.io is forbidden: User "marco" cannot watch resource "httproutes"'
+      )
+    );
+    expect(report).toHaveBeenCalledTimes(1);
+    first.unmount();
+    const { result } = watched(true, report);
+    expect(callbacks.enabled).toBe(false);
+    expect(result.current.live).toBe(false);
+  });
+
   it("hands the failure to a caller that reports it itself", () => {
     const report = vi.fn();
     watched(true, report);

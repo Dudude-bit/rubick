@@ -94,6 +94,7 @@ async function read(filters: EventFilters) {
 
 const EVENTS = listQueryFor(ResourceType.Event);
 const NO_DETAIL = () => [];
+const NO_EVENTS: EventInfo[] = [];
 const STORIES_FOLLOW_MS = 1000;
 
 /** Draws the page again when the entry under `queryKey` changes, at most once per `everyMs`. */
@@ -273,7 +274,19 @@ export function Events() {
   const kept = streamed.data?.rows;
   // A watch that failed leaves its rows on screen until a poll answers.
   const fromWatch = watching || (polled === undefined && kept !== undefined);
+  // The read can fail, and until now nothing here asked. An empty feed then
+  // drew the quiet-scope sentence — which for the stories tab went as far as
+  // "the read succeeded and returned no events", a claim about a request that
+  // came back 403. In a fan-out one refused namespace is enough: the rest may
+  // have answered, but what is on screen is no longer the scope's whole story.
+  const failed = useFailureUntilAnswered(
+    watching ? null : several ? parts.error : single.error,
+    !watching && (several ? parts.isLoading : single.isLoading)
+  );
+  // Refused now, the feed is refused, whatever an earlier read showed.
+  const refused = failed !== null && isRefusal(failed);
   const { pool, windowFull } = useMemo(() => {
+    if (refused) return { pool: NO_EVENTS, windowFull: false };
     if (!fromWatch) {
       const rows = polled ?? [];
       return { pool: rows, windowFull: limit !== null && rows.length >= limit };
@@ -284,7 +297,7 @@ export function Events() {
     return limit !== null && typed.length > limit
       ? { pool: typed.slice(0, limit), windowFull: true }
       : { pool: typed, windowFull: false };
-  }, [fromWatch, polled, kept, eventType, limit]);
+  }, [refused, fromWatch, polled, kept, eventType, limit]);
 
   // Narrowed before the cut, not after it. The limit buys a pool of the
   // latest N; searching what is left after the cut would search the newest
@@ -332,15 +345,6 @@ export function Events() {
     : several
       ? parts.freshness
       : single.freshness;
-  // The read can fail, and until now nothing here asked. An empty feed then
-  // drew the quiet-scope sentence — which for the stories tab went as far as
-  // "the read succeeded and returned no events", a claim about a request that
-  // came back 403. In a fan-out one refused namespace is enough: the rest may
-  // have answered, but what is on screen is no longer the scope's whole story.
-  const failed = useFailureUntilAnswered(
-    watching ? null : several ? parts.error : single.error,
-    !watching && (several ? parts.isLoading : single.isLoading)
-  );
   // A read that failed over rows it had: they stay, said to be old. A
   // namespace of the fan-out that never answered is unread, not old.
   const stale =
