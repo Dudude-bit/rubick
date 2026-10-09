@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { describe, expect, it } from "vite-plus/test";
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter } from "@/test/render";
@@ -535,6 +535,37 @@ describe("a scope one namespace of which refused its pods", () => {
     const unchecked = screen.getByTestId("attention-unchecked");
     expect(unchecked).toHaveTextContent("Pods");
     expect(unchecked).toHaveTextContent("may not list in team-blind");
+  });
+
+  /**
+   * Marco's Not checked block read "нет права на list", half Russian and
+   * half API. Fails if the Russian line loses the verb as the API spells it,
+   * or the verb stops reading as a term.
+   */
+  it("names the refused verb as the API spells it, inside a Russian sentence", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      await wrap(
+        <AttentionPanel
+          attention={attentionFrom([], {
+            overview,
+          } as Partial<AttentionInputs>)}
+          pods={null}
+          podsUnread={[refusedPods]}
+          nodes={[]}
+          nodesKnown={false}
+        />
+      );
+      const unchecked = screen.getByTestId("attention-unchecked");
+      expect(unchecked).toHaveTextContent(
+        "запрос list запрещён в пространстве имён team-blind"
+      );
+      expect(within(unchecked).getAllByText("list")[0]).toHaveClass(
+        "font-mono"
+      );
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 
   /**

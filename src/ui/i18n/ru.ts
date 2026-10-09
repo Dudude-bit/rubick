@@ -4891,7 +4891,7 @@ export const ru: Catalogue = {
     attentionNotChecked: "Не проверено",
     attentionStillReading: "ещё читается",
     attentionRefused: "доступ запрещён",
-    attentionMayNot: "нет права на {verb}",
+    attentionMayNot: "запрос {verb} запрещён",
     attentionClusterWide: "во всём кластере",
     attentionFailed: "не удалось прочитать",
     attentionInNamespace: "в пространстве имён {namespace}",

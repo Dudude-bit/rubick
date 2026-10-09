@@ -393,7 +393,9 @@ function CheckRow({ check }: { check: AttentionCheck }) {
           ? t("cluster", "attentionStillReading")
           : refused
             ? verb
-              ? t("cluster", "attentionMayNot", { verb })
+              ? parts(t("cluster", "attentionMayNot"), {
+                  verb: <span className="font-mono text-fg-mid">{verb}</span>,
+                })
               : t("cluster", "attentionRefused")
             : t("cluster", "attentionFailed")}
         {(named || refused) && (
