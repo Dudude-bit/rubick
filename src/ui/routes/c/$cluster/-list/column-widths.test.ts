@@ -42,7 +42,7 @@ interface Column {
   meta?: {
     share?: unknown;
     label?: unknown;
-    floor?: number | ((t: T) => number);
+    floor?: number | ((t: T, rows: readonly never[]) => number);
   };
 }
 
@@ -177,16 +177,21 @@ const ACTIONS = {
   meta: { floor: actionsColumnSize(4) },
 };
 
-/** What `DataTable` lays a list out by: its sizes, and the floors under them. */
-const drawn = (columns: Column[], t: T = en) =>
+/** What `DataTable` lays a list out by: its sizes, and the floors under them for `rows`. */
+const drawn = (columns: Column[], t: T = en, rows: readonly unknown[] = []) =>
   [...columns, ACTIONS].map((c) => ({
     size: c.size ?? 150,
-    floor: columnFloor(c, t),
+    floor: columnFloor(c, t, rows),
   }));
 
 /** Each column's pixels in a port `port` wide, and whether the port has to scroll. */
-const laidOut = (columns: Column[], port: number, t: T = en) => {
-  const layout = tableLayout(drawn(columns, t), port);
+const laidOut = (
+  columns: Column[],
+  port: number,
+  t: T = en,
+  rows: readonly unknown[] = []
+) => {
+  const layout = tableLayout(drawn(columns, t, rows), port);
   return {
     ...layout,
     px: layout.shares.map((share) => (share / 100) * layout.span),
@@ -506,6 +511,70 @@ describe("a value a cell says in words", () => {
       Math.ceil(
         "9964→9964".length * 7.2 + 4 + "envoy-metrics · TCP".length * 6.2 + 20
       )
+    );
+  });
+});
+
+describe("a short value a row holds, in a 1024px window in Russian", () => {
+  /** The port a 1024px window leaves a list, less the sidebar and gutters. */
+  const PORT_1024 = 784;
+  const at = (columns: Column[], id: string) =>
+    columns.findIndex((c) => nameOf(c) === id);
+
+  /** Lena read "v1.35...." for v1.35.5+k3s1 on Nodes. Fails if the Version column can be drawn narrower than the longest version a node reports. */
+  it("draws a k3s kubelet version whole on Nodes", () => {
+    const rows = [
+      { name: "k3d-rubick-live-agent-0", version: "v1.35.5+k3s1" },
+      { name: "k3d-rubick-live-server-0", version: "v1.35.5+k3s1" },
+    ];
+    const columns = nodes(new Map());
+    const { px } = laidOut(columns, PORT_1024, ru, rows);
+    expect(px[at(columns, "version")]).toBeGreaterThanOrEqual(
+      "v1.35.5+k3s1".length * 6.6 + 20
+    );
+  });
+
+  /** Lena read "Rolling..." for RollingUpdate on Deployments. Fails if the Strategy column can be drawn narrower than either strategy's name. */
+  it.each([
+    ["English", en],
+    ["Russian", ru],
+  ] as const)("draws RollingUpdate whole on Deployments in %s", (_l, t) => {
+    const columns = deployments();
+    const { px } = laidOut(columns, PORT_1024, t);
+    expect(px[at(columns, "strategy")]).toBeGreaterThanOrEqual(
+      "RollingUpdate".length * 6.6 + 20
+    );
+  });
+
+  /** Lena read "k3d-ru…ent-0" on Pods. Fails if the Node column can be drawn narrower than the node names its rows hold. */
+  it("draws a k3d node name whole on Pods", () => {
+    const shown = (pods as Column[]).filter((c) => nameOf(c) !== "namespace");
+    const rows = [
+      { name: "cart-667846ff79-4f68h", nodeName: "k3d-rubick-live-agent-0" },
+      { name: "never-placed-75dcb67599-w9npx", nodeName: null },
+    ];
+    const { px } = laidOut(shown, PORT_1024, ru, rows);
+    expect(px[at(shown, "node")]).toBeGreaterThanOrEqual(
+      "k3d-rubick-live-agent-0".length * 7.2 + 38
+    );
+  });
+
+  /**
+   * Every list gave its Name column 280px while its names were 10 to 20
+   * glyphs. Fails if the Name floor keeps room its rows' names never use, or
+   * stops holding the longest of them, or 31 glyphs of a longer one.
+   */
+  it("holds the Name column to the longest name its rows hold", () => {
+    const name =
+      (deployments() as Column[]).find((c) => c.accessorKey === "name") ?? {};
+    const short = ["cart", "checkout", "payments", "recommendations"].map(
+      (each) => ({ name: each })
+    );
+    expect(columnFloor(name, ru, short)).toBe(
+      Math.ceil("recommendations".length * 7.2 + 2 * (14 + 4) + 20)
+    );
+    expect(columnFloor(name, ru, [{ name: "x".repeat(60) }, ...short])).toBe(
+      NAME_CELL_PX
     );
   });
 });

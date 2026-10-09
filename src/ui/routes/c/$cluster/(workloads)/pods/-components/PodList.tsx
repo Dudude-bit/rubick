@@ -18,7 +18,7 @@ import {
   createAgeColumn,
   createCpuColumn,
   createMemoryColumn,
-  NODE_CELL_PX,
+  nodeCellPx,
 } from "../../../-list/columns";
 import { podReadiness } from "@/lib/container-sequence";
 import { restartsAreNews } from "@/lib/crash-loop";
@@ -176,7 +176,8 @@ export const columns: ColumnDef<PodRow>[] = [
     id: "node",
     header: columnHeader("columns", "node"),
     meta: {
-      floor: NODE_CELL_PX,
+      floor: (_t, rows: readonly PodRow[]) =>
+        nodeCellPx(rows, (pod) => pod.nodeName),
       share: (pod: PodRow, t) =>
         pod.nodeName
           ? {

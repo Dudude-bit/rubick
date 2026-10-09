@@ -120,7 +120,16 @@ export const columns = (
     size: 120,
     accessorKey: "version",
     header: columnHeader("columns", "version"),
-    meta: { floor: () => widestText(["v1.37.10"], "sans", 6.6) + 20 },
+    meta: {
+      floor: (_t, rows: readonly NodeInfo[]) =>
+        widestText(
+          rows.length
+            ? [...new Set(rows.map((node) => node.version))]
+            : ["v1.37.10"],
+          "sans",
+          6.6
+        ) + 20,
+    },
   },
   {
     size: 130,

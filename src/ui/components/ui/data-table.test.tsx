@@ -1220,6 +1220,40 @@ describe("column widths", () => {
     }
   });
 
+  /**
+   * Lena read "v1.35...." for v1.35.5+k3s1: a floor written for the usual
+   * value cannot know what a cluster says. Fails if a floor that reads the
+   * rows is not handed every row the table holds.
+   */
+  it("hands a floor that reads the rows every row the table holds", async () => {
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    const byName = {
+      ...columns[0],
+      size: 300,
+      meta: {
+        floor: (_t: unknown, rows: readonly Item[]) =>
+          Math.max(0, ...rows.map((row) => row.name.length * 100)),
+      },
+    };
+    try {
+      await wrap(
+        <DataTable<Item>
+          columns={[byName, { ...columns[1], size: 100 }]}
+          data={[...DATA, { name: "long-one", namespace: "ns" }]}
+        />
+      );
+      expect(screen.getByRole("table").style.minWidth).not.toBe("");
+      expect(
+        (Number.parseFloat(widthOf("Name")) / 100) *
+          Number.parseFloat(screen.getByRole("table").style.minWidth)
+      ).toBeGreaterThanOrEqual(800);
+    } finally {
+      width.mockRestore();
+    }
+  });
+
   /** Fails if the port is only measured on first render, which on every list that loads first left the floors unapplied and its headers cut. */
   it("applies its floors when the table arrives after the loading skeleton", async () => {
     const columnsOf = [

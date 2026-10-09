@@ -870,7 +870,7 @@ function DataTableInner<TData extends RowData>({
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const [portWidth, attachPort, port] = usePortWidth(scrollRef);
   // Floors are measured text: drawn again once the fonts they are measured in arrive.
-  const [, fontsArrived] = React.useReducer((n: number) => n + 1, 0);
+  const [fonts, fontsArrived] = React.useReducer((n: number) => n + 1, 0);
   React.useEffect(() => {
     if (document.fonts?.status !== "loading") return;
     let live = true;
@@ -880,12 +880,27 @@ function DataTableInner<TData extends RowData>({
     };
   }, []);
 
+  // Per column, from every row the table holds rather than the ones a
+  // search leaves, so typing does not move the columns.
+  const bounds = React.useMemo(() => {
+    void [fonts, columnsWithActions];
+    return new Map(
+      table.getAllFlatColumns().map((column) => [
+        column.id,
+        {
+          floor: columnFloor(column.columnDef, t, data),
+          ideal: columnIdeal(column.columnDef, t, data),
+        },
+      ])
+    );
+  }, [table, columnsWithActions, data, t, fonts]);
+
   // Only the columns actually on screen count, so hiding one hands its room
   // to the rest instead of leaving a gap.
   const specs = table.getVisibleFlatColumns().map((column) => ({
     size: column.getSize(),
-    floor: columnFloor(column.columnDef, t),
-    ideal: columnIdeal(column.columnDef, t),
+    floor: bounds.get(column.id)?.floor ?? 0,
+    ideal: bounds.get(column.id)?.ideal ?? 0,
   }));
   const layout = tableLayout(specs, portWidth);
 

@@ -43,10 +43,10 @@ export interface AppColumnMeta {
   share?: (row: never, t: T) => ReportValue | string | null;
   /** The header's words, where the header is a control rather than `columnHeader`. */
   label?: HeaderSaying;
-  /** Pixels the column is never drawn under, whatever the table's width; a function where it depends on the reader's language. */
-  floor?: number | ((t: T) => number);
+  /** Pixels the column is never drawn under, whatever the table's width; a function where it depends on the reader's language or on the rows the table holds. */
+  floor?: number | ((t: T, rows: readonly never[]) => number);
   /** Pixels it is drawn at while the port has room for every column's. */
-  ideal?: number | ((t: T) => number);
+  ideal?: number | ((t: T, rows: readonly never[]) => number);
 }
 
 /**

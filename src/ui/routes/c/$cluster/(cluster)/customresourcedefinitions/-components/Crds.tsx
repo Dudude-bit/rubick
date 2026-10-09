@@ -33,7 +33,7 @@ import { STALE_TIMES } from "@/lib/refresh";
 import type { CrdInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { T } from "@/i18n/T";
-import { scopeKey } from "./crd-scope";
+import { scopeCellPx, scopeKey } from "./crd-scope";
 import { columnHeader } from "@/i18n/column-header";
 import { toastError } from "@/lib/toast-error";
 import { None } from "@/components/ui/none";
@@ -151,8 +151,8 @@ export function Crds() {
       {
         accessorKey: "scope",
         header: columnHeader("columns", "scope"),
-        // "в пространстве имён" is the widest value, whole at 150.
         size: 150,
+        meta: { floor: scopeCellPx },
         cell: ({ row }) => (
           <span className="text-fg-mut">
             <T section="apiResources" k={scopeKey(row.original.scope)} />

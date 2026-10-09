@@ -47,16 +47,60 @@ interface WithMemoryLimits {
   memoryRequests?: string | null;
 }
 
-/**
- * `named-port-demo-dcbc89bf5-4lh84` (31 glyphs at 7.2px), the kind's icon and the
- * copy mark with a 4px gap each, and a cell's 20px of padding. The narrowest a
- * Name column is drawn: it is the cell a reader aims at, so every other column
- * gives up its room before this one does.
- */
-export const NAME_CELL_PX = Math.ceil(31 * 7.2 + 2 * (14 + 4) + 20);
+/** The kind's icon and the copy mark with a 4px gap each, and a cell's 20px of padding. */
+const NAME_CHROME_PX = 2 * (14 + 4) + 20;
 
-/** `controlplane` (12 glyphs at 7.2px), the node's 10px icon, its 4px gap and the link's 4px of padding, and a cell's padding; a longer name ends in an ellipsis, whole on hover. */
-export const NODE_CELL_PX = Math.ceil(12 * 7.2 + 18 + 20);
+/**
+ * `named-port-demo-dcbc89bf5-4lh84` (31 glyphs at 7.2px) and the name cell's
+ * chrome. The narrowest a Name column is drawn while its names are unknown:
+ * it is the cell a reader aims at, so every other column gives up its room
+ * before this one does.
+ */
+export const NAME_CELL_PX = Math.ceil(31 * 7.2 + NAME_CHROME_PX);
+
+/** The node's 10px icon, its 4px gap and the link's 4px of padding, and a cell's padding. */
+const NODE_CHROME_PX = 18 + 20;
+
+/** `controlplane` (12 glyphs at 7.2px) and the node cell's chrome; a longer name ends in an ellipsis, whole on hover. */
+export const NODE_CELL_PX = Math.ceil(12 * 7.2 + NODE_CHROME_PX);
+
+/** The most of a node's name a column holds whole: `gke-prod-pool-1-a3f9-x2kd` and `k3d-rubick-live-agent-0`, not an EKS hostname. */
+const NODE_GLYPHS = 28;
+
+/** The most glyphs any of `rows` says in `text`, up to `cap`. */
+function longestText<Row>(
+  rows: readonly Row[],
+  text: (row: Row) => string | null | undefined,
+  cap: number
+): number {
+  let longest = 0;
+  for (const row of rows) {
+    const said = text(row)?.length ?? 0;
+    if (said > longest) longest = Math.min(said, cap);
+    if (longest === cap) break;
+  }
+  return longest;
+}
+
+/**
+ * A Name column as narrow as the longest name it holds, up to 31 glyphs:
+ * room a short list's names never use goes to the columns beside it.
+ */
+export const nameCellPx = (_t: unknown, rows: readonly { name: string }[]) =>
+  rows.length === 0
+    ? NAME_CELL_PX
+    : Math.ceil(
+        longestText(rows, (row) => row.name, 31) * 7.2 + NAME_CHROME_PX
+      );
+
+/** A Node column as wide as the longest node name in it, up to {@link NODE_GLYPHS}. */
+export const nodeCellPx = <Row,>(
+  rows: readonly Row[],
+  node: (row: Row) => string | null | undefined
+) =>
+  rows.length === 0
+    ? NODE_CELL_PX
+    : Math.ceil(longestText(rows, node, NODE_GLYPHS) * 7.2 + NODE_CHROME_PX);
 
 /** `ingress-nginx` and `cert-manager` whole: 14 glyphs at 7.2px and a cell's padding. */
 export const NAMESPACE_CELL_PX = Math.ceil(14 * 7.2 + 20);
@@ -98,7 +142,7 @@ export function createNameColumn<
   return {
     size: 320,
     accessorKey: "name",
-    meta: { floor: NAME_CELL_PX },
+    meta: { floor: nameCellPx },
     header: columnHeader("columns", "name"),
     cell: ({ row }) => (
       <span className="group/name inline-flex min-w-0 max-w-full items-center gap-1">
