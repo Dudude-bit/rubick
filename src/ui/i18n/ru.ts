@@ -2187,6 +2187,11 @@ export const ru: Catalogue = {
       "Контейнер {container} перезапускался после этого листинга (перезапуск {restarts}). Всё, что было записано вне монтирований, ушло вместе с ним.",
     readNewContainer: "Прочитать новый контейнер",
     filterNamesReading: "фильтр по именам…",
+    shownOf: "показано {shown} из {n}",
+    noNameMatches: "Ни одно имя здесь не содержит «{filter}».",
+    noNameMatchesYet:
+      "Ни одно из прочитанных пока имён не содержит «{filter}».",
+    clearFilter: "Очистить фильтр",
     filterNames: {
       one: "фильтр по {n} имени…",
       few: "фильтр по {n} именам…",

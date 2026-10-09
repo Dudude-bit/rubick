@@ -481,6 +481,70 @@ describe("FilesTab", () => {
     expect(onDebug).not.toHaveBeenCalled();
   });
 
+  /**
+   * Lena typed "app" in /data/cache: only ".." was left, and the line still
+   * said "6 entries". Fails if a filter that hides every name says nothing,
+   * offers no way back, or the count stops saying how many are shown.
+   */
+  it("says a filter hides every name, counts what it shows, and clears", async () => {
+    listing.mockReturnValue(
+      done([file("blob-1.bin"), file("blob-2.bin"), file("app.yaml")])
+    );
+    await wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    const box = screen.getByRole("textbox", { name: "filter 3 names…" });
+
+    await userEvent.type(box, "app");
+    expect(screen.getByTestId("files-shown")).toHaveTextContent("1 of 3 shown");
+    expect(screen.queryByText(/No name here contains/)).toBeNull();
+
+    await userEvent.clear(box);
+    await userEvent.type(box, "zzz");
+    expect(screen.getByTestId("files-shown")).toHaveTextContent("0 of 3 shown");
+    expect(
+      screen.getByText("No name here contains “zzz”.")
+    ).toBeInTheDocument();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Clear the filter" })
+    );
+    expect(box).toHaveValue("");
+    expect(box).toHaveFocus();
+    expect(screen.queryByTestId("files-shown")).toBeNull();
+    expect(screen.getByText("blob-1.bin")).toBeInTheDocument();
+  });
+
+  /** A read still arriving has not shown every name yet; fails if a miss so far is called a miss. */
+  it("calls a miss during a read a miss so far", async () => {
+    listing.mockReturnValue({
+      phase: "reading",
+      entries: [file("blob-1.bin")],
+      startedAt: 0,
+    });
+    await wrap(
+      <FilesTab
+        pod={pod()}
+        via={null}
+        onDebug={() => {}}
+        onStopVia={() => {}}
+      />
+    );
+    await userEvent.type(
+      screen.getByRole("textbox", { name: "filter names…" }),
+      "app"
+    );
+    expect(
+      screen.getByText("No name read so far contains “app”.")
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No name here contains/)).toBeNull();
+  });
+
   it("says an empty directory is empty only once the tool has said so", async () => {
     listing.mockReturnValue(done([]));
     await wrap(
