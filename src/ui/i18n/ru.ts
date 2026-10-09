@@ -8577,6 +8577,7 @@ export const ru: Catalogue = {
     },
     readySegment: "готовы",
     startingSegment: "запускаются",
+    failingSegment: "сбоят",
     notCreatedSegment: "не созданы",
     fromEndpoint: "из {endpoint}",
     watchingFromNow: "наблюдаем с этого момента",

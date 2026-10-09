@@ -52,6 +52,7 @@ import { recordToKeyValues } from "@/components/object/key-values";
 import { useResourceDetail, useResourceMutation } from "@/hooks";
 import { useStatefulSetShare } from "./useStatefulSetShare";
 import { setReplicaSegments } from "./set-replicas";
+import { useStartsClock } from "../../-components/replica-gap";
 import { useConnections } from "@/hooks/useConnections";
 import {
   CountBlock,
@@ -215,6 +216,7 @@ export function StatefulSetDetail() {
   });
 
   const share = useStatefulSetShare(statefulSet, pods, podsError);
+  const startsNow = useStartsClock(podsError ? null : pods);
 
   const tabs = useMemo(
     () => [
@@ -248,7 +250,8 @@ export function StatefulSetDetail() {
                     label={t("count", "replicasWanted", { n: desired })}
                     segments={setReplicaSegments(
                       { desired, current, ready },
-                      pods.length,
+                      podsError ? null : pods,
+                      startsNow,
                       statefulSet?.rollout,
                       t
                     )}
@@ -427,6 +430,7 @@ export function StatefulSetDetail() {
       desired,
       current,
       ready,
+      startsNow,
     ]
   );
 

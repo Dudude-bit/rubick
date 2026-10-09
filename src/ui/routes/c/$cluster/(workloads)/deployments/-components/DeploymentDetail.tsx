@@ -32,6 +32,7 @@ import { yamlTab } from "../../../-object/yaml-tab";
 import { eventsTab } from "../../../-object/events-tab";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { RelatedResources } from "../../-components/RelatedResources";
+import { replicaGap, useStartsClock } from "../../-components/replica-gap";
 import { TrafficChain } from "../../../-object/TrafficChain";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
@@ -298,6 +299,7 @@ export function DeploymentDetail() {
   });
 
   const share = useDeploymentShare(deployment, revisions, pods, podsError);
+  const startsNow = useStartsClock(podsError ? null : pods);
 
   if (!deployment && !isLoading && !error) {
     return null;
@@ -351,11 +353,12 @@ export function DeploymentDetail() {
                       count: ready,
                       tone: "ok",
                     },
-                    {
-                      label: t("count", "notReadyWord"),
-                      count: Math.max(0, desired - ready),
-                      tone: "warn",
-                    },
+                    ...replicaGap(
+                      Math.max(0, desired - ready),
+                      podsError ? null : pods,
+                      startsNow,
+                      t
+                    ),
                   ]}
                   emptyMessage={t("empty", "scaledToZero")}
                   note={t("count", "upToDateAvailable", {

@@ -9,6 +9,10 @@ const t: T = (section, key, values) => translate("en", section, key, values);
 const shape = (segments: ReturnType<typeof setReplicaSegments>) =>
   segments.map(({ count, tone }) => [count, tone]);
 
+const NOW = Date.parse("2026-10-09T04:00:00Z");
+const made = (n: number) =>
+  Array.from({ length: n }, () => ({ start: { state: "settled" as const } }));
+
 describe("a StatefulSet's Replicas bar", () => {
   /**
    * Dana scaled orders-db to 2: for two seconds the bar said red "1 not
@@ -19,16 +23,24 @@ describe("a StatefulSet's Replicas bar", () => {
     const counts = { desired: 2, current: 1, ready: 1 };
     const waiting = { state: "unobserved", available: 1, desired: 2 } as const;
 
-    expect(shape(setReplicaSegments(counts, 2, waiting, t))).toEqual([
-      [1, "ok"],
-      [1, "warn"],
-      [0, "neutral"],
-    ]);
-    expect(shape(setReplicaSegments(counts, 1, waiting, t))).toEqual([
-      [1, "ok"],
-      [0, "warn"],
-      [1, "neutral"],
-    ]);
+    expect(shape(setReplicaSegments(counts, made(2), NOW, waiting, t))).toEqual(
+      [
+        [1, "ok"],
+        [0, "pending"],
+        [0, "err"],
+        [1, "warn"],
+        [0, "neutral"],
+      ]
+    );
+    expect(shape(setReplicaSegments(counts, made(1), NOW, waiting, t))).toEqual(
+      [
+        [1, "ok"],
+        [0, "pending"],
+        [0, "err"],
+        [0, "warn"],
+        [1, "neutral"],
+      ]
+    );
   });
 
   /** A pod missing while the set is Unavailable is the fault, and stays red. */
@@ -42,10 +54,18 @@ describe("a StatefulSet's Replicas bar", () => {
     } as const;
     expect(
       shape(
-        setReplicaSegments({ desired: 2, current: 0, ready: 0 }, 0, down, t)
+        setReplicaSegments(
+          { desired: 2, current: 0, ready: 0 },
+          made(0),
+          NOW,
+          down,
+          t
+        )
       )
     ).toEqual([
       [0, "ok"],
+      [0, "pending"],
+      [0, "err"],
       [0, "warn"],
       [2, "err"],
     ]);
@@ -57,13 +77,16 @@ describe("a StatefulSet's Replicas bar", () => {
       shape(
         setReplicaSegments(
           { desired: 1, current: 1, ready: 1 },
-          2,
+          made(2),
+          NOW,
           { state: "ready" },
           t
         )
       )
     ).toEqual([
       [1, "ok"],
+      [0, "pending"],
+      [0, "err"],
       [0, "warn"],
       [0, "neutral"],
     ]);

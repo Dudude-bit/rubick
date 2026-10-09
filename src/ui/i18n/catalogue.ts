@@ -7505,6 +7505,7 @@ export const en = {
     },
     readySegment: "ready",
     startingSegment: "starting",
+    failingSegment: "failing",
     notCreatedSegment: "not created",
     fromEndpoint: "from {endpoint}",
     watchingFromNow: "watching from now",
