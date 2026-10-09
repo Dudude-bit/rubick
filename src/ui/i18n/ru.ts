@@ -4792,6 +4792,7 @@ export const ru: Catalogue = {
     nsRecent: "недавнее",
     nsAsTyped: "нажмите Enter",
     nsNotListed: "нет в списке",
+    nsPodsRefused: "поды недоступны",
     readingKubeconfig: "Читаем ваш kubeconfig…",
     connectACluster: "Подключите кластер",
     pickOneToStart: "в вашем kubeconfig. Выберите один, чтобы начать.",

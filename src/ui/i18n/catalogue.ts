@@ -4299,6 +4299,7 @@ export const en = {
     nsRecent: "recent",
     nsAsTyped: "press Enter",
     nsNotListed: "not in the list",
+    nsPodsRefused: "may not list pods",
     readingKubeconfig: "Reading your kubeconfig…",
     connectACluster: "Connect a cluster",
     pickOneToStart: "in your kubeconfig. Pick one to start.",
