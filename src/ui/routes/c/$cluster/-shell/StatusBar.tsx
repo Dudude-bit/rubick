@@ -13,10 +13,10 @@ import {
 } from "@/components/ui/tooltip";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useAttention } from "@/hooks/useAttention";
-import { attentionWords, unreadWhere, type Attention } from "@/lib/attention";
+import { attentionWords, type Attention } from "@/lib/attention";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useRenewal } from "@/hooks/useCredentialRenewal";
-import type { Renewal } from "@/generated/types";
+import type { OverviewUnread, Renewal } from "@/generated/types";
 import { scopeLabel } from "@/lib/namespace-scope";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -26,7 +26,7 @@ import { useThemeStore } from "@/stores/themeStore";
 import { ActivityPanel } from "./ActivityPanel";
 import { LinkOpenedNote } from "./DeepLinkBanner";
 import { StallIndicator } from "./StallIndicator";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 
 /**
  * Which renewal states put a sign-in hint in the strip, as a total map.
@@ -202,10 +202,7 @@ export function StatusBar() {
                     ) : (
                       <span className="text-fg-fnt">
                         {t("cluster", "podsNotCounted", {
-                          where: unreadWhere(
-                            here.unread.filter((entry) => entry.kind === "Pod"),
-                            t
-                          ),
+                          where: podsUnreadIn(here.unread, t),
                         })}
                       </span>
                     )}
@@ -234,6 +231,20 @@ export function StatusBar() {
       )}
     </footer>
   );
+}
+
+/** Where the pods went unread, in the strip's own short words. */
+function podsUnreadIn(unread: readonly OverviewUnread[], t: T): string {
+  const named = [
+    ...new Set(
+      unread.flatMap((entry) =>
+        entry.kind === "Pod" && entry.namespace ? [entry.namespace] : []
+      )
+    ),
+  ];
+  return named.length === 0
+    ? t("cluster", "countsInAll")
+    : t("cluster", "countsIn", { scope: scopeLabel(named, t) });
 }
 
 /** The count the Overview's panel heads, in the colour of its worst row. */
