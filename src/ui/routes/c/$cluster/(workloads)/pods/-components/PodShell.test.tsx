@@ -53,6 +53,8 @@ function pod(overrides: Partial<PodInfo>): PodInfo {
 }
 
 const handlers = {
+  started: true,
+  onStart: () => {},
   onChoose: () => {},
   onOpenLogs: () => {},
   onDebug: () => {},
@@ -135,6 +137,51 @@ describe("PodShell's container chooser", () => {
     render(<PodShell pod={threeWay} container={null} ended {...handlers} />);
     expect(screen.queryByTestId("pod-terminal")).not.toBeInTheDocument();
     expect(screen.getByText(/No shell is attached/)).toBeInTheDocument();
+  });
+});
+
+/**
+ * A page opened from a link or a restored tab lands on Shell with nobody
+ * having asked, and the shell is a live process in someone's container.
+ */
+describe("PodShell before the reader asks for a shell", () => {
+  /** Fails if landing on the tab mounts the terminal, which opens the exec. */
+  it("offers to start one and attaches nothing", () => {
+    render(
+      <PodShell
+        pod={threeWay}
+        container={null}
+        ended={false}
+        {...handlers}
+        started={false}
+      />
+    );
+    expect(screen.queryByTestId("pod-terminal")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("No shell is running here yet")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Start a shell in app" })
+    ).toBeInTheDocument();
+  });
+
+  /** Fails if the button does not hand the ask back to the page. */
+  it("starts on the button", async () => {
+    const onStart = vi.fn();
+    render(
+      <PodShell
+        pod={threeWay}
+        container={null}
+        ended={false}
+        {...handlers}
+        started={false}
+        onStart={onStart}
+      />
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "Start a shell in app" })
+    );
+    expect(onStart).toHaveBeenCalledOnce();
   });
 });
 

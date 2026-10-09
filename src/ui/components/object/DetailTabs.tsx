@@ -99,11 +99,25 @@ function DetailTabTrigger({
  * tab is already the active one, and its panel has to be in this pass's
  * output. Adding a member schedules nothing and is idempotent, so a double
  * render arrives at the same set.
+ *
+ * Kept per `subject`: a page stays mounted when it moves to another object,
+ * and a shell opened on the last pod would otherwise open on the next one.
  */
-function useOpenedTabs(activeTab: string): ReadonlySet<string> {
-  const [opened] = useState<Set<string>>(() => new Set());
-  opened.add(activeTab);
-  return opened;
+function useOpenedTabs(
+  activeTab: string,
+  subject: string
+): ReadonlySet<string> {
+  const [opened, setOpened] = useState(() => ({
+    subject,
+    tabs: new Set<string>(),
+  }));
+  let current = opened;
+  if (current.subject !== subject) {
+    current = { subject, tabs: new Set() };
+    setOpened(current);
+  }
+  current.tabs.add(activeTab);
+  return current.tabs;
 }
 
 /** The tabs the strip has scrolled out of sight, and on which side. */
@@ -229,18 +243,21 @@ export function DetailTabs({
   activeTab,
   onTabChange,
   actions,
+  subject = "",
 }: {
   tabs: DetailTab[];
   activeTab: string;
   onTabChange: (tab: string) => void;
   /** Controls belonging to the page, pinned to the right of the same row. */
   actions?: React.ReactNode;
+  /** Which object the tabs are about; a new one starts with nothing opened. */
+  subject?: string;
 }) {
   // A tab named by a link that this page does not have opens the first one
   // rather than none: a page with every panel hidden reads as broken.
   const requested = tabs.some((tab) => tab.id === activeTab);
   const current = requested || tabs.length === 0 ? activeTab : tabs[0].id;
-  const opened = useOpenedTabs(current);
+  const opened = useOpenedTabs(current, subject);
   const surface = surfaceIsOpen(tabs, current);
   // Force-mounting a surface keeps its shell attached and its log stream
   // running, which is the point. It must not also keep its queries re-reading

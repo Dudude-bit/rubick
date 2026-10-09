@@ -883,6 +883,8 @@ export const en = {
     fallingBackToPolling: "{title}: falling back to periodic refresh.",
     dismissJob: "Dismiss {job} {name}",
     closeTerminal: "Close terminal",
+    startShellIn: "Start a shell in {container}",
+    readFiles: "Read the files",
     base64Copied: "Base64 of {key} copied: {size} of binary.",
     deletePod: "Delete Pod",
     creatingDebugContainer: "Creating debug container...",
@@ -1604,6 +1606,9 @@ export const en = {
     idle: "activity",
     ports: "Ports",
     terminals: "Terminals",
+    endShell: "End the shell in {pod}",
+    readingTerminals: "Reading the open terminals",
+    terminalsUnread: "Could not read the open terminals",
     jobs: "Jobs",
     portForwards: { one: "{n} port forward", other: "{n} port forwards" },
     terminalCount: { one: "{n} terminal", other: "{n} terminals" },
@@ -5705,6 +5710,12 @@ export const en = {
     customResourceNotRead:
       "This custom resource has not been read yet. Its spec is whatever the CRD defines, and nothing here has seen it.",
     shellNotPermitted: "No shell with this access",
+    shellWaits: "No shell is running here yet",
+    shellWaitsBody:
+      "A shell is a live process in {container}. It starts only when you ask, never because the page was opened from a link or a restored tab.",
+    filesWait: "The files have not been read yet",
+    filesWaitBody:
+      "Each folder is read by running a command in the container. That happens only when you ask, never because the page was opened from a link or a restored tab.",
     noShellAttached: "No shell is attached",
     shellSessionEnded:
       "The session was ended. Choosing a container above opens a new one; nothing is running here in the meantime.",
@@ -5931,7 +5942,6 @@ export const en = {
     connectToViewTerminals: "Connect to a cluster to view terminals",
     noTerminalsOnContext: "No terminal sessions open on {context}",
     openFromPodPage: "Open one from any pod's detail page.",
-    sessionsHaveErrors: "Some sessions have errors. Open one to reconnect.",
     noIngressClassNamed: "No IngressClass named {name} in this cluster",
     ingressNamesNoClass:
       "This Ingress names no class, and this cluster has no default one",

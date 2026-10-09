@@ -330,6 +330,11 @@ pub enum AppEvent {
         session_id: String,
         status: Option<String>,
     },
+    /// Every shell the backend holds in a container, whenever one opens,
+    /// connects, starts closing or is gone.
+    TerminalSessions {
+        sessions: Vec<crate::terminal::TerminalSessionInfo>,
+    },
     /// Port-forward status update. `pod` and `remote_port` are where the
     /// forward points now, which a `moved` changes. `stopped` and `failed`
     /// are terminal, and every forward ends on exactly one of them.
@@ -472,6 +477,7 @@ impl AppEvent {
             AppEvent::SearchStatus { .. } => "search-status",
             AppEvent::TerminalOutput { .. } => "terminal-output",
             AppEvent::TerminalClosed { .. } => "terminal-closed",
+            AppEvent::TerminalSessions { .. } => "terminal-sessions",
             AppEvent::PortForwardStatus { .. } => "port-forward-status",
             AppEvent::AuthUrlRequested { .. } => "auth-url-requested",
             AppEvent::AuthFlowCompleted { .. } => "auth-flow-completed",
@@ -666,6 +672,7 @@ mod tests {
                 message: "refused".into(),
             },
             AppEvent::EventBridgeLagged { missed: 12 },
+            AppEvent::TerminalSessions { sessions: vec![] },
         ]
     }
 
@@ -693,6 +700,7 @@ mod tests {
             AppEvent::PodRowsDone { .. } => 19,
             AppEvent::PodRowsFailed { .. } => 20,
             AppEvent::EventBridgeLagged { .. } => 21,
+            AppEvent::TerminalSessions { .. } => 22,
         }
     }
 
@@ -701,7 +709,7 @@ mod tests {
     fn every_variant_has_a_sample() {
         let mut seen: Vec<usize> = every_variant().iter().map(sample_index).collect();
         seen.sort_unstable();
-        assert_eq!(seen, (0..=21).collect::<Vec<_>>());
+        assert_eq!(seen, (0..=22).collect::<Vec<_>>());
     }
 
     /// Every `AppEvent` payload must be a flat object — no `type`

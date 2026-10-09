@@ -1,4 +1,10 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -22,6 +28,7 @@ import { CopyableAddress } from "@/components/ui/copyable-value";
 import { MetricsStatusBanner } from "../../../-metrics";
 import { DebugPodDialog } from "../../../-debug";
 import { FilesTab } from "./FilesTab";
+import { StartOnAsk } from "./StartOnAsk";
 import { ChecksTab } from "./ChecksTab";
 import type { Via } from "@/generated/types";
 import { LogViewer } from "../../../-logs/LogViewer";
@@ -91,6 +98,7 @@ import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
 import { failingCondition } from "@/lib/condition-health";
 import {
   lifetimeContainers,
+  offeredContainers,
   podContainers,
   podReadiness,
 } from "@/lib/container-sequence";
@@ -109,7 +117,11 @@ import {
   terminationWhen,
 } from "@/lib/pod-status";
 import { useClusterStore } from "@/stores/clusterStore";
-import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
+import {
+  heardSessions,
+  useTerminalSessionStore,
+} from "@/stores/terminalSessionStore";
+import { asksFor, useShellAskStore } from "@/stores/shellAskStore";
 import type {
   ContainerInfo,
   DebugResult,
@@ -120,6 +132,10 @@ import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 import { errorToShow } from "@/lib/error-utils";
 import { TONE_TEXT } from "@/lib/tone";
+
+/** Tabs that run a command in the container, and so open only when asked on this page. */
+const RUNS_IN_CONTAINER: ReadonlySet<string> = new Set(["shell", "files"]);
+const NOTHING_ASKED: ReadonlySet<string> = new Set();
 
 interface PodProblem {
   /** The kubelet's own word for it, for the header row. */
@@ -344,6 +360,14 @@ function podProblem(
   return null;
 }
 
+/** Whether opening Files would run anything: a stopped pod's tab only shows its mounts. */
+function filesWouldRun(pod: PodInfo, via: Via | null): boolean {
+  return (
+    via !== null ||
+    offeredContainers(pod).some((c) => c.state.type === "running")
+  );
+}
+
 export function PodDetail() {
   const t = useT();
   const navigate = useNavigate();
@@ -490,6 +514,41 @@ export function PodDetail() {
   const podKey = `${namespace}/${name}`;
   const logContainer = logRequest?.pod === podKey ? logRequest.container : null;
 
+  // What the reader asked to run on this pod from this page. Landing on the
+  // tab is not asking: a link, a restored tab and a page moved to the next
+  // pod all land there with nobody having said a word.
+  const [asked, setAsked] = useState<{
+    pod: string;
+    tabs: ReadonlySet<string>;
+  }>({ pod: podKey, tabs: NOTHING_ASKED });
+  const askedTabs = asked.pod === podKey ? asked.tabs : NOTHING_ASKED;
+  const ask = useCallback(
+    (tab: string) =>
+      setAsked((prev) => {
+        const tabs = prev.pod === podKey ? prev.tabs : NOTHING_ASKED;
+        return tabs.has(tab)
+          ? prev
+          : { pod: podKey, tabs: new Set([...tabs, tab]) };
+      }),
+    [podKey]
+  );
+  const shellAsk = useShellAskStore((state) => state.ask);
+  const dropShellAsk = useShellAskStore((state) => state.drop);
+  const askedElsewhere = asksFor(shellAsk, namespace, name);
+  if (askedElsewhere && !askedTabs.has("shell"))
+    setAsked({ pod: podKey, tabs: new Set([...askedTabs, "shell"]) });
+  useEffect(() => {
+    if (askedElsewhere) dropShellAsk();
+  }, [askedElsewhere, dropShellAsk]);
+
+  const openTab = useCallback(
+    (tab: string) => {
+      if (RUNS_IN_CONTAINER.has(tab)) ask(tab);
+      setActiveTab(tab);
+    },
+    [ask, setActiveTab]
+  );
+
   // The URL's `?shell=` is about this route, so it needs no pod key of its
   // own; a choice made by clicking does.
   const choice = shellChoice?.pod === podKey ? shellChoice : null;
@@ -498,7 +557,7 @@ export function PodDetail() {
 
   const openTerminal = (containerName: string) => {
     setShellChoice({ pod: podKey, container: containerName });
-    setActiveTab("shell");
+    openTab("shell");
   };
 
   const openLogs = (containerName: string) => {
@@ -517,7 +576,7 @@ export function PodDetail() {
       );
     } else if (debugFor === "files") {
       setFilesVia({ container: result.containerName, root: "/proc/1/root" });
-      setActiveTab("files");
+      openTab("files");
     } else {
       openTerminal(result.containerName);
     }
@@ -665,8 +724,11 @@ export function PodDetail() {
   // A shell the reader opened and left is invisible the moment they click
   // Logs. The store already knows it is there; the dot is how the tab says so.
   const shellSession = useTerminalSessionStore((state) =>
-    state.sessions.find(
-      (session) => session.podName === name && session.namespace === namespace
+    heardSessions(state).find(
+      (session) =>
+        session.pod === name &&
+        session.namespace === namespace &&
+        session.context === currentContext
     )
   );
 
@@ -688,7 +750,7 @@ export function PodDetail() {
         createdAt={pod?.createdAt}
         onBack={() => router.history.back()}
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={openTab}
         statusBadge={
           pod?.status.display ? (
             <PodStatusBadge pod={pod} silence={silence} />
@@ -713,7 +775,7 @@ export function PodDetail() {
         onFindReplacement={handleFindReplacement}
         isSearchingReplacement={isSearchingReplacement}
         goneNote={
-          (activeTab === "shell" || shellSession) && (
+          ((askedTabs.has("shell") && !shellEnded) || shellSession) && (
             <p className="flex items-center gap-1.5 text-xs text-warn">
               <SquareTerminal className="h-3.5 w-3.5 flex-none" aria-hidden />
               {t("empty", "shellEndedPodGone")}
@@ -802,7 +864,7 @@ export function PodDetail() {
                     onOpenTab={(tab, container) =>
                       tab === "logs" && container
                         ? openLogs(container)
-                        : setActiveTab(tab)
+                        : openTab(tab)
                     }
                   />
                 )}
@@ -950,7 +1012,7 @@ export function PodDetail() {
             mark: shellSession
               ? liveMark(
                   t("empty", "sessionAttachedTo", {
-                    container: shellSession.containerName,
+                    container: shellSession.container,
                   })
                 )
               : undefined,
@@ -959,6 +1021,8 @@ export function PodDetail() {
                 pod={pod}
                 container={shellContainer}
                 ended={shellEnded}
+                started={askedTabs.has("shell")}
+                onStart={() => ask("shell")}
                 onChoose={openTerminal}
                 onOpenLogs={openLogs}
                 onDebug={() => {
@@ -975,7 +1039,8 @@ export function PodDetail() {
             label: t("columns", "files"),
             glyph: viewGlyph(FolderOpen),
             kind: "surface",
-            content: pod ? (
+            content: !pod ? null : askedTabs.has("files") ||
+              !filesWouldRun(pod, filesVia) ? (
               <FilesTab
                 key={`files:${pod.uid}`}
                 pod={pod}
@@ -988,7 +1053,15 @@ export function PodDetail() {
                 debugDenied={denied.ephemeral}
                 onStopVia={() => setFilesVia(null)}
               />
-            ) : null,
+            ) : (
+              <StartOnAsk
+                icon={FolderOpen}
+                headline={t("empty", "filesWait")}
+                body={t("empty", "filesWaitBody")}
+                action={t("action", "readFiles")}
+                onStart={() => ask("files")}
+              />
+            ),
           },
           {
             id: "checks",

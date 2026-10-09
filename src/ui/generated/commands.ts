@@ -133,6 +133,7 @@ import type {
   StorageClassInfo,
   StreamLogConfig,
   TcpProbe,
+  TerminalSessionInfo,
   ThemeConfig,
   TlsCertificate,
   UpdaterConfig,
@@ -405,6 +406,10 @@ export async function closeTerminal(sessionId: string): Promise<void> {
   return invoke<void>("close_terminal", { sessionId });
 }
 
+export async function listTerminalSessions(): Promise<TerminalSessionInfo[]> {
+  return invoke<TerminalSessionInfo[]>("list_terminal_sessions");
+}
+
 export async function terminalSubscribed(sessionId: string): Promise<void> {
   return invoke<void>("terminal_subscribed", { sessionId });
 }
@@ -413,9 +418,18 @@ export async function openPodShell(
   namespace: string,
   pod: string,
   container: string | null,
-  shell: string | null
+  shell: string | null,
+  cols: number | null,
+  rows: number | null
 ): Promise<string> {
-  return invoke<string>("open_pod_shell", { namespace, pod, container, shell });
+  return invoke<string>("open_pod_shell", {
+    namespace,
+    pod,
+    container,
+    shell,
+    cols,
+    rows,
+  });
 }
 
 export async function checkHelmAvailability(): Promise<CliAvailability> {

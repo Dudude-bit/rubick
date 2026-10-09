@@ -1829,6 +1829,16 @@ export interface CliAvailability {
   searchedPaths: string[];
 }
 
+export interface TerminalSessionInfo {
+  id: string;
+  context: string;
+  namespace: string;
+  pod: string;
+  container: string;
+  state: TerminalState;
+  openedAt: string;
+}
+
 export interface ControllerRevisionInfo {
   name: string;
   revision: number;
@@ -2700,6 +2710,14 @@ export type FieldOp = "=" | "≠";
 
 export type LevelOp = "=" | "≥";
 
+export type TerminalState =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "closing"
+  | "disconnected"
+  | "error";
+
 export type RollbackOutcome =
   | { outcome: "rolledBack" }
   | { outcome: "alreadyThere" };
@@ -2761,6 +2779,7 @@ export type AppEvent =
     }
   | { channel: "terminal-output"; session_id: string; data: string }
   | { channel: "terminal-closed"; session_id: string; status: string | null }
+  | { channel: "terminal-sessions"; sessions: TerminalSessionInfo[] }
   | {
       channel: "port-forward-status";
       id: string;

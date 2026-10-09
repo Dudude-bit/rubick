@@ -30,21 +30,34 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-vi.mock("@/stores/clusterStore", () => ({
-  useClusterStore: () => "k3d-k8s-gui-dev",
-}));
-
 // The real one is an xterm-backed lazy chunk; none of that is under test.
-vi.mock("@/components/terminal/Terminal", () => ({
-  Terminal: ({ sessionId }: { sessionId: string | null }) => (
-    <div data-testid="terminal-stub" data-session-id={sessionId ?? ""} />
-  ),
+// It measures itself unless a test holds the measurement back.
+const pane = vi.hoisted(() => ({
+  measure: null as null | (() => void),
+  holdSize: false,
 }));
+vi.mock("@/components/terminal/Terminal", async () => {
+  const { useEffect } = await import("react");
+  return {
+    Terminal: ({
+      sessionId,
+      onSize,
+    }: {
+      sessionId: string | null;
+      onSize?: (cols: number, rows: number) => void;
+    }) => {
+      useEffect(() => {
+        pane.measure = () => onSize?.(132, 41);
+        if (!pane.holdSize) pane.measure();
+      }, [onSize]);
+      return (
+        <div data-testid="terminal-stub" data-session-id={sessionId ?? ""} />
+      );
+    },
+  };
+});
 
 import { commands } from "@/lib/commands";
-import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
-import { renderWithRouter } from "@/test/render";
-import { TerminalsTab } from "../../../-shell/activity/TerminalsTab";
 import { PodTerminal } from "./PodTerminal";
 
 const props = {
@@ -77,7 +90,6 @@ describe("PodTerminal when the session dies after openPodShell returned", () => 
   beforeEach(() => {
     for (const k of Object.keys(listeners)) delete listeners[k];
     vi.clearAllMocks();
-    useTerminalSessionStore.getState().clearAll();
   });
 
   it("falls into the reconnect banner when the upgrade is rejected", async () => {
@@ -164,50 +176,85 @@ describe("a shell the reader exited", () => {
   beforeEach(() => {
     for (const k of Object.keys(listeners)) delete listeners[k];
     vi.clearAllMocks();
-    useTerminalSessionStore.getState().clearAll();
+  });
+
+  /** Fails if the pane goes on calling an exited shell connected. */
+  it("keeps the session id until the backend says it ended", async () => {
+    await renderConnected();
+
+    closed("term-2");
+    expect(screen.getByTestId("terminal-stub")).toHaveAttribute(
+      "data-session-id",
+      "term-1"
+    );
   });
 
   /**
-   * Marco typed `exit`: the Shell tab said Ended while Activity > Terminals
-   * listed the session "connected", the footer kept "1 terminal" and the
-   * tab dot stayed green until the tab's ×. Fails if the session the
-   * backend closed stays in the store every one of those reads.
+   * Leaving the page is leaving the shell. Fails if the pane goes away and
+   * the session is left for nobody to close.
    */
-  it("leaves Activity, the footer count and the tab mark the moment it ends", async () => {
-    await renderWithRouter(
-      <>
-        <PodTerminal {...props} />
-        <TerminalsTab />
-      </>
-    );
-    await waitFor(() => {
+  it("closes its session when it goes away", async () => {
+    const { unmount } = render(<PodTerminal {...props} />);
+    await waitFor(() =>
       expect(screen.getByTestId("terminal-stub")).toHaveAttribute(
         "data-session-id",
         "term-1"
-      );
-    });
-    expect(screen.getByText(/app · connected/)).toBeInTheDocument();
-
-    closed("term-1");
-
-    await waitFor(() =>
-      expect(screen.queryByText(/app · connected/)).not.toBeInTheDocument()
+      )
     );
-    expect(useTerminalSessionStore.getState().sessions).toEqual([]);
+
+    unmount();
+
+    expect(commands.closeTerminal).toHaveBeenCalledWith("term-1");
+  });
+});
+
+describe("a shell opened at the pane's size", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+    pane.holdSize = false;
   });
 
-  /** Another pane's session closing is not this one's. */
-  it("keeps its session when another one closes", async () => {
-    await renderWithRouter(<PodTerminal {...props} />);
+  /**
+   * Lena's Shell opened on three prompts: busybox draws one more for each
+   * resize, and the pane's size used to follow the shell. Fails if the
+   * shell is opened before, or without, the size the pane measured.
+   */
+  it("waits for the pane to measure itself and opens at that size", async () => {
+    pane.holdSize = true;
+    render(<PodTerminal {...props} />);
+    await waitFor(() => expect(pane.measure).not.toBeNull());
+    expect(commands.openPodShell).not.toHaveBeenCalled();
+
+    act(() => pane.measure!());
+
     await waitFor(() =>
-      expect(useTerminalSessionStore.getState().sessions).toHaveLength(1)
+      expect(commands.openPodShell).toHaveBeenCalledWith(
+        "default",
+        "log-demo-7f9",
+        "app",
+        null,
+        132,
+        41
+      )
     );
+  });
 
-    closed("term-2");
+  /**
+   * The page was left while the shell was still opening. Fails if the id
+   * that answers afterwards is kept by nobody and the shell left running.
+   */
+  it("closes a session that answers after the pane went away", async () => {
+    let answer!: (id: string) => void;
+    vi.mocked(commands.openPodShell).mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve))
+    );
+    const { unmount } = render(<PodTerminal {...props} />);
+    await waitFor(() => expect(commands.openPodShell).toHaveBeenCalled());
 
-    expect(useTerminalSessionStore.getState().sessions[0]).toMatchObject({
-      id: "term-1",
-      status: "connected",
-    });
+    unmount();
+    await act(async () => answer("term-late"));
+
+    expect(commands.closeTerminal).toHaveBeenCalledWith("term-late");
   });
 });

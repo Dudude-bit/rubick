@@ -14,6 +14,7 @@ import { useChangeJournal } from "@/hooks/useChangeJournal";
 import { usePortForwardAutoStart } from "@/hooks/usePortForwardAutoStart";
 import { useAutoUpdater } from "@/hooks/useAutoUpdater";
 import { useDeepLinks } from "@/hooks/useDeepLinks";
+import { useTerminalSessionSync } from "@/hooks/useTerminalSessionSync";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { applyTheme } from "@/lib/theme";
@@ -56,6 +57,7 @@ export default function App() {
   // At the root: a link can arrive at the front door or on a cluster the
   // kubeconfig lost, where no cluster shell is mounted to hear it.
   useDeepLinks();
+  useTerminalSessionSync();
 
   // Mounted here rather than in a component that can remount: every query in
   // the app polls against these three facts, and a second set of listeners

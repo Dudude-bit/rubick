@@ -868,6 +868,8 @@ export const ru: Catalogue = {
     fallingBackToPolling: "{title}: переходим на периодическое обновление.",
     dismissJob: "Убрать {job} {name}",
     closeTerminal: "Закрыть терминал",
+    startShellIn: "Запустить оболочку в {container}",
+    readFiles: "Прочитать файлы",
     base64Copied: "Base64 ключа {key} скопирован: {size} двоичных данных.",
     deletePod: "Удалить под",
     creatingDebugContainer: "Создаём контейнер для отладки…",
@@ -1619,6 +1621,9 @@ export const ru: Catalogue = {
     idle: "активность",
     ports: "Порты",
     terminals: "Терминалы",
+    endShell: "Завершить оболочку в {pod}",
+    readingTerminals: "Читается список открытых терминалов",
+    terminalsUnread: "Не удалось прочитать список открытых терминалов",
     jobs: "Задачи",
     // Three forms, and the plural rule picks between them by the number:
     // 1 проброс, 2 проброса, 5 пробросов, 21 проброс.
@@ -6310,6 +6315,12 @@ export const ru: Catalogue = {
     customResourceNotRead:
       "Этот пользовательский ресурс ещё не прочитан. Его spec задаёт CRD, и здесь его пока никто не видел.",
     shellNotPermitted: "С этими правами оболочка недоступна",
+    shellWaits: "Оболочка пока не запущена",
+    shellWaitsBody:
+      "Оболочка запускает живой процесс в {container}, поэтому она открывается только по вашей команде, а не при открытии страницы по ссылке или из восстановленной вкладки.",
+    filesWait: "Файлы пока не прочитаны",
+    filesWaitBody:
+      "Каждая папка читается командой, запущенной в контейнере. Это происходит только по вашей команде, а не при открытии страницы по ссылке или из восстановленной вкладки.",
     noShellAttached: "Терминал не подключён",
     shellSessionEnded:
       "Сессия завершена. Выберите контейнер выше, чтобы открыть новую; пока здесь ничего не выполняется.",
@@ -6549,8 +6560,6 @@ export const ru: Catalogue = {
     connectToViewTerminals: "Подключитесь к кластеру, чтобы видеть терминалы",
     noTerminalsOnContext: "На {context} нет открытых терминалов",
     openFromPodPage: "Откройте терминал со страницы любого пода.",
-    sessionsHaveErrors:
-      "В некоторых сессиях ошибки. Откройте сессию, чтобы переподключиться.",
     noIngressClassNamed: "В этом кластере нет IngressClass с именем {name}",
     ingressNamesNoClass:
       "Этот Ingress не указывает класс, а класса по умолчанию в кластере нет",

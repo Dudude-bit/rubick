@@ -329,3 +329,51 @@ describe("a tab strip that scrolls", () => {
     expect(onTabChange).not.toHaveBeenCalled();
   });
 });
+
+describe("a page moved to another object", () => {
+  const surfaces: DetailTab[] = [
+    tabs[0],
+    {
+      id: "shell",
+      label: "Shell",
+      kind: "surface",
+      content: <p>a live shell</p>,
+      glyph: { names: "view", icon: Activity },
+    },
+  ];
+
+  /**
+   * Dana used Shell on one pod, then a link moved the same page to another:
+   * the Shell panel stayed mounted for the new pod and opened an exec in it.
+   * Fails if what was opened for one object stays opened for the next.
+   */
+  it("forgets which surfaces were opened for the last one", () => {
+    const { rerender } = render(
+      <DetailTabs
+        tabs={surfaces}
+        activeTab="shell"
+        onTabChange={() => {}}
+        subject="Pod/shop/cart-a"
+      />
+    );
+    rerender(
+      <DetailTabs
+        tabs={surfaces}
+        activeTab="overview"
+        onTabChange={() => {}}
+        subject="Pod/shop/cart-a"
+      />
+    );
+    expect(screen.getByText("a live shell")).toBeInTheDocument();
+
+    rerender(
+      <DetailTabs
+        tabs={surfaces}
+        activeTab="overview"
+        onTabChange={() => {}}
+        subject="Pod/shop/cart-b"
+      />
+    );
+    expect(screen.queryByText("a live shell")).not.toBeInTheDocument();
+  });
+});

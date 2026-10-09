@@ -8,7 +8,10 @@ import {
 import { Activity, Bell, Network, Terminal } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePortForwardStore } from "@/stores/portForwardStore";
-import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
+import {
+  heardSessions,
+  useTerminalSessionStore,
+} from "@/stores/terminalSessionStore";
 import {
   useActivityPanelStore,
   type ActivityTab,
@@ -55,17 +58,15 @@ export function ActivityPanel() {
   // state changed, re-renders, calls the selector again → infinite
   // loop with React error #185 ("Maximum update depth exceeded").
   const portForwardSessions = usePortForwardStore((state) => state.sessions);
-  const terminalSessions = useTerminalSessionStore((state) => state.sessions);
+  const terminalSessions = useTerminalSessionStore(heardSessions);
   const currentContext = useClusterStore((state) => state.currentContext);
   const watches = useWatchesFor(currentContext);
 
-  const activeTerminals = terminalSessions.filter(
-    (s) => s.status === "connected"
-  ).length;
-
   const counts: Record<TabId, number> = {
     ports: portForwardSessions.length,
-    terminals: activeTerminals,
+    // Every shell the backend holds, connecting and closing included: each
+    // is a process in somebody's container.
+    terminals: terminalSessions.length,
     watching: watches.filter(isOpen).length,
   };
 

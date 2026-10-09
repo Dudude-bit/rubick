@@ -189,7 +189,6 @@ pub(super) async fn run_exec_auth(
     let terminal_session_id = state
         .terminal_manager
         .create_session(Box::new(adapter))
-        .await
         .map_err(|e| {
             cleanup_auth_artifacts(&browser_script, &url_file, &bin_dir);
             state.remove_auth_session(&session_id);

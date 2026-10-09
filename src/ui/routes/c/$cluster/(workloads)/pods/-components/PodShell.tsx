@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from "react";
-import { Lock } from "lucide-react";
+import { Lock, SquareTerminal } from "lucide-react";
 
 import { containerColors } from "../../../-logs/container-colors";
 import {
@@ -13,6 +13,7 @@ import { lastTermination, terminationWhen } from "@/lib/pod-status";
 import type { PodInfo } from "@/generated/types";
 
 import { PodTerminal } from "./PodTerminal";
+import { StartOnAsk } from "./StartOnAsk";
 import type { PodDenied } from "@/lib/access";
 import { ReasonTip } from "@/components/object/detail-blocks";
 import { cn } from "@/lib/utils";
@@ -293,6 +294,9 @@ export interface PodShellProps {
    */
   container: string | null;
   ended: boolean;
+  /** The reader asked for a shell on this page; arriving on the tab is not asking. */
+  started: boolean;
+  onStart: () => void;
   onChoose: (container: string) => void;
   /** Opens the Logs tab on this container, on the run that failed. */
   onOpenLogs: (container: string) => void;
@@ -306,6 +310,8 @@ export function PodShell({
   pod,
   container,
   ended,
+  started,
+  onStart,
   onChoose,
   onOpenLogs,
   onDebug,
@@ -395,6 +401,14 @@ export function PodShell({
             {denied.shell}
           </p>
         </Hollow>
+      ) : target && !started ? (
+        <StartOnAsk
+          icon={SquareTerminal}
+          headline={t("empty", "shellWaits")}
+          body={t("empty", "shellWaitsBody", { container: target.name })}
+          action={t("action", "startShellIn", { container: target.name })}
+          onStart={onStart}
+        />
       ) : target ? (
         // Keyed by the container, because opening a session is the one thing
         // `PodTerminal` does on mount: switching the chooser has to close the
