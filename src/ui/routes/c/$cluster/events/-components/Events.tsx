@@ -720,6 +720,7 @@ export function Events() {
               showNamespace={!currentNamespace}
               question={[cacheKey, eventType, eventLimit, query].join("\n")}
               held={pointed}
+              cutAt={windowFull && limit !== null ? limit : undefined}
               // A feed filtered down to nothing has not told the reader
               // their scope is quiet — it has told them their query missed.
               // Three states, not two: the scope is quiet, the query

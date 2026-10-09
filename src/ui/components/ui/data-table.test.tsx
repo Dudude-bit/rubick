@@ -2049,6 +2049,36 @@ describe("a list past the virtualisation threshold", () => {
       />
     );
 
+  /**
+   * Lena read "141 rows. Narrow the scope or search" in warning colour over
+   * exactly the 141 warnings kubectl listed: nothing was missing. Fails if a
+   * whole long list is drawn as a warning, or a list cut at a limit is not.
+   */
+  it("advises on a whole long list and warns only where the read stopped at a limit", async () => {
+    await long();
+    const advice = screen.getByText(
+      "500 rows. To trim the list, narrow the scope or search"
+    );
+    expect(advice.closest(".text-warn")).toBeNull();
+    expect(advice.parentElement?.querySelector(".text-warn")).toBeNull();
+    cleanup();
+
+    await wrap(
+      <DataTable<Item>
+        columns={columns}
+        data={many}
+        getRowHref={href}
+        grouping={null}
+        cutAt={500}
+      />
+    );
+    const cut = screen.getByText(
+      "Only the latest 500 were read. To see older ones, narrow the scope or raise the limit"
+    );
+    expect(cut.parentElement?.querySelector("svg")).toHaveClass("text-warn");
+    expect(screen.queryByText(/To trim the list/)).toBeNull();
+  });
+
   /** Rebuilding descriptors or sorting on scroll makes windowing cost the entire list. */
   it.each([false, true])(
     "reuses descriptors and navigation indexes when the scroll offset changes with grouping %s",

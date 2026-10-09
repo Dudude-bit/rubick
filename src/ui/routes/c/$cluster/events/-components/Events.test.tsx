@@ -1079,7 +1079,8 @@ describe("what the limit is counted against", () => {
    * Lena's "64 warnings" beside the Warnings filter's 122: the first counted
    * the warnings among the latest 500 events of every type, the second
    * every warning, since the filter narrows the read itself. Fails if a
-   * count read inside the limit's cut does not say so, or a whole one does.
+   * count read inside the limit's cut does not say so, or a whole one does,
+   * and the same of the warning beside the table (Lena's 141 of 141).
    */
   it("says the warnings it counts are among the latest 500 only where the read was cut", async () => {
     useClusterStore.setState({
@@ -1100,9 +1101,18 @@ describe("what the limit is counted against", () => {
         "63 warning events · 437 normal events · of the latest 500"
       )
     ).toBeInTheDocument();
+    expect(
+      screen.getByText(/^Only the latest 500 were read\./)
+    ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
     expect(await screen.findByText("122 warning events")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText(/^Only the latest/)).toBeNull()
+    );
+    expect(
+      screen.getByText(/ rows\. To trim the list, narrow the scope or search$/)
+    ).not.toHaveClass("text-warn");
   }, 30_000);
 
   /**
