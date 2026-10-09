@@ -16,7 +16,7 @@ import {
   useActivityPanelStore,
   type ActivityTab,
 } from "@/stores/activityPanelStore";
-import { activityLabel } from "@/lib/activity-label";
+import { activityLabel, activityNamed } from "@/lib/activity-label";
 import { useLocale } from "@/stores/localeStore";
 import { PortForwardsTab } from "./activity/PortForwardsTab";
 import { TerminalsTab } from "./activity/TerminalsTab";
@@ -76,7 +76,12 @@ export function ActivityPanel() {
   const handleClose = () => setOpen(false);
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet
+      open={open}
+      onOpenChange={(next) =>
+        next ? setTab(activityNamed(counts) ?? tab) : handleClose()
+      }
+    >
       {/* Lives in the status bar, so the trigger is a status-bar line and
           not a 36px icon button: the running count is the point. */}
       <SheetTrigger asChild>

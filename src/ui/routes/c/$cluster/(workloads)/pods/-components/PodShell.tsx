@@ -405,7 +405,10 @@ export function PodShell({
         <StartOnAsk
           icon={SquareTerminal}
           headline={t("empty", "shellWaits")}
-          body={t("empty", "shellWaitsBody", { container: target.name })}
+          body={t("empty", "shellWaitsBody", {
+            container: target.name,
+            tab: t("columns", "shell"),
+          })}
           action={t("action", "startShellIn", { container: target.name })}
           onStart={onStart}
         />

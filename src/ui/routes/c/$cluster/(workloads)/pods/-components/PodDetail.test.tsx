@@ -772,7 +772,9 @@ describe("a pod page runs nothing in the container until the reader asks on it",
 
   /**
    * A link, a restored tab or Back can land on Shell. Nobody asked; the tab
-   * offers. Fails if arriving on the tab opens the exec.
+   * offers, and says a click on it is the ask, which is what Dana saw it do.
+   * Fails if arriving on the tab opens the exec, or if the offer says a shell
+   * waits for some other ask.
    */
   it.each([
     ["a restored tab on Shell", "?tab=shell"],
@@ -782,6 +784,9 @@ describe("a pod page runs nothing in the container until the reader asks on it",
     async (_, search) => {
       await arrive(`/c/prod/pods/shop/cart-a${search}`);
       expect(execs()).toEqual([]);
+      expect(
+        screen.getByText(/only a click starts one: on the Shell tab/)
+      ).toBeInTheDocument();
 
       fireEvent.click(
         screen.getByRole("button", { name: "Start a shell in app" })
@@ -792,10 +797,16 @@ describe("a pod page runs nothing in the container until the reader asks on it",
     }
   );
 
-  /** Files lists by exec; a link may name the tab. Fails if arriving lists. */
+  /**
+   * Files lists by exec; a link may name the tab. Fails if arriving lists, or
+   * if the offer does not say a click on the tab is what reads.
+   */
   it("lands on Files without reading a folder, and reads on the button", async () => {
     await arrive("/c/prod/pods/shop/cart-a?tab=files");
     expect(execs()).toEqual([]);
+    expect(
+      screen.getByText(/only a click reads them: on the Files tab/)
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Read the files" }));
     await advance(0);

@@ -29,13 +29,24 @@ const KEYS = {
   watching: "watchCount",
 } as const;
 
+const runningOf = (counts: ActivityCounts) =>
+  (Object.keys(KEYS) as Array<keyof ActivityCounts>).filter(
+    (kind) => counts[kind] > 0
+  );
+
+/** The one kind the label names, which is the tab the trigger opens on. */
+export function activityNamed(
+  counts: ActivityCounts
+): keyof ActivityCounts | null {
+  const running = runningOf(counts);
+  return running.length === 1 ? running[0] : null;
+}
+
 export function activityLabel(
   counts: ActivityCounts,
   locale: Locale = "en"
 ): string {
-  const running = (Object.keys(KEYS) as Array<keyof ActivityCounts>).filter(
-    (kind) => counts[kind] > 0
-  );
+  const running = runningOf(counts);
 
   if (running.length === 0) return translate(locale, "activity", "idle");
 

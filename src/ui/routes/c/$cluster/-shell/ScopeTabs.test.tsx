@@ -200,6 +200,59 @@ describe("what a tab says", () => {
     useKeptShellStore.setState({ shells: [] });
   });
 
+  /**
+   * With five tabs Dana's shell tab had no close button: squeezed to its
+   * floor, the shell glyph pushed the button past the edge the tab clipped
+   * at. Fails if anything between a close button and its tab can clip it,
+   * or if the tab that keeps a shell gets no room for the glyph.
+   */
+  it("keeps every tab's close button out of what a squeezed tab cuts off, at five tabs", async () => {
+    useScopeTabStore.setState({
+      tabs: ["a", "b", "c", "d", "e"].map((id) =>
+        tab({ id, href: `/c/k3d-dev/pods/shop/cart-${id}` })
+      ),
+      activeId: "c",
+      pendingHref: null,
+    });
+    useKeptShellStore.setState({
+      shells: [
+        {
+          id: "term-1",
+          tab: "c",
+          context: "k3d-dev",
+          namespace: "shop",
+          pod: "cart-c",
+          container: "app",
+        },
+      ],
+    });
+    await mount();
+
+    const clips =
+      /\b(overflow-hidden|overflow-x-hidden|overflow-clip|truncate)\b/;
+    for (const each of tabs()) {
+      const close = within(each).getByRole("button", { name: /^Close / });
+      for (let at: HTMLElement | null = close; at; at = at.parentElement) {
+        expect(at.className).not.toMatch(clips);
+        if (at === each) break;
+      }
+    }
+    const floor = (el: HTMLElement) =>
+      Number(/\bmin-w-(\d+)\b/.exec(el.className)?.[1]);
+    expect(floor(tabs()[2])).toBeGreaterThan(floor(tabs()[0]));
+
+    await userEvent.click(
+      within(tabs()[2]).getByRole("button", { name: /^Close / })
+    );
+    expect(useScopeTabStore.getState().tabs.map((each) => each.id)).toEqual([
+      "a",
+      "b",
+      "d",
+      "e",
+    ]);
+    useKeptShellStore.setState({ shells: [] });
+  });
+
   it("has no native title left to cover the pickers", async () => {
     useScopeTabStore.setState({
       tabs: [tab({ id: "a" })],
