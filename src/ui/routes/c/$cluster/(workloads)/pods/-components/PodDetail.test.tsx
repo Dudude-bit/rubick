@@ -8,6 +8,7 @@ import {
 } from "vite-plus/test";
 import { act, screen } from "@testing-library/react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 import type { EventInfo, PodInfo, ReplicaSetInfo } from "@/generated/types";
 import { REFRESH_INTERVALS } from "@/lib/refresh";
@@ -389,5 +390,54 @@ describe("the pod page's Events", () => {
     expect(
       screen.getByRole("tab", { name: "Events: Could not read events." })
     ).toBeInTheDocument();
+  });
+});
+
+describe("a pod page whose pod changes between its polls", () => {
+  afterEach(() => {
+    vi.mocked(listen).mockImplementation(async () => () => {});
+  });
+
+  /**
+   * Sam's page read CrashLoopBackOff two seconds after kubectl said Running,
+   * while the Pods list had already moved: no list's watch runs under a page.
+   * Fails if the page waits for its next poll instead of reading the pod
+   * when the pod's own watch sees it change.
+   */
+  it("reads the pod again when its watch sees it change, before its next poll", async () => {
+    let dispatch: ((event: { payload: unknown }) => void) | null = null;
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === "resource-event") dispatch = handler as typeof dispatch;
+      return () => {};
+    });
+    const answer = vi.mocked(invoke).getMockImplementation()!;
+    vi.mocked(invoke).mockImplementation(async (command, args) =>
+      command === "subscribe_object_watch"
+        ? "pod-stream"
+        : answer(command, args)
+    );
+
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    expect(invoke).toHaveBeenCalledWith("subscribe_object_watch", {
+      kind: "Pod",
+      namespace: "shop",
+      name: NAME,
+    });
+    const reads = calls("get_pod");
+
+    dispatch!({
+      payload: {
+        stream_id: "pod-stream",
+        changes: [{ op: "applied", resource: POD }],
+        error: null,
+      },
+    });
+    await advance(300);
+
+    expect(calls("get_pod")).toBe(reads + 1);
   });
 });

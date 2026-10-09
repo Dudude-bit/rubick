@@ -67,6 +67,8 @@ import { PeekHeading } from "./peek-heading";
 import { PeekTraffic } from "./peek-traffic";
 import { TabGlyph, TabMark } from "@/components/object/tab-marks";
 import { usePeekHost } from "./peek-dock";
+import { usePodWatch } from "@/hooks/usePodWatch";
+import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { usePeekWidth } from "./peek-width";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
@@ -117,6 +119,12 @@ export function PeekContent({
   });
 
   const gone = error !== null && errorCode(error) === ERROR_CODES.NOT_FOUND;
+  const visible = useSurfaceVisible();
+  usePodWatch(
+    namespace,
+    target.name,
+    !gone && visible && toKind(target.kind) === ResourceType.Pod
+  );
   // The Overview fetch is also what a tab is marked from, so the strip is
   // built after it rather than beside it. A gone object has nothing left to
   // read but the Overview that says so.

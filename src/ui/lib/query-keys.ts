@@ -147,6 +147,11 @@ export const queryKeys = {
   ],
   /** The pod table in every scope it has been read in. */
   everyPodRows: (): string[] => ["pod-rows"],
+  /** What one pod's own watch holds: only the stream's bookkeeping, nobody reads it. */
+  podWatch: (
+    namespace: string | null | undefined,
+    name: string | undefined
+  ): (string | null | undefined)[] => ["pod-watch", home(namespace), name],
 
   /**
    * `list_namespaces` as a plain read. Not the Namespaces page's list, which

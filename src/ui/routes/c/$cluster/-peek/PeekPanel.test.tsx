@@ -18,6 +18,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { listen } from "@tauri-apps/api/event";
 import { useLocation } from "@tanstack/react-router";
 import { QueryClient } from "@tanstack/react-query";
 import type {
@@ -103,6 +104,9 @@ vi.mock("@/lib/commands", () => ({
     listApiCatalog: vi.fn(() => new Promise(() => {})),
     listRoleBindingsIn: vi.fn(() => new Promise(() => {})),
     listClusterRoleBindings: vi.fn(() => new Promise(() => {})),
+    subscribeObjectWatch: vi.fn(async () => "pod-stream"),
+    resourceWatchSubscribed: vi.fn(async () => undefined),
+    unsubscribeResourceWatch: vi.fn(async () => undefined),
   },
 }));
 
@@ -942,6 +946,61 @@ const CONFIGMAP_PEEK = "/c/prod/events?peek=configmaps/k8s-gui-test/app-config";
  * nothing, and an action on either reaches the other. Each fails if the
  * panel keys that answer apart from the page again.
  */
+describe("a pod's peek over a page no list's watch carries it on", () => {
+  beforeEach(() => {
+    mockCluster();
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+  });
+  afterEach(() => {
+    vi.mocked(listen).mockImplementation(async () => () => {});
+    useClusterStore.setState({ currentContext: null, isConnected: false });
+  });
+
+  /**
+   * The page's twin: the peek read CrashLoopBackOff on its poll while the
+   * pod was up between crashes. Fails if the peek waits for that poll
+   * instead of reading the pod when the pod's own watch sees it change, or
+   * if a peek of another kind opens a pod watch.
+   */
+  it("reads the pod again when its watch sees it change, and watches no other kind", async () => {
+    let dispatch: ((event: { payload: unknown }) => void) | null = null;
+    vi.mocked(listen).mockImplementation(async (event, handler) => {
+      if (event === "resource-event") dispatch = handler as typeof dispatch;
+      return () => {};
+    });
+    await wrap(POD_PEEK);
+    await screen.findByText("CrashLoopBackOff");
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith(
+        "pod-stream"
+      )
+    );
+    expect(commands.subscribeObjectWatch).toHaveBeenCalledWith(
+      "Pod",
+      "k8s-gui-test",
+      "crash-demo-56588f6b8c-8bj9v"
+    );
+    const reads = vi.mocked(commands.getPod).mock.calls.length;
+
+    dispatch!({
+      payload: {
+        stream_id: "pod-stream",
+        changes: [{ op: "applied", resource: buildPod() }],
+        error: null,
+      },
+    });
+    await waitFor(() =>
+      expect(vi.mocked(commands.getPod).mock.calls.length).toBe(reads + 1)
+    );
+
+    vi.mocked(commands.subscribeObjectWatch).mockClear();
+    cleanup();
+    await wrap("/c/prod/events?peek=configmaps/k8s-gui-test/app-config");
+    await screen.findByText("nginx.conf");
+    expect(commands.subscribeObjectWatch).not.toHaveBeenCalled();
+  });
+});
+
 describe("PeekPanel reads what the detail pages read", () => {
   beforeEach(mockCluster);
 
