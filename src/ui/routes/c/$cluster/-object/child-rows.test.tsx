@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it } from "vite-plus/test";
 import type { JobInfo, ReplicaSetInfo } from "@/generated/types";
 import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
-import { JobRows, RevisionRows } from "./child-rows";
+import { screen } from "@testing-library/react";
+
+import { ChildRows, JobRows, RevisionRows, type ChildRow } from "./child-rows";
 
 const revision = (
   name: string,
@@ -107,5 +109,37 @@ describe("rolling back from the Revisions tab", () => {
     buttons[0].click();
     expect(offered).toEqual(["web-3"]);
     expect(router.state.location.pathname).toBe(onDeployment.at);
+  });
+});
+
+describe("a pod row whose status flips", () => {
+  const pod = (status: string): ChildRow => ({
+    kind: "Pod",
+    name: "checkout-7596d7fc77-xl4m8",
+    namespace: "shop",
+    status,
+  });
+
+  /**
+   * Sam's peek cut checkout-7596d7fc77-xl4m8 short while it read
+   * CrashLoopBackOff and drew it whole while Running, so the row jumped
+   * every few seconds. Fails if a shorter status gives back the room a
+   * longer one took.
+   */
+  it("keeps the room the widest status took, whatever it reads now", async () => {
+    const { rerender } = await renderWithRouter(
+      <ChildRows rows={[pod("Running")]} />,
+      onDeployment
+    );
+    const reserved = () =>
+      screen.getByTestId("child-row-status").style.minWidth;
+    expect(reserved()).toBe("7ch");
+
+    rerender(<ChildRows rows={[pod("CrashLoopBackOff")]} />);
+    expect(reserved()).toBe("16ch");
+
+    rerender(<ChildRows rows={[pod("Running")]} />);
+    expect(screen.getByTestId("child-row-status")).toHaveTextContent("Running");
+    expect(reserved()).toBe("16ch");
   });
 });
