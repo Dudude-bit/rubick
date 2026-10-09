@@ -1905,7 +1905,7 @@ export const ru: Catalogue = {
     notReadLogs: "последние строки {container} ({reason})",
     notReadEvents: "события этого пода ({reason})",
     eventsHeld:
-      "Список стоит на месте, пока над ним указатель, чтобы строка не сдвинулась из-под него",
+      "Список стоит на месте, пока здесь указатель, чтобы строка не сдвинулась из-под него",
     notReadOtherNamespace:
       "объекты Service в {namespace}, где находится этот адрес: приложение прочитало только пространство имён самого пода",
     notReadPolicies: "NetworkPolicy пространства имён {namespace} ({reason})",

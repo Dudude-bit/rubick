@@ -25,7 +25,7 @@ import { DataFreshness } from "@/components/ui/realtime";
 import { EVENT_ROW } from "@/components/object/detail-blocks";
 import { EventsTable } from "./EventsTable";
 import { StoryCard } from "./StoryCard";
-import { useHeldOrder } from "./held-rows";
+import { useHeldOrder } from "../../-list/held-rows";
 import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
 import { useListRefusal } from "../../-list/useListRefusal";
 import { StaleRows } from "../../-list/StaleRows";
@@ -336,6 +336,8 @@ export function Events() {
         : [],
     [view, matching, storyOptions, order]
   );
+  // The whole screen, header included: Dana read the rows with the pointer on
+  // the view switch, and they moved before it reached the one she aimed at.
   const [pointed, setPointed] = useState(false);
   const shownStories = useHeldOrder(
     stories,
@@ -411,6 +413,8 @@ export function Events() {
         "flex flex-col gap-2 animate-in fade-in duration-200",
         listed && "h-full min-h-0"
       )}
+      onPointerEnter={() => setPointed(true)}
+      onPointerLeave={() => setPointed(false)}
     >
       <SectionHeader
         title="Events"
@@ -628,11 +632,7 @@ export function Events() {
                       })}
               </p>
             ) : (
-              <div
-                className="flex flex-col gap-2 p-1.5"
-                onPointerEnter={() => setPointed(true)}
-                onPointerLeave={() => setPointed(false)}
-              >
+              <div className="flex flex-col gap-2 p-1.5">
                 {shownStories.map((story) => (
                   <StoryCard
                     key={story.key}
@@ -651,6 +651,7 @@ export function Events() {
               events={events}
               showNamespace={!currentNamespace}
               question={[cacheKey, eventType, eventLimit, query].join("\n")}
+              held={pointed}
               // A feed filtered down to nothing has not told the reader
               // their scope is quiet — it has told them their query missed.
               // Three states, not two: the scope is quiet, the query

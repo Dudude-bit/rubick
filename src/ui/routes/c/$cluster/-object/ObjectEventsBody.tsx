@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { CircleX, Lock } from "lucide-react";
 
 import { useT } from "@/i18n/useT";
@@ -11,10 +12,15 @@ import {
 } from "@/hooks/useObjectEvents";
 import { errorToShow, isRefusal } from "@/lib/error-utils";
 import { cn, formatWhen } from "@/lib/utils";
+import { useHeldRows } from "../-list/held-rows";
+import { HeldUpdates } from "../-list/HeldUpdates";
+
+const NO_EVENTS: EventInfo[] = [];
 
 /**
  * One object's events as the page and the peek both draw them: refused,
- * failing, still reading, or read and none, each said apart.
+ * failing, still reading, or read and none, each said apart. Newest first and
+ * live, so the rows hold still while the pointer is on them.
  */
 export function ObjectEventsBody({
   query,
@@ -32,6 +38,15 @@ export function ObjectEventsBody({
 }) {
   const t = useT();
   const { data, error } = query;
+  const [pointed, setPointed] = useState(false);
+  const rows = shown ?? data ?? NO_EVENTS;
+  // Whose events these are, so another object's are drawn at once, held or not.
+  const about = rows[0]
+    ? everyObject
+      ? rows[0].namespace
+      : `${rows[0].involvedObject.kind}/${rows[0].namespace}/${rows[0].involvedObject.name}`
+    : "";
+  const held = useHeldRows(rows, pointed && rows.length > 0, about);
   if (error) {
     const refused = isRefusal(error);
     return (
@@ -69,24 +84,34 @@ export function ObjectEventsBody({
       </div>
     );
   return (
-    <EventRows
-      events={shown ?? data}
-      showObject={everyObject}
-      compact={compact}
-      emptyMessage={
-        <>
-          {none ??
-            t(
-              "empty",
-              everyObject ? "noEventsInNamespace" : "noEventsForObject"
-            )}
-          <span className="mt-0.5 block text-[11px]">
-            {t("empty", "eventsNoneReadAt", {
-              time: formatWhen(query.dataUpdatedAt, "clock"),
-            })}
-          </span>
-        </>
-      }
-    />
+    <div
+      onPointerEnter={() => setPointed(true)}
+      onPointerLeave={() => setPointed(false)}
+    >
+      {held.waiting > 0 && (
+        <div className="flex justify-end">
+          <HeldUpdates n={held.waiting} onShow={held.show} />
+        </div>
+      )}
+      <EventRows
+        events={held.shown}
+        showObject={everyObject}
+        compact={compact}
+        emptyMessage={
+          <>
+            {none ??
+              t(
+                "empty",
+                everyObject ? "noEventsInNamespace" : "noEventsForObject"
+              )}
+            <span className="mt-0.5 block text-[11px]">
+              {t("empty", "eventsNoneReadAt", {
+                time: formatWhen(query.dataUpdatedAt, "clock"),
+              })}
+            </span>
+          </>
+        }
+      />
+    </div>
   );
 }

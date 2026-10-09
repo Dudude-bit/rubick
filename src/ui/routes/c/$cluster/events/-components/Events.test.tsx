@@ -298,6 +298,29 @@ describe("a feed a watch keeps", () => {
   });
 
   /**
+   * Dana read the rows with the pointer on the view switch, and they moved
+   * before it reached the one she aimed at. Fails if the list holds only
+   * under the pointer on the rows and not on the rest of the screen.
+   */
+  it("holds its rows while the pointer is anywhere on the screen, header included", async () => {
+    await watched();
+    burst(Array.from({ length: 5 }, (_, index) => dated("prod", index + 1)));
+    await waitFor(() => expect(rowAt(0)?.textContent).toContain("prod-pod-1"));
+
+    const header = screen.getByRole("tab", { name: "All events" });
+    await userEvent.hover(header);
+    send([{ op: "applied", resource: dated("prod", 0) }]);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(rowAt(0)?.textContent).toContain("prod-pod-1");
+    expect(
+      screen.getByRole("button", { name: "Show 1 update" })
+    ).toBeInTheDocument();
+
+    await userEvent.unhover(header);
+    await waitFor(() => expect(rowAt(0)?.textContent).toContain("prod-pod-0"));
+  });
+
+  /**
    * Dana found no gesture on an Events row that reached the object's Events
    * tab, and rows that answered neither a click nor a right click. Fails if
    * the row's click, its object link, its double click or its menu forgets
