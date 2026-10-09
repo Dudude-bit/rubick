@@ -43,7 +43,7 @@ export function ResourceListHeader({
       description={description}
       actions={
         <>
-          {actions}
+          {/* First: the room it keeps for its longest reading falls left of the actions. */}
           <DataFreshness
             dataUpdatedAt={dataUpdatedAt}
             live={live}
@@ -51,6 +51,7 @@ export function ResourceListHeader({
             stale={stale}
             refusedAt={refusedAt}
           />
+          {actions}
         </>
       }
     />
