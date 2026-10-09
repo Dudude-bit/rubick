@@ -49,6 +49,8 @@ export interface TerminalProps {
    * that opens after its session started. See `useGenericTerminalSession`.
    */
   replay?: () => string;
+  /** The pane's size in cells, each time it is fitted, the first time included. */
+  onSize?: (cols: number, rows: number) => void;
 }
 
 /**
@@ -60,6 +62,7 @@ export function Terminal({
   metadata,
   onClose,
   replay,
+  onSize,
 }: TerminalProps) {
   const t = useT();
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -159,12 +162,14 @@ export function Terminal({
   const sendRef = useRef(send);
   const resizeRef = useRef(resize);
   const disconnectRef = useRef(disconnect);
+  const onSizeRef = useRef(onSize);
 
   useEffect(() => {
     sendRef.current = send;
     resizeRef.current = resize;
     disconnectRef.current = disconnect;
-  }, [send, resize, disconnect]);
+    onSizeRef.current = onSize;
+  }, [send, resize, disconnect, onSize]);
 
   // The pane measures itself when it mounts, which is before the session is
   // connected — and a measurement taken then is dropped. Without this the far
@@ -198,7 +203,10 @@ export function Terminal({
     xterm.open(terminalRef.current);
 
     // Fit terminal to container
-    setTimeout(() => fitAddon.fit(), 0);
+    setTimeout(() => {
+      fitAddon.fit();
+      onSizeRef.current?.(xterm.cols, xterm.rows);
+    }, 0);
 
     xtermRef.current = xterm;
     fitAddonRef.current = fitAddon;
@@ -210,6 +218,7 @@ export function Terminal({
     const handleResize = () => {
       fitAddon.fit();
       resizeRef.current(xterm.cols, xterm.rows);
+      onSizeRef.current?.(xterm.cols, xterm.rows);
     };
 
     const resizeObserver = new ResizeObserver(handleResize);

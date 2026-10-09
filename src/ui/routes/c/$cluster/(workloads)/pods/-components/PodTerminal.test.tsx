@@ -31,11 +31,31 @@ vi.mock("@/lib/commands", () => ({
 }));
 
 // The real one is an xterm-backed lazy chunk; none of that is under test.
-vi.mock("@/components/terminal/Terminal", () => ({
-  Terminal: ({ sessionId }: { sessionId: string | null }) => (
-    <div data-testid="terminal-stub" data-session-id={sessionId ?? ""} />
-  ),
+// It measures itself unless a test holds the measurement back.
+const pane = vi.hoisted(() => ({
+  measure: null as null | (() => void),
+  holdSize: false,
 }));
+vi.mock("@/components/terminal/Terminal", async () => {
+  const { useEffect } = await import("react");
+  return {
+    Terminal: ({
+      sessionId,
+      onSize,
+    }: {
+      sessionId: string | null;
+      onSize?: (cols: number, rows: number) => void;
+    }) => {
+      useEffect(() => {
+        pane.measure = () => onSize?.(132, 41);
+        if (!pane.holdSize) pane.measure();
+      }, [onSize]);
+      return (
+        <div data-testid="terminal-stub" data-session-id={sessionId ?? ""} />
+      );
+    },
+  };
+});
 
 import { commands } from "@/lib/commands";
 import { PodTerminal } from "./PodTerminal";
@@ -185,5 +205,56 @@ describe("a shell the reader exited", () => {
     unmount();
 
     expect(commands.closeTerminal).toHaveBeenCalledWith("term-1");
+  });
+});
+
+describe("a shell opened at the pane's size", () => {
+  beforeEach(() => {
+    for (const k of Object.keys(listeners)) delete listeners[k];
+    vi.clearAllMocks();
+    pane.holdSize = false;
+  });
+
+  /**
+   * Lena's Shell opened on three prompts: busybox draws one more for each
+   * resize, and the pane's size used to follow the shell. Fails if the
+   * shell is opened before, or without, the size the pane measured.
+   */
+  it("waits for the pane to measure itself and opens at that size", async () => {
+    pane.holdSize = true;
+    render(<PodTerminal {...props} />);
+    await waitFor(() => expect(pane.measure).not.toBeNull());
+    expect(commands.openPodShell).not.toHaveBeenCalled();
+
+    act(() => pane.measure!());
+
+    await waitFor(() =>
+      expect(commands.openPodShell).toHaveBeenCalledWith(
+        "default",
+        "log-demo-7f9",
+        "app",
+        null,
+        132,
+        41
+      )
+    );
+  });
+
+  /**
+   * The page was left while the shell was still opening. Fails if the id
+   * that answers afterwards is kept by nobody and the shell left running.
+   */
+  it("closes a session that answers after the pane went away", async () => {
+    let answer!: (id: string) => void;
+    vi.mocked(commands.openPodShell).mockImplementationOnce(
+      () => new Promise((resolve) => (answer = resolve))
+    );
+    const { unmount } = render(<PodTerminal {...props} />);
+    await waitFor(() => expect(commands.openPodShell).toHaveBeenCalled());
+
+    unmount();
+    await act(async () => answer("term-late"));
+
+    expect(commands.closeTerminal).toHaveBeenCalledWith("term-late");
   });
 });

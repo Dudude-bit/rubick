@@ -20,11 +20,23 @@ import type { AccessQuery } from "@/generated/types";
 import { useShellAskStore } from "@/stores/shellAskStore";
 import { PodDetail } from "./PodDetail";
 
-vi.mock("@/components/terminal/Terminal", () => ({
-  Terminal: ({ sessionId }: { sessionId?: string }) => (
-    <div data-testid="terminal-stub" data-session-id={sessionId ?? ""} />
-  ),
-}));
+vi.mock("@/components/terminal/Terminal", async () => {
+  const { useEffect } = await import("react");
+  return {
+    Terminal: ({
+      sessionId,
+      onSize,
+    }: {
+      sessionId?: string;
+      onSize?: (cols: number, rows: number) => void;
+    }) => {
+      useEffect(() => onSize?.(120, 40), [onSize]);
+      return (
+        <div data-testid="terminal-stub" data-session-id={sessionId ?? ""} />
+      );
+    },
+  };
+});
 
 const NAME = "cart-9df89489c-n6rzf";
 

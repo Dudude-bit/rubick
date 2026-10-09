@@ -43,6 +43,9 @@ export function useGenericTerminalSession({
   // than `openPodShell` answers.
   const isMountedRef = useRef(true);
   const currentSessionIdRef = useRef<string | null>(null);
+  // Every resize that reaches busybox 1.36 draws another prompt; only a new
+  // size is worth sending.
+  const sentSizeRef = useRef<string | null>(null);
 
   // Use refs for callbacks to avoid re-running effect when they change
   const onOutputRef = useRef(onOutput);
@@ -105,7 +108,13 @@ export function useGenericTerminalSession({
 
   const resize = useCallback(async (cols: number, rows: number) => {
     const sid = currentSessionIdRef.current;
-    if (sid && statusRef.current === "connected") {
+    const size = `${sid} ${cols}x${rows}`;
+    if (
+      sid &&
+      statusRef.current === "connected" &&
+      sentSizeRef.current !== size
+    ) {
+      sentSizeRef.current = size;
       try {
         await commands.terminalResize(sid, cols, rows);
       } catch (err) {

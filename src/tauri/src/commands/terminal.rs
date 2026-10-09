@@ -62,6 +62,8 @@ pub async fn open_pod_shell(
     pod: String,
     container: Option<String>,
     shell: Option<String>,
+    cols: Option<u16>,
+    rows: Option<u16>,
     state: State<'_, AppState>,
 ) -> Result<String> {
     let ctx = ResourceContext::for_command(&state, Some(namespace.clone()))?;
@@ -90,6 +92,7 @@ pub async fn open_pod_shell(
             container: container_name,
         },
         shell.as_deref(),
+        cols.zip(rows),
     )
     .with_fresh_client(Box::new(move || {
         manager

@@ -52,6 +52,7 @@ async fn shell() -> Shell {
             container: "main".to_string(),
         },
         Some("sh"),
+        Some((120, 40)),
     );
     let id = manager.create_session(Box::new(adapter)).expect("session");
     manager.mark_subscribed(&id).expect("subscribed");
@@ -211,4 +212,35 @@ async fn a_closed_shell_is_not_left_running_in_the_container() {
         Some("Success"),
         "pid {pid} is still running in {pod}"
     );
+}
+
+/// Lena's Shell opened on three `/srv/app #` prompts: busybox 1.36 draws a
+/// new one for every resize, and the pane's size arrived after the shell
+/// was up. Opened at the size, the pane saying it again changes nothing.
+#[tokio::test]
+#[ignore = "needs a live cluster and a pod with a shell"]
+async fn a_shell_opened_at_the_pane_size_prints_one_prompt() {
+    let Shell {
+        manager,
+        id,
+        mut events,
+        ..
+    } = shell().await;
+    let heard = |events: &mut tokio::sync::broadcast::Receiver<AppEvent>| {
+        let mut said = String::new();
+        while let Ok(event) = events.try_recv() {
+            if let AppEvent::TerminalOutput { data, .. } = event {
+                said.push_str(&data);
+            }
+        }
+        said
+    };
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    let first = heard(&mut events);
+    assert!(!first.trim().is_empty(), "the shell printed a prompt");
+
+    manager.resize_session(&id, 120, 40).await.expect("resize");
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    assert_eq!(heard(&mut events), "", "the same size drew another prompt");
+    manager.close_session(&id).expect("close");
 }

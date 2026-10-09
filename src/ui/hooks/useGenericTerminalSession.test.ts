@@ -27,6 +27,7 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
+import { commands } from "@/lib/commands";
 import { useGenericTerminalSession } from "./useGenericTerminalSession";
 
 // ----- Tests -----
@@ -193,6 +194,26 @@ describe("useGenericTerminalSession deferred-start handshake", () => {
    * land in the pane that finally opens. Draining before the listener is
    * installed loses the bytes in between, so the order is what this asserts.
    */
+  /**
+   * Busybox 1.36 draws a fresh prompt for every resize that reaches it, and
+   * the pane re-fits on every layout pass. Fails if one size is sent twice.
+   */
+  it("sends a size only when it is new", async () => {
+    const { result } = renderHook(() =>
+      useGenericTerminalSession({ sessionId: "session-size" })
+    );
+    await waitFor(() => expect(result.current.status).toBe("connected"));
+
+    await result.current.resize(120, 40);
+    await result.current.resize(120, 40);
+    await result.current.resize(121, 40);
+
+    expect(vi.mocked(commands.terminalResize).mock.calls).toEqual([
+      ["session-size", 120, 40],
+      ["session-size", 121, 40],
+    ]);
+  });
+
   it("drains what came before the pane only after the live listener exists", async () => {
     const written: string[] = [];
     let drainedAt: number | null = null;

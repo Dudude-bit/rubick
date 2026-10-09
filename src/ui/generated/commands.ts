@@ -418,9 +418,18 @@ export async function openPodShell(
   namespace: string,
   pod: string,
   container: string | null,
-  shell: string | null
+  shell: string | null,
+  cols: number | null,
+  rows: number | null
 ): Promise<string> {
-  return invoke<string>("open_pod_shell", { namespace, pod, container, shell });
+  return invoke<string>("open_pod_shell", {
+    namespace,
+    pod,
+    container,
+    shell,
+    cols,
+    rows,
+  });
 }
 
 export async function checkHelmAvailability(): Promise<CliAvailability> {

@@ -38,6 +38,13 @@ export function PodTerminal({
   const [ended, setEnded] = useState(false);
   const connectAttemptRef = useRef(0);
   const sessionIdRef = useRef<string | null>(null);
+  // The shell opens at the pane's size, so it never has to be told one later.
+  const sizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  const [measured, setMeasured] = useState(false);
+  const onSize = useCallback((cols: number, rows: number) => {
+    sizeRef.current = { cols, rows };
+    setMeasured(true);
+  }, []);
 
   // Keep sessionIdRef in sync
   useEffect(() => {
@@ -63,7 +70,9 @@ export function PodTerminal({
         namespace,
         podName,
         containerName,
-        null
+        null,
+        sizeRef.current?.cols ?? null,
+        sizeRef.current?.rows ?? null
       );
 
       if (connectAttemptRef.current !== attemptId) {
@@ -140,19 +149,18 @@ export function PodTerminal({
     };
   }, []);
 
-  // Initial connection: fire-and-forget async session startup, which
-  // ends up calling setSessionId inside. Genuine side-effect (talks
-  // to the backend); not derivable.
+  // Opens once the pane has its size. Leaving closes the session, and one
+  // still being opened is closed by `connect` when its id arrives.
   useEffect(() => {
+    if (!measured) return;
     connect();
-
-    // Cleanup on unmount - use ref to get current sessionId
     return () => {
+      connectAttemptRef.current += 1;
       const sid = sessionIdRef.current;
       if (sid) commands.closeTerminal(sid).catch(() => {});
     };
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [measured]);
 
   // Poll for pod status while connected
   useEffect(() => {
@@ -275,6 +283,7 @@ export function PodTerminal({
         sessionId={sessionId}
         metadata={metadata}
         onClose={handleClose}
+        onSize={onSize}
       />
     </div>
   );

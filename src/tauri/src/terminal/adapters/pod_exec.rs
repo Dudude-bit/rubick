@@ -50,17 +50,23 @@ const PICK_SHELL: &str = "if command -v fish >/dev/null 2>&1; then exec fish; el
 /// The exec command for a shell that says its pid before anything else.
 ///
 /// `/bin/sh` prints the mark and then `exec`s the shell, which keeps the pid.
-/// A named shell is passed as `$0`, never spliced into the script.
+/// A named shell is passed as `$0`, never spliced into the script. The
+/// terminal is set to the pane's size before the shell starts: busybox 1.36
+/// prints a fresh prompt on every resize, and a pane that only said its size
+/// once the shell was up opened on three of them.
 #[must_use]
-pub fn shell_command(shell: Option<&str>) -> Vec<String> {
+pub fn shell_command(shell: Option<&str>, size: Option<(u16, u16)>) -> Vec<String> {
     let mark = "printf '\\033]777;rubick-pid=%s\\007' \"$$\"";
+    let size = size
+        .map(|(cols, rows)| format!("stty cols {cols} rows {rows} 2>/dev/null; "))
+        .unwrap_or_default();
     let mut command = vec!["/bin/sh".to_string(), "-c".to_string()];
     match shell {
         Some(shell) => {
-            command.push(format!("{mark}; exec \"$0\""));
+            command.push(format!("{mark}; {size}exec \"$0\""));
             command.push(shell.to_string());
         }
-        None => command.push(format!("{mark}; {PICK_SHELL}")),
+        None => command.push(format!("{mark}; {size}{PICK_SHELL}")),
     }
     command
 }
@@ -126,6 +132,7 @@ pub type ClientSource = Box<dyn Fn() -> Option<Client> + Send + Sync>;
 pub struct PodExecAdapter {
     target: SessionTarget,
     command: Vec<String>,
+    size: Option<(u16, u16)>,
     client: Client,
     fresh_client: Option<ClientSource>,
     attached: Option<AttachedProcess>,
@@ -158,11 +165,18 @@ pub struct PodExecAdapter {
 }
 
 impl PodExecAdapter {
-    /// A shell in `target`'s container: the one named, or the best it has.
+    /// A shell in `target`'s container, the one named or the best it has, at
+    /// the pane's size when the pane has said it.
     #[must_use]
-    pub fn new(client: Client, target: SessionTarget, shell: Option<&str>) -> Self {
+    pub fn new(
+        client: Client,
+        target: SessionTarget,
+        shell: Option<&str>,
+        size: Option<(u16, u16)>,
+    ) -> Self {
         Self {
-            command: shell_command(shell),
+            command: shell_command(shell, size),
+            size,
             target,
             client,
             fresh_client: None,
@@ -320,6 +334,12 @@ impl TerminalAdapter for PodExecAdapter {
             .map(|r| Box::new(r) as Box<dyn AsyncRead + Unpin + Send + Sync>);
         // Also a `.take()`, so once, and only present because `tty` is true.
         self.resize_tx = attached.terminal_size();
+        if let (Some((cols, rows)), Some(tx)) = (self.size, self.resize_tx.as_mut()) {
+            let _ = tx.try_send(TerminalSize {
+                width: cols,
+                height: rows,
+            });
+        }
 
         self.attached = Some(attached);
         // A reconnect is a new stream, and the old one having ended says
@@ -447,17 +467,35 @@ mod tests {
     /// pane leaves the shell running in the container.
     #[test]
     fn the_shell_says_its_pid_before_anything_else() {
-        let picked = shell_command(None);
+        let picked = shell_command(None, None);
         assert_eq!(picked[..2], ["/bin/sh", "-c"]);
         assert!(picked[2].starts_with("printf '\\033]777;rubick-pid=%s\\007' \"$$\"; "));
         assert!(picked[2].ends_with("else exec sh; fi"));
 
-        let named = shell_command(Some("/bin/ash; reboot"));
+        let named = shell_command(Some("/bin/ash; reboot"), None);
         assert!(named[2].ends_with("; exec \"$0\""));
         assert_eq!(
             named[3], "/bin/ash; reboot",
             "a named shell is an argument, not script"
         );
+    }
+
+    /// Lena's Shell opened on three prompts: busybox drew one for the start
+    /// and one for each resize the pane sent after it. Fails if the shell
+    /// starts before the terminal has the pane's size.
+    #[test]
+    fn the_shell_starts_at_the_size_of_the_pane() {
+        let picked = shell_command(None, Some((132, 41)));
+        let script = &picked[2];
+        let stty = script
+            .find("stty cols 132 rows 41 2>/dev/null; ")
+            .expect("the size is set");
+        assert!(stty < script.find("exec").expect("a shell"));
+        assert!(script.find("rubick-pid").expect("the mark") < stty);
+
+        let named = shell_command(Some("bash"), Some((80, 24)));
+        assert!(named[2].ends_with("stty cols 80 rows 24 2>/dev/null; exec \"$0\""));
+        assert!(!shell_command(None, None)[2].contains("stty"));
     }
 
     /// The hang-up is the signal a closed terminal sends, to that pid alone.
