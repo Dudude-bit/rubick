@@ -525,7 +525,15 @@ export function IngressDetail() {
 
   return (
     <>
-      <ChainWatches services={chain.services} reads={[chain.key]} />
+      {/* The header's verdict reads its backends from the Services list's
+          answer, which a change under them makes stale as it does the chain. */}
+      <ChainWatches
+        services={chain.services}
+        reads={[
+          chain.key,
+          queryKeys.serviceHealthInputs(ingress ? [ingress.namespace] : []),
+        ]}
+      />
       <ResourceDetailLayout
         freshness={freshness}
         resource={ingress}

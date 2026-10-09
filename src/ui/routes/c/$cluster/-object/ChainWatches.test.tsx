@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
 import { render, screen, waitFor } from "@testing-library/react";
-import { QueryClientProvider, type QueryClient } from "@tanstack/react-query";
+import {
+  QueryClientProvider,
+  useQuery,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { listen } from "@tauri-apps/api/event";
 
 const commands = vi.hoisted(() => ({
@@ -275,4 +279,40 @@ it("draws no chain from an earlier Deployment of the same name, and reads again"
 
   release(COMING_UP({ subjectUid: "big-pull-uid", readAt: ago(0) }));
   expect(await screen.findByText("noneReady")).toBeInTheDocument();
+});
+
+/**
+ * An Ingress page draws its header's verdict from the Services list's
+ * answer, not from its chain, and kept "backend coming up" there once the
+ * chain had moved on. Fails if a change under the chain does not read every
+ * answer the page hands the watches.
+ */
+it("reads every answer it is handed again when a slice under the chain changes", async () => {
+  const header = ["service-health-inputs", "shop"];
+  const read = vi.fn(async () => ({ rows: [], unread: [] }));
+  function Header() {
+    useQuery({ queryKey: header, queryFn: read });
+    return null;
+  }
+  render(
+    <QueryClientProvider client={client}>
+      <Header />
+      <ChainWatches
+        services={[
+          { namespace: "shop", name: "big-pull", selector: "app=big-pull" },
+        ]}
+        reads={[header]}
+      />
+    </QueryClientProvider>
+  );
+  await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+  await waitFor(() =>
+    expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith(
+      "slices-stream"
+    )
+  );
+
+  send("slices-stream", { op: "applied", resource: SLICE });
+
+  await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
 });
