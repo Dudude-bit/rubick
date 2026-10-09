@@ -42,6 +42,7 @@ import { errorToShow } from "@/lib/error-utils";
 import { scaleWarnings } from "@/lib/governance";
 import { readinessOf } from "@/lib/restart-plan";
 import { objectLink } from "@/lib/links";
+import { useShellAskStore } from "@/stores/shellAskStore";
 import { STALE_TIMES } from "@/lib/refresh";
 import { toKind } from "@/lib/resource-registry";
 import type {
@@ -323,7 +324,8 @@ export function useObjectActions({
   const openShell = () => {
     const container =
       reachableContainer(pod) ?? (pod ? lifetimeContainers(pod)[0] : undefined);
-    if (!container) return;
+    if (!container || !namespace) return;
+    useShellAskStore.getState().askFor(namespace, name);
     navigate({
       ...objectLink({ kind: "Pod", name, namespace })!,
       search: { shell: container.name },
@@ -332,6 +334,8 @@ export function useObjectActions({
 
   const handleDebugStart = (result: DebugResult) => {
     setDialog(null);
+    if (!result.isNewPod)
+      useShellAskStore.getState().askFor(result.namespace, result.podName);
     navigate({
       ...objectLink({
         kind: "Pod",

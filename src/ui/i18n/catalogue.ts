@@ -883,6 +883,8 @@ export const en = {
     fallingBackToPolling: "{title}: falling back to periodic refresh.",
     dismissJob: "Dismiss {job} {name}",
     closeTerminal: "Close terminal",
+    startShellIn: "Start a shell in {container}",
+    readFiles: "Read the files",
     base64Copied: "Base64 of {key} copied: {size} of binary.",
     deletePod: "Delete Pod",
     creatingDebugContainer: "Creating debug container...",
@@ -5702,6 +5704,12 @@ export const en = {
     customResourceNotRead:
       "This custom resource has not been read yet. Its spec is whatever the CRD defines, and nothing here has seen it.",
     shellNotPermitted: "No shell with this access",
+    shellWaits: "No shell is running here yet",
+    shellWaitsBody:
+      "A shell is a live process in {container}. It starts only when you ask, never because the page was opened from a link or a restored tab.",
+    filesWait: "The files have not been read yet",
+    filesWaitBody:
+      "Each folder is read by running a command in the container. That happens only when you ask, never because the page was opened from a link or a restored tab.",
     noShellAttached: "No shell is attached",
     shellSessionEnded:
       "The session was ended. Choosing a container above opens a new one; nothing is running here in the meantime.",

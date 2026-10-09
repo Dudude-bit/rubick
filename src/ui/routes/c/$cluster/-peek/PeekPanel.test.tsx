@@ -143,6 +143,7 @@ import { ResourceRef } from "@/components/object/ResourceRef";
 import { preloadPeekContent } from "./peek-loader";
 import { pageTab } from "@/hooks/usePeek";
 import { PeekHost } from "./peek-dock";
+import { useShellAskStore } from "@/stores/shellAskStore";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 import {
   DropdownMenu,
@@ -2023,7 +2024,9 @@ describe("PeekPanel actions", () => {
     ).not.toHaveLength(0);
   });
 
+  /** Fails if the page lands on Shell without the ask, which it would offer rather than open. */
   it("takes a shell request to the page where a terminal fits", async () => {
+    useShellAskStore.getState().drop();
     vi.mocked(commands.getPod).mockResolvedValue(RUNNING_POD);
     await wrap(RUNNING_PEEK);
     await screen.findByText("Running");
@@ -2032,6 +2035,10 @@ describe("PeekPanel actions", () => {
     await waitFor(() =>
       expect(location()).toBe("/c/prod/pods/k8s-gui-test/log-demo-1?shell=app")
     );
+    expect(useShellAskStore.getState().ask).toMatchObject({
+      namespace: "k8s-gui-test",
+      pod: "log-demo-1",
+    });
   });
 
   it("names the object and the consequence before deleting it", async () => {

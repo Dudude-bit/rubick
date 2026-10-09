@@ -419,6 +419,7 @@ export function ResourceDetailLayout({
           tabs={tabs}
           activeTab={activeTab}
           onTabChange={onTabChange}
+          subject={`${resourceKind}/${namespace ?? ""}/${title}`}
           actions={
             <>
               <ShareObjectAction

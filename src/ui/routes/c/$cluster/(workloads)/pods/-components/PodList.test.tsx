@@ -68,6 +68,7 @@ vi.mock("@/hooks/usePodsWithMetrics", () => ({
 
 import { renderWithRouter } from "@/test/render";
 import { PodList } from "./PodList";
+import { useShellAskStore } from "@/stores/shellAskStore";
 
 describe("the pod list while a new scope is read", () => {
   /**
@@ -100,6 +101,11 @@ describe("the row's shell button", () => {
         "/c/prod/pods/prod/api-0?tab=shell"
       )
     );
+    // The address alone is what a restored tab carries; the click is the ask.
+    expect(useShellAskStore.getState().ask).toMatchObject({
+      namespace: "prod",
+      pod: "api-0",
+    });
   });
 });
 

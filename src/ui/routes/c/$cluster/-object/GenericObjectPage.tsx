@@ -221,6 +221,7 @@ export function GenericObjectPage({
           onTabChange={(tab) =>
             setSearch({ tab: tab === "overview" ? undefined : tab })
           }
+          subject={`${resource}/${namespace ?? ""}/${name}`}
         />
       )}
     </div>

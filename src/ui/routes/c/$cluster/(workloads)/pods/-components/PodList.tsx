@@ -38,6 +38,7 @@ import { narrowPods } from "@/lib/pod-filter";
 import { usePodFilter } from "@/hooks/usePodFilter";
 import { PodSelectorBanner } from "./PodSelectorBanner";
 import { PodStatusBadge } from "./PodStatusBadge";
+import { useShellAskStore } from "@/stores/shellAskStore";
 
 /** A pod row that also knows whether its node is still reporting. */
 type PodRow = WithNodeSilence<PodWithMetrics>;
@@ -257,10 +258,12 @@ export function PodList() {
       {
         icon: Terminal,
         label: t("action", "shell"),
-        onClick: (item) =>
+        onClick: (item) => {
+          useShellAskStore.getState().askFor(item.namespace, item.name);
           navigate(
             objectLink({ kind: ResourceType.Pod, ...item }, { tab: "shell" })!
-          ),
+          );
+        },
       },
       {
         icon: Trash2,
