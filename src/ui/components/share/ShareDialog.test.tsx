@@ -127,6 +127,7 @@ const report: Report = {
     roles: { ok: "", pending: "", warn: "", err: "", neutral: "" },
     verdict: "",
     notRead: "",
+    refused: "",
     open: "",
     shield: "",
   },

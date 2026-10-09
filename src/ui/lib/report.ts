@@ -155,6 +155,8 @@ export interface ReportFinding {
   detail: string | null;
   role: StatusRole;
   ref?: ReportRef;
+  /** A mark of its own in place of the role's, as the screen draws the row: not read, or refused. */
+  mark?: "notRead" | "refused";
 }
 
 export type ReportSectionBody =
@@ -236,6 +238,7 @@ export interface ReportIcons {
   roles: Record<StatusRole, string>;
   verdict: string;
   notRead: string;
+  refused: string;
   open: string;
   shield: string;
 }
@@ -478,7 +481,11 @@ function roleHtml(
   icons: ReportIcons,
   unread = false
 ) {
-  return `<span class="role ${role}">${unread ? icons.notRead : icons.roles[role]}${e(text)}</span>`;
+  return markHtml(role, unread ? icons.notRead : icons.roles[role], text);
+}
+
+function markHtml(role: StatusRole, glyph: string, text: string) {
+  return `<span class="role ${role}">${glyph}${e(text)}</span>`;
 }
 
 function valueHtml(value: ReportValue, ctx: Ctx): string {
@@ -571,7 +578,7 @@ function findingsHtml(items: ReportFinding[], ctx: Ctx): string {
   return items
     .map(
       (item) =>
-        `<div class="find">${roleHtml(item.role, "", ctx.icons)}<span>${
+        `<div class="find">${markHtml(item.role, item.mark ? ctx.icons[item.mark] : ctx.icons.roles[item.role], "")}<span>${
           item.ref ? `${refHtml(item.ref, ctx)} ` : ""
         }${item.ref && item.title === item.ref.stem + item.ref.tail ? "" : e(item.title)}</span>${item.detail ? `<span class="msg">${e(item.detail)}</span>` : ""}</div>`
     )

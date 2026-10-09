@@ -4,9 +4,11 @@ import { cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter } from "@/test/render";
+import { unreadLines } from "@/lib/report-parts";
 import { AttentionPanel, WarningsPanel, WorkloadsPanel } from "./health";
 import {
   attentionShare,
+  uncheckedShare,
   deploymentSegments,
   jobSegments,
   nodesShare,
@@ -566,6 +568,66 @@ describe("a scope one namespace of which refused its pods", () => {
   });
 
   /**
+   * Marco's team-blind Share: the dialog said "Needs attention 0" and "Not
+   * read 0" while the file listed ledger and every refused kind under Needs
+   * attention, with no Not checked, a plain circle for ledger's not-read
+   * eye, and "Everything this report names was read" at its end. Fails if
+   * the file's Needs attention, Not checked and Not read stop being the
+   * screen's, or stop agreeing with the counts the dialog reads off them.
+   */
+  it("hands Share its Needs attention, its Not checked and what it could not read as the screen draws them", () => {
+    const said = {
+      ...overview,
+      unread: [refusedPods, refusedIn("Job", "jobs")],
+      unconfirmed: [
+        {
+          severity: "critical",
+          kind: "Deployment",
+          name: "ledger",
+          namespace: "team-blind",
+          reason: "Unavailable",
+          detail: null,
+          since: null,
+          restarts: null,
+          foldedPods: null,
+        },
+      ],
+    } as unknown as ClusterOverview;
+    const attention = attentionFrom([], {
+      overview: said,
+    } as Partial<AttentionInputs>);
+
+    const problems = attentionShare(attention, t);
+    expect(problems.count).toBe(0);
+    expect(problems.body).toEqual({
+      type: "text",
+      text: "nothing found in what could be checked",
+    });
+
+    const unchecked = uncheckedShare(attention, t)!;
+    expect(unchecked.title).toBe("Not checked");
+    const items =
+      unchecked.body.type === "findings" ? unchecked.body.items : [];
+    expect(unchecked.count).toBe(items.length);
+    expect(items[0]).toMatchObject({
+      title: "its controller says Unavailable; its pods were not read",
+      ref: { kind: "Deployment", stem: "ledger" },
+      mark: "notRead",
+    });
+    const refused = items.slice(1);
+    expect(refused.map((item) => item.title)).toEqual(
+      expect.arrayContaining([
+        "Pods: list is forbidden in team-blind",
+        "Jobs: list is forbidden in team-blind",
+      ])
+    );
+    expect(refused.every((item) => item.mark === "refused")).toBe(true);
+    expect(unreadLines([problems, unchecked])).toEqual(
+      refused.map((item) => item.title)
+    );
+  });
+
+  /**
    * Marco's team-blind Overview said "nothing found in what could be
    * checked" while ledger's controller had said Unavailable for hours, its
    * pods refused. Fails if that verdict vanishes from Needs attention, or is
@@ -765,11 +827,11 @@ describe("a scope one namespace of which refused its pods", () => {
     const attention = attentionFrom([], {
       overview,
     } as Partial<AttentionInputs>);
-    const problems = attentionShare(attention, t);
+    const unchecked = uncheckedShare(attention, t);
     const findings =
-      problems.body.type === "findings" ? problems.body.items : [];
+      unchecked?.body.type === "findings" ? unchecked.body.items : [];
     expect(findings.map((finding) => finding.title)).toContain(
-      "Pods: refused in team-blind"
+      "Pods: list is forbidden in team-blind"
     );
 
     const workloads = workloadsShare(overview, t);
@@ -968,18 +1030,19 @@ describe("what the panels offer Share", () => {
    * and one calling a refusal a failure would disagree with the panel.
    */
   it("names a kind the list could not read as a finding of its own", () => {
-    const section = attentionShare(
+    const section = uncheckedShare(
       attentionFrom([], {
         autoscalers: { data: undefined, error: new Error("forbidden") },
       }),
       t
     );
-    const items = section.body.type === "findings" ? section.body.items : [];
+    const items = section?.body.type === "findings" ? section.body.items : [];
     expect(items).toEqual([
       expect.objectContaining({
         title: "HorizontalPodAutoscalers: refused across the cluster",
         detail: "forbidden",
         role: "neutral",
+        mark: "refused",
       }),
     ]);
   });

@@ -1,4 +1,11 @@
-import { Bell, Boxes, Gauge, Server, TriangleAlert } from "lucide-react";
+import {
+  Bell,
+  Boxes,
+  EyeOff,
+  Gauge,
+  Server,
+  TriangleAlert,
+} from "lucide-react";
 
 import type { CompositionSegment } from "@/components/object/detail-blocks";
 import { iconSvg } from "@/lib/icon-svg";
@@ -16,10 +23,12 @@ import type { JobStatus } from "@/lib/status-meaning";
 import {
   attentionLines,
   checkRefused,
+  checkSaid,
   foldedWords,
   reasonWord,
   unreadWhere,
   type Attention,
+  type AttentionCheck,
   type AttentionDetail,
 } from "@/lib/attention";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
@@ -41,6 +50,7 @@ import { currentLocale } from "@/stores/localeStore";
 import { byteScale, formatBytes } from "@/lib/k8s-quantity";
 import { splitUnit } from "@/lib/metric-format";
 import { formatAge, formatDecimal } from "@/lib/utils";
+import { formatCount } from "@/lib/count";
 import { withRestartsBy } from "@/lib/pod-status";
 
 /**
@@ -123,7 +133,11 @@ export function memoryRatio(
   return { used: used.value, total: value, unit };
 }
 
-/** What the "Needs attention" panel draws, as a Share finding per row. */
+/**
+ * What the "Needs attention" panel counts, as a Share finding per row, in
+ * the words its header says when it found none. What it could not check is
+ * {@link uncheckedShare}'s, as the panel draws it apart under Not checked.
+ */
 export function attentionShare(attention: Attention, t: T): PlacedSection {
   const items = attentionLines(attention.items).map((line): ReportFinding => {
     if (line.at === "unserved")
@@ -163,8 +177,47 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
       detail: null,
       role: "neutral",
     });
-  for (const item of attention.unconfirmed)
-    items.push({
+  return {
+    id: "overview-problems",
+    order: ORDER.summary,
+    title: t("action", "needsAttention"),
+    icon: iconSvg(TriangleAlert),
+    count: attention.total,
+    caption:
+      items.length > 0 && !attention.complete
+        ? t("count", "worstFirstPartial", { n: formatCount(attention.total) })
+        : null,
+    body:
+      items.length > 0
+        ? { type: "findings", items }
+        : {
+            type: "text",
+            text: t(
+              "cluster",
+              attention.complete ? "attentionNothing" : "attentionNoneFound"
+            ),
+          },
+  };
+}
+
+/**
+ * What the panel's Not checked block draws, as a section of its own: each
+ * verdict its pods left unconfirmed, with the not-read mark, and each kind
+ * it could not read, with the lock where it was refused. Those kinds are
+ * the file's "Not read" too, so its count and the dialog's agree with the
+ * screen. Marco's team-blind file listed all of them under Needs attention
+ * beside a dialog saying 0, and "Everything this report names was read".
+ */
+export function uncheckedShare(
+  attention: Attention,
+  t: T
+): PlacedSection | null {
+  const checks = attention.checks.filter((check) => check.state !== "read");
+  if (checks.length + attention.unconfirmed.length === 0) return null;
+  const said = (check: AttentionCheck) =>
+    `${getDisplayPlural(check.kind)}: ${checkSaid(check, t)}`;
+  const items: ReportFinding[] = [
+    ...attention.unconfirmed.map((item): ReportFinding => ({
       title:
         item.since === null
           ? t("cluster", "attentionUnconfirmedUndated", {
@@ -181,29 +234,28 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
         name: item.name,
         namespace: item.namespace,
       }),
-    });
-  for (const check of attention.checks) {
-    if (check.state === "read") continue;
-    const said =
-      check.state === "reading"
-        ? t("cluster", "attentionStillReading")
-        : `${t(
-            "cluster",
-            checkRefused(check) ? "attentionRefused" : "attentionFailed"
-          )} ${unreadWhere(check.unread, t)}`;
-    items.push({
-      title: `${getDisplayPlural(check.kind)}: ${said}`,
+      mark: "notRead",
+    })),
+    ...checks.map((check): ReportFinding => ({
+      title: said(check),
       detail: check.unread.find((entry) => entry.message)?.message ?? null,
-      role: "neutral",
-    });
-  }
+      role:
+        check.state === "reading"
+          ? "pending"
+          : checkRefused(check)
+            ? "neutral"
+            : "warn",
+      mark: checkRefused(check) ? "refused" : undefined,
+    })),
+  ];
   return {
-    id: "overview-problems",
+    id: "overview-unchecked",
     order: ORDER.summary,
-    title: t("action", "needsAttention"),
-    icon: iconSvg(TriangleAlert),
-    count: attention.total,
+    title: t("cluster", "attentionNotChecked"),
+    icon: iconSvg(EyeOff),
+    count: items.length,
     body: { type: "findings", items },
+    notRead: checks.map(said),
   };
 }
 

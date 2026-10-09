@@ -5,6 +5,7 @@ import {
   EyeOff,
   ExternalLink,
   History,
+  Lock,
   ShieldCheck,
   Zap,
   Bell,
@@ -44,8 +45,14 @@ import {
 import { identHue, kindHue, splitName } from "./resource-identity";
 import { ROLE_ICON, statusRole } from "./status-role";
 
-/** A section with where it sits: the page's own first, the evidence after, the logs last. */
-export type PlacedSection = ReportSection & { order: number };
+/**
+ * A section with where it sits: the page's own first, the evidence after,
+ * the logs last, and what it names as not read, for the file's "Not read".
+ */
+export type PlacedSection = ReportSection & {
+  order: number;
+  notRead?: string[];
+};
 
 export const ORDER = {
   summary: 10,
@@ -101,9 +108,12 @@ export function unreadLines(sections: readonly PlacedSection[]): string[] {
     titles.push(section.title);
     byReason.set(reason, titles);
   }
-  return [...byReason].map(
-    ([reason, titles]) => `${titles.join(", ")}: ${reason}`
-  );
+  return [
+    ...[...byReason].map(
+      ([reason, titles]) => `${titles.join(", ")}: ${reason}`
+    ),
+    ...sections.flatMap((section) => section.notRead ?? []),
+  ];
 }
 
 /** As many journal entries as a reader scrolls; older ones are in the app. */
@@ -147,6 +157,7 @@ export function frameIcons(): ReportIcons {
     },
     verdict: iconSvg(Zap),
     notRead: iconSvg(EyeOff),
+    refused: iconSvg(Lock),
     open: iconSvg(ExternalLink),
     shield: iconSvg(ShieldCheck),
   };
