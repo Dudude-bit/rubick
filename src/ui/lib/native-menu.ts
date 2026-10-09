@@ -8,8 +8,10 @@ export function keepNativeMenuForText(): () => void {
     if (wantsNativeMenu(event.target)) return;
     event.preventDefault();
   };
-  window.addEventListener("contextmenu", onMenu, true);
-  return () => window.removeEventListener("contextmenu", onMenu, true);
+  // Bubbling, after the app's own handlers: a Radix menu trigger ignores an
+  // event already prevented, so a capturing listener left every one shut.
+  window.addEventListener("contextmenu", onMenu);
+  return () => window.removeEventListener("contextmenu", onMenu);
 }
 
 const EDITABLE =

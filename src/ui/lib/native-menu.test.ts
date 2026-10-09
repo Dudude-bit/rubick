@@ -40,6 +40,21 @@ describe("the webview's own menu", () => {
     expect(rightClick(root.querySelector("div, canvas") ?? root)).toBe(true);
   });
 
+  /**
+   * Radix's context menu trigger skips an event already prevented, so a
+   * capturing listener kept the new tab button's menu shut on every right
+   * click. Fails if the app's own handler sees the event prevented.
+   */
+  it("is withheld only after the app's own menu had the event", () => {
+    const row = make("<div><span>pod-1</span></div>");
+    let seenPrevented: boolean | null = null;
+    row.addEventListener("contextmenu", (event) => {
+      seenPrevented = event.defaultPrevented;
+    });
+    expect(rightClick(row)).toBe(false);
+    expect(seenPrevented).toBe(false);
+  });
+
   it("is left alone over text the reader selected", () => {
     const line = make("<p>error: connection refused</p>");
     window.getSelection()!.selectAllChildren(line);

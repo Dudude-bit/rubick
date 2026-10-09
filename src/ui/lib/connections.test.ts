@@ -1430,8 +1430,33 @@ describe("a governing edge says which query reached it", () => {
     const row = groups.find((group) => group.key === "governs")?.rows[0];
     expect(row?.label).toBe("Disruption budget");
     expect(row?.ways).toEqual([
-      "matched app in (expr-demo),track notin (canary)",
+      "selects app in (expr-demo),track notin (canary)",
     ]);
+  });
+
+  /**
+   * Lena's pod Links tab read "cart matched app=cart" beside a Service line
+   * saying "выбирает app=cart". Fails if the budget's selector line is
+   * written in English on a Russian screen.
+   */
+  it("says the selector in the reader's language", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const pod = ref("Pod", "cart-1");
+    const groups = connectionGroups(
+      connections(pod, [
+        {
+          from: budget(),
+          to: pod,
+          relation: { verb: "governs", selector: "app=cart" },
+        },
+      ]),
+      ru
+    );
+
+    expect(
+      groups.find((group) => group.key === "governs")?.rows[0].ways
+    ).toEqual(["выбирает app=cart"]);
   });
 
   it("keeps naming the far end where it is not the subject", () => {
@@ -1458,7 +1483,7 @@ describe("a governing edge says which query reached it", () => {
 
     expect(
       groups.find((group) => group.key === "governs")?.rows[0].ways
-    ).toEqual(["protects Pod expr-demo-a", "matched app in (expr-demo)"]);
+    ).toEqual(["protects Pod expr-demo-a", "selects app in (expr-demo)"]);
   });
 });
 
@@ -1943,7 +1968,7 @@ describe("where a pod's replica count is really set", () => {
       connectionGroups(connections(pod, [owns(deployment, pod)]), ru).find(
         (group) => group.key === "owners"
       )?.rows ?? [];
-    expect(rows[0].detail).toContain("Застрял · готовы 0 из 2");
+    expect(rows[0].detail).toContain("Застрял · готово 0 из 2");
     expect(rows[0].detail).not.toContain("Stalled");
   });
 

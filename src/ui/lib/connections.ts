@@ -1708,7 +1708,9 @@ function governedBy(conns: ResourceConnections, t: T): ConnRow[] {
       // labels — so "why does this apply to me" is otherwise unanswerable
       // from the page it applies to. An autoscaler states its target
       // outright and carries no selector to print.
-      ...(edge.relation.selector ? [`matched ${edge.relation.selector}`] : []),
+      ...(edge.relation.selector
+        ? [t("nav", "selectsLabels", { selector: edge.relation.selector })]
+        : []),
     ],
   }));
   return labelled(rows);
@@ -1877,7 +1879,9 @@ function deliveredRows(delivery: Delivery[], t: T): ConnRow[] {
       },
       detail: [
         `${source.vendor} ${source.owner.kind}`,
-        source.path ? `from ${source.path}` : null,
+        source.path
+          ? t("nav", "deliveredFromPath", { path: source.path })
+          : null,
       ]
         .filter(Boolean)
         .join(" · "),

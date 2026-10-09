@@ -139,7 +139,10 @@ export function SectionHeader({
           {title}
         </h2>
         {count != null && (
-          <span data-testid="section-count" className="text-xs text-fg-fnt">
+          <span
+            data-testid="section-count"
+            className="min-w-0 text-xs text-fg-fnt"
+          >
             {typeof count === "number" ? formatCount(count) : count}
           </span>
         )}

@@ -1059,10 +1059,6 @@ function NamespacePopover({
   onSelect: (namespaces: string[], keepOpen: boolean) => void;
 }) {
   const t = useT();
-  const { namespaces, podCount, namespaceList } = useClusterSummary({
-    enabled: open,
-    problems: true,
-  });
   const contextNamespace = useClusterStore(
     (s) => s.contexts.find((c) => c.name === s.currentContext)?.namespace
   );
@@ -1071,6 +1067,17 @@ function NamespacePopover({
     useNamespaceRecencyStore((s) =>
       context ? s.recent[context] : undefined
     ) ?? NO_RECENT;
+  // Counted like the scope's own, so a namespace keeps its count when the
+  // window moves off it.
+  const seeds = useMemo(
+    () => [...seedScope(contextNamespace), ...recent],
+    [contextNamespace, recent]
+  );
+  const { namespaces, podCount, namespaceList } = useClusterSummary({
+    enabled: open,
+    problems: true,
+    alsoCount: seeds,
+  });
   const [filter, setFilter] = useState("");
   const [cursor, setCursor] = useState(-1);
   /** The namespace the ceiling has just turned down, until anything else

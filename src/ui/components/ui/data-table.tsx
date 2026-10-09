@@ -1506,46 +1506,55 @@ function DataTableInner<TData extends RowData>({
                 <TableRow data-quiet>
                   <TableCell
                     colSpan={visibleColumnCount}
-                    className="h-32 text-center"
+                    className="h-32 p-0 text-center"
                   >
-                    {/* "Nothing matches your filter" and "this cluster has
-                     * none of these" are different problems with different
-                     * fixes — saying "No results." for both leaves the user
-                     * guessing which one they're looking at. */}
-                    {searchValue ? (
-                      <div className="flex flex-col items-center gap-2">
-                        <SearchX
-                          className="h-5 w-5 text-fg-mut"
-                          aria-hidden="true"
-                        />
-                        <p className="text-xs text-fg-mut">
-                          <T section="empty" k="nothingMatches" />{" "}
-                          <span className="font-mono text-fg">
-                            {searchValue}
-                          </span>
-                        </p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs"
-                          onClick={() => changeSearch("")}
-                        >
-                          {t("action", "clearSearch")}
-                        </Button>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center gap-2">
-                        <Inbox
-                          className="h-5 w-5 text-fg-mut"
-                          aria-hidden="true"
-                        />
-                        <p className="text-xs text-fg-mut">
-                          {emptyMessage ?? (
-                            <T section="empty" k="noResourcesInScope" />
-                          )}
-                        </p>
-                      </div>
-                    )}
+                    {/* Held to the visible port: centred across columns
+                        scrolled out of view, beside a peek it was cut
+                        mid-word. */}
+                    <div
+                      data-empty-state
+                      className="sticky left-0 px-2.5 py-1"
+                      style={portWidth > 0 ? { width: portWidth } : undefined}
+                    >
+                      {/* "Nothing matches your filter" and "this cluster has
+                       * none of these" are different problems with different
+                       * fixes; saying "No results." for both leaves the user
+                       * guessing which one they're looking at. */}
+                      {searchValue ? (
+                        <div className="flex flex-col items-center gap-2">
+                          <SearchX
+                            className="h-5 w-5 text-fg-mut"
+                            aria-hidden="true"
+                          />
+                          <p className="text-xs text-fg-mut">
+                            <T section="empty" k="nothingMatches" />{" "}
+                            <span className="font-mono text-fg">
+                              {searchValue}
+                            </span>
+                          </p>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => changeSearch("")}
+                          >
+                            {t("action", "clearSearch")}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-2">
+                          <Inbox
+                            className="h-5 w-5 text-fg-mut"
+                            aria-hidden="true"
+                          />
+                          <p className="text-xs text-fg-mut">
+                            {emptyMessage ?? (
+                              <T section="empty" k="noResourcesInScope" />
+                            )}
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               )}

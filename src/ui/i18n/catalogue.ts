@@ -90,6 +90,7 @@ export const en = {
     notLookedAtNote:
       "named, so a group that is absent is never read as a group that is empty",
     deliveredBy: "Delivered by",
+    deliveredFromPath: "from {path}",
     disruptionBudget: "Disruption budget",
     autoscaling: "Autoscaling",
     tlsCertificate: "TLS certificate",
@@ -815,8 +816,8 @@ export const en = {
     scheduleUnreadable: "the schedule could not be read",
     runs: "Runs",
     runsSubject: "jobs this CronJob still owns",
-    barUpToDate: "up to date",
-    barOutdated: "outdated",
+    barUpToDate: { one: "up to date", other: "up to date" },
+    barOutdated: { one: "outdated", other: "outdated" },
     historyLimits:
       "keeps the last {succeeded} succeeded and {failed} failed runs",
     jobsFailed: { one: "{n} failed", other: "{n} failed" },
@@ -1174,6 +1175,7 @@ export const en = {
     hintScopeToIt: "scope to it",
     hintUseAsScope: "scope to it",
     hintOpenList: "open its list",
+    searchAllNamespaces: "Search all namespaces",
     hintComplete: "complete",
     hintRun: "run",
     hintActions: "actions",
@@ -2560,9 +2562,14 @@ export const en = {
       other: "Scrape truth from the connected Prometheus · {n} targets",
     },
     ofTotal: "of {total}",
-    needAttention: "{n} of {total} need attention",
-    needAttentionSomeUnread:
-      "{n} need attention, of a number this account cannot count",
+    needAttention: {
+      one: "{n} of {total} needs attention",
+      other: "{n} of {total} need attention",
+    },
+    needAttentionSomeUnread: {
+      one: "{n} needs attention, of a number this account cannot count",
+      other: "{n} need attention, of a number this account cannot count",
+    },
     someUnread:
       "Some monitors could not be read, so this is not the whole picture",
     allScraped: {
@@ -3319,6 +3326,7 @@ export const en = {
     logFormatKlog: "Kubernetes log format with severity prefix (I/W/E/F)",
     logFormatLogback: "Java Logback format with timestamp and level",
     logFormatPlain: "Plain text without structured formatting",
+    logFormatPlainName: "plain",
     noTimestamp: "no timestamp",
     awsPortNumber: "port {port}",
     awsNoTargetGroup: "no target group named",
@@ -6515,6 +6523,8 @@ export const en = {
     nothingMatchesQuery: "Nothing matches “{query}”.",
     nothingMatchesInReadable:
       "No object matches “{query}” in the kinds that could be read.",
+    nothingMatchesInReadableIn:
+      "No object in {scope} matches “{query}” in the kinds that could be read.",
     noHelmHistory: "No history: Helm keeps none for this release.",
     nothingRoutesThroughController:
       "Nothing routes through this controller, so there is no shape to draw.",
@@ -7234,7 +7244,10 @@ export const en = {
       other: "{n} reconcilers · some kinds not read",
     },
     sources: { one: "{n} source", other: "{n} sources" },
-    notReconcilingAndFirst: "{n} of {total} not reconciling, and first",
+    notReconcilingAndFirst: {
+      one: "{n} of {total} not reconciling, and first",
+      other: "{n} of {total} not reconciling, and first",
+    },
     reconcilersAllApplied: {
       one: "{n} reconciler, all applied",
       other: "{n} reconcilers, all applied",
@@ -7285,11 +7298,13 @@ export const en = {
       one: "{list}: nothing routes to it",
       other: "{list}: nothing routes to them",
     },
-    runningSegment: "running",
-    succeededSegment: "succeeded",
-    failedSegment: "failed",
-    retryingSegment: "retrying",
-    notScheduledSegment: "not scheduled",
+    runningSegment: { one: "running", other: "running" },
+    succeededSegment: { one: "succeeded", other: "succeeded" },
+    failedSegment: { one: "failed", other: "failed" },
+    jobsSucceededSegment: { one: "succeeded", other: "succeeded" },
+    jobsFailedSegment: { one: "failed", other: "failed" },
+    retryingSegment: { one: "retrying", other: "retrying" },
+    notScheduledSegment: { one: "not scheduled", other: "not scheduled" },
     plusMore: "+{n} more",
     hostsNeedAttention: {
       one: "{n} {of} needs attention",
@@ -7527,7 +7542,7 @@ export const en = {
     nReady: "{n} ready",
     nNotReady: "{n} not ready",
     nPublished: "{n} published",
-    nDraining: "{n} draining",
+    nDraining: { one: "{n} draining", other: "{n} draining" },
     ofN: "of {n}",
     nDecoded: "{n} decoded",
     nNotRead: "{n} not read",
@@ -7556,10 +7571,13 @@ export const en = {
       one: "{n} unranked problem",
       other: "{n} unranked problems",
     },
-    readySegment: "ready",
-    startingSegment: "starting",
-    failingSegment: "failing",
-    notCreatedSegment: "not created",
+    readySegment: { one: "ready", other: "ready" },
+    notReadySegment: { one: "not ready", other: "not ready" },
+    nodesReadySegment: { one: "ready", other: "ready" },
+    nodesNotReadySegment: { one: "not ready", other: "not ready" },
+    startingSegment: { one: "starting", other: "starting" },
+    failingSegment: { one: "failing", other: "failing" },
+    notCreatedSegment: { one: "not created", other: "not created" },
     fromEndpoint: "from {endpoint}",
     watchingFromNow: "watching from now",
     watchedSincePageOpen: "watched since you opened this page · {span} so far",
@@ -7610,6 +7628,11 @@ export const en = {
       one: "No object matches “{query}” in the {n} kind searched.",
       other: "No object matches “{query}” in the {n} kinds searched.",
     },
+    noObjectInKindsIn: {
+      one: "No object in {scope} matches “{query}” in the {n} kind searched.",
+      other:
+        "No object in {scope} matches “{query}” in the {n} kinds searched.",
+    },
     noObjectOnClusters: {
       one: "No object matches “{query}” in the kinds searched on {n} cluster.",
       other:
@@ -7629,7 +7652,6 @@ export const en = {
     notReadySummary: "{n} not ready",
     readyNotReadySummary: "{n} ready · {notReady} not ready",
     upToDateAvailable: "{updated} up to date · {available} available",
-    readyWord: "ready",
     notReadyWord: "not ready",
     certificates: { one: "{n} certificate", other: "{n} certificates" },
     annotations: { one: "{n} annotation", other: "{n} annotations" },

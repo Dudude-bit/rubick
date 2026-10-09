@@ -1720,6 +1720,24 @@ describe("a feed beside a peek", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
+  /**
+   * Dana's header read "103 warning events · 897 normal events · of the
+   * latest" with "1000" on a line of its own, and the toolbar under it moved
+   * down a row whenever the limit's digits changed. Fails if the count can
+   * take a second line, or still states the cut the notice under it states.
+   */
+  it("keeps its header count on one line and leaves the cut to the notice", async () => {
+    pageOf(300);
+    listEvents.mockResolvedValue(feed("prod", 500));
+    await mount("list");
+    const count = await screen.findByText("500 normal events");
+    expect(count).toHaveClass("truncate");
+    expect(count).toHaveAttribute("title", "500 normal events");
+    expect(
+      screen.getByText(/^Only the latest 500 were read\./)
+    ).toBeInTheDocument();
+  });
+
   /** Fails if a page with room loses its row of type buttons to the menu. */
   it("keeps the type in a row where the page has room", async () => {
     pageOf(900);

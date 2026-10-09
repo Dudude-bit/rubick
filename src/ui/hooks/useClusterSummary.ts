@@ -9,7 +9,7 @@ import {
 import { namespaceAttention, type NamespaceAttention } from "@/lib/attention";
 import { commands } from "@/lib/commands";
 import { isRefusal } from "@/lib/error-utils";
-import { whole } from "@/lib/namespace-scope";
+import { clampScope, whole } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
 import { useRightsAsked } from "@/lib/refusals";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -96,6 +96,7 @@ export function useNamespaceList() {
  * reads four more lists across the cluster: only the picker shows it.
  */
 const WHOLE_CLUSTER: readonly string[] = [];
+const NO_NAMESPACES: readonly string[] = [];
 
 /**
  * One namespace's pods in an overview of several, `null` where they were not
@@ -109,7 +110,13 @@ const podsReadIn = (overview: ClusterOverview, name: string) =>
 export function useClusterSummary({
   enabled = true,
   problems = false,
-}: { enabled?: boolean; problems?: boolean } = {}): ClusterSummary {
+  alsoCount = NO_NAMESPACES,
+}: {
+  enabled?: boolean;
+  problems?: boolean;
+  /** Namespaces a reader is offered besides the window's own, counted the same way once the whole cluster refused. */
+  alsoCount?: readonly string[];
+} = {}): ClusterSummary {
   const {
     data: namespaceInfos,
     state: namespaceList,
@@ -124,7 +131,11 @@ export function useClusterSummary({
   const overview = refused ? undefined : whole;
 
   const windowScope = useClusterStore((s) => s.namespaceScope);
-  const ownScope = refused && windowScope.length > 0 ? windowScope : null;
+  const ownCounted = useMemo(
+    () => clampScope([...new Set([...windowScope, ...alsoCount])]),
+    [windowScope, alsoCount]
+  );
+  const ownScope = refused && ownCounted.length > 0 ? ownCounted : null;
   const { data: own } = useClusterOverview(
     ownScope ?? WHOLE_CLUSTER,
     enabled && ownScope !== null
@@ -134,6 +145,7 @@ export function useClusterSummary({
     enabled: problems && enabled && namespaceList !== "pending" && !refused,
   });
   const ownAttention = useAttention({
+    scope: ownScope ?? undefined,
     enabled: problems && enabled && ownScope !== null,
   });
 

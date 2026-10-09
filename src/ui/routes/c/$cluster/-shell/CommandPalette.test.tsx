@@ -155,6 +155,7 @@ describe("the command palette's hits", () => {
     useClusterStore.setState({
       currentContext: "k3d-dev",
       currentNamespace: "",
+      namespaceScope: [],
       isConnected: true,
     });
     useScopeTabStore.setState({
@@ -399,6 +400,34 @@ describe("the command palette's hits", () => {
     await userEvent.click(await screen.findByText("Search 1 more kind too"));
     expect(search.options.everything).toBe(true);
     expect(screen.queryByText(/Search 1 more kind/)).toBeNull();
+  });
+
+  /**
+   * Dana's shop tab answered "No object matches wd-demo" for a pod that lives
+   * in lena-sandbox, with only a small chip saying where it looked. Fails if
+   * the answer stops naming the namespace, or the one Enter that reads every
+   * namespace stops changing the request.
+   */
+  it("names the namespace it searched and searches every namespace on one Enter", async () => {
+    useClusterStore.setState({
+      namespaceScope: ["shop"],
+      currentNamespace: "shop",
+    });
+    await open("wd-demo");
+    expect(search.options).toMatchObject({ namespace: "shop" });
+    expect(
+      await screen.findByText(
+        "No object in shop matches “wd-demo” in the 1 kind searched. 1 other kind was not searched."
+      )
+    ).toBeInTheDocument();
+
+    search.hits = [hit({ name: "wd-demo", namespace: "lena-sandbox" })];
+    await userEvent.click(screen.getByText("Search all namespaces"));
+
+    expect(search.options).toMatchObject({ namespace: null });
+    expect(await screen.findByText("lena-sandbox")).toBeInTheDocument();
+    expect(screen.getByText("All namespaces")).toBeInTheDocument();
+    expect(screen.queryByText("Search all namespaces")).toBeNull();
   });
 
   it("still opens the kinds it does have a page for", async () => {

@@ -218,6 +218,16 @@ export function CronJobDetail() {
     refresh: "resourceList",
   });
   const jobs = jobsRead ?? NO_JOBS;
+  const tally = useMemo(() => {
+    const jobsIn = (status: string) =>
+      jobs.filter((job) => job.status === status).length;
+    return {
+      running: jobsIn("Running"),
+      complete: jobsIn("Complete"),
+      retrying: jobsIn("Retrying"),
+      failed: jobsIn("Failed"),
+    };
+  }, [jobs]);
 
   // A CronJob's pods are two hops away — its runs own them — so they are
   // asked for only while the controller says a run is in flight. Between
@@ -304,27 +314,31 @@ export function CronJobDetail() {
                       // tab.
                       segments={[
                         {
-                          label: t("count", "runningSegment"),
-                          count: jobs.filter((job) => job.status === "Running")
-                            .length,
+                          label: t("count", "runningSegment", {
+                            n: tally.running,
+                          }),
+                          count: tally.running,
                           tone: "ok",
                         },
                         {
-                          label: t("count", "succeededSegment"),
-                          count: jobs.filter((job) => job.status === "Complete")
-                            .length,
+                          label: t("count", "jobsSucceededSegment", {
+                            n: tally.complete,
+                          }),
+                          count: tally.complete,
                           tone: "neutral",
                         },
                         {
-                          label: t("count", "retryingSegment"),
-                          count: jobs.filter((job) => job.status === "Retrying")
-                            .length,
+                          label: t("count", "retryingSegment", {
+                            n: tally.retrying,
+                          }),
+                          count: tally.retrying,
                           tone: "warn",
                         },
                         {
-                          label: t("count", "failedSegment"),
-                          count: jobs.filter((job) => job.status === "Failed")
-                            .length,
+                          label: t("count", "jobsFailedSegment", {
+                            n: tally.failed,
+                          }),
+                          count: tally.failed,
                           tone: "err",
                         },
                       ]}
@@ -468,6 +482,7 @@ export function CronJobDetail() {
       events,
       cronJob,
       jobs,
+      tally,
       jobsRead,
       jobsError,
       refetchJobs,

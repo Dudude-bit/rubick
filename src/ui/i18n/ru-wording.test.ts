@@ -86,3 +86,58 @@ describe("an open-ended count", () => {
     );
   });
 });
+
+describe("a verb beside a count", () => {
+  /**
+   * A flat string has one form for every number: "{n} из {total} требуют
+   * внимания" said "1 из 4 требуют", and "готовы {ready} из {total}" said
+   * "готовы 1 из 3". Fails if a plural verb or short adjective stands next to
+   * a count in a string that is not a Plural.
+   */
+  it("never stands next to a count in a flat string", () => {
+    const count = String.raw`\{(?:n|ready|healthy|count|done|available)\}`;
+    const after = new RegExp(
+      String.raw`${count}(?: из \{\w+\})? (?:не )?[а-яё]+(?:ют|ят|ются|ятся|ы|ли|лись)(?![а-яё])`,
+      "i"
+    );
+    const before = new RegExp(
+      String.raw`(?:^|[\s:,])[а-яё]+(?:ы|ют|ят|ются|ятся) ${count}`,
+      "i"
+    );
+    const flat = Object.entries(ru).flatMap(([section, keys]) =>
+      Object.entries(keys as Record<string, string | Plural>)
+        .filter(
+          ([, value]) =>
+            typeof value === "string" &&
+            (after.test(value) || before.test(value))
+        )
+        .map(([key]) => `${section}.${key}`)
+    );
+    expect(flat).toEqual([]);
+  });
+
+  /** One draining, one needing attention, one not reconciling: each in the singular. */
+  it("puts the verb in the singular beside one", () => {
+    const say = (section: "count" | "monitors", key: string, n: number) =>
+      translate("ru", section, key as never, { n, total: 4 });
+    expect(say("count", "nDraining", 1)).toBe("1 завершается");
+    expect(say("count", "nDraining", 3)).toBe("3 завершаются");
+    expect(say("monitors", "needAttention", 1)).toBe("1 из 4 требует внимания");
+    expect(say("count", "notReconcilingAndFirst", 1)).toBe(
+      "1 из 4 не согласуется, такие идут первыми"
+    );
+    expect(say("count", "ofTotalReady", 1)).toBe("готово 1 из 4");
+  });
+});
+
+describe("the Russian word for a drain", () => {
+  /**
+   * "Слив ждёт" and "что должен учитывать слив" on Lena's cart Deployment
+   * read as a dump or a leak. A node drain is an освобождение, as the drain
+   * dialog already says. Fails if "слив" comes back anywhere.
+   */
+  it("is never слив", () => {
+    const found = strings().filter(([, text]) => /слив/i.test(text));
+    expect(found).toEqual([]);
+  });
+});

@@ -155,17 +155,17 @@ export function JobDetail() {
                     }
                     segments={[
                       {
-                        label: t("count", "succeededSegment"),
+                        label: t("count", "succeededSegment", { n: succeeded }),
                         count: succeeded,
                         tone: "neutral",
                       },
                       {
-                        label: t("count", "runningSegment"),
+                        label: t("count", "runningSegment", { n: active }),
                         count: active,
                         tone: "ok",
                       },
                       {
-                        label: t("count", "failedSegment"),
+                        label: t("count", "failedSegment", { n: failed }),
                         count: failed,
                         tone: "err",
                       },

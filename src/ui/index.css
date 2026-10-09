@@ -362,9 +362,11 @@
   }
   body {
     @apply bg-canvas text-fg;
+    /* Inter's contextual alternates draw the x in h6x2v as a times sign and
+     * JetBrains Mono's turn != into one glyph: names are read and typed back. */
     font-feature-settings:
       "rlig" 1,
-      "calt" 1;
+      "calt" 0;
   }
 
   /* Resource metrics rewrite themselves on every watch event. Proportional

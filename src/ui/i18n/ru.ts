@@ -67,6 +67,7 @@ export const ru: Catalogue = {
     notLookedAtNote:
       "перечислены по имени, чтобы отсутствующая группа не читалась как пустая",
     deliveredBy: "Доставлено",
+    deliveredFromPath: "из {path}",
     disruptionBudget: "Бюджет простоя",
     autoscaling: "Автомасштабирование",
     tlsCertificate: "Сертификат TLS",
@@ -239,7 +240,7 @@ export const ru: Catalogue = {
     resourceVersion: "Версия ресурса",
     uid: "UID",
     apiVersion: "Версия API",
-    aDrainWaits: "Слив ждёт",
+    aDrainWaits: "Освобождение узла ждёт",
     setBy: "Задаёт",
     cpu: "CPU",
     pods: "Поды",
@@ -792,8 +793,18 @@ export const ru: Catalogue = {
     scheduleUnreadable: "не удалось разобрать расписание",
     runs: "Запуски",
     runsSubject: "задачи, которые этот CronJob ещё хранит",
-    barUpToDate: "актуальны",
-    barOutdated: "устарели",
+    barUpToDate: {
+      one: "актуален",
+      few: "актуальны",
+      many: "актуальны",
+      other: "актуальны",
+    },
+    barOutdated: {
+      one: "устарел",
+      few: "устарели",
+      many: "устарели",
+      other: "устарели",
+    },
     historyLimits:
       "хранит последние запуски: успешных до {succeeded}, неудачных до {failed}",
     jobsFailed: {
@@ -1168,6 +1179,7 @@ export const ru: Catalogue = {
     hintScopeToIt: "искать в нём",
     hintUseAsScope: "выбрать областью",
     hintOpenList: "открыть список",
+    searchAllNamespaces: "Искать во всех пространствах имён",
     hintComplete: "дополнить",
     hintRun: "выполнить",
     hintActions: "действия",
@@ -2684,9 +2696,19 @@ export const ru: Catalogue = {
       other: "Сбор метрик по данным подключённого Prometheus · {n} цели",
     },
     ofTotal: "из {total}",
-    needAttention: "{n} из {total} требуют внимания",
-    needAttentionSomeUnread:
-      "{n} требуют внимания, а сколько их всего, эта учётная запись сосчитать не может",
+    needAttention: {
+      one: "{n} из {total} требует внимания",
+      few: "{n} из {total} требуют внимания",
+      many: "{n} из {total} требуют внимания",
+      other: "{n} из {total} требуют внимания",
+    },
+    needAttentionSomeUnread: {
+      one: "{n} требует внимания, а сколько их всего, эта учётная запись сосчитать не может",
+      few: "{n} требуют внимания, а сколько их всего, эта учётная запись сосчитать не может",
+      many: "{n} требуют внимания, а сколько их всего, эта учётная запись сосчитать не может",
+      other:
+        "{n} требуют внимания, а сколько их всего, эта учётная запись сосчитать не может",
+    },
     someUnread:
       "Часть мониторов прочитать не удалось, так что это не вся картина",
     allScraped: {
@@ -3536,7 +3558,7 @@ export const ru: Catalogue = {
       many: "{n} автомасштабаторов претендуют на это и отменяют друг друга",
       other: "{n} автомасштабатора претендуют на это и отменяют друг друга",
     },
-    govWhatDrainRespects: "что должен учитывать слив",
+    govWhatDrainRespects: "что учитывает освобождение узла",
     govWhoSetsIt: "кто его задаёт",
     nginxNoController:
       "В этом кластере нет ничего с меткой {selector}, поэтому собственную конфигурацию контроллера прочитать не удалось.",
@@ -3596,6 +3618,7 @@ export const ru: Catalogue = {
     logFormatKlog: "Формат логов Kubernetes с префиксом уровня (I/W/E/F)",
     logFormatLogback: "Формат Java Logback со временем и уровнем",
     logFormatPlain: "Обычный текст без структуры",
+    logFormatPlainName: "обычный текст",
     noTimestamp: "времени нет",
     awsPortNumber: "порт {port}",
     awsNoTargetGroup: "целевая группа не указана",
@@ -3622,10 +3645,10 @@ export const ru: Catalogue = {
       other: "таймаут запроса {n} с",
     },
     agicDraining: {
-      one: "слив {n} с",
-      few: "слив {n} с",
-      many: "слив {n} с",
-      other: "слив {n} с",
+      one: "завершение соединений {n} с",
+      few: "завершение соединений {n} с",
+      many: "завершение соединений {n} с",
+      other: "завершение соединений {n} с",
     },
     agicOutAfter: {
       one: "выводится после {n} неудачной проверки",
@@ -3653,7 +3676,7 @@ export const ru: Catalogue = {
     gcpAccessLogsAt: "журналы доступа на {percent}%",
     gcpSetsNothing: "ничего не задаёт",
     gcpTimeout: "таймаут {n} с",
-    gcpDraining: "слив {n} с",
+    gcpDraining: "завершение соединений {n} с",
     gcpRequestHeaders: {
       one: "{n} заголовок запроса",
       few: "{n} заголовка запроса",
@@ -4251,14 +4274,14 @@ export const ru: Catalogue = {
     pdbAtMost: "максимум {n} недоступно",
     pdbNoRule: "правило не задано",
     pdbNoDisruption: "прерывания запрещены",
-    pdbRoom: "{allowed} · здоровы {healthy} из {selected} выбранных",
+    pdbRoom: "{allowed} · здоровых {healthy} из {selected} выбранных",
     pdbBelowFloor:
-      "{name} ниже собственного минимума: здоровы {healthy}, нужно {required}",
+      "{name} ниже собственного минимума: здоровых {healthy}, нужно {required}",
     pdbBelowFloorDetail:
-      "Вытеснение пода здесь отклоняется и будет отклоняться, пока не вернутся недостающие реплики. Слив узла, задевающий эту нагрузку, не завершится.",
+      "Вытеснение пода здесь отклоняется и будет отклоняться, пока не вернутся недостающие реплики. Освобождение узла (kubectl drain), задевающее эту нагрузку, не завершится.",
     pdbExactlyMet: "{name} сейчас не допускает прерываний",
     pdbExactlyMetDetail:
-      "Бюджет соблюдён в точности: здоровы {healthy} при минимуме {required}. Слив узла, задевающий эту нагрузку, будет ждать.",
+      "Бюджет соблюдён в точности: здоровых {healthy} при минимуме {required}. Освобождение узла (kubectl drain), задевающее эту нагрузку, будет ждать.",
     hpaSeveralTitle: {
       one: "{n} автомасштабировщик",
       few: "{n} автомасштабировщика",
@@ -6171,7 +6194,7 @@ export const ru: Catalogue = {
     notNowExplained:
       "Kubernetes отказывает им на время, а не насовсем: обычно мешает бюджет прерываний без запаса, иногда сам API придерживает поток.",
     budgetRuleHealthyCovering:
-      "{rule}, работоспособны {healthy} из {expected}, покрывает здесь {pods}.",
+      "{rule}, работоспособных {healthy} из {expected}, покрывает здесь {pods}.",
     couldNotReadClusterState: "Не удалось прочитать состояние кластера",
     noClusterOverviewAccess:
       "У вас нет прав на просмотр всего кластера. Откройте пространство имён, к которому у вас есть доступ: введите его имя в выборе пространства имён сверху.",
@@ -6810,7 +6833,7 @@ export const ru: Catalogue = {
     noFieldMatches:
       "Ни одно поле не подходит под «{query}». Enter выполнит поиск по тексту.",
     showingMostCommon:
-      "Показаны {n} самых частых. Введите текст, чтобы сузить.",
+      "Показано {n} самых частых. Введите текст, чтобы сузить.",
     noStructuredFields:
       "В этих строках нет структурированных полей, только уровень и контейнер.",
     readingCertificate: "читаем сертификат…",
@@ -7135,6 +7158,8 @@ export const ru: Catalogue = {
     nothingMatchesQuery: "По запросу «{query}» ничего не найдено.",
     nothingMatchesInReadable:
       "В тех видах ресурсов, что удалось прочитать, объектов по запросу «{query}» нет.",
+    nothingMatchesInReadableIn:
+      "В {scope} объектов по запросу «{query}» нет в тех видах ресурсов, что удалось прочитать.",
     noHelmHistory: "Истории нет: Helm не хранит её для этого релиза.",
     nothingRoutesThroughController:
       "Через этот контроллер ничего не проходит, поэтому рисовать нечего.",
@@ -7971,7 +7996,7 @@ export const ru: Catalogue = {
       few: "Один адрес клиента может держать {n} соединения одновременно.",
       other: "Один адрес клиента может держать {n} соединений одновременно.",
     },
-    readyOfTotal: "готовы {ready} из {total}",
+    readyOfTotal: "готово {ready} из {total}",
     addressesTakeNoTraffic: {
       one: "{n} из его адресов не принимает трафик",
       few: "{n} из его адресов не принимают трафик",
@@ -8043,7 +8068,12 @@ export const ru: Catalogue = {
       many: "{n} источников",
       other: "{n} источников",
     },
-    notReconcilingAndFirst: "{n} из {total} не согласуются, и они первыми",
+    notReconcilingAndFirst: {
+      one: "{n} из {total} не согласуется, такие идут первыми",
+      few: "{n} из {total} не согласуются, такие идут первыми",
+      many: "{n} из {total} не согласуются, такие идут первыми",
+      other: "{n} из {total} не согласуются, такие идут первыми",
+    },
     reconcilersAllApplied: {
       one: "{n} реконсилятор, всё применено",
       few: "{n} реконсилятора, всё применено",
@@ -8126,11 +8156,48 @@ export const ru: Catalogue = {
       many: "{list}: в них ничего не маршрутизируется",
       other: "{list}: в них ничего не маршрутизируется",
     },
-    runningSegment: "выполняются",
-    succeededSegment: "завершились",
-    failedSegment: "не удались",
-    retryingSegment: "повторяются",
-    notScheduledSegment: "не назначено",
+    runningSegment: {
+      one: "выполняется",
+      few: "выполняются",
+      many: "выполняются",
+      other: "выполняются",
+    },
+    succeededSegment: {
+      one: "завершился",
+      few: "завершились",
+      many: "завершились",
+      other: "завершились",
+    },
+    failedSegment: {
+      one: "не удался",
+      few: "не удались",
+      many: "не удались",
+      other: "не удались",
+    },
+    jobsSucceededSegment: {
+      one: "завершилась",
+      few: "завершились",
+      many: "завершились",
+      other: "завершились",
+    },
+    jobsFailedSegment: {
+      one: "не удалась",
+      few: "не удались",
+      many: "не удались",
+      other: "не удались",
+    },
+    retryingSegment: {
+      one: "повторяется",
+      few: "повторяются",
+      many: "повторяются",
+      other: "повторяются",
+    },
+    notScheduledSegment: {
+      one: "не назначен",
+      few: "не назначены",
+      many: "не назначены",
+      other: "не назначены",
+    },
     plusMore: "ещё {n}",
     hostsNeedAttention: {
       one: "{n} {of} требует внимания",
@@ -8286,7 +8353,7 @@ export const ru: Catalogue = {
       many: "{n} {of} требуют внимания",
       other: "{n} {of} требуют внимания",
     },
-    failingAndFirst: "со сбоем {n} из {total}, и они первыми",
+    failingAndFirst: "со сбоем {n} из {total}, такие идут первыми",
     objects: {
       one: "{n} объект",
       few: "{n} объекта",
@@ -8529,7 +8596,7 @@ export const ru: Catalogue = {
       other: "{n} сертификата, ни одного с проблемой",
     },
     shownOfTotal: "{n} из {total}",
-    brokenAndFirst: "сломано {n} из {total}, и они первыми",
+    brokenAndFirst: "сломано {n} из {total}, такие идут первыми",
     servedOnNames: {
       one: "Отдаётся на {n} имени, которого нет в сертификате",
       few: "Отдаётся на {n} именах, которых нет в сертификате",
@@ -8599,7 +8666,12 @@ export const ru: Catalogue = {
     nReady: "готово {n}",
     nNotReady: "не готово {n}",
     nPublished: "опубликовано {n}",
-    nDraining: "{n} завершается",
+    nDraining: {
+      one: "{n} завершается",
+      few: "{n} завершаются",
+      many: "{n} завершаются",
+      other: "{n} завершаются",
+    },
     ofN: "из {n}",
     nDecoded: "разобрано {n}",
     nNotRead: "не разобрано {n}",
@@ -8646,10 +8718,48 @@ export const ru: Catalogue = {
       many: "{n} проблем вне списка",
       other: "{n} проблемы вне списка",
     },
-    readySegment: "готовы",
-    startingSegment: "запускаются",
-    failingSegment: "сбоят",
-    notCreatedSegment: "не созданы",
+    readySegment: {
+      one: "готова",
+      few: "готовы",
+      many: "готовы",
+      other: "готовы",
+    },
+    notReadySegment: {
+      one: "не готова",
+      few: "не готовы",
+      many: "не готовы",
+      other: "не готовы",
+    },
+    nodesReadySegment: {
+      one: "готов",
+      few: "готовы",
+      many: "готовы",
+      other: "готовы",
+    },
+    nodesNotReadySegment: {
+      one: "не готов",
+      few: "не готовы",
+      many: "не готовы",
+      other: "не готовы",
+    },
+    startingSegment: {
+      one: "запускается",
+      few: "запускаются",
+      many: "запускаются",
+      other: "запускаются",
+    },
+    failingSegment: {
+      one: "сбоит",
+      few: "сбоят",
+      many: "сбоят",
+      other: "сбоят",
+    },
+    notCreatedSegment: {
+      one: "не создана",
+      few: "не созданы",
+      many: "не созданы",
+      other: "не созданы",
+    },
     fromEndpoint: "из {endpoint}",
     watchingFromNow: "наблюдаем с этого момента",
     watchedSincePageOpen: "наблюдаем с момента открытия страницы · пока {span}",
@@ -8735,6 +8845,13 @@ export const ru: Catalogue = {
       other:
         "В {n} вида ресурсов, где искали, объектов по запросу «{query}» нет.",
     },
+    noObjectInKindsIn: {
+      one: "В {scope} объектов по запросу «{query}» нет: искали в {n} виде ресурсов.",
+      few: "В {scope} объектов по запросу «{query}» нет: искали в {n} видах ресурсов.",
+      many: "В {scope} объектов по запросу «{query}» нет: искали в {n} видах ресурсов.",
+      other:
+        "В {scope} объектов по запросу «{query}» нет: искали в {n} вида ресурсов.",
+    },
     noObjectOnClusters: {
       one: "Объектов по запросу «{query}» нет в тех видах ресурсов, где искали, на {n} кластере.",
       few: "Объектов по запросу «{query}» нет в тех видах ресурсов, где искали, на {n} кластерах.",
@@ -8779,7 +8896,6 @@ export const ru: Catalogue = {
     notReadySummary: "не готовы: {n}",
     readyNotReadySummary: "готовы: {n} · не готовы: {notReady}",
     upToDateAvailable: "{updated} обновлено · {available} доступно",
-    readyWord: "готово",
     notReadyWord: "не готово",
     certificates: {
       one: "{n} сертификат",
@@ -9036,7 +9152,7 @@ export const ru: Catalogue = {
       many: "в {n} срезах",
       other: "в {n} срезах",
     },
-    ofTotalReady: "{n} из {total} готовы",
+    ofTotalReady: "готово {n} из {total}",
     nRoutes: {
       one: "{n} маршрут",
       few: "{n} маршрута",

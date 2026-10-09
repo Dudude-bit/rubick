@@ -562,6 +562,85 @@ describe("the palette's resource rows", () => {
     expect(hintTone(entries)).toBe("empty");
   });
 
+  /**
+   * A tab narrowed to shop said "No object matches wd-demo" about a pod in
+   * lena-sandbox, which reads as "it does not exist". Fails if a narrowed
+   * answer stops naming its namespaces or stops offering every namespace.
+   */
+  it("names the namespaces a narrowed empty answer covers and offers all of them", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "wd-demo",
+        shownClusters: [
+          { ...cluster("k3d-dev"), searched: [read("Pod"), read("Service")] },
+        ],
+        narrowedTo: "shop",
+      })
+    );
+
+    expect(hintText(entries)).toBe(
+      "No object in shop matches “wd-demo” in the 2 kinds searched."
+    );
+    expect(entries).toContainEqual({
+      id: "search-all-ns",
+      kind: "search-all-namespaces",
+    });
+  });
+
+  /** A refused kind hedges the answer, and the namespace is still part of it. */
+  it("names the namespaces when some kinds could not be read", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "wd-demo",
+        shownClusters: [
+          {
+            ...cluster("k3d-dev"),
+            searched: [read("Pod")],
+            unreadable: [
+              { ...read("Secret"), reason: "forbidden", message: "forbidden" },
+            ],
+          },
+        ],
+        narrowedTo: "2 namespaces",
+      })
+    );
+
+    expect(hintText(entries)).toBe(
+      "No object in 2 namespaces matches “wd-demo” in the kinds that could be read."
+    );
+  });
+
+  /**
+   * Another cluster is read whole, and a window on every namespace has none
+   * left out: offering more there is a button that does nothing.
+   */
+  it("offers no wider search where every namespace was read", () => {
+    const answered = {
+      ...cluster("k3d-dev"),
+      searched: [read("Pod")],
+    };
+    const whole = buildPaletteEntries(
+      state({ text: "wd-demo", shownClusters: [answered] })
+    );
+    const elsewhere = buildPaletteEntries(
+      state({
+        text: "wd-demo",
+        scope: { kind: "context", context: "k3d-dev" },
+        shownClusters: [answered],
+        narrowedTo: "shop",
+      })
+    );
+
+    for (const entries of [whole, elsewhere]) {
+      expect(entries.some((e) => e.kind === "search-all-namespaces")).toBe(
+        false
+      );
+      expect(hintText(entries)).toBe(
+        "No object matches “wd-demo” in the 1 kind searched."
+      );
+    }
+  });
+
   /** The served kinds it did not look at are part of the answer, not a footnote. */
   it("says how many served kinds an empty answer did not search", () => {
     const entries = buildPaletteEntries(

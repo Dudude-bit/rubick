@@ -12,6 +12,14 @@ type Counted = {
   >;
 };
 
+/** What a bar counts, which Russian agrees its words with: a replica, or a DaemonSet's node. */
+export type ReplicaUnit = "replica" | "node";
+
+const NOT_READY = {
+  replica: "notReadySegment",
+  node: "nodesNotReadySegment",
+} as const satisfies Record<ReplicaUnit, string>;
+
 export interface ReplicaSplit {
   ready: number;
   /** Starting in blue, failing in red, the rest not ready in amber. */
@@ -35,7 +43,8 @@ export function replicaSplit(
   pods: readonly Counted[] | null,
   now: number,
   t: T,
-  waiting = false
+  waiting = false,
+  unit: ReplicaUnit = "replica"
 ): ReplicaSplit {
   let ready = Math.min(counted, made);
   let starting = 0;
@@ -57,18 +66,23 @@ export function replicaSplit(
   }
   if (waiting)
     starting += Math.min(unaccounted, made - ready - starting - failing);
+  const notReady = made - ready - starting - failing;
   return {
     ready,
     gap: [
       {
-        label: t("count", "startingSegment"),
+        label: t("count", "startingSegment", { n: starting }),
         count: starting,
         tone: "pending",
       },
-      { label: t("count", "failingSegment"), count: failing, tone: "err" },
       {
-        label: t("count", "notReadyWord"),
-        count: made - ready - starting - failing,
+        label: t("count", "failingSegment", { n: failing }),
+        count: failing,
+        tone: "err",
+      },
+      {
+        label: t("count", NOT_READY[unit], { n: notReady }),
+        count: notReady,
         tone: "warn",
       },
     ],
