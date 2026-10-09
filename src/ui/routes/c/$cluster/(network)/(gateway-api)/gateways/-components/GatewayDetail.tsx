@@ -323,10 +323,6 @@ export function GatewayDetail() {
     refresh: "overview",
   });
 
-  if (!gateway && !isLoading && !error) {
-    return null;
-  }
-
   const programmed = gateway ? gatewayProgrammed(gateway) : undefined;
 
   const classFact: KeyValue = (() => {

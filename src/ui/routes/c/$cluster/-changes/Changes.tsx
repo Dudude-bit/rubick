@@ -93,7 +93,7 @@ export function Changes() {
   }
 
   return (
-    <div className="flex flex-col gap-2 animate-in fade-in duration-200">
+    <div className="flex flex-col gap-2">
       <SectionHeader
         title={t("changes", "title")}
         count={

@@ -906,3 +906,48 @@ describe("a detail page whose re-read fails", () => {
     expect(screen.queryByText("polling")).toBeNull();
   });
 });
+
+describe("ResourceDetailLayout before any read has answered", () => {
+  /**
+   * Lena's deep link to big-pull drew a blank pane: a page whose read had no
+   * answer and no failure yet rendered nothing, and this frame drew "Could
+   * not read" for the same state. Fails if a read still to come is drawn as
+   * anything but the page's placeholder.
+   */
+  it("draws its placeholder, not a blank and not a failure", async () => {
+    await wrap(
+      <ResourceDetailLayout
+        {...base}
+        resource={undefined}
+        activeTab="overview"
+        tabs={[]}
+      />
+    );
+    expect(screen.getByTestId("detail-skeleton")).toBeInTheDocument();
+    expect(screen.queryByText(/Could not read/)).toBeNull();
+  });
+
+  /**
+   * A page that fades in from nothing is a blank pane for as long as a busy
+   * window takes to draw its next frame, as Lena's did for three seconds.
+   * Fails if the placeholder or the page it gives way to starts transparent.
+   */
+  it("is drawn opaque from its first frame, and so is the page after it", async () => {
+    const { rerender } = await wrapRerenderable(
+      <ResourceDetailLayout
+        {...base}
+        resource={undefined}
+        isLoading
+        activeTab="overview"
+        tabs={[]}
+      />
+    );
+    const faded = () => document.querySelectorAll(".fade-in, .animate-in");
+    expect(screen.getByTestId("detail-skeleton")).toBeInTheDocument();
+    expect(faded()).toHaveLength(0);
+
+    rerender(<ResourceDetailLayout {...base} activeTab="overview" tabs={[]} />);
+    expect(screen.queryByTestId("detail-skeleton")).toBeNull();
+    expect(faded()).toHaveLength(0);
+  });
+});

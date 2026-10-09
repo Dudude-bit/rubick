@@ -497,10 +497,6 @@ export function CronJobDetail() {
     ]
   );
 
-  if (!cronJob && !isLoading && !error) {
-    return null;
-  }
-
   return (
     <>
       <ResourceDetailLayout

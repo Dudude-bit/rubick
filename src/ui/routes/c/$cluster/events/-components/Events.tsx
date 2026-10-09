@@ -488,10 +488,7 @@ export function Events() {
     <div
       ref={setPage}
       data-events-page
-      className={cn(
-        "flex flex-col gap-2 animate-in fade-in duration-200",
-        listed && "h-full min-h-0"
-      )}
+      className={cn("flex flex-col gap-2", listed && "h-full min-h-0")}
       onPointerEnter={() => setPointed(true)}
       onPointerLeave={() => setPointed(false)}
     >

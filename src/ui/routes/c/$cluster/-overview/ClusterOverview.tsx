@@ -123,7 +123,7 @@ export function ClusterOverview() {
   // screen so the layout never flashes empty while polling.
   if (isLoading && !overview) {
     return (
-      <div className="flex flex-col gap-[22px] animate-in fade-in duration-200">
+      <div className="flex flex-col gap-[22px]">
         {pinned}
         <div className="space-y-6">
           <HeaderSkeleton />
@@ -195,7 +195,7 @@ export function ClusterOverview() {
   };
 
   return (
-    <div className="flex flex-col gap-[22px] animate-in fade-in duration-200">
+    <div className="flex flex-col gap-[22px]">
       <div className="flex items-center justify-end gap-3">
         <DataFreshness
           dataUpdatedAt={freshness.dataUpdatedAt}

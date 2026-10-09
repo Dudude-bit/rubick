@@ -466,10 +466,6 @@ export function StatefulSetDetail() {
     ]
   );
 
-  if (!statefulSet && !isLoading && !error) {
-    return null;
-  }
-
   return (
     <>
       <ChainWatches services={chain.services} reads={[chain.key]} />

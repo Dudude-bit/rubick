@@ -83,10 +83,6 @@ export function SecretDetail() {
     };
   }, [secret, t]);
 
-  if (!secret && !isLoading && !error) {
-    return null;
-  }
-
   const dataKeys = secret?.dataKeys ?? [];
   const labels = secret?.labels ?? {};
   const annotations = secret?.annotations ?? {};

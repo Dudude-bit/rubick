@@ -259,10 +259,6 @@ export function NodeDetail() {
     ]
   );
 
-  if (!node && !isLoading && !error) {
-    return null;
-  }
-
   const handleDebugStart = (result: DebugResult) => {
     navigate(
       objectLink({

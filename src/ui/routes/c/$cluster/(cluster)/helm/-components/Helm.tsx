@@ -319,7 +319,7 @@ export function Helm() {
   }
 
   return (
-    <div className="flex flex-col gap-2 animate-in fade-in duration-200">
+    <div className="flex flex-col gap-2">
       <HelmStatusBanner />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>

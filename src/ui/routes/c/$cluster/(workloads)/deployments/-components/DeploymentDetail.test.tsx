@@ -344,3 +344,23 @@ describe("the Revisions tab", () => {
     ).not.toMatch(/\d/);
   });
 });
+
+describe("a Deployment page before its read has answered", () => {
+  /**
+   * Lena's deep link to big-pull drew the content pane blank: with no object,
+   * no failure and no fetch in flight, as a read reset or called off leaves
+   * it, the page returned nothing. Fails if it draws anything but its
+   * placeholder then.
+   */
+  it("draws its placeholder rather than nothing", async () => {
+    const held = vi.mocked(useResourceDetail)({} as never);
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...held,
+      resource: undefined,
+      isLoading: false,
+      error: null,
+    });
+    await open();
+    expect(screen.getByTestId("detail-skeleton")).toBeInTheDocument();
+  });
+});

@@ -786,9 +786,5 @@ export function ResourceList<
   // A column with a height, so the table below the header can take what is
   // left of the window instead of a fixed 600px box with the rest of the pane
   // blank under it.
-  return (
-    <div className="flex h-full min-h-0 flex-col gap-4 animate-in fade-in duration-200">
-      {wrapped}
-    </div>
-  );
+  return <div className="flex h-full min-h-0 flex-col gap-4">{wrapped}</div>;
 }
