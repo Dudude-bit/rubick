@@ -6416,7 +6416,7 @@ export const en = {
     endpointsByHand: "none: endpoints are managed by hand",
     anythingUnmatched: "anything unmatched",
     noRulesNoBackend: "No rules and no default backend",
-    nothingBackingService: "Nothing is backing this service",
+    listsNoAddress: "It lists no address",
     notBoundValue: "not bound",
     notAllowed: "not allowed",
     nothingReportedYet: "Nothing reported yet",

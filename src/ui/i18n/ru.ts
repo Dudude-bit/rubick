@@ -7031,7 +7031,7 @@ export const ru: Catalogue = {
     endpointsByHand: "нет: эндпоинты ведутся вручную",
     anythingUnmatched: "всё, что не совпало",
     noRulesNoBackend: "Ни правил, ни бэкенда по умолчанию",
-    nothingBackingService: "За этим сервисом никого нет",
+    listsNoAddress: "Адресов в нём нет",
     notBoundValue: "не привязан",
     notAllowed: "не разрешено",
     nothingReportedYet: "Пока ничего не сообщено",

@@ -363,8 +363,12 @@ export const NETWORK_SOURCES: PeekSources = {
     const notReady = endpoints.subsets.flatMap(
       (subset) => subset.notReadyAddresses
     );
+    const listed = [
+      ...addresses.map((address) => ({ address, ready: true })),
+      ...notReady.map((address) => ({ address, ready: false })),
+    ];
     return {
-      status: addresses.length ? "Ready" : "Unavailable",
+      verdictOfService: endpoints.name,
       createdAt: endpoints.createdAt,
       groups: [
         {
@@ -376,6 +380,7 @@ export const NETWORK_SOURCES: PeekSources = {
                 <ServiceHealthView
                   name={endpoints.name}
                   namespace={target.namespace ?? null}
+                  follow={false}
                 />
               ),
             },
@@ -398,23 +403,32 @@ export const NETWORK_SOURCES: PeekSources = {
         },
         {
           title: "Pods",
-          count: addresses.length,
-          items: addresses.slice(0, 8).map((address) => ({
+          count: listed.length,
+          items: listed.slice(0, 8).map(({ address, ready }) => ({
             label: (
               <CopyableAddress
                 value={address.ip}
                 label={t("columns", "address")}
               />
             ),
-            value: address.targetRef
-              ? ref(
-                  address.targetRef.kind,
-                  address.targetRef.name,
-                  target.namespace
-                )
-              : (address.hostname ?? <None />),
+            value: (
+              <span className="inline-flex items-baseline gap-1.5">
+                {address.targetRef
+                  ? ref(
+                      address.targetRef.kind,
+                      address.targetRef.name,
+                      target.namespace
+                    )
+                  : (address.hostname ?? <None />)}
+                {!ready && (
+                  <span className="text-[11px] text-warn">
+                    {t("readings", "epNotReady")}
+                  </span>
+                )}
+              </span>
+            ),
           })),
-          emptyMessage: t("empty", "nothingBackingService"),
+          emptyMessage: t("empty", "listsNoAddress"),
         },
       ],
     };

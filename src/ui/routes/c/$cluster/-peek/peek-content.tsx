@@ -75,6 +75,7 @@ import { parts } from "@/i18n/parts";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { EyeOff, Ghost } from "lucide-react";
 import { GoneNotice } from "../-object/gone";
+import { ServiceHealthView } from "../-object/health-views";
 import { StaleRows } from "../-list/StaleRows";
 import {
   ownersOf,
@@ -284,6 +285,12 @@ export function PeekContent({
               <Ghost className="h-3 w-3" aria-hidden="true" />
               {t("empty", "goneMark")}
             </span>
+          ) : summary?.verdictOfService ? (
+            <ServiceHealthView
+              name={summary.verdictOfService}
+              namespace={namespace}
+              compact
+            />
           ) : summary?.status ? (
             <StatusBadge
               status={summary.status}
