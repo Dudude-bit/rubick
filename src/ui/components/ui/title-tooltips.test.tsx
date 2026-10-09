@@ -161,8 +161,11 @@ describe("where the card sits", () => {
 describe("one tooltip at a time", () => {
   /**
    * Dana pointed at busybox:1.36 inside a cut Events message: WebKit's own
-   * box for the link opened over the cell's card and hid half of it. Fails
-   * if the link's title is left to WebKit, or both cards are up at once.
+   * box for the link opened over the cell's card, and once the link's card
+   * took over, WebKit drew the whole message again from the cell's title,
+   * put back while the pointer was still inside the cell. Fails if either
+   * title is left to WebKit while the pointer is on the link, or both cards
+   * are up at once.
    */
   it("hands over to a title inside the one shown, and back", async () => {
     render(
@@ -184,14 +187,23 @@ describe("one tooltip at a time", () => {
     expect(screen.getAllByRole("tooltip")).toHaveLength(1);
     expect(card()?.textContent).toBe("Open busybox:1.36 on Docker Hub");
     expect(link.hasAttribute("title")).toBe(false);
-    expect(cell.getAttribute("title")).toBe(
-      "Container image busybox:1.36 present"
-    );
+    expect(cell.hasAttribute("title")).toBe(false);
 
     fireEvent.pointerOut(link, { relatedTarget: cell });
     fireEvent.pointerOver(cell);
     await wait(700);
     expect(card()?.textContent).toBe("Container image busybox:1.36 present");
+    expect(link.getAttribute("title")).toBe("Open busybox:1.36 on Docker Hub");
+    expect(cell.hasAttribute("title")).toBe(false);
+
+    fireEvent.pointerOut(cell, {
+      relatedTarget: screen.getByTestId("elsewhere"),
+    });
+    expect(card()).toBeNull();
+    expect(cell.getAttribute("title")).toBe(
+      "Container image busybox:1.36 present"
+    );
+    expect(link.getAttribute("title")).toBe("Open busybox:1.36 on Docker Hub");
   });
 
   /** A title card and an app tooltip covered each other; fails if either opens while the other stays up. */

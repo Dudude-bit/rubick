@@ -21,16 +21,35 @@ interface ShownTitle {
   y: number;
 }
 
+interface Held {
+  text: string;
+  labelled: boolean;
+}
+
+/** Every title from `node` up, the nearest first; a blank one hides those above it, as in WebKit. */
+function titlesAbove(
+  node: Element | null,
+  held: ReadonlyMap<Element, Held>
+): [Element, string][] {
+  const found: [Element, string][] = [];
+  for (let el = node; el; el = el.parentElement) {
+    const text = held.get(el)?.text ?? el.getAttribute("title");
+    if (text === null) continue;
+    if (!text.trim()) break;
+    found.push([el, text]);
+  }
+  return found;
+}
+
 /**
- * Takes over the `title` of whatever the pointer rests on: the attribute is
- * held while the pointer is there, so WebKit draws no box of its own, and
- * `show` draws it instead. A press, a key, a menu or a scroll puts it away
- * until the pointer leaves.
+ * Takes over the `title` of whatever the pointer rests on and of every
+ * titled element around it, since WebKit draws the nearest one left in
+ * place, and `show` draws it instead. A press, a key, a menu or a scroll
+ * puts it away until the pointer leaves.
  */
 function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
+  const held = new Map<Element, Held>();
   let owner: Element | null = null;
-  let held = "";
-  let labelled = false;
   let quiet = false;
   let visible = false;
   let hiddenAt = Number.NEGATIVE_INFINITY;
@@ -41,9 +60,10 @@ function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
   let announcing = false;
 
   const reveal = () => {
-    if (!owner || quiet || !held || !owner.isConnected) return;
+    const text = owner && held.get(owner)?.text;
+    if (!owner || quiet || !text || !owner.isConnected) return;
     visible = true;
-    show({ text: held, anchor: owner.getBoundingClientRect(), x, y });
+    show({ text, anchor: owner.getBoundingClientRect(), x, y });
     announcing = true;
     document.dispatchEvent(new CustomEvent(TOOLTIP_OPEN));
     announcing = false;
@@ -60,45 +80,65 @@ function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
   const watcher =
     typeof MutationObserver === "undefined"
       ? null
-      : new MutationObserver(() => {
-          if (!owner) return;
-          const again = owner.getAttribute("title");
-          if (again === null) {
-            held = "";
-            hide();
-            return;
+      : new MutationObserver((records) => {
+          for (const { target } of records) {
+            if (!(target instanceof Element)) continue;
+            const entry = held.get(target);
+            if (!entry) continue;
+            const again = target.getAttribute("title");
+            if (again === null) {
+              held.delete(target);
+              if (target === owner) hide();
+              continue;
+            }
+            entry.text = again;
+            target.removeAttribute("title");
+            if (visible && target === owner) reveal();
           }
-          held = again;
-          owner.removeAttribute("title");
           watcher?.takeRecords();
-          if (visible) reveal();
         });
+  const observe = (el: Element) =>
+    watcher?.observe(el, { attributes: true, attributeFilter: ["title"] });
+
+  const take = (el: Element, text: string) => {
+    el.removeAttribute("title");
+    // An icon with nothing else naming it keeps its name while the title is held.
+    const labelled =
+      !el.hasAttribute("aria-label") &&
+      !el.hasAttribute("aria-labelledby") &&
+      !el.textContent?.trim();
+    if (labelled) el.setAttribute("aria-label", text);
+    held.set(el, { text, labelled });
+    observe(el);
+  };
+  const holdOnly = (keep: readonly Element[]) => {
+    const dropped = [...held].filter(([el]) => !keep.includes(el));
+    if (dropped.length === 0) return;
+    watcher?.disconnect();
+    for (const [el, { text, labelled }] of dropped) {
+      held.delete(el);
+      if (!el.hasAttribute("title")) el.setAttribute("title", text);
+      if (labelled) el.removeAttribute("aria-label");
+    }
+    held.forEach((_, el) => observe(el));
+  };
 
   const release = () => {
     hide();
-    watcher?.disconnect();
-    if (owner && held && !owner.hasAttribute("title")) {
-      owner.setAttribute("title", held);
-    }
-    if (owner && labelled) owner.removeAttribute("aria-label");
+    holdOnly([]);
     owner = null;
-    held = "";
-    labelled = false;
     quiet = false;
   };
 
   const over = (event: Event) => {
     const target = event.target instanceof Element ? event.target : null;
-    // A title inside the one held is the nearer one, and takes over from it.
-    const nearer = target?.closest("[title]");
-    if (
-      owner &&
-      target &&
-      owner.contains(target) &&
-      !(nearer && nearer !== owner && owner.contains(nearer))
-    )
-      return;
-    release();
+    const titles = titlesAbove(target, held);
+    holdOnly(titles.map(([el]) => el));
+    for (const [el, text] of titles) if (!held.has(el)) take(el, text);
+    const nearest = titles[0]?.[0] ?? null;
+    if (owner && nearest === owner) return;
+    hide();
+    owner = nearest;
     if (event instanceof MouseEvent) {
       x = event.clientX;
       y = event.clientY;
@@ -107,33 +147,18 @@ function watchTitles(show: (shown: ShownTitle | null) => void): () => void {
     // pointer is redrawn; a title put away by a press stays away until it moves.
     if (parkedAt && (parkedAt.x !== x || parkedAt.y !== y)) parkedAt = null;
     quiet = parkedAt !== null;
-    const found = target?.closest("[title]");
-    const text = found?.getAttribute("title") ?? "";
-    if (!found || !text.trim()) return;
-    owner = found;
-    held = text;
-    found.removeAttribute("title");
-    // An icon with nothing else naming it keeps its name while the title is held.
-    if (
-      !found.hasAttribute("aria-label") &&
-      !found.hasAttribute("aria-labelledby") &&
-      !found.textContent?.trim()
-    ) {
-      found.setAttribute("aria-label", text);
-      labelled = true;
-    }
-    watcher?.observe(found, { attributes: true, attributeFilter: ["title"] });
+    if (!owner) return;
     const delay =
       performance.now() - hiddenAt < SKIP_DELAY_MS ? 0 : OPEN_DELAY_MS;
     timer = window.setTimeout(reveal, delay);
   };
   const out = (event: Event) => {
-    if (!owner) return;
+    if (held.size === 0) return;
     const to =
       event instanceof MouseEvent && event.relatedTarget instanceof Node
         ? event.relatedTarget
         : null;
-    if (to && owner.contains(to)) return;
+    if (to && [...held.keys()].some((el) => el.contains(to))) return;
     release();
   };
   const hush = (event: Event) => {
