@@ -11,7 +11,7 @@ import { useResourceWatch } from "@/hooks/useResourceWatch";
 import { commands } from "@/lib/commands";
 import { ERROR_CODES } from "@/lib/error-utils";
 import { queryKeys } from "@/lib/query-keys";
-import type { PodsSeen } from "@/lib/service-health";
+import type { ServiceSeen } from "@/lib/service-health";
 import { ResourceType } from "@/lib/resource-registry";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { useClusterStore } from "@/stores/clusterStore";
@@ -110,7 +110,7 @@ export function useServiceWatch(
   service: { uid: string | undefined; selector: string | null | undefined },
   reads: readonly QueryKey[],
   follow: boolean
-): PodsSeen {
+): ServiceSeen {
   const client = useQueryClient();
   const connected = useClusterStore((s) => s.isConnected);
   const visible = useSurfaceVisible();
@@ -122,6 +122,10 @@ export function useServiceWatch(
   );
   const slicesKey = useMemo(
     () => queryKeys.serviceWatch("slices", namespace, name),
+    [namespace, name]
+  );
+  const changedKey = useMemo(
+    () => queryKeys.serviceWatch("changed", namespace, name),
     [namespace, name]
   );
   const subscribePods = useCallback(
@@ -172,13 +176,27 @@ export function useServiceWatch(
     detail,
     recount: false,
     behind: true,
+    onChange: () => client.setQueryData(changedKey, Date.now()),
   });
   const pods = useQuery<Scoped<unknown>>({
     queryKey: podsKey,
     queryFn: skipToken,
   });
-  if (!podsOn) return undefined;
-  return pods.data
-    ? { pods: pods.data.rows.length, at: pods.dataUpdatedAt }
-    : "listing";
+  const changed = useQuery<number>({
+    queryKey: changedKey,
+    queryFn: skipToken,
+  });
+  const listed = pods.data?.rows.length;
+  const at = pods.dataUpdatedAt;
+  return useMemo(
+    () => ({
+      pods: !podsOn
+        ? undefined
+        : listed === undefined
+          ? "listing"
+          : { pods: listed, at },
+      changed: changed.data ?? 0,
+    }),
+    [podsOn, listed, at, changed.data]
+  );
 }

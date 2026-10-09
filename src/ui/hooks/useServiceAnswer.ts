@@ -12,7 +12,7 @@ import { useHeldNotFound } from "@/hooks/useHeldRead";
 import { useReadSelector, useReadUid } from "@/hooks/useReadUid";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { ResourceType } from "@/lib/resource-registry";
-import { speaksFor } from "@/lib/service-health";
+import { speaksFor, waitsOnList, type SeenOf } from "@/lib/service-health";
 
 /** How long after a read a second one is fresh rather than shared with it. */
 const FRESH_READ_MS = 300;
@@ -67,6 +67,15 @@ export function useServiceAnswer(
     [key],
     follow
   );
+  const seen = useMemo<SeenOf>(
+    () => (service) =>
+      service.kind === ResourceType.Service &&
+      service.name === name &&
+      (service.namespace ?? null) === (namespace ?? null)
+        ? watched
+        : undefined,
+    [watched, name, namespace]
+  );
   const notFound = isResourceNotFoundError(error);
   const notFoundHeld = useHeldNotFound(
     ResourceType.Service,
@@ -80,7 +89,7 @@ export function useServiceAnswer(
     data &&
     name &&
     !notFound &&
-    speaksFor({ data, at: dataUpdatedAt }, { name, uid }, watched)
+    speaksFor({ data, at: dataUpdatedAt }, { name, uid }, seen)
       ? data
       : undefined;
   const stale = notFound
@@ -89,7 +98,7 @@ export function useServiceAnswer(
 
   const another = !!uid && !!data?.subjectUid && data.subjectUid !== uid;
   // Held only until the pod watch has listed: its list answers it, not a read.
-  const listing = !notFound && !another && watched === "listing";
+  const listing = !notFound && !another && !!data && waitsOnList(data, seen);
   const asked = useRef<unknown>(null);
   useEffect(() => {
     if (!follow || !stale || notFound || listing || asked.current === data)

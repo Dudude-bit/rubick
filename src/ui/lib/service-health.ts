@@ -15,10 +15,11 @@ import type { T } from "@/i18n/useT";
 import type {
   ChainStop,
   NotServing,
+  ObjectRef,
   ResourceConnections,
   ServicePublished,
 } from "@/generated/types";
-import { askedPorts, describeStop } from "@/lib/connections";
+import { askedPorts, describeStop, stopMood } from "@/lib/connections";
 import { errorToShow } from "@/lib/error-utils";
 import { endpointCount, publishedFor, servingCount } from "@/lib/published";
 import type { StatusRole } from "@/lib/status-role";
@@ -268,35 +269,62 @@ export const serviceVerdictLabels = (t: T) => [
  */
 export type PodsSeen = { pods: number; at: number } | "listing" | undefined;
 
+/** What the watches under one Service have seen: its pods, and when a slice it publishes last changed (0 for never). */
+export interface ServiceSeen {
+  pods: PodsSeen;
+  changed: number;
+}
+
+/** What the watches under each Service an answer names have seen, `undefined` for one nobody watches. */
+export type SeenOf = (service: ObjectRef) => ServiceSeen | undefined;
+
 /** One neighbourhood read, and when it answered: no older than its lists were asked for. */
 export interface ReadAnswer {
   data: ResourceConnections;
   at: number;
 }
 
+const readTime = ({ data, at }: ReadAnswer) =>
+  data.readAt ? Date.parse(data.readAt) : at;
+
 /**
- * Whether a neighbourhood read can speak for the Service on screen. One about
- * another Service of the same name cannot, nor one that found no pod carrying
- * the selector while the Service's own pod watch is still listing them or has
- * since seen one: a read older than what is known is a read not taken yet.
- * Sam's big-pull page drew "1 ready" from the Service deleted before it, and
- * "No pod carries app=big-pull" while its pod was being created.
+ * Whether a neighbourhood read can speak for the object on screen. One about
+ * another object of the same name cannot, nor one that, about any Service it
+ * names, found no pod carrying the selector while that Service's pod watch is
+ * still listing them or has since seen one, or stops it at a fault while a
+ * slice it publishes has changed since: a read older than what is known is a
+ * read not taken yet. Sam's big-pull page drew "1 ready" from the Service
+ * deleted before it, "No pod carries app=big-pull" while its pod was being
+ * created, and "publishes no endpoint" from a read whose pods were listed
+ * after the pod was Ready and whose slices before its address was written.
  */
 export function speaksFor(
   answer: ReadAnswer,
-  service: { name: string; uid: string | undefined },
-  watched: PodsSeen
+  subject: { name: string; uid: string | undefined },
+  seen: SeenOf
 ): boolean {
   const { data } = answer;
-  if (data.subject.name !== service.name) return false;
-  if (service.uid && data.subjectUid && data.subjectUid !== service.uid)
+  if (data.subject.name !== subject.name) return false;
+  if (subject.uid && data.subjectUid && data.subjectUid !== subject.uid)
     return false;
-  const none =
-    publishedFor(data, data.subject)?.stop?.reason === "selectsNothing";
-  if (!none || !watched) return true;
-  if (watched === "listing") return false;
-  const read = data.readAt ? Date.parse(data.readAt) : answer.at;
-  return !(watched.pods > 0 && read < watched.at);
+  const read = readTime(answer);
+  return data.published.every(({ service, stop }) => {
+    const watched = stop ? seen(service) : undefined;
+    if (!stop || !watched) return true;
+    if (stopMood(stop) === "fault" && read < watched.changed) return false;
+    const pods = watched.pods;
+    if (stop.reason !== "selectsNothing" || !pods) return true;
+    if (pods === "listing") return false;
+    return !(pods.pods > 0 && read < pods.at);
+  });
+}
+
+/** Whether a read waits on a pod watch that has not listed yet, whose list reads it again. */
+export function waitsOnList(data: ResourceConnections, seen: SeenOf): boolean {
+  return data.published.some(
+    ({ service, stop }) =>
+      stop?.reason === "selectsNothing" && seen(service)?.pods === "listing"
+  );
 }
 
 /** A Service's verdict from its neighbourhood, the answer its trace draws. */

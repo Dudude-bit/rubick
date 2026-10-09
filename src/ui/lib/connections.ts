@@ -589,7 +589,7 @@ export interface ChainHopStop {
 }
 
 /** The mood of a stop no subject turns idle. */
-function stopMood(stop: ChainStop): StopMood {
+export function stopMood(stop: ChainStop): StopMood {
   if (stop.reason === "scaledToZero") return "idle";
   if (stop.reason === "publishesNothingYet")
     return stop.podsUnread ? "unchecked" : "fault";
