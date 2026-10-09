@@ -1287,6 +1287,38 @@ describe("the count beside a namespace", () => {
 
 describe("a picker open on one tab", () => {
   /**
+   * Closing the picker hands the focus back to its tab, and the tab's
+   * tooltip opened on that focus and stayed over the page (Dana, shot 36).
+   * Fails if a picker closing leaves the tooltip open.
+   */
+  it("does not leave its tab's tooltip open as it closes", async () => {
+    const user = userEvent.setup();
+    useScopeTabStore.setState({
+      tabs: [
+        tab({
+          id: "a",
+          href: "/c/k3d-dev/pods",
+          namespace: "shop",
+          scope: ["shop"],
+        }),
+      ],
+      activeId: "a",
+      pendingHref: null,
+    });
+    useClusterStore.setState({
+      currentNamespace: "shop",
+      namespaceScope: ["shop"],
+    });
+    await mount("/c/k3d-dev/pods");
+    await user.click(within(tabs()[0]).getByText("shop"));
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  /**
    * Dana clicked another tab with a namespace picker open, three times, and
    * nothing moved: the click opened the tab, then the picker, closing on
    * the same click, took the window back to its own tab. Fails if a tab left
@@ -1327,5 +1359,35 @@ describe("a picker open on one tab", () => {
     expect(useScopeTabStore.getState().activeId).toBe("b");
     expect(tabs()[1]).toHaveAttribute("aria-selected", "true");
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+});
+
+describe("the new tab button", () => {
+  /**
+   * Its menu hands the focus back as it closes, and the button's tooltip
+   * opened on that focus and stayed. Fails if a pick leaves it open.
+   */
+  it("does not pin its tooltip after a pick from its menu", async () => {
+    const user = userEvent.setup();
+    useClusterStore.setState({
+      contexts: [{ name: "k3d-dev" }] as unknown as ContextInfo[],
+    });
+    useScopeTabStore.setState({
+      tabs: [tab({ id: "a", href: "/c/k3d-dev" })],
+      activeId: "a",
+      pendingHref: null,
+    });
+    await mount();
+    const button = screen.getByRole("button", {
+      name: "New tab. Menu key opens it on another cluster.",
+    });
+    await user.pointer({ keys: "[MouseRight]", target: button });
+    await user.click(
+      await screen.findByRole("menuitem", { name: /New tab here/ })
+    );
+
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 });

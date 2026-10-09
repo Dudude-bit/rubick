@@ -50,6 +50,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useTriggerTooltip } from "@/components/ui/use-trigger-tooltip";
 import {
   useClusterSummary,
   type NamespaceListState,
@@ -508,11 +509,11 @@ function NewTabButton() {
   const currentContext = useClusterStore((s) => s.currentContext);
   const openTab = useScopeTabStore((s) => s.openTab);
   const [menu, setMenu] = useState(false);
-  const [tip, setTip] = useState(false);
+  const tip = useTriggerTooltip(menu);
 
   return (
     <ContextMenu onOpenChange={setMenu}>
-      <Tooltip open={tip && !menu} onOpenChange={setTip}>
+      <Tooltip {...tip.tooltip}>
         <TooltipTrigger asChild>
           <ContextMenuTrigger asChild>
             <button
@@ -535,7 +536,10 @@ function NewTabButton() {
         </TooltipContent>
       </Tooltip>
 
-      <ContextMenuContent className="w-[244px]">
+      <ContextMenuContent
+        className="w-[244px]"
+        onCloseAutoFocus={tip.onCloseAutoFocus}
+      >
         <ContextMenuLabel>{t("action", "newTabOn")}</ContextMenuLabel>
         {contexts.length === 0 && (
           <p className="px-[7px] py-2 text-[11px] text-fg-fnt">
@@ -601,7 +605,9 @@ function ScopeTabItem({
     setWasActive(active);
     if (!active) setOpen(null);
   }
-  const [tip, setTip] = useState(false);
+  // The tooltip stands down while a picker is open rather than floating over
+  // the list the reader is trying to read.
+  const tip = useTriggerTooltip(open !== null);
   const mark = useClusterMark(context);
   const alias = mark.alias?.trim();
   const color = clusterColor(context, mark.hue);
@@ -724,10 +730,7 @@ function ScopeTabItem({
   }
 
   return (
-    // Controlled, so the tooltip stands down while a picker is open rather
-    // than floating over the list the reader is trying to read — which is
-    // what the native `title` did and could not be told not to.
-    <Tooltip open={tip && open === null} onOpenChange={setTip}>
+    <Tooltip {...tip.tooltip}>
       <TooltipTrigger asChild>
         <div
           role="tab"
@@ -759,6 +762,7 @@ function ScopeTabItem({
             <ContextPopover
               open={open === "ctx"}
               onOpenChange={guard("ctx")}
+              onCloseAutoFocus={tip.onCloseAutoFocus}
               activeContext={context}
               onSelect={pickCluster}
             >
@@ -813,6 +817,7 @@ function ScopeTabItem({
             <NamespacePopover
               open={open === "ns"}
               onOpenChange={guard("ns")}
+              onCloseAutoFocus={tip.onCloseAutoFocus}
               scope={scope}
               onSelect={pickScope}
             >
@@ -901,12 +906,14 @@ function ContextPopover({
   children,
   open,
   onOpenChange,
+  onCloseAutoFocus,
   onSelect,
   activeContext,
 }: {
   children: React.ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus?: () => void;
   onSelect: (context: string) => void;
   activeContext?: string | null;
 }) {
@@ -923,7 +930,10 @@ function ContextPopover({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-[244px] p-1">
+      <PopoverContent
+        className="w-[244px] p-1"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <div
           role="listbox"
           aria-label={t("nav", "cluster")}
@@ -1037,12 +1047,14 @@ function NamespacePopover({
   children,
   open,
   onOpenChange,
+  onCloseAutoFocus,
   scope,
   onSelect,
 }: {
   children: React.ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus: () => void;
   scope: string[];
   onSelect: (namespaces: string[], keepOpen: boolean) => void;
 }) {
@@ -1281,7 +1293,10 @@ function NamespacePopover({
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="w-[268px] p-0">
+      <PopoverContent
+        className="w-[268px] p-0"
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <div className="flex items-center gap-[7px] border-b border-hair px-2.5 py-2 text-fg-fnt">
           <Search aria-hidden="true" className="h-3 w-3 flex-none" />
           <input

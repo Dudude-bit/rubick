@@ -1655,7 +1655,59 @@ describe("a feed beside a peek", () => {
     await waitFor(() => expect(asked().at(-1)?.event_type).toBe("Warning"));
     expect(
       screen.getByRole("button", { name: "Feed settings: Warnings" })
-    ).toHaveTextContent("Warnings");
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * With Warnings and a limit the button's words took a row of their own and
+   * the toolbar grew to three. Fails if the button draws the words rather
+   * than how many settings differ, or its tooltip stops naming them.
+   */
+  it("counts on its button what it narrowed, and names it in the tooltip", async () => {
+    pageOf(300);
+    await mount("list");
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Feed settings" })
+    );
+    await user.click(screen.getByRole("menuitemradio", { name: "Warnings" }));
+    await user.click(
+      screen.getByRole("button", { name: "Feed settings: Warnings" })
+    );
+    await user.click(screen.getByRole("menuitemradio", { name: "Latest 200" }));
+
+    const button = await screen.findByRole("button", {
+      name: "Feed settings: Warnings, Latest 200",
+    });
+    expect(button).toHaveTextContent(/^2$/);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    act(() => button.blur());
+    act(() => button.focus());
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Feed settings: Warnings, Latest 200"
+    );
+  });
+
+  /**
+   * Lena's "Feed settings" tooltip stayed over the toolbar after every pick,
+   * until she clicked somewhere else: the menu hands the focus back to its
+   * button, and a tooltip opened by focus stays. Fails if it opens then.
+   */
+  it("does not pin its tooltip on the focus a pick hands back", async () => {
+    pageOf(300);
+    await mount("list");
+    const user = userEvent.setup();
+    await user.click(
+      await screen.findByRole("button", { name: "Feed settings" })
+    );
+    await user.click(screen.getByRole("menuitemradio", { name: "Warnings" }));
+
+    const button = screen.getByRole("button", {
+      name: "Feed settings: Warnings",
+    });
+    await waitFor(() => expect(button).toHaveFocus());
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
   /** Fails if a page with room loses its row of type buttons to the menu. */
