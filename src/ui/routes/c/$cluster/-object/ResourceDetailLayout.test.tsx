@@ -185,6 +185,40 @@ describe("ResourceDetailLayout and who owns the height", () => {
     );
     expect(container.firstChild).not.toHaveClass("h-full");
   });
+
+  /**
+   * Logs, Shell, Files and YAML drew the strip 4 px higher than the other
+   * tabs, 8 px under a banner, so the tab moved under the pointer that had
+   * just clicked it. Fails if a surface tab spaces the column differently.
+   */
+  it("keeps the strip where it is when a surface tab opens", async () => {
+    const tabs: DetailTab[] = [
+      {
+        id: "overview",
+        label: "Overview",
+        glyph: viewGlyph(Info),
+        content: null,
+      },
+      {
+        id: "logs",
+        label: "Logs",
+        glyph: viewGlyph(Info),
+        kind: "surface",
+        content: null,
+      },
+    ];
+    const spacing = (el: ChildNode | null) =>
+      [...((el as HTMLElement).classList ?? [])].filter((c) =>
+        /^(gap|space-y|mt|pt|py)-/.test(c)
+      );
+    const { container, rerender } = await wrapRerenderable(
+      <ResourceDetailLayout {...base} activeTab="overview" tabs={tabs} />
+    );
+    const onBlocks = spacing(container.firstChild);
+    rerender(<ResourceDetailLayout {...base} activeTab="logs" tabs={tabs} />);
+    expect(container.firstChild).toHaveClass("h-full");
+    expect(spacing(container.firstChild)).toEqual(onBlocks);
+  });
 });
 
 /**

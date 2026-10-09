@@ -368,8 +368,8 @@ export function ResourceDetailLayout({
           // chrome — identity, then the strip — and the mock's whole gain is
           // that the two read as one band. The 22px rhythm still belongs to
           // the blocks, which the open tab's panel now owns.
-          "flex flex-col animate-in fade-in duration-200",
-          surface ? "h-full min-h-0 gap-2" : "gap-3"
+          "flex flex-col gap-3 animate-in fade-in duration-200",
+          surface && "h-full min-h-0"
         )}
       >
         <ResourceDetailHeader
