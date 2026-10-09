@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -43,7 +43,8 @@ import { STALE_TIMES } from "@/lib/refresh";
 import { ResourceType, toPlural } from "@/lib/resource-registry";
 import { formatDate } from "@/lib/utils";
 import { jobEndRow, jobRanFor } from "../../../-object/job-end";
-import type { JobDetailInfo } from "@/generated/types";
+import type { JobDetailInfo, PodInfo } from "@/generated/types";
+import { controlledBy } from "@/lib/controlled-by";
 import { useT } from "@/i18n/useT";
 import { ownStatusWord } from "@/lib/status-words";
 
@@ -95,6 +96,10 @@ export function JobDetail() {
     placeholderData: keepPreviousData,
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
+    select: useCallback(
+      (pods: PodInfo[]) => controlledBy(pods, job?.uid),
+      [job?.uid]
+    ),
   });
   useOwnedPodsWatch(ResourceType.Job, namespace, name, [podsKey], !!job);
 

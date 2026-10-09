@@ -60,6 +60,7 @@ describe("what the Services of a scope publish", () => {
       return {
         services: [],
         published: namespace === "net" ? [WEB_PUBLISHED] : [],
+        readAt: new Date().toISOString(),
       };
     });
 

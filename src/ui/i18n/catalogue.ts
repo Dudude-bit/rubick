@@ -118,6 +118,12 @@ export const en = {
     stopNoPodCarries: "No pod carries {selector}",
     stopScaledToZero: "No pods by intent: {name} is scaled to zero",
     stopScaledToZeroSeveral: "No pods by intent: {names} are scaled to zero",
+    stopPodsBeingMade:
+      "No pod carries {selector} yet: {name} is making its pods",
+    stopPodsBeingMadeSeveral:
+      "No pod carries {selector} yet: {names} are making their pods",
+    stopPodsBeingMadeNote:
+      "They have only just been asked for and have no address yet, so connections to this address are refused for now. It is a fault only if no pod comes.",
     stopNearMissNote:
       "Closest: {pods}. Connections to this address are refused until a pod carries the whole selector: add {lacks} to their template, or drop it from the selector.",
     stopScaledToZeroNote:
@@ -4089,6 +4095,8 @@ export const en = {
     healthNoEndpoints: "no endpoints",
     healthComingUp: "coming up",
     healthIdle: "idle",
+    healthDrainingWhy:
+      "None of its addresses is ready, so its traffic goes to the ones still finishing their connections until they are gone",
     healthBackendIdle:
       "{name} has no pods by intent: what runs behind it is scaled to zero",
     healthBackendStarting: "{name} is coming up: its pods are still starting",
@@ -5440,6 +5448,7 @@ export const en = {
     stopNoServiceToSendTo: "no service to send to",
     stopSelectorMatchesNothing: "selector matches nothing",
     stopScaledToZeroUnder: "scaled to zero",
+    stopPodsBeingMadeUnder: "pods being made",
     stopNothingPublishedYet: "nothing published yet",
     stopRunningNoneReady: "running, none ready",
     stopNotScheduled: "not scheduled",
@@ -6409,7 +6418,7 @@ export const en = {
     endpointsByHand: "none: endpoints are managed by hand",
     anythingUnmatched: "anything unmatched",
     noRulesNoBackend: "No rules and no default backend",
-    nothingBackingService: "Nothing is backing this service",
+    listsNoAddress: "It lists no address",
     notBoundValue: "not bound",
     notAllowed: "not allowed",
     nothingReportedYet: "Nothing reported yet",

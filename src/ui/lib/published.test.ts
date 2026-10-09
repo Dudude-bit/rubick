@@ -81,8 +81,22 @@ describe("the state of one address", () => {
         endpoint({ ready: false, serving: false, terminating: false }),
         t
       )
-    ).toEqual({ text: "not ready", tone: "err" });
+    ).toEqual({ text: "not ready", tone: "warn" });
     expect(endpointState(endpoint(), t)).toEqual({ text: "ready", tone: "ok" });
+  });
+
+  /**
+   * Marco's ledger address read "not ready" in red on its Service's
+   * Endpoints tab and in amber on the Endpoints list. Fails if one address
+   * not ready takes the red of a Service with none ready.
+   */
+  it("draws an address that is not ready in the Endpoints list's amber", () => {
+    expect(
+      endpointState(
+        endpoint({ ready: false, serving: false, terminating: false }),
+        t
+      ).tone
+    ).toBe("warn");
   });
 });
 

@@ -23,7 +23,14 @@ const at = (kind: string): ObjectRef => ({
 
 function drawn(stop: ChainStop) {
   const read: ServiceBackingRead = {
-    published: () => ({ stop }) as ReturnType<ServiceBackingRead["published"]>,
+    published: () =>
+      ({
+        stop,
+        ready: 0,
+        draining: 0,
+        notReady: 0,
+        unrouted: 0,
+      }) as ReturnType<ServiceBackingRead["published"]>,
     why: () => null,
   };
   render(
@@ -45,6 +52,22 @@ describe("the Endpoints list's empty row", () => {
       workloads: [at("Deployment")],
     });
     expect(screen.getByText("idle")).toBeTruthy();
+    expect(screen.queryByText("no endpoints")).toBeNull();
+  });
+
+  /**
+   * Sam's big-pull in the tenth of a second before its Deployment made a
+   * pod read red "no endpoints"; fails if a workload making its pods is
+   * drawn as the fault.
+   */
+  it("says an Endpoints object whose workload is making its pods is coming up", () => {
+    drawn({
+      reason: "podsBeingMade",
+      service: at("Service"),
+      selector: "app=hello-web",
+      workloads: [at("Deployment")],
+    });
+    expect(screen.getByText("coming up")).toBeTruthy();
     expect(screen.queryByText("no endpoints")).toBeNull();
   });
 

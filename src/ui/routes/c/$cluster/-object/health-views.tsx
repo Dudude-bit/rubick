@@ -71,27 +71,41 @@ export function VerdictBadge({
 export function ServiceHealthView({
   name,
   namespace,
+  compact = false,
+  follow = true,
 }: {
   name: string;
   namespace: string | null;
+  compact?: boolean;
+  /** Unset where another reader on the surface, always mounted, follows it. */
+  follow?: boolean;
 }) {
   const query = useConnections(ResourceType.Service, name, namespace);
   return (
     <ServiceVerdict
-      read={useServiceAnswer(name, namespace, query, true).read}
+      read={useServiceAnswer(name, namespace, query, follow).read}
+      compact={compact}
     />
   );
 }
 
 /** A Service's verdict from the answer every other reader of it on that surface draws from. */
-export function ServiceVerdict({ read }: { read: ConnectionsRead }) {
+export function ServiceVerdict({
+  read,
+  compact = false,
+}: {
+  read: ConnectionsRead;
+  compact?: boolean;
+}) {
   const t = useT();
   const { data, error } = read;
   const health = useMemo(
     () => healthFromConnections(data, error),
     [data, error]
   );
-  return <VerdictBadge verdict={serviceHealthWords(health, t)} />;
+  return (
+    <VerdictBadge verdict={serviceHealthWords(health, t)} compact={compact} />
+  );
 }
 
 /** One Ingress, on its page and in its peek: the same reads as the list. */

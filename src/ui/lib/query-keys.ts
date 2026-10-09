@@ -177,11 +177,11 @@ export const queryKeys = {
   /**
    * What the watches under a Service's verdict hold: the pods its selector
    * picks, keyed by that selector and the Service's uid so an edit to it or
-   * a Service made again under its name subscribes again, or the slices it
-   * publishes.
+   * a Service made again under its name subscribes again, the slices it
+   * publishes, or when one of them last changed.
    */
   serviceWatch: (
-    part: "pods" | "slices",
+    part: "pods" | "slices" | "changed",
     namespace: string | null | undefined,
     name: string | undefined,
     selector?: string | null,

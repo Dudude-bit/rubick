@@ -97,6 +97,12 @@ export const ru: Catalogue = {
     stopScaledToZero: "Подов нет намеренно: {name} масштабирован до нуля",
     stopScaledToZeroSeveral:
       "Подов нет намеренно: {names} масштабированы до нуля",
+    stopPodsBeingMade:
+      "Подов с меткой {selector} пока нет: {name} создаёт свои поды",
+    stopPodsBeingMadeSeveral:
+      "Подов с меткой {selector} пока нет: {names} создают свои поды",
+    stopPodsBeingMadeNote:
+      "Их только что запросили, и адреса у них пока нет, поэтому подключения к этому адресу пока отклоняются. Это сбой, только если поды так и не появятся.",
     stopNearMissNote:
       "Ближе всех: {pods}. Подключения к этому адресу отклоняются, пока ни один под не подходит под весь селектор: добавьте метку {lacks} в их шаблон или уберите её из селектора.",
     stopScaledToZeroNote:
@@ -4574,6 +4580,8 @@ export const ru: Catalogue = {
     healthNoEndpoints: "нет эндпоинтов",
     healthComingUp: "запускается",
     healthIdle: "простаивает",
+    healthDrainingWhy:
+      "Ни один его адрес не готов, поэтому трафик идёт на те, что дорабатывают свои соединения, пока они не исчезнут",
     healthBackendIdle:
       "У {name} нет подов намеренно: нагрузка за ним масштабирована до нуля",
     healthBackendStarting: "{name} запускается: его поды ещё стартуют",
@@ -6012,6 +6020,7 @@ export const ru: Catalogue = {
     stopNoServiceToSendTo: "нет service, куда отправлять",
     stopSelectorMatchesNothing: "селектор ничего не находит",
     stopScaledToZeroUnder: "масштабирован до нуля",
+    stopPodsBeingMadeUnder: "поды создаются",
     stopNothingPublishedYet: "пока ничего не опубликовано",
     stopRunningNoneReady: "работают, но ни один не готов",
     stopNotScheduled: "не размещены на узле",
@@ -7024,7 +7033,7 @@ export const ru: Catalogue = {
     endpointsByHand: "нет: эндпоинты ведутся вручную",
     anythingUnmatched: "всё, что не совпало",
     noRulesNoBackend: "Ни правил, ни бэкенда по умолчанию",
-    nothingBackingService: "За этим сервисом никого нет",
+    listsNoAddress: "Адресов в нём нет",
     notBoundValue: "не привязан",
     notAllowed: "не разрешено",
     nothingReportedYet: "Пока ничего не сообщено",

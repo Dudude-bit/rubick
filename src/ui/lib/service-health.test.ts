@@ -4,6 +4,7 @@ import { EyeOff } from "lucide-react";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import type { ObjectRef, ServicePublished } from "@/generated/types";
+import { chainStopHop } from "./connections";
 import {
   healthFromConnections,
   serviceHealthOf,
@@ -266,10 +267,45 @@ describe("one verdict for a Service on every surface", () => {
       published({ ready: 1, unrouted: 1 }),
       null
     );
-    expect(health).toEqual({ state: "partly", serving: 1, total: 2 });
+    expect(health).toEqual({
+      state: "partly",
+      ready: 1,
+      draining: 0,
+      total: 2,
+    });
     const words = serviceHealthWords(health, t);
     expect(words.role).toBe("warn");
     expect(words.label).toBe("1 of 2 ready");
+  });
+
+  /**
+   * Sam's big-pull right after delete and apply: the old pod's endpoint
+   * ready false, serving true, terminating true, kubectl endpoints <none>,
+   * and the headline said "1 ready" in green. Fails if a draining address is
+   * counted ready again.
+   */
+  it("counts a Service down to a draining address as draining, never ready", () => {
+    const health = serviceHealthOf(SELECTING, published({ draining: 1 }), null);
+    expect(health).toEqual({ state: "draining", draining: 1, total: 1 });
+    const words = serviceHealthWords(health, t);
+    expect(words.label).toBe("1 draining");
+    expect(words.role).toBe("warn");
+  });
+
+  /**
+   * A second later the new pod was ready beside the old one draining, and
+   * the headline said "2 ready". Fails if the draining one joins the ready.
+   */
+  it("says one of two ready with the draining one named apart", () => {
+    const health = serviceHealthOf(
+      SELECTING,
+      published({ ready: 1, draining: 1 }),
+      null
+    );
+    const words = serviceHealthWords(health, t);
+    expect(words.label).toBe("1 of 2 ready");
+    expect(words.role).toBe("warn");
+    expect(words.reason).toBe("1 draining");
   });
 
   it("calls a Service ready when every address serves", () => {
@@ -378,6 +414,30 @@ describe("a Service whose workloads wait on their pods", () => {
     expect(words.reason).toBe(
       "The endpoints list 1 address for app=ledger, and it is not ready: pods not read, so whether they are starting is not known"
     );
+  });
+
+  /**
+   * Sam's big-pull read red "No pod carries app=big-pull" for a tenth of a
+   * second from a read that listed the pods just before its Deployment made
+   * the first. Fails if a workload making its pods leaves the Service a
+   * fault, on its badge or on its chain.
+   */
+  it("reads coming up, not no endpoints, while its workload is making its pods", () => {
+    const stop = {
+      reason: "podsBeingMade" as const,
+      service: SERVICE,
+      selector: "app=big-pull",
+      workloads: [{ ...SERVICE, kind: "Deployment", name: "big-pull" }],
+    };
+    const health = serviceHealthOf(SELECTING, published({ stop }), null);
+    expect(health.state).toBe("comingUp");
+    const words = serviceHealthWords(health, t);
+    expect(words.label).toBe("coming up");
+    expect(words.role).toBe("pending");
+    expect(words.reason).toBe(
+      "No pod carries app=big-pull yet: big-pull is making its pods"
+    );
+    expect(chainStopHop(stop, SERVICE, t)).toMatchObject({ mood: "coming" });
   });
 
   /**

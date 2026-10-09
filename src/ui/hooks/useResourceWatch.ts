@@ -66,6 +66,8 @@ interface UseResourceWatchOptions<T> {
    * watches, whose rows are few.
    */
   behind?: boolean;
+  /** Called when a change after the list lands: a read taken before it is behind. */
+  onChange?: () => void;
 }
 
 export interface ResourceWatchState {
@@ -99,6 +101,7 @@ export function useResourceWatch<
   order,
   recount = true,
   behind = false,
+  onChange,
 }: UseResourceWatchOptions<T>): ResourceWatchState {
   const t = useT();
   const queryClient = useQueryClient();
@@ -116,6 +119,7 @@ export function useResourceWatch<
   const orderRef = useRef(order);
   const recountRef = useRef(recount);
   const behindRef = useRef(behind);
+  const onChangeRef = useRef(onChange);
   useEffect(() => {
     onErrorRef.current = onError;
     onRecoveredRef.current = onRecovered;
@@ -124,7 +128,8 @@ export function useResourceWatch<
     orderRef.current = order;
     recountRef.current = recount;
     behindRef.current = behind;
-  }, [onError, onRecovered, detail, t, order, recount, behind]);
+    onChangeRef.current = onChange;
+  }, [onError, onRecovered, detail, t, order, recount, behind, onChange]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -299,6 +304,7 @@ export function useResourceWatch<
               }
             );
             indexedList = stored?.rows;
+            onChangeRef.current?.();
             readAgain(
               queryClient,
               changes,

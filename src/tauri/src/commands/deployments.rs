@@ -3,9 +3,9 @@
 use crate::commands::filters::ResourceFilters;
 use crate::commands::helpers::{list_in_scope, list_resource_infos, ResourceContext};
 use crate::error::Result;
-use crate::resources::{DeploymentInfo, PodInfo};
+use crate::resources::{runs_for, DeploymentInfo, Owners, PodInfo};
 use crate::state::AppState;
-use k8s_openapi::api::apps::v1::Deployment;
+use k8s_openapi::api::apps::v1::{Deployment, ReplicaSet};
 use k8s_openapi::api::core::v1::Pod;
 use kube::api::{Patch, PatchParams};
 use tauri::State;
@@ -135,7 +135,15 @@ pub async fn get_deployment_pods(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<PodInfo>> {
-    let ctx = ResourceContext::for_command(&state, namespace)?;
+    deployment_pods(&state, name, namespace).await
+}
+
+async fn deployment_pods(
+    state: &AppState,
+    name: String,
+    namespace: Option<String>,
+) -> Result<Vec<PodInfo>> {
+    let ctx = ResourceContext::for_command(state, namespace)?;
 
     // Get the deployment to find its label selector
     let deploy_api: kube::Api<Deployment> = ctx.namespaced_api();
@@ -150,14 +158,26 @@ pub async fn get_deployment_pods(
                 crate::error::Error::InvalidInput("Deployment has no selector".to_string())
             })?;
 
-    // Get pods matching the selector
-    let pod_api: kube::Api<Pod> = ctx.namespaced_api();
+    // The pods its ReplicaSets control, by uid: the old pods of a Deployment
+    // deleted and made again under its name carry the same labels.
     let params = kube::api::ListParams::default().labels(&label_selector);
-    let pods = pod_api.list(&params).await?;
-
-    let pod_infos: Vec<PodInfo> = pods.items.iter().map(PodInfo::from).collect();
-
-    Ok(pod_infos)
+    let (pods_api, sets_api) = (
+        ctx.namespaced_api::<Pod>(),
+        ctx.namespaced_api::<ReplicaSet>(),
+    );
+    let (pods, sets) = tokio::join!(pods_api.list(&params), sets_api.list(&params));
+    let sets = sets.ok();
+    let owners = Owners::of_deployment(
+        &name,
+        deployment.metadata.uid.as_deref(),
+        sets.as_ref().map(|sets| sets.items.as_slice()),
+    );
+    Ok(pods?
+        .items
+        .iter()
+        .filter(|pod| matches!(owners, Owners::Named(_)) || runs_for(pod, &owners))
+        .map(PodInfo::from)
+        .collect())
 }
 
 #[cfg(test)]
@@ -271,6 +291,54 @@ mod detail_tests {
             desired: 4,
         };
         assert_eq!(read("ImagePullBackOff").await, short);
+    }
+
+    /// Sam deleted big-pull and applied it again with its old pod still
+    /// terminating: the new Deployment's Pods tab listed the old pod beside
+    /// its own, the `ReplicaSet` of the same name standing in for both. Fails
+    /// if a pod is listed under a Deployment that does not control the
+    /// `ReplicaSet` controlling it, or if one it does control is dropped.
+    #[tokio::test]
+    async fn a_deployment_lists_only_the_pods_its_own_replica_sets_control() {
+        let mut old = pod("cart-9df89489c-z9", "cart-9df89489c", false, "");
+        old["metadata"]["ownerReferences"][0]["uid"] = "rs-of-the-deleted-cart".into();
+        old["metadata"]["deletionTimestamp"] = chrono::Utc::now().to_rfc3339().into();
+        let pods = serde_json::json!({
+            "apiVersion": "v1", "kind": "PodList", "metadata": {},
+            "items": [old, pod("cart-9df89489c-a1", "cart-9df89489c", false, "ContainerCreating")],
+        })
+        .to_string();
+        let sets = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "ReplicaSetList", "metadata": {},
+            "items": [{
+                "metadata": {
+                    "name": "cart-9df89489c", "namespace": "shop", "uid": "cart-9df89489c",
+                    "ownerReferences": [{
+                        "apiVersion": "apps/v1", "kind": "Deployment",
+                        "name": "cart", "uid": "cart", "controller": true,
+                    }],
+                },
+            }],
+        })
+        .to_string();
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/apis/apps/v1/namespaces/shop/deployments/cart" => (200, cart()),
+            "/api/v1/namespaces/shop/pods" => (200, pods.clone()),
+            "/apis/apps/v1/namespaces/shop/replicasets" => (200, sets.clone()),
+            _ => (404, "{}".into()),
+        })
+        .await;
+
+        let listed = deployment_pods(&state, "cart".into(), Some("shop".into()))
+            .await
+            .expect("the pods");
+        assert_eq!(
+            listed
+                .iter()
+                .map(|pod| pod.name.as_str())
+                .collect::<Vec<_>>(),
+            ["cart-9df89489c-a1"]
+        );
     }
 
     /// The page fell back on the counts in silence when the pod list was

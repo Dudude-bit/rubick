@@ -321,6 +321,86 @@ it("watches the pods of a Service made again under its name, and draws no 'no po
   expect(screen.queryByText("no endpoints")).toBeNull();
 });
 
+const UNPUBLISHED = (more: Partial<ResourceConnections> = {}) =>
+  answer(
+    { ready: 0, notReady: 0 },
+    {
+      reason: "publishesNothing",
+      service: SUBJECT,
+      selector: "app=big-pull",
+      pods: 1,
+      readyPods: 1,
+      unnamedPorts: [],
+    },
+    more
+  );
+
+/**
+ * Sam's sc3: red "This Service publishes no endpoint, 1 pod matches and it
+ * is Ready" for a third of a second, kubectl having the pod Running at
+ * 34.606 and its address in the slice at 34.614. The read in flight listed
+ * the pods after the first and the slices before the second, and landed
+ * after the slice watch had seen the change. Fails if a fault read whose
+ * lists were asked before a slice changed is drawn, or if one asked after
+ * it is held back.
+ */
+it("draws no 'publishes no endpoint' from a read whose slices were listed before one changed", async () => {
+  client.setQueryData(queryKeys.detail("Service", "shop", "big-pull"), {
+    ...BIG_PULL,
+    uid: "big-pull-uid",
+  });
+  let release: (value: ResourceConnections) => void = () => {};
+  commands.getResourceConnections
+    .mockResolvedValueOnce(
+      COMING_UP({
+        subjectUid: "big-pull-uid",
+        readAt: new Date(Date.now() - 1_000).toISOString(),
+      })
+    )
+    .mockReturnValueOnce(
+      new Promise<ResourceConnections>((resolve) => (release = resolve))
+    )
+    .mockResolvedValue(
+      READY({
+        subjectUid: "big-pull-uid",
+        readAt: new Date(Date.now() + 60_000).toISOString(),
+      })
+    );
+  draw();
+  expect(await screen.findByText("coming up")).toBeInTheDocument();
+  await streamsOpen();
+  send("slices-stream", { op: "restarted" }, { op: "synced" });
+
+  void client.invalidateQueries({ queryKey: ["connections"] });
+  await waitFor(() =>
+    expect(commands.getResourceConnections).toHaveBeenCalledTimes(2)
+  );
+  const asked = Date.now();
+  send("slices-stream", {
+    op: "applied",
+    resource: { name: "big-pull-x8f2k", namespace: "shop" },
+  });
+  release(
+    UNPUBLISHED({
+      subjectUid: "big-pull-uid",
+      readAt: new Date(asked - 1).toISOString(),
+    })
+  );
+
+  expect(await screen.findByText("still reading")).toBeInTheDocument();
+  expect(screen.queryByText("no endpoints")).toBeNull();
+  expect(await screen.findByText("1 ready")).toBeInTheDocument();
+
+  commands.getResourceConnections.mockResolvedValue(
+    UNPUBLISHED({
+      subjectUid: "big-pull-uid",
+      readAt: new Date(Date.now() + 60_000).toISOString(),
+    })
+  );
+  await client.invalidateQueries({ queryKey: ["connections"] });
+  expect(await screen.findByText("no endpoints")).toBeInTheDocument();
+});
+
 function Beside() {
   const query = useConnections("Service", "big-pull", "shop");
   return (

@@ -21,7 +21,8 @@ import { queryKeys } from "@/lib/query-keys";
 import { cn } from "@/lib/utils";
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
-import { backingFrom, ROUTING_STALE, useBackingLists } from "@/integrations";
+import { ROUTING_STALE } from "@/integrations";
+import { useRouteBacking } from "./useRouteBacking";
 import {
   routeTraces,
   probedReachable,
@@ -752,7 +753,7 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
     staleTime: ROUTING_STALE,
     enabled: served.has("GatewayClass"),
   });
-  const backing = useBackingLists();
+  const backing = useRouteBacking(route, false).sources;
 
   // GEP-713 reverse lookup: the policy names the Service, never the other
   // way round, so the trace scans the namespace's policies once.
@@ -774,11 +775,11 @@ export function RouteTraceSection({ route }: { route: RouteInfo }) {
           topologyKnown:
             gateways.data !== undefined &&
             (classes.data !== undefined || !served.has("GatewayClass")),
-          backing: backingFrom(backing.data, backing.error),
+          backing,
         },
         t
       ),
-    [route, gateways.data, classes.data, backing.data, backing.error, served, t]
+    [route, gateways.data, classes.data, backing, served, t]
   );
 
   // A ListenerSet parent is a gateway attachment that went the long way;

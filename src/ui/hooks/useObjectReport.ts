@@ -5,7 +5,9 @@ import type {
   ShareFrame,
 } from "@/components/share/contribution";
 import { useAppInfo } from "@/hooks/useAppInfo";
+import { useChainAnswer } from "@/hooks/useChainAnswer";
 import { useConnections } from "@/hooks/useConnections";
+import { useServiceAnswer } from "@/hooks/useServiceAnswer";
 import { eventsOfEveryObject, useObjectEvents } from "@/hooks/useObjectEvents";
 import { useIngressRouting } from "@/hooks/useIngressRouting";
 import { useLocationHref } from "@/hooks/useLocationHref";
@@ -33,6 +35,7 @@ import {
 } from "@/lib/report-parts";
 import { graphSections } from "@/lib/report-graph";
 import { kindHue } from "@/lib/resource-identity";
+import { ResourceType } from "@/lib/resource-registry";
 import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
@@ -110,12 +113,28 @@ export function useObjectReport(
   const graphed = !!subject && CONNECTED_KINDS.has(subject.kind);
   const silent = useSilentNodes(capturing);
 
-  const connections = useConnections(
-    subject?.kind ?? "",
-    subject?.name,
+  // The chain as the page draws it: a read its watches have outrun is still
+  // being read here too, not a verdict the page has already let go of.
+  const isService = subject?.kind === ResourceType.Service;
+  const serviceQuery = useConnections(
+    ResourceType.Service,
+    isService ? subject.name : undefined,
     subject?.namespace,
-    capturing && graphed
+    capturing
   );
+  const service = useServiceAnswer(
+    isService ? subject.name : undefined,
+    subject?.namespace,
+    serviceQuery,
+    false
+  );
+  const chain = useChainAnswer(
+    subject?.kind ?? "",
+    isService ? undefined : subject?.name,
+    subject?.namespace,
+    { enabled: capturing && graphed, followed: false }
+  );
+  const connections = isService ? service.read : chain.read;
   // The certificates and controllers in front of the object, as the page's
   // chain reads them; nothing until Share is pressed, like the graph itself.
   const routed = useIngressRouting(capturing ? connections.data : undefined);

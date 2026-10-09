@@ -11,7 +11,7 @@ use crate::resources::{
     ServiceInfo, ServicePublished,
 };
 use crate::state::AppState;
-use k8s_openapi::api::apps::v1::{Deployment, StatefulSet};
+use k8s_openapi::api::apps::v1::{Deployment, ReplicaSet, StatefulSet};
 use k8s_openapi::api::core::v1::{Endpoints, Pod, Service};
 use k8s_openapi::api::discovery::v1::EndpointSlice;
 use k8s_openapi::api::networking::v1::{Ingress, NetworkPolicy};
@@ -171,6 +171,8 @@ pub async fn list_service_endpoints(
 pub struct ServiceBacking {
     pub services: Vec<ServiceInfo>,
     pub published: Vec<ServicePublished>,
+    /// When its lists were asked for: an answer read from them is no newer.
+    pub read_at: chrono::DateTime<chrono::Utc>,
 }
 
 /// The Services and their answers from one list of each — what every routing
@@ -181,10 +183,12 @@ pub async fn list_service_backing(
     state: State<'_, AppState>,
 ) -> Result<ServiceBacking> {
     let ctx = ResourceContext::for_list(&state, namespace)?;
+    let read_at = chrono::Utc::now();
     let (services, published) = published_in(&ctx).await?;
     Ok(ServiceBacking {
         services: services.iter().map(ServiceInfo::from).collect(),
         published,
+        read_at,
     })
 }
 
@@ -326,10 +330,16 @@ async fn explain_waits(
         let params = ListParams::default();
         let deployments: kube::Api<Deployment> = kube::Api::namespaced(client.clone(), &ns);
         let sets: kube::Api<StatefulSet> = kube::Api::namespaced(client.clone(), &ns);
-        let (deployments, sets) = tokio::join!(deployments.list(&params), sets.list(&params));
-        (ns, (items(deployments), items(sets)))
+        let replica_sets: kube::Api<ReplicaSet> = kube::Api::namespaced(client.clone(), &ns);
+        let (deployments, sets, replica_sets) = tokio::join!(
+            deployments.list(&params),
+            sets.list(&params),
+            replica_sets.list(&params)
+        );
+        let replica_sets = replica_sets.ok().map(|list| list.items);
+        (ns, (items(deployments), items(sets), replica_sets))
     });
-    let read: HashMap<String, (Vec<Deployment>, Vec<StatefulSet>)> =
+    let read: HashMap<String, Waiting> =
         futures::future::join_all(reads).await.into_iter().collect();
     let now = chrono::Utc::now();
     services
@@ -337,12 +347,12 @@ async fn explain_waits(
         .zip(asked)
         .map(
             |(svc, (published, pods))| match read.get(&svc.namespace().unwrap_or_default()) {
-                Some((deployments, sets)) => {
+                Some((deployments, sets, replica_sets)) => {
                     let selected: Option<Vec<&Pod>> =
                         pods.as_ref().map(|pods| pods.iter().collect());
                     published.with_workloads(
                         svc,
-                        &published::makers(deployments, sets),
+                        &published::makers(deployments, sets, replica_sets.as_deref()),
                         selected.as_deref(),
                         now,
                     )
@@ -354,6 +364,7 @@ async fn explain_waits(
 }
 
 type Behind = (Vec<Deployment>, Vec<StatefulSet>, Vec<Pod>);
+type Waiting = (Vec<Deployment>, Vec<StatefulSet>, Option<Vec<ReplicaSet>>);
 
 fn items<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> Vec<K> {
     list.map(|list| list.items).unwrap_or_default()
@@ -396,7 +407,7 @@ async fn explain_empty_selectors(
         .map(
             |(svc, published)| match read.get(&svc.namespace().unwrap_or_default()) {
                 Some((deployments, sets, pods)) => published
-                    .with_makers(svc, &published::makers(deployments, sets))
+                    .with_makers(svc, &published::makers(deployments, sets, None))
                     .with_near_miss(svc, pods),
                 None => published,
             },
@@ -788,6 +799,7 @@ mod tests {
         let whole = wire_len(&ServiceBacking {
             services: services.iter().map(ServiceInfo::from).collect(),
             published: published.clone(),
+            read_at: chrono::Utc::now(),
         });
         let compact = wire_len(&Scoped::whole(health_inputs_of(&services, published)));
         eprintln!(

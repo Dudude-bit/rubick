@@ -365,6 +365,7 @@ export interface NearMiss {
 export interface ServiceBacking {
   services: ServiceInfo[];
   published: ServicePublished[];
+  readAt: string;
 }
 
 export interface ServicePublished {
@@ -2427,6 +2428,12 @@ export type ChainStop =
     }
   | {
       reason: "scaledToZero";
+      service: ObjectRef;
+      selector: string;
+      workloads: ObjectRef[];
+    }
+  | {
+      reason: "podsBeingMade";
       service: ObjectRef;
       selector: string;
       workloads: ObjectRef[];

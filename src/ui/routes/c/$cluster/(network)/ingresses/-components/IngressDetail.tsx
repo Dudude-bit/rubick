@@ -29,12 +29,13 @@ import { recordToKeyValues, TONE_CLASS } from "@/components/object/key-values";
 import { CertificateLine } from "../../../-object/CertificateFacts";
 import { IssuanceSection } from "@/components/object/IssuanceChain";
 import { TrafficChain } from "../../../-object/TrafficChain";
+import { ChainWatches } from "../../../-object/ChainWatches";
 import { IngressHealthView } from "../../../-object/health-views";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { useOneIngressHealth } from "@/hooks/useIngressHealth";
 import { useResourceDetail } from "@/hooks";
 import { Link } from "@tanstack/react-router";
-import { useObjectConnections } from "@/hooks/useConnections";
+import { useChainAnswer } from "@/hooks/useChainAnswer";
 import { useIngressShare } from "./useIngressShare";
 import { IngressAccess } from "./IngressAccess";
 import { generateAccessUrls } from "./access-urls";
@@ -152,11 +153,8 @@ export function IngressDetail() {
         ? "unknown"
         : "no";
 
-  const connections = useObjectConnections(
-    ResourceType.Ingress,
-    name,
-    namespace
-  );
+  const chain = useChainAnswer(ResourceType.Ingress, name, namespace);
+  const connections = chain.read;
   const tlsSecretNames = tlsConfigs.flatMap((config) =>
     config.secretName ? [config.secretName] : []
   );
@@ -526,58 +524,69 @@ export function IngressDetail() {
   ];
 
   return (
-    <ResourceDetailLayout
-      freshness={freshness}
-      resource={ingress}
-      delivery={deliveryQuery}
-      share={share}
-      isLoading={isLoading}
-      error={error}
-      resourceKind={ResourceType.Ingress}
-      title={ingress?.name || name || ""}
-      namespace={ingress?.namespace || namespace}
-      createdAt={ingress?.createdAt}
-      badges={
-        <>
-          {ingress?.className && (
-            <span className="font-mono text-[11px] text-fg-mut">
-              {ingress.className}
-            </span>
-          )}
-          <span
-            className={cn(
-              "text-[11px]",
-              tls === "no"
-                ? "text-warn"
-                : tls === "unknown"
-                  ? TLS_NOT_CHECKED_TONE
-                  : soonest?.tone
-                    ? TONE_CLASS[soonest.tone]
-                    : "text-fg-fnt"
+    <>
+      {/* The header's verdict reads its backends from the Services list's
+          answer, which a change under them makes stale as it does the chain. */}
+      <ChainWatches
+        services={chain.services}
+        reads={[
+          chain.key,
+          queryKeys.serviceHealthInputs(ingress ? [ingress.namespace] : []),
+        ]}
+      />
+      <ResourceDetailLayout
+        freshness={freshness}
+        resource={ingress}
+        delivery={deliveryQuery}
+        share={share}
+        isLoading={isLoading}
+        error={error}
+        resourceKind={ResourceType.Ingress}
+        title={ingress?.name || name || ""}
+        namespace={ingress?.namespace || namespace}
+        createdAt={ingress?.createdAt}
+        badges={
+          <>
+            {ingress?.className && (
+              <span className="font-mono text-[11px] text-fg-mut">
+                {ingress.className}
+              </span>
             )}
-          >
-            {tls === "no"
-              ? t("empty", "noTls")
-              : tls === "unknown"
-                ? t("empty", "tlsNotChecked")
-                : (soonest?.tone && expiryText(soonest, t)) || "TLS"}
-          </span>
-        </>
-      }
-      onBack={goBack}
-      actions={
-        <DeleteAction
-          kind={ResourceType.Ingress}
-          name={ingress?.name || name || ""}
-          namespace={ingress?.namespace || namespace}
-          detail={ingress}
-          intercept={intercept("Delete")}
-          mutation={deleteMutation}
-        />
-      }
-      activeTab={activeTab}
-      onTabChange={setActiveTab}
-      tabs={tabs}
-    />
+            <span
+              className={cn(
+                "text-[11px]",
+                tls === "no"
+                  ? "text-warn"
+                  : tls === "unknown"
+                    ? TLS_NOT_CHECKED_TONE
+                    : soonest?.tone
+                      ? TONE_CLASS[soonest.tone]
+                      : "text-fg-fnt"
+              )}
+            >
+              {tls === "no"
+                ? t("empty", "noTls")
+                : tls === "unknown"
+                  ? t("empty", "tlsNotChecked")
+                  : (soonest?.tone && expiryText(soonest, t)) || "TLS"}
+            </span>
+          </>
+        }
+        onBack={goBack}
+        actions={
+          <DeleteAction
+            kind={ResourceType.Ingress}
+            name={ingress?.name || name || ""}
+            namespace={ingress?.namespace || namespace}
+            detail={ingress}
+            intercept={intercept("Delete")}
+            mutation={deleteMutation}
+          />
+        }
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        tabs={tabs}
+      />
+    </>
   );
 }

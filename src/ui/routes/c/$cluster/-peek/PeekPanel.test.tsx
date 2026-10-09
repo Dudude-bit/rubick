@@ -326,10 +326,11 @@ const objRef = (kind: string, name: string, namespace: string): ObjectRef => ({
 });
 
 function buildConnections(
-  edges: ResourceConnections["edges"] = []
+  edges: ResourceConnections["edges"] = [],
+  subject = objRef("Service", "frontend", "storefront")
 ): ResourceConnections {
   return {
-    subject: objRef("Service", "frontend", "storefront"),
+    subject,
     edges,
     stops: [],
     published: [],
@@ -2489,13 +2490,16 @@ describe("PeekPanel traffic chain", () => {
 
   it("puts the Service in front above a Pod, and nothing below it", async () => {
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
-      buildConnections([
-        {
-          from: objRef("Service", "crash-svc", "k8s-gui-test"),
-          to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
-          relation: { verb: "selects", selector: "app=crash" },
-        },
-      ])
+      buildConnections(
+        [
+          {
+            from: objRef("Service", "crash-svc", "k8s-gui-test"),
+            to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
+            relation: { verb: "selects", selector: "app=crash" },
+          },
+        ],
+        objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test")
+      )
     );
     await wrap(POD_PEEK);
 
@@ -2515,13 +2519,16 @@ describe("PeekPanel traffic chain", () => {
    */
   it("asks the vendors about the Services in front of a Pod", async () => {
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
-      buildConnections([
-        {
-          from: objRef("Service", "crash-svc", "k8s-gui-test"),
-          to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
-          relation: { verb: "selects", selector: "app=crash" },
-        },
-      ])
+      buildConnections(
+        [
+          {
+            from: objRef("Service", "crash-svc", "k8s-gui-test"),
+            to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
+            relation: { verb: "selects", selector: "app=crash" },
+          },
+        ],
+        objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test")
+      )
     );
     servicesRoutesSpy.mockImplementation((services: unknown[]) =>
       services.length === 0
@@ -2569,13 +2576,16 @@ describe("PeekPanel traffic chain", () => {
    */
   it("stacks parallel ways in at one level rather than chaining them", async () => {
     vi.mocked(commands.getResourceConnections).mockResolvedValue(
-      buildConnections([
-        {
-          from: objRef("Service", "crash-svc", "k8s-gui-test"),
-          to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
-          relation: { verb: "selects", selector: "app=crash" },
-        },
-      ])
+      buildConnections(
+        [
+          {
+            from: objRef("Service", "crash-svc", "k8s-gui-test"),
+            to: objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test"),
+            relation: { verb: "selects", selector: "app=crash" },
+          },
+        ],
+        objRef("Pod", "crash-demo-56588f6b8c-8bj9v", "k8s-gui-test")
+      )
     );
     servicesRoutesSpy.mockImplementation((services: unknown[]) =>
       services.length === 0
@@ -2622,6 +2632,74 @@ describe("PeekPanel traffic chain", () => {
     ).toBeInTheDocument();
     // Three levels — the doors, the Service, this Pod — so two arrows,
     // however many doors there are.
+  });
+
+  /**
+   * Marco's ledger, in a namespace where he cannot read pods: its Endpoints
+   * peek said red "Unavailable" and "Pods 0, Nothing is backing this
+   * service" beside a Status saying its pods were not read, while the object
+   * listed the pod's address as not ready. Fails if the header draws a
+   * verdict the Service does not, or the address listed not ready is
+   * dropped from the count.
+   */
+  it("draws an Endpoints peek whose pods were not read without a fault, and lists its address not ready", async () => {
+    const service = objRef("Service", "frontend", "storefront");
+    vi.mocked(commands.getEndpoints).mockResolvedValue({
+      ...buildEndpointsInfo(),
+      subsets: [
+        {
+          addresses: [],
+          notReadyAddresses: [
+            {
+              ip: "10.42.1.99",
+              hostname: null,
+              nodeName: "k3d-rubick-live-agent-0",
+              targetRef: {
+                kind: "Pod",
+                name: "frontend-76bccd5b44-499fh",
+                namespace: "storefront",
+              },
+            },
+          ],
+          ports: [{ name: null, port: 8080, protocol: "TCP" }],
+        },
+      ],
+    });
+    vi.mocked(commands.getResourceConnections).mockResolvedValue({
+      ...buildConnections(),
+      published: [
+        {
+          service,
+          source: "slices",
+          slices: 1,
+          ready: 0,
+          draining: 0,
+          notReady: 1,
+          unrouted: 0,
+          unroutedReady: 0,
+          ports: [],
+          endpoints: [],
+          whole: true,
+          unpublished: [],
+          stop: {
+            reason: "noneReady",
+            service,
+            selector: "app=frontend",
+            pods: 1,
+            why: "podsUnread",
+          },
+        },
+      ],
+    });
+    await wrap("/c/prod/events?peek=endpoints/storefront/frontend");
+
+    expect(await screen.findAllByText("none ready")).toHaveLength(2);
+    expect(screen.queryByText("Unavailable")).toBeNull();
+    expect(screen.queryByText("Nothing is backing this service")).toBeNull();
+    expect(
+      screen.getByRole("link", { name: /frontend-76bccd5b44-499fh/ })
+    ).toBeInTheDocument();
+    expect(screen.getByText("not ready")).toHaveClass("text-warn");
   });
 
   it("names the Service an Endpoints publishes for, above it", async () => {

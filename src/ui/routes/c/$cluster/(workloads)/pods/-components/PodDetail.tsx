@@ -37,6 +37,7 @@ import { yamlTab } from "../../../-object/yaml-tab";
 import { RelatedResources } from "../../-components/RelatedResources";
 import { serviceAccountRow } from "../../-components/identity-rows";
 import { TrafficChain } from "../../../-object/TrafficChain";
+import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
 import {
@@ -79,7 +80,8 @@ import { useMetrics, useResourceDetail, useClusterInfo } from "@/hooks";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { silenceOf } from "@/lib/node-reporting";
-import { useObjectConnections } from "@/hooks/useConnections";
+import { useChainAnswer } from "@/hooks/useChainAnswer";
+import { useRereadWith } from "@/hooks/useRereadWith";
 import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { eventsTab } from "../../../-object/events-tab";
 import { useNodePlacement } from "./useNodePlacement";
@@ -447,12 +449,12 @@ export function PodDetail() {
 
   // A gone pod is the page's whole answer; nothing else about it is asked.
   const gone = isResourceNotFoundError(error);
-  const connections = useObjectConnections(
-    ResourceType.Pod,
-    name,
-    namespace,
-    !gone
-  );
+  const chain = useChainAnswer(ResourceType.Pod, name, namespace, {
+    enabled: !gone,
+  });
+  const connections = chain.read;
+  // The chain reads the pod the header has just read, not a poll later.
+  useRereadWith(queryKeys.detail(ResourceType.Pod, namespace, name), chain.key);
   // The pod's own events, for the "most likely" sentence: read here rather
   // than inside the panel so a refusal reaches it as a line, not a crash.
   const podEvents = useObjectEvents("Pod", name, namespace, {
@@ -776,6 +778,7 @@ export function PodDetail() {
 
   return (
     <>
+      <ChainWatches services={chain.services} reads={[chain.key]} />
       <ResourceDetailLayout
         freshness={freshness}
         resource={pod}

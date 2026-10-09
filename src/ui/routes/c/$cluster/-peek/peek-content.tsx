@@ -75,6 +75,7 @@ import { parts } from "@/i18n/parts";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { EyeOff, Ghost } from "lucide-react";
 import { GoneNotice } from "../-object/gone";
+import { ServiceHealthView } from "../-object/health-views";
 import { StaleRows } from "../-list/StaleRows";
 import {
   ownersOf,
@@ -84,6 +85,7 @@ import {
 } from "@/hooks/useLastOwners";
 import { attentionOf, rowsWithStarts, startsOf } from "@/lib/workload-status";
 import { useLastPassed } from "@/hooks/useNow";
+import { useStaleNotFound } from "@/hooks/useStaleNotFound";
 
 export function PeekContent({
   target,
@@ -104,7 +106,7 @@ export function PeekContent({
 
   const source = useMemo(() => resolveSource(target), [target]);
 
-  const { data, error, isLoading, dataUpdatedAt } = useLiveQuery({
+  const read = useLiveQuery({
     queryKey: peekQueryKey(target),
     queryFn: () => source.fetch(target.name, namespace),
     staleTime: STALE_TIMES.resourceDetail,
@@ -113,6 +115,16 @@ export function PeekContent({
     retry: false,
   });
 
+  const { dataUpdatedAt } = read;
+  const reappearing = useStaleNotFound(
+    toKind(target.kind) ?? target.kind,
+    namespace,
+    target.name,
+    read
+  );
+  const data = reappearing ? undefined : read.data;
+  const error = reappearing ? null : read.error;
+  const isLoading = read.isLoading || reappearing;
   const gone = error !== null && errorCode(error) === ERROR_CODES.NOT_FOUND;
   const visible = useSurfaceVisible();
   usePodWatch(
@@ -273,6 +285,12 @@ export function PeekContent({
               <Ghost className="h-3 w-3" aria-hidden="true" />
               {t("empty", "goneMark")}
             </span>
+          ) : summary?.verdictOfService ? (
+            <ServiceHealthView
+              name={summary.verdictOfService}
+              namespace={namespace}
+              compact
+            />
           ) : summary?.status ? (
             <StatusBadge
               status={summary.status}

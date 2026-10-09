@@ -100,6 +100,7 @@ function stopSubject(stop: ChainStop) {
       return stop.gateway;
     case "selectsNothing":
     case "scaledToZero":
+    case "podsBeingMade":
     case "publishesNothingYet":
     case "noneReady":
     case "publishesNothing":

@@ -29,6 +29,7 @@ import { useT } from "@/i18n/useT";
 import { errorToShow, ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { useRememberOwners } from "./useLastOwners";
 import { useObjectWatch } from "./useObjectWatch";
+import { useStaleNotFound } from "./useStaleNotFound";
 
 export interface UseResourceDetailOptions<T> {
   /** Resource kind for YAML command (e.g., "Pod", "Deployment") */
@@ -133,10 +134,12 @@ export function useResourceDetail<T>(
 
   // Fetch resource data
   const {
-    data: resource,
-    isLoading,
+    data: held,
+    isLoading: reading,
     isPlaceholderData,
     error: readError,
+    errorUpdatedAt,
+    isFetching,
     refetch,
     freshness,
   } = useLiveQuery<T, Error, T, QueryKey>({
@@ -169,9 +172,18 @@ export function useResourceDetail<T>(
   //
   // NotFound is not a dropped poll: the object is gone, and the page says so
   // as the peek does, from the owners its last read named.
+  const reappearing = useStaleNotFound(resourceKind, namespace, name, {
+    error: readError,
+    errorUpdatedAt,
+    isFetching,
+  });
+  const resource = reappearing ? undefined : held;
+  const isLoading = reading || reappearing;
   const holdsThisObject = resource !== undefined && !isPlaceholderData;
   const error =
-    holdsThisObject && !isResourceNotFoundError(readError) ? null : readError;
+    reappearing || (holdsThisObject && !isResourceNotFoundError(readError))
+      ? null
+      : readError;
   useRememberOwners(
     { kind: resourceKind, name: name ?? "", namespace },
     holdsThisObject ? resource : undefined

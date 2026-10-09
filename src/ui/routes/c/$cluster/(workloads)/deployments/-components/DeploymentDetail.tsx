@@ -37,6 +37,7 @@ import { replicaSplit, useStartsClock } from "../../-components/replica-gap";
 import { useWorkloadPods } from "../../-components/workload-pods";
 import { workloadRole } from "@/lib/workload-status";
 import { TrafficChain } from "../../../-object/TrafficChain";
+import { ChainWatches } from "../../../-object/ChainWatches";
 import { connectionsTab } from "../../../-object/connections-tab";
 import { PodListCard } from "../../../-object/PodListCard";
 import { ResourceDetailLayout } from "../../../-object/ResourceDetailLayout";
@@ -81,7 +82,7 @@ import { recordToKeyValues } from "@/components/object/key-values";
 import { PinAction } from "../../-components/PinAction";
 import { useResourceMutation, useResourceDetail } from "@/hooks";
 import { useDeploymentShare } from "./useDeploymentShare";
-import { useObjectConnections } from "@/hooks/useConnections";
+import { useChainAnswer } from "@/hooks/useChainAnswer";
 import { useMetrics } from "@/hooks/useMetrics";
 import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { commands } from "@/lib/commands";
@@ -128,6 +129,9 @@ export function DeploymentDetail() {
     guardedOf(ResourceType.Deployment, namespace || null)
   ).patch;
 
+  const chain = useChainAnswer(ResourceType.Deployment, name, namespace);
+  const connections = chain.read;
+
   const podsKey = queryKeys.ownedPods(ResourceType.Deployment, namespace, name);
   const podsQuery = useLiveQuery({
     queryKey: podsKey,
@@ -163,14 +167,8 @@ export function DeploymentDetail() {
     ResourceType.Deployment,
     namespace,
     name,
-    [podsKey],
+    [podsKey, chain.key],
     !!deployment
-  );
-
-  const connections = useObjectConnections(
-    ResourceType.Deployment,
-    name,
-    namespace
   );
 
   const {
@@ -580,6 +578,7 @@ export function DeploymentDetail() {
 
   return (
     <>
+      <ChainWatches services={chain.services} reads={[chain.key]} />
       <ResourceDetailLayout
         freshness={freshness}
         resource={deployment}

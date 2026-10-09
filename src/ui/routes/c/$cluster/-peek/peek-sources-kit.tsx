@@ -56,6 +56,12 @@ export interface PeekSummary {
   statusTitle?: string;
   /** A mark of its own in place of the role's glyph, as the page header draws it. */
   statusGlyph?: LucideIcon;
+  /**
+   * The Service whose verdict the header draws in place of a status, by
+   * name, for an object that is its own and states none: the verdict is
+   * read with a hook, which this function has none of.
+   */
+  verdictOfService?: string;
   createdAt?: string | null;
   /** For the kinds whose API hands back a rendered age instead of a stamp. */
   groups: PeekGroup[];

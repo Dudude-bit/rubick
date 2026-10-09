@@ -68,12 +68,11 @@ export function endpointState(
       tone: "warn",
     };
   }
-  return {
-    text: endpoint.terminating
-      ? t("readings", "epTerminating")
-      : t("readings", "epNotReady"),
-    tone: "err",
-  };
+  // Not ready is the Endpoints list's amber and the Endpoints object's; the
+  // red is the Service's verdict when none is.
+  return endpoint.terminating
+    ? { text: t("readings", "epTerminating"), tone: "err" }
+    : { text: t("readings", "epNotReady"), tone: "warn" };
 }
 
 /** "3 endpoints across 1 slice" — the count line over the first list. */

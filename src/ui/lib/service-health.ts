@@ -15,17 +15,20 @@ import type { T } from "@/i18n/useT";
 import type {
   ChainStop,
   NotServing,
+  ObjectRef,
   ResourceConnections,
   ServicePublished,
 } from "@/generated/types";
-import { askedPorts, describeStop } from "@/lib/connections";
+import { askedPorts, describeStop, stopMood } from "@/lib/connections";
 import { errorToShow } from "@/lib/error-utils";
 import { endpointCount, publishedFor, servingCount } from "@/lib/published";
 import type { StatusRole } from "@/lib/status-role";
 
 export type ServiceHealth =
-  | { state: "ready"; serving: number }
-  | { state: "partly"; serving: number; total: number }
+  | { state: "ready"; ready: number }
+  | { state: "partly"; ready: number; draining: number; total: number }
+  /** Nothing ready: what it serves goes to addresses still finishing their connections. */
+  | { state: "draining"; draining: number; total: number }
   | { state: "noneReady"; published: PublishedCounts }
   /** None ready or none listed, and every workload behind it is still starting its pods. */
   | { state: "comingUp"; published: PublishedCounts }
@@ -67,9 +70,11 @@ export function serviceHealthOf(
   const total = listed + published.unrouted;
   if (service.selectorless && total === 0) return { state: "selectorless" };
   if (serving > 0) {
-    return serving === total
-      ? { state: "ready", serving }
-      : { state: "partly", serving, total };
+    const { ready, draining } = published;
+    if (ready === total) return { state: "ready", ready };
+    return ready > 0
+      ? { state: "partly", ready, draining, total }
+      : { state: "draining", draining, total };
   }
   const waiting = waitingOn(published.stop);
   if (listed > 0) return { state: waiting ?? "noneReady", published };
@@ -86,6 +91,7 @@ export function serviceHealthOf(
 function waitingOn(
   stop: ChainStop | null | undefined
 ): "comingUp" | "podsUnread" | null {
+  if (stop?.reason === "podsBeingMade") return "comingUp";
   if (stop?.reason === "publishesNothingYet")
     return stop.podsUnread ? "podsUnread" : null;
   if (stop?.reason !== "noneReady") return null;
@@ -141,7 +147,7 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
     case "ready":
       return {
         code: health.state,
-        label: t("count", "nReady", { n: health.serving }),
+        label: t("count", "nReady", { n: health.ready }),
         role: "ok",
         reason: null,
       };
@@ -149,13 +155,27 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
       return {
         code: health.state,
         label: t("count", "readyOfTotal", {
-          ready: health.serving,
+          ready: health.ready,
           total: health.total,
         }),
         role: "warn",
-        reason: t("count", "addressesTakeNoTraffic", {
-          n: health.total - health.serving,
-        }),
+        reason: [
+          health.draining > 0 &&
+            t("readings", "drainingCount", { n: health.draining }),
+          health.total > health.ready + health.draining &&
+            t("count", "addressesTakeNoTraffic", {
+              n: health.total - health.ready - health.draining,
+            }),
+        ]
+          .filter(Boolean)
+          .join(", "),
+      };
+    case "draining":
+      return {
+        code: health.state,
+        label: t("readings", "drainingCount", { n: health.draining }),
+        role: "warn",
+        reason: t("readings", "healthDrainingWhy"),
       };
     case "noneReady":
       return {
@@ -232,6 +252,7 @@ export function serviceHealthWords(health: ServiceHealth, t: T): Verdict {
 export const serviceVerdictLabels = (t: T) => [
   t("count", "nReady", { n: 99 }),
   t("count", "readyOfTotal", { ready: 99, total: 99 }),
+  t("readings", "drainingCount", { n: 99 }),
   t("empty", "stopNoneReady"),
   t("readings", "healthComingUp"),
   t("readings", "healthNoEndpoints"),
@@ -249,35 +270,76 @@ export const serviceVerdictLabels = (t: T) => [
  */
 export type PodsSeen = { pods: number; at: number } | "listing" | undefined;
 
+/** What the watches under one Service have seen: its pods, and when a slice it publishes last changed (0 for never). */
+export interface ServiceSeen {
+  pods: PodsSeen;
+  changed: number;
+}
+
+/** What the watches under each Service an answer names have seen, `undefined` for one nobody watches. */
+export type SeenOf = (service: ObjectRef) => ServiceSeen | undefined;
+
 /** One neighbourhood read, and when it answered: no older than its lists were asked for. */
 export interface ReadAnswer {
   data: ResourceConnections;
   at: number;
 }
 
+const readTime = ({ data, at }: ReadAnswer) =>
+  data.readAt ? Date.parse(data.readAt) : at;
+
 /**
- * Whether a neighbourhood read can speak for the Service on screen. One about
- * another Service of the same name cannot, nor one that found no pod carrying
- * the selector while the Service's own pod watch is still listing them or has
- * since seen one: a read older than what is known is a read not taken yet.
- * Sam's big-pull page drew "1 ready" from the Service deleted before it, and
- * "No pod carries app=big-pull" while its pod was being created.
+ * Whether what a read says each Service publishes can stand, read at `read`:
+ * not where, about any Service it names, it found no pod carrying the
+ * selector while that Service's pod watch is still listing them or has since
+ * seen one, or stops it at a fault while a slice it publishes has changed
+ * since. A read older than what is known is a read not taken yet. Sam's
+ * big-pull drew "No pod carries app=big-pull" while its pod was being
+ * created, and "publishes no endpoint" from a read whose pods were listed
+ * after the pod was Ready and whose slices before its address was written.
+ */
+export function publishedSpeaks(
+  published: readonly Pick<ServicePublished, "service" | "stop">[],
+  read: number,
+  seen: SeenOf
+): boolean {
+  return published.every(({ service, stop }) => {
+    const watched = stop ? seen(service) : undefined;
+    if (!stop || !watched) return true;
+    if (stopMood(stop) === "fault" && read < watched.changed) return false;
+    const pods = watched.pods;
+    if (stop.reason !== "selectsNothing" || !pods) return true;
+    if (pods === "listing") return false;
+    return !(pods.pods > 0 && read < pods.at);
+  });
+}
+
+/**
+ * Whether a neighbourhood read can speak for the object on screen: not one
+ * about another object of the same name, which drew "1 ready" from the
+ * Service deleted before big-pull, nor one {@link publishedSpeaks} holds back.
  */
 export function speaksFor(
   answer: ReadAnswer,
-  service: { name: string; uid: string | undefined },
-  watched: PodsSeen
+  subject: { name: string; uid: string | undefined },
+  seen: SeenOf
 ): boolean {
   const { data } = answer;
-  if (data.subject.name !== service.name) return false;
-  if (service.uid && data.subjectUid && data.subjectUid !== service.uid)
+  if (data.subject.name !== subject.name) return false;
+  if (subject.uid && data.subjectUid && data.subjectUid !== subject.uid)
     return false;
-  const none =
-    publishedFor(data, data.subject)?.stop?.reason === "selectsNothing";
-  if (!none || !watched) return true;
-  if (watched === "listing") return false;
-  const read = data.readAt ? Date.parse(data.readAt) : answer.at;
-  return !(watched.pods > 0 && read < watched.at);
+  return publishedSpeaks(data.published, readTime(answer), seen);
+}
+
+/** Whether a read waits on a pod watch that has not listed yet, whose list reads it again. */
+export function waitsOnList(
+  data: { published: readonly Pick<ServicePublished, "service" | "stop">[] },
+  seen: SeenOf
+): boolean {
+  return data.published.some(
+    ({ service, stop }) =>
+      stop?.reason === "selectsNothing" && seen(service)?.pods === "listing"
+  );
 }
 
 /** A Service's verdict from its neighbourhood, the answer its trace draws. */
