@@ -290,13 +290,9 @@ function NoShellState({
 
 export interface PodShellProps {
   pod: PodInfo;
-  /**
-   * The container the reader chose, `null` for "whichever can take one" and
-   * for a session the reader has ended — the two are told apart by `ended`,
-   * because re-attaching to a shell somebody just closed is not a tab, it is
-   * a loop.
-   */
+  /** The container the reader chose, `null` for "whichever can take one". */
   container: string | null;
+  /** The reader ended the shell; re-attaching to it on its own would be a loop, so it offers again. */
   ended: boolean;
   /** The reader asked for a shell on this page; arriving on the tab is not asking. */
   started: boolean;
@@ -305,7 +301,7 @@ export interface PodShellProps {
   /** Opens the Logs tab on this container, on the run that failed. */
   onOpenLogs: (container: string) => void;
   onDebug: () => void;
-  onEnd: () => void;
+  onEnd: (container: string) => void;
   /** What the cluster's access review refuses this user on this pod. */
   denied?: PodDenied;
 }
@@ -340,7 +336,7 @@ export function PodShell({
   const chosen = container
     ? (containers.find((c) => c.name === container) ?? null)
     : null;
-  const target = chosen ?? (ended ? null : (attachable[0] ?? null));
+  const target = chosen ?? attachable[0] ?? null;
 
   const hollow = attachable.length === 0 ? noShell(pod, t) : null;
 
@@ -405,14 +401,21 @@ export function PodShell({
             {denied.shell}
           </p>
         </Hollow>
-      ) : target && !started ? (
+      ) : target && (ended || !started) ? (
         <StartOnAsk
           icon={SquareTerminal}
-          headline={t("empty", "shellWaits")}
-          body={t("empty", "shellWaitsBody", {
-            container: target.name,
-            tab: t("columns", "shell"),
-          })}
+          headline={ended ? t("empty", "shellEnded") : t("empty", "shellWaits")}
+          body={
+            ended
+              ? t("empty", "shellEndedBody", {
+                  container: target.name,
+                  tab: t("columns", "shell"),
+                })
+              : t("empty", "shellWaitsBody", {
+                  container: target.name,
+                  tab: t("columns", "shell"),
+                })
+          }
           action={t("action", "startShellIn", { container: target.name })}
           onStart={onStart}
         />
@@ -426,23 +429,19 @@ export function PodShell({
             podName={pod.name}
             namespace={pod.namespace}
             containerName={target.name}
-            onClose={onEnd}
+            onClose={() => onEnd(target.name)}
           />
         </div>
-      ) : hollow ? (
-        <NoShellState
-          state={hollow}
-          finished={FINISHED.has(pod.status.phase.toLowerCase())}
-          onOpenLogs={onOpenLogs}
-          onDebug={onDebug}
-          denied={denied}
-        />
       ) : (
-        <Hollow headline={t("empty", "noShellAttached")}>
-          <p className="text-xs text-fg-mut">
-            {t("empty", "shellSessionEnded")}
-          </p>
-        </Hollow>
+        hollow && (
+          <NoShellState
+            state={hollow}
+            finished={FINISHED.has(pod.status.phase.toLowerCase())}
+            onOpenLogs={onOpenLogs}
+            onDebug={onDebug}
+            denied={denied}
+          />
+        )
       )}
     </div>
   );

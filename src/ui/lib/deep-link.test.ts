@@ -61,19 +61,15 @@ describe("parseDeepLink", () => {
   });
 
   /**
-   * A link opens unattended, so it must never carry a param that makes the
-   * destination act. `?shell=<container>` and `?tab=shell` both open an exec
-   * session into a container the moment the pod page mounts — a change to the
-   * cluster from a link someone was handed. Only view-selection params survive.
+   * A link opens unattended, so it carries only params that pick a view. Dana's
+   * link with `?tab=shell` landed on Overview: the Shell tab is a view now,
+   * an offer that starts nothing. Fails if the shell tab is dropped, or if a
+   * param outside the allowlist, `?shell=<container>` included, gets through.
    */
-  it("drops the shell param and the shell tab, keeps read-only view params", () => {
-    expect(
-      parseDeepLink("rubick://open/c/ctx/pods/ns/api?shell=app")?.path
-    ).toBe("/c/ctx/pods/ns/api");
+  it("keeps the tab a link names, Shell included, and drops every other param", () => {
     expect(
       parseDeepLink("rubick://open/c/ctx/pods/ns/api?tab=shell")?.path
-    ).toBe("/c/ctx/pods/ns/api");
-    // The safe ones are preserved.
+    ).toBe("/c/ctx/pods/ns/api?tab=shell");
     expect(
       parseDeepLink("rubick://open/c/ctx/pods/ns/api?tab=logs")?.path
     ).toBe("/c/ctx/pods/ns/api?tab=logs");
@@ -81,15 +77,9 @@ describe("parseDeepLink", () => {
       parseDeepLink("rubick://open/c/ctx/integrations?vendor=argocd&type=app")
         ?.path
     ).toBe("/c/ctx/integrations?vendor=argocd&type=app");
-    // The router reads a quoted value as the word inside it, so the quotes
-    // do not make it another tab.
     expect(
-      parseDeepLink("rubick://open/c/ctx/pods/ns/api?tab=%22shell%22")?.path
+      parseDeepLink("rubick://open/c/ctx/pods/ns/api?shell=app")?.path
     ).toBe("/c/ctx/pods/ns/api");
-    expect(
-      parseDeepLink("rubick://open/c/ctx/pods/ns/api?tab=%20%22shell%22")?.path
-    ).toBe("/c/ctx/pods/ns/api");
-    // An unknown param is not forwarded either — allowlist, not blocklist.
     expect(
       parseDeepLink("rubick://open/c/ctx/pods/ns/api?exec=1&shell=app&tab=logs")
         ?.path

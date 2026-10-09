@@ -7,8 +7,17 @@ import type { ContainerInfo, PodInfo } from "@/generated/types";
 // The real one opens an exec session over Tauri and mounts xterm; neither is
 // what this file is about.
 vi.mock("./PodTerminal", () => ({
-  PodTerminal: ({ containerName }: { containerName: string }) => (
-    <div data-testid="pod-terminal">{containerName}</div>
+  PodTerminal: ({
+    containerName,
+    onClose,
+  }: {
+    containerName: string;
+    onClose: () => void;
+  }) => (
+    <div data-testid="pod-terminal">
+      {containerName}
+      <button type="button" aria-label="end the shell" onClick={onClose} />
+    </div>
   ),
 }));
 
@@ -133,10 +142,48 @@ describe("PodShell's container chooser", () => {
     expect(onChoose).toHaveBeenCalledWith("proxy");
   });
 
-  it("says nothing is attached after the reader ends the session", () => {
-    render(<PodShell pod={threeWay} container={null} ended {...handlers} />);
+  /** Fails if the page is not told which container the shell it picked by itself ran in. */
+  it("names the container whose shell the reader ended", async () => {
+    const onEnd = vi.fn();
+    render(
+      <PodShell
+        pod={threeWay}
+        container={null}
+        ended={false}
+        {...handlers}
+        onEnd={onEnd}
+      />
+    );
+    await userEvent.click(
+      screen.getByRole("button", { name: "end the shell" })
+    );
+    expect(onEnd).toHaveBeenCalledWith("app");
+  });
+
+  /**
+   * Dana ended a shell and found a page that only a container chip could
+   * restart. Fails if an ended shell re-attaches on its own, or if the page
+   * offers nothing to start a new one in the container she had.
+   */
+  it("offers a new shell in the ended one's container and attaches nothing", async () => {
+    const onStart = vi.fn();
+    render(
+      <PodShell
+        pod={threeWay}
+        container="proxy"
+        ended
+        {...handlers}
+        onStart={onStart}
+      />
+    );
     expect(screen.queryByTestId("pod-terminal")).not.toBeInTheDocument();
-    expect(screen.getByText(/No shell is attached/)).toBeInTheDocument();
+    expect(screen.getByText("The shell was ended")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /^proxy/ })).toBeChecked();
+
+    await userEvent.click(
+      screen.getByRole("button", { name: "Start a shell in proxy" })
+    );
+    expect(onStart).toHaveBeenCalledOnce();
   });
 });
 

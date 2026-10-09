@@ -23,6 +23,7 @@ import { useKeptShellStore, type KeptShell } from "@/stores/keptShellStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { keepShells } from "@/hooks/useKeptShells";
 import type { AnyRouter } from "@tanstack/react-router";
+import { parseDeepLink } from "@/lib/deep-link";
 import { PodDetail } from "./PodDetail";
 
 vi.mock("@/components/terminal/Terminal", async () => {
@@ -31,13 +32,17 @@ vi.mock("@/components/terminal/Terminal", async () => {
     Terminal: ({
       sessionId,
       onSize,
+      onClose,
     }: {
       sessionId?: string;
       onSize?: (cols: number, rows: number) => void;
+      onClose?: () => void;
     }) => {
       useEffect(() => onSize?.(120, 40), [onSize]);
       return (
-        <div data-testid="terminal-stub" data-session-id={sessionId ?? ""} />
+        <div data-testid="terminal-stub" data-session-id={sessionId ?? ""}>
+          <button type="button" aria-label="end the shell" onClick={onClose} />
+        </div>
       );
     },
   };
@@ -941,6 +946,81 @@ describe("a pod page runs nothing in the container until the reader asks on it",
       await advance(0);
       await advance(0);
       expect(execs()).toContain(exec);
+    }
+  );
+
+  /**
+   * Dana's link with `?tab=shell` landed on Overview while `?tab=logs` landed
+   * on Logs. Fails if the link loses its tab on the way in, or if landing on
+   * Shell starts anything.
+   */
+  it("lands a link that names Shell on its offer, and starts nothing", async () => {
+    const link = parseDeepLink(
+      "rubick://open/c/prod/pods/shop/cart-a?tab=shell&t=2026-10-09T15:00:00Z"
+    );
+    await arrive(link!.path);
+    await advance(10_000);
+
+    expect(screen.getByRole("tab", { name: /^Shell/ })).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    expect(
+      screen.getByRole("button", { name: "Start a shell in app" })
+    ).toBeInTheDocument();
+    expect(execs()).toEqual([]);
+  });
+
+  /**
+   * Dana ended a shell with its x and clicked the Shell tab: nothing started,
+   * only the container chip did. Fails if ending restarts on its own, or if a
+   * click on the tab, open or not, does not start a new shell.
+   */
+  it.each([
+    ["the Shell tab already open", null],
+    ["the Shell tab from another tab", /^Overview/],
+  ])(
+    "starts a new shell on a click on %s after the last one was ended",
+    async (_, away) => {
+      let opened = 0;
+      vi.mocked(invoke).mockImplementation(async (command: string, args) => {
+        if (command === "get_pod")
+          return running((args as { name: string }).name);
+        if (command === "open_pod_shell") return `term-${++opened}`;
+        if (command === "check_access")
+          return (args as { queries: AccessQuery[] }).queries.map((query) => ({
+            ...query,
+            allowed: true,
+          }));
+        return undefined;
+      });
+      await arrive("/c/prod/pods/shop/cart-a");
+      await clickTab(/^Shell/);
+      expect(terminal()).toHaveAttribute("data-session-id", "term-1");
+
+      fireEvent.click(screen.getByRole("button", { name: "end the shell" }));
+      await advance(10_000);
+      expect(invoke).toHaveBeenCalledWith("close_terminal", {
+        sessionId: "term-1",
+      });
+      expect(terminal()).toBeNull();
+      expect(screen.getByText("The shell was ended")).toBeInTheDocument();
+      expect(execs()).toEqual(["open_pod_shell cart-a"]);
+
+      if (away) {
+        await clickTab(away);
+        await clickTab(/^Shell/);
+      } else {
+        fireEvent.click(screen.getByRole("tab", { name: /^Shell/ }));
+        await advance(0);
+        await advance(0);
+      }
+
+      expect(execs()).toEqual([
+        "open_pod_shell cart-a",
+        "open_pod_shell cart-a",
+      ]);
+      expect(terminal()).toHaveAttribute("data-session-id", "term-2");
     }
   );
 

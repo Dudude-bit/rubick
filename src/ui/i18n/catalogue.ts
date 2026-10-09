@@ -5727,9 +5727,9 @@ export const en = {
     filesWait: "The files have not been read yet",
     filesWaitBody:
       "Each folder is read by running a command in the container, so only a click reads them: on the {tab} tab or on the button below. Opening the page by a link, a restored tab or Back reads nothing.",
-    noShellAttached: "No shell is attached",
-    shellSessionEnded:
-      "The session was ended. Choosing a container above opens a new one; nothing is running here in the meantime.",
+    shellEnded: "The shell was ended",
+    shellEndedBody:
+      "Nothing is running in {container} now. A click on the {tab} tab, on the button below or on a container above opens a new shell.",
     pvUnbound: "unbound: no claim is using this volume",
     vendorDidNotAnswer:
       "{vendor} did not answer: {reason}. This is the window the app watched itself; the longer ranges are gone until it is back.",

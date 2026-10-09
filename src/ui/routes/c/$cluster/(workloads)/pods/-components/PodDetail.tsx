@@ -389,11 +389,8 @@ export function PodDetail() {
   const requestedShell = useAppSearch().shell ?? null;
   const setSearch = useSetSearch();
 
-  // Which container the Shell tab is attached to, once the reader has said.
-  // `container: null` is the reader having ended the session, which is not the
-  // same as never having chosen: the tab attaches to whatever can take a shell
-  // when nobody has said, and re-attaching to one somebody just closed would
-  // be a loop rather than a tab.
+  // Which container the Shell tab is attached to, once the reader has said,
+  // and whether they ended that shell, which leaves the tab offering a new one.
   //
   // Carried with the pod it was chosen on, for the reason `logRequest` is: this
   // page stays mounted across a move to another pod, and `app` means a
@@ -401,6 +398,7 @@ export function PodDetail() {
   const [shellChoice, setShellChoice] = useState<{
     pod: string;
     container: string | null;
+    ended: boolean;
   } | null>(null);
   const [debugDialogOpen, setDebugDialogOpen] = useState(false);
   // Which tab asked for the debug container: the shell opens a terminal in
@@ -559,33 +557,39 @@ export function PodDetail() {
   );
   if (kept && !askedTabs.has("shell")) {
     setAsked({ pod: podKey, tabs: new Set([...askedTabs, "shell"]) });
-    setShellChoice({ pod: podKey, container: kept.container });
+    setShellChoice({ pod: podKey, container: kept.container, ended: false });
   }
+
+  // A click on the tab, open or not, is the ask, and after an end it asks again.
+  const askOn = useCallback(
+    (tab: string) => {
+      if (!RUNS_IN_CONTAINER.has(tab)) return;
+      ask(tab);
+      if (tab === "shell")
+        setShellChoice((prev) =>
+          prev?.pod === podKey && prev.ended ? { ...prev, ended: false } : prev
+        );
+    },
+    [ask, podKey]
+  );
 
   const openTab = useCallback(
     (tab: string) => {
-      if (RUNS_IN_CONTAINER.has(tab)) ask(tab);
+      askOn(tab);
       setActiveTab(tab);
     },
-    [ask, setActiveTab]
-  );
-
-  const askAgain = useCallback(
-    (tab: string) => {
-      if (RUNS_IN_CONTAINER.has(tab)) ask(tab);
-    },
-    [ask]
+    [askOn, setActiveTab]
   );
 
   // The URL's `?shell=` is about this route, so it needs no pod key of its
   // own; a choice made by clicking does.
   const choice = shellChoice?.pod === podKey ? shellChoice : null;
   const shellContainer = choice ? choice.container : requestedShell;
-  const shellEnded = choice !== null && choice.container === null;
+  const shellEnded = choice?.ended ?? false;
 
   const openTerminal = (containerName: string) => {
     if (kept && kept.container !== containerName) void endShell(kept.id);
-    setShellChoice({ pod: podKey, container: containerName });
+    setShellChoice({ pod: podKey, container: containerName, ended: false });
     openTab("shell");
   };
 
@@ -619,40 +623,43 @@ export function PodDetail() {
     pod?.labels?.["k8s-gui/debug-pod"] === "true" ||
     pod?.labels?.["k8s-gui/check-pod"] === "true";
 
-  const handleTerminalClose = useCallback(() => {
-    setShellChoice({ pod: podKey, container: null });
-    // The URL asked for this shell; once it is closed it would be lying, and
-    // a reload would reopen a terminal nobody asked for again.
-    if (requestedShell) setSearch({ shell: undefined }, { replace: true });
+  const handleTerminalClose = useCallback(
+    (container: string) => {
+      setShellChoice({ pod: podKey, container, ended: true });
+      // The URL asked for this shell; once it is closed it would be lying, and
+      // a reload would reopen a terminal nobody asked for again.
+      if (requestedShell) setSearch({ shell: undefined }, { replace: true });
 
-    if (isDebugPod && pod) {
-      toast({
-        title: t("action", "debugPodStillRunning"),
-        description: t("action", "debugPodDeleteHint"),
-        action: (
-          <Button
-            size="sm"
-            variant="destructive"
-            onClick={async () => {
-              try {
-                await commands.deleteDebugPod(pod.name, pod.namespace);
-                toast({
-                  title: t("action", "debugPodDeleted"),
-                  description: pod.name,
-                });
-                router.history.back();
-              } catch (err) {
-                toastError(t("action", "failedToDelete"), err);
-              }
-            }}
-          >
-            {t("action", "deleteNow")}
-          </Button>
-        ),
-        duration: 10000,
-      });
-    }
-  }, [isDebugPod, pod, podKey, t, toast, router, requestedShell, setSearch]);
+      if (isDebugPod && pod) {
+        toast({
+          title: t("action", "debugPodStillRunning"),
+          description: t("action", "debugPodDeleteHint"),
+          action: (
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={async () => {
+                try {
+                  await commands.deleteDebugPod(pod.name, pod.namespace);
+                  toast({
+                    title: t("action", "debugPodDeleted"),
+                    description: pod.name,
+                  });
+                  router.history.back();
+                } catch (err) {
+                  toastError(t("action", "failedToDelete"), err);
+                }
+              }}
+            >
+              {t("action", "deleteNow")}
+            </Button>
+          ),
+          duration: 10000,
+        });
+      }
+    },
+    [isDebugPod, pod, podKey, t, toast, router, requestedShell, setSearch]
+  );
 
   const handleFindReplacement = savedLabels
     ? () =>
@@ -778,7 +785,7 @@ export function PodDetail() {
         onBack={() => router.history.back()}
         activeTab={activeTab}
         onTabChange={openTab}
-        onTabAgain={askAgain}
+        onTabAgain={askOn}
         statusBadge={
           pod?.status.display ? (
             <PodStatusBadge pod={pod} silence={silence} />
@@ -1050,7 +1057,7 @@ export function PodDetail() {
                 container={shellContainer}
                 ended={shellEnded}
                 started={askedTabs.has("shell")}
-                onStart={() => ask("shell")}
+                onStart={() => askOn("shell")}
                 onChoose={openTerminal}
                 onOpenLogs={openLogs}
                 onDebug={() => {

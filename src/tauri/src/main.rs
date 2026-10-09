@@ -6,7 +6,7 @@
 )]
 
 use k8s_gui_lib::app_log::{init_tracing, log_dir};
-use k8s_gui_lib::{commands, integrations, shell, state::AppState, BUNDLE};
+use k8s_gui_lib::{commands, integrations, quit, shell, state::AppState, BUNDLE};
 use tauri::{Emitter, Manager};
 use tokio::sync::broadcast;
 
@@ -172,6 +172,19 @@ fn main() {
 
                     if let Err(e) = app_handle.emit_str(event_name, payload) {
                         tracing::error!("Failed to emit event {}: {}", event_name, e);
+                    }
+                }
+            });
+
+            let way_out = quit::WayOut::of(&state);
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                match quit::Termination::listen() {
+                    Ok(termination) => {
+                        quit::quit_on(termination, way_out, |_| handle.exit(0)).await;
+                    }
+                    Err(error) => {
+                        tracing::warn!(%error, "not listening for quit signals; a kill leaves shells running");
                     }
                 }
             });
@@ -520,19 +533,11 @@ fn main() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        // On the way out, kill any kubectl proxy — Drop does not run when the
-        // macOS loop ends the process, and an unauthenticated loopback proxy
-        // must not outlive the window.
+        // Drop does not run when the macOS loop ends the process.
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
-                let state = app_handle.state::<AppState>();
-                state.client_manager.shutdown_proxies();
-                // A shell left behind keeps running in the container.
-                tauri::async_runtime::block_on(
-                    state
-                        .terminal_manager
-                        .close_all(std::time::Duration::from_secs(6)),
-                );
+                let way_out = quit::WayOut::of(&app_handle.state::<AppState>());
+                tauri::async_runtime::block_on(way_out.take());
             }
         });
 }
