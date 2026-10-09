@@ -3636,6 +3636,8 @@ export const en = {
       other: "{n} published",
     },
     stillTakingTraffic: ", still taking traffic",
+    noneOfItsPodsPublished: "none of its pods published",
+    acrossTheService: "across the Service: {counts}",
     delUnconfirmedMark: "{vendor} · {claim} · unconfirmed",
     delEditWhatApplies: "To change it for good, change what {name} applies.",
     delEditManifests: "To change it for good, edit the manifests under {path}.",

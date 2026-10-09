@@ -152,6 +152,11 @@ describe("the traffic chain", () => {
             to: deployment,
             relation: { verb: "selects", selector: "app=log-demo" },
           },
+          ...["log-demo-a", "log-demo-b"].map((name) => ({
+            from: deployment,
+            to: pod(name, true),
+            relation: { verb: "selects" as const, selector: "app=log-demo" },
+          })),
         ],
         [],
         [],
@@ -178,7 +183,80 @@ describe("the traffic chain", () => {
     expect(svcHop.via).toContain("selects app=log-demo");
     const last = path.hops[2];
     if (last.at !== "published") throw new Error("expected the published hop");
-    expect(last.summary).toBe("and 1 more · 2 published");
+    expect(last.summary).toBe("and 1 more · across the Service: 2 published");
+  });
+
+  describe("under a workload, its own pods and the Service's counts", () => {
+    const deployment = ref("Deployment", "big-pull");
+    const svc = service("big-pull", "app=big-pull");
+    const fronts = {
+      from: svc,
+      to: deployment,
+      relation: { verb: "selects" as const, selector: "app=big-pull" },
+    };
+    const owns = (name: string) => ({
+      from: deployment,
+      to: pod(name, true),
+      relation: { verb: "selects" as const, selector: "app=big-pull" },
+    });
+    const draining = endpointOf("big-pull-67577558d6-4hdt2", {
+      ready: false,
+      terminating: true,
+    });
+    const hopOf = (
+      edges: ConnectionEdge[],
+      endpoints: PublishedEndpoint[],
+      counts: Parameters<typeof publishes>[1],
+      notLookedAt: ResourceConnections["notLookedAt"] = []
+    ) => {
+      const last = trafficChains(
+        connections(deployment, [fronts, ...edges], [], notLookedAt, [
+          publishes("big-pull", counts, { endpoints }),
+        ]),
+        t
+      )[0].hops.at(-1);
+      if (last?.at !== "published")
+        throw new Error("expected the published hop");
+      return last;
+    };
+
+    /**
+     * Sam's big-pull, made again while the old pod drained: "this
+     * Deployment" named the old Deployment's pod first, its own behind "and
+     * 1 more", over counts that were the Service's. Fails if a pod the
+     * workload does not own is named as its own, or the counts read as its.
+     */
+    it("names its own pod first and says the counts are the Service's", () => {
+      const hop = hopOf(
+        [owns("big-pull-67577558d6-tg86l")],
+        [draining, endpointOf("big-pull-67577558d6-tg86l")],
+        { ready: 1, draining: 1 }
+      );
+      expect(hop.first?.name).toBe("big-pull-67577558d6-tg86l");
+      expect(hop.summary).toBe("across the Service: 1 published · 1 draining");
+    });
+
+    /** Fails if the old pod the Service still sends to is named as the workload's while none of its own is published. */
+    it("names no pod of another's while none of its own is published", () => {
+      const hop = hopOf([], [draining], { draining: 1 });
+      expect(hop.first).toBeNull();
+      expect(hop.address).toBeNull();
+      expect(hop.summary).toBe(
+        "none of its pods published · across the Service: 1 draining, still taking traffic"
+      );
+    });
+
+    /** Fails if pods nobody could read are taken for none of its own. */
+    it("names the first address as before where its pods were not read", () => {
+      const hop = hopOf([], [draining], { draining: 1 }, [
+        {
+          kind: "Pod",
+          why: { says: "unanswered", version: "v1", said: "forbidden" },
+        },
+      ]);
+      expect(hop.first?.name).toBe("big-pull-67577558d6-4hdt2");
+      expect(hop.summary).toBe("1 draining, still taking traffic");
+    });
   });
 
   it("puts an Ingress above the Service that routes to it", () => {

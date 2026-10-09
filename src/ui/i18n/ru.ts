@@ -4065,6 +4065,8 @@ export const ru: Catalogue = {
       other: "{n} адреса опубликовано",
     },
     stillTakingTraffic: ", всё ещё принимает трафик",
+    noneOfItsPodsPublished: "ни один его под не опубликован",
+    acrossTheService: "по всему Service: {counts}",
     delUnconfirmedMark: "{vendor} · {claim} · не подтверждено",
     delEditWhatApplies:
       "Чтобы изменить насовсем, поменяйте то, что применяет {name}.",

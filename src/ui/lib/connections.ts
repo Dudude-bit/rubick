@@ -585,7 +585,7 @@ export interface ChainHopPublished {
   published: ServicePublished;
   /** The pod behind the first address, so the hop has a name and not only a
    * number. Null where the endpoints name no pod, which a hand-written slice
-   * does not. */
+   * does not, or none of the subject workload's own. */
   first: ObjectRef | null;
   /** The first address itself, for a slice that names no pod. */
   address: string | null;
@@ -855,13 +855,22 @@ function serviceHop(object: ObjectRef, self: boolean, t: T): ChainHopObject {
  *
  * A draining address counts as taking traffic: kube-proxy falls back to the
  * terminating endpoints when no ready one is left, so a Service down to one
- * draining pod is a restart in progress rather than an outage.
+ * draining pod is a restart in progress rather than an outage. Under a
+ * workload, `own` names its pods and the counts say they are the Service's.
  */
-function publishedHop(published: ServicePublished, t: T): ChainHopPublished {
-  const first = published.endpoints[0];
-  const rest = endpointCount(published) - 1;
-  const summary = join(
-    rest > 0 && t("empty", "andMore", { n: rest }),
+function publishedHop(
+  published: ServicePublished,
+  t: T,
+  own: ReadonlySet<string> | null
+): ChainHopPublished {
+  const listed = own
+    ? published.endpoints.filter(
+        (endpoint) => endpoint.target && own.has(refKey(endpoint.target))
+      )
+    : published.endpoints;
+  const first = listed[0];
+  const rest = (own ? listed.length : endpointCount(published)) - 1;
+  const counts = join(
     published.ready > 0 &&
       t("readings", "publishedCount", { n: published.ready }),
     published.draining > 0 &&
@@ -871,6 +880,11 @@ function publishedHop(published: ServicePublished, t: T): ChainHopPublished {
     published.notReady > 0 &&
       t("readings", "notReadyEndpoints", { n: published.notReady }),
     sourceMark(published, t)
+  );
+  const summary = join(
+    own && !first && t("readings", "noneOfItsPodsPublished"),
+    rest > 0 && t("empty", "andMore", { n: rest }),
+    own && counts ? t("readings", "acrossTheService", { counts }) : counts
   );
   return {
     at: "published",
@@ -956,6 +970,21 @@ export function trafficChains(
   const attaches = verb(conns.edges, "attachesTo");
   const selects = verb(conns.edges, "selects");
   const tls = tlsSecrets(conns);
+  // A workload's own pods, by uid, where they were read: the Service's
+  // addresses can be another's, the old pods of one deleted under its name.
+  const own =
+    subject.kind === "Service" ||
+    subject.kind === "Ingress" ||
+    subject.kind === "Pod" ||
+    conns.notLookedAt.some((entry) => entry.kind === "Pod")
+      ? null
+      : new Set(
+          selects
+            .filter(
+              (edge) => sameObject(edge.from, subject) && edge.to.kind === "Pod"
+            )
+            .map((edge) => refKey(edge.to))
+        );
 
   const fronting: ObjectRef[] =
     subject.kind === "Service"
@@ -1119,7 +1148,7 @@ export function trafficChains(
         published &&
         endpointCount(published) > 0
       )
-        hops.push(publishedHop(published, t));
+        hops.push(publishedHop(published, t, own));
 
       return {
         key: refKey(service),
