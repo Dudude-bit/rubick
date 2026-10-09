@@ -480,7 +480,7 @@ export function Composition({
         {total != null &&
           visible.map((segment) => (
             <span
-              key={segment.label}
+              key={`${segment.label}/${segment.qualifier ?? ""}`}
               className={SEGMENT_BAR[segment.tone]}
               style={{ flex: segment.count }}
             />
@@ -499,7 +499,7 @@ export function Composition({
           visible.map((segment) =>
             segment.qualifier ? (
               <span
-                key={segment.label}
+                key={`${segment.label}/${segment.qualifier ?? ""}`}
                 className={cn(
                   SEGMENT_LEGEND[segment.tone],
                   "inline-flex flex-wrap items-center gap-x-1.5"
@@ -517,7 +517,7 @@ export function Composition({
               </span>
             ) : (
               <span
-                key={segment.label}
+                key={`${segment.label}/${segment.qualifier ?? ""}`}
                 className={cn(
                   SEGMENT_LEGEND[segment.tone],
                   segment.unread && "inline-flex items-center gap-1"

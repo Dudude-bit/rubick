@@ -6793,7 +6793,7 @@ export const en = {
     idleCounted: { other: "Idle" },
     retryingCounted: { other: "Retrying" },
     suspendedCounted: { other: "Suspended" },
-    startingCounted: { other: "Starting" },
+    startingCounted: { other: "starting" },
     waitingCounted: { other: "Waiting" },
     ready: "Ready",
     progressing: "Progressing",
@@ -6850,6 +6850,8 @@ export const en = {
       "Restarted, and the kubelet reports no last exit, so whether a container is still crash-looping is not known.",
     pendingTooLong:
       "Pending past the wait a pod is given before it counts as a problem: a minute for a node to take it, ten minutes to start once one has.",
+    pendingStarting:
+      "Starting: still inside the wait a pod is given before it counts as a problem, so not a fault yet.",
     containerStatusUnknown:
       "the container's state was lost, usually after the node restarted.",
     deadlineExceeded:

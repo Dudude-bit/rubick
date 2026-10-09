@@ -434,7 +434,11 @@ function capped(lines: AttentionLine[]): AttentionLine[] {
 function notRunning(pods: PodComposition, t: T): string {
   return podSegments(pods, t)
     .filter((segment) => segment.label !== "Running" && segment.count > 0)
-    .map((segment) => `${segment.count} ${segment.label}`)
+    .map((segment) =>
+      [`${segment.count} ${segment.label}`, segment.qualifier]
+        .filter(Boolean)
+        .join(" · ")
+    )
     .join(", ");
 }
 

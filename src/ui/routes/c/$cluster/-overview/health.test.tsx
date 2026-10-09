@@ -1124,8 +1124,10 @@ describe("what Needs attention says it checked", () => {
    * said coming up in blue, and the Deployments tile drew Progressing grey.
    * Fails if a pod still inside its wait is counted with the ones past it,
    * or either tile draws coming up in another colour than the badges do.
+   * Sam then read "Starting" here for the pod its page and the Pods list
+   * call Pending; fails if the tile or the line drops the phase they print.
    */
-  it("counts a pod still inside its wait as starting, apart from Pending", async () => {
+  it("counts a pod still inside its wait as Pending and starting, apart from the rest", async () => {
     const pods: PodComposition = {
       running: 2,
       pending: 3,
@@ -1141,16 +1143,21 @@ describe("what Needs attention says it checked", () => {
     await panel(attentionFrom([{ ...problem, severity: "critical" }]), pods);
 
     expect(screen.getByTestId("attention-summary")).toHaveTextContent(
-      "(2 Starting, 1 Pending)"
+      "(2 Pending · starting, 1 Pending)"
     );
     expect(
       podSegments(pods, t)
         .filter((segment) => segment.count > 0)
-        .map(({ label, count, tone }) => [label, count, tone])
+        .map(({ label, qualifier, count, tone }) => [
+          label,
+          qualifier,
+          count,
+          tone,
+        ])
     ).toEqual([
-      ["Running", 2, "ok"],
-      ["Starting", 2, "pending"],
-      ["Pending", 1, "warn"],
+      ["Running", undefined, 2, "ok"],
+      ["Pending", "starting", 2, "pending"],
+      ["Pending", undefined, 1, "warn"],
     ]);
     expect(
       deploymentSegments(

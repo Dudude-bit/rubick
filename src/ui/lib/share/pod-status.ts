@@ -106,6 +106,7 @@ export function podStatusTitle(
       statusRole(pod.status.display) === "pending" &&
         pendingTooLong(pod) &&
         t("statusMeaning", "pendingTooLong"),
+      insideWait(pod) && t("statusMeaning", "pendingStarting"),
     ]
       .filter(Boolean)
       .join("\n") || undefined
