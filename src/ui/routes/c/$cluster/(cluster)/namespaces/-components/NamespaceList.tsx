@@ -11,6 +11,7 @@ import { NAME_CELL_PX, createAgeColumn } from "../../../-list/columns";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { commands } from "@/lib/commands";
+import { hrefOf, objectLink } from "@/lib/links";
 import { whole } from "@/lib/namespace-scope";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
@@ -87,11 +88,14 @@ export const columns: ColumnDef<NamespaceInfo>[] = [
 ];
 
 /**
- * Namespaces have no detail page and no delete action here — deleting one
- * takes everything inside it with it, which is not a hover-target decision.
- * The row's useful verb is "point this window at it", so that is the action.
+ * Namespaces have no delete action here: deleting one takes everything
+ * inside it with it, which is not a hover-target decision. The row's useful
+ * verb is "point this window at it", so that is the action.
  */
 const NAMESPACE_DETAIL = queryKeys.rowDetail(ResourceType.Namespace);
+
+const namespaceHref = (row: NamespaceInfo) =>
+  hrefOf(objectLink({ kind: ResourceType.Namespace, name: row.name })!);
 
 export function NamespaceList() {
   const t = useT();
@@ -156,6 +160,7 @@ export function NamespaceList() {
         live={live}
         resyncing={resyncing}
         getRowId={getResourceRowId}
+        getRowHref={namespaceHref}
         columns={columns}
         emptyStateLabel="Namespaces"
         quickActions={quickActions}

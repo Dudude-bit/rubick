@@ -1,4 +1,5 @@
 import { act, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, expect, it, vi } from "vite-plus/test";
 import { DataTable } from "@/components/ui/data-table";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -15,8 +16,14 @@ vi.mock("@/hooks/useResourceWatch", () => ({
 }));
 vi.mock("../../../-list/ResourceList", () => ({
   ResourceList: vi.fn(
-    ({ columns }: { columns: ColumnDef<NamespaceInfo>[] }) => (
-      <DataTable columns={columns} data={namespaces} />
+    ({
+      columns,
+      getRowHref,
+    }: {
+      columns: ColumnDef<NamespaceInfo>[];
+      getRowHref?: (row: NamespaceInfo) => string;
+    }) => (
+      <DataTable columns={columns} data={namespaces} getRowHref={getRowHref} />
     )
   ),
 }));
@@ -102,3 +109,19 @@ it("says an unread pod count is unknown, not none", async () => {
   await mount();
   expect(screen.getByText("0")).toBeInTheDocument();
 });
+
+/**
+ * The rows had no destination, so a click on the status, the pod count or
+ * the space beside the name did nothing. Fails if any of them stops opening
+ * the namespace's peek.
+ */
+it.each(["Active", "2"])(
+  "opens the namespace's peek from a click on %s, not only on its name",
+  async (cell) => {
+    const { router } = await mount();
+    await userEvent.click(screen.getByText(cell));
+    await vi.waitFor(() =>
+      expect(router.state.location.search).toEqual({ peek: "namespaces/prod" })
+    );
+  }
+);
