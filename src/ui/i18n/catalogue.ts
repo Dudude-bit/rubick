@@ -4250,6 +4250,7 @@ export const en = {
     whatCanIDoIn: "What can I do in {namespace}?",
     whatCanIDo: "What can I do here?",
     countsUnread: "not counted",
+    podsNotCounted: "pods not counted {where}",
     countsIn: "in {scope}",
     countsInAll: "in all namespaces",
     countsInMany: { one: "in {n} namespace", other: "in {n} namespaces" },

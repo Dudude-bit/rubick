@@ -113,8 +113,10 @@ export function useClusterSummary({
     // no count to state, and a `0` there would tell a namespace-scoped user
     // their cluster is empty and healthy. `known` is what keeps that honest.
     const known = overview !== undefined;
+    // An answer whose pods were refused somewhere has no breakdown to read.
+    const podsKnown = known && overview.counts.pods !== null;
     const pods = new Map(
-      (overview?.namespaces ?? []).map((ns) => [ns.name, ns.podCount])
+      (podsKnown ? overview.namespaces : []).map((ns) => [ns.name, ns.podCount])
     );
     if (!known && alone && own?.counts.pods != null)
       pods.set(alone[0], own.counts.pods);
@@ -136,7 +138,7 @@ export function useClusterSummary({
     const namespaces = names
       .map((name) => ({
         name,
-        podCount: pods.get(name) ?? (known ? 0 : null),
+        podCount: pods.get(name) ?? (podsKnown ? 0 : null),
         problems: problemsOf(name),
       }))
       .sort(

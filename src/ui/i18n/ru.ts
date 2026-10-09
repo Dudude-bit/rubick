@@ -4731,6 +4731,7 @@ export const ru: Catalogue = {
     whatCanIDoIn: "Что мне можно в {namespace}?",
     whatCanIDo: "Что мне здесь можно?",
     countsUnread: "не посчитано",
+    podsNotCounted: "поды не посчитаны {where}",
     countsIn: "в {scope}",
     countsInAll: "во всех пространствах имён",
     countsInMany: {

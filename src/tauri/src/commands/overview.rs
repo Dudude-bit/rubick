@@ -313,8 +313,9 @@ pub struct ClusterOverview {
     /// Objects per kind in the requested scope, for the sidebar and the
     /// composition bars.
     pub counts: ResourceCounts,
-    /// Phase breakdown of the pods in the requested scope.
-    pub pods: PodComposition,
+    /// Phase breakdown of the pods in the requested scope; `None` when a
+    /// namespace in it refused them.
+    pub pods: Option<PodComposition>,
     /// Jobs per word the Jobs list prints; `None` when the list was refused.
     pub jobs: Option<Vec<ReasonCount>>,
     /// Deployments per rollout word the Deployments list prints; `None` when
@@ -545,19 +546,45 @@ fn pods_by_deployment<'a>(
     owned
 }
 
+/// Whether the scope's pods went unread where `namespace` is.
+fn pods_unread_in(unread: &[OverviewUnread], namespace: Option<&str>) -> bool {
+    unread.iter().any(|entry| {
+        entry.kind == "Pod"
+            && (entry.namespace.is_none() || entry.namespace.as_deref() == namespace)
+    })
+}
+
+/// A workload's verdict with its own pods asked, or the controller's alone
+/// where its namespace refused them.
+fn with_pods_read<'a>(
+    rollout: Rollout,
+    meta: &kube::core::ObjectMeta,
+    pods: impl IntoIterator<Item = &'a Pod>,
+    unread: &[OverviewUnread],
+    now: DateTime<Utc>,
+) -> Rollout {
+    if pods_unread_in(unread, meta.namespace.as_deref()) {
+        return rollout.pods_unread();
+    }
+    crate::resources::with_pods(rollout, pods, now)
+}
+
 /// A Deployment's rollout as its list and page read it, its own pods included.
 fn rollout_with_pods(
     d: &Deployment,
     owned: &HashMap<(&str, &str), Vec<&Pod>>,
+    unread: &[OverviewUnread],
     now: DateTime<Utc>,
 ) -> Rollout {
     let key = (
         d.metadata.namespace.as_deref().unwrap_or_default(),
         d.metadata.name.as_deref().unwrap_or_default(),
     );
-    crate::resources::with_pods(
+    with_pods_read(
         crate::resources::deployment_rollout(d),
+        &d.metadata,
         owned.get(&key).into_iter().flatten().copied(),
+        unread,
         now,
     )
 }
@@ -565,12 +592,13 @@ fn rollout_with_pods(
 fn deployment_problems<'a>(
     deployments: impl IntoIterator<Item = &'a Deployment>,
     owned: &HashMap<(&str, &str), Vec<&Pod>>,
+    unread: &[OverviewUnread],
     now: DateTime<Utc>,
 ) -> Vec<ClusterProblem> {
     deployments
         .into_iter()
         .filter_map(|d| {
-            let rollout = rollout_with_pods(d, owned, now);
+            let rollout = rollout_with_pods(d, owned, unread, now);
             if !rollout.is_problem() {
                 return None;
             }
@@ -663,15 +691,23 @@ fn with_own_pods(
     rollout: Rollout,
     set: &kube::core::ObjectMeta,
     owned: &HashMap<&str, Vec<&Pod>>,
+    unread: &[OverviewUnread],
     now: DateTime<Utc>,
 ) -> Rollout {
     let pods = set.uid.as_deref().and_then(|uid| owned.get(uid));
-    crate::resources::with_pods(rollout, pods.into_iter().flatten().copied(), now)
+    with_pods_read(
+        rollout,
+        set,
+        pods.into_iter().flatten().copied(),
+        unread,
+        now,
+    )
 }
 
 fn stateful_set_problems<'a>(
     sets: impl IntoIterator<Item = &'a StatefulSet>,
     owned: &HashMap<&str, Vec<&Pod>>,
+    unread: &[OverviewUnread],
     now: DateTime<Utc>,
 ) -> Vec<ClusterProblem> {
     sets.into_iter()
@@ -683,6 +719,7 @@ fn stateful_set_problems<'a>(
                     crate::resources::statefulset_rollout(set),
                     &set.metadata,
                     owned,
+                    unread,
                     now,
                 ),
                 set.status
@@ -698,6 +735,7 @@ fn stateful_set_problems<'a>(
 fn daemon_set_problems<'a>(
     sets: impl IntoIterator<Item = &'a DaemonSet>,
     owned: &HashMap<&str, Vec<&Pod>>,
+    unread: &[OverviewUnread],
     now: DateTime<Utc>,
 ) -> Vec<ClusterProblem> {
     sets.into_iter()
@@ -710,6 +748,7 @@ fn daemon_set_problems<'a>(
                     crate::resources::daemonset_rollout(set),
                     &set.metadata,
                     owned,
+                    unread,
                     now,
                 ),
                 status.map_or(0, |s| s.number_ready),
@@ -1287,27 +1326,32 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         input.usage_by_node.as_ref(),
     );
 
+    let unread = input.unread;
+    let pods_known = !unread.iter().any(|entry| entry.kind == "Pod");
     let mut problems = pod_problems(refs(input.scoped_pods), input.now);
     let by_deployment = pods_by_deployment(refs(input.scoped_pods));
     problems.extend(deployment_problems(
         refs(input.deployments),
         &by_deployment,
+        unread,
         input.now,
     ));
     let rollouts: Vec<Rollout> = input
         .deployments
         .iter()
-        .map(|d| rollout_with_pods(d, &by_deployment, input.now))
+        .map(|d| rollout_with_pods(d, &by_deployment, unread, input.now))
         .collect();
     let owned = pods_by_controller(refs(input.scoped_pods));
     problems.extend(stateful_set_problems(
         refs(input.stateful_sets),
         &owned,
+        unread,
         input.now,
     ));
     problems.extend(daemon_set_problems(
         refs(input.daemon_sets),
         &owned,
+        unread,
         input.now,
     ));
     problems.extend(job_problems(input.jobs.into_iter().flat_map(refs)));
@@ -1316,17 +1360,17 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     // Scoped, the breakdown restates the selection, under a heading that
     // counts namespaces in the cluster. Drop it instead.
     let namespaces = match input.scope {
-        Some(_) => Vec::new(),
-        None => namespace_loads(refs(input.scoped_pods), &problems),
+        None if pods_known => namespace_loads(refs(input.scoped_pods), &problems),
+        _ => Vec::new(),
     };
     let (problems, problems_truncated) = rank_and_cap(problems);
 
     // The lists this query already had to read answer their own counts, so
     // those four kinds cost no extra request. A refused node read is `None`,
     // not `Some(0)` — the same distinction the other counts make.
-    let read = |kind: &str| !input.unread.iter().any(|unread| unread.kind == kind);
+    let read = |kind: &str| !unread.iter().any(|entry| entry.kind == kind);
     let counts = ResourceCounts {
-        pods: Some(input.scoped_pods.len()),
+        pods: pods_known.then_some(input.scoped_pods.len()),
         deployments: read("Deployment").then_some(input.deployments.len()),
         stateful_sets: read("StatefulSet").then_some(input.stateful_sets.len()),
         daemon_sets: read("DaemonSet").then_some(input.daemon_sets.len()),
@@ -1344,13 +1388,13 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         warnings: recent_warnings(refs(input.events)),
         warnings_known: input.events_known,
         counts,
-        pods: pod_composition(refs(input.scoped_pods), input.now),
+        pods: pods_known.then(|| pod_composition(refs(input.scoped_pods), input.now)),
         jobs: input.jobs.map(|jobs| job_composition(refs(jobs))),
         deployments: read("Deployment").then(|| count_codes(rollouts.iter().map(Rollout::code))),
         namespaces,
         metrics_available,
         served_from: input.served_from,
-        unread: input.unread.to_vec(),
+        unread: unread.to_vec(),
     }
 }
 
@@ -1634,16 +1678,28 @@ fn take<K>(
     }
 }
 
+impl Listed {
+    /// Whether any of this reach's workload lists answered.
+    fn answered(&self) -> bool {
+        self.pods.is_ok()
+            || self.deployments.is_ok()
+            || self.stateful_sets.is_ok()
+            || self.daemon_sets.is_ok()
+            || self.jobs.is_ok()
+    }
+}
+
 /// Joins the reaches by the rule the counts follow: what one namespace
 /// refused is never filled in by the ones that answered.
 ///
-/// Pods are the load-bearing read, so a namespace that refuses them fails the
-/// whole overview. The workloads feed problems as well as counts: the problems
-/// of the namespaces that answered stand, the count goes unknown, and the
-/// refusal is carried by kind and namespace. Jobs are a count and a
+/// Every kind feeds problems as well as counts: the problems of the
+/// namespaces that answered stand, the count goes unknown, and the refusal is
+/// carried by kind and namespace. Only a scope where no workload list
+/// answered anywhere fails, with its pods' refusal. Jobs are a count and a
 /// composition, both unknown when any namespace refused. Events are what
 /// answered, said to be part.
 fn gather(parts: Vec<Listed>) -> Result<Gathered> {
+    let answered = parts.iter().any(Listed::answered);
     let jobs_known = parts.iter().all(|part| part.jobs.is_ok());
     let mut gathered = Gathered {
         pods: Vec::new(),
@@ -1658,8 +1714,12 @@ fn gather(parts: Vec<Listed>) -> Result<Gathered> {
     let mut jobs = Vec::new();
     for part in parts {
         let reach = part.reach.as_deref();
-        gathered.pods.extend(arcs(part.pods?));
         let unread = &mut gathered.unread;
+        match part.pods {
+            Ok(pods) => gathered.pods.extend(arcs(pods)),
+            Err(error) if !answered => return Err(error),
+            Err(error) => unread.push(OverviewUnread::of("Pod", reach, &error)),
+        }
         take(
             "Deployment",
             reach,
@@ -1719,10 +1779,10 @@ async fn by_listing(
         nodes_api.list(&params),
     );
 
-    // With no pods in scope there is no screen to draw. On the whole cluster
-    // the scoped list is the cluster-wide one, so a token with no cluster
-    // read rights fails here and the page shows the refusal (and says to
-    // pick a namespace).
+    // With no workload read in scope there is no screen to draw. On the whole
+    // cluster the scoped lists are the cluster-wide ones, so a token with no
+    // cluster read rights fails here and the page shows the refusal (and
+    // says to pick a namespace).
     let listed = gather(parts)?;
     // The node list and the cluster-wide accounting pods are cluster-scoped
     // reads a namespace-restricted token is refused. They degrade to "unknown"
@@ -1744,7 +1804,21 @@ async fn by_listing(
             None
         }
     };
-    let accounting_known = scope.is_none() || cluster_pods.is_some();
+    // Unscoped, the accounting pods are the scoped ones, refused with them.
+    let pods_refused = unread.iter().find(|entry| entry.kind == "Pod").cloned();
+    let accounting_known = match (scope, pods_refused) {
+        (Some(_), _) => cluster_pods.is_some(),
+        (None, None) => true,
+        (None, Some(refused)) => {
+            if nodes.is_some() {
+                unread.push(OverviewUnread {
+                    kind: "Node".to_string(),
+                    ..refused
+                });
+            }
+            false
+        }
+    };
     let nodes_known = nodes.is_some() && accounting_known;
 
     Ok(build_overview(&OverviewInputs {
@@ -1978,7 +2052,7 @@ mod tests {
         );
         // The workloads the user could read are still on the screen.
         assert_eq!(result.counts.pods, Some(2));
-        assert_eq!(result.pods.running, 2);
+        assert_eq!(result.pods.expect("every pod list answered").running, 2);
     }
 
     /// A missing metrics-server comes back as `Ok` with a `NotInstalled`
@@ -2865,6 +2939,7 @@ mod tests {
         let stalled = deployment_problems(
             [&deployment(1, ("False", "ProgressDeadlineExceeded"))],
             &HashMap::new(),
+            &[],
             Utc::now(),
         );
         assert_eq!(stalled.len(), 1);
@@ -2873,6 +2948,7 @@ mod tests {
         assert!(deployment_problems(
             [&deployment(1, ("True", "ReplicaSetUpdated"))],
             &HashMap::new(),
+            &[],
             Utc::now()
         )
         .is_empty());
@@ -2917,12 +2993,12 @@ mod tests {
         let before = deployment.clone();
         crate::overview::strip_deployment(&mut deployment);
         assert_eq!(
-            deployment_problems([&before], &HashMap::new(), Utc::now()).len(),
+            deployment_problems([&before], &HashMap::new(), &[], Utc::now()).len(),
             1
         );
         assert_eq!(
-            deployment_problems([&deployment], &HashMap::new(), Utc::now()),
-            deployment_problems([&before], &HashMap::new(), Utc::now()),
+            deployment_problems([&deployment], &HashMap::new(), &[], Utc::now()),
+            deployment_problems([&before], &HashMap::new(), &[], Utc::now()),
             "a Deployment strip that reached status would empty the panel"
         );
         assert!(
@@ -3761,7 +3837,7 @@ mod tests {
             deployment(0, false),
         ]
         .iter()
-        .map(|d| rollout_with_pods(d, &owned, Utc::now()))
+        .map(|d| rollout_with_pods(d, &owned, &[], Utc::now()))
         .collect();
 
         assert_eq!(
@@ -4232,22 +4308,104 @@ mod across_namespaces {
         assert_eq!(overview.counts.services, Some(1));
     }
 
-    /// Every namespace or none, as when each was asked on its own and one
-    /// refusal left the page without an answer. Keeping the namespaces that
-    /// answered would label their pods with the scope's name.
+    /// One namespace refusing its pods failed the whole scope, and a
+    /// readable namespace beside it read as refused. Fails if the refusal is
+    /// not named where it happened, if the answered half is summed as the
+    /// scope's pods, or if a workload there is judged by pods nobody read.
     #[tokio::test]
-    async fn a_namespace_that_refuses_its_pods_fails_the_whole_overview() {
-        let (answer, _) = Cluster::new()
+    async fn a_namespace_that_refuses_its_pods_is_named_and_the_rest_of_the_scope_stands() {
+        let overview = Cluster::new()
             .items(
                 "/api/v1/namespaces/prod/pods",
-                vec![pod("api", PROD, "Running")],
+                vec![crash_looping("api", PROD)],
             )
             .refuse("/api/v1/namespaces/staging/pods")
-            .overview()
+            .items(
+                "/apis/apps/v1/namespaces/staging/deployments",
+                vec![unavailable("ledger", STAGING)],
+            )
+            .listed()
             .await;
 
-        let error = answer.expect_err("a refusal, not two thirds of a scope");
+        let pods: Vec<_> = overview
+            .unread
+            .iter()
+            .filter(|entry| entry.kind == "Pod")
+            .collect();
+        assert_eq!(pods.len(), 1, "{:?}", overview.unread);
+        assert_eq!(pods[0].namespace.as_deref(), Some(STAGING));
+        assert_eq!(pods[0].code, "PERMISSION_DENIED");
+        assert_eq!(overview.counts.pods, None, "not prod's pods as the scope's");
+        assert!(overview.pods.is_none());
+        assert!(overview
+            .problems
+            .iter()
+            .any(|p| p.kind == "Pod" && p.name == "api"));
+        assert!(
+            !overview.problems.iter().any(|p| p.name == "ledger"),
+            "{:?}",
+            overview.problems
+        );
+        assert_eq!(overview.counts.deployments, Some(1));
+        assert_eq!(
+            overview.deployments,
+            Some(vec![ReasonCount {
+                reason: "Unavailable".to_string(),
+                count: 1,
+            }])
+        );
+    }
+
+    /// The refusal screen is for a scope with nothing read in it at all.
+    /// Fails if a scope whose every workload list was refused draws an
+    /// overview of nothing instead.
+    #[tokio::test]
+    async fn a_scope_where_no_workload_list_answered_fails_with_its_refusal() {
+        let mut cluster = Cluster::new();
+        for namespace in [PROD, STAGING] {
+            for path in [
+                format!("/api/v1/namespaces/{namespace}/pods"),
+                format!("/apis/apps/v1/namespaces/{namespace}/deployments"),
+                format!("/apis/apps/v1/namespaces/{namespace}/statefulsets"),
+                format!("/apis/apps/v1/namespaces/{namespace}/daemonsets"),
+                format!("/apis/batch/v1/namespaces/{namespace}/jobs"),
+            ] {
+                cluster = cluster.refuse(&path);
+            }
+        }
+        let (answer, _) = cluster.overview().await;
+
+        let error = answer.expect_err("nothing in scope answered");
         assert!(error.is_refusal(), "{error}");
+    }
+
+    /// Unscoped, the pods that are refused are the ones the capacity view
+    /// adds up. Fails if that view is drawn from no pods as a cluster with
+    /// nothing requested, or if the node half is not named as unread.
+    #[tokio::test]
+    async fn an_unscoped_overview_whose_pods_were_refused_claims_no_capacity() {
+        let (client, _) = server(vec![
+            ("/api/v1/nodes", 200, list(vec![node("n1", true)])),
+            ("/api/v1/pods", 403, refused("/api/v1/pods")),
+            (
+                "/apis/apps/v1/deployments",
+                200,
+                list(vec![unavailable("api", PROD)]),
+            ),
+        ])
+        .await;
+        let sides = Sides {
+            counts: ResourceCounts::default(),
+            usage_by_node: None,
+        };
+        let overview = by_listing(&client, None, sides)
+            .await
+            .expect("the Deployments answered");
+
+        assert!(!overview.nodes_known);
+        assert!(overview.unread.iter().any(|entry| entry.kind == "Node"));
+        assert_eq!(overview.counts.pods, None);
+        assert!(overview.namespaces.is_empty());
     }
 
     /// The rule the counts follow, for the one kind whose bar needs status.
@@ -4408,11 +4566,12 @@ mod across_namespaces {
             .listed()
             .await;
 
-        assert_eq!(overview.pods.running, 5);
-        assert_eq!(overview.pods.crash_looping, 1);
-        assert_eq!(overview.pods.pending, 1);
-        assert_eq!(overview.pods.succeeded, 1);
-        assert_eq!(overview.pods.failed, 1);
+        let pods = overview.pods.expect("both namespaces answered");
+        assert_eq!(pods.running, 5);
+        assert_eq!(pods.crash_looping, 1);
+        assert_eq!(pods.pending, 1);
+        assert_eq!(pods.succeeded, 1);
+        assert_eq!(pods.failed, 1);
         let jobs = overview.jobs.expect("both namespaces answered");
         let count = |code: &str| {
             jobs.iter()

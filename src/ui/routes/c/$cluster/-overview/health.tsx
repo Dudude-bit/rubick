@@ -30,14 +30,15 @@ import {
 import { eventReasonMark } from "@/lib/event-reason";
 import {
   attentionLines,
+  checkRefused,
   foldedWords,
   reasonWord,
+  unreadWhere,
   type Attention,
   type AttentionLine,
   type AttentionCheck,
   type AttentionItem,
 } from "@/lib/attention";
-import { ERROR_CODES } from "@/lib/error-utils";
 import { parseRefusal } from "@/lib/refusal";
 import { listLink, objectLink } from "@/lib/links";
 import {
@@ -56,7 +57,7 @@ import type {
   SchedulerPressure,
   WarningGroup,
 } from "@/generated/types";
-import { useT, type T } from "@/i18n/useT";
+import { useT } from "@/i18n/useT";
 import { formatCount } from "@/lib/count";
 
 /**
@@ -354,29 +355,14 @@ function MoreRows({
   );
 }
 
-function scopeOf(unread: AttentionCheck["unread"], t: T): string | null {
-  const named = [
-    ...new Set(
-      unread.flatMap((entry) => (entry.namespace ? [entry.namespace] : []))
-    ),
-  ];
-  if (named.length === 0) return null;
-  return named.length === 1
-    ? t("cluster", "attentionInNamespace", { namespace: named[0] })
-    : t("cluster", "attentionInNamespaces", { n: named.length });
-}
-
 /** One kind the list could not look at: refused, failed, or not answered yet. */
 function CheckRow({ check }: { check: AttentionCheck }) {
   const t = useT();
   const reading = check.state === "reading";
-  const refused =
-    !reading &&
-    check.unread.length > 0 &&
-    check.unread.every((entry) => entry.code === ERROR_CODES.PERMISSION);
+  const refused = checkRefused(check);
   const Icon = reading ? Loader2 : refused ? Lock : TriangleAlert;
   const said = check.unread.find((entry) => entry.message)?.message ?? null;
-  const where = scopeOf(check.unread, t);
+  const named = check.unread.some((entry) => entry.namespace);
   // A refusal reads as what was refused and where; the server's sentence is
   // on hover, where kubectl's words can be checked against it.
   const verb = refused && said ? parseRefusal(said)?.verb : undefined;
@@ -408,11 +394,8 @@ function CheckRow({ check }: { check: AttentionCheck }) {
               ? t("cluster", "attentionMayNot", { verb })
               : t("cluster", "attentionRefused")
             : t("cluster", "attentionFailed")}
-        {(where || refused) && (
-          <span className="text-fg-fnt">
-            {" "}
-            {where ?? t("cluster", "attentionClusterWide")}
-          </span>
+        {(named || refused) && (
+          <span className="text-fg-fnt"> {unreadWhere(check.unread, t)}</span>
         )}
         {said && !refused && (
           <span className="font-mono text-[11px] text-fg-fnt">
@@ -458,7 +441,8 @@ export function AttentionPanel({
   nodesKnown,
 }: {
   attention: Attention;
-  pods: PodComposition;
+  /** `null` when a namespace in scope refused its pods: no total to state. */
+  pods: PodComposition | null;
   nodes: NodeSummary[];
   /** False when the node list was refused: the "N nodes ready" half of the
    *  summary is unknown, not "0 of 0", so it is left off. */
@@ -475,9 +459,8 @@ export function AttentionPanel({
     .flatMap((line) => (line.at === "item" ? [line.item] : []));
   const cut = total - items.length;
   const unchecked = attention.checks.filter((check) => check.state !== "read");
-  const serving = podsServing(pods);
   const readyNodes = nodes.filter((n) => n.ready).length;
-  const down = notRunning(pods);
+  const down = pods && notRunning(pods);
   const summaryRole: StatusRole = worst ?? (complete ? "ok" : "neutral");
 
   return (
@@ -532,14 +515,18 @@ export function AttentionPanel({
             {t("cluster", SUMMARY_LABEL[summaryRole])}
           </span>
           <span className="truncate text-fg-fnt">
-            {t("count", "podsReady", {
-              n: formatCount(serving),
-              of: t("count", "ofPods", { n: podTotal(pods) }),
-            })}
-            {down && <> ({down})</>}
+            {pods && (
+              <>
+                {t("count", "podsReady", {
+                  n: formatCount(podsServing(pods)),
+                  of: t("count", "ofPods", { n: podTotal(pods) }),
+                })}
+                {down && <> ({down})</>}
+              </>
+            )}
             {nodesKnown && (
               <>
-                {" · "}
+                {pods && " · "}
                 {t("count", "nodesReady", {
                   n: readyNodes,
                   of: t("count", "ofNodes", { n: nodes.length }),
@@ -598,7 +585,7 @@ export function WorkloadsPanel({
 }) {
   const t = useT();
   const { counts, pods, jobs, nodes, problemsTruncated } = overview;
-  const podCount = podTotal(pods);
+  const podCount = pods && podTotal(pods);
   useShareSection("overview-workloads", () => workloadsShare(overview, t));
 
   return (
@@ -618,7 +605,15 @@ export function WorkloadsPanel({
           total={podCount}
           label={podCount === 1 ? "Pod" : "Pods"}
           emptyMessage={t("empty", "noneInScope")}
-          segments={podSegments(pods)}
+          segments={pods ? podSegments(pods) : []}
+          note={
+            pods
+              ? undefined
+              : unreadWhere(
+                  overview.unread.filter((entry) => entry.kind === "Pod"),
+                  t
+                )
+          }
         />
         <Composition
           total={counts.deployments}

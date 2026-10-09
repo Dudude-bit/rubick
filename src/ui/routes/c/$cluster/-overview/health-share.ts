@@ -10,8 +10,10 @@ import type { WorkloadStatus } from "@/lib/workload-status";
 import type { JobStatus } from "@/lib/status-meaning";
 import {
   attentionLines,
+  checkRefused,
   foldedWords,
   reasonWord,
+  unreadWhere,
   type Attention,
   type AttentionDetail,
 } from "@/lib/attention";
@@ -151,11 +153,15 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
     });
   for (const check of attention.checks) {
     if (check.state === "read") continue;
+    const said =
+      check.state === "reading"
+        ? t("cluster", "attentionStillReading")
+        : `${t(
+            "cluster",
+            checkRefused(check) ? "attentionRefused" : "attentionFailed"
+          )} ${unreadWhere(check.unread, t)}`;
     items.push({
-      title: `${getDisplayPlural(check.kind)}: ${t(
-        "cluster",
-        check.state === "reading" ? "attentionStillReading" : "attentionFailed"
-      )}`,
+      title: `${getDisplayPlural(check.kind)}: ${said}`,
       detail: check.unread.find((entry) => entry.message)?.message ?? null,
       role: "neutral",
     });
@@ -321,7 +327,12 @@ export function workloadsShare(overview: ClusterOverview, t: T): PlacedSection {
     body: {
       type: "facts",
       rows: [
-        compositionRow("Pods", podTotal(pods), podSegments(pods), t),
+        compositionRow(
+          "Pods",
+          pods && podTotal(pods),
+          pods ? podSegments(pods) : [],
+          t
+        ),
         compositionRow(
           "Deployments",
           counts.deployments,

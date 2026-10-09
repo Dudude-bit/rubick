@@ -19,7 +19,7 @@ import type {
   ServiceHealthInputs,
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
-import { errorCode, errorToShow } from "@/lib/error-utils";
+import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { autoscalerVerdict } from "@/lib/governance";
 import { ownStatusWord } from "@/lib/status-words";
 import { ingressHealthWords, type IngressHealth } from "@/lib/ingress-health";
@@ -60,6 +60,25 @@ export interface AttentionCheck {
   state: "read" | "reading" | "unread";
   unread: Unread[];
 }
+
+/** Where reads went unread, in words: one namespace, several, or the whole cluster. */
+export function unreadWhere(unread: readonly Unread[], t: T): string {
+  const named = [
+    ...new Set(
+      unread.flatMap((entry) => (entry.namespace ? [entry.namespace] : []))
+    ),
+  ];
+  if (named.length === 0) return t("cluster", "attentionClusterWide");
+  return named.length === 1
+    ? t("cluster", "attentionInNamespace", { namespace: named[0] })
+    : t("cluster", "attentionInNamespaces", { n: named.length });
+}
+
+/** An unread check every reach of which refused it, rather than failed. */
+export const checkRefused = (check: AttentionCheck): boolean =>
+  check.state === "unread" &&
+  check.unread.length > 0 &&
+  check.unread.every((entry) => entry.code === ERROR_CODES.PERMISSION);
 
 export interface Attention {
   /** Worst first, then the longest broken (undated first, as the backend ranks). */

@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useAttention } from "@/hooks/useAttention";
-import { attentionWords, type Attention } from "@/lib/attention";
+import { attentionWords, unreadWhere, type Attention } from "@/lib/attention";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useRenewal } from "@/hooks/useCredentialRenewal";
 import type { Renewal } from "@/generated/types";
@@ -85,7 +85,7 @@ export function StatusBar() {
   // would count the wrong namespaces.
   const here =
     scoped.data && !scoped.isPlaceholderData && attention
-      ? { pods: scoped.data.counts.pods, attention }
+      ? { pods: scoped.data.counts.pods, unread: scoped.data.unread, attention }
       : null;
   // The two worth a line that is always up — both predict the sign-in screen,
   // and they differ in why. Everything else is quiet, and a chip that is
@@ -197,14 +197,19 @@ export function StatusBar() {
                   </span>
                 ) : (
                   <>
-                    {here.pods !== null && (
-                      <>
-                        <span>
-                          {t("cluster", "podCount", { n: here.pods })}
-                        </span>
-                        <span>·</span>
-                      </>
+                    {here.pods !== null ? (
+                      <span>{t("cluster", "podCount", { n: here.pods })}</span>
+                    ) : (
+                      <span className="text-fg-fnt">
+                        {t("cluster", "podsNotCounted", {
+                          where: unreadWhere(
+                            here.unread.filter((entry) => entry.kind === "Pod"),
+                            t
+                          ),
+                        })}
+                      </span>
                     )}
+                    <span>·</span>
                     <ProblemCount attention={here.attention} />
                   </>
                 )}

@@ -135,6 +135,36 @@ describe("cluster summary counts when the overview is refused", () => {
     }
   });
 
+  /**
+   * The overview now answers when only its pods were refused, with no
+   * namespace breakdown. Fails if a namespace missing from that breakdown
+   * reads as holding zero pods.
+   */
+  it("leaves pod counts unknown when the answer's pods were refused", async () => {
+    getClusterOverview.mockResolvedValue({
+      namespaces: [],
+      problems: [],
+      problemsTruncated: 0,
+      unread: [
+        {
+          kind: "Pod",
+          namespace: null,
+          code: "PERMISSION_DENIED",
+          message: "pods is forbidden",
+        },
+      ],
+      counts: { pods: null },
+    } as never);
+    listNamespaces.mockResolvedValue([{ name: "team-a" }] as never);
+
+    const { result } = renderHook(() => useClusterSummary(), { wrapper });
+    await waitFor(() => expect(result.current.namespaces).toHaveLength(1));
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+
+    expect(result.current.podCount).toBeNull();
+    expect(result.current.namespaces[0].podCount).toBeNull();
+  });
+
   it("reports the real counts when the overview answers", async () => {
     getClusterOverview.mockResolvedValue({
       namespaces: [{ name: "team-a", podCount: 3, problemCount: 1 }],
