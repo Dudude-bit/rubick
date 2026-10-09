@@ -7,6 +7,7 @@ import type {
 } from "@/generated/types";
 import {
   containerStatus,
+  lastTermination,
   terminationWhen,
   type ContainerStatus,
 } from "@/lib/pod-status";
@@ -358,7 +359,7 @@ function noteFor(
   const phase = container.phase;
 
   if (mark === "failed") {
-    const death = container.lastTerminated ?? null;
+    const death = lastTermination(container);
     const when = death ? terminationWhen(death, t) : null;
     if (container.restartCount > 0) {
       return t("readings", "logsAttemptsLast", {

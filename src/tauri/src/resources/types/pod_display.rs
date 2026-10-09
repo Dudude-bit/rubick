@@ -68,6 +68,16 @@ fn last_terminated(cs: &ContainerStatus) -> Option<&ContainerStateTerminated> {
     cs.last_state.as_ref()?.terminated.as_ref()
 }
 
+/// The run a container ended last: the state it is in now while it sits
+/// exited, otherwise the one it is backing off from. `lastState` alone is the
+/// exit before that while the container is still terminated.
+fn latest_exit(cs: &ContainerStatus) -> Option<&ContainerStateTerminated> {
+    cs.state
+        .as_ref()
+        .and_then(|s| s.terminated.as_ref())
+        .or_else(|| last_terminated(cs))
+}
+
 /// Init containers that keep running alongside the app containers.
 ///
 /// The one place that judgement is made. `ContainerInfo` ships it to
@@ -242,15 +252,7 @@ pub fn looping_exit(pod: &Pod) -> Option<DateTime<Utc>> {
         .iter()
         .flatten()
         .filter(|cs| cs.restart_count >= 2)
-        .filter_map(|cs| {
-            cs.state
-                .as_ref()
-                .and_then(|s| s.terminated.as_ref())
-                .or_else(|| last_terminated(cs))?
-                .finished_at
-                .as_ref()
-                .map(Moment::moment)
-        })
+        .filter_map(|cs| latest_exit(cs)?.finished_at.as_ref().map(Moment::moment))
         .max()
 }
 
@@ -350,7 +352,8 @@ pub fn pending_since(pod: &Pod) -> Option<DateTime<Utc>> {
         .map(Moment::moment)
 }
 
-/// Restarts as kubectl counts them, and when the last one happened.
+/// Restarts as kubectl counts them, and when the latest exit among them
+/// ended: the one a terminated container sits in, not the run before it.
 ///
 /// Not a plain sum over `containerStatuses`: a sidecar's restarts count
 /// too, and while a pod is still initializing the number that matters is
@@ -358,7 +361,12 @@ pub fn pending_since(pod: &Pod) -> Option<DateTime<Utc>> {
 #[must_use]
 pub fn restarts(pod: &Pod) -> (i32, Option<DateTime<Utc>>) {
     fn note(slot: &mut Option<DateTime<Utc>>, cs: &ContainerStatus) {
-        if let Some(at) = last_terminated(cs).and_then(|t| t.finished_at.as_ref()) {
+        let exit = if cs.restart_count > 0 {
+            latest_exit(cs)
+        } else {
+            last_terminated(cs)
+        };
+        if let Some(at) = exit.and_then(|t| t.finished_at.as_ref()) {
             if slot.is_none_or(|current| current < at.moment()) {
                 *slot = Some(at.moment());
             }
@@ -728,6 +736,44 @@ mod tests {
         });
         p.status.as_mut().unwrap().container_statuses = Some(vec![cs]);
         p
+    }
+
+    /// Sam's checkout pod read "34 restarts, last 5m ago" four seconds after
+    /// an exit, while Copy for agent named that exit: `lastState` is the run
+    /// before while the container sits terminated. Fails if the age is read
+    /// from it, or a first run that ended dates a restart that never was.
+    #[test]
+    fn the_last_restart_is_dated_by_the_exit_the_container_sits_in() {
+        let now = Utc::now();
+        let ago = |seconds: i64| Some((now - chrono::Duration::seconds(seconds)).timestamp());
+        let sitting = looping(
+            ContainerState {
+                terminated: Some(exited(now, 4, "Error", 1)),
+                ..Default::default()
+            },
+            exited(now, 300, "Error", 1),
+            34,
+        );
+        assert_eq!(restarts(&sitting).1.map(|t| t.timestamp()), ago(4));
+        assert_eq!(
+            crate::resources::PodRow::from(&sitting)
+                .last_restart_at
+                .map(|t| t.timestamp()),
+            ago(4)
+        );
+        let backing_off = looping(waiting("CrashLoopBackOff"), exited(now, 40, "Error", 1), 34);
+        assert_eq!(restarts(&backing_off).1.map(|t| t.timestamp()), ago(40));
+
+        let mut first = pod("Running");
+        first.status.as_mut().unwrap().container_statuses = Some(vec![status(
+            "app",
+            ContainerState {
+                terminated: Some(exited(now, 4, "Error", 1)),
+                ..Default::default()
+            },
+            false,
+        )]);
+        assert_eq!(restarts(&first), (0, None));
     }
 
     /// Dana's checkout pods read "Running" on the Overview whenever the read
