@@ -38,6 +38,7 @@ import {
 } from "@/components/share/screen-share";
 import type { PlacedSection } from "@/lib/report-parts";
 import { commands } from "@/lib/commands";
+import { currentConnection, forgetRefusals, noteRefusal } from "@/lib/refusals";
 import { ResourceList } from "./ResourceList";
 import type { Scoped, UnreadNamespace } from "@/generated/types";
 import { SCOPE_PICKER_OPEN, SLOW_READ_MS } from "@/lib/read-deadline";
@@ -307,6 +308,32 @@ describe("a list whose re-read is refused", () => {
       screen.getByRole("button", { name: "Try the read again" })
     );
     expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Shot 45: right after Try the read again, the lock page's header said
+   * "polled less often · 2m ago", the age of the answer before the revoke.
+   * Fails if the header does not say refused, as old as the refusal the
+   * cluster just gave, or claims polling.
+   */
+  it("says refused in the header, as old as the cluster's refusal", async () => {
+    const refusal = new Error("namespaces is forbidden: RBAC");
+    noteRefusal("listNamespaces []", refusal, currentConnection());
+    try {
+      await list({
+        data: [{ name: "team-blind", namespace: "" }],
+        error: refusal,
+        dataUpdatedAt: Date.now() - 120_000,
+      });
+
+      expect(screen.getByText("refused")).toBeVisible();
+      expect(screen.getByText(/^\d+s ago$/)).toBeVisible();
+      expect(screen.queryByText("2m ago")).not.toBeInTheDocument();
+      expect(screen.queryByText("polled less often")).not.toBeInTheDocument();
+      expect(screen.queryByText("polling")).not.toBeInTheDocument();
+    } finally {
+      forgetRefusals();
+    }
   });
 });
 

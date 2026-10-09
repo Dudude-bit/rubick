@@ -22,6 +22,8 @@ export function currentConnection(): number {
 interface Refused {
   connection: number;
   error: unknown;
+  /** When the cluster said it, which is the last time it was asked. */
+  at: number;
 }
 
 const useRefusals = create<{
@@ -68,7 +70,34 @@ export function noteRefusal(
   const reads = new Map(useRefusals.getState().reads);
   for (const [key, refused] of reads)
     if (refused.connection !== connection) reads.delete(key);
-  useRefusals.setState({ reads: reads.set(read, { connection, error }) });
+  useRefusals.setState({
+    reads: reads.set(read, { connection, error, at: Date.now() }),
+  });
+}
+
+/**
+ * When the cluster refused the read `error` answered on this connection, or
+ * `null` where no kept refusal is that one. A kept refusal answers every later
+ * ask itself, so the time a screen re-read it from here is not this.
+ */
+export function useRefusedAt(error: unknown): number | null {
+  return useRefusals((s) => {
+    if (error == null) return null;
+    const connection = currentConnection();
+    for (const refused of s.reads.values())
+      if (refused.connection === connection && carries(error, refused.error))
+        return refused.at;
+    return null;
+  });
+}
+
+/** `error` is `kept`, or wraps it. */
+function carries(error: unknown, kept: unknown): boolean {
+  for (let at = error, depth = 0; at != null && depth < 4; depth++) {
+    if (at === kept) return true;
+    at = at instanceof Error ? at.cause : undefined;
+  }
+  return false;
 }
 
 /** The reader says their rights may have changed: every refused read is asked once more. */

@@ -4178,6 +4178,9 @@ export const en = {
     freshOfflineNote: "Not connected. Nothing on this screen is updating.",
     freshStaleNote:
       "The last read failed, so what is on screen is from the last read that answered.",
+    freshRefused: "refused",
+    freshRefusedNote:
+      "The cluster refused the last read, and this screen does not ask again on its own. Try the read again asks once more.",
     freshNeverReadNote:
       "The read failed, and no read of this has answered yet.",
     lastRead: "Last read",

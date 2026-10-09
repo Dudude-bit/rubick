@@ -908,6 +908,26 @@ describe("a feed whose re-read is refused", () => {
     expect(screen.queryByText(/just now/)).not.toBeInTheDocument();
     expect(screen.queryByText("read failing")).not.toBeInTheDocument();
   });
+
+  /** The lists' header says refused; fails if the feed's says polled or polling over the same refusal. */
+  it("says refused in the header, not polled", async () => {
+    listEvents.mockResolvedValue(feed("prod", 3));
+    const { client } = await mount();
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("prod-pod-0")
+    );
+
+    listEvents.mockRejectedValue(
+      Object.assign(new Error('events is forbidden: User "marco"'), {
+        code: "PERMISSION_DENIED",
+      })
+    );
+    await act(() => client.refetchQueries());
+
+    expect(await screen.findByText("refused")).toBeInTheDocument();
+    expect(screen.queryByText("polled less often")).not.toBeInTheDocument();
+    expect(screen.queryByText("polling")).not.toBeInTheDocument();
+  });
 });
 
 describe("a feed across namespaces whose re-read fails", () => {

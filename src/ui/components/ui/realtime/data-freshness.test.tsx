@@ -93,6 +93,43 @@ describe("what the freshness reading claims", () => {
   });
 });
 
+describe("a refused read", () => {
+  /**
+   * Marco pressed Try the read again on the refused Namespaces list and the
+   * header said "polled less often · 2m ago": the age of the answer before
+   * the grant was revoked, on a list nothing polls. Fails if a refusal reads
+   * as polled or slowed, or carries the last answer's age instead of its own.
+   */
+  it("says refused, as old as the refusal, whatever the last answer was", () => {
+    wrap(
+      <DataFreshness
+        dataUpdatedAt={Date.now() - 120_000}
+        slowed
+        refusedAt={Date.now() - 4000}
+      />
+    );
+    expect(screen.getByText("refused")).toBeInTheDocument();
+    expect(screen.getByText(/^\d+s ago$/)).toBeInTheDocument();
+    expect(screen.queryByText("2m ago")).not.toBeInTheDocument();
+    expect(screen.queryByText("polled less often")).not.toBeInTheDocument();
+  });
+
+  /** Fails if a list refused on its first read says nothing in the header. */
+  it("says refused, with no age, when neither the refusal's time nor an answer is known", () => {
+    wrap(<DataFreshness refusedAt={null} />);
+    expect(screen.getByText("refused")).toBeInTheDocument();
+    expect(screen.queryByText(/ago/)).not.toBeInTheDocument();
+  });
+
+  /** Disconnected, nothing is refused or read: fails if refused outranks offline. */
+  it("says offline over a refusal when the window is not connected", () => {
+    useClusterStore.setState({ isConnected: false });
+    wrap(<DataFreshness dataUpdatedAt={UPDATED} refusedAt={UPDATED} />);
+    expect(screen.getByText("offline")).toBeInTheDocument();
+    expect(screen.queryByText("refused")).not.toBeInTheDocument();
+  });
+});
+
 describe("the room the reading takes", () => {
   /**
    * The Events toolbar is right-aligned, so the label growing from "polling"
