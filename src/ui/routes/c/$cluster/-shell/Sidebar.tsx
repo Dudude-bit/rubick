@@ -33,7 +33,7 @@ import {
   useLocks,
   type Lock as ListLock,
 } from "./useListAccess";
-import { useAppSearch } from "@/hooks/useSearchParam";
+import { useAppSearchValue } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "../-object/useGatewayRoutes";
@@ -593,7 +593,7 @@ function GroupCaption({ k, busy = false }: { k: NavKey; busy?: boolean }) {
 function IntegrationsGroup() {
   const t = useT();
   const onCatalog = useRouterState({ select: isCatalogLocation });
-  const vendor = useAppSearch().vendor ?? null;
+  const vendor = useAppSearchValue("vendor") ?? null;
   const { pages, pending, reading } = useIntegrationPages();
   const context = useClusterStore((state) => state.currentContext);
   const saved = useClusterForwardStore((state) => state.forwards);

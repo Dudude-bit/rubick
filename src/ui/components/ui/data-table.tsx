@@ -11,6 +11,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import {
+  searchableColumn,
   tableStack,
   type ColumnDef,
   type Row,
@@ -37,7 +38,7 @@ import { claimListKeys } from "@/lib/list-keys";
 import { revealInScroller } from "@/lib/reveal";
 import { useSurfaceVisible } from "@/lib/surface-visibility";
 import { peekOfRow, usePeek, type PeekTarget } from "@/hooks/usePeek";
-import { useAppSearch, useSetSearch } from "@/hooks/useSearchParam";
+import { useAppSearchValue, useSetSearch } from "@/hooks/useSearchParam";
 import type { AppSearch } from "@/lib/app-search";
 import { useClusterStore } from "@/stores/clusterStore";
 import {
@@ -613,11 +614,9 @@ function DataTableInner<TData extends RowData>({
   const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
     []
   );
-  const [globalFilter, setGlobalFilter] = React.useState("");
   const t = useT();
-  const search = useAppSearch();
   const setSearch = useSetSearch();
-  const inTheUrl = searchParam ? (search[searchParam] ?? "") : "";
+  const inTheUrl = useAppSearchValue(searchParam) ?? "";
   const [searchValue, setSearchValue] = React.useState(inTheUrl);
   // The query string is the authority, and the state beside it is only so
   // that typing does not wait for a navigation. Seeded once, the two came
@@ -631,7 +630,14 @@ function DataTableInner<TData extends RowData>({
     if (!searchParam) return;
     setSearch({ [searchParam]: value || undefined }, { replace: true });
   };
-  const deferredSearch = React.useDeferredValue(searchValue);
+  // One road. The box used to be able to aim at a single column instead,
+  // chosen by whether a caller passed a `searchKey`, and nothing said which
+  // pages should, so ten of them narrowed the search to the name for no
+  // stated reason, and the road they took was the one that quietly stopped
+  // filtering (#185). A column opts out with `enableGlobalFilter: false`.
+  // Narrowed in the deferred render itself, not in one more render at full
+  // priority that an effect copying it into state used to cost per keystroke.
+  const globalFilter = React.useDeferredValue(searchValue);
 
   // Compact rows stay strictly single-line — a pod name like
   // `cron-demo-29765030-v9vcv` otherwise wraps to three lines and the row
@@ -805,8 +811,8 @@ function DataTableInner<TData extends RowData>({
     getRowId,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
-    onGlobalFilterChange: setGlobalFilter,
     onColumnSizingChange: setColumnSizing,
+    getColumnCanGlobalFilter: searchableColumn,
     state: {
       sorting,
       columnFilters,
@@ -828,15 +834,6 @@ function DataTableInner<TData extends RowData>({
   const keyboardNavEnabled = enableKeyboardNav ?? !!(getRowHref || onRowClick);
   const containerRef = React.useRef<HTMLDivElement>(null);
   const filterRef = React.useRef<HTMLInputElement>(null);
-
-  // One road. The box used to be able to aim at a single column instead,
-  // chosen by whether a caller passed a `searchKey`, and nothing said which
-  // pages should — so ten of them narrowed the search to the name for no
-  // stated reason, and the road they took was the one that quietly stopped
-  // filtering (#185). A column opts out with `enableGlobalFilter: false`.
-  React.useEffect(() => {
-    setGlobalFilter(deferredSearch);
-  }, [deferredSearch]);
 
   const filteredRows = table.getFilteredRowModel().rows.length;
   const totalRows = data.length;

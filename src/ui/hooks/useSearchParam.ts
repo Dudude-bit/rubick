@@ -8,6 +8,20 @@ export function useAppSearch(): AppSearch {
   return useSearch({ strict: false }) as AppSearch;
 }
 
+/**
+ * One key of the query. A reader of the whole query is drawn again when any
+ * key changes, so a filter writing `?q=` per keystroke redrew every name link
+ * in a list and the shell around it.
+ */
+export function useAppSearchValue<K extends keyof AppSearch>(
+  key: K | undefined
+): AppSearch[K] | undefined {
+  return useSearch({
+    strict: false,
+    select: (search: AppSearch) => (key ? search[key] : undefined),
+  } as never) as AppSearch[K] | undefined;
+}
+
 /** Writes part of the query in place, keeping the rest of it. */
 export function useSetSearch(): (
   patch: Partial<AppSearch>,
@@ -39,7 +53,7 @@ export function useSearchParam(
   key: keyof AppSearch,
   fallback = ""
 ): [string, (next: string) => void] {
-  const value = useAppSearch()[key] ?? fallback;
+  const value = useAppSearchValue(key) ?? fallback;
   const setSearch = useSetSearch();
   const set = useCallback(
     (next: string) =>
