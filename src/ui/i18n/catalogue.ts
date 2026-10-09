@@ -4382,11 +4382,8 @@ export const en = {
     signInAgain: "Sign in again",
     podCount: { one: "{n} pod", other: "{n} pods" },
     problemCount: { one: "{n} problem", other: "{n} problems" },
-    problemCountPartial: {
-      one: "{n}+ problem, not all checked",
-      other: "{n}+ problems, not all checked",
-    },
-    problemCountAtLeast: { one: "{n}+ problem", other: "{n}+ problems" },
+    problemCountPartial: { other: "{n}+ problems, not all checked" },
+    problemCountAtLeast: { other: "{n}+ problems" },
     problemsNotAllChecked: "not all checked",
     finishedOnNode: "Finished here",
     finishedOnNodeNote:
@@ -7561,10 +7558,7 @@ export const en = {
       other: "Type at least {n} characters to search resources.",
     },
     matchCount: { one: "{n} match", other: "{n} matches" },
-    matchesCapped: {
-      one: "{n}+ match · capped",
-      other: "{n}+ matches · capped",
-    },
+    matchesCapped: { other: "{n}+ matches · capped" },
     moreOnThisCluster: "{n} more on this cluster",
     kindsSearchedByName: {
       one: "Names searched in {n} kind",
