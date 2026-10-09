@@ -301,7 +301,9 @@ describe("every list at the windows it is drawn in", () => {
    * Fixed layout shares a table's width out in per cent, and per cent of a
    * table that cannot be wider than its port are a cut. Fails if a list whose
    * floors add up to more than the port stops asking for the width they need,
-   * or asks for more than they need when they fit.
+   * asks for more when they fit, or ends its sideways scroll on a sliver of
+   * a column beside the pinned one: Lena read a stray ")" of a restart count
+   * there.
    */
   it.each(
     PAGES.flatMap(([page, columns]) =>
@@ -312,10 +314,25 @@ describe("every list at the windows it is drawn in", () => {
     (_page, _language, columns, t) => {
       const floors = drawn(columns, t).reduce((sum, c) => sum + c.floor, 0);
       for (const port of PORTS) {
-        const { span, scrolls, shares } = laidOut(columns, port, t);
+        const { span, scrolls, shares, px } = laidOut(columns, port, t);
         expect(scrolls).toBe(floors > port);
-        expect(span).toBe(Math.max(port, floors));
         expect(shares.reduce((sum, share) => sum + share, 0)).toBeCloseTo(100);
+        if (!scrolls) {
+          expect(span).toBe(port);
+          continue;
+        }
+        expect(span).toBeGreaterThanOrEqual(floors);
+        const room = port - px[0];
+        const ends = px.map((_, at) =>
+          px.slice(at).reduce((sum, width) => sum + width, 0)
+        );
+        const first = ends.findIndex((end, at) => at > 1 && end <= room + 0.01);
+        if (first < 0) continue;
+        const sliver = room - ends[first];
+        expect(
+          sliver < 0.01 || sliver >= Math.min(64, px[first - 1] / 2),
+          `${sliver} at ${port}`
+        ).toBe(true);
       }
     }
   );
