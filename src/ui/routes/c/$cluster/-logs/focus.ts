@@ -1,5 +1,5 @@
 import type { ContainerInfo } from "@/generated/types";
-import { containerFailed } from "@/lib/container-sequence";
+import { containerFailed, readsPreviousRun } from "@/lib/container-sequence";
 
 /**
  * Which container the viewer opens on, and which run of it.
@@ -36,18 +36,6 @@ const NOTHING_HIDDEN: LogFocus = {
   previous: false,
   reason: null,
 };
-
-/**
- * A container that is *waiting* is backing off from a death whose output
- * belongs to the run before this one: the current run has printed
- * nothing yet and may not have started at all. A container that is
- * terminated is still sitting on the output that killed it.
- */
-function readsPreviousRun(container: ContainerInfo): boolean {
-  return (
-    container.lastTerminated !== null && container.state.type !== "terminated"
-  );
-}
 
 function only(
   containers: readonly ContainerInfo[],

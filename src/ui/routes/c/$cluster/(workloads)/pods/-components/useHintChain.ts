@@ -13,6 +13,7 @@ import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
 import { addressIn, namespaceOf, type Chain, type Trouble } from "@/lib/hints";
+import { readsPreviousRun } from "@/lib/container-sequence";
 import { usePolicyPeerData } from "@/hooks/usePolicyPeers";
 import { knownOf } from "@/lib/known";
 import { labelSelectorMatches } from "@/lib/label-selector";
@@ -40,7 +41,13 @@ export function useHintChain(
     trouble && "container" in trouble && trouble.container
       ? trouble.container
       : null;
-  const previous = trouble?.reason === "crashLoop";
+  // The run that holds the last exit: the one before only once the
+  // container has left it. Asked of a container that has just exited, the
+  // run before is the one the node has already dropped.
+  const crashed = [...pod.initContainers, ...pod.containers].find(
+    (container) => container.name === logContainer
+  );
+  const previous = crashed !== undefined && readsPreviousRun(crashed);
 
   const logs = useQuery({
     queryKey: [
