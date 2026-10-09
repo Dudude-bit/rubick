@@ -57,6 +57,7 @@ interface SheetContentProps
    * open while working behind it must not claim that.
    */
   showOverlay?: boolean;
+  container?: HTMLElement | null;
 }
 
 const SheetContent = React.forwardRef<
@@ -64,12 +65,19 @@ const SheetContent = React.forwardRef<
   SheetContentProps
 >(
   (
-    { side = "right", showOverlay = true, className, children, ...props },
+    {
+      side = "right",
+      showOverlay = true,
+      container,
+      className,
+      children,
+      ...props
+    },
     ref
   ) => {
     const t = useT();
     return (
-      <SheetPortal>
+      <SheetPortal container={container}>
         {showOverlay && <SheetOverlay />}
         <SheetPrimitive.Content
           ref={ref}

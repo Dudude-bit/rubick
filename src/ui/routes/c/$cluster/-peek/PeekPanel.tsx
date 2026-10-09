@@ -8,7 +8,10 @@ import { PeekSkeleton } from "./peek-skeleton";
 import type { PeekTabId } from "./peek-tabs";
 import { usePeekWidth } from "./peek-width";
 import { SurfaceVisibility, useSurfaceVisible } from "@/lib/surface-visibility";
+import { cn } from "@/lib/utils";
 import { peekLanding } from "../-object/attachment";
+import { usePeekHost } from "./peek-dock";
+import { usePeekEscape } from "./peek-escape";
 
 /** The sheet's `data-[state=closed]:duration-300`, with room to finish. */
 const SLIDE_OUT_MS = 500;
@@ -40,6 +43,7 @@ export function PeekPanel() {
   // The tab lives above the target, not inside it: clicking down a list of
   // pods with Logs open should stay on Logs rather than resetting each time.
   const [requestedTab, setRequestedTab] = useState<PeekTabId>("overview");
+  usePeekEscape(!!target, close);
 
   // After the window has drawn, so the body is not what delays it — and
   // before the first click, so the first peek opens whole.
@@ -82,15 +86,22 @@ export function PeekPanel() {
 /** The outline the body fills in: the name from `?peek=` alone, and the overview's shape. */
 function PeekLoading({ target }: { target: PeekTarget }) {
   const { width } = usePeekWidth();
+  const { container, position } = usePeekHost();
   return (
     <SheetContent
       side="right"
       showOverlay={false}
+      container={container}
+      data-peek=""
+      onEscapeKeyDown={(event) => event.preventDefault()}
       onPointerDownOutside={(event) => event.preventDefault()}
       onInteractOutside={(event) => event.preventDefault()}
       aria-describedby={undefined}
       style={{ width }}
-      className="flex max-w-none flex-col gap-0 p-0 sm:max-w-none"
+      className={cn(
+        "flex max-w-none flex-col gap-0 p-0 sm:max-w-none",
+        position
+      )}
     >
       <header className="flex-none px-3.5 pb-2 pt-3 pr-9">
         <SheetTitle className="flex min-w-0 items-center">

@@ -269,6 +269,8 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "alt+arrows move along ownership on an object's page",
   "src/ui/lib/window-activity.ts":
     "not a shortcut: notices that the reader is here",
+  "src/ui/routes/c/$cluster/-peek/peek-escape.ts":
+    "esc closes the open peek ahead of the row or filter under it",
 };
 
 export function chordsOf(): Shortcut[] {

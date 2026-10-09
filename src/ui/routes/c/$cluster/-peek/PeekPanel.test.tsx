@@ -1,5 +1,5 @@
 import { load } from "js-yaml";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import {
   beforeAll,
   afterEach,
@@ -134,6 +134,14 @@ import { forgetLastOwners } from "@/hooks/useLastOwners";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { preloadPeekContent } from "./peek-loader";
 import { pageTab } from "@/hooks/usePeek";
+import { PeekHost } from "./peek-dock";
+import * as PopoverPrimitive from "@radix-ui/react-popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function buildPod(overrides: Partial<PodInfo> = {}): PodInfo {
   return {
@@ -705,6 +713,164 @@ describe("PeekPanel", () => {
     await screen.findByText("CrashLoopBackOff");
     await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(location()).toBe("/c/prod/events"));
+  });
+
+  /** Fails if a row under the panel reads Escape first, or the peek stays open while the focus is outside it. */
+  it("closes on Escape pressed outside it, ahead of the row there, which keeps the focus", async () => {
+    await wrap(
+      POD_PEEK,
+      <>
+        <PeekPanel />
+        <button
+          type="button"
+          onKeyDown={(event) => {
+            if (event.key === "Escape") event.currentTarget.blur();
+          }}
+        >
+          row
+        </button>
+      </>
+    );
+    await screen.findByText("CrashLoopBackOff");
+    const row = screen.getByRole("button", { name: "row" });
+    row.focus();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(location()).toBe("/c/prod/events"));
+    expect(row).toHaveFocus();
+  });
+
+  /** Fails if a layer left mounted after it closed takes Escape away from the open peek. */
+  it("closes on Escape while a closed layer is still mounted above it", async () => {
+    function LateLayer() {
+      const [mounted, setMounted] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => setMounted(true)}>
+            mount
+          </button>
+          {mounted && (
+            <PopoverPrimitive.Root open={false}>
+              <PopoverPrimitive.Anchor />
+              <PopoverPrimitive.Portal forceMount>
+                <PopoverPrimitive.Content forceMount>
+                  closed
+                </PopoverPrimitive.Content>
+              </PopoverPrimitive.Portal>
+            </PopoverPrimitive.Root>
+          )}
+        </>
+      );
+    }
+    await wrap(
+      POD_PEEK,
+      <>
+        <PeekPanel />
+        <LateLayer />
+      </>
+    );
+    await screen.findByText("CrashLoopBackOff");
+    await userEvent.click(screen.getByRole("button", { name: "mount" }));
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(location()).toBe("/c/prod/events"));
+  });
+
+  /** Fails if Escape closes the peek under a menu open in front of it instead of the menu. */
+  it("lets a menu open in front of it take Escape first", async () => {
+    await wrap(
+      POD_PEEK,
+      <>
+        <PeekPanel />
+        <DropdownMenu>
+          <DropdownMenuTrigger>more</DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem>one</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </>
+    );
+    await screen.findByText("CrashLoopBackOff");
+    await userEvent.click(screen.getByRole("button", { name: "more" }));
+    await screen.findByRole("menu");
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    expect(location()).toContain("peek=");
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(location()).toBe("/c/prod/events"));
+  });
+
+  /** Fails if Escape typed in a terminal or an open suggestion list closes the peek instead of reaching them. */
+  it.each([
+    [
+      "a terminal",
+      <div key="t" className="xterm">
+        <textarea aria-label="keys" />
+      </div>,
+    ],
+    [
+      "an open suggestion list",
+      <input
+        key="c"
+        aria-label="keys"
+        role="combobox"
+        aria-expanded="true"
+        aria-controls="none"
+      />,
+    ],
+  ])("leaves Escape to %s", async (_, control) => {
+    await wrap(
+      POD_PEEK,
+      <>
+        <PeekPanel />
+        {control}
+      </>
+    );
+    await screen.findByText("CrashLoopBackOff");
+    screen.getByLabelText("keys").focus();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(location()).not.toBe("/c/prod/events");
+  });
+
+  /** Fails if closing the peek drops the focus on nothing instead of on what opened it. */
+  it("gives the focus back to what opened it", async () => {
+    await wrap(
+      "/c/prod/events",
+      <>
+        <PeekPanel />
+        <PeekOpener
+          target={{
+            kind: "Pod",
+            name: "crash-demo-56588f6b8c-8bj9v",
+            namespace: "k8s-gui-test",
+          }}
+          label="open"
+        />
+      </>
+    );
+    const opener = screen.getByRole("button", { name: "open" });
+    await userEvent.click(opener);
+    await screen.findByText("CrashLoopBackOff");
+    expect(screen.getByRole("dialog")).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(location()).toBe("/c/prod/events"));
+    expect(opener).toHaveFocus();
+  });
+
+  /** Fails if the panel is drawn over the whole window again, covering the tab bar and the status bar. */
+  it("opens inside the page's box when the shell gives it one", async () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    await wrap(
+      POD_PEEK,
+      <PeekHost.Provider value={host}>
+        <PeekPanel />
+      </PeekHost.Provider>
+    );
+    const dialog = await screen.findByRole("dialog");
+    expect(host).toContainElement(dialog);
+    expect(dialog).toHaveClass("absolute");
+    expect(dialog).not.toHaveClass("fixed");
+    host.remove();
   });
 
   it("replaces its contents when a reference inside it is clicked", async () => {

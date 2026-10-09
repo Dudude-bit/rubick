@@ -66,6 +66,7 @@ import { PeekTabBody } from "./PeekTabs";
 import { PeekHeading } from "./peek-heading";
 import { PeekTraffic } from "./peek-traffic";
 import { TabGlyph, TabMark } from "@/components/object/tab-marks";
+import { usePeekHost } from "./peek-dock";
 import { usePeekWidth } from "./peek-width";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
@@ -102,6 +103,7 @@ export function PeekContent({
   const contentRef = useRef<HTMLDivElement>(null);
   const namespace = target.namespace ?? null;
   const { width, min, max, preview, commit } = usePeekWidth();
+  const host = usePeekHost();
 
   const source = useMemo(() => resolveSource(target), [target]);
 
@@ -205,7 +207,10 @@ export function PeekContent({
       ref={contentRef}
       side="right"
       showOverlay={false}
+      container={host.container}
+      data-peek=""
       onKeyDown={handleKeyDown}
+      onEscapeKeyDown={(event) => event.preventDefault()}
       // Without a scrim Radix would still close on any outside pointerdown,
       // including the one that picks the next row. Closing here and letting
       // that row's own click reopen the panel is a flicker for no gain; the
@@ -220,7 +225,10 @@ export function PeekContent({
       }}
       aria-describedby={undefined}
       style={{ width }}
-      className="flex max-w-none flex-col gap-0 p-0 sm:max-w-none"
+      className={cn(
+        "flex max-w-none flex-col gap-0 p-0 sm:max-w-none",
+        host.position
+      )}
     >
       <PeekResizeHandle
         width={width}
