@@ -90,6 +90,7 @@ export const en = {
     notLookedAtNote:
       "named, so a group that is absent is never read as a group that is empty",
     deliveredBy: "Delivered by",
+    deliveredFromPath: "from {path}",
     disruptionBudget: "Disruption budget",
     autoscaling: "Autoscaling",
     tlsCertificate: "TLS certificate",
@@ -3325,6 +3326,7 @@ export const en = {
     logFormatKlog: "Kubernetes log format with severity prefix (I/W/E/F)",
     logFormatLogback: "Java Logback format with timestamp and level",
     logFormatPlain: "Plain text without structured formatting",
+    logFormatPlainName: "plain",
     noTimestamp: "no timestamp",
     awsPortNumber: "port {port}",
     awsNoTargetGroup: "no target group named",

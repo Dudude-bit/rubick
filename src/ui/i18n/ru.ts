@@ -67,6 +67,7 @@ export const ru: Catalogue = {
     notLookedAtNote:
       "перечислены по имени, чтобы отсутствующая группа не читалась как пустая",
     deliveredBy: "Доставлено",
+    deliveredFromPath: "из {path}",
     disruptionBudget: "Бюджет простоя",
     autoscaling: "Автомасштабирование",
     tlsCertificate: "Сертификат TLS",
@@ -239,7 +240,7 @@ export const ru: Catalogue = {
     resourceVersion: "Версия ресурса",
     uid: "UID",
     apiVersion: "Версия API",
-    aDrainWaits: "Слив ждёт",
+    aDrainWaits: "Освобождение узла ждёт",
     setBy: "Задаёт",
     cpu: "CPU",
     pods: "Поды",
@@ -3557,7 +3558,7 @@ export const ru: Catalogue = {
       many: "{n} автомасштабаторов претендуют на это и отменяют друг друга",
       other: "{n} автомасштабатора претендуют на это и отменяют друг друга",
     },
-    govWhatDrainRespects: "что должен учитывать слив",
+    govWhatDrainRespects: "что учитывает освобождение узла",
     govWhoSetsIt: "кто его задаёт",
     nginxNoController:
       "В этом кластере нет ничего с меткой {selector}, поэтому собственную конфигурацию контроллера прочитать не удалось.",
@@ -3617,6 +3618,7 @@ export const ru: Catalogue = {
     logFormatKlog: "Формат логов Kubernetes с префиксом уровня (I/W/E/F)",
     logFormatLogback: "Формат Java Logback со временем и уровнем",
     logFormatPlain: "Обычный текст без структуры",
+    logFormatPlainName: "обычный текст",
     noTimestamp: "времени нет",
     awsPortNumber: "порт {port}",
     awsNoTargetGroup: "целевая группа не указана",
@@ -3643,10 +3645,10 @@ export const ru: Catalogue = {
       other: "таймаут запроса {n} с",
     },
     agicDraining: {
-      one: "слив {n} с",
-      few: "слив {n} с",
-      many: "слив {n} с",
-      other: "слив {n} с",
+      one: "завершение соединений {n} с",
+      few: "завершение соединений {n} с",
+      many: "завершение соединений {n} с",
+      other: "завершение соединений {n} с",
     },
     agicOutAfter: {
       one: "выводится после {n} неудачной проверки",
@@ -3674,7 +3676,7 @@ export const ru: Catalogue = {
     gcpAccessLogsAt: "журналы доступа на {percent}%",
     gcpSetsNothing: "ничего не задаёт",
     gcpTimeout: "таймаут {n} с",
-    gcpDraining: "слив {n} с",
+    gcpDraining: "завершение соединений {n} с",
     gcpRequestHeaders: {
       one: "{n} заголовок запроса",
       few: "{n} заголовка запроса",
@@ -4276,10 +4278,10 @@ export const ru: Catalogue = {
     pdbBelowFloor:
       "{name} ниже собственного минимума: здоровых {healthy}, нужно {required}",
     pdbBelowFloorDetail:
-      "Вытеснение пода здесь отклоняется и будет отклоняться, пока не вернутся недостающие реплики. Слив узла, задевающий эту нагрузку, не завершится.",
+      "Вытеснение пода здесь отклоняется и будет отклоняться, пока не вернутся недостающие реплики. Освобождение узла (kubectl drain), задевающее эту нагрузку, не завершится.",
     pdbExactlyMet: "{name} сейчас не допускает прерываний",
     pdbExactlyMetDetail:
-      "Бюджет соблюдён в точности: здоровых {healthy} при минимуме {required}. Слив узла, задевающий эту нагрузку, будет ждать.",
+      "Бюджет соблюдён в точности: здоровых {healthy} при минимуме {required}. Освобождение узла (kubectl drain), задевающее эту нагрузку, будет ждать.",
     hpaSeveralTitle: {
       one: "{n} автомасштабировщик",
       few: "{n} автомасштабировщика",

@@ -7,6 +7,8 @@ import {
 } from "@/components/ui/tooltip";
 import {
   FORMAT_DESCRIPTIONS,
+  formatLineRate,
+  formatName,
   formatTimeRange,
   termLabel,
   type QueryTerm,
@@ -148,7 +150,7 @@ export function LogStatusBar({
                   twice; the segment beside it says both instead. */}
               {intakeKey === "" &&
                 rate !== null &&
-                ` · ${t("count", "linesPerSecond", { rate: formatRate(rate) })}`}
+                ` · ${t("count", "linesPerSecond", { rate: formatLineRate(rate) })}`}
             </span>
           </TooltipTrigger>
           <TooltipContent side="top">{formatInfo.description}</TooltipContent>
@@ -162,22 +164,26 @@ export function LogStatusBar({
               <span aria-hidden="true">⇣ </span>
               {t("action", "intake")} {intakeKey} ·{" "}
               {kept !== null
-                ? `${t("count", "keptPerSecond", { rate: formatRate(kept) })}${
+                ? `${t("count", "keptPerSecond", { rate: formatLineRate(kept) })}${
                     arriving === null
                       ? ""
                       : t("count", "ofPerSecond", {
-                          rate: formatRate(arriving),
+                          rate: formatLineRate(arriving),
                         })
                   }`
                 : arriving !== null
-                  ? t("count", "arrivingBefore", { rate: formatRate(arriving) })
+                  ? t("count", "arrivingBefore", {
+                      rate: formatLineRate(arriving),
+                    })
                   : t("action", "keepingOnlyMatches")}
             </span>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs">
             {t("empty", "intakeDiscardNote")}
             {arriving !== null &&
-              t("empty", "intakeArrivingRate", { rate: formatRate(arriving) })}
+              t("empty", "intakeArrivingRate", {
+                rate: formatLineRate(arriving),
+              })}
             .
           </TooltipContent>
         </Tooltip>
@@ -221,7 +227,7 @@ function describeFormat(logs: StreamedLogLine[], t: ReturnType<typeof useT>) {
 
   if (counts.size === 1) {
     return {
-      label: dominant,
+      label: formatName(dominant, t),
       description: t("readings", FORMAT_DESCRIPTIONS[dominant]),
     };
   }
@@ -229,7 +235,7 @@ function describeFormat(logs: StreamedLogLine[], t: ReturnType<typeof useT>) {
   const share = Math.round((best / logs.length) * 100);
   if (share >= 90) {
     return {
-      label: `${dominant} (${share}%)`,
+      label: `${formatName(dominant, t)} (${share}%)`,
       description: t("readings", FORMAT_DESCRIPTIONS[dominant]),
     };
   }
@@ -268,13 +274,4 @@ function measureRate(
   const span = logs[end].epoch - logs[start].epoch;
   if (span <= 0) return null;
   return ((end - start) / span) * 1000;
-}
-
-/**
- * A decimal below ten, none above. A quiet pod runs at well under one line
- * a second, and rounding that to "1" or "0" is the difference between a
- * reading and a shrug.
- */
-function formatRate(rate: number): string {
-  return rate < 10 ? rate.toFixed(1) : formatCount(Math.round(rate));
 }

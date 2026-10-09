@@ -4,7 +4,8 @@ import type {
   LogLine,
   QueryTerm,
 } from "@/generated/types";
-import { formatDuration, formatTimeUnit } from "@/lib/utils";
+import { formatDecimal, formatDuration, formatTimeUnit } from "@/lib/utils";
+import { formatCount } from "@/lib/count";
 
 export type ViewMode = "compact" | "table" | "raw";
 
@@ -141,6 +142,22 @@ export const FORMAT_DESCRIPTIONS = {
   logback: "logFormatLogback",
   plain: "logFormatPlain",
 } as const satisfies Record<LogFormat, string>;
+
+/** A format's name in the footer: plain text is words, the others are names. */
+export function formatName(format: LogFormat, t: T): string {
+  return format === "plain" ? t("readings", "logFormatPlainName") : format;
+}
+
+/**
+ * Lines a second, with a decimal below ten and none above: a quiet pod runs
+ * at well under one line a second, and rounding that to "1" or "0" is the
+ * difference between a reading and a shrug.
+ */
+export function formatLineRate(rate: number, locale?: string): string {
+  return rate < 10
+    ? formatDecimal(rate, 1, locale)
+    : formatCount(Math.round(rate));
+}
 
 /**
  * Wall clock, 24-hour, fixed width. `toLocaleTimeString` was the reason the

@@ -129,3 +129,15 @@ describe("a verb beside a count", () => {
     expect(say("count", "ofTotalReady", 1)).toBe("готово 1 из 4");
   });
 });
+
+describe("the Russian word for a drain", () => {
+  /**
+   * "Слив ждёт" and "что должен учитывать слив" on Lena's cart Deployment
+   * read as a dump or a leak. A node drain is an освобождение, as the drain
+   * dialog already says. Fails if "слив" comes back anywhere.
+   */
+  it("is never слив", () => {
+    const found = strings().filter(([, text]) => /слив/i.test(text));
+    expect(found).toEqual([]);
+  });
+});
