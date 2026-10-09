@@ -12,6 +12,7 @@
 import type {
   AutoscalerInfo,
   ClusterOverview,
+  ClusterProblem,
   IngressHealthInput,
   PersistentVolumeClaimInfo,
   ProblemDetail,
@@ -91,6 +92,8 @@ export interface Attention {
   worst: AttentionTone | null;
   /** Each namespace's problems, counting the rows the backend's cut dropped. */
   byNamespace: ReadonlyMap<string, number>;
+  /** What a workload's controller says where its pods went unread: named as not checked, never counted. */
+  unconfirmed: AttentionItem[];
 }
 
 /** One namespace's share of an attention read across several. */
@@ -158,26 +161,30 @@ const withKey = (item: Omit<AttentionItem, "key">): AttentionItem => ({
   key: keyOf(item),
 });
 
-const problemItems = remember(
-  (problems: ClusterOverview["problems"]): AttentionItem[] =>
-    problems.map((problem) =>
-      withKey({
-        tone: problem.severity === "critical" ? "err" : "warn",
-        kind: problem.kind,
-        name: problem.name,
-        namespace: problem.namespace,
-        reason: problem.reason,
-        detail: problem.detail,
-        since: problem.since,
-        restarts: problem.restarts,
-        foldedPods: problem.foldedPods,
-        opens: {
-          kind: problem.kind,
-          name: problem.name,
-          namespace: problem.namespace,
-        },
-      })
-    )
+const itemOf = (problem: ClusterProblem): AttentionItem =>
+  withKey({
+    tone: problem.severity === "critical" ? "err" : "warn",
+    kind: problem.kind,
+    name: problem.name,
+    namespace: problem.namespace,
+    reason: problem.reason,
+    detail: problem.detail,
+    since: problem.since,
+    restarts: problem.restarts,
+    foldedPods: problem.foldedPods,
+    opens: {
+      kind: problem.kind,
+      name: problem.name,
+      namespace: problem.namespace,
+    },
+  });
+
+const problemItems = remember((problems: ClusterProblem[]) =>
+  problems.map(itemOf)
+);
+
+const unconfirmedItems = remember((problems: ClusterProblem[]) =>
+  problems.map(itemOf)
 );
 
 function toneOf(role: string): AttentionTone | null {
@@ -546,5 +553,6 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
     complete: checks.every((check) => check.state === "read"),
     worst: items[0]?.tone ?? null,
     byNamespace: countByNamespace(overview, backend, ours),
+    unconfirmed: unconfirmedItems(overview.unconfirmed),
   };
 }

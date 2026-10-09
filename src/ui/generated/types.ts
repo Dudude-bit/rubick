@@ -1859,6 +1859,7 @@ export interface ControllerRevisionInfo {
 export interface ClusterOverview {
   problems: ClusterProblem[];
   problemsTruncated: number;
+  unconfirmed: ClusterProblem[];
   scheduler: SchedulerPressure;
   nodes: NodeSummary[];
   nodesKnown: boolean;

@@ -4911,6 +4911,9 @@ export const ru: Catalogue = {
     attentionNothing: "ничего не требует внимания",
     attentionNoneFound: "в проверенном ничего не найдено",
     attentionNotChecked: "Не проверено",
+    attentionUnconfirmed:
+      "контроллер говорит {word} уже {age}; поды не прочитаны",
+    attentionUnconfirmedUndated: "контроллер говорит {word}; поды не прочитаны",
     attentionStillReading: "ещё читается",
     attentionRefused: "доступ запрещён",
     attentionForbidden: "запрос {verb} запрещён",

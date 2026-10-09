@@ -93,6 +93,7 @@ describe("the namespaces the window offers", () => {
       namespaces: [],
       problems: [],
       problemsTruncated: 0,
+      unconfirmed: [],
       unread: [],
       counts: { pods: 0 },
     } as never);
@@ -145,6 +146,7 @@ describe("cluster summary counts when the overview is refused", () => {
       namespaces: [],
       problems: [],
       problemsTruncated: 0,
+      unconfirmed: [],
       unread: [
         {
           kind: "Pod",
@@ -170,6 +172,7 @@ describe("cluster summary counts when the overview is refused", () => {
       namespaces: [{ name: "team-a", podCount: 3, problemCount: 1 }],
       problems: [{ namespace: "team-a" }],
       problemsTruncated: 0,
+      unconfirmed: [],
       unread: [],
       counts: { pods: 3 },
     } as never);
@@ -199,6 +202,7 @@ describe("cluster summary counts when the overview is refused", () => {
       ],
       problems: Array.from({ length: 50 }, () => ({ namespace: "prod" })),
       problemsTruncated: 1,
+      unconfirmed: [],
       unread: [],
       counts: { pods: 51 },
     } as never);
@@ -230,6 +234,7 @@ describe("who asks for the whole cluster", () => {
       namespaces: [],
       problems: [],
       problemsTruncated: 0,
+      unconfirmed: [],
       unread: [],
       counts: { pods: 3 },
     } as never);
@@ -263,6 +268,7 @@ describe("counts once the whole cluster refused", () => {
         namespaces: [],
         problems: [{ namespace: "team-checkout" }],
         problemsTruncated: 0,
+        unconfirmed: [],
         unread: [],
         counts: { pods: 4 },
       } as never;
@@ -310,6 +316,7 @@ describe("counts once the whole cluster refused", () => {
           { namespace: "team-checkout" },
         ],
         problemsTruncated: 0,
+        unconfirmed: [],
         unread: [
           {
             kind: "Pod",
@@ -360,6 +367,7 @@ it("counts no selected namespace the window's overview does not break out", asyn
       namespaces: [],
       problems: [],
       problemsTruncated: 0,
+      unconfirmed: [],
       unread: [
         {
           kind: "Pod",
@@ -448,6 +456,7 @@ describe("the count beside a namespace and the count on its Overview", () => {
         (row) => scope === null || scope.includes(row.namespace ?? "")
       ),
       problemsTruncated: 0,
+      unconfirmed: [],
       unread: [],
       counts: { pods: scope === null ? 18 : 4 },
     }));
@@ -553,6 +562,7 @@ describe("the count beside a namespace and the count on its Overview", () => {
       ],
       problems: [],
       problemsTruncated: 0,
+      unconfirmed: [],
       unread: [
         {
           kind: "DaemonSet",

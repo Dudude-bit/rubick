@@ -1,6 +1,12 @@
 import { Fragment } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { CircleSlash, Loader2, Lock, TriangleAlert } from "lucide-react";
+import {
+  CircleSlash,
+  EyeOff,
+  Loader2,
+  Lock,
+  TriangleAlert,
+} from "lucide-react";
 
 import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Composition } from "@/components/object/detail-blocks";
@@ -443,6 +449,58 @@ function CheckRow({ check }: { check: AttentionCheck }) {
   );
 }
 
+/**
+ * A workload whose controller states a problem its unread pods could have
+ * changed: not counted, and not dropped. Marco's team-blind Overview said
+ * "nothing found" while ledger had been Unavailable for hours.
+ */
+function UnconfirmedRow({ item }: { item: AttentionItem }) {
+  const t = useT();
+  const word = (
+    <span className="font-mono font-medium text-fg-mid">
+      {reasonWord(item, t)}
+    </span>
+  );
+  return (
+    <li
+      className="col-span-full grid grid-cols-subgrid items-baseline py-[3px] text-xs"
+      data-testid="attention-unconfirmed"
+    >
+      <EyeOff className={cn(MARK, "text-fg-mut")} aria-hidden="true" />
+      <span className="inline-flex min-w-0 items-baseline gap-1 font-mono text-fg-mid">
+        <KindIcon
+          kind={item.kind}
+          className="h-2.5 w-2.5 flex-none self-center"
+        />
+        <ResourceRef
+          kind={item.kind}
+          name={item.name}
+          namespace={item.namespace}
+          showKind={false}
+          className="max-w-full"
+        />
+      </span>
+      <span
+        className="min-w-0 wrap-break-word text-fg-mut"
+        title={detailWords(item.detail, t) ?? undefined}
+      >
+        {item.since === null
+          ? parts(t("cluster", "attentionUnconfirmedUndated"), { word })
+          : parts(t("cluster", "attentionUnconfirmed"), {
+              word,
+              age: formatAge(item.since, t),
+            })}
+        {item.namespace && (
+          <span className="whitespace-nowrap text-fg-fnt">
+            {" "}
+            · {item.namespace}
+          </span>
+        )}
+      </span>
+    </li>
+  );
+}
+
 /** The word beside the summary dot: no verdict of its own while rows above it carry one. */
 const SUMMARY_LABEL: Record<
   StatusRole,
@@ -630,7 +688,7 @@ export function AttentionPanel({
             )}
           </span>
         </div>
-        {unchecked.length > 0 && (
+        {unchecked.length + attention.unconfirmed.length > 0 && (
           <div
             className="col-span-full mt-1 border-t border-hair pt-1.5"
             data-testid="attention-unchecked"
@@ -639,6 +697,9 @@ export function AttentionPanel({
               {t("cluster", "attentionNotChecked")}
             </p>
             <ul className="grid grid-cols-[10px_max-content_minmax(0,1fr)] gap-x-2.5 px-1.5">
+              {attention.unconfirmed.map((item) => (
+                <UnconfirmedRow key={item.key} item={item} />
+              ))}
               {unchecked.map((check) => (
                 <CheckRow key={check.kind} check={check} />
               ))}

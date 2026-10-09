@@ -70,6 +70,7 @@ function attentionFrom(
       overview: {
         problems,
         problemsTruncated: 0,
+        unconfirmed: [],
         unread: [],
       } as unknown as ClusterOverview,
       services: { answered: [], unread: [] },
@@ -383,6 +384,7 @@ describe("a scope one namespace of which refused its pods", () => {
     nodes: [],
     problems: [],
     problemsTruncated: 0,
+    unconfirmed: [],
     unread: [refusedPods],
   } as unknown as ClusterOverview;
 
@@ -416,6 +418,7 @@ describe("a scope one namespace of which refused its pods", () => {
     nodes: [],
     problems: [],
     problemsTruncated: 0,
+    unconfirmed: [],
     unread: [refusedPods, refusedIn("Job", "jobs")],
   } as unknown as ClusterOverview;
 
@@ -560,6 +563,54 @@ describe("a scope one namespace of which refused its pods", () => {
     const unchecked = screen.getByTestId("attention-unchecked");
     expect(unchecked).toHaveTextContent("Pods");
     expect(unchecked).toHaveTextContent("list is forbidden in team-blind");
+  });
+
+  /**
+   * Marco's team-blind Overview said "nothing found in what could be
+   * checked" while ledger's controller had said Unavailable for hours, its
+   * pods refused. Fails if that verdict vanishes from Needs attention, or is
+   * counted as a problem nobody could confirm.
+   */
+  it("names a workload its controller calls Unavailable under Not checked, uncounted", async () => {
+    const said = {
+      ...overview,
+      unconfirmed: [
+        {
+          severity: "critical",
+          kind: "Deployment",
+          name: "ledger",
+          namespace: "team-blind",
+          reason: "Unavailable",
+          detail: {
+            says: "said",
+            text: "Deployment does not have minimum availability.",
+          },
+          since: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+          restarts: null,
+          foldedPods: null,
+        },
+      ],
+    } as unknown as ClusterOverview;
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([], {
+          overview: said,
+        } as Partial<AttentionInputs>)}
+        pods={null}
+        podsUnread={[refusedPods]}
+        nodes={[]}
+        nodesKnown={false}
+      />
+    );
+    expect(
+      screen.getByText("nothing found in what could be checked")
+    ).toBeInTheDocument();
+    const row = screen.getByTestId("attention-unconfirmed");
+    expect(row).toHaveTextContent("ledger");
+    expect(row).toHaveTextContent(
+      "its controller has said Unavailable for 3h; its pods were not read"
+    );
+    expect(screen.getByTestId("attention-unchecked")).toContainElement(row);
   });
 
   /**
@@ -819,6 +870,7 @@ describe("the census legend in Russian", () => {
       flagged("Unavailable"),
     ],
     problemsTruncated: 0,
+    unconfirmed: [],
     unread: [],
   } as unknown as ClusterOverview;
   const ru: T = (section, key, values) => translate("ru", section, key, values);
@@ -1071,6 +1123,7 @@ describe("what Needs attention says it checked", () => {
         overview: {
           problems: [],
           problemsTruncated: 0,
+          unconfirmed: [],
           unread: [
             {
               kind: "DaemonSet",

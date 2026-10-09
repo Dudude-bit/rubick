@@ -26,6 +26,7 @@ function overview(over: Partial<ClusterOverview> = {}): ClusterOverview {
   return {
     problems: [],
     problemsTruncated: 0,
+    unconfirmed: [],
     unread: [],
     ...over,
   } as ClusterOverview;
@@ -553,6 +554,36 @@ describe("what Needs attention lists beyond pods", () => {
     expect(listed.items.map((item) => item.name)).toEqual(["web", "flappy"]);
     expect(listed.total).toBe(5);
     expect(listed.worst).toBe("err");
+  });
+
+  /**
+   * Marco's ledger: Unavailable by its controller, its pods refused. Fails if
+   * the verdict nobody could confirm is counted, ranked or charged to its
+   * namespace, or is dropped instead of carried to Not checked.
+   */
+  it("carries a verdict its pods could not confirm apart from the count", () => {
+    const ledger: ClusterProblem = {
+      severity: "critical",
+      kind: "Deployment",
+      name: "ledger",
+      namespace: "team-blind",
+      reason: "Unavailable",
+      detail: null,
+      since: "2026-10-05T02:00:00Z",
+      restarts: null,
+      foldedPods: null,
+    };
+    const listed = attention({
+      overview: overview({ unconfirmed: [ledger] }),
+    });
+
+    expect(listed.items).toEqual([]);
+    expect(listed.total).toBe(0);
+    expect(listed.worst).toBeNull();
+    expect(listed.byNamespace.get("team-blind") ?? 0).toBe(0);
+    expect(listed.unconfirmed).toMatchObject([
+      { kind: "Deployment", name: "ledger", reason: "Unavailable" },
+    ]);
   });
 });
 

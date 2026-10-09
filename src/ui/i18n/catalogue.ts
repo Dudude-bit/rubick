@@ -4405,6 +4405,10 @@ export const en = {
     attentionNothing: "nothing needs attention",
     attentionNoneFound: "nothing found in what could be checked",
     attentionNotChecked: "Not checked",
+    attentionUnconfirmed:
+      "its controller has said {word} for {age}; its pods were not read",
+    attentionUnconfirmedUndated:
+      "its controller says {word}; its pods were not read",
     attentionStillReading: "still reading",
     attentionRefused: "refused",
     attentionForbidden: "{verb} is forbidden",

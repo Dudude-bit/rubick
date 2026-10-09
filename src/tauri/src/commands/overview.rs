@@ -331,6 +331,10 @@ pub struct ClusterOverview {
     /// How many problems were dropped by the cap, so the UI can say "+N more"
     /// rather than quietly understate an outage.
     pub problems_truncated: usize,
+    /// What a workload's controller states where its pods, unread, could have
+    /// changed it, ranked as `problems` are: named as not checked, never
+    /// counted with them.
+    pub unconfirmed: Vec<ClusterProblem>,
     pub scheduler: SchedulerPressure,
     /// Uncapped: node counts are bounded in practice (hundreds at worst, and
     /// unlike pods they do not multiply per workload), and a truncated node
@@ -674,19 +678,41 @@ fn rollout_with_pods(
     )
 }
 
+/// A verdict that is a problem as it stands.
+fn as_problem(rollout: &Rollout) -> Option<&Rollout> {
+    rollout.is_problem().then_some(rollout)
+}
+
+/// The problem a workload's controller states where its pods, unread, could
+/// have changed it: not counted, and not dropped either.
+fn unconfirmed(rollout: &Rollout) -> Option<&Rollout> {
+    match rollout {
+        Rollout::PodsUnread { controller } if controller.is_problem() => Some(controller),
+        _ => None,
+    }
+}
+
 fn deployment_problems<'a>(
     deployments: impl IntoIterator<Item = &'a Deployment>,
     owned: &HashMap<(&str, &str), Vec<&Pod>>,
     unread: &[OverviewUnread],
     now: DateTime<Utc>,
 ) -> Vec<ClusterProblem> {
+    deployments_saying(deployments, owned, unread, now, as_problem)
+}
+
+fn deployments_saying<'a>(
+    deployments: impl IntoIterator<Item = &'a Deployment>,
+    owned: &HashMap<(&str, &str), Vec<&Pod>>,
+    unread: &[OverviewUnread],
+    now: DateTime<Utc>,
+    pick: fn(&Rollout) -> Option<&Rollout>,
+) -> Vec<ClusterProblem> {
     deployments
         .into_iter()
         .filter_map(|d| {
-            let rollout = rollout_with_pods(d, owned, unread, now);
-            if !rollout.is_problem() {
-                return None;
-            }
+            let read = rollout_with_pods(d, owned, unread, now);
+            let rollout = pick(&read)?;
             let status = d.status.as_ref();
             let desired = d.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1);
             let ready = status.and_then(|s| s.ready_replicas).unwrap_or(0);
@@ -704,7 +730,7 @@ fn deployment_problems<'a>(
                     .cloned()
             });
             Some(ClusterProblem {
-                severity: rollout_severity(&rollout),
+                severity: rollout_severity(rollout),
                 kind: "Deployment".to_string(),
                 name: d.metadata.name.clone().unwrap_or_default(),
                 namespace: d.metadata.namespace.clone(),
@@ -794,19 +820,20 @@ fn stateful_set_problems<'a>(
     owned: &HashMap<&str, Vec<&Pod>>,
     unread: &[OverviewUnread],
     now: DateTime<Utc>,
+    pick: fn(&Rollout) -> Option<&Rollout>,
 ) -> Vec<ClusterProblem> {
     sets.into_iter()
         .filter_map(|set| {
             set_problem(
                 "StatefulSet",
                 &set.metadata,
-                &with_own_pods(
+                pick(&with_own_pods(
                     crate::resources::statefulset_rollout(set),
                     &set.metadata,
                     owned,
                     unread,
                     now,
-                ),
+                ))?,
                 set.status
                     .as_ref()
                     .and_then(|s| s.ready_replicas)
@@ -822,6 +849,7 @@ fn daemon_set_problems<'a>(
     owned: &HashMap<&str, Vec<&Pod>>,
     unread: &[OverviewUnread],
     now: DateTime<Utc>,
+    pick: fn(&Rollout) -> Option<&Rollout>,
 ) -> Vec<ClusterProblem> {
     sets.into_iter()
         .filter_map(|set| {
@@ -829,13 +857,13 @@ fn daemon_set_problems<'a>(
             set_problem(
                 "DaemonSet",
                 &set.metadata,
-                &with_own_pods(
+                pick(&with_own_pods(
                     crate::resources::daemonset_rollout(set),
                     &set.metadata,
                     owned,
                     unread,
                     now,
-                ),
+                ))?,
                 status.map_or(0, |s| s.number_ready),
                 status.map_or(0, |s| s.desired_number_scheduled),
             )
@@ -1489,13 +1517,37 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         &owned,
         unread,
         input.now,
+        as_problem,
     ));
     problems.extend(daemon_set_problems(
         refs(input.daemon_sets),
         &owned,
         unread,
         input.now,
+        as_problem,
     ));
+    let mut said = deployments_saying(
+        refs(input.deployments),
+        &by_deployment,
+        unread,
+        input.now,
+        unconfirmed,
+    );
+    said.extend(stateful_set_problems(
+        refs(input.stateful_sets),
+        &owned,
+        unread,
+        input.now,
+        unconfirmed,
+    ));
+    said.extend(daemon_set_problems(
+        refs(input.daemon_sets),
+        &owned,
+        unread,
+        input.now,
+        unconfirmed,
+    ));
+    let (unconfirmed, _) = rank_and_cap(said);
     problems.extend(job_problems(refs(input.jobs)));
     problems.extend(node_problems(refs(nodes)));
     let problems = fold_job_runs(problems, refs(input.scoped_pods));
@@ -1527,6 +1579,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     ClusterOverview {
         problems,
         problems_truncated,
+        unconfirmed,
         scheduler: aggregate.scheduler,
         nodes: aggregate.summaries,
         nodes_known: input.nodes_known,
@@ -4886,6 +4939,8 @@ mod across_namespaces {
     /// readable namespace beside it read as refused. Fails if the refusal is
     /// not named where it happened, if the answered half is summed as the
     /// scope's pods, or if a workload there is judged by pods nobody read.
+    /// Marco's ledger then vanished from Needs attention: fails too if its
+    /// controller's Unavailable is not said beside the problems.
     #[tokio::test]
     async fn a_namespace_that_refuses_its_pods_is_named_and_the_rest_of_the_scope_stands() {
         let overview = Cluster::new()
@@ -4922,6 +4977,15 @@ mod across_namespaces {
             !overview.problems.iter().any(|p| p.name == "ledger"),
             "{:?}",
             overview.problems
+        );
+        assert_eq!(
+            overview
+                .unconfirmed
+                .iter()
+                .map(|p| (p.kind.as_str(), p.name.as_str(), p.reason.as_str()))
+                .collect::<Vec<_>>(),
+            [("Deployment", "ledger", "Unavailable")],
+            "the controller's word, said beside the problems"
         );
         assert_eq!(overview.counts.deployments, Some(1));
         assert_eq!(

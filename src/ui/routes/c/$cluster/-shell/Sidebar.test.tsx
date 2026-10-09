@@ -284,6 +284,7 @@ describe("the counts at the end of each row", () => {
         },
       ],
       byNamespace: new Map([["team-checkout", 3]]),
+      unconfirmed: [],
     };
     attention = whole;
 

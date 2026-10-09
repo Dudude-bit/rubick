@@ -51,6 +51,7 @@ setTransport(
         namespaces: [],
         problems: [{ namespace: "team-checkout" }],
         problemsTruncated: 0,
+        unconfirmed: [],
         unread: [],
         counts: { pods: 4 },
       };

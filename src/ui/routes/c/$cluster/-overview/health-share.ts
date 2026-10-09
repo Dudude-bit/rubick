@@ -40,7 +40,7 @@ import { translate, type Locale } from "@/i18n";
 import { currentLocale } from "@/stores/localeStore";
 import { byteScale, formatBytes } from "@/lib/k8s-quantity";
 import { splitUnit } from "@/lib/metric-format";
-import { formatDecimal } from "@/lib/utils";
+import { formatAge, formatDecimal } from "@/lib/utils";
 import { withRestartsBy } from "@/lib/pod-status";
 
 /**
@@ -162,6 +162,25 @@ export function attentionShare(attention: Attention, t: T): PlacedSection {
       title: t("cluster", "attentionMore", { n: cut }),
       detail: null,
       role: "neutral",
+    });
+  for (const item of attention.unconfirmed)
+    items.push({
+      title:
+        item.since === null
+          ? t("cluster", "attentionUnconfirmedUndated", {
+              word: reasonWord(item, t),
+            })
+          : t("cluster", "attentionUnconfirmed", {
+              word: reasonWord(item, t),
+              age: formatAge(item.since, t),
+            }),
+      detail: detailWords(item.detail, t),
+      role: "neutral",
+      ref: refOf({
+        kind: item.kind,
+        name: item.name,
+        namespace: item.namespace,
+      }),
     });
   for (const check of attention.checks) {
     if (check.state === "read") continue;
