@@ -420,7 +420,8 @@ function HiddenScopeTab({
           {alias ?? tab.context ?? t("cluster", "noCluster")} /
         </span>
       )}
-      <span className="min-w-0 truncate text-fg-mut">
+      {/* Whole, as in the strip: the object name beside it gives up the width. */}
+      <span className="flex-none text-fg-mut">
         {scopeLabel(tabScope(tab), t)} /
       </span>
       {keepsShell && (
@@ -429,7 +430,7 @@ function HiddenScopeTab({
           aria-hidden="true"
         />
       )}
-      <RouteName name={tabRouteLabel(tab.href, t)} />
+      <RouteName name={tabRouteLabel(tab.href, t)} className="min-w-0" />
       {open && (
         <Check className="ml-auto h-3 w-3 flex-none" aria-hidden="true" />
       )}

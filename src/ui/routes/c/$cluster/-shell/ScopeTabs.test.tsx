@@ -358,6 +358,26 @@ describe("a strip with more tabs than room", () => {
   });
 
   /**
+   * Dana's menu read "All namespa… / recommendations…4b65d-bjc2c" beside a
+   * whole "shop / recommendations-685f64b65d-bjc2c". Fails if an entry's
+   * scope may give up width, or its object name may not.
+   */
+  it("keeps each menu entry's scope whole and cuts only its object name", async () => {
+    six("t0");
+    const width = roomOf1100();
+    try {
+      await mount();
+      const cart = (await menuItems()).at(-1)!;
+      const scope = within(cart).getByText(/^All namespaces/);
+      expect(scope).toHaveClass("flex-none");
+      expect(scope).not.toHaveClass("truncate");
+      expect(cart.querySelector("[data-route-name]")).toHaveClass("min-w-0");
+    } finally {
+      width();
+    }
+  });
+
+  /**
    * Dana's deep link landed on the cart tab, which sat half under Search
    * with no tab on screen marked open. Fails if the open tab can be the one
    * the strip leaves out, or a tab picked from the menu does not open.
