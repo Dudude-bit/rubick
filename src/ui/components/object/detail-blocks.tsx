@@ -13,6 +13,7 @@ import { conditionRole } from "@/lib/condition-health";
 import { eventReasonMark } from "@/lib/event-reason";
 import type { MessageSubject } from "@/lib/message-refs";
 import { formatQuantity, usageRole } from "@/lib/metric-format";
+import { allocatedPercent } from "@/lib/node-amount";
 import { ROLE_ICON, ROLE_TEXT } from "@/lib/status-role";
 import { cn, formatDate } from "@/lib/utils";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
@@ -390,7 +391,7 @@ export function UsageRow({ label, used, total, type, unit }: UsageRowProps) {
             {ratio !== null && (
               <>
                 {" · "}
-                {Math.round(ratio * 100)}
+                {allocatedPercent(usedNum, totalNum)}
                 <span className="text-[0.85em] text-fg-fnt">%</span>
               </>
             )}
