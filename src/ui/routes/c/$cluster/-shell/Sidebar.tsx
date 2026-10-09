@@ -289,8 +289,44 @@ function SettingsRow() {
   );
 }
 
+const RAIL_FADE = {
+  above: "[mask-image:linear-gradient(to_bottom,transparent,black_24px)]",
+  below:
+    "[mask-image:linear-gradient(to_bottom,black_calc(100%-24px),transparent)]",
+  both: "[mask-image:linear-gradient(to_bottom,transparent,black_24px,black_calc(100%-24px),transparent)]",
+} as const;
+
+/** Fades the edge the rail continues past, so a caption the edge cuts reads as more to come rather than as broken. */
+function useRailFade() {
+  const [fade, setFade] = React.useState<keyof typeof RAIL_FADE | null>(null);
+  const attach = React.useCallback((rail: HTMLElement | null) => {
+    if (!rail) return;
+    const measure = () => {
+      const above = rail.scrollTop > 0;
+      const below = rail.scrollTop + rail.clientHeight < rail.scrollHeight - 1;
+      setFade(
+        above && below ? "both" : above ? "above" : below ? "below" : null
+      );
+    };
+    measure();
+    rail.addEventListener("scroll", measure, { passive: true });
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? undefined
+        : new ResizeObserver(measure);
+    observer?.observe(rail);
+    if (rail.firstElementChild) observer?.observe(rail.firstElementChild);
+    return () => {
+      rail.removeEventListener("scroll", measure);
+      observer?.disconnect();
+    };
+  }, []);
+  return [attach, fade && RAIL_FADE[fade]] as const;
+}
+
 export function Sidebar() {
   const isConnected = useClusterStore((s) => s.isConnected);
+  const [attachRail, railFade] = useRailFade();
   const { data } = useScopedOverview();
   const locks = useListLocks(NAV_KINDS);
   const servedLocks = useLocks(NAV_QUERIES);
@@ -305,28 +341,38 @@ export function Sidebar() {
   return (
     <aside className="flex w-52 flex-col overflow-hidden border-r border-hair">
       <ClusterRow />
-      <nav className="flex-1 overflow-y-auto scrollbar-thin px-1.5 pb-2.5 pt-1">
-        {GROUPS.map((group, index) => (
-          <div key={group.caption ?? `ungrouped-${index}`}>
-            {group.caption && <GroupCaption k={group.caption} />}
-            {group.items.map((item) => (
-              <NavRow
-                key={item.labelKey ?? item.label}
-                item={item}
-                overview={overview}
-                lock={
-                  item.kind
-                    ? locks[item.kind]
-                    : item.query
-                      ? servedLocks.get(item.query.resource)
-                      : undefined
-                }
-              />
-            ))}
-            {group.caption === "network" && <GatewayRows overview={overview} />}
-          </div>
-        ))}
-        <IntegrationsGroup />
+      <nav
+        ref={attachRail}
+        className={cn(
+          "flex-1 overflow-y-auto scrollbar-thin px-1.5 pb-2.5 pt-1",
+          railFade
+        )}
+      >
+        <div>
+          {GROUPS.map((group, index) => (
+            <div key={group.caption ?? `ungrouped-${index}`}>
+              {group.caption && <GroupCaption k={group.caption} />}
+              {group.items.map((item) => (
+                <NavRow
+                  key={item.labelKey ?? item.label}
+                  item={item}
+                  overview={overview}
+                  lock={
+                    item.kind
+                      ? locks[item.kind]
+                      : item.query
+                        ? servedLocks.get(item.query.resource)
+                        : undefined
+                  }
+                />
+              ))}
+              {group.caption === "network" && (
+                <GatewayRows overview={overview} />
+              )}
+            </div>
+          ))}
+          <IntegrationsGroup />
+        </div>
       </nav>
       {/* The app's own strip, outside the scroll: the rows above are the
           cluster's and travel with it; these stay put on every screen. */}
