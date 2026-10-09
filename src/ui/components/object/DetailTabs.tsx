@@ -198,6 +198,11 @@ function HiddenTabs({
   const says = open
     ? `${label}. ${t("action", "tabsMoreHoldsOpen", { tab: open.label })}`
     : label;
+  // WebKit rings the focus the menu hands back after a click as if a key had
+  // brought it, so the ring follows the last input, as the tabs' own does.
+  const [ring, setRing] = useState(false);
+  const pointer = useRef(false);
+  const keyed = useRef(false);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -206,8 +211,18 @@ function HiddenTabs({
           aria-label={says}
           title={open ? says : undefined}
           data-holds-open={open ? "true" : undefined}
+          data-ring={ring ? "true" : undefined}
+          onPointerDown={() => {
+            pointer.current = true;
+          }}
+          onKeyDown={() => setRing(true)}
+          onFocus={() => {
+            setRing(!pointer.current);
+            pointer.current = false;
+          }}
+          onBlur={() => setRing(false)}
           className={cn(
-            "flex flex-none items-center gap-1 border-b pl-2 text-xs transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
+            "flex flex-none items-center gap-1 border-b pl-2 text-xs outline-hidden transition-colors hover:text-fg data-[ring=true]:ring-1 data-[ring=true]:ring-info",
             open ? "border-fg font-medium text-fg" : "border-hair text-fg-mut"
           )}
         >
@@ -215,7 +230,22 @@ function HiddenTabs({
           <ChevronDown className="h-3 w-3" aria-hidden="true" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent
+        align="end"
+        onKeyDown={() => {
+          keyed.current = true;
+        }}
+        onPointerDown={() => {
+          keyed.current = false;
+        }}
+        onPointerDownOutside={() => {
+          keyed.current = false;
+        }}
+        onCloseAutoFocus={() => {
+          pointer.current = !keyed.current;
+          keyed.current = false;
+        }}
+      >
         {tabs.map((tab) => {
           const isOpen = tab.id === open?.id;
           return (
