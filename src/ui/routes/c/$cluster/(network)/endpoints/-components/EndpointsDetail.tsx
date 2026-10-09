@@ -16,10 +16,14 @@ import { DeleteAction } from "../../../-object/DeleteAction";
 import { countMark, viewGlyph } from "@/components/object/detail-tab";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { KeyValueSection, type KeyValue } from "../../../-object/detail-kv";
-import { ServiceHealthView } from "../../../-object/health-views";
+import { ServiceVerdict } from "../../../-object/health-views";
 import { useResourceDetail } from "@/hooks";
 import { useEndpointsShare } from "./useEndpointsShare";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useConnections } from "@/hooks/useConnections";
+import { useServiceAnswer } from "@/hooks/useServiceAnswer";
+import { healthFromConnections } from "@/lib/service-health";
 import { ResourceType } from "@/lib/resource-registry";
 import { commands } from "@/lib/commands";
 import { legacyNote, publishedSummary } from "@/lib/published";
@@ -77,6 +81,22 @@ export function EndpointsDetail() {
   );
   const share = useEndpointsShare(endpoints);
 
+  // The Service's verdict, as its peek draws it in the same place: with its
+  // pods unread, a not-ready address is not known to be a fault.
+  const service = endpoints?.name || name || "";
+  const serviceNamespace = endpoints?.namespace || namespace || null;
+  const verdict = useServiceAnswer(
+    service,
+    serviceNamespace,
+    useConnections(ResourceType.Service, service, serviceNamespace),
+    true
+  ).read;
+  const podsUnread = useMemo(
+    () =>
+      healthFromConnections(verdict.data, verdict.error).state === "podsUnread",
+    [verdict.data, verdict.error]
+  );
+
   const subsets = endpoints?.subsets ?? [];
   const backends: Backend[] = subsets.flatMap((subset, index) => [
     ...subset.addresses.map((address) => ({
@@ -109,12 +129,7 @@ export function EndpointsDetail() {
     },
     {
       label: t("columns", "status"),
-      value: (
-        <ServiceHealthView
-          name={endpoints?.name || name || ""}
-          namespace={endpoints?.namespace || namespace || null}
-        />
-      ),
+      value: <ServiceVerdict read={verdict} />,
     },
     {
       label: t("columns", "notReadyCount"),
@@ -316,10 +331,11 @@ export function EndpointsDetail() {
       title={endpoints?.name || name || ""}
       namespace={endpoints?.namespace || namespace}
       createdAt={endpoints?.createdAt}
+      statusBadge={endpoints && <ServiceVerdict read={verdict} compact />}
       badges={
         <span
           className={
-            totalNotReady > 0
+            totalNotReady > 0 && !podsUnread
               ? "text-[11px] text-warn"
               : "text-[11px] text-fg-mut"
           }
