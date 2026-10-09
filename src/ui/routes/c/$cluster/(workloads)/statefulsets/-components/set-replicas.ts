@@ -1,8 +1,8 @@
 import type { CompositionSegment } from "@/components/object/detail-blocks";
-import type { PodStart, Rollout } from "@/generated/types";
+import type { Rollout } from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import { NEEDS_ATTENTION } from "@/lib/workload-status";
-import { replicaGap } from "../../-components/replica-gap";
+import { replicaSplit } from "../../-components/replica-gap";
 
 /**
  * The Replicas bar. A pod the page has read exists whether or not the
@@ -12,7 +12,7 @@ import { replicaGap } from "../../-components/replica-gap";
  */
 export function setReplicaSegments(
   counts: { desired: number; current: number; ready: number },
-  pods: readonly { start: PodStart }[] | null,
+  pods: Parameters<typeof replicaSplit>[2],
   now: number,
   rollout: Rollout | undefined,
   t: T
@@ -22,13 +22,14 @@ export function setReplicaSegments(
     Math.max(counts.current, pods?.length ?? 0)
   );
   const missing = Math.max(0, counts.desired - created);
+  const split = replicaSplit(created, counts.ready, pods, now, t);
   return [
     {
-      label: t("count", "readySegment", { n: counts.ready }),
-      count: counts.ready,
+      label: t("count", "readySegment", { n: split.ready }),
+      count: split.ready,
       tone: "ok",
     },
-    ...replicaGap(Math.max(0, created - counts.ready), pods, now, t),
+    ...split.gap,
     {
       label: t("count", "notCreatedSegment", { n: missing }),
       count: missing,

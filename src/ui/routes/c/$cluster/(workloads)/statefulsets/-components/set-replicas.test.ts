@@ -10,8 +10,10 @@ const shape = (segments: ReturnType<typeof setReplicaSegments>) =>
   segments.map(({ count, tone }) => [count, tone]);
 
 const NOW = Date.parse("2026-10-09T04:00:00Z");
-const made = (n: number) =>
-  Array.from({ length: n }, () => ({ start: { state: "settled" as const } }));
+const pod = (display: string, ready: boolean) => ({
+  start: { state: "settled" as const },
+  status: { display, ready },
+});
 
 describe("a StatefulSet's Replicas bar", () => {
   /**
@@ -23,24 +25,23 @@ describe("a StatefulSet's Replicas bar", () => {
     const counts = { desired: 2, current: 1, ready: 1 };
     const waiting = { state: "unobserved", available: 1, desired: 2 } as const;
 
-    expect(shape(setReplicaSegments(counts, made(2), NOW, waiting, t))).toEqual(
-      [
-        [1, "ok"],
-        [0, "pending"],
-        [0, "err"],
-        [1, "warn"],
-        [0, "neutral"],
-      ]
-    );
-    expect(shape(setReplicaSegments(counts, made(1), NOW, waiting, t))).toEqual(
-      [
-        [1, "ok"],
-        [0, "pending"],
-        [0, "err"],
-        [0, "warn"],
-        [1, "neutral"],
-      ]
-    );
+    const read = [pod("Running", true), pod("Pending", false)];
+    expect(shape(setReplicaSegments(counts, read, NOW, waiting, t))).toEqual([
+      [1, "ok"],
+      [0, "pending"],
+      [0, "err"],
+      [1, "warn"],
+      [0, "neutral"],
+    ]);
+    expect(
+      shape(setReplicaSegments(counts, read.slice(0, 1), NOW, waiting, t))
+    ).toEqual([
+      [1, "ok"],
+      [0, "pending"],
+      [0, "err"],
+      [0, "warn"],
+      [1, "neutral"],
+    ]);
   });
 
   /** A pod missing while the set is Unavailable is the fault, and stays red. */
@@ -56,7 +57,7 @@ describe("a StatefulSet's Replicas bar", () => {
       shape(
         setReplicaSegments(
           { desired: 2, current: 0, ready: 0 },
-          made(0),
+          [],
           NOW,
           down,
           t
@@ -77,7 +78,7 @@ describe("a StatefulSet's Replicas bar", () => {
       shape(
         setReplicaSegments(
           { desired: 1, current: 1, ready: 1 },
-          made(2),
+          [pod("Running", true), pod("Terminating", true)],
           NOW,
           { state: "ready" },
           t
