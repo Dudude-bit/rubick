@@ -8,9 +8,18 @@
  * strip beside this one would drift from it by the second vendor.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ChevronDown } from "lucide-react";
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useT } from "@/i18n/useT";
+import { cn } from "@/lib/utils";
 import { CaptionScope } from "@/components/ui/section";
 import { SurfaceVisibility, useSurfaceVisible } from "@/lib/surface-visibility";
 import { TabGlyph, TabMark } from "./tab-marks";
@@ -32,6 +41,7 @@ function DetailTabTrigger({
   return (
     <TabsTrigger
       value={tab.id}
+      data-tab={tab.id}
       title={
         says ??
         (tab.mark?.shows === "count"
@@ -73,6 +83,103 @@ function useOpenedTabs(activeTab: string): ReadonlySet<string> {
   return opened;
 }
 
+/** The tabs the strip has scrolled out of sight, and on which side. */
+interface Clipped {
+  ids: string[];
+  before: boolean;
+  after: boolean;
+}
+
+const NOTHING_CLIPPED: Clipped = { ids: [], before: false, after: false };
+
+function useClippedTabs(
+  strip: React.RefObject<HTMLDivElement | null>,
+  ids: string
+): Clipped {
+  const [clipped, setClipped] = useState(NOTHING_CLIPPED);
+  useLayoutEffect(() => {
+    const list = strip.current;
+    if (!list) return;
+    const measure = () => {
+      const box = list.getBoundingClientRect();
+      const next: Clipped = { ids: [], before: false, after: false };
+      for (const tab of list.querySelectorAll<HTMLElement>("[data-tab]")) {
+        const edge = tab.getBoundingClientRect();
+        const before = edge.left < box.left - 1;
+        const after = edge.right > box.right + 1;
+        if (!before && !after) continue;
+        next.ids.push(tab.dataset.tab ?? "");
+        next.before ||= before;
+        next.after ||= after;
+      }
+      setClipped((prev) =>
+        prev.ids.join("\n") === next.ids.join("\n") &&
+        prev.before === next.before &&
+        prev.after === next.after
+          ? prev
+          : next
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    for (const tab of list.querySelectorAll("[data-tab]"))
+      observer.observe(tab);
+    list.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      observer.disconnect();
+      list.removeEventListener("scroll", measure);
+    };
+  }, [strip, ids]);
+  return clipped;
+}
+
+/** Every tab the strip cannot show, one click away and named. */
+function HiddenTabs({
+  tabs,
+  onPick,
+}: {
+  tabs: DetailTab[];
+  onPick: (tab: string) => void;
+}) {
+  const t = useT();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={t("action", "tabsMoreLabel", { n: tabs.length })}
+          className="flex flex-none items-center gap-1 border-b border-hair pl-2 text-xs text-fg-mut transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+        >
+          {t("action", "tabsMore", { n: tabs.length })}
+          <ChevronDown className="h-3 w-3" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {tabs.map((tab) => (
+          <DropdownMenuItem
+            key={tab.id}
+            onSelect={() => onPick(tab.id)}
+            className="gap-1.5"
+          >
+            <TabGlyph glyph={tab.glyph} isActive={false} />
+            {tab.label}
+            {tab.mark && <TabMark mark={tab.mark} isActive={false} />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Fades the side the strip continues on, so a cut tab reads as more to come. */
+const FADE = {
+  before: "[mask-image:linear-gradient(to_right,transparent,black_2rem)]",
+  after:
+    "[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]",
+  both: "[mask-image:linear-gradient(to_right,transparent,black_2rem,black_calc(100%-2rem),transparent)]",
+} as const;
+
 export function DetailTabs({
   tabs,
   activeTab,
@@ -97,6 +204,18 @@ export function DetailTabs({
   // nothing downstream can work that out for itself.
   const pageVisible = useSurfaceVisible();
   const stripRef = useRef<HTMLDivElement>(null);
+  const clipped = useClippedTabs(
+    stripRef,
+    tabs.map((tab) => tab.id).join("\n")
+  );
+  const fade =
+    clipped.before && clipped.after
+      ? FADE.both
+      : clipped.before
+        ? FADE.before
+        : clipped.after
+          ? FADE.after
+          : undefined;
 
   useEffect(() => {
     stripRef.current
@@ -119,23 +238,34 @@ export function DetailTabs({
           go. Tabs never shrink: when the actions do not fit they wrap to
           their own row, and only tabs wider than the page scroll. */}
       <div className="flex flex-wrap items-stretch gap-3">
-        <TabsList
-          ref={stripRef}
-          onWheel={(event) => {
-            const el = event.currentTarget;
-            if (el.scrollWidth <= el.clientWidth) return;
-            el.scrollLeft += event.deltaY || event.deltaX;
-          }}
-          className="h-auto min-w-0 flex-auto justify-start gap-4 overflow-x-auto rounded-none border-b border-hair bg-transparent p-0 text-fg-mut scrollbar-thin"
-        >
-          {tabs.map((tab) => (
-            <DetailTabTrigger
-              key={tab.id}
-              tab={tab}
-              isActive={tab.id === current}
+        <div className="flex min-w-0 flex-auto items-stretch">
+          <TabsList
+            ref={stripRef}
+            onWheel={(event) => {
+              const el = event.currentTarget;
+              if (el.scrollWidth <= el.clientWidth) return;
+              el.scrollLeft += event.deltaY || event.deltaX;
+            }}
+            className={cn(
+              "h-auto min-w-0 flex-1 justify-start gap-4 overflow-x-auto rounded-none border-b border-hair bg-transparent p-0 text-fg-mut scrollbar-thin",
+              fade
+            )}
+          >
+            {tabs.map((tab) => (
+              <DetailTabTrigger
+                key={tab.id}
+                tab={tab}
+                isActive={tab.id === current}
+              />
+            ))}
+          </TabsList>
+          {clipped.ids.length > 0 && (
+            <HiddenTabs
+              tabs={tabs.filter((tab) => clipped.ids.includes(tab.id))}
+              onPick={onTabChange}
             />
-          ))}
-        </TabsList>
+          )}
+        </div>
         {actions && (
           <div className="ml-auto flex flex-none items-center gap-1 border-b border-hair">
             <span

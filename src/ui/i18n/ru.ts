@@ -682,6 +682,13 @@ export const ru: Catalogue = {
     invalidPort: "Неверный порт",
     invalidPortHint: "Введите номера портов от 1 до 65535",
     updating: "обновляется…",
+    tabsMore: "ещё {n}",
+    tabsMoreLabel: {
+      one: "Ещё {n} вкладка не поместилась",
+      few: "Ещё {n} вкладки не поместились",
+      many: "Ещё {n} вкладок не поместились",
+      other: "Ещё {n} вкладки не поместились",
+    },
     manifestCopiedNamed: "Манифест {name} скопирован",
     kindManifest: "манифест {kind}",
     suspendedLower: "приостановлен",

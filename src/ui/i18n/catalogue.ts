@@ -710,6 +710,11 @@ export const en = {
     invalidPort: "Invalid port",
     invalidPortHint: "Please enter port numbers from 1 to 65535",
     updating: "updating…",
+    tabsMore: "{n} more",
+    tabsMoreLabel: {
+      one: "{n} more tab does not fit",
+      other: "{n} more tabs do not fit",
+    },
     manifestCopiedNamed: "{name} manifest copied",
     kindManifest: "{kind} manifest",
     suspendedLower: "suspended",
