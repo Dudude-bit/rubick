@@ -5321,6 +5321,10 @@ export const ru: Catalogue = {
   },
   attached: {
     openedFrom: "Открыто из {object}, который относится сюда.",
+    replicaSetsListedHere:
+      "У ReplicaSet нет своего списка, поэтому открыт список Deployment. Каждый ReplicaSet есть на вкладке «{tab}» того Deployment, которому он принадлежит.",
+    gatewayClassesListedHere:
+      "У GatewayClass нет своего списка, поэтому открыт список Gateway. Каждый Gateway называет свой GatewayClass в столбце «{column}».",
     openOwn: "Открыть его отдельно",
     targetMissing: "Не открыто на цели: {kind} {name} не существует.",
     targetUnread:

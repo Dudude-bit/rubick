@@ -740,3 +740,47 @@ describe("what a list is of", () => {
     expect(screen.queryByRole("link", { name: /Learn more/ })).toBeNull();
   });
 });
+
+describe("a list a link to another kind's list landed on", () => {
+  /**
+   * ReplicaSet in API resources opened the Deployments list with no word of
+   * why. Fails if the list stops saying ReplicaSets have none of their own
+   * and where each one is, or says it on a list it did not send the reader to.
+   */
+  it("says why and where on the Deployments list only", async () => {
+    const deployments = (
+      <ResourceList<Item>
+        title="Deployments"
+        columns={columns}
+        emptyStateLabel="Deployments"
+        data={[]}
+      />
+    );
+    await renderWithRouter(deployments, {
+      at: "/c/prod/deployments?listOf=replicasets",
+      route: "/c/$cluster/$",
+    });
+    expect(
+      screen.getByText(/ReplicaSets have no list of their own/)
+    ).toHaveTextContent(
+      "Each ReplicaSet is on the Revisions tab of the Deployment that owns it."
+    );
+
+    await renderWithRouter(deployments, {
+      at: "/c/prod/deployments",
+      route: "/c/$cluster/$",
+    });
+    await renderWithRouter(
+      <ResourceList<Item>
+        title="Pods"
+        columns={columns}
+        emptyStateLabel="Pods"
+        data={[]}
+      />,
+      { at: "/c/prod/pods?listOf=replicasets", route: "/c/$cluster/$" }
+    );
+    expect(
+      screen.getAllByText(/ReplicaSets have no list of their own/)
+    ).toHaveLength(1);
+  });
+});

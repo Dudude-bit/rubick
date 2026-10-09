@@ -4793,6 +4793,10 @@ export const en = {
   // An object whose meaning belongs to one parent, opened there or not.
   attached: {
     openedFrom: "Opened from {object}, which belongs here.",
+    replicaSetsListedHere:
+      "ReplicaSets have no list of their own, so this is the Deployments list. Each ReplicaSet is on the {tab} tab of the Deployment that owns it.",
+    gatewayClassesListedHere:
+      "GatewayClasses have no list of their own, so this is the Gateways list. Each Gateway names its GatewayClass in the {column} column.",
     openOwn: "Open it on its own page",
     targetMissing: "Not opened on its target: {kind} {name} does not exist.",
     targetUnread:

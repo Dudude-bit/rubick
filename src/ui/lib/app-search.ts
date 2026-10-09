@@ -23,6 +23,8 @@ export interface AppSearch {
   selector?: string;
   /** The namespaces, comma-separated, that selector is read in. */
   in?: string;
+  /** The plural of a kind with no list of its own, on the list that shows it instead. */
+  listOf?: string;
 }
 
 const KEYS: ReadonlyArray<keyof AppSearch> = [
@@ -41,6 +43,7 @@ const KEYS: ReadonlyArray<keyof AppSearch> = [
   "kind",
   "selector",
   "in",
+  "listOf",
 ];
 
 export function appSearch(raw: Record<string, unknown>): AppSearch {

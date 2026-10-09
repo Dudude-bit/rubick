@@ -458,6 +458,12 @@ const LIST_ELSEWHERE: Partial<Record<ResourceKind, string>> = {
   UDPRoute: "routes",
 };
 
+/** The kind, for one whose own list is not where its list link leads; `null` otherwise. */
+export function listedElsewhere(kindOrPlural: string): ResourceKind | null {
+  const kind = toKind(kindOrPlural);
+  return kind && LIST_ELSEWHERE[kind] ? kind : null;
+}
+
 /** The URL segment of the page that lists this kind. */
 export function listSegment(resourceKindOrPlural: string): string {
   const def =
