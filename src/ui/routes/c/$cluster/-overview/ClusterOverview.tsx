@@ -39,15 +39,19 @@ function overviewStats(
   attention: Attention,
   t: T
 ): ReportStat[] {
-  const pods = podTotal(overview.pods);
-  const serving = podsServing(overview.pods);
+  const { pods } = overview;
   const stats: ReportStat[] = [
     {
       label: t("action", "needsAttention"),
       value: attentionFigure(attention),
       role: attention.worst ?? (attention.complete ? "ok" : "neutral"),
     },
-    { label: "Pods", value: `${serving}/${pods}` },
+    {
+      label: "Pods",
+      value: pods
+        ? `${podsServing(pods)}/${podTotal(pods)}`
+        : t("empty", "notReadLower"),
+    },
   ];
   if (overview.nodesKnown)
     stats.push({

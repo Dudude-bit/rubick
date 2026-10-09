@@ -16,7 +16,7 @@ import { useAttention } from "@/hooks/useAttention";
 import { attentionWords, type Attention } from "@/lib/attention";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useRenewal } from "@/hooks/useCredentialRenewal";
-import type { Renewal } from "@/generated/types";
+import type { OverviewUnread, Renewal } from "@/generated/types";
 import { scopeLabel } from "@/lib/namespace-scope";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
@@ -26,7 +26,7 @@ import { useThemeStore } from "@/stores/themeStore";
 import { ActivityPanel } from "./ActivityPanel";
 import { LinkOpenedNote } from "./DeepLinkBanner";
 import { StallIndicator } from "./StallIndicator";
-import { useT } from "@/i18n/useT";
+import { useT, type T } from "@/i18n/useT";
 
 /**
  * Which renewal states put a sign-in hint in the strip, as a total map.
@@ -85,7 +85,7 @@ export function StatusBar() {
   // would count the wrong namespaces.
   const here =
     scoped.data && !scoped.isPlaceholderData && attention
-      ? { pods: scoped.data.counts.pods, attention }
+      ? { pods: scoped.data.counts.pods, unread: scoped.data.unread, attention }
       : null;
   // The two worth a line that is always up — both predict the sign-in screen,
   // and they differ in why. Everything else is quiet, and a chip that is
@@ -211,14 +211,16 @@ export function StatusBar() {
                   </span>
                 ) : (
                   <>
-                    {here.pods !== null && (
-                      <>
-                        <span>
-                          {t("cluster", "podCount", { n: here.pods })}
-                        </span>
-                        <span>·</span>
-                      </>
+                    {here.pods !== null ? (
+                      <span>{t("cluster", "podCount", { n: here.pods })}</span>
+                    ) : (
+                      <span className="text-fg-fnt">
+                        {t("cluster", "podsNotCounted", {
+                          where: podsUnreadIn(here.unread, t),
+                        })}
+                      </span>
                     )}
+                    <span>·</span>
                     <ProblemCount attention={here.attention} />
                   </>
                 )}
@@ -243,6 +245,20 @@ export function StatusBar() {
       )}
     </footer>
   );
+}
+
+/** Where the pods went unread, in the strip's own short words. */
+function podsUnreadIn(unread: readonly OverviewUnread[], t: T): string {
+  const named = [
+    ...new Set(
+      unread.flatMap((entry) =>
+        entry.kind === "Pod" && entry.namespace ? [entry.namespace] : []
+      )
+    ),
+  ];
+  return named.length === 0
+    ? t("cluster", "countsInAll")
+    : t("cluster", "countsIn", { scope: scopeLabel(named, t) });
 }
 
 /** The count the Overview's panel heads, in the colour of its worst row. */

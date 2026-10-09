@@ -122,7 +122,10 @@ function totalsOf(notRead: NotRead) {
   return { total, served: total + notRead.kinds.filter(unwatched).length };
 }
 
-/** Once settled, how many of the watched kinds were read where they count. */
+/**
+ * Once settled, how many of the watched kinds were read where they count,
+ * and the served kinds left out, each named with why on opening.
+ */
 export function ReadTotals({
   notRead,
   unread,
@@ -133,23 +136,31 @@ export function ReadTotals({
   const t = useT();
   const { total, served } = totalsOf(notRead);
   return (
-    <p
-      className="flex flex-wrap items-center gap-x-1.5 text-fg-mut"
-      data-testid="read-totals"
-    >
-      <ListChecks className="h-3.5 w-3.5" aria-hidden="true" />
-      <span className="tabular-nums">
-        {t("count", "kindsReadSettled", {
-          n: Math.max(0, total - unread),
-          total,
-        })}
-      </span>
-      {served > total && (
-        <span className="basis-full pl-5 tabular-nums text-fg-fnt">
-          {t("count", "kindsServedLeftOut", { n: served })}
+    <div className="flex flex-col text-fg-mut" data-testid="read-totals">
+      <p className="flex items-center gap-x-1.5">
+        <ListChecks className="h-3.5 w-3.5" aria-hidden="true" />
+        <span className="tabular-nums">
+          {t("count", "kindsReadSettled", {
+            n: Math.max(0, total - unread),
+            total,
+          })}
         </span>
+      </p>
+      {served > total && (
+        <details className="group pl-5" data-testid="left-out">
+          <summary className="inline-flex cursor-pointer select-none items-center gap-1 rounded-md py-0.5 tabular-nums text-fg-fnt hover:text-fg-mut">
+            {t("count", "kindsServedLeftOut", { n: served })}
+            <ChevronRight
+              className="h-3 w-3 transition-transform duration-200 group-open:rotate-90 motion-reduce:transition-none"
+              aria-hidden="true"
+            />
+          </summary>
+          <div className="mt-1.5">
+            <ReadingChips kinds={notRead.kinds.filter(unwatched)} />
+          </div>
+        </details>
       )}
-    </p>
+    </div>
   );
 }
 

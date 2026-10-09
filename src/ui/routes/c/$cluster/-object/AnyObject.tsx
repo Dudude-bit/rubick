@@ -1,7 +1,11 @@
+import { Navigate } from "@tanstack/react-router";
+
 import { AttachedGate } from "./Attached";
 import { CustomResourceDetail } from "./-components/CustomResourceDetail";
 import { GenericObjectPage } from "./GenericObjectPage";
+import { segmentNamespaced, servedOf, useServed } from "./served";
 import { useCrdIndex } from "@/hooks/useCrdIndex";
+import { namespaceListLink } from "@/lib/links";
 
 /**
  * Any object the address names whose kind has no page of its own. A custom
@@ -19,6 +23,12 @@ export function AnyObject({
   name: string;
 }) {
   const crds = useCrdIndex();
+  const namespaced = segmentNamespaced(resource, useServed(servedOf(resource)));
+  // Without a namespace, a namespaced kind's one segment names a namespace.
+  if (namespace === undefined && namespaced !== false)
+    return namespaced ? (
+      <Navigate {...namespaceListLink(resource, name)} replace />
+    ) : null;
   if (resource.includes(".") && crds.isLoading) return null;
   const page =
     resource.includes(".") && crds.isCrd(resource) ? (

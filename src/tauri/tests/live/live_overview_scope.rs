@@ -6,7 +6,9 @@
 //!     K8S_GUI_INIT_CONTEXT=kind-rubick-gui \
 //!       cargo test --test live live_overview_scope:: -- --ignored --nocapture
 
-use k8s_gui_lib::commands::overview::{cluster_overview, ClusterOverview, ResourceCounts};
+use k8s_gui_lib::commands::overview::{
+    cluster_overview, ClusterOverview, PodComposition, ResourceCounts,
+};
 use k8s_gui_lib::AppState;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -85,9 +87,14 @@ fn differences(whole: &ClusterOverview, parts: &[ClusterOverview]) -> Vec<String
             wrong.push("a cluster fact differs from a part's".to_string());
         }
     }
-    let running: usize = parts.iter().map(|p| p.pods.running).sum();
-    let failed: usize = parts.iter().map(|p| p.pods.failed).sum();
-    if (whole.pods.running, whole.pods.failed) != (running, failed) {
+    let phases = |pods: &PodComposition| (pods.running, pods.failed);
+    let summed: Option<(usize, usize)> = parts
+        .iter()
+        .map(|p| p.pods.as_ref().map(phases))
+        .try_fold((0, 0), |(running, failed), part| {
+            part.map(|(r, f)| (running + r, failed + f))
+        });
+    if whole.pods.as_ref().map(phases) != summed {
         wrong.push("pod composition is not the parts' sum".to_string());
     }
     let jobs: Option<usize> = parts

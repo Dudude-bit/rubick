@@ -18,6 +18,7 @@ import { WhatsNew } from "./WhatsNew";
 import { useClusterForwards } from "@/hooks/useClusterForwards";
 import { usePrefetchCoreLists } from "./usePrefetchCoreLists";
 import { useRefusedScope } from "./useRefusedScope";
+import { useScopeFromAddress } from "./useScopeFromAddress";
 import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
@@ -60,6 +61,7 @@ export function Layout({ page }: { page?: React.ReactNode } = {}) {
   // cache instead of spending their first second asking.
   usePrefetchCoreLists();
   useRefusedScope();
+  useScopeFromAddress();
 
   return (
     <div

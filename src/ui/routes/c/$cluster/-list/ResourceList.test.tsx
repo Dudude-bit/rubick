@@ -277,6 +277,39 @@ describe("a list whose rows come from outside", () => {
   });
 });
 
+describe("a list whose re-read is refused", () => {
+  /**
+   * Marco after his grant was revoked: 18 namespaces under a warning
+   * triangle and "read failing", though the words said refused. A refusal
+   * now is the page a first refusal draws. Fails if the old rows stay, the
+   * header keeps "live" or "read failing", or the lock state is not drawn.
+   */
+  it("draws the refused page instead of the rows an earlier read showed", async () => {
+    const onRetry = vi.fn();
+    store.state.namespaceScope = ["shop"];
+    await list({
+      data: [{ name: "api-7bcd", namespace: "shop" }],
+      error: new Error("pods is forbidden: RBAC"),
+      dataUpdatedAt: Date.now(),
+      live: true,
+      onRetry,
+    });
+    store.state.namespaceScope = [];
+
+    expect(screen.queryByText("api-7bcd")).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/do not have permission to list these/)
+    ).toBeVisible();
+    expect(screen.queryByText(/just now/)).not.toBeInTheDocument();
+    expect(screen.queryByText("read failing")).not.toBeInTheDocument();
+    expect(screen.queryByText("live")).not.toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Try the read again" })
+    );
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("a list whose first read failed", () => {
   /**
    * Dana's Events page after the 502 had a bare red sentence: no "read

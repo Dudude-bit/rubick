@@ -878,6 +878,38 @@ describe("a feed whose re-read fails", () => {
   });
 });
 
+describe("a feed whose re-read is refused", () => {
+  /**
+   * After a revoke the lists kept the old rows under a warning and "read
+   * failing" though the cluster had refused. Refused now is the refused
+   * page. Fails if the old events stay, or the header calls it failing.
+   */
+  it("draws the refusal instead of the events an earlier read showed", async () => {
+    listEvents.mockResolvedValue(feed("prod", 3));
+    const { client } = await mount();
+    await waitFor(() =>
+      expect(document.body.textContent).toContain("prod-pod-0")
+    );
+
+    listEvents.mockRejectedValue(
+      Object.assign(
+        new Error(
+          'events is forbidden: User "marco" cannot list resource "events" at the cluster scope'
+        ),
+        { code: "PERMISSION_DENIED" }
+      )
+    );
+    await act(() => client.refetchQueries());
+
+    expect(
+      await screen.findByText(/across the whole cluster was refused/)
+    ).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain("prod-pod-0");
+    expect(screen.queryByText(/just now/)).not.toBeInTheDocument();
+    expect(screen.queryByText("read failing")).not.toBeInTheDocument();
+  });
+});
+
 describe("a feed across namespaces whose re-read fails", () => {
   /**
    * The lists keep their rows through a failed re-read and say since when;

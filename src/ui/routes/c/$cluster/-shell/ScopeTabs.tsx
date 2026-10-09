@@ -881,10 +881,16 @@ function NamespacePopover({
     : full
       ? t("cluster", "namespaceLimitFull", { n: scope.length })
       : scope.length > 1
-        ? t("cluster", "namespaceScopeCount", {
-            n: scope.length,
-            limit: SCOPE_LIMIT,
-          })
+        ? listed
+          ? t("cluster", "namespaceScopeOfListed", {
+              selected: scope.length,
+              n: namespaces.length,
+              limit: SCOPE_LIMIT,
+            })
+          : t("cluster", "namespaceScopeCount", {
+              n: scope.length,
+              limit: SCOPE_LIMIT,
+            })
         : t("cluster", "namespaceMultiHint", {
             click: formatShortcut("mod"),
             enter: formatShortcut("mod+Enter"),

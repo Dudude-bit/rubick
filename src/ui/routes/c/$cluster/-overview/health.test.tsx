@@ -338,6 +338,80 @@ describe("the healthy line when the node read was refused", () => {
   });
 });
 
+describe("a scope one namespace of which refused its pods", () => {
+  const refusedPods = {
+    kind: "Pod",
+    namespace: "team-blind",
+    code: "PERMISSION_DENIED",
+    message:
+      'pods is forbidden: User "system:serviceaccount:team-checkout:marco" cannot list resource "pods" in API group "" in the namespace "team-blind"',
+  };
+  const overview = {
+    counts: { pods: null, deployments: 1, nodes: null, jobs: null },
+    pods: null,
+    jobs: null,
+    deployments: [{ reason: "Unavailable", count: 1 }],
+    nodes: [],
+    problems: [],
+    problemsTruncated: 0,
+    unread: [refusedPods],
+  } as unknown as ClusterOverview;
+
+  /**
+   * Marco's two namespaces: the overview was one refusal for both. Read,
+   * the pods tile is the one that cannot state a total, and says where.
+   * Fails if it prints a count, or the refusal loses its namespace.
+   */
+  it("leaves the pods tile without a total and names where it was refused", async () => {
+    await wrap(
+      <WorkloadsPanel overview={overview} scope="team-blind, team-checkout" />
+    );
+
+    expect(screen.getByText("Pods").parentElement).toHaveTextContent(
+      "not read"
+    );
+    expect(screen.getByText("in team-blind")).toBeInTheDocument();
+    expect(screen.getByText("Deployment").parentElement).toHaveTextContent("1");
+  });
+
+  /** Fails if the healthy line states "0 of 0 pods ready" for pods nobody read. */
+  it("drops the pods clause from the healthy line", async () => {
+    await wrap(
+      <AttentionPanel
+        attention={attentionFrom([], { overview } as Partial<AttentionInputs>)}
+        pods={null}
+        nodes={[]}
+        nodesKnown={false}
+      />
+    );
+    expect(screen.getByTestId("attention-summary")).not.toHaveTextContent(
+      /pods ready/
+    );
+    const unchecked = screen.getByTestId("attention-unchecked");
+    expect(unchecked).toHaveTextContent("Pods");
+    expect(unchecked).toHaveTextContent("may not list in team-blind");
+  });
+
+  /** Share said "could not be read" for a refusal, and nowhere said where. */
+  it("hands Share the refusal and where, and no pods row with a total", () => {
+    const attention = attentionFrom([], {
+      overview,
+    } as Partial<AttentionInputs>);
+    const problems = attentionShare(attention, t);
+    const findings =
+      problems.body.type === "findings" ? problems.body.items : [];
+    expect(findings.map((finding) => finding.title)).toContain(
+      "Pods: refused in team-blind"
+    );
+
+    const workloads = workloadsShare(overview, t);
+    const rows = workloads.body.type === "facts" ? workloads.body.rows : [];
+    expect(rows.find((row) => row.label === "Pods")?.values).toEqual([
+      { text: t("share", "scrNotReadable") },
+    ]);
+  });
+});
+
 describe("the Deployments tile", () => {
   /**
    * Dana: the tile said "4 Unavailable" beside a list that called one of
@@ -504,7 +578,10 @@ describe("what the panels offer Share", () => {
     expect(items[2]?.title).toContain("2");
   });
 
-  /** A report that dropped what was not checked would read as a clean bill. */
+  /**
+   * A report that dropped what was not checked would read as a clean bill,
+   * and one calling a refusal a failure would disagree with the panel.
+   */
   it("names a kind the list could not read as a finding of its own", () => {
     const section = attentionShare(
       attentionFrom([], {
@@ -515,7 +592,7 @@ describe("what the panels offer Share", () => {
     const items = section.body.type === "findings" ? section.body.items : [];
     expect(items).toEqual([
       expect.objectContaining({
-        title: "HorizontalPodAutoscalers: could not be read",
+        title: "HorizontalPodAutoscalers: refused across the cluster",
         detail: "forbidden",
         role: "neutral",
       }),

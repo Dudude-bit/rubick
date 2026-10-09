@@ -10,6 +10,7 @@ import {
 import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
+import { forgetRefusals } from "@/lib/refusals";
 import { setTransport, transport } from "@/lib/transport";
 import { fakeTransport } from "@/lib/transport/fake";
 import { renderWithRouter } from "@/test/render";
@@ -110,7 +111,7 @@ async function marco() {
   await renderWithRouter(<ScopeTabs />, { at: "/c/acme-staging", route: "$" });
   const toggle = () =>
     user.click(
-      within(screen.getAllByRole("tab")[0]).getByText("team-checkout")
+      within(screen.getAllByRole("tab")[0]).getByText(/team-checkout/)
     );
   const wait = (ms: number) => act(() => vi.advanceTimersByTimeAsync(ms));
   return { toggle, wait };
@@ -152,5 +153,73 @@ describe("the namespace picker for a reader of one namespace", () => {
     await wait(60_000);
 
     expect(wholeClusterAsks()).toBe(1);
+  });
+});
+
+describe("the picker's footer under a selection of two", () => {
+  const two = () =>
+    useClusterStore.setState({
+      namespaceScope: ["team-checkout", "shop"],
+      currentNamespace: "",
+    });
+  const footer = () => screen.getByText(/namespaces selected/);
+
+  /**
+   * Marco's footer read "2 of 4 namespaces" while the Namespaces list held
+   * 18: the 4 was the ceiling. Fails if a total is stated with no list to
+   * take it from.
+   */
+  it("states no total when the namespaces cannot be listed", async () => {
+    two();
+    const { toggle, wait } = await marco();
+    await wait(1_000);
+    await toggle();
+
+    expect(footer()).toHaveTextContent(
+      "2 namespaces selected, up to 4 at once"
+    );
+    expect(footer()).not.toHaveTextContent(/ of /);
+  });
+
+  /**
+   * A grant arrives mid-session and the reader asks again from any screen:
+   * the picker follows the list. Fails if the picker keeps its refusal, or
+   * states a total other than the list's.
+   */
+  it("takes its total from the list once the reader asks again after a grant", async () => {
+    two();
+    const { toggle, wait } = await marco();
+    await wait(1_000);
+    await toggle();
+    expect(screen.getByText(/Cannot list namespaces here/)).toBeInTheDocument();
+
+    cluster.namespaces = "listed";
+    act(() => forgetRefusals());
+    await wait(1_000);
+
+    expect(footer()).toHaveTextContent(
+      "2 of 2 namespaces selected, up to 4 at once"
+    );
+    expect(screen.queryByText(/Cannot list namespaces here/)).toBeNull();
+  });
+
+  /**
+   * The grant revoked: a list that is refused now is refused, whatever it
+   * said before. Fails if the last answer's total stands over a refusal.
+   */
+  it("drops the total as soon as the list is refused again", async () => {
+    cluster.namespaces = "listed";
+    two();
+    const { toggle, wait } = await marco();
+    await wait(1_000);
+    await toggle();
+    expect(footer()).toHaveTextContent("2 of 2 namespaces selected");
+
+    cluster.namespaces = "refused";
+    act(() => forgetRefusals());
+    await wait(1_000);
+
+    expect(footer()).not.toHaveTextContent(/ of /);
+    expect(screen.getByText(/Cannot list namespaces here/)).toBeInTheDocument();
   });
 });

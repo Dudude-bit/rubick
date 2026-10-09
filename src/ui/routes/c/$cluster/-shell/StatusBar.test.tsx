@@ -50,10 +50,15 @@ vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
   useScopedOverview: () => scoped,
 }));
 
-const overviewOf = (pods: number, problems: number) => ({
+const overviewOf = (
+  pods: number | null,
+  problems: number,
+  unread: unknown[] = []
+) => ({
   counts: { pods },
   problems: Array.from({ length: problems }, () => ({})),
   problemsTruncated: 0,
+  unread,
 });
 
 let renewal = "scheduled";
@@ -326,6 +331,34 @@ describe("what the problem count counts", () => {
     bar();
 
     expect(screen.getByTestId("scope-counts")).toHaveTextContent("4 problems");
+  });
+
+  /**
+   * Marco on team-blind and team-checkout: one namespace refusing its pods
+   * read as "not counted in team-blind, team-checkout". Fails if the
+   * problems that were counted are dropped, or the pods are summed from the
+   * namespace that answered, or the refusal stops saying where it was.
+   */
+  it("counts what was read and names where the pods were refused", () => {
+    scoped.data = overviewOf(null, 0, [
+      {
+        kind: "Pod",
+        namespace: "team-blind",
+        code: "PERMISSION_DENIED",
+        message: "pods is forbidden",
+      },
+    ]);
+    attentions.here = attentionOf(2, false);
+    useClusterStore.setState({
+      namespaceScope: ["team-blind", "team-checkout"],
+    });
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveTextContent("pods not counted in team-blind");
+    expect(counts).toHaveTextContent("2+ problems");
+    expect(counts).toHaveTextContent("in team-blind, team-checkout");
+    expect(counts).not.toHaveTextContent(/\d+ pods/);
   });
 
   /**

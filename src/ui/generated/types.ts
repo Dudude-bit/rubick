@@ -1852,7 +1852,7 @@ export interface ClusterOverview {
   warningsKnown: boolean;
   namespaces: NamespaceLoad[];
   counts: ResourceCounts;
-  pods: PodComposition;
+  pods: PodComposition | null;
   jobs: ReasonCount[] | null;
   deployments: ReasonCount[] | null;
   metricsAvailable: boolean;

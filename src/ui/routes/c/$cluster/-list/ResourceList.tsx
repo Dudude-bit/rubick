@@ -66,6 +66,7 @@ import { deleteCommandFor } from "../-peek/peek-actions";
 import type { PeekTarget } from "@/hooks/usePeek";
 
 const NOTHING_UNREAD: UnreadNamespace[] = [];
+const NO_ROWS: never[] = [];
 
 /**
  * The column, built once because every list that has one gets exactly this one
@@ -320,12 +321,26 @@ export function ResourceList<
     }
   );
 
+  // Read at last. A failed list used to render `resources = []` with
+  // `isLoading` already false, so the table printed "No resources of this type
+  // in the current scope": a cluster that could not be read and one that is
+  // genuinely empty looked identical, and an expired token said every list in
+  // the app was empty. The error only replaces the table when there is nothing
+  // to show: a refetch that fails keeps the rows it already had, the same rule
+  // a resync follows.
+  // Asked of the query, not of `data`: rows from outside are undefined
+  // exactly when their read failed, and that error is the caller's.
+  const failed = (shouldUseQuery ? queryResult.error : externalError) ?? null;
+  // A refusal is about who asks now, so rows an earlier read showed go with it.
+  const refused = failed !== null && isRefusal(failed);
+
   // The answer is already the selection's; narrowing guards a caller whose
   // `data` is wider than it.
   const scope = useNamespaceScope();
   const resources = useMemo(
-    () => scope.narrow(data ?? queryResult.data?.rows ?? []),
-    [data, queryResult.data, scope]
+    () =>
+      refused ? NO_ROWS : scope.narrow(data ?? queryResult.data?.rows ?? []),
+    [refused, data, queryResult.data, scope]
   );
   // The last scope's answer, held while this one is read: its unread
   // namespaces are not this scope's, and its rows are not this scope's total.
@@ -337,16 +352,6 @@ export function ResourceList<
     : ((shouldUseQuery ? queryResult.data?.unread : externalUnread) ??
       NOTHING_UNREAD);
   const loading = isLoading ?? queryResult.isLoading;
-  // Read at last. A failed list used to render `resources = []` with
-  // `isLoading` already false, so the table printed "No resources of this type
-  // in the current scope" — a cluster that could not be read and one that is
-  // genuinely empty looked identical, and an expired token said every list in
-  // the app was empty. The error only replaces the table when there is nothing
-  // to show: a refetch that fails keeps the rows it already had, the same rule
-  // a resync follows.
-  // Asked of the query, not of `data`: rows from outside are undefined
-  // exactly when their read failed, and that error is the caller's.
-  const failed = (shouldUseQuery ? queryResult.error : externalError) ?? null;
   const dataUpdatedAt = externalDataUpdatedAt ?? queryResult.dataUpdatedAt;
   // Every list, whatever feeds it: rows a failed read kept are said to be old.
   const stale = failed !== null && resources.length > 0;
@@ -554,7 +559,7 @@ export function ResourceList<
           // A resync is not live: the rows below it are the ones from before
           // the watch started re-listing, and the badge is the only thing that
           // would otherwise still claim they are current.
-          live={live && !resyncing}
+          live={live && !resyncing && !refused}
           slowed={externalSlowed ?? (!live && queryResult.freshness.slowed)}
           stale={stale || (failed !== null && !isRefusal(failed))}
         />
