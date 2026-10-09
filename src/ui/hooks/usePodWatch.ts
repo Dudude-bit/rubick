@@ -49,6 +49,7 @@ export function usePodWatch(
     queryKey,
     detail: POD_DETAIL,
     recount: false,
+    behind: true,
   });
 }
 
@@ -89,6 +90,7 @@ export function useOwnedPodsWatch(
     detail: () =>
       node ? reads : [...reads, queryKeys.detail(kind, namespace, name)],
     recount: false,
+    behind: true,
   });
 }
 
@@ -161,6 +163,7 @@ export function useServiceWatch(
     detail,
     onError: unlisted,
     recount: false,
+    behind: true,
   });
   useResourceWatch({
     enabled: follow && on,
@@ -168,6 +171,7 @@ export function useServiceWatch(
     queryKey: slicesKey,
     detail,
     recount: false,
+    behind: true,
   });
   const pods = useQuery<Scoped<unknown>>({
     queryKey: podsKey,
