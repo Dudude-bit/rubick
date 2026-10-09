@@ -1,10 +1,19 @@
-import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
 import { Link } from "@tanstack/react-router";
 import {
   AlertCircle,
   Check,
+  ChevronDown,
   Lock,
   Search,
   ShieldUser,
@@ -16,6 +25,13 @@ import { ClusterRow } from "@/components/cluster/ClusterRow";
 import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
 import { ProviderMark } from "@/components/ui/provider-mark";
+import { fitTabs } from "@/components/object/tab-fit";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -58,6 +74,8 @@ import {
   seedScope,
 } from "@/lib/namespace-scope";
 import { pageLink } from "@/lib/links";
+import { splitName } from "@/lib/resource-identity";
+import { nameCut } from "@/components/object/ResourceName";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
@@ -97,8 +115,9 @@ import {
  *
  * Width is the Firefox rule, not the Chrome one: natural width, shrinking
  * together as the strip fills, stopping at a floor wide enough to still read
- * a route, and past that the strip scrolls rather than grinding tabs into
- * slivers. Nothing stretches, so one tab is one tab's worth of chrome.
+ * a route. Past that a tab is whole in the strip or named in the menu beside
+ * it, never cut under Search: the open one first, then the rest in order
+ * while they fit. Nothing stretches, so one tab is one tab's worth of chrome.
  */
 export function ScopeTabs() {
   const t = useT();
@@ -108,17 +127,13 @@ export function ScopeTabs() {
 
   const tabs = useScopeTabStore((s) => s.tabs);
   const activeId = useScopeTabStore((s) => s.activeId);
+  const shellTabs = useKeptShellStore((s) =>
+    s.shells.map((shell) => shell.tab).join("\n")
+  );
 
+  const roomRef = useRef<HTMLDivElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
-
-  // Scrolling is only an acceptable overflow policy if the tab you just
-  // switched to cannot be the one off the edge. Ctrl+1..9 and Ctrl+Tab
-  // reach every tab; this is what makes them land somewhere visible.
-  useEffect(() => {
-    stripRef.current
-      ?.querySelector<HTMLElement>('[data-active="true"]')
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
-  }, [activeId, tabs.length]);
+  const menuRef = useRef<HTMLButtonElement>(null);
 
   // The active tab's scope lives in `clusterStore`, not on the tab; a tab
   // whose cluster is gone keeps the name it was pointed at, because nothing
@@ -140,35 +155,57 @@ export function ScopeTabs() {
 
   const multiCluster =
     new Set(shown.map((tab) => tab.context).filter(Boolean)).size > 1;
+  const kept = new Set(shellTabs.split("\n"));
+  const floors = shown.map((tab) =>
+    !tab.context && !tab.missing
+      ? null
+      : FLOOR[tab.missing ? "missing" : multiCluster ? "named" : "plain"][
+          kept.has(tab.id) ? 1 : 0
+        ]
+  );
+  const hidden = useHiddenTabs({
+    room: roomRef,
+    strip: stripRef,
+    menu: menuRef,
+    floors,
+    open: shown.findIndex((tab) => tab.id === activeId),
+  });
 
   return (
     <div className="flex h-[38px] flex-none items-center gap-1 border-b border-hair px-2.5">
-      {/* Outside the scroller on purpose: however far the strip has been
-          scrolled, the way to open a tab has not moved. */}
       <NewTabButton />
 
       <div
-        ref={stripRef}
-        role="tablist"
-        aria-label={t("action", "openScopes")}
-        // A tab strip is one line, so a trackpad's vertical gesture is the
-        // gesture a reader will use on it.
-        onWheel={(event) => {
-          const el = event.currentTarget;
-          if (el.scrollWidth <= el.clientWidth) return;
-          el.scrollLeft += event.deltaY || event.deltaX;
-        }}
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
+        ref={roomRef}
+        className="flex min-w-0 flex-1 items-center gap-1"
+        data-scope-room
       >
-        {shown.map((tab) => (
-          <ScopeTabItem
-            key={tab.id}
-            tab={tab}
-            active={tab.id === activeId}
+        <div
+          ref={stripRef}
+          role="tablist"
+          aria-label={t("action", "openScopes")}
+          className="relative flex min-w-0 flex-1 items-center gap-1 overflow-hidden"
+        >
+          {shown.map((tab, index) => (
+            <ScopeTabItem
+              key={tab.id}
+              tab={tab}
+              active={tab.id === activeId}
+              namesCluster={multiCluster}
+              closable={shown.length > 1}
+              floor={floors[index]}
+              overflow={hidden[index]}
+            />
+          ))}
+        </div>
+        {hidden.some(Boolean) && (
+          <HiddenScopeTabs
+            tabs={shown.filter((_, index) => hidden[index])}
+            activeId={activeId}
             namesCluster={multiCluster}
-            closable={shown.length > 1}
+            buttonRef={menuRef}
           />
-        ))}
+        )}
       </div>
 
       <button
@@ -182,6 +219,223 @@ export function ScopeTabs() {
         <Kbd shortcut="mod+K" className="leading-[13px]" />
       </button>
     </div>
+  );
+}
+
+/** The strip's `gap-1`, which the fit counts between tabs and before the menu. */
+const GAP_PX = 4;
+/** The menu before it has been drawn once: "ещё 10" and its chevron. */
+const MENU_PX = 64;
+
+/**
+ * Which tabs the menu holds: each tab is counted at its floor, the width it
+ * can shrink to with its label whole, and a tab without one at its own width.
+ */
+function useHiddenTabs({
+  room,
+  strip,
+  menu,
+  floors,
+  open,
+}: {
+  room: React.RefObject<HTMLDivElement | null>;
+  strip: React.RefObject<HTMLDivElement | null>;
+  menu: React.RefObject<HTMLButtonElement | null>;
+  floors: readonly (number | null)[];
+  open: number;
+}): boolean[] {
+  const [hidden, setHidden] = useState<boolean[]>([]);
+  // A string, because `floors` is a new array on every render.
+  const floorsKey = floors.join(",");
+  const menuShown = hidden.some(Boolean);
+  useLayoutEffect(() => {
+    const box = room.current;
+    const list = strip.current;
+    if (!box || !list) return;
+    const stated = floorsKey.split(",").map((px) => (px ? Number(px) : null));
+    const measure = () => {
+      if (box.clientWidth === 0) return;
+      const tabs = [...list.querySelectorAll<HTMLElement>("[data-scope-tab]")];
+      const shown = fitTabs({
+        widths: tabs.map(
+          (tab, index) => stated[index] ?? tab.getBoundingClientRect().width
+        ),
+        room: box.clientWidth,
+        gap: GAP_PX,
+        menu: (menu.current?.getBoundingClientRect().width || MENU_PX) + GAP_PX,
+        open,
+      });
+      const next = shown.map((fits) => !fits);
+      setHidden((prev) => (prev.join() === next.join() ? prev : next));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(box);
+    if (menu.current) observer.observe(menu.current);
+    return () => observer.disconnect();
+  }, [room, strip, menu, floorsKey, open, menuShown]);
+  return floors.map((_, index) => hidden[index] ?? false);
+}
+
+/** Every tab the strip cannot show whole, one click away, the open one marked. */
+function HiddenScopeTabs({
+  tabs,
+  activeId,
+  namesCluster,
+  buttonRef,
+}: {
+  tabs: ScopeTab[];
+  activeId: string | null;
+  namesCluster: boolean;
+  buttonRef: React.RefObject<HTMLButtonElement | null>;
+}) {
+  const t = useT();
+  const activateTab = useScopeTabStore((s) => s.activateTab);
+  const open = tabs.find((tab) => tab.id === activeId);
+  const label = t("action", "tabsMoreLabel", { n: tabs.length });
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          ref={buttonRef}
+          type="button"
+          aria-label={
+            open
+              ? `${label}. ${t("action", "tabsMoreHoldsOpen", { tab: tabRouteLabel(open.href, t) })}`
+              : label
+          }
+          className={cn(
+            "flex flex-none items-center gap-1 rounded-md px-2 py-1 text-[11px] leading-[14px] transition-colors hover:bg-hover hover:text-fg",
+            open ? "bg-sel text-fg" : "text-fg-mut"
+          )}
+        >
+          {t("action", "tabsMore", { n: tabs.length })}
+          <ChevronDown className="h-3 w-3" aria-hidden="true" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-w-[340px]">
+        {tabs.map((tab) => (
+          <HiddenScopeTab
+            key={tab.id}
+            tab={tab}
+            open={tab.id === activeId}
+            namesCluster={namesCluster}
+            onPick={() => activateTab(tab.id)}
+          />
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function HiddenScopeTab({
+  tab,
+  open,
+  namesCluster,
+  onPick,
+}: {
+  tab: ScopeTab;
+  open: boolean;
+  namesCluster: boolean;
+  onPick: () => void;
+}) {
+  const t = useT();
+  const mark = useClusterMark(tab.context);
+  const alias = mark.alias?.trim();
+  const keepsShell = useKeptShellStore((s) =>
+    s.shells.some((shell) => shell.tab === tab.id)
+  );
+  return (
+    <DropdownMenuItem
+      onSelect={onPick}
+      aria-current={open ? "true" : undefined}
+      aria-label={tabTitle(tab, t, alias)}
+      className={cn("gap-1.5", open && "font-medium text-fg")}
+    >
+      <span
+        className={cn(
+          "h-1.5 w-1.5 flex-none rounded-full",
+          tab.missing && "border border-fg-fnt"
+        )}
+        style={
+          tab.missing
+            ? undefined
+            : { background: clusterColor(tab.context, mark.hue) }
+        }
+      />
+      <ProviderMark
+        provider={detectProvider(tab.context ?? "")}
+        className="h-[13px] w-[13px] flex-none"
+      />
+      {(namesCluster || tab.missing) && (
+        <span className="flex-none text-fg-mut">
+          {alias ?? tab.context ?? t("cluster", "noCluster")} /
+        </span>
+      )}
+      <span className="min-w-0 truncate text-fg-mut">
+        {scopeLabel(tabScope(tab), t)} /
+      </span>
+      {keepsShell && (
+        <SquareTerminal
+          className="h-3 w-3 flex-none text-ok"
+          aria-hidden="true"
+        />
+      )}
+      <RouteName name={tabRouteLabel(tab.href, t)} />
+      {open && (
+        <Check className="ml-auto h-3 w-3 flex-none" aria-hidden="true" />
+      )}
+    </DropdownMenuItem>
+  );
+}
+
+/**
+ * A route that names an object is cut by `ResourceName`'s rule: whole
+ * characters of its start, one ellipsis, and its generated end, since two pods
+ * of one ReplicaSet differ only there. Any other route is cut at its end.
+ */
+function RouteName({ name, className }: { name: string; className?: string }) {
+  const { stem, tail } = splitName(name);
+  if (!tail)
+    return (
+      <span className={cn("min-w-18 shrink truncate", className)}>{name}</span>
+    );
+  const cut = nameCut({ name, stem, generated: true, before: 0, label: 0 });
+  return (
+    <span
+      className={cn(
+        "flex min-w-18 max-w-full shrink overflow-hidden whitespace-nowrap font-mono",
+        className
+      )}
+      style={{ width: `${cut.box}ch` }}
+      data-route-name
+    >
+      <span
+        className="flex-none overflow-hidden"
+        style={{ width: cut.head.css }}
+      >
+        {name}
+      </span>
+      <span
+        aria-hidden="true"
+        className="flex-none overflow-hidden before:content-['…']"
+        style={{ width: cut.cut.css }}
+      />
+      {cut.end && (
+        <span
+          aria-hidden="true"
+          className="flex-none overflow-hidden [direction:rtl]"
+          style={{ width: cut.end.css }}
+        >
+          <span
+            dir="ltr"
+            data-name={name}
+            className="before:content-[attr(data-name)]"
+          />
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -267,6 +521,8 @@ function ScopeTabItem({
   active,
   namesCluster,
   closable,
+  floor,
+  overflow,
 }: {
   tab: ScopeTab;
   active: boolean;
@@ -274,6 +530,10 @@ function ScopeTabItem({
   namesCluster: boolean;
   /** The strip has somewhere to fall back to if this tab goes. */
   closable: boolean;
+  /** The width its parts need at their own minimums; `null` for a tab drawn at its own width. */
+  floor: number | null;
+  /** In the menu, not the strip: out of sight and out of the way, still measured. */
+  overflow: boolean;
 }) {
   const t = useT();
   const { context } = tab;
@@ -343,6 +603,8 @@ function ScopeTabItem({
         role="tab"
         aria-selected={active}
         data-active={active}
+        data-scope-tab
+        data-overflow={overflow || undefined}
         onClick={() => {
           if (!active) activateTab(tab.id);
         }}
@@ -351,7 +613,10 @@ function ScopeTabItem({
           event.preventDefault();
           closeTab(tab.id);
         }}
-        className="flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px]"
+        className={cn(
+          "flex flex-none items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px]",
+          OVERFLOW
+        )}
       >
         <ContextPopover
           open={open === "ctx"}
@@ -402,6 +667,9 @@ function ScopeTabItem({
           aria-selected={active}
           aria-label={keepsShell ? `${title}. ${keepsShell}` : title}
           data-active={active}
+          data-scope-tab
+          data-overflow={overflow || undefined}
+          style={{ minWidth: floor ?? undefined }}
           onClick={() => {
             if (!active) activateTab(tab.id);
           }}
@@ -416,21 +684,16 @@ function ScopeTabItem({
             // Natural width, no growing, a cap a long object name reaches
             // and a floor it stops at: an empty strip is not a reason to
             // stretch a tab, and a contested one gives up characters before
-            // it gives up tabs. Below the floor the strip scrolls.
+            // it gives up tabs. Below the floor a tab goes to the menu.
             //
-            // The floor is stated here rather than left to the segments'
-            // own minimums because a flex item's intrinsic minimum is not
+            // The floor is stated rather than left to the segments' own
+            // minimums because a flex item's intrinsic minimum is not
             // reliably the sum of its children's, and a tab narrower than
             // its own parts is a tab with its label written over itself —
             // hence the label clips as the backstop. The close button sits
             // outside what clips, so no width can take it away.
             "flex max-w-104 shrink items-center gap-[5px] rounded-md px-[9px] py-1 text-[12px] leading-[15px] transition-colors",
-            // A lost cluster needs room for the one fact only this tab still
-            // holds — the name it was pointed at — and for the word that says
-            // it is gone.
-            FLOOR[tab.missing ? "missing" : showName ? "named" : "plain"][
-              keepsShell ? 1 : 0
-            ],
+            OVERFLOW,
             active ? "bg-sel text-fg-mut" : "text-fg-fnt hover:bg-hover"
           )}
         >
@@ -531,14 +794,10 @@ function ScopeTabItem({
                 aria-hidden="true"
               />
             )}
-            <span
-              className={cn(
-                "min-w-18 truncate shrink",
-                active ? "text-fg" : "text-fg-mut"
-              )}
-            >
-              {route}
-            </span>
+            <RouteName
+              name={route}
+              className={active ? "text-fg" : "text-fg-mut"}
+            />
           </span>
 
           <button
@@ -579,14 +838,18 @@ function ScopeTabItem({
 }
 
 /**
- * A tab's floor, then the same with the shell glyph: the width of its parts
- * at their own minimums in Inter at 12px, so the label never clips.
+ * A tab's floor in pixels, then the same with the shell glyph: the width of
+ * its parts at their own minimums in Inter at 12px, so the label never clips.
+ * A lost cluster needs room for the name it was pointed at and the word that
+ * says it is gone.
  */
 const FLOOR = {
-  missing: ["min-w-89", "min-w-94"],
-  named: ["min-w-70", "min-w-74"],
-  plain: ["min-w-57", "min-w-61"],
+  missing: [356, 376],
+  named: [280, 296],
+  plain: [228, 244],
 } as const;
+
+const OVERFLOW = "data-[overflow=true]:invisible data-[overflow=true]:absolute";
 
 /** The open segment carries the fill: it is what says which of the two
  *  lists you are looking at while both stay visible. */

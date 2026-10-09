@@ -241,8 +241,7 @@ describe("what a tab says", () => {
         if (at === each) break;
       }
     }
-    const floor = (el: HTMLElement) =>
-      Number(/\bmin-w-(\d+)\b/.exec(el.className)?.[1]);
+    const floor = (el: HTMLElement) => parseFloat(el.style.minWidth);
     expect(floor(tabs()[2])).toBeGreaterThan(floor(tabs()[0]));
 
     await userEvent.click(
@@ -265,6 +264,121 @@ describe("what a tab says", () => {
     });
     await mount();
     expect(tabs()[0]).not.toHaveAttribute("title");
+  });
+});
+
+describe("a strip with more tabs than room", () => {
+  const ROUTES = ["pods", "deployments", "services", "events", "nodes"];
+  const six = (active: string) => {
+    useScopeTabStore.setState({
+      tabs: [
+        ...ROUTES.map((route, index) =>
+          tab({ id: `t${index}`, href: `/c/k3d-dev/${route}` })
+        ),
+        tab({ id: "cart", href: "/c/k3d-dev/pods/shop/cart-667846ff79-4f68h" }),
+      ],
+      activeId: active,
+      pendingHref: null,
+    });
+  };
+  /** The strip and its menu are 1000px: four tabs at their 228px floor and the menu. */
+  const roomOf1000 = () =>
+    vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockImplementation(function (this: HTMLElement) {
+        return this.hasAttribute("data-scope-room") ? 1000 : 0;
+      });
+  /** The menu's tabs stay mounted to be measured, out of sight: what the strip draws is the rest. */
+  const drawn = () =>
+    screen
+      .getAllByRole("tab")
+      .filter((each) => !each.hasAttribute("data-overflow"));
+  const inStrip = () =>
+    drawn().map((each) => each.getAttribute("aria-label")?.split(" · ").at(-1));
+  const menuItems = async () => {
+    await userEvent.click(screen.getByRole("button", { name: /do not fit/ }));
+    return screen.getAllByRole("menuitem");
+  };
+
+  /**
+   * Dana at 1440 with six tabs: the fifth sat cut under Search with no
+   * close button and the sixth was off screen, with nothing saying so.
+   * Fails if a tab is drawn cut, or one that does not fit is not offered by
+   * name, or a tab in the strip has no close button.
+   */
+  it("shows each tab whole in the strip or by name in the menu", async () => {
+    six("t0");
+    const width = roomOf1000();
+    try {
+      await mount();
+      expect(inStrip()).toEqual(["Pods", "Deployments", "Services", "Events"]);
+      for (const each of drawn())
+        expect(
+          within(each).getByRole("button", { name: /^Close / })
+        ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "2 more tabs do not fit" })
+      ).toHaveTextContent("2 more");
+      expect((await menuItems()).map((item) => item.textContent)).toEqual([
+        "All namespaces /Nodes",
+        "All namespaces /cart-667846ff79-4f68h",
+      ]);
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  /**
+   * Dana's deep link landed on the cart tab, which sat half under Search
+   * with no tab on screen marked open. Fails if the open tab can be the one
+   * the strip leaves out, or a tab picked from the menu does not open.
+   */
+  it("keeps the open tab in the strip, and opens the one picked from the menu", async () => {
+    six("cart");
+    const width = roomOf1000();
+    try {
+      await mount();
+      expect(inStrip()).toEqual([
+        "Pods",
+        "Deployments",
+        "Services",
+        "cart-667846ff79-4f68h",
+      ]);
+      const items = await menuItems();
+      await userEvent.click(items[0]);
+      expect(useScopeTabStore.getState().activeId).toBe("t3");
+      expect(inStrip()).toContain("Events");
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  /**
+   * Two cart pods read "cart-6678…" and "cart-6678…". Fails if a cut
+   * object route can lose the end that tells two pods of one ReplicaSet
+   * apart, or if the name stops being in the text once, whole.
+   */
+  it("keeps the generated end of an object route it cuts", async () => {
+    six("cart");
+    await mount();
+    const name = screen
+      .getByRole("tab", { name: /cart-667846ff79-4f68h/ })
+      .querySelector("[data-route-name]")!;
+    const [head, cut, end] = [...name.children] as HTMLElement[];
+    expect(name).toHaveClass("font-mono");
+    expect(head).toHaveTextContent(/^cart-667846ff79-4f68h$/);
+    expect(cut).toHaveAttribute("aria-hidden", "true");
+    expect(end).toHaveAttribute("aria-hidden", "true");
+    expect(end.style.width).toContain("ch");
+    expect(end.firstElementChild).toHaveAttribute(
+      "data-name",
+      "cart-667846ff79-4f68h"
+    );
+    expect(
+      screen
+        .getByRole("tab", { name: /Pods$/ })
+        .querySelector("[data-route-name]")
+    ).toBeNull();
   });
 });
 
