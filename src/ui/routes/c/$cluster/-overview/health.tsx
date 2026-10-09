@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { CircleSlash, Loader2, Lock, TriangleAlert } from "lucide-react";
 
@@ -61,6 +61,7 @@ import { useT, type T } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
 import { formatCount } from "@/lib/count";
 import { allocatedPercent } from "@/lib/node-amount";
+import { useAttentionExpanded } from "./attention-expanded";
 
 /**
  * The unit rides along dimmed and a size smaller, so the number keeps the
@@ -70,10 +71,14 @@ function Unit({ children }: { children: React.ReactNode }) {
   return <span className="text-[0.85em] text-fg-fnt">{children}</span>;
 }
 
-// The 240px reason track holds Init:CreateContainerConfigError, mark and gap.
+// One grid for every row, so a column is as wide as what its rows hold: the
+// reason up to Init:CreateContainerConfigError, a count or an age only where
+// a row has one, and the sentence the rest.
+const ROWS =
+  "@container grid grid-cols-[auto_fit-content(240px)_minmax(12rem,1fr)_auto_auto_auto] gap-x-2.5";
 // Baselines, not centres: a detail that wraps keeps the marks on its first line.
 const ROW =
-  "grid grid-cols-[10px_240px_minmax(0,1fr)_60px_74px_46px] items-baseline gap-2.5 rounded-[5px] px-1.5 py-[5px] text-xs";
+  "col-span-full grid grid-cols-subgrid items-baseline rounded-[5px] px-1.5 py-[5px] text-xs";
 const MARK = "mt-0.5 h-3 w-3 self-start justify-self-center";
 const SAID = "line-clamp-4 min-w-0 wrap-break-word text-fg-mid";
 
@@ -267,22 +272,23 @@ function AttentionRow({
           </span>
         )}
       </span>
-      <Sparkline
-        rising={item.kind === "Pod" && restarts > 0}
-        className={cn("mt-px self-start", tone)}
-      />
-      <span className="text-right font-mono text-fg-mut">
-        {restarts > 0 ? (
+      {/* The first to give way: it draws nothing the row does not already say. */}
+      <span className="self-start" data-testid="attention-trend">
+        <Sparkline
+          rising={item.kind === "Pod" && restarts > 0}
+          className={cn("mt-px @max-[56rem]:hidden", tone)}
+        />
+      </span>
+      <span className="whitespace-nowrap text-right font-mono text-fg-mut">
+        {restarts > 0 && (
           <>
             {restarts}
             <Unit> {t("count", "restartNoun", { n: restarts })}</Unit>
           </>
-        ) : (
-          <span className="text-fg-fnt">·</span>
         )}
       </span>
-      <span className="text-right text-[11px] leading-4 text-fg-fnt">
-        {item.since === null ? "·" : formatAge(item.since, t)}
+      <span className="whitespace-nowrap text-right text-[11px] leading-4 text-fg-fnt">
+        {item.since !== null && formatAge(item.since, t)}
       </span>
     </>
   );
@@ -308,6 +314,9 @@ function AttentionRow({
   );
 }
 
+const TOGGLE =
+  "rounded text-fg-mut underline decoration-hair underline-offset-2 transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info";
+
 /**
  * The rows past the cap, by kind, each a way into its list. The count opens
  * the rows this list holds in place; what the backend cut has only a count.
@@ -316,10 +325,13 @@ function MoreRows({
   hidden,
   cut,
   onExpand,
+  onCollapse,
 }: {
   hidden: AttentionItem[];
   cut: number;
   onExpand: () => void;
+  /** Present once the rows past the cap are open. */
+  onCollapse?: () => void;
 }) {
   const t = useT();
   const byKind = new Map<string, number>();
@@ -327,13 +339,23 @@ function MoreRows({
     byKind.set(item.kind, (byKind.get(item.kind) ?? 0) + 1);
   const more = t("cluster", "attentionMore", { n: hidden.length + cut });
   return (
-    <p className="flex flex-wrap items-baseline gap-x-2 px-1.5 py-[5px] text-[11px] text-fg-fnt">
-      {hidden.length > 0 ? (
+    <p className="col-span-full flex flex-wrap items-baseline gap-x-2 px-1.5 py-[5px] text-[11px] text-fg-fnt">
+      {onCollapse && (
+        <button
+          type="button"
+          aria-expanded={true}
+          onClick={onCollapse}
+          className={TOGGLE}
+        >
+          {t("action", "showFewer")}
+        </button>
+      )}
+      {hidden.length + cut === 0 ? null : hidden.length > 0 ? (
         <button
           type="button"
           aria-expanded={false}
           onClick={onExpand}
-          className="rounded text-fg-mut underline decoration-hair underline-offset-2 transition-colors hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info"
+          className={TOGGLE}
         >
           {more}
         </button>
@@ -432,16 +454,15 @@ function capped(lines: AttentionLine[]): AttentionLine[] {
   return head.at(-1)?.at === "unserved" ? head.slice(0, -1) : head;
 }
 
-/** Not-running pods by phase, in the words the composition bar uses. */
-function notRunning(pods: PodComposition, t: T): string {
+/** Not-running pods by phase, in the words the composition bar uses, one count and its words each. */
+function notRunning(pods: PodComposition, t: T): string[] {
   return podSegments(pods, t)
     .filter((segment) => segment.label !== "Running" && segment.count > 0)
     .map((segment) =>
       [`${segment.count} ${segment.label}`, segment.qualifier]
         .filter(Boolean)
         .join(" · ")
-    )
-    .join(", ");
+    );
 }
 
 export function AttentionPanel({
@@ -464,16 +485,18 @@ export function AttentionPanel({
   const t = useT();
   useShareSection("overview-problems", () => attentionShare(attention, t));
   const { items, total, complete, worst } = attention;
-  const [expanded, setExpanded] = useState(false);
+  const expanded = useAttentionExpanded((state) => state.expanded);
+  const setExpanded = useAttentionExpanded((state) => state.setExpanded);
   const lines = attentionLines(items);
-  const shown = expanded ? lines : capped(lines);
+  const head = capped(lines);
+  const shown = expanded ? lines : head;
   const hidden = lines
     .slice(shown.length)
     .flatMap((line) => (line.at === "item" ? [line.item] : []));
   const cut = total - items.length;
   const unchecked = attention.checks.filter((check) => check.state !== "read");
   const readyNodes = nodes.filter((n) => n.ready).length;
-  const down = pods && notRunning(pods.read, t);
+  const down = pods ? notRunning(pods.read, t) : [];
   const nodesLine =
     nodesKnown &&
     t("count", "nodesReady", {
@@ -496,7 +519,7 @@ export function AttentionPanel({
               : t("cluster", "attentionNoneFound")
         }
       />
-      <div>
+      <div className={ROWS}>
         {shown.map((line) =>
           line.at === "item" ? (
             <AttentionRow
@@ -512,11 +535,14 @@ export function AttentionPanel({
             />
           )
         )}
-        {hidden.length + cut > 0 && (
+        {(hidden.length + cut > 0 || head.length < shown.length) && (
           <MoreRows
             hidden={hidden}
             cut={cut}
             onExpand={() => setExpanded(true)}
+            onCollapse={
+              head.length < shown.length ? () => setExpanded(false) : undefined
+            }
           />
         )}
         {/* What is fine gets one muted line after the rows, never a panel of
@@ -533,52 +559,59 @@ export function AttentionPanel({
           <span className="truncate font-mono font-medium text-fg-mut">
             {t("cluster", SUMMARY_LABEL[summaryRole])}
           </span>
-          {/* The counts give way in their details; the words that change
-              what the counts mean wrap below them and are never cut. */}
+          {/* Every count stays whole with its words, and the line breaks
+              between them; the words that change what the counts mean come
+              after and are never cut either. */}
           <span
-            className="col-span-4 flex min-w-0 flex-wrap items-baseline gap-x-2 text-fg-fnt"
+            className="col-span-4 min-w-0 text-fg-fnt"
             data-testid="attention-overall"
           >
-            {(pods || nodesLine) && (
-              <span className="flex min-w-0 max-w-full items-baseline whitespace-nowrap">
-                {pods && (
-                  <span className="flex-none">
-                    {t("count", "podsReady", {
-                      n: formatCount(pods.read.ready),
-                      of: t("count", "ofPods", { n: podTotal(pods.read) }),
-                    })}
-                  </span>
-                )}
-                {down && (
-                  <span
-                    className="min-w-0 truncate"
-                    data-testid="attention-overall-details"
-                  >
-                    &nbsp;({down})
-                  </span>
-                )}
-                {nodesLine && (
-                  <span className="flex-none">
-                    {pods && "\u00a0·\u00a0"}
-                    {nodesLine}
-                  </span>
-                )}
+            {pods && (
+              <span className="whitespace-nowrap">
+                {t("count", "podsReady", {
+                  n: formatCount(pods.read.ready),
+                  of: t("count", "ofPods", { n: podTotal(pods.read) }),
+                })}
               </span>
-            )}{" "}
+            )}
+            {down.length > 0 && (
+              <span data-testid="attention-overall-details">
+                {down.map((segment, index) => (
+                  <Fragment key={index}>
+                    {" "}
+                    <span className="whitespace-nowrap">
+                      {index === 0 && "("}
+                      {segment}
+                      {index === down.length - 1 ? ")" : ","}
+                    </span>
+                  </Fragment>
+                ))}
+              </span>
+            )}
+            {nodesLine && (
+              <>
+                {pods && " "}
+                <span className="whitespace-nowrap">
+                  {pods && "·\u00a0"}
+                  {nodesLine}
+                </span>
+              </>
+            )}
             {(!pods || podsUnread.length > 0) && (
-              <span className="min-w-0 max-w-full">
+              <>
+                {(pods || nodesLine) && " "}
                 <UnreadMark unread={podsUnread}>
                   {t("cluster", "podsNotCounted", {
                     where: unreadWhere(podsUnread, t),
                   })}
                 </UnreadMark>
-              </span>
+              </>
             )}
           </span>
         </div>
         {unchecked.length > 0 && (
           <div
-            className="mt-1 border-t border-hair pt-1.5"
+            className="col-span-full mt-1 border-t border-hair pt-1.5"
             data-testid="attention-unchecked"
           >
             <p className="px-1.5 pb-0.5 text-[11px] text-fg-fnt">
@@ -919,7 +952,7 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
       : null;
 
   return (
-    <div className="grid grid-cols-[260px_minmax(0,1fr)_46px] items-center gap-2.5 px-1.5 py-[5px] text-xs">
+    <div className="grid grid-cols-[260px_minmax(0,1fr)_46px] items-baseline gap-2.5 px-1.5 py-[5px] text-xs">
       {/* 260px holds FailedComputeMetricsReplicas and its count whole. */}
       <span className="inline-flex min-w-0 items-baseline gap-1 font-mono font-medium text-warn">
         <Icon
@@ -935,12 +968,17 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
           </span>
         )}
       </span>
-      <span className="truncate text-fg-mid">
+      <span
+        className={SAID}
+        title={warning.sample ?? undefined}
+        data-testid="warning-said"
+      >
         {subject && (
           <ResourceRef
             kind={subject.kind}
             name={subject.name}
             namespace={subject.namespace}
+            className="max-w-full"
           />
         )}
         {subject && warning.sample && " "}
