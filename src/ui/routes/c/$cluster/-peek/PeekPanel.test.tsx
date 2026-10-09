@@ -1102,6 +1102,7 @@ describe("a workload's peek Pods tab", () => {
     vi.mocked(commands.getDeployment).mockResolvedValue({
       name: "checkout",
       namespace: "shop",
+      uid: "checkout-uid",
       replicas: { desired: 1, ready: 0, updated: 1, available: 0 },
       rollout: { state: "ready" },
       containers: [],
@@ -1109,7 +1110,10 @@ describe("a workload's peek Pods tab", () => {
       ownerReferences: [],
       createdAt: null,
     } as never);
-    vi.mocked(commands.getDeploymentPods).mockResolvedValue([buildPod()]);
+    vi.mocked(commands.getDeploymentPods).mockResolvedValue({
+      uid: "checkout-uid",
+      pods: [buildPod()],
+    });
     await wrap("/c/prod/events?peek=deployments/shop/checkout");
     await openTab("Pods");
     await waitFor(() =>
@@ -1195,7 +1199,10 @@ describe("PeekPanel reads what the detail pages read", () => {
       conditions: [],
       ownerReferences: [],
     } as never);
-    vi.mocked(commands.getDeploymentPods).mockResolvedValue([buildPod()]);
+    vi.mocked(commands.getDeploymentPods).mockResolvedValue({
+      uid: "deploy-uid",
+      pods: [buildPod()],
+    });
     await wrap("/c/prod/events?peek=deployments/shop/api");
     await openTab("Pods");
     await waitFor(() =>
@@ -1203,7 +1210,7 @@ describe("PeekPanel reads what the detail pages read", () => {
         wrap.client.getQueryData(
           queryKeys.ownedPods("Deployment", "shop", "api")
         )
-      ).toEqual([buildPod()])
+      ).toEqual({ uid: "deploy-uid", pods: [buildPod()] })
     );
   });
 

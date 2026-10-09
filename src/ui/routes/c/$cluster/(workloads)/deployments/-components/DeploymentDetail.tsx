@@ -137,8 +137,7 @@ export function DeploymentDetail() {
     queryKey: podsKey,
     queryFn: async () => {
       try {
-        if (!name) return [];
-        return await commands.getDeploymentPods(name, namespace || null);
+        return await commands.getDeploymentPods(name!, namespace || null);
       } catch (err) {
         throw new Error(normalizeTauriError(err), { cause: err });
       }

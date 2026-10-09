@@ -204,20 +204,73 @@ describe("the Overview", () => {
       () => {
         asked += 1;
         return asked === 1
-          ? Promise.resolve([CREATING])
+          ? Promise.resolve({ uid: "uid", pods: [CREATING] })
           : new Promise(() => {});
       }
     );
     onOverview();
     const client = testQueryClient();
+    read(client);
     await open(client);
     expect(await screen.findByText("1 starting")).toBeInTheDocument();
 
+    await new Promise((resolve) => setTimeout(resolve, 5));
     read(client);
 
     expect(await screen.findByText("1 ready")).toBeInTheDocument();
     expect(screen.queryByText("1 starting")).toBeNull();
     await waitFor(() => expect(asked).toBe(2));
+  });
+});
+
+describe("the Pods tab", () => {
+  /**
+   * Sam deleted big-pull and applied it again: the new Deployment's Pods tab
+   * counted 1 and listed the old one's pod green "Running" while kubectl had
+   * it Terminating and no pod owned by the new one. Fails if pods read for
+   * another Deployment of its name are listed or counted under this one, or
+   * are not asked for again.
+   */
+  it("lists none of the pods read for the Deployment deleted before this one, and asks again", async () => {
+    let asked = 0;
+    answering(
+      () => new Promise(() => {}),
+      () => {
+        asked += 1;
+        return asked === 1
+          ? Promise.resolve({
+              uid: "the-one-deleted",
+              pods: [
+                {
+                  ...CREATING,
+                  name: "ledger-6d9f7-old",
+                  status: { ...CREATING.status, display: "Running" },
+                },
+              ],
+            })
+          : new Promise(() => {});
+      }
+    );
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...vi.mocked(useResourceDetail)(
+        {} as Parameters<typeof useResourceDetail>[0]
+      ),
+      activeTab: "pods",
+    });
+    const client = testQueryClient();
+    await open(client);
+    await waitFor(() => expect(asked).toBe(1));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByText("ledger-6d9f7-old")).toBeNull();
+
+    read(client);
+
+    await waitFor(() => expect(asked).toBe(2));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(screen.queryByText("ledger-6d9f7-old")).toBeNull();
+    expect(screen.getByRole("tab", { name: /Pods/ }).textContent).not.toMatch(
+      /\d/
+    );
   });
 });
 

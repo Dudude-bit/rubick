@@ -45,6 +45,7 @@ import type {
   DebugStatus,
   Dependents,
   DeploymentInfo,
+  DeploymentPods,
   DetectedExtension,
   Diagnostics,
   DrainHandle,
@@ -337,8 +338,8 @@ export async function updateDeploymentImage(
 export async function getDeploymentPods(
   name: string,
   namespace: string | null
-): Promise<PodInfo[]> {
-  return invoke<PodInfo[]>("get_deployment_pods", { name, namespace });
+): Promise<DeploymentPods> {
+  return invoke<DeploymentPods>("get_deployment_pods", { name, namespace });
 }
 
 export async function appEventTypes(): Promise<AppEvent | null> {

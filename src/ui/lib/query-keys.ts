@@ -167,12 +167,14 @@ export const queryKeys = {
   ownedPodWatch: (
     kind: string,
     namespace: string | null | undefined,
-    name: string | undefined
+    name: string | undefined,
+    uid?: string
   ): (string | null | undefined)[] => [
     "owned-pod-watch",
     kind,
     home(namespace),
     name,
+    uid ?? null,
   ],
   /**
    * What the watches under a Service's verdict hold: the pods its selector

@@ -2207,6 +2207,11 @@ export interface PodStatusInfo {
   restartingUntil?: string;
 }
 
+export interface DeploymentPods {
+  uid: string;
+  pods: PodInfo[];
+}
+
 export interface DeploymentInfo {
   name: string;
   namespace: string;
