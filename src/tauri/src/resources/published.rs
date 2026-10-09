@@ -332,6 +332,7 @@ pub(crate) fn pod_ref(pod: &Pod, ns: &str) -> ObjectRef {
         display: super::types::pod_display::display_status(pod),
         ready: condition_is_true(pod.status.as_ref(), "Ready"),
         looping_exit_at: super::types::pod_display::looping_exit(pod),
+        exit_unreported: super::types::pod_display::exit_unreported(pod),
     })
 }
 

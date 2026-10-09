@@ -153,6 +153,7 @@ describe("what is not published", () => {
       display: "Running",
       ready,
       loopingExitAt: null,
+      exitUnreported: false,
     },
   });
 

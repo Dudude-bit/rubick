@@ -94,15 +94,27 @@ import {
   podReadiness,
 } from "@/lib/container-sequence";
 import { statusRole } from "@/lib/status-role";
-import { loopingContainer, loopingNow } from "@/lib/crash-loop";
+import {
+  loopingContainer,
+  loopState,
+  seenLoop,
+  withKnownLoop,
+  type SeenLoop,
+} from "@/lib/crash-loop";
 import {
   describeRestarts,
   describeTermination,
+  lastTermination,
   terminationWhen,
 } from "@/lib/pod-status";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
-import type { ContainerInfo, PodInfo, DebugResult } from "@/generated/types";
+import type {
+  ContainerInfo,
+  DebugResult,
+  EventInfo,
+  PodInfo,
+} from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { toastError } from "@/lib/toast-error";
 import { errorToShow } from "@/lib/error-utils";
@@ -162,13 +174,31 @@ function describeWaiting(
   };
 }
 
+/**
+ * The pod as read, its loop carried across a read the kubelet sent without
+ * the last exit, from what this page saw before it and from the pod's events.
+ */
+function useKnownLoop(
+  read: PodInfo | undefined,
+  events: readonly EventInfo[] | undefined
+): PodInfo | undefined {
+  const [seen, setSeen] = useState<SeenLoop | null>(null);
+  const pod = useMemo(
+    () => read && withKnownLoop(read, seen, events ?? []),
+    [read, seen, events]
+  );
+  const next = pod ? seenLoop(pod, seen) : seen;
+  if (next !== seen) setSeen(next);
+  return pod;
+}
+
 /** The same loop whichever instant of the back-off the read caught. */
 function crashLoop(
   container: ContainerInfo,
   reason: string,
   t: ReturnType<typeof useT>
 ): Omit<PodProblem, "tab"> {
-  const last = container.lastTerminated;
+  const last = lastTermination(container);
   return {
     reason,
     headline: t("empty", "startsAndExits", { container: container.name }),
@@ -232,12 +262,31 @@ function podProblem(
     }
   }
 
-  const looping = loopingNow(pod.status)
-    ? loopingContainer(podContainers(pod))
-    : null;
+  const loop = loopState(pod.status);
+  const looping =
+    loop === "looping" ? loopingContainer(podContainers(pod)) : null;
   if (looping) {
     return {
       ...crashLoop(looping, pod.status.display, t),
+      tab: "containers",
+    };
+  }
+  const unreported =
+    loop === "unreported"
+      ? podContainers(pod).find(
+          (c) => c.restartCount > 0 && !lastTermination(c)
+        )
+      : undefined;
+  if (unreported) {
+    return {
+      reason: pod.status.display,
+      headline: t("empty", "restartedExitUnreported", {
+        container: unreported.name,
+      }),
+      detail: t("empty", "restartsExitUnreportedDetail", {
+        n: unreported.restartCount,
+      }),
+      tone: "warn",
       tab: "containers",
     };
   }
@@ -338,7 +387,7 @@ export function PodDetail() {
   } | null>(null);
 
   const {
-    resource: pod,
+    resource: read,
     isLoading,
     error,
     name,
@@ -370,6 +419,7 @@ export function PodDetail() {
     enabled: !gone,
     refresh: "slow",
   });
+  const pod = useKnownLoop(read, podEvents.data);
 
   const share = usePodShare(pod, podEvents.data ?? [], podEvents.error);
   const nodeIsSpot = useNodePlacement(pod?.nodeName)?.spot ?? false;

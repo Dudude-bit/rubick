@@ -254,6 +254,25 @@ pub fn looping_exit(pod: &Pod) -> Option<DateTime<Utc>> {
         .max()
 }
 
+/// Whether a running pod has a container that restarted while neither its
+/// state nor its `lastState` says how a run ended: the kubelet does not
+/// always report the last exit, and fifteen restarts with none reported are
+/// a question it left open, not a sign of health.
+#[must_use]
+pub fn exit_unreported(pod: &Pod) -> bool {
+    running_status(pod).is_some_and(|status| {
+        status.container_statuses.iter().flatten().any(|cs| {
+            cs.restart_count > 0
+                && cs
+                    .state
+                    .as_ref()
+                    .and_then(|s| s.terminated.as_ref())
+                    .is_none()
+                && last_terminated(cs).is_none()
+        })
+    })
+}
+
 fn running_status(pod: &Pod) -> Option<&k8s_openapi::api::core::v1::PodStatus> {
     let status = pod.status.as_ref()?;
     (status.phase.as_deref() == Some("Running") && pod.metadata.deletion_timestamp.is_none())
@@ -779,6 +798,37 @@ mod tests {
         const FILE: &str = include_str!("../../../../contracts/crash-loop.json");
         let file: serde_json::Value = serde_json::from_str(FILE).expect("json");
         assert_eq!(file["windowSeconds"], CRASH_LOOP_WINDOW_SECONDS);
+    }
+
+    /// Sam's checkout pod read green Running with fifteen restarts while the
+    /// kubelet reported no last exit. The frontend reads the same cases off
+    /// what the row ships; fails if this side calls one of them otherwise,
+    /// or ships a different exit or none.
+    #[test]
+    fn crash_loop_cases_match_the_shared_file() {
+        const FILE: &str = include_str!("../../../../contracts/crash-loop.json");
+        let file: serde_json::Value = serde_json::from_str(FILE).expect("json");
+        for case in file["cases"].as_array().expect("cases") {
+            let name = case["name"].as_str().expect("name");
+            let pod: Pod = serde_json::from_value(serde_json::json!({
+                "metadata": { "name": "checkout", "namespace": "shop" },
+                "spec": { "containers": [{ "name": "app" }] },
+                "status": { "phase": "Running", "containerStatuses": case["containerStatuses"] }
+            }))
+            .expect("pod");
+            let now = DateTime::parse_from_rfc3339(case["now"].as_str().expect("now"))
+                .expect("now")
+                .with_timezone(&Utc);
+            let row = crate::resources::PodRow::from(&pod);
+            assert_eq!(row.status.display, case["display"], "{name}");
+            assert_eq!(
+                serde_json::to_value(row.status.looping_exit_at).expect("value"),
+                case["loopingExitAt"],
+                "{name}"
+            );
+            assert_eq!(row.status.exit_unreported, case["exitUnreported"], "{name}");
+            assert_eq!(crash_looping(&pod, now), case["looping"], "{name}");
+        }
     }
 
     /// Fails if a pod that crashed long ago, or restarted once with its

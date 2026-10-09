@@ -302,6 +302,77 @@ describe("a crash-looping pod caught while its container is up", () => {
   });
 });
 
+describe("a pod that restarted while the kubelet reports no last exit", () => {
+  const UNREPORTED = {
+    ...POD,
+    restartCount: 15,
+    status: { ...POD.status, exitUnreported: true },
+    containers: [
+      {
+        name: "app",
+        image: "busybox:1.36",
+        ready: true,
+        started: true,
+        phase: "app",
+        state: { type: "running" },
+        lastTerminated: null,
+        restartCount: 15,
+        ports: [],
+        resources: { requests: {}, limits: {} },
+        env: [],
+        envFrom: [],
+      },
+    ],
+  };
+  const open = async (events: EventInfo[]) => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod") return UNREPORTED;
+      if (command === "get_replicaset") return REPLICA_SET;
+      if (command === "list_events") return events;
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+  };
+
+  /**
+   * Sam's checkout pod, fifteen restarts and no lastState, read green
+   * Running with no banner. Fails if the header is green or the page says
+   * nothing about the restarts and the exit nobody reported.
+   */
+  it("is amber and says the last exit is not reported", async () => {
+    await open([]);
+    expect(screen.getByText("Running").className).toContain("text-warn");
+    expect(
+      screen.getAllByText("app restarted, and its last exit is not reported")
+        .length
+    ).toBeGreaterThan(0);
+  });
+
+  /**
+   * The kubelet backed off the same container a minute before. Fails if
+   * the page lets the missing exit turn a loop it can still see into
+   * anything else.
+   */
+  it("keeps the loop while the kubelet is still backing the container off", async () => {
+    await open([
+      {
+        ...podEvent("BackOff", "Warning", 31),
+        message: `Back-off restarting failed container app in pod ${NAME}_shop`,
+        lastTimestamp: new Date(Date.now() - 60_000).toISOString(),
+      },
+    ]);
+    expect(screen.getByText("Running").className).toContain("text-err");
+    expect(
+      screen.getAllByText("app starts and then exits, over and over").length
+    ).toBeGreaterThan(0);
+  });
+});
+
 const podEvent = (
   reason: string,
   type: "Normal" | "Warning",

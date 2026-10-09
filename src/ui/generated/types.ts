@@ -2023,6 +2023,7 @@ export interface PodRowStatus {
   phase: string;
   display: string;
   loopingExitAt?: string;
+  exitUnreported?: boolean;
 }
 
 export interface FileEntry {
@@ -2171,6 +2172,7 @@ export interface PodStatusInfo {
   message: string | null;
   reason: string | null;
   loopingExitAt?: string;
+  exitUnreported?: boolean;
 }
 
 export interface DeploymentInfo {
@@ -2371,6 +2373,7 @@ export type ObjectFacts =
       display: string;
       ready: boolean;
       loopingExitAt: string | null;
+      exitUnreported: boolean;
     }
   | {
       kind: "workload";

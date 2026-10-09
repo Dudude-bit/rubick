@@ -50,6 +50,7 @@ const pod = (name: string, ready: boolean): ObjectRef =>
     display: ready ? "Running" : "NotReady",
     ready,
     loopingExitAt: null,
+    exitUnreported: false,
   });
 
 const service = (name: string, selector: string | null): ObjectRef =>
@@ -1523,6 +1524,7 @@ describe("a node, which is the same edge read from the other end", () => {
           display: "Running",
           ready: false,
           loopingExitAt: new Date(Date.now() - secondsAgo * 1000).toISOString(),
+          exitUnreported: false,
         },
       },
       to: node(),
@@ -1534,6 +1536,35 @@ describe("a node, which is the same edge read from the other end", () => {
       )?.rows[0].detail;
     expect(detail(at(5))).toBe("Running · up between crashes");
     expect(detail(at(3600))).toBe("Running");
+  });
+
+  /**
+   * Sam's checkout pod with fifteen restarts read plain Running while the
+   * kubelet reported no last exit. Fails if Connections calls such a pod
+   * Running and nothing more, or says it of one never restarted.
+   */
+  it("says a restarted pod's last exit was not reported where the kubelet gave none", () => {
+    const placedPod = (exitUnreported: boolean): ConnectionEdge => ({
+      from: {
+        ...pod("checkout-fwk7g", true),
+        facts: {
+          kind: "pod",
+          phase: "Running",
+          display: "Running",
+          ready: true,
+          loopingExitAt: null,
+          exitUnreported,
+        },
+      },
+      to: node(),
+      relation: { verb: "runsOn" },
+    });
+    const detail = (edge: ConnectionEdge) =>
+      connectionGroups(connections(node(), [edge]), t).find(
+        (group) => group.key === "placed"
+      )?.rows[0].detail;
+    expect(detail(placedPod(true))).toBe("Running · last exit not reported");
+    expect(detail(placedPod(false))).toBe("Running");
   });
 
   /** The tally was an English template literal under a Russian title. */

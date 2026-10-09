@@ -128,6 +128,9 @@ pub enum ObjectFacts {
         /// See `PodStatusInfo::looping_exit_at`.
         #[serde(rename = "loopingExitAt")]
         looping_exit_at: Option<DateTime<Utc>>,
+        /// See `PodStatusInfo::exit_unreported`.
+        #[serde(rename = "exitUnreported", default)]
+        exit_unreported: bool,
     },
     Workload {
         replicas: i32,

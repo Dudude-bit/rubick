@@ -263,3 +263,49 @@ describe("a pod up between the crashes of a loop", () => {
     }
   );
 });
+
+describe("a pod that restarted with no exit reported", () => {
+  const checkout = (exitUnreported: boolean) => ({
+    name: "checkout-7596d7fc77-fwk7g",
+    namespace: "shop",
+    restartCount: 15,
+    lastRestartAt: null,
+    status: { display: "Running", phase: "Running", exitUnreported },
+    containers: [
+      {
+        name: "app",
+        ready: true,
+        started: true,
+        phase: "app" as const,
+        state: { type: "running" as const },
+      },
+    ],
+    initContainers: [],
+  });
+
+  /**
+   * Sam's checkout pod, fifteen restarts and no lastState from the kubelet,
+   * read green Running with no word about either. Fails if the list or the
+   * peek draws it green, drops the sentence saying the last exit is not
+   * reported, or the peek's restarts row stops saying so.
+   */
+  it("is amber on every surface and says the last exit is not reported", () => {
+    const pod = checkout(true);
+    render(<>{statusCell(pod)}</>);
+    expect(screen.getByText("Running").className).toContain("text-warn");
+    expect(
+      screen.getByTitle(/the kubelet reports no last exit/)
+    ).toBeInTheDocument();
+    const peek = WORKLOAD_SOURCES.Pod!.summarise(
+      pod as unknown as PodInfo,
+      { kind: "Pod", name: pod.name, namespace: pod.namespace },
+      t
+    );
+    expect(peek.statusRole).toBe("warn");
+    const restarts = peek.groups
+      ?.flatMap((group) => group.items)
+      .find((item) => item.label === t("columns", "restarts"));
+    expect(restarts?.value).toBe("15 restarts, last exit not reported");
+    expect(podRole(checkout(false), null)).toBe("ok");
+  });
+});
