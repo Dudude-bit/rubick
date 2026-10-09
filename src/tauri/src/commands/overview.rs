@@ -455,8 +455,13 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
 
     // Before the waiting reason, so the row reads the same at every instant
     // of the back-off cycle rather than turning amber while the container is up.
-    // The kubelet's word only while the kubelet says it; otherwise this app's.
-    if crash_looping(pod, now) {
+    // The kubelet's word only while the kubelet says it; otherwise this app's,
+    // and an init container's `Init:` word wherever the list prints one.
+    let stuck = stuck_reason(pod);
+    let in_init = stuck
+        .as_ref()
+        .is_some_and(|(reason, _)| reason.starts_with("Init:"));
+    if crash_looping(pod, now) && !in_init {
         return Some(ClusterProblem {
             severity: ProblemSeverity::Critical,
             kind: "Pod".to_string(),
@@ -475,7 +480,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
         });
     }
 
-    if let Some((reason, message)) = stuck_reason(pod) {
+    if let Some((reason, message)) = stuck {
         return Some(ClusterProblem {
             severity: ProblemSeverity::Critical,
             kind: "Pod".to_string(),
@@ -2777,6 +2782,31 @@ mod tests {
             assert_eq!(problems[0].severity, ProblemSeverity::Critical, "{instant}");
             assert_eq!(problems[0].reason, word.unwrap_or("Pending"), "{instant}");
         }
+    }
+
+    /// Sam saw init-demo's init container exit 1 again and again with its
+    /// restarts grey. Fails if the instant it is up between short failed
+    /// runs reads as an ordinary wait rather than as the loop it is in.
+    #[test]
+    fn an_init_container_up_between_failed_runs_is_crash_looping() {
+        let now = Utc::now();
+        let ago = |seconds: i64| (now - chrono::Duration::seconds(seconds)).to_rfc3339();
+        let mut pod = init_demo(
+            now,
+            serde_json::json!({ "running": { "startedAt": ago(3) } }),
+        );
+        pod.status
+            .as_mut()
+            .and_then(|status| status.init_container_statuses.as_mut())
+            .expect("an init container")[0]
+            .last_state = serde_json::from_value(serde_json::json!({
+            "terminated": { "exitCode": 1, "reason": "Error", "startedAt": ago(10), "finishedAt": ago(5) }
+        }))
+        .expect("a last state");
+
+        let problems = pod_problems([&pod], now);
+        assert_eq!(problems.len(), 1);
+        assert_eq!(problems[0].reason, CRASH_LOOPING);
     }
 
     /// Sam's Overview turned amber six seconds after the unplaced pod's own

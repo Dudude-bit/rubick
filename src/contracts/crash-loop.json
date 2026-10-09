@@ -332,6 +332,169 @@
       "restartingUntil": null,
       "looping": false,
       "exitUnreported": false
+    },
+    {
+      "name": "an init container the kubelet is backing off, the pod held on it",
+      "now": "2026-10-09T15:43:00Z",
+      "phase": "Pending",
+      "restartCount": 9,
+      "initContainerStatuses": [
+        {
+          "name": "wait-for-db",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-10-09T15:20:01Z",
+              "finishedAt": "2026-10-09T15:20:04Z"
+            }
+          }
+        },
+        {
+          "name": "migrate",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": false,
+          "restartCount": 9,
+          "state": {
+            "waiting": {
+              "reason": "CrashLoopBackOff"
+            }
+          },
+          "lastState": {
+            "terminated": {
+              "exitCode": 1,
+              "reason": "Error",
+              "startedAt": "2026-10-09T15:39:55Z",
+              "finishedAt": "2026-10-09T15:40:00Z"
+            }
+          }
+        }
+      ],
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": false,
+          "restartCount": 0,
+          "state": {
+            "waiting": {
+              "reason": "PodInitializing"
+            }
+          }
+        }
+      ],
+      "display": "Init:CrashLoopBackOff",
+      "loopingUntil": "2026-10-09T15:55:00Z",
+      "restartingUntil": "2026-10-09T16:40:00Z",
+      "looping": true,
+      "exitUnreported": false
+    },
+    {
+      "name": "an init container up for seconds between the runs of its loop",
+      "now": "2026-10-09T15:43:00Z",
+      "phase": "Pending",
+      "restartCount": 10,
+      "initContainerStatuses": [
+        {
+          "name": "wait-for-db",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": true,
+          "restartCount": 0,
+          "state": {
+            "terminated": {
+              "exitCode": 0,
+              "reason": "Completed",
+              "startedAt": "2026-10-09T15:20:01Z",
+              "finishedAt": "2026-10-09T15:20:04Z"
+            }
+          }
+        },
+        {
+          "name": "migrate",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": false,
+          "restartCount": 10,
+          "state": {
+            "running": {
+              "startedAt": "2026-10-09T15:42:58Z"
+            }
+          },
+          "lastState": {
+            "terminated": {
+              "exitCode": 1,
+              "reason": "Error",
+              "startedAt": "2026-10-09T15:37:53Z",
+              "finishedAt": "2026-10-09T15:37:58Z"
+            }
+          }
+        }
+      ],
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": false,
+          "restartCount": 0,
+          "state": {
+            "waiting": {
+              "reason": "PodInitializing"
+            }
+          }
+        }
+      ],
+      "display": "Init:1/2",
+      "loopingUntil": "2026-10-09T15:47:58Z",
+      "restartingUntil": "2026-10-09T16:37:58Z",
+      "looping": true,
+      "exitUnreported": false
+    },
+    {
+      "name": "an init container the kubelet is backing off, with no last exit reported",
+      "now": "2026-10-09T15:43:00Z",
+      "phase": "Pending",
+      "restartCount": 13,
+      "initContainerStatuses": [
+        {
+          "name": "migrate",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": false,
+          "restartCount": 13,
+          "state": {
+            "waiting": {
+              "reason": "CrashLoopBackOff"
+            }
+          }
+        }
+      ],
+      "containerStatuses": [
+        {
+          "name": "app",
+          "image": "busybox:1.36",
+          "imageID": "",
+          "ready": false,
+          "restartCount": 0,
+          "state": {
+            "waiting": {
+              "reason": "PodInitializing"
+            }
+          }
+        }
+      ],
+      "display": "Init:CrashLoopBackOff",
+      "loopingUntil": null,
+      "restartingUntil": null,
+      "looping": true,
+      "exitUnreported": false
     }
   ]
 }

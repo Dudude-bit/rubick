@@ -235,29 +235,47 @@ pub const LONG_RUN_SECONDS: i64 = 10 * 60;
 /// crash-looping whichever instant this is.
 #[must_use]
 pub fn crash_looping(pod: &Pod, now: DateTime<Utc>) -> bool {
-    running_status(pod).is_some()
-        && (backing_off(pod) || looping_until(pod).is_some_and(|until| now < until))
+    backing_off(pod) || looping_until(pod).is_some_and(|until| now < until)
+}
+
+/// The containers whose exits can make a loop: a running pod's app
+/// containers, and the init container a pod still initializing is held on,
+/// which the kubelet starts again after every failed run just the same.
+fn loop_candidates(pod: &Pod) -> Vec<&ContainerStatus> {
+    let Some(status) = pod.status.as_ref() else {
+        return Vec::new();
+    };
+    if pod.metadata.deletion_timestamp.is_some() {
+        return Vec::new();
+    }
+    let phase = status.phase.as_deref();
+    let mut candidates: Vec<&ContainerStatus> = Vec::new();
+    if phase == Some("Running") {
+        candidates.extend(status.container_statuses.iter().flatten());
+    }
+    if matches!(phase, Some("Running" | "Pending"))
+        && !condition_is_true(Some(status), "Initialized")
+    {
+        candidates.extend(blocking_init(pod).map(|(_, cs)| cs));
+    }
+    candidates
 }
 
 /// Whether the kubelet itself says a container of this pod is in
 /// `CrashLoopBackOff`, rather than the app reading a loop off its exits.
 #[must_use]
 pub fn backing_off(pod: &Pod) -> bool {
-    pod.status
-        .as_ref()
-        .and_then(|s| s.container_statuses.as_ref())
-        .into_iter()
-        .flatten()
-        .any(|cs| {
-            cs.state
-                .as_ref()
-                .and_then(|s| s.waiting.as_ref())
-                .and_then(|w| w.reason.as_deref())
-                == Some("CrashLoopBackOff")
-        })
+    loop_candidates(pod).into_iter().any(|cs| {
+        cs.state
+            .as_ref()
+            .and_then(|s| s.waiting.as_ref())
+            .and_then(|w| w.reason.as_deref())
+            == Some("CrashLoopBackOff")
+    })
 }
 
-/// Until when a running pod counts as crash-looping by its exits, read without
+/// Until when a pod counts as crash-looping by the exits of its running app
+/// containers or the init container it is held on, read without
 /// a clock so a watched row stays true: the reader compares it with its own.
 ///
 /// Only a container restarted twice or more counts, and only for an exit that
@@ -266,10 +284,8 @@ pub fn backing_off(pod: &Pod) -> bool {
 /// than [`CRASH_LOOP_SETTLE_SECONDS`] into a run that has stayed up since.
 #[must_use]
 pub fn looping_until(pod: &Pod) -> Option<DateTime<Utc>> {
-    running_status(pod)?
-        .container_statuses
-        .iter()
-        .flatten()
+    loop_candidates(pod)
+        .into_iter()
         .filter_map(container_looping_until)
         .max()
 }
@@ -317,16 +333,14 @@ fn repeated_short_exit(cs: &ContainerStatus) -> Option<DateTime<Utc>> {
 /// exited in an hour is over whatever it was.
 pub const RESTART_RECENT_SECONDS: i64 = 3600;
 
-/// Until when a running pod's restarts are exits that keep coming, read
+/// Until when a pod's restarts are exits that keep coming, read
 /// without a clock as [`looping_until`] is: the same evidence, held for
 /// [`RESTART_RECENT_SECONDS`] rather than until the loop lapses. Restarts that
 /// each ended a long run, a cluster restart above all, never count.
 #[must_use]
 pub fn restarting_until(pod: &Pod) -> Option<DateTime<Utc>> {
-    running_status(pod)?
-        .container_statuses
-        .iter()
-        .flatten()
+    loop_candidates(pod)
+        .into_iter()
         .filter_map(container_restarting_until)
         .max()
 }
@@ -1026,19 +1040,30 @@ mod tests {
     }
 
     /// Sam's checkout pod read green Running with fifteen restarts while the
-    /// kubelet reported no last exit. The frontend reads the same cases off
-    /// what the row ships; fails if this side calls one of them otherwise,
-    /// or ships a different exit or none.
+    /// kubelet reported no last exit, and init-demo's looping init container
+    /// left its restarts grey. The frontend reads the same cases off what the
+    /// row ships; fails if this side calls one of them otherwise, or ships a
+    /// different exit or none.
     #[test]
     fn crash_loop_cases_match_the_shared_file() {
         const FILE: &str = include_str!("../../../../contracts/crash-loop.json");
         let file: serde_json::Value = serde_json::from_str(FILE).expect("json");
         for case in file["cases"].as_array().expect("cases") {
             let name = case["name"].as_str().expect("name");
+            let inits = case["initContainerStatuses"].as_array();
             let pod: Pod = serde_json::from_value(serde_json::json!({
                 "metadata": { "name": "checkout", "namespace": "shop" },
-                "spec": { "containers": [{ "name": "app" }] },
-                "status": { "phase": "Running", "containerStatuses": case["containerStatuses"] }
+                "spec": {
+                    "initContainers": inits.into_iter().flatten()
+                        .map(|cs| serde_json::json!({ "name": cs["name"] }))
+                        .collect::<Vec<_>>(),
+                    "containers": [{ "name": "app" }]
+                },
+                "status": {
+                    "phase": case["phase"].as_str().unwrap_or("Running"),
+                    "containerStatuses": case["containerStatuses"],
+                    "initContainerStatuses": case["initContainerStatuses"]
+                }
             }))
             .expect("pod");
             let now = DateTime::parse_from_rfc3339(case["now"].as_str().expect("now"))
@@ -1058,14 +1083,23 @@ mod tests {
                 case["restartingUntil"],
                 "{name}"
             );
+            if let Some(restarts) = case["restartCount"].as_i64() {
+                assert_eq!(i64::from(row.restart_count), restarts, "{name}");
+            }
             let info = crate::resources::PodInfo::from(&pod);
+            let looper = if inits.is_some() {
+                info.init_containers.last()
+            } else {
+                info.containers.first()
+            }
+            .expect("the container that loops");
             assert_eq!(
-                serde_json::to_value(info.containers[0].restarting_until).expect("value"),
+                serde_json::to_value(looper.restarting_until).expect("value"),
                 case["restartingUntil"],
                 "{name}"
             );
             assert_eq!(
-                serde_json::to_value(info.containers[0].looping_until).expect("value"),
+                serde_json::to_value(looper.looping_until).expect("value"),
                 case["loopingUntil"],
                 "{name}"
             );

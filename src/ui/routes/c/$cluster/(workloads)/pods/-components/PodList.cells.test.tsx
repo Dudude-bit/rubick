@@ -64,6 +64,28 @@ describe("what a narrow pod column keeps on hover", () => {
     expect(screen.getByText("15")).toHaveClass("text-warn");
   });
 
+  /**
+   * Sam's init-demo, its init container migrate exiting 1 over and over, drew
+   * "13 (3m ago)" grey beside amber checkout loops. Fails if a pod held in
+   * an init container's back-off has its restarts drawn as history.
+   */
+  it("draws an init container's crash loop amber like any other", () => {
+    render(
+      <>
+        {columnOf("restarts").cell({
+          row: {
+            original: {
+              restartCount: 13,
+              lastRestartAt: new Date(Date.now() - 3 * 60_000).toISOString(),
+              status: { display: "Init:CrashLoopBackOff" },
+            },
+          },
+        } as never)}
+      </>
+    );
+    expect(screen.getByText("13")).toHaveClass("text-warn");
+  });
+
   /** "Готов…" and "Перезап…" could not be read, and a screen reader heard only "sort by this column". */
   it("keeps a cut header whole and names its column to a screen reader", () => {
     const header = columnOf("ready").header as (ctx: never) => ReactNode;
