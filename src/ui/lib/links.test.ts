@@ -9,8 +9,10 @@ import {
   crdFor,
   crdInGroup,
   crdInstancesLink,
+  helmReleaseLink,
   hrefOf,
   listLink,
+  namespaceShownBy,
   objectLink,
   retargetHref,
   servedListLink,
@@ -315,6 +317,51 @@ describe("the same place in another cluster", () => {
   /** Outside any cluster there is no place to keep. */
   it("starts at the overview from the front door", () => {
     expect(retargetHref("/", "dev")).toBe("/c/dev");
+  });
+});
+
+describe("the namespace an address shows one object in", () => {
+  /**
+   * The tab names this namespace beside the page. Fails if an address built
+   * here for one object reads as being in no namespace, or in the wrong one.
+   */
+  it("is the object's own namespace for every address that shows one", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const built = [
+      objectLink({ kind: "Pod", name: "wd-demo", namespace: "lena-sandbox" }),
+      objectLink({ kind: "ConfigMap", name: "cfg", namespace: "lena-sandbox" }),
+      helmReleaseLink({
+        source: "secrets",
+        namespace: "lena-sandbox",
+        name: "web",
+      }),
+    ];
+    for (const link of built)
+      expect(namespaceShownBy(hrefOf(link!))).toBe("lena-sandbox");
+    expect(
+      namespaceShownBy(hrefOf(objectLink({ kind: "Namespace", name: "shop" })!))
+    ).toBe("shop");
+    expect(namespaceShownBy("/c/prod/pods/team%20a/api-0?tab=logs")).toBe(
+      "team a"
+    );
+  });
+
+  /** Fails if a list, a page or a cluster-scoped object claims a namespace. */
+  it("is none where the address shows no namespaced object", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    for (const href of [
+      "/c/prod",
+      "/c/prod/pods",
+      "/c/prod/pods?peek=pods%2Fweb%2Fapi-0",
+      "/c/prod/namespaces",
+      "/c/prod/helm",
+      "/c/prod/integrations/argocd",
+      hrefOf(objectLink({ kind: "Node", name: "agent-0" })!),
+      "/",
+    ])
+      expect(namespaceShownBy(href)).toBeNull();
   });
 });
 

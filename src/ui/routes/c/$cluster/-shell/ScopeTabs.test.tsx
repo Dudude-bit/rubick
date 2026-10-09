@@ -473,7 +473,7 @@ describe("a strip with more tabs than room", () => {
 });
 
 describe("watching several namespaces at once", () => {
-  const draw = async (scope: string[]) => {
+  const draw = async (scope: string[], at?: string) => {
     summary.namespaces = Array.from({ length: SCOPE_LIMIT + 2 }, (_, i) => ({
       name: `ns-${i}`,
       podCount: 1,
@@ -491,7 +491,7 @@ describe("watching several namespaces at once", () => {
       activeId: "a",
       pendingHref: null,
     });
-    await mount();
+    return mount(at);
   };
 
   /** Marco's "what can I do here", asked where the namespace is chosen. */
@@ -552,6 +552,27 @@ describe("watching several namespaces at once", () => {
     expect(
       screen.getByRole("combobox", { name: t("action", "filterNamespaces") })
     ).toHaveValue("");
+  });
+
+  /**
+   * A pod page under a scope that does not hold its namespace is a tab
+   * naming one namespace over an object in another. Fails if a pick that
+   * leaves the object out keeps its page, or one that keeps it in leaves it.
+   */
+  it("sends an object page the picked scope leaves out to its list", async () => {
+    const user = userEvent.setup();
+    const router = await draw(["ns-0"], "/c/k3d-dev/pods/ns-0/api-1");
+    await openPicker(user);
+    await user.keyboard("{Control>}");
+    await user.click(rowFor("ns-1"));
+    await user.keyboard("{/Control}");
+    expect(router.state.location.pathname).toBe("/c/k3d-dev/pods/ns-0/api-1");
+
+    await user.click(rowFor("ns-3"));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe("/c/k3d-dev/pods")
+    );
+    expect(scope()).toEqual(["ns-3"]);
   });
 
   it("replaces the selection on a plain click and shuts the list", async () => {

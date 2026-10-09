@@ -29,10 +29,11 @@ import {
   clampScope,
   decodeScope,
   sameScope,
+  scopeShowing,
   wireNamespace,
 } from "@/lib/namespace-scope";
 import { ACCESS_KINDS, segmentOf } from "@/lib/access-kinds";
-import { clusterOf, retargetHref } from "@/lib/links";
+import { clusterOf, namespaceShownBy, retargetHref } from "@/lib/links";
 import {
   RESOURCE_REGISTRY,
   getDisplayPlural,
@@ -222,10 +223,13 @@ export function tabScope(tab: ScopeTab): string[] {
  * A tab as this build understands it. Applied once, on the way in from disk,
  * so that what the strip draws is what activating the tab would apply — a tab
  * restored from a build with a larger ceiling must not name namespaces this
- * one is not going to read.
+ * one is not going to read, nor one its page's object is not in.
  */
 function normalizeTab(tab: ScopeTab): ScopeTab {
-  const scope = clampScope(tabScope(tab));
+  const scope = scopeShowing(
+    clampScope(tabScope(tab)),
+    namespaceShownBy(tab.href)
+  );
   return { ...tab, scope, namespace: wireNamespace(scope) };
 }
 
@@ -245,22 +249,25 @@ export const useScopeTabStore = create<ScopeTabState>()(
         // A tab opened *at* something — a link gesture on an object — lands
         // on that object's namespace alone; one opened from the strip
         // inherits the whole selection the reader is already reading under.
-        const scope =
-          namespace === undefined
-            ? live.namespaceScope
-            : namespace
-              ? [namespace]
-              : [];
         // A new tab inherits the cluster the reader is already looking at:
         // the common reason to open one is a second view of the same
         // cluster, and inheriting makes the shortcut instant instead of
         // routing through a connect and possibly an auth prompt.
         const tabContext = context ?? live.currentContext;
+        const to = href ?? homeOf(tabContext);
+        const scope = scopeShowing(
+          namespace === undefined
+            ? live.namespaceScope
+            : namespace
+              ? [namespace]
+              : [],
+          namespaceShownBy(to)
+        );
         const tab = makeTab({
           context: tabContext,
           namespace: wireNamespace(scope),
           scope,
-          href: href ?? homeOf(tabContext),
+          href: to,
         });
         if (background) {
           set((state) => ({ tabs: [...state.tabs, tab] }));

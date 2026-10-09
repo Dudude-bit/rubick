@@ -316,6 +316,32 @@ export function clusterOf(pathname: string): string | null {
 }
 
 /**
+ * The namespace an address shows one object in, and `null` where it shows a
+ * list, a page or a cluster-scoped object. A Namespace's own page is in it.
+ */
+export function namespaceShownBy(href: string): string | null {
+  const [path] = href.split("?");
+  const [c, cluster, resource, ...rest] = path.split("/").filter(Boolean);
+  if (c !== "c" || !cluster) return null;
+  const segment =
+    resource === "namespaces" && rest.length === 1
+      ? rest[0]
+      : resource === "helm"
+        ? rest.length === 3
+          ? rest[1]
+          : undefined
+        : rest.length === 2
+          ? rest[0]
+          : undefined;
+  if (!segment) return null;
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The same place in another cluster: a list stays a list, and an object,
  * which exists in the cluster it was opened in and nowhere else, gives way
  * to its kind's list.

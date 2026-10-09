@@ -9,7 +9,7 @@ import {
 } from "react";
 
 import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate, useRouter } from "@tanstack/react-router";
 import {
   AlertCircle,
   Check,
@@ -69,11 +69,12 @@ import {
 } from "@/lib/cluster-identity";
 import {
   SCOPE_LIMIT,
+  inScope,
   isNamespaceName,
   scopeLabel,
   seedScope,
 } from "@/lib/namespace-scope";
-import { pageLink } from "@/lib/links";
+import { namespaceShownBy, pageLink, retargetHref } from "@/lib/links";
 import { splitName } from "@/lib/resource-identity";
 import { nameCut } from "@/components/object/ResourceName";
 import { formatShortcut } from "@/lib/platform";
@@ -588,6 +589,8 @@ function ScopeTabItem({
   const openCluster = useOpenCluster();
   const activateTab = useScopeTabStore((s) => s.activateTab);
   const closeTab = useScopeTabStore((s) => s.closeTab);
+  const router = useRouter();
+  const navigate = useNavigate();
 
   const [open, setOpen] = useState<"ctx" | "ns" | null>(null);
   const [tip, setTip] = useState(false);
@@ -636,6 +639,16 @@ function ScopeTabItem({
     setOpen(null);
     if (next === context) return;
     openCluster(next);
+  };
+
+  // An object outside the scope just picked gives way to its list, as it
+  // does to a cluster switch: the tab would name a namespace it is not in.
+  const pickScope = (next: string[], keepOpen: boolean) => {
+    if (!keepOpen) setOpen(null);
+    void setNamespaceScope(next);
+    const { pathname } = router.state.location;
+    if (context && !inScope(next, namespaceShownBy(pathname)))
+      void navigate({ href: retargetHref(pathname, context) });
   };
 
   // A tab with no cluster keeps its place — it is where a cluster gets
@@ -793,10 +806,7 @@ function ScopeTabItem({
               open={open === "ns"}
               onOpenChange={guard("ns")}
               scope={scope}
-              onSelect={(next, keepOpen) => {
-                if (!keepOpen) setOpen(null);
-                setNamespaceScope(next);
-              }}
+              onSelect={pickScope}
             >
               <button
                 type="button"
