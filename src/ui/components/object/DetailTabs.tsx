@@ -8,7 +8,7 @@
  * strip beside this one would drift from it by the second vendor.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { ChevronDown } from "lucide-react";
 
 import {
@@ -24,6 +24,28 @@ import { CaptionScope } from "@/components/ui/section";
 import { SurfaceVisibility, useSurfaceVisible } from "@/lib/surface-visibility";
 import { TabGlyph, TabMark } from "./tab-marks";
 import { surfaceIsOpen, type DetailTab } from "./detail-tab";
+
+const STEP: Record<string, (at: number, count: number) => number> = {
+  ArrowLeft: (at, count) => (at - 1 + count) % count,
+  ArrowRight: (at, count) => (at + 1) % count,
+  Home: () => 0,
+  End: (_, count) => count - 1,
+  PageUp: () => 0,
+  PageDown: (_, count) => count - 1,
+};
+
+/** Radix's arrow walk, with a focus that scrolls nothing: its own moved the page around the strip. */
+function stepFocus(event: React.KeyboardEvent<HTMLElement>) {
+  const step = STEP[event.key];
+  if (!step || event.metaKey || event.ctrlKey || event.altKey || event.shiftKey)
+    return;
+  const list = event.currentTarget.closest('[role="tablist"]');
+  const tabs = [...(list?.querySelectorAll<HTMLElement>('[role="tab"]') ?? [])];
+  const at = tabs.indexOf(event.currentTarget);
+  if (at < 0) return;
+  event.preventDefault();
+  tabs[step(at, tabs.length)].focus({ preventScroll: true });
+}
 
 /** One tab, drawn by the two rules rather than by its label. */
 function DetailTabTrigger({
@@ -49,7 +71,8 @@ function DetailTabTrigger({
           : undefined)
       }
       aria-label={says ?? undefined}
-      className="group -mb-px h-8 shrink-0 justify-start gap-1.5 whitespace-nowrap rounded-none border-b border-transparent px-0.5 text-xs font-normal text-fg-mut shadow-none transition-colors hover:bg-transparent hover:text-fg data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
+      onKeyDown={stepFocus}
+      className="group -mb-px h-8 shrink-0 justify-start gap-1.5 whitespace-nowrap rounded-none border-b border-transparent px-0.5 text-xs font-normal text-fg-mut shadow-none transition-colors hover:bg-transparent hover:text-fg focus-visible:ring-inset data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
     >
       {/* A one-letter tab is unreadable, so nothing here shrinks or
           truncates; the strip scrolls instead. */}
@@ -174,11 +197,32 @@ function HiddenTabs({
 
 /** Fades the side the strip continues on, so a cut tab reads as more to come. */
 const FADE = {
-  before: "[mask-image:linear-gradient(to_right,transparent,black_2rem)]",
+  before: "[mask-image:linear-gradient(to_right,transparent,black_32px)]",
   after:
-    "[mask-image:linear-gradient(to_right,black_calc(100%-2rem),transparent)]",
-  both: "[mask-image:linear-gradient(to_right,transparent,black_2rem,black_calc(100%-2rem),transparent)]",
+    "[mask-image:linear-gradient(to_right,black_calc(100%-32px),transparent)]",
+  both: "[mask-image:linear-gradient(to_right,transparent,black_32px,black_calc(100%-32px),transparent)]",
 } as const;
+const FADE_PX = 32;
+
+/** Scrolls the strip alone until `tab` sits whole and clear of both fades. */
+function revealTab(strip: HTMLElement | null, tab: Element | null | undefined) {
+  if (!strip || !tab) return;
+  const box = strip.getBoundingClientRect();
+  const edge = tab.getBoundingClientRect();
+  const start = edge.left - box.left + strip.scrollLeft;
+  const end = edge.right - box.left + strip.scrollLeft;
+  let next = strip.scrollLeft;
+  if (end + FADE_PX > next + strip.clientWidth)
+    next = end + FADE_PX - strip.clientWidth;
+  if (start - FADE_PX < next) next = start - FADE_PX;
+  next = Math.max(0, Math.min(next, strip.scrollWidth - strip.clientWidth));
+  if (next !== strip.scrollLeft) strip.scrollLeft = next;
+}
+
+const tabNamed = (strip: HTMLElement | null, id: string) =>
+  [...(strip?.querySelectorAll<HTMLElement>("[data-tab]") ?? [])].find(
+    (tab) => tab.dataset.tab === id
+  );
 
 export function DetailTabs({
   tabs,
@@ -217,10 +261,8 @@ export function DetailTabs({
           ? FADE.after
           : undefined;
 
-  useEffect(() => {
-    stripRef.current
-      ?.querySelector<HTMLElement>('[data-state="active"]')
-      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  useLayoutEffect(() => {
+    revealTab(stripRef.current, tabNamed(stripRef.current, current));
   }, [current]);
 
   return (
@@ -246,8 +288,16 @@ export function DetailTabs({
               if (el.scrollWidth <= el.clientWidth) return;
               el.scrollLeft += event.deltaY || event.deltaX;
             }}
+            onFocus={(event) =>
+              revealTab(
+                event.currentTarget,
+                (event.target as Element).closest("[data-tab]")
+              )
+            }
             className={cn(
-              "h-auto min-w-0 flex-1 justify-start gap-4 overflow-x-auto rounded-none border-b border-hair bg-transparent p-0 text-fg-mut scrollbar-thin",
+              // WebKit draws a scrollbar over the labels and takes their
+              // lower half's clicks; the fades and the menu say there is more.
+              "h-auto min-w-0 flex-1 justify-start gap-4 overflow-x-auto rounded-none border-b border-hair bg-transparent p-0 text-fg-mut scrollbar-none",
               fade
             )}
           >
@@ -262,7 +312,10 @@ export function DetailTabs({
           {clipped.ids.length > 0 && (
             <HiddenTabs
               tabs={tabs.filter((tab) => clipped.ids.includes(tab.id))}
-              onPick={onTabChange}
+              onPick={(id) => {
+                revealTab(stripRef.current, tabNamed(stripRef.current, id));
+                onTabChange(id);
+              }}
             />
           )}
         </div>
