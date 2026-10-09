@@ -15,6 +15,7 @@ import { usePortForwardAutoStart } from "@/hooks/usePortForwardAutoStart";
 import { useAutoUpdater } from "@/hooks/useAutoUpdater";
 import { useDeepLinks } from "@/hooks/useDeepLinks";
 import { useTerminalSessionSync } from "@/hooks/useTerminalSessionSync";
+import { useKeptShells } from "@/hooks/useKeptShells";
 import { usePortForwardStore } from "@/stores/portForwardStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { applyTheme } from "@/lib/theme";
@@ -58,6 +59,7 @@ export default function App() {
   // kubeconfig lost, where no cluster shell is mounted to hear it.
   useDeepLinks();
   useTerminalSessionSync();
+  useKeptShells();
 
   // Mounted here rather than in a component that can remount: every query in
   // the app polls against these three facts, and a second set of listeners

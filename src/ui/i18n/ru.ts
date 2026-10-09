@@ -1105,6 +1105,8 @@ export const ru: Catalogue = {
     newTabOn: "Новая вкладка на",
     closeTab: "Закрыть вкладку",
     closeNamed: "Закрыть {name}",
+    tabKeepsShell:
+      "В {target} запущена оболочка. Если закрыть вкладку, оболочка завершится.",
     filterNamespaces: "Фильтр пространств имён",
     filterNamespacesPlaceholder: "Фильтр пространств имён…",
     typeNamespacePlaceholder: "Введите пространство имён…",
@@ -1623,6 +1625,9 @@ export const ru: Catalogue = {
     ports: "Порты",
     terminals: "Терминалы",
     endShell: "Завершить оболочку в {pod}",
+    shellEndedOnLeave: "Оболочка завершена",
+    shellEndedOnLeaveBody:
+      "Оболочка в {target} завершена, потому что её вкладка перешла на другую страницу.",
     readingTerminals: "Читается список открытых терминалов",
     terminalsUnread: "Не удалось прочитать список открытых терминалов",
     jobs: "Задачи",
@@ -6558,8 +6563,7 @@ export const ru: Catalogue = {
     httpListenerOffSuffix:
       "и он не называет никакого сертификата, поэтому GKE не строит ни одного слушателя.",
     manifestDeclaresNoObjects: "В сохранённом манифесте нет объектов.",
-    connectToViewTerminals: "Подключитесь к кластеру, чтобы видеть терминалы",
-    noTerminalsOnContext: "На {context} нет открытых терминалов",
+    noShellsOpen: "Открытых оболочек нет",
     openFromPodPage: "Откройте терминал со страницы любого пода.",
     noIngressClassNamed: "В этом кластере нет IngressClass с именем {name}",
     ingressNamesNoClass:
@@ -8450,13 +8454,6 @@ export const ru: Catalogue = {
       other: "Самый плотный срез {clock}: {lines} строки.",
     },
     andNMore: ", и ещё {n}",
-    openOnOtherClusters: {
-      one: "{n} открыт на другом кластере. Здесь терминал можно открыть со страницы любого пода.",
-      few: "{n} открыто на других кластерах. Здесь терминал можно открыть со страницы любого пода.",
-      many: "{n} открыто на других кластерах. Здесь терминал можно открыть со страницы любого пода.",
-      other:
-        "{n} открыто на других кластерах. Здесь терминал можно открыть со страницы любого пода.",
-    },
     acrossNamespaces: {
       one: "в {n} пространстве имён",
       few: "в {n} пространствах имён",

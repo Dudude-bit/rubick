@@ -2,7 +2,14 @@ import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
 
 import { SCOPE_PICKER_OPEN } from "@/lib/read-deadline";
 import { Link } from "@tanstack/react-router";
-import { AlertCircle, Check, Lock, Search, ShieldUser } from "lucide-react";
+import {
+  AlertCircle,
+  Check,
+  Lock,
+  Search,
+  ShieldUser,
+  SquareTerminal,
+} from "lucide-react";
 
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ClusterRow } from "@/components/cluster/ClusterRow";
@@ -60,6 +67,7 @@ import {
 } from "@/stores/clusterRecencyStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useNamespaceRecencyStore } from "@/stores/namespaceRecencyStore";
+import { useKeptShellStore } from "@/stores/keptShellStore";
 import { useT, type T } from "@/i18n/useT";
 import {
   tabRouteLabel,
@@ -281,6 +289,16 @@ function ScopeTabItem({
   const alias = mark.alias?.trim();
   const color = clusterColor(context, mark.hue);
   const route = tabRouteLabel(tab.href, t);
+  // Closing a tab ends the shell it keeps, so the tab says it keeps one.
+  const shell = useKeptShellStore((s) =>
+    s.shells.find((each) => each.tab === tab.id)
+  );
+  const keepsShell = shell
+    ? t("action", "tabKeepsShell", {
+        target: `${shell.pod}/${shell.container}`,
+      })
+    : null;
+  const title = tabTitle(tab, t, alias);
   // A cluster the kubeconfig has lost is the odd one out however many
   // clusters are open — that is exactly when the name is the fact the
   // reader needs.
@@ -382,7 +400,7 @@ function ScopeTabItem({
         <div
           role="tab"
           aria-selected={active}
-          aria-label={tabTitle(tab, t, alias)}
+          aria-label={keepsShell ? `${title}. ${keepsShell}` : title}
           data-active={active}
           onClick={() => {
             if (!active) activateTab(tab.id);
@@ -503,6 +521,12 @@ function ScopeTabItem({
               page one path — the same trail a detail page draws — and the
               page end of it carries the strongest colour in the tab,
               because it is the part that says which tab this is. */}
+          {keepsShell && (
+            <SquareTerminal
+              className="h-3 w-3 flex-none text-ok"
+              aria-hidden="true"
+            />
+          )}
           <span
             className={cn(
               "min-w-18 truncate shrink",
@@ -514,9 +538,7 @@ function ScopeTabItem({
 
           <button
             type="button"
-            aria-label={t("action", "closeNamed", {
-              name: tabTitle(tab, t, alias),
-            })}
+            aria-label={t("action", "closeNamed", { name: title })}
             onClick={(event) => {
               event.stopPropagation();
               closeTab(tab.id);
@@ -536,6 +558,15 @@ function ScopeTabItem({
         </p>
         {tab.missing && (
           <p className="mt-0.5">{t("cluster", "missingTabHint")}</p>
+        )}
+        {keepsShell && (
+          <p className="mt-0.5 flex items-start gap-1.5">
+            <SquareTerminal
+              className="mt-px h-3 w-3 flex-none text-ok"
+              aria-hidden="true"
+            />
+            {keepsShell}
+          </p>
         )}
       </TooltipContent>
     </Tooltip>

@@ -19,6 +19,8 @@ interface UseGenericTerminalSessionProps {
    * after the live listener, so nothing falls into the gap between the two.
    */
   replay?: () => string;
+  /** `false` leaves the session running when the pane goes; its owner ends it. */
+  ownsSession?: boolean;
 }
 
 /**
@@ -30,6 +32,7 @@ export function useGenericTerminalSession({
   onOutput,
   onClose,
   replay,
+  ownsSession = true,
 }: UseGenericTerminalSessionProps) {
   const [status, setStatus] = useState<SessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +54,7 @@ export function useGenericTerminalSession({
   const onOutputRef = useRef(onOutput);
   const onCloseRef = useRef(onClose);
   const replayRef = useRef(replay);
+  const ownsRef = useRef(ownsSession);
 
   // Keep refs up to date
   const t = useT();
@@ -63,7 +67,8 @@ export function useGenericTerminalSession({
     onOutputRef.current = onOutput;
     onCloseRef.current = onClose;
     replayRef.current = replay;
-  }, [onOutput, onClose, replay, t]);
+    ownsRef.current = ownsSession;
+  }, [onOutput, onClose, replay, ownsSession, t]);
 
   // `send` and `resize` are called from xterm's own handlers rather than from
   // a render, so they read the status from a ref — which was declared and then
@@ -138,9 +143,10 @@ export function useGenericTerminalSession({
       const sid = currentSessionIdRef.current;
       if (sid) {
         currentSessionIdRef.current = null;
-        commands.closeTerminal(sid).catch((err) => {
-          console.error("Failed to close terminal session:", err);
-        });
+        if (ownsRef.current)
+          commands.closeTerminal(sid).catch((err) => {
+            console.error("Failed to close terminal session:", err);
+          });
         if (isMountedRef.current) {
           setStatus("closed");
         }

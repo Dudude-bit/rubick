@@ -6,6 +6,8 @@ import type { TerminalSessionInfo } from "@/generated/types";
 import { renderWithRouter } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
+import { useKeptShellStore } from "@/stores/keptShellStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
 import { ActivityPanel } from "../ActivityPanel";
 import { TerminalsTab } from "./TerminalsTab";
 
@@ -24,6 +26,7 @@ const shell = (
 
 afterEach(() => {
   useTerminalSessionStore.setState({ sessions: null, failed: null });
+  useKeptShellStore.setState({ shells: [] });
   useClusterStore.setState({ currentContext: null });
   vi.mocked(invoke).mockImplementation(async () => undefined);
 });
@@ -48,6 +51,77 @@ describe("Activity's terminals", () => {
     ]);
   });
 
+  /**
+   * A tab parked on another cluster keeps its shell, and the status bar
+   * counts it. Fails if the list leaves out what the count includes.
+   */
+  it("lists a shell kept on another cluster, naming the cluster", async () => {
+    useClusterStore.setState({ currentContext: "acme-staging" });
+    useTerminalSessionStore.setState({
+      sessions: [{ ...shell("api-0"), context: "acme-prod" }],
+    });
+    await renderWithRouter(<TerminalsTab />);
+
+    expect(screen.getByRole("link", { name: /api-0/ })).toHaveTextContent(
+      /acme-prod · shop · app · connected/
+    );
+    expect(screen.queryByText("No shells are open")).toBeNull();
+  });
+
+  /**
+   * The way back to a parked shell is its own tab, on its Shell tab; the tab
+   * on screen stays where it is. Fails if the row navigates the tab on
+   * screen, which would end any shell that tab keeps.
+   */
+  it("takes the reader back to the tab that keeps the shell, on its Shell tab", async () => {
+    useClusterStore.setState({ currentContext: "acme-staging" });
+    useScopeTabStore.setState({
+      tabs: [
+        {
+          id: "here",
+          context: "acme-staging",
+          namespace: "",
+          scope: [],
+          href: "/c/acme-staging/events",
+          missing: false,
+        },
+        {
+          id: "owner",
+          context: "acme-staging",
+          namespace: "",
+          scope: [],
+          href: "/c/acme-staging/pods/shop/cart-4f68h?tab=logs",
+          missing: false,
+        },
+      ],
+      activeId: "here",
+      pendingHref: null,
+    });
+    useKeptShellStore.getState().keep({
+      id: "term-cart-4f68h",
+      tab: "owner",
+      context: "acme-staging",
+      namespace: "shop",
+      pod: "cart-4f68h",
+      container: "app",
+    });
+    useTerminalSessionStore.setState({ sessions: [shell("cart-4f68h")] });
+    await renderWithRouter(<TerminalsTab />, { at: "/c/acme-staging/events" });
+
+    fireEvent.click(
+      screen.getByRole("link", { name: /shop · app · connected/ })
+    );
+
+    const tabs = useScopeTabStore.getState();
+    expect(tabs.activeId).toBe("owner");
+    expect(tabs.pendingHref).toBe(
+      "/c/acme-staging/pods/shop/cart-4f68h?tab=shell"
+    );
+    expect(tabs.tabs.find((tab) => tab.id === "here")?.href).toBe(
+      "/c/acme-staging/events"
+    );
+  });
+
   /** A shell with no page left needs ending from here. */
   it("ends a shell from its row", async () => {
     useClusterStore.setState({ currentContext: "acme-staging" });
@@ -68,7 +142,7 @@ describe("Activity's terminals", () => {
     useClusterStore.setState({ currentContext: "acme-staging" });
     await renderWithRouter(<TerminalsTab />);
     expect(screen.getByText("Reading the open terminals")).toBeInTheDocument();
-    expect(screen.queryByText(/No terminal sessions/)).toBeNull();
+    expect(screen.queryByText("No shells are open")).toBeNull();
 
     useTerminalSessionStore.setState({ failed: "the bridge is down" });
     expect(

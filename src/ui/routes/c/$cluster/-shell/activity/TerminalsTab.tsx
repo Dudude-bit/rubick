@@ -2,13 +2,18 @@ import { useNavigate } from "@tanstack/react-router";
 import { Terminal, AlertCircle, X } from "lucide-react";
 import { useTerminalSessionStore } from "@/stores/terminalSessionStore";
 import { useClusterStore } from "@/stores/clusterStore";
-import { commands } from "@/lib/commands";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
+import {
+  endShell,
+  tabKeepsShell,
+  useKeptShellStore,
+} from "@/stores/keptShellStore";
 import { cn } from "@/lib/utils";
 import { RealtimeAge } from "@/components/ui/realtime";
-import { objectLink } from "@/lib/links";
+import { hrefOf, objectLink } from "@/lib/links";
 import { ResourceType } from "@/lib/resource-registry";
 import { ResourceRef } from "@/components/object/ResourceRef";
-import type { TerminalState } from "@/generated/types";
+import type { TerminalSessionInfo, TerminalState } from "@/generated/types";
 import {
   ACTIVITY_ROW,
   ActivityAction,
@@ -36,25 +41,29 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
   const currentContext = useClusterStore((state) => state.currentContext);
   const sessions = useTerminalSessionStore((state) => state.sessions);
   const failed = useTerminalSessionStore((state) => state.failed);
+  const kept = useKeptShellStore((state) => state.shells);
 
-  const handleNavigateToPod = (namespace: string, podName: string) => {
+  // Back to the page a shell is on, on its Shell tab: its own scope tab when
+  // one keeps it, and never by taking a tab that keeps another shell away.
+  const handleNavigateToShell = (session: TerminalSessionInfo) => {
     onClose?.();
-    const link = objectLink({
-      kind: ResourceType.Pod,
-      name: podName,
-      namespace,
-    });
-    if (link) void navigate(link);
-  };
-
-  if (!currentContext) {
-    return (
-      <ActivityEmpty
-        icon={AlertCircle}
-        title={t("empty", "connectToViewTerminals")}
-      />
+    const owner = kept.find((shell) => shell.id === session.id);
+    const link = objectLink(
+      {
+        kind: ResourceType.Pod,
+        name: session.pod,
+        namespace: session.namespace,
+      },
+      { cluster: session.context, tab: owner ? "shell" : undefined }
     );
-  }
+    if (!link) return;
+    const tabs = useScopeTabStore.getState();
+    if (owner && owner.tab !== tabs.activeId)
+      void tabs.activateTab(owner.tab, hrefOf(link));
+    else if (!owner && tabKeepsShell(tabs.activeId))
+      void tabs.openTab({ href: hrefOf(link), context: session.context });
+    else void navigate(link);
+  };
 
   if (sessions === null) {
     return failed ? (
@@ -71,34 +80,22 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
     );
   }
 
-  const contextSessions = sessions.filter(
-    (session) => session.context === currentContext
-  );
-
-  if (contextSessions.length === 0) {
-    // The scope belongs in the copy: this list is filtered to the current
-    // context, so a shell left open on another cluster is not gone — it is
-    // just not here, and "no terminal sessions" said otherwise.
+  // Every shell, whichever tab or cluster holds it: each is a process in
+  // somebody's container, and the count in the status bar is all of them.
+  if (sessions.length === 0) {
     return (
       <ActivityEmpty
         icon={Terminal}
-        title={t("empty", "noTerminalsOnContext", { context: currentContext })}
-        hint={
-          sessions.length > 0
-            ? t("count", "openOnOtherClusters", { n: sessions.length })
-            : t("empty", "openFromPodPage")
-        }
+        title={t("empty", "noShellsOpen")}
+        hint={t("empty", "openFromPodPage")}
       />
     );
   }
 
   return (
     <div className="pb-3">
-      <ActivityGroup
-        title={t("activity", "sessions")}
-        count={contextSessions.length}
-      >
-        {contextSessions.map((session) => (
+      <ActivityGroup title={t("activity", "sessions")} count={sessions.length}>
+        {sessions.map((session) => (
           // A `role="link"` div rather than a button, because the pod name
           // inside it is a real anchor now and an anchor cannot live in a
           // button. Same split the resource tables use: the row opens the
@@ -113,12 +110,12 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
             )}
             onClick={(event) => {
               if ((event.target as HTMLElement).closest("a, button")) return;
-              handleNavigateToPod(session.namespace, session.pod);
+              handleNavigateToShell(session);
             }}
             onKeyDown={(event) => {
               if (event.key !== "Enter" || event.target !== event.currentTarget)
                 return;
-              handleNavigateToPod(session.namespace, session.pod);
+              handleNavigateToShell(session);
             }}
           >
             {/* The status word rides in the secondary line so the dot is
@@ -132,14 +129,21 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
             />
             <span className="min-w-0 flex-1">
               <span className="block truncate">
-                <ResourceRef
-                  kind={ResourceType.Pod}
-                  name={session.pod}
-                  namespace={session.namespace}
-                  showKind={false}
-                />
+                {/* The peek reads the cluster on screen, so a pod in another
+                    one is named, not linked; the row still goes there. */}
+                {session.context === currentContext ? (
+                  <ResourceRef
+                    kind={ResourceType.Pod}
+                    name={session.pod}
+                    namespace={session.namespace}
+                    showKind={false}
+                  />
+                ) : (
+                  <span className="font-mono text-fg">{session.pod}</span>
+                )}
               </span>
               <span className="block truncate font-mono text-[11px] text-fg-fnt">
+                {session.context !== currentContext && `${session.context} · `}
                 {session.namespace} · {session.container} · {session.state}
               </span>
             </span>
@@ -150,7 +154,7 @@ export function TerminalsTab({ onClose }: TerminalsTabProps) {
             <ActivityAction
               aria-label={t("activity", "endShell", { pod: session.pod })}
               disabled={session.state === "closing"}
-              onClick={() => void commands.closeTerminal(session.id)}
+              onClick={() => void endShell(session.id)}
             >
               <X className="h-3.5 w-3.5" aria-hidden="true" />
             </ActivityAction>

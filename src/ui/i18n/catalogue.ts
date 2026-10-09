@@ -1111,6 +1111,7 @@ export const en = {
     newTabOn: "New tab on",
     closeTab: "Close tab",
     closeNamed: "Close {name}",
+    tabKeepsShell: "A shell is running in {target}. Closing this tab ends it.",
     filterNamespaces: "Filter namespaces",
     filterNamespacesPlaceholder: "Filter namespaces…",
     typeNamespacePlaceholder: "Type a namespace…",
@@ -1608,6 +1609,9 @@ export const en = {
     ports: "Ports",
     terminals: "Terminals",
     endShell: "End the shell in {pod}",
+    shellEndedOnLeave: "Shell ended",
+    shellEndedOnLeaveBody:
+      "The shell in {target} was ended because its tab moved to another page.",
     readingTerminals: "Reading the open terminals",
     terminalsUnread: "Could not read the open terminals",
     jobs: "Jobs",
@@ -5940,8 +5944,7 @@ export const en = {
     httpListenerOffSuffix:
       "and it names no certificate of any kind, so GKE builds neither listener.",
     manifestDeclaresNoObjects: "The stored manifest declares no objects.",
-    connectToViewTerminals: "Connect to a cluster to view terminals",
-    noTerminalsOnContext: "No terminal sessions open on {context}",
+    noShellsOpen: "No shells are open",
     openFromPodPage: "Open one from any pod's detail page.",
     noIngressClassNamed: "No IngressClass named {name} in this cluster",
     ingressNamesNoClass:
@@ -7423,11 +7426,6 @@ export const en = {
       other: "Busiest slice {clock} with {lines} lines.",
     },
     andNMore: ", and {n} more",
-    openOnOtherClusters: {
-      one: "{n} open on another cluster. Open one here from any pod's detail page.",
-      other:
-        "{n} open on other clusters. Open one here from any pod's detail page.",
-    },
     acrossNamespaces: {
       one: "across {n} namespace",
       other: "across {n} namespaces",

@@ -51,6 +51,8 @@ export interface TerminalProps {
   replay?: () => string;
   /** The pane's size in cells, each time it is fitted, the first time included. */
   onSize?: (cols: number, rows: number) => void;
+  /** `false` where the session outlives the pane and its parent ends it. */
+  ownsSession?: boolean;
 }
 
 /**
@@ -63,12 +65,14 @@ export function Terminal({
   onClose,
   replay,
   onSize,
+  ownsSession = true,
 }: TerminalProps) {
   const t = useT();
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
   const initializedRef = useRef(false);
+  const fittedRef = useRef(false);
   const { background, dark: isDark, ansi } = useCanvasTheme();
 
   const onOutput = useCallback((data: string) => {
@@ -94,6 +98,7 @@ export function Terminal({
       onOutput,
       onClose: onSessionClose,
       replay,
+      ownsSession,
     }
   );
 
@@ -174,10 +179,12 @@ export function Terminal({
   // The pane measures itself when it mounts, which is before the session is
   // connected — and a measurement taken then is dropped. Without this the far
   // end keeps the API server's default geometry for the life of the shell,
-  // and anything drawing a full screen is drawn to the wrong width.
+  // and anything drawing a full screen is drawn to the wrong width. A pane
+  // attaching to a running shell is connected before it is fitted, and its
+  // unfitted 80x24 would redraw the shell twice.
   useEffect(() => {
     const xterm = xtermRef.current;
-    if (status !== "connected" || !xterm) return;
+    if (status !== "connected" || !xterm || !fittedRef.current) return;
     resizeRef.current(xterm.cols, xterm.rows);
   }, [status]);
 
@@ -202,9 +209,10 @@ export function Terminal({
     xterm.loadAddon(webLinksAddon);
     xterm.open(terminalRef.current);
 
-    // Fit terminal to container
     setTimeout(() => {
       fitAddon.fit();
+      fittedRef.current = true;
+      resizeRef.current(xterm.cols, xterm.rows);
       onSizeRef.current?.(xterm.cols, xterm.rows);
     }, 0);
 
@@ -226,6 +234,7 @@ export function Terminal({
 
     return () => {
       initializedRef.current = false;
+      fittedRef.current = false;
       resizeObserver.disconnect();
       xterm.dispose();
       // DON'T call disconnect here - session lifecycle is managed by parent component

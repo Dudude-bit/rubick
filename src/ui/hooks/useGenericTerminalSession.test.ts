@@ -238,4 +238,29 @@ describe("useGenericTerminalSession deferred-start handshake", () => {
     expect(drainedAt).not.toBeNull();
     expect(outputCall!.index).toBeLessThan(drainedAt!);
   });
+
+  /**
+   * A pod shell outlives its pane while its tab is parked. Fails if the pane
+   * going away ends a session its owner keeps, or stops ending one it owns.
+   */
+  it.each([
+    [true, ["owned"]],
+    [false, []],
+  ])(
+    "ends the session as it goes only when it owns it (%s)",
+    async (ownsSession, closed) => {
+      const sessionId = ownsSession ? "owned" : "kept";
+      const { result, unmount } = renderHook(() =>
+        useGenericTerminalSession({ sessionId, ownsSession })
+      );
+      await waitFor(() => expect(subscribedCalls).toHaveLength(1));
+      expect(result.current.status).toBe("connected");
+
+      unmount();
+
+      expect(
+        vi.mocked(commands.closeTerminal).mock.calls.map(([id]) => id)
+      ).toEqual(closed);
+    }
+  );
 });
