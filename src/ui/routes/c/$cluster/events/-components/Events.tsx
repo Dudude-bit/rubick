@@ -475,15 +475,19 @@ export function Events() {
         title="Events"
         description={<KindAbout kind={ResourceType.Event} />}
         count={
-          showSkeleton || nothingRead
-            ? undefined
-            : summarise(
+          showSkeleton || nothingRead ? undefined : (
+            <OneLine
+              text={summarise(
                 t,
                 warningCount,
                 normalCount,
-                windowFull ? eventLimit : null,
+                // Beside a peek the list says the cut in its own notice, and
+                // in the header too it pushed the toolbar down a row.
+                windowFull && !(narrow && view === "list") ? eventLimit : null,
                 view === "stories" ? { n: stories.length, window } : null
-              )
+              )}
+            />
+          )
         }
         actions={
           <>
@@ -804,6 +808,14 @@ function summarise(
   if (cappedAt)
     parts.push(t("count", "latestKept", { n: formatCount(Number(cappedAt)) }));
   return parts.join(" · ");
+}
+
+function OneLine({ text }: { text: string }) {
+  return (
+    <span className="block truncate" title={text}>
+      {text}
+    </span>
+  );
 }
 
 const windowWords = (window: StoryWindow) =>

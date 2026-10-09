@@ -1181,6 +1181,37 @@ describe("column widths", () => {
    * scrollbar. Fails if the table stops being as wide as its floors when they
    * outgrow the port, or is widened when they fit.
    */
+  /**
+   * Beside a peek at 1024 the Events table was wider than its pane, and its
+   * empty message, centred across every column, was cut mid-word at the
+   * pane's edge. Fails if the message stops being held to the visible port.
+   */
+  it("keeps its empty message inside the part of the table on screen", async () => {
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(300);
+    try {
+      await wrap(
+        <DataTable<Item>
+          columns={[
+            { ...columns[0], size: 300, meta: { floor: 300 } },
+            { ...columns[1], size: 100, meta: { floor: 300 } },
+          ]}
+          data={[]}
+          emptyMessage="Событий в net нет"
+        />
+      );
+      expect(screen.getByRole("table").style.minWidth).toBe("600px");
+      const message = screen
+        .getByText("Событий в net нет")
+        .closest<HTMLElement>("[data-empty-state]");
+      expect(message?.style.width).toBe("300px");
+      expect(message).toHaveClass("sticky", "left-0");
+    } finally {
+      width.mockRestore();
+    }
+  });
+
   it("is as wide as its floors when they outgrow the port, and no wider otherwise", async () => {
     const width = vi
       .spyOn(HTMLElement.prototype, "clientWidth", "get")
