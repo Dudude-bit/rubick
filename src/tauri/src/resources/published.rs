@@ -274,6 +274,21 @@ fn service_ports(service: &Service) -> Vec<ServicePort> {
         .unwrap_or_default()
 }
 
+/// A port's name as both sides are matched on. The endpoint controller
+/// writes a Service's one unnamed port into its slice as `name: ""`, where
+/// the Service leaves the field out: the same unnamed port either way.
+fn port_name(name: Option<&String>) -> Option<String> {
+    name.filter(|name| !name.is_empty()).cloned()
+}
+
+/// The port names `spec.ports` declares, the unnamed one as `None`.
+fn exposed_names(service: &Service) -> BTreeSet<Option<String>> {
+    service_ports(service)
+        .iter()
+        .map(|port| port_name(port.name.as_ref()))
+        .collect()
+}
+
 /// The `targetPort` names a Service asks for. A number is resolved by the
 /// kernel and can never be the thing that is missing.
 fn named_target_ports(service: &Service) -> Vec<String> {
@@ -383,10 +398,7 @@ pub fn from_slices(
     pods: &[&Pod],
 ) -> ServicePublished {
     let ns = service.namespace().unwrap_or_default();
-    let exposed: BTreeSet<Option<String>> = service_ports(service)
-        .iter()
-        .map(|port| port.name.clone())
-        .collect();
+    let exposed = exposed_names(service);
 
     let mut ports: Vec<PublishedPort> = Vec::new();
     let mut endpoints: Vec<PublishedEndpoint> = Vec::new();
@@ -402,11 +414,14 @@ pub fn from_slices(
             .ports
             .iter()
             .flatten()
-            .map(|port| PublishedPort {
-                name: port.name.clone(),
-                port: port.port,
-                protocol: port.protocol.clone().unwrap_or_else(|| "TCP".to_string()),
-                exposed: exposed.contains(&port.name),
+            .map(|port| {
+                let name = port_name(port.name.as_ref());
+                PublishedPort {
+                    exposed: exposed.contains(&name),
+                    name,
+                    port: port.port,
+                    protocol: port.protocol.clone().unwrap_or_else(|| "TCP".to_string()),
+                }
             })
             .collect();
         // An empty port list is the API's "no defined ports", and it is what
@@ -482,10 +497,7 @@ pub fn from_legacy(
     legacy: Option<&Endpoints>,
 ) -> ServicePublished {
     let ns = service.namespace().unwrap_or_default();
-    let exposed: BTreeSet<Option<String>> = service_ports(service)
-        .iter()
-        .map(|port| port.name.clone())
-        .collect();
+    let exposed = exposed_names(service);
 
     let mut ports: Vec<PublishedPort> = Vec::new();
     let mut endpoints: Vec<PublishedEndpoint> = Vec::new();
@@ -499,12 +511,13 @@ pub fn from_legacy(
             .map(|port| port.port)
             .collect();
         for port in subset.ports.iter().flatten() {
-            if !ports.iter().any(|seen| seen.name == port.name) {
+            let name = port_name(port.name.as_ref());
+            if !ports.iter().any(|seen| seen.name == name) {
                 ports.push(PublishedPort {
-                    name: port.name.clone(),
+                    exposed: exposed.contains(&name),
+                    name,
                     port: Some(port.port),
                     protocol: port.protocol.clone().unwrap_or_else(|| "TCP".to_string()),
-                    exposed: exposed.contains(&port.name),
                 });
             }
         }
@@ -1380,6 +1393,100 @@ mod tests {
             .ports
             .iter()
             .any(|port| port.name.as_deref() == Some("http") && port.exposed));
+    }
+
+    fn exposed_of(service_port: Option<&str>, slice_port: Option<&str>) -> (bool, bool) {
+        let svc = service(
+            "ledger",
+            vec![ServicePort {
+                name: service_port.map(str::to_string),
+                port: 80,
+                target_port: Some(IntOrString::Int(8080)),
+                ..Default::default()
+            }],
+        );
+        let slices = [slice(
+            "ledger-x",
+            "ledger",
+            Some(vec![EndpointPort {
+                name: slice_port.map(str::to_string),
+                port: Some(8080),
+                protocol: Some("TCP".to_string()),
+                ..Default::default()
+            }]),
+            vec![endpoint(
+                "10.42.1.108",
+                "ledger-0",
+                EndpointConditions {
+                    ready: Some(false),
+                    serving: Some(false),
+                    terminating: Some(false),
+                },
+            )],
+        )];
+        let from_slice = from_slices(
+            &svc,
+            svc_ref("ledger"),
+            &slices.iter().collect::<Vec<_>>(),
+            &[],
+        );
+        let legacy = Endpoints {
+            subsets: Some(vec![EndpointSubset {
+                not_ready_addresses: Some(vec![EndpointAddress {
+                    ip: "10.42.1.108".to_string(),
+                    ..Default::default()
+                }]),
+                ports: Some(vec![LegacyPort {
+                    name: slice_port.map(str::to_string),
+                    port: 8080,
+                    protocol: Some("TCP".to_string()),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        };
+        let legacy = from_legacy(&svc, svc_ref("ledger"), Some(&legacy));
+        (from_slice.ports[0].exposed, legacy.ports[0].exposed)
+    }
+
+    /// Marco's ledger Service, one unnamed port 80 to 8080, was told its
+    /// slice's port 8080 matched none of its names: the controller writes the
+    /// unnamed port as `name: ""` and the Service leaves the name out. Fails
+    /// if the two spellings of no name are told apart, or a named port is
+    /// matched to an unnamed one.
+    #[test]
+    fn an_unnamed_service_port_matches_the_slices_unnamed_port_and_only_that() {
+        assert_eq!(exposed_of(None, Some("")), (true, true));
+        assert_eq!(exposed_of(None, None), (true, true));
+        assert_eq!(exposed_of(Some("http"), Some("http")), (true, true));
+        assert_eq!(exposed_of(Some("http"), Some("")), (false, false));
+        assert_eq!(exposed_of(None, Some("metrics")), (false, false));
+    }
+
+    /// The unnamed port is listed by no name, not by an empty one the page
+    /// would print as nothing at all.
+    #[test]
+    fn a_slice_port_written_with_an_empty_name_is_listed_unnamed() {
+        let svc = service("ledger", vec![port("http", IntOrString::Int(8080))]);
+        let slices = [slice(
+            "ledger-x",
+            "ledger",
+            Some(vec![EndpointPort {
+                name: Some(String::new()),
+                port: Some(8080),
+                ..Default::default()
+            }]),
+            vec![],
+        )];
+        let published = from_slices(
+            &svc,
+            svc_ref("ledger"),
+            &slices.iter().collect::<Vec<_>>(),
+            &[],
+        );
+        assert_eq!(published.ports[0].name, None);
+        assert!(!published.ports[0].exposed);
     }
 
     #[test]
