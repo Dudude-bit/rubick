@@ -29,7 +29,7 @@ const HOST = "open";
  * dropped even though `tab` is allowed. A param the app grows later stays out
  * until it is proven safe to open unattended.
  */
-const SAFE_PARAMS = new Set(["tab", "vendor", "type"]);
+const SAFE_PARAMS = new Set(["tab", "vendor", "type", "namespace"]);
 
 export interface DeepLink {
   /** The cluster the address names. */

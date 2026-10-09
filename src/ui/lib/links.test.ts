@@ -18,6 +18,9 @@ import {
   setRouter,
 } from "./links";
 import { RESOURCE_REGISTRY } from "./resource-registry";
+import { parseDeepLink } from "./deep-link";
+import { catalogQuery } from "@/routes/c/$cluster/-object/served";
+import type { ApiCatalog } from "@/generated/types";
 
 function at(path: string) {
   const router = createRouter({
@@ -284,5 +287,72 @@ describe("the same place in another cluster", () => {
   /** Outside any cluster there is no place to keep. */
   it("starts at the overview from the front door", () => {
     expect(retargetHref("/", "dev")).toBe("/c/dev");
+  });
+});
+
+describe("one segment under a kind's address", () => {
+  const LEASES: ApiCatalog = {
+    entries: [
+      {
+        group: "coordination.k8s.io",
+        version: "v1",
+        kind: "Lease",
+        plural: "leases",
+        namespaced: true,
+        verbs: ["list", "watch"],
+        shortNames: [],
+      },
+    ],
+    unread: [],
+  };
+
+  async function landed(path: string, catalog?: ApiCatalog) {
+    const queryClient = new QueryClient();
+    if (catalog) queryClient.setQueryData(catalogQuery().queryKey, catalog);
+    const router = createRouter({
+      routeTree,
+      context: { queryClient },
+      history: createMemoryHistory({ initialEntries: [path] }),
+    });
+    setRouter(router);
+    await router.load();
+    return router.state.location;
+  }
+
+  /**
+   * Marco's `rubick://open/c/acme-staging/deployments/team-blind` opened
+   * "Could not read this object ... in the namespace default". Fails if one
+   * segment under a namespaced kind is taken for an object's name.
+   */
+  it("opens a namespaced kind's list scoped to that namespace", async () => {
+    const location = await landed("/c/acme-staging/deployments/team-blind");
+    expect(location.pathname).toBe("/c/acme-staging/deployments");
+    expect(location.search).toEqual({ namespace: "team-blind" });
+  });
+
+  /** The generic route reads discovery for a kind the registry does not hold. */
+  it("does the same for a kind only discovery knows", async () => {
+    const location = await landed("/c/prod/leases/kube-system", LEASES);
+    expect(location.pathname).toBe("/c/prod/leases");
+    expect(location.search).toEqual({ namespace: "kube-system" });
+  });
+
+  /** Fails if a namespace and a name, or a cluster-scoped object, lose their page. */
+  it("keeps two segments as a namespace and a name, and a cluster-scoped kind's object", async () => {
+    expect(
+      (await landed("/c/prod/deployments/team-blind/ledger")).pathname
+    ).toBe("/c/prod/deployments/team-blind/ledger");
+    expect((await landed("/c/prod/nodes/worker-1")).pathname).toBe(
+      "/c/prod/nodes/worker-1"
+    );
+  });
+
+  /** A link handed around keeps the namespace through the deep-link parser. */
+  it("survives a deep link", () => {
+    expect(
+      parseDeepLink(
+        "rubick://open/c/acme-staging/deployments?namespace=team-blind"
+      )?.path
+    ).toBe("/c/acme-staging/deployments?namespace=team-blind");
   });
 });

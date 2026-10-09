@@ -217,11 +217,23 @@ export function selectedPodsLink(
 }
 
 /** The list of any served kind, by the segment its address carries. */
-export function resourceListLink(resource: string): AppLink {
+export function resourceListLink(
+  resource: string,
+  search?: Record<string, string>
+): AppLink {
   return {
     to: "/c/$cluster/$resource",
     params: inCluster({ resource }),
+    search,
   } as AppLink;
+}
+
+/** That list with the window scoped to one namespace on arrival. */
+export function namespaceListLink(
+  resource: string,
+  namespace: string
+): AppLink {
+  return resourceListLink(resource, { namespace });
 }
 
 /** The objects one CRD defines: its own page, on the instances tab. */

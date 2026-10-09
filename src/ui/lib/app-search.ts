@@ -23,6 +23,8 @@ export interface AppSearch {
   selector?: string;
   /** The namespaces, comma-separated, that selector is read in. */
   in?: string;
+  /** The namespace a link scopes the window to on arrival. */
+  namespace?: string;
 }
 
 const KEYS: ReadonlyArray<keyof AppSearch> = [
@@ -41,6 +43,7 @@ const KEYS: ReadonlyArray<keyof AppSearch> = [
   "kind",
   "selector",
   "in",
+  "namespace",
 ];
 
 export function appSearch(raw: Record<string, unknown>): AppSearch {

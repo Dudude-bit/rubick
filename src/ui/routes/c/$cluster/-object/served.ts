@@ -60,6 +60,21 @@ export function servedIn(
     : { state: "absent" };
 }
 
+/**
+ * Whether an address segment names a namespaced kind: the registry's word
+ * for its own kinds, discovery's for the rest, `null` while discovery has
+ * not answered.
+ */
+export function segmentNamespaced(
+  segment: string,
+  served: Served
+): boolean | null {
+  if (isResourceType(segment))
+    return getResourceDefinition(segment).scope !== "cluster";
+  if (served.state === "served") return served.entry.namespaced;
+  return served.state === "reading" ? null : false;
+}
+
 /** A minute: a kind appears when something is installed, not mid-read. */
 const CATALOG_STALE_MS = 60_000;
 
