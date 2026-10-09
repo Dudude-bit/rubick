@@ -58,6 +58,79 @@ describe("DetailTabs", () => {
     );
   });
 
+  /**
+   * WebKit matches no :focus-visible for a focus that began with a click,
+   * the arrows' focus after it included, so Dana and Lena walked the strip
+   * blind. Fails if the tab the arrows reach wears no ring, or a click alone
+   * draws one.
+   */
+  it("rings the tab the arrows reach after a click, and not the clicked one", () => {
+    render(
+      <DetailTabs tabs={tabs} activeTab="overview" onTabChange={() => {}} />
+    );
+    const overview = screen.getByRole("tab", { name: "Overview" });
+    fireEvent.pointerDown(overview);
+    overview.focus();
+    expect(overview).not.toHaveAttribute("data-ring");
+
+    fireEvent.keyDown(overview, { key: "ArrowRight" });
+    const logs = screen.getByRole("tab", { name: "Logs" });
+    expect(logs).toHaveFocus();
+    expect(logs).toHaveAttribute("data-ring", "true");
+    expect(logs.className).toContain("data-[ring=true]:ring-1");
+    expect(overview).not.toHaveAttribute("data-ring");
+  });
+
+  /**
+   * WebKitGTK names Shift+Tab "Unidentified", so Radix never let go of the
+   * strip and Shift+Tab then Tab landed on "ещё N". Fails if the strip is
+   * more than one Tab stop, or the stop is not the focused tab inside it and
+   * the open tab outside it.
+   */
+  it("keeps the strip one Tab stop: the focused tab inside it, the open one outside", async () => {
+    render(
+      <>
+        <button type="button">Back</button>
+        <DetailTabs
+          tabs={tabs}
+          activeTab="overview"
+          onTabChange={() => {}}
+          actions={<button type="button">Delete</button>}
+        />
+      </>
+    );
+    const stops = () =>
+      [screen.getByRole("tablist"), ...screen.getAllByRole("tab")].filter(
+        (el) => el.tabIndex >= 0
+      );
+    const overview = screen.getByRole("tab", { name: "Overview" });
+    const logs = screen.getByRole("tab", { name: "Logs" });
+    expect(stops()).toEqual([overview]);
+
+    overview.focus();
+    fireEvent.keyDown(overview, { key: "ArrowRight" });
+    expect(stops()).toEqual([logs]);
+
+    await userEvent.tab();
+    expect(screen.getByRole("button", { name: "Delete" })).toHaveFocus();
+    expect(stops()).toEqual([overview]);
+
+    await userEvent.tab({ shift: true });
+    expect(overview).toHaveFocus();
+    await userEvent.tab({ shift: true });
+    expect(screen.getByRole("button", { name: "Back" })).toHaveFocus();
+  });
+
+  /** WebKit starts Shift+Tab from the node a click lands on, and from a label inside the tab that was the tab again. */
+  it("takes a click on the label on the tab itself", () => {
+    render(
+      <DetailTabs tabs={tabs} activeTab="overview" onTabChange={() => {}} />
+    );
+    expect(screen.getByRole("tab", { name: "Logs" }).className).toContain(
+      "*:pointer-events-none"
+    );
+  });
+
   /** A tab strip too wide for the row wraps the actions below it, right-aligned. */
   it("wraps the actions onto their own line instead of squeezing the tabs", () => {
     render(

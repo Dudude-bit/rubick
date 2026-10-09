@@ -51,9 +51,15 @@ function stepFocus(event: React.KeyboardEvent<HTMLElement>) {
 function DetailTabTrigger({
   tab,
   isActive,
+  isStop,
+  ring,
 }: {
   tab: DetailTab;
   isActive: boolean;
+  /** The strip's only Tab stop; Radix's own misses Shift+Tab, which WebKitGTK names "Unidentified". */
+  isStop: boolean;
+  /** WebKit gives a focus a click began no :focus-visible, the arrows' included. */
+  ring: boolean;
 }) {
   const says =
     tab.mark && tab.mark.shows !== "count"
@@ -72,7 +78,9 @@ function DetailTabTrigger({
       }
       aria-label={says ?? undefined}
       onKeyDown={stepFocus}
-      className="group -mb-px h-8 shrink-0 justify-start gap-1.5 whitespace-nowrap rounded-none border-b border-transparent px-0.5 text-xs font-normal text-fg-mut shadow-none transition-colors hover:bg-transparent hover:text-fg focus-visible:ring-inset data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
+      tabIndex={isStop ? 0 : -1}
+      data-ring={ring ? "true" : undefined}
+      className="group -mb-px h-8 shrink-0 justify-start gap-1.5 whitespace-nowrap rounded-none border-b border-transparent px-0.5 text-xs font-normal text-fg-mut shadow-none transition-colors hover:bg-transparent hover:text-fg focus-visible:ring-inset *:pointer-events-none data-[ring=true]:ring-1 data-[ring=true]:ring-inset data-[ring=true]:ring-info data-[state=active]:border-fg data-[state=active]:bg-transparent data-[state=active]:font-medium data-[state=active]:text-fg data-[state=active]:shadow-none"
     >
       {/* A one-letter tab is unreadable, so nothing here shrinks or
           truncates; the strip scrolls instead. */}
@@ -224,6 +232,17 @@ const tabNamed = (strip: HTMLElement | null, id: string) =>
     (tab) => tab.dataset.tab === id
   );
 
+const tabOf = (target: EventTarget | null) =>
+  target instanceof Element
+    ? (target.closest<HTMLElement>("[data-tab]")?.dataset.tab ?? null)
+    : null;
+
+/** The tab holding the focus, and whether a key brought it there. */
+interface Focused {
+  id: string;
+  ring: boolean;
+}
+
 export function DetailTabs({
   tabs,
   activeTab,
@@ -248,6 +267,9 @@ export function DetailTabs({
   // nothing downstream can work that out for itself.
   const pageVisible = useSurfaceVisible();
   const stripRef = useRef<HTMLDivElement>(null);
+  const [focused, setFocused] = useState<Focused | null>(null);
+  const pointer = useRef(false);
+  const stop = focused?.id ?? current;
   const clipped = useClippedTabs(
     stripRef,
     tabs.map((tab) => tab.id).join("\n")
@@ -283,17 +305,32 @@ export function DetailTabs({
         <div className="flex min-w-0 flex-auto items-stretch">
           <TabsList
             ref={stripRef}
+            tabIndex={-1}
             onWheel={(event) => {
               const el = event.currentTarget;
               if (el.scrollWidth <= el.clientWidth) return;
               el.scrollLeft += event.deltaY || event.deltaX;
             }}
-            onFocus={(event) =>
+            onPointerDown={() => {
+              pointer.current = true;
+            }}
+            onKeyDownCapture={() => {
+              pointer.current = false;
+              setFocused((was) => was && { ...was, ring: true });
+            }}
+            onFocus={(event) => {
+              const id = tabOf(event.target);
+              if (id) setFocused({ id, ring: !pointer.current });
+              pointer.current = false;
               revealTab(
                 event.currentTarget,
                 (event.target as Element).closest("[data-tab]")
-              )
-            }
+              );
+            }}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node))
+                setFocused(null);
+            }}
             className={cn(
               // WebKit draws a scrollbar over the labels and takes their
               // lower half's clicks; the fades and the menu say there is more.
@@ -306,6 +343,8 @@ export function DetailTabs({
                 key={tab.id}
                 tab={tab}
                 isActive={tab.id === current}
+                isStop={tab.id === stop}
+                ring={focused?.id === tab.id && focused.ring}
               />
             ))}
           </TabsList>
