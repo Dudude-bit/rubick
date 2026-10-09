@@ -5,6 +5,7 @@ import { launchLinks, onOpenLinks } from "@/lib/host";
 import { parseDeepLink } from "@/lib/deep-link";
 import { logInfo } from "@/lib/logger";
 import { useDeepLinkStore } from "@/stores/deepLinkStore";
+import { useScopeTabStore } from "@/stores/scopeTabStore";
 
 /**
  * The launch link belongs to the window, not to the layout that reads it:
@@ -27,7 +28,7 @@ export function useDeepLinks(): void {
   useEffect(() => {
     let cancelled = false;
 
-    const open = (raw: string) => {
+    const open = (raw: string, launched = false) => {
       const link = parseDeepLink(raw);
       if (!link) {
         logInfo(`ignored a link that is not ours: ${raw}`, {
@@ -35,6 +36,8 @@ export function useDeepLinks(): void {
         });
         return;
       }
+      // The link the app was started with wins over the page the session restores.
+      if (launched) useScopeTabStore.getState().yieldToLink(link);
       // Announced once the window is there: before, the page still on
       // screen would be taken for the one the link opened, and leaving it
       // is what dismisses the banner.
@@ -49,7 +52,7 @@ export function useDeepLinks(): void {
         .then((urls) => {
           if (cancelled || launchRead) return;
           launchRead = true;
-          for (const url of urls ?? []) open(url);
+          for (const url of urls ?? []) open(url, true);
         })
         .catch((error: unknown) => {
           logInfo(`no launch link: ${String(error)}`, { context: "deep-link" });
