@@ -83,7 +83,7 @@ import { PinAction } from "../../-components/PinAction";
 import { useResourceMutation, useResourceDetail } from "@/hooks";
 import { useDeploymentShare } from "./useDeploymentShare";
 import { useChainAnswer } from "@/hooks/useChainAnswer";
-import { useHeldRead } from "@/hooks/useHeldRead";
+import { useHeldRead, useReadBehind } from "@/hooks/useHeldRead";
 import { useMetrics } from "@/hooks/useMetrics";
 import { useOwnedPodsWatch } from "@/hooks/usePodWatch";
 import { commands } from "@/lib/commands";
@@ -180,18 +180,34 @@ export function DeploymentDetail() {
     staleTime: STALE_TIMES.resourceList,
     refresh: "resourceList",
   });
-  const {
-    data: revisionsRead,
-    error: revisionsError,
-    isPending: revisionsPending,
-    refetch: refetchRevisions,
-  } = useHeldRead(
+  const revisionsHeld = useHeldRead(
     ResourceType.Deployment,
     namespace,
     name,
     revisionsQuery,
     revisionsKey
   );
+  const revisionsBehind = useReadBehind(
+    ResourceType.Deployment,
+    namespace,
+    name,
+    {
+      at: revisionsQuery.dataUpdatedAt,
+      contradicted:
+        revisionsHeld.data?.length === 0 &&
+        !!deployment &&
+        Math.max(
+          deployment.replicas.ready,
+          deployment.replicas.updated,
+          deployment.replicas.available
+        ) > 0,
+    },
+    revisionsKey
+  );
+  const revisionsRead = revisionsBehind ? undefined : revisionsHeld.data;
+  const revisionsError = revisionsHeld.error;
+  const revisionsPending = revisionsHeld.isPending || revisionsBehind;
+  const refetchRevisions = revisionsHeld.refetch;
   const revisions = revisionsRead ?? [];
 
   // For the banner only. The Usage block reads the same query through the
