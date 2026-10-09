@@ -31,13 +31,17 @@ vi.mock("@/components/terminal/Terminal", async () => {
     Terminal: ({
       sessionId,
       onSize,
+      onClose,
     }: {
       sessionId?: string;
       onSize?: (cols: number, rows: number) => void;
+      onClose?: () => void;
     }) => {
       useEffect(() => onSize?.(120, 40), [onSize]);
       return (
-        <div data-testid="terminal-stub" data-session-id={sessionId ?? ""} />
+        <div data-testid="terminal-stub" data-session-id={sessionId ?? ""}>
+          <button type="button" aria-label="end the shell" onClick={onClose} />
+        </div>
       );
     },
   };
@@ -941,6 +945,59 @@ describe("a pod page runs nothing in the container until the reader asks on it",
       await advance(0);
       await advance(0);
       expect(execs()).toContain(exec);
+    }
+  );
+
+  /**
+   * Dana ended a shell with its x and clicked the Shell tab: nothing started,
+   * only the container chip did. Fails if ending restarts on its own, or if a
+   * click on the tab, open or not, does not start a new shell.
+   */
+  it.each([
+    ["the Shell tab already open", null],
+    ["the Shell tab from another tab", /^Overview/],
+  ])(
+    "starts a new shell on a click on %s after the last one was ended",
+    async (_, away) => {
+      let opened = 0;
+      vi.mocked(invoke).mockImplementation(async (command: string, args) => {
+        if (command === "get_pod")
+          return running((args as { name: string }).name);
+        if (command === "open_pod_shell") return `term-${++opened}`;
+        if (command === "check_access")
+          return (args as { queries: AccessQuery[] }).queries.map((query) => ({
+            ...query,
+            allowed: true,
+          }));
+        return undefined;
+      });
+      await arrive("/c/prod/pods/shop/cart-a");
+      await clickTab(/^Shell/);
+      expect(terminal()).toHaveAttribute("data-session-id", "term-1");
+
+      fireEvent.click(screen.getByRole("button", { name: "end the shell" }));
+      await advance(10_000);
+      expect(invoke).toHaveBeenCalledWith("close_terminal", {
+        sessionId: "term-1",
+      });
+      expect(terminal()).toBeNull();
+      expect(screen.getByText("The shell was ended")).toBeInTheDocument();
+      expect(execs()).toEqual(["open_pod_shell cart-a"]);
+
+      if (away) {
+        await clickTab(away);
+        await clickTab(/^Shell/);
+      } else {
+        fireEvent.click(screen.getByRole("tab", { name: /^Shell/ }));
+        await advance(0);
+        await advance(0);
+      }
+
+      expect(execs()).toEqual([
+        "open_pod_shell cart-a",
+        "open_pod_shell cart-a",
+      ]);
+      expect(terminal()).toHaveAttribute("data-session-id", "term-2");
     }
   );
 
