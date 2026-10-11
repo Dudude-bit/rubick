@@ -369,6 +369,42 @@ describe("a rail taller than the window", () => {
     );
   });
 
+  /**
+   * At 900 tall Dana read RoleBindings, faded at the edge above the App block,
+   * as a row clipped under it. Fails if a rail with rows past its foot stops
+   * counting them and offering to scroll there, or keeps saying so at the end.
+   */
+  it("counts the rows past its foot and scrolls to them", async () => {
+    railOf(900);
+    const past = /^(RoleBindings|ClusterRoles|ClusterRoleBindings)/;
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        const bottom =
+          this.tagName === "NAV"
+            ? 600
+            : past.test(this.textContent ?? "")
+              ? 640
+              : 100;
+        return { bottom } as DOMRect;
+      }
+    );
+    const scrollBy = vi.fn();
+    Element.prototype.scrollBy = scrollBy;
+    await wrap(<Sidebar />);
+
+    const more = screen.getByRole("button", { name: "3 more below" });
+    expect(more).toHaveAttribute("tabindex", "-1");
+    fireEvent.click(more);
+    expect(scrollBy).toHaveBeenCalledWith(
+      expect.objectContaining({ top: 480 })
+    );
+
+    const rail = screen.getByRole("navigation");
+    rail.scrollTop = 300;
+    fireEvent.scroll(rail);
+    expect(screen.queryByRole("button", { name: /more below/ })).toBeNull();
+  });
+
   /** Fails if a rail with nothing past its edges is faded anyway. */
   it("wears no fade when every row fits", async () => {
     railOf(600);
