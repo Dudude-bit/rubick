@@ -5003,7 +5003,8 @@ export const ru: Catalogue = {
     searchColourWords:
       "color coloring tint kind colour цвет раскраска оттенок вид",
     contextConnected: "подключён",
-    contextReady: "готов",
+    contextNotConnected: "не подключён",
+    contextConnectFailed: "подключиться не удалось",
     contextCannotConnect: "подключиться нельзя",
     contextCannotTell: "определить нельзя",
     criticalLabel:

@@ -4472,7 +4472,8 @@ export const en = {
     searchThemeWords: "dark light appearance",
     searchColourWords: "color coloring tint kind",
     contextConnected: "connected",
-    contextReady: "ready",
+    contextNotConnected: "not connected",
+    contextConnectFailed: "connect failed",
     contextCannotConnect: "cannot connect",
     contextCannotTell: "cannot tell",
     criticalLabel:

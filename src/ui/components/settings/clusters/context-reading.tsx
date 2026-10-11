@@ -181,7 +181,8 @@ export function describeAuth(context: ContextInfo): ReactNode {
 
 export type ContextStatus =
   | "connected"
-  | "ready"
+  | "not connected"
+  | "connect failed"
   | "cannot connect"
   | "cannot tell";
 
@@ -206,11 +207,14 @@ export function readContext(
     binaries,
     binding,
     connected,
+    failed = false,
   }: {
     /** Binary name to resolved path; `null` means "looked, not found". */
     binaries: Map<string, string | null>;
     binding: ContextBindingInfo | undefined;
     connected: boolean;
+    /** The last connect to this context failed and its error still stands. */
+    failed?: boolean;
   },
   // Aliased: `T` in this file is the JSX component that renders one line.
   t: Translate
@@ -237,9 +241,11 @@ export function readContext(
     ? "connected"
     : missingBinary
       ? "cannot connect"
-      : context.auth.kind === "unrecognised"
-        ? "cannot tell"
-        : "ready";
+      : failed
+        ? "connect failed"
+        : context.auth.kind === "unrecognised"
+          ? "cannot tell"
+          : "not connected";
 
   return {
     how: describeAuth(context),

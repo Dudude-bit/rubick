@@ -24,10 +24,10 @@ import { useT } from "@/i18n/useT";
  * connecting, and a second cluster switcher hidden in Settings is how two
  * of them drift apart.
  */
-/** The four states a context can be in, in words. */
 const CONTEXT_STATUS = {
   connected: "contextConnected",
-  ready: "contextReady",
+  "not connected": "contextNotConnected",
+  "connect failed": "contextConnectFailed",
   "cannot connect": "contextCannotConnect",
   "cannot tell": "contextCannotTell",
 } as const;
@@ -37,6 +37,7 @@ export function ContextRow({
   binding,
   binaries,
   connected,
+  failure = null,
   onBind,
   fromFile,
 }: {
@@ -44,6 +45,8 @@ export function ContextRow({
   binding: ContextBindingInfo | undefined;
   binaries: Map<string, string | null>;
   connected: boolean;
+  /** The error of the last connect to this context, while it stands. */
+  failure?: string | null;
   onBind: (context: string) => void;
   /**
    * Which file named this context, where more than one is being read.
@@ -55,7 +58,11 @@ export function ContextRow({
   fromFile?: string;
 }) {
   const t = useT();
-  const reading = readContext(context, { binaries, binding, connected }, t);
+  const reading = readContext(
+    context,
+    { binaries, binding, connected, failed: failure !== null },
+    t
+  );
   const show = useShownPath();
   const visible = useSettingSearchMatch(reading.searchText);
   const mark = useClusterMark(context.name);
@@ -65,7 +72,7 @@ export function ContextRow({
   const { prefix, label } = clusterNameParts(context.name);
 
   const missing = reading.missingBinary;
-  const blocked = missing !== null;
+  const blocked = missing !== null || reading.status === "connect failed";
   // A plugin whose binary is missing has a louder problem than an unset
   // profile, and one problem per row is the budget.
   const unbound =
@@ -191,6 +198,11 @@ export function ContextRow({
       </div>
 
       <span
+        title={
+          reading.status === "connect failed"
+            ? (failure ?? undefined)
+            : undefined
+        }
         className={cn(
           "whitespace-nowrap text-[11px]",
           reading.status === "connected"
