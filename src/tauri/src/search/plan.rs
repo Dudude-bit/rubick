@@ -171,7 +171,7 @@ mod tests {
             query: "api".to_string(),
             contexts: contexts.iter().map(|s| (*s).to_string()).collect(),
             all_contexts: false,
-            namespace: None,
+            scope: None,
             kinds: None,
             session: None,
             everything: false,

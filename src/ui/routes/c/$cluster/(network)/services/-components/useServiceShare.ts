@@ -14,7 +14,11 @@ import {
   sourceNote,
 } from "@/lib/published";
 import type { ReportStat } from "@/lib/report";
-import { serviceHealthOf, serviceHealthWords } from "@/lib/service-health";
+import {
+  podsUnreadOf,
+  serviceHealthOf,
+  serviceHealthWords,
+} from "@/lib/service-health";
 import { ORDER, refOf, type PlacedSection } from "@/lib/report-parts";
 import { useT, type T } from "@/i18n/useT";
 import type { ServiceInfo, ServicePublished } from "@/generated/types";
@@ -152,6 +156,7 @@ export function servicePublishedSection(
     : undefined;
   const all = published?.endpoints ?? [];
   const rows = all.slice(0, MAX_ROWS);
+  const podsUnread = podsUnreadOf(published);
   return {
     id: "published",
     order: ORDER.own,
@@ -167,7 +172,7 @@ export function servicePublishedSection(
         t("columns", "state"),
       ],
       rows: rows.map((endpoint) => {
-        const state = endpointState(endpoint, t);
+        const state = endpointState(endpoint, t, podsUnread);
         const address = endpointAddress(endpoint);
         return {
           cells: [
@@ -180,7 +185,7 @@ export function servicePublishedSection(
                   ref: refOf(endpoint.target),
                 }
               : { text: t("empty", "registeredByHand"), quiet: true },
-            { text: state.text, role: state.tone },
+            { text: state.text, role: state.tone, unread: state.unread },
           ],
         };
       }),

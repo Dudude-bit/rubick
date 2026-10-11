@@ -39,7 +39,10 @@ type ListableResource = { name: string; namespace?: string | null };
 
 type Navigate = ReturnType<typeof useNavigate>;
 
-export interface ResourceListPageConfig<T extends ListableResource> {
+export interface ResourceListPageConfig<
+  T extends ListableResource,
+  R = undefined,
+> {
   /** Kubernetes resource type — used for query keys + detail URLs. */
   resourceType: ResourceKind;
   /** Page title (also used as the empty-state label by default). */
@@ -56,7 +59,9 @@ export interface ResourceListPageConfig<T extends ListableResource> {
    */
   deleter?: (item: T) => Promise<unknown>;
   /** Build column definitions. Receives navigate so columns can link. */
-  columns: (deps: { navigate: Navigate }) => ColumnDef<T>[];
+  columns: (deps: { navigate: Navigate; read?: R }) => ColumnDef<T>[];
+  /** One answer read for every row and handed to `columns`, so what a shared file says of a cell is what the cell draws from it. */
+  useRead?: () => R;
   /** Extra quick actions, inserted between the default View and Delete. */
   extraActions?: (deps: { navigate: Navigate }) => QuickAction<T>[];
   /**
@@ -81,9 +86,12 @@ export interface ResourceListPageConfig<T extends ListableResource> {
   around?: ComponentType<{ children: ReactNode }>;
 }
 
-export function createResourceListPage<T extends ListableResource>(
-  config: ResourceListPageConfig<T>
-) {
+const readNothing = () => undefined;
+
+export function createResourceListPage<
+  T extends ListableResource,
+  R = undefined,
+>(config: ResourceListPageConfig<T, R>) {
   const linkOf = (row: ListableResource) =>
     objectLink({
       kind: config.resourceType,
@@ -102,7 +110,12 @@ export function createResourceListPage<T extends ListableResource>(
     // different multi-namespace scopes never read each other's rows.
     const cacheKey = isCluster ? null : scopeCacheKey(scope.scope);
 
-    const columns = useMemo(() => config.columns({ navigate }), [navigate]);
+    const useRead = config.useRead ?? (readNothing as () => R | undefined);
+    const read = useRead();
+    const columns = useMemo(
+      () => config.columns({ navigate, read }),
+      [navigate, read]
+    );
 
     const quickActions = useMemo(
       () =>

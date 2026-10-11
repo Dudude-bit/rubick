@@ -539,7 +539,10 @@ export function Events() {
                 // Beside a peek the list says the cut in its own notice, and
                 // in the header too it pushed the toolbar down a row.
                 windowFull && !(narrow && view === "list") ? eventLimit : null,
-                view === "stories" ? { n: stories.length, window } : null
+                view === "stories" ? { n: stories.length, window } : null,
+                eventType === "all"
+                  ? null
+                  : { type: eventType as EventType, hidden: others }
               )}
             />
           )
@@ -860,18 +863,32 @@ function UnreadFeed({
  * Worst first. Counts Event objects, as kubectl and the sidebar do, and names
  * the span they cover so a story's occurrences are not read as the same unit.
  */
+/**
+ * The header's count. Under a type filter it says how many of that type are
+ * shown, none included, and what the filter leaves out: Lena's warnings in net
+ * read "none" beside a sidebar counting 96 events.
+ */
 function summarise(
   t: ReturnType<typeof useT>,
   warnings: number,
   normal: number,
   cappedAt: string | null,
-  stories: { n: number; window: StoryWindow } | null
+  stories: { n: number; window: StoryWindow } | null,
+  filter: { type: EventType; hidden: number | null } | null = null
 ): string {
   const parts: string[] = [];
   if (stories !== null) parts.push(t("count", "stories", { n: stories.n }));
-  if (warnings > 0) parts.push(t("count", "warningEvents", { n: warnings }));
-  if (normal > 0) parts.push(t("count", "normalEvents", { n: normal }));
+  if (warnings > 0 || filter?.type === "Warning")
+    parts.push(t("count", "warningEvents", { n: warnings }));
+  if (normal > 0 || filter?.type === "Normal")
+    parts.push(t("count", "normalEvents", { n: normal }));
   if (parts.length === 0) parts.push(t("empty", "noneInline"));
+  if (filter && filter.hidden !== 0)
+    parts.push(
+      filter.hidden === null || stories !== null
+        ? t("count", "typeFilterLeavesRest")
+        : t("count", "hiddenByTypeFilter", { n: filter.hidden })
+    );
   if (stories !== null)
     parts.push(
       t("count", "inStoryWindow", { span: windowWords(stories.window) })

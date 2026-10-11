@@ -298,7 +298,7 @@ export interface ReadAnswer {
   at: number;
 }
 
-const readTime = ({ data, at }: ReadAnswer) =>
+export const readTime = ({ data, at }: ReadAnswer) =>
   data.readAt ? Date.parse(data.readAt) : at;
 
 /**
@@ -342,6 +342,17 @@ export function speaksFor(
   if (subject.uid && data.subjectUid && data.subjectUid !== subject.uid)
     return false;
   return publishedSpeaks(data.published, readTime(answer), seen);
+}
+
+/** Whether a read was taken before the latest change a watch under a Service it names has seen: what it publishes may have moved since. */
+export function readBehind(answer: ReadAnswer, seen: SeenOf): boolean {
+  const read = readTime(answer);
+  return answer.data.published.some(({ service }) => {
+    const watched = seen(service);
+    if (!watched) return false;
+    const pods = typeof watched.pods === "object" ? watched.pods.at : 0;
+    return read < Math.max(watched.changed, pods);
+  });
 }
 
 /** Whether a read waits on a pod watch that has not listed yet, whose list reads it again. */

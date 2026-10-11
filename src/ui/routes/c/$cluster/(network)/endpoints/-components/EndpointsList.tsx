@@ -23,7 +23,10 @@ import { None } from "@/components/ui/none";
 import { AddressesCell } from "./EndpointAddresses";
 import { NoEndpoints } from "./NoEndpoints";
 import { BackingAround } from "../../-components/ServiceBacking";
+import { useScopeBacking } from "../../-components/service-backing";
 import { NotReadyPill } from "./NotReadyPill";
+import { endpointsPodsUnread } from "./pods-unread";
+import type { ServiceBackingRead } from "@/hooks/useServiceBacking";
 
 /** Every address the object holds: an unready one is still an address. */
 const addressesOf = (endpoints: EndpointsInfo) =>
@@ -32,7 +35,9 @@ const addressesOf = (endpoints: EndpointsInfo) =>
     ...subset.notReadyAddresses.map((address) => ({ address, ready: false })),
   ]);
 
-export const columns = (): ColumnDef<EndpointsInfo>[] => [
+export const columns = ({
+  read,
+}: { read?: ServiceBackingRead } = {}): ColumnDef<EndpointsInfo>[] => [
   createNameColumn<EndpointsInfo>(ResourceType.Endpoints),
   createNamespaceColumn<EndpointsInfo>(),
   {
@@ -48,6 +53,7 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
         );
         if (ready === 0 && notReady === 0)
           return { text: t("readings", "healthNoEndpoints"), role: "err" };
+        const podsUnread = notReady > 0 && endpointsPodsUnread(read, row);
         return {
           text: [
             ready > 0 ? t("count", "nReady", { n: ready }) : null,
@@ -55,7 +61,8 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
           ]
             .filter(Boolean)
             .join(", "),
-          role: notReady > 0 ? "warn" : "ok",
+          role: podsUnread ? "neutral" : notReady > 0 ? "warn" : "ok",
+          unread: podsUnread,
         };
       },
     },
@@ -167,6 +174,9 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
     header: columnHeader("columns", "ips"),
     meta: {
       share: (row: EndpointsInfo, t) => ({
+        unread:
+          addressesOf(row).some(({ ready }) => !ready) &&
+          endpointsPodsUnread(read, row),
         text:
           addressesOf(row)
             .map(({ address, ready }) =>
@@ -178,17 +188,26 @@ export const columns = (): ColumnDef<EndpointsInfo>[] => [
         mono: true,
       }),
     },
-    cell: ({ row }) => <AddressesCell addresses={addressesOf(row.original)} />,
+    cell: ({ row }) => (
+      <AddressesCell
+        endpoints={row.original}
+        addresses={addressesOf(row.original)}
+      />
+    ),
   },
   createAgeColumn<EndpointsInfo>(),
 ];
 
-export const EndpointsList = createResourceListPage<EndpointsInfo>({
+export const EndpointsList = createResourceListPage<
+  EndpointsInfo,
+  ServiceBackingRead
+>({
   resourceType: ResourceType.Endpoints,
   title: "Endpoints",
   fetcher: ({ scope }) => commands.listEndpointsIn(scope),
   watch: ({ scope }) => commands.subscribeEndpointsWatch(scope),
   // No deleter — read-only resource
   columns,
+  useRead: useScopeBacking,
   around: BackingAround,
 });

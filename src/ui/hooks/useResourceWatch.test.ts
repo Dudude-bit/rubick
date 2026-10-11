@@ -1240,6 +1240,43 @@ describe("the readers beside a watched list", () => {
   });
 
   /**
+   * Sam's chain named the old pod for a second after its page's header said
+   * the new one was Ready: a re-read that found a read in flight waited a
+   * whole settle again after it landed. Fails if the re-read does not follow
+   * the read it waited on as soon as that one lands.
+   */
+  it("follows a read that was in flight as soon as it lands", async () => {
+    const client = testQueryClient();
+    let release: (value: { pods: number }) => void = () => {};
+    let followedAt = 0;
+    const overview = vi
+      .fn()
+      .mockResolvedValueOnce({ pods: 14 })
+      .mockImplementationOnce(
+        () => new Promise<{ pods: number }>((resolve) => (release = resolve))
+      )
+      .mockImplementation(async () => {
+        followedAt ||= Date.now();
+        return { pods: 15 };
+      });
+    client.setQueryData<Scoped<Item>>(PODS, {
+      rows: [{ name: "pod-0", namespace: "shop" }],
+      unread: [],
+    });
+    const hook = await watching(client, PODS, SIDEBAR, overview);
+    void client.refetchQueries({ queryKey: SIDEBAR });
+
+    emit("stream-cm-1", "applied", { name: "search-2cw59", namespace: "shop" });
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    const landed = Date.now();
+    release({ pods: 14 });
+    await waitFor(() => expect(hook.result.current).toEqual({ pods: 15 }), {
+      timeout: 3000,
+    });
+    expect(followedAt - landed).toBeLessThan(250);
+  });
+
+  /**
    * A minimised window stops polling; a watch still writing rows must not
    * start reading on its behalf. Fails if a hidden window re-reads at once.
    */

@@ -256,14 +256,13 @@ impl SearchManager {
 
         let targets = plan::plan_targets(&names, &known, &live, request.connect);
         let limit = plan::clamp_limit(request.limit_per_context);
-        let namespace = crate::utils::normalize_optional_namespace(request.namespace.clone());
+        let scope = crate::commands::helpers::scope_of(request.scope.clone())?;
 
         let index = match current.as_deref() {
             Some(context) if request.everything && names.iter().any(|name| name == context) => {
-                let scope = namespace.clone().map(|ns| vec![ns]);
                 Some((
                     context.to_string(),
-                    state.ownership.ensure(state, scope).await?,
+                    state.ownership.ensure(state, scope.clone()).await?,
                 ))
             }
             Some(context) => state
@@ -280,7 +279,7 @@ impl SearchManager {
         };
         let search_id = state
             .search_manager
-            .start(&targets, query, namespace, kinds, limit, sources);
+            .start(&targets, query, scope, kinds, limit, sources);
 
         Ok(SearchHandle { search_id, targets })
     }
@@ -298,7 +297,7 @@ impl SearchManager {
         &self,
         targets: &[SearchTarget],
         query: String,
-        namespace: Option<String>,
+        scope: Option<Vec<String>>,
         kinds: Vec<&'static SearchableKind>,
         limit_per_context: u32,
         sources: Sources,
@@ -336,7 +335,7 @@ impl SearchManager {
                 let client_manager = client_manager.clone();
                 let id = id.clone();
                 let query = query.clone();
-                let namespace = namespace.clone();
+                let scope = scope.clone();
                 let kinds = kinds.clone();
                 let permits = permits.clone();
                 let sources = sources.clone();
@@ -353,7 +352,7 @@ impl SearchManager {
                             id.clone(),
                             context.clone(),
                             query,
-                            namespace,
+                            scope,
                             kinds,
                             limit_per_context,
                             sources,
@@ -407,11 +406,14 @@ impl Answer {
     fn absorb(
         &mut self,
         kind: &Wanted,
-        read: Read,
+        (read, refused): (Read, Option<Arc<Error>>),
         query: &str,
         context: &str,
         limit: u32,
     ) -> Vec<SearchHit> {
+        if let Some(error) = refused {
+            self.unread(kind, &error);
+        }
         match read {
             Ok(Found::NotServed) => Vec::new(),
             Ok(Found::Loading) => {
@@ -444,18 +446,53 @@ impl Answer {
                 hits
             }
             Err(error) => {
-                let (reason, message) = describe_failure(&error);
-                let named = kind.named();
-                self.unreadable.push(UnreadKind {
-                    kind: named.kind,
-                    group: named.group,
-                    plural: named.plural,
-                    reason,
-                    message,
-                });
+                self.unread(kind, &error);
                 Vec::new()
             }
         }
+    }
+
+    fn unread(&mut self, kind: &Wanted, error: &Error) {
+        let (reason, message) = describe_failure(error);
+        let named = kind.named();
+        self.unreadable.push(UnreadKind {
+            kind: named.kind,
+            group: named.group,
+            plural: named.plural,
+            reason,
+            message,
+        });
+    }
+}
+
+/// One kind's reads, one per namespace of the scope, as one answer: the names
+/// of every namespace that answered, beside the first failure of one that did
+/// not. A kind no namespace answered fails whole; one refused in a namespace
+/// is still searched in the others.
+async fn across_scope(reads: Vec<BoxFuture<'static, Read>>) -> (Read, Option<Arc<Error>>) {
+    let mut names = Vec::new();
+    let mut truncated = false;
+    let mut listed = false;
+    let mut failed = None;
+    for read in futures::future::join_all(reads).await {
+        match read {
+            Ok(Found::Listed(part)) => {
+                listed = true;
+                truncated |= part.truncated;
+                names.extend(part.names.iter().cloned());
+            }
+            Ok(other) => return (Ok(other), None),
+            Err(error) => {
+                failed.get_or_insert(error);
+            }
+        }
+    }
+    match failed {
+        Some(error) if !listed => (Err(error), None),
+        refused => (
+            Ok(Found::Listed(Arc::new(Listed { names, truncated }))),
+            refused,
+        ),
     }
 }
 
@@ -495,7 +532,7 @@ async fn search_context(
     search_id: String,
     context: String,
     query: String,
-    namespace: Option<String>,
+    scope: Option<Vec<String>>,
     kinds: Arc<Vec<&'static SearchableKind>>,
     limit: u32,
     sources: Sources,
@@ -513,15 +550,25 @@ async fn search_context(
         .filter(|(indexed, _)| indexed == context)
         .map(|(_, index)| index);
     let read = |kind: Wanted, index: Option<Arc<ClusterIndex>>| {
-        names_of(
-            client.clone(),
-            client_manager.clone(),
-            kind,
-            namespace.clone(),
-            context.to_string(),
-            index,
-            sources.lists.clone(),
-        )
+        let reaches: Vec<Option<String>> = match &scope {
+            Some(names) if !kind.cluster_scoped() => names.iter().cloned().map(Some).collect(),
+            _ => vec![None],
+        };
+        let reads: Vec<_> = reaches
+            .into_iter()
+            .map(|namespace| {
+                names_of(
+                    client.clone(),
+                    client_manager.clone(),
+                    kind.clone(),
+                    namespace,
+                    context.to_string(),
+                    index.clone(),
+                    sources.lists.clone(),
+                )
+            })
+            .collect();
+        across_scope(reads)
     };
     let send = |hits: Vec<SearchHit>| {
         if !hits.is_empty() {
@@ -549,11 +596,11 @@ async fn search_context(
     let mut answer = Answer::default();
     let mut waiting: Vec<Wanted> = Vec::new();
     while let Some((kind, found)) = stream.next().await {
-        if matches!(found, Ok(Found::Loading)) {
+        if matches!(found, (Ok(Found::Loading), _)) {
             waiting.push(kind);
             continue;
         }
-        if let Err(error) = &found {
+        if let (Err(error), _) | (_, Some(error)) = &found {
             tracing::debug!(
                 "Search {search_id}: {context}/{} failed: {error}",
                 kind.label()
@@ -583,7 +630,7 @@ async fn search_context(
         let mut still = Vec::new();
         for kind in waiting {
             match read(kind.clone(), index.clone()).await {
-                Ok(Found::Loading) => still.push(kind),
+                (Ok(Found::Loading), _) => still.push(kind),
                 found => send(answer.absorb(&kind, found, &query, context, limit)),
             }
         }
@@ -902,6 +949,101 @@ mod tests {
             refused.message, "services is forbidden",
             "the cluster's words, without a sentence around them"
         );
+    }
+
+    /// Marco's "ledger" across team-checkout and team-blind: the palette read
+    /// each kind across the cluster, every kind was refused there, and
+    /// "Nothing has been searched" hid the Deployment he could read. Each
+    /// namespace is read on its own now: a kind refused in one is named as
+    /// not read and still searched in the other, and a kind both refuse is
+    /// named without failing the cluster.
+    #[tokio::test]
+    async fn a_scoped_search_reads_each_namespace_and_names_a_refusal_in_one() {
+        use crate::client::served::{test_server::connected, ServedIndex};
+
+        let forbidden = |what: &str| {
+            (
+                403,
+                serde_json::json!({
+                    "kind": "Status", "apiVersion": "v1", "status": "Failure",
+                    "message": format!("{what} is forbidden"), "reason": "Forbidden", "code": 403,
+                })
+                .to_string(),
+            )
+        };
+        let listed = |name: &str, namespace: &str| {
+            (
+                200,
+                serde_json::json!({
+                    "kind": "PartialObjectMetadataList",
+                    "apiVersion": "meta.k8s.io/v1",
+                    "metadata": {},
+                    "items": [{"metadata": {"name": name, "namespace": namespace}}],
+                })
+                .to_string(),
+            )
+        };
+        let (state, _) = connected(ServedIndex::default(), move |path, _| match path {
+            "/api/v1/namespaces/team-checkout/pods" => listed("ledger-client", "team-checkout"),
+            "/api/v1/namespaces/team-blind/services" => listed("ledger", "team-blind"),
+            "/api/v1/namespaces/team-checkout/services" => listed("checkout", "team-checkout"),
+            "/api/v1/namespaces/team-blind/pods" => forbidden("pods"),
+            path if path.ends_with("/secrets") => forbidden("secrets"),
+            _ => forbidden("the cluster"),
+        })
+        .await;
+        let (event_tx, mut rx) = broadcast::channel(16);
+        search_context(
+            event_tx,
+            state.client_manager.clone(),
+            "s".into(),
+            "fake".into(),
+            "ledger".into(),
+            Some(vec!["team-blind".into(), "team-checkout".into()]),
+            Arc::new(vec![
+                gateway_kind("Pod"),
+                gateway_kind("Service"),
+                gateway_kind("Secret"),
+            ]),
+            50,
+            Sources::default(),
+        )
+        .await;
+
+        let mut hits = Vec::new();
+        let mut last = None;
+        while let Ok(event) = rx.try_recv() {
+            match event {
+                AppEvent::SearchHits { hits: more, .. } => hits.extend(more),
+                AppEvent::SearchStatus {
+                    status,
+                    searched,
+                    unreadable,
+                    ..
+                } => last = Some((status, searched, unreadable)),
+                _ => {}
+            }
+        }
+        let (status, searched, unreadable) = last.expect("a terminal status");
+        assert_eq!(status, SearchContextStatus::Done);
+        let mut found: Vec<_> = hits.iter().map(|hit| hit.name.as_str()).collect();
+        found.sort_unstable();
+        assert_eq!(found, ["ledger", "ledger-client"]);
+        let searched: Vec<_> = searched.iter().map(|kind| kind.kind.as_str()).collect();
+        assert_eq!(searched, ["Pod", "Service"]);
+        let refused: Vec<_> = unreadable
+            .iter()
+            .map(|kind| (kind.kind.as_str(), kind.message.as_str()))
+            .collect();
+        assert!(
+            refused.contains(&("Pod", "pods is forbidden")),
+            "{refused:?}"
+        );
+        assert!(
+            refused.contains(&("Secret", "secrets is forbidden")),
+            "{refused:?}"
+        );
+        assert_eq!(refused.len(), 2, "{refused:?}");
     }
 
     /// A kind the cluster does not serve has no objects to match, and says

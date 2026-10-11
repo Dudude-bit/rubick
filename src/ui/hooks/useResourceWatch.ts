@@ -387,7 +387,8 @@ const due = new WeakMap<QueryClient, Set<string>>();
 /**
  * Reads `queryKey` again once a burst of changes settles. A read in flight
  * may have left before the change, so it is waited for rather than cut
- * short, which under steady churn would never let one finish.
+ * short, which under steady churn would never let one finish, and followed
+ * as soon as it lands.
  */
 function readSoon(client: QueryClient, queryKey: QueryKey, settleMs: number) {
   const pending = due.get(client) ?? new Set<string>();
@@ -395,18 +396,24 @@ function readSoon(client: QueryClient, queryKey: QueryKey, settleMs: number) {
   const id = hashKey(queryKey);
   if (pending.has(id)) return;
   pending.add(id);
-  setTimeout(() => {
+  const read = () => {
     pending.delete(id);
-    if (client.isFetching({ queryKey }) > 0) {
-      readSoon(client, queryKey, settleMs);
-      return;
-    }
     // A hidden window re-reads on its way back; until then it is only stale.
     const visible = useWindowActivity.getState().visible;
     void client.invalidateQueries(
       { queryKey, refetchType: visible ? "active" : "none" },
       { cancelRefetch: false }
     );
+  };
+  setTimeout(() => {
+    if (client.isFetching({ queryKey }) === 0) return read();
+    // Followed the moment it lands: waiting a whole settle again put Sam's
+    // chain a second behind the pod it named.
+    const stop = client.getQueryCache().subscribe(() => {
+      if (client.isFetching({ queryKey }) > 0) return;
+      stop();
+      setTimeout(read, 0);
+    });
   }, settleMs);
 }
 

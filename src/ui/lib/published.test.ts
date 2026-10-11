@@ -73,16 +73,21 @@ describe("the state of one address", () => {
     expect(
       endpointState(
         endpoint({ ready: false, serving: true, terminating: true }),
-        t
+        t,
+        false
       )
     ).toEqual({ text: "serving, terminating", tone: "warn" });
     expect(
       endpointState(
         endpoint({ ready: false, serving: false, terminating: false }),
-        t
+        t,
+        false
       )
     ).toEqual({ text: "not ready", tone: "warn" });
-    expect(endpointState(endpoint(), t)).toEqual({ text: "ready", tone: "ok" });
+    expect(endpointState(endpoint(), t, false)).toEqual({
+      text: "ready",
+      tone: "ok",
+    });
   });
 
   /**
@@ -94,9 +99,25 @@ describe("the state of one address", () => {
     expect(
       endpointState(
         endpoint({ ready: false, serving: false, terminating: false }),
-        t
+        t,
+        false
       ).tone
     ).toBe("warn");
+  });
+
+  /**
+   * Marco's ledger, pods unread: its Service's Endpoints tab drew "not ready"
+   * amber under a grey header. Fails if the address takes a fault's colour,
+   * or loses the not-read mark, while the pods that would say why are unread.
+   */
+  it("draws an address not ready neutral with the not-read mark while the Service's pods are unread", () => {
+    expect(
+      endpointState(
+        endpoint({ ready: false, serving: false, terminating: false }),
+        t,
+        true
+      )
+    ).toEqual({ text: "not ready", tone: "neutral", unread: true });
   });
 });
 

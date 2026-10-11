@@ -1,11 +1,8 @@
 import type { ReactNode } from "react";
 
-import { useNamespaceScope } from "@/hooks/useNamespaceScope";
-import { useServiceBacking } from "@/hooks/useServiceBacking";
-import { Backing } from "./service-backing";
+import { Backing, useScopeBacking } from "./service-backing";
 
 export function BackingAround({ children }: { children: ReactNode }) {
-  const scope = useNamespaceScope();
-  const read = useServiceBacking(scope.wire);
+  const read = useScopeBacking();
   return <Backing.Provider value={read}>{children}</Backing.Provider>;
 }

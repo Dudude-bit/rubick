@@ -8322,6 +8322,13 @@ export const ru: Catalogue = {
       many: "{n} обычных событий",
       other: "{n} обычного события",
     },
+    hiddenByTypeFilter: {
+      one: "ещё {n} событие скрыто фильтром по типу",
+      few: "ещё {n} события скрыты фильтром по типу",
+      many: "ещё {n} событий скрыто фильтром по типу",
+      other: "ещё {n} события скрыто фильтром по типу",
+    },
+    typeFilterLeavesRest: "фильтр по типу не показывает остальные события",
     inStoryWindow: "в окне {span}",
     latestKept: "из последних {n}",
     podsStayedOnTheNode: {

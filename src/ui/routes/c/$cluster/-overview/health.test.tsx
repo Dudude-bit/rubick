@@ -75,6 +75,7 @@ function attentionFrom(
         unconfirmed: [],
         unread: [],
       } as unknown as ClusterOverview,
+      scope: null,
       services: { answered: [], unread: [] },
       ingresses: { data: { rows: [], unread: [] }, error: null },
       ingressHealth: () => {

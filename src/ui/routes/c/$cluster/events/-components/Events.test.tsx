@@ -765,7 +765,11 @@ describe("a feed a watch keeps", () => {
     await screen.findByText("1 warning event · 2 normal events");
 
     await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
-    expect(await screen.findByText("1 warning event")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "1 warning event · 2 other events hidden by the type filter"
+      )
+    ).toBeInTheDocument();
     expect(subscribeEventWatch).toHaveBeenCalledTimes(1);
     expect(listEvents).not.toHaveBeenCalled();
   });
@@ -788,6 +792,26 @@ describe("a feed a watch keeps", () => {
       )
     ).toBeInTheDocument();
     expect(screen.queryByText(/No events in .* yet/)).toBeNull();
+  });
+
+  /**
+   * Lena's net, Warnings chosen: the header said "none" while the sidebar
+   * counted 96 events. Fails if the header stops saying how many of the
+   * chosen type it shows, or how many the filter hides.
+   */
+  it("heads a feed the type filter emptied with what it shows and what the filter hides", async () => {
+    await watched();
+    burst([dated("prod", 0), dated("prod", 1), dated("prod", 2)]);
+    await screen.findByText("3 normal events");
+
+    await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
+
+    expect(
+      await screen.findByText(
+        "0 warning events · 3 other events hidden by the type filter"
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByText("none")).toBeNull();
   });
 
   /** Fails if the stories of a feed the type filter emptied say nothing happened in the window. */
@@ -1157,7 +1181,11 @@ describe("what the limit is counted against", () => {
     ).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
-    expect(await screen.findByText("122 warning events")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "122 warning events · the type filter leaves the rest out"
+      )
+    ).toBeInTheDocument();
     await waitFor(() =>
       expect(screen.queryByText(/^Only the latest/)).toBeNull()
     );
@@ -1256,6 +1284,9 @@ describe("narrowing the feed", () => {
       await screen.findByText(
         "No warnings in prod; the type filter leaves every other event out."
       )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("0 warning events · the type filter leaves the rest out")
     ).toBeInTheDocument();
   });
 

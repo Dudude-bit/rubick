@@ -264,6 +264,65 @@ describe("what the Service actually publishes", () => {
   });
 });
 
+describe("an address not ready in what the Service publishes", () => {
+  const notReadyOf = (why: "podsUnread" | "failingReadiness") => {
+    const subject = published().service;
+    const section = servicePublishedSection(
+      connectionsOf({
+        subject,
+        edges: [],
+        stops: [],
+        notLookedAt: [],
+        published: [
+          published({
+            ready: 0,
+            notReady: 1,
+            stop: {
+              reason: "noneReady",
+              service: subject,
+              selector: "app=checkout",
+              pods: 1,
+              why,
+            },
+            endpoints: [
+              {
+                address: "10.42.1.30",
+                target: null,
+                ready: false,
+                serving: false,
+                terminating: false,
+                nodeName: null,
+                zone: null,
+                hintZones: [],
+                ports: [8080],
+              },
+            ],
+          }),
+        ],
+      }),
+      t
+    );
+    return (section.body as { rows: { cells: unknown[] }[] }).rows[0].cells[2];
+  };
+
+  /**
+   * Marco's ledger, pods unread: the file said the address amber where the
+   * Service's verdict is grey. Fails if it takes a fault's colour, or loses
+   * the not-read mark, while the pods are unread.
+   */
+  it("is shared neutral with the not-read mark while the Service's pods are unread", () => {
+    expect(notReadyOf("podsUnread")).toMatchObject({
+      role: "neutral",
+      unread: true,
+    });
+  });
+
+  /** Fails if an address its pods do explain is shared without its amber. */
+  it("is shared amber once the Service's pods were read", () => {
+    expect(notReadyOf("failingReadiness")).toMatchObject({ role: "warn" });
+  });
+});
+
 describe("the shared file's Cluster IP", () => {
   /** It printed "None" for an ExternalName Service, the headless literal for an address it does not have. */
   it("says none for an alias and labels the headless literal", () => {

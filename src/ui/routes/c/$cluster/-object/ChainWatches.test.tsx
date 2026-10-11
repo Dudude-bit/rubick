@@ -316,3 +316,63 @@ it("reads every answer it is handed again when a slice under the chain changes",
 
   await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
 });
+
+/**
+ * Sam's d1: the chain named the draining pod for a second after the new one
+ * was published, from a re-read that shared a backend read begun before the
+ * slice changed and was then believed. Fails if an answer read before the
+ * latest change the watches saw is not read again on its own, or is hidden
+ * while it is.
+ */
+it("reads a chain again whose answer was read before the slice the watch saw change", async () => {
+  const DRAINING = answer({ ready: 0, notReady: 0 }, null, {
+    subjectUid: "big-pull-uid",
+  });
+  DRAINING.published[0].draining = 1;
+  let changedAt = 0;
+  let shared = 0;
+  commands.getResourceConnections.mockImplementation(async () => {
+    if (!changedAt) return { ...DRAINING, readAt: new Date().toISOString() };
+    if (shared++ === 0)
+      return { ...DRAINING, readAt: new Date(changedAt - 100).toISOString() };
+    return READY({
+      subjectUid: "big-pull-uid",
+      readAt: new Date().toISOString(),
+    });
+  });
+  function Served() {
+    const chain = useChainAnswer("Deployment", "big-pull", "shop");
+    const published = chain.read.data?.published[0];
+    return (
+      <>
+        <ChainWatches services={chain.services} reads={[chain.key]} />
+        <p>
+          {published
+            ? `${published.ready} ready, ${published.draining} draining`
+            : "following the path in"}
+        </p>
+      </>
+    );
+  }
+  render(
+    <QueryClientProvider client={client}>
+      <Served />
+    </QueryClientProvider>
+  );
+  expect(await screen.findByText("0 ready, 1 draining")).toBeInTheDocument();
+  await waitFor(() =>
+    expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith(
+      "slices-stream"
+    )
+  );
+
+  changedAt = Date.now();
+  send("slices-stream", { op: "applied", resource: SLICE });
+
+  await waitFor(() => expect(shared).toBe(1));
+  expect(screen.getByText("0 ready, 1 draining")).toBeInTheDocument();
+  expect(
+    await screen.findByText("1 ready, 0 draining", {}, { timeout: 1500 })
+  ).toBeInTheDocument();
+  expect(shared).toBe(2);
+});

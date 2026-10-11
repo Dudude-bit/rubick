@@ -6,7 +6,13 @@ import type { ConnectionsQuery, ConnectionsRead } from "@/hooks/useConnections";
 import { useHeldNotFound } from "@/hooks/useHeldRead";
 import { useReadUid } from "@/hooks/useReadUid";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
-import { speaksFor, waitsOnList, type SeenOf } from "@/lib/service-health";
+import {
+  readBehind,
+  readTime,
+  speaksFor,
+  waitsOnList,
+  type SeenOf,
+} from "@/lib/service-health";
 
 /** How long after a read a second one is fresh rather than shared with it. */
 const FRESH_READ_MS = 300;
@@ -78,6 +84,26 @@ export function useHeldAnswer(
         FRESH_READ_MS
       );
   }, [follow, stale, listing, notFound, data, another, client, key]);
+
+  // Kept on screen, as it may well still be true, and read again once the
+  // backend's shared read it came from has aged out: Sam's chain named a
+  // draining pod for a second beside a header already counting its successor.
+  const behind =
+    follow &&
+    !stale &&
+    !!data &&
+    !notFound &&
+    readBehind({ data, at: dataUpdatedAt }, seen);
+  const followed = useRef<unknown>(null);
+  useEffect(() => {
+    if (!behind || followed.current === data || !data) return;
+    followed.current = data;
+    const wait = readTime({ data, at: dataUpdatedAt }) + FRESH_READ_MS;
+    setTimeout(
+      () => void client.invalidateQueries({ queryKey: key, exact: true }),
+      Math.max(0, wait - Date.now())
+    );
+  }, [behind, data, dataUpdatedAt, client, key]);
 
   const shownError = stale ? null : error;
   const pending = !current && (isPending || stale);

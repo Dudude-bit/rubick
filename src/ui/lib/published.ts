@@ -50,10 +50,12 @@ export function publishedFor(
  */
 export function endpointState(
   endpoint: PublishedEndpoint,
-  t: T
+  t: T,
+  podsUnread: boolean
 ): {
   text: string;
-  tone: "ok" | "warn" | "err";
+  tone: "ok" | "warn" | "err" | "neutral";
+  unread?: boolean;
 } {
   if (endpoint.ready) {
     return endpoint.terminating
@@ -70,8 +72,10 @@ export function endpointState(
   }
   // Not ready is the Endpoints list's amber and the Endpoints object's; the
   // red is the Service's verdict when none is.
-  return endpoint.terminating
-    ? { text: t("readings", "epTerminating"), tone: "err" }
+  if (endpoint.terminating)
+    return { text: t("readings", "epTerminating"), tone: "err" };
+  return podsUnread
+    ? { text: t("readings", "epNotReady"), tone: "neutral", unread: true }
     : { text: t("readings", "epNotReady"), tone: "warn" };
 }
 

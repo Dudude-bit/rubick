@@ -4,8 +4,19 @@ import { Badge } from "@/components/ui/badge";
 import type { EndpointsInfo } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
-import { podsUnreadOf } from "@/lib/service-health";
-import { useBackingRead } from "../../-components/service-backing";
+import { useEndpointsPodsUnread } from "./pods-unread";
+
+/** The not-read mark beside words about addresses not ready. */
+export function PodsUnreadMark() {
+  const t = useT();
+  return (
+    <EyeOff
+      className="h-2.5 w-2.5 flex-none"
+      role="img"
+      aria-label={t("empty", "podsNotRead")}
+    />
+  );
+}
 
 /**
  * Addresses not ready, as the Service's verdict on this list reads them:
@@ -19,19 +30,10 @@ export function NotReadyPill({
   endpoints: EndpointsInfo;
   n: number;
 }) {
-  const t = useT();
-  const podsUnread = podsUnreadOf(
-    useBackingRead()?.published(endpoints.namespace, endpoints.name)
-  );
+  const podsUnread = useEndpointsPodsUnread(endpoints);
   return (
     <Badge variant={podsUnread ? "secondary" : "warning"}>
-      {podsUnread && (
-        <EyeOff
-          className="h-2.5 w-2.5"
-          role="img"
-          aria-label={t("empty", "podsNotRead")}
-        />
-      )}
+      {podsUnread && <PodsUnreadMark />}
       <T section="count" k="nNotReady" values={{ n }} />
     </Badge>
   );

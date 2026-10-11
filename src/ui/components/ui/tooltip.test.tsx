@@ -56,6 +56,13 @@ describe("a tooltip and the pointer", () => {
     render(
       <TooltipProvider>
         <AddressesCell
+          endpoints={{
+            name: "web",
+            namespace: "default",
+            subsets: [],
+            createdAt: null,
+            overCapacity: false,
+          }}
           addresses={[
             {
               address: {

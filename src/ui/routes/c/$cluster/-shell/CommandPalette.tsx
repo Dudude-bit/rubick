@@ -163,7 +163,6 @@ export function CommandPalette() {
 
   const contexts = useClusterStore((s) => s.contexts);
   const currentContext = useClusterStore((s) => s.currentContext);
-  const currentNamespace = useClusterStore((s) => s.currentNamespace);
   const namespaceScope = useNamespaceScope();
   const isConnected = useClusterStore((s) => s.isConnected);
   const catalog = useQuery({
@@ -216,7 +215,7 @@ export function CommandPalette() {
     contexts: requestContexts,
     // Another cluster's namespaces are not this one's, so a scoped search
     // is a whole-cluster search; the unscoped one keeps today's filter.
-    namespace: wholeCluster ? null : currentNamespace || null,
+    scope: wholeCluster ? null : namespaceScope.wire,
     connect: wake !== null,
     attempt: wake?.attempt ?? 0,
     // A retry is a question asked again, so it lists again too.

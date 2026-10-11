@@ -54,8 +54,8 @@ export interface UseResourceSearchOptions {
   contexts?: string[];
   /** Search every context in the kubeconfig. Overrides `contexts`. */
   allContexts?: boolean;
-  /** Namespace scope applied to every searched cluster. */
-  namespace?: string | null;
+  /** The namespaces every searched cluster is read in, each on its own; `null` is the whole cluster. */
+  scope?: readonly string[] | null;
   /**
    * Allow the backend to open a connection to a cluster that has none.
    * Leave false while the reader is typing: querying a cold cluster
@@ -133,7 +133,7 @@ export function useResourceSearch({
   query,
   contexts,
   allContexts = false,
-  namespace = null,
+  scope: namespaces = null,
   connect = false,
   kinds,
   session,
@@ -156,6 +156,7 @@ export function useResourceSearch({
   // arrays from these keys, so there is nothing to keep in sync.
   const contextsKey = (contexts ?? []).join(SEP);
   const kindsKey = (kinds ?? []).join(SEP);
+  const namespacesKey = namespaces ? namespaces.join(SEP) : null;
 
   const trimmed = query.trim();
   const active = enabled && isSearchable(trimmed);
@@ -169,7 +170,7 @@ export function useResourceSearch({
         contextsKey,
         kindsKey,
         String(allContexts),
-        namespace ?? "",
+        namespacesKey ?? "",
         String(connect),
         String(attempt),
         session ?? "",
@@ -202,7 +203,7 @@ export function useResourceSearch({
           query: trimmed,
           contexts: contextsKey ? contextsKey.split(SEP) : [],
           allContexts,
-          namespace: namespace ?? undefined,
+          scope: namespacesKey === null ? undefined : namespacesKey.split(SEP),
           kinds: kindsKey ? kindsKey.split(SEP) : undefined,
           session,
           everything,
@@ -294,7 +295,7 @@ export function useResourceSearch({
     contextsKey,
     kindsKey,
     allContexts,
-    namespace,
+    namespacesKey,
     connect,
     limitPerContext,
     debounceMs,
