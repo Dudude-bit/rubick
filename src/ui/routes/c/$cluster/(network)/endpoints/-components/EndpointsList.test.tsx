@@ -133,3 +133,94 @@ describe("the Endpoints list's Endpoints column", () => {
     expect(within(pill).queryByRole("img")).toBeNull();
   });
 });
+
+describe("the Endpoints list's IPs column and shared words, beside the Service's verdict", () => {
+  const service = {
+    kind: "Service",
+    name: "unready-demo",
+    namespace: "k8s-gui-test",
+    existence: "present" as const,
+    facts: null,
+  };
+  const backing = (why: "podsUnread" | "failingReadiness") => ({
+    published: (): ServicePublished => ({
+      service,
+      source: "slices",
+      slices: 1,
+      ready: 0,
+      draining: 0,
+      notReady: 2,
+      unrouted: 0,
+      unroutedReady: 0,
+      ports: [],
+      endpoints: [],
+      whole: true,
+      unpublished: [],
+      stop: {
+        reason: "noneReady",
+        service,
+        selector: "app=unready-demo",
+        pods: 2,
+        why,
+      },
+    }),
+    why: () => null,
+  });
+  const t = translate.bind(null, "en") as T;
+  const shared = (id: string, why: "podsUnread" | "failingReadiness") =>
+    (
+      columns({ read: backing(why) }).find((column) => column.id === id)!.meta!
+        .share as (
+        row: EndpointsInfo,
+        t: T
+      ) => { text: string; role?: string; unread?: boolean }
+    )(unreadyDemo, t);
+  const counted = async (why: "podsUnread" | "failingReadiness") => {
+    await renderWithRouter(
+      <Backing.Provider value={backing(why)}>
+        <DataTable columns={columns()} data={[unreadyDemo]} />
+      </Backing.Provider>
+    );
+    return screen.getAllByRole("cell").find((at) => at.textContent === "2")!;
+  };
+
+  /**
+   * Marco's ledger, pods unread: the IPs column's "1" was amber with no mark
+   * beside a grey verdict. Fails if the count draws a fault's colour, or
+   * loses the not-read mark, while the Service's pods are unread.
+   */
+  it("draws the count of addresses not ready with the not-read mark while the Service's pods are unread", async () => {
+    const cell = await counted("podsUnread");
+    const mark = within(cell).getByRole("img", { name: "pods not read" });
+    expect(mark.parentElement).not.toHaveClass("text-warn");
+  });
+
+  /** Fails if a count its pods do explain loses its amber. */
+  it("draws the count of addresses not ready amber once the Service's pods were read", async () => {
+    const cell = await counted("failingReadiness");
+    expect(within(cell).queryByRole("img")).toBeNull();
+    expect(within(cell).getByText("2")).toHaveClass("text-warn");
+  });
+
+  /**
+   * The shared file said the ledger's addresses amber where the screen is
+   * grey. Fails if either column's words take a fault's colour, or drop the
+   * not-read mark, while the Service's pods are unread.
+   */
+  it("shares addresses not ready with the not-read mark while the Service's pods are unread", () => {
+    expect(shared("endpoints", "podsUnread")).toMatchObject({
+      role: "neutral",
+      unread: true,
+    });
+    expect(shared("addresses", "podsUnread").unread).toBe(true);
+  });
+
+  /** Fails if shared words its pods do explain lose their amber. */
+  it("shares addresses not ready amber once the Service's pods were read", () => {
+    expect(shared("endpoints", "failingReadiness")).toMatchObject({
+      role: "warn",
+      unread: false,
+    });
+    expect(shared("addresses", "failingReadiness").unread).toBe(false);
+  });
+});

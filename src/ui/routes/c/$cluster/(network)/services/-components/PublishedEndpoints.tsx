@@ -43,15 +43,18 @@ import type { ServicePublished } from "@/generated/types";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 import { None } from "@/components/ui/none";
+import { podsUnreadOf } from "@/lib/service-health";
+import { EyeOff } from "lucide-react";
 
 /** How many rows are worth drawing before the reader has to ask for more.
  *  1240 rows is not an answer; the count and the disagreements are. */
 const SHOWN = 12;
 
-const TONE: Record<"ok" | "warn" | "err", string> = {
+const TONE: Record<"ok" | "warn" | "err" | "neutral", string> = {
   ok: "text-ok",
   warn: "text-warn",
   err: "text-err",
+  neutral: "text-fg-mut",
 };
 
 export function PublishedEndpoints({ query }: { query: ConnectionsRead }) {
@@ -92,6 +95,7 @@ function Lists({ published }: { published: ServicePublished }) {
   const topology = topologyNote(published, t);
   const source = sourceNote(published, t);
   const zoned = published.endpoints.some((endpoint) => endpoint.zone !== null);
+  const podsUnread = podsUnreadOf(published);
 
   return (
     <div className="flex flex-col gap-6">
@@ -132,7 +136,7 @@ function Lists({ published }: { published: ServicePublished }) {
             </TableHeader>
             <TableBody>
               {rows.map((endpoint) => {
-                const state = endpointState(endpoint, t);
+                const state = endpointState(endpoint, t, podsUnread);
                 return (
                   <TableRow
                     key={endpoint.address ?? endpoint.target?.name}
@@ -162,7 +166,18 @@ function Lists({ published }: { published: ServicePublished }) {
                       )}
                     </TableCell>
                     <TableCell className={cn("text-[11px]", TONE[state.tone])}>
-                      {state.text}
+                      {state.unread ? (
+                        <span className="inline-flex items-center gap-1">
+                          <EyeOff
+                            className="h-3 w-3 flex-none"
+                            role="img"
+                            aria-label={t("empty", "podsNotRead")}
+                          />
+                          {state.text}
+                        </span>
+                      ) : (
+                        state.text
+                      )}
                     </TableCell>
                     <TableCell>
                       {endpoint.nodeName ? (
