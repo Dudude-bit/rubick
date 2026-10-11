@@ -375,7 +375,7 @@ export function DetailTabs({
           go. Tabs never shrink: when the actions do not fit they wrap to
           their own row, and a tab the row still cannot hold goes to the
           menu whole. */}
-      <div className="flex flex-wrap items-stretch gap-3">
+      <div className="sticky top-0 z-10 flex flex-wrap items-stretch gap-3 bg-canvas">
         {/* Asks for every tab's width, so the actions wrap before a tab
             goes to the menu. */}
         <div
