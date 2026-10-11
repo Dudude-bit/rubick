@@ -42,6 +42,8 @@ pub struct UnreadKind {
     pub plural: String,
     pub reason: SearchFailureKind,
     pub message: String,
+    /// The namespaces whose read failed; empty for a read across the cluster.
+    pub namespaces: Vec<String>,
 }
 
 /// Where a single cluster stands in a search.

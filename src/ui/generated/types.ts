@@ -2088,6 +2088,7 @@ export interface UnreadKind {
   plural: string;
   reason: SearchFailureKind;
   message: string;
+  namespaces: string[];
 }
 
 export interface SearchedKind {

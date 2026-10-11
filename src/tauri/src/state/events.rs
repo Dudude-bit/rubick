@@ -989,6 +989,7 @@ mod tests {
                 plural: "services".into(),
                 reason: SearchFailureKind::Forbidden,
                 message: "services is forbidden".into(),
+                namespaces: vec!["shop".into()],
             }],
             loading: Vec::new(),
         }
@@ -1001,6 +1002,7 @@ mod tests {
                 "plural": "services",
                 "reason": "forbidden",
                 "message": "services is forbidden",
+                "namespaces": ["shop"],
             }])),
             "each unread kind travels as data with its own reason, not inside a sentence"
         );

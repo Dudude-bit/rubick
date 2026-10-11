@@ -4388,6 +4388,8 @@ export const en = {
       other: "could not read {n} kinds: {kinds}",
     },
     kindsRefusedHover: "The cluster refused your account: {kinds}",
+    kindsRefusedInHover: "Refused in {namespaces}: {kinds}",
+    kindFailedInHover: "{kind} in {namespaces}: {message}",
     kindsNotListableHover:
       "The cluster serves these without a list verb, so no account can search them: {kinds}",
     otherKindsNotSearched: "kinds outside the app's own are not searched",
