@@ -42,6 +42,7 @@ const search = vi.hoisted(() => ({
     plural: string;
     reason: SearchFailureKind;
     message: string;
+    namespaces: string[];
   }[],
   hits: [] as {
     context: string;
@@ -238,6 +239,7 @@ describe("the command palette's hits", () => {
         plural: "services",
         reason: "forbidden",
         message: "services is forbidden",
+        namespaces: [],
       },
     ];
     await open("burst-demo");
@@ -283,6 +285,7 @@ describe("the command palette's hits", () => {
       plural: `${kind.toLowerCase()}s`,
       reason: "forbidden",
       message: `${kind.toLowerCase()}s is forbidden`,
+      namespaces: [],
     }));
     await open("access");
     const line = await screen.findByText(
@@ -312,6 +315,7 @@ describe("the command palette's hits", () => {
         plural: `${kind.toLowerCase()}s`,
         reason: "forbidden" as const,
         message: `${kind.toLowerCase()}s is forbidden: User "marco" cannot list resource`,
+        namespaces: [],
       })),
       {
         kind: "Widget",
@@ -319,6 +323,7 @@ describe("the command palette's hits", () => {
         plural: "widgets",
         reason: "timeout" as const,
         message: "request timed out",
+        namespaces: [],
       },
     ];
     await open("access");
@@ -326,6 +331,36 @@ describe("the command palette's hits", () => {
     expect(line.getAttribute("title")?.split("\n")).toEqual([
       "The cluster refused your account: DaemonSet, Lease, Node, Role",
       "Widget: request timed out",
+    ]);
+  });
+
+  /**
+   * Marco's two namespaces: Pod and Job were refused in team-blind only and
+   * read in team-checkout, and the hover called them refused outright. Fails
+   * if a refusal does not name the namespaces that refused it, or one read
+   * across the cluster gains a namespace it was never asked in.
+   */
+  it("names the namespaces each refusal came from on hover", async () => {
+    const refusal = (kind: string, namespaces: string[]) => ({
+      kind,
+      group: "",
+      plural: `${kind.toLowerCase()}s`,
+      reason: "forbidden" as const,
+      message: `${kind.toLowerCase()}s is forbidden`,
+      namespaces,
+    });
+    search.unreadable = [
+      refusal("Pod", ["team-blind"]),
+      refusal("Job", ["team-blind"]),
+      refusal("Secret", ["team-blind", "team-checkout"]),
+      refusal("Node", []),
+    ];
+    await open("ledger");
+    const line = await screen.findByText(/could not read 4 kinds/);
+    expect(line.getAttribute("title")?.split("\n")).toEqual([
+      "Refused in team-blind: Job, Pod",
+      "The cluster refused your account: Node",
+      "Refused in team-blind, team-checkout: Secret",
     ]);
   });
 
@@ -341,6 +376,7 @@ describe("the command palette's hits", () => {
         plural: "serviceaccounts",
         reason: "forbidden",
         message: "serviceaccounts is forbidden",
+        namespaces: [],
       },
     ];
     search.loading = [
@@ -379,6 +415,7 @@ describe("the command palette's hits", () => {
         plural: "priorityclasses",
         reason: "forbidden",
         message: "priorityclasses is forbidden",
+        namespaces: [],
       },
     ];
     await open("checkout");

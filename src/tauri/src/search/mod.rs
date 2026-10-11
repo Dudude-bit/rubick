@@ -406,13 +406,14 @@ impl Answer {
     fn absorb(
         &mut self,
         kind: &Wanted,
-        (read, refused): (Read, Option<Arc<Error>>),
+        (read, refused): (Read, Refused),
         query: &str,
         context: &str,
         limit: u32,
     ) -> Vec<SearchHit> {
-        if let Some(error) = refused {
-            self.unread(kind, &error);
+        let named = refused.is_some();
+        if let Some((error, namespaces)) = refused {
+            self.unread(kind, &error, namespaces);
         }
         match read {
             Ok(Found::NotServed) => Vec::new(),
@@ -446,13 +447,15 @@ impl Answer {
                 hits
             }
             Err(error) => {
-                self.unread(kind, &error);
+                if !named {
+                    self.unread(kind, &error, Vec::new());
+                }
                 Vec::new()
             }
         }
     }
 
-    fn unread(&mut self, kind: &Wanted, error: &Error) {
+    fn unread(&mut self, kind: &Wanted, error: &Error, namespaces: Vec<String>) {
         let (reason, message) = describe_failure(error);
         let named = kind.named();
         self.unreadable.push(UnreadKind {
@@ -461,20 +464,29 @@ impl Answer {
             plural: named.plural,
             reason,
             message,
+            namespaces,
         });
     }
 }
+
+/// A failure beside an answer, with the namespaces whose read it was.
+type Refused = Option<(Arc<Error>, Vec<String>)>;
 
 /// One kind's reads, one per namespace of the scope, as one answer: the names
 /// of every namespace that answered, beside the first failure of one that did
 /// not. A kind no namespace answered fails whole; one refused in a namespace
 /// is still searched in the others.
-async fn across_scope(reads: Vec<BoxFuture<'static, Read>>) -> (Read, Option<Arc<Error>>) {
+async fn across_scope(reads: Vec<(Option<String>, BoxFuture<'static, Read>)>) -> (Read, Refused) {
+    let (reaches, reads): (Vec<_>, Vec<_>) = reads.into_iter().unzip();
     let mut names = Vec::new();
     let mut truncated = false;
     let mut listed = false;
     let mut failed = None;
-    for read in futures::future::join_all(reads).await {
+    let mut failed_in = Vec::new();
+    for (namespace, read) in reaches
+        .into_iter()
+        .zip(futures::future::join_all(reads).await)
+    {
         match read {
             Ok(Found::Listed(part)) => {
                 listed = true;
@@ -484,14 +496,15 @@ async fn across_scope(reads: Vec<BoxFuture<'static, Read>>) -> (Read, Option<Arc
             Ok(other) => return (Ok(other), None),
             Err(error) => {
                 failed.get_or_insert(error);
+                failed_in.extend(namespace);
             }
         }
     }
     match failed {
-        Some(error) if !listed => (Err(error), None),
-        refused => (
+        Some(error) if !listed => (Err(error.clone()), Some((error, failed_in))),
+        failed => (
             Ok(Found::Listed(Arc::new(Listed { names, truncated }))),
-            refused,
+            failed.map(|error| (error, failed_in)),
         ),
     }
 }
@@ -557,14 +570,17 @@ async fn search_context(
         let reads: Vec<_> = reaches
             .into_iter()
             .map(|namespace| {
-                names_of(
-                    client.clone(),
-                    client_manager.clone(),
-                    kind.clone(),
-                    namespace,
-                    context.to_string(),
-                    index.clone(),
-                    sources.lists.clone(),
+                (
+                    namespace.clone(),
+                    names_of(
+                        client.clone(),
+                        client_manager.clone(),
+                        kind.clone(),
+                        namespace,
+                        context.to_string(),
+                        index.clone(),
+                        sources.lists.clone(),
+                    ),
                 )
             })
             .collect();
@@ -600,7 +616,7 @@ async fn search_context(
             waiting.push(kind);
             continue;
         }
-        if let (Err(error), _) | (_, Some(error)) = &found {
+        if let (Err(error), _) | (_, Some((error, _))) = &found {
             tracing::debug!(
                 "Search {search_id}: {context}/{} failed: {error}",
                 kind.label()
@@ -1031,19 +1047,29 @@ mod tests {
         assert_eq!(found, ["ledger", "ledger-client"]);
         let searched: Vec<_> = searched.iter().map(|kind| kind.kind.as_str()).collect();
         assert_eq!(searched, ["Pod", "Service"]);
-        let refused: Vec<_> = unreadable
+        let mut refused: Vec<_> = unreadable
             .iter()
-            .map(|kind| (kind.kind.as_str(), kind.message.as_str()))
+            .map(|kind| {
+                (
+                    kind.kind.as_str(),
+                    kind.message.as_str(),
+                    kind.namespaces.join(","),
+                )
+            })
             .collect();
-        assert!(
-            refused.contains(&("Pod", "pods is forbidden")),
-            "{refused:?}"
+        refused.sort_unstable();
+        assert_eq!(
+            refused,
+            [
+                ("Pod", "pods is forbidden", "team-blind".to_string()),
+                (
+                    "Secret",
+                    "secrets is forbidden",
+                    "team-blind,team-checkout".to_string()
+                ),
+            ],
+            "each refusal names the namespaces that refused it, so Pod is not claimed refused in team-checkout"
         );
-        assert!(
-            refused.contains(&("Secret", "secrets is forbidden")),
-            "{refused:?}"
-        );
-        assert_eq!(refused.len(), 2, "{refused:?}");
     }
 
     /// A kind the cluster does not serve has no objects to match, and says

@@ -4899,6 +4899,8 @@ export const ru: Catalogue = {
       other: "не удалось прочитать {n} вида: {kinds}",
     },
     kindsRefusedHover: "Кластер отказал вашей учётной записи: {kinds}",
+    kindsRefusedInHover: "Отказано в {namespaces}: {kinds}",
+    kindFailedInHover: "{kind} в {namespaces}: {message}",
     kindsNotListableHover:
       "Кластер отдаёт эти виды без глагола list, поэтому их не может найти ни одна учётная запись: {kinds}",
     otherKindsNotSearched: "в видах ресурсов вне приложения не искали",
@@ -5003,7 +5005,8 @@ export const ru: Catalogue = {
     searchColourWords:
       "color coloring tint kind colour цвет раскраска оттенок вид",
     contextConnected: "подключён",
-    contextReady: "готов",
+    contextNotConnected: "не подключён",
+    contextConnectFailed: "подключиться не удалось",
     contextCannotConnect: "подключиться нельзя",
     contextCannotTell: "определить нельзя",
     criticalLabel:

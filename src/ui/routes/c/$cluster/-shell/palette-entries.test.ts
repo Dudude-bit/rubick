@@ -597,7 +597,12 @@ describe("the palette's resource rows", () => {
             ...cluster("k3d-dev"),
             searched: [read("Pod")],
             unreadable: [
-              { ...read("Secret"), reason: "forbidden", message: "forbidden" },
+              {
+                ...read("Secret"),
+                reason: "forbidden",
+                message: "forbidden",
+                namespaces: [],
+              },
             ],
           },
         ],
@@ -787,6 +792,7 @@ describe("the palette's resource rows", () => {
                 plural: "services",
                 reason: "forbidden",
                 message: "services is forbidden",
+                namespaces: [],
               },
             ],
           },
@@ -976,6 +982,7 @@ describe("what a name search covered", () => {
         ...read("ServiceAccount", "", "serviceaccounts"),
         reason: "forbidden",
         message: "serviceaccounts is forbidden",
+        namespaces: [],
       },
     ],
   };

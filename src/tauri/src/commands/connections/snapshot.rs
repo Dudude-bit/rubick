@@ -62,7 +62,7 @@ pub(super) struct Snapshot {
 /// A snapshot with any read that failed is not kept past its own flight — a
 /// refusal is an answer for the callers who were waiting, not for the next.
 pub struct Snapshots {
-    entries: dashmap::DashMap<SnapshotKey, (std::time::Instant, SnapshotCell)>,
+    entries: dashmap::DashMap<SnapshotKey, Held>,
     kept_for: std::time::Duration,
 }
 
@@ -77,6 +77,12 @@ impl Default for Snapshots {
 
 type SnapshotKey = (String, String, String);
 type SnapshotCell = Arc<tokio::sync::OnceCell<Arc<Snapshot>>>;
+/// A shared read: when it began, by both clocks, and its answer once it lands.
+type Held = (
+    std::time::Instant,
+    chrono::DateTime<chrono::Utc>,
+    SnapshotCell,
+);
 
 /// How long a finished snapshot is reused: enough for a round of cards that
 /// arrived a little apart. Kept short because an edit is followed by a
@@ -86,23 +92,25 @@ type SnapshotCell = Arc<tokio::sync::OnceCell<Arc<Snapshot>>>;
 pub(super) const SHARED_FOR: std::time::Duration = std::time::Duration::from_millis(250);
 
 impl Snapshots {
+    #[cfg(test)]
     pub(super) async fn get(
         &self,
         context: &str,
         ctx: &ResourceContext,
         gateway: Option<&crate::resources::GatewayApiDetection>,
     ) -> Result<Arc<Snapshot>> {
-        Ok(self.take(context, ctx, gateway, false).await?.0)
+        Ok(self.take(context, ctx, gateway, None).await?.0)
     }
 
-    /// The snapshot, and whether its read began before this call asked;
-    /// `fresh` starts one that begins now, for the callers after it to share.
+    /// The snapshot, and whether its read began before this call asked. A
+    /// read that began before `not_before` is not joined: one that begins
+    /// now answers, for the callers after it to share.
     async fn take(
         &self,
         context: &str,
         ctx: &ResourceContext,
         gateway: Option<&crate::resources::GatewayApiDetection>,
-        fresh: bool,
+        not_before: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<(Arc<Snapshot>, bool)> {
         let key = (
             context.to_string(),
@@ -119,13 +127,18 @@ impl Snapshots {
                 .unwrap_or_default(),
         );
         let now = std::time::Instant::now();
-        self.entries
-            .retain(|_, (at, cell)| !cell.initialized() || now.duration_since(*at) < self.kept_for);
+        self.entries.retain(|_, (at, _, cell)| {
+            !cell.initialized() || now.duration_since(*at) < self.kept_for
+        });
         let (cell, joined) = match self.entries.entry(key.clone()) {
-            dashmap::Entry::Occupied(held) if !fresh => (held.get().1.clone(), true),
+            dashmap::Entry::Occupied(held)
+                if not_before.is_none_or(|after| held.get().1 >= after) =>
+            {
+                (held.get().2.clone(), true)
+            }
             entry => {
                 let cell = SnapshotCell::default();
-                entry.insert((now, cell.clone()));
+                entry.insert((now, chrono::Utc::now(), cell.clone()));
                 (cell, false)
             }
         };
@@ -135,7 +148,7 @@ impl Snapshots {
             .clone();
         if snapshot.any_unread() {
             self.entries
-                .remove_if(&key, |_, (_, held)| Arc::ptr_eq(held, &cell));
+                .remove_if(&key, |_, (_, _, held)| Arc::ptr_eq(held, &cell));
         }
         Ok((snapshot, joined))
     }
@@ -146,6 +159,8 @@ impl Snapshots {
 #[derive(Clone, Copy, Default)]
 pub struct Source<'a> {
     pub(super) shared: Option<(&'a Snapshots, &'a str)>,
+    /// A shared read that began before this answers nobody here.
+    pub(super) not_before: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 impl<'a> Source<'a> {
@@ -153,6 +168,17 @@ impl<'a> Source<'a> {
     pub fn shared(snapshots: &'a Snapshots, context: &'a str) -> Self {
         Self {
             shared: Some((snapshots, context)),
+            not_before: None,
+        }
+    }
+
+    /// Joins no shared read that began before `at`: the caller has seen the
+    /// cluster change since, and a read from before it would answer for it.
+    #[must_use]
+    pub fn not_before(self, at: Option<chrono::DateTime<chrono::Utc>>) -> Self {
+        Self {
+            not_before: at,
+            ..self
         }
     }
 
@@ -162,7 +188,10 @@ impl<'a> Source<'a> {
         gateway: Option<&crate::resources::GatewayApiDetection>,
     ) -> Result<Arc<Snapshot>> {
         match self.shared {
-            Some((snapshots, context)) => snapshots.get(context, ctx, gateway).await,
+            Some((snapshots, context)) => Ok(snapshots
+                .take(context, ctx, gateway, self.not_before)
+                .await?
+                .0),
             None => Snapshot::of(ctx, gateway).await.map(Arc::new),
         }
     }
@@ -179,9 +208,12 @@ impl<'a> Source<'a> {
         let Some((snapshots, context)) = self.shared else {
             return Snapshot::of(ctx, gateway).await.map(Arc::new);
         };
-        let (snapshot, joined) = snapshots.take(context, ctx, gateway, false).await?;
+        let (snapshot, joined) = snapshots
+            .take(context, ctx, gateway, self.not_before)
+            .await?;
         if joined && lacks_subject(&snapshot) {
-            return Ok(snapshots.take(context, ctx, gateway, true).await?.0);
+            let now = Some(chrono::Utc::now());
+            return Ok(snapshots.take(context, ctx, gateway, now).await?.0);
         }
         Ok(snapshot)
     }
@@ -964,6 +996,34 @@ mod shared_tests {
 
         tokio::time::sleep(std::time::Duration::from_millis(350)).await;
         snapshots.get("kind", &ctx, None).await.expect("later");
+        assert_eq!(pod_lists(&hits), 2);
+    }
+
+    /// Sam's chain named a draining pod for a second after its successor was
+    /// published: the re-read a slice change asked for joined a read begun
+    /// before the change. Fails if a read older than `not_before` is joined.
+    #[tokio::test]
+    async fn a_read_begun_before_the_caller_saw_a_change_is_not_joined() {
+        let (client, hits) = server(routes((200, empty()))).await;
+        let ctx = ResourceContext::from_client(client, NS.to_string());
+        let snapshots = Snapshots::default();
+
+        snapshots.get("kind", &ctx, None).await.expect("first");
+        let seen = Some(chrono::Utc::now());
+        let source = Source::shared(&snapshots, "kind");
+        source.snapshot(&ctx, None).await.expect("joined");
+        assert_eq!(pod_lists(&hits), 1);
+        source
+            .not_before(seen)
+            .snapshot(&ctx, None)
+            .await
+            .expect("fresh");
+        assert_eq!(pod_lists(&hits), 2);
+        source
+            .not_before(seen)
+            .snapshot(&ctx, None)
+            .await
+            .expect("joins the fresh one");
         assert_eq!(pod_lists(&hits), 2);
     }
 

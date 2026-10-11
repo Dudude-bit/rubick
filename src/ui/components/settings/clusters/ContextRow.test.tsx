@@ -57,3 +57,39 @@ describe("the critical checkbox on a context row", () => {
     expect(useClusterIdentityStore.getState().marks[PROD]).toBeUndefined();
   });
 });
+
+describe("the status word on a context row", () => {
+  /**
+   * Nothing in Settings contacts an API server, so a context the app is not
+   * connected to has never been shown to answer; calling it "ready" told an
+   * on-call reader an unreachable prod cluster was fine.
+   */
+  it("says not connected, not ready, for a context nobody has tried", () => {
+    row(PROD);
+    expect(screen.getByText("not connected")).toBeTruthy();
+    expect(screen.queryByText("ready")).toBeNull();
+  });
+
+  /**
+   * The last connect to this context failed: the row has to say so in red,
+   * with the cluster's own words on hover, instead of the neutral word a
+   * context nobody tried gets.
+   */
+  it("says connect failed in red with the error on hover when the last connect failed", () => {
+    render(
+      <ContextRow
+        context={ctx(PROD)}
+        binding={undefined}
+        binaries={new Map()}
+        connected={false}
+        failure="dial tcp 10.255.255.1:6443: i/o timeout"
+        onBind={() => {}}
+      />
+    );
+    const word = screen.getByText("connect failed");
+    expect(word.className).toContain("text-err");
+    expect(word.getAttribute("title")).toBe(
+      "dial tcp 10.255.255.1:6443: i/o timeout"
+    );
+  });
+});

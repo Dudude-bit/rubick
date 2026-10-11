@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, it, vi } from "vite-plus/test";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import {
   QueryClientProvider,
   useQuery,
@@ -320,26 +320,24 @@ it("reads every answer it is handed again when a slice under the chain changes",
 /**
  * Sam's d1: the chain named the draining pod for a second after the new one
  * was published, from a re-read that shared a backend read begun before the
- * slice changed and was then believed. Fails if an answer read before the
- * latest change the watches saw is not read again on its own, or is hidden
- * while it is.
+ * slice changed. Fails if the re-read a slice change asks for does not tell
+ * the backend to join no read begun before that change.
  */
-it("reads a chain again whose answer was read before the slice the watch saw change", async () => {
+it("asks the backend for no read begun before the slice the watch saw change", async () => {
   const DRAINING = answer({ ready: 0, notReady: 0 }, null, {
     subjectUid: "big-pull-uid",
   });
   DRAINING.published[0].draining = 1;
   let changedAt = 0;
-  let shared = 0;
-  commands.getResourceConnections.mockImplementation(async () => {
-    if (!changedAt) return { ...DRAINING, readAt: new Date().toISOString() };
-    if (shared++ === 0)
-      return { ...DRAINING, readAt: new Date(changedAt - 100).toISOString() };
-    return READY({
-      subjectUid: "big-pull-uid",
-      readAt: new Date().toISOString(),
-    });
-  });
+  commands.getResourceConnections.mockImplementation(
+    async (...args: unknown[]) => {
+      const notBefore = args[4] as string | null;
+      const readAt = new Date().toISOString();
+      return changedAt && notBefore && Date.parse(notBefore) >= changedAt
+        ? READY({ subjectUid: "big-pull-uid", readAt })
+        : { ...DRAINING, readAt };
+    }
+  );
   function Served() {
     const chain = useChainAnswer("Deployment", "big-pull", "shop");
     const published = chain.read.data?.published[0];
@@ -369,10 +367,113 @@ it("reads a chain again whose answer was read before the slice the watch saw cha
   changedAt = Date.now();
   send("slices-stream", { op: "applied", resource: SLICE });
 
-  await waitFor(() => expect(shared).toBe(1));
-  expect(screen.getByText("0 ready, 1 draining")).toBeInTheDocument();
-  expect(
-    await screen.findByText("1 ready, 0 draining", {}, { timeout: 1500 })
-  ).toBeInTheDocument();
-  expect(shared).toBe(2);
+  expect(await screen.findByText("1 ready, 0 draining")).toBeInTheDocument();
+});
+
+/**
+ * Sam's round 22: published at .312, the header Ready by .7, the chain still
+ * naming the draining pod at 1.0 s. The path from the slice's watch event to
+ * the chain drawn, with a backend that shares a read begun in the last 250 ms
+ * the way `Snapshots` does and takes 150 ms to read, and a read already in
+ * flight when the slice changes. Fails if the chain lands later than 500 ms
+ * after the event.
+ */
+it("draws the new pod on a Deployment's chain within half a second of its slice changing", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: false });
+  try {
+    const READ_MS = 150;
+    const SHARED_MS = 250;
+    let published = false;
+    let flight: {
+      start: number;
+      landed: number | null;
+      answer: Promise<ResourceConnections>;
+    } | null = null;
+    const DRAINING = answer({ ready: 0, notReady: 0 }, null, {
+      subjectUid: "big-pull-uid",
+    });
+    DRAINING.published[0].draining = 1;
+    commands.getResourceConnections.mockImplementation((...args: unknown[]) => {
+      const notBefore = args[4] as string | null;
+      const now = Date.now();
+      const joinable =
+        flight &&
+        (flight.landed === null || now - flight.start < SHARED_MS) &&
+        (!notBefore || flight.start >= Date.parse(notBefore));
+      if (joinable) return flight!.answer;
+      const start = now;
+      const state = published;
+      const next = {
+        start,
+        landed: null as number | null,
+        answer: new Promise<ResourceConnections>((resolve) =>
+          setTimeout(() => {
+            next.landed = Date.now();
+            const readAt = new Date(start).toISOString();
+            resolve(
+              state
+                ? READY({ subjectUid: "big-pull-uid", readAt })
+                : { ...DRAINING, readAt }
+            );
+          }, READ_MS)
+        ),
+      };
+      flight = next;
+      return next.answer;
+    });
+    function Served() {
+      const chain = useChainAnswer("Deployment", "big-pull", "shop");
+      const row = chain.read.data?.published[0];
+      return (
+        <>
+          <ChainWatches services={chain.services} reads={[chain.key]} />
+          <p>{row ? `${row.ready} ready, ${row.draining} draining` : "…"}</p>
+        </>
+      );
+    }
+    render(
+      <QueryClientProvider client={client}>
+        <Served />
+      </QueryClientProvider>
+    );
+    const step = () => act(() => vi.advanceTimersByTimeAsync(10));
+    for (let i = 0; i < 100 && !screen.queryByText("0 ready, 1 draining"); i++)
+      await step();
+    expect(screen.getByText("0 ready, 1 draining")).toBeInTheDocument();
+    for (
+      let i = 0;
+      i < 100 && commands.resourceWatchSubscribed.mock.calls.length < 2;
+      i++
+    )
+      await step();
+    send(
+      "pods-stream",
+      { op: "restarted" },
+      { op: "applied", resource: POD },
+      { op: "synced" }
+    );
+    for (let i = 0; i < 100; i++) await step();
+
+    const before = flight;
+    send("pods-stream", { op: "applied", resource: POD });
+    for (
+      let i = 0;
+      i < 100 && (flight === before || Date.now() - flight!.start < 50);
+      i++
+    )
+      await step();
+    expect(flight!.landed).toBeNull();
+
+    published = true;
+    const changed = Date.now();
+    send("slices-stream", { op: "applied", resource: SLICE });
+    while (
+      !screen.queryByText("1 ready, 0 draining") &&
+      Date.now() - changed < 3000
+    )
+      await step();
+    expect(Date.now() - changed).toBeLessThanOrEqual(500);
+  } finally {
+    vi.useRealTimers();
+  }
 });

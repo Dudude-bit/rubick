@@ -103,6 +103,9 @@ export function useOwnedPodsWatch(
   });
 }
 
+/** A pod and the slice publishing it change tens of ms apart: one read for both, and no more wait than that. */
+const CHAIN_SETTLE_MS = 50;
+
 /**
  * The pods a Service's selector picks and the slices it publishes, watched as
  * the API server narrows them while its verdict is on screen: each change
@@ -177,6 +180,7 @@ export function useServiceWatch(
     onError: unlisted,
     recount: false,
     behind: true,
+    settleMs: CHAIN_SETTLE_MS,
   });
   useResourceWatch({
     enabled: follow && on,
@@ -185,6 +189,7 @@ export function useServiceWatch(
     detail,
     recount: false,
     behind: true,
+    settleMs: CHAIN_SETTLE_MS,
     onChange: () => client.setQueryData(changedKey, Date.now()),
   });
   const pods = useQuery<Scoped<unknown>>({

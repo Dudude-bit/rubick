@@ -1,21 +1,16 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useQueryClient, type QueryKey } from "@tanstack/react-query";
+import {
+  useQueryClient,
+  type QueryClient,
+  type QueryKey,
+} from "@tanstack/react-query";
 
 import type { ResourceConnections } from "@/generated/types";
 import type { ConnectionsQuery, ConnectionsRead } from "@/hooks/useConnections";
 import { useHeldNotFound } from "@/hooks/useHeldRead";
 import { useReadUid } from "@/hooks/useReadUid";
 import { isResourceNotFoundError } from "@/hooks/useResourceDetail";
-import {
-  readBehind,
-  readTime,
-  speaksFor,
-  waitsOnList,
-  type SeenOf,
-} from "@/lib/service-health";
-
-/** How long after a read a second one is fresh rather than shared with it. */
-const FRESH_READ_MS = 300;
+import { speaksFor, waitsOnList, type SeenOf } from "@/lib/service-health";
 
 export interface HeldAnswer {
   /** The answer, where it can speak for the object on screen. */
@@ -33,9 +28,9 @@ export interface HeldAnswer {
 /**
  * A neighbourhood as every verdict of its object reads it, held to what the
  * watches under the Services it names have seen (`seen`). Where `follow` is
- * set an answer that cannot speak for it is read again: at once where it is
- * another object's, which is wrong in every reader of it, and once the read
- * it shared has aged out where it is only older than what a watch has seen.
+ * set an answer that cannot speak for it is read again at once: a read asks
+ * the backend for none begun before the latest change a watch saw (see
+ * `seenSince`), so the next answer is newer than it.
  */
 export function useHeldAnswer(
   kind: string,
@@ -78,32 +73,8 @@ export function useHeldAnswer(
       return;
     asked.current = data;
     if (another) void client.resetQueries({ queryKey: key, exact: true });
-    else
-      setTimeout(
-        () => void client.invalidateQueries({ queryKey: key, exact: true }),
-        FRESH_READ_MS
-      );
+    else readAgain(client, key);
   }, [follow, stale, listing, notFound, data, another, client, key]);
-
-  // Kept on screen, as it may well still be true, and read again once the
-  // backend's shared read it came from has aged out: Sam's chain named a
-  // draining pod for a second beside a header already counting its successor.
-  const behind =
-    follow &&
-    !stale &&
-    !!data &&
-    !notFound &&
-    readBehind({ data, at: dataUpdatedAt }, seen);
-  const followed = useRef<unknown>(null);
-  useEffect(() => {
-    if (!behind || followed.current === data || !data) return;
-    followed.current = data;
-    const wait = readTime({ data, at: dataUpdatedAt }) + FRESH_READ_MS;
-    setTimeout(
-      () => void client.invalidateQueries({ queryKey: key, exact: true }),
-      Math.max(0, wait - Date.now())
-    );
-  }, [behind, data, dataUpdatedAt, client, key]);
 
   const shownError = stale ? null : error;
   const pending = !current && (isPending || stale);
@@ -118,4 +89,12 @@ export function useHeldAnswer(
   );
 
   return { current, stale, read };
+}
+
+/** A read in flight is let land rather than cut short, as a watch's re-read is. */
+function readAgain(client: QueryClient, key: QueryKey) {
+  void client.invalidateQueries(
+    { queryKey: key, exact: true },
+    { cancelRefetch: false }
+  );
 }

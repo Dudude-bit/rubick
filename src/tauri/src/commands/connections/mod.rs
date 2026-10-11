@@ -66,13 +66,15 @@ use uses::*;
 /// `kind` is the Kubernetes kind, in any casing: `Pod`, `Deployment`,
 /// `StatefulSet`, `DaemonSet`, `ReplicaSet`, `Job`, `CronJob`, `Service`,
 /// `Ingress`, `PersistentVolumeClaim`, `ConfigMap`, `Secret`, `Node` or
-/// `PersistentVolume`.
+/// `PersistentVolume`. `not_before` is when the caller last saw the cluster
+/// change: a shared read that began before it is not joined.
 #[tauri::command]
 pub async fn get_resource_connections(
     kind: String,
     name: String,
     namespace: Option<String>,
     gateway: Option<crate::resources::GatewayApiDetection>,
+    not_before: Option<chrono::DateTime<chrono::Utc>>,
     state: State<'_, AppState>,
 ) -> Result<ResourceConnections> {
     crate::validation::validate_dns_subdomain(&name)?;
@@ -87,7 +89,7 @@ pub async fn get_resource_connections(
         ResourceContext::for_command(&state, namespace)?
     };
     let context = state.get_current_context().unwrap_or_default();
-    let source = Source::shared(&state.neighbourhoods, &context);
+    let source = Source::shared(&state.neighbourhoods, &context).not_before(not_before);
     Box::pin(connections_through(
         source,
         &ctx,

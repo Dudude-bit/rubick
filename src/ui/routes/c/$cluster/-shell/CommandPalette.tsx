@@ -1521,15 +1521,29 @@ function unreadHover(cluster: ClusterSearchState, t: T): string {
   const unreadable = byKindName(cluster.unreadable);
   const refused = unreadable.filter((unread) => unread.reason === "forbidden");
   const failed = unreadable.filter((unread) => unread.reason !== "forbidden");
+  const where = new Map<string, string[]>();
+  for (const unread of refused) {
+    const key = unread.namespaces.join(", ");
+    where.set(key, [...(where.get(key) ?? []), unread.kind]);
+  }
   return [
-    ...(refused.length > 0
-      ? [
-          t("cluster", "kindsRefusedHover", {
-            kinds: refused.map((unread) => unread.kind).join(", "),
-          }),
-        ]
-      : []),
-    ...failed.map((unread) => `${unread.kind}: ${unread.message}`),
+    ...[...where].map(([namespaces, kinds]) =>
+      namespaces === ""
+        ? t("cluster", "kindsRefusedHover", { kinds: kinds.join(", ") })
+        : t("cluster", "kindsRefusedInHover", {
+            namespaces,
+            kinds: kinds.join(", "),
+          })
+    ),
+    ...failed.map((unread) =>
+      unread.namespaces.length === 0
+        ? `${unread.kind}: ${unread.message}`
+        : t("cluster", "kindFailedInHover", {
+            kind: unread.kind,
+            namespaces: unread.namespaces.join(", "),
+            message: unread.message,
+          })
+    ),
   ].join("\n");
 }
 
