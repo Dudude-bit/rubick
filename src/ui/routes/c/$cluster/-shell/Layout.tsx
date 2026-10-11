@@ -45,7 +45,7 @@ function EditorWhenOpened() {
   );
 }
 
-export function Layout({ page }: { page?: React.ReactNode } = {}) {
+export function Layout() {
   const t = useT();
   const currentContext = useClusterStore((s) => s.currentContext);
   const { hue } = useClusterMark(currentContext);
@@ -109,7 +109,7 @@ export function Layout({ page }: { page?: React.ReactNode } = {}) {
                 overflow as before. */}
               <div className="h-full">
                 <Suspense fallback={<PageSkeleton className="p-0" />}>
-                  <PageArea page={page} />
+                  <PageArea />
                 </Suspense>
               </div>
             </main>
