@@ -551,6 +551,42 @@ describe("a scope some of whose namespaces did not answer", () => {
   });
 
   /**
+   * Sam's Services, kube-system to default: for a frame the page drew
+   * kube-dns under default with "1 Service, from the namespaces that
+   * answered". The last scope's rows may stand in only where the new scope
+   * reaches them; with none, the page is still reading, not empty.
+   */
+  it("draws no row of the last scope that the new scope does not reach while it reads", async () => {
+    store.state.namespaceScope = ["kube-system"];
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const page = (queryKey: string[], answer: () => Promise<Scoped<Item>>) => (
+      <ResourceList<Item>
+        title="Services"
+        columns={columns}
+        emptyStateLabel="Services"
+        queryKey={queryKey}
+        queryFn={answer}
+      />
+    );
+    const { rerender } = await drawRerenderable(
+      page(["services", "kube-system"], async () => ({
+        rows: [{ name: "kube-dns", namespace: "kube-system" }],
+        unread: [],
+      })),
+      client
+    );
+    expect(await screen.findByText("kube-dns")).toBeVisible();
+
+    store.state.namespaceScope = ["default"];
+    rerender(page(["services", "default"], () => new Promise(() => {})));
+    expect(screen.queryByText("kube-dns")).toBeNull();
+    expect(screen.queryByText(/from the namespaces that answered/)).toBeNull();
+    expect(screen.queryByText(/No resources of this type/)).toBeNull();
+  });
+
+  /**
    * A re-read under a live watch that timed out in one namespace. The watch
    * still streams that namespace, and its rows are current in the cache;
    * the answer took them away and called the namespace unread, and the

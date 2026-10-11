@@ -344,16 +344,19 @@ export function ResourceList<
   // The answer is already the selection's; narrowing guards a caller whose
   // `data` is wider than it.
   const scope = useNamespaceScope();
-  const resources = useMemo(
-    () =>
-      refused ? NO_ROWS : scope.narrow(data ?? queryResult.data?.rows ?? []),
-    [refused, data, queryResult.data, scope]
-  );
   // The last scope's answer, held while this one is read: its unread
   // namespaces are not this scope's, and its rows are not this scope's total.
   const placeholder = shouldUseQuery
     ? queryResult.isPlaceholderData
     : externalPlaceholder;
+  const resources = useMemo(() => {
+    if (refused) return NO_ROWS;
+    const rows = data ?? queryResult.data?.rows ?? [];
+    // A row the last scope read stands in only where this scope reaches it.
+    return placeholder
+      ? rows.filter((row) => scope.matches(row.namespace))
+      : scope.narrow(rows);
+  }, [refused, data, queryResult.data, scope, placeholder]);
   const unread = placeholder
     ? NOTHING_UNREAD
     : ((shouldUseQuery ? queryResult.data?.unread : externalUnread) ??
@@ -462,7 +465,7 @@ export function ResourceList<
   // A resync with nothing to show is still loading; a resync with rows keeps
   // them, and says so above rather than wearing "live" over them.
   const showSkeleton =
-    (loading || resyncing) && resources.length === 0 && !failed;
+    (loading || resyncing || placeholder) && resources.length === 0 && !failed;
   // How long the skeleton has been one. A clock that only runs while there
   // is a skeleton to time: a list with rows on it is never woken by this.
   const now = useNowSeconds(showSkeleton);
@@ -481,6 +484,7 @@ export function ResourceList<
     resources.length === 0 &&
     (failed !== null ||
       loading ||
+      placeholder ||
       !!resyncing ||
       (shouldUseQuery ? queryResult.data === undefined : data === undefined));
 
