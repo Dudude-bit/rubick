@@ -63,6 +63,17 @@ export interface AttentionCheck {
   unread: Unread[];
 }
 
+/** A read of `scope` that failed whole, as each namespace it asked lost it, or as the cluster's when it asked the cluster. */
+export const failedWhole = (
+  scope: readonly string[] | null,
+  error: unknown
+): Unread[] =>
+  (scope ?? [null]).map((namespace) => ({
+    namespace,
+    code: errorCode(error),
+    message: errorToShow(error),
+  }));
+
 /** Where reads went unread, in words: one namespace, several, or the whole cluster. */
 export function unreadWhere(unread: readonly Unread[], t: T): string {
   const named = [
@@ -379,22 +390,12 @@ const claimItems = remember(
 function checkOf<V>(
   kind: string,
   read: Answer<Scoped<V>>,
+  scope: readonly string[] | null,
   extra: Unread[] = [],
   reading = false
 ): AttentionCheck {
-  if (read.error) {
-    return {
-      kind,
-      state: "unread",
-      unread: [
-        {
-          namespace: null,
-          code: errorCode(read.error),
-          message: errorToShow(read.error),
-        },
-      ],
-    };
-  }
+  if (read.error)
+    return { kind, state: "unread", unread: failedWhole(scope, read.error) };
   if (read.data === undefined) return { kind, state: "reading", unread: [] };
   const unread = [...read.data.unread, ...extra];
   if (unread.length > 0) return { kind, state: "unread", unread };
@@ -407,6 +408,8 @@ function checkOf<V>(
 
 export interface AttentionInputs {
   overview: ClusterOverview;
+  /** The namespaces every list below was asked in; `null` is the cluster. */
+  scope: readonly string[] | null;
   services: {
     answered: ServiceHealthInputs[];
     unread: Unread[] | "reading";
@@ -565,9 +568,15 @@ export function attentionOf(input: AttentionInputs, t: T): Attention {
                 : "read",
           unread: services.unread,
         },
-    checkOf("Ingress", input.ingresses, ingress.unknown, ingress.reading),
-    checkOf("HorizontalPodAutoscaler", input.autoscalers),
-    checkOf("PersistentVolumeClaim", input.claims),
+    checkOf(
+      "Ingress",
+      input.ingresses,
+      input.scope,
+      ingress.unknown,
+      ingress.reading
+    ),
+    checkOf("HorizontalPodAutoscaler", input.autoscalers, input.scope),
+    checkOf("PersistentVolumeClaim", input.claims, input.scope),
   ];
 
   return {

@@ -10,7 +10,12 @@ import type {
   PersistentVolumeClaimInfo,
   ServiceHealthGroup,
 } from "@/generated/types";
-import { attentionOf, reasonWord, type AttentionInputs } from "./attention";
+import {
+  attentionOf,
+  checkSaid,
+  reasonWord,
+  type AttentionInputs,
+} from "./attention";
 import {
   ingressHealthOf,
   ingressHealthWords,
@@ -150,6 +155,7 @@ function attention(inputs: Partial<AttentionInputs> = {}) {
   return attentionOf(
     {
       overview: overview(),
+      scope: null,
       services: { answered: [], unread: [] },
       ingresses: NONE,
       ingressHealth: () => {
@@ -671,6 +677,29 @@ describe("what Needs attention could not look at", () => {
     expect(claims?.state).toBe("unread");
     expect(claims?.unread[0].message).toContain("connection refused");
     expect(listed.complete).toBe(false);
+  });
+
+  /**
+   * Marco, scoped to team-blind alone: an Ingress list the cluster refused in
+   * that namespace said "list is forbidden across the cluster". Fails if a
+   * whole refusal of a one-namespace read is placed across the cluster, or a
+   * cluster-wide read's refusal stops saying so.
+   */
+  it("places a whole refusal in the namespaces the list was asked in", () => {
+    const refusal = Object.assign(new Error("ingresses is forbidden"), {
+      code: "PERMISSION_DENIED",
+    });
+    const said = (scope: readonly string[] | null) =>
+      checkSaid(
+        attention({
+          scope,
+          ingresses: { data: undefined, error: refusal },
+        }).checks.find((check) => check.kind === "Ingress")!,
+        t
+      );
+    expect(said(["team-blind"])).toContain("in team-blind");
+    expect(said(["team-blind", "team-checkout"])).toContain("in 2 namespaces");
+    expect(said(null)).toContain("across the cluster");
   });
 
   /**

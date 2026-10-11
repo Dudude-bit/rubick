@@ -106,6 +106,7 @@ export function useAttention({
       attentionOf(
         {
           overview: answered,
+          scope: wire,
           services: {
             answered: services.answered,
             unread: services.unread,
@@ -129,6 +130,7 @@ export function useAttention({
       ),
     [
       answered,
+      wire,
       services,
       servicesLate,
       ingressData,

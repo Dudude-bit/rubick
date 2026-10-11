@@ -2,9 +2,9 @@ import { useMemo } from "react";
 
 import type { ServiceHealthInputs } from "@/generated/types";
 import { useLiveQuery, type Freshness } from "@/hooks/useLiveQuery";
-import type { Unread } from "@/lib/attention";
+import { failedWhole, type Unread } from "@/lib/attention";
 import { commands } from "@/lib/commands";
-import { errorCode, errorToShow } from "@/lib/error-utils";
+import { errorToShow } from "@/lib/error-utils";
 import type { NamespaceBacking } from "@/lib/ingress-health";
 import type { Known } from "@/lib/known";
 import { queryKeys } from "@/lib/query-keys";
@@ -57,15 +57,7 @@ export function useServiceHealthInputs(
       scope === null || scope.includes(namespace);
     return {
       answered: data?.rows ?? [],
-      unread: error
-        ? [
-            {
-              namespace: null,
-              code: errorCode(error),
-              message: errorToShow(error),
-            },
-          ]
-        : (data?.unread ?? "reading"),
+      unread: error ? failedWhole(scope, error) : (data?.unread ?? "reading"),
       freshness: { dataUpdatedAt, everyMs },
       in: (namespace) => {
         if (!data || !covers(namespace)) {
