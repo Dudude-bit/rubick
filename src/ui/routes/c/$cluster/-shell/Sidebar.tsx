@@ -112,7 +112,7 @@ type NavItem = NavName & {
 // Split by state because the router joins a link's state classes onto it
 // without merging them, so the two text colours must never meet.
 const ROW_BASE_CLASS =
-  "group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] transition-colors hover:bg-hover";
+  "group flex items-center gap-[9px] rounded-[5px] px-2 py-1 text-[12px] leading-[15px] transition-colors hover:bg-hover outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info";
 const ROW_SHUT_CLASS = "text-fg-mid";
 const ROW_CLASS = `${ROW_BASE_CLASS} ${ROW_SHUT_CLASS}`;
 const ROW_OPEN_CLASS = "bg-sel font-medium text-fg";
@@ -851,7 +851,7 @@ function ClusterRow() {
         })}
         className={cn(
           row,
-          "transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-hidden"
+          "transition-colors outline-hidden hover:bg-hover focus-visible:bg-hover focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info"
         )}
       >
         {body}

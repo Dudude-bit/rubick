@@ -61,6 +61,7 @@ export function ToolPathsPanel() {
     kubectl,
     checkHelmAvailability,
     checkKubectlAvailability,
+    recheckAfterPathChange,
     isChecking,
   } = useDependenciesStore();
   // Null means "showing what is saved". The field only takes over once it
@@ -89,7 +90,7 @@ export function ToolPathsPanel() {
       }),
     onSuccess: async () => {
       queryClient.invalidateQueries({ queryKey: ["cli-paths"] });
-      await Promise.all([checkHelmAvailability(), checkKubectlAvailability()]);
+      await recheckAfterPathChange();
     },
     onError: (error) => toastError(t("settings", "toolPathsSaveFailed"), error),
   });

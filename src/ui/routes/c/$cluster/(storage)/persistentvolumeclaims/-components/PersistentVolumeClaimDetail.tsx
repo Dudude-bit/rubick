@@ -80,7 +80,7 @@ export function PersistentVolumeClaimDetail() {
       mono: true,
     },
     {
-      label: "Volume",
+      label: t("columns", "volume"),
       value: pvc?.volume ? (
         <ResourceRef
           kind={ResourceType.PersistentVolume}
@@ -123,7 +123,11 @@ export function PersistentVolumeClaimDetail() {
       label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
-        <KeyValueSection title="Claim" items={facts} className="max-w-lg" />
+        <KeyValueSection
+          title={t("columns", "claim")}
+          items={facts}
+          className="max-w-lg"
+        />
       ),
     },
     connectionsTab(connections, t, deliveryQuery),

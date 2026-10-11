@@ -615,6 +615,82 @@ describe("DataTable rows", () => {
       await staysAt();
     });
 
+    const withControls: ColumnDef<Item>[] = [
+      ...columns,
+      {
+        id: "copy",
+        header: "Copy",
+        cell: ({ row }) => (
+          <button type="button">copy {row.original.name}</button>
+        ),
+      },
+    ];
+    const between = (ui: ReactNode) =>
+      wrap(
+        <>
+          <button type="button">before</button>
+          {ui}
+          <button type="button">after</button>
+        </>
+      );
+
+    /** Dana pressed Shift+Tab twelve times in Events and never left the table: every link in every row was a stop. Fails if a link or button inside a row is back in the Tab order. */
+    it("is one stop in the Tab order, so Tab and Shift+Tab leave the table", async () => {
+      await between(
+        <DataTable<Item> columns={withControls} data={DATA} getRowHref={href} />
+      );
+      act(() => row().focus());
+      await userEvent.tab();
+      expect(screen.getByRole("button", { name: "after" })).toHaveFocus();
+      await userEvent.tab({ shift: true });
+      expect(row()).toHaveFocus();
+      await userEvent.tab({ shift: true });
+      expect(document.activeElement?.closest("tbody")).toBeNull();
+      expect(document.activeElement).not.toBe(document.body);
+    });
+
+    /** Fails if the links and buttons a row holds cannot be reached from the keyboard at all once they leave the Tab order. */
+    it("walks a row's links and buttons with Right and Left, and returns to the row on Escape", async () => {
+      await wrap(
+        <DataTable<Item> columns={withControls} data={DATA} getRowHref={href} />
+      );
+      act(() => row().focus());
+      await userEvent.keyboard("{ArrowRight}");
+      expect(screen.getByRole("link", { name: "a-1" })).toHaveFocus();
+      await userEvent.keyboard("{ArrowRight}");
+      expect(screen.getByRole("button", { name: "copy a-1" })).toHaveFocus();
+      await userEvent.keyboard("{ArrowLeft}");
+      expect(screen.getByRole("link", { name: "a-1" })).toHaveFocus();
+      await userEvent.keyboard("{ArrowLeft}");
+      expect(row()).toHaveFocus();
+      await userEvent.keyboard("{ArrowRight}{ArrowRight}{Escape}");
+      expect(row()).toHaveFocus();
+      await staysAt();
+    });
+
+    /** A watch replaces rows wholesale. Fails if a row drawn after the first render brings its links back into the Tab order. */
+    it("keeps a row a later answer adds out of the Tab order", async () => {
+      const { rerender } = await wrapRerenderable(
+        <DataTable<Item> columns={withControls} data={DATA} getRowHref={href} />
+      );
+      rerender(
+        <DataTable<Item>
+          columns={withControls}
+          data={[...DATA, { name: "c-3", namespace: "ns" }]}
+          getRowHref={href}
+        />
+      );
+      await vi.waitFor(() =>
+        expect(
+          screen.getByRole("button", { name: "copy c-3" })
+        ).toHaveAttribute("tabindex", "-1")
+      );
+      expect(screen.getByRole("link", { name: "c-3" })).toHaveAttribute(
+        "tabindex",
+        "-1"
+      );
+    });
+
     it("still moves the focus with the arrows", async () => {
       await renderTable();
       fireEvent.keyDown(row(), { key: "ArrowDown" });

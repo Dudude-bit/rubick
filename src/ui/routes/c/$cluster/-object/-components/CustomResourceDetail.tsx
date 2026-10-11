@@ -367,7 +367,7 @@ export function CustomResourceDetail({
     },
     {
       id: "spec",
-      label: "Spec",
+      label: t("columns", "spec"),
       glyph: viewGlyph(ListTree),
       content: (
         <Section>

@@ -293,7 +293,11 @@ export function NodeDetail() {
         />
       ),
     },
-    { label: "Hostname", value: address("Hostname") ?? <None />, mono: true },
+    {
+      label: t("columns", "hostname"),
+      value: address("Hostname") ?? <None />,
+      mono: true,
+    },
     { label: "Kubernetes", value: node?.version, mono: true },
     {
       label: t("columns", "containerRuntime"),
@@ -426,7 +430,7 @@ export function NodeDetail() {
           </div>
           {node && node.taints.length > 0 && (
             <KeyValueSection
-              title="Taints"
+              title={t("columns", "taints")}
               count={node.taints.length}
               items={taintKeyValues(node.taints)}
             />

@@ -11,7 +11,7 @@ import { connectingTo, failedAt, useClusterStore } from "@/stores/clusterStore";
 import { useScopeTabStore } from "@/stores/scopeTabStore";
 
 /** The route's page, or the one screen that stands in for every page. */
-export function PageArea({ page }: { page?: React.ReactNode }) {
+export function PageArea() {
   const expired = useExpiredCredentials();
   const catchingUp = useScopeTabStore((s) => s.pendingHref !== null);
   const connecting = useClusterStore(connectingTo);
@@ -21,14 +21,16 @@ export function PageArea({ page }: { page?: React.ReactNode }) {
   // empty state, which is how an expired token said a cluster had no pods.
   if (expired) return <CredentialsExpired expired={expired} />;
   // So does a connect in flight or failed, which each list's "no cluster" hid.
-  if (!page && (connecting || failed)) return <ClusterFrontDoor />;
+  if (connecting || failed) return <ClusterFrontDoor />;
   // A parked tab's cache is minutes old: hold it until its route has landed.
   if (catchingUp) return <PageSkeleton className="p-0" />;
   return (
     <>
       <DeepLinkBanner />
       <ObjectMenu />
-      <ScreenShareProvider>{page ?? <Outlet />}</ScreenShareProvider>
+      <ScreenShareProvider>
+        <Outlet />
+      </ScreenShareProvider>
     </>
   );
 }

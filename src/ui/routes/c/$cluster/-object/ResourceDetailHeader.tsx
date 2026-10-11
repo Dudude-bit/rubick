@@ -232,32 +232,34 @@ export function ResourceDetailHeader({
   );
 
   return (
-    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-      <LineageTrail
-        served={served ?? servedOfKind(kind)}
-        name={name}
-        namespace={namespace}
-      />
-      {/* Tighter than the row around it: the trail and the name are one path,
+    <div className="flex items-start gap-x-2.5">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2.5 gap-y-1">
+        <LineageTrail
+          served={served ?? servedOfKind(kind)}
+          name={name}
+          namespace={namespace}
+        />
+        {/* Tighter than the row around it: the trail and the name are one path,
           and 10px between a slash and its segment breaks that path into
           separate words. */}
-      <div className="flex min-w-0 items-center gap-x-1.5 text-[11px] text-fg-fnt">
-        {trail}
-        <span aria-hidden="true">/</span>
-        {title}
+        <div className="flex min-w-0 items-center gap-x-1.5 text-[11px] text-fg-fnt">
+          {trail}
+          <span aria-hidden="true">/</span>
+          {title}
+        </div>
+        {status}
+        {meta}
+        {createdAt && (
+          <span
+            className="text-[11px] text-fg-fnt"
+            title={formatDate(createdAt) ?? undefined}
+          >
+            <RealtimeAge timestamp={createdAt} className="text-fg-fnt" />{" "}
+            {t("action", "ageOldSuffix")}
+          </span>
+        )}
       </div>
-      {status}
-      {meta}
-      {createdAt && (
-        <span
-          className="text-[11px] text-fg-fnt"
-          title={formatDate(createdAt) ?? undefined}
-        >
-          <RealtimeAge timestamp={createdAt} className="text-fg-fnt" />{" "}
-          {t("action", "ageOldSuffix")}
-        </span>
-      )}
-      <div className="ml-auto flex flex-none items-center">
+      <div className="flex h-5 flex-none items-center">
         <DataFreshness
           dataUpdatedAt={dataUpdatedAt}
           live={live}

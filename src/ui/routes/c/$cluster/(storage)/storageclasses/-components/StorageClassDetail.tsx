@@ -49,7 +49,11 @@ export function StorageClassDetail() {
   const parameters = sc?.parameters ?? {};
 
   const facts: KeyValue[] = [
-    { label: "Provisioner", value: sc?.provisioner ?? <None />, mono: true },
+    {
+      label: t("columns", "provisioner"),
+      value: sc?.provisioner ?? <None />,
+      mono: true,
+    },
     {
       label: t("columns", "defaultClass"),
       // The one question people open this page to answer: does a claim that

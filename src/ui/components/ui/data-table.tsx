@@ -578,6 +578,58 @@ const VIM_KEYS: Record<string, string> = { j: "ArrowDown", k: "ArrowUp" };
 const OWN_ARROWS =
   '[role="tablist"][aria-orientation="vertical"],[role="radiogroup"],[role="slider"],[role="tree"],[role="grid"],[role="menubar"]';
 
+/** What a browser stops on with Tab, besides a row itself. */
+const CONTROLS =
+  "a[href],button:not(:disabled),input:not(:disabled),select,textarea,summary,[tabindex]:not([data-row-index])";
+
+/** The controls inside one row, in reading order. */
+const rowControls = (row: HTMLElement) =>
+  Array.from(row.querySelectorAll<HTMLElement>(CONTROLS));
+
+/**
+ * A row is the table's one tab stop, so its links and buttons leave the Tab
+ * order: Tab and Shift+Tab step past the table, and Right and Left walk them.
+ */
+function parkRowControls(root: Element) {
+  const found =
+    root instanceof HTMLElement && root.matches(CONTROLS) ? [root] : [];
+  for (const control of [
+    ...found,
+    ...root.querySelectorAll<HTMLElement>(CONTROLS),
+  ]) {
+    if (control.tabIndex !== -1 && control.closest("tr[data-row-index]"))
+      control.tabIndex = -1;
+  }
+}
+
+function useRowControlsParked(
+  container: React.RefObject<HTMLElement | null>,
+  enabled: boolean
+) {
+  React.useEffect(() => {
+    const root = container.current;
+    if (!enabled || !root) return;
+    parkRowControls(root);
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        if (record.type === "attributes") {
+          if (record.target instanceof Element) parkRowControls(record.target);
+          continue;
+        }
+        for (const node of record.addedNodes)
+          if (node instanceof Element) parkRowControls(node);
+      }
+    });
+    observer.observe(root, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["tabindex", "href", "disabled"],
+    });
+    return () => observer.disconnect();
+  }, [container, enabled]);
+}
+
 export function DataTable<TData extends RowData>(props: DataTableProps<TData>) {
   return (
     <PerfProfiler id="data-table">
@@ -840,6 +892,7 @@ function DataTableInner<TData extends RowData>({
 
   const keyboardNavEnabled = enableKeyboardNav ?? !!(getRowHref || onRowClick);
   const containerRef = React.useRef<HTMLDivElement>(null);
+  useRowControlsParked(containerRef, keyboardNavEnabled);
   const filterRef = React.useRef<HTMLInputElement>(null);
 
   const filteredRows = table.getFilteredRowModel().rows.length;
@@ -1087,6 +1140,35 @@ function DataTableInner<TData extends RowData>({
   const onRowKey = (event: React.KeyboardEvent, index: number, row: TData) => {
     if (isMenuKey(event) && openMenu(index)) {
       event.preventDefault();
+      return;
+    }
+    const rowAt = event.currentTarget as HTMLElement;
+    const target = event.target as HTMLElement;
+    const typing = target.matches("input,textarea,select");
+    if (
+      !typing &&
+      (event.key === "ArrowRight" || event.key === "ArrowLeft") &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey
+    ) {
+      const controls = rowControls(rowAt);
+      const at = controls.indexOf(target);
+      const next =
+        event.key === "ArrowRight"
+          ? controls[at + 1]
+          : at > 0
+            ? controls[at - 1]
+            : rowAt;
+      if (next && next !== target) {
+        event.preventDefault();
+        next.focus({ preventScroll: true });
+      }
+      return;
+    }
+    if (event.key === "Escape" && target !== rowAt && !typing) {
+      event.preventDefault();
+      rowAt.focus({ preventScroll: true });
       return;
     }
     switch (event.key) {

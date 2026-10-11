@@ -7,7 +7,6 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 import { act, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
 import {
   beforeAll,
   beforeEach,
@@ -96,13 +95,13 @@ const deploymentsPage = () => (
   <ConnectClusterEmptyState resourceLabel="Deployments" />
 );
 
-async function mountDeployments(page?: ReactNode) {
+async function mountDeployments() {
   const root = createRootRoute({ component: Outlet });
   const cluster = createRoute({
     getParentRoute: () => root,
     path: "/c/$cluster",
     validateSearch: appSearch,
-    component: () => <PageArea page={page} />,
+    component: () => <PageArea />,
   });
   const deployments = createRoute({
     getParentRoute: () => cluster,
@@ -188,27 +187,6 @@ describe("a page under a cluster that is not connected yet", () => {
     await mountDeployments();
 
     expect(screen.getByText(t("empty", "noClusterIsConnected"))).toBeVisible();
-    expect(
-      screen.queryByText(t("cluster", "didNotAnswer"))
-    ).not.toBeInTheDocument();
-  });
-
-  /**
-   * The address can name a cluster the kubeconfig does not list while an
-   * earlier failure still stands. Fails if that failure covers the page
-   * saying the named cluster is missing.
-   */
-  it("keeps a page about the address over another cluster's failed connect", async () => {
-    useClusterStore.setState({
-      error: "Connection error: deadline has elapsed",
-      errorContext: "acme-prod-eu",
-    });
-
-    await mountDeployments(<p>gone-cluster is not in the kubeconfig</p>);
-
-    expect(
-      screen.getByText("gone-cluster is not in the kubeconfig")
-    ).toBeVisible();
     expect(
       screen.queryByText(t("cluster", "didNotAnswer"))
     ).not.toBeInTheDocument();

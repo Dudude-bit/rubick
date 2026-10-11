@@ -27,15 +27,12 @@ export function ToolsFoot({
   onManagePaths: () => void;
   onManageProfiles: () => void;
 }) {
-  const { helm, kubectl, checkAllDependencies, isChecking } =
-    useDependenciesStore();
+  const { helm, kubectl, ensureDependencies } = useDependenciesStore();
   const t = useT();
 
   useEffect(() => {
-    if ((helm === null || kubectl === null) && !isChecking) {
-      void checkAllDependencies();
-    }
-  }, [helm, kubectl, isChecking, checkAllDependencies]);
+    void ensureDependencies();
+  }, [ensureDependencies]);
 
   const { data: gcpProfiles } = useQuery({
     queryKey: queryKeys.gcpProfiles(),
