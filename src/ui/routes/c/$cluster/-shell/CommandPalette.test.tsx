@@ -403,6 +403,23 @@ describe("the command palette's hits", () => {
   });
 
   /**
+   * Marco's tab over team-checkout and team-blind searched the whole cluster,
+   * where every kind is refused, and said nothing had been searched. Fails if
+   * a scope of several namespaces stops reaching the search as those
+   * namespaces.
+   */
+  it("searches each namespace of a scope of several", async () => {
+    useClusterStore.setState({
+      namespaceScope: ["team-blind", "team-checkout"],
+      currentNamespace: "",
+    });
+    await open("ledger");
+    expect(search.options).toMatchObject({
+      scope: ["team-blind", "team-checkout"],
+    });
+  });
+
+  /**
    * Dana's shop tab answered "No object matches wd-demo" for a pod that lives
    * in lena-sandbox, with only a small chip saying where it looked. Fails if
    * the answer stops naming the namespace, or the one Enter that reads every
@@ -414,7 +431,7 @@ describe("the command palette's hits", () => {
       currentNamespace: "shop",
     });
     await open("wd-demo");
-    expect(search.options).toMatchObject({ namespace: "shop" });
+    expect(search.options).toMatchObject({ scope: ["shop"] });
     expect(
       await screen.findByText(
         "No object in shop matches “wd-demo” in the 1 kind searched. 1 other kind was not searched."
@@ -424,7 +441,7 @@ describe("the command palette's hits", () => {
     search.hits = [hit({ name: "wd-demo", namespace: "lena-sandbox" })];
     await userEvent.click(screen.getByText("Search all namespaces"));
 
-    expect(search.options).toMatchObject({ namespace: null });
+    expect(search.options).toMatchObject({ scope: null });
     expect(await screen.findByText("lena-sandbox")).toBeInTheDocument();
     expect(screen.getByText("All namespaces")).toBeInTheDocument();
     expect(screen.queryByText("Search all namespaces")).toBeNull();

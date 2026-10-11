@@ -1543,7 +1543,7 @@ export interface SearchRequest {
   query: string;
   contexts: string[];
   allContexts: boolean;
-  namespace?: string;
+  scope?: string[];
   kinds?: string[];
   session?: string;
   everything: boolean;

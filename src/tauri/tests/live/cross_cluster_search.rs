@@ -57,7 +57,7 @@ async fn fan_out_reports_every_cluster() {
             query: query.clone(),
             contexts,
             all_contexts: false,
-            namespace: None,
+            scope: None,
             kinds: None,
             session: None,
             everything: false,

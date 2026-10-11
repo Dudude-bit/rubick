@@ -262,10 +262,10 @@ pub struct SearchRequest {
     /// Search every context in the kubeconfig. Overrides `contexts`.
     #[serde(default)]
     pub all_contexts: bool,
-    /// Namespace scope applied to every searched context. None = all
-    /// namespaces.
+    /// The namespaces every searched context is read in, each on its own;
+    /// None = the whole cluster.
     #[serde(default)]
-    pub namespace: Option<String>,
+    pub scope: Option<Vec<String>>,
     /// Kind labels to search; None = every kind in `SEARCHABLE_KINDS`.
     #[serde(default)]
     pub kinds: Option<Vec<String>>,
