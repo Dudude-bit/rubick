@@ -320,6 +320,18 @@ describe("the counts at the end of each row", () => {
   });
 });
 
+describe("the keyboard focus in the rail", () => {
+  /** Dana tabbed onto the cluster name and opened its menu with nothing on screen saying where the focus was. Fails if the cluster row or a page row loses its focus ring. */
+  it("rings the cluster name and every row it lands on, as every other control does", async () => {
+    await wrap(<Sidebar />);
+    const ring = ["focus-visible:ring-1", "focus-visible:ring-info"];
+    expect(
+      screen.getByRole("button", { name: "Rename or recolour prod" })
+    ).toHaveClass(...ring);
+    expect(screen.getByRole("link", { name: /Overview/ })).toHaveClass(...ring);
+  });
+});
+
 describe("a rail taller than the window", () => {
   afterEach(() => vi.restoreAllMocks());
 
