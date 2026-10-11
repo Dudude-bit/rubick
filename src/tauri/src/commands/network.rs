@@ -254,165 +254,132 @@ async fn health_inputs_in(
 
 /// The slices say that no address of a Service is ready, or that it has
 /// none, never why; the pods it selects do, and its page reads them. Asked
-/// only for those Services, so a scope of healthy ones costs no more than
-/// before. One whose selector then matches no pod is asked, once per
-/// namespace, whether the workloads behind it are scaled to zero, and one
-/// with none ready whether they are only waiting on their pods. A list that
-/// fails leaves the answer it would have sharpened as it was.
+/// only in a namespace with such a Service, so a scope of healthy ones costs
+/// no more than before, and in one round beside the workloads that say
+/// whether those pods are only waiting, or scaled to zero where the selector
+/// matches none: one read of each kind per namespace, whatever the number of
+/// Services in it. A list that fails leaves the answer it would have
+/// sharpened as it was.
 async fn with_unready_cause(
     client: &kube::Client,
     services: &[Service],
     published: Vec<ServicePublished>,
 ) -> Vec<ServicePublished> {
-    let asks = services
-        .iter()
-        .zip(published)
-        .map(|(svc, published)| async move {
-            let unexplained = matches!(
-                published.stop,
-                Some(
-                    ChainStop::NoneReady {
-                        why: NotServing::InSlices,
-                        ..
-                    } | ChainStop::PublishesNothingYet { .. }
-                )
-            );
-            let selector = svc
-                .spec
-                .as_ref()
-                .and_then(|s| s.selector.clone())
-                .unwrap_or_default();
-            let query = Selector::Equality(&selector).query_text();
-            let (true, Some(query)) = (unexplained, query) else {
-                return (published, None);
-            };
-            let pods: kube::Api<Pod> =
-                kube::Api::namespaced(client.clone(), &svc.namespace().unwrap_or_default());
-            match pods.list(&ListParams::default().labels(&query)).await {
-                Ok(list) => {
-                    let selected: Vec<&Pod> = list.items.iter().collect();
-                    let published = published.with_stop(svc, Some(&selected));
-                    (published, Some(list.items))
-                }
-                Err(_) => (published, None),
-            }
-        });
-    let asked = futures::future::join_all(asks).await;
-    let published = explain_waits(client, services, asked).await;
-    explain_empty_selectors(client, services, published).await
-}
-
-/// Whether the workloads behind a Service with none ready, or with none
-/// published and its pods unread, are only waiting on their pods, by
-/// [`published::waiting_on`]: one read of each kind per namespace that has
-/// such a Service. `pods` is what the selector picked,
-/// `None` where they were not read.
-async fn explain_waits(
-    client: &kube::Client,
-    services: &[Service],
-    asked: Vec<(ServicePublished, Option<Vec<Pod>>)>,
-) -> Vec<ServicePublished> {
-    let waiting: BTreeSet<String> = services
-        .iter()
-        .zip(&asked)
-        .filter(|(_, (published, _))| {
-            matches!(
-                published.stop,
-                Some(ChainStop::NoneReady { .. } | ChainStop::PublishesNothingYet { .. })
-            )
-        })
-        .map(|(svc, _)| svc.namespace().unwrap_or_default())
-        .collect();
-    if waiting.is_empty() {
-        return asked.into_iter().map(|(published, _)| published).collect();
+    let asked = unexplained_namespaces(services, &published);
+    if asked.is_empty() {
+        return published;
     }
-    let reads = waiting.into_iter().map(|ns| async move {
+    let reads = asked.into_iter().map(|ns| async move {
         let params = ListParams::default();
+        let pods: kube::Api<Pod> = kube::Api::namespaced(client.clone(), &ns);
         let deployments: kube::Api<Deployment> = kube::Api::namespaced(client.clone(), &ns);
         let sets: kube::Api<StatefulSet> = kube::Api::namespaced(client.clone(), &ns);
         let replica_sets: kube::Api<ReplicaSet> = kube::Api::namespaced(client.clone(), &ns);
-        let (deployments, sets, replica_sets) = tokio::join!(
+        let (pods, deployments, sets, replica_sets) = tokio::join!(
+            pods.list(&params),
             deployments.list(&params),
             sets.list(&params),
             replica_sets.list(&params)
         );
-        let replica_sets = replica_sets.ok().map(|list| list.items);
-        (ns, (items(deployments), items(sets), replica_sets))
-    });
-    let read: HashMap<String, Waiting> =
-        futures::future::join_all(reads).await.into_iter().collect();
-    let now = chrono::Utc::now();
-    services
-        .iter()
-        .zip(asked)
-        .map(
-            |(svc, (published, pods))| match read.get(&svc.namespace().unwrap_or_default()) {
-                Some((deployments, sets, replica_sets)) => {
-                    let selected: Option<Vec<&Pod>> =
-                        pods.as_ref().map(|pods| pods.iter().collect());
-                    published.with_workloads(
-                        svc,
-                        &published::makers(deployments, sets, replica_sets.as_deref()),
-                        selected.as_deref(),
-                        now,
-                    )
-                }
-                None => published,
-            },
-        )
-        .collect()
-}
-
-type Behind = (Vec<Deployment>, Vec<StatefulSet>, Vec<Pod>);
-type Waiting = (Vec<Deployment>, Vec<StatefulSet>, Option<Vec<ReplicaSet>>);
-
-fn items<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> Vec<K> {
-    list.map(|list| list.items).unwrap_or_default()
-}
-
-/// What the pods cannot say about a Service whose selector matches none of
-/// them: whether the workloads behind it are scaled to zero, and which pods
-/// carry the most of it. One read of each kind per namespace that has one.
-async fn explain_empty_selectors(
-    client: &kube::Client,
-    services: &[Service],
-    published: Vec<ServicePublished>,
-) -> Vec<ServicePublished> {
-    let empty: BTreeSet<String> = services
-        .iter()
-        .zip(&published)
-        .filter(|(_, published)| matches!(published.stop, Some(ChainStop::SelectsNothing { .. })))
-        .map(|(svc, _)| svc.namespace().unwrap_or_default())
-        .collect();
-    if empty.is_empty() {
-        return published;
-    }
-    let reads = empty.into_iter().map(|ns| async move {
-        let params = ListParams::default();
-        let deployments: kube::Api<Deployment> = kube::Api::namespaced(client.clone(), &ns);
-        let sets: kube::Api<StatefulSet> = kube::Api::namespaced(client.clone(), &ns);
-        let pods: kube::Api<Pod> = kube::Api::namespaced(client.clone(), &ns);
-        let (deployments, sets, pods) = tokio::join!(
-            deployments.list(&params),
-            sets.list(&params),
-            pods.list(&params)
-        );
-        (ns, (items(deployments), items(sets), items(pods)))
+        let read = Behind {
+            pods: pods.ok().map(|list| list.items),
+            deployments: items(deployments),
+            sets: items(sets),
+            replica_sets: replica_sets.ok().map(|list| list.items),
+        };
+        (ns, read)
     });
     let read: HashMap<String, Behind> =
         futures::future::join_all(reads).await.into_iter().collect();
+    let now = chrono::Utc::now();
     services
         .iter()
         .zip(published)
         .map(
             |(svc, published)| match read.get(&svc.namespace().unwrap_or_default()) {
-                Some((deployments, sets, pods)) => published
-                    .with_makers(svc, &published::makers(deployments, sets, None))
-                    .with_near_miss(svc, pods),
-                None => published,
+                Some(behind) if unexplained(&published) => explained(svc, published, behind, now),
+                _ => published,
             },
         )
         .collect()
+}
+
+/// What one namespace answered for the Services in it the slices left
+/// unexplained. `None` is a list that failed.
+struct Behind {
+    pods: Option<Vec<Pod>>,
+    deployments: Vec<Deployment>,
+    sets: Vec<StatefulSet>,
+    replica_sets: Option<Vec<ReplicaSet>>,
+}
+
+fn unexplained(published: &ServicePublished) -> bool {
+    matches!(
+        published.stop,
+        Some(
+            ChainStop::NoneReady {
+                why: NotServing::InSlices,
+                ..
+            } | ChainStop::PublishesNothingYet { .. }
+        )
+    )
+}
+
+fn unexplained_namespaces(
+    services: &[Service],
+    published: &[ServicePublished],
+) -> BTreeSet<String> {
+    services
+        .iter()
+        .zip(published)
+        .filter(|(_, published)| unexplained(published))
+        .map(|(svc, _)| svc.namespace().unwrap_or_default())
+        .collect()
+}
+
+/// A Service the slices left unexplained, said as its pods and the
+/// workloads behind them read: none ready or none published with what each
+/// waits on, and a selector matching no pod with whether it is scaled to
+/// zero and which pods carry the most of it.
+fn explained(
+    svc: &Service,
+    published: ServicePublished,
+    behind: &Behind,
+    now: chrono::DateTime<chrono::Utc>,
+) -> ServicePublished {
+    let selector = svc
+        .spec
+        .as_ref()
+        .and_then(|s| s.selector.clone())
+        .unwrap_or_default();
+    let selected: Option<Vec<&Pod>> = behind.pods.as_ref().map(|pods| {
+        pods.iter()
+            .filter(|pod| Selector::Equality(&selector).matches(pod.labels()) == Some(true))
+            .collect()
+    });
+    let published = match &selected {
+        Some(selected) => published.with_stop(svc, Some(selected)),
+        None => published,
+    };
+    let waiting = published::makers(
+        &behind.deployments,
+        &behind.sets,
+        behind.replica_sets.as_deref(),
+    );
+    let published = published.with_workloads(svc, &waiting, selected.as_deref(), now);
+    if !matches!(published.stop, Some(ChainStop::SelectsNothing { .. })) {
+        return published;
+    }
+    published
+        .with_makers(
+            svc,
+            &published::makers(&behind.deployments, &behind.sets, None),
+        )
+        .with_near_miss(svc, behind.pods.as_deref().unwrap_or_default())
+}
+
+fn items<K: Clone>(list: kube::Result<kube::core::ObjectList<K>>) -> Vec<K> {
+    list.map(|list| list.items).unwrap_or_default()
 }
 
 fn health_inputs_of(
@@ -1290,7 +1257,6 @@ mod tests {
                 }
             })
         };
-        let none = list("PodList", serde_json::json!([]));
         let pods = list(
             "PodList",
             serde_json::json!([canary("checkout-api-a"), canary("checkout-api-b")]),
@@ -1301,12 +1267,11 @@ mod tests {
             empty("DeploymentList"),
             empty("StatefulSetList"),
         );
-        let (client, _) = answering(move |path, nth| match path {
+        let (client, _) = answering(move |path, _| match path {
             "/api/v1/namespaces/team-checkout/services" => (200, services.clone()),
             "/apis/discovery.k8s.io/v1/namespaces/team-checkout/endpointslices" => {
                 (200, slices.clone())
             }
-            "/api/v1/namespaces/team-checkout/pods" if nth == 1 => (200, none.clone()),
             "/api/v1/namespaces/team-checkout/pods" => (200, pods.clone()),
             "/apis/apps/v1/namespaces/team-checkout/deployments" => (200, deployments.clone()),
             "/apis/apps/v1/namespaces/team-checkout/statefulsets" => (200, sets.clone()),
@@ -1324,5 +1289,98 @@ mod tests {
             panic!("the closest pods are named, got {stop:?}");
         };
         assert_eq!((near.pods.len(), near.lacks.as_str()), (2, "track=stable"));
+    }
+
+    /// Lena's Services list read "still reading" on every row for seconds:
+    /// each unready Service asked for its own pods, then the workloads were
+    /// asked, then the pods again for the Services selecting nothing, four
+    /// rounds in a row. Fails if a namespace's pods or workloads are asked
+    /// more than once, whatever the number of Services in it.
+    #[tokio::test]
+    async fn the_reads_behind_unready_services_ask_each_kind_once_per_namespace() {
+        use crate::client::served::test_server::answering;
+        let list = |kind: &str, items: serde_json::Value| {
+            serde_json::json!({ "apiVersion": "v1", "kind": kind, "metadata": {}, "items": items })
+                .to_string()
+        };
+        let service = |name: &str, track: &str| {
+            serde_json::json!({
+                "metadata": { "name": name, "namespace": "team-checkout" },
+                "spec": {
+                    "type": "ClusterIP",
+                    "selector": { "app": "checkout-api", "track": track },
+                    "ports": [{ "port": 80, "targetPort": 8080, "protocol": "TCP" }]
+                }
+            })
+        };
+        let services = list(
+            "ServiceList",
+            serde_json::json!([
+                service("checkout-stable", "stable"),
+                service("checkout-blue", "blue"),
+                service("checkout-canary", "canary")
+            ]),
+        );
+        let pods = list(
+            "PodList",
+            serde_json::json!([{
+                "metadata": {
+                    "name": "checkout-api-a",
+                    "namespace": "team-checkout",
+                    "labels": { "app": "checkout-api", "track": "canary" }
+                },
+                "status": { "phase": "Pending" }
+            }]),
+        );
+        let empty = |kind: &str| list(kind, serde_json::json!([]));
+        let (slices, deployments, sets, replica_sets) = (
+            empty("EndpointSliceList"),
+            empty("DeploymentList"),
+            empty("StatefulSetList"),
+            empty("ReplicaSetList"),
+        );
+        let (client, hits) = answering(move |path, _| match path {
+            "/api/v1/namespaces/team-checkout/services" => (200, services.clone()),
+            "/apis/discovery.k8s.io/v1/namespaces/team-checkout/endpointslices" => {
+                (200, slices.clone())
+            }
+            "/api/v1/namespaces/team-checkout/pods" => (200, pods.clone()),
+            "/apis/apps/v1/namespaces/team-checkout/deployments" => (200, deployments.clone()),
+            "/apis/apps/v1/namespaces/team-checkout/statefulsets" => (200, sets.clone()),
+            "/apis/apps/v1/namespaces/team-checkout/replicasets" => (200, replica_sets.clone()),
+            _ => (404, "{}".to_string()),
+        })
+        .await;
+        let (services, published) = published_in(&ResourceContext {
+            client,
+            namespace: Some("team-checkout".to_string()),
+        })
+        .await
+        .expect("published");
+        let stops: BTreeMap<String, Option<ChainStop>> = services
+            .iter()
+            .map(ResourceExt::name_any)
+            .zip(published.into_iter().map(|p| p.stop))
+            .collect();
+        assert!(
+            matches!(
+                stops["checkout-stable"],
+                Some(ChainStop::SelectsNothing { near: Some(_), .. })
+            ),
+            "{stops:?}"
+        );
+        assert!(
+            matches!(stops["checkout-canary"], Some(ChainStop::NoneReady { ref why, .. }) if *why != NotServing::InSlices),
+            "{stops:?}"
+        );
+        let hits = hits.lock().expect("hits").clone();
+        for kind in [
+            "/api/v1/namespaces/team-checkout/pods",
+            "/apis/apps/v1/namespaces/team-checkout/deployments",
+            "/apis/apps/v1/namespaces/team-checkout/statefulsets",
+            "/apis/apps/v1/namespaces/team-checkout/replicasets",
+        ] {
+            assert_eq!(hits.get(kind), Some(&1), "{kind} in {hits:?}");
+        }
     }
 }
