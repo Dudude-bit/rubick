@@ -1,5 +1,12 @@
 import { QueryClient } from "@tanstack/react-query";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import {
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vite-plus/test";
 
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
@@ -10,6 +17,9 @@ import { prefetchObject } from "./prefetch";
 
 const POD = { name: "api-0", namespace: "shop" };
 const CERTIFICATE = { name: "web", namespace: "shop" };
+
+// prefetchObject loads the peek sources lazily; a cold load on a busy machine outran the 5 s test timeout.
+beforeAll(() => import("../-peek/peek-sources"), 60_000);
 
 let asked: string[];
 let real: Transport;
