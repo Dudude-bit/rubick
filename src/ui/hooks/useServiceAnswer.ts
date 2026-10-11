@@ -18,9 +18,7 @@ export type ServiceAnswer = HeldAnswer;
  * A Service's neighbourhood as its page and every verdict of it read it.
  * Where `follow` is set its pods and slices are watched while it is on
  * screen, each change reading `query` again, and an answer that cannot speak
- * for it is read again: at once where it is another Service's, which is wrong
- * in every reader of it, and once the read it shared has aged out where it is
- * only older than the pod its watch has seen.
+ * for it is read again at once.
  */
 export function useServiceAnswer(
   name: string | undefined,

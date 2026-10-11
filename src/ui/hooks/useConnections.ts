@@ -7,6 +7,8 @@
  * reader opens first, and switching tabs costs nothing.
  */
 
+import { useQueryClient, type QueryClient } from "@tanstack/react-query";
+
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES, type RefreshRate } from "@/lib/refresh";
@@ -54,10 +56,20 @@ export function useConnections(
   // whole answer once the cluster turns out to speak Gateway API.
   const gateway = useGatewayApi().data ?? null;
   const queryKey = keyOf(kind, name, namespace, gateway);
+  const client = useQueryClient();
   return useLiveQuery<ResourceConnections>({
     queryKey,
     queryFn: () =>
-      commands.getResourceConnections(kind, name!, namespace ?? null, gateway),
+      commands.getResourceConnections(
+        kind,
+        name!,
+        namespace ?? null,
+        gateway,
+        seenSince(
+          client,
+          client.getQueryData<ResourceConnections>(queryKey)?.published
+        )
+      ),
     enabled: enabled && !!name,
     // The scan landing changes the key, not the object. A list's row menu
     // keeps one observer across rows, and drew one row's autoscaler in the
@@ -112,4 +124,27 @@ export function useObjectConnections(
   const query = useConnections(kind, name, namespace, enabled);
   const key = useConnectionsKey(kind, name, namespace);
   return useHeldRead(kind, namespace, name, query, key);
+}
+
+/**
+ * When a watch under a Service the last answer publishes through last saw a
+ * pod or a slice change: a backend read begun before it would answer for a
+ * cluster that has moved on, so a read asks for none older.
+ */
+export function seenSince(
+  client: QueryClient,
+  published: ResourceConnections["published"] | undefined
+): string | null {
+  let latest = 0;
+  for (const { service } of published ?? []) {
+    if (service.kind !== "Service") continue;
+    for (const part of ["pods", "changed"] as const)
+      for (const query of client.getQueryCache().findAll({
+        queryKey: queryKeys
+          .serviceWatch(part, service.namespace, service.name)
+          .slice(0, 4),
+      }))
+        latest = Math.max(latest, query.state.dataUpdatedAt);
+  }
+  return latest > 0 ? new Date(latest).toISOString() : null;
 }

@@ -821,13 +821,15 @@ export async function getResourceConnections(
   kind: string,
   name: string,
   namespace: string | null,
-  gateway: GatewayApiDetection | null
+  gateway: GatewayApiDetection | null,
+  notBefore: string | null
 ): Promise<ResourceConnections> {
   return invoke<ResourceConnections>("get_resource_connections", {
     kind,
     name,
     namespace,
     gateway,
+    notBefore,
   });
 }
 

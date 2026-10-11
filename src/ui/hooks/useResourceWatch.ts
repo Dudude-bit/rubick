@@ -68,6 +68,8 @@ interface UseResourceWatchOptions<T> {
   behind?: boolean;
   /** Called when a change after the list lands: a read taken before it is behind. */
   onChange?: () => void;
+  /** How long a burst of changes settles before `detail` is read again. */
+  settleMs?: number;
 }
 
 export interface ResourceWatchState {
@@ -102,6 +104,7 @@ export function useResourceWatch<
   recount = true,
   behind = false,
   onChange,
+  settleMs = DETAIL_MS,
 }: UseResourceWatchOptions<T>): ResourceWatchState {
   const t = useT();
   const queryClient = useQueryClient();
@@ -120,6 +123,7 @@ export function useResourceWatch<
   const recountRef = useRef(recount);
   const behindRef = useRef(behind);
   const onChangeRef = useRef(onChange);
+  const settleRef = useRef(settleMs);
   useEffect(() => {
     onErrorRef.current = onError;
     onRecoveredRef.current = onRecovered;
@@ -129,7 +133,18 @@ export function useResourceWatch<
     recountRef.current = recount;
     behindRef.current = behind;
     onChangeRef.current = onChange;
-  }, [onError, onRecovered, detail, t, order, recount, behind, onChange]);
+    settleRef.current = settleMs;
+  }, [
+    onError,
+    onRecovered,
+    detail,
+    t,
+    order,
+    recount,
+    behind,
+    onChange,
+    settleMs,
+  ]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -267,7 +282,8 @@ export function useResourceWatch<
                     queryClient,
                     rows.values(),
                     detailRef.current,
-                    listedFrom
+                    listedFrom,
+                    settleRef.current
                   );
                 listedFrom = 0;
               }
@@ -309,7 +325,8 @@ export function useResourceWatch<
               queryClient,
               changes,
               detailRef.current,
-              recounted && recountRef.current
+              recounted && recountRef.current,
+              settleRef.current
             );
           }
         });
@@ -425,13 +442,14 @@ function readAgain<T>(
   client: QueryClient,
   changes: Array<ResourceChange<T>>,
   detail: ((row: T) => readonly QueryKey[]) | undefined,
-  recounted: boolean
+  recounted: boolean,
+  settleMs: number
 ) {
   if (detail)
     for (const { resource } of changes) {
       if (!resource) continue;
       for (const key of detail(resource))
-        if (client.getQueryState(key)) readSoon(client, key, DETAIL_MS);
+        if (client.getQueryState(key)) readSoon(client, key, settleMs);
     }
   if (recounted) readSoon(client, queryKeys.everyOverview(), COUNTS_MS);
 }
@@ -446,7 +464,8 @@ function readBehind<T>(
   client: QueryClient,
   rows: Iterable<T>,
   detail: ((row: T) => readonly QueryKey[]) | undefined,
-  listedFrom: number
+  listedFrom: number,
+  settleMs: number
 ) {
   if (!detail) return;
   for (const row of rows)
@@ -456,7 +475,7 @@ function readBehind<T>(
         state &&
         Math.max(state.dataUpdatedAt, state.errorUpdatedAt) <= listedFrom
       )
-        readSoon(client, key, DETAIL_MS);
+        readSoon(client, key, settleMs);
     }
 }
 
