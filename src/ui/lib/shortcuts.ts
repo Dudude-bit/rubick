@@ -273,6 +273,8 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "mod+s downloads, Backspace goes up",
   "src/ui/routes/c/$cluster/-object/ownership-keys.ts":
     "alt+arrows move along ownership on an object's page",
+  "src/ui/lib/focus-modality.ts":
+    "not a shortcut: notices the reader is on the keyboard, so focus rings show",
   "src/ui/lib/window-activity.ts":
     "not a shortcut: notices that the reader is here",
   "src/ui/routes/c/$cluster/-peek/peek-escape.ts":
