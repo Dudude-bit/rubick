@@ -205,6 +205,12 @@ export const SHORTCUTS: readonly Shortcut[] = [
     labelKey: "rowMove",
   },
   { id: "rowOpen", section: "table", keys: ["enter"], labelKey: "rowOpen" },
+  {
+    id: "rowControls",
+    section: "table",
+    keys: ["←", "→"],
+    labelKey: "rowControls",
+  },
   { id: "rowClear", section: "table", keys: ["esc"], labelKey: "rowClear" },
   { id: "rowFilter", section: "table", keys: ["/"], labelKey: "rowFilter" },
 
@@ -277,6 +283,8 @@ export const KEYDOWN_SITES: Readonly<Record<string, string>> = {
     "not a shortcut: bare arrows, Home and End walk the tab strip; a chord passes through",
   "src/ui/lib/native-menu.ts":
     "Menu and shift+F10 open the focused control's context menu",
+  "src/ui/components/ui/data-table.tsx":
+    "not a shortcut: bare left and right walk the focused row's links; a chord passes through",
 };
 
 export function chordsOf(): Shortcut[] {

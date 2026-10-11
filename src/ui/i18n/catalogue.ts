@@ -7048,6 +7048,7 @@ export const en = {
     nthTab: "Tab by number, 9 is the last",
     rowMove: "Move between rows",
     rowOpen: "Open the row",
+    rowControls: "Step through the row's links and buttons",
     rowClear: "Clear the selection",
     rowFilter: "Filter the list",
     docs: "Rubick documentation",
