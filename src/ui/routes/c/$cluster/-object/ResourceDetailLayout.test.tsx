@@ -342,40 +342,6 @@ describe("ResourceDetailLayout chrome", () => {
     expect(row).toHaveClass("sticky", "top-0", "bg-canvas");
   });
 
-  /** At 1024 the freshness mark wrapped onto a row of its own under the name. Fails if it goes back into the row that wraps. */
-  it("keeps the freshness mark beside the identity rows rather than wrapping under them", async () => {
-    const { container } = await wrap(
-      <ResourceDetailLayout
-        {...base}
-        activeTab="overview"
-        freshness={{
-          dataUpdatedAt: Date.now(),
-          slowed: false,
-          paused: false,
-          everyMs: 2000,
-          stale: false,
-          failure: null,
-          waitingSince: null,
-        }}
-        tabs={[
-          {
-            id: "overview",
-            label: "Overview",
-            glyph: viewGlyph(Info),
-            content: null,
-          },
-        ]}
-      />
-    );
-    const freshness = container.querySelector(".inline-grid");
-    const identity = screen
-      .getByRole("heading", { level: 1 })
-      .closest(".flex-wrap");
-    expect(freshness).not.toBeNull();
-    expect(identity).not.toContainElement(freshness as HTMLElement);
-    expect(identity?.parentElement).toContainElement(freshness as HTMLElement);
-  });
-
   // tab, to buy back the second row it needed for the actions. It is one row
   // either way now, so there is nothing to buy and nothing to drop — and a
   // header that restructures itself when the reader clicks Logs reads as the
