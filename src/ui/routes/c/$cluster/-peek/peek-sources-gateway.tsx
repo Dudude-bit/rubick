@@ -178,7 +178,10 @@ export const GATEWAY_SOURCES: PeekSources = {
         {
           title: "Gateway",
           items: [
-            { label: "Class", value: ref("GatewayClass", gateway.className) },
+            {
+              label: t("columns", "class"),
+              value: ref("GatewayClass", gateway.className),
+            },
             {
               label: t("columns", "addresses"),
               value: (
@@ -298,7 +301,7 @@ export const GATEWAY_SOURCES: PeekSources = {
                     : ("warn" as const),
             },
             ...(cls.description
-              ? [{ label: "Description", value: cls.description }]
+              ? [{ label: t("columns", "description"), value: cls.description }]
               : []),
           ],
         },

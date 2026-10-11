@@ -63,7 +63,7 @@ export function PersistentVolumeDetail() {
       mono: true,
     },
     {
-      label: "Claim",
+      label: t("columns", "claim"),
       // A volume with no claim is storage nobody is using — the one fact on
       // this page that is worth a colour. Bound is the correct, quiet case.
       value: pv?.claim ? (
@@ -91,7 +91,13 @@ export function PersistentVolumeDetail() {
       mono: true,
     },
     ...(pv?.reason
-      ? [{ label: "Reason", value: pv.reason, tone: "err" as const }]
+      ? [
+          {
+            label: t("columns", "reason"),
+            value: pv.reason,
+            tone: "err" as const,
+          },
+        ]
       : []),
   ];
 
@@ -120,7 +126,11 @@ export function PersistentVolumeDetail() {
       label: t("nav", "overview"),
       glyph: viewGlyph(Info),
       content: (
-        <KeyValueSection title="Volume" items={facts} className="max-w-lg" />
+        <KeyValueSection
+          title={t("columns", "volume")}
+          items={facts}
+          className="max-w-lg"
+        />
       ),
     },
     connectionsTab(connections, t, deliveryQuery),
