@@ -102,6 +102,8 @@ export interface SectionHeaderProps extends React.HTMLAttributes<HTMLDivElement>
   description?: React.ReactNode;
   /** Right-aligned controls belonging to this section. */
   actions?: React.ReactNode;
+  /** The count truncates rather than pushing the actions onto a row of their own. */
+  countYields?: boolean;
 }
 
 export function SectionHeader({
@@ -109,6 +111,7 @@ export function SectionHeader({
   count,
   description,
   actions,
+  countYields = false,
   className,
   ...props
 }: SectionHeaderProps) {
@@ -141,7 +144,10 @@ export function SectionHeader({
         {count != null && (
           <span
             data-testid="section-count"
-            className="min-w-0 text-xs text-fg-fnt"
+            className={cn(
+              "min-w-0 text-xs text-fg-fnt",
+              countYields && "flex-[1_1_0]"
+            )}
           >
             {typeof count === "number" ? formatCount(count) : count}
           </span>

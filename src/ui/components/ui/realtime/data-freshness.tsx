@@ -61,6 +61,8 @@ export interface DataFreshnessProps {
    * live nor polled, and its age is the refusal's, not the last answer's.
    */
   refusedAt?: number | null;
+  /** Hold the widest reading's width; off where nothing sits after the mark. */
+  reserve?: boolean;
   className?: string;
 }
 
@@ -149,6 +151,7 @@ export const DataFreshness = memo(function DataFreshness({
   slowed = false,
   stale = false,
   refusedAt,
+  reserve = true,
   className,
 }: DataFreshnessProps) {
   const t = useT();
@@ -184,7 +187,7 @@ export const DataFreshness = memo(function DataFreshness({
             className
           )}
         >
-          <Reserve />
+          {reserve && <Reserve />}
           <span className="col-start-1 row-start-1 inline-flex items-center gap-1.5">
             {dot === null ? (
               <Lock

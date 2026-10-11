@@ -3,6 +3,7 @@ import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  ChevronsDown,
   FolderOpen,
   LayoutDashboard,
   Library,
@@ -296,10 +297,22 @@ const RAIL_FADE = {
   both: "[mask-image:linear-gradient(to_bottom,transparent,black_24px,black_calc(100%-24px),transparent)]",
 } as const;
 
+/** Rows whose foot is past the rail's lower edge, the one the edge cuts included. */
+function rowsBelow(rail: HTMLElement) {
+  const edge = rail.getBoundingClientRect().bottom;
+  let n = 0;
+  for (const row of rail.querySelectorAll("a[href]"))
+    if (row.getBoundingClientRect().bottom > edge + 1) n += 1;
+  return n;
+}
+
 /** Fades the edge the rail continues past, so a caption the edge cuts reads as more to come rather than as broken. */
 function useRailFade() {
   const [fade, setFade] = React.useState<keyof typeof RAIL_FADE | null>(null);
+  const [below, setBelow] = React.useState(0);
+  const [rail, setRail] = React.useState<HTMLElement | null>(null);
   const attach = React.useCallback((rail: HTMLElement | null) => {
+    setRail(rail);
     if (!rail) return;
     const measure = () => {
       const above = rail.scrollTop > 0;
@@ -307,6 +320,7 @@ function useRailFade() {
       setFade(
         above && below ? "both" : above ? "above" : below ? "below" : null
       );
+      setBelow(below ? rowsBelow(rail) : 0);
     };
     measure();
     rail.addEventListener("scroll", measure, { passive: true });
@@ -321,12 +335,31 @@ function useRailFade() {
       observer?.disconnect();
     };
   }, []);
-  return [attach, fade && RAIL_FADE[fade]] as const;
+  const more = () =>
+    rail?.scrollBy({ top: rail.clientHeight * 0.8, behavior: "smooth" });
+  return [attach, fade && RAIL_FADE[fade], below, more] as const;
+}
+
+/** Says the rail goes on past the App block, where a faded row alone read as clipped. */
+function RailMore({ n, onClick }: { n: number; onClick: () => void }) {
+  const t = useT();
+  if (n === 0) return null;
+  return (
+    <button
+      type="button"
+      tabIndex={-1}
+      onClick={onClick}
+      className="absolute bottom-0.5 right-2 flex items-center gap-1 rounded bg-canvas px-1.5 py-0.5 text-[10px] leading-[13px] text-fg-fnt transition-colors hover:bg-hover hover:text-fg"
+    >
+      <ChevronsDown className="h-3 w-3" aria-hidden="true" />
+      {t("count", "railRowsBelow", { n })}
+    </button>
+  );
 }
 
 export function Sidebar() {
   const isConnected = useClusterStore((s) => s.isConnected);
-  const [attachRail, railFade] = useRailFade();
+  const [attachRail, railFade, rowsPast, scrollRail] = useRailFade();
   const { data } = useScopedOverview();
   const locks = useListLocks(NAV_KINDS);
   const servedLocks = useLocks(NAV_QUERIES);
@@ -341,39 +374,42 @@ export function Sidebar() {
   return (
     <aside className="flex w-52 flex-col overflow-hidden border-r border-hair">
       <ClusterRow />
-      <nav
-        ref={attachRail}
-        className={cn(
-          "flex-1 overflow-y-auto scrollbar-thin px-1.5 pb-2.5 pt-1",
-          railFade
-        )}
-      >
-        <div>
-          {GROUPS.map((group, index) => (
-            <div key={group.caption ?? `ungrouped-${index}`}>
-              {group.caption && <GroupCaption k={group.caption} />}
-              {group.items.map((item) => (
-                <NavRow
-                  key={item.labelKey ?? item.label}
-                  item={item}
-                  overview={overview}
-                  lock={
-                    item.kind
-                      ? locks[item.kind]
-                      : item.query
-                        ? servedLocks.get(item.query.resource)
-                        : undefined
-                  }
-                />
-              ))}
-              {group.caption === "network" && (
-                <GatewayRows overview={overview} />
-              )}
-            </div>
-          ))}
-          <IntegrationsGroup />
-        </div>
-      </nav>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <nav
+          ref={attachRail}
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto scrollbar-thin px-1.5 pb-2.5 pt-1",
+            railFade
+          )}
+        >
+          <div>
+            {GROUPS.map((group, index) => (
+              <div key={group.caption ?? `ungrouped-${index}`}>
+                {group.caption && <GroupCaption k={group.caption} />}
+                {group.items.map((item) => (
+                  <NavRow
+                    key={item.labelKey ?? item.label}
+                    item={item}
+                    overview={overview}
+                    lock={
+                      item.kind
+                        ? locks[item.kind]
+                        : item.query
+                          ? servedLocks.get(item.query.resource)
+                          : undefined
+                    }
+                  />
+                ))}
+                {group.caption === "network" && (
+                  <GatewayRows overview={overview} />
+                )}
+              </div>
+            ))}
+            <IntegrationsGroup />
+          </div>
+        </nav>
+        <RailMore n={rowsPast} onClick={scrollRail} />
+      </div>
       {/* The app's own strip, outside the scroll: the rows above are the
           cluster's and travel with it; these stay put on every screen. */}
       <div className="border-t border-hair px-1.5 pb-2.5">

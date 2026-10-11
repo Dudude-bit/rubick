@@ -7357,6 +7357,7 @@ export const en = {
     daysAgo: { one: "{n} day ago", other: "{n} days ago" },
     warningEvents: { one: "{n} warning event", other: "{n} warning events" },
     normalEvents: { one: "{n} normal event", other: "{n} normal events" },
+    railRowsBelow: { one: "{n} more below", other: "{n} more below" },
     hiddenByTypeFilter: {
       one: "{n} other event hidden by the type filter",
       other: "{n} other events hidden by the type filter",

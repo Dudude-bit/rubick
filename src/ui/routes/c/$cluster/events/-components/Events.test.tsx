@@ -814,6 +814,25 @@ describe("a feed a watch keeps", () => {
     expect(screen.queryByText("none")).toBeNull();
   });
 
+  /**
+   * Lena's toolbar dropped a row under Warnings: the longer header pushed the
+   * controls onto a line of their own. Fails if the header's count claims
+   * room of its own instead of truncating beside the controls.
+   */
+  it("keeps the toolbar on the header's row when the type filter lengthens the count", async () => {
+    await watched();
+    burst([dated("prod", 0), dated("prod", 1), dated("prod", 2)]);
+    await screen.findByText("3 normal events");
+
+    await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
+
+    const summary = await screen.findByText(
+      "0 warning events · 3 other events hidden by the type filter"
+    );
+    expect(summary).toHaveClass("truncate");
+    expect(screen.getByTestId("section-count")).toHaveClass("flex-[1_1_0]");
+  });
+
   /** Fails if the stories of a feed the type filter emptied say nothing happened in the window. */
   it("says the type filter emptied the stories, not that nothing happened", async () => {
     await watched("stories");

@@ -8317,6 +8317,12 @@ export const ru: Catalogue = {
       many: "{n} предупреждений",
       other: "{n} предупреждения",
     },
+    railRowsBelow: {
+      one: "ещё {n} пункт ниже",
+      few: "ещё {n} пункта ниже",
+      many: "ещё {n} пунктов ниже",
+      other: "ещё {n} пункта ниже",
+    },
     normalEvents: {
       one: "{n} обычное событие",
       few: "{n} обычных события",

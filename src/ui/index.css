@@ -4,6 +4,16 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* lib/focus-modality: WebKitGTK gives a focus that follows a click no :focus-visible. */
+@custom-variant focus-visible {
+  &:focus-visible {
+    @slot;
+  }
+  :root[data-keys] &:focus {
+    @slot;
+  }
+}
+
 @theme {
   --color-canvas: hsl(var(--canvas));
   --color-raise: hsl(var(--raise));
@@ -122,6 +132,11 @@
   color utility to any element that depends on these defaults.
 */
 @layer base {
+  :where(:focus-visible, :root[data-keys] :focus):not([tabindex="-1"]) {
+    outline: 1px solid hsl(var(--info));
+    outline-offset: -1px;
+  }
+
   *,
   ::after,
   ::before,
