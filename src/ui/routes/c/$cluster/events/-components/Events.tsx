@@ -529,6 +529,7 @@ export function Events() {
       <SectionHeader
         title="Events"
         description={<KindAbout kind={ResourceType.Event} />}
+        countYields
         count={
           showSkeleton || nothingRead ? undefined : (
             <OneLine
