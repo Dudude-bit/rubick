@@ -7356,6 +7356,11 @@ export const en = {
     daysAgo: { one: "{n} day ago", other: "{n} days ago" },
     warningEvents: { one: "{n} warning event", other: "{n} warning events" },
     normalEvents: { one: "{n} normal event", other: "{n} normal events" },
+    hiddenByTypeFilter: {
+      one: "{n} other event hidden by the type filter",
+      other: "{n} other events hidden by the type filter",
+    },
+    typeFilterLeavesRest: "the type filter leaves the rest out",
     inStoryWindow: "in the {span} window",
     latestKept: "of the latest {n}",
     podsStayedOnTheNode: {
