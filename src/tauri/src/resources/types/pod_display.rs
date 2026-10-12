@@ -123,9 +123,37 @@ fn blocking_init(pod: &Pod) -> Option<(usize, &ContainerStatus)> {
         })
 }
 
-/// The status kubectl would print for this pod.
+/// The verdict the kubelet wrote on a failed pod as a whole: `Evicted`,
+/// `OutOfcpu`, `DeadlineExceeded`. Not for one being deleted, which kubectl
+/// and every screen call `Terminating`.
+fn pod_verdict(pod: &Pod) -> Option<&str> {
+    let status = pod.status.as_ref()?;
+    (status.phase.as_deref() == Some("Failed") && pod.metadata.deletion_timestamp.is_none())
+        .then_some(status.reason.as_deref())
+        .flatten()
+        .filter(|reason| !reason.is_empty())
+}
+
+/// The status every screen leads with: kubectl's, except a failed pod's own
+/// verdict. kubectl prints the containers' word there, `ContainerStatusUnknown`
+/// for an evicted pod, where the pod's page, peek and Needs attention say
+/// `Evicted`; the list said the first and the rest the second.
 #[must_use]
 pub fn display_status(pod: &Pod) -> String {
+    pod_verdict(pod).map_or_else(|| printed_status(pod), str::to_string)
+}
+
+/// What `kubectl get pods` prints, where it is not [`display_status`].
+#[must_use]
+pub fn kubectl_status(pod: &Pod) -> Option<String> {
+    let verdict = pod_verdict(pod)?;
+    let printed = printed_status(pod);
+    (printed != verdict).then_some(printed)
+}
+
+/// The status kubectl would print for this pod.
+#[must_use]
+pub fn printed_status(pod: &Pod) -> String {
     let status = pod.status.as_ref();
     let phase = status
         .and_then(|s| s.phase.clone())
@@ -671,6 +699,39 @@ mod tests {
         let mut p = pod("Failed");
         p.status.as_mut().unwrap().reason = Some("Evicted".to_string());
         assert_eq!(display_status(&p), "Evicted");
+    }
+
+    /// Dana's Pods list drew evicted pods grey `ContainerStatusUnknown` while
+    /// their page, peek and Needs attention said red `Evicted`. Fails if a
+    /// failed pod's own verdict gives way to its containers' word, if
+    /// kubectl's word is dropped, or if a pod on its way out stops reading
+    /// `Terminating`.
+    #[test]
+    fn a_failed_pods_own_verdict_leads_and_kubectls_word_is_kept() {
+        let unknown = || terminated(137, Some("ContainerStatusUnknown"));
+        let mut p = pod("Failed");
+        let s = p.status.as_mut().unwrap();
+        s.reason = Some("Evicted".to_string());
+        s.init_container_statuses = Some(vec![status("migrate", unknown(), false)]);
+        s.container_statuses = Some(vec![status("app", unknown(), false)]);
+        p.spec.as_mut().unwrap().init_containers = Some(vec![Container::default()]);
+        assert_eq!(display_status(&p), "Evicted");
+        assert_eq!(
+            kubectl_status(&p).as_deref(),
+            Some("Init:ContainerStatusUnknown")
+        );
+
+        p.status.as_mut().unwrap().reason = None;
+        assert_eq!(display_status(&p), "Init:ContainerStatusUnknown");
+        assert_eq!(kubectl_status(&p), None);
+
+        p.status.as_mut().unwrap().reason = Some("Evicted".to_string());
+        p.metadata.deletion_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(Utc::now())
+                .expect("an instant this test wrote itself"),
+        ));
+        assert_eq!(display_status(&p), "Terminating");
+        assert_eq!(kubectl_status(&p), None);
     }
 
     #[test]

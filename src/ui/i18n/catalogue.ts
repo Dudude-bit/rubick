@@ -7056,6 +7056,8 @@ export const en = {
       "the container's state was lost, usually after the node restarted.",
     deadlineExceeded:
       "the pod ran longer than its activeDeadlineSeconds allow and was stopped.",
+    kubectlPrints:
+      "kubectl get pods prints {status}: its containers' word, where this badge gives the pod's own.",
     initProgress:
       "init containers run one at a time before the app's own; {done} of {total} have finished.",
     initNote:

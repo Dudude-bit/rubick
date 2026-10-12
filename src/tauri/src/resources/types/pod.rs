@@ -11,8 +11,8 @@ use crate::utils::format_cpu;
 
 use super::common::{extract_owner_references, ConditionInfo, ContainerInfo};
 use super::pod_display::{
-    counts_ready, display_status, exit_unreported, looping_until, restarting_until, restarts,
-    restarts_by,
+    counts_ready, display_status, exit_unreported, kubectl_status, looping_until, restarting_until,
+    restarts, restarts_by,
 };
 use crate::utils::Moment;
 
@@ -402,8 +402,11 @@ pub struct PodStatusInfo {
     /// sometimes wants — a pod can be in phase `Running` while its only
     /// container loops — but it is never what the app leads with.
     pub phase: String,
-    /// What `kubectl get pod` prints. See `pod_display`.
+    /// What every screen leads with. See `pod_display::display_status`.
     pub display: String,
+    /// What `kubectl get pod` prints where `display` is the pod's own verdict instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kubectl_status: Option<String>,
     pub ready: bool,
     pub conditions: Vec<ConditionInfo>,
     pub message: Option<String>,
@@ -427,6 +430,7 @@ impl PodStatusInfo {
             return Self {
                 phase: "Unknown".to_string(),
                 display,
+                kubectl_status: None,
                 ready: false,
                 conditions: vec![],
                 message: None,
@@ -448,6 +452,7 @@ impl PodStatusInfo {
         Self {
             phase: phase_of(pod),
             display,
+            kubectl_status: kubectl_status(pod),
             ready,
             conditions,
             message: status.message.clone(),

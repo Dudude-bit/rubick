@@ -7769,6 +7769,8 @@ export const ru: Catalogue = {
       "состояние контейнера потеряно, обычно после перезапуска узла.",
     deadlineExceeded:
       "под работал дольше, чем разрешает activeDeadlineSeconds, и был остановлен.",
+    kubectlPrints:
+      "kubectl get pods выводит {status}: это слово его контейнеров, а значок показывает слово самого пода.",
     initProgress:
       "init-контейнеры запускаются по одному перед контейнерами приложения; завершено {done} из {total}.",
     initNote:
