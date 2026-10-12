@@ -160,6 +160,21 @@ const COMMON_REASONS = [
   "ScalingReplicaSet",
 ] as const;
 
+/** Past this many glyphs a reason is a sentence, and wraps between its words rather than widening the column. */
+const ONE_LINE_REASON = 32;
+
+/** The reasons the table holds, each whole on one line, beside the common ones. */
+const reasonsOf = (rows: readonly EventInfo[]) => [
+  ...COMMON_REASONS,
+  ...new Set(
+    rows.flatMap((event) =>
+      event.reason && event.reason.length <= ONE_LINE_REASON
+        ? [event.reason]
+        : []
+    )
+  ),
+];
+
 /** The longest word in a reason Kubernetes writes: a narrower column wraps between words and never inside one. */
 const LONGEST_REASON_WORD = ["Unschedulable"] as const;
 
@@ -176,14 +191,14 @@ const REASON: ColumnDef<EventInfo> = {
   enableSorting: false,
   meta: {
     floor: () => reasonCellPx(LONGEST_REASON_WORD),
-    ideal: () => reasonCellPx(COMMON_REASONS),
+    ideal: (_t, rows: readonly EventInfo[]) => reasonCellPx(reasonsOf(rows)),
   },
   header: columnHeader("columns", "reason"),
   cell: ReasonCell,
 };
 const OBJECT: ColumnDef<EventInfo> = {
   id: "object",
-  size: 300,
+  size: 240,
   meta: { floor: OBJECT_CELL_PX },
   accessorFn: (event) =>
     `${event.involvedObject.kind}/${event.involvedObject.name}`,
