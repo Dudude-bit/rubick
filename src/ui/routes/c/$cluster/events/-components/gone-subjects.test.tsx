@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import type { Story } from "@/lib/event-stories";
 import { queryKeys } from "@/lib/query-keys";
 import { useClusterStore } from "@/stores/clusterStore";
+import { useWindowActivity } from "@/lib/window-activity";
 import { testQueryClient } from "@/test/render";
 
 const getObjectMetadata = vi.hoisted(() => vi.fn());
@@ -14,7 +15,8 @@ vi.mock("@/lib/commands", () => ({
   commands: { getObjectMetadata, getClusterOverview },
 }));
 
-const { HELD_FOR_MS, useGoneSubjects } = await import("./gone-subjects");
+const { useGoneSubjects } = await import("./gone-subjects");
+const { REFRESH_INTERVALS } = await import("@/lib/refresh");
 const { useClusterOverview } = await import("@/hooks/useClusterOverview");
 
 const story = (name: string, state: Story["state"] = "settled") =>
@@ -31,14 +33,14 @@ const story = (name: string, state: Story["state"] = "settled") =>
 const NOT_FOUND = { code: "NOT_FOUND", message: "not found" };
 const GONE = "lena-sandbox/HorizontalPodAutoscaler/hello-web";
 
-function mount(stories: Story[], now: number) {
+function mount(stories: Story[]) {
   const client = testQueryClient();
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>{children}</QueryClientProvider>
   );
   const hook = renderHook(
-    ({ at }: { at: number }) => useGoneSubjects(stories, at),
-    { wrapper, initialProps: { at: now } }
+    ({ told }: { told: Story[] }) => useGoneSubjects(told),
+    { wrapper, initialProps: { told: stories } }
   );
   return { client, ...hook };
 }
@@ -59,15 +61,12 @@ describe("which stories' objects were deleted", () => {
         throw { code: "PERMISSION", message: "forbidden" };
       return { labels: {}, annotations: {} };
     });
-    const { result } = mount(
-      [
-        story("hello-web"),
-        story("refused"),
-        story("api"),
-        story("done-and-gone", "done"),
-      ],
-      Date.now()
-    );
+    const { result } = mount([
+      story("hello-web"),
+      story("refused"),
+      story("api"),
+      story("done-and-gone", "done"),
+    ]);
     await waitFor(() => expect([...result.current]).toEqual([GONE]));
     expect(getObjectMetadata).toHaveBeenCalledTimes(3);
   });
@@ -81,44 +80,80 @@ describe("which stories' objects were deleted", () => {
     useClusterStore.setState({ isConnected: true });
     getObjectMetadata.mockReset();
     getObjectMetadata.mockRejectedValue(NOT_FOUND);
-    const { result } = mount(
-      [story("hello-web", "stillHappening")],
-      Date.now()
-    );
+    const { result } = mount([story("hello-web", "stillHappening")]);
     await waitFor(() => expect([...result.current]).toEqual([GONE]));
   });
 
   /**
    * An object deleted while its page stays open was read once, present, and
-   * never again. Fails if the read is not repeated as the page's clock moves
-   * past the time an answer is held, or is repeated before it.
+   * never again. Fails if the objects are not asked again at the steady
+   * rate, are asked sooner, or are asked one question apiece rather than
+   * as one.
    */
-  it("reads an object again as the page's clock moves on, and not sooner", async () => {
-    const at = Date.parse("2026-10-12T11:47:30Z");
-    vi.useFakeTimers({ toFake: ["Date"] });
-    vi.setSystemTime(at);
+  it("asks again at the steady rate, all of them as one question", async () => {
+    vi.useFakeTimers();
     try {
       useClusterStore.setState({ isConnected: true });
+      useWindowActivity.setState({ visible: true, focused: true });
       getObjectMetadata.mockReset();
       getObjectMetadata.mockResolvedValue({ labels: {}, annotations: {} });
-      const { result, rerender } = mount(
-        [story("hello-web", "stillHappening")],
-        at
-      );
-      await waitFor(() => expect(getObjectMetadata).toHaveBeenCalledTimes(1));
-
-      getObjectMetadata.mockRejectedValue(NOT_FOUND);
-      rerender({ at: at + 1 });
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      expect(getObjectMetadata).toHaveBeenCalledTimes(1);
-
-      vi.setSystemTime(at + HELD_FOR_MS + 1);
-      rerender({ at: at + HELD_FOR_MS });
-      await waitFor(() => expect([...result.current]).toEqual([GONE]));
+      const { client, result } = mount([
+        story("hello-web", "stillHappening"),
+        story("api", "stillHappening"),
+      ]);
+      await vi.advanceTimersByTimeAsync(10);
       expect(getObjectMetadata).toHaveBeenCalledTimes(2);
+      expect(
+        client.getQueryCache().findAll({ queryKey: ["held"] })
+      ).toHaveLength(1);
+
+      getObjectMetadata.mockImplementation(async (_kind, _version, name) => {
+        if (name === "hello-web") throw NOT_FOUND;
+        return { labels: {}, annotations: {} };
+      });
+      await vi.advanceTimersByTimeAsync(REFRESH_INTERVALS.steady / 2);
+      expect(getObjectMetadata).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(REFRESH_INTERVALS.steady / 2 + 10);
+      expect(getObjectMetadata).toHaveBeenCalledTimes(4);
+      expect([...result.current]).toEqual([GONE]);
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  /**
+   * The stories follow the watch once a second, and an answer per story
+   * redrew the page on each of them. Fails if an answer that changes no
+   * story draws the reader of it again.
+   */
+  it("draws nothing for an answer that changes no story", async () => {
+    useClusterStore.setState({ isConnected: true });
+    getObjectMetadata.mockReset();
+    getObjectMetadata.mockResolvedValue({ labels: {}, annotations: {} });
+    let draws = 0;
+    const client = testQueryClient();
+    const told = [story("hello-web", "stillHappening")];
+    renderHook(
+      () => {
+        draws += 1;
+        return useGoneSubjects(told);
+      },
+      {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      }
+    );
+    await waitFor(() => expect(getObjectMetadata).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    const before = draws;
+
+    await client.refetchQueries({ queryKey: ["held"] });
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    expect(getObjectMetadata).toHaveBeenCalledTimes(2);
+    expect(draws).toBe(before);
   });
 
   /**
@@ -134,10 +169,7 @@ describe("which stories' objects were deleted", () => {
     });
     getObjectMetadata.mockReset();
     getObjectMetadata.mockResolvedValue({ labels: {}, annotations: {} });
-    const { client, result } = mount(
-      [story("hello-web", "stillHappening")],
-      Date.now()
-    );
+    const { client, result } = mount([story("hello-web", "stillHappening")]);
     await waitFor(() => expect(getObjectMetadata).toHaveBeenCalledTimes(1));
     await new Promise((resolve) => setTimeout(resolve, 5));
     expect(result.current.size).toBe(0);
@@ -186,7 +218,7 @@ describe("which stories' objects were deleted", () => {
     renderHook(
       () => {
         useClusterOverview(["lena-sandbox"]);
-        return useGoneSubjects([story("hello-web")], Date.now());
+        return useGoneSubjects([story("hello-web")]);
       },
       { wrapper }
     );

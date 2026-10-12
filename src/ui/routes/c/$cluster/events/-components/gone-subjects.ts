@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo } from "react";
+import { keepPreviousData, useQueryClient } from "@tanstack/react-query";
 
 import type { ClusterOverview } from "@/generated/types";
+import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useReadAt } from "@/hooks/useReadUid";
 import { commands } from "@/lib/commands";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
@@ -10,84 +11,88 @@ import { queryKeys } from "@/lib/query-keys";
 import { getApiVersion, toKind } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 
-/** How long an answer about an object's existence is taken as still true. */
-export const HELD_FOR_MS = 30_000;
-
-interface Ask {
-  queryKey: (string | null)[];
-  read: () => Promise<unknown>;
+interface Named {
+  key: string;
+  kind: string;
+  apiVersion: string;
+  namespace: string | null;
+  name: string;
 }
 
 /**
- * The stories whose object was deleted. Each one that may be is read, burning
- * or settled, and read again as the page's clock moves on; only a read the
- * cluster answered with "not found" says gone. A refused or failed read says
- * nothing, and a kind the registry cannot name is not asked. An object the
- * Overview's own check calls gone is read again at once.
+ * The stories whose object was deleted, asked as one question, "which of
+ * these named objects no longer exist", and asked again at the steady rate
+ * while the page is shown. Only a read the cluster answered with "not found"
+ * says gone; a refused or failed one says nothing, and a kind the registry
+ * cannot name is not asked. An object the Overview's own check calls gone is
+ * asked again at once.
  *
- * Read imperatively and kept as one string, so an answer that changes no
- * story draws nothing: the stories follow the watch once a second, and a
- * query per story redrew the page on every one of their answers.
+ * The answer is one string, so it draws the page only when it changes which
+ * stories are gone: the stories follow the watch once a second.
  */
 export function useGoneSubjects(
-  stories: readonly Story[],
-  now: number
+  stories: readonly Story[]
 ): ReadonlySet<string> {
   const isConnected = useClusterStore((state) => state.isConnected);
   const client = useQueryClient();
-  const asked = useMemo(() => {
-    const seen = new Map<string, Ask>();
+  const named = useMemo(() => {
+    const seen = new Map<string, Named>();
     for (const story of stories) {
       const kind = story.subject.kind && toKind(story.subject.kind);
       if (!kind || !mayBeGone(story)) continue;
-      const { name, namespace } = story.subject;
-      const apiVersion = getApiVersion(kind);
-      seen.set(subjectKey(story.subject), {
-        queryKey: queryKeys.held(kind, apiVersion, namespace, name),
-        read: () =>
-          commands.getObjectMetadata(kind, apiVersion, name, namespace),
+      const key = subjectKey(story.subject);
+      seen.set(key, {
+        key,
+        kind,
+        apiVersion: getApiVersion(kind),
+        namespace: story.subject.namespace,
+        name: story.subject.name,
       });
     }
-    return [...seen];
+    return [...seen.values()].sort((a, b) => (a.key < b.key ? -1 : 1));
   }, [stories]);
+  const subjects = named.map((subject) => subject.key).join("\n");
+  const queryKey = useMemo(
+    () => queryKeys.held(subjects ? subjects.split("\n") : []),
+    [subjects]
+  );
+  const asked = useLiveQuery({
+    queryKey,
+    queryFn: () => goneOf(named),
+    enabled: isConnected && named.length > 0,
+    placeholderData: keepPreviousData,
+    select: (gone: string[]) => gone.join("\n"),
+    notifyOnChangeProps: ["data"],
+    refresh: "steady",
+  });
+  const gone = subjects ? asked.data : undefined;
+
   const overview = useGoneInOverview();
-  const [gone, setGone] = useState("");
   useEffect(() => {
-    if (!isConnected) return;
-    let live = true;
-    const toldAt = client.getQueryState(overview.queryKey)?.dataUpdatedAt ?? 0;
-    void Promise.all(
-      asked.map(async ([key, { queryKey, read }]) => {
-        const seen = client.getQueryState<boolean>(queryKey);
-        const contradicted =
-          overview.gone.has(key) &&
-          seen?.data === true &&
-          seen.dataUpdatedAt < toldAt;
-        const held = await client
-          .fetchQuery({
-            queryKey,
-            queryFn: () =>
-              read().then(
-                () => true,
-                (error: unknown) => {
-                  if (errorCode(error) === ERROR_CODES.NOT_FOUND) return false;
-                  throw error;
-                }
-              ),
-            staleTime: contradicted ? 0 : HELD_FOR_MS,
-            retry: false,
-          })
-          .catch(() => null);
-        return held === false ? [key] : [];
-      })
-    ).then((found) => {
-      if (live) setGone(found.flat().sort().join("\n"));
-    });
-    return () => {
-      live = false;
-    };
-  }, [asked, overview, now, client, isConnected]);
+    if (!isConnected || !subjects) return;
+    const told = client.getQueryState(overview.queryKey)?.dataUpdatedAt ?? 0;
+    const said = client.getQueryState<string[]>(queryKey);
+    const contradicted = [...overview.gone].some(
+      (key) => subjects.split("\n").includes(key) && !said?.data?.includes(key)
+    );
+    if (contradicted && (said?.dataUpdatedAt ?? 0) < told)
+      void client.refetchQueries({ queryKey, exact: true });
+  }, [overview, subjects, queryKey, client, isConnected]);
+
   return useMemo(() => new Set(gone ? gone.split("\n") : []), [gone]);
+}
+
+async function goneOf(named: readonly Named[]): Promise<string[]> {
+  const answers = await Promise.all(
+    named.map(({ key, kind, apiVersion, name, namespace }) =>
+      commands.getObjectMetadata(kind, apiVersion, name, namespace).then(
+        () => null,
+        (error: unknown) =>
+          errorCode(error) === ERROR_CODES.NOT_FOUND ? key : null
+      )
+    )
+  );
+  return answers.filter((key): key is string => key !== null);
 }
 
 /** The objects the window's Overview answer last checked and found gone, read from the cache without asking. */
