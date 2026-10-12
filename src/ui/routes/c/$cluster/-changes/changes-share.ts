@@ -101,14 +101,14 @@ export function changesScreenSection(
  */
 export function watchedSection(
   watching: ObservedSpan | undefined,
-  covering: readonly ObservedSpan[],
+  spans: readonly ObservedSpan[],
   items: readonly ChangeItem[],
   t: T
 ): PlacedSection {
   const gaps = items.filter((item) => item.kind === "gap").length;
   const refused = watching && unwatchedWords(watching, t);
   const earlier =
-    watching && earlierRowsWords(covering, items, watching.from, t, clock);
+    watching && earlierRowsWords(spans, items, watching.from, t, clock);
   const since = watching
     ? t("changes", "watchingNow", { since: clock(watching.from) })
     : t("changes", "notWatchingNow");

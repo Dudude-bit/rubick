@@ -9,6 +9,7 @@ import {
   COMPARED_FIELDS,
   diffRevisions,
   diffSnapshots,
+  earlierRowsWords,
   gapsOf,
   gapWords,
   helmReleaseOf,
@@ -1209,4 +1210,49 @@ describe("a gap in words", () => {
       expect(gapWords(hole, r, clock)).not.toMatch(/Вне наблюдаемых/);
     }
   );
+});
+
+describe("where the rows before the running watch came from", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  const clock = (ms: number) => new Date(ms).toISOString().slice(11, 19);
+  const MINUTE = 60_000;
+  const row = (at: number) => ({
+    kind: "journal" as const,
+    at,
+    entry: {
+      id: String(at),
+      context: "acme",
+      kind: "Deployment",
+      namespace: "shop",
+      name: "web",
+      at,
+      field: "replicas" as const,
+      key: null,
+      from: "1",
+      to: "2",
+    },
+  });
+
+  /**
+   * A relist writes its rows a moment before its span opens, so no span
+   * holds them. Fails if such a row is left out of the range the sentence
+   * gives while a span that holds another row is in it.
+   */
+  it("reaches a row no span holds as well as the spans that hold the rest", () => {
+    const spans = [
+      { from: T0, seenAt: T0 + 10 * MINUTE, to: T0 + 10 * MINUTE },
+      { from: T0 + 20 * MINUTE, seenAt: T0 + 30 * MINUTE, to: null },
+    ];
+    expect(
+      earlierRowsWords(
+        spans,
+        [row(T0 + 5 * MINUTE), row(T0 + 20 * MINUTE - 5)],
+        T0 + 20 * MINUTE,
+        t,
+        clock
+      )
+    ).toBe(
+      "Rows before 00:20:00 were recorded by this app while it watched from 00:00:00 to 00:19:59"
+    );
+  });
 });

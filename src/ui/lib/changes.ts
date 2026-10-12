@@ -676,8 +676,9 @@ export function gapWords(
 
 /**
  * Where the rows older than the running watch came from: this app recorded
- * them while it watched earlier, first start to last end. `null` when every
- * row is the running watch's own.
+ * them while it watched earlier, first start to last end of the spans that
+ * hold them, whatever namespaces those spans watched, as the rows themselves
+ * were. `null` when every row is the running watch's own.
  */
 export function earlierRowsWords(
   spans: readonly ObservedSpan[],
@@ -690,14 +691,14 @@ export function earlierRowsWords(
     item.kind === "journal" && item.at < since ? [item.at] : []
   );
   if (older.length === 0) return null;
+  const holds = (span: ObservedSpan, at: number) =>
+    at >= span.from && at <= (span.to ?? span.seenAt);
   const held = spans
-    .filter(
-      (span) =>
-        span.from < since &&
-        older.some((at) => at >= span.from && at <= (span.to ?? span.seenAt))
-    )
+    .filter((span) => span.from < since && older.some((at) => holds(span, at)))
     .flatMap((span) => [span.from, Math.min(span.to ?? span.seenAt, since)]);
-  const ends = held.length > 0 ? held : older;
+  // A relist writes its rows just before its span opens.
+  const loose = older.filter((at) => !spans.some((span) => holds(span, at)));
+  const ends = [...held, ...loose];
   return t("changes", "earlierRows", {
     since: clock(since),
     from: clock(Math.min(...ends)),

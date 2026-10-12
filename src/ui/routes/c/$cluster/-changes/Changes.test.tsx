@@ -377,6 +377,61 @@ describe("rows older than the running watch", () => {
     ).toBeInTheDocument();
   });
 
+  /**
+   * Dana's header said the rows were recorded "from 02:37 PM to 02:38 PM"
+   * above rows from 03:02 PM, recorded while the app watched shop alone and
+   * listed below as watched until 03:13 PM. Fails if the header reads a
+   * narrower set of stretches than the rows it is about were recorded in.
+   */
+  it("dates the earlier rows by every stretch that recorded them, on the page and in Share", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    const shopRow = { ...lenaRow("shop", 11), namespace: "shop" };
+    useChangeJournalStore.setState({
+      entries: [lenaRow("a", 35.5), shopRow],
+      spans: {
+        prod: [
+          { from: NOW - 36 * MIN, seenAt: NOW - 35 * MIN, to: NOW - 35 * MIN },
+          {
+            from: NOW - 18 * MIN,
+            seenAt: NOW - MIN,
+            to: NOW - MIN,
+            scope: ["shop"],
+          },
+          { from: NOW - MIN, seenAt: NOW, to: null },
+        ],
+      },
+    });
+
+    const collect = await mount();
+    const at = (ago: number) => formatWhen(NOW - ago * MIN, "moment");
+    expect(
+      screen.getByText(
+        `Rows before ${at(1)} were recorded by this app while it watched from ${at(36)} to ${at(1)}`
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        `Watching shop only, not the other namespaces, ${at(18)} to ${at(1)}`
+      )
+    ).toBeInTheDocument();
+    const shared = collect().find((section) => section.id === "changes-watched")
+      ?.body as { text: string };
+    const utc = (ago: number) =>
+      new Intl.DateTimeFormat("en", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+        timeZone: "UTC",
+      }).format(NOW - ago * MIN);
+    expect(shared.text).toContain(
+      `while it watched from ${utc(36)} UTC to ${utc(1)} UTC`
+    );
+  });
+
   /** Fails if the line is said where every row is the running watch's own. */
   it("says nothing about an earlier watch when every row is the running watch's own", async () => {
     useClusterStore.setState({

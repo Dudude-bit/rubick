@@ -88,11 +88,11 @@ export function Changes() {
   const quiet = quietSince(watching, items);
   const refused = watching && unwatchedWords(watching, t);
   const earlier =
-    watching && earlierRowsWords(covering, items, watching.from, t, moment);
+    watching && earlierRowsWords(ours, items, watching.from, t, moment);
 
   useShareSection("changes", () => [
     changesScreenSection(items, t),
-    watchedSection(watching, covering, items, t),
+    watchedSection(watching, ours, items, t),
   ]);
 
   if (!isConnected) {
