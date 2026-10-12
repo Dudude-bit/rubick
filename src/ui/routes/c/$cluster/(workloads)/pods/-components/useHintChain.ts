@@ -12,10 +12,18 @@ import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { normalizeTauriError, errorToShow } from "@/lib/error-utils";
-import { addressIn, namespaceOf, type Chain, type Trouble } from "@/lib/hints";
+import {
+  addressIn,
+  namespaceOf,
+  requiredTopologyKeys,
+  topologyReading,
+  type Chain,
+  type Trouble,
+} from "@/lib/hints";
 import { readsPreviousRun } from "@/lib/container-sequence";
 import { usePolicyPeerData } from "@/hooks/usePolicyPeers";
 import { knownOf } from "@/lib/known";
+import { whole } from "@/lib/namespace-scope";
 import { labelSelectorMatches } from "@/lib/label-selector";
 import { pathPolicies, type PolicyRows } from "@/lib/policy-peers";
 import { ResourceType } from "@/lib/resource-registry";
@@ -162,6 +170,36 @@ export function useHintChain(
     staleTime: STALE,
     retry: false,
   });
+  // The scheduler's "missing required label" names no key; the pod's own
+  // spec does, and the nodes say how many carry it.
+  const spreads =
+    trouble?.reason === "pending" && trouble.causes.includes("topologyLabel");
+  const spec = useQuery({
+    queryKey: queryKeys.servedObject("", "pods", pod.namespace, pod.name),
+    queryFn: () =>
+      commands.getServedObject("", "pods", pod.name, pod.namespace),
+    enabled: spreads,
+    staleTime: STALE,
+    retry: false,
+  });
+  const nodes = useQuery({
+    queryKey: queryKeys.resources(ResourceType.Node, null),
+    queryFn: () => commands.listNodes(null).then(whole),
+    enabled: spreads,
+    staleTime: STALE,
+    retry: false,
+  });
+  const topology = useMemo<Chain["topology"]>(
+    () =>
+      spec.data === undefined || nodes.isPending
+        ? { read: "unread" }
+        : topologyReading(
+            requiredTopologyKeys(spec.data),
+            nodes.data?.rows ?? null
+          ),
+    [spec.data, nodes.data, nodes.isPending]
+  );
+
   const selector = service?.selector ?? NO_SELECTOR;
   const selecting = Object.keys(selector).length > 0;
   const { home: namespacePods } = usePolicyPeerData(
@@ -236,6 +274,14 @@ export function useHintChain(
           reason: namespacePods.why,
         })
       );
+    if (spreads && spec.error)
+      notRead.push(
+        t("hints", "notReadPodSpec", { reason: errorToShow(spec.error) })
+      );
+    if (spreads && nodes.error)
+      notRead.push(
+        t("hints", "notReadNodes", { reason: errorToShow(nodes.error) })
+      );
     if (elsewhere)
       notRead.push(
         t("hints", "notReadOtherNamespace", { namespace: elsewhere })
@@ -280,10 +326,15 @@ export function useHintChain(
         : null,
       sidecar,
       policies,
+      topology,
       notRead,
     };
   }, [
     policies,
+    topology,
+    spreads,
+    spec.error,
+    nodes.error,
     policyList.error,
     namespacePods,
     address,

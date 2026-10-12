@@ -1871,6 +1871,10 @@ export const ru: Catalogue = {
       "Скорее всего: ни один узел не подходит, а ответ планировщика менялся за {attempts}, так что узлы, вероятно, меняются у него на глазах.",
     guessPendingTopologyLabel:
       "Скорее всего: ни у одного узла нет метки, по которой его ограничение topology spread распределяет поды, поэтому планировщик не сможет его разместить, пока такая метка не появится.",
+    guessPendingTopologyKey:
+      "Скорее всего: на узлах нет метки {key}, по которой его ограничение topology spread распределяет поды: она есть на {carrying} из {nodes}. Планировщик, вероятно, не сможет разместить его на узле без неё.",
+    guessPendingTopologyKeyUncounted:
+      "Скорее всего: на узлах нет метки {key}, по которой его ограничение topology spread распределяет поды, поэтому планировщик не сможет его разместить, пока она не появится. Узлы прочитать не удалось, поэтому на скольких из них она есть, здесь не посчитано.",
     guessPendingTopology:
       "Скорее всего: на любом узле нарушится его ограничение topology spread, поэтому он ждёт, пока не изменятся его поды или узлы.",
     notPlacedYet:
@@ -1939,6 +1943,9 @@ export const ru: Catalogue = {
     checkNodes: "Посмотреть узлы: taints, ёмкость, что уже размещено",
     checkTopologyLabels:
       "Проверьте метки узлов: есть ли на них ключ, по которому распределяет ограничение topology spread",
+    checkTopologyKey:
+      "Проверьте метку {key} на узлах: она есть на {carrying} из {nodes}",
+    checkTopologyKeyUncounted: "Проверьте, есть ли на узлах метка {key}",
     checkTopologySpread:
       "Сравните ограничение topology spread с тем, где уже работают его поды",
     checkTaints: "Сравните taints узлов с tolerations пода",
@@ -1955,6 +1962,8 @@ export const ru: Catalogue = {
       "объекты Service в {namespace}, где находится этот адрес: приложение прочитало только пространство имён самого пода",
     notReadPolicies: "NetworkPolicy пространства имён {namespace} ({reason})",
     notReadPods: "поды пространства имён {namespace} ({reason})",
+    notReadPodSpec: "спецификация этого пода ({reason})",
+    notReadNodes: "узлы ({reason})",
   },
   services: {
     myServices: "Мои сервисы",

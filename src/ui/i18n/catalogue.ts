@@ -1810,6 +1810,10 @@ export const en = {
       "Most likely: no node fits it, and the scheduler's answer has changed over {attempts}, so the nodes are probably changing under it.",
     guessPendingTopologyLabel:
       "Most likely: no node has the label its topology spread constraint spreads by, so the scheduler probably cannot place it anywhere until one does.",
+    guessPendingTopologyKey:
+      "Most likely: the nodes lack {key}, the label its topology spread constraint spreads by: {carrying} of {nodes} carry it. The scheduler probably cannot place it on a node without it.",
+    guessPendingTopologyKeyUncounted:
+      "Most likely: the nodes lack {key}, the label its topology spread constraint spreads by, so the scheduler probably cannot place it until one carries it. The nodes could not be read, so how many carry it is not counted here.",
     guessPendingTopology:
       "Most likely: every node would break its topology spread constraint, so it probably waits until its pods or the nodes change.",
     notPlacedYet:
@@ -1864,6 +1868,9 @@ export const en = {
     checkNodes: "Look at the nodes: taints, capacity, what is already placed",
     checkTopologyLabels:
       "Look at the nodes' labels for the key its topology spread constraint spreads by",
+    checkTopologyKey:
+      "Look at the nodes' labels for {key}: {carrying} of {nodes} carry it",
+    checkTopologyKeyUncounted: "Look at the nodes' labels for {key}",
     checkTopologySpread:
       "Compare its topology spread constraint with where its pods already run",
     checkTaints: "Compare the nodes' taints with the pod's tolerations",
@@ -1880,6 +1887,8 @@ export const en = {
       "the Services of {namespace}, where that address lives: this app only listed this pod's own namespace",
     notReadPolicies: "the NetworkPolicies of {namespace} ({reason})",
     notReadPods: "the pods of {namespace} ({reason})",
+    notReadPodSpec: "the spec of this pod ({reason})",
+    notReadNodes: "the nodes ({reason})",
   },
   services: {
     myServices: "My services",
