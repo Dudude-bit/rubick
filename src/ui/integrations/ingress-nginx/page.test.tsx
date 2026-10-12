@@ -36,6 +36,7 @@ vi.mock("@/lib/commands", () => ({
 const { default: IngressNginxPage } = await import("./page");
 
 const shop: IngressInfo = {
+  uid: "",
   name: "shop",
   namespace: "web",
   className: "nginx",

@@ -11,6 +11,8 @@ import {
 import { None } from "@/components/ui/none";
 import { conditionRole } from "@/lib/condition-health";
 import { eventReasonMark } from "@/lib/event-reason";
+import { tallyOf } from "@/lib/event-stories";
+import { sayWords } from "@/i18n/say";
 import type { MessageSubject } from "@/lib/message-refs";
 import { formatQuantity, usageRole } from "@/lib/metric-format";
 import { allocatedPercent } from "@/lib/node-amount";
@@ -640,8 +642,10 @@ const EventRow = memo(function EventRow({
   showNamespace: boolean;
   compact: boolean;
 }) {
+  const t = useT();
   const isWarning = event.type === "Warning";
   const count = event.count ?? 0;
+  const tally = tallyOf(event);
   const { family, Icon, color } = eventReasonMark(event.reason ?? null);
   // Almost every name a controller writes is in its own namespace and it
   // does not say so; the involved object is the one thing that knows which.
@@ -712,7 +716,10 @@ const EventRow = memo(function EventRow({
           </span>
         )}
       </span>
-      <span className="whitespace-nowrap text-right font-mono text-[11px] text-fg-fnt">
+      <span
+        className="whitespace-nowrap text-right font-mono text-[11px] text-fg-fnt"
+        title={tally ? sayWords(tally, t) : undefined}
+      >
         {count > 1 ? `×${count}` : ""}
       </span>
       <span

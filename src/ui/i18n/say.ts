@@ -15,6 +15,7 @@
  */
 
 import { errorToShow } from "@/lib/error-utils";
+import { formatWhen } from "@/lib/utils";
 
 import type { en } from "./catalogue";
 import type { T } from "./useT";
@@ -57,12 +58,18 @@ export function spanWords(
   );
 }
 
+/** A moment by the clock, with the day in front of it whenever it is not today. */
+export function momentWords(ms: number, now = Date.now()): string {
+  const day = (at: number) => new Date(at).toDateString();
+  return formatWhen(ms, day(ms) === day(now) ? "hourMinute" : "moment");
+}
+
 /**
  * A {@link Saying}, in words.
  *
  * `spanMs` is resolved before the sentence rather than inside it: a duration
  * is itself counted words, and no language can hand another a substring of
- * its own plural.
+ * its own plural. A value named `<name>AtMs` is a moment, said as `{<name>}`.
  */
 export function sayWords(saying: Saying, t: T): string {
   const source = saying.values ?? {};
@@ -72,6 +79,8 @@ export function sayWords(saying: Saying, t: T): string {
       typeof value === "object"
         ? sayWords(value, t)
         : (value as string | number);
+    if (name.endsWith("AtMs"))
+      values[name.slice(0, -"AtMs".length)] = momentWords(Number(value));
   }
   if ("spanMs" in values) values.span = spanWords(Number(values.spanMs), t);
   return t("readings", saying.key, values);

@@ -13,6 +13,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { useWindowActivity } from "@/lib/window-activity";
 import { testQueryClient } from "@/test/render";
 import { ofIncarnation, useObjectEvents } from "./useObjectEvents";
+import { useReadUidAt } from "./useReadUid";
 
 const event = (reason: string, uid: string | null): EventInfo => ({
   name: `wd-demo.${reason}`,
@@ -110,6 +111,34 @@ it("filters by a uid its caller read itself", async () => {
       useObjectEvents("Pod", "wd-demo", "lena-sandbox", {
         refresh: "slow",
         uid: "current",
+      }),
+    {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    }
+  );
+  await waitFor(() => expect(result.current.data).toBeDefined());
+  expect(result.current.data?.map((e) => e.reason)).toEqual([
+    "Started",
+    "Noted",
+  ]);
+});
+
+/**
+ * A ServiceAccount or an HPA peek is read from its manifest, under a key of
+ * its own, where the uid sits in `metadata`. Fails if the peek's read is not
+ * where the uid is looked for, or the manifest's shape is not read.
+ */
+it("filters by the uid of an object read from its manifest", async () => {
+  const client = testQueryClient();
+  const key = ["peek", "Pod", "lena-sandbox", "wd-demo"];
+  client.setQueryData(key, { metadata: { uid: "current" } });
+  const { result } = renderHook(
+    () =>
+      useObjectEvents("Pod", "wd-demo", "lena-sandbox", {
+        refresh: "slow",
+        uid: useReadUidAt(key),
       }),
     {
       wrapper: ({ children }: { children: ReactNode }) => (

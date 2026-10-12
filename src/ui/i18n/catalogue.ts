@@ -1688,6 +1688,11 @@ export const en = {
       other: "Not observed for {n} seconds at {at}",
     },
     outsideScope: "Watching other namespaces, not this one, {from} to {to}",
+    watchedQuiet: "Watched {from} to {to}: nothing here changed",
+    watchedQuietBrief: {
+      one: "Watched for {n} second at {at}: nothing here changed",
+      other: "Watched for {n} seconds at {at}: nothing here changed",
+    },
     outsideScopeBrief: {
       one: "Watching other namespaces, not this one, for {n} second at {at}",
       other: "Watching other namespaces, not this one, for {n} seconds at {at}",
@@ -1739,9 +1744,7 @@ export const en = {
     watchingNow: "Watching since {since}",
     earlierRows:
       "Rows before {since} were recorded by this app while it watched from {from} to {to}",
-    unwatchedRefused: "{kinds} not watched: the cluster refused",
-    unwatchedRefusedIn:
-      "{kinds} not watched in {namespaces}: the cluster refused",
+    unwatchedRefused: "{kinds} not watched {where}: the cluster refused",
     deliveriesUnread: "What delivers this could not be read: {reason}",
     claimedOwner:
       "{owner} does not list this object; it only carries the label naming it",
@@ -3053,34 +3056,41 @@ export const en = {
     govMetricFrom: "{source} metric",
     govBudgetKeeps: "keeps {rule}; {room}",
     storyChanged:
-      "{changes} within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+      "{changes} {when}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
     storyPods:
-      "Pods within {span}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+      "Pods {when}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
     changesRollouts: { one: "{n} rollout", other: "{n} rollouts" },
     changesScales: { one: "{n} scale", other: "{n} scales" },
     changesBoth: "{rollouts} and {scales}",
-    storyJob: "Ran within {span}: {created}, {completed} completed.",
-    storyQuiet: "{reasons} within {span}. Nothing to say beyond that.",
+    storyJob: "Ran {when}: {created}, {completed} completed.",
+    storyQuiet: "{reasons} {when}. Nothing to say beyond that.",
     storyCrash:
-      "Cannot stay up: the kubelet is backing off from restarting the container, {times} within {span}: {detail}",
-    storyStartFailed:
-      "The container could not be started, {times} within {span}: {detail}",
-    storyPull: "Cannot pull the image, {times} within {span}: {detail}",
+      "Cannot stay up: the kubelet is backing off from restarting the container, {count}: {detail}",
+    storyStartFailed: "The container could not be started, {count}: {detail}",
+    storyPull: "Cannot pull the image, {count}: {detail}",
     storySchedulingSame:
-      "Cannot be scheduled, the same answer {times} within {span}: {detail}",
+      "Cannot be scheduled, the same answer {count}: {detail}",
     storySchedulingVaried:
-      "Cannot be scheduled, {k} different answers within {span}, the latest: {detail}",
-    storyProbe: "Probes failed {times} within {span}: {detail}",
-    storyPressure: "Under pressure, {times} within {span}: {detail}",
-    storyVolumeTrouble: "Volume trouble, {times} within {span}: {detail}",
-    storyJobTrouble: "Job trouble, {times} within {span}: {detail}",
-    storyScaling: "Autoscaler trouble, {times} within {span}: {detail}",
-    storyNode: "Node trouble, {times} within {span}: {detail}",
-    storyRolloutTrouble: "Rollout trouble, {times} within {span}: {detail}",
-    storyTrouble: "{reason} {times} within {span}: {detail}",
+      "Cannot be scheduled, {k} different answers {when}, the latest: {detail}",
+    storyProbe: "Probes failed {count}: {detail}",
+    storyPressure: "Under pressure, {count}: {detail}",
+    storyVolumeTrouble: "Volume trouble, {count}: {detail}",
+    storyJobTrouble: "Job trouble, {count}: {detail}",
+    storyScaling: "Autoscaler trouble, {count}: {detail}",
+    storyNode: "Node trouble, {count}: {detail}",
+    storyRolloutTrouble: "Rollout trouble, {count}: {detail}",
+    storyTrouble: "{reason} {count}: {detail}",
+    whenWithin: "within {span}",
+    whenSince: "since {first}",
+    countWithin: "{times} within {span}",
+    countSince: "{times} since {first}, the last at {last}",
+    countBoth: "{within} and {earlier}",
     storyStillHappening: "still happening",
     storySettled: "settled",
     storyStateUnknown: "cannot say",
+    storyEndedWithObject: "ended with it",
+    storyEndedWithObjectHint:
+      "The {kind} {name} these events were about has been replaced, so nothing more can happen to it. The {kind} with this name now has a story of its own.",
     refusedToRead: "Your access does not allow reading {kind} {name}.",
     namedRowsOnly: {
       one: "Showing only the {n} row the Overview listed as needing attention.",
@@ -4337,6 +4347,13 @@ export const en = {
       "requests vs allocatable · live usage not available from the metrics API",
     warningEvents: "Warning events",
     warningEventsScope: "last hour, by reason",
+    warningOlder: "+{n} since {since}",
+    warningOlderOnly: "×{n} since {since}",
+    warningOlderHint: {
+      one: "{n} repeat of an event first seen at {since}, before the last hour. The cluster counts an event's repeats over its whole life, so whether it fell within the hour is not recorded.",
+      other:
+        "{n} repeats of events first seen at {since}, before the last hour. The cluster counts an event's repeats over its whole life, so how many fell within the hour is not recorded.",
+    },
     warningEventsUnread:
       "Not every events list was read in full, so warnings may be missing here.",
     noCluster: "no cluster",

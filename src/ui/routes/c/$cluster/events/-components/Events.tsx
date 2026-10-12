@@ -207,16 +207,22 @@ const keyOfStory = (story: Story) => story.key;
 const TOGGLE =
   "h-6 whitespace-nowrap rounded px-1.5 text-[11px] transition-colors hover:bg-hover";
 
+/** The heading's own word and the gaps either side of the count. */
+const TITLE_PX = 64;
+
 /**
- * Whether the toolbar, laid out in one row, is wider than the page, so the
- * feed's settings fold into one menu. Measured unfolded for each `layout`
- * rather than against a fixed width: beside a peek at 1440 the English page
- * was wider than the old 640 and its toolbar still stacked three rows.
+ * Whether the toolbar, laid out in one row, leaves the heading too little
+ * room to say its count whole, so the feed's settings fold into one menu.
+ * Measured unfolded for each `layout` rather than against a fixed width:
+ * beside a peek at 1440 the English page was wider than the old 640 and its
+ * toolbar still stacked three rows, and at 1440 alone "4 stories in the 1h
+ * window" was cut to "4 stories…".
  */
 function useFolded(
   page: HTMLElement | null,
   bar: HTMLElement | null,
-  layout: string
+  layout: string,
+  count: HTMLElement | null
 ) {
   const [width, setWidth] = useState(0);
   const [need, setNeed] = useState<{ layout: string; px: number } | null>(null);
@@ -229,7 +235,21 @@ function useFolded(
     observer.observe(page);
     return () => observer.disconnect();
   }, [page]);
-  const folded = width > 0 && need?.layout === layout && need.px > width;
+  const [countPx, setCountPx] = useState(0);
+  useLayoutEffect(() => {
+    if (!count) return;
+    const read = () => setCountPx(count.scrollWidth + TITLE_PX);
+    read();
+    const observer = new MutationObserver(read);
+    observer.observe(count, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+    });
+    return () => observer.disconnect();
+  }, [count]);
+  const folded =
+    width > 0 && need?.layout === layout && need.px + countPx > width;
   useLayoutEffect(() => {
     if (!bar || folded) return;
     const read = () => {
@@ -508,7 +528,13 @@ export function Events() {
   const normalCount = counted.length - warningCount;
   const showSkeleton = isLoading && events.length === 0;
   const nothingRead = failed !== null && pool.length === 0;
-  const narrow = useFolded(page, bar, `${view} ${locale} ${nothingRead}`);
+  const [count, setCount] = useState<HTMLElement | null>(null);
+  const narrow = useFolded(
+    page,
+    bar,
+    `${view} ${locale} ${nothingRead}`,
+    count
+  );
   const listed = view === "list" && !showSkeleton && !(failed && !stale);
 
   useShareSection("events", () => [
@@ -551,6 +577,7 @@ export function Events() {
         count={
           showSkeleton || nothingRead ? undefined : (
             <HeaderCount
+              measure={setCount}
               parts={summarise(
                 t,
                 warningCount,
@@ -937,10 +964,21 @@ function summarise(
  * fits beside the toolbar at 1024 in Russian. The sentence is its title and
  * what a screen reader hears.
  */
-function HeaderCount({ parts }: { parts: CountPart[] }) {
+function HeaderCount({
+  parts,
+  measure,
+}: {
+  parts: CountPart[];
+  measure: (element: HTMLElement | null) => void;
+}) {
   const words = parts.map((part) => part.words).join(" · ");
   return (
-    <span className="block truncate" title={words}>
+    <span
+      ref={measure}
+      data-events-count
+      className="block truncate"
+      title={words}
+    >
       <span className="sr-only">{words}</span>
       <span aria-hidden="true" data-testid="events-count-drawn">
         {parts.map((part, index) => (

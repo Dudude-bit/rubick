@@ -9,6 +9,7 @@ const t: T = (section, key, values) => translate("en", section, key, values);
 
 function pv(over: Partial<PersistentVolumeInfo> = {}): PersistentVolumeInfo {
   return {
+    uid: "",
     name: "pv-123",
     capacity: "10Gi",
     accessModes: ["ReadWriteOnce"],

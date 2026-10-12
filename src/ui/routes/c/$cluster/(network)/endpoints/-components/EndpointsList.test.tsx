@@ -11,6 +11,7 @@ import { columns } from "./EndpointsList";
 
 /** unready-demo as `list_endpoints_in` returns it: two pods failing readiness. */
 const unreadyDemo: EndpointsInfo = {
+  uid: "",
   name: "unready-demo",
   namespace: "k8s-gui-test",
   subsets: [

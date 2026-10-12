@@ -3,6 +3,7 @@ import { Eye, History } from "lucide-react";
 import type { ChangeItem, ObservedSpan } from "@/lib/changes";
 import {
   earlierRowsWords,
+  gapWords,
   journalWords,
   quietSince,
   unwatchedWords,
@@ -13,6 +14,7 @@ import {
   ORDER,
   gapChange,
   refOf,
+  utcMoment,
   type PlacedSection,
 } from "@/lib/report-parts";
 import type { T } from "@/i18n/useT";
@@ -55,6 +57,16 @@ export function changesScreenSection(
       ];
     }
     if (item.kind === "gap") return [gapChange(item.gap, t)];
+    if (item.kind === "watched")
+      return [
+        {
+          at: new Date(item.at).toISOString(),
+          ref: null,
+          parts: [
+            { text: gapWords(item.gap, t, utcMoment, true), quiet: true },
+          ],
+        },
+      ];
     // The screen only ever hands this section journal entries and gaps; a
     // revision, a delivery or a Helm release row has nowhere to attach on a
     // page with no single object, so it is left for the object's own page.

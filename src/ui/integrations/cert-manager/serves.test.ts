@@ -17,6 +17,7 @@ const ingress = (
 ): IngressInfo => {
   const { host = "shop.example.com", ...rest } = overrides;
   return {
+    uid: "",
     name: "edge",
     namespace: "web",
     className: "gce",

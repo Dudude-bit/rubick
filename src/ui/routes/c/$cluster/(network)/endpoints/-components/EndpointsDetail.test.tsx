@@ -13,6 +13,7 @@ import { renderWithRouter } from "@/test/render";
 import { EndpointsDetail } from "./EndpointsDetail";
 
 const LEDGER: EndpointsInfo = {
+  uid: "",
   name: "ledger",
   namespace: "team-blind",
   createdAt: null,

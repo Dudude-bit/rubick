@@ -23,6 +23,7 @@ vi.mock("@/lib/commands", () => ({
 const { default: AwsLoadBalancerPage } = await import("./page");
 
 const shop: IngressInfo = {
+  uid: "",
   name: "shop",
   namespace: "web",
   className: "alb",

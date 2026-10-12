@@ -25,6 +25,7 @@ const notGoverned: PolicyDirection = {
 };
 
 const policy: NetworkPolicyInfo = {
+  uid: "",
   name: "deny-egress",
   namespace: "shop",
   selects: { kind: "written", query: "app=checkout" },

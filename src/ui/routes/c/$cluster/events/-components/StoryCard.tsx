@@ -36,6 +36,7 @@ const STATE_LABEL: Record<StoryState, keyof typeof en.readings> = {
   settled: "storySettled",
   done: "storyDone",
   unknown: "storyStateUnknown",
+  earlier: "storyEndedWithObject",
 };
 
 // `unknown` is drawn neutral, never green: the reassuring colour is the one
@@ -45,6 +46,7 @@ const STATE_TONE: Record<StoryState, string> = {
   settled: "bg-warn/15 text-warn",
   done: "bg-ok/15 text-ok",
   unknown: "bg-fg-fnt/15 text-fg-mut",
+  earlier: "bg-fg-fnt/15 text-fg-mut",
 };
 
 const STATE_EDGE: Record<StoryState, string> = {
@@ -52,6 +54,7 @@ const STATE_EDGE: Record<StoryState, string> = {
   settled: "border-warn/50",
   done: "border-hair",
   unknown: "border-hair",
+  earlier: "border-hair",
 };
 
 const STATE_LINE: Record<StoryState, string> = {
@@ -59,6 +62,7 @@ const STATE_LINE: Record<StoryState, string> = {
   settled: "text-warn",
   done: "text-fg",
   unknown: "text-fg-mut",
+  earlier: "text-fg-mut",
 };
 
 /** How many of a story's pods the timeline asks about; the rest is said in words. */
@@ -207,6 +211,14 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
             "rounded px-1.5 py-px text-[10px] font-medium",
             STATE_TONE[story.state]
           )}
+          title={
+            story.state === "earlier" && subject.kind
+              ? t("readings", "storyEndedWithObjectHint", {
+                  kind: subject.kind,
+                  name: subject.name,
+                })
+              : undefined
+          }
         >
           {t("readings", STATE_LABEL[story.state])}
         </span>

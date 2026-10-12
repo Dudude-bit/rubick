@@ -57,6 +57,7 @@ describe("a tooltip and the pointer", () => {
       <TooltipProvider>
         <AddressesCell
           endpoints={{
+            uid: "",
             name: "web",
             namespace: "default",
             subsets: [],

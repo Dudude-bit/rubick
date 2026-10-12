@@ -30,6 +30,54 @@ async function mount() {
   return () => collect!();
 }
 
+describe("the stretches this app watched", () => {
+  /**
+   * Lena's page said "watching since 07:24:23" while it had watched
+   * lena-sandbox from 07:14, and nothing covered the nine quiet minutes
+   * before a scope switch. Fails if a watched stretch with nothing recorded
+   * gets no row, on the page or in Share.
+   */
+  it("says a quiet stretch it watched before the running one was watched", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: ["lena-sandbox"],
+    });
+    const scope = ["lena-sandbox"];
+    useChangeJournalStore.setState({
+      entries: [],
+      spans: {
+        prod: [
+          {
+            from: NOW - 30 * 60_000,
+            seenAt: NOW - 21 * 60_000,
+            to: NOW - 21 * 60_000,
+            scope,
+          },
+          {
+            from: NOW - 21 * 60_000,
+            seenAt: NOW - 20 * 60_000,
+            to: NOW - 20 * 60_000,
+            scope: ["default"],
+          },
+          { from: NOW - 20 * 60_000, seenAt: NOW, to: null, scope },
+        ],
+      },
+    });
+
+    const collect = await mount();
+    const quiet = `Watched ${formatWhen(NOW - 30 * 60_000, "moment")} to ${formatWhen(NOW - 21 * 60_000, "moment")}: nothing here changed`;
+    expect(screen.getByText(quiet)).toBeInTheDocument();
+    const changes = collect().find((section) => section.id === "changes");
+    const rows = changes?.body.type === "changes" ? changes.body.changes : [];
+    expect(
+      rows.some((row) =>
+        row.parts.some((part) => part.text.startsWith("Watched "))
+      )
+    ).toBe(true);
+  });
+});
+
 describe("what the Changes page offers Share", () => {
   /** Deleting the object's ref on a journal row leaves a shared report of a
    *  cluster-wide timeline with no way to tell which workload a row is about. */
@@ -123,6 +171,7 @@ describe("what the Changes page offers Share", () => {
             seenAt: NOW,
             to: null,
             unwatched: ["DaemonSet"],
+            scope: ["team-checkout"],
           },
         ],
       },
@@ -130,8 +179,10 @@ describe("what the Changes page offers Share", () => {
 
     const collect = await mount();
     expect(
-      screen.getByText("DaemonSet not watched: the cluster refused")
-    ).toBeInTheDocument();
+      screen.getByText(
+        "DaemonSet not watched in team-checkout: the cluster refused"
+      )
+    ).toHaveAttribute("title", "DaemonSet: team-checkout");
     const watched = collect().find(
       (section) => section.id === "changes-watched"
     );

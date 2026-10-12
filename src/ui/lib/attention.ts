@@ -22,6 +22,7 @@ import type {
 import type { T } from "@/i18n/useT";
 import { ERROR_CODES, errorCode, errorToShow } from "@/lib/error-utils";
 import { autoscalerVerdict } from "@/lib/governance";
+import { namespacesWhere } from "@/lib/namespace-scope";
 import { parseRefusal } from "@/lib/refusal";
 import { isRolloutCode, ownStatusWord, rolloutWord } from "@/lib/status-words";
 import { ingressHealthWords, type IngressHealth } from "@/lib/ingress-health";
@@ -75,17 +76,11 @@ export const failedWhole = (
   }));
 
 /** Where reads went unread, in words: one namespace, several, or the whole cluster. */
-export function unreadWhere(unread: readonly Unread[], t: T): string {
-  const named = [
-    ...new Set(
-      unread.flatMap((entry) => (entry.namespace ? [entry.namespace] : []))
-    ),
-  ];
-  if (named.length === 0) return t("cluster", "attentionClusterWide");
-  return named.length === 1
-    ? t("cluster", "attentionInNamespace", { namespace: named[0] })
-    : t("cluster", "attentionInNamespaces", { n: named.length });
-}
+export const unreadWhere = (unread: readonly Unread[], t: T): string =>
+  namespacesWhere(
+    unread.flatMap((entry) => (entry.namespace ? [entry.namespace] : [])),
+    t
+  );
 
 /** An unread check every reach of which refused it, rather than failed. */
 export const checkRefused = (check: AttentionCheck): boolean =>

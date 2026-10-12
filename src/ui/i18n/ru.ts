@@ -1733,6 +1733,13 @@ export const ru: Catalogue = {
     },
     outsideScope:
       "С {from} по {to} следили за другими пространствами имён, а за этим нет",
+    watchedQuiet: "С {from} по {to} наблюдали: здесь ничего не менялось",
+    watchedQuietBrief: {
+      one: "Наблюдали {n} секунду в {at}: здесь ничего не менялось",
+      few: "Наблюдали {n} секунды в {at}: здесь ничего не менялось",
+      many: "Наблюдали {n} секунд в {at}: здесь ничего не менялось",
+      other: "Наблюдали {n} секунды в {at}: здесь ничего не менялось",
+    },
     outsideScopeBrief: {
       one: "В течение {n} секунды ({at}) следили за другими пространствами имён, а за этим нет",
       few: "В течение {n} секунд ({at}) следили за другими пространствами имён, а за этим нет",
@@ -1796,9 +1803,7 @@ export const ru: Catalogue = {
     watchingNow: "Наблюдаем с {since}",
     earlierRows:
       "Строки до {since} приложение записало, когда наблюдало с {from} по {to}",
-    unwatchedRefused: "{kinds} не отслеживаются: кластер отказал",
-    unwatchedRefusedIn:
-      "{kinds} не отслеживаются в {namespaces}: кластер отказал",
+    unwatchedRefused: "{kinds} не отслеживаются {where}: кластер отказал",
     deliveriesUnread: "Не удалось прочитать, кто это доставляет: {reason}",
     claimedOwner:
       "{owner} не перечисляет этот объект; на объекте только метка с его именем",
@@ -3268,9 +3273,9 @@ export const ru: Catalogue = {
     govMetricFrom: "метрика {source}",
     govBudgetKeeps: "держит {rule}; {room}",
     storyChanged:
-      "{changes} за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
+      "{changes} {when}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
     storyPods:
-      "Поды за {span}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
+      "Поды {when}: запланировано {scheduled}, скачано {pulled}, запущено {started}, остановлено {stopped}.",
     changesRollouts: {
       one: "{n} развёртывание",
       few: "{n} развёртывания",
@@ -3284,27 +3289,35 @@ export const ru: Catalogue = {
       other: "{n} масштабирования",
     },
     changesBoth: "{rollouts} и {scales}",
-    storyJob: "Отработало за {span}: {created}, завершено {completed}.",
-    storyQuiet: "{reasons} за {span}. Больше сказать нечего.",
+    storyJob: "Отработало {when}: {created}, завершено {completed}.",
+    storyQuiet: "{reasons} {when}. Больше сказать нечего.",
     storyCrash:
-      "Контейнер раз за разом падает: kubelet откладывает его перезапуск, {times} за {span}: {detail}",
-    storyStartFailed: "Контейнер не запустился {times} за {span}: {detail}",
-    storyPull: "Образ не скачался {times} за {span}: {detail}",
+      "Контейнер раз за разом падает: kubelet откладывает его перезапуск, {count}: {detail}",
+    storyStartFailed: "Контейнер не запустился {count}: {detail}",
+    storyPull: "Образ не скачался {count}: {detail}",
     storySchedulingSame:
-      "Не назначается на узел, один и тот же ответ {times} за {span}: {detail}",
+      "Не назначается на узел, один и тот же ответ {count}: {detail}",
     storySchedulingVaried:
-      "Не назначается на узел, разных ответов за {span}: {k}, последний: {detail}",
-    storyProbe: "Проверки не прошли {times} за {span}: {detail}",
-    storyPressure: "Нехватка ресурсов {times} за {span}: {detail}",
-    storyVolumeTrouble: "Проблема с томом {times} за {span}: {detail}",
-    storyJobTrouble: "Проблема с Job {times} за {span}: {detail}",
-    storyScaling: "Проблема автомасштабирования {times} за {span}: {detail}",
-    storyNode: "Проблема узла {times} за {span}: {detail}",
-    storyRolloutTrouble: "Проблема развёртывания {times} за {span}: {detail}",
-    storyTrouble: "{reason} {times} за {span}: {detail}",
+      "Не назначается на узел, разных ответов {when}: {k}, последний: {detail}",
+    storyProbe: "Проверки не прошли {count}: {detail}",
+    storyPressure: "Нехватка ресурсов {count}: {detail}",
+    storyVolumeTrouble: "Проблема с томом {count}: {detail}",
+    storyJobTrouble: "Проблема с Job {count}: {detail}",
+    storyScaling: "Проблема автомасштабирования {count}: {detail}",
+    storyNode: "Проблема узла {count}: {detail}",
+    storyRolloutTrouble: "Проблема развёртывания {count}: {detail}",
+    storyTrouble: "{reason} {count}: {detail}",
+    whenWithin: "за {span}",
+    whenSince: "с {first}",
+    countWithin: "{times} за {span}",
+    countSince: "{times} с {first}, последний раз в {last}",
+    countBoth: "{within} и {earlier}",
     storyStillHappening: "продолжается",
     storySettled: "прекратилось",
     storyStateUnknown: "неизвестно",
+    storyEndedWithObject: "закончилось с ним",
+    storyEndedWithObjectHint:
+      "Объект {kind} {name}, о котором эти события, заменён другим, поэтому с ним больше ничего не произойдёт. У {kind} с этим именем сейчас своя история.",
     refusedToRead: "Ваш доступ не позволяет читать {kind} {name}.",
     namedRowsOnly: {
       one: "Показана только {n} строка, которую Обзор отметил как требующую внимания.",
@@ -4839,6 +4852,15 @@ export const ru: Catalogue = {
       "запросы к доступному · текущее потребление недоступно из API метрик",
     warningEvents: "Предупреждающие события",
     warningEventsScope: "за последний час, по причинам",
+    warningOlder: "+{n} с {since}",
+    warningOlderOnly: "×{n} с {since}",
+    warningOlderHint: {
+      one: "{n} повтор события, впервые замеченного в {since}, ещё до последнего часа. Кластер считает повторы события за всю его жизнь, поэтому пришёлся ли он на последний час, не записано.",
+      few: "{n} повтора событий, впервые замеченных в {since}, ещё до последнего часа. Кластер считает повторы события за всю его жизнь, поэтому сколько из них пришлось на последний час, не записано.",
+      many: "{n} повторов событий, впервые замеченных в {since}, ещё до последнего часа. Кластер считает повторы события за всю его жизнь, поэтому сколько из них пришлось на последний час, не записано.",
+      other:
+        "{n} повтора событий, впервые замеченных в {since}, ещё до последнего часа. Кластер считает повторы события за всю его жизнь, поэтому сколько из них пришлось на последний час, не записано.",
+    },
     warningEventsUnread:
       "Не все списки событий прочитаны целиком, поэтому части предупреждений здесь может не быть.",
     noCluster: "нет кластера",

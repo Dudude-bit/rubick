@@ -12,6 +12,7 @@ import {
 const t: T = (section, key, values) => translate("en", section, key, values);
 
 const gateway = (over: Partial<GatewayInfo> = {}): GatewayInfo => ({
+  uid: "",
   name: "public",
   namespace: "gw",
   apiVersion: "gateway.networking.k8s.io/v1",

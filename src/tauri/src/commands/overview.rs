@@ -191,7 +191,11 @@ pub struct NodeSummary {
 #[serde(rename_all = "camelCase")]
 pub struct WarningGroup {
     pub reason: String,
+    /// Repeats of the events first seen inside the window.
     pub count: i32,
+    /// Repeats of the events first seen before it, which the cluster's
+    /// lifetime counts cannot place inside the window.
+    pub older: Option<OlderTally>,
     pub last_seen: Option<String>,
     /// Most recent message for this reason.
     pub sample: Option<String>,
@@ -209,6 +213,14 @@ pub struct WarningGroup {
     /// Whether that object is the one holding its name now. A pod made again
     /// under its name took its predecessor's `FailedMount` as its own.
     pub incarnation: Incarnation,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OlderTally {
+    pub count: i32,
+    /// The earliest first sighting among those events.
+    pub since: DateTime<Utc>,
 }
 
 /// Whether the object an event names is the one that has the name now.
@@ -1062,6 +1074,7 @@ fn recent_warnings<'a>(
         let entry = grouped.entry(reason.clone()).or_insert(WarningGroup {
             reason,
             count: 0,
+            older: None,
             last_seen: None,
             sample: None,
             object_kind: None,
@@ -1069,7 +1082,28 @@ fn recent_warnings<'a>(
             namespace: None,
             incarnation: Incarnation::Unchecked,
         });
-        entry.count += event.count.unwrap_or(1);
+        let repeats = event
+            .count
+            .or_else(|| event.series.as_ref().and_then(|s| s.count))
+            .unwrap_or(1)
+            .max(1);
+        let first = event
+            .first_timestamp
+            .as_ref()
+            .map(Moment::moment)
+            .or_else(|| event.event_time.as_ref().map(Moment::moment))
+            .or(last);
+        match first.filter(|first| *first < cutoff) {
+            Some(first) => {
+                let older = entry.older.get_or_insert(OlderTally {
+                    count: 0,
+                    since: first,
+                });
+                older.count += repeats;
+                older.since = older.since.min(first);
+            }
+            None => entry.count += repeats,
+        }
         let last_rfc = last.map(|t| t.to_rfc3339());
         // Keep the newest occurrence as the representative sample.
         if entry.last_seen.is_none() || last_rfc > entry.last_seen {
@@ -1086,7 +1120,9 @@ fn recent_warnings<'a>(
     }
 
     let mut groups: Vec<_> = grouped.into_values().collect();
-    groups.sort_by_key(|group| std::cmp::Reverse(group.count));
+    groups.sort_by_key(|group| {
+        std::cmp::Reverse(group.count + group.older.as_ref().map_or(0, |older| older.count))
+    });
     groups
 }
 
@@ -5542,6 +5578,26 @@ mod across_namespaces {
             let groups = recent_warnings(order, |_| Incarnation::Unchecked);
             assert_eq!(groups[0].sample.as_deref(), Some("dated"));
         }
+    }
+
+    /// Marco's panel counted 767 `BackOff` repeats in the last hour where 696 were one
+    /// event first seen two and a half hours earlier. Fails if the lifetime
+    /// count of an event older than the hour is counted as the hour's.
+    #[test]
+    fn an_event_first_seen_before_the_hour_is_tallied_apart_with_its_first_sighting() {
+        let began = Utc::now() - chrono::Duration::minutes(150);
+        let mut old = event(PROD, "BackOff", 696, Some(50));
+        old.first_timestamp = Some(Time(
+            crate::utils::moment::as_cluster_time(began).expect("an instant this test wrote"),
+        ));
+        let fresh = event(PROD, "BackOff", 71, Some(1));
+
+        let groups = recent_warnings([&old, &fresh], |_| Incarnation::Unchecked);
+
+        assert_eq!(groups[0].count, 71);
+        let older = groups[0].older.as_ref().expect("the older event's tally");
+        assert_eq!(older.count, 696);
+        assert_eq!(older.since.timestamp(), began.timestamp());
     }
 
     /// The panel is read top-down, and adding the namespaces up changes the

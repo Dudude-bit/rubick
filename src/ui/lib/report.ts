@@ -143,10 +143,14 @@ export interface ReportConditionRow {
 
 export interface ReportEventRow {
   at: string | null;
+  /** When the repeats `count` covers began, where that is before `at`. */
+  first?: string | null;
   role: StatusRole;
   reason: string;
   message: string;
   count: number;
+  /** Repeats of events older than the window the row counts, in words. */
+  older?: string | null;
   ref?: ReportRef;
 }
 
@@ -566,9 +570,11 @@ function eventsHtml(rows: ReportEventRow[], ctx: Ctx): string {
       (row) =>
         `<div class="evt">${roleHtml(row.role, row.reason, ctx.icons)}<span>${
           row.ref ? `${refHtml(row.ref, ctx)} ` : ""
-        }${row.at ? `<time datetime="${e(row.at)}">${e(when(row.at, ctx.words.lang))}</time>` : ""}${
-          row.count > 1 ? ` <span class="x">×${row.count}</span>` : ""
-        }</span><span class="msg">${e(row.message)}</span></div>`
+        }${row.first ? `<time datetime="${e(row.first)}">${e(when(row.first, ctx.words.lang))}</time> → ` : ""}${row.at ? `<time datetime="${e(row.at)}">${e(when(row.at, ctx.words.lang))}</time>` : ""}${
+          row.count > 1 || (row.older && row.count > 0)
+            ? ` <span class="x">×${row.count}</span>`
+            : ""
+        }${row.older ? ` <span class="x">${e(row.older)}</span>` : ""}</span><span class="msg">${e(row.message)}</span></div>`
     )
     .join("");
 }

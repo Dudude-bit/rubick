@@ -1783,16 +1783,21 @@ describe("a feed beside a peek", () => {
    * jsdom lays nothing out: the page alone is `width` pixels wide, and its
    * toolbar in one row is `bar`, about what English list controls take.
    */
-  function pageOf(width: number, bar = 620) {
-    const sizes = [
-      ["clientWidth", "data-events-page", width],
-      ["scrollWidth", "data-events-bar", bar],
-    ] as const;
-    for (const [property, owner, size] of sizes) {
+  function pageOf(width: number, bar = 620, count = 0) {
+    const sizes: Array<
+      ["clientWidth" | "scrollWidth", Record<string, number>]
+    > = [
+      ["clientWidth", { "data-events-page": width }],
+      ["scrollWidth", { "data-events-bar": bar, "data-events-count": count }],
+    ];
+    for (const [property, owners] of sizes) {
       Object.defineProperty(HTMLElement.prototype, property, {
         configurable: true,
         get(this: HTMLElement) {
-          return this.hasAttribute(owner) ? size : 0;
+          const owner = Object.keys(owners).find((name) =>
+            this.hasAttribute(name)
+          );
+          return owner ? owners[owner] : 0;
         },
       });
       restoreLayout.push(
@@ -1922,6 +1927,19 @@ describe("a feed beside a peek", () => {
       await screen.findByRole("button", { name: "Feed settings" })
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Warnings" })).toBeNull();
+  });
+
+  /**
+   * At 1440 in English the toolbar fit beside the heading and left it 64 px:
+   * "4 stories…". Fails if the toolbar stays in a row that leaves the count
+   * no room to be said whole.
+   */
+  it("folds where its controls in a row leave the count no room", async () => {
+    pageOf(900, 760, 160);
+    await mount("list");
+    expect(
+      await screen.findByRole("button", { name: "Feed settings" })
+    ).toBeInTheDocument();
   });
 
   /** Fails if a page with room loses its row of type buttons to the menu. */

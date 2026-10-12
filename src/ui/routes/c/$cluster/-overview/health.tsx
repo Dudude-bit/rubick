@@ -21,6 +21,8 @@ import {
   cpuRatio,
   memoryRatio,
   nodesShare,
+  olderHint,
+  olderWords,
   podSegments,
   podTotal,
   readyBetweenCrashes,
@@ -1034,6 +1036,7 @@ const PAST_OF: Record<Incarnation, Past | null> = {
 };
 
 function WarningRow({ warning }: { warning: WarningGroup }) {
+  const t = useT();
   // Every row here is a Warning, so severity owns the colour outright and the
   // family mark contributes only shape.
   const { Icon } = eventReasonMark(warning.reason);
@@ -1059,9 +1062,18 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
         <span className="truncate" title={warning.reason}>
           {warning.reason}
         </span>
-        {warning.count > 1 && (
+        {(warning.count > 1 || (warning.count > 0 && warning.older)) && (
           <span className="flex-none">
             <Unit>×{warning.count}</Unit>
+          </span>
+        )}
+        {warning.older && (
+          <span
+            className="flex-none font-sans font-normal"
+            title={olderHint(warning, t)}
+            data-testid="warning-older"
+          >
+            <Unit>{olderWords(warning, t)}</Unit>
           </span>
         )}
       </span>

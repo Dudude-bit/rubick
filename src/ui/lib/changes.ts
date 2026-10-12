@@ -22,6 +22,7 @@ import type {
 import type { DeliveryRevision } from "@/integrations";
 import { probeFields } from "./probe-words";
 import type { T } from "@/i18n/useT";
+import { namespacesWhere } from "./namespace-scope";
 
 /**
  * The kinds whose history the Changes tab can draw, as a value as well as a
@@ -558,25 +559,32 @@ function refusedIn(
   );
 }
 
-/** The kinds a span was refused, each with where, in words, or `null` when it watched them all. */
-export function unwatchedWords(span: ObservedSpan, t: T): string | null {
-  const said: string[] = [];
-  if (span.unwatched?.length)
-    said.push(
-      t("changes", "unwatchedRefused", { kinds: span.unwatched.join(", ") })
-    );
+/** Each kind a span was refused, with the namespaces it was refused in; `[]` is the whole cluster. */
+export function refusedWhere(span: ObservedSpan): Map<string, string[]> {
   const where = new Map<string, string[]>();
+  for (const kind of span.unwatched ?? []) where.set(kind, span.scope ?? []);
   for (const entry of span.unwatchedIn ?? []) {
     const [kind, namespace] = entry.split("/");
     where.set(kind, [...(where.get(kind) ?? []), namespace]);
   }
-  for (const [kind, namespaces] of where)
-    said.push(
-      t("changes", "unwatchedRefusedIn", {
-        kinds: kind,
-        namespaces: namespaces.join(", "),
-      })
-    );
+  return where;
+}
+
+/** The kinds a span was refused, each with where, in words, or `null` when it watched them all. */
+export function unwatchedWords(span: ObservedSpan, t: T): string | null {
+  const kindsAt = new Map<string, { kinds: string[]; where: string[] }>();
+  for (const [kind, where] of refusedWhere(span)) {
+    const key = [...where].sort().join();
+    const same = kindsAt.get(key) ?? { kinds: [], where };
+    same.kinds.push(kind);
+    kindsAt.set(key, same);
+  }
+  const said = [...kindsAt.values()].map(({ kinds, where }) =>
+    t("changes", "unwatchedRefused", {
+      kinds: kinds.join(", "),
+      where: namespacesWhere(where, t),
+    })
+  );
   return said.length > 0 ? said.join(" · ") : null;
 }
 
@@ -618,12 +626,15 @@ export function spansWatching(
 export function gapWords(
   gap: Gap,
   t: T,
-  clock: (ms: number) => string
+  clock: (ms: number) => string,
+  watched = false
 ): string {
   const ms = gap.to - gap.from;
-  const [brief, long] = gap.elsewhere
-    ? (["outsideScopeBrief", "outsideScope"] as const)
-    : (["notObservedBrief", "notObserved"] as const);
+  const [brief, long] = watched
+    ? (["watchedQuietBrief", "watchedQuiet"] as const)
+    : gap.elsewhere
+      ? (["outsideScopeBrief", "outsideScope"] as const)
+      : (["notObservedBrief", "notObserved"] as const);
   return ms < 60_000
     ? t("changes", brief, {
         n: Math.max(1, Math.round(ms / 1000)),
@@ -663,6 +674,44 @@ export function earlierRowsWords(
   });
 }
 
+/**
+ * The stretches `spans` watched within [from, to] and recorded no row in, as
+ * rows: Lena's page said nothing about the nine quiet minutes it had watched
+ * before a scope switch. The one still running has the header's own line.
+ */
+export function quietStretches(
+  spans: readonly ObservedSpan[],
+  items: readonly ChangeItem[],
+  from: number,
+  to: number
+): ChangeItem[] {
+  const stretches: Gap[] = [];
+  const clipped = spans
+    .map((span) => ({
+      from: Math.max(span.from, from),
+      to: Math.min(span.to ?? to, to),
+    }))
+    .filter((span) => span.to > span.from)
+    .sort((a, b) => a.from - b.from);
+  for (const span of clipped) {
+    const last = stretches.at(-1);
+    if (last && span.from <= last.to) last.to = Math.max(last.to, span.to);
+    else stretches.push({ ...span });
+  }
+  return stretches
+    .filter(
+      (stretch) =>
+        stretch.to < to &&
+        !items.some(
+          (item) =>
+            item.kind === "journal" &&
+            item.at >= stretch.from &&
+            item.at <= stretch.to
+        )
+    )
+    .map((gap) => ({ kind: "watched", at: gap.to, gap }));
+}
+
 /** When the running watch began, if it has recorded no row since; `null` otherwise. */
 export function quietSince(
   watching: ObservedSpan | undefined,
@@ -671,7 +720,10 @@ export function quietSince(
   if (!watching) return null;
   return items.some(
     (item) =>
-      item.kind !== "gap" && item.at !== null && item.at >= watching.from
+      item.kind !== "gap" &&
+      item.kind !== "watched" &&
+      item.at !== null &&
+      item.at >= watching.from
   )
     ? null
     : watching.from;
@@ -774,6 +826,8 @@ export type ChangeItem =
   | { kind: "helm"; at: number | null; revision: HelmRevision }
   | { kind: "journal"; at: number; entry: JournalEntry }
   | { kind: "gap"; at: number; gap: Gap }
+  /** A stretch watched with nothing recorded, said so it is not read as unaccounted for. */
+  | { kind: "watched"; at: number; gap: Gap }
   /** The object's `creationTimestamp`: nothing before it is this object's history. */
   | { kind: "created"; at: number };
 

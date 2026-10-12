@@ -22,6 +22,7 @@ import {
   type AttentionInputs,
 } from "@/lib/attention";
 import { translate } from "@/i18n";
+import { momentWords } from "@/i18n/say";
 import {
   ownCountedWord,
   ownStatusWord,
@@ -55,6 +56,7 @@ const MESSAGE = "Scaled up replica set meshed-demo-65d47b457f to 1";
 const warning: WarningGroup = {
   reason: "ScalingReplicaSet",
   count: 3,
+  older: null,
   lastSeen: new Date().toISOString(),
   sample: MESSAGE,
   objectKind: "Deployment",
@@ -192,6 +194,37 @@ describe("the overview's two event panels", () => {
     expect(
       screen.getByRole("link", { name: "Deployment unread" })
     ).toBeInTheDocument();
+  });
+
+  /**
+   * Marco's BackOff read ×767 under "last hour" where 696 were one event first
+   * seen two and a half hours earlier. Fails if the older event's lifetime
+   * count is drawn as the hour's, or its tally stops naming when it began.
+   */
+  it("draws repeats of an event older than the hour apart from the hour's count", async () => {
+    const since = new Date(Date.now() - 150 * 60_000);
+    await wrap(
+      <WarningsPanel
+        warnings={[
+          {
+            ...warning,
+            reason: "BackOff",
+            count: 71,
+            older: { count: 696, since: since.toISOString() },
+          },
+        ]}
+        known
+      />
+    );
+    expect(screen.getByText("×71")).toBeInTheDocument();
+    expect(screen.queryByText(/767/)).toBeNull();
+    const older = screen.getByTestId("warning-older");
+    expect(older).toHaveTextContent(
+      `+696 since ${momentWords(since.getTime())}`
+    );
+    expect(older.getAttribute("title")).toMatch(
+      /^696 repeats of events first seen at /
+    );
   });
 
   it("says the warnings are unknown when an events list failed", async () => {

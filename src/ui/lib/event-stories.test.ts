@@ -92,7 +92,7 @@ describe("the recorded hour", () => {
     expect(rollout.says).toEqual({
       key: "storyChanged",
       values: {
-        spanMs: 5000,
+        when: { key: "whenWithin", values: { spanMs: 5000 } },
         scheduled: 1,
         pulled: 2,
         started: 2,
@@ -132,11 +132,13 @@ describe("the recorded hour", () => {
       values: {
         // The count is its own sentence: Russian needs three forms where
         // English needs two, so the outer string cannot carry `{n} times`.
-        times: { key: "timesSeen", values: { n: 12 } },
         // The pulls all failed at 07:29:42. The 99 minutes this used to
         // quote belonged to the scheduling failures in the same story —
         // a span borrowed from trouble the sentence is not counting.
-        spanMs: 0,
+        count: {
+          key: "countWithin",
+          values: { times: { key: "timesSeen", values: { n: 12 } }, spanMs: 0 },
+        },
         detail: 'Failed to pull image "busybox:1.36": pull QPS exceeded',
       },
     });
@@ -150,9 +152,12 @@ describe("the recorded hour", () => {
     expect(hpa.subject.kind).toBe("HorizontalPodAutoscaler");
     expect(hpa.state).toBe("stillHappening");
     expect(hpa.says.key).toBe("storyScaling");
-    expect(hpa.says.values?.times).toEqual({
-      key: "timesSeen",
-      values: { n: 570 },
+    expect(hpa.says.values?.count).toMatchObject({
+      key: "countBoth",
+      values: {
+        within: { values: { times: { values: { n: 70 } } } },
+        earlier: { values: { times: { values: { n: 500 } } } },
+      },
     });
     const node = one(stories, "k3d-k8s-gui-dev-server-0");
     expect(node.state).toBe("settled");
@@ -163,7 +168,7 @@ describe("the recorded hour", () => {
     expect(one(stories, "cron-demo-29812785").says).toEqual({
       key: "storyJob",
       values: {
-        spanMs: 3000,
+        when: { key: "whenWithin", values: { spanMs: 3000 } },
         created: { key: "jobsCreated", values: { n: 1 } },
         completed: 1,
       },
@@ -232,6 +237,38 @@ describe("placing events", () => {
     expect(now.warnings).toBe(0);
     const before = stories.find((story) => story.subject.earlier)!;
     expect(before.reasons.map((r) => r.reason)).toEqual(["FailedMount"]);
+  });
+
+  /**
+   * Lena's earlier wd-demo story sat red "still happening" for minutes beside
+   * its "earlier object" chip, about a pod that no longer existed. Fails if a
+   * story about a replaced object takes any state that says it may go on.
+   */
+  it("gives the story of a replaced object its own state, whatever the age of its warnings", () => {
+    const stories = storiesOf(
+      [
+        event({
+          kind: "Pod",
+          name: "wd-demo",
+          reason: "FailedMount",
+          type: "Warning",
+          involvedObject: {
+            kind: "Pod",
+            name: "wd-demo",
+            namespace: "shop",
+            uid: "d10287fd",
+          },
+          lastTimestamp: ago(30_000),
+        }),
+      ],
+      {
+        now: NOW,
+        windowMs: HOUR,
+        narrowed: false,
+        earlier: new Set(["d10287fd"]),
+      }
+    );
+    expect(stories[0].state).toBe("earlier");
   });
 
   /** Would put the guess back: a pod named like a Deployment's is not that Deployment's until a controller says so. */
@@ -459,6 +496,117 @@ describe("the timeline", () => {
     expect(buckets.map((b) => b.count)).toEqual([0, 0, 1, 0, 0, 1]);
     expect(buckets[5].worst).toBe("warn");
     expect(buckets[2].worst).toBeNull();
+  });
+});
+
+describe("what a window counts", () => {
+  const en: T = (section, key, values) => translate("en", section, key, values);
+  const ru: T = (section, key, values) => translate("ru", section, key, values);
+  const MINUTE = 60_000;
+  const failed = (
+    pod: string,
+    count: number,
+    firstAgo: number,
+    lastAgo: number
+  ) =>
+    event({
+      kind: "Pod",
+      name: pod,
+      type: "Warning",
+      reason: "Failed",
+      message:
+        "Error: couldn't find key DB_PASSWORD in Secret team-checkout/checkout-db",
+      count,
+      firstTimestamp: ago(firstAgo),
+      lastTimestamp: ago(lastAgo),
+    });
+  const marco = [
+    failed("checkout-worker-649f5449-h6x2v", 696, 150 * MINUTE, 50 * MINUTE),
+    failed("checkout-worker-649f5449-zb8sn", 71, 20 * MINUTE, 1000),
+  ];
+
+  /**
+   * Marco's 1 h window said "767 times within 1 hour" where 696 of them were
+   * one event first seen two and a half hours earlier. Fails if the window's
+   * count takes in the lifetime count of an event older than the window.
+   */
+  it("counts in the window only what began in it, and says an older event's tally with its own times", () => {
+    const [story] = storiesOf(marco, {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+    });
+    expect(story.says.values?.count).toEqual({
+      key: "countBoth",
+      values: {
+        within: {
+          key: "countWithin",
+          values: {
+            times: { key: "timesSeen", values: { n: 71 } },
+            spanMs: 20 * MINUTE - 1000,
+          },
+        },
+        earlier: {
+          key: "countSince",
+          values: {
+            times: { key: "timesSeen", values: { n: 696 } },
+            firstAtMs: NOW - 150 * MINUTE,
+            lastAtMs: NOW - 50 * MINUTE,
+          },
+        },
+      },
+    });
+    const said = sayWords(story.says, en);
+    expect(said).toMatch(
+      /^The container could not be started, 71 times within 19 minutes and 696 times since .+, the last at .+: Error: couldn't find key/
+    );
+    expect(said).not.toContain("767");
+    expect(sayWords(story.says, ru)).toMatch(
+      /^Контейнер не запустился 71 раз за 19 минут и 696 раз с .+, последний раз в .+: Error/
+    );
+  });
+
+  /** The 15 m window said "94 times within 11 minutes" on a card that had begun 20 minutes earlier. Fails if an event older than the window is counted inside it. */
+  it("says an event first seen before the window only by its own first and last sighting", () => {
+    const [story] = storiesOf(
+      [failed("checkout-worker-649f5449-zb8sn", 94, 20 * MINUTE, 3 * MINUTE)],
+      { now: NOW, windowMs: WINDOW_MS["15m"], narrowed: false }
+    );
+    expect(story.says.values?.count).toEqual({
+      key: "countSince",
+      values: {
+        times: { key: "timesSeen", values: { n: 94 } },
+        firstAtMs: NOW - 20 * MINUTE,
+        lastAtMs: NOW - 3 * MINUTE,
+      },
+    });
+    expect(sayWords(story.says, en)).not.toContain("within");
+  });
+
+  /** A quiet story's counts are lifetime counts too. Fails if one older than the window is said to have happened within it. */
+  it("dates a quiet story from its oldest event's first sighting when that is older than the window", () => {
+    const [story] = storiesOf(
+      [
+        event({
+          kind: "Ingress",
+          name: "shop",
+          reason: "Sync",
+          message: "Scheduled for sync",
+          count: 412,
+          firstTimestamp: ago(3 * HOUR),
+          lastTimestamp: ago(MINUTE),
+        }),
+      ],
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(story.says).toEqual({
+      key: "storyQuiet",
+      values: {
+        when: { key: "whenSince", values: { firstAtMs: NOW - 3 * HOUR } },
+        reasons: "Sync ×412",
+      },
+    });
+    expect(sayWords(story.says, en)).toMatch(/^Sync ×412 since /);
   });
 });
 

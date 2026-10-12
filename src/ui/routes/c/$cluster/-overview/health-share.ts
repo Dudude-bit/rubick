@@ -46,6 +46,7 @@ import type {
   WarningGroup,
 } from "@/generated/types";
 import type { T } from "@/i18n/useT";
+import { momentWords } from "@/i18n/say";
 import { translate, type Locale } from "@/i18n";
 import { currentLocale } from "@/stores/localeStore";
 import { byteScale, formatBytes } from "@/lib/k8s-quantity";
@@ -629,6 +630,26 @@ function warningSaid(warning: WarningGroup, t: T): string {
   return word ? `${t("readings", word)}: ${sample}` : sample;
 }
 
+/** The repeats of events first seen before the hour, which the panel cannot count inside it. */
+export function olderWords(warning: WarningGroup, t: T): string | null {
+  if (!warning.older) return null;
+  const values = {
+    n: formatCount(warning.older.count),
+    since: momentWords(Date.parse(warning.older.since)),
+  };
+  return warning.count > 0
+    ? t("cluster", "warningOlder", values)
+    : t("cluster", "warningOlderOnly", values);
+}
+
+export const olderHint = (warning: WarningGroup, t: T): string | undefined =>
+  warning.older
+    ? t("cluster", "warningOlderHint", {
+        n: warning.older.count,
+        since: momentWords(Date.parse(warning.older.since)),
+      })
+    : undefined;
+
 /** What the feed of warnings draws, as events with the object each is about. */
 export function warningsShare(
   warnings: WarningGroup[],
@@ -641,6 +662,7 @@ export function warningsShare(
     reason: warning.reason,
     message: warningSaid(warning, t),
     count: warning.count,
+    older: olderWords(warning, t),
     ref:
       warning.objectKind && warning.objectName
         ? refOf({

@@ -31,6 +31,7 @@ export function PastObjectRef({
   past,
   showKind = true,
   showNamespace = false,
+  fit = false,
 }: {
   kind: string;
   name: string;
@@ -38,12 +39,17 @@ export function PastObjectRef({
   past: Past;
   showKind?: boolean;
   showNamespace?: boolean;
+  /** Fills a cell of its own, and gives the name the room before the mark's word. */
+  fit?: boolean;
 }) {
   const t = useT();
   const { Icon, word, hint } = MARK[past];
   return (
     <span
-      className="inline-flex min-w-0 items-baseline gap-1.5"
+      className={cn(
+        "inline-flex min-w-0 items-baseline gap-1.5",
+        fit && "@container w-full"
+      )}
       title={t("readings", hint, { kind, name })}
       data-past={past}
     >
@@ -57,7 +63,9 @@ export function PastObjectRef({
       </span>
       <span className="inline-flex flex-none items-center gap-0.5 self-center rounded bg-fg-fnt/15 px-1 py-px text-[10px] text-fg-mut">
         <Icon className="h-2.5 w-2.5" aria-hidden="true" />
-        {t("readings", word)}
+        <span className={cn(fit && "sr-only @[15rem]:not-sr-only")}>
+          {t("readings", word)}
+        </span>
       </span>
     </span>
   );

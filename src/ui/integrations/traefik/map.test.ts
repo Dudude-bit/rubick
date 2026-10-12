@@ -34,6 +34,7 @@ function ingress(
   over: { service?: string; secretName?: string; at?: string[] } = {}
 ): IngressInfo {
   return {
+    uid: "",
     name,
     namespace: "shop",
     className: "traefik",

@@ -123,6 +123,7 @@ pub struct RouteInfo {
     pub api_version: String,
     pub name: String,
     pub namespace: String,
+    pub uid: String,
     pub hostnames: Vec<String>,
     pub parent_refs: Vec<ParentRefInfo>,
     pub rules: Vec<RouteRuleInfo>,
@@ -289,6 +290,7 @@ pub struct ObjectName {
 pub struct GatewayInfo {
     pub name: String,
     pub namespace: String,
+    pub uid: String,
     pub api_version: String,
     /// `spec.gatewayClassName` — the claim that decides whose Gateway this
     /// is, resolved the same way `IngressClass` claiming is.
@@ -333,6 +335,7 @@ pub struct ListenerSetInfo {
 #[serde(rename_all = "camelCase")]
 pub struct GatewayClassInfo {
     pub name: String,
+    pub uid: String,
     /// `spec.controllerName` — the implementation, in its own words.
     pub controller_name: String,
     pub description: Option<String>,
@@ -440,6 +443,7 @@ impl GatewayInfo {
         Self {
             name: obj.name_any(),
             namespace: obj.namespace().unwrap_or_default(),
+            uid: obj.uid().unwrap_or_default(),
             api_version: types.api_version,
             class_name: spec.gateway_class_name,
             listener_sets: Vec::new(),
@@ -553,6 +557,7 @@ impl GatewayClassInfo {
 
         Self {
             name: obj.name_any(),
+            uid: obj.uid().unwrap_or_default(),
             controller_name: spec.controller_name,
             description: spec.description,
             accepted,
@@ -1026,6 +1031,7 @@ impl RouteInfo {
             api_version: types.api_version,
             name: obj.name_any(),
             namespace: obj.namespace().unwrap_or_default(),
+            uid: obj.uid().unwrap_or_default(),
             hostnames: spec.hostnames,
             parent_refs: spec.parent_refs.into_iter().map(parent_ref_info).collect(),
             rules: spec.rules.into_iter().map(rule_info).collect(),
@@ -1152,6 +1158,23 @@ mod tests {
         serde_yaml::from_str(yaml).expect("fixture parses")
     }
 
+    /// Their Events tabs keep an earlier object's events off the one there now
+    /// by its uid. Fails if one of these kinds stops carrying it.
+    #[test]
+    fn every_gateway_api_detail_carries_its_objects_uid() {
+        let object = |kind: &str| {
+            parse(&format!(
+                "apiVersion: gateway.networking.k8s.io/v1\nkind: {kind}\nmetadata:\n  name: web\n  namespace: shop\n  uid: 4afe41e6\n"
+            ))
+        };
+        assert_eq!(GatewayInfo::read(&object("Gateway")).uid, "4afe41e6");
+        assert_eq!(
+            GatewayClassInfo::read(&object("GatewayClass")).uid,
+            "4afe41e6"
+        );
+        assert_eq!(RouteInfo::read(&object("HTTPRoute")).uid, "4afe41e6");
+    }
+
     /// The corpus writes parents short; group, kind and port are the same
     /// for every case.
     fn parent_of(short: &serde_json::Value) -> ParentRefInfo {
@@ -1213,6 +1236,7 @@ mod tests {
                 api_version: format!("{GATEWAY_API_GROUP}/v1"),
                 name: "r".into(),
                 namespace: case["routeNamespace"].as_str().expect("a namespace").into(),
+                uid: String::new(),
                 hostnames: vec![],
                 parent_refs: vec![],
                 rules: vec![],

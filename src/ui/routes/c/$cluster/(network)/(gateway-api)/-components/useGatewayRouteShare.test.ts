@@ -12,6 +12,7 @@ import {
 const t: T = (section, key, values) => translate("en", section, key, values);
 
 const route: RouteInfo = {
+  uid: "",
   kind: "HTTPRoute",
   apiVersion: "gateway.networking.k8s.io/v1",
   name: "shop",

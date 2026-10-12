@@ -52,6 +52,7 @@ function networkPolicy(
     deniesEverything: governed,
   });
   return {
+    uid: "",
     name: "default-deny",
     namespace: "shop",
     selects:

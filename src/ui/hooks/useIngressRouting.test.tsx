@@ -79,6 +79,7 @@ const conns: ResourceConnections = {
 };
 
 const info = (className: string | null): IngressInfo => ({
+  uid: "",
   name: "shop",
   namespace: "storefront",
   className,

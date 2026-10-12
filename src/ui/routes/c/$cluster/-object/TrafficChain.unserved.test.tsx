@@ -13,6 +13,7 @@ import { TrafficChain } from "./TrafficChain";
 
 /** shop as `get_ingress` returns it on a cluster with no IngressClass at all. */
 const shop: IngressInfo = {
+  uid: "",
   name: "shop",
   namespace: "k8s-gui-test",
   className: "nginx",

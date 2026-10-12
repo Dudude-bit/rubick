@@ -48,6 +48,7 @@ function ingress(
   } = {}
 ): IngressInfo {
   return {
+    uid: "",
     name,
     namespace: "shop",
     className: options.className === undefined ? "nginx" : options.className,

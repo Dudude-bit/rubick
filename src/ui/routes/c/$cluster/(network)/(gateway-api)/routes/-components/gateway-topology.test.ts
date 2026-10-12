@@ -32,6 +32,7 @@ const gateway = (
   name: string,
   conditions: ConditionInfo[] = []
 ): GatewayInfo => ({
+  uid: "",
   name,
   namespace: "gwtest",
   apiVersion: "gateway.networking.k8s.io/v1",
@@ -67,6 +68,7 @@ const route = (
   name: string,
   overrides: Partial<RouteInfo> = {}
 ): RouteInfo => ({
+  uid: "",
   kind: "HTTPRoute",
   apiVersion: "gateway.networking.k8s.io/v1",
   name,

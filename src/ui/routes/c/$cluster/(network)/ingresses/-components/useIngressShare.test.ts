@@ -12,6 +12,7 @@ import {
 const t: T = (section, key, values) => translate("en", section, key, values);
 
 const ingress: IngressInfo = {
+  uid: "",
   name: "shop",
   namespace: "shop",
   className: "nginx",

@@ -17,6 +17,7 @@ vi.mock("@/lib/commands", () => ({
 const { serviceRoutes } = await import("./service-routes");
 
 const shop: IngressInfo = {
+  uid: "",
   name: "shop",
   namespace: "web",
   className: null,

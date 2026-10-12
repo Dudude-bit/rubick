@@ -22,6 +22,7 @@ const NAME = "widgets.demo.k8s-gui.io";
 
 const widgets = {
   name: NAME,
+  uid: "",
   group: "demo.k8s-gui.io",
   kind: "Widget",
   plural: "widgets",

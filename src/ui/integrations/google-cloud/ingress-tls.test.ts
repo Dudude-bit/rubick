@@ -19,6 +19,7 @@ vi.mock("@/lib/commands", () => ({
 const { ingressTls } = await import("./ingress-tls");
 
 const shop: IngressInfo = {
+  uid: "",
   name: "shop",
   namespace: "web",
   className: null,
