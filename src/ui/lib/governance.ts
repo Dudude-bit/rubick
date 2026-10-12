@@ -127,7 +127,10 @@ function sentence(text: string): string {
 }
 
 /** "1 to 5 replicas", or "pinned at 3" for the degenerate range. */
-export function autoscalerRange(facts: AutoscalerFacts, t: T): string {
+export function autoscalerRange(
+  facts: Pick<AutoscalerFacts, "minReplicas" | "maxReplicas">,
+  t: T
+): string {
   return facts.minReplicas === facts.maxReplicas
     ? t("readings", "hpaPinnedAt", { n: facts.maxReplicas })
     : t("readings", "hpaRange", {

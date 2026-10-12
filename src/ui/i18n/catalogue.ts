@@ -270,6 +270,7 @@ export const en = {
     apiVersion: "API version",
     aDrainWaits: "A drain waits",
     setBy: "Set by",
+    hpaScales: "Scales",
     cpu: "CPU",
     pods: "Pods",
     events: "Events",
@@ -3868,6 +3869,9 @@ export const en = {
     hpaRunning: "{n} running",
     hpaWanted: "{n} wanted",
     hpaNothingComputed: "nothing computed",
+    hpaScaleUnread:
+      "This autoscaler could not be read, so what it scales is not known.",
+    hpaNamesNoTarget: "This autoscaler names nothing to scale.",
     hpaLastScaled: "last scaled {ago} ago",
     pdbAtLeast: "at least {n} available",
     pdbAtMost: "at most {n} unavailable",
@@ -5546,6 +5550,12 @@ export const en = {
     tlsNotChecked: "TLS not checked",
     relatedShortBy:
       "An integration that reads {kind} objects could not answer, so what is below is short by an unknown amount.",
+    relatedNothing:
+      "Nothing points at anything: this {kind} names no other object right now, and nothing in the cluster owns it.",
+    relatedUnread:
+      "No integration in this app reads {kind} objects, so nothing here knows what this one is connected to. That is a gap in the app and not a fact about the cluster. The object’s own spec and status, on the tabs beside this one, are what it says about itself.",
+    relatedOwnerOnly:
+      "Only the owner reference, which every object carries. No integration in this app reads {kind} objects, so anything else this one points at is not shown here.",
     stopNoServiceToSendTo: "no service to send to",
     stopSelectorMatchesNothing: "selector matches nothing",
     stopScaledToZeroUnder: "scaled to zero",

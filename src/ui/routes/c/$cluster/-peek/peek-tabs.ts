@@ -59,6 +59,11 @@ const overviewTab = (t: T): PeekTabDefinition => ({
   label: t("nav", "overview"),
   glyph: viewGlyph(Info),
 });
+const connectionsTab = (t: T): PeekTabDefinition => ({
+  id: "connections",
+  label: t("columns", "connections"),
+  glyph: viewGlyph(Link2),
+});
 const YAML: PeekTabDefinition = {
   id: "yaml",
   // A format, not a word — the same in every language the app speaks.
@@ -83,31 +88,16 @@ export function peekTabsFor(
   /** What the Overview fetch returned, when it has returned. */
   detail?: unknown,
   /**
-   * Set for a custom resource, which is the only kind that gets Connections
-   * here.
-   *
-   * Not because a Pod's connections are uninteresting in a peek — they are —
-   * but because a Pod has a Connections tab on its own page already, and a
-   * custom resource had one nowhere at all. Widening this to every kind is a
-   * separate decision about how much a peek should hold, and making it by
-   * accident while closing a gap would be the wrong way to take it.
+   * Set for a custom resource, which gets Connections here because it has
+   * them nowhere else. Of the registry's kinds only an autoscaler does, for
+   * the same reason: it has no page of its own to name what it scales.
    */
   crd?: string
 ): PeekTabDefinition[] {
   const resolved = toKind(kind);
   const middle: PeekTabDefinition[] = [];
 
-  if (crd) {
-    return [
-      overviewTab(t),
-      {
-        id: "connections",
-        label: t("columns", "connections"),
-        glyph: viewGlyph(Link2),
-      },
-      YAML,
-    ];
-  }
+  if (crd) return [overviewTab(t), connectionsTab(t), YAML];
 
   if (resolved === "Pod") {
     const pod = detail as PodInfo | undefined;
@@ -130,6 +120,8 @@ export function peekTabsFor(
       glyph: viewGlyph(Table2),
       mark: keyed ? countMark(keyed.dataKeys.length) : undefined,
     });
+  } else if (resolved === ResourceType.HorizontalPodAutoscaler) {
+    middle.push(connectionsTab(t));
   } else if (resolved && resolved in CHILD_KIND) {
     const child = CHILD_KIND[resolved as keyof typeof CHILD_KIND];
     middle.push({

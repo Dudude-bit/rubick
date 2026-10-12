@@ -21,6 +21,15 @@ describe("peekTabsFor", () => {
     }
   });
 
+  /** Lena's HPA peek from an Events row had no Connections while the one from its list did; fails if an autoscaler's tabs depend on the entry point again. */
+  it("gives an autoscaler a Connections tab without a CRD", () => {
+    expect(labels("HorizontalPodAutoscaler")).toEqual([
+      "Overview",
+      "Connections",
+      "YAML",
+    ]);
+  });
+
   it("gives a pod its logs and its containers", () => {
     expect(labels("Pod")).toEqual(["Overview", "Logs", "Containers", "YAML"]);
   });

@@ -62,3 +62,60 @@ describe("a workload's peek, its Pods tab", () => {
     await waitFor(() => expect(asked).toBe(2));
   });
 });
+
+describe("an autoscaler's peek, its Connections tab", () => {
+  const hpa = {
+    kind: "HorizontalPodAutoscaler",
+    name: "hello-web",
+    namespace: "lena-sandbox",
+  };
+  const object = {
+    apiVersion: "autoscaling/v2",
+    kind: "HorizontalPodAutoscaler",
+    metadata: { name: "hello-web", namespace: "lena-sandbox" },
+    spec: {
+      scaleTargetRef: {
+        apiVersion: "apps/v1",
+        kind: "Deployment",
+        name: "hello-web",
+      },
+      minReplicas: 1,
+      maxReplicas: 2,
+    },
+  };
+
+  /** Lena's HPA peek said nothing knew what it connects to while the pod's tab named it; fails if the tab stops naming the scale target. */
+  it("names what the autoscaler scales, linked, with its bounds", async () => {
+    vi.mocked(invoke).mockResolvedValue(undefined);
+    await renderWithRouter(
+      <PeekTabBody
+        tab="connections"
+        target={hpa}
+        detail={object}
+        isDetailLoading={false}
+      />,
+      { at: "/c/prod/events", route: "/c/$cluster/events" }
+    );
+    expect(screen.getByText("Scales")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Deployment hello-web" })
+    ).toHaveAttribute("href", "/c/prod/deployments/lena-sandbox/hello-web");
+    expect(screen.getByText(/1 to 2 replicas/)).toBeInTheDocument();
+  });
+
+  /** An unread autoscaler is not one that scales nothing; fails if the tab draws the failed read as an empty answer. */
+  it("says what it scales is not known when the autoscaler could not be read", async () => {
+    await renderWithRouter(
+      <PeekTabBody
+        tab="connections"
+        target={hpa}
+        detail={undefined}
+        isDetailLoading={false}
+      />
+    );
+    expect(
+      screen.getByText(/could not be read, so what it scales is not known/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/names nothing to scale/)).toBeNull();
+  });
+});
