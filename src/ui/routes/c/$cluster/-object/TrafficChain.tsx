@@ -151,8 +151,10 @@ export function Rail({
       <span
         aria-hidden="true"
         data-testid={here ? "rail-here" : undefined}
+        // No fade: the app-wide border fade kept a published pod's dot amber
+        // for a repaint after its words had already turned.
         className={cn(
-          "mt-[5px] h-[7px] w-[7px] flex-none rounded-full border-[1.5px]",
+          "mt-[5px] h-[7px] w-[7px] flex-none rounded-full border-[1.5px] transition-none",
           NODE_TONE[tone],
           here && "border-fg bg-fg ring-[3px] ring-fg/20"
         )}
@@ -161,7 +163,7 @@ export function Rail({
         <span
           aria-hidden="true"
           className={cn(
-            "min-h-[10px] w-px flex-1",
+            "min-h-[10px] w-px flex-1 transition-none",
             into === "bad" ? "bg-err/40" : "bg-hair"
           )}
         />

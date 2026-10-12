@@ -398,6 +398,32 @@ describe("TrafficChain", () => {
     expect(screen.getAllByTestId("rail-here")).toHaveLength(1);
   });
 
+  /**
+   * Sam's drains: the new ready pod's dot stayed amber for a repaint after
+   * its words said published, because the app fades every border colour.
+   * Fails if the rail's dot or line fades its tone instead of turning with
+   * the words.
+   */
+  it("turns the rail's tone in the same paint as its words", async () => {
+    await wrap(
+      <TrafficChain
+        query={query(
+          answered([
+            {
+              reason: "selectsNothing",
+              service,
+              selector: "app=demo",
+              near: null,
+            },
+          ])
+        )}
+      />
+    );
+    const dot = screen.getByTestId("rail-here");
+    expect(dot).toHaveClass("transition-none");
+    expect(dot.nextElementSibling).toHaveClass("transition-none");
+  });
+
   it("does not draw a chain it has not read yet", async () => {
     /** Loading is its own screen. A blank space where the chain will be
      *  reads as "nothing routes here", which is the one wrong answer. */
