@@ -294,6 +294,40 @@ describe("the rollout line", () => {
     expect(screen.queryByTestId("rollout-summary")).toBeNull();
   });
 
+  /**
+   * Sam's header trailed kubectl get deploy by 0.2 to 0.6 s at every flip:
+   * it waited for a read after its watch had already delivered the object.
+   * Fails if the header draws the read where the watch holds the same
+   * object, or draws the watch's object of another uid.
+   */
+  it("draws the object its watch delivered, not the read behind it", async () => {
+    const draining = {
+      ...ledger,
+      replicas: { desired: 1, ready: 0, available: 0, updated: 1 },
+      rollout: { state: "comingUp", available: 0, desired: 1 },
+    };
+    answering(() => new Promise(() => {}));
+    const delivering = (watched: unknown) =>
+      vi.mocked(useResourceDetail).mockReturnValue({
+        ...vi.mocked(useResourceDetail)(
+          {} as Parameters<typeof useResourceDetail>[0]
+        ),
+        activeTab: "overview",
+        watched,
+      });
+
+    delivering(draining);
+    const page = await open();
+    expect(await screen.findByText("Progressing")).toBeInTheDocument();
+    expect(screen.getByText("0/1 ready")).toBeInTheDocument();
+    page.unmount();
+
+    delivering({ ...draining, uid: "another" });
+    await open();
+    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    expect(screen.getByText("1/1")).toBeInTheDocument();
+  });
+
   /** Fails if the note is drawn where the pods agree with the controller. */
   it("says nothing beside the verdict where the pods agree with it", async () => {
     answering(

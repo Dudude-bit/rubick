@@ -239,6 +239,27 @@ export function withStarts(
     : rollout;
 }
 
+/**
+ * The object a page's own watch delivered, where it is the object the page
+ * read: the controller's words as the watch carries them, its verdict asked
+ * of the pods the page holds as a read asks them (`with_own_pods`). Where
+ * those pods are not in hand, a verdict they could have moved is the read's.
+ */
+export function watchedWorkload<W extends { uid: string; rollout: Rollout }>(
+  read: W | undefined,
+  watched: W | undefined,
+  starts: readonly PodStart[] | null,
+  now: number
+): W | undefined {
+  if (!read || !watched || watched.uid !== read.uid) return read;
+  const rollout = starts
+    ? withStarts(watched.rollout, starts, now)
+    : podsCanExplain(watched.rollout)
+      ? read.rollout
+      : watched.rollout;
+  return rollout === watched.rollout ? watched : { ...watched, rollout };
+}
+
 /** The pods of each workload, every instant one of their starts runs out, and the namespaces whose pods were not read. */
 export interface WorkloadStarts {
   byWorkload: ReadonlyMap<string, PodStart[]>;

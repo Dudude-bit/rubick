@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import { keepPreviousData } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
@@ -38,6 +38,7 @@ import { useWorkloadPods } from "../../-components/workload-pods";
 import {
   podsAhead,
   readyBesideBadge,
+  watchedWorkload,
   workloadRole,
 } from "@/lib/workload-status";
 import { ROLE_ICON, ROLE_TEXT, type StatusRole } from "@/lib/status-role";
@@ -131,7 +132,8 @@ export function DeploymentDetail() {
   const {
     name,
     namespace,
-    resource: deployment,
+    resource: read,
+    watched,
     isLoading,
     error,
     yaml: deploymentYaml,
@@ -170,6 +172,8 @@ export function DeploymentDetail() {
     refresh: "resourceList",
     refetchOnWindowFocus: false,
   });
+  const delivered = watched as DeploymentInfo | undefined;
+  const current = delivered && delivered.uid === read?.uid ? delivered : read;
   const {
     pods,
     error: podsError,
@@ -182,7 +186,21 @@ export function DeploymentDetail() {
     name,
     podsQuery,
     podsKey,
-    deployment?.replicas.ready
+    current?.replicas.ready
+  );
+  const startsNow = useStartsClock(splitPods);
+  // The watch's own object, so the header moves in the frame the watch
+  // delivers it rather than a read later: Sam's header trailed kubectl by
+  // 0.2 to 0.6 s at every flip.
+  const deployment = useMemo(
+    () =>
+      watchedWorkload(
+        read,
+        delivered,
+        splitPods && splitPods.map((pod) => pod.start),
+        startsNow
+      ),
+    [read, delivered, splitPods, startsNow]
   );
   useOwnedPodsWatch(
     ResourceType.Deployment,
@@ -378,7 +396,6 @@ export function DeploymentDetail() {
     pods,
     podsError
   );
-  const startsNow = useStartsClock(splitPods);
 
   const replicas = deployment?.replicas;
   const desired = replicas?.desired ?? 0;

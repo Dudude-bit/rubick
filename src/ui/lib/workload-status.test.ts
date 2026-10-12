@@ -19,6 +19,7 @@ import {
   podsAhead,
   rowsWithStarts,
   startsOf,
+  watchedWorkload,
   withStarts,
   workloadRole,
   workloadStatus,
@@ -266,6 +267,57 @@ describe("a set's verdict with its pods asked", () => {
         name
       ).toEqual(withStarts(rollout, pods, now));
     }
+  });
+});
+
+describe("the object a page's watch delivered", () => {
+  const read = { uid: "a", rollout: { state: "ready" } as Rollout, ready: 1 };
+  const short: Rollout = { state: "short", available: 0, desired: 1 };
+  const starting: PodStart = {
+    state: "starting",
+    until: "2026-10-12T17:00:00Z",
+  };
+  const now = Date.parse("2026-10-12T16:59:00Z");
+
+  /**
+   * Sam's Deployment header trailed kubectl by up to 0.6 s, waiting on a
+   * read after its watch had the object. Fails if the watch's object is not
+   * what the page draws, or another object of its name is.
+   */
+  it("is what the page draws, where it is the object the page read", () => {
+    const delivered = {
+      uid: "a",
+      rollout: { state: "ready" } as Rollout,
+      ready: 0,
+    };
+    expect(watchedWorkload(read, delivered, [], now)).toBe(delivered);
+    expect(watchedWorkload(read, { ...delivered, uid: "b" }, [], now)).toBe(
+      read
+    );
+    expect(watchedWorkload(read, undefined, [], now)).toBe(read);
+  });
+
+  /**
+   * The watch carries the controller's verdict alone; a read asks the pods.
+   * Fails if a gap the page's pods explain is not asked of them, or one
+   * whose pods are not in hand claims they were not read instead of keeping
+   * the read's answer.
+   */
+  it("asks the page's pods what a read would, and keeps the read's answer without them", () => {
+    const delivered = { ...read, ready: 0, rollout: short };
+    expect(watchedWorkload(read, delivered, [starting], now)?.rollout).toEqual({
+      state: "comingUp",
+      available: 0,
+      desired: 1,
+    });
+    expect(watchedWorkload(read, delivered, [], now)?.rollout).toBe(short);
+    expect(watchedWorkload(read, delivered, null, now)?.rollout).toBe(
+      read.rollout
+    );
+    const ready = { ...read, rollout: { state: "ready" } as Rollout };
+    expect(
+      watchedWorkload({ ...read, rollout: short }, ready, null, now)?.rollout
+    ).toBe(ready.rollout);
   });
 });
 
