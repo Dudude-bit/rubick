@@ -156,4 +156,45 @@ describe("the shell's Tab order", () => {
       stop();
     }
   });
+
+  /**
+   * Dana clicked Pods, then Overview, in the sidebar and Shift+Tab never left
+   * the row: WebKitGTK steps back from the pressed label and finds the row
+   * itself. Fails if Shift+Tab after a pointer click on a row does not land
+   * on the stop before it.
+   */
+  it("steps back from a sidebar row the pointer clicked", async () => {
+    const stop = startFocusWrap();
+    try {
+      await renderWithRouter(<Shell />, {
+        at: "/c/prod",
+        route: "/c/$cluster/$",
+      });
+      await act(async () => {});
+      const user = userEvent.setup();
+      const row = (name: string) =>
+        [...document.querySelectorAll<HTMLElement>("nav a[href]")].find(
+          (a) => a.textContent?.trim() === name
+        )!;
+      const webkitShiftTab = {
+        key: "Unidentified",
+        code: "Tab",
+        keyCode: 9,
+        shiftKey: true,
+      };
+
+      await user.click(row("Pods").querySelector("span")!);
+      expect(document.activeElement).toBe(row("Pods"));
+      fireEvent.keyDown(document.activeElement!, webkitShiftTab);
+      expect(document.activeElement).toBe(row("Changes"));
+
+      await user.click(row("Overview").querySelector("span")!);
+      fireEvent.keyDown(document.activeElement!, webkitShiftTab);
+      expect(label(document.activeElement!)).toBe(
+        'button "Rename or recolour prod"'
+      );
+    } finally {
+      stop();
+    }
+  });
 });

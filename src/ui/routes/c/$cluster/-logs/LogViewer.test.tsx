@@ -137,6 +137,34 @@ describe("LogViewer when a live stream dies", () => {
     expect(screen.queryByText(/No output yet/)).not.toBeInTheDocument();
   });
 
+  /**
+   * Marco's Logs after Follow again read "Follow ✓" beside "Stopped" under a
+   * "not followed" banner. Fails if the chip says following while no line
+   * can arrive, if a click on it then turns following off for later, or if
+   * it stays off once the stream is live again.
+   */
+  it("unticks Follow while the stream is stopped, and ticks it again when lines can arrive", async () => {
+    await renderStreaming();
+    const follow = () => screen.getByRole("button", { name: "Follow" });
+    await waitFor(() =>
+      expect(follow()).toHaveAttribute("aria-pressed", "true")
+    );
+
+    fireFailure(
+      "follow-stopped",
+      "failed to create fsnotify watcher: too many open files"
+    );
+    await screen.findByRole("button", { name: /Stopped/ });
+    expect(follow()).toHaveAttribute("aria-pressed", "false");
+    await userEvent.click(follow());
+    expect(follow()).toHaveAttribute("aria-pressed", "false");
+
+    await userEvent.click(screen.getByRole("button", { name: /Follow again/ }));
+    await waitFor(() =>
+      expect(follow()).toHaveAttribute("aria-pressed", "true")
+    );
+  });
+
   it("offers a reconnect for a connection that broke", async () => {
     await renderStreaming();
 

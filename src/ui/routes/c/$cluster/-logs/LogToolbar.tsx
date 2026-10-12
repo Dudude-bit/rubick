@@ -166,6 +166,9 @@ export function LogToolbar({
   onStripModeChange,
 }: LogToolbarProps) {
   const t = useT();
+  // The chip and the status read one state: nothing is followed while no line can arrive.
+  const live = isStreaming || isConnecting;
+  const following = autoScroll && live;
 
   return (
     // Wraps because the same toolbar sits in the peek panel, which the
@@ -232,12 +235,14 @@ export function LogToolbar({
       )}
 
       <ToolbarToggle
-        on={autoScroll}
+        on={following}
         onClick={onAutoScrollToggle}
         title={
-          autoScroll
+          following
             ? t("action", "followOnHint")
-            : t("action", "followOffHint")
+            : live
+              ? t("action", "followOffHint")
+              : t("action", "followStoppedHint")
         }
       >
         <ArrowDown

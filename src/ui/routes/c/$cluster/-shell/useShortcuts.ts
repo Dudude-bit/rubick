@@ -6,7 +6,9 @@ import {
   CHORD_MS,
   chordsOf,
   DETAIL_TAB_OPEN,
+  FIELD_PRESS_MS,
   pageKeysOf,
+  TYPING_MS,
 } from "@/lib/shortcuts";
 import { routeListKey } from "@/lib/list-keys";
 import { useShortcutsOverlayStore } from "@/stores/shortcutsOverlayStore";
@@ -25,6 +27,27 @@ export function useShortcuts(): void {
   const pending = useRef<{ key: string; at: number } | null>(null);
 
   useEffect(() => {
+    let lastLetterAt = -Infinity;
+    let fieldPressedAt = -Infinity;
+    let waiting: ReturnType<typeof setTimeout> | null = null;
+    const cancel = () => {
+      if (waiting !== null) clearTimeout(waiting);
+      waiting = null;
+    };
+    const soon = (act: () => void) => {
+      cancel();
+      if (Date.now() - fieldPressedAt < FIELD_PRESS_MS) return;
+      waiting = setTimeout(() => {
+        waiting = null;
+        act();
+      }, TYPING_MS);
+    };
+    const onPointer = (event: PointerEvent) => {
+      if (!claimedByTarget(event.target)) return;
+      fieldPressedAt = Date.now();
+      cancel();
+    };
+
     const onKey = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       // Help is asked for from anywhere, a field and the help itself included.
@@ -58,34 +81,50 @@ export function useShortcuts(): void {
         return;
       }
 
+      const now = Date.now();
+      const letter = key.length === 1;
+      const typing = letter && now - lastLetterAt < TYPING_MS;
+      if (letter) {
+        lastLetterAt = now;
+        cancel();
+      }
+
       const first = pending.current;
       pending.current = null;
-      if (first && Date.now() - first.at < CHORD_MS) {
+      if (first && now - first.at < CHORD_MS) {
         const chord = chordsOf().find(
           (entry) => entry.keys[0] === first.key && entry.keys[1] === key
         );
-        if (chord?.path) {
+        const path = chord?.path;
+        if (path) {
           event.preventDefault();
-          void navigate(chord.path);
+          soon(() => void navigate(path));
         }
         return;
       }
 
-      if (routeListKey(event)) return;
+      if (routeListKey(event) || typing) return;
 
       if (key === "g") {
-        pending.current = { key, at: Date.now() };
+        pending.current = { key, at: now };
         return;
       }
 
-      const page = pageKeysOf().find((entry) => entry.keys[0] === key);
-      if (page?.tab) {
-        window.dispatchEvent(
-          new CustomEvent(DETAIL_TAB_OPEN, { detail: { tab: page.tab } })
+      const tab = pageKeysOf().find((entry) => entry.keys[0] === key)?.tab;
+      if (tab) {
+        soon(() =>
+          window.dispatchEvent(
+            new CustomEvent(DETAIL_TAB_OPEN, { detail: { tab } })
+          )
         );
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointer, { capture: true });
+    return () => {
+      cancel();
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onPointer, { capture: true });
+    };
   }, [navigate]);
 }

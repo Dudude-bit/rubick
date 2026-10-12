@@ -826,7 +826,7 @@ describe("a feed a watch keeps", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Warnings" }));
 
-    const summary = await screen.findByText(
+    const summary = await screen.findByTitle(
       "0 warning events · 3 other events hidden by the type filter"
     );
     expect(summary).toHaveClass("truncate");
@@ -1491,7 +1491,7 @@ describe("stories", () => {
     expect(card.textContent).not.toMatch(/278 events/);
     expect(
       screen.getByText(
-        "1 story · 1 warning event · 2 normal events · in the 1h window"
+        "1 story in the 1h window · 1 warning event · 2 normal events"
       )
     ).toBeInTheDocument();
   });
@@ -1596,6 +1596,46 @@ describe("stories", () => {
       ["team-checkout"]
     );
     useClusterStore.setState({ currentContext: null, contexts: [] });
+  });
+
+  /**
+   * Lena's header at 1024 ended "3 предупреждения · 30 обы…" and "2 истории ·
+   * 1 предупрежден…". Fails if the drawn line spells the type counts out in
+   * words again, or the sentence stops being its title.
+   */
+  it("draws the type counts with the table's markers and keeps the sentence for hover", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      const normals = Array.from({ length: 30 }, (_, i) =>
+        event("prod", i + 1)
+      );
+      listEvents.mockResolvedValue([
+        warning("prod", "api-7b6d9c5f4-x8k2p", 0),
+        warning("prod", "api-7b6d9c5f4-x8k2p", 100),
+        warning("prod", "api-7b6d9c5f4-x8k2p", 101),
+        ...normals,
+      ]);
+      await mount("list");
+      const list = await screen.findByTitle(
+        "3 предупреждения · 30 обычных событий"
+      );
+      expect(within(list).getByTestId("events-count-drawn")).toHaveTextContent(
+        /^▲ 3 · ● 30$/
+      );
+      expect(
+        within(list).getByText("3 предупреждения · 30 обычных событий")
+      ).toHaveClass("sr-only");
+
+      await userEvent.click(screen.getByRole("tab", { name: "Истории" }));
+      const stories = await screen.findByTitle(
+        /^1 история за 1\sч · 3 предупреждения$/
+      );
+      expect(
+        within(stories).getByTestId("events-count-drawn").textContent
+      ).toMatch(/^1 история за 1\sч · ▲ 3$/);
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 
   /**
@@ -1862,9 +1902,8 @@ describe("a feed beside a peek", () => {
     pageOf(300);
     listEvents.mockResolvedValue(feed("prod", 500));
     await mount("list");
-    const count = await screen.findByText("500 normal events");
+    const count = await screen.findByTitle("500 normal events");
     expect(count).toHaveClass("truncate");
-    expect(count).toHaveAttribute("title", "500 normal events");
     expect(
       screen.getByText(/^Only the latest 500 were read\./)
     ).toBeInTheDocument();

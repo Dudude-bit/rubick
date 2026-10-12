@@ -405,6 +405,29 @@ describe("a rail taller than the window", () => {
     expect(screen.queryByRole("button", { name: /more below/ })).toBeNull();
   });
 
+  /**
+   * Dana's Shift+Tab stopped on Pods half under the top fade, and Tab on
+   * RoleBindings under the rows-below pill, which sits inside the bottom
+   * fade. Fails if a rail row stops keeping a scroll margin deeper than the
+   * fade, which is what the browser leaves clear around a focused row.
+   */
+  it("brings a focused row clear of the fades", async () => {
+    railOf(900);
+    await wrap(<Sidebar />);
+    const rail = screen.getByRole("navigation");
+    rail.scrollTop = 300;
+    fireEvent.scroll(rail);
+    const fade = Number(/black_(\d+)px/.exec(rail.className)?.[1]);
+    expect(fade).toBeGreaterThan(0);
+    const rows = [...rail.querySelectorAll("a[href]")];
+    expect(rows.length).toBeGreaterThan(20);
+    for (const row of rows) {
+      const margin =
+        Number(/(^|\s)scroll-my-(\d+)(\s|$)/.exec(row.className)?.[2]) * 4;
+      expect(margin, row.textContent ?? "").toBeGreaterThan(fade);
+    }
+  });
+
   /** Fails if a rail with nothing past its edges is faded anyway. */
   it("wears no fade when every row fits", async () => {
     railOf(600);

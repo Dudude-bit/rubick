@@ -155,8 +155,14 @@ export function formatName(format: LogFormat, t: T): string {
  */
 export function formatLineRate(rate: number, locale?: string): string {
   return rate < 10
-    ? formatDecimal(rate, 1, locale)
+    ? formatDecimal(rate, 1, locale, true)
     : formatCount(Math.round(rate));
+}
+
+/** The rate as shown, with the number it reads as, so "102 строки/с" takes its plural form. */
+export function lineRateValues(rate: number, locale?: string) {
+  const n = rate < 10 ? Math.round(rate * 10) / 10 : Math.round(rate);
+  return { n, rate: formatLineRate(rate, locale) };
 }
 
 /**
