@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -126,7 +126,72 @@ describe("Clusters settings", () => {
     vi.clearAllMocks();
     listContexts.mockResolvedValue(CONTEXTS);
     setKubeconfigPath.mockResolvedValue(undefined);
-    useClusterStore.setState({ currentContext: "k3d-dev", isConnected: true });
+    useClusterStore.setState({
+      currentContext: "k3d-dev",
+      isConnected: true,
+      live: ["k3d-dev"],
+      failures: {},
+    });
+  });
+
+  describe("every row says whether it is connected", () => {
+    const statusOf = (name: string) =>
+      screen
+        .getByText(name)
+        .closest("div.grid")
+        ?.querySelector("[data-testid=context-status]");
+
+    /**
+     * Dana's switch to an unreachable acme-prod-eu: the cluster she left is
+     * still connected and the one she tried failed. Fails if a row reads
+     * "connected" off the current context rather than the backend's
+     * sessions, or the failure is read off the screen's passing error.
+     */
+    it("says connected for every held cluster and connect failed, with why, for the one that failed", async () => {
+      useClusterStore.setState({
+        currentContext: "gke-shop",
+        isConnected: false,
+        error: null,
+        errorContext: null,
+        live: ["k3d-dev"],
+        failures: {
+          "gke-shop": { kind: "timeout", error: "deadline has elapsed" },
+        },
+      });
+      renderPane();
+      await screen.findByText("gke-shop");
+
+      expect(statusOf("k3d-dev")?.textContent).toBe("connected");
+      expect(statusOf("gke-shop")?.textContent).toBe("connect failed");
+      expect(statusOf("gke-shop")?.getAttribute("title")).toContain(
+        "203.0.113.42 did not answer in time"
+      );
+    });
+
+    /**
+     * Live round 24: acme-prod-eu jumped above acme-staging when a connect to
+     * it began, and back once staging reconnected. Fails if the order keys on
+     * the connection in any way.
+     */
+    it("keeps its rows in the file's order whatever connects", async () => {
+      const { container } = renderPane();
+      await screen.findByText("gke-shop");
+      const order = () =>
+        [...container.querySelectorAll("div.grid .font-mono.text-xs")].map(
+          (row) => row.textContent
+        );
+      const before = order();
+      expect(before).toEqual(CONTEXTS.map((context) => context.name));
+
+      act(() =>
+        useClusterStore.setState({
+          currentContext: "aks-staging",
+          isConnected: false,
+          live: ["k3d-dev"],
+        })
+      );
+      expect(order()).toEqual(before);
+    });
   });
 
   describe("every row says how it authenticates", () => {

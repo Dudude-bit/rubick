@@ -87,6 +87,9 @@ beforeEach(() => {
     connectStartedAt: null,
     error: null,
     errorContext: null,
+    live: [],
+    wayBack: null,
+    failures: {},
   });
 });
 
@@ -117,7 +120,8 @@ async function mountDeployments() {
   });
   setRouter(router);
   await act(() => router.load());
-  return renderWithProviders(<RouterProvider router={router} />);
+  renderWithProviders(<RouterProvider router={router} />);
+  return router;
 }
 
 describe("a page under a cluster that is not connected yet", () => {
@@ -189,6 +193,91 @@ describe("a page under a cluster that is not connected yet", () => {
     expect(screen.getByText(t("empty", "noClusterIsConnected"))).toBeVisible();
     expect(
       screen.queryByText(t("cluster", "didNotAnswer"))
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("a switch to a cluster that did not answer", () => {
+  const failedFromStaging = (live: string[]) =>
+    useClusterStore.setState({
+      error: "Connection error: deadline has elapsed",
+      errorContext: "acme-prod-eu",
+      wayBack: "acme-staging",
+      live,
+    });
+
+  /**
+   * Live round 23: the switch left Dana nowhere. The cluster she came from
+   * is still connected, so the failed page offers it back, marked live.
+   * Fails if the way back is missing or does not take her there.
+   */
+  it("offers the cluster it left, still connected, and takes the reader back to it", async () => {
+    failedFromStaging(["acme-staging"]);
+    const router = await mountDeployments();
+
+    const back = await screen.findByRole("button", {
+      name: t("cluster", "backToConnected", { context: "acme-staging" }),
+    });
+    expect(back.querySelector("svg")?.getAttribute("class")).toContain(
+      "text-ok"
+    );
+    await act(async () => back.click());
+
+    expect(router.state.location.pathname).toBe("/c/acme-staging/deployments");
+  });
+
+  /** Fails if the way back is offered for a cluster nothing still holds. */
+  it("offers no way back once the cluster it left is no longer connected", async () => {
+    failedFromStaging([]);
+    await mountDeployments();
+
+    await screen.findByRole("button", { name: t("action", "retry") });
+    expect(
+      screen.queryByRole("button", {
+        name: t("cluster", "backToConnected", { context: "acme-staging" }),
+      })
+    ).toBeNull();
+  });
+
+  /**
+   * Cancelling a switch is not leaving: the cluster it started from is still
+   * connected, so Cancel goes back there rather than to the front door.
+   * Fails if Cancel disconnects while there is somewhere to go back to.
+   */
+  it("cancels a switch back to the cluster it left", async () => {
+    useClusterStore.setState({
+      isAuthenticating: true,
+      pendingContext: "acme-prod-eu",
+      connectStartedAt: Date.now(),
+      wayBack: "acme-staging",
+      live: ["acme-staging"],
+    });
+    const router = await mountDeployments();
+
+    await act(async () =>
+      screen.getByRole("button", { name: t("action", "cancel") }).click()
+    );
+
+    expect(router.state.location.pathname).toBe("/c/acme-staging/deployments");
+  });
+
+  /**
+   * Coming back to a held cluster takes no connecting screen, and for that
+   * beat the cache is still the cluster just left. Fails if the page draws
+   * over it.
+   */
+  it("draws no page while a held cluster is coming back", async () => {
+    useClusterStore.setState({ pendingContext: "acme-prod-eu" });
+
+    await mountDeployments();
+
+    expect(
+      screen.queryByText(t("empty", "noClusterIsConnected"))
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(
+        t("cluster", "connectingTo", { context: "acme-prod-eu" })
+      )
     ).not.toBeInTheDocument();
   });
 });

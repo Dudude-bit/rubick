@@ -43,6 +43,7 @@ function state(overrides: Partial<PaletteState> = {}): PaletteState {
     scope: { kind: "current" },
     contexts: [{ name: "k3d-dev" }, { name: "prod-eu" }],
     currentContext: "k3d-dev",
+    live: ["k3d-dev"],
     marks: {},
     recentItems: [],
     isConnected: true,
@@ -858,6 +859,29 @@ describe("the palette's entries after a bang", () => {
   /** The live cluster is marked apart from the ones a pick would connect to. */
   it("marks which cluster is live", () => {
     const entries = buildPaletteEntries(state({ text: "!" }));
+
+    const meta = Object.fromEntries(
+      entries.flatMap((entry) =>
+        entry.kind === "cluster" ? [[entry.context, entry.meta]] : []
+      )
+    );
+    expect(meta).toEqual({ "k3d-dev": "live", "prod-eu": "not connected" });
+  });
+
+  /**
+   * The window's own cluster after a failed connect is not live, and a
+   * cluster another tab keeps is. Fails if the mark is read off the current
+   * context rather than the sessions the backend holds.
+   */
+  it("marks live the clusters still connected, not the one the window names", () => {
+    const entries = buildPaletteEntries(
+      state({
+        text: "!",
+        currentContext: "prod-eu",
+        isConnected: false,
+        live: ["k3d-dev"],
+      })
+    );
 
     const meta = Object.fromEntries(
       entries.flatMap((entry) =>

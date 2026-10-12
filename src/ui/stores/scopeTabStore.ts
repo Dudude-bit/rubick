@@ -5,10 +5,11 @@
  * peek comes back with it — plus the scope that route is read under, one
  * cluster and one namespace.
  *
- * The backend holds a single live connection, so only the active tab is live.
+ * Every read goes to one cluster at a time, so only the active tab is live.
  * The others are parked records, not mounted React trees: there is one router
  * outlet and it belongs to the active tab, which is what keeps a parked tab
- * from holding watches or queries.
+ * from holding watches or queries. A parked tab does keep its cluster's
+ * session, so activating it again is not a reconnect.
  *
  * The active tab owns neither its scope nor its route — both mirror the thing
  * that actually holds them, `clusterStore` and the router. A second copy would
@@ -39,7 +40,7 @@ import {
   getDisplayPlural,
   isResourceType,
 } from "@/lib/resource-registry";
-import { useClusterStore } from "./clusterStore";
+import { holdClusters, useClusterStore } from "./clusterStore";
 
 /** The front door: no cluster yet, and a tab's address before it has one. */
 const HOME = "/";
@@ -368,6 +369,7 @@ export const useScopeTabStore = create<ScopeTabState>()(
         );
         if (id !== activeId) {
           set({ tabs: remaining });
+          await useClusterStore.getState().release();
           return;
         }
         // The tab that slid into this one's place, or the new last tab —
@@ -567,6 +569,15 @@ export const useScopeTabStore = create<ScopeTabState>()(
     }
   )
 );
+
+// A parked tab is a cluster on screen a click away: switching in another
+// tab must not disconnect it, and coming back to it must not reconnect.
+holdClusters(() => {
+  const { tabs, activeId } = useScopeTabStore.getState();
+  return tabs
+    .filter((tab) => tab.id !== activeId && !tab.missing)
+    .map((tab) => tab.context);
+});
 
 /**
  * What the tab's route is called.

@@ -8,7 +8,11 @@
  * @module stores/clusterStore
  */
 
-import type { ConnectionPath } from "@/generated/types";
+import type {
+  ClusterInfo,
+  ConnectFailure,
+  ConnectionPath,
+} from "@/generated/types";
 import { translate } from "@/i18n";
 import { currentLocale } from "./localeStore";
 import { create } from "zustand";
@@ -92,6 +96,22 @@ interface ClusterState {
    * one before, so a surface holding a route from the old one can let go.
    */
   contextSwitches: number;
+  /**
+   * The contexts whose sessions the backend holds, as it last said. More
+   * than the current one while a parked scope tab shows another cluster, or
+   * while a switch has not landed and the cluster it left is the way back.
+   */
+  live: string[];
+  /**
+   * The cluster a switch left while connected to it, kept until the switch
+   * lands, so one that fails leaves the reader somewhere to go back to.
+   */
+  wayBack: string | null;
+  /**
+   * Every context whose last connect failed, with why, until it lands. Kept
+   * apart from `error`, which is the screen's and goes with the next move.
+   */
+  failures: Record<string, ConnectFailed>;
 
   // Actions
   loadContexts: () => Promise<void>;
@@ -109,6 +129,43 @@ interface ClusterState {
     options?: { keepRoute?: boolean }
   ) => Promise<void>;
   disconnect: () => Promise<void>;
+  /** Disconnect every held cluster nothing on screen uses any longer. */
+  release: () => Promise<void>;
+}
+
+export interface ConnectFailed {
+  kind: ConnectFailure;
+  /** The server's words, for Details and a hover; never a headline. */
+  error: string;
+}
+
+/**
+ * The clusters another surface still shows. A parked scope tab names its
+ * own, and a switch in this tab must not tear that one down.
+ */
+let heldElsewhere: () => (string | null)[] = () => [];
+
+export function holdClusters(held: () => (string | null)[]): void {
+  heldElsewhere = held;
+}
+
+let releases = 0;
+
+/**
+ * A cluster stops being in use when the reader leaves it, not when it was
+ * connected: "last used 15m ago" sat beside one in use seconds before.
+ */
+function leaving(state: {
+  isConnected: boolean;
+  currentContext: string | null;
+}) {
+  if (state.isConnected && state.currentContext)
+    useClusterRecencyStore.getState().recordUse(state.currentContext);
+}
+
+function without<T>(record: Record<string, T>, key: string) {
+  const { [key]: _gone, ...rest } = record;
+  return rest;
 }
 
 /**
@@ -144,6 +201,10 @@ export const connectingTo = (s: ClusterState): string | null =>
 export const failedAt = (s: ClusterState): string | null =>
   s.error ? s.errorContext : null;
 
+/** The cluster a switch left, while the backend still holds it. */
+export const wayBackTo = (s: ClusterState): string | null =>
+  s.wayBack !== null && s.live.includes(s.wayBack) ? s.wayBack : null;
+
 export const useClusterStore = create<ClusterState>((set, get) => ({
   contexts: [],
   contextsKnown: false,
@@ -163,6 +224,9 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   connectStartedAt: null,
   lastConnected: null,
   contextSwitches: 0,
+  live: [],
+  wayBack: null,
+  failures: {},
 
   loadContexts: async () => {
     set({ isLoading: true, error: null, errorContext: null });
@@ -244,11 +308,11 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     const scope = clampScope([
       ...new Set(namespaces.filter((name) => name !== "")),
     ]);
+    // The connect error stays: a tab re-applying its scope after a failed
+    // connect wiped the only record of why.
     set({
       namespaceScope: scope,
       currentNamespace: wireNamespace(scope),
-      error: null,
-      errorContext: null,
     });
     if (context) {
       // The wire value, not the selection: this field is one opaque string
@@ -277,39 +341,37 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
     }
 
     // Prevent multiple concurrent connection attempts to the same context
-    if (get().isAuthenticating && get().pendingContext === targetContext) {
+    const before = get();
+    if (before.pendingContext === targetContext) {
       return;
     }
 
-    const previousContext = get().currentContext;
-    if (previousContext && previousContext !== targetContext) {
-      commands.disconnectCluster(previousContext).catch(() => {
+    // A connect still in flight elsewhere is abandoned, and its sign-in
+    // modal only closes on the cancel this sends.
+    if (before.isAuthenticating && before.pendingContext !== null) {
+      commands.disconnectCluster(before.pendingContext).catch(() => {
         // Best-effort cleanup to avoid stale auth sessions.
       });
     }
     // After a disconnect there is no previous context, and the scope left
     // behind is the last cluster's — not this one's.
-    const changed = previousContext !== targetContext;
-    const attemptId = get().connectionAttemptId + 1;
-
-    set({
-      isLoading: true,
-      isAuthenticating: true,
+    const changed = before.currentContext !== targetContext;
+    const attemptId = before.connectionAttemptId + 1;
+    if (changed) leaving(before);
+    const moving = {
       error: null,
       errorContext: null,
       pendingContext: targetContext,
       currentContext: targetContext,
-      ...scopeFor(get(), targetContext, changed),
+      ...scopeFor(before, targetContext, changed),
       isConnected: false,
       connectedThrough: null,
       connectionAttemptId: attemptId,
-      connectStartedAt: Date.now(),
-    });
-    try {
-      const info = await commands.connectCluster(targetContext);
-      if (get().connectionAttemptId !== attemptId) {
-        return;
-      }
+      wayBack:
+        before.isConnected && changed ? before.currentContext : before.wayBack,
+    };
+
+    const landed = (info: ClusterInfo) => {
       const connectedContext = info.context || targetContext;
       // On the way in, not on the attempt: a failed connect left the reader
       // where they were.
@@ -327,13 +389,10 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         isAuthenticating: false,
         pendingContext: null,
         connectStartedAt: null,
+        wayBack: null,
+        live: [...new Set([...get().live, connectedContext])],
+        failures: without(get().failures, connectedContext),
       });
-      // A connect that landed is a session the cluster accepts, and it is
-      // the only proof that lifts the refusal banner: "Sign in again"
-      // reconnects to the same context, so the context-change clearing in
-      // useExpiredCredentials never fires for exactly the button built to
-      // recover from it.
-      credentialsRestored();
       // Only a connection that landed counts as "used": ordering the
       // front door by clusters the reader failed to reach would put the
       // broken ones on top.
@@ -344,14 +403,74 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         .catch(() => {
           // Ignore errors saving preferences - not critical
         });
+      void get().release();
+    };
+
+    // A cluster the backend still holds comes back as it was left: no
+    // sign-in, no probe, no waiting screen.
+    if (changed && before.live.includes(targetContext)) {
+      set({
+        ...moving,
+        isLoading: false,
+        isAuthenticating: false,
+        connectStartedAt: null,
+      });
+      const info = await commands.focusCluster(targetContext).catch(() => null);
+      if (get().connectionAttemptId !== attemptId) return;
+      if (info) {
+        landed(info);
+        return;
+      }
+    }
+
+    set({
+      ...moving,
+      isLoading: true,
+      isAuthenticating: true,
+      connectStartedAt: Date.now(),
+      live: get().live.filter((name) => name !== targetContext),
+    });
+    try {
+      const info = await commands.connectCluster(targetContext);
+      if (get().connectionAttemptId !== attemptId) {
+        // Landed after the reader moved on, so nothing on screen uses it.
+        void get().release();
+        return;
+      }
+      landed(info);
+      // A connect that landed is a session the cluster accepts, and it is
+      // the only proof that lifts the refusal banner: "Sign in again"
+      // reconnects to the same context, so the context-change clearing in
+      // useExpiredCredentials never fires for exactly the button built to
+      // recover from it.
+      credentialsRestored();
     } catch (error) {
       if (get().connectionAttemptId !== attemptId) {
         return;
       }
+      // The backend filed the attempt before answering; its kind is what
+      // every reader leads with.
+      const attempt = await commands
+        .connectionAttempt(targetContext)
+        .catch(() => null);
+      if (get().connectionAttemptId !== attemptId) {
+        return;
+      }
+      const shown = errorToShow(error);
       set({
         // Every reader of this field puts it on screen.
-        error: errorToShow(error),
+        error: shown,
         errorContext: targetContext,
+        failures: {
+          ...get().failures,
+          [targetContext]: {
+            kind:
+              attempt?.direct.state === "failed"
+                ? attempt.direct.failure
+                : "unknown",
+            error: shown,
+          },
+        },
         isLoading: false,
         isAuthenticating: false,
         isConnected: false,
@@ -359,18 +478,13 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
         pendingContext: null,
         connectStartedAt: null,
       });
+      void get().release();
     }
   },
 
   disconnect: async () => {
-    const { currentContext } = get();
-    if (currentContext) {
-      try {
-        await commands.disconnectCluster(currentContext);
-      } catch (error) {
-        console.error("Error disconnecting:", error);
-      }
-    }
+    const { pendingContext, isAuthenticating } = get();
+    leaving(get());
     set({
       isConnected: false,
       connectedThrough: null,
@@ -384,12 +498,44 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       isAuthenticating: false,
       isLoading: false,
       connectStartedAt: null,
+      wayBack: null,
       // A connect already in flight would otherwise resolve after this and
       // hand the window back a cluster the user just left — bumping the
       // attempt id is what makes disconnecting the last word.
       connectionAttemptId: get().connectionAttemptId + 1,
     });
+    if (isAuthenticating && pendingContext) {
+      await commands.disconnectCluster(pendingContext).catch((error) => {
+        console.error("Error disconnecting:", error);
+      });
+    }
+    await commands.focusCluster(null).catch(() => null);
+    await get().release();
+  },
+
+  release: async () => {
+    const state = get();
+    const keep = new Set(
+      [state.currentContext, state.wayBack, ...heldElsewhere()].filter(
+        (name): name is string => name !== null
+      )
+    );
+    const asked = ++releases;
+    const live = await commands.releaseClusters([...keep]).catch(() => null);
+    if (
+      !live ||
+      asked !== releases ||
+      get().connectionAttemptId !== state.connectionAttemptId
+    )
+      return;
+    set({ live });
   },
 }));
 
 followConnections(() => useClusterStore.getState().connectionAttemptId);
+
+// Quitting is the last moment the cluster on screen was in use.
+if (typeof window !== "undefined")
+  window.addEventListener("pagehide", () =>
+    leaving(useClusterStore.getState())
+  );

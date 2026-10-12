@@ -1,9 +1,19 @@
-import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vite-plus/test";
 
 vi.mock("@/lib/commands", () => ({
   commands: {
     connectCluster: vi.fn(async (context: string) => ({ context })),
     disconnectCluster: vi.fn(async () => undefined),
+    focusCluster: vi.fn(async () => null),
+    releaseClusters: vi.fn(async () => []),
+    connectionAttempt: vi.fn(async () => null),
     saveClusterPreferences: vi.fn(async () => undefined),
     listContexts: vi.fn(async () => [{ name: "dev" }, { name: "prod" }]),
     getCurrentContext: vi.fn(async () => "dev"),
@@ -22,8 +32,9 @@ import {
   readExpiredCredentials,
 } from "@/lib/credentials";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
-import type { ContextInfo } from "@/generated/types";
-import { useClusterStore } from "./clusterStore";
+import type { ClusterInfo, ContextInfo } from "@/generated/types";
+import { holdClusters, useClusterStore, wayBackTo } from "./clusterStore";
+import { useClusterRecencyStore } from "./clusterRecencyStore";
 
 const saveClusterPreferences = vi.mocked(commands.saveClusterPreferences);
 
@@ -384,5 +395,318 @@ describe("landing on a different cluster", () => {
     await state().connect("prod");
 
     expect(state().contextSwitches).toBe(0);
+  });
+});
+
+interface Gate {
+  promise: Promise<void>;
+  open: () => void;
+  fail: (error: Error) => void;
+}
+
+function gate(): Gate {
+  let open!: () => void;
+  let fail!: (error: Error) => void;
+  const promise = new Promise<void>((resolve, reject) => {
+    open = resolve;
+    fail = reject;
+  });
+  return { promise, open, fail };
+}
+
+/**
+ * The backend as the store sees it: which contexts hold a session, and which
+ * one every read goes to. A connect lets go of its own context's session at
+ * once and holds one only once it lands; a release never takes the current.
+ */
+function fakeBackend() {
+  const live = new Set<string>();
+  const gates = new Map<string, Gate>();
+  let current: string | null = null;
+  vi.mocked(commands.connectCluster).mockImplementation(async (context) => {
+    current = context;
+    live.delete(context);
+    await gates.get(context)?.promise;
+    live.add(context);
+    return { context } as ClusterInfo;
+  });
+  vi.mocked(commands.focusCluster).mockImplementation(async (context) => {
+    current = context;
+    return context !== null && live.has(context)
+      ? ({ context } as ClusterInfo)
+      : null;
+  });
+  vi.mocked(commands.disconnectCluster).mockImplementation(async (context) => {
+    live.delete(context);
+    if (current === context) current = null;
+  });
+  vi.mocked(commands.releaseClusters).mockImplementation(async (keep) => {
+    for (const name of [...live])
+      if (!keep.includes(name) && name !== current) live.delete(name);
+    return [...live].sort();
+  });
+  vi.mocked(commands.connectionAttempt).mockImplementation(async (context) => ({
+    context,
+    at: "2026-10-12T01:32:06Z",
+    direct: {
+      state: "failed",
+      error: "deadline has elapsed",
+      failure: "timeout",
+    },
+    proxy: { state: "notTried" },
+  }));
+  return {
+    live,
+    hold: (context: string) => {
+      const held = gate();
+      gates.set(context, held);
+      return held;
+    },
+  };
+}
+
+/** Lets every pending promise, and the ones they start, settle. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+describe("switching clusters keeps the one left until the new one lands", () => {
+  let backend: ReturnType<typeof fakeBackend>;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    holdClusters(() => []);
+    useClusterStore.setState({
+      currentContext: null,
+      isConnected: false,
+      pendingContext: null,
+      isAuthenticating: false,
+      error: null,
+      errorContext: null,
+      live: [],
+      wayBack: null,
+      failures: {},
+      lastConnected: null,
+    });
+    backend = fakeBackend();
+    await state().connect("acme-staging");
+    await settle();
+    vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    holdClusters(() => []);
+    vi.mocked(commands.connectCluster).mockImplementation(
+      async (context) => ({ context }) as ClusterInfo
+    );
+    vi.mocked(commands.focusCluster).mockImplementation(async () => null);
+    vi.mocked(commands.disconnectCluster).mockImplementation(
+      async () => undefined
+    );
+    vi.mocked(commands.releaseClusters).mockImplementation(async () => []);
+    vi.mocked(commands.connectionAttempt).mockImplementation(async () => null);
+  });
+
+  /**
+   * Live round 23: Dana on acme-staging tried acme-prod-eu, which is
+   * unreachable, and was left with no live cluster at all. Fails if the
+   * switch lets go of the cluster it is leaving before the new one answers.
+   */
+  it("leaves the previous cluster live, current in Settings and a way back, when the switch fails", async () => {
+    const prod = backend.hold("acme-prod-eu");
+    const switching = state().connect("acme-prod-eu");
+    prod.fail(new Error("client error (Connect): deadline has elapsed"));
+    await switching;
+    await settle();
+
+    expect(commands.disconnectCluster).not.toHaveBeenCalledWith("acme-staging");
+    expect([...backend.live]).toEqual(["acme-staging"]);
+    expect(state().live).toEqual(["acme-staging"]);
+    expect(wayBackTo(state())).toBe("acme-staging");
+    expect(state().errorContext).toBe("acme-prod-eu");
+  });
+
+  /**
+   * Going back must show the cluster's screens at once. Fails if it
+   * reconnects, or passes through the connecting state on the way.
+   */
+  it("goes back to the cluster it kept without connecting or a connecting pause", async () => {
+    const prod = backend.hold("acme-prod-eu");
+    const switching = state().connect("acme-prod-eu");
+    prod.fail(new Error("deadline has elapsed"));
+    await switching;
+    await settle();
+    vi.mocked(commands.connectCluster).mockClear();
+
+    let connecting = false;
+    const stop = useClusterStore.subscribe((s) => {
+      if (s.isAuthenticating) connecting = true;
+    });
+    await state().connect("acme-staging", { keepRoute: true });
+    stop();
+
+    expect(commands.focusCluster).toHaveBeenCalledWith("acme-staging");
+    expect(commands.connectCluster).not.toHaveBeenCalled();
+    expect(connecting).toBe(false);
+    expect(state().isConnected).toBe(true);
+    expect(state().currentContext).toBe("acme-staging");
+  });
+
+  /** Fails if a switch that landed leaves the cluster it left connected. */
+  it("disconnects the previous cluster once the switch lands", async () => {
+    await state().connect("acme-dev");
+    await settle();
+
+    expect([...backend.live]).toEqual(["acme-dev"]);
+    expect(state().live).toEqual(["acme-dev"]);
+    expect(state().wayBack).toBeNull();
+  });
+
+  /**
+   * Scope tabs on two clusters: switching between them must not reconnect,
+   * and a switch in one tab must not tear down the cluster another shows.
+   * Fails if the parked tab's cluster is let go of after a landing.
+   */
+  it("keeps a cluster another tab shows, and comes back to it without connecting", async () => {
+    holdClusters(() => ["acme-staging"]);
+    await state().connect("acme-dev");
+    await settle();
+    expect([...backend.live].sort()).toEqual(["acme-dev", "acme-staging"]);
+
+    holdClusters(() => ["acme-dev"]);
+    vi.mocked(commands.connectCluster).mockClear();
+    await state().connect("acme-staging");
+    await settle();
+
+    expect(commands.connectCluster).not.toHaveBeenCalled();
+    expect(state().isConnected).toBe(true);
+    expect(state().live).toEqual(["acme-dev", "acme-staging"]);
+  });
+
+  /**
+   * A backend that let the session go answers a focus with nothing; the
+   * window connects instead of claiming a cluster it does not hold.
+   */
+  it("connects after all when the backend no longer holds the cluster", async () => {
+    useClusterStore.setState({ live: ["acme-staging", "acme-gone"] });
+
+    await state().connect("acme-gone");
+
+    expect(commands.focusCluster).toHaveBeenCalledWith("acme-gone");
+    expect(commands.connectCluster).toHaveBeenCalledWith("acme-gone");
+    expect(state().isConnected).toBe(true);
+  });
+
+  /**
+   * Two switches in a row: the second wins, the first's sign-in is closed,
+   * and the one that landed late is not left connected for nothing. Fails if
+   * the abandoned attempt is not cancelled or its session outlives it.
+   */
+  it("lets the last of two quick switches win and leaves no session nothing uses", async () => {
+    const prod = backend.hold("acme-prod-eu");
+    const dev = backend.hold("acme-dev");
+    const first = state().connect("acme-prod-eu");
+    const second = state().connect("acme-dev");
+
+    expect(commands.disconnectCluster).toHaveBeenCalledWith("acme-prod-eu");
+
+    prod.open();
+    await first;
+    await settle();
+    expect(state().pendingContext).toBe("acme-dev");
+    expect([...backend.live]).toEqual(["acme-staging"]);
+
+    dev.open();
+    await second;
+    await settle();
+    expect(state().currentContext).toBe("acme-dev");
+    expect([...backend.live]).toEqual(["acme-dev"]);
+  });
+
+  /**
+   * A disconnect while a switch is still connecting is the last word: the
+   * switch never lands on screen, and neither cluster keeps a session.
+   */
+  it("ends a disconnect issued mid-switch with nothing connected", async () => {
+    const prod = backend.hold("acme-prod-eu");
+    const switching = state().connect("acme-prod-eu");
+
+    await state().disconnect();
+    expect(commands.disconnectCluster).toHaveBeenCalledWith("acme-prod-eu");
+    expect(commands.focusCluster).toHaveBeenCalledWith(null);
+
+    prod.open();
+    await switching;
+    await settle();
+
+    expect(state().isConnected).toBe(false);
+    expect(state().currentContext).toBeNull();
+    expect([...backend.live]).toEqual([]);
+  });
+
+  /**
+   * Live round 24: a new tab on acme-prod-eu re-applied its namespace after
+   * the connect failed, and that wiped the error, so Settings and the front
+   * door said "not connected" with no reason anywhere. Fails if a scope
+   * change clears the failure, or if moving on loses it.
+   */
+  it("keeps a failed connect, with its kind and words, past a scope change and a move elsewhere", async () => {
+    const prod = backend.hold("acme-prod-eu");
+    const switching = state().connect("acme-prod-eu");
+    prod.fail(new Error("client error (Connect): deadline has elapsed"));
+    await switching;
+
+    await state().setNamespaceScope(["team-checkout"]);
+    expect(state().errorContext).toBe("acme-prod-eu");
+
+    await state().connect("acme-staging");
+    expect(state().failures["acme-prod-eu"]).toEqual({
+      kind: "timeout",
+      error: "client error (Connect): deadline has elapsed",
+    });
+  });
+
+  /** Fails if one context's failure overwrites another's. */
+  it("keeps each context's failure apart", async () => {
+    const prod = backend.hold("acme-prod-eu");
+    const first = state().connect("acme-prod-eu");
+    prod.fail(new Error("deadline has elapsed"));
+    await first;
+    const dr = backend.hold("acme-dr");
+    const second = state().connect("acme-dr");
+    dr.fail(new Error("connection refused"));
+    await second;
+
+    expect(Object.keys(state().failures).sort()).toEqual([
+      "acme-dr",
+      "acme-prod-eu",
+    ]);
+  });
+
+  /** Fails if a context that lands keeps reading as failed. */
+  it("forgets a failure once that context lands", async () => {
+    const prod = backend.hold("acme-prod-eu");
+    const switching = state().connect("acme-prod-eu");
+    prod.fail(new Error("deadline has elapsed"));
+    await switching;
+
+    prod.open();
+    backend.hold("acme-prod-eu").open();
+    await state().connect("acme-prod-eu");
+
+    expect(state().failures).toEqual({});
+  });
+
+  /**
+   * The front door said acme-staging was last used 15 minutes ago, seconds
+   * after it was on screen: the time was the connect's. Fails if leaving a
+   * cluster does not count as its last use.
+   */
+  it("counts leaving a cluster as its last use", async () => {
+    useClusterRecencyStore.setState({ lastUsed: { "acme-staging": 1 } });
+
+    await state().connect("acme-dev");
+
+    expect(
+      useClusterRecencyStore.getState().lastUsed["acme-staging"]
+    ).toBeGreaterThan(1);
   });
 });

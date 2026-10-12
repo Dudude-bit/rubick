@@ -8,6 +8,9 @@ pub struct Session {
     pub id: String,
     pub context: String,
     pub connected_at: chrono::DateTime<chrono::Utc>,
+    /// What the connect that made this session learned, handed back when
+    /// the window returns to it without connecting again.
+    pub info: crate::client::ClusterInfo,
 }
 
 /// Port-forward session information

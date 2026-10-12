@@ -93,6 +93,11 @@ pub struct AppState {
     /// Monotonic counter for connection attempts
     pub connect_generation: AtomicU64,
 
+    /// Held while a context's session is made, brought back or torn down,
+    /// so a release cannot tear down the context a focus has just made
+    /// current, and a superseded connect cannot land after the newer one.
+    pub cluster_lifecycle: parking_lot::Mutex<()>,
+
     /// Active debug operations (ephemeral container/debug pod creation)
     pub debug_operations: DashMap<String, crate::commands::debug::DebugOperation>,
 
@@ -145,6 +150,7 @@ impl AppState {
             event_tx,
             auth_sessions: DashMap::new(),
             connect_generation: AtomicU64::new(0),
+            cluster_lifecycle: parking_lot::Mutex::new(()),
             debug_operations: DashMap::new(),
             perf: Arc::new(perf::PerfCounters::default()),
             overview_cache,
@@ -348,13 +354,14 @@ impl AppState {
     }
 
     /// Create a new session
-    pub fn create_session(&self, context: &str) -> Session {
+    pub fn create_session(&self, info: &crate::client::ClusterInfo) -> Session {
         let session = Session {
             id: Uuid::new_v4().to_string(),
-            context: context.to_string(),
+            context: info.context.clone(),
             connected_at: chrono::Utc::now(),
+            info: info.clone(),
         };
-        self.sessions.insert(context.to_string(), session.clone());
+        self.sessions.insert(info.context.clone(), session.clone());
         session
     }
 
@@ -378,7 +385,14 @@ mod tests {
     fn test_session_management() {
         let state = AppState::new().unwrap();
 
-        let session = state.create_session("test-context");
+        let session = state.create_session(&crate::client::ClusterInfo {
+            context: "test-context".to_string(),
+            server_version: "1.31".to_string(),
+            platform: "linux/amd64".to_string(),
+            git_version: "v1.31.0".to_string(),
+            credentials_expire_at: None,
+            connected_through: crate::client::ConnectionPath::Direct,
+        });
         assert_eq!(session.context, "test-context");
         assert!(state.sessions.contains_key("test-context"));
 

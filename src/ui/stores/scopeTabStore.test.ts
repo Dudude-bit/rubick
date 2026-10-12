@@ -7,11 +7,14 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     connectCluster: vi.fn(async (context: string) => ({ context })),
     disconnectCluster: vi.fn(async () => undefined),
+    focusCluster: vi.fn(async () => null),
+    releaseClusters: vi.fn(async () => []),
     saveClusterPreferences: vi.fn(async () => undefined),
   },
 }));
 
 import { routeTree } from "@/generated/routeTree.gen";
+import { commands } from "@/lib/commands";
 import { hrefOf, listLink, objectLink, setRouter } from "@/lib/links";
 import { SCOPE_LIMIT } from "@/lib/namespace-scope";
 import { RESOURCE_REGISTRY } from "@/lib/resource-registry";
@@ -1101,5 +1104,32 @@ describe("a tab whose cluster the kubeconfig no longer has", () => {
     const [only] = useScopeTabStore.getState().tabs;
     expect(only.missing).toBe(false);
     expect(only.href).toBe("/c/here/pods/default/api-7f9");
+  });
+});
+
+describe("which clusters the tabs keep connected", () => {
+  /**
+   * Tabs on several clusters: a cluster a parked tab shows stays connected,
+   * so coming back to it is not a reconnect, and closing its last tab is
+   * what lets it go. Fails if a parked tab stops holding its cluster, or
+   * closing one does not let its cluster go.
+   */
+  it("lets go of a parked tab's cluster when it closes and keeps every other tab's", async () => {
+    live("k3d-dev");
+    seed(
+      [
+        tab({ id: "a", context: "k3d-dev", href: "/c/k3d-dev" }),
+        tab({ id: "b", context: "prod", href: "/c/prod" }),
+        tab({ id: "c", context: "staging", href: "/c/staging" }),
+      ],
+      "a"
+    );
+    vi.mocked(commands.releaseClusters).mockClear();
+
+    await state().closeTab("b");
+
+    const [keep] = vi.mocked(commands.releaseClusters).mock.lastCall!;
+    expect(keep).toEqual(expect.arrayContaining(["k3d-dev", "staging"]));
+    expect(keep).not.toContain("prod");
   });
 });

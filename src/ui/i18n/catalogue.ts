@@ -4375,6 +4375,7 @@ export const en = {
     failSignIn: "Signing in failed before the cluster was asked.",
     failPlugin:
       "The credential plugin {plugin} failed, so there was nothing to sign in with.",
+    backToConnected: "Back to {context}, still connected",
     orPickAnother: "or pick another below",
     server: "Server",
     allClusters: "all clusters",

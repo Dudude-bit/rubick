@@ -13,6 +13,8 @@ import {
 } from "@/stores/clusterRecencyStore";
 import { useT } from "@/i18n/useT";
 import type { ContextInfo } from "@/generated/types";
+import { failureLine } from "@/components/cluster/connect-failure";
+import { useClusterStore, type ConnectFailed } from "@/stores/clusterStore";
 
 /**
  * Whether something that traps the keyboard already has it.
@@ -53,7 +55,6 @@ export function ClusterList({
   query,
   inputRef,
   onSelect,
-  failedContext,
   autoFocus = true,
 }: {
   /** Already filtered — see `useClusterFilter`. */
@@ -66,12 +67,12 @@ export function ClusterList({
   query: string;
   inputRef: React.RefObject<HTMLInputElement | null>;
   onSelect: (context: string) => void;
-  /** The cluster whose last connection attempt came back with an error. */
-  failedContext?: string | null;
   autoFocus?: boolean;
 }) {
   const t = useT();
   const lastUsed = useClusterRecencyStore((s) => s.lastUsed);
+  const live = useClusterStore((s) => s.live);
+  const failures = useClusterStore((s) => s.failures);
   const listRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
@@ -205,9 +206,10 @@ export function ClusterList({
         {recent.map((ctx) => (
           <ClusterListRow
             key={ctx.name}
-            context={ctx.name}
+            context={ctx}
             lastUsedAt={lastUsed[ctx.name]}
-            failed={ctx.name === failedContext}
+            live={live.includes(ctx.name)}
+            failure={failures[ctx.name]}
             onSelect={onSelect}
           />
         ))}
@@ -218,8 +220,9 @@ export function ClusterList({
         {rest.map((ctx) => (
           <ClusterListRow
             key={ctx.name}
-            context={ctx.name}
-            failed={ctx.name === failedContext}
+            context={ctx}
+            live={live.includes(ctx.name)}
+            failure={failures[ctx.name]}
             onSelect={onSelect}
           />
         ))}
@@ -266,20 +269,25 @@ function Caption({ children }: { children: React.ReactNode }) {
 }
 
 function ClusterListRow({
-  context,
+  context: info,
   lastUsedAt,
-  failed,
+  live,
+  failure,
   onSelect,
 }: {
-  context: string;
+  context: ContextInfo;
   lastUsedAt?: number;
-  failed?: boolean;
+  /** Connected now, so in use now: there is no age to give. */
+  live: boolean;
+  failure?: ConnectFailed;
   onSelect: (context: string) => void;
 }) {
   const t = useT();
+  const context = info.name;
   const age = useRealtimeAge(
     lastUsedAt ? new Date(lastUsedAt).toISOString() : null
   );
+  const failed = !live && failure !== undefined;
 
   return (
     // Right is the key, not Down: Down already walks this list, and a menu
@@ -291,6 +299,17 @@ function ClusterListRow({
         aria-selected={false}
         aria-haspopup="menu"
         data-cluster-row
+        title={
+          failed
+            ? failureLine(
+                t,
+                failure.kind,
+                context,
+                info.server,
+                info.exec_command
+              )
+            : undefined
+        }
         onClick={() => onSelect(context)}
         className={cn(
           "group mx-[-7px] rounded-[5px] text-left transition-colors hover:bg-hover",
@@ -302,11 +321,15 @@ function ClusterListRow({
           failed={failed}
           meta={
             <span className="flex items-center gap-1.5">
-              {failed
-                ? t("cluster", "failedInline")
-                : lastUsedAt
-                  ? t("cluster", "lastUsedAgo", { age })
-                  : providerLabel(detectProvider(context)).toLowerCase()}
+              {live ? (
+                <span className="text-ok">{t("cluster", "liveInline")}</span>
+              ) : failed ? (
+                t("cluster", "failedInline")
+              ) : lastUsedAt ? (
+                t("cluster", "lastUsedAgo", { age })
+              ) : (
+                providerLabel(detectProvider(context)).toLowerCase()
+              )}
               {/* Both ways in are only worth their width on the row the
                   reader is standing on. The arrow is spelled out for
                   screen readers by `aria-keyshortcuts` on the trigger, so

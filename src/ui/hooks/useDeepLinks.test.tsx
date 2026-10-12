@@ -12,6 +12,8 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     connectCluster: vi.fn(async (context: string) => ({ context })),
     disconnectCluster: vi.fn(async () => undefined),
+    focusCluster: vi.fn(async () => null),
+    releaseClusters: vi.fn(async () => []),
     saveClusterPreferences: vi.fn(async () => undefined),
   },
 }));

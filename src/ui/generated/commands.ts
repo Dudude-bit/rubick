@@ -911,6 +911,16 @@ export async function connectCluster(context: string): Promise<ClusterInfo> {
   return invoke<ClusterInfo>("connect_cluster", { context });
 }
 
+export async function focusCluster(
+  context: string | null
+): Promise<ClusterInfo | null> {
+  return invoke<ClusterInfo | null>("focus_cluster", { context });
+}
+
+export async function releaseClusters(keep: string[]): Promise<string[]> {
+  return invoke<string[]>("release_clusters", { keep });
+}
+
 export async function connectionAttempt(
   context: string
 ): Promise<ConnectAttempt | null> {

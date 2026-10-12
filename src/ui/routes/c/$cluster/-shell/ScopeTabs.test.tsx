@@ -23,6 +23,8 @@ vi.mock("@/lib/commands", () => ({
   commands: {
     connectCluster: vi.fn(async (context: string) => ({ context })),
     disconnectCluster: vi.fn(async () => undefined),
+    focusCluster: vi.fn(async () => null),
+    releaseClusters: vi.fn(async () => []),
     saveClusterPreferences: vi.fn(async () => undefined),
     listContexts: vi.fn(async () => []),
     checkNamespaceAccess: vi.fn(async () => nsAccess.answers),
@@ -143,6 +145,43 @@ beforeEach(() => {
     isAuthenticating: false,
     error: null,
     pendingContext: null,
+  });
+});
+
+describe("what a tab's dot says", () => {
+  const dotOf = (index: number) =>
+    tabs()[index].querySelector("[data-connected]") as HTMLElement;
+
+  /**
+   * Live round 24: after the switch to acme-prod-eu failed, the strip kept
+   * acme-staging's tabs on filled dots, as if live, while nothing was. Fails
+   * if a tab whose cluster holds no session draws the fill, or one that
+   * does, active or parked, loses it.
+   */
+  it("fills the dot only for a cluster that is connected, and rings the rest in its colour", async () => {
+    useClusterStore.setState({
+      currentContext: "prod-eu",
+      isConnected: false,
+      live: ["k3d-dev"],
+    });
+    useScopeTabStore.setState({
+      tabs: [
+        tab({ id: "a", context: "k3d-dev" }),
+        tab({ id: "b", context: "staging" }),
+        tab({ id: "c", context: "prod-eu" }),
+      ],
+      activeId: "c",
+      pendingHref: null,
+    });
+    await mount("/c/prod-eu");
+
+    expect(dotOf(0).dataset.connected).toBe("true");
+    expect(dotOf(0).style.background).not.toBe("");
+    for (const index of [1, 2]) {
+      expect(dotOf(index).dataset.connected).toBe("false");
+      expect(dotOf(index).style.background).toBe("");
+      expect(dotOf(index).style.borderColor).not.toBe("");
+    }
   });
 });
 

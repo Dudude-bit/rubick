@@ -471,6 +471,8 @@ export interface PaletteState {
   scope: Scope;
   contexts: ReadonlyArray<{ name: string }>;
   currentContext: string | null;
+  /** The contexts the backend holds a session for. */
+  live?: readonly string[];
   marks: Record<string, ClusterMark>;
   recentItems: RecentItem[];
   isConnected: boolean;
@@ -546,6 +548,7 @@ export function buildPaletteEntries({
   scope,
   contexts,
   currentContext,
+  live = [],
   marks,
   recentItems,
   isConnected,
@@ -604,10 +607,9 @@ export function buildPaletteEntries({
             ? match.context
             : highlight(match)
           : undefined,
-        meta:
-          match.context === currentContext
-            ? t("cluster", "liveInline")
-            : t("cluster", "notConnectedInline"),
+        meta: live.includes(match.context)
+          ? t("cluster", "liveInline")
+          : t("cluster", "notConnectedInline"),
       });
     }
     if (out.length === 1) {

@@ -24,6 +24,9 @@ import {
   type ContextStatus,
 } from "./context-reading";
 import { useT } from "@/i18n/useT";
+import { failureLine } from "@/components/cluster/connect-failure";
+import { verbatim } from "@/lib/error-utils";
+import type { ConnectFailed } from "@/stores/clusterStore";
 
 /**
  * One context, and the three questions every row answers: what is it, how
@@ -71,8 +74,8 @@ export function ContextRow({
   binding: ContextBindingInfo | undefined;
   binaries: Map<string, string | null>;
   connected: boolean;
-  /** The error of the last connect to this context, while it stands. */
-  failure?: string | null;
+  /** The last connect to this context failed, and has not landed since. */
+  failure?: ConnectFailed | null;
   onBind: (context: string) => void;
   /**
    * Which file named this context, where more than one is being read.
@@ -217,8 +220,8 @@ export function ContextRow({
       <span
         data-testid="context-status"
         title={
-          reading.status === "connect failed"
-            ? (failure ?? undefined)
+          reading.status === "connect failed" && failure
+            ? `${failureLine(t, failure.kind, context.name, context.server, context.exec_command)}\n\n${verbatim(failure.error)}`
             : undefined
         }
         className={cn(

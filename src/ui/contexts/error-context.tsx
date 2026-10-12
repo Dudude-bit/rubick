@@ -13,6 +13,7 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import { useToast } from "@/components/ui/use-toast";
 import { useClusterStore } from "@/stores/clusterStore";
+import { failureLine } from "@/components/cluster/connect-failure";
 import { shownPath } from "@/lib/hide-paths";
 import { useT } from "@/i18n/useT";
 import {
@@ -89,13 +90,23 @@ export function ErrorProvider({ children }: Props) {
     [emitToast]
   );
 
-  // The page says why the connect failed, with the server's words folded
-  // under Details; the toast only says that it did.
+  // Why, in the page's own plain words; the server's stay folded under the
+  // page's Details. A toast that only said "could not connect" was the one
+  // trace a failure left wherever the page did not stay to say more.
   useEffect(() => {
     if (!clusterError || !clusterErrorContext) return;
     reportError(clusterError, clusterErrorContext);
+    const { failures, contexts } = useClusterStore.getState();
+    const info = contexts.find((each) => each.name === clusterErrorContext);
     emitToast(
-      t("cluster", "couldNotConnect", { context: clusterErrorContext })
+      t("cluster", "couldNotConnect", { context: clusterErrorContext }),
+      failureLine(
+        t,
+        failures[clusterErrorContext]?.kind ?? "unknown",
+        clusterErrorContext,
+        info?.server,
+        info?.exec_command
+      )
     );
   }, [clusterError, clusterErrorContext, emitToast, t]);
 

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { commands } from "@/lib/commands";
 import { queryKeys } from "@/lib/query-keys";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
-import { failedAt, useClusterStore } from "@/stores/clusterStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { BindingDialog } from "./clusters/BindingDialog";
 import { CloudProfilesPanel } from "./clusters/CloudProfilesPanel";
 import { ContextRow } from "./clusters/ContextRow";
@@ -37,10 +37,8 @@ export function ClustersSettings() {
   const [toolPaths, setToolPaths] = React.useState(false);
   const [profiles, setProfiles] = React.useState(false);
 
-  const currentContext = useClusterStore((state) => state.currentContext);
-  const failedContext = useClusterStore(failedAt);
-  const connectError = useClusterStore((state) => state.error);
-  const isConnected = useClusterStore((state) => state.isConnected);
+  const failures = useClusterStore((state) => state.failures);
+  const live = useClusterStore((state) => state.live);
   const t = useT();
 
   const { data: contexts, isLoading } = useQuery({
@@ -95,18 +93,12 @@ export function ClustersSettings() {
     return map;
   }, [kubeconfig.source]);
 
-  // The current context first, then the file's own order. Somebody
-  // arriving to check "the one I am on" should not scroll past twenty-nine
-  // others to find it, and any cleverer sort would move rows under a
-  // reader who had learned where they were.
-  const ordered = React.useMemo(() => {
-    const list = [...(contexts ?? [])];
-    list.sort(
-      (a, b) =>
-        Number(b.name === currentContext) - Number(a.name === currentContext)
-    );
-    return list;
-  }, [contexts, currentContext]);
+  // The file's own order, and nothing that moves. Sorting the current
+  // context first put acme-prod-eu on top the moment a connect to it began,
+  // and acme-staging back once it reconnected: rows moved under a reader
+  // who had learned where they were. The one in use carries its check, and
+  // the settings search finds any other.
+  const ordered = contexts ?? [];
 
   return (
     <div>
@@ -127,8 +119,8 @@ export function ClustersSettings() {
               context={context}
               binding={bindingByContext.get(context.name)}
               binaries={binaries}
-              connected={isConnected && context.name === currentContext}
-              failure={context.name === failedContext ? connectError : null}
+              connected={live.includes(context.name)}
+              failure={failures[context.name] ?? null}
               onBind={setBinding}
               fromFile={fileOf.get(context.name)}
             />

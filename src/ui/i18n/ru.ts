@@ -4884,6 +4884,7 @@ export const ru: Catalogue = {
     failSignIn: "Вход не удался ещё до обращения к кластеру.",
     failPlugin:
       "Плагин учётных данных {plugin} завершился с ошибкой, поэтому войти было нечем.",
+    backToConnected: "Вернуться к {context}, он всё ещё подключён",
     orPickAnother: "или выберите другой ниже",
     server: "Сервер",
     allClusters: "все кластеры",

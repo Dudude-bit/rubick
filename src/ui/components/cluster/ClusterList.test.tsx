@@ -60,7 +60,11 @@ const onSelect = vi.fn();
 beforeEach(() => {
   onSelect.mockReset();
   localStorage.clear();
-  useClusterStore.setState({ contexts: NAMES.map(context) });
+  useClusterStore.setState({
+    contexts: NAMES.map(context),
+    live: [],
+    failures: {},
+  });
   useClusterRecencyStore.setState({ lastUsed: {} });
   useClusterIdentityStore.setState({ marks: {} });
 });
@@ -374,5 +378,51 @@ describe("the recent clusters, in Russian", () => {
     expect(screen.getByText(/открывался .* назад/)).toBeInTheDocument();
     expect(screen.queryByText(/last used/)).not.toBeInTheDocument();
     useLocaleStore.setState({ choice: "en" });
+  });
+});
+
+describe("what each row says about its cluster", () => {
+  const rowOf = (name: string) =>
+    rows().find((row) => row.textContent?.includes(name)) as HTMLElement;
+
+  /**
+   * The front door said acme-staging was "last used 15m ago" seconds after
+   * it was on screen, and still connected. Fails if a connected cluster
+   * gives an age instead of saying it is live.
+   */
+  it("says live, not an age, for a cluster still connected", () => {
+    useClusterRecencyStore.setState({
+      lastUsed: { "prod-eus2-mki": 1_000, "prod-euw1-mki": 2_000 },
+    });
+    useClusterStore.setState({ live: ["prod-eus2-mki"] });
+    render(<Harness />);
+
+    const live = rowOf("prod-eus2-mki");
+    expect(live.textContent).toContain(t("cluster", "liveInline"));
+    expect(live.textContent).not.toMatch(/last used/);
+    expect(rowOf("prod-euw1-mki").textContent).toMatch(/last used/);
+  });
+
+  /**
+   * Live round 24: after acme-prod-eu failed to connect, its row on the
+   * front door said nothing about it. Fails if a failure the window moved
+   * on from leaves no mark on its row, or no reason on hover.
+   */
+  it("marks a context whose last connect failed, with why on hover", () => {
+    useClusterStore.setState({
+      failures: {
+        "dev-euw1-mki": { kind: "timeout", error: "deadline has elapsed" },
+      },
+    });
+    render(<Harness />);
+
+    const failed = rowOf("dev-euw1-mki");
+    expect(failed.textContent).toContain(t("cluster", "failedInline"));
+    expect(failed.getAttribute("title")).toBe(
+      t("cluster", "failTimeout", {
+        host: "dev-euw1-mki.example:6443",
+        context: "dev-euw1-mki",
+      })
+    );
   });
 });

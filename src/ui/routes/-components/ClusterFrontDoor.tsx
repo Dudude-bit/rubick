@@ -2,16 +2,7 @@ import { ClusterList } from "@/components/cluster/ClusterList";
 import { ErrorDetails } from "@/components/ui/error-details";
 import { Spinner } from "@/components/ui/spinner";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Ban,
-  KeyRound,
-  SearchX,
-  ShieldX,
-  SquareTerminal,
-  TimerOff,
-  WifiOff,
-  type LucideIcon,
-} from "lucide-react";
+import { CircleCheck } from "lucide-react";
 
 import { useClusterFilter, type ClusterFilter } from "@/hooks/useClusterFilter";
 import { useKubeconfigPath } from "@/hooks/useKubeconfigPath";
@@ -19,7 +10,12 @@ import { useOpenCluster } from "@/hooks/useOpenCluster";
 import { useShownPath } from "@/lib/hide-paths";
 import { commands } from "@/lib/commands";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
-import { connectingTo, failedAt, useClusterStore } from "@/stores/clusterStore";
+import {
+  connectingTo,
+  failedAt,
+  useClusterStore,
+  wayBackTo,
+} from "@/stores/clusterStore";
 import { verbatim } from "@/lib/error-utils";
 import { cn } from "@/lib/utils";
 import type {
@@ -27,6 +23,7 @@ import type {
   ConnectFailure,
   KubeconfigSource,
 } from "@/generated/types";
+import { FAILURE, failureLine } from "@/components/cluster/connect-failure";
 import { useT, type T } from "@/i18n/useT";
 
 /**
@@ -59,6 +56,7 @@ export function ClusterFrontDoor() {
   const error = useClusterStore((s) => s.error);
   const openCluster = useOpenCluster();
   const disconnect = useClusterStore((s) => s.disconnect);
+  const wayBack = useClusterStore(wayBackTo);
 
   const kubeconfig = useKubeconfigPath();
 
@@ -68,7 +66,7 @@ export function ClusterFrontDoor() {
         <Connecting
           context={connecting}
           startedAt={connectStartedAt}
-          onCancel={() => disconnect()}
+          onCancel={() => (wayBack ? openCluster(wayBack) : disconnect())}
         />
       </Door>
     );
@@ -81,6 +79,8 @@ export function ClusterFrontDoor() {
           context={failed}
           message={error}
           onRetry={() => openCluster(failed)}
+          wayBack={wayBack}
+          onBack={openCluster}
         />
         <div className="mt-7">
           <ClusterList
@@ -91,7 +91,6 @@ export function ClusterFrontDoor() {
             query={cluster.query}
             inputRef={cluster.inputRef}
             onSelect={openCluster}
-            failedContext={failed}
           />
         </div>
         <SourceLine kubeconfig={kubeconfig} />
@@ -474,72 +473,6 @@ function Connecting({
   );
 }
 
-/** What the screen leads with for each kind of failure, as a total map. */
-const FAILURE: Record<
-  ConnectFailure,
-  {
-    icon: LucideIcon;
-    title: "didNotAnswer" | "couldNotConnect";
-    line:
-      | "failDns"
-      | "failRefused"
-      | "failTimeout"
-      | "failTls"
-      | "failCredentials"
-      | "failSignIn"
-      | "notReachable";
-  }
-> = {
-  dns: { icon: SearchX, title: "couldNotConnect", line: "failDns" },
-  refused: { icon: Ban, title: "couldNotConnect", line: "failRefused" },
-  timeout: { icon: TimerOff, title: "didNotAnswer", line: "failTimeout" },
-  tls: { icon: ShieldX, title: "couldNotConnect", line: "failTls" },
-  credentials: {
-    icon: KeyRound,
-    title: "couldNotConnect",
-    line: "failCredentials",
-  },
-  signIn: {
-    icon: SquareTerminal,
-    title: "couldNotConnect",
-    line: "failSignIn",
-  },
-  unknown: { icon: WifiOff, title: "didNotAnswer", line: "notReachable" },
-};
-
-/** The server's host and port, which name the machine without a path. */
-function hostOf(server: string | null | undefined): string | null {
-  if (!server) return null;
-  try {
-    return new URL(server).host || null;
-  } catch {
-    return null;
-  }
-}
-
-/** The program a credential plugin runs, without the directory it lives in. */
-function pluginOf(command: string | null | undefined): string | null {
-  const program = command?.trim().split(/\s+/)[0];
-  return program ? (program.split(/[\\/]/).pop() ?? null) : null;
-}
-
-function failureLine(
-  t: T,
-  failure: ConnectFailure,
-  context: string,
-  server: string | null | undefined,
-  exec: string | null | undefined
-): string {
-  const host = hostOf(server) ?? context;
-  if (failure === "signIn") {
-    const plugin = pluginOf(exec);
-    return plugin
-      ? t("cluster", "failPlugin", { plugin })
-      : t("cluster", "failSignIn");
-  }
-  return t("cluster", FAILURE[failure].line, { host, context });
-}
-
 /** Everything behind the human line, in the order it happened. */
 function detailsOf(
   t: T,
@@ -563,10 +496,14 @@ function Failed({
   context,
   message,
   onRetry,
+  wayBack,
+  onBack,
 }: {
   context: string;
   message: string;
   onRetry: () => void;
+  wayBack: string | null;
+  onBack: (context: string) => void;
 }) {
   const t = useT();
   const info = useClusterStore((s) =>
@@ -604,6 +541,15 @@ function Failed({
       </div>
       <div className="mt-4 flex flex-wrap items-baseline gap-x-3 text-[11px] text-fg-fnt">
         <Act onClick={onRetry}>{t("action", "retry")}</Act>
+        {wayBack && (
+          <Act onClick={() => onBack(wayBack)}>
+            <CircleCheck
+              aria-hidden="true"
+              className="mr-1 inline size-3 -translate-y-px text-ok"
+            />
+            {t("cluster", "backToConnected", { context: wayBack })}
+          </Act>
+        )}
         <span>{t("cluster", "orPickAnother")}</span>
       </div>
       <SecondWay attempt={attempt} />
