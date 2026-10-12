@@ -1,7 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { CronJobDetailInfo, JobInfo } from "@/generated/types";
+
+const listeners = vi.hoisted(
+  () => ({}) as Record<string, Array<(event: { payload: unknown }) => void>>
+);
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(
+    async (event: string, handler: (event: { payload: unknown }) => void) => {
+      (listeners[event] ??= []).push(handler);
+      return () => {
+        listeners[event] = (listeners[event] ?? []).filter(
+          (h) => h !== handler
+        );
+      };
+    }
+  ),
+  emit: vi.fn(async () => {}),
+  once: vi.fn(async () => () => {}),
+}));
 
 vi.mock("@/hooks", () => ({
   useResourceDetail: vi.fn(),
@@ -15,6 +39,9 @@ vi.mock("@/lib/commands", () => ({
     listPods: vi.fn(async () => []),
     triggerCronjob: vi.fn(async () => "nightly-backup-1"),
     checkAccess: vi.fn(),
+    subscribeJobWatch: vi.fn(async () => "jobs-1"),
+    resourceWatchSubscribed: vi.fn(async () => undefined),
+    unsubscribeResourceWatch: vi.fn(async () => undefined),
   },
 }));
 
@@ -272,6 +299,58 @@ describe("CronJobDetail", () => {
     const usage = await usageSection();
     expect(usage).toHaveTextContent("still reading");
     expect(usage).not.toHaveTextContent("nothing running");
+  });
+
+  /**
+   * Dana's cron-demo: right after a run "Next run" had moved on while "Last
+   * run" still said the old time, until the CronJob was polled again. Fails
+   * if a run the page holds, newer than the CronJob's own last schedule,
+   * does not date "Last run".
+   */
+  it("dates the last run by the newest run it holds when the CronJob's status trails", async () => {
+    const minute = Math.floor((Date.now() - 2 * 60_000) / 60_000);
+    vi.mocked(commands.listJobs).mockResolvedValueOnce([
+      run(`nightly-backup-${minute}`, "Running"),
+    ]);
+    await renderPage();
+    const last = (await screen.findByText("Last run")).parentElement!;
+    await waitFor(() => expect(last).toHaveTextContent("2m ago"));
+    expect(last).not.toHaveTextContent("1h ago");
+  });
+
+  /**
+   * nightly-export said "nothing running, last run 3m ago" for the eight
+   * seconds kubectl showed its Job running: the runs were polled. Fails if a
+   * change to one of this CronJob's Jobs does not read its runs again at
+   * once, or if another CronJob's Job does.
+   */
+  it("reads its runs again when one of its Jobs changes, and not for another's", async () => {
+    useClusterStore.setState({ currentContext: "prod", isConnected: true });
+    await renderPage();
+    await waitFor(() =>
+      expect(commands.resourceWatchSubscribed).toHaveBeenCalledWith("jobs-1")
+    );
+    await waitFor(() => expect(commands.listJobs).toHaveBeenCalled());
+    const send = (name: string) =>
+      act(() => {
+        for (const heard of listeners["resource-event"] ?? [])
+          heard({
+            payload: {
+              stream_id: "jobs-1",
+              changes: [{ op: "applied", resource: run(name, "Running") }],
+              error: null,
+            },
+          });
+      });
+    send("restarted-elsewhere-1");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const before = vi.mocked(commands.listJobs).mock.calls.length;
+    send("nightly-backup-29863734");
+    await waitFor(() =>
+      expect(vi.mocked(commands.listJobs).mock.calls.length).toBeGreaterThan(
+        before
+      )
+    );
   });
 
   /**

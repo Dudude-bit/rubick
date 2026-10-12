@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { DeleteAction } from "../../../-object/DeleteAction";
 import {
   keepPreviousData,
@@ -6,6 +6,10 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useResourceWatch } from "@/hooks/useResourceWatch";
+import { queryKeys } from "@/lib/query-keys";
+import { useSurfaceVisible } from "@/lib/surface-visibility";
+import { useClusterStore } from "@/stores/clusterStore";
 import { AlignLeft, Info, Layers2, Play } from "lucide-react";
 
 import { LogViewer } from "../../../-logs/LogViewer";
@@ -65,9 +69,16 @@ import { None } from "@/components/ui/none";
  * both are derived here; when the expression cannot be parsed the row says so
  * instead of showing a confident wrong time.
  */
-function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
+function ScheduleHeadlines({
+  cronJob,
+  lastRun,
+}: {
+  cronJob: CronJobDetailInfo;
+  /** When it last fired, by its own status or by the newest run it holds, whichever is later. */
+  lastRun: string | null;
+}) {
   const t = useT();
-  const lastAge = useRealtimeAge(cronJob.lastSchedule ?? null);
+  const lastAge = useRealtimeAge(lastRun);
   // Every render, deliberately, where this was a `useMemo` keyed on the
   // schedule string. The countdown below re-renders this component once a
   // second; a next-run computed once at mount counts down to zero and stays
@@ -96,7 +107,7 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
       <Headline
         label={t("columns", "lastRun")}
         value={
-          cronJob.lastSchedule
+          lastRun
             ? t("action", "agoSuffix", { age: lastAge })
             : t("action", "never")
         }
@@ -105,15 +116,11 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
             ? t("action", "lastSuccessAt", {
                 when: formatDate(cronJob.lastSuccessfulTime) ?? "",
               })
-            : cronJob.lastSchedule
+            : lastRun
               ? t("action", "noRunSucceededYet")
               : t("action", "cronJobNeverFired")
         }
-        tone={
-          cronJob.lastSchedule && !cronJob.lastSuccessfulTime
-            ? "warn"
-            : undefined
-        }
+        tone={lastRun && !cronJob.lastSuccessfulTime ? "warn" : undefined}
       />
       <Headline
         label={t("columns", "nextRun")}
@@ -139,7 +146,65 @@ function ScheduleHeadlines({ cronJob }: { cronJob: CronJobDetailInfo }) {
   );
 }
 
+/**
+ * The later of the CronJob's own last schedule and the newest run it holds.
+ * The controller names a scheduled Job after the minute it was scheduled
+ * for, so a Job the page has seen dates the run before the CronJob's status
+ * is read again.
+ */
+function lastRunOf(
+  name: string,
+  lastSchedule: string | null,
+  jobs: readonly JobInfo[]
+): string | null {
+  const prefix = `${name}-`;
+  const minutes = jobs.map((job) => {
+    const suffix = job.name.startsWith(prefix)
+      ? job.name.slice(prefix.length)
+      : "";
+    return /^\d+$/.test(suffix) ? Number(suffix) : 0;
+  });
+  const newest = Math.max(0, ...minutes) * 60_000;
+  const said = lastSchedule ? Date.parse(lastSchedule) : 0;
+  return newest > said ? new Date(newest).toISOString() : lastSchedule;
+}
+
 const NO_JOBS: JobInfo[] = [];
+
+/**
+ * The namespace's Jobs, watched while the page is shown: a change to one of
+ * this CronJob's runs reads its runs, their pods and the CronJob again, so
+ * a run starting or ending moves "Last run", the runs and Usage together
+ * rather than on three polls that back off apart.
+ */
+function useRunsWatch(namespace: string | undefined, name: string | undefined) {
+  const connected = useClusterStore((s) => s.isConnected);
+  const visible = useSurfaceVisible();
+  const queryKey = useMemo(
+    () => ["cronjob-runs-watch", namespace, name],
+    [namespace, name]
+  );
+  const subscribe = useCallback(
+    () => commands.subscribeJobWatch(namespace ? [namespace] : null),
+    [namespace]
+  );
+  const reads = useMemo(
+    () => [
+      ["cronjob-jobs", namespace, name],
+      ["cronjob-pods", namespace, name],
+      queryKeys.detail(ResourceType.CronJob, namespace, name),
+    ],
+    [namespace, name]
+  );
+  useResourceWatch<JobInfo>({
+    enabled: connected && visible && !!namespace && !!name,
+    subscribe,
+    queryKey,
+    detail: (job) => (job.name.startsWith(`${name}-`) ? reads : []),
+    recount: false,
+    behind: true,
+  });
+}
 const RUNS_IN_FLIGHT = new Set(["Running", "Retrying", "Pending"]);
 
 export function CronJobDetail() {
@@ -182,7 +247,7 @@ export function CronJobDetail() {
         title: t("action", "cronRunStarted"),
         description: t("action", "cronRunStartedName", { name: created }),
       });
-      queryClient.invalidateQueries({
+      void queryClient.invalidateQueries({
         queryKey: ["cronjob-jobs", namespace, name],
       });
       setRunOpen(false);
@@ -219,6 +284,7 @@ export function CronJobDetail() {
     refresh: "resourceList",
   });
   const jobs = jobsRead ?? NO_JOBS;
+  useRunsWatch(namespace, name);
   const tally = useMemo(() => {
     const jobsIn = (status: string) =>
       jobs.filter((job) => job.status === status).length;
@@ -282,7 +348,12 @@ export function CronJobDetail() {
         glyph: viewGlyph(Info),
         content: (
           <>
-            {cronJob && <ScheduleHeadlines cronJob={cronJob} />}
+            {cronJob && (
+              <ScheduleHeadlines
+                cronJob={cronJob}
+                lastRun={lastRunOf(cronJob.name, cronJob.lastSchedule, jobs)}
+              />
+            )}
 
             <WorkloadOverview
               alerts={
