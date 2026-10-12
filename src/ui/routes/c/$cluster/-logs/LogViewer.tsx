@@ -720,11 +720,13 @@ export function LogViewer({
     [handleAddTerm]
   );
 
+  const streamUp = isStreaming || isConnecting;
   const handleAutoScrollToggle = useCallback(() => {
     // Turning it back on is the same act as jumping to the foot: the list
-    // pins itself the moment `follow` flips true.
-    setAutoScroll((previous) => !previous);
-  }, []);
+    // pins itself the moment `follow` flips true. A stopped stream shows the
+    // chip off, so a click there only ever goes to the foot.
+    setAutoScroll((previous) => !streamUp || !previous);
+  }, [streamUp]);
 
   const handleCopyLogs = useCallback(() => {
     if (visibleLogs.length === 0) return;
