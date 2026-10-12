@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -166,6 +166,31 @@ describe("Clusters settings", () => {
       expect(statusOf("gke-shop")?.getAttribute("title")).toContain(
         "203.0.113.42 did not answer in time"
       );
+    });
+
+    /**
+     * Live round 24: acme-prod-eu jumped above acme-staging when a connect to
+     * it began, and back once staging reconnected. Fails if the order keys on
+     * the connection in any way.
+     */
+    it("keeps its rows in the file's order whatever connects", async () => {
+      const { container } = renderPane();
+      await screen.findByText("gke-shop");
+      const order = () =>
+        [...container.querySelectorAll("div.grid .font-mono.text-xs")].map(
+          (row) => row.textContent
+        );
+      const before = order();
+      expect(before).toEqual(CONTEXTS.map((context) => context.name));
+
+      act(() =>
+        useClusterStore.setState({
+          currentContext: "aks-staging",
+          isConnected: false,
+          live: ["k3d-dev"],
+        })
+      );
+      expect(order()).toEqual(before);
     });
   });
 
