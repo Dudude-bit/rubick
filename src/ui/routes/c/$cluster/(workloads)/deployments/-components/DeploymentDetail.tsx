@@ -459,6 +459,7 @@ export function DeploymentDetail() {
               <RelatedResources
                 ownerReferences={deployment.ownerReferences}
                 namespace={deployment.namespace}
+                connections={connections.data}
               />
             )}
           </WorkloadOverview>

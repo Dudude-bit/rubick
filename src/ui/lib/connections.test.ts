@@ -2092,6 +2092,70 @@ describe("where a pod's replica count is really set", () => {
     expect(rows[1].detail).toContain("the replica count is set here");
   });
 
+  /**
+   * hello-web's pod said "the replica count is set here" under the
+   * Autoscaling row naming the HPA that scales it, while the Deployment page
+   * said the HPA sets it. Fails if the chain stops asking the autoscalers.
+   */
+  it("names the autoscaler aimed at the top of the chain as what sets the count", () => {
+    const pod = ref("Pod", "hello-web-5966d9b889-7nvr5");
+    const rs = ref("ReplicaSet", "hello-web-5966d9b889");
+    const deployment = ref("Deployment", "hello-web");
+    const hpa = ref("HorizontalPodAutoscaler", "hello-web", {
+      kind: "autoscaler",
+      minReplicas: 1,
+      maxReplicas: 2,
+      currentReplicas: 1,
+      desiredReplicas: 1,
+      metrics: [],
+      conditions: [],
+      lastScaleTime: null,
+    });
+    const rows = ownerRows(pod, [
+      owns(rs, pod),
+      owns(deployment, rs),
+      {
+        from: hpa,
+        to: deployment,
+        relation: { verb: "governs", selector: null },
+      },
+    ]);
+
+    expect(rows[1].detail).toContain(
+      "the replica count is set by HorizontalPodAutoscaler hello-web"
+    );
+    expect(rows[1].detail).not.toContain("set here");
+  });
+
+  /** An unread autoscaler list is not "no autoscaler". Fails if the clause claims the count is set here regardless. */
+  it("does not claim the count is set here when autoscalers were not read", () => {
+    const pod = ref("Pod", "hello-web-5966d9b889-7nvr5");
+    const deployment = ref("Deployment", "hello-web");
+    const rows =
+      connectionGroups(
+        connections(
+          pod,
+          [owns(deployment, pod)],
+          [],
+          [
+            {
+              kind: "HorizontalPodAutoscaler",
+              why: {
+                says: "unanswered",
+                version: "autoscaling/v2",
+                said: "forbidden",
+              },
+            },
+          ]
+        ),
+        t
+      ).find((group) => group.key === "owners")?.rows ?? [];
+
+    expect(rows[0].detail).toContain(
+      "the replica count is set here unless an autoscaler sets it"
+    );
+  });
+
   it("says it of a StatefulSet's pod too — one hop is the whole chain", () => {
     const pod = ref("Pod", "stateful-demo-0");
     const set = ref("StatefulSet", "stateful-demo");

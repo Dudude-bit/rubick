@@ -47,6 +47,9 @@ export const en = {
     actsOn: "acts on",
     nothingIsTheTop: "nothing: a {kind} sits at the top of the chain",
     replicaCountSetHere: "the replica count is set here",
+    replicaCountSetBy: "the replica count is set by {kind} {name}",
+    replicaCountSetHereUnlessScaled:
+      "the replica count is set here unless an autoscaler sets it, and autoscalers were not read",
     noServiceSelectsThese:
       "No Service in this namespace selects these pods, so nothing in the cluster routes traffic to this {kind}.",
     serviceResolvesExternal:
@@ -107,7 +110,6 @@ export const en = {
     overHttpPlain: "over plain HTTP",
     resourceBackend: "a resource backend, which the app does not follow",
     ownerNotController: "an owner, not the controller",
-    replicasSetHere: "the replica count is set here",
     noNamespaceValue: "no namespace",
     servicePublishesNoEndpoint: "This Service publishes no endpoint",
     stopNoSliceNote:

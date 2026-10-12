@@ -26,6 +26,9 @@ export const ru: Catalogue = {
     actsOn: "действует на",
     nothingIsTheTop: "никем: {kind} стоит в самом начале цепочки",
     replicaCountSetHere: "число реплик задаётся здесь",
+    replicaCountSetBy: "число реплик задаёт {kind} {name}",
+    replicaCountSetHereUnlessScaled:
+      "число реплик задаётся здесь, если его не задаёт автомасштабировщик, а их не прочитали",
     noServiceSelectsThese:
       "Ни один Service в этом пространстве имён не выбирает эти поды, поэтому внутри кластера трафик до этого объекта ({kind}) не доходит.",
     serviceResolvesExternal:
@@ -84,7 +87,6 @@ export const ru: Catalogue = {
     overHttpPlain: "по обычному HTTP",
     resourceBackend: "ресурсный бэкенд, по таким приложение не ходит",
     ownerNotController: "владелец, но не контроллер",
-    replicasSetHere: "число реплик задаётся здесь",
     noNamespaceValue: "без пространства имён",
     servicePublishesNoEndpoint: "Этот Service не публикует ни одного эндпоинта",
     stopNoSliceNote:

@@ -989,6 +989,7 @@ export function PodDetail() {
                     <RelatedResources
                       ownerReferences={pod.ownerReferences}
                       namespace={pod.namespace}
+                      connections={connections.data}
                     />
                   )}
                 </WorkloadOverview>

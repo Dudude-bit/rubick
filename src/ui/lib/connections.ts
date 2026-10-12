@@ -25,6 +25,7 @@ import { clusterIpText } from "./cluster-ip";
 import {
   autoscalerRange,
   autoscalerReplicas,
+  autoscalers,
   budgetRoom,
   budgetRule,
 } from "./governance";
@@ -53,7 +54,9 @@ import type {
 } from "@/generated/types";
 import { declaredQuantity } from "./metric-format";
 
-function sameObject(a: ObjectRef, b: ObjectRef): boolean {
+type Named = Pick<ObjectRef, "kind" | "name" | "namespace">;
+
+function sameObject(a: Named, b: Named): boolean {
   return (
     a.kind === b.kind &&
     a.name === b.name &&
@@ -1396,12 +1399,45 @@ function needLabel(
   }
 }
 
+/** Who sets a workload's replica count, as this neighbourhood can tell. */
+export type ReplicaSetter =
+  | { by: "autoscaler"; object: ObjectRef }
+  | { by: "itself" }
+  | { by: "unread" };
+
+/** An autoscaler aimed at the workload wins; with autoscalers unread, the workload's own claim is not known. */
+export function replicaSetter(
+  conns: ResourceConnections,
+  workload: Named
+): ReplicaSetter {
+  const scaler = autoscalers(conns).find((auto) =>
+    sameObject(auto.target, workload)
+  );
+  if (scaler) return { by: "autoscaler", object: scaler.object };
+  return conns.notLookedAt.some(
+    (entry) => entry.kind === "HorizontalPodAutoscaler"
+  )
+    ? { by: "unread" }
+    : { by: "itself" };
+}
+
 /**
- * What the top of an ownership chain is worth opening for, as a catalogue
- * key: shared with the overview's own chain so the two callers cannot word it
- * differently.
+ * Where the top of an ownership chain gets its replica count, in words:
+ * shared with the Overview's own chain so the two cannot word it differently.
  */
-export const REPLICAS_SET_HERE = "replicaCountSetHere" as const;
+export function replicaSetterWords(setter: ReplicaSetter, t: T): string {
+  switch (setter.by) {
+    case "autoscaler":
+      return t("nav", "replicaCountSetBy", {
+        kind: setter.object.kind,
+        name: setter.object.name,
+      });
+    case "unread":
+      return t("nav", "replicaCountSetHereUnlessScaled");
+    case "itself":
+      return t("nav", "replicaCountSetHere");
+  }
+}
 
 const OWNABLE = new Set([
   "Pod",
@@ -1646,7 +1682,10 @@ function madeByAndMakes(conns: ResourceConnections, t: T): ConnRow[] {
   ) {
     rows[top] = {
       ...rows[top],
-      detail: join(t("nav", REPLICAS_SET_HERE), rows[top].detail),
+      detail: join(
+        replicaSetterWords(replicaSetter(conns, child), t),
+        rows[top].detail
+      ),
     };
   }
 
