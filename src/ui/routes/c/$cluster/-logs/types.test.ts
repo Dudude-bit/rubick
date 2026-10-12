@@ -36,4 +36,28 @@ describe("the logs footer", () => {
       translate("en", "count", "linesPerSecond", lineRateValues(1, "en"))
     ).toBe("1 line/s");
   });
+
+  /**
+   * Lena could check the rate's plural live only on fractions: no logger in
+   * the cluster wrote whole numbers of lines a second. Fails if a whole rate
+   * takes the wrong form for its number in either language.
+   */
+  it("words whole rates in the form each number takes, in both languages", () => {
+    const rate = (locale: "en" | "ru", n: number) =>
+      translate(locale, "count", "linesPerSecond", lineRateValues(n, locale));
+    expect([1, 2, 5, 21, 102].map((n) => rate("ru", n))).toEqual([
+      "1 строка/с",
+      "2 строки/с",
+      "5 строк/с",
+      "21 строка/с",
+      "102 строки/с",
+    ]);
+    expect([1, 2, 5, 21, 102].map((n) => rate("en", n))).toEqual([
+      "1 line/s",
+      "2 lines/s",
+      "5 lines/s",
+      "21 lines/s",
+      "102 lines/s",
+    ]);
+  });
 });
