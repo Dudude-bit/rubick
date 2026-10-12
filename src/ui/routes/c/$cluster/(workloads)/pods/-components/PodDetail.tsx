@@ -62,6 +62,7 @@ import {
   ReasonedAction,
 } from "@/components/object/detail-blocks";
 import { usePodDenied } from "@/lib/access";
+import { podForwardReason } from "../../../-peek/peek-actions";
 import { UsageBlock } from "../../../-usage/usage-block";
 import { ImageRef } from "@/components/object/ImageRef";
 import { ResourceMessage } from "@/components/object/ResourceMessage";
@@ -879,7 +880,7 @@ export function PodDetail() {
               icon={Network}
               onClick={() => setPortForwardOpen(true)}
               disabled={!currentContext || !pod}
-              reason={denied.portForward}
+              reason={denied.portForward ?? podForwardReason(pod, t)}
             />
             <DeleteAction
               restart

@@ -1969,6 +1969,7 @@ export interface WarningGroup {
   objectName: string | null;
   namespace: string | null;
   incarnation: Incarnation;
+  uid: string | null;
 }
 
 export interface OlderTally {
@@ -2084,6 +2085,7 @@ export interface PodRowStatus {
   loopingUntil?: string;
   exitUnreported: boolean;
   restartingUntil?: string;
+  rejected?: string;
 }
 
 export interface FileEntry {
@@ -2240,6 +2242,7 @@ export interface PodStatusInfo {
   loopingUntil?: string;
   exitUnreported: boolean;
   restartingUntil?: string;
+  rejected?: string;
 }
 
 export interface DeploymentPods {

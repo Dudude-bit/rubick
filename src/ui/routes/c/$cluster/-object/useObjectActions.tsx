@@ -21,7 +21,7 @@
 
 import { useCallback, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { DebugNodeDialog, DebugPodDialog } from "../-debug";
 import {
@@ -34,16 +34,13 @@ import { useClusterInfo } from "@/hooks";
 import { useConnections } from "@/hooks/useConnections";
 import { useCritical } from "@/hooks/useCritical";
 import { useDeliveryIntercept } from "../-delivery/useDelivery";
-import { commands } from "@/lib/commands";
 import { lifetimeContainers } from "@/lib/container-sequence";
 import { podForwardPorts } from "@/lib/port-forward";
 import { deliveryOfKind } from "@/lib/delivery";
-import { errorToShow } from "@/lib/error-utils";
 import { scaleWarnings } from "@/lib/governance";
 import { readinessOf } from "@/lib/restart-plan";
 import { objectLink } from "@/lib/links";
 import { useShellAskStore } from "@/stores/shellAskStore";
-import { STALE_TIMES } from "@/lib/refresh";
 import { toKind } from "@/lib/resource-registry";
 import type {
   DebugResult,
@@ -67,11 +64,11 @@ import {
   restartRollsOut,
   scaleCommandFor,
   warned,
-  type ForwardBackend,
   type PeekActionId,
   type PeekActionPlan,
 } from "../-peek/peek-actions";
 import { useAsk } from "./useAsk";
+import { useServiceForwardBackend } from "./useServiceForwardBackend";
 import {
   guardedOf,
   noteDenied,
@@ -157,17 +154,7 @@ export function useObjectActions({
   // is the page's, so an already-open Deployment answers from cache.
   const governance = useConnections(kind, name, namespace, dialog === "scale");
 
-  // A Service does not answer a port-forward; the pod behind it does. Which
-  // pod that is only exists in its endpoints, so it has to be read before the
-  // action can honestly claim it will work.
-  const backendQuery = useQuery({
-    queryKey: ["peek-service-backend", namespace, name],
-    queryFn: () => resolveServiceBackend(name, namespace!, service!),
-    enabled: !!service && !!namespace && service.ports.length > 0,
-    staleTime: STALE_TIMES.fast,
-    refetchOnWindowFocus: false,
-    retry: false,
-  });
+  const backend = useServiceForwardBackend(service, namespace, name);
 
   const invalidate = () => {
     for (const queryKey of peekMutationKeys(kind)) {
@@ -296,10 +283,9 @@ export function useObjectActions({
 
   const plan = planPeekActions(kind, detail, t, {
     watching: askTarget ? asking.watching(askTarget) : false,
-    backend: backendQuery.data,
-    backendPending:
-      backendQuery.isPending && backendQuery.fetchStatus !== "idle",
-    backendError: backendQuery.error ? errorToShow(backendQuery.error) : null,
+    backend: backend.backend,
+    backendPending: backend.backendPending,
+    backendError: backend.backendError,
     denied: {
       delete: denied[verbOf.delete],
       scale: denied[verbOf.scale],
@@ -318,7 +304,7 @@ export function useObjectActions({
   const busy: Partial<Record<PeekActionId, boolean>> = {
     restart: restart.isPending,
     delete: remove.isPending,
-    portForward: !!service && backendQuery.isFetching,
+    portForward: !!service && backend.fetching,
   };
 
   const openShell = () => {
@@ -512,22 +498,4 @@ export function useObjectActions({
   );
 
   return { plan, busy, run, askDelete, dialogs };
-}
-
-async function resolveServiceBackend(
-  name: string,
-  namespace: string,
-  service: ServiceInfo
-): Promise<ForwardBackend | null> {
-  const endpoints = await commands.getEndpoints(name, namespace);
-  for (const subset of endpoints.subsets) {
-    const address = subset.addresses.find(
-      (entry) => entry.targetRef?.kind === "Pod"
-    );
-    if (!address?.targetRef) continue;
-    const port = subset.ports[0]?.port ?? service.ports[0]?.port;
-    if (port === undefined) continue;
-    return { podName: address.targetRef.name, port };
-  }
-  return null;
 }

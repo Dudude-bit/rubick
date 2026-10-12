@@ -702,6 +702,20 @@ describe("watching several namespaces at once", () => {
   });
 
   /**
+   * Lena typed "lena" and pressed Enter: the picker took the typed text, a
+   * namespace the cluster does not have, over lena-sandbox in the list under
+   * it, and every page went quiet. Fails if Enter prefers a name the list does
+   * not hold to the first one it does.
+   */
+  it("takes the first listed match on Enter, not the typed text", async () => {
+    const user = userEvent.setup();
+    await draw([]);
+    await openPicker(user);
+    await user.keyboard("ns{Enter}");
+    expect(scope()).toEqual(["ns-0"]);
+  });
+
+  /**
    * A pod page under a scope that does not hold its namespace is a tab
    * naming one namespace over an object in another. Fails if a pick that
    * leaves the object out keeps its page, or one that keeps it in leaves it.

@@ -32,6 +32,8 @@ export interface ClickablePortProps {
   className?: string;
   /** Off when the protocol is already implied by the surrounding row. */
   showProtocol?: boolean;
+  /** Why a forward here cannot land, as the pod's own Port forward says it. */
+  reason?: string;
 }
 
 export function ClickablePort({
@@ -42,10 +44,11 @@ export function ClickablePort({
   podNamespace,
   className,
   showProtocol = true,
+  reason,
 }: ClickablePortProps) {
   const t = useT();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const denied = usePodDenied(podNamespace).portForward;
+  const denied = usePodDenied(podNamespace).portForward ?? reason;
 
   const label = portName
     ? `${port} (${portName})`
@@ -164,6 +167,7 @@ export interface ClickablePortsProps {
   podName: string;
   podNamespace: string;
   className?: string;
+  reason?: string;
 }
 
 export function ClickablePorts({
@@ -171,6 +175,7 @@ export function ClickablePorts({
   podName,
   podNamespace,
   className,
+  reason,
 }: ClickablePortsProps) {
   if (!ports || ports.length === 0) return null;
 
@@ -184,6 +189,7 @@ export function ClickablePorts({
           protocol={port.protocol || "TCP"}
           podName={podName}
           podNamespace={podNamespace}
+          reason={reason}
         />
       ))}
     </span>

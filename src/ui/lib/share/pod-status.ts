@@ -11,6 +11,8 @@ type LoopStatus = {
   display: string;
   loopingUntil?: string | null;
   exitUnreported?: boolean;
+  /** The kubelet's words for a pod it turned away on arrival, which never ran. */
+  rejected?: string;
 };
 
 export type PodBadgeInput = ReadinessLists & {
@@ -95,12 +97,16 @@ export function podStatusTitle(
   if (silence) return silenceNote(silence, t);
   return (
     [
-      podStatusMeaning(
-        pod.status.display,
-        pod.status.phase,
-        t,
-        podReadiness(pod)
-      ),
+      pod.status.rejected
+        ? `${pod.status.display}: ${t("statusMeaning", "rejectedOnArrival", {
+            said: pod.status.rejected,
+          })}`
+        : podStatusMeaning(
+            pod.status.display,
+            pod.status.phase,
+            t,
+            podReadiness(pod)
+          ),
       upBetweenCrashes(pod) && t("statusMeaning", "betweenCrashes"),
       exitUnreported(pod) && t("statusMeaning", "exitUnreported"),
       statusRole(pod.status.display) === "pending" &&

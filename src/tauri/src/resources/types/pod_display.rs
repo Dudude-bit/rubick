@@ -526,19 +526,7 @@ pub fn failed_at(pod: &Pod) -> Option<DateTime<Utc>> {
         .map(Moment::moment)
         .max();
     let started = status.start_time.as_ref().map(Moment::moment);
-    let never_ran = !statuses().any(|cs| {
-        cs.started == Some(true)
-            || cs
-                .last_state
-                .as_ref()
-                .is_some_and(|s| s.terminated.is_some())
-            || cs.state.as_ref().is_some_and(|s| {
-                s.running.is_some()
-                    || s.terminated
-                        .as_ref()
-                        .is_some_and(|t| t.started_at.is_some())
-            })
-    });
+    let never_ran = never_ran(status);
     let deadline = pod
         .spec
         .as_ref()
@@ -551,6 +539,90 @@ pub fn failed_at(pod: &Pod) -> Option<DateTime<Utc>> {
         .or(deadline)
         .or_else(|| started.filter(|_| never_ran))
         .or_else(|| changed("Ready", "False"))
+}
+
+/// Whether no container of the pod, init or app, has ever been started.
+fn never_ran(status: &PodStatus) -> bool {
+    !status
+        .init_container_statuses
+        .iter()
+        .chain(status.container_statuses.iter())
+        .flatten()
+        .any(|cs| {
+            cs.started == Some(true)
+                || cs
+                    .last_state
+                    .as_ref()
+                    .is_some_and(|s| s.terminated.is_some())
+                || cs.state.as_ref().is_some_and(|s| {
+                    s.running.is_some()
+                        || s.terminated
+                            .as_ref()
+                            .is_some_and(|t| t.started_at.is_some())
+                })
+        })
+}
+
+/// What the kubelet said when it turned a pod away on arrival, before
+/// starting anything: failed, nothing ever ran, and neither a disruption
+/// nor a deadline named. An evicted pod ran first; this one never did, and
+/// `Pod was rejected: The node had condition: [DiskPressure]` is the only
+/// account of why.
+#[must_use]
+pub fn rejected_at_admission(pod: &Pod) -> Option<String> {
+    let status = pod.status.as_ref()?;
+    if status.phase.as_deref() != Some("Failed")
+        || status.reason.as_deref() == Some("DeadlineExceeded")
+    {
+        return None;
+    }
+    let disrupted = status
+        .conditions
+        .iter()
+        .flatten()
+        .any(|c| c.type_ == "DisruptionTarget" && c.status == "True");
+    if disrupted || !never_ran(status) {
+        return None;
+    }
+    status.message.clone().filter(|message| !message.is_empty())
+}
+
+/// When a stuck pod's reason began, as the cluster recorded it: the end of
+/// the held container's last run, else the moment its init sequence or its
+/// containers stopped being ready. `None` where neither was recorded, since
+/// the pod's age is not the reason's.
+#[must_use]
+pub fn stuck_since(pod: &Pod) -> Option<DateTime<Utc>> {
+    let status = pod.status.as_ref()?;
+    let initializing = status.phase.as_deref().is_none_or(|p| p == "Pending")
+        && !condition_is_true(Some(status), "Initialized");
+    let (held, conditions): (Option<&ContainerStatus>, &[&str]) =
+        match blocking_init(pod).filter(|_| initializing) {
+            Some((_, cs)) => (Some(cs), &["Initialized"]),
+            None => (
+                status
+                    .container_statuses
+                    .iter()
+                    .flatten()
+                    .find(|cs| stuck_waiting(cs).is_some()),
+                &["ContainersReady", "Ready"],
+            ),
+        };
+    let exited = held
+        .and_then(latest_exit)
+        .and_then(|t| t.finished_at.as_ref())
+        .map(Moment::moment);
+    exited.or_else(|| {
+        conditions.iter().find_map(|kind| {
+            status
+                .conditions
+                .iter()
+                .flatten()
+                .find(|c| c.type_ == *kind && c.status != "True")
+                .and_then(|c| c.last_transition_time.as_ref())
+                .map(Moment::moment)
+        })
+    })
 }
 
 /// When a Pending pod started waiting: its last scheduling decision, or its
@@ -836,6 +908,95 @@ mod tests {
         assert_eq!(failed_at(&late), Some(at(12).moment()));
 
         assert_eq!(failed_at(&pod("Running")), None);
+    }
+
+    /// Dana's admission-rejected pods said, on hover, that the node removed
+    /// them for memory or disk: the words of an eviction, about pods that
+    /// never ran. Fails if a pod the kubelet turned away loses the kubelet's
+    /// own words, or a pod that ran or was disrupted is taken for one.
+    #[test]
+    fn a_pod_turned_away_on_arrival_carries_the_kubelets_words() {
+        let said = "Pod was rejected: The node had condition: [DiskPressure].";
+        let mut rejected = pod("Failed");
+        let s = rejected.status.as_mut().unwrap();
+        s.reason = Some("Evicted".to_string());
+        s.message = Some(said.to_string());
+        s.container_statuses = Some(vec![status("app", waiting("ContainerCreating"), false)]);
+        assert_eq!(rejected_at_admission(&rejected).as_deref(), Some(said));
+
+        let mut ran = rejected.clone();
+        let mut exited = status("app", terminated(137, Some("Error")), false);
+        exited.started = Some(true);
+        ran.status.as_mut().unwrap().container_statuses = Some(vec![exited]);
+        assert_eq!(rejected_at_admission(&ran), None);
+
+        let mut evicted = rejected.clone();
+        evicted.status.as_mut().unwrap().conditions = Some(vec![PodCondition {
+            type_: "DisruptionTarget".to_string(),
+            status: "True".to_string(),
+            ..Default::default()
+        }]);
+        assert_eq!(rejected_at_admission(&evicted), None);
+
+        assert_eq!(rejected_at_admission(&pod("Running")), None);
+    }
+
+    /// An init container's wait is dated by when initialisation stopped, an
+    /// app container's by its last run where it had one. Fails if either is
+    /// dated by the other's condition, or a run's end is passed over.
+    #[test]
+    fn a_stuck_containers_wait_is_dated_by_its_own_record() {
+        let at = |text: &str| Time(text.parse().expect("a time"));
+        let mut held = pod("Pending");
+        let s = held.status.as_mut().unwrap();
+        s.conditions = Some(vec![
+            PodCondition {
+                type_: "Initialized".to_string(),
+                status: "False".to_string(),
+                last_transition_time: Some(at("2026-10-12T01:00:00Z")),
+                ..Default::default()
+            },
+            PodCondition {
+                type_: "ContainersReady".to_string(),
+                status: "False".to_string(),
+                last_transition_time: Some(at("2026-10-12T00:00:00Z")),
+                ..Default::default()
+            },
+        ]);
+        s.init_container_statuses =
+            Some(vec![status("migrate", waiting("ImagePullBackOff"), false)]);
+        held.spec.as_mut().unwrap().init_containers = Some(vec![Container {
+            name: "migrate".to_string(),
+            ..Default::default()
+        }]);
+        assert_eq!(
+            stuck_since(&held),
+            Some(at("2026-10-12T01:00:00Z").moment())
+        );
+
+        let mut app = pod("Running");
+        let s = app.status.as_mut().unwrap();
+        s.conditions = held.status.as_ref().unwrap().conditions.clone();
+        let mut config = status("worker", waiting("CreateContainerConfigError"), false);
+        config.last_state = Some(ContainerState {
+            terminated: Some(ContainerStateTerminated {
+                exit_code: 0,
+                finished_at: Some(at("2026-10-12T02:00:00Z")),
+                ..Default::default()
+            }),
+            ..Default::default()
+        });
+        s.container_statuses = Some(vec![config]);
+        assert_eq!(stuck_since(&app), Some(at("2026-10-12T02:00:00Z").moment()));
+
+        app.status
+            .as_mut()
+            .unwrap()
+            .container_statuses
+            .as_mut()
+            .unwrap()[0]
+            .last_state = None;
+        assert_eq!(stuck_since(&app), Some(at("2026-10-12T00:00:00Z").moment()));
     }
 
     #[test]

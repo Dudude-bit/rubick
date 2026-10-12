@@ -377,6 +377,13 @@ function ContainerBlock({
               ports={container.ports}
               podName={podName}
               podNamespace={namespace}
+              reason={
+                container.state.type === "running"
+                  ? undefined
+                  : t("action", "containerNotListening", {
+                      container: container.name,
+                    })
+              }
             />
           ) : (
             container.ports

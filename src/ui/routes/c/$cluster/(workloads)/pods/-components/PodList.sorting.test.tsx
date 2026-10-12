@@ -17,6 +17,7 @@ type Row = {
   status: { display: string; phase: string };
   restartCount: number;
   containers?: unknown[];
+  initContainers?: unknown[];
 };
 
 // `ColumnDef` is a union — the accessor arm carries `accessorFn` and the
@@ -61,14 +62,35 @@ describe("the pod columns a reader can sort", () => {
   });
 
   /** By what is missing, so the ones short of a replica sort together
-   *  regardless of how many they were asked for. */
+   *  regardless of how many they were asked for. Fails if Ready sorts by
+   *  the text it shows, which puts 1/1 between 0/3 and 2/3. */
   it("sorts ready by the shortfall, not by the ready count", () => {
-    const short = valueOf("ready", {
+    const app = (ready: boolean) => ({
+      ready,
+      started: true,
+      phase: "app",
+      state: { type: ready ? "running" : "unknown" },
+    });
+    const pod = (ready: number, total: number) => ({
       status: { display: "Running", phase: "Running" },
       restartCount: 0,
-      containers: [],
+      containers: Array.from({ length: total }, (_, i) => app(i < ready)),
+      initContainers: [],
     });
-    expect(typeof short).toBe("number");
+    const sortFn = (column("ready") as { sortFn?: unknown }).sortFn as (
+      a: { original: unknown },
+      b: { original: unknown }
+    ) => number;
+    const rows = [pod(1, 1), pod(2, 3), pod(0, 3)];
+    expect(valueOf("ready", rows[2])).toBe("0/3");
+    const sorted = [...rows].sort((a, b) =>
+      sortFn({ original: a }, { original: b })
+    );
+    expect(sorted.map((row) => valueOf("ready", row))).toEqual([
+      "1/1",
+      "2/3",
+      "0/3",
+    ]);
   });
 
   /** A header that offers to sort a column with nothing to sort by does

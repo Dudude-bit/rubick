@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { CronJobDetailInfo } from "@/generated/types";
+import type { CronJobDetailInfo, JobInfo } from "@/generated/types";
 
 vi.mock("@/hooks", () => ({
   useResourceDetail: vi.fn(),
@@ -12,6 +12,7 @@ vi.mock("@/lib/commands", () => ({
     getCronjob: vi.fn(async () => buildCronJob()),
     deleteCronjob: vi.fn(),
     listJobs: vi.fn(async () => []),
+    listPods: vi.fn(async () => []),
     triggerCronjob: vi.fn(async () => "nightly-backup-1"),
     checkAccess: vi.fn(),
   },
@@ -79,6 +80,23 @@ function mockDetail(
     deleteMutation: { mutate: vi.fn(), isPending: false },
   } as unknown as ReturnType<typeof useResourceDetail>);
 }
+
+function run(name: string, status: string): JobInfo {
+  return {
+    name,
+    namespace: "ops",
+    completions: 1,
+    succeeded: status === "Complete" ? 1 : 0,
+    failed: 0,
+    active: status === "Running" ? 1 : 0,
+    status,
+    failure: null,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+const usageSection = async () =>
+  (await screen.findByText("Usage")).closest("section") as HTMLElement;
 
 function renderPage() {
   return renderWithRouter(<CronJobDetail />, {
@@ -221,6 +239,39 @@ describe("CronJobDetail", () => {
       await screen.findByText("This CronJob has not run yet")
     ).toBeInTheDocument();
     expect(screen.getByText(/0 kept · history limits/)).toBeInTheDocument();
+  });
+
+  /**
+   * Dana's cron-demo Usage read "still reading" for more than ten seconds
+   * between runs: the pods are asked for only while a run is in flight, and
+   * the read nobody started counted as one under way. Fails if a CronJob
+   * the controller and its Jobs both call idle waits on a read for it.
+   */
+  it("says nothing is running between runs without waiting on a read", async () => {
+    vi.mocked(commands.listJobs).mockResolvedValueOnce([
+      run("nightly-backup-29863555", "Complete"),
+    ]);
+    await renderPage();
+    const usage = await usageSection();
+    expect(usage).toHaveTextContent("nothing running");
+    expect(usage).toHaveTextContent("No run of this CronJob is in flight.");
+    expect(usage).not.toHaveTextContent("still reading");
+    expect(commands.listPods).not.toHaveBeenCalled();
+  });
+
+  /** A Job still running is a run in flight, whatever the controller's count says; fails if its pods go unasked. */
+  it("reads the pods of a run a Job it holds says is running", async () => {
+    vi.mocked(commands.listJobs).mockResolvedValueOnce([
+      run("nightly-backup-29863560", "Running"),
+    ]);
+    vi.mocked(commands.listPods).mockImplementationOnce(
+      () => new Promise(() => {})
+    );
+    await renderPage();
+    await waitFor(() => expect(commands.listPods).toHaveBeenCalled());
+    const usage = await usageSection();
+    expect(usage).toHaveTextContent("still reading");
+    expect(usage).not.toHaveTextContent("nothing running");
   });
 
   /**

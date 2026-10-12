@@ -145,6 +145,58 @@ describe("the report of any object", () => {
     expect(events?.unread).toContain("forbidden");
   });
 
+  /**
+   * Lena's hello-web HPA page said Events 2, as kubectl does by uid; its
+   * Share said 10, counting the events of every earlier HPA of that name.
+   * Fails if Share stops reading the object's own uid off what the page read.
+   */
+  it("counts only the events of the object the page read, as its page does", async () => {
+    const about = (uid: string, reason: string) => ({
+      name: `${reason}.${uid}`,
+      namespace: "lena-sandbox",
+      uid: `event-${reason}-${uid}`,
+      type: "Warning",
+      reason,
+      message: null,
+      source: null,
+      involvedObject: {
+        kind: "HorizontalPodAutoscaler",
+        name: "hello-web",
+        namespace: "lena-sandbox",
+        uid,
+      },
+      count: 1,
+      firstTimestamp: null,
+      lastTimestamp: null,
+    });
+    listEvents.mockResolvedValue([
+      about("8b3e3d88", "FailedGetResourceMetric"),
+      about("8b3e3d88", "FailedComputeMetricsReplicas"),
+      about("c20ecc6d", "FailedGetResourceMetric"),
+      about("c20ecc6d", "FailedComputeMetricsReplicas"),
+      about("c20ecc6d", "SuccessfulRescale"),
+    ]);
+    const { result } = renderHook(
+      () =>
+        useObjectReport(
+          {
+            kind: "HorizontalPodAutoscaler",
+            name: "hello-web",
+            namespace: "lena-sandbox",
+          },
+          { metadata: { name: "hello-web", uid: "8b3e3d88" } },
+          undefined,
+          true
+        ),
+      { wrapper }
+    );
+    await waitFor(() =>
+      expect(
+        result.current.report?.sections.find((s) => s.id === "events")?.count
+      ).toBe(2)
+    );
+  });
+
   /** The sender's colouring choice travels with the file rather than being reset to the default. */
   it("carries the sender's resource colouring setting", async () => {
     useDisplaySettingsStore.setState({ resourceColouring: "off" });

@@ -283,15 +283,49 @@ describe("why a pod action cannot run", () => {
     expect(reason).not.toMatch(/Running/);
   });
 
-  it("says when there is no port declared to forward at all", () => {
+  /**
+   * A port the pod does not declare is one a process may still listen on,
+   * and kubectl forwards to it; the peek refused it while the page offered
+   * it. Fails if a running pod's forward is shut for want of a declaration.
+   */
+  it("offers a forward into a running pod that declares no port", () => {
     const portless = pod({
       containers: [container("app", { type: "running" })],
     });
-    expect(find(all("Pod", portless), "portForward")?.reason).toMatch(
-      /declares a port/
-    );
-    // Running and reachable, so the shell is still on offer.
+    expect(find(all("Pod", portless), "portForward")?.reason).toBeUndefined();
     expect(find(all("Pod", portless), "shell")?.reason).toBeUndefined();
+  });
+
+  /**
+   * Marco's checkout-worker: CreateContainerConfigError, nothing running. Its
+   * Shell said so and its Port forward opened a dialog for a forward that
+   * cannot land. Fails if a pod with no running container is offered one, or
+   * if a pod that has ended is told something may still start listening.
+   */
+  it("says nothing is listening in a pod with no container running", () => {
+    const stuck = pod({
+      status: {
+        ...pod().status,
+        display: "CreateContainerConfigError",
+      },
+      containers: [
+        container(
+          "worker",
+          { type: "waiting", reason: "CreateContainerConfigError" },
+          [8080]
+        ),
+      ],
+    });
+    expect(find(all("Pod", stuck), "portForward")?.reason).toMatch(
+      /^Nothing is listening yet: .*CreateContainerConfigError/
+    );
+    const ended = pod({
+      status: { ...pod().status, phase: "Failed", display: "Evicted" },
+      containers: [container("app", { type: "unknown" }, [8080])],
+    });
+    expect(find(all("Pod", ended), "portForward")?.reason).toMatch(
+      /has ended \(Evicted\)/
+    );
   });
 
   it("leaves a healthy pod's actions alone", () => {

@@ -256,6 +256,62 @@ describe("a running container for a reader who may neither exec nor forward", ()
   });
 });
 
+describe("a port of a container that is not running", () => {
+  /**
+   * Marco's checkout-worker, stuck in CreateContainerConfigError: its pod's
+   * Port forward now says nothing is listening, and a port drawn under the
+   * same container opened the same forward into nothing. Fails if a port of
+   * a container that is not running still opens a forward.
+   */
+  it("greys the port and says nothing is listening on it", async () => {
+    useClusterStore.setState((s) => ({
+      currentContext: "acme-staging",
+      isConnected: true,
+      connectionAttemptId: s.connectionAttemptId + 1,
+    }));
+    vi.mocked(invoke).mockImplementation(async (command: string, args) =>
+      command === "check_access"
+        ? (args as { queries: AccessQuery[] }).queries.map((query) => ({
+            ...query,
+            allowed: true,
+          }))
+        : undefined
+    );
+    const pod = {
+      name: "checkout-worker-5b79c79b9c-jlnhp",
+      namespace: "team-checkout",
+      initContainers: [],
+      containers: [
+        {
+          name: "worker",
+          image: "ghcr.io/acme/checkout-worker:1.4.2",
+          phase: "app",
+          ready: false,
+          started: false,
+          restartCount: 0,
+          resources: { requests: {}, limits: {} },
+          state: { type: "waiting", reason: "CreateContainerConfigError" },
+          lastTerminated: null,
+          ports: [{ containerPort: 9090, name: null, protocol: "TCP" }],
+          env: [],
+          envFrom: [],
+        },
+      ],
+    } as unknown as PodInfo;
+    await renderWithRouter(
+      <ContainerRows pod={pod} namespace="team-checkout" podName={pod.name} />
+    );
+    await waitFor(() =>
+      expect(invoke).toHaveBeenCalledWith("check_access", expect.anything())
+    );
+    const port = screen.getByRole("button", { name: "9090/TCP" });
+    await waitFor(() => expect(port).toHaveAttribute("aria-disabled", "true"));
+    fireEvent.click(port);
+    expect(screen.queryByText("Start port-forward")).toBeNull();
+    vi.mocked(invoke).mockImplementation(async () => undefined);
+  });
+});
+
 describe("a Deployment's template for a reader who may not patch it", () => {
   /** Fails if Update image stays live while can-i patch deployments says no. */
   it("greys Update image with the reason", async () => {

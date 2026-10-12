@@ -335,3 +335,60 @@ it("draws in its header the verdict its Status row and its peek draw", async () 
 
   expect(await screen.findAllByText("1 ready")).toHaveLength(2);
 });
+
+/**
+ * Marco's checkout-api has no ready endpoints: its peek greyed Port forward
+ * saying so while its page offered it, with a dialog promising a ready pod
+ * behind it. Fails if the page answers the question without the endpoints
+ * the peek reads, or gives a forward that would land on nothing.
+ */
+it("greys Port forward on a Service with nothing ready behind it, as its peek does", async () => {
+  const endpoints = (addresses: unknown[]) => ({
+    name: "big-pull",
+    namespace: "shop",
+    uid: "ep-uid",
+    subsets: addresses.length
+      ? [
+          {
+            addresses,
+            notReadyAddresses: [],
+            ports: [{ name: null, port: 8080, protocol: "TCP" }],
+          },
+        ]
+      : [],
+    createdAt: null,
+    overCapacity: false,
+  });
+  let behind: unknown[] = [];
+  vi.mocked(invoke).mockImplementation(async (command: string) => {
+    if (command === "get_service") return SERVICE;
+    if (command === "get_endpoints") return endpoints(behind);
+    return undefined;
+  });
+  const { unmount } = await renderWithRouter(<ServiceDetail />, {
+    at: "/c/k3d-rubick/services/shop/big-pull",
+    route: "/c/$cluster/services/$namespace/$name",
+  });
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole("button", { name: "Port forward" })[0]
+    ).toHaveAttribute("aria-disabled", "true")
+  );
+  unmount();
+
+  behind = [
+    { ip: "10.42.0.7", targetRef: { kind: "Pod", name: "big-pull-x8f2k" } },
+  ];
+  await renderWithRouter(<ServiceDetail />, {
+    at: "/c/k3d-rubick/services/shop/big-pull",
+    route: "/c/$cluster/services/$namespace/$name",
+  });
+  await waitFor(() =>
+    expect(invoke).toHaveBeenCalledWith("get_endpoints", expect.anything())
+  );
+  await waitFor(() =>
+    expect(
+      screen.getAllByRole("button", { name: "Port forward" })[0]
+    ).not.toHaveAttribute("aria-disabled")
+  );
+});

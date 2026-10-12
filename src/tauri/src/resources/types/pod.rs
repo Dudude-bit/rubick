@@ -12,7 +12,7 @@ use crate::utils::format_cpu;
 use super::common::{extract_owner_references, ConditionInfo, ContainerInfo};
 use super::pod_display::{
     counts_ready, display_status, exit_unreported, failed_at, kubectl_status, looping_until,
-    restarting_until, restarts, restarts_by,
+    rejected_at_admission, restarting_until, restarts, restarts_by,
 };
 use crate::utils::Moment;
 
@@ -424,6 +424,9 @@ pub struct PodStatusInfo {
     /// See [`restarting_until`]; the reader compares it with its own clock.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub restarting_until: Option<DateTime<Utc>>,
+    /// See [`rejected_at_admission`].
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rejected: Option<String>,
 }
 
 impl PodStatusInfo {
@@ -442,6 +445,7 @@ impl PodStatusInfo {
                 looping_until: None,
                 exit_unreported: false,
                 restarting_until: None,
+                rejected: None,
             };
         };
 
@@ -465,6 +469,7 @@ impl PodStatusInfo {
             looping_until: looping_until(pod),
             exit_unreported: exit_unreported(pod),
             restarting_until: restarting_until(pod),
+            rejected: rejected_at_admission(pod),
         }
     }
 }

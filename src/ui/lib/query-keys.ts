@@ -225,6 +225,12 @@ export const queryKeys = {
    * whatever the last watch tick built.
    */
   namespaces: (): string[] => ["namespaces"],
+  /** Which of these names a fresh list of namespaces lacks: asked again whenever the scope names one the cached list does not have. */
+  namespacesAbsent: (names: readonly string[]): string[] => [
+    "namespaces",
+    "absent",
+    scopeCacheKey(names) ?? EVERY_NAMESPACE,
+  ],
 
   /**
    * The nodes nothing is heard from. Its own key, not the node list's: this
@@ -499,6 +505,15 @@ export const queryKeys = {
   autoscalers: (namespace?: string | null): string[] => [
     "autoscalers",
     scope(namespace),
+  ],
+  /** The pod a forward to one Service would land on, read off its endpoints by its page and its peek alike. */
+  serviceForwardBackend: (
+    namespace: string | null | undefined,
+    name: string | undefined
+  ): (string | null | undefined)[] => [
+    "service-forward-backend",
+    home(namespace),
+    name,
   ],
   serviceBacking: (namespaces: readonly string[] | null): string[] => [
     "service-backing",

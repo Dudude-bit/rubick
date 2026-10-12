@@ -17,8 +17,8 @@ use crate::metrics::{MetricsStatusKind, NodeMetricsResponse};
 use crate::resources::node_budget::holds_reservation;
 use crate::resources::{
     backing_off, condition_is_true, counts_ready, crash_looping, exit_unreported, job_state,
-    looping_until, pending_since, pod_start, restarting_until, stuck_reason, within_pending_grace,
-    PodStart, Rollout,
+    looping_until, pending_since, pod_start, restarting_until, stuck_reason, stuck_since,
+    within_pending_grace, PodStart, Rollout,
 };
 use crate::state::AppState;
 use crate::utils::quantities::{parse_cpu, parse_memory};
@@ -214,6 +214,9 @@ pub struct WarningGroup {
     /// Whether that object is the one holding its name now. A pod made again
     /// under its name took its predecessor's `FailedMount` as its own.
     pub incarnation: Incarnation,
+    /// The object's uid where the row is about one past object, which no
+    /// other row shares: two deleted HPAs of one name are two rows.
+    pub uid: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -651,11 +654,8 @@ fn pod_problems<'a>(
 fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
     let name = pod.metadata.name.clone().unwrap_or_default();
     let namespace = pod.metadata.namespace.clone();
-    let created = pod
-        .metadata
-        .creation_timestamp
-        .as_ref()
-        .map(|t| t.moment().to_rfc3339());
+    // The reason's own time, never the pod's age.
+    let stuck_at = || stuck_since(pod).map(|t| t.to_rfc3339());
     let status = pod.status.as_ref()?;
     let phase = status.phase.as_deref().unwrap_or("");
 
@@ -686,7 +686,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             }
             .to_string(),
             detail: Some(ProblemDetail::restarts(pod, restarts)),
-            since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
+            since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
             restarts: Some(restarts),
             folded_pods: None,
         });
@@ -708,9 +708,9 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
                 ProblemDetail::said(message)
             },
             since: if looping {
-                last_restart_at.map(|t| t.to_rfc3339()).or(created)
+                last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at)
             } else {
-                created
+                stuck_at()
             },
             restarts: Some(restarts),
             folded_pods: None,
@@ -780,7 +780,7 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             detail: Some(ProblemDetail::restarts(pod, restarts)),
             // Dated by the restart, not by the pod. `since: created` put a
             // twelve-day-old date on something that happened minutes ago.
-            since: last_restart_at.map(|t| t.to_rfc3339()).or(created),
+            since: last_restart_at.map(|t| t.to_rfc3339()).or_else(stuck_at),
             restarts: Some(restarts),
             folded_pods: None,
         });
@@ -1151,8 +1151,9 @@ fn recent_warnings<'a>(
 ) -> Vec<WarningGroup> {
     let cutoff = chrono::Utc::now() - chrono::Duration::minutes(RECENT_WARNING_WINDOW_MINUTES);
     // An earlier or a gone object's repeats are kept off the reason's row for
-    // the objects there now, which they would otherwise be read as part of.
-    let mut grouped: BTreeMap<(String, bool), WarningGroup> = BTreeMap::new();
+    // the objects there now, which they would otherwise be read as part of,
+    // and off each other's: one past object to a row.
+    let mut grouped: BTreeMap<(String, Option<String>), WarningGroup> = BTreeMap::new();
 
     for event in events {
         if event.type_.as_deref() != Some("Warning") {
@@ -1171,9 +1172,11 @@ fn recent_warnings<'a>(
             .clone()
             .unwrap_or_else(|| "Unknown".to_string());
         let about = incarnation(event);
-        let past = matches!(about, Incarnation::Earlier | Incarnation::Gone);
+        let past = matches!(about, Incarnation::Earlier | Incarnation::Gone)
+            .then(|| event.involved_object.uid.clone())
+            .flatten();
         let entry = grouped
-            .entry((reason.clone(), past))
+            .entry((reason.clone(), past.clone()))
             .or_insert(WarningGroup {
                 reason,
                 count: 0,
@@ -1184,6 +1187,7 @@ fn recent_warnings<'a>(
                 object_name: None,
                 namespace: None,
                 incarnation: Incarnation::Unchecked,
+                uid: past,
             });
         let repeats = event
             .count
@@ -2769,7 +2773,58 @@ mod tests {
         let deleted = Looked::from([(hello_web, Held::Nobody)]);
         assert_eq!(
             warnings_looked(events(), &deleted),
-            vec![(45, Incarnation::Gone)]
+            vec![(41, Incarnation::Gone), (4, Incarnation::Gone)]
+        );
+    }
+
+    /// Lena deleted both hello-web HPAs and the Overview read
+    /// `FailedGetResourceMetric x54` under one deleted hello-web, 41 and 13
+    /// from two objects that Events kept as two stories. Fails if two past
+    /// objects of one name share a row, or a row stops naming its object's uid.
+    #[test]
+    fn two_deleted_objects_of_one_name_keep_a_row_each() {
+        let events = vec![
+            metric_warning("c20ecc6d", 13, 40),
+            metric_warning("8b3e3d88", 41, 10),
+        ];
+        let deleted = Looked::from([(
+            (
+                "HorizontalPodAutoscaler".to_string(),
+                Some("lena-sandbox".to_string()),
+                "hello-web".to_string(),
+            ),
+            Held::Nobody,
+        )]);
+        let mut rows: Vec<_> = build_overview(&OverviewInputs {
+            scoped_pods: &[],
+            accounting_pods: &[],
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &[],
+            events: &arcs(events),
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            now: Utc::now(),
+            looked: &deleted,
+        })
+        .warnings
+        .into_iter()
+        .map(|group| (group.count, group.uid))
+        .collect();
+        rows.sort();
+        assert_eq!(
+            rows,
+            vec![
+                (13, Some("c20ecc6d".to_string())),
+                (41, Some("8b3e3d88".to_string())),
+            ]
         );
     }
 
@@ -4694,6 +4749,34 @@ mod tests {
             },
         }))
         .expect("a pod the kubelet wrote")
+    }
+
+    /// Marco's Needs attention read `CreateContainerConfigError 14h` beside
+    /// the pod's own Ready False since 12h58m: the row was dated by the pod's
+    /// creation, over an hour before it was even initialized. Fails if a
+    /// stuck reason is dated by anything but when its containers stopped
+    /// being ready, or by the pod's age where the cluster recorded nothing.
+    #[test]
+    fn a_stuck_reason_is_dated_by_when_its_containers_stopped_being_ready() {
+        let mut pod = config_error_pod();
+        let status = pod.status.as_mut().expect("a status");
+        for condition in status.conditions.iter_mut().flatten() {
+            if condition.type_ == "Ready" || condition.type_ == "ContainersReady" {
+                condition.last_transition_time =
+                    Some(Time("2026-10-12T01:16:18Z".parse().expect("a time")));
+            }
+        }
+        let since = |pod: &Pod| {
+            pod_problem(pod, Utc::now())
+                .expect("a problem")
+                .since
+                .map(|at| at.parse::<DateTime<Utc>>().expect("a time"))
+        };
+        assert_eq!(
+            since(&pod),
+            Some("2026-10-12T01:16:18Z".parse().expect("a time"))
+        );
+        assert_eq!(since(&config_error_pod()), None);
     }
 
     /// Sam's team-checkout Overview read "1 Pending" for the pod its Pods

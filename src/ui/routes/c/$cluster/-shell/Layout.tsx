@@ -17,6 +17,7 @@ import { WhatsNew } from "./WhatsNew";
 import { useClusterForwards } from "@/hooks/useClusterForwards";
 import { usePrefetchCoreLists } from "./usePrefetchCoreLists";
 import { useRefusedScope } from "./useRefusedScope";
+import { useScopeMissing } from "@/hooks/useScopeMissing";
 import { useScopeFromAddress } from "./useScopeFromAddress";
 import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
@@ -66,6 +67,8 @@ export function Layout() {
   useRefusedScope();
   useScopeFromAddress();
   useFollowedOverview(useScopedOverview().data);
+  // Asked once for the shell: the page, the rail and the strip say it alike.
+  const missing = useScopeMissing();
   useEffect(holdTitlesOnResize, []);
 
   return (
@@ -100,7 +103,7 @@ export function Layout() {
         />
       )}
       <div className="flex flex-1 overflow-hidden">
-        <Sidebar />
+        <Sidebar missing={missing} />
         <div className="flex flex-1 flex-col overflow-hidden">
           <ScopeTabs />
           <div
@@ -119,12 +122,12 @@ export function Layout() {
                 page showed through the strip above it. */}
               <div className="h-full pt-4">
                 <Suspense fallback={<PageSkeleton className="p-0" />}>
-                  <PageArea />
+                  <PageArea missing={missing} />
                 </Suspense>
               </div>
             </main>
           </div>
-          <StatusBar />
+          <StatusBar missing={missing} />
         </div>
       </div>
       <CommandPalette />
