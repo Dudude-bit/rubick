@@ -662,11 +662,21 @@ export function DeploymentDetail() {
             />
           </>
         }
+        headerNote={
+          deployment && (
+            <RolloutSummary
+              rollout={deployment.rollout}
+              subject={{ kind: ResourceType.Deployment, name, namespace }}
+              place="header"
+            />
+          )
+        }
         summary={
           deployment && (
             <RolloutSummary
               rollout={deployment.rollout}
               subject={{ kind: ResourceType.Deployment, name, namespace }}
+              place="line"
             />
           )
         }

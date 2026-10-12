@@ -245,6 +245,48 @@ describe("the Replicas block", () => {
   });
 });
 
+describe("the rollout line", () => {
+  const rolling = (rollout: unknown) =>
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...vi.mocked(useResourceDetail)(
+        {} as Parameters<typeof useResourceDetail>[0]
+      ),
+      resource: { ...ledger, rollout },
+    });
+
+  /**
+   * Every drain of Sam's big-pull moved the page 28 px down and back as
+   * "Pods coming up" came and went above the tabs. Fails if a state a
+   * rollout passes through on a drain is said anywhere but the header row.
+   */
+  it("says a rollout coming up in the header row, so nothing under it moves when it ends", async () => {
+    rolling({ state: "comingUp", available: 0, desired: 1 });
+    await open();
+
+    const line = await screen.findByTestId("rollout-summary");
+    expect(line).toHaveTextContent("Pods coming up: 0 of 1 pod is available");
+    expect(line.closest("[data-header-note]")).not.toBeNull();
+  });
+
+  /** Fails if a fault, and the controller's words with it, is squeezed into the header row too. */
+  it("keeps a fault on its own line above the tabs", async () => {
+    rolling({
+      state: "unavailable",
+      reason: "MinimumReplicasUnavailable",
+      message: "Deployment does not have minimum availability.",
+      available: 0,
+      desired: 1,
+    });
+    await open();
+
+    const line = await screen.findByTestId("rollout-summary");
+    expect(line.closest("[data-header-note]")).toBeNull();
+    expect(line).toHaveTextContent(
+      "Deployment does not have minimum availability."
+    );
+  });
+});
+
 describe("the Pods tab", () => {
   /**
    * Sam deleted big-pull and applied it again: the new Deployment's Pods tab

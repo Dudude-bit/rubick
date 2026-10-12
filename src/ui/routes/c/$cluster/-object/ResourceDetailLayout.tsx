@@ -212,6 +212,8 @@ interface ResourceDetailLayoutProps {
    * Overview tab is, and there is no slot here for them any more.
    */
   summary?: ReactNode;
+  /** What passes in the course of things, said in the header row rather than above the strip. */
+  headerNote?: ReactNode;
 
   /**
    * What the object's own query is worth right now, from `useResourceDetail`.
@@ -260,6 +262,7 @@ export function ResourceDetailLayout({
   isSearchingReplacement,
   goneNote,
   summary,
+  headerNote,
   freshness,
   tabs: pageTabs,
   activeTab,
@@ -395,6 +398,7 @@ export function ResourceDetailLayout({
               <HelmMark object={resource} />
             </>
           }
+          note={headerNote}
           onBack={onBack}
           dataUpdatedAt={freshness?.dataUpdatedAt}
           live={freshness?.live}

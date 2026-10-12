@@ -47,6 +47,8 @@ export interface ResourceDetailHeaderProps {
   status?: ReactNode;
   /** Facts that qualify the name: node roles, an ingress class, a count. */
   meta?: ReactNode;
+  /** A passing state in words, in the row's spare width: it comes and goes without moving the page. */
+  note?: ReactNode;
   createdAt?: string | null;
   onBack: () => void;
   /** Timestamp of the last successful fetch, from React Query. */
@@ -169,6 +171,7 @@ export function ResourceDetailHeader({
   namespaceLink,
   status,
   meta,
+  note,
   createdAt,
   onBack,
   dataUpdatedAt,
@@ -270,6 +273,9 @@ export function ResourceDetailHeader({
           reserve={false}
         />
       </span>
+      <div data-header-note className="flex min-w-0 grow basis-0">
+        {note}
+      </div>
     </div>
   );
 }
