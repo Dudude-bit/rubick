@@ -840,11 +840,13 @@ fn pod_problem(pod: &Pod, now: DateTime<Utc>) -> Option<ClusterProblem> {
             name,
             namespace,
             reason: "Pending".to_string(),
-            detail: ProblemDetail::said(
-                scheduled
-                    .and_then(|c| c.message.clone())
-                    .or_else(|| status.message.clone()),
-            ),
+            detail: ProblemDetail::cause(pod).or_else(|| {
+                ProblemDetail::said(
+                    scheduled
+                        .and_then(|c| c.message.clone())
+                        .or_else(|| status.message.clone()),
+                )
+            }),
             since: pending_since.map(|t| t.to_rfc3339()),
             restarts: None,
             folded_pods: None,

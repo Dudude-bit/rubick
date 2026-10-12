@@ -7112,6 +7112,7 @@ export const en = {
     meansOomLimit: "killed for using more memory than its {limit} limit",
     meansOomNoLimit:
       "killed for memory, with no limit of its own: the node ran short",
+    meansStartError: "the runtime could not start its command, so it never ran",
     meansClean:
       "it finished successfully, and its restart policy starts it again",
     meansNotExecutable:

@@ -120,6 +120,7 @@ export function exitMeaning(run: EndedRun, t: T): string | null {
     return run.limit
       ? t("cause", "meansOomLimit", { limit: run.limit })
       : t("cause", "meansOomNoLimit");
+  if (run.reason === "StartError") return t("cause", "meansStartError");
   const signal = run.signal ?? (run.code > 128 ? run.code - 128 : null);
   if (run.code === 0 && signal === null) return t("cause", "meansClean");
   if (run.code === 126) return t("cause", "meansNotExecutable");

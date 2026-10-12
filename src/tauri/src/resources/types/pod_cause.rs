@@ -835,6 +835,21 @@ mod tests {
         );
     }
 
+    /// The Overview reads pods its cache stripped: a probe dropped there read
+    /// as none declared on every not-Ready row. Fails if the strip loses it.
+    #[test]
+    fn a_stripped_pod_still_names_its_readiness_probe() {
+        let mut pod = not_ready_pod();
+        crate::overview::strip_pod(&mut pod);
+        assert!(matches!(
+            pod_cause(&pod),
+            Some(PodCause::NotReady {
+                probe: Some(ProbeCheck::Http { .. }),
+                ..
+            })
+        ));
+    }
+
     /// A container still starting is not "running and not ready"; its own
     /// state is the story. Fails if a waiting container is called not ready.
     #[test]

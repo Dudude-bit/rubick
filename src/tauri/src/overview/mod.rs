@@ -671,14 +671,14 @@ fn strip_container(container: &mut Container) {
     container.args = None;
     container.lifecycle = None;
     container.liveness_probe = None;
-    container.readiness_probe = None;
     container.startup_probe = None;
     container.security_context = None;
 }
 
 /// What the overview never reads, dropped before the object is stored: the
 /// store holds every pod in the cluster, and a pod's env, mounts and probes
-/// are most of its bytes.
+/// are most of its bytes. The readiness probe stays: a not-Ready pod's cause
+/// quotes it, and without it every one read as declaring none.
 pub fn strip_pod(pod: &mut Pod) {
     pod.metadata.managed_fields = None;
     pod.metadata.annotations = None;
