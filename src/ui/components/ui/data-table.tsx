@@ -13,6 +13,7 @@ import {
 import {
   searchableColumn,
   tableStack,
+  type AppColumnMeta,
   type ColumnDef,
   type Row,
 } from "@/components/ui/table-features";
@@ -48,6 +49,7 @@ import {
   Inbox,
   AlertTriangle,
   AlignJustify,
+  EyeOff,
   List,
 } from "lucide-react";
 import {
@@ -61,10 +63,11 @@ import {
   ACTIONS_CELL_GUTTER,
   actionsColumnSize,
   tableLayout,
+  yieldedColumns,
 } from "./column-shares";
 import { controlAt } from "@/lib/row-control";
 import { holdTitles } from "@/lib/hold-titles";
-import { columnFloor, columnIdeal } from "@/lib/column-label";
+import { columnFloor, columnIdeal, columnLabel } from "@/lib/column-label";
 import type { RowGrouping } from "@/components/ui/row-grouping";
 
 import { cn } from "@/lib/utils";
@@ -178,6 +181,12 @@ const VIRTUAL_SCROLL_DEFAULT_HEIGHT = 600;
  * pulls focus off whatever the reader had moved to since.
  */
 const PENDING_FOCUS_MS = 1000;
+
+/** A column's id as the table files it: its own, or the key it reads. */
+const columnIdOf = (column: object) => {
+  const { id, accessorKey } = column as { id?: string; accessorKey?: unknown };
+  return id ?? (typeof accessorKey === "string" ? accessorKey : "");
+};
 
 /** The generated column, named once so the cells can recognise it. */
 const ACTIONS_COLUMN_ID = "_actions";
@@ -860,6 +869,65 @@ function DataTableInner<TData extends RowData>({
     [keepWidths]
   );
 
+  const scrollRef = React.useRef<HTMLDivElement>(null);
+  const [portWidth, attachPort, port] = usePortWidth(scrollRef);
+  // Floors are measured text: drawn again once the fonts they are measured in arrive.
+  const [fonts, fontsArrived] = React.useReducer((n: number) => n + 1, 0);
+  React.useEffect(() => {
+    if (document.fonts?.status !== "loading") return;
+    let live = true;
+    void document.fonts.ready.then(() => live && fontsArrived());
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // Per column, from every row the table holds rather than the ones a
+  // search leaves, so typing does not move the columns.
+  const bounds = React.useMemo(() => {
+    void fonts;
+    return new Map(
+      columnsWithActions.map((column) => [
+        columnIdOf(column),
+        {
+          floor: columnFloor(column, t, data),
+          ideal: columnIdeal(column, t, data),
+        },
+      ])
+    );
+  }, [columnsWithActions, data, t, fonts]);
+
+  const yielded = React.useMemo(
+    () =>
+      yieldedColumns(
+        columnsWithActions.flatMap((column) => {
+          const id = columnIdOf(column);
+          if (columnVisibility[id] === false) return [];
+          const meta = column.meta as AppColumnMeta | undefined;
+          return [
+            { id, floor: bounds.get(id)?.floor ?? 0, yields: meta?.yields },
+          ];
+        }),
+        portWidth
+      ),
+    [columnsWithActions, columnVisibility, bounds, portWidth]
+  );
+  // By the ids rather than the array, so a resize that hides nothing new
+  // leaves every row's props alone.
+  const yieldedKey = yielded.join("\n");
+  const visibility = React.useMemo<ColumnVisibilityState>(
+    () =>
+      yieldedKey === ""
+        ? columnVisibility
+        : {
+            ...columnVisibility,
+            ...Object.fromEntries(
+              yieldedKey.split("\n").map((id) => [id, false])
+            ),
+          },
+    [columnVisibility, yieldedKey]
+  );
+
   const table = useTable({
     // Which features exist is part of the table's type, named in one place.
     // Row models come with them: in v9 the sorted and filtered ones are slots
@@ -876,7 +944,7 @@ function DataTableInner<TData extends RowData>({
       sorting,
       columnFilters,
       globalFilter,
-      columnVisibility,
+      columnVisibility: visibility,
       columnSizing,
     },
   });
@@ -924,34 +992,6 @@ function DataTableInner<TData extends RowData>({
     if (at >= 0) return at;
     return ordered.length ? Math.min(selection.index, ordered.length - 1) : -1;
   }, [ordered, selection]);
-
-  const scrollRef = React.useRef<HTMLDivElement>(null);
-  const [portWidth, attachPort, port] = usePortWidth(scrollRef);
-  // Floors are measured text: drawn again once the fonts they are measured in arrive.
-  const [fonts, fontsArrived] = React.useReducer((n: number) => n + 1, 0);
-  React.useEffect(() => {
-    if (document.fonts?.status !== "loading") return;
-    let live = true;
-    void document.fonts.ready.then(() => live && fontsArrived());
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  // Per column, from every row the table holds rather than the ones a
-  // search leaves, so typing does not move the columns.
-  const bounds = React.useMemo(() => {
-    void [fonts, columnsWithActions];
-    return new Map(
-      table.getAllFlatColumns().map((column) => [
-        column.id,
-        {
-          floor: columnFloor(column.columnDef, t, data),
-          ideal: columnIdeal(column.columnDef, t, data),
-        },
-      ])
-    );
-  }, [table, columnsWithActions, data, t, fonts]);
 
   // Only the columns actually on screen count, so hiding one hands its room
   // to the rest instead of leaving a gap.
@@ -1298,7 +1338,7 @@ function DataTableInner<TData extends RowData>({
       menu={!!onRowMenu}
       measure={shouldVirtualScroll ? virtualizer.measureElement : undefined}
       columns={columnsWithActions}
-      visibility={columnVisibility}
+      visibility={visibility}
       pinned={pinned}
       events={rowEvents}
     />
@@ -1674,6 +1714,24 @@ function DataTableInner<TData extends RowData>({
                       shown: formatCount(filteredRows),
                     })}
           </div>
+          {yielded.length > 0 && (
+            <span
+              className="flex min-w-0 items-center gap-1"
+              title={t("readings", "columnsYieldedHint")}
+              data-testid="columns-yielded"
+            >
+              <EyeOff className="h-3 w-3 flex-none" aria-hidden="true" />
+              <span className="truncate">
+                {t("readings", "columnsYielded", {
+                  columns: columnsWithActions
+                    .filter((column) => yielded.includes(columnIdOf(column)))
+                    .map((column) => columnLabel(column, t))
+                    .filter(Boolean)
+                    .join(", "),
+                })}
+              </span>
+            </span>
+          )}
         </div>
       </div>
     </RowActionsProvider>

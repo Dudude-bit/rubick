@@ -4,7 +4,7 @@
  * Provides reusable column definitions to reduce duplication across resource lists.
  */
 
-import type { ColumnDef } from "@/components/ui/table-features";
+import type { ColumnDef, RowData } from "@/components/ui/table-features";
 import { AgeHeader } from "@/components/ui/sortable-header";
 import { T } from "@/i18n/T";
 import { columnHeader } from "@/i18n/column-header";
@@ -158,6 +158,12 @@ export function createNameColumn<
     ),
   };
 }
+
+/** The column, hidden in that order by a port too narrow for every column's floor. */
+export const yielding = <Row extends RowData>(
+  column: ColumnDef<Row>,
+  yields: number
+): ColumnDef<Row> => ({ ...column, meta: { ...column.meta, yields } });
 
 /**
  * Creates a namespace column

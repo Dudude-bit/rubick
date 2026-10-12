@@ -1454,6 +1454,52 @@ describe("column widths", () => {
     }
   });
 
+  /**
+   * Lena's Pods list at 1024 in Russian scrolled sideways and cut a header.
+   * Fails if a port too narrow for every floor keeps a column that yields
+   * instead of hiding it, keeps it hidden once there is room, or hides it
+   * without naming it under the table.
+   */
+  it("hides a yielding column where the port is too narrow and names it under the table", async () => {
+    const columnsOf: ColumnDef<Item>[] = [
+      { ...columns[0], size: 300, meta: { floor: 300 } },
+      {
+        accessorKey: "namespace",
+        header: "Namespace",
+        size: 200,
+        meta: { floor: 300, yields: 1 },
+      },
+    ];
+    const narrow = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(500);
+    try {
+      await wrap(<DataTable<Item> columns={columnsOf} data={DATA} />);
+      expect(
+        screen.queryByRole("columnheader", { name: "Namespace" })
+      ).toBeNull();
+      expect(screen.getByTestId("columns-yielded")).toHaveTextContent(
+        "Hidden at this width: Namespace"
+      );
+      expect(screen.getByRole("table").parentElement!.style.overflowX).toBe("");
+    } finally {
+      narrow.mockRestore();
+    }
+    const roomy = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(900);
+    try {
+      cleanup();
+      await wrap(<DataTable<Item> columns={columnsOf} data={DATA} />);
+      expect(
+        screen.getByRole("columnheader", { name: "Namespace" })
+      ).toBeInTheDocument();
+      expect(screen.queryByTestId("columns-yielded")).toBeNull();
+    } finally {
+      roomy.mockRestore();
+    }
+  });
+
   /** Fails if a table that scrolls sideways lets its first column or group captions scroll away, which left no row saying which pod it was. */
   it("pins the first column and the group captions only while the table scrolls sideways", async () => {
     const columnsOf = [

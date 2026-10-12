@@ -271,6 +271,12 @@ export const en = {
     aDrainWaits: "A drain waits",
     setBy: "Set by",
     hpaScales: "Scales",
+    printedReference: "Reference",
+    printedMinPods: "MinPods",
+    printedMaxPods: "MaxPods",
+    printedMinAvailable: "Min Available",
+    printedMaxUnavailable: "Max Unavailable",
+    printedAllowedDisruptions: "Allowed Disruptions",
     cpu: "CPU",
     pods: "Pods",
     events: "Events",
@@ -3871,6 +3877,9 @@ export const en = {
     hpaRunning: "{n} running",
     hpaWanted: "{n} wanted",
     hpaNothingComputed: "nothing computed",
+    columnsYielded: "Hidden at this width: {columns}",
+    columnsYieldedHint:
+      "Widen the window, or close the panel beside the list, to see these columns. The search still reads them.",
     hpaScaleUnread:
       "This autoscaler could not be read, so what it scales is not known.",
     hpaNamesNoTarget: "This autoscaler names nothing to scale.",
@@ -4319,6 +4328,8 @@ export const en = {
     // which is not where the reader is standing.
     objectLinkCopied: "Copied a link to {name}",
     linkOpened: "Opened from a link. You are looking at the cluster now.",
+    linkOpenedShort: "Opened from a link",
+    linkOpenedAtShort: "Opened from a link taken {when}",
     linkOpenedAt:
       "Opened from a link captured {when}. You are looking at the cluster now, not at what it showed then.",
     linkContextMissing:

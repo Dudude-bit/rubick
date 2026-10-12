@@ -18,7 +18,9 @@ import {
   createAgeColumn,
   createCpuColumn,
   createMemoryColumn,
+  badgeCellPx,
   nodeCellPx,
+  yielding,
 } from "../../../-list/columns";
 import { podReadiness } from "@/lib/container-sequence";
 import { restartsAreNews } from "@/lib/crash-loop";
@@ -98,8 +100,11 @@ export const columns: ColumnDef<PodRow>[] = [
     accessorFn: (pod) => pod.status.display,
     enableSorting: true,
     meta: {
-      // "CreateContainerConfigError" at 7.2px a glyph, its mark and padding.
-      floor: 224,
+      // The widest status its rows say; "CreateContainerConfigError" before any row is read.
+      floor: (_t, rows: readonly PodRow[]) =>
+        rows.length === 0
+          ? 224
+          : badgeCellPx(rows.map((pod) => pod.status.display)),
       label: { section: "columns", key: "status" },
       share: (pod: PodRow, t) =>
         podStatusValue(pod, pod.nodeSilence ?? null, t),
@@ -115,8 +120,10 @@ export const columns: ColumnDef<PodRow>[] = [
       />
     ),
   },
-  createCpuColumn<PodRow>(),
-  createMemoryColumn<PodRow>(),
+  // kubectl's own columns stay; what it prints only with -o wide, and the
+  // metrics, give way first on a narrow window.
+  yielding(createCpuColumn<PodRow>(), 4),
+  yielding(createMemoryColumn<PodRow>(), 3),
   {
     // "Готовность" and its sort mark.
     size: 120,
@@ -176,6 +183,7 @@ export const columns: ColumnDef<PodRow>[] = [
     id: "node",
     header: columnHeader("columns", "node"),
     meta: {
+      yields: 2,
       floor: (_t, rows: readonly PodRow[]) =>
         nodeCellPx(rows, (pod) => pod.nodeName),
       share: (pod: PodRow, t) =>
@@ -198,6 +206,7 @@ export const columns: ColumnDef<PodRow>[] = [
     id: "ip",
     header: columnHeader("columns", "ip"),
     meta: {
+      yields: 1,
       floor: IPV4_CELL_PX,
       share: (pod: PodRow, t) =>
         pod.podIp
@@ -206,7 +215,7 @@ export const columns: ColumnDef<PodRow>[] = [
     },
     cell: ({ row }) => <PodIpCell pod={row.original} />,
   },
-  createAgeColumn<PodRow>(),
+  yielding(createAgeColumn<PodRow>(), 5),
 ];
 
 export function PodList() {

@@ -47,6 +47,8 @@ export interface AppColumnMeta {
   floor?: number | ((t: T, rows: readonly never[]) => number);
   /** Pixels it is drawn at while the port has room for every column's. */
   ideal?: number | ((t: T, rows: readonly never[]) => number);
+  /** Where a port too narrow for every floor hides it, the lowest first; never hidden without one. */
+  yields?: number;
 }
 
 /**

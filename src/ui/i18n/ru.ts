@@ -243,6 +243,12 @@ export const ru: Catalogue = {
     aDrainWaits: "Освобождение узла ждёт",
     setBy: "Задаёт",
     hpaScales: "Масштабирует",
+    printedReference: "Масштабирует",
+    printedMinPods: "Мин. подов",
+    printedMaxPods: "Макс. подов",
+    printedMinAvailable: "Мин. доступно",
+    printedMaxUnavailable: "Макс. недоступно",
+    printedAllowedDisruptions: "Можно прервать",
     cpu: "CPU",
     pods: "Поды",
     events: "События",
@@ -4341,6 +4347,9 @@ export const ru: Catalogue = {
     hpaRunning: "работает {n}",
     hpaWanted: "хочет {n}",
     hpaNothingComputed: "ничего не вычислено",
+    columnsYielded: "Не поместились: {columns}",
+    columnsYieldedHint:
+      "Чтобы увидеть эти столбцы, расширьте окно или закройте панель рядом со списком. Поиск по ним работает и так.",
     hpaScaleUnread:
       "Автомасштабировщик не удалось прочитать, поэтому неизвестно, что он масштабирует.",
     hpaNamesNoTarget:
@@ -4824,6 +4833,8 @@ export const ru: Catalogue = {
     linkCopied: "Скопировано, где вы сейчас",
     objectLinkCopied: "Скопирована ссылка на {name}",
     linkOpened: "Открыто по ссылке. Вы смотрите на кластер сейчас.",
+    linkOpenedShort: "Открыто по ссылке",
+    linkOpenedAtShort: "Открыто по ссылке, снятой {when}",
     linkOpenedAt:
       "Открыто по ссылке, снятой {when}. Вы смотрите на кластер сейчас, а не на то, что он показывал тогда.",
     linkContextMissing:

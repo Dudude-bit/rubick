@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { actionsColumnSize, tableLayout } from "@/components/ui/column-shares";
+import {
+  actionsColumnSize,
+  tableLayout,
+  yieldedColumns,
+} from "@/components/ui/column-shares";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { columnFloor } from "@/lib/column-label";
@@ -563,12 +567,71 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
     );
   });
 
+  /**
+   * Lena's Pods list needed a sideways scroll at 1024 in Russian and cut the
+   * Restarts header to "Пер…". Fails if the list stops fitting by hiding
+   * what kubectl prints only with -o wide and the metrics, or hides a column
+   * kubectl always prints while those are still there.
+   */
+  it("fits Pods by hiding its wide and metric columns, not the ones kubectl always prints", () => {
+    const shown = (pods as Column[]).filter((c) => nameOf(c) !== "namespace");
+    const rows = [
+      {
+        name: "hello-web-5966d9b889-7nvr5",
+        nodeName: "k3d-rubick-live-agent-0",
+        restartCount: 14,
+        status: { display: "Running" },
+      },
+      {
+        name: "wd-demo",
+        nodeName: "k3d-rubick-live-server-0",
+        restartCount: 0,
+        status: { display: "Running" },
+      },
+    ];
+    const specs = drawn(shown, ru, rows).map((spec, index) => ({
+      id: index < shown.length ? nameOf(shown[index]) : "actions",
+      floor: spec.floor,
+      yields: (shown[index]?.meta as { yields?: number } | undefined)?.yields,
+    }));
+    const hidden = yieldedColumns(specs, PORT_1024);
+    expect(hidden.slice(0, 4)).toEqual(["ip", "node", "memory", "cpu"]);
+    const kept = specs.filter((spec) => !hidden.includes(spec.id));
+    expect(kept.map((spec) => spec.id)).toEqual(
+      expect.arrayContaining(["name", "status", "ready", "restarts", "actions"])
+    );
+    expect(kept.reduce((sum, spec) => sum + spec.floor, 0)).toBeLessThanOrEqual(
+      PORT_1024
+    );
+  });
+
+  /** Fails if the Pods status column keeps room for "CreateContainerConfigError" its rows never say, or stops holding the widest they do. */
+  it("holds the Pods status column to the widest status its rows say", () => {
+    const status = (pods as Column[]).find((c) => nameOf(c) === "status")!;
+    const running = [{ status: { display: "Running" } }];
+    const failing = [
+      ...running,
+      { status: { display: "CreateContainerConfigError" } },
+    ];
+    expect(columnFloor(status, en, running)).toBeLessThan(
+      columnFloor(status, en, failing)
+    );
+    expect(columnFloor(status, en, failing)).toBeGreaterThanOrEqual(
+      Math.ceil("CreateContainerConfigError".length * 6.6 + 14 + 20)
+    );
+  });
+
   /** Lena read "k3d-ru…ent-0" on Pods. Fails if the Node column can be drawn narrower than the node names its rows hold. */
   it("draws a k3d node name whole on Pods", () => {
     const shown = (pods as Column[]).filter((c) => nameOf(c) !== "namespace");
+    const status = { display: "Running" };
     const rows = [
-      { name: "cart-667846ff79-4f68h", nodeName: "k3d-rubick-live-agent-0" },
-      { name: "never-placed-75dcb67599-w9npx", nodeName: null },
+      {
+        name: "cart-667846ff79-4f68h",
+        nodeName: "k3d-rubick-live-agent-0",
+        status,
+      },
+      { name: "never-placed-75dcb67599-w9npx", nodeName: null, status },
     ];
     const { px } = laidOut(shown, PORT_1024, ru, rows);
     expect(px[at(shown, "node")]).toBeGreaterThanOrEqual(

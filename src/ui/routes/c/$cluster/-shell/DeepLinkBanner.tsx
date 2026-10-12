@@ -127,10 +127,14 @@ function LiveNote({ capturedAt }: { capturedAt: Date | null }) {
     return () => clearTimeout(timer);
   }, [held, dismiss]);
 
-  const text = capturedAt
-    ? t("cluster", "linkOpenedAt", { when: formatWhen(capturedAt) })
+  const when = capturedAt ? formatWhen(capturedAt) : null;
+  const text = when
+    ? t("cluster", "linkOpenedAt", { when })
     : t("cluster", "linkOpened");
-  const [sentence, cut] = useCut(text);
+  const short = when
+    ? t("cluster", "linkOpenedAtShort", { when })
+    : t("cluster", "linkOpenedShort");
+  const [box, whole, cut] = useCut(text);
   return (
     <span
       role="status"
@@ -143,12 +147,20 @@ function LiveNote({ capturedAt }: { capturedAt: Date | null }) {
       className="flex h-6 min-w-0 items-center gap-1.5 text-fg-mid"
     >
       <Link2 className="h-3 w-3 flex-none text-info" aria-hidden="true" />
-      <span
-        ref={sentence}
-        title={cut ? text : undefined}
-        className="min-w-0 truncate"
-      >
-        {text}
+      {/* The whole sentence sets the width it asks for; where the bar has
+          less, its first clause is drawn and the rest is on hover. */}
+      <span ref={box} title={cut ? text : undefined} className="min-w-0">
+        <span
+          ref={whole}
+          aria-hidden="true"
+          className="invisible block h-0 overflow-hidden whitespace-nowrap"
+        >
+          {text}
+        </span>
+        <span className="block truncate" aria-hidden={cut || undefined}>
+          {cut ? short : text}
+        </span>
+        {cut && <span className="sr-only">{text}</span>}
       </span>
       <button
         type="button"
@@ -162,18 +174,20 @@ function LiveNote({ capturedAt }: { capturedAt: Date | null }) {
   );
 }
 
-/** Whether the text no longer fits its box, so the whole of it is offered on hover and only then. */
+/** Whether the whole text no longer fits its box, so its short form is drawn and the whole is offered on hover. */
 function useCut(text: string) {
-  const ref = useRef<HTMLSpanElement>(null);
+  const box = useRef<HTMLSpanElement>(null);
+  const whole = useRef<HTMLSpanElement>(null);
   const [cut, setCut] = useState(false);
   useLayoutEffect(() => {
-    const box = ref.current;
-    if (!box) return;
-    const measure = () => setCut(box.scrollWidth > box.clientWidth);
+    const outer = box.current;
+    const inner = whole.current;
+    if (!outer || !inner) return;
+    const measure = () => setCut(inner.scrollWidth > outer.clientWidth);
     measure();
     const observer = new ResizeObserver(measure);
-    observer.observe(box);
+    observer.observe(outer);
     return () => observer.disconnect();
   }, [text]);
-  return [ref, cut] as const;
+  return [box, whole, cut] as const;
 }

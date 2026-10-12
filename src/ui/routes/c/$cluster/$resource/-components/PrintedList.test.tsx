@@ -295,6 +295,91 @@ describe("an access kind on the generic list", () => {
   });
 
   /**
+   * Lena read Reference, Targets, MinPods, MaxPods and Replicas in English
+   * beside a Russian "Имя" and "Возраст", and the Name cut to "h…" with the
+   * peek open. Fails if those headers stay English, or the Name column can
+   * be squeezed under the name its rows hold.
+   */
+  it("names an HPA's columns in the reader's language and keeps its names whole", async () => {
+    const HPA: CatalogEntry = {
+      ...LEASES,
+      group: "autoscaling",
+      kind: "HorizontalPodAutoscaler",
+      plural: "horizontalpodautoscalers",
+    };
+    const number = (name: string) => ({
+      ...column(name),
+      columnType: "integer",
+    });
+    await inRussian(
+      HPA,
+      printed(
+        [
+          column("Name"),
+          column("Reference"),
+          column("Targets"),
+          number("MinPods"),
+          number("MaxPods"),
+          number("Replicas"),
+          AGE,
+        ],
+        [
+          row("hello-web", "lena-sandbox", [
+            "hello-web",
+            "Deployment/hello-web",
+            "cpu: <unknown>/50%",
+            "1",
+            "2",
+            "1",
+            "2h0m",
+          ]),
+        ]
+      )
+    );
+    expect(await screen.findByText("Deployment/hello-web")).toBeVisible();
+    for (const header of [
+      "Масштабирует",
+      "Цели",
+      "Мин. подов",
+      "Макс. подов",
+      "Реплики",
+    ])
+      expect(screen.getByText(header)).toBeVisible();
+    for (const english of ["Reference", "Targets", "MinPods", "Replicas"])
+      expect(screen.queryByText(english)).toBeNull();
+  });
+
+  /** Lena's HPA list beside the peek drew its Name as "h…". Fails if a narrow port squeezes the name rather than hiding the later columns, or hides them without saying so. */
+  it("keeps the Name whole beside the peek and names the columns it hid", async () => {
+    const width = vi
+      .spyOn(HTMLElement.prototype, "clientWidth", "get")
+      .mockReturnValue(300);
+    try {
+      await inRussian(
+        ROLE_BINDINGS,
+        printed(
+          [column("Name"), column("Role"), AGE],
+          [
+            row("hello-web", "lena-sandbox", [
+              "hello-web",
+              "Role/system::leader-locking-kube-controller-manager",
+              "2h0m",
+            ]),
+          ]
+        )
+      );
+      const name = await screen.findByText("Имя");
+      const px = (parseFloat(name.closest("th")!.style.width) / 100) * 300;
+      expect(px).toBeGreaterThanOrEqual(
+        Math.ceil("hello-web".length * 7.2 + 2 * (14 + 4) + 20)
+      );
+      expect(screen.getByTestId("columns-yielded")).toHaveTextContent("Роль");
+    } finally {
+      width.mockRestore();
+    }
+  });
+
+  /**
    * At 1440 px the Role column cut "Role/system::leader-locking-kube-contr…"
    * beside an Age as wide as itself. Fails if the Role gets no more room
    * than an age, or a cut Role cannot be read whole on hover.

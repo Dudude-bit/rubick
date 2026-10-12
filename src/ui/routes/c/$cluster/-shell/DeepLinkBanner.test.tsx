@@ -73,16 +73,23 @@ describe("the note a live link leaves", () => {
   });
 
   /**
-   * At the narrowest window Lena saw the note shrink to its icon, and at a
-   * wide one Dana saw its whole sentence repeated above it. Fails if a cut
-   * sentence offers nothing on hover, or a whole one offers itself again.
+   * At the narrowest window Lena saw the note shrink to its icon, at 1024
+   * "Открыто по ссылке. Вы см…", and at a wide one Dana saw its whole
+   * sentence repeated above it. Fails if a bar too narrow for the sentence
+   * draws a cut sentence rather than its first clause with the whole on
+   * hover, or a whole one offers itself again.
    */
   it.each([
-    [400, 120, "the whole sentence"],
-    [120, 120, "nothing"],
+    [400, 120, "Opened from a link", true],
+    [
+      120,
+      120,
+      "Opened from a link. You are looking at the cluster now.",
+      false,
+    ],
   ])(
-    "offers %i px of text in a %i px box %s on hover",
-    (scrollWidth, clientWidth) => {
+    "draws the sentence %i px wide in a %i px box as %s",
+    (scrollWidth, clientWidth, drawn, cut) => {
       const scroll = vi
         .spyOn(HTMLElement.prototype, "scrollWidth", "get")
         .mockReturnValue(scrollWidth);
@@ -92,11 +99,15 @@ describe("the note a live link leaves", () => {
       try {
         arriveLive();
         renderNote();
-        const sentence = screen.getByText(
-          "Opened from a link. You are looking at the cluster now."
+        const note = screen.getByTestId("link-opened");
+        const shown = [...note.querySelectorAll(".truncate")].map(
+          (element) => element.textContent
         );
-        expect(sentence.getAttribute("title")).toBe(
-          scrollWidth > clientWidth ? sentence.textContent : null
+        expect(shown).toEqual([drawn]);
+        expect(note.querySelector("[title]")?.getAttribute("title")).toBe(
+          cut
+            ? "Opened from a link. You are looking at the cluster now."
+            : undefined
         );
       } finally {
         scroll.mockRestore();
