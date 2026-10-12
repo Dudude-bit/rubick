@@ -65,7 +65,7 @@ export function ResourceMessage({
       segment.kind === "text" ? (
         segment.text
       ) : segment.kind === "image" ? (
-        <ImageRef image={segment.ref.reference} inline />
+        <ImageRef image={segment.ref.reference} inline cut={oneLine} />
       ) : objectLink(segment.ref) && oneLine ? (
         // Plain text inside the link, so the line's ellipsis cuts through the
         // name: a whole box that does not fit is hidden whole, and the row

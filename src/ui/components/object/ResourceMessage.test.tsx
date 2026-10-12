@@ -188,6 +188,31 @@ describe("ResourceMessage", () => {
   });
 });
 
+describe("an image on a cut line", () => {
+  /**
+   * Lena's pod peek cut "Container image ..." with 155 px free: the image was
+   * a copy button, one box the ellipsis hides whole. Fails if an image in a
+   * cut line is drawn as a box again.
+   */
+  it("is text the ellipsis can cut", async () => {
+    const { container } = await wrap(
+      <ResourceMessage
+        message='Container image "nginx:1.27-alpine" already present on machine'
+        oneLine
+      />
+    );
+    expect(container).toHaveTextContent(
+      'Container image "nginx:1.27-alpine" already present on machine'
+    );
+    const image = screen.getByRole("button", {
+      name: "Copy image nginx:1.27-alpine",
+    });
+    expect(image.tagName).toBe("SPAN");
+    for (const box of [image, image.parentElement!])
+      expect(box.className).not.toMatch(/inline-(flex|block)/);
+  });
+});
+
 describe("Prose", () => {
   /** Lena's Service rows break "app=topology-" from "demo"; fails if a selector or a ratio in the app's own sentence can break inside, or loses the comma after it. */
   it("keeps selectors and ratios whole with their punctuation", async () => {
