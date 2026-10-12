@@ -1804,6 +1804,10 @@ export const en = {
       "Most likely: no node fits it. The scheduler gave the same answer {times}, so probably nothing about the nodes has changed since it first asked.",
     guessPendingVaried:
       "Most likely: no node fits it, and the scheduler's answer has changed over {attempts}, so the nodes are probably changing under it.",
+    guessPendingTopologyLabel:
+      "Most likely: no node has the label its topology spread constraint spreads by, so the scheduler probably cannot place it anywhere until one does.",
+    guessPendingTopology:
+      "Most likely: every node would break its topology spread constraint, so it probably waits until its pods or the nodes change.",
     notPlacedYet:
       "Not placed yet: the scheduler has found no node for it so far, and it is still inside the wait a new pod gets, so this is not a fault yet.",
     guessUnknownUnread:
@@ -1854,6 +1858,13 @@ export const en = {
     checkVolumeRef: "{kind} {name}: does it exist, is it bound",
     checkRequests: "Compare the requests with what the nodes have free",
     checkNodes: "Look at the nodes: taints, capacity, what is already placed",
+    checkTopologyLabels:
+      "Look at the nodes' labels for the key its topology spread constraint spreads by",
+    checkTopologySpread:
+      "Compare its topology spread constraint with where its pods already run",
+    checkTaints: "Compare the nodes' taints with the pod's tolerations",
+    checkNodeSelector:
+      "Compare the pod's nodeSelector and affinity with the nodes' labels",
     checkProbe:
       "Read the probe: port, path, initial delay, against what the container listens on",
     notReadService: "the Services of {namespace} ({reason})",
