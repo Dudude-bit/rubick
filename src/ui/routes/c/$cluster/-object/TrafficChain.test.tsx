@@ -400,9 +400,8 @@ describe("TrafficChain", () => {
 
   /**
    * Sam's drains: the new ready pod's dot stayed amber for a repaint after
-   * its words said published, because the app fades every border colour.
-   * Fails if the rail's dot or line fades its tone instead of turning with
-   * the words.
+   * its words said published, because the app faded every border colour.
+   * Fails if the rail's dot or line asks for a colour fade of its own.
    */
   it("turns the rail's tone in the same paint as its words", async () => {
     await wrap(
@@ -420,8 +419,8 @@ describe("TrafficChain", () => {
       />
     );
     const dot = screen.getByTestId("rail-here");
-    expect(dot).toHaveClass("transition-none");
-    expect(dot.nextElementSibling).toHaveClass("transition-none");
+    for (const mark of [dot, dot.nextElementSibling!])
+      expect(mark.className).not.toMatch(/\btransition(-colors|-all)?\b/);
   });
 
   it("does not draw a chain it has not read yet", async () => {

@@ -41,26 +41,56 @@ describe("the theme the window opens in", () => {
 });
 
 describe("a change of tone", () => {
+  const css = readFileSync("src/ui/index.css", "utf8");
+  const rules = [...css.matchAll(/([^{}]+)\{([^{}]*)\}/g)].map(
+    ([, selector, body]) => ({
+      selectors: selector
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .split(",")
+        .map((part) => part.trim()),
+      body,
+    })
+  );
+  const fades = (body: string) =>
+    /transition(-property)?\s*:[^;]*\b(all|color|background|background-color|border|border-color|fill|stroke)\b/.test(
+      body
+    );
+
+  /**
+   * A fade's first frame is the old colour: a ready pod's dot stayed amber
+   * for a repaint, and a switched window kept the last cluster's red accent
+   * for over a second. Fails if any rule on `*` fades a colour again.
+   */
+  it("never fades a colour on every element", () => {
+    const everything = rules.filter(({ selectors }) =>
+      selectors.some((part) => /^\*(::before|::after)?$/.test(part))
+    );
+    expect(everything.length).toBeGreaterThan(0);
+    for (const { selectors, body } of everything)
+      expect(fades(body), selectors.join(", ")).toBe(false);
+  });
+
   /**
    * Sam's Service went from red "no endpoints" to blue "coming up", and the
-   * clock beside the blue words was still red: the glyph inherits its colour
-   * a fade behind the text. Fails if words and glyphs fade their colour
-   * outside a theme switch.
+   * clock beside the blue words was still red. Fails if a theme switch stops
+   * fading words and glyphs together with their backgrounds.
    */
-  it("is drawn at once, and only a theme switch fades the colour of words and glyphs", () => {
-    const css = readFileSync("src/ui/index.css", "utf8");
-    const faded = (selector: string) =>
-      new RegExp(`${selector}[^{]*\\{[^}]*transition-property:\\s*([^;]+);`)
-        .exec(css)?.[1]
-        .split(",")
-        .map((property) => property.trim());
-    expect(faded("\\*,\\s*\\*::before,\\s*\\*::after\\s*")).toEqual([
-      "background-color",
-      "border-color",
-    ]);
-    expect(faded("\\.theme-fade \\*,")).toEqual(
-      expect.arrayContaining(["color", "fill", "stroke"])
+  it("fades words, glyphs and backgrounds together only under a theme switch", () => {
+    const themed = rules.find(({ selectors }) =>
+      selectors.includes(".theme-fade *")
     );
+    expect(themed?.body).toMatch(
+      /transition-property:\s*background-color, border-color, color, fill, stroke;/
+    );
+    expect(themed?.body).toMatch(/transition-duration:\s*150ms/);
+  });
+
+  /** Fails if a hover affordance loses the background fade it had when every element faded. */
+  it("keeps the background fade on what changes it on hover", () => {
+    const hover = rules.find(({ selectors }) =>
+      selectors.some((part) => part.includes('[class*="hover:bg-"]'))
+    );
+    expect(hover && fades(hover.body)).toBe(true);
   });
 
   /** Fails if a switch between themes does not fade, or the fade outlives it. */

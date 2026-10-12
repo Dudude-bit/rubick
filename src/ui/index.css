@@ -396,21 +396,21 @@
     font-variant-numeric: tabular-nums;
   }
 
-  /* Smooth transitions for theme changes */
-  *,
-  *::before,
-  *::after {
-    transition-property: background-color, border-color;
-    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-    transition-duration: 150ms;
-  }
-
-  /* Words and glyphs change tone at once otherwise: an icon inherits its
-   * colour a fade behind its text, and drew a red clock beside blue words. */
+  /* No colour fades app-wide: a fade's first frame is the old colour, which
+   * kept a ready dot amber and a switched window the last cluster's red. A
+   * theme switch fades everything together, and a hover affordance its own. */
   .theme-fade *,
   .theme-fade *::before,
   .theme-fade *::after {
     transition-property: background-color, border-color, color, fill, stroke;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
+  }
+
+  :where([class*="hover:bg-"], [class*="hover:border-"]) {
+    transition-property: background-color, border-color;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+    transition-duration: 150ms;
   }
 
   @media (prefers-reduced-motion: reduce) {
