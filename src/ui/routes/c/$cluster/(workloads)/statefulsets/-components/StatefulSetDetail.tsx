@@ -491,11 +491,21 @@ export function StatefulSetDetail() {
             </span>
           )
         }
+        headerNote={
+          statefulSet && (
+            <RolloutSummary
+              rollout={statefulSet.rollout}
+              subject={{ kind: ResourceType.StatefulSet, name, namespace }}
+              place="header"
+            />
+          )
+        }
         summary={
           statefulSet && (
             <RolloutSummary
               rollout={statefulSet.rollout}
               subject={{ kind: ResourceType.StatefulSet, name, namespace }}
+              place="line"
             />
           )
         }

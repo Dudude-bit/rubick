@@ -210,6 +210,7 @@ export function ClusterOverview() {
         <AttentionPanel
           attention={attention}
           pods={overview.pods}
+          podsUnlisted={overview.podsUnlisted}
           podsUnread={overview.unread.filter((entry) => entry.kind === "Pod")}
           nodes={overview.nodes}
           nodesKnown={overview.nodesKnown}

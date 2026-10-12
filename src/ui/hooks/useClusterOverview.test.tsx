@@ -217,6 +217,37 @@ describe("an overview served from the watched stores", () => {
     );
   });
 
+  /**
+   * Sam's drain named the new pod at 114 ms in one run and 676 ms in the
+   * next: a change announced while a read was on its way joined that read,
+   * which could have left before it. Fails if a change announced during a
+   * read is not read again once that read lands.
+   */
+  it("reads again after a read in flight when a change is announced during it", async () => {
+    useClusterStore.setState({ namespaceScope: ["shop"] });
+    const { result } = follow("watch");
+    await waitFor(() => expect(result.current).toBe(true));
+    await waitFor(() => expect(announce).not.toBeNull());
+    const reads = getClusterOverview.mock.calls.length;
+    let land: (value: unknown) => void = () => {};
+    getClusterOverview.mockImplementationOnce(
+      () => new Promise((resolve) => (land = resolve))
+    );
+
+    changed(["shop"]);
+    await waitFor(() =>
+      expect(getClusterOverview).toHaveBeenCalledTimes(reads + 1)
+    );
+    changed(["shop"]);
+    await new Promise((settle) => setTimeout(settle, 50));
+    expect(getClusterOverview).toHaveBeenCalledTimes(reads + 1);
+
+    await act(async () => land({ servedFrom: "watch", counts: { pods: 41 } }));
+    await waitFor(() =>
+      expect(getClusterOverview).toHaveBeenCalledTimes(reads + 2)
+    );
+  });
+
   /** Fails if an overview listed rather than served from the stores claims to follow them, or listens for them. */
   it("does not follow an overview that was listed", async () => {
     const { result } = follow("list");

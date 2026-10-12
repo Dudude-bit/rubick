@@ -481,11 +481,21 @@ export function DaemonSetDetail() {
             </span>
           )
         }
+        headerNote={
+          daemonSet && (
+            <RolloutSummary
+              rollout={daemonSet.rollout}
+              subject={{ kind: ResourceType.DaemonSet, name, namespace }}
+              place="header"
+            />
+          )
+        }
         summary={
           daemonSet && (
             <RolloutSummary
               rollout={daemonSet.rollout}
               subject={{ kind: ResourceType.DaemonSet, name, namespace }}
+              place="line"
             />
           )
         }

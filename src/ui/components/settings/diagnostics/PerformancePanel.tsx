@@ -41,8 +41,8 @@ function StatsRows({
 }: {
   rows: [string, PerfStats][];
   nameLabel: string;
-  /** What the backend timed of the same commands, from the moment it took one to its answer. */
-  backend?: BackendCounters["commands"];
+  /** What the backend timed of the same commands, from the moment it took one to its answer; `atStop` while the recording runs. */
+  backend?: BackendCounters["commands"] | "atStop";
 }) {
   const t = useT();
   return (
@@ -85,11 +85,14 @@ function StatsRows({
               <td className="py-1 pr-3 text-right">{ms(s.max)}</td>
               {backend && (
                 <td className="py-1 pr-3 text-right">
-                  {backend[name] ? (
+                  {backend !== "atStop" && backend[name] ? (
                     `${ms(backend[name].p50)} · ${ms(backend[name].max)}`
                   ) : (
                     <span className="font-sans text-fg-fnt">
-                      {t("settings", "perfNotTimed")}
+                      {t(
+                        "settings",
+                        backend === "atStop" ? "perfAtStop" : "perfNotTimed"
+                      )}
                     </span>
                   )}
                 </td>
@@ -203,7 +206,12 @@ export function PerformancePanel() {
             <StatsRows
               rows={ipcRows}
               nameLabel={t("settings", "perfCommand")}
-              backend={report.backend?.commands}
+              backend={
+                report.backend?.commands ??
+                (session.phase === "recording" || session.phase === "stopping"
+                  ? "atStop"
+                  : undefined)
+              }
             />
           )}
           {report.tasks && (

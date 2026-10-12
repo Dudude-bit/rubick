@@ -18,23 +18,47 @@ const TONE_ICON: Record<RolloutLine["tone"], (typeof ROLE_ICON)["ok"]> = {
   unknown: EyeOff,
 };
 
+/** A state a rollout passes through on every drain, restart or scale, with nothing of the controller's to quote. */
+const passing = (line: RolloutLine) => line.tone === "info" && !line.said;
+
 /**
  * The rollout verdict in a sentence, with the controller's own words after it.
  * The page header and the peek draw this one line, so the two cannot disagree.
+ *
+ * A page puts a passing state in its header row (`header`) and the rest
+ * above the strip (`line`), so what is under them does not move on a drain.
  */
 export function RolloutSummary({
   rollout,
   subject,
   className,
+  place,
 }: {
   rollout: Rollout;
   subject: MessageSubject;
   className?: string;
+  place?: "header" | "line";
 }) {
   const t = useT();
   const line = rolloutLine(rollout, t);
   if (!line) return null;
   const Icon = TONE_ICON[line.tone];
+  if (place === "line" && passing(line)) return null;
+  if (place === "header")
+    return passing(line) ? (
+      <p
+        className={cn(
+          "flex min-w-0 items-center gap-1.5 text-[11px]",
+          TONE_TEXT[line.tone]
+        )}
+        data-testid="rollout-summary"
+      >
+        <Icon className="h-2.5 w-2.5 flex-none" aria-hidden="true" />
+        <span className="truncate" title={line.text}>
+          {line.text}
+        </span>
+      </p>
+    ) : null;
   return (
     <p
       className={cn(

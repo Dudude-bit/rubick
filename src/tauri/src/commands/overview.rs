@@ -448,6 +448,11 @@ pub struct ClusterOverview {
     /// Objects per kind in the requested scope, for the sidebar and the
     /// composition bars.
     pub counts: ResourceCounts,
+    /// The pods `pods` counts short of serving that no row in `problems`
+    /// names, by the word it gives them: a failed Job's failed pods are in its
+    /// row, a pod not ready is its workload's to answer for, and one being
+    /// deleted is on its way out.
+    pub pods_unlisted: Vec<ReasonCount>,
     /// Phase breakdown of the pods read in the requested scope; `None` when
     /// no pod list in it answered.
     pub pods: Option<Census<PodComposition>>,
@@ -1320,6 +1325,53 @@ fn pod_composition<'a>(
     composition
 }
 
+/// The words the census gives a pod short of serving that need no row of its own, in the order it prints them.
+const UNLISTED: [&str; 4] = ["NotReady", "Terminating", "Failed", "Unknown"];
+
+/// See [`ClusterOverview::pods_unlisted`]. Branches as [`pod_composition`] does, so each word counts what its segment counts.
+fn unlisted_pods<'a>(
+    pods: impl IntoIterator<Item = &'a Pod>,
+    problems: &[ClusterProblem],
+    now: DateTime<Utc>,
+) -> Vec<ReasonCount> {
+    let listed: HashSet<(Option<&str>, &str)> = problems
+        .iter()
+        .filter(|p| p.kind == "Pod")
+        .map(|p| (p.namespace.as_deref(), p.name.as_str()))
+        .collect();
+    let mut counts = [0usize; UNLISTED.len()];
+    for pod in pods {
+        let key = (
+            pod.metadata.namespace.as_deref(),
+            pod.metadata.name.as_deref().unwrap_or_default(),
+        );
+        if listed.contains(&key) {
+            continue;
+        }
+        let status = pod.status.as_ref();
+        let word = match status.and_then(|s| s.phase.as_deref()).unwrap_or_default() {
+            "Running" if pod.metadata.deletion_timestamp.is_some() => "Terminating",
+            "Running" if crash_looping(pod, now) || stuck_reason(pod).is_some() => continue,
+            "Running" if !condition_is_true(status, "Ready") => "NotReady",
+            "Running" | "Pending" | "Succeeded" => continue,
+            "Failed" => "Failed",
+            _ => "Unknown",
+        };
+        if let Some(at) = UNLISTED.iter().position(|w| *w == word) {
+            counts[at] += 1;
+        }
+    }
+    UNLISTED
+        .iter()
+        .zip(counts)
+        .filter(|(_, count)| *count > 0)
+        .map(|(reason, count)| ReasonCount {
+            reason: (*reason).to_string(),
+            count,
+        })
+        .collect()
+}
+
 /// How many objects each word covers, in the order the words first appear.
 fn count_codes<'a>(codes: impl IntoIterator<Item = &'a str>) -> Vec<ReasonCount> {
     let mut counts: Vec<ReasonCount> = Vec::new();
@@ -1674,6 +1726,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
     problems.extend(job_problems(refs(input.jobs)));
     problems.extend(node_problems(refs(nodes)));
     let problems = fold_job_runs(problems, refs(input.scoped_pods));
+    let pods_unlisted = unlisted_pods(refs(input.scoped_pods), &problems, input.now);
     // One namespace's breakdown restates it; several are each the picker's.
     let namespaces = match input.scope {
         None if pods_known => namespace_loads(refs(input.scoped_pods), &problems),
@@ -1725,6 +1778,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
             complete,
         }),
         namespaces,
+        pods_unlisted,
         metrics_available,
         served_from: input.served_from,
         next_change_at: next_change(refs(input.scoped_pods), input.now),
@@ -4548,6 +4602,96 @@ mod tests {
         assert!(names.contains(&"reports-1") && names.contains(&"reports-2-a"));
         let failed = problems.iter().find(|p| p.kind == "Job").expect("the Job");
         assert_eq!(failed.folded_pods, Some(2));
+    }
+
+    /// Dana's Overview chip said "38 Pods" beside a census counting 2 `NotReady`,
+    /// 2 Terminating and 34 Failed, and nothing said which of those the list
+    /// named. Fails if a pod short of serving with no row of its own is not
+    /// counted under its census word, or one with a row is.
+    #[test]
+    fn the_pods_the_census_counts_and_no_row_names_are_counted_by_their_word() {
+        let pod = |name: &str, status: serde_json::Value, extra: serde_json::Value| -> Pod {
+            let mut pod = serde_json::json!({
+                "metadata": { "name": name, "namespace": "shop" },
+                "status": status,
+            });
+            if let (Some(meta), Some(extra)) = (pod["metadata"].as_object_mut(), extra.as_object())
+            {
+                meta.extend(extra.clone());
+            }
+            serde_json::from_value(pod).expect("a Pod")
+        };
+        let running = |ready: &str| {
+            serde_json::json!({
+                "phase": "Running",
+                "conditions": [{ "type": "Ready", "status": ready }],
+            })
+        };
+        let job_run = serde_json::json!({ "ownerReferences": [{
+            "apiVersion": "batch/v1", "kind": "Job", "name": "reports-1",
+            "uid": "reports-1", "controller": true
+        }] });
+        let none = serde_json::json!({});
+        let pods = arcs(vec![
+            pod("unready-demo-a", running("False"), none.clone()),
+            pod("unready-demo-b", running("False"), none.clone()),
+            pod(
+                "big-pull-old",
+                running("True"),
+                serde_json::json!({ "deletionTimestamp": "2026-10-12T07:00:00Z" }),
+            ),
+            pod(
+                "reports-1-a",
+                serde_json::json!({ "phase": "Failed" }),
+                job_run.clone(),
+            ),
+            pod(
+                "reports-1-b",
+                serde_json::json!({ "phase": "Failed" }),
+                job_run,
+            ),
+            pod(
+                "evicted",
+                serde_json::json!({ "phase": "Failed" }),
+                none.clone(),
+            ),
+            pod("web", running("True"), none.clone()),
+            pod("done", serde_json::json!({ "phase": "Succeeded" }), none),
+        ]);
+        let job: Job = serde_json::from_value(serde_json::json!({
+            "metadata": { "name": "reports-1", "namespace": "shop" },
+            "status": { "conditions": [{
+                "type": "Failed", "status": "True", "reason": "BackoffLimitExceeded"
+            }] },
+        }))
+        .expect("a Job");
+
+        let overview = build_overview(&OverviewInputs {
+            scoped_pods: &pods,
+            accounting_pods: &[],
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread: &[],
+            jobs: &arcs(vec![job]),
+            events: &[],
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            now: Utc::now(),
+        });
+
+        let said: Vec<_> = overview
+            .pods_unlisted
+            .iter()
+            .map(|r| (r.reason.as_str(), r.count))
+            .collect();
+        assert_eq!(said, [("NotReady", 2), ("Terminating", 1), ("Failed", 2)]);
+        assert!(overview.problems.iter().any(|p| p.name == "evicted"));
     }
 
     /// The stores drop the pod template; the rollout verdict has to read the

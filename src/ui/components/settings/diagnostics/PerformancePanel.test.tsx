@@ -1,10 +1,12 @@
 import { render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it, vi } from "vite-plus/test";
 
 import { perf } from "@/lib/perf";
+import { perfSession } from "@/lib/perf-session";
 import { PerformancePanel } from "./PerformancePanel";
 
 afterEach(() => {
+  vi.restoreAllMocks();
   perf.stop();
   perf.backend = undefined;
 });
@@ -55,5 +57,26 @@ describe("PerformancePanel", () => {
     render(<PerformancePanel />);
 
     expect(screen.queryByText("in the backend, p50 · max")).toBeNull();
+  });
+
+  /**
+   * Sam read the recorder while it ran, found no backend column and called
+   * it missing: the backend is asked for its counters only at Stop. Fails
+   * if a running recording hides the column instead of saying when it fills in.
+   */
+  it("shows the backend column while recording, saying it fills in at Stop", () => {
+    vi.spyOn(perfSession, "current", "get").mockReturnValue({
+      phase: "recording",
+      error: null,
+    });
+    perf.start(0);
+    perf.record({ kind: "ipc", name: "getClusterOverview", ms: 33, at: 1 });
+
+    render(<PerformancePanel />);
+
+    expect(screen.getByText("in the backend, p50 · max")).toBeTruthy();
+    expect(
+      within(rowOf("getClusterOverview")).getByText("at Stop")
+    ).toBeTruthy();
   });
 });

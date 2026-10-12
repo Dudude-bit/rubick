@@ -416,7 +416,11 @@ const due = new WeakMap<QueryClient, Map<string, Due>>();
  * first held Sam's chain to its quarter second after the Service's watches
  * had asked for a twentieth.
  */
-function readSoon(client: QueryClient, queryKey: QueryKey, settleMs: number) {
+export function readSoon(
+  client: QueryClient,
+  queryKey: QueryKey,
+  settleMs: number
+) {
   const pending = due.get(client) ?? new Map<string, Due>();
   due.set(client, pending);
   const id = hashKey(queryKey);

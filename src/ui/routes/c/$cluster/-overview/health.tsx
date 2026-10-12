@@ -3,6 +3,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import {
   CircleSlash,
   EyeOff,
+  Info,
   Loader2,
   Lock,
   TriangleAlert,
@@ -66,6 +67,7 @@ import type {
   OverviewUnread,
   PodComposition,
   Incarnation,
+  ReasonCount,
   ResourcePressure,
   SchedulerPressure,
   WarningGroup,
@@ -539,6 +541,7 @@ function notRunning(pods: PodComposition, t: T): string[] {
 export function AttentionPanel({
   attention,
   pods,
+  podsUnlisted = [],
   podsUnread,
   nodes,
   nodesKnown,
@@ -546,6 +549,8 @@ export function AttentionPanel({
   attention: Attention;
   /** `null` when no pod list in scope answered: no count to state. */
   pods: Census<PodComposition> | null;
+  /** The pods `pods` counts short of serving that no row names. */
+  podsUnlisted?: ReasonCount[];
   /** Where the pods went unread, said beside whatever was counted. */
   podsUnread: readonly OverviewUnread[];
   nodes: NodeSummary[];
@@ -680,6 +685,26 @@ export function AttentionPanel({
                   {nodesLine}
                 </span>
               </>
+            )}
+            {pods && podsUnlisted.length > 0 && (
+              <span
+                className="mt-0.5 flex items-center gap-1"
+                data-testid="attention-unlisted"
+                title={t("cluster", "podsUnlistedHint")}
+              >
+                <Info className="h-2.5 w-2.5 flex-none" aria-hidden="true" />
+                <span>
+                  {t("cluster", "podsUnlisted", {
+                    list: podsUnlisted
+                      .map(({ reason, count }) =>
+                        reason === "Failed"
+                          ? t("count", "failedInJobRows", { n: count })
+                          : `${count} ${reason}`
+                      )
+                      .join(" · "),
+                  })}
+                </span>
+              </span>
             )}
             {(!pods || podsUnread.length > 0) && (
               <>

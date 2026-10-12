@@ -158,6 +158,24 @@ describe("a count that names what it counts", () => {
     expect(say("nodesWanted", 2)).toBe("требуемых узла");
     expect(say("completionsWanted", 1)).toBe("требуемое завершение");
   });
+
+  /**
+   * Lena's Deployment read "1 готова" beside "1 обновлено · 1 доступно": the
+   * ready count agreed with "реплика" and the two beside it did not. Fails if
+   * either count of the replicas note loses that agreement at 1, 2, 5 or 21.
+   */
+  it("agrees every count of the replicas note with реплика", () => {
+    const note = (n: number) =>
+      translate("ru", "count", "upToDateAvailable", {
+        updated: translate("ru", "count", "replicasUpToDate", { n }),
+        available: translate("ru", "count", "replicasAvailable", { n }),
+      });
+    expect(translate("ru", "count", "readySegment", { n: 1 })).toBe("готова");
+    expect(note(1)).toBe("1 обновлена · 1 доступна");
+    expect(note(2)).toBe("2 обновлены · 2 доступны");
+    expect(note(5)).toBe("5 обновлены · 5 доступны");
+    expect(note(21)).toBe("21 обновлена · 21 доступна");
+  });
 });
 
 describe("the Russian word for a drain", () => {

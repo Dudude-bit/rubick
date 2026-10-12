@@ -224,6 +224,7 @@ const FULL_OVERVIEW: ClusterOverviewData = {
     serviceAccounts: 0,
     events: 0,
   },
+  podsUnlisted: [],
   pods: {
     read: {
       running: 1,
@@ -245,6 +246,27 @@ const FULL_OVERVIEW: ClusterOverviewData = {
   metricsAvailable: false,
   unread: [],
 };
+
+describe("the pods Needs attention does not name", () => {
+  /** Fails if the page drops the backend's count of pods with no row of their own on its way to the panel. */
+  it("says them under the overall line", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    getClusterOverview.mockResolvedValue({
+      ...FULL_OVERVIEW,
+      podsUnlisted: [{ reason: "NotReady", count: 1 }],
+    });
+
+    await mount(<ClusterOverview />);
+
+    expect(await screen.findByTestId("attention-unlisted")).toHaveTextContent(
+      "Not listed on their own: 1 NotReady"
+    );
+  });
+});
 
 describe("what the overview offers Share", () => {
   /** One section per panel, deleting a hook makes its panel's evidence
