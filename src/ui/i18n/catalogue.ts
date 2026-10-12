@@ -1728,6 +1728,15 @@ export const en = {
       other: "Watching {watched} only, not {missed}, for {n} seconds at {at}",
     },
     partScopeStill: "Watching {watched} only, not {missed}, since {from}",
+    partAll:
+      "Watching {watched} only, not the other namespaces, {from} to {to}",
+    partAllBrief: {
+      one: "Watching {watched} only, not the other namespaces, for {n} second at {at}",
+      other:
+        "Watching {watched} only, not the other namespaces, for {n} seconds at {at}",
+    },
+    partAllStill:
+      "Watching {watched} only, not the other namespaces, since {from}",
     revisionNumber: "revision {n}",
     revisionCurrent: "current",
     revisionOldest: "oldest known; nothing earlier to compare with",

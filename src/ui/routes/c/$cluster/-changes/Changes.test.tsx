@@ -125,6 +125,55 @@ describe("the stretches this app watched", () => {
   });
 });
 
+describe("a stretch that watched part of the scope", () => {
+  /**
+   * Marco's two-namespace page called team-checkout's first stretch "Not
+   * observed" and merged team-blind alone with team-checkout alone under
+   * "Watching other namespaces, not this one". Fails if either stretch loses
+   * its own label of what it watched.
+   */
+  it("names what each stretch watched, on its own row", async () => {
+    const MIN = 60_000;
+    const both = ["team-blind", "team-checkout"];
+    const moment = (ago: number) => formatWhen(NOW - ago * MIN, "moment");
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: both,
+    });
+    const stretch = (from: number, to: number | null, scope: string[]) => ({
+      from: NOW - from * MIN,
+      seenAt: to === null ? NOW : NOW - to * MIN,
+      to: to === null ? null : NOW - to * MIN,
+      scope,
+    });
+    useChangeJournalStore.setState({
+      entries: [],
+      spans: {
+        prod: [
+          stretch(60, 58, ["team-checkout"]),
+          stretch(58, 30, both),
+          stretch(30, 20, ["team-blind"]),
+          stretch(20, 10, ["team-checkout"]),
+          stretch(10, null, both),
+        ],
+      },
+    });
+
+    await mount();
+    for (const words of [
+      `Watching team-checkout only, not team-blind, ${moment(60)} to ${moment(58)}`,
+      `Watching team-blind only, not team-checkout, ${moment(30)} to ${moment(20)}`,
+      `Watching team-checkout only, not team-blind, ${moment(20)} to ${moment(10)}`,
+    ])
+      expect(screen.getByText(words)).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(`^Not observed .+ to ${moment(60)}$`))
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/other namespaces/)).toBeNull();
+  });
+});
+
 describe("what the Changes page offers Share", () => {
   /** Deleting the object's ref on a journal row leaves a shared report of a
    *  cluster-wide timeline with no way to tell which workload a row is about. */

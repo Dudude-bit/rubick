@@ -199,6 +199,7 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
         namespaces: [subject.namespace],
       }),
       watching: spansWatching(ours, [subject.kind]),
+      scope: [subject.namespace],
       window: { from: now - WINDOW_MS, to: windowEnd(ours, now) },
       createdAt: subject.createdAt,
     });

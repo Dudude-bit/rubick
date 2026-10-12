@@ -384,7 +384,8 @@ export function changesSection(
         spansWatching(
           journal.spans,
           targets.map((target) => target.kind)
-        )
+        ),
+        subject.namespace ? [subject.namespace] : []
       )
     : [];
   const rows: (ReportChange & { ms: number })[] = [
