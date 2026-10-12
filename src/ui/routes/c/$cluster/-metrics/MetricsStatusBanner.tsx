@@ -3,6 +3,7 @@ import { AlertTriangle, Gauge, Lock, X, type LucideIcon } from "lucide-react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ErrorDetails } from "@/components/ui/error-details";
+import { HeldLines } from "../-list/HeldLines";
 import { UnreadNamespaces } from "../-list/UnreadNamespaces";
 import { cn } from "@/lib/utils";
 import { commands } from "@/lib/commands";
@@ -96,9 +97,13 @@ export function MetricsStatusBanner({
       <Icon className="h-4 w-4" aria-hidden="true" />
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">
-          <AlertTitle>{t("cluster", title)}</AlertTitle>
+          {/* Above a list, so a peek opening beside it must not wrap them
+              onto more lines and move the rows under the pointer. */}
+          <AlertTitle>
+            <HeldLines>{t("cluster", title)}</HeldLines>
+          </AlertTitle>
           <AlertDescription className="text-fg-mut">
-            {t("cluster", body)}
+            <HeldLines>{t("cluster", body)}</HeldLines>
           </AlertDescription>
           <div className="mt-1 flex flex-wrap items-start gap-x-3 gap-y-1">
             <button
