@@ -103,7 +103,7 @@ type OverviewStub = Pick<
   ClusterOverview,
   "counts" | "problems" | "problemsTruncated"
 > &
-  Partial<Pick<ClusterOverview, "servedFrom">>;
+  Partial<Pick<ClusterOverview, "servedFrom" | "countsPartial">>;
 let overview: OverviewStub | undefined;
 /** When the overview on screen landed, and whether a read of it is late. */
 const read = vi.hoisted(() => ({ at: 0, slowRead: false, stale: false }));
@@ -279,6 +279,47 @@ describe("the counts at the end of each row", () => {
       within(await row("NetworkPolicies")).getByText("7")
     ).toBeInTheDocument();
     expect(within(await row("Secrets")).queryByText(/^\d+$/)).toBeNull();
+  });
+
+  /**
+   * Marco's team-checkout and team-blind left Pods, Secrets and six more rows
+   * blank, no number, no lock, no tooltip: "0", "unknown" and "refused" read
+   * alike. Fails if a count read in one namespace and refused in another
+   * draws nothing, draws its floor as a total, or does not say where it was
+   * counted and where refused.
+   */
+  it("marks a count refused in part of the scope with its floor and where", async () => {
+    overview = {
+      counts: { pods: null, secrets: 3 } as ClusterOverview["counts"],
+      problems: [],
+      problemsTruncated: 0,
+      countsPartial: [
+        {
+          count: "pods",
+          counted: 4,
+          countedIn: ["team-checkout"],
+          refusedIn: ["team-blind"],
+          unreadIn: [],
+        },
+      ],
+    };
+    await wrap(<Sidebar />);
+
+    const pods = within(
+      await screen.findByRole("link", { name: /^Pods/ })
+    ).getByTestId("partial-count");
+    expect(pods).toHaveTextContent("4+");
+    expect(pods).toHaveAccessibleName(
+      "at least 4, not every namespace counted"
+    );
+    expect(pods.getAttribute("title")).toContain(
+      "Counted 4 in team-checkout.\nThe cluster refused the list in team-blind, so there may be more."
+    );
+    expect(
+      within(
+        await screen.findByRole("link", { name: /^Secrets/ })
+      ).queryByTestId("partial-count")
+    ).toBeNull();
   });
 
   /**

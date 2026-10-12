@@ -569,6 +569,45 @@ pub struct ClusterOverview {
     pub next_change_at: Option<DateTime<Utc>>,
     /// The kinds whose problems this answer could not look for, and why.
     pub unread: Vec<OverviewUnread>,
+    /// The counts `counts` leaves `None` because only some of the namespaces
+    /// asked answered them.
+    pub counts_partial: Vec<PartialCount>,
+}
+
+/// A count the namespaces asked answered in part: what was counted where
+/// the list was read, and where it was not. `counted` is a floor, never a
+/// total, which is why the matching entry in `counts` stays `None`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PartialCount {
+    pub count: CountKind,
+    pub counted: usize,
+    pub counted_in: Vec<String>,
+    /// Where the cluster refused the list.
+    pub refused_in: Vec<String>,
+    /// Where the list could not be counted for any other reason.
+    pub unread_in: Vec<String>,
+}
+
+/// The namespaced entries of `ResourceCounts`, by the name they have there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CountKind {
+    Pods,
+    Deployments,
+    StatefulSets,
+    DaemonSets,
+    Jobs,
+    CronJobs,
+    Services,
+    Ingresses,
+    ConfigMaps,
+    Secrets,
+    Endpoints,
+    PersistentVolumeClaims,
+    ServiceAccounts,
+    NetworkPolicies,
+    Events,
 }
 
 /// A kind the overview asked for in one reach and got no list of: its
@@ -1887,6 +1926,73 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         served_from: input.served_from,
         next_change_at: next_change(refs(input.scoped_pods), input.now),
         unread: unread.to_vec(),
+        counts_partial: listed_partials(
+            unread,
+            input.scope,
+            [
+                (CountKind::Pods, "Pod", input.scoped_pods.len()),
+                (
+                    CountKind::Deployments,
+                    "Deployment",
+                    input.deployments.len(),
+                ),
+                (
+                    CountKind::StatefulSets,
+                    "StatefulSet",
+                    input.stateful_sets.len(),
+                ),
+                (CountKind::DaemonSets, "DaemonSet", input.daemon_sets.len()),
+                (CountKind::Jobs, "Job", input.jobs.len()),
+            ],
+        ),
+    }
+}
+
+/// The counts of the lists the overview reads that some namespaces in scope
+/// answered and others did not.
+fn listed_partials(
+    unread: &[OverviewUnread],
+    scope: Option<&[String]>,
+    listed: [(CountKind, &str, usize); 5],
+) -> Vec<PartialCount> {
+    let Some(scope) = scope else {
+        return Vec::new();
+    };
+    listed
+        .into_iter()
+        .filter_map(|(count, kind, counted)| {
+            let missed: Vec<&OverviewUnread> =
+                unread.iter().filter(|entry| entry.kind == kind).collect();
+            if missed.iter().any(|entry| entry.namespace.is_none()) {
+                return None;
+            }
+            let mut partial = PartialCount {
+                count,
+                counted,
+                counted_in: Vec::new(),
+                refused_in: Vec::new(),
+                unread_in: Vec::new(),
+            };
+            for namespace in scope {
+                match missed
+                    .iter()
+                    .find(|entry| entry.namespace.as_deref() == Some(namespace))
+                {
+                    None => partial.counted_in.push(namespace.clone()),
+                    Some(entry) if entry.code == "PERMISSION_DENIED" => {
+                        partial.refused_in.push(namespace.clone());
+                    }
+                    Some(_) => partial.unread_in.push(namespace.clone()),
+                }
+            }
+            partial.is_partial().then_some(partial)
+        })
+        .collect()
+}
+
+impl PartialCount {
+    fn is_partial(&self) -> bool {
+        !self.counted_in.is_empty() && (!self.refused_in.is_empty() || !self.unread_in.is_empty())
     }
 }
 
@@ -2011,25 +2117,88 @@ fn add_counts(parts: &[ResourceCounts]) -> ResourceCounts {
     }
 }
 
-/// The namespaced counts in every reach, added up, and the namespace count once.
+/// The namespaced counts in every reach, added up, and the namespace count
+/// once; beside them, the counts only some reaches answered.
 async fn side_counts(
     client: &Client,
     scope: Option<&[String]>,
     refused: &RefusedCounts,
-) -> ResourceCounts {
+) -> (ResourceCounts, Vec<PartialCount>) {
     let namespaces_api: Api<Namespace> = Api::all(client.clone());
+    let reached = reaches(scope);
     let (namespaces, parts) = tokio::join!(
         count_of(&namespaces_api, None, refused),
         join_all(
-            reaches(scope)
-                .into_iter()
-                .map(|reach| namespaced_counts(client, reach, refused))
+            reached
+                .iter()
+                .map(|reach| namespaced_counts(client, *reach, refused))
         ),
     );
-    ResourceCounts {
-        namespaces,
-        ..add_counts(&parts)
-    }
+    let partial = counted_partials(&reached, &parts, refused);
+    (
+        ResourceCounts {
+            namespaces,
+            ..add_counts(&parts)
+        },
+        partial,
+    )
+}
+
+type CountOf = fn(&ResourceCounts) -> Option<usize>;
+
+/// The namespaced counts some reaches answered and others did not, each
+/// absence told apart as a refusal or not by the plural it was refused under.
+fn counted_partials(
+    reached: &[Option<&str>],
+    parts: &[ResourceCounts],
+    refused: &RefusedCounts,
+) -> Vec<PartialCount> {
+    let fields: [(CountKind, &str, CountOf); 10] = [
+        (CountKind::CronJobs, "cronjobs", |c| c.cron_jobs),
+        (CountKind::Services, "services", |c| c.services),
+        (CountKind::Ingresses, "ingresses", |c| c.ingresses),
+        (CountKind::ConfigMaps, "configmaps", |c| c.config_maps),
+        (CountKind::Secrets, "secrets", |c| c.secrets),
+        (CountKind::Endpoints, "endpoints", |c| c.endpoints),
+        (
+            CountKind::PersistentVolumeClaims,
+            "persistentvolumeclaims",
+            |c| c.persistent_volume_claims,
+        ),
+        (CountKind::ServiceAccounts, "serviceaccounts", |c| {
+            c.service_accounts
+        }),
+        (CountKind::NetworkPolicies, "networkpolicies", |c| {
+            c.network_policies
+        }),
+        (CountKind::Events, "events", |c| c.events),
+    ];
+    fields
+        .into_iter()
+        .filter_map(|(count, plural, of)| {
+            let mut partial = PartialCount {
+                count,
+                counted: 0,
+                counted_in: Vec::new(),
+                refused_in: Vec::new(),
+                unread_in: Vec::new(),
+            };
+            for (reach, part) in reached.iter().zip(parts) {
+                let namespace = (*reach)?.to_string();
+                match of(part) {
+                    Some(n) => {
+                        partial.counted += n;
+                        partial.counted_in.push(namespace);
+                    }
+                    None if refused.contains(&format!("{namespace}/{plural}")) => {
+                        partial.refused_in.push(namespace);
+                    }
+                    None => partial.unread_in.push(namespace),
+                }
+            }
+            partial.is_partial().then_some(partial)
+        })
+        .collect()
 }
 
 /// The overview for `scope` (`None` is the whole cluster): from the
@@ -2058,15 +2227,18 @@ pub async fn cluster_overview(
             Some((snapshot, looked))
         },
     );
+    let (counts, partial) = counts;
     let sides = Sides {
         counts,
         // Live usage is best-effort: metrics-server is not installed everywhere.
         usage_by_node: usage_index(metrics.ok()),
     };
-    match watched {
-        Some((snapshot, looked)) => Ok(from_snapshot(&snapshot, scope.as_deref(), sides, &looked)),
-        None => by_listing(&client, scope.as_deref(), sides, Some((state, &memo))).await,
-    }
+    let mut overview = match watched {
+        Some((snapshot, looked)) => from_snapshot(&snapshot, scope.as_deref(), sides, &looked),
+        None => by_listing(&client, scope.as_deref(), sides, Some((state, &memo))).await?,
+    };
+    overview.counts_partial.extend(partial);
+    Ok(overview)
 }
 
 /// The most names a poll reads one by one to say who holds them.
@@ -5671,7 +5843,8 @@ mod across_namespaces {
             let (client, hits) = server(self.0).await;
             let scope =
                 scope_of(Some(vec![STAGING.to_string(), PROD.to_string()])).expect("a valid scope");
-            let counts = side_counts(&client, scope.as_deref(), &RefusedCounts::default()).await;
+            let (counts, _) =
+                side_counts(&client, scope.as_deref(), &RefusedCounts::default()).await;
             let sides = Sides {
                 counts,
                 usage_by_node: None,
@@ -5816,6 +5989,67 @@ mod across_namespaces {
         assert_eq!(overview.counts.namespaces, Some(12));
     }
 
+    /// Marco's team-checkout and team-blind left the rail blank beside
+    /// Secrets: counted in one namespace, refused in the other, and said as
+    /// neither. Fails if a count refused in one namespace of the scope does
+    /// not say how many it counted where, and where it was refused.
+    #[tokio::test]
+    async fn a_count_refused_in_one_namespace_says_where_it_was_counted() {
+        let (client, _) = server(Cluster::new().refuse("/api/v1/namespaces/prod/secrets").0).await;
+        let scope =
+            scope_of(Some(vec![STAGING.to_string(), PROD.to_string()])).expect("a valid scope");
+        let (counts, partial) =
+            side_counts(&client, scope.as_deref(), &RefusedCounts::default()).await;
+        assert_eq!(counts.secrets, None);
+        assert_eq!(
+            partial,
+            vec![PartialCount {
+                count: CountKind::Secrets,
+                counted: 0,
+                counted_in: vec![STAGING.to_string()],
+                refused_in: vec![PROD.to_string()],
+                unread_in: Vec::new(),
+            }]
+        );
+    }
+
+    /// Marco's mixed scope left Pods blank in the rail while the Overview
+    /// said "not read in team-blind". Fails if a list refused in one
+    /// namespace and read in another is not a partial count naming both, or
+    /// if one refused across the cluster is.
+    #[test]
+    fn a_list_read_in_some_namespaces_is_a_partial_count() {
+        let blind = OverviewUnread {
+            kind: "Pod".to_string(),
+            namespace: Some("team-blind".to_string()),
+            code: "PERMISSION_DENIED".to_string(),
+            message: "pods is forbidden".to_string(),
+        };
+        let scope = ["team-checkout".to_string(), "team-blind".to_string()];
+        let listed = [
+            (CountKind::Pods, "Pod", 4),
+            (CountKind::Deployments, "Deployment", 3),
+            (CountKind::StatefulSets, "StatefulSet", 0),
+            (CountKind::DaemonSets, "DaemonSet", 0),
+            (CountKind::Jobs, "Job", 1),
+        ];
+        assert_eq!(
+            listed_partials(std::slice::from_ref(&blind), Some(&scope), listed),
+            vec![PartialCount {
+                count: CountKind::Pods,
+                counted: 4,
+                counted_in: vec!["team-checkout".to_string()],
+                refused_in: vec!["team-blind".to_string()],
+                unread_in: Vec::new(),
+            }]
+        );
+        let cluster_wide = OverviewUnread {
+            namespace: None,
+            ..blind
+        };
+        assert!(listed_partials(&[cluster_wide], Some(&scope), listed).is_empty());
+    }
+
     /// Marco's token may not list the cluster's namespaces; counted on every
     /// refresh, that was one more 403 every ten seconds for a badge that
     /// never shows. Fails if a refused count is asked again on the same
@@ -5829,7 +6063,7 @@ mod across_namespaces {
             scope_of(Some(vec![STAGING.to_string(), PROD.to_string()])).expect("a valid scope");
         let refused = RefusedCounts::default();
         for _ in 0..3 {
-            let counts = side_counts(&client, scope.as_deref(), &refused).await;
+            let (counts, _) = side_counts(&client, scope.as_deref(), &refused).await;
             assert_eq!(counts.secrets, None, "refused in one namespace is no total");
             assert_eq!(counts.namespaces, None);
             assert_eq!(counts.config_maps, Some(0));

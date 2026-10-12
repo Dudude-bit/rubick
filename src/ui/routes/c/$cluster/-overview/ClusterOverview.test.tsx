@@ -246,6 +246,7 @@ const FULL_OVERVIEW: ClusterOverviewData = {
   deployments: null,
   metricsAvailable: false,
   unread: [],
+  countsPartial: [],
 };
 
 describe("the pods Needs attention does not name", () => {

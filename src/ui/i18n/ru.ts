@@ -5011,6 +5011,12 @@ export const ru: Catalogue = {
     countsFailed: "Пересчитать не удалось. Это число посчитано в {at}.",
     countsFailedAll:
       "Пересчитать не удалось. На экране значения, посчитанные в {at}.",
+    countPartialAtLeast: "не меньше {n}, посчитаны не все пространства имён",
+    countPartialCounted: "Посчитано {n} в {names}.",
+    countPartialRefused:
+      "В {names} кластер отказался отдать список, так что всего может быть больше.",
+    countPartialUnread:
+      "В {names} список посчитать не удалось, так что всего может быть больше.",
     podsNotCounted: "поды не посчитаны {where}",
     notReadWhere: "не прочитано {where}",
     countsIn: "в {scope}",

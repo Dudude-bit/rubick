@@ -4477,6 +4477,12 @@ export const en = {
     countsLateAll: "Still reading the counts. These are from {at}.",
     countsFailed: "Could not count again. This count is from {at}.",
     countsFailedAll: "Could not count again. These are from {at}.",
+    countPartialAtLeast: "at least {n}, not every namespace counted",
+    countPartialCounted: "Counted {n} in {names}.",
+    countPartialRefused:
+      "The cluster refused the list in {names}, so there may be more.",
+    countPartialUnread:
+      "The list could not be counted in {names}, so there may be more.",
     podsNotCounted: "pods not counted {where}",
     notReadWhere: "not read {where}",
     countsIn: "in {scope}",

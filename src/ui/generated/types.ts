@@ -1895,6 +1895,7 @@ export interface ClusterOverview {
   servedFrom: OverviewSource;
   nextChangeAt: string | null;
   unread: OverviewUnread[];
+  countsPartial: PartialCount[];
 }
 
 export interface OverviewUnread {
@@ -1903,6 +1904,31 @@ export interface OverviewUnread {
   code: string;
   message: string;
 }
+
+export interface PartialCount {
+  count: CountKind;
+  counted: number;
+  countedIn: string[];
+  refusedIn: string[];
+  unreadIn: string[];
+}
+
+export type CountKind =
+  | "pods"
+  | "deployments"
+  | "statefulSets"
+  | "daemonSets"
+  | "jobs"
+  | "cronJobs"
+  | "services"
+  | "ingresses"
+  | "configMaps"
+  | "secrets"
+  | "endpoints"
+  | "persistentVolumeClaims"
+  | "serviceAccounts"
+  | "networkPolicies"
+  | "events";
 
 export interface RolloutCount {
   reason: string;

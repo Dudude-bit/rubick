@@ -84,7 +84,11 @@ import {
 } from "@/lib/namespace-scope";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
-import type { ListQuery, ResourceCounts } from "@/generated/types";
+import type {
+  ListQuery,
+  PartialCount,
+  ResourceCounts,
+} from "@/generated/types";
 import { errorWords } from "@/i18n/say";
 import { useT, type T as Translate } from "@/i18n/useT";
 
@@ -1142,20 +1146,26 @@ function NavCount({
     return <AttentionCount attention={attention} counts={counts} />;
 
   const count = item.count && overview.counts[item.count];
-  if (count == null) return null;
+  const age = countAge(
+    counts,
+    pageFollows ||
+      (item.count !== undefined && counts.followed.has(item.count)),
+    t
+  );
+  const behind = (heldAt !== null || late || failed) && HELD_CLASS;
+  if (count == null) {
+    const partial = overview.countsPartial?.find(
+      (each) => each.count === item.count
+    );
+    return partial ? (
+      <PartialCountMark partial={partial} age={age} className={behind} />
+    ) : null;
+  }
   return (
     <span
-      className={cn(
-        "ml-auto text-[11px] text-fg-fnt",
-        (heldAt !== null || late || failed) && HELD_CLASS
-      )}
+      className={cn("ml-auto text-[11px] text-fg-fnt", behind)}
       title={[
-        countAge(
-          counts,
-          pageFollows ||
-            (item.count !== undefined && counts.followed.has(item.count)),
-          t
-        ),
+        age,
         scoped && missing && missing.missing.length > 0
           ? missingWords(missing, t)
           : null,
@@ -1164,6 +1174,46 @@ function NavCount({
         .join("\n")}
     >
       {count}
+    </span>
+  );
+}
+
+/** A count some namespaces of the scope answered and others refused: what was counted, as a floor, beside a lock. */
+function PartialCountMark({
+  partial,
+  age,
+  className,
+}: {
+  partial: PartialCount;
+  age: string;
+  className: string | false;
+}) {
+  const t = useT();
+  const where = (names: readonly string[]) => listWords(names, t);
+  const said = [
+    t("cluster", "countPartialCounted", {
+      n: partial.counted,
+      names: where(partial.countedIn),
+    }),
+    partial.refusedIn.length > 0
+      ? t("cluster", "countPartialRefused", { names: where(partial.refusedIn) })
+      : null,
+    partial.unreadIn.length > 0
+      ? t("cluster", "countPartialUnread", { names: where(partial.unreadIn) })
+      : null,
+  ].filter(Boolean);
+  return (
+    <span
+      className={cn(
+        "ml-auto flex items-center gap-1 text-[11px] text-fg-fnt",
+        className
+      )}
+      title={[...said, age].filter(Boolean).join("\n")}
+      aria-label={t("cluster", "countPartialAtLeast", { n: partial.counted })}
+      data-testid="partial-count"
+    >
+      <Lock className="h-2.5 w-2.5 flex-none" aria-hidden="true" />
+      {`${partial.counted}+`}
     </span>
   );
 }
