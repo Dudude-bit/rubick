@@ -33,6 +33,21 @@ describe("a Job's status in the list", () => {
     expect(screen.getByText("Failed")).toHaveClass("text-err");
     expect(screen.getByText("DeadlineExceeded")).toBeInTheDocument();
   });
+
+  /** Lena read "Fai… BackoffLimitEx…": fails if the badge can shrink beside its reason or the failed pods, which give way instead. */
+  it("keeps the badge whole and lets what follows it give way", () => {
+    render(
+      <JobStatusCell
+        job={{
+          status: "Failed",
+          failed: 7,
+          failure: { reason: "BackoffLimitExceeded", message: null },
+        }}
+      />
+    );
+    expect(screen.getByText("Failed").closest(".flex-none")).not.toBeNull();
+    expect(screen.getByText("BackoffLimitExceeded")).toHaveClass("truncate");
+  });
 });
 
 describe("a Job's status word in Russian", () => {

@@ -4,11 +4,13 @@ import { CircleX, ClipboardCopy, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
-import { EnvironmentBlocks } from "./diagnostics/EnvironmentBlocks";
+import {
+  EnvironmentBlocks,
+  EnvironmentBlocksReading,
+} from "./diagnostics/EnvironmentBlocks";
 import { FindingsList } from "./diagnostics/FindingsList";
 import { PerformancePanel } from "./diagnostics/PerformancePanel";
 import { asMarkdown } from "./diagnostics/report";
@@ -16,25 +18,27 @@ import { useT } from "@/i18n/useT";
 import { cn, formatWhen } from "@/lib/utils";
 import { usePrivacyStore } from "@/stores/privacyStore";
 
-const ENVIRONMENT_BLOCKS = 7;
-
-/** The environment blocks' height while the machine is read, so nothing below moves under the pointer when they land. */
+/**
+ * The page while the machine is read, in the room the read page takes when
+ * it finds nothing wrong: the all-clear sentence's lines under the reading
+ * one, and the blocks' own rows. Start sat 10 px lower until the read landed.
+ */
 function Reading() {
   const t = useT();
   return (
     <div data-testid="diagnostics-reading">
-      <p className="min-h-12 max-w-[72ch] text-xs text-fg-mut">
-        {t("settings", "diagnosticsReading")}
-      </p>
-      <div className="mt-6" aria-hidden="true">
-        {Array.from({ length: ENVIRONMENT_BLOCKS }, (_, index) => (
-          <div key={index} className="border-t border-hair py-3">
-            <div className="flex h-4 items-center">
-              <Skeleton className="h-2.5 w-36" />
-            </div>
-          </div>
-        ))}
+      <div className="grid max-w-[72ch]">
+        <p
+          aria-hidden="true"
+          className="invisible col-start-1 row-start-1 text-xs"
+        >
+          {t("settings", "diagnosticsAllClear")}
+        </p>
+        <p className="col-start-1 row-start-1 text-xs text-fg-mut">
+          {t("settings", "diagnosticsReading")}
+        </p>
       </div>
+      <EnvironmentBlocksReading />
     </div>
   );
 }

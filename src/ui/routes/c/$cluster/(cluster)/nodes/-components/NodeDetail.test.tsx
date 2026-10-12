@@ -463,7 +463,9 @@ describe("the pods on the node", () => {
 
     const whole = (text: string) => (_: string, el: Element | null) =>
       el?.tagName === "SPAN" && el.textContent === text;
-    expect(await screen.findByText(whole("39/110 · 35%"))).toBeInTheDocument();
+    expect(
+      await screen.findByText(whole("39/110 · 35.5%"))
+    ).toBeInTheDocument();
     const row = screen
       .getAllByRole("row")
       .find((tr) => tr.firstElementChild?.textContent === "pods")!;

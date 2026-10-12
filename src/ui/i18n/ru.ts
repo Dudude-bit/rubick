@@ -1367,6 +1367,7 @@ export const ru: Catalogue = {
       "Потяните, чтобы изменить ширину · двойной щелчок вернёт исходную",
     more: "Ещё",
     moreActions: "Другие действия",
+    foldedActions: "В этом меню: {list}",
     goBack: "Вернуться",
     show: "Показать",
     hide: "Скрыть",
@@ -5390,6 +5391,7 @@ export const ru: Catalogue = {
     themeLight: "Светлая",
     themeDark: "Тёмная",
     themeSystem: "Системная",
+    themeNotSaved: "Тема не сохранена, при следующем запуске откроется прежняя",
     resourceColouring: "Цвет ресурсов",
     resourceColouringHint:
       "Цвет различает виды ресурсов и даёт каждому объекту постоянный оттенок. «Минимально» оставляет только значок.",

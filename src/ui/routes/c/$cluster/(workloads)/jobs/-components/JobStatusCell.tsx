@@ -12,11 +12,14 @@ export function JobStatusCell({
   const t = useT();
   return (
     <span className="inline-flex min-w-0 items-baseline gap-1.5">
-      <StatusBadge status={job.status}>
-        {ownStatusWord(job.status, t)}
-      </StatusBadge>
+      {/* The badge stays whole; what follows it gives way. */}
+      <span className="flex-none">
+        <StatusBadge status={job.status}>
+          {ownStatusWord(job.status, t)}
+        </StatusBadge>
+      </span>
       {job.status === "Retrying" && (
-        <span className="text-[11px] tabular-nums text-warn">
+        <span className="truncate text-[11px] tabular-nums text-warn">
           {t("count", "failedPods", { n: job.failed })}
         </span>
       )}

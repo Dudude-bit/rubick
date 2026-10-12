@@ -96,14 +96,21 @@ impl AppConfig {
     /// - Config file cannot be read
     /// - Config file contains invalid TOML
     pub fn load() -> Result<Self> {
-        let config_path = Self::config_path()?;
+        Self::load_from(&Self::config_path()?)
+    }
 
+    /// [`load`](Self::load), from `config_path`.
+    ///
+    /// # Errors
+    ///
+    /// As [`load`](Self::load), less the config directory.
+    pub fn load_from(config_path: &Path) -> Result<Self> {
         if config_path.exists() {
             // A config written by an older version is world-readable and holds
             // credentials. Reading it is the moment we know it exists.
-            private_file::harden(&config_path);
+            private_file::harden(config_path);
 
-            let content = std::fs::read_to_string(&config_path)
+            let content = std::fs::read_to_string(config_path)
                 .map_err(|e| Error::Config(format!("Failed to read config: {e}")))?;
 
             let config: Self = toml::from_str(&content)

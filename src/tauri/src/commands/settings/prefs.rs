@@ -5,7 +5,7 @@ use crate::config::{ClusterPreferences, RecentItem, UpdaterConfig, YamlHistoryEn
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 
-use super::helpers::{read_config, with_config};
+use super::helpers::{read_config, with_config, with_config_in_background};
 
 // ============================================================================
 // AppInfo (build/version metadata)
@@ -61,14 +61,17 @@ pub fn get_theme_config() -> Result<ThemeConfig> {
     })
 }
 
+/// Off the main thread: the window is already in the new theme and must not
+/// wait for the disk to say so.
 #[tauri::command]
-pub fn save_theme_config(theme: ThemeConfig) -> Result<()> {
-    with_config(|config| {
+pub async fn save_theme_config(theme: ThemeConfig) -> Result<()> {
+    with_config_in_background(move |config| {
         config.theme.theme = theme.theme;
         config.theme.accent_color = theme.accent_color;
         config.theme.font_size = theme.font_size;
         config.theme.compact = theme.compact;
     })
+    .await
 }
 
 // ============================================================================
@@ -197,4 +200,23 @@ pub fn save_cluster_preferences(
             config.cluster_preferences.scopes.insert(ctx, scope);
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{save_theme_config, ThemeConfig};
+
+    /// A sync command runs on the thread that draws the window, so the theme
+    /// switch landed when the save returned. Fails to build if the save stops
+    /// being a future.
+    #[test]
+    fn the_theme_save_never_runs_on_the_window_thread() {
+        fn deferred<F: std::future::Future>(_: F) {}
+        deferred(save_theme_config(ThemeConfig {
+            theme: "light".into(),
+            accent_color: "#3b82f6".into(),
+            font_size: 14,
+            compact: false,
+        }));
+    }
 }

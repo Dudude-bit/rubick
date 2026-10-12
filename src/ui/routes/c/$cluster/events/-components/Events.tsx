@@ -54,6 +54,7 @@ import { RefusalWayOut, UnreadList } from "../../-list/UnreadList";
 import { useListRefusal } from "../../-list/useListRefusal";
 import { StaleRows } from "../../-list/StaleRows";
 import { KindAbout } from "@/components/object/KindAbout";
+import { HeldLines } from "../../-list/HeldLines";
 import { ShareScreenAction } from "@/components/share/ShareAction";
 import { useShareSection } from "@/components/share/screen-share";
 import { eventsFiltersSection } from "./events-share";
@@ -576,7 +577,11 @@ export function Events() {
     >
       <SectionHeader
         title="Events"
-        description={<KindAbout kind={ResourceType.Event} />}
+        description={
+          <HeldLines>
+            <KindAbout kind={ResourceType.Event} />
+          </HeldLines>
+        }
         countYields
         count={
           showSkeleton || nothingRead ? undefined : (

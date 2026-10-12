@@ -177,14 +177,14 @@ describe("UsageRow without a denominator", () => {
 
   /**
    * Lena's node page read pods "5/110 · 5%" in Headroom and "5 · 4%" in its
-   * Resources table. Fails if this row rounds a share the table, like
-   * kubectl describe node, cuts down.
+   * Resources table. Fails if this row writes a share another way than the
+   * table: to a tenth, under the whole number kubectl describe node prints.
    */
-  it("cuts a share down to whole per cent, as the node's table does", () => {
+  it("writes a share as the node's table does", () => {
     const { container } = render(
       <UsageRow label="Pods" used={5} total={110} type="count" />
     );
-    expect(container.textContent).toContain("· 4%");
+    expect(container.textContent).toContain("· 4.5%");
   });
 
   it("still draws the fill when both numbers are real", () => {

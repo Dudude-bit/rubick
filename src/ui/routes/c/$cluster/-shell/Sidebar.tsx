@@ -380,7 +380,9 @@ export function Sidebar({
         <nav
           ref={attachRail}
           className={cn(
-            "min-h-0 flex-1 overflow-y-auto scrollbar-thin px-1.5 pb-2.5 pt-1",
+            // In a lane: WebKit's overlay scrollbar lay over the counts and
+            // lock marks and took their pointer.
+            "min-h-0 flex-1 overflow-y-auto scrollbar-lane px-1.5 pb-2.5 pt-1",
             railFade
           )}
         >

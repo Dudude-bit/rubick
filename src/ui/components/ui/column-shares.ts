@@ -1,15 +1,18 @@
 /** WebKitGTK's overlay scrollbar takes the pointer over a port's last 21px. */
 export const SCROLLBAR_REACH = 24;
 export const ACTIONS_CELL_GUTTER = { paddingRight: SCROLLBAR_REACH };
+/** A cell's own padding on either side. */
+export const CELL_PAD_PX = 10;
 
 /**
  * The width the actions cell needs, from what it actually holds: a 20px icon
- * and a 2px gap each, the cell's own 10px padding on the left and the
- * scrollbar's reach on the right. TanStack's default is 150, a name column's
- * worth of the table reserved for two buttons, on every list in the app.
+ * and a 2px gap each, the cell's own 10px padding on the left and `gutter` on
+ * the right, the overlay scrollbar's reach unless the port draws its own in a
+ * lane. TanStack's default is 150, a name column's worth of the table
+ * reserved for two buttons, on every list in the app.
  */
-export const actionsColumnSize = (count: number) =>
-  10 + SCROLLBAR_REACH + count * 22;
+export const actionsColumnSize = (count: number, gutter = SCROLLBAR_REACH) =>
+  CELL_PAD_PX + gutter + count * 22;
 
 /** A column as the layout sees it: its size in units, and the pixels it never goes under. */
 export interface ColumnSpec {

@@ -60,7 +60,8 @@ import {
 import { useDisplaySettingsStore } from "@/stores/displaySettingsStore";
 import { buildTableRows, type BodyItem } from "./data-table-rows";
 import {
-  ACTIONS_CELL_GUTTER,
+  CELL_PAD_PX,
+  SCROLLBAR_REACH,
   actionsColumnSize,
   tableLayout,
   yieldedColumns,
@@ -205,6 +206,9 @@ const ESTIMATED_ROW_PX = { compact: 23, comfortable: 33 } as const;
 /** How many rows either side of the viewport stay mounted. */
 const OVERSCAN = 12;
 
+/** Longer than any platform's double-click interval, so a first click from earlier never stands in for this one's. */
+const DOUBLE_CLICK_MS = 1500;
+
 /** Read off the table's attribute, so a density switch restyles rows instead of drawing them. */
 const CELL_PADDING = "px-2.5 py-2 group-data-[density=compact]/table:py-[3px]";
 
@@ -226,6 +230,8 @@ const SIDEWAYS_LANE = { overflowX: "scroll", paddingBottom: 6 } as const;
 
 /** The first column stays put while a wide table scrolls under it, so every row still says which object it is. */
 const PINNED = "sticky left-0 z-[1] bg-canvas";
+/** The actions cell's right padding, which the table sets: a page's overlay scrollbar reaches over it, a port's laned one does not. */
+const ACTIONS_GUTTER = { paddingRight: "var(--actions-gutter)" };
 /** Opaque, so the row's own tint and selection ring are drawn again on top of it. */
 const PINNED_ROW_TINT =
   "group-hover:bg-[image:linear-gradient(var(--color-hover),var(--color-hover))] group-aria-selected:bg-[image:linear-gradient(var(--color-hover),var(--color-hover))] group-aria-selected:shadow-[inset_1px_0_var(--color-info),inset_0_1px_var(--color-info),inset_0_-1px_var(--color-info)]";
@@ -233,6 +239,7 @@ const PINNED_ROW_TINT =
 /** What a row does when it is used, read at that moment from the table. */
 interface RowEvents<TData extends RowData> {
   gesture: (row: TData, event: React.MouseEvent) => void;
+  menuAt: (rowId: string, at: { x: number; y: number }) => void;
   openPage: (row: TData, event: React.MouseEvent) => void;
   menu: (row: TData, index: number, event: React.MouseEvent) => void;
   key: (event: React.KeyboardEvent, index: number, row: TData) => void;
@@ -278,9 +285,7 @@ function RowCellsView<TData extends RowData>({
             pinned && index === 0 && [PINNED, PINNED_ROW_TINT]
           )}
           style={
-            cell.column.id === ACTIONS_COLUMN_ID
-              ? ACTIONS_CELL_GUTTER
-              : undefined
+            cell.column.id === ACTIONS_COLUMN_ID ? ACTIONS_GUTTER : undefined
           }
         >
           {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -402,18 +407,25 @@ const RowActions = React.createContext<QuickAction<never>[]>([]);
 
 const NO_ACTIONS: QuickAction<never>[] = [];
 
+/** Set while the row's buttons are folded into one: opens the row's menu at a point. */
+const FoldedActions = React.createContext<
+  ((rowId: string, at: { x: number; y: number }) => void) | null
+>(null);
+
 function RowActionsProvider<TData extends RowData>({
   actions,
+  folded,
   children,
 }: {
   actions: QuickAction<TData>[] | undefined;
+  folded: React.ContextType<typeof FoldedActions>;
   children: React.ReactNode;
 }) {
   return (
     <RowActions.Provider
       value={(actions as unknown as QuickAction<never>[]) ?? NO_ACTIONS}
     >
-      {children}
+      <FoldedActions.Provider value={folded}>{children}</FoldedActions.Provider>
     </RowActions.Provider>
   );
 }
@@ -422,6 +434,7 @@ function ActionsCell<TData extends RowData>({ row }: { row: Row<TData> }) {
   const actions = React.useContext(
     RowActions
   ) as unknown as QuickAction<TData>[];
+  const fold = React.useContext(FoldedActions);
   return (
     // The icon buttons are 20px so their hit area can stay 24px, which is 4px
     // more than a compact row's line box. The negative margin lets that
@@ -431,13 +444,18 @@ function ActionsCell<TData extends RowData>({ row }: { row: Row<TData> }) {
       data-quick-actions
       className="-my-0.5 flex items-center justify-end gap-0.5"
     >
-      <QuickActions item={row.original} actions={actions} />
+      <QuickActions
+        item={row.original}
+        actions={actions}
+        folded={fold ? (at) => fold(row.id, at) : undefined}
+      />
     </div>
   );
 }
 
 function createActionsColumn<TData extends RowData>(
-  count: number
+  count: number,
+  gutter: number
 ): ColumnDef<TData> {
   return {
     id: ACTIONS_COLUMN_ID,
@@ -445,8 +463,8 @@ function createActionsColumn<TData extends RowData>(
     // The one reference that matters. The column object around it may be
     // rebuilt as often as it likes.
     cell: ActionsCell,
-    size: actionsColumnSize(count),
-    meta: { floor: actionsColumnSize(count) },
+    size: actionsColumnSize(count, gutter),
+    meta: { floor: actionsColumnSize(count, gutter) },
     enableSorting: false,
     enableHiding: false,
   };
@@ -765,18 +783,6 @@ function DataTableInner<TData extends RowData>({
 
   const shouldVirtualScroll = enableVirtualScroll ?? isLong;
 
-  // Keyed on the count, not the array: the cell renderer reads the array from
-  // the context, and the column has nothing else to learn from it.
-  const actionCount = quickActions?.length ?? 0;
-  const columnsWithActions = React.useMemo(() => {
-    if (actionCount === 0) return columns;
-    // Drop any column already claiming the id, so it cannot appear twice.
-    const filteredColumns = columns.filter(
-      (col) => !CONTROL_COLUMNS.has(col.id ?? "")
-    );
-    return [...filteredColumns, createActionsColumn<TData>(actionCount)];
-  }, [columns, actionCount]);
-
   // Keyed by what the table lists rather than by `tableId`, which is a
   // `useId` and new on every mount — a width that forgot itself on the way to
   // the next page is a control that does not hold. A table with no label
@@ -883,12 +889,22 @@ function DataTableInner<TData extends RowData>({
     };
   }, []);
 
+  // Drop any column already claiming the actions' id, so it cannot appear twice.
+  const actionCount = quickActions?.length ?? 0;
+  const dataColumns = React.useMemo(
+    () =>
+      actionCount === 0
+        ? columns
+        : columns.filter((col) => !CONTROL_COLUMNS.has(col.id ?? "")),
+    [columns, actionCount]
+  );
+
   // Per column, from every row the table holds rather than the ones a
   // search leaves, so typing does not move the columns.
-  const bounds = React.useMemo(() => {
+  const dataBounds = React.useMemo(() => {
     void fonts;
     return new Map(
-      columnsWithActions.map((column) => [
+      dataColumns.map((column) => [
         columnIdOf(column),
         {
           floor: columnFloor(column, t, data),
@@ -896,23 +912,65 @@ function DataTableInner<TData extends RowData>({
         },
       ])
     );
-  }, [columnsWithActions, data, t, fonts]);
+  }, [dataColumns, data, t, fonts]);
 
-  const yielded = React.useMemo(
+  // A filled table's port draws its own scrollbar in a lane, so only a table
+  // the page scrolls keeps the room the page's overlay scrollbar reaches over.
+  const gutter = fill ? CELL_PAD_PX : SCROLLBAR_REACH;
+  const dataYields = React.useMemo(
     () =>
-      yieldedColumns(
-        columnsWithActions.flatMap((column) => {
-          const id = columnIdOf(column);
-          if (columnVisibility[id] === false) return [];
-          const meta = column.meta as AppColumnMeta | undefined;
-          return [
-            { id, floor: bounds.get(id)?.floor ?? 0, yields: meta?.yields },
-          ];
-        }),
-        portWidth
-      ),
-    [columnsWithActions, columnVisibility, bounds, portWidth]
+      dataColumns.flatMap((column) => {
+        const id = columnIdOf(column);
+        if (columnVisibility[id] === false) return [];
+        const meta = column.meta as AppColumnMeta | undefined;
+        const floor = dataBounds.get(id)?.floor ?? 0;
+        return [{ id, floor, yields: meta?.yields }];
+      }),
+    [dataColumns, columnVisibility, dataBounds]
   );
+  // The row's buttons fold into one that opens its menu, which offers them
+  // all, wherever that keeps a column the full row would hide, or a sideways
+  // scroll away: Lena's lists hid columns beside room held for buttons drawn
+  // only under the pointer.
+  const { yielded, foldActions } = React.useMemo(() => {
+    const laidOutWith = (slots: number) => {
+      if (actionCount === 0) return yieldedColumns(dataYields, portWidth);
+      const actions = {
+        id: ACTIONS_COLUMN_ID,
+        floor: actionsColumnSize(slots, gutter),
+      };
+      return yieldedColumns([...dataYields, actions], portWidth);
+    };
+    const full = laidOutWith(actionCount);
+    if (!onRowMenu || actionCount < 2 || portWidth <= 0)
+      return { yielded: full, foldActions: false };
+    const kept = dataYields.filter((column) => !full.includes(column.id));
+    const scrolls =
+      kept.reduce((sum, column) => sum + column.floor, 0) +
+        actionsColumnSize(actionCount, gutter) >
+      portWidth;
+    const folded = laidOutWith(1);
+    return folded.length < full.length || scrolls
+      ? { yielded: folded, foldActions: true }
+      : { yielded: full, foldActions: false };
+  }, [dataYields, actionCount, gutter, onRowMenu, portWidth]);
+  const actionSlots = foldActions ? 1 : actionCount;
+
+  // Keyed on the count, not the array: the cell renderer reads the array from
+  // the context, and the column has nothing else to learn from it.
+  const columnsWithActions = React.useMemo(
+    () =>
+      actionCount === 0
+        ? dataColumns
+        : [...dataColumns, createActionsColumn<TData>(actionSlots, gutter)],
+    [dataColumns, actionCount, actionSlots, gutter]
+  );
+  const bounds = React.useMemo(() => {
+    if (actionCount === 0) return dataBounds;
+    const floor = actionsColumnSize(actionSlots, gutter);
+    return new Map(dataBounds).set(ACTIONS_COLUMN_ID, { floor, ideal: 0 });
+  }, [dataBounds, actionCount, actionSlots, gutter]);
+
   // By the ids rather than the array, so a resize that hides nothing new
   // leaves every row's props alone.
   const yieldedKey = yielded.join("\n");
@@ -1297,10 +1355,38 @@ function DataTableInner<TData extends RowData>({
   );
 
   const rowEvents = React.useRef<RowEvents<TData> | null>(null);
+  const openRowMenuAt = React.useCallback(
+    (rowId: string, at: { x: number; y: number }) =>
+      rowEvents.current?.menuAt(rowId, at),
+    []
+  );
+  // A double click acts where its first click landed: that click can open a
+  // peek that reflows the rows, and the second one then hits the row above.
+  const firstClick = React.useRef<{
+    row: TData;
+    target: HTMLElement;
+    at: number;
+  } | null>(null);
   React.useLayoutEffect(() => {
     rowEvents.current = {
-      gesture: handleRowGesture,
-      openPage: (row, event) => {
+      gesture: (row, event) => {
+        if (event.detail > 1) return;
+        firstClick.current = {
+          row,
+          target: event.target as HTMLElement,
+          at: event.timeStamp,
+        };
+        handleRowGesture(row, event);
+      },
+      openPage: (pointed, event) => {
+        const first =
+          firstClick.current &&
+          event.timeStamp - firstClick.current.at < DOUBLE_CLICK_MS
+            ? firstClick.current
+            : null;
+        firstClick.current = null;
+        const row = first?.row ?? pointed;
+        const target = first?.target ?? (event.target as HTMLElement);
         const href = getRowHref?.(row);
         if (!href || !peekOfRow(row, getRowHref, getRowPeek)) return;
         // The same places a single click keeps its hands off, so the two
@@ -1309,7 +1395,7 @@ function DataTableInner<TData extends RowData>({
         // its owner) keeps the double click; the row's own name is where the
         // eye goes when told "double click the row", so it must not be the
         // one spot where nothing happens.
-        const control = controlAt(event.target as HTMLElement);
+        const control = controlAt(target);
         if (
           control &&
           !(control.tagName === "A" && control.getAttribute("href") === href)
@@ -1317,6 +1403,10 @@ function DataTableInner<TData extends RowData>({
           return;
         }
         navigate({ href });
+      },
+      menuAt: (rowId, at) => {
+        const index = ordered.findIndex((row) => row.id === rowId);
+        if (index >= 0) openMenu(index, at);
       },
       menu: (row, index, event) => {
         const link = (event.target as HTMLElement).closest("a");
@@ -1419,7 +1509,10 @@ function DataTableInner<TData extends RowData>({
   // the height a target rather than a ceiling and strand the count line at
   // the bottom of a mostly empty window.
   return (
-    <RowActionsProvider actions={quickActions}>
+    <RowActionsProvider
+      actions={quickActions}
+      folded={foldActions ? openRowMenuAt : null}
+    >
       <div className={cn("flex flex-col gap-2", fill && "min-h-0")}>
         <div className="flex flex-none flex-wrap items-center justify-between gap-2">
           {/* A search field is a text entry, not a panel: the box only
@@ -1522,7 +1615,12 @@ function DataTableInner<TData extends RowData>({
             // content that changes on every watch tick.
             className="group/table table-fixed"
             data-density={tableDensity}
-            style={layout.scrolls ? { minWidth: layout.span } : undefined}
+            style={
+              {
+                ...(layout.scrolls ? { minWidth: layout.span } : undefined),
+                "--actions-gutter": `${gutter}px`,
+              } as React.CSSProperties
+            }
             containerClassName={cn("scrollbar-lane", fill && "min-h-0")}
             // A filled table takes its bound from the flex row above; only an
             // unfilled one falls back to the fixed port.

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient } from "@tanstack/react-query";
 
@@ -9,7 +9,7 @@ vi.mock("@/lib/commands", () => ({
 
 import { commands } from "@/lib/commands";
 
-import { renderWithProviders } from "@/test/render";
+import { renderWithRouter } from "@/test/render";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useMetricsNoticeStore } from "@/stores/metricsNoticeStore";
 import { MetricsStatusBanner } from "./MetricsStatusBanner";
@@ -34,8 +34,8 @@ describe("MetricsStatusBanner", () => {
    * status "available". Without the unread namespace named, its pods' blank
    * samples looked like "not scraped yet" and no banner said otherwise.
    */
-  it("names a namespace whose metrics were refused beside ones that answered", () => {
-    renderWithProviders(
+  it("names a namespace whose metrics were refused beside ones that answered", async () => {
+    await renderWithRouter(
       <MetricsStatusBanner
         status={available}
         unread={[
@@ -54,8 +54,8 @@ describe("MetricsStatusBanner", () => {
   });
 
   /** Every namespace answered: there is nothing to say. */
-  it("says nothing when every namespace answered", () => {
-    const { container } = renderWithProviders(
+  it("says nothing when every namespace answered", async () => {
+    const { container } = await renderWithRouter(
       <MetricsStatusBanner status={available} unread={[]} />
     );
     expect(container).toBeEmptyDOMElement();
@@ -66,8 +66,8 @@ describe("MetricsStatusBanner", () => {
    * the server's words reach the visible line, or if a missing install is
    * drawn in the red a broken workload wears.
    */
-  it("says metrics-server is missing in words, with the 404 folded away", () => {
-    renderWithProviders(<MetricsStatusBanner status={notInstalled} />);
+  it("says metrics-server is missing in words, with the 404 folded away", async () => {
+    await renderWithRouter(<MetricsStatusBanner status={notInstalled} />);
 
     const banner = bannerOf(
       "metrics-server is not installed, so CPU and memory are not shown"
@@ -77,8 +77,8 @@ describe("MetricsStatusBanner", () => {
   });
 
   /** Fails if a refusal goes back to the error tone it cannot be fixed from. */
-  it("draws a refusal calmly, not as an error", () => {
-    renderWithProviders(
+  it("draws a refusal calmly, not as an error", async () => {
+    await renderWithRouter(
       <MetricsStatusBanner status={{ status: "forbidden", message: null }} />
     );
     const banner = bannerOf(
@@ -93,7 +93,7 @@ describe("MetricsStatusBanner", () => {
    * does not hold for the cluster, or if it hides it for every cluster.
    */
   it("can be put away for one cluster and stays away there", async () => {
-    const { unmount } = renderWithProviders(
+    const { unmount } = await renderWithRouter(
       <MetricsStatusBanner status={notInstalled} />
     );
     await userEvent.click(
@@ -102,14 +102,14 @@ describe("MetricsStatusBanner", () => {
     expect(screen.queryByText(/metrics-server is not installed/)).toBeNull();
     unmount();
 
-    const again = renderWithProviders(
+    const again = await renderWithRouter(
       <MetricsStatusBanner status={notInstalled} />
     );
     expect(screen.queryByText(/metrics-server is not installed/)).toBeNull();
     again.unmount();
 
     useClusterStore.setState({ currentContext: "acme-prod" });
-    renderWithProviders(<MetricsStatusBanner status={notInstalled} />);
+    await renderWithRouter(<MetricsStatusBanner status={notInstalled} />);
     expect(
       bannerOf(
         "metrics-server is not installed, so CPU and memory are not shown"
@@ -125,7 +125,7 @@ describe("MetricsStatusBanner", () => {
   it("makes Check again forget the remembered answer before it reads", async () => {
     const client = new QueryClient();
     const refetch = vi.spyOn(client, "refetchQueries");
-    renderWithProviders(<MetricsStatusBanner status={notInstalled} />, {
+    await renderWithRouter(<MetricsStatusBanner status={notInstalled} />, {
       client,
     });
     await userEvent.click(screen.getByRole("button", { name: "Check again" }));
@@ -134,5 +134,32 @@ describe("MetricsStatusBanner", () => {
     expect(
       vi.mocked(commands.recheckMetrics).mock.invocationCallOrder[0]
     ).toBeLessThan(refetch.mock.invocationCallOrder[0]);
+  });
+
+  /**
+   * The banner sits above a list, and a peek opening beside the list made its
+   * sentences wrap onto more lines, moving every row under the pointer. Fails
+   * if its title or its sentence takes more lines beside a peek than before.
+   */
+  it("keeps its lines while a peek opens beside the list", async () => {
+    const rects = vi
+      .spyOn(HTMLElement.prototype, "getClientRects")
+      .mockImplementation(() => [new DOMRect()] as unknown as DOMRectList);
+    const { router } = await renderWithRouter(
+      <MetricsStatusBanner status={notInstalled} />,
+      { at: "/c/prod/pods" }
+    );
+    await act(() =>
+      router.navigate({ href: "/c/prod/pods?peek=pods%2Fns%2Fa-1" })
+    );
+    const title = screen.getByText(
+      "metrics-server is not installed, so CPU and memory are not shown"
+    );
+    expect(title.style.webkitLineClamp).toBe("1");
+    expect(
+      screen.getByText(/^Installing it is a job for whoever runs this cluster/)
+        .style.webkitLineClamp
+    ).toBe("1");
+    rects.mockRestore();
   });
 });

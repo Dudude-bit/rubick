@@ -169,4 +169,22 @@ describe("a kind name longer than its row", () => {
     const version = within(row).getByTitle("coordination.k8s.io/v1");
     expect(version).toHaveTextContent(/^v1$/);
   });
+
+  /**
+   * Lena read "ValidatingAdmissionPolicyBinding v." in Russian at 1024: the
+   * version gave way while the scope kept its words. Fails if the version
+   * can be cut, or the scope's words stop giving way first, whole on hover.
+   */
+  it("keeps the version whole and lets the scope's words give way", async () => {
+    catalog.answer = () => Promise.resolve(SERVED);
+    await draw();
+    const row = (await screen.findByText("TokenReview")).closest("li")!;
+    const version = within(row).getByTitle("authentication.k8s.io/v1");
+    expect(version).toHaveClass("flex-none");
+    expect(version).not.toHaveClass("truncate");
+    const scope = within(row).getByText("cluster-wide");
+    expect(scope).toHaveClass("truncate");
+    expect(scope.parentElement).toHaveAttribute("title", "cluster-wide");
+    expect(scope.parentElement?.parentElement).toHaveClass("shrink-[100]");
+  });
 });

@@ -28,6 +28,7 @@ import {
   WorkloadsPanel,
 } from "./health";
 import { podTotal, readyBetweenCrashes } from "./health-share";
+import { holdScroll } from "./scroll-anchor";
 import type { ClusterOverview as ClusterOverviewData } from "@/generated/types";
 import type { ReportStat } from "@/lib/report";
 import { useT, type T } from "@/i18n/useT";
@@ -36,6 +37,9 @@ import type { ListQuery } from "@/generated/types";
 
 /** What reading a namespace's overview needs first: its pods. */
 const PODS: ListQuery = { group: "", resource: "pods", namespaced: true };
+
+const holdsScroll = (page: HTMLDivElement | null) =>
+  page ? holdScroll(page) : undefined;
 
 /** The headline numbers for Share: what is broken, and what is serving. */
 function overviewStats(
@@ -195,7 +199,7 @@ export function ClusterOverview() {
   };
 
   return (
-    <div className="flex flex-col gap-[22px]">
+    <div ref={holdsScroll} className="flex flex-col gap-[22px]">
       <div className="flex items-center justify-end gap-3">
         <DataFreshness
           dataUpdatedAt={freshness.dataUpdatedAt}

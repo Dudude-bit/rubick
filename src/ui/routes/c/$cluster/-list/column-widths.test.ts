@@ -379,6 +379,68 @@ describe("the cells a narrow port draws at their floors", () => {
   );
 });
 
+describe("the Jobs status column", () => {
+  /**
+   * Lena read "Fai… BackoffLimitEx…" and "Повторя… 1 упавший под" in all
+   * namespaces at 1024 in Russian, with the Age column beside them half
+   * empty. Fails if the column's floor stops holding the widest badge with
+   * the reason or the failed pods it draws beside it, in either language.
+   */
+  it.each([
+    ["English", en],
+    ["Russian", ru],
+  ] as const)(
+    "holds a badge and what follows it whole in %s",
+    (_language, t) => {
+      const rows = [
+        {
+          status: "Failed",
+          failed: 6,
+          failure: { reason: "BackoffLimitExceeded" },
+        },
+        { status: "Retrying", failed: 1, failure: null },
+        { status: "Complete", failed: 0, failure: null },
+      ];
+      const columns = jobs();
+      const status = columns.findIndex((c) => nameOf(c) === "status");
+      const px = laidOut(columns, 640, t, rows).px[status];
+      const drawn = (word: string, beside: number) =>
+        word.length * 6.6 + 14 + 6 + beside + 20;
+      expect(px).toBeGreaterThanOrEqual(
+        drawn(
+          ownStatusWord("Failed", t) ?? "Failed",
+          "BackoffLimitExceeded".length * 6.6
+        )
+      );
+      expect(px).toBeGreaterThanOrEqual(
+        drawn(
+          ownStatusWord("Retrying", t) ?? "Retrying",
+          t("count", "failedPods", { n: 1 }).length * 6.2
+        )
+      );
+    }
+  );
+});
+
+describe("the Services type column", () => {
+  /**
+   * Lena read "ExternalName example…" in all namespaces at 1024 in Russian:
+   * the column was sized for the type alone. Fails if it stops holding an
+   * ExternalName's target and its copy mark whole beside a narrow window.
+   */
+  it("holds an ExternalName's target whole", () => {
+    const rows = [
+      { type: "ExternalName", externalName: "example.com" },
+      { type: "ClusterIP", externalName: null },
+    ];
+    const columns = services();
+    const type = columns.findIndex((c) => nameOf(c) === "type");
+    expect(laidOut(columns, 640, ru, rows).px[type]).toBeGreaterThanOrEqual(
+      "example.com".length * 7.2 + 14 + 20
+    );
+  });
+});
+
 describe("the CronJobs Suspend column", () => {
   /**
    * Lena read "Приостан…" in a column sized for "Suspended". Fails if the
@@ -642,6 +704,46 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
       expect(hidden).not.toContain("name");
     }
   );
+
+  /**
+   * Lena's Pods in all namespaces at 1024 in Russian scrolled sideways by
+   * the width of the four buttons drawn only under the pointer. Fails if the
+   * list, its buttons folded into one beside its laned scrollbar, still needs
+   * a sideways scroll, or hides the name, the status or the restarts for it.
+   */
+  it("fits Pods in all namespaces at 1024 in Russian without a sideways scroll", () => {
+    const rows = [
+      {
+        name: "named-port-demo-7954dcd89f-knkqs",
+        namespace: "team-checkout",
+        status: { display: "CreateContainerConfigError" },
+        nodeName: "k3d-rubick-live-agent-0",
+        restartCount: 830,
+      },
+    ];
+    const shown = pods.filter((c) => nameOf(c) !== "namespace");
+    const folded = { size: 1, meta: { floor: actionsColumnSize(1, 10) } };
+    const specs = [...shown, folded].map((c, index) => ({
+      id: index < shown.length ? nameOf(c) : "actions",
+      floor: columnFloor(c, ru, rows),
+      yields: (c as Column).meta?.yields,
+    }));
+    // The lane's 8px, then 20px less again: WebKit's glyphs run wider than
+    // the widths these floors are estimated at here.
+    for (const port of [PORT_1024 - 8, PORT_1024 - 28]) {
+      const hidden = yieldedColumns(specs, port);
+      const kept = specs.filter((spec) => !hidden.includes(spec.id));
+      expect(
+        kept.reduce((sum, spec) => sum + spec.floor, 0),
+        `at ${port}`
+      ).toBeLessThanOrEqual(port);
+      expect(hidden).not.toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/^(name|status|restarts)$/),
+        ])
+      );
+    }
+  });
 
   /**
    * Lena read "15 (13 мин наза…" on Pods with room beside the column. Fails

@@ -29,6 +29,10 @@ import { None } from "@/components/ui/none";
  */
 const EXTERNALLY_REACHABLE = new Set(["NodePort", "LoadBalancer"]);
 
+/** The most of an ExternalName's target the column keeps whole; a longer one ends in an ellipsis, whole on hover. */
+const TARGET_GLYPHS = 24;
+const COPY_MARK_PX = 14;
+
 export const columns = (): ColumnDef<ServiceInfo>[] => [
   createNameColumn<ServiceInfo>(ResourceType.Service),
   createNamespaceColumn<ServiceInfo>(),
@@ -38,7 +42,24 @@ export const columns = (): ColumnDef<ServiceInfo>[] => [
     header: columnHeader("columns", "type"),
     meta: {
       yields: 4,
-      floor: () => widestText(["ExternalName", "LoadBalancer"], "sans", 7) + 20,
+      // The type, or an ExternalName's target under it with its copy mark:
+      // sized for the type alone it read "example…".
+      floor: (_t, rows: readonly ServiceInfo[]) =>
+        Math.max(
+          widestText(["ExternalName", "LoadBalancer"], "sans", 7),
+          Math.min(
+            widestText(
+              rows.flatMap((row) =>
+                row.type === "ExternalName" && row.externalName
+                  ? [row.externalName]
+                  : []
+              ),
+              "mono",
+              7.2
+            ),
+            TARGET_GLYPHS * 7.2
+          ) + COPY_MARK_PX
+        ) + 20,
     },
     cell: ({ row }) => (
       <div className="flex min-w-0 flex-col">

@@ -1352,6 +1352,7 @@ export const en = {
     dragToResize: "Drag to resize · double-click to reset",
     more: "More",
     moreActions: "More actions",
+    foldedActions: "In this menu: {list}",
     goBack: "Go back",
     show: "Show",
     hide: "Hide",
@@ -4818,6 +4819,8 @@ export const en = {
     themeLight: "Light",
     themeDark: "Dark",
     themeSystem: "System",
+    themeNotSaved:
+      "Theme not saved, so the next start opens in the previous one",
     resourceColouring: "Resource colouring",
     resourceColouringHint:
       "Colour tells resource kinds apart and gives each object a stable tint. Minimal keeps the icon only.",

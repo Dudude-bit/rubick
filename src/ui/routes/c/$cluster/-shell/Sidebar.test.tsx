@@ -592,6 +592,19 @@ describe("a rail taller than the window", () => {
     }
   });
 
+  /**
+   * At 1440x900 Marco's pointer did nothing on the counts and lock marks at
+   * the right of every row: the rail's scrollbar was WebKit's overlay one,
+   * lying over them. Fails if the rail stops drawing it in a lane of its own.
+   */
+  it("draws its scrollbar beside the rows, not over their counts", async () => {
+    railOf(900);
+    await wrap(<Sidebar />);
+    const rail = screen.getByRole("navigation");
+    expect(rail).toHaveClass("scrollbar-lane");
+    expect(rail).not.toHaveClass("scrollbar-thin");
+  });
+
   /** Fails if a rail with nothing past its edges is faded anyway. */
   it("wears no fade when every row fits", async () => {
     railOf(600);

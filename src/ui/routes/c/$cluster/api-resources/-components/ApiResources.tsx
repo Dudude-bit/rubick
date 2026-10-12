@@ -136,6 +136,9 @@ function KindRow({ entry }: { entry: CatalogEntry }) {
     ? `${entry.group}/${entry.version}`
     : entry.version;
   const ScopeIcon = entry.namespaced ? FolderOpen : Globe;
+  const scope = entry.namespaced
+    ? t("apiResources", "namespaced")
+    : t("apiResources", "clusterWide");
   const name = (
     <>
       <KindIcon kind={entry.kind} className="h-3.5 w-3.5" />
@@ -149,40 +152,42 @@ function KindRow({ entry }: { entry: CatalogEntry }) {
       {listable(entry) ? (
         <RouteLink
           {...servedListLink(entry)}
-          className="-mx-1 flex max-w-full shrink-0 items-center gap-2 rounded px-1 hover:bg-hover"
+          className="-mx-1 flex min-w-0 items-center gap-2 rounded px-1 hover:bg-hover"
         >
           {name}
         </RouteLink>
       ) : (
-        <span className="flex max-w-full shrink-0 items-center gap-2">
-          {name}
-        </span>
+        <span className="flex min-w-0 items-center gap-2">{name}</span>
       )}
       <span
         // The group is the section's heading; repeating it pushed the version
         // itself off the end of a long kind's row.
-        className="min-w-0 shrink-[100] truncate font-mono text-[11px] text-fg-fnt"
+        className="flex-none font-mono text-[11px] text-fg-fnt"
         title={apiVersion}
       >
         {entry.version}
       </span>
-      <span className="ml-auto flex flex-none items-center gap-2 text-[11px]">
+      {/* The scope's words give way first, down to their icons, and the
+          version never: "ValidatingAdmissionPolicyBinding v." in Russian. */}
+      <span className="ml-auto flex min-w-0 shrink-[100] items-center gap-2 text-[11px]">
         {!listable(entry) && (
-          <span className="inline-flex items-center gap-1 text-fg-fnt">
-            <Ban className="h-3 w-3" aria-hidden="true" />
-            {t("apiResources", "notListable")}
+          <span
+            className="inline-flex min-w-0 items-center gap-1 text-fg-fnt"
+            title={t("apiResources", "notListable")}
+          >
+            <Ban className="h-3 w-3 flex-none" aria-hidden="true" />
+            <span className="truncate">{t("apiResources", "notListable")}</span>
           </span>
         )}
         <span
           className={cn(
-            "inline-flex items-center gap-1",
+            "inline-flex min-w-0 items-center gap-1",
             entry.namespaced ? "text-fg-mut" : "text-info"
           )}
+          title={scope}
         >
-          <ScopeIcon className="h-3 w-3" aria-hidden="true" />
-          {entry.namespaced
-            ? t("apiResources", "namespaced")
-            : t("apiResources", "clusterWide")}
+          <ScopeIcon className="h-3 w-3 flex-none" aria-hidden="true" />
+          <span className="truncate">{scope}</span>
         </span>
       </span>
     </li>

@@ -286,16 +286,100 @@ describe("DataTable rows", () => {
 
   /**
    * Marco's greyed trash said why only over the left of its glyph: WebKitGTK's
-   * overlay scrollbar takes a scrolling port's last 21px, and a pixel of hit
+   * overlay scrollbar takes a scrolling page's last 21px, and a pixel of hit
    * area hung below the last row made even a two-row list scroll. Fails if the
    * last button's cell gives up its gutter or the hit area outgrows the row.
    */
   it("keeps a row's last button clear of the scrollbar and its hit area inside the row", async () => {
     await renderTable({ quickAction: vi.fn() });
     const button = screen.getAllByRole("button", { name: "View" })[0];
-    expect(button.closest("td")).toHaveStyle({ paddingRight: "24px" });
+    expect(button.closest("td")?.style.paddingRight).toBe(
+      "var(--actions-gutter)"
+    );
+    expect(
+      screen.getByRole("table").style.getPropertyValue("--actions-gutter")
+    ).toBe("24px");
     expect(button.className).toContain("before:-inset-y-px");
     expect(button.className).not.toContain("before:-inset-0.5");
+  });
+
+  /**
+   * A list page's own port draws its scrollbar in a lane beside the rows, so
+   * the 24px kept for an overlay one was room taken from the columns. Fails
+   * if a filled table keeps more than a cell's padding after its buttons.
+   */
+  it("keeps only a cell's padding after the buttons of a table that fills its page", async () => {
+    await wrap(
+      <DataTable<Item>
+        columns={columns}
+        data={DATA}
+        getRowHref={href}
+        fill
+        quickActions={[{ icon: Eye, label: "View", onClick: vi.fn() }]}
+      />
+    );
+    expect(
+      screen.getByRole("table").style.getPropertyValue("--actions-gutter")
+    ).toBe("10px");
+  });
+
+  /**
+   * Lena's Pods and Nodes hid columns at 1024 while the room held for four
+   * buttons, drawn only under the pointer, sat empty beside them. Fails if a
+   * row's buttons stay unfolded where folding them keeps a column, if the one
+   * left does not open the row's menu on that row, or if they fold with room.
+   */
+  it("folds a row's buttons into its menu where that keeps a column", async () => {
+    const onRowMenu = vi.fn();
+    const actions = ["Logs", "Shell", "Delete"].map((label) => ({
+      icon: Eye,
+      label,
+      onClick: vi.fn(),
+    }));
+    const columnsOf: ColumnDef<Item>[] = [
+      { ...columns[0], size: 300, meta: { floor: 300 } },
+      {
+        accessorKey: "namespace",
+        header: "Namespace",
+        size: 150,
+        meta: { floor: 150, yields: 1 },
+      },
+    ];
+    const draw = async (port: number) => {
+      cleanup();
+      const width = vi
+        .spyOn(HTMLElement.prototype, "clientWidth", "get")
+        .mockReturnValue(port);
+      try {
+        await wrap(
+          <DataTable<Item>
+            columns={columnsOf}
+            data={DATA}
+            getRowHref={href}
+            fill
+            quickActions={actions}
+            onRowMenu={onRowMenu}
+          />
+        );
+      } finally {
+        width.mockRestore();
+      }
+    };
+
+    await draw(300 + 150 + 10 + 10 + 22 + 4);
+    expect(
+      screen.getByRole("columnheader", { name: "Namespace" })
+    ).toBeInTheDocument();
+    expect(screen.queryAllByRole("button", { name: "Logs" })).toHaveLength(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "More actions" })[1]);
+    expect(onRowMenu).toHaveBeenCalledWith(DATA[1], expect.any(Object));
+    await staysAt();
+
+    await draw(1000);
+    expect(screen.getAllByRole("button", { name: "Logs" })).toHaveLength(2);
+    expect(
+      screen.queryAllByRole("button", { name: "More actions" })
+    ).toHaveLength(0);
   });
 
   /**
@@ -376,6 +460,23 @@ describe("DataTable rows", () => {
     expect(tabs()).toHaveLength(1);
     fireEvent.doubleClick(whitespace());
     await goesTo("/c/prod/pods/ns/a-1");
+  });
+
+  /**
+   * Dana double clicked unready-demo and topology-demo's page opened: the
+   * peek her first click opened moved the rows down, and the second click
+   * landed on the row above. Fails if the second click of a double opens a
+   * peek of its own, or the double click opens any row but the first's.
+   */
+  it("opens the page of the row the first click of a double hit, wherever the second lands", async () => {
+    await renderTable();
+    fireEvent.click(screen.getByTestId("status-b-2"), { detail: 1 });
+    await goesTo("/c/prod/pods?peek=pods%2Fns%2Fb-2");
+    const above = whitespace();
+    fireEvent.click(above, { detail: 2 });
+    await staysAt("/c/prod/pods?peek=pods%2Fns%2Fb-2");
+    fireEvent.doubleClick(above, { detail: 2 });
+    await goesTo("/c/prod/pods/ns/b-2");
   });
 
   /**
