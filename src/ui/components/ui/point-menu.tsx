@@ -6,6 +6,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
 /**
  * A menu opened at a point rather than under a control: where the pointer
@@ -37,7 +38,16 @@ export function PointMenu({
           className="size-0"
         />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className={className}>
+      {/* As tall as its items where the window has the room: a row's menu
+          capped at 24rem hid Delete under a scroll with 90 px free below. */}
+      <DropdownMenuContent
+        align="start"
+        collisionPadding={8}
+        className={cn(
+          "max-h-(--radix-dropdown-menu-content-available-height)",
+          className
+        )}
+      >
         {children}
       </DropdownMenuContent>
     </DropdownMenu>,
