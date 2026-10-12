@@ -24,7 +24,7 @@ import { readLinkIntent } from "@/hooks/useLinkGesture";
 import { usePeek } from "@/hooks/usePeek";
 import { useNow } from "@/hooks/useNow";
 import { useRealtimeAge } from "@/hooks/useRealtimeAge";
-import { sayWords, spanWords } from "@/i18n/say";
+import { coverWords, sayWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
 import { queryKeys } from "@/lib/query-keys";
 import { ResourceType } from "@/lib/resource-registry";
@@ -143,7 +143,7 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
   );
   const span =
     story.firstAt !== null && story.lastAt !== null
-      ? spanWords(story.lastAt - story.firstAt, t, "alone")
+      ? coverWords(story.lastAt - story.firstAt, t, "alone")
       : null;
   const { subject } = story;
   const landing = landingOfStory(story);

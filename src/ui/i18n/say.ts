@@ -58,6 +58,37 @@ export function spanWords(
   );
 }
 
+/**
+ * How long a stretch of events lasted, never said shorter than it was: "within
+ * 1 hour" for events 1 h 43 min apart understated the stretch by 40%. Two units
+ * where one would round, the smaller one rounded up.
+ */
+export function coverWords(
+  ms: number,
+  t: T,
+  use: "inSentence" | "alone" = "inSentence"
+): string {
+  const minuteKey = use === "alone" ? "spanMinutes" : "spanMinutesInSentence";
+  const minutes = Math.max(1, Math.ceil(ms / MINUTE));
+  if (minutes < 60) return t("readings", minuteKey, { n: minutes });
+  const both = (larger: string, rest: number, smaller: string) =>
+    rest === 0 ? larger : t("readings", "spanAnd", { larger, smaller });
+  if (minutes < 24 * 60) {
+    const rest = minutes % 60;
+    return both(
+      t("readings", "spanHours", { n: Math.floor(minutes / 60) }),
+      rest,
+      t("readings", minuteKey, { n: rest })
+    );
+  }
+  const hours = Math.ceil(ms / HOUR);
+  return both(
+    t("readings", "spanDays", { n: Math.floor(hours / 24) }),
+    hours % 24,
+    t("readings", "spanHours", { n: hours % 24 })
+  );
+}
+
 /** A moment by the clock, with the day in front of it whenever it is not today. */
 export function momentWords(ms: number, now = Date.now()): string {
   const day = (at: number) => new Date(at).toDateString();
@@ -80,7 +111,8 @@ export function listWords(names: readonly string[], t: T): string {
  *
  * `spanMs` is resolved before the sentence rather than inside it: a duration
  * is itself counted words, and no language can hand another a substring of
- * its own plural. A value named `<name>AtMs` is a moment, said as `{<name>}`.
+ * its own plural. `coverMs` is a stretch events covered, said by
+ * {@link coverWords}. A value named `<name>AtMs` is a moment, said as `{<name>}`.
  */
 export function sayWords(saying: Saying, t: T): string {
   const source = saying.values ?? {};
@@ -94,6 +126,7 @@ export function sayWords(saying: Saying, t: T): string {
       values[name.slice(0, -"AtMs".length)] = momentWords(Number(value));
   }
   if ("spanMs" in values) values.span = spanWords(Number(values.spanMs), t);
+  if ("coverMs" in values) values.span = coverWords(Number(values.coverMs), t);
   return t("readings", saying.key, values);
 }
 

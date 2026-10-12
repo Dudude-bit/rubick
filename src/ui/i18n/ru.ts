@@ -3984,6 +3984,7 @@ export const ru: Catalogue = {
       many: "{n} минут",
       other: "{n} минуты",
     },
+    spanAnd: "{larger} {smaller}",
     spanMinutesInSentence: {
       one: "{n} минуту",
       few: "{n} минуты",

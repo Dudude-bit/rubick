@@ -3600,6 +3600,7 @@ export const en = {
     spanDays: { one: "{n} day", other: "{n} days" },
     spanHours: { one: "{n} hour", other: "{n} hours" },
     spanMinutes: { one: "{n} minute", other: "{n} minutes" },
+    spanAnd: "{larger} {smaller}",
     spanMinutesInSentence: { one: "{n} minute", other: "{n} minutes" },
     factShowThem: "Show them",
     factUpgrading: {
