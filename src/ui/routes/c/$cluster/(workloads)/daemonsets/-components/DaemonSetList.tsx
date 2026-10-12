@@ -12,6 +12,7 @@ import {
   createAgeColumn,
   createCpuColumn,
   createMemoryColumn,
+  yielding,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
 import { createRolloutColumn } from "../../-components/rollout-column";
@@ -21,21 +22,27 @@ type DaemonSetInfoWithMetrics = DaemonSetInfo & ResourceMetrics;
 export const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
   createNameColumn<DaemonSetInfoWithMetrics>(ResourceType.DaemonSet),
   createNamespaceColumn<DaemonSetInfoWithMetrics>(),
-  createCpuColumn<DaemonSetInfoWithMetrics>(),
-  createMemoryColumn<DaemonSetInfoWithMetrics>(),
+  yielding(createCpuColumn<DaemonSetInfoWithMetrics>(), 2),
+  yielding(createMemoryColumn<DaemonSetInfoWithMetrics>(), 1),
   // Three counts of nodes, so three columns as wide as their headers.
   {
     size: 90,
     id: "desired",
     header: columnHeader("columns", "desired"),
-    meta: { share: (row: DaemonSetInfoWithMetrics) => String(row.desired) },
+    meta: {
+      yields: 5,
+      share: (row: DaemonSetInfoWithMetrics) => String(row.desired),
+    },
     cell: ({ row }) => row.original.desired,
   },
   {
     size: 90,
     id: "current",
     header: columnHeader("columns", "current"),
-    meta: { share: (row: DaemonSetInfoWithMetrics) => String(row.current) },
+    meta: {
+      yields: 4,
+      share: (row: DaemonSetInfoWithMetrics) => String(row.current),
+    },
     cell: ({ row }) => row.original.current,
   },
   {
@@ -66,7 +73,7 @@ export const columns = (): ColumnDef<DaemonSetInfoWithMetrics>[] => [
     },
   },
   createRolloutColumn<DaemonSetInfoWithMetrics>(),
-  createAgeColumn<DaemonSetInfoWithMetrics>(),
+  yielding(createAgeColumn<DaemonSetInfoWithMetrics>(), 3),
 ];
 
 export const DaemonSetList = createWorkloadListPage<DaemonSetInfo>({

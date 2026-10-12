@@ -27,13 +27,14 @@ const port = (window: number, peek: boolean) =>
 function laidOut(
   columns: readonly ColumnDef<EventInfo>[],
   width: number,
-  t: T
+  t: T,
+  rows: readonly EventInfo[] = []
 ) {
   const layout = tableLayout(
     columns.map((column) => ({
       size: column.size ?? 150,
-      floor: columnFloor(column, t),
-      ideal: columnIdeal(column, t),
+      floor: columnFloor(column, t, rows),
+      ideal: columnIdeal(column, t, rows),
     })),
     width
   );
@@ -126,4 +127,43 @@ describe("the Events table with room", () => {
         expect(reason).toBeGreaterThanOrEqual(oneLine(common));
     }
   );
+});
+
+describe("the Events table holding an autoscaler's warnings", () => {
+  const LONGEST = "FailedComputeMetricsReplicas";
+  const rows = [
+    "FailedGetResourceMetric",
+    LONGEST,
+    "Pulled",
+    "SandboxChanged",
+  ].map((reason) => ({ reason }) as EventInfo);
+
+  /**
+   * Lena read "FailedGetResource / Metric" on two lines at 1400 and at 1024
+   * while the Object column had room to spare. Fails if a reason the table
+   * holds wraps where the table has room for it on one line.
+   */
+  it.each([
+    ["1024 in Russian", port(1024, false), ru],
+    ["1400 in English", port(1400, false), en],
+  ] as const)("holds every reason on one line at %s", (_at, width, t) => {
+    const { reason } = laidOut(ONE_NAMESPACE, width, t, rows);
+    expect(reason).toBeGreaterThanOrEqual(oneLine(LONGEST));
+  });
+
+  /**
+   * The message stopped near the middle of a 1400 window beside an Object
+   * column wider than its names. Fails if the message gets less of the
+   * table than it did before the reasons were held whole.
+   */
+  it("gives the message more of a wide table than the object", () => {
+    const { object, message } = laidOut(
+      ONE_NAMESPACE,
+      port(1400, false),
+      en,
+      rows
+    );
+    expect(message).toBeGreaterThanOrEqual(2 * object);
+    expect(message).toBeGreaterThanOrEqual(510);
+  });
 });

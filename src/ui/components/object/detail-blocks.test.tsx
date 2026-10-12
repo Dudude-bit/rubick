@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 
 import { renderWithRouter } from "@/test/render";
 import { ConditionRows, EventRows, UsageRow } from "./detail-blocks";
@@ -221,6 +221,43 @@ describe("an event row at drawer width", () => {
       screen.getByText("FailedCreatePodSandBox").parentElement
     ).toHaveAttribute("title", "FailedCreatePodSandBox");
   });
+});
+
+describe("an event row's message", () => {
+  const event = (uid: string, count: number) =>
+    ({
+      uid,
+      type: "Normal",
+      reason: "Pulled",
+      message: `Container image "busybox:1.36" already present ${uid}`,
+      namespace: "lena-sandbox",
+      involvedObject: {
+        kind: "Pod",
+        name: "wd-demo",
+        namespace: "lena-sandbox",
+      },
+      count,
+      lastTimestamp: new Date().toISOString(),
+    }) as unknown as EventInfo;
+
+  /**
+   * Lena's pod peek cut every message about 60 px before the age: an empty
+   * count column and its gaps sat between them. Fails if a row that never
+   * repeated keeps a column for a count it does not have.
+   */
+  it.each([true, false])(
+    "runs up to the time when the event never repeated, compact %s",
+    async (compact) => {
+      await wrap(
+        <EventRows compact={compact} events={[event("a", 1), event("b", 3)]} />
+      );
+      const [once, thrice] = screen.getAllByTestId("event-when");
+      expect(once.parentElement!.children).toHaveLength(4);
+      expect(once.children).toHaveLength(1);
+      expect(within(thrice).getByText("×3")).toBeInTheDocument();
+      expect(thrice.parentElement!.children).toHaveLength(4);
+    }
+  );
 });
 
 describe("an event's count", () => {

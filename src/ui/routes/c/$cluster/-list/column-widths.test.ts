@@ -16,6 +16,8 @@ import {
   rolloutWord,
 } from "@/lib/status-words";
 
+import { useLocaleStore } from "@/stores/localeStore";
+
 import { AGE_CELL_PX, NAME_CELL_PX, NODE_CELL_PX } from "./columns";
 
 import { configMapColumns } from "../(config)/configmaps/-components/ConfigMapList";
@@ -47,6 +49,7 @@ interface Column {
     share?: unknown;
     label?: unknown;
     floor?: number | ((t: T, rows: readonly never[]) => number);
+    yields?: number;
   };
 }
 
@@ -603,6 +606,55 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
     expect(kept.reduce((sum, spec) => sum + spec.floor, 0)).toBeLessThanOrEqual(
       PORT_1024
     );
+  });
+
+  /** One row as Lena's lena-sandbox held it, in the fields every list's floors read. */
+  const LENAS_ROWS = [
+    {
+      name: "hello-web-5966d9b889-7nvr5",
+      status: { display: "Running" },
+      nodeName: "k3d-rubick-live-agent-0",
+      version: "v1.35.5+k3s1",
+      restartCount: 15,
+    },
+  ];
+
+  /**
+   * Lena's Services and Nodes scrolled sideways at 1024 in Russian and cut
+   * their last column while Pods hid columns by priority. Fails if any list,
+   * in one namespace and with a full row of actions, needs a sideways scroll
+   * there, or hides its Name to avoid one.
+   */
+  it.each(PAGES)(
+    "fits %s by hiding columns, never by scrolling",
+    (_page, columns) => {
+      const shown = columns.filter((c) => nameOf(c) !== "namespace");
+      const specs = drawn(shown, ru, LENAS_ROWS).map((spec, index) => ({
+        id: index < shown.length ? nameOf(shown[index]) : "actions",
+        floor: spec.floor,
+        yields: shown[index]?.meta?.yields,
+      }));
+      const hidden = yieldedColumns(specs, PORT_1024);
+      const kept = specs.filter((spec) => !hidden.includes(spec.id));
+      expect(
+        kept.reduce((sum, spec) => sum + spec.floor, 0)
+      ).toBeLessThanOrEqual(PORT_1024);
+      expect(hidden).not.toContain("name");
+    }
+  );
+
+  /**
+   * Lena read "15 (13 мин наза…" on Pods with room beside the column. Fails
+   * if the Restarts floor stops holding the most restarts its rows count
+   * with the widest age a restart is told in, in the reader's language.
+   */
+  it("holds a restart count and the age of the last one whole on Pods", () => {
+    useLocaleStore.setState({ choice: "ru" });
+    const restarts = (pods as Column[]).find((c) => nameOf(c) === "restarts")!;
+    expect(columnFloor(restarts, ru, LENAS_ROWS)).toBeGreaterThanOrEqual(
+      "15 (59 мин назад)".length * 7.2 + 20
+    );
+    useLocaleStore.setState({ choice: null });
   });
 
   /** Fails if the Pods status column keeps room for "CreateContainerConfigError" its rows never say, or stops holding the widest they do. */

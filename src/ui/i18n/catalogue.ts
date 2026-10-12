@@ -3911,7 +3911,7 @@ export const en = {
     hpaDesiredNotComputing: "{n}, not computing now: ScalingActive is False",
     columnsYielded: "Hidden at this width: {columns}",
     columnsYieldedHint:
-      "Widen the window, or close the panel beside the list, to see these columns. The search still reads them.",
+      "Hidden at this width: {columns}. Widen the window, or close the panel beside the list, to see them. The search still reads them.",
     hpaScaleUnread:
       "This autoscaler could not be read, so what it scales is not known.",
     hpaNamesNoTarget: "This autoscaler names nothing to scale.",
@@ -4823,6 +4823,8 @@ export const en = {
     managedUpdates:
       "This build updates through the package manager it was installed with.",
     diagnosticsCopied: "Diagnostics copied",
+    diagnosticsReading: "Reading what this app can see of the machine…",
+    diagnosticsUnread: "Could not read what this app can see of the machine.",
     copyDiagnostics: "Copy diagnostics",
     redactNamesAndPaths: "Redact names and paths",
     redactEverywhere:

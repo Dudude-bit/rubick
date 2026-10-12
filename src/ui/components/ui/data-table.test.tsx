@@ -1458,7 +1458,7 @@ describe("column widths", () => {
    * Lena's Pods list at 1024 in Russian scrolled sideways and cut a header.
    * Fails if a port too narrow for every floor keeps a column that yields
    * instead of hiding it, keeps it hidden once there is room, or hides it
-   * without naming it under the table.
+   * without naming it under the table and in that note's tooltip.
    */
   it("hides a yielding column where the port is too narrow and names it under the table", async () => {
     const columnsOf: ColumnDef<Item>[] = [
@@ -1480,6 +1480,10 @@ describe("column widths", () => {
       ).toBeNull();
       expect(screen.getByTestId("columns-yielded")).toHaveTextContent(
         "Hidden at this width: Namespace"
+      );
+      expect(screen.getByTestId("columns-yielded")).toHaveAttribute(
+        "title",
+        expect.stringMatching(/^Hidden at this width: Namespace\. Widen/)
       );
       expect(screen.getByRole("table").parentElement!.style.overflowX).toBe("");
     } finally {

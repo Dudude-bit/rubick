@@ -56,7 +56,7 @@ function open(section: string) {
 const PANE_MARK: Record<string, RegExp> = {
   appearance: /Resource colouring/,
   clusters: /clusters pane/,
-  diagnostics: /No problems found|Search path/,
+  diagnostics: /Redact names and paths/,
   sharing: /Reports are saved as files/,
   handoff: /Search engine/,
   about: /Automatic updates/,

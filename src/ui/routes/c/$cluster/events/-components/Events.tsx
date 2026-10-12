@@ -1155,8 +1155,7 @@ function EventsSkeleton() {
           <span />
           <Skeleton className="h-3 w-24" />
           <Skeleton className="h-3 w-full" />
-          <span />
-          <Skeleton className="h-3 w-6 justify-self-end" />
+          <Skeleton className="h-3 w-11 justify-self-end" />
         </div>
       ))}
     </div>

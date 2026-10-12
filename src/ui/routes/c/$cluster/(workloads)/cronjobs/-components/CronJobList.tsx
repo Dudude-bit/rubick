@@ -18,6 +18,7 @@ import {
   createCpuColumn,
   createMemoryColumn,
   statusCellPx,
+  yielding,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
 import { CronStatusBadge } from "./CronStatusBadge";
@@ -27,8 +28,8 @@ type CronJobInfoWithMetrics = CronJobInfo & ResourceMetrics;
 export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
   createNameColumn<CronJobInfoWithMetrics>(ResourceType.CronJob),
   createNamespaceColumn<CronJobInfoWithMetrics>(),
-  createCpuColumn<CronJobInfoWithMetrics>(),
-  createMemoryColumn<CronJobInfoWithMetrics>(),
+  yielding(createCpuColumn<CronJobInfoWithMetrics>(), 2),
+  yielding(createMemoryColumn<CronJobInfoWithMetrics>(), 1),
   {
     // Five mono fields and their spaces: `0 */6 * * MON-FRI`.
     size: 150,
@@ -65,7 +66,10 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     size: 84,
     id: "active",
     header: columnHeader("columns", "active"),
-    meta: { share: (row: CronJobInfoWithMetrics) => String(row.active) },
+    meta: {
+      yields: 4,
+      share: (row: CronJobInfoWithMetrics) => String(row.active),
+    },
     cell: ({ row }) => row.original.active,
   },
   {
@@ -74,6 +78,7 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     id: "last_schedule",
     header: columnHeader("columns", "lastSchedule"),
     meta: {
+      yields: 5,
       share: (row: CronJobInfoWithMetrics, t) =>
         row.lastSchedule
           ? { text: row.lastSchedule, at: row.lastSchedule }
@@ -81,7 +86,7 @@ export const columns = (): ColumnDef<CronJobInfoWithMetrics>[] => [
     },
     cell: ({ row }) => <LastSchedule at={row.original.lastSchedule} />,
   },
-  createAgeColumn<CronJobInfoWithMetrics>(),
+  yielding(createAgeColumn<CronJobInfoWithMetrics>(), 3),
 ];
 
 // The cell needs the translator, so it is a component; `columns` is exported

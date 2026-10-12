@@ -93,21 +93,62 @@ describe("a change of tone", () => {
     expect(hover && fades(hover.body)).toBe(true);
   });
 
+  /** The frames the window draws, one at a time, however long each takes. */
+  const frames = () => {
+    const queued: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (run: FrameRequestCallback) =>
+      queued.push(run)
+    );
+    return () => queued.splice(0).forEach((run) => run(0));
+  };
+
   /** Fails if a switch between themes does not fade, or the fade outlives it. */
   it("fades for the switch between themes alone, not on the first paint", () => {
     vi.useFakeTimers();
+    const draw = frames();
     const root = document.documentElement;
     applyTheme("dark");
     expect(root.classList.contains("theme-fade")).toBe(false);
 
     applyTheme("light");
     expect(root.classList.contains("theme-fade")).toBe(true);
+    draw();
+    draw();
     vi.advanceTimersByTime(250);
     expect(root.classList.contains("theme-fade")).toBe(false);
 
     applyTheme("light");
     expect(root.classList.contains("theme-fade")).toBe(false);
     vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  /**
+   * Dana's switch was a hard cut 1.2 s after the click: the fade was taken
+   * away 200 ms after the switch, while the first frame in the new theme was
+   * still being drawn, so no frame ever faded. Fails if the fade ends before
+   * the switched frame is drawn, or a second switch is cut by the first's end.
+   */
+  it("keeps fading until the frame in the new theme is drawn, however late", () => {
+    vi.useFakeTimers();
+    const draw = frames();
+    const root = document.documentElement;
+    applyTheme("dark");
+    applyTheme("light");
+    vi.advanceTimersByTime(1200);
+    expect(root.classList.contains("theme-fade")).toBe(true);
+    draw();
+    draw();
+    vi.advanceTimersByTime(100);
+    applyTheme("dark");
+    vi.advanceTimersByTime(150);
+    expect(root.classList.contains("theme-fade")).toBe(true);
+    draw();
+    draw();
+    vi.advanceTimersByTime(250);
+    expect(root.classList.contains("theme-fade")).toBe(false);
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 });
 

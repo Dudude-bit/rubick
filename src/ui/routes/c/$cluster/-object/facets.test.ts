@@ -3,6 +3,10 @@ import { describe, expect, it } from "vite-plus/test";
 import { translate } from "@/i18n";
 import type { T } from "@/i18n/useT";
 import { autoscalerReplicas, type AutoscalerFacts } from "@/lib/governance";
+import type { ReactElement } from "react";
+
+import { ScaleTargetRef } from "./AutoscalerScales";
+import type { ScaleTarget } from "./scale-target";
 import { objectFacets } from "./facets";
 
 /** The key itself, so a group is found by the catalogue key it is titled with. */
@@ -399,6 +403,29 @@ describe("an autoscaler that cannot read its metrics", () => {
       (item) => item.label === "currentMetrics.0.type"
     );
     expect(row?.value).toBe('""');
+  });
+
+  /**
+   * Lena's HPA page drew its target as three raw scaleTargetRef rows with no
+   * link while the peek named it. Fails if the spec stops folding them into
+   * one row that links the object the autoscaler scales.
+   */
+  it("reads scaleTargetRef as the object it names, linked", () => {
+    const rows = group(hpaBlind, "spec")?.items ?? [];
+    expect(rows.map((row) => row.label)).toEqual([
+      "minReplicas",
+      "maxReplicas",
+      "scaleTargetRef",
+    ]);
+    const link = rows[2].value as ReactElement<{
+      target: ScaleTarget;
+      namespace: string | null;
+    }>;
+    expect(link.type).toBe(ScaleTargetRef);
+    expect(link.props).toEqual({
+      target: { apiVersion: "apps/v1", kind: "Deployment", name: "log-demo" },
+      namespace: "k8s-gui-test",
+    });
   });
 
   /** A computed zero stays the number; fails if every autoscaler loses it. */

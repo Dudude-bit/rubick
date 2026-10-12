@@ -13,6 +13,7 @@ import {
   createCpuColumn,
   createMemoryColumn,
   createReplicasColumn,
+  yielding,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
 import { createRolloutColumn } from "../../-components/rollout-column";
@@ -22,8 +23,8 @@ type DeploymentInfoWithMetrics = DeploymentInfo & ResourceMetrics;
 export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
   createNameColumn<DeploymentInfoWithMetrics>(ResourceType.Deployment),
   createNamespaceColumn<DeploymentInfoWithMetrics>(),
-  createCpuColumn<DeploymentInfoWithMetrics>(),
-  createMemoryColumn<DeploymentInfoWithMetrics>(),
+  yielding(createCpuColumn<DeploymentInfoWithMetrics>(), 2),
+  yielding(createMemoryColumn<DeploymentInfoWithMetrics>(), 1),
   createReplicasColumn<DeploymentInfoWithMetrics>(),
   {
     // "RollingUpdate" or "Recreate".
@@ -31,6 +32,7 @@ export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
     id: "strategy",
     header: columnHeader("columns", "strategy"),
     meta: {
+      yields: 3,
       floor: () => widestText(["RollingUpdate", "Recreate"], "sans", 6.6) + 20,
       share: (row: DeploymentInfoWithMetrics) =>
         row.strategy || "RollingUpdate",
@@ -42,7 +44,7 @@ export const columns = (): ColumnDef<DeploymentInfoWithMetrics>[] => [
     ),
   },
   createRolloutColumn<DeploymentInfoWithMetrics>(),
-  createAgeColumn<DeploymentInfoWithMetrics>(),
+  yielding(createAgeColumn<DeploymentInfoWithMetrics>(), 4),
 ];
 
 export const DeploymentList = createWorkloadListPage<DeploymentInfo>({

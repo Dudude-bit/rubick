@@ -7,9 +7,12 @@ import type { Diagnostics } from "@/generated/types";
 import { usePrivacyStore } from "@/stores/privacyStore";
 
 const collectDiagnostics = vi.fn();
+/** A failed read, outside the spy: a spy reset earlier in the file reports the rejection it returns as the test's own failure. */
+let refusedWith: unknown = null;
 vi.mock("@/lib/commands", () => ({
   commands: {
-    collectDiagnostics: (redact: boolean) => collectDiagnostics(redact),
+    collectDiagnostics: (redact: boolean) =>
+      refusedWith ? Promise.reject(refusedWith) : collectDiagnostics(redact),
   },
 }));
 
@@ -184,5 +187,44 @@ describe("DiagnosticsSettings' redact names and paths box", () => {
     fireEvent.click(copy());
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
     expect(writeText.mock.calls[0][0]).not.toContain("marco");
+  });
+});
+
+describe("DiagnosticsSettings before the machine is read", () => {
+  beforeEach(() => collectDiagnostics.mockReset());
+
+  /**
+   * Marco aimed at Start and hit nothing: the environment blocks landed and
+   * pushed it 300 px down. Fails if the page holds less room for the blocks
+   * while reading than they take once read, or says all clear before it read.
+   */
+  it("holds a row for every environment block while it reads", async () => {
+    let answer: (value: Diagnostics) => void = () => {};
+    collectDiagnostics.mockReturnValue(
+      new Promise<Diagnostics>((resolve) => (answer = resolve))
+    );
+    const { container } = renderPane();
+    const reading = screen.getByTestId("diagnostics-reading");
+    const rows = reading.querySelectorAll(".border-t").length;
+    expect(screen.queryByText(/No problems found/)).toBeNull();
+    answer(empty);
+    await waitFor(() =>
+      expect(screen.queryByTestId("diagnostics-reading")).toBeNull()
+    );
+    expect(container.querySelectorAll("details")).toHaveLength(rows);
+  });
+
+  /** A machine not yet read is not one with no problems; fails if the page says all clear before, or instead of, an answer. */
+  it("says all clear only once read, and says a failed read failed", async () => {
+    refusedWith = { code: "INTERNAL", message: "spawn failed" };
+    renderPane();
+    expect(
+      await screen.findByText(
+        "Could not read what this app can see of the machine."
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByText("spawn failed")).toBeInTheDocument();
+    expect(screen.queryByText(/No problems found/)).toBeNull();
+    refusedWith = null;
   });
 });

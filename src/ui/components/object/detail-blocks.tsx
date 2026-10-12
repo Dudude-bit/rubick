@@ -580,14 +580,14 @@ export function Headline({ label, value, note, mono, tone }: HeadlineProps) {
  * because the `/events` screen builds its skeleton rows on the same grid.
  */
 export const EVENT_ROW =
-  "grid grid-cols-[10px_minmax(0,182px)_minmax(0,1fr)_54px_44px] items-baseline gap-2.5 px-1.5 py-[3px] text-xs";
+  "grid grid-cols-[10px_minmax(0,182px)_minmax(0,1fr)_auto] items-baseline gap-2.5 px-1.5 py-[3px] text-xs";
 
 /** The same feed at drawer width, where the reason column would eat the
  *  message — which is the part being read there. Both widths carry the
  *  14px the family glyph and its gap cost, so the reason truncates no
  *  earlier than it did before the glyph existed. */
 const EVENT_ROW_COMPACT =
-  "grid grid-cols-[10px_minmax(0,128px)_minmax(0,1fr)_32px_44px] items-baseline gap-2 py-[3px] text-xs";
+  "grid grid-cols-[10px_minmax(0,128px)_minmax(0,1fr)_auto] items-baseline gap-2 py-[3px] text-xs";
 
 export interface EventRowsProps {
   events: EventInfo[];
@@ -716,21 +716,30 @@ const EventRow = memo(function EventRow({
           </span>
         )}
       </span>
+      {/* One cell for both, so a row that never repeated hands the count's
+       *  width to its message instead of leaving it blank. */}
       <span
-        className="whitespace-nowrap text-right font-mono text-[11px] text-fg-fnt"
-        title={tally ? sayWords(tally, t) : undefined}
+        className="flex items-baseline justify-end gap-2 whitespace-nowrap text-[11px] text-fg-fnt"
+        data-testid="event-when"
       >
-        {count > 1 ? `×${count}` : ""}
-      </span>
-      <span
-        className="whitespace-nowrap text-right text-[11px] text-fg-fnt"
-        title={formatDate(event.lastTimestamp) ?? undefined}
-      >
-        {event.lastTimestamp ? (
-          <RealtimeAge timestamp={event.lastTimestamp} />
-        ) : (
-          <None />
+        {count > 1 && (
+          <span
+            className="font-mono"
+            title={tally ? sayWords(tally, t) : undefined}
+          >
+            ×{count}
+          </span>
         )}
+        <span
+          className="w-11 text-right"
+          title={formatDate(event.lastTimestamp) ?? undefined}
+        >
+          {event.lastTimestamp ? (
+            <RealtimeAge timestamp={event.lastTimestamp} />
+          ) : (
+            <None />
+          )}
+        </span>
       </span>
     </div>
   );

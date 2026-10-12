@@ -2,6 +2,8 @@ import { screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import type { CatalogEntry } from "@/generated/types";
+import { buildDeepLink, parseDeepLink } from "@/lib/deep-link";
+import { hrefOf, objectLink } from "@/lib/links";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter } from "@/test/render";
 
@@ -94,6 +96,44 @@ describe("an attached object's address", () => {
       "/c/test/horizontalpodautoscalers/shop/api"
     );
   });
+
+  /**
+   * Lena's copied HPA link carried view=own and still landed on the
+   * Deployment: the link parser dropped the param on the way in. Fails if a
+   * copied link to any attached kind opens anything but that object's page.
+   */
+  it.each([
+    { kind: "HorizontalPodAutoscaler", segment: "horizontalpodautoscalers" },
+    {
+      kind: "EndpointSlice",
+      segment: "endpointslices.discovery.k8s.io",
+      crd: "endpointslices.discovery.k8s.io",
+    },
+    { kind: "Event", segment: "events" },
+    {
+      kind: "Lease",
+      segment: "leases.coordination.k8s.io",
+      crd: "leases.coordination.k8s.io",
+    },
+  ])(
+    "opens a copied $kind link on that object's own page",
+    async ({ kind, segment, crd }) => {
+      await renderWithRouter(<p />, { at: "/c/test" });
+      const own = objectLink({ kind, name: "api", namespace: "shop", crd });
+      const copied = parseDeepLink(buildDeepLink(hrefOf(own!)));
+      const { router } = await renderWithRouter(
+        <AttachedGate resource={segment} namespace="shop" name="api">
+          <p>its own page</p>
+        </AttachedGate>,
+        { at: copied!.path }
+      );
+      expect(await screen.findByText("its own page")).toBeInTheDocument();
+      expect(router.state.location.pathname).toBe(
+        `/c/test/${segment}/shop/api`
+      );
+      expect(router.state.location.search).toEqual({ view: "own" });
+    }
+  );
 
   /**
    * A deep link to an Event about an HPA went on through the HPA to its

@@ -33,6 +33,7 @@ import {
   createAgeColumn,
   createNameColumn,
   metricCellFloor,
+  yielding,
 } from "../../../-list/columns";
 import { SpotMark } from "../../../-object/spot-mark";
 import type { RowGrouping } from "@/components/ui/row-grouping";
@@ -136,6 +137,7 @@ export const columns = (
     id: "internal_ip",
     header: columnHeader("columns", "internalIp"),
     meta: {
+      yields: 1,
       floor: IPV4_CELL_PX,
       share: (row: NodeInfo, t) => ({
         text:
@@ -158,6 +160,7 @@ export const columns = (
     id: "cpu",
     header: columnHeader("columns", "cpuUsage"),
     meta: {
+      yields: 3,
       floor: metricCellFloor,
       share: (row: NodeInfo, t) => {
         const used = nodeMetricsByName.get(row.name)?.cpuMillicores;
@@ -183,6 +186,7 @@ export const columns = (
     id: "memory",
     header: columnHeader("columns", "memoryUsage"),
     meta: {
+      yields: 2,
       floor: metricCellFloor,
       share: (row: NodeInfo, t) => {
         const used = nodeMetricsByName.get(row.name)?.memoryBytes;
@@ -210,6 +214,7 @@ export const columns = (
     id: "capacity_pods",
     header: columnHeader("columns", "podCap"),
     meta: {
+      yields: 4,
       share: (row: NodeInfo, t) =>
         row.capacity?.pods || {
           text: t("empty", "unknownLower"),
@@ -223,7 +228,7 @@ export const columns = (
         </span>
       ),
   },
-  createAgeColumn<NodeInfo>(),
+  yielding(createAgeColumn<NodeInfo>(), 5),
 ];
 
 const NODES_TITLE = "Nodes";

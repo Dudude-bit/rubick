@@ -14,6 +14,7 @@ import {
   createAgeColumn,
   createNameColumn,
   createNamespaceColumn,
+  yielding,
 } from "../../../-list/columns";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import type { QuickAction } from "@/components/ui/quick-actions";
@@ -59,7 +60,7 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
       ),
   },
   createCapacityColumn<PersistentVolumeClaimInfo>(),
-  createAccessModesColumn<PersistentVolumeClaimInfo>(),
+  yielding(createAccessModesColumn<PersistentVolumeClaimInfo>(), 1),
   {
     size: 160,
     accessorKey: "storageClass",
@@ -67,8 +68,9 @@ export const columns: ColumnDef<PersistentVolumeClaimInfo>[] = [
     cell: ({ row }) => (
       <StorageClassRef name={row.original.storageClass} fallback="default" />
     ),
+    meta: { yields: 2 },
   },
-  createAgeColumn<PersistentVolumeClaimInfo>(),
+  yielding(createAgeColumn<PersistentVolumeClaimInfo>(), 3),
 ];
 
 const pvcLink = (pvc: PersistentVolumeClaimInfo) =>

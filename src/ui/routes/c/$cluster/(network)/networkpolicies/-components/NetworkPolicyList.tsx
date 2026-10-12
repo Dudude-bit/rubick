@@ -14,6 +14,7 @@ import {
   createNameColumn,
   createNamespaceColumn,
   createAgeColumn,
+  yielding,
 } from "../../../-list/columns";
 import { createResourceListPage } from "../../../-list/createResourceListPage";
 
@@ -72,7 +73,7 @@ export const networkPolicyColumns: ColumnDef<NetworkPolicyInfo>[] = [
     },
     cell: ({ row }) => <DirectionCell direction={row.original.egress} />,
   },
-  createAgeColumn<NetworkPolicyInfo>(),
+  yielding(createAgeColumn<NetworkPolicyInfo>(), 1),
 ];
 
 export const NetworkPolicyList = createResourceListPage<NetworkPolicyInfo>({

@@ -12,6 +12,7 @@ import {
   createCpuColumn,
   createMemoryColumn,
   statusCellPx,
+  yielding,
 } from "../../../-list/columns";
 import { createWorkloadListPage } from "../../-components/createWorkloadListPage";
 import { ownStatusWord } from "@/lib/status-words";
@@ -22,8 +23,8 @@ type JobInfoWithMetrics = JobInfo & ResourceMetrics;
 export const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
   createNameColumn<JobInfoWithMetrics>(ResourceType.Job),
   createNamespaceColumn<JobInfoWithMetrics>(),
-  createCpuColumn<JobInfoWithMetrics>(),
-  createMemoryColumn<JobInfoWithMetrics>(),
+  yielding(createCpuColumn<JobInfoWithMetrics>(), 2),
+  yielding(createMemoryColumn<JobInfoWithMetrics>(), 1),
   {
     // "1/1", under a header that is the widest thing in the column.
     size: 110,
@@ -49,7 +50,7 @@ export const columns = (): ColumnDef<JobInfoWithMetrics>[] => [
     },
     cell: ({ row }) => <JobStatusCell job={row.original} />,
   },
-  createAgeColumn<JobInfoWithMetrics>(),
+  yielding(createAgeColumn<JobInfoWithMetrics>(), 3),
 ];
 
 export const JobList = createWorkloadListPage<JobInfo>({

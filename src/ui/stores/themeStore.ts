@@ -9,7 +9,7 @@
 
 import { create } from "zustand";
 import { commands } from "@/lib/commands";
-import { cachedTheme, type Theme } from "@/lib/theme";
+import { applyTheme, cachedTheme, type Theme } from "@/lib/theme";
 
 export type { Theme };
 
@@ -65,6 +65,14 @@ export const useThemeStore = create<ThemeState>((set) => ({
     }
   },
 }));
+
+/** Paints each theme the store takes in the click that chose it: through React the switch waited for the whole app to render again. */
+export function followTheme(): () => void {
+  applyTheme(useThemeStore.getState().theme);
+  return useThemeStore.subscribe((state, before) => {
+    if (state.theme !== before.theme) applyTheme(state.theme);
+  });
+}
 
 // Initialize theme on store creation
 if (typeof window !== "undefined") {

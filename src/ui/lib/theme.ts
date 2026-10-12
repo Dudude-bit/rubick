@@ -5,6 +5,12 @@ const KEY = "rubick.theme";
 const FADE = "theme-fade";
 const FADE_MS = 200;
 
+let switches = 0;
+
+/** After the frame drawn in the new theme: the fades start there, however long that frame took. */
+const afterSwitchedFrame = (run: () => void) =>
+  requestAnimationFrame(() => requestAnimationFrame(run));
+
 /**
  * The theme last applied, kept in localStorage so the first frame is
  * painted in it. The backend's setting stays the truth and replaces this
@@ -38,7 +44,12 @@ export function applyTheme(theme: Theme): void {
   root.classList.add(resolved);
   if (switching) {
     root.classList.add(FADE);
-    window.setTimeout(() => root.classList.remove(FADE), FADE_MS);
+    const at = ++switches;
+    afterSwitchedFrame(() =>
+      window.setTimeout(() => {
+        if (at === switches) root.classList.remove(FADE);
+      }, FADE_MS)
+    );
   }
   root.style.colorScheme = resolved;
   root.style.backgroundColor = "hsl(var(--canvas))";
