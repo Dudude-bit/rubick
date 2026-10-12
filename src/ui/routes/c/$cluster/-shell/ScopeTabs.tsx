@@ -1346,14 +1346,14 @@ function NamespacePopover({
               // Enter with nothing arrowed onto is the filter's own answer:
               // type three letters, press it, and you are in that namespace —
               // which is the frequent job done without touching the mouse.
-              const exact = rows.findIndex(
-                (row, index) => index > 0 && row.key === typedName
-              );
+              // A listed namespace before the typed text: the typed row is
+              // always an exact match, and took "lena" over lena-sandbox.
+              const exact = ordered.findIndex((ns) => ns.name === typedName);
               const row =
                 at >= 0
                   ? rows[at]
                   : needle !== ""
-                    ? rows[exact > 0 ? exact : 1]
+                    ? rows[exact >= 0 ? exact + 1 : 1]
                     : undefined;
               if (!row) return;
               event.preventDefault();
