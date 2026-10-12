@@ -55,12 +55,15 @@ function batchedStorage(): Storage {
 }
 
 const coverKey = (span: SpanCover) =>
-  `${[...(span.unwatched ?? [])].sort().join()}|${[...(span.scope ?? [])].sort().join()}`;
+  [span.unwatched, span.unwatchedIn, span.scope]
+    .map((list) => [...(list ?? [])].sort().join())
+    .join("|");
 
 /** Only spans that watched the same things fold into one. */
 function covered(cover: SpanCover): SpanCover {
   return {
     ...(cover.unwatched?.length && { unwatched: cover.unwatched }),
+    ...(cover.unwatchedIn?.length && { unwatchedIn: cover.unwatchedIn }),
     ...(cover.scope?.length && { scope: cover.scope }),
   };
 }

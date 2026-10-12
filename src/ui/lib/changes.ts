@@ -531,19 +531,53 @@ export interface ObservedSpan {
   /** The last moment the watch was known alive; a crash leaves this as the end. */
   seenAt: number;
   to: number | null;
-  /** Kinds the cluster refused to let it watch, so this span says nothing about them. */
+  /** Kinds the cluster refused to let it watch anywhere, so this span says nothing about them. */
   unwatched?: string[];
+  /** Kinds refused in some of its namespaces only, as `<kind>/<namespace>`. */
+  unwatchedIn?: string[];
   /** The namespaces it watched; absent for all of them. */
   scope?: string[];
 }
 
-export type SpanCover = Pick<ObservedSpan, "unwatched" | "scope">;
+export type SpanCover = Pick<
+  ObservedSpan,
+  "unwatched" | "unwatchedIn" | "scope"
+>;
 
-/** The kinds a span was refused, in words, or `null` when it watched them all. */
+/** Whether the span was refused `kind` in `namespace`, `null` asking about every namespace it watched. */
+function refusedIn(
+  span: SpanCover,
+  kind: string,
+  namespace: string | null
+): boolean {
+  if (span.unwatched?.includes(kind)) return true;
+  return (span.unwatchedIn ?? []).some(
+    (entry) =>
+      entry.startsWith(`${kind}/`) &&
+      (namespace === null || entry === `${kind}/${namespace}`)
+  );
+}
+
+/** The kinds a span was refused, each with where, in words, or `null` when it watched them all. */
 export function unwatchedWords(span: ObservedSpan, t: T): string | null {
-  return span.unwatched?.length
-    ? t("changes", "unwatchedRefused", { kinds: span.unwatched.join(", ") })
-    : null;
+  const said: string[] = [];
+  if (span.unwatched?.length)
+    said.push(
+      t("changes", "unwatchedRefused", { kinds: span.unwatched.join(", ") })
+    );
+  const where = new Map<string, string[]>();
+  for (const entry of span.unwatchedIn ?? []) {
+    const [kind, namespace] = entry.split("/");
+    where.set(kind, [...(where.get(kind) ?? []), namespace]);
+  }
+  for (const [kind, namespaces] of where)
+    said.push(
+      t("changes", "unwatchedRefusedIn", {
+        kinds: kind,
+        namespaces: namespaces.join(", "),
+      })
+    );
+  return said.length > 0 ? said.join(" · ") : null;
 }
 
 /**
@@ -559,7 +593,11 @@ export function spansCovering(
 ): ObservedSpan[] {
   return spans.filter(
     (span) =>
-      !kinds.some((kind) => span.unwatched?.includes(kind)) &&
+      !kinds.some((kind) =>
+        namespaces.length === 0
+          ? refusedIn(span, kind, null)
+          : namespaces.some((namespace) => refusedIn(span, kind, namespace))
+      ) &&
       (!span.scope?.length ||
         (namespaces.length > 0 &&
           namespaces.every((namespace) => span.scope?.includes(namespace))))

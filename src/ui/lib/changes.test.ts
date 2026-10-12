@@ -13,6 +13,7 @@ import {
   gapWords,
   helmReleaseOf,
   spansCovering,
+  unwatchedWords,
   otherDifferences,
   timelineOf,
   type JournalEntry,
@@ -833,6 +834,39 @@ describe("which spans watched an object", () => {
         namespaces: [],
       })
     ).toEqual([everywhere]);
+  });
+
+  /**
+   * StatefulSets refused in team-blind and watched in team-checkout: Marco's
+   * StatefulSet in team-checkout was drawn as never watched. Fails if a
+   * refusal in one namespace takes the span from the others.
+   */
+  it("counts a span for a kind in the namespaces it was not refused in", () => {
+    const partly: ObservedSpan = {
+      ...span(["team-checkout", "team-blind"]),
+      unwatchedIn: ["StatefulSet/team-blind"],
+    };
+    const covering = (namespaces: string[]) =>
+      spansCovering([partly], { kinds: ["StatefulSet"], namespaces });
+    expect(covering(["team-checkout"])).toEqual([partly]);
+    expect(covering(["team-blind"])).toEqual([]);
+  });
+
+  /** Fails if the header stops naming where a kind was refused, or names a kind refused everywhere by namespace. */
+  it("says where each kind was refused", () => {
+    const t: T = (section, key, values) =>
+      translate("en", section, key, values);
+    expect(
+      unwatchedWords(
+        {
+          ...span(["team-checkout", "team-blind"], ["DaemonSet"]),
+          unwatchedIn: ["StatefulSet/team-blind"],
+        },
+        t
+      )
+    ).toBe(
+      "DaemonSet not watched: the cluster refused · StatefulSet not watched in team-blind: the cluster refused"
+    );
   });
 
   it("does not count a span for a kind it was refused", () => {
