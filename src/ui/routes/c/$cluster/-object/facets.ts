@@ -298,7 +298,7 @@ function writers(metadata: Json): KeyValue[] {
     }));
 }
 
-/** An autoscaler that never computed a count leaves `desiredReplicas` at 0, which is not a wish for none. */
+/** An autoscaler that is not computing keeps `desiredReplicas` as it was, 0 if it never got that far: said, and said why. */
 function readStatus(fields: Json, rows: KeyValue[], t: T): KeyValue[] {
   if (fields.kind !== "HorizontalPodAutoscaler") return rows;
   const listed = record(fields.status).conditions;
@@ -312,7 +312,12 @@ function readStatus(fields: Json, rows: KeyValue[], t: T): KeyValue[] {
   if (desiredComputed(conditions)) return rows;
   return rows.map((row) =>
     row.label === "desiredReplicas"
-      ? { label: row.label, value: t("readings", "hpaNothingComputed") }
+      ? {
+          label: row.label,
+          value: t("readings", "hpaDesiredNotComputing", {
+            n: String(row.value),
+          }),
+        }
       : row
   );
 }

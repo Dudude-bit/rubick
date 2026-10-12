@@ -3897,7 +3897,9 @@ export const en = {
     hpaAtCeilingDefault: "The desired replica count is above maxReplicas.",
     hpaRunning: "{n} running",
     hpaWanted: "{n} wanted",
-    hpaNothingComputed: "nothing computed",
+    hpaWantedNotComputing:
+      "{n} wanted, not computing now: ScalingActive is False",
+    hpaDesiredNotComputing: "{n}, not computing now: ScalingActive is False",
     columnsYielded: "Hidden at this width: {columns}",
     columnsYieldedHint:
       "Widen the window, or close the panel beside the list, to see these columns. The search still reads them.",

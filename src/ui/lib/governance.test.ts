@@ -217,10 +217,9 @@ describe("what an autoscaler is worth saying", () => {
     expect(finding?.tone).toBe("warn");
     expect(finding?.title).toContain("cannot read its metrics");
     expect(metricReadings(auto.facts)[0].current).toBeNull();
-    // `desiredReplicas` stays at zero on an autoscaler that never computed,
-    // and "0 wanted" beside two running pods reads as an imminent scale to
-    // nothing rather than as an unset field.
-    expect(autoscalerReplicas(auto.facts, t)).toContain("nothing computed");
+    expect(autoscalerReplicas(auto.facts, t)).toBe(
+      "2 running · 2 wanted, not computing now: ScalingActive is False"
+    );
   });
 
   /** "external metric" was English composed in code beside a Russian target. */

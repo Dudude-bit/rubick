@@ -355,11 +355,12 @@ describe("an autoscaler that cannot read its metrics", () => {
   };
 
   /**
-   * Sam's peek printed desiredReplicas 0 for hpa-blind while the Deployment's
-   * row said nothing computed. Fails if the peek or the page prints the zero
-   * a failed computation leaves, or the two readers word it apart.
+   * Sam's peek printed a bare desiredReplicas 0 for hpa-blind, and Lena's
+   * page then printed "nothing computed" where kubectl prints 0. Fails if
+   * either reader drops the number the cluster wrote, or stops saying beside
+   * it why it is not a wish, or the two word it apart.
    */
-  it("says nothing computed where the Deployment's row does", () => {
+  it("says the zero the cluster wrote, and why it is not a wish, where the Deployment's row does", () => {
     const en = ((section: string, key: string, values?: never) =>
       translate("en", section as never, key as never, values)) as T;
     const row = objectFacets(hpaBlind, en)
@@ -382,8 +383,10 @@ describe("an autoscaler that cannot read its metrics", () => {
       } as AutoscalerFacts,
       en
     );
-    expect(row?.value).toBe("nothing computed");
-    expect(deployment).toContain(row?.value);
+    expect(row?.value).toBe("0, not computing now: ScalingActive is False");
+    expect(deployment).toContain(
+      "0 wanted, not computing now: ScalingActive is False"
+    );
   });
 
   /** Sam read a blank beside currentMetrics.0.type, where the controller wrote an empty type; fails if an empty string draws as nothing. */

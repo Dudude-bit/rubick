@@ -4373,7 +4373,9 @@ export const ru: Catalogue = {
     hpaAtCeilingDefault: "Желаемое число реплик выше maxReplicas.",
     hpaRunning: "работает {n}",
     hpaWanted: "хочет {n}",
-    hpaNothingComputed: "ничего не вычислено",
+    hpaWantedNotComputing:
+      "хочет {n}, но сейчас не вычисляет: ScalingActive False",
+    hpaDesiredNotComputing: "{n}, но сейчас не вычисляет: ScalingActive False",
     columnsYielded: "Не поместились: {columns}",
     columnsYieldedHint:
       "Чтобы увидеть эти столбцы, расширьте окно или закройте панель рядом со списком. Поиск по ним работает и так.",
