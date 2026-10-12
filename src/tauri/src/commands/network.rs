@@ -237,7 +237,12 @@ pub async fn list_service_health_inputs(
     state: State<'_, AppState>,
 ) -> Result<Scoped<ServiceHealthInputs>> {
     let client = (*state.current_client()?).clone();
-    across(scope, |reach| health_inputs_in(client.clone(), reach)).await
+    crate::client::clock::timed(
+        &state.perf,
+        "listServiceHealthInputs",
+        across(scope, |reach| health_inputs_in(client.clone(), reach)),
+    )
+    .await
 }
 
 async fn health_inputs_in(

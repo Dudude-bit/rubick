@@ -568,6 +568,15 @@ export interface PerfSnapshot {
   eventBytes: number;
   maxEventBytes: number;
   watchChanges: number;
+  commands: Record<string, CommandTimes>;
+}
+
+export interface CommandTimes {
+  count: number;
+  p50: number;
+  p95: number;
+  max: number;
+  maxApiCalls: number;
 }
 
 export interface NodeMetricsResponse {

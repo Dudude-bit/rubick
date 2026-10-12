@@ -1635,7 +1635,12 @@ pub async fn get_cluster_overview(
     scope: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<ClusterOverview> {
-    Box::pin(cluster_overview(&state, scope)).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getClusterOverview",
+        Box::pin(cluster_overview(&state, scope)),
+    )
+    .await
 }
 
 /// The counts and the usage every overview needs beside its lists.

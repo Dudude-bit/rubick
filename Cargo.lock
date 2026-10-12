@@ -2843,6 +2843,7 @@ dependencies = [
  "futures",
  "gcp_auth",
  "http",
+ "http-body",
  "hyper-util",
  "json-patch 4.2.0",
  "k8s-openapi",

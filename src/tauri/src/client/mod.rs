@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+pub mod clock;
 mod context;
 pub mod proxy;
 mod send_again;
@@ -276,6 +277,7 @@ fn client_with_deadline(config: Config, deadline: std::time::Duration) -> Result
             send_again::SendAgain::default(),
         ))
         .with_layer(&tower::timeout::TimeoutLayer::new(deadline))
+        .with_layer(&clock::Clock)
         .build())
 }
 

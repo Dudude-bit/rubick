@@ -6,6 +6,8 @@
 //! rather than four atomics, so a snapshot never mixes two runs.
 
 use parking_lot::Mutex;
+use std::collections::{BTreeMap, VecDeque};
+use std::time::Duration;
 
 /// One IPC message, as `src/contracts/ipc-budget.json` states it.
 pub const IPC_TARGET_BYTES: usize = 262_144;
@@ -53,6 +55,9 @@ pub fn chunks_within<T: serde::Serialize>(rows: Vec<T>, budget: usize) -> Vec<Ve
     chunks
 }
 
+/// Most recent wall times kept per command for percentiles, as the frontend's recorder keeps.
+const SAMPLE_CAP: usize = 5000;
+
 #[derive(Default)]
 struct Counters {
     recording: bool,
@@ -60,6 +65,26 @@ struct Counters {
     event_bytes: u64,
     max_event_bytes: u64,
     watch_changes: u64,
+    commands: BTreeMap<&'static str, Times>,
+}
+
+#[derive(Default)]
+struct Times {
+    count: u64,
+    max: u64,
+    max_api_calls: usize,
+    recent: VecDeque<u64>,
+}
+
+/// One command as the backend timed it, from its first poll to its answer.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CommandTimes {
+    pub count: u64,
+    pub p50: u64,
+    pub p95: u64,
+    pub max: u64,
+    pub max_api_calls: usize,
 }
 
 #[derive(Default)]
@@ -75,6 +100,7 @@ pub struct PerfSnapshot {
     pub event_bytes: u64,
     pub max_event_bytes: u64,
     pub watch_changes: u64,
+    pub commands: BTreeMap<String, CommandTimes>,
 }
 
 impl PerfCounters {
@@ -112,8 +138,53 @@ impl PerfCounters {
             event_bytes: c.event_bytes,
             max_event_bytes: c.max_event_bytes,
             watch_changes: c.watch_changes,
+            commands: c
+                .commands
+                .iter()
+                .map(|(name, times)| ((*name).to_string(), times.summary()))
+                .collect(),
         }
     }
+
+    /// One timed command answered, `api_calls` requests made on its task.
+    pub fn observe_command(&self, name: &'static str, took: Duration, api_calls: usize) {
+        let mut c = self.inner.lock();
+        if !c.recording {
+            return;
+        }
+        let ms = u64::try_from(took.as_millis()).unwrap_or(u64::MAX);
+        let times = c.commands.entry(name).or_default();
+        times.count += 1;
+        times.max = times.max.max(ms);
+        times.max_api_calls = times.max_api_calls.max(api_calls);
+        if times.recent.len() == SAMPLE_CAP {
+            times.recent.pop_front();
+        }
+        times.recent.push_back(ms);
+    }
+}
+
+impl Times {
+    fn summary(&self) -> CommandTimes {
+        let mut sorted: Vec<u64> = self.recent.iter().copied().collect();
+        sorted.sort_unstable();
+        CommandTimes {
+            count: self.count,
+            p50: percentile(&sorted, 50),
+            p95: percentile(&sorted, 95),
+            max: self.max,
+            max_api_calls: self.max_api_calls,
+        }
+    }
+}
+
+/// Nearest rank over an ascending list, as `percentile` in `src/ui/lib/perf.ts` takes it.
+fn percentile(sorted: &[u64], p: usize) -> u64 {
+    if sorted.is_empty() {
+        return 0;
+    }
+    let rank = (p * sorted.len()).div_ceil(100).clamp(1, sorted.len());
+    sorted[rank - 1]
 }
 
 #[cfg(test)]
@@ -182,7 +253,8 @@ mod tests {
                 events_emitted: 2,
                 event_bytes: 140,
                 max_event_bytes: 100,
-                watch_changes: 3
+                watch_changes: 3,
+                commands: BTreeMap::new(),
             }
         );
     }
@@ -198,6 +270,34 @@ mod tests {
         c.set_recording(true);
         assert_eq!(c.snapshot().events_emitted, 0);
         assert!(c.snapshot().recording);
+    }
+
+    /// Timing commands nobody records would take a lock on every call for
+    /// numbers no one reads; a percentile taken another way than the
+    /// frontend's would put two different p95s side by side in one report.
+    #[test]
+    fn a_command_is_timed_only_while_recording_and_reported_by_nearest_rank() {
+        let c = PerfCounters::default();
+        c.observe_command("x", Duration::from_millis(5), 1);
+        assert!(c.snapshot().commands.is_empty());
+        c.set_recording(true);
+        for ms in [10u64, 20, 30, 40, 1000] {
+            c.observe_command(
+                "x",
+                Duration::from_millis(ms),
+                usize::try_from(ms / 10).unwrap(),
+            );
+        }
+        assert_eq!(
+            c.snapshot().commands["x"],
+            CommandTimes {
+                count: 5,
+                p50: 30,
+                p95: 1000,
+                max: 1000,
+                max_api_calls: 100,
+            }
+        );
     }
 
     /// The frontend reads the same file; a constant edited on one side only is the drift this catches.

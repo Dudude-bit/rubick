@@ -90,13 +90,17 @@ pub async fn get_resource_connections(
     };
     let context = state.get_current_context().unwrap_or_default();
     let source = Source::shared(&state.neighbourhoods, &context).not_before(not_before);
-    Box::pin(connections_through(
-        source,
-        &ctx,
-        &kind,
-        &name,
-        gateway.as_ref(),
-    ))
+    crate::client::clock::timed(
+        &state.perf,
+        "getResourceConnections",
+        Box::pin(connections_through(
+            source,
+            &ctx,
+            &kind,
+            &name,
+            gateway.as_ref(),
+        )),
+    )
     .await
 }
 

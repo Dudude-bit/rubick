@@ -4593,6 +4593,8 @@ export const en = {
     perfCount: "calls",
     perfRows: "rows",
     perfBytes: "bytes",
+    perfInBackend: "in the backend, p50 · max",
+    perfNotTimed: "not timed",
     perfTasks: "Long tasks",
     perfRenders: "Render",
     perfNavigation: "Navigation",
