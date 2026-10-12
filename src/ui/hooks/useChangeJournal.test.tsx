@@ -275,7 +275,7 @@ describe("the change journal across a namespace switch", () => {
 
     const [before] = spans();
     expect(gapsOf(spans(), before.from, now)).toEqual([
-      { from: failedAt, to: now },
+      { from: failedAt, to: now, running: true },
     ]);
   });
 

@@ -92,7 +92,7 @@ describe("spans", () => {
       to: T0 + 130 * MINUTE,
     });
     expect(gapsOf(reopened.spans.dev, T0, T0 + 460 * MINUTE)).toEqual([
-      { from: T0 + 130 * MINUTE, to: T0 + 460 * MINUTE },
+      { from: T0 + 130 * MINUTE, to: T0 + 460 * MINUTE, running: true },
     ]);
   });
 
