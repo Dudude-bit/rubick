@@ -1448,8 +1448,15 @@ const kindNames = (kinds: readonly { kind: string }[]) =>
  */
 function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
   const t = useT();
-  const { cluster, scope, notSearched, unlistable, unreadGroups, served } =
-    entry;
+  const {
+    cluster,
+    scope,
+    notSearched,
+    unlistable,
+    unreadGroups,
+    served,
+    split,
+  } = entry;
   return (
     <div
       role="presentation"
@@ -1460,13 +1467,31 @@ function Coverage({ entry }: { entry: Extract<Entry, { kind: "coverage" }> }) {
         title={kindNames(cluster.searched)}
       >
         <ScanSearch className="h-3 w-3 flex-none" aria-hidden />
-        {served === null
+        {served === null || split === null
           ? t("count", "kindsSearchedByName", { n: cluster.searched.length })
           : t("count", "kindsSearchedOfServed", {
               n: served,
-              searched: cluster.searched.length,
+              searched: split.read,
             })}
       </span>
+      {split !== null && split.partly > 0 && (
+        <span
+          className="flex items-center gap-1 text-fg-fnt"
+          title={unreadHover(cluster, t)}
+        >
+          <Lock className="h-3 w-3 flex-none" aria-hidden />
+          {t("count", "kindsPartlyRefused", { n: split.partly })}
+        </span>
+      )}
+      {split !== null && split.refused > 0 && (
+        <span
+          className="flex items-center gap-1 text-warn"
+          title={unreadHover(cluster, t)}
+        >
+          <Lock className="h-3 w-3 flex-none" aria-hidden />
+          {t("count", "kindsRefusedWherever", { n: split.refused })}
+        </span>
+      )}
       {scope !== null && (
         <span className="flex items-center gap-1">
           <FolderOpen className="h-3 w-3 flex-none" aria-hidden />

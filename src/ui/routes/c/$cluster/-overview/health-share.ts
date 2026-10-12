@@ -35,6 +35,7 @@ import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
   ClusterOverview,
   NodeSummary,
+  Incarnation,
   OverviewUnread,
   ProblemDetail,
   PodComposition,
@@ -614,6 +615,20 @@ export function nodesShare(
   };
 }
 
+const PAST_WORD: Record<Incarnation, "earlierObject" | "goneObject" | null> = {
+  current: null,
+  unchecked: null,
+  earlier: "earlierObject",
+  gone: "goneObject",
+};
+
+/** The sample, said to be about an object that no longer holds its name where that is so. */
+function warningSaid(warning: WarningGroup, t: T): string {
+  const word = PAST_WORD[warning.incarnation];
+  const sample = warning.sample ?? "";
+  return word ? `${t("readings", word)}: ${sample}` : sample;
+}
+
 /** What the feed of warnings draws, as events with the object each is about. */
 export function warningsShare(
   warnings: WarningGroup[],
@@ -624,7 +639,7 @@ export function warningsShare(
     at: warning.lastSeen,
     role: "warn",
     reason: warning.reason,
-    message: warning.sample ?? "",
+    message: warningSaid(warning, t),
     count: warning.count,
     ref:
       warning.objectKind && warning.objectName

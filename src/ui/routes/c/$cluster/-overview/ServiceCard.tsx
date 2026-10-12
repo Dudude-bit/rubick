@@ -7,7 +7,8 @@ import { useShareSection } from "@/components/share/screen-share";
 import { pinShare } from "./service-card-share";
 import { useConnections } from "@/hooks/useConnections";
 import { trafficChains, unreadWhy } from "@/lib/connections";
-import { cn, formatAge } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { RealtimeAge } from "@/components/ui/realtime";
 import { RolloutBadge } from "../-object/RolloutSummary";
 import {
   CARD_REFRESH,
@@ -169,7 +170,7 @@ export function ServiceCard({
                 <Journal item={latest} />
               </span>
               <span className="ml-1 text-fg-fnt">
-                {formatAge(new Date(latest.at).toISOString(), t)}
+                <RealtimeAge timestamp={new Date(latest.at).toISOString()} />
               </span>
             </>
           )}

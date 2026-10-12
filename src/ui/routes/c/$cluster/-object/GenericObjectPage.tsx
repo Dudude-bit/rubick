@@ -105,6 +105,7 @@ export function GenericObjectPage({
   const events = useObjectEvents(kind, name, namespace, {
     enabled: read !== null,
     refresh: "slow",
+    uid,
   });
   const activeTab = useAppSearch().tab ?? "overview";
   const setSearch = useSetSearch();

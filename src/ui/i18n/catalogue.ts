@@ -1740,6 +1740,8 @@ export const en = {
     earlierRows:
       "Rows before {since} were recorded by this app while it watched from {from} to {to}",
     unwatchedRefused: "{kinds} not watched: the cluster refused",
+    unwatchedRefusedIn:
+      "{kinds} not watched in {namespaces}: the cluster refused",
     deliveriesUnread: "What delivers this could not be read: {reason}",
     claimedOwner:
       "{owner} does not list this object; it only carries the label naming it",
@@ -1806,6 +1808,10 @@ export const en = {
       "Most likely: no node fits it. The scheduler gave the same answer {times}, so probably nothing about the nodes has changed since it first asked.",
     guessPendingVaried:
       "Most likely: no node fits it, and the scheduler's answer has changed over {attempts}, so the nodes are probably changing under it.",
+    guessPendingTopologyLabel:
+      "Most likely: no node has the label its topology spread constraint spreads by, so the scheduler probably cannot place it anywhere until one does.",
+    guessPendingTopology:
+      "Most likely: every node would break its topology spread constraint, so it probably waits until its pods or the nodes change.",
     notPlacedYet:
       "Not placed yet: the scheduler has found no node for it so far, and it is still inside the wait a new pod gets, so this is not a fault yet.",
     guessUnknownUnread:
@@ -1856,6 +1862,13 @@ export const en = {
     checkVolumeRef: "{kind} {name}: does it exist, is it bound",
     checkRequests: "Compare the requests with what the nodes have free",
     checkNodes: "Look at the nodes: taints, capacity, what is already placed",
+    checkTopologyLabels:
+      "Look at the nodes' labels for the key its topology spread constraint spreads by",
+    checkTopologySpread:
+      "Compare its topology spread constraint with where its pods already run",
+    checkTaints: "Compare the nodes' taints with the pod's tolerations",
+    checkNodeSelector:
+      "Compare the pod's nodeSelector and affinity with the nodes' labels",
     checkProbe:
       "Read the probe: port, path, initial delay, against what the container listens on",
     notReadService: "the Services of {namespace} ({reason})",
@@ -3068,6 +3081,23 @@ export const en = {
     storyStillHappening: "still happening",
     storySettled: "settled",
     storyStateUnknown: "cannot say",
+    refusedToRead: "Your access does not allow reading {kind} {name}.",
+    namedRowsOnly: {
+      one: "Showing only the {n} row the Overview listed as needing attention.",
+      other:
+        "Showing only the {n} rows the Overview listed as needing attention.",
+    },
+    namedRowsMissing: {
+      one: "{n} of them is not in this list now.",
+      other: "{n} of them are not in this list now.",
+    },
+    namedRowsShowAll: "Show all",
+    earlierObject: "earlier object",
+    earlierObjectHint:
+      "About an earlier {kind} named {name}. The {kind} with this name now is another object, and these events are not its own.",
+    goneObject: "deleted",
+    goneObjectHint:
+      "About a {kind} named {name} that no longer exists. Nothing with this name is there now.",
     podStatusNotAsked: {
       one: "1 more pod's exits are not on this clock, because it was not asked.",
       other:
@@ -3850,8 +3880,12 @@ export const en = {
     shellNotRunning: "not running",
     shellStateUnknown: "state unknown, nothing to attach to",
     logsPrintedBeforeExit: "What it printed before it exited is in Logs.",
-    logsAttemptsLast:
-      "{attempts}{when}. What the run that failed printed is in Logs.",
+    logsAttempts: "{attempts}{when}.",
+    failedRunInLogs: "What the run that failed printed is in Logs.",
+    failedRunLogAsking: "Asking the node for that run's log.",
+    failedRunLogEmpty: "That run printed nothing.",
+    failedRunLogGone: "The node no longer has that run's log.",
+    failedRunLogUnread: "Could not ask the node for that run's log.",
     logsFinishedComplete: "Finished{took}{when}. Its log is complete.",
     logsTook: " in {took}",
     logsWhen: ", {when}",
@@ -4660,7 +4694,9 @@ export const en = {
     framework: "Framework",
     updates: "Updates",
     updateAvailable: "Version {version} is available",
-    upToDate: "You are running the latest version",
+    upToDate: "No newer release in the release feed",
+    updateCheckFailed: "Could not check for updates",
+    updatesNotChecked: "Not checked for updates yet",
     updateHint: "Downloading an update restarts the app when it is ready.",
     lastChecked: "Checked at {time}.",
     downloadingUpdate: "Downloading update",
@@ -4891,6 +4927,8 @@ export const en = {
       "There is no Service named {name} here, so nothing keeps these endpoints but whoever wrote them.",
     noOwner: "No controller owns this revision.",
     involvedGone: "{kind} {name}, which this event is about, no longer exists.",
+    involvedReplaced:
+      "Not opened on {kind} {name}: this event is about an earlier {kind} of that name, and the one there now is another object.",
   },
   // Every kind the cluster serves, as kubectl api-resources lists them.
   apiResources: {
@@ -6076,6 +6114,10 @@ export const en = {
       "A slice matches its ports to the Service's by name. These ports' names match none the slice declares, so nothing routes to them.",
     couldNotReadWhatConnects: "Could not read what connects to this.",
     clusterDidNotAnswer: "The cluster did not answer.",
+    noAnswerWithin: {
+      one: "The cluster did not answer within {n} second.",
+      other: "The cluster did not answer within {n} seconds.",
+    },
     unknownRefused: "The cluster refused: {message}",
     unknownFault: "The read failed: {message}",
     unknownRetry: "Try the read again",
@@ -7263,6 +7305,16 @@ export const en = {
       one: "{n} pod carries {selector}, and it is not ready",
       other: "{n} pods carry {selector}, and none of them is ready",
     },
+    podsCarryNoneOwn: {
+      one: "{n} pod carries {selector}, it is not this {kind}'s, and it is not ready",
+      other:
+        "{n} pods carry {selector}, none of them this {kind}'s, and none of them is ready",
+    },
+    podsCarrySomeOwn: {
+      one: "{n} pod carries {selector}, and it is not ready",
+      other:
+        "{n} pods carry {selector}, {own} of them this {kind}'s, and none of them is ready",
+    },
     podsCarryPartOf: {
       one: "{n} pod carries {carries} but not {lacks}",
       other: "{n} pods carry {carries} but not {lacks}",
@@ -7639,6 +7691,14 @@ export const en = {
     kindsStillLoading: {
       one: "{n} kind still loading",
       other: "{n} kinds still loading",
+    },
+    kindsPartlyRefused: {
+      one: "{n} of them refused in some namespaces",
+      other: "{n} of them refused in some namespaces",
+    },
+    kindsRefusedWherever: {
+      one: "{n} kind refused wherever asked",
+      other: "{n} kinds refused wherever asked",
     },
     kindsNotSearched: {
       one: "{n} kind not searched",

@@ -25,6 +25,7 @@ import {
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
+import { PATH_PATIENCE_MS, useOverdue } from "./useOverdue";
 import {
   CopyableAddress,
   CopyableAddresses,
@@ -150,8 +151,10 @@ export function Rail({
       <span
         aria-hidden="true"
         data-testid={here ? "rail-here" : undefined}
+        // No fade: the app-wide border fade kept a published pod's dot amber
+        // for a repaint after its words had already turned.
         className={cn(
-          "mt-[5px] h-[7px] w-[7px] flex-none rounded-full border-[1.5px]",
+          "mt-[5px] h-[7px] w-[7px] flex-none rounded-full border-[1.5px] transition-none",
           NODE_TONE[tone],
           here && "border-fg bg-fg ring-[3px] ring-fg/20"
         )}
@@ -160,7 +163,7 @@ export function Rail({
         <span
           aria-hidden="true"
           className={cn(
-            "min-h-[10px] w-px flex-1",
+            "min-h-[10px] w-px flex-1 transition-none",
             into === "bad" ? "bg-err/40" : "bg-hair"
           )}
         />
@@ -585,7 +588,19 @@ export function TrafficChain({
   const edge = useServiceEdge(serviceHops);
   // The ways in a vendor's objects state — see `service.routes`.
   const routed2 = useServicesRoutes(serviceHops);
+  const overdue = useOverdue(isPending, PATH_PATIENCE_MS);
 
+  if (overdue) {
+    return (
+      <Unknown
+        question={t("empty", "couldNotReadWhatConnects")}
+        error={t("empty", "noAnswerWithin", {
+          n: PATH_PATIENCE_MS / 1000,
+        })}
+        onRetry={() => void query.refetch()}
+      />
+    );
+  }
   if (isPending) {
     return (
       <p className="text-xs text-fg-fnt">{t("empty", "followingPathIn")}</p>

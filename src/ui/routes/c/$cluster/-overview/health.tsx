@@ -12,6 +12,7 @@ import { Section, SectionBody, SectionHeader } from "@/components/ui/section";
 import { Composition } from "@/components/object/detail-blocks";
 import { Prose, ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
+import { PastObjectRef, type Past } from "../-object/PastObjectRef";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useShareSection } from "@/components/share/screen-share";
 import {
@@ -46,14 +47,15 @@ import {
   type AttentionItem,
 } from "@/lib/attention";
 import { ERROR_CODES } from "@/lib/error-utils";
-import { listLink, objectLink } from "@/lib/links";
+import { namedListLink, objectLink } from "@/lib/links";
 import {
   ROLE_DOT,
   ROLE_ICON,
   ROLE_TEXT,
   type StatusRole,
 } from "@/lib/status-role";
-import { cn, formatAge } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { RealtimeAge } from "@/components/ui/realtime";
 import { getDisplayPlural, ResourceType } from "@/lib/resource-registry";
 import type {
   Census,
@@ -61,6 +63,7 @@ import type {
   NodeSummary,
   OverviewUnread,
   PodComposition,
+  Incarnation,
   ResourcePressure,
   SchedulerPressure,
   WarningGroup,
@@ -299,7 +302,7 @@ function AttentionRow({
         )}
       </span>
       <span className="whitespace-nowrap text-right text-[11px] leading-4 text-fg-fnt">
-        {item.since !== null && formatAge(item.since, t)}
+        {item.since !== null && <RealtimeAge timestamp={item.since} />}
       </span>
     </>
   );
@@ -345,9 +348,9 @@ function MoreRows({
   onCollapse?: () => void;
 }) {
   const t = useT();
-  const byKind = new Map<string, number>();
+  const byKind = new Map<string, AttentionItem[]>();
   for (const item of hidden)
-    byKind.set(item.kind, (byKind.get(item.kind) ?? 0) + 1);
+    byKind.set(item.kind, [...(byKind.get(item.kind) ?? []), item]);
   const more = t("cluster", "attentionMore", { n: hidden.length + cut });
   return (
     <p className="col-span-full flex flex-wrap items-baseline gap-x-2 px-1.5 py-[5px] text-[11px] text-fg-fnt">
@@ -373,15 +376,15 @@ function MoreRows({
       ) : (
         <span>{more}</span>
       )}
-      {[...byKind].map(([kind, n]) => (
+      {[...byKind].map(([kind, items]) => (
         <Link
           key={kind}
-          {...listLink(kind)}
+          {...namedListLink(kind, items)}
           className="inline-flex items-center gap-1 text-fg-mut hover:text-fg"
         >
           <KindIcon kind={kind} className="h-2.5 w-2.5" />
           <span className="font-mono">
-            {n} {n === 1 ? kind : getDisplayPlural(kind)}
+            {items.length} {items.length === 1 ? kind : getDisplayPlural(kind)}
           </span>
         </Link>
       ))}
@@ -489,7 +492,7 @@ function UnconfirmedRow({ item }: { item: AttentionItem }) {
           ? parts(t("cluster", "attentionUnconfirmedUndated"), { word })
           : parts(t("cluster", "attentionUnconfirmed"), {
               word,
-              age: formatAge(item.since, t),
+              age: <RealtimeAge timestamp={item.since} />,
             })}
         {item.namespace && (
           <span className="whitespace-nowrap text-fg-fnt">
@@ -1022,8 +1025,15 @@ export function WarningsPanel({
   );
 }
 
+/** What a warning's object is drawn as: a link only where it still holds its name or nobody checked. */
+const PAST_OF: Record<Incarnation, Past | null> = {
+  current: null,
+  unchecked: null,
+  earlier: "earlier",
+  gone: "gone",
+};
+
 function WarningRow({ warning }: { warning: WarningGroup }) {
-  const t = useT();
   // Every row here is a Warning, so severity owns the colour outright and the
   // family mark contributes only shape.
   const { Icon } = eventReasonMark(warning.reason);
@@ -1036,6 +1046,7 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
           namespace: warning.namespace,
         }
       : null;
+  const past = PAST_OF[warning.incarnation];
 
   return (
     <div className="grid grid-cols-[260px_minmax(0,1fr)_46px] items-baseline gap-2.5 px-1.5 py-[5px] text-xs">
@@ -1059,14 +1070,21 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
         title={warning.sample ?? undefined}
         data-testid="warning-said"
       >
-        {subject && (
+        {subject && past ? (
+          <PastObjectRef
+            kind={subject.kind}
+            name={subject.name}
+            namespace={subject.namespace}
+            past={past}
+          />
+        ) : subject ? (
           <ResourceRef
             kind={subject.kind}
             name={subject.name}
             namespace={subject.namespace}
             className="max-w-full"
           />
-        )}
+        ) : null}
         {subject && warning.sample && " "}
         {warning.sample && (
           <span className="text-fg-fnt">
@@ -1081,7 +1099,7 @@ function WarningRow({ warning }: { warning: WarningGroup }) {
         )}
       </span>
       <span className="text-right text-[11px] text-fg-fnt">
-        {formatAge(warning.lastSeen, t)}
+        <RealtimeAge timestamp={warning.lastSeen} />
       </span>
     </div>
   );

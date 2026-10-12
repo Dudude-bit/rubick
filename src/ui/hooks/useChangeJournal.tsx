@@ -131,13 +131,20 @@ export function useChangeJournal() {
       open = true;
       const at = Date.now();
       retirePredecessor(at);
-      const unwatched = new Set(
-        watches
-          .filter((w) => refused.has(`${w.kind}/${w.namespace ?? "*"}`))
-          .map((w) => w.kind)
+      const refusedWatches = watches.filter((w) =>
+        refused.has(`${w.kind}/${w.namespace ?? "*"}`)
+      );
+      // Refused in every namespace it was asked in is not watched at all;
+      // refused in some is not watched there, and watched in the rest.
+      const everywhere = [...new Set(refusedWatches.map((w) => w.kind))].filter(
+        (kind) =>
+          refusedWatches.filter((w) => w.kind === kind).length === scopes.length
       );
       beginSpan(cluster, at, {
-        unwatched: [...unwatched],
+        unwatched: everywhere,
+        unwatchedIn: refusedWatches
+          .filter((w) => !everywhere.includes(w.kind))
+          .map((w) => `${w.kind}/${w.namespace}`),
         scope: namespaces,
       });
       ticker = setInterval(() => heartbeat(cluster, Date.now()), HEARTBEAT_MS);

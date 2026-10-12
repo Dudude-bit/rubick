@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo } from "react";
+import { createContext, useCallback, useContext, useMemo } from "react";
 
 import { DataTable } from "@/components/ui/data-table";
 import type { ColumnDef } from "@/components/ui/table-features";
@@ -15,6 +15,8 @@ import { widestText } from "@/lib/text-width";
 import { hrefOf, objectLink } from "@/lib/links";
 import type { PeekTarget } from "@/hooks/usePeek";
 import { eventLanding } from "../../-object/attachment";
+import { PastObjectRef } from "../../-object/PastObjectRef";
+import { aboutEarlier } from "@/lib/event-incarnation";
 import { useRowMenu } from "../../-list/useRowMenu";
 import { useHeldRows } from "../../-list/held-rows";
 import { HeldUpdates } from "../../-list/HeldUpdates";
@@ -66,10 +68,24 @@ function ReasonCell({ row }: { row: { original: EventInfo } }) {
 const landingOf = (event: EventInfo) =>
   eventLanding(event.involvedObject.kind, event);
 
+const NO_EARLIER: ReadonlySet<string> = new Set();
+const Earlier = createContext<ReadonlySet<string>>(NO_EARLIER);
+
 /** A link to where the Event belongs; the row's whitespace is the peek. The glyph alone says the kind, on every row. */
 function ObjectCell({ row }: { row: { original: EventInfo } }) {
+  const earlier = useContext(Earlier);
   const subject = subjectOf(row.original);
   const landing = landingOf(row.original);
+  if (aboutEarlier(row.original, earlier))
+    return (
+      <PastObjectRef
+        kind={subject.kind}
+        name={subject.name}
+        namespace={subject.namespace}
+        showKind={false}
+        past="earlier"
+      />
+    );
   return (
     <ResourceRef
       kind={subject.kind}
@@ -219,8 +235,8 @@ export const EVENT_COLUMNS = {
 const uidOf = (event: EventInfo) => event.uid;
 
 /** The object's Events tab where its page has one, the Event's own page otherwise. */
-function hrefOfEvent(event: EventInfo): string {
-  const landing = landingOf(event);
+function hrefOfEvent(event: EventInfo, earlier: ReadonlySet<string>): string {
+  const landing = aboutEarlier(event, earlier) ? undefined : landingOf(event);
   const link = landing
     ? objectLink(subjectOf(event), landing)
     : objectLink({
@@ -231,10 +247,13 @@ function hrefOfEvent(event: EventInfo): string {
   return link ? hrefOf(link) : "";
 }
 
-const peekOfEvent = (event: EventInfo): PeekTarget => ({
-  ...subjectOf(event),
-  via: landingOf(event)?.via,
-});
+const peekOfEvent = (
+  event: EventInfo,
+  earlier: ReadonlySet<string>
+): PeekTarget | null =>
+  aboutEarlier(event, earlier)
+    ? null
+    : { ...subjectOf(event), via: landingOf(event)?.via };
 
 const Waiting = createContext<{ n: number; show: () => void }>({
   n: 0,
@@ -256,6 +275,7 @@ const NO_QUICK_ACTIONS: never[] = [];
  */
 export function EventsTable({
   events,
+  earlier = NO_EARLIER,
   showNamespace,
   emptyMessage,
   question,
@@ -263,6 +283,8 @@ export function EventsTable({
   cutAt,
 }: {
   events: EventInfo[];
+  /** The uids of objects another of the same name has replaced: their rows link to no object. */
+  earlier?: ReadonlySet<string>;
   showNamespace: boolean;
   emptyMessage: string;
   /** The read stopped at this many events, so older ones are not listed. */
@@ -276,10 +298,18 @@ export function EventsTable({
     held && events.length > 0,
     question
   );
+  const rowHref = useCallback(
+    (event: EventInfo) => hrefOfEvent(event, earlier),
+    [earlier]
+  );
+  const rowPeek = useCallback(
+    (event: EventInfo) => peekOfEvent(event, earlier),
+    [earlier]
+  );
   const rowMenu = useRowMenu<EventInfo>({
     kind: "Event",
-    getRowHref: hrefOfEvent,
-    getRowPeek: peekOfEvent,
+    getRowHref: rowHref,
+    getRowPeek: rowPeek,
   });
   const waitingValue = useMemo(() => ({ n: waiting, show }), [waiting, show]);
   const table = useMemo(
@@ -289,8 +319,8 @@ export function EventsTable({
         data={shown}
         fill
         getRowId={uidOf}
-        getRowHref={hrefOfEvent}
-        getRowPeek={peekOfEvent}
+        getRowHref={rowHref}
+        getRowPeek={rowPeek}
         onRowMenu={rowMenu.open}
         pageKeys
         rowLabel="events"
@@ -300,11 +330,13 @@ export function EventsTable({
         toolbar={SHOW_WAITING}
       />
     ),
-    [showNamespace, shown, emptyMessage, cutAt, rowMenu.open]
+    [showNamespace, shown, emptyMessage, cutAt, rowMenu.open, rowHref, rowPeek]
   );
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <Waiting.Provider value={waitingValue}>{table}</Waiting.Provider>
+      <Earlier.Provider value={earlier}>
+        <Waiting.Provider value={waitingValue}>{table}</Waiting.Provider>
+      </Earlier.Provider>
       {rowMenu.element(NO_QUICK_ACTIONS)}
     </div>
   );

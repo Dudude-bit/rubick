@@ -96,6 +96,8 @@ export type Trouble =
   | {
       reason: "pending";
       message: string | null;
+      /** What the scheduler's latest answer names as keeping every node out, in its order. */
+      causes: SchedulingCause[];
       count: number;
       sameEachTime: boolean;
       /** Still inside the wait a new pod gets: the scheduler's answer, not yet a fault. */
@@ -115,6 +117,62 @@ const PULL_REASONS = new Set([
   "ErrImageNeverPull",
   "InvalidImageName",
 ]);
+
+/** What a scheduler's answer names as keeping a node out. */
+export type SchedulingCause =
+  | "topologyLabel"
+  | "topology"
+  | "taint"
+  | "nodeSelector"
+  | "resources";
+
+/** By the scheduler's own wording: `0/2 nodes are available: 2 node(s) didn't match pod topology spread constraints (missing required label)`. */
+const SCHEDULING_CAUSES: Array<[SchedulingCause, RegExp]> = [
+  ["topologyLabel", /topology spread constraints \(missing required label\)/i],
+  ["topology", /topology spread constraints/i],
+  ["taint", /untolerated taint|didn't tolerate/i],
+  ["nodeSelector", /node affinity\/selector|didn't match node selector/i],
+  ["resources", /\bInsufficient\b/],
+];
+
+/** The causes an answer names, in the order it names them, one of each. */
+export function schedulingCauses(message: string | null): SchedulingCause[] {
+  if (!message) return [];
+  const found: Array<[number, SchedulingCause]> = [];
+  for (const [cause, pattern] of SCHEDULING_CAUSES) {
+    const at = message.search(pattern);
+    if (at === -1) continue;
+    if (cause === "topology" && found.some(([, c]) => c === "topologyLabel"))
+      continue;
+    found.push([at, cause]);
+  }
+  return found.sort(([a], [b]) => a - b).map(([, cause]) => cause);
+}
+
+const TO_NODES = {
+  kind: "object",
+  objectKind: "Node",
+  name: "",
+  namespace: null,
+} as const;
+
+const CAUSE_CHECKS: Record<SchedulingCause, Check[]> = {
+  topologyLabel: [{ says: { key: "checkTopologyLabels" }, to: TO_NODES }],
+  topology: [{ says: { key: "checkTopologySpread" }, to: TO_NODES }],
+  taint: [{ says: { key: "checkTaints" }, to: TO_NODES }],
+  nodeSelector: [{ says: { key: "checkNodeSelector" }, to: TO_NODES }],
+  resources: [
+    { says: { key: "checkRequests" }, to: { kind: "tab", tab: "containers" } },
+    { says: { key: "checkNodes" }, to: TO_NODES },
+  ],
+};
+
+/** The checks that follow the scheduler's own reasons, or the general two where it names none this knows. */
+function schedulingChecks(causes: readonly SchedulingCause[]): Check[] {
+  return causes.length > 0
+    ? causes.flatMap((cause) => CAUSE_CHECKS[cause])
+    : CAUSE_CHECKS.resources;
+}
 
 function occurrences(event: EventInfo): number {
   return Math.max(1, event.count ?? 1);
@@ -231,6 +289,7 @@ export function troubleOf(
     return {
       reason: "pending",
       message: last.message,
+      causes: schedulingCauses(last.message),
       count: scheduling.reduce((sum, e) => sum + occurrences(e), 0),
       sameEachTime: new Set(scheduling.map((e) => e.message ?? "")).size === 1,
       waiting,
@@ -764,25 +823,22 @@ export function hintFor(trouble: Trouble, pod: PodInfo, chain: Chain): Hint {
           key: "factSchedulerSaid",
           values: { message: trouble.message },
         });
-      checks.push({
-        says: { key: "checkRequests" },
-        to: { kind: "tab", tab: "containers" },
-      });
-      checks.push({
-        says: { key: "checkNodes" },
-        to: { kind: "object", objectKind: "Node", name: "", namespace: null },
-      });
+      checks.push(...schedulingChecks(trouble.causes));
       return {
         headline: trouble.waiting
           ? { key: "notPlacedYet" }
-          : {
-              key: trouble.sameEachTime
-                ? "guessPendingSame"
-                : "guessPendingVaried",
-              values: trouble.sameEachTime
-                ? { times: counted("countTimes", trouble.count) }
-                : { attempts: counted("countAttempts", trouble.count) },
-            },
+          : trouble.causes[0] === "topologyLabel"
+            ? { key: "guessPendingTopologyLabel" }
+            : trouble.causes[0] === "topology"
+              ? { key: "guessPendingTopology" }
+              : {
+                  key: trouble.sameEachTime
+                    ? "guessPendingSame"
+                    : "guessPendingVaried",
+                  values: trouble.sameEachTime
+                    ? { times: counted("countTimes", trouble.count) }
+                    : { attempts: counted("countAttempts", trouble.count) },
+                },
         lines,
         checks,
       };

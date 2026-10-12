@@ -25,7 +25,8 @@ export type Stay =
   | { says: "siblingsUnread"; kind: string; name: string }
   | { says: "noService"; name: string }
   | { says: "noOwner" }
-  | { says: "involvedGone"; kind: string; name: string };
+  | { says: "involvedGone"; kind: string; name: string }
+  | { says: "involvedReplaced"; kind: string; name: string };
 
 export type Attachment =
   | { state: "free" }
@@ -47,6 +48,8 @@ export type Exists = "present" | "missing" | { unread: string };
 export interface Reader {
   /** Whether `target` exists, read through the catalogue's plural for its kind. */
   exists(target: Target): Promise<Exists>;
+  /** The uid of the object that has `target`'s name now, `null` where it could not be read. */
+  uidOf(target: Target): Promise<string | null>;
   /** The objects of this kind beside the one being opened. */
   siblings(): Promise<Json[] | null>;
   /** How a parent of `target`'s kind is addressed. */
@@ -239,6 +242,10 @@ const event =
         state: "stay",
         stay: { says: "targetUnread", kind, name, error: exists.unread },
       };
+    // The kubelet writes a Node's name where its uid belongs.
+    const uid = text(ref?.uid);
+    if (uid && uid !== name && (await read.uidOf(target)) !== uid)
+      return { state: "stay", stay: { says: "involvedReplaced", kind, name } };
     return { state: "parent", parent: read.refOf(target), tab: "events" };
   };
 
@@ -328,22 +335,42 @@ export function readerOver(
         entry.kind === target.kind && entry.group === groupOf(target.apiVersion)
     );
   const self = servedOf(resource);
+  const reads = new Map<string, Promise<unknown>>();
+  const get = (target: Target) => {
+    const entry = entryOf(target);
+    if (!entry) return null;
+    const namespace = entry.namespaced ? (target.namespace ?? null) : null;
+    const key = `${entry.group}/${entry.plural}/${namespace ?? ""}/${target.name}`;
+    const read =
+      reads.get(key) ??
+      commands.getServedObject(
+        entry.group,
+        entry.plural,
+        target.name,
+        namespace
+      );
+    reads.set(key, read);
+    return read;
+  };
   return {
     async exists(target) {
-      const entry = entryOf(target);
-      if (!entry) return "missing";
+      const read = get(target);
+      if (!read) return "missing";
       try {
-        await commands.getServedObject(
-          entry.group,
-          entry.plural,
-          target.name,
-          entry.namespaced ? (target.namespace ?? null) : null
-        );
+        await read;
         return "present";
       } catch (failure) {
         return errorCode(failure) === "NOT_FOUND"
           ? "missing"
           : { unread: errorToShow(failure) };
+      }
+    },
+    async uidOf(target) {
+      try {
+        const uid = field(await get(target), "metadata.uid");
+        return typeof uid === "string" && uid !== "" ? uid : null;
+      } catch {
+        return null;
       }
     },
     async siblings() {

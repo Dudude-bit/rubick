@@ -161,6 +161,20 @@ export function listLink(
   } as AppLink;
 }
 
+/** A row's identity in a list's `?names=`. */
+export const rowName = (row: { namespace?: string | null; name: string }) =>
+  `${row.namespace ?? ""}/${row.name}`;
+
+/** The list of a kind narrowed to exactly these objects. */
+export function namedListLink(
+  kind: string,
+  rows: ReadonlyArray<{ namespace?: string | null; name: string }>
+): AppLink {
+  return listLink(kind, {
+    names: [...new Set(rows.map(rowName))].sort().join(","),
+  });
+}
+
 /**
  * The list of a kind the catalogue names: its own page where the registry
  * holds that very kind, the generic list of whatever is served otherwise.

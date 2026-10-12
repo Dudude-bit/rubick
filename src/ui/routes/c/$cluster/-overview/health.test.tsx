@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
-import { beforeEach, describe, expect, it } from "vite-plus/test";
-import { cleanup, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
+import { act, cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { renderWithRouter } from "@/test/render";
@@ -60,6 +60,7 @@ const warning: WarningGroup = {
   objectKind: "Deployment",
   objectName: "meshed-demo",
   namespace: "k8s-gui-test",
+  incarnation: "current",
 };
 
 /** The panel's list, from the reader every surface uses, with every kind read. */
@@ -152,6 +153,45 @@ describe("the overview's two event panels", () => {
     expect(
       screen.getByRole("link", { name: "Deployment meshed-demo" })
     ).toHaveAttribute("href", "/c/prod/deployments/k8s-gui-test/meshed-demo");
+  });
+
+  /**
+   * wd-demo, made again under its name, wore its predecessor's FailedMount
+   * here, linked to the new pod. Fails if a warning about an object that no
+   * longer holds its name links it, or stops saying which it was.
+   */
+  it("names without a link an object a warning is about that no longer holds its name", async () => {
+    await wrap(
+      <WarningsPanel
+        warnings={[
+          { ...warning, reason: "FailedMount", incarnation: "earlier" },
+          {
+            ...warning,
+            reason: "BackOff",
+            objectName: "gone-1",
+            incarnation: "gone",
+          },
+          {
+            ...warning,
+            reason: "Unhealthy",
+            objectName: "unread",
+            incarnation: "unchecked",
+          },
+        ]}
+        known
+      />
+    );
+    expect(
+      screen.queryByRole("link", { name: "Deployment meshed-demo" })
+    ).toBeNull();
+    expect(
+      screen.queryByRole("link", { name: "Deployment gone-1" })
+    ).toBeNull();
+    expect(screen.getByText("earlier object")).toBeInTheDocument();
+    expect(screen.getByText("deleted")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Deployment unread" })
+    ).toBeInTheDocument();
   });
 
   it("says the warnings are unknown when an events list failed", async () => {
@@ -674,6 +714,52 @@ describe("a scope one namespace of which refused its pods", () => {
       "its controller has said Unavailable for 3h; its pods were not read"
     );
     expect(screen.getByTestId("attention-unchecked")).toContainElement(row);
+  });
+
+  /**
+   * Marco's "Unavailable for 22s" stood still between polls, ten seconds at a
+   * time, while the condition aged. Fails if the age is read once per payload
+   * instead of from the clock.
+   */
+  it("ticks a verdict's age with the clock between payloads", async () => {
+    vi.useFakeTimers();
+    try {
+      const said = {
+        ...overview,
+        unconfirmed: [
+          {
+            severity: "critical",
+            kind: "Deployment",
+            name: "ledger",
+            namespace: "team-blind",
+            reason: "Unavailable",
+            detail: null,
+            since: new Date(Date.now() - 20_000).toISOString(),
+            restarts: null,
+            foldedPods: null,
+          },
+        ],
+      } as unknown as ClusterOverview;
+      await wrap(
+        <AttentionPanel
+          attention={attentionFrom([], {
+            overview: said,
+          } as Partial<AttentionInputs>)}
+          pods={null}
+          podsUnread={[refusedPods]}
+          nodes={[]}
+          nodesKnown={false}
+        />
+      );
+      const row = screen.getByTestId("attention-unconfirmed");
+      expect(row).toHaveTextContent("Unavailable for 20s");
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+      expect(row).toHaveTextContent("Unavailable for 25s");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   /**
@@ -1749,8 +1835,12 @@ describe("what Needs attention says it checked", () => {
     ).toHaveClass("@max-[56rem]:hidden");
   });
 
-  /** Fifty rows push the rest of the page off screen; the tail is a count and a way into each list. */
-  it("caps the rows and links what it left out to each kind's list", async () => {
+  /**
+   * Fifty rows push the rest of the page off screen; the tail is a count and
+   * a way into each list. Dana's "3 Pods" opened every pod. Fails if the
+   * count's link stops narrowing the list to exactly the rows it counts.
+   */
+  it("caps the rows and links what it left out to those rows of each kind's list", async () => {
     const pods = Array.from({ length: 14 }, (_, at) => ({
       ...problem,
       kind: "Pod",
@@ -1759,11 +1849,22 @@ describe("what Needs attention says it checked", () => {
     }));
     await panel(attentionFrom(pods));
 
-    expect(screen.getAllByRole("link", { name: /^Pod api-/ })).toHaveLength(12);
+    const shown = screen
+      .getAllByRole("link", { name: /^Pod api-/ })
+      .map((link) => link.getAttribute("aria-label")!.slice("Pod ".length));
+    expect(shown).toHaveLength(12);
     expect(screen.getByText("and 2 more")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "2 Pods" })).toHaveAttribute(
-      "href",
-      "/c/prod/pods"
+    const href = screen
+      .getByRole("link", { name: "2 Pods" })
+      .getAttribute("href")!;
+    const url = new URL(href, "http://app");
+    expect(url.pathname).toBe("/c/prod/pods");
+    expect(url.searchParams.get("names")!.split(",").sort()).toEqual(
+      pods
+        .map((pod) => pod.name)
+        .filter((name) => !shown.includes(name))
+        .map((name) => `${problem.namespace}/${name}`)
+        .sort()
     );
   });
 

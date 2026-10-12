@@ -916,3 +916,41 @@ describe("a list a link to another kind's list landed on", () => {
     ).toHaveLength(1);
   });
 });
+
+describe("a list a link narrowed to the rows it named", () => {
+  /**
+   * Dana's "3 Pods" from Needs attention opened every pod in the namespace.
+   * Fails if `?names=` stops narrowing the rows, the banner stops saying how
+   * many and how many are not here, or Show all stops being offered.
+   */
+  it("shows only the named rows, says one is gone, and offers all of them back", async () => {
+    await renderWithRouter(
+      <ResourceList<Item>
+        title="Pods"
+        columns={columns}
+        emptyStateLabel="Pods"
+        data={[
+          { name: "api-1", namespace: "shop" },
+          { name: "api-2", namespace: "shop" },
+          { name: "web-1", namespace: "shop" },
+        ]}
+      />,
+      {
+        at: "/c/prod/pods?names=shop%2Fapi-1,shop%2Fapi-2,shop%2Fgone-1",
+        route: "/c/$cluster/$",
+      }
+    );
+    expect(screen.getByText("api-1")).toBeInTheDocument();
+    expect(screen.getByText("api-2")).toBeInTheDocument();
+    expect(screen.queryByText("web-1")).toBeNull();
+    expect(
+      screen.getByText(
+        "Showing only the 3 rows the Overview listed as needing attention."
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("1 of them is not in this list now.")
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show all" })).toBeVisible();
+  });
+});

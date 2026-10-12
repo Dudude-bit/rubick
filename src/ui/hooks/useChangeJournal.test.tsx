@@ -12,6 +12,12 @@ const bus = vi.hoisted(() => ({
   handlers: [] as Array<(event: { payload: unknown }) => void>,
 }));
 
+/** One stream per kind in team-checkout, as the tests below name them, and one per namespace elsewhere. */
+const streamOf = vi.hoisted(
+  () => (kind: string, scope: string[] | null) =>
+    !scope || scope[0] === "team-checkout" ? kind : `${kind}@${scope[0]}`
+);
+
 vi.mock("@/lib/events", () => ({
   listenEvent: vi.fn(async () => () => {}),
   listenResourceEvents: vi.fn(
@@ -25,9 +31,15 @@ vi.mock("@/lib/events", () => ({
 vi.mock("@/lib/commands", () => ({
   commands: {
     getNamespace: vi.fn(async () => ({ uid: "uid-1" })),
-    subscribeDeploymentWatch: vi.fn(async () => "deploy"),
-    subscribeStatefulsetWatch: vi.fn(async () => "sts"),
-    subscribeDaemonsetWatch: vi.fn(async () => "ds"),
+    subscribeDeploymentWatch: vi.fn(async (scope: string[] | null) =>
+      streamOf("deploy", scope)
+    ),
+    subscribeStatefulsetWatch: vi.fn(async (scope: string[] | null) =>
+      streamOf("sts", scope)
+    ),
+    subscribeDaemonsetWatch: vi.fn(async (scope: string[] | null) =>
+      streamOf("ds", scope)
+    ),
     resourceWatchSubscribed: vi.fn(async () => {}),
     unsubscribeResourceWatch: vi.fn(async () => {}),
   },
@@ -129,6 +141,33 @@ describe("the change journal under a refused kind", () => {
     await journal();
     await emit("ds", "failed", "connection reset by peer");
     expect(span()).toBeUndefined();
+  });
+});
+
+describe("a kind refused in some namespaces of the scope", () => {
+  /**
+   * Marco's Changes over team-checkout and team-blind said "StatefulSet,
+   * DaemonSet not watched" while StatefulSets were watched in team-checkout.
+   * Fails if a kind refused in one namespace is called unwatched in all, or
+   * a kind refused in every namespace is not.
+   */
+  it("names where a kind was refused, and calls it unwatched only where it was refused everywhere", async () => {
+    useClusterStore.setState({
+      namespaceScope: ["team-checkout", "team-blind"],
+    });
+    renderHook(() => useChangeJournal());
+    await waitFor(() => expect(bus.handlers).toHaveLength(6));
+    await emit("deploy", "synced");
+    await emit("deploy@team-blind", "synced");
+    await emit("sts", "synced");
+    await emit("sts@team-blind", "failed", REFUSED);
+    await emit("ds", "failed", REFUSED);
+    await emit("ds@team-blind", "failed", REFUSED);
+    expect(span()).toMatchObject({
+      to: null,
+      unwatched: ["DaemonSet"],
+      unwatchedIn: ["StatefulSet/team-blind"],
+    });
   });
 });
 

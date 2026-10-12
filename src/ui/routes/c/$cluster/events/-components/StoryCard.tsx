@@ -3,6 +3,8 @@ import { useQueries } from "@tanstack/react-query";
 
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { eventLanding } from "../../-object/attachment";
+import { PastObjectRef } from "../../-object/PastObjectRef";
+import { involvedUid } from "@/lib/event-incarnation";
 import { commands } from "@/lib/commands";
 import {
   densityOf,
@@ -100,6 +102,7 @@ const sameStory = (a: Story, b: Story) =>
   a.subject.name === b.subject.name &&
   a.subject.namespace === b.subject.namespace &&
   a.subject.byName === b.subject.byName &&
+  a.subject.earlier === b.subject.earlier &&
   a.events.length === b.events.length &&
   a.events.every((event, index) => event === b.events[index]);
 
@@ -141,14 +144,15 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
   const { subject } = story;
   const landing = landingOfStory(story);
   const { open: openPeek } = usePeek();
-  const peek = subject.kind
-    ? {
-        kind: subject.kind,
-        name: subject.name,
-        namespace: subject.namespace,
-        via: landing?.via,
-      }
-    : null;
+  const peek =
+    subject.kind && !subject.earlier
+      ? {
+          kind: subject.kind,
+          name: subject.name,
+          namespace: subject.namespace,
+          via: landing?.via,
+        }
+      : null;
 
   return (
     <article
@@ -173,7 +177,15 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
       }
     >
       <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
-        {subject.kind ? (
+        {subject.kind && subject.earlier ? (
+          <PastObjectRef
+            kind={subject.kind}
+            name={subject.name}
+            namespace={subject.namespace}
+            showNamespace={showNamespace}
+            past="earlier"
+          />
+        ) : subject.kind ? (
           <ResourceRef
             kind={subject.kind}
             name={subject.name}
@@ -308,6 +320,7 @@ function podsOf(story: Story): {
   /** How many of the story's pods were never asked about. */
   skipped: number;
 } {
+  if (story.subject.earlier) return { asked: [], skipped: 0 };
   const all = story.members.filter((member) => member.startsWith("Pod/"));
   return {
     asked: all.slice(0, STATUS_PODS).map((member) => ({
@@ -335,7 +348,7 @@ function Timeline({ story }: { story: Story }) {
   });
   const marks: StatusMark[] = statuses.flatMap((status, index) => {
     const pod = status.data;
-    if (!pod) return [];
+    if (!pod || !ownPod(story, pods[index].name, pod.uid)) return [];
     return pod.containers.flatMap((container) =>
       [...new Set([lastTermination(container), container.lastTerminated])]
         .filter(
@@ -446,6 +459,17 @@ function TimelineRow({
       </span>
     </li>
   );
+}
+
+/** Whether the pod read under this name is the one the story's events are about, where they say. */
+function ownPod(story: Story, name: string, uid: string): boolean {
+  const said = story.events.flatMap((event) =>
+    event.involvedObject.kind === ResourceType.Pod &&
+    event.involvedObject.name === name
+      ? [involvedUid(event)]
+      : []
+  );
+  return said.every((own) => own === null || own === uid);
 }
 
 /** The subject's Events tab, noting the latest Event written about the subject itself. */

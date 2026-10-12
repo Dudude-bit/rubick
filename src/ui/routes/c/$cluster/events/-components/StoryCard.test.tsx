@@ -82,3 +82,35 @@ describe("a story card held between watch ticks", () => {
     expect(screen.getByText("cannot say")).toBeInTheDocument();
   });
 });
+
+describe("a story about an earlier object of a name", () => {
+  /**
+   * A link from the old wd-demo's FailedMount opened the pod made again under
+   * the name, as if the warning were its own. Fails if the card links or
+   * peeks the name, or stops saying the object was an earlier one.
+   */
+  it("names the object without a link and says it was an earlier one", async () => {
+    const earlier: EventInfo = {
+      ...backOff,
+      reason: "FailedMount",
+      involvedObject: { ...backOff.involvedObject, uid: "d10287fd" },
+    };
+    const options: StoryOptions = {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+      readFrom: null,
+      earlier: new Set(["d10287fd"]),
+    };
+    const [story] = storiesOf([earlier], options);
+    const { container } = await renderWithRouter(
+      <StoryCard story={story} options={options} showNamespace={false} />
+    );
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(screen.getByText("earlier object")).toBeInTheDocument();
+    expect(container.querySelector("[data-past='earlier']")).toHaveAttribute(
+      "title",
+      expect.stringContaining("earlier Pod named web-0")
+    );
+  });
+});

@@ -1797,6 +1797,8 @@ export const ru: Catalogue = {
     earlierRows:
       "Строки до {since} приложение записало, когда наблюдало с {from} по {to}",
     unwatchedRefused: "{kinds} не отслеживаются: кластер отказал",
+    unwatchedRefusedIn:
+      "{kinds} не отслеживаются в {namespaces}: кластер отказал",
     deliveriesUnread: "Не удалось прочитать, кто это доставляет: {reason}",
     claimedOwner:
       "{owner} не перечисляет этот объект; на объекте только метка с его именем",
@@ -1867,6 +1869,10 @@ export const ru: Catalogue = {
       "Скорее всего: ни один узел не подходит. Планировщик дал один и тот же ответ {times}, так что с узлами, вероятно, ничего не менялось с первого вопроса.",
     guessPendingVaried:
       "Скорее всего: ни один узел не подходит, а ответ планировщика менялся за {attempts}, так что узлы, вероятно, меняются у него на глазах.",
+    guessPendingTopologyLabel:
+      "Скорее всего: ни у одного узла нет метки, по которой его ограничение topology spread распределяет поды, поэтому планировщик не сможет его разместить, пока такая метка не появится.",
+    guessPendingTopology:
+      "Скорее всего: на любом узле нарушится его ограничение topology spread, поэтому он ждёт, пока не изменятся его поды или узлы.",
     notPlacedYet:
       "Ещё не размещён: планировщик пока не нашёл для него узел, но под ещё в пределах ожидания, которое даётся новому поду, так что это пока не сбой.",
     guessUnknownUnread:
@@ -1931,6 +1937,12 @@ export const ru: Catalogue = {
     checkVolumeRef: "{kind} {name}: существует ли, связан ли",
     checkRequests: "Сравнить requests с тем, сколько свободно на узлах",
     checkNodes: "Посмотреть узлы: taints, ёмкость, что уже размещено",
+    checkTopologyLabels:
+      "Проверьте метки узлов: есть ли на них ключ, по которому распределяет ограничение topology spread",
+    checkTopologySpread:
+      "Сравните ограничение topology spread с тем, где уже работают его поды",
+    checkTaints: "Сравните taints узлов с tolerations пода",
+    checkNodeSelector: "Сравните nodeSelector и affinity пода с метками узлов",
     checkProbe:
       "Прочитать пробу: порт, путь, начальная задержка, против того, что слушает контейнер",
     notReadService: "Service в {namespace} ({reason})",
@@ -3293,6 +3305,27 @@ export const ru: Catalogue = {
     storyStillHappening: "продолжается",
     storySettled: "прекратилось",
     storyStateUnknown: "неизвестно",
+    refusedToRead: "Ваш доступ не позволяет читать {kind} {name}.",
+    namedRowsOnly: {
+      one: "Показана только {n} строка, которую Обзор отметил как требующую внимания.",
+      few: "Показаны только {n} строки, которые Обзор отметил как требующие внимания.",
+      many: "Показаны только {n} строк, которые Обзор отметил как требующие внимания.",
+      other:
+        "Показаны только {n} строки, которые Обзор отметил как требующие внимания.",
+    },
+    namedRowsMissing: {
+      one: "{n} из них сейчас нет в этом списке.",
+      few: "{n} из них сейчас нет в этом списке.",
+      many: "{n} из них сейчас нет в этом списке.",
+      other: "{n} из них сейчас нет в этом списке.",
+    },
+    namedRowsShowAll: "Показать все",
+    earlierObject: "прежний объект",
+    earlierObjectHint:
+      "О прежнем объекте {kind} с именем {name}. Сейчас под этим именем другой объект {kind}, и эти события не о нём.",
+    goneObject: "удалён",
+    goneObjectHint:
+      "Об объекте {kind} с именем {name}, которого больше нет. Сейчас под этим именем ничего нет.",
     podStatusNotAsked: {
       one: "Выходы ещё {n} пода не на этой шкале, потому что его не спрашивали.",
       few: "Выходы ещё {n} подов не на этой шкале, потому что их не спрашивали.",
@@ -4319,8 +4352,12 @@ export const ru: Catalogue = {
     shellStateUnknown: "состояние неизвестно, подключаться не к чему",
     logsPrintedBeforeExit:
       "То, что он напечатал перед выходом, есть во вкладке Logs.",
-    logsAttemptsLast:
-      "{attempts}{when}. То, что напечатал упавший запуск, есть во вкладке Logs.",
+    logsAttempts: "{attempts}{when}.",
+    failedRunInLogs: "То, что напечатал упавший запуск, есть во вкладке Logs.",
+    failedRunLogAsking: "Спрашиваем у узла лог этого запуска.",
+    failedRunLogEmpty: "Этот запуск ничего не напечатал.",
+    failedRunLogGone: "Лога этого запуска на узле больше нет.",
+    failedRunLogUnread: "Не удалось спросить у узла лог этого запуска.",
     logsFinishedComplete: "Завершился{took}{when}. Его лог полный.",
     logsTook: " за {took}",
     logsWhen: ", {when}",
@@ -5196,7 +5233,9 @@ export const ru: Catalogue = {
     framework: "Фреймворк",
     updates: "Обновления",
     updateAvailable: "Доступна версия {version}",
-    upToDate: "Установлена последняя версия",
+    upToDate: "В ленте релизов нет версии новее",
+    updateCheckFailed: "Не удалось проверить обновления",
+    updatesNotChecked: "Обновления ещё не проверялись",
     updateHint: "После загрузки обновления приложение перезапустится.",
     downloadingUpdate: "Загрузка обновления",
     downloadingUpdateHint:
@@ -5435,6 +5474,8 @@ export const ru: Catalogue = {
       "Service с именем {name} здесь нет, так что эти endpoints держит только тот, кто их записал.",
     noOwner: "Эту ревизию не держит ни один контроллер.",
     involvedGone: "{kind} {name}, о котором это событие, больше не существует.",
+    involvedReplaced:
+      "Не открыто на {kind} {name}: это событие о прежнем объекте {kind} с этим именем, а сейчас под ним другой объект.",
   },
   apiResources: {
     description:
@@ -6710,6 +6751,12 @@ export const ru: Catalogue = {
       "В срезе порты привязаны к портам Service по имени. Имена этих портов не совпадают ни с одним из объявленных в срезе, поэтому к ним ничего не маршрутизируется.",
     couldNotReadWhatConnects: "Не удалось прочитать, что с этим связано.",
     clusterDidNotAnswer: "Кластер не ответил.",
+    noAnswerWithin: {
+      one: "Кластер не ответил за {n} секунду.",
+      few: "Кластер не ответил за {n} секунды.",
+      many: "Кластер не ответил за {n} секунд.",
+      other: "Кластер не ответил за {n} секунды.",
+    },
     unknownRefused: "Кластер отказал: {message}",
     unknownFault: "Чтение не удалось: {message}",
     unknownRetry: "Прочитать ещё раз",
@@ -8078,6 +8125,20 @@ export const ru: Catalogue = {
       many: "У {n} подов метка {selector}, и ни один не готов",
       other: "У {n} пода метка {selector}, и ни один не готов",
     },
+    podsCarryNoneOwn: {
+      one: "У {n} пода метка {selector}, он не от этого {kind} и не готов",
+      few: "У {n} подов метка {selector}, ни один не от этого {kind}, и ни один не готов",
+      many: "У {n} подов метка {selector}, ни один не от этого {kind}, и ни один не готов",
+      other:
+        "У {n} пода метка {selector}, ни один не от этого {kind}, и ни один не готов",
+    },
+    podsCarrySomeOwn: {
+      one: "У {n} пода метка {selector}, и он не готов",
+      few: "У {n} подов метка {selector}, из них {own} от этого {kind}, и ни один не готов",
+      many: "У {n} подов метка {selector}, из них {own} от этого {kind}, и ни один не готов",
+      other:
+        "У {n} пода метка {selector}, из них {own} от этого {kind}, и ни один не готов",
+    },
     podsCarryPartOf: {
       one: "У {n} пода метка {carries}, но нет {lacks}",
       few: "У {n} подов метка {carries}, но нет {lacks}",
@@ -8878,6 +8939,18 @@ export const ru: Catalogue = {
       few: "{n} вида ещё загружаются",
       many: "{n} видов ещё загружается",
       other: "{n} вида ещё загружаются",
+    },
+    kindsPartlyRefused: {
+      one: "{n} из них запрещён в части пространств имён",
+      few: "{n} из них запрещены в части пространств имён",
+      many: "{n} из них запрещены в части пространств имён",
+      other: "{n} из них запрещены в части пространств имён",
+    },
+    kindsRefusedWherever: {
+      one: "{n} вид запрещён везде, где спрашивали",
+      few: "{n} вида запрещены везде, где спрашивали",
+      many: "{n} видов запрещены везде, где спрашивали",
+      other: "{n} вида запрещены везде, где спрашивали",
     },
     kindsNotSearched: {
       one: "в {n} виде не искали",

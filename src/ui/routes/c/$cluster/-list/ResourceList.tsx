@@ -58,6 +58,9 @@ import {
 import type { ListQuery, Scoped, UnreadNamespace } from "@/generated/types";
 import { UnreadNamespaces } from "./UnreadNamespaces";
 import { ListedHere } from "./ListedHere";
+import { NamedRowsBanner } from "./NamedRows";
+import { useNamedRows } from "./useNamedRows";
+import { rowName } from "@/lib/links";
 import { StaleRows } from "./StaleRows";
 import { RefusalWayOut, UnreadList } from "./UnreadList";
 import { useListRefusal } from "./useListRefusal";
@@ -388,11 +391,17 @@ export function ResourceList<
         })
       : [];
   const showDelivery = !!delivery && deliveries.available;
-  const rows = showDelivery
+  const delivered = showDelivery
     ? resources.filter((row) =>
         matchesDeliveryFilter(deliveryFilter, deliveriesOf(row))
       )
     : resources;
+  const named = useNamedRows();
+  const rows = useMemo(
+    () =>
+      named ? delivered.filter((row) => named.has(rowName(row))) : delivered,
+    [named, delivered]
+  );
 
   const deleteMutation = useMutation({
     mutationFn: async (item: Row) => {
@@ -577,6 +586,9 @@ export function ResourceList<
         />
       )}
       {!embedded && <ListedHere kind={listKind} />}
+      {!embedded && named && !loading && (
+        <NamedRowsBanner named={named} found={rows.length} />
+      )}
       {headerContent}
       {stale && (
         <StaleRows

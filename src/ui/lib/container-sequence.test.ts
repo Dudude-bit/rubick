@@ -121,14 +121,19 @@ describe("containerSequence on a pod held in init", () => {
     expect(app.steps[0].note).toBe("No logs yet: init has not finished.");
   });
 
-  it("keeps the failed step's restart history pointing at the log", () => {
+  /**
+   * Dana's migrate said its failed run was in Logs while the node had dropped
+   * that log. Fails if the static note promises a log again; the block asks
+   * the node instead.
+   */
+  it("counts the failed step's attempts and leaves its log to the node to answer", () => {
     const groups = containerSequence(stuckInInit, t);
     const migrate = groups
       .find((group) => group.phase === "init")!
       .steps.find((step) => step.container.name === "migrate")!;
 
     expect(migrate.note).toContain("9 attempts");
-    expect(migrate.note).toContain("in Logs");
+    expect(migrate.note).not.toContain("Logs");
   });
 
   /**

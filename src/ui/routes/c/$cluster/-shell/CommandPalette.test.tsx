@@ -428,6 +428,45 @@ describe("the command palette's hits", () => {
   });
 
   /**
+   * Pods read in team-checkout and refused in team-blind were counted both as
+   * searched and as could not read, so Marco's parts summed past the kinds
+   * served. Fails if a kind read somewhere stops counting as searched once,
+   * or the summary stops saying it was refused in some namespaces, or a kind
+   * refused everywhere is not counted on the summary.
+   */
+  it("counts a kind refused in some namespaces once, as searched, and says so", async () => {
+    search.searched = [{ kind: "Pod", group: "", plural: "pods" }];
+    search.unreadable = [
+      {
+        kind: "Pod",
+        group: "",
+        plural: "pods",
+        reason: "forbidden",
+        message: "pods is forbidden",
+        namespaces: ["team-blind"],
+      },
+      {
+        kind: "PriorityClass",
+        group: "scheduling.k8s.io",
+        plural: "priorityclasses",
+        reason: "forbidden",
+        message: "priorityclasses is forbidden",
+        namespaces: [],
+      },
+    ];
+    await open("checkout");
+    expect(
+      await screen.findByText("Names searched in 1 of 2 kinds served")
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("1 of them refused in some namespaces")
+    ).toBeInTheDocument();
+    expect(screen.getByText("1 kind refused wherever asked")).toHaveClass(
+      "text-warn"
+    );
+  });
+
+  /**
    * The kinds left out are one Enter away: the row asks for every kind the
    * cluster serves, and the request is what changes.
    */

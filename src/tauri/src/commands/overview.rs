@@ -206,7 +206,89 @@ pub struct WarningGroup {
     /// The involved object's namespace, not the event's: an event about a
     /// pod is recorded beside it, but a cluster-scoped object's event is not.
     pub namespace: Option<String>,
+    /// Whether that object is the one holding its name now. A pod made again
+    /// under its name took its predecessor's `FailedMount` as its own.
+    pub incarnation: Incarnation,
 }
+
+/// Whether the object an event names is the one that has the name now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Incarnation {
+    Current,
+    /// Another object has the name now.
+    Earlier,
+    /// Nothing has the name now.
+    Gone,
+    /// The event names no uid, or its kind was not read where it lives.
+    Unchecked,
+}
+
+/// Who holds each name now, among the kinds this query read.
+struct Holders<'a> {
+    uids: HashMap<(&'a str, &'a str, &'a str), &'a str>,
+    unread: &'a [OverviewUnread],
+    scope: Option<&'a [String]>,
+}
+
+impl<'a> Holders<'a> {
+    fn of(input: &'a OverviewInputs<'a>) -> Self {
+        fn hold<'a, K: Resource>(
+            uids: &mut HashMap<(&'a str, &'a str, &'a str), &'a str>,
+            kind: &'static str,
+            items: &'a [Arc<K>],
+        ) {
+            for item in items {
+                let meta = item.meta();
+                if let (Some(namespace), Some(name), Some(uid)) =
+                    (&meta.namespace, &meta.name, &meta.uid)
+                {
+                    uids.insert((kind, namespace, name), uid);
+                }
+            }
+        }
+        let mut uids = HashMap::new();
+        hold(&mut uids, "Pod", input.scoped_pods);
+        hold(&mut uids, "Deployment", input.deployments);
+        hold(&mut uids, "StatefulSet", input.stateful_sets);
+        hold(&mut uids, "DaemonSet", input.daemon_sets);
+        hold(&mut uids, "Job", input.jobs);
+        Self {
+            uids,
+            unread: input.unread,
+            scope: input.scope,
+        }
+    }
+
+    fn incarnation(&self, event: &Event) -> Incarnation {
+        let object = &event.involved_object;
+        let (Some(kind), Some(namespace), Some(name), Some(uid)) =
+            (&object.kind, &object.namespace, &object.name, &object.uid)
+        else {
+            return Incarnation::Unchecked;
+        };
+        let read = HELD_KINDS.contains(&kind.as_str())
+            && self
+                .scope
+                .is_none_or(|scope| scope.iter().any(|n| n == namespace))
+            && !self.unread.iter().any(|entry| {
+                entry.kind == *kind && entry.namespace.as_deref().is_none_or(|n| n == namespace)
+            });
+        if !read {
+            return Incarnation::Unchecked;
+        }
+        match self
+            .uids
+            .get(&(kind.as_str(), namespace.as_str(), name.as_str()))
+        {
+            Some(now) if now == uid => Incarnation::Current,
+            Some(_) => Incarnation::Earlier,
+            None => Incarnation::Gone,
+        }
+    }
+}
+
+const HELD_KINDS: [&str; 5] = ["Pod", "Deployment", "StatefulSet", "DaemonSet", "Job"];
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -954,7 +1036,10 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
         .collect()
 }
 
-fn recent_warnings<'a>(events: impl IntoIterator<Item = &'a Event>) -> Vec<WarningGroup> {
+fn recent_warnings<'a>(
+    events: impl IntoIterator<Item = &'a Event>,
+    incarnation: impl Fn(&Event) -> Incarnation,
+) -> Vec<WarningGroup> {
     let cutoff = chrono::Utc::now() - chrono::Duration::minutes(RECENT_WARNING_WINDOW_MINUTES);
     let mut grouped: BTreeMap<String, WarningGroup> = BTreeMap::new();
 
@@ -982,6 +1067,7 @@ fn recent_warnings<'a>(events: impl IntoIterator<Item = &'a Event>) -> Vec<Warni
             object_kind: None,
             object_name: None,
             namespace: None,
+            incarnation: Incarnation::Unchecked,
         });
         entry.count += event.count.unwrap_or(1);
         let last_rfc = last.map(|t| t.to_rfc3339());
@@ -995,6 +1081,7 @@ fn recent_warnings<'a>(events: impl IntoIterator<Item = &'a Event>) -> Vec<Warni
             // for an event about a Node — inheriting it would file a
             // cluster-scoped object inside a namespace it does not live in.
             entry.namespace.clone_from(&event.involved_object.namespace);
+            entry.incarnation = incarnation(event);
         }
     }
 
@@ -1583,7 +1670,10 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         scheduler: aggregate.scheduler,
         nodes: aggregate.summaries,
         nodes_known: input.nodes_known,
-        warnings: recent_warnings(refs(input.events)),
+        warnings: {
+            let holders = Holders::of(input);
+            recent_warnings(refs(input.events), |event| holders.incarnation(event))
+        },
         warnings_known: input.events_known,
         counts,
         pods: census("Pod").map(|complete| Census {
@@ -2191,6 +2281,72 @@ mod tests {
             served_from: OverviewSource::List,
             now: Utc::now(),
         })
+    }
+
+    fn failed_mount(namespace: &str, name: &str, uid: &str) -> Event {
+        let mut event: Event = serde_json::from_value(serde_json::json!({
+            "apiVersion": "v1",
+            "kind": "Event",
+            "metadata": { "name": format!("{name}.{uid}"), "namespace": namespace },
+            "type": "Warning",
+            "reason": "FailedMount",
+            "count": 1,
+            "lastTimestamp": (Utc::now() - chrono::Duration::minutes(3))
+                .format("%Y-%m-%dT%H:%M:%SZ")
+                .to_string(),
+            "involvedObject": { "kind": "Pod", "name": name, "namespace": namespace, "uid": uid },
+        }))
+        .expect("an event this test wrote");
+        event.message = Some("MountVolume.SetUp failed".to_string());
+        event
+    }
+
+    fn warnings_with(pods: &[Pod], unread: &[OverviewUnread], event: Event) -> Vec<WarningGroup> {
+        build_overview(&OverviewInputs {
+            scoped_pods: &arcs(pods.to_vec()),
+            accounting_pods: &arcs(pods.to_vec()),
+            nodes: &[],
+            nodes_known: true,
+            deployments: &[],
+            stateful_sets: &[],
+            daemon_sets: &[],
+            unread,
+            jobs: &[],
+            events: &arcs([event]),
+            events_known: true,
+            usage_by_node: None,
+            counts: ResourceCounts::default(),
+            scope: None,
+            served_from: OverviewSource::List,
+            now: Utc::now(),
+        })
+        .warnings
+    }
+
+    /// wd-demo, deleted and made again, wore its predecessor's `FailedMount` on
+    /// the Overview as its own. Fails if the warning's object is matched by
+    /// name and not by uid, or if a pod list that was not read answers.
+    #[test]
+    fn a_warning_names_whether_its_object_still_holds_the_name() {
+        let mut current = pod("wd-demo", PodStatus::default());
+        current.metadata.uid = Some("4afe41e6".to_string());
+        let pods = [current];
+        let incarnation = |uid: &str, pods: &[Pod], unread: &[OverviewUnread]| {
+            warnings_with(pods, unread, failed_mount("default", "wd-demo", uid))[0].incarnation
+        };
+        assert_eq!(incarnation("4afe41e6", &pods, &[]), Incarnation::Current);
+        assert_eq!(incarnation("d10287fd", &pods, &[]), Incarnation::Earlier);
+        assert_eq!(incarnation("d10287fd", &[], &[]), Incarnation::Gone);
+        let refused = [OverviewUnread {
+            kind: "Pod".to_string(),
+            namespace: Some("default".to_string()),
+            code: "FORBIDDEN".to_string(),
+            message: "forbidden".to_string(),
+        }];
+        assert_eq!(
+            incarnation("d10287fd", &[], &refused),
+            Incarnation::Unchecked
+        );
     }
 
     fn node_metrics_response(
@@ -5359,7 +5515,7 @@ mod across_namespaces {
         recent.message = Some("Insufficient memory".to_string());
         recent.involved_object.name = Some("api-1".to_string());
 
-        let groups = recent_warnings([&loud, &recent]);
+        let groups = recent_warnings([&loud, &recent], |_| Incarnation::Unchecked);
 
         assert_eq!(groups.len(), 1);
         let group = &groups[0];
@@ -5378,7 +5534,7 @@ mod across_namespaces {
         undated.message = Some("undated".to_string());
 
         for order in [[&dated, &undated], [&undated, &dated]] {
-            let groups = recent_warnings(order);
+            let groups = recent_warnings(order, |_| Incarnation::Unchecked);
             assert_eq!(groups[0].sample.as_deref(), Some("dated"));
         }
     }
@@ -5392,7 +5548,7 @@ mod across_namespaces {
             event(PROD, "FailedScheduling", 2, Some(5)),
             event(STAGING, "FailedScheduling", 8, Some(5)),
         ];
-        let reasons: Vec<_> = recent_warnings(&events)
+        let reasons: Vec<_> = recent_warnings(&events, |_| Incarnation::Unchecked)
             .into_iter()
             .map(|group| group.reason)
             .collect();

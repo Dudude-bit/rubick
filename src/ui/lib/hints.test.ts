@@ -9,6 +9,7 @@ import {
   hintFor,
   namespaceOf,
   redact,
+  schedulingCauses,
   searchQuery,
   searchUrl,
   troubleOf,
@@ -498,6 +499,67 @@ describe("a pod the scheduler has not placed", () => {
     expect(hintFor(late, unplaced(-1), NONE).headline.key).toBe(
       "guessPendingSame"
     );
+  });
+});
+
+describe("what the scheduler says keeps a pending pod out", () => {
+  const unplaced = (secondsLeft: number) =>
+    pod({
+      nodeName: null,
+      status: {
+        phase: "Pending",
+        display: "Pending",
+        exitUnreported: false,
+        ready: false,
+        conditions: [],
+        message: null,
+        reason: null,
+      },
+      start: {
+        state: "starting",
+        until: new Date(Date.now() + secondsLeft * 1000).toISOString(),
+      },
+    });
+  const TOPOLOGY =
+    "0/2 nodes are available: 2 node(s) didn't match pod topology spread constraints (missing required label). preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.";
+  const TAINT =
+    "0/2 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 1 Insufficient cpu.";
+
+  /**
+   * Dana's topology-demo pod: the scheduler said no node carries the
+   * topology key, and Most likely pointed at requests, taints and capacity.
+   * Fails if the advice stops following the scheduler's own reason.
+   */
+  it("points at the nodes' labels when the scheduler names a missing topology label", () => {
+    const trouble = troubleOf(unplaced(-1), [
+      event("FailedScheduling", TOPOLOGY),
+    ])!;
+    expect(trouble).toMatchObject({ causes: ["topologyLabel"] });
+    const hint = hintFor(trouble, unplaced(-1), NONE);
+    expect(hint.headline.key).toBe("guessPendingTopologyLabel");
+    expect(hint.checks.map((check) => check.says.key)).toEqual([
+      "checkTopologyLabels",
+    ]);
+  });
+
+  /** Fails if causes are read out of order, or the requests check is offered for a taint alone. */
+  it("names each cause the answer gives, in its order", () => {
+    expect(schedulingCauses(TAINT)).toEqual(["taint", "resources"]);
+    expect(
+      schedulingCauses(
+        "0/2 nodes are available: 2 node(s) didn't match Pod's node affinity/selector."
+      )
+    ).toEqual(["nodeSelector"]);
+  });
+
+  /** An answer this does not know is not given someone else's checks; it keeps the general two. */
+  it("keeps the general checks for an answer it cannot place", () => {
+    const trouble = troubleOf(unplaced(-1), [
+      event("FailedScheduling", "0/5 nodes are available"),
+    ])!;
+    expect(
+      hintFor(trouble, unplaced(-1), NONE).checks.map((c) => c.says.key)
+    ).toEqual(["checkRequests", "checkNodes"]);
   });
 });
 
