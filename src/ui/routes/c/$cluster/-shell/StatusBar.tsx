@@ -1,4 +1,4 @@
-import { Monitor, Moon, Sun } from "lucide-react";
+import { History, Monitor, Moon, Sun } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -11,8 +11,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useScopedOverview } from "@/hooks/useClusterOverview";
 import { useAttention } from "@/hooks/useAttention";
+import { useRealtimeAge } from "@/hooks/useRealtimeAge";
 import { attentionWords, type Attention } from "@/lib/attention";
 import { useClusterSummary } from "@/hooks/useClusterSummary";
 import { useRenewal } from "@/hooks/useCredentialRenewal";
@@ -21,10 +21,12 @@ import { scopeLabel } from "@/lib/namespace-scope";
 import { formatShortcut } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useShownPath } from "@/lib/hide-paths";
-import { hasSession, useClusterStore } from "@/stores/clusterStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import { useThemeStore } from "@/stores/themeStore";
 import { podTotal } from "../-overview/health-share";
 import { ActivityPanel } from "./ActivityPanel";
+import { useShellCounts } from "./useShellCounts";
+import { useWindowCluster } from "./useWindowCluster";
 import { LinkOpenedNote } from "./DeepLinkBanner";
 import { StallIndicator } from "./StallIndicator";
 import { useT, type T } from "@/i18n/useT";
@@ -70,8 +72,7 @@ const SIGN_IN_HINT: Record<
 export function StatusBar() {
   const t = useT();
   const show = useShownPath();
-  const currentContext = useClusterStore((s) => s.currentContext);
-  const connected = useClusterStore(hasSession);
+  const { context: currentContext, live: connected } = useWindowCluster();
   const connectedThrough = useClusterStore((s) => s.connectedThrough);
   const isLoading = useClusterStore((s) => s.isLoading);
   const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
@@ -80,13 +81,16 @@ export function StatusBar() {
   const pendingContext = useClusterStore((s) => s.pendingContext);
   const connect = useClusterStore((s) => s.connect);
   const scope = useClusterStore((s) => s.namespaceScope);
-  const scoped = useScopedOverview();
-  const attention = useAttention();
+  const counts = useShellCounts();
   // A placeholder is the last scope's answer, and under this scope's label it
-  // would count the wrong namespaces.
+  // would count the wrong namespaces; it has no attention, so it stays out.
   const here =
-    scoped.data && !scoped.isPlaceholderData && attention
-      ? { pods: scoped.data.pods, unread: scoped.data.unread, attention }
+    counts.overview && counts.attention
+      ? {
+          pods: counts.overview.pods,
+          unread: counts.overview.unread,
+          attention: counts.attention,
+        }
       : null;
   // The two worth a line that is always up — both predict the sign-in screen,
   // and they differ in why. Everything else is quiet, and a chip that is
@@ -150,7 +154,9 @@ export function StatusBar() {
               }
               className="text-err transition-colors hover:text-fg"
             >
-              {t("cluster", "connectionFailedRetry")}
+              {t("cluster", "connectFailedRetry", {
+                failed: t("cluster", "connectFailed"),
+              })}
             </button>
           </TooltipTrigger>
           <TooltipContent side="top" align="end" className="max-w-[420px]">
@@ -201,8 +207,18 @@ export function StatusBar() {
             <TooltipTrigger asChild>
               <span
                 data-testid="scope-counts"
-                className="flex cursor-default items-center gap-1.5"
+                className={cn(
+                  "flex cursor-default items-center gap-1.5",
+                  counts.heldAt !== null && "opacity-60"
+                )}
               >
+                {counts.heldAt !== null && (
+                  <History
+                    role="img"
+                    aria-label={t("cluster", "countsHeld")}
+                    className="h-3 w-3 flex-none"
+                  />
+                )}
                 {here === null ? (
                   // Refused, failed or still reading: the count is unknown,
                   // and "0 pods · 0 problems" would say the opposite of the
@@ -243,6 +259,7 @@ export function StatusBar() {
               </span>
             </TooltipTrigger>
             <TooltipContent side="top" align="end" className="max-w-[320px]">
+              {counts.heldAt !== null && <HeldAt at={counts.heldAt} />}
               <ClusterWide />
             </TooltipContent>
           </Tooltip>
@@ -251,6 +268,17 @@ export function StatusBar() {
         <span>{t("cluster", "notConnectedLower")}</span>
       )}
     </footer>
+  );
+}
+
+/** How old the counts standing in for the cluster's own are. */
+function HeldAt({ at }: { at: number }) {
+  const t = useT();
+  const age = useRealtimeAge(new Date(at).toISOString());
+  return (
+    <p className="mb-1">
+      {t("cluster", "countsHeldAt", { ago: t("action", "agoSuffix", { age }) })}
+    </p>
   );
 }
 

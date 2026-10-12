@@ -115,6 +115,8 @@ interface ClusterState {
   failures: Record<string, ConnectFailed>;
   /** Which way each session that landed reaches its cluster. */
   paths: Record<string, ConnectionPath>;
+  /** When the window last turned to `currentContext`: an answer older than this is from before. */
+  turnedAt: number;
 
   // Actions
   loadContexts: () => Promise<void>;
@@ -233,6 +235,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
   wayBack: null,
   failures: {},
   paths: {},
+  turnedAt: 0,
 
   loadContexts: async () => {
     set({ isLoading: true, error: null, errorContext: null });
@@ -375,6 +378,7 @@ export const useClusterStore = create<ClusterState>((set, get) => ({
       connectionAttemptId: attemptId,
       wayBack:
         before.isConnected && changed ? before.currentContext : before.wayBack,
+      turnedAt: changed ? Date.now() : before.turnedAt,
     };
 
     const landed = (info: ClusterInfo) => {

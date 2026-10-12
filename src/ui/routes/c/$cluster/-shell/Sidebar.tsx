@@ -20,12 +20,11 @@ import {
 import { ClusterMenu } from "@/components/cluster/ClusterMenu";
 import { ProviderMark } from "@/components/ui/provider-mark";
 import { Spinner } from "@/components/ui/spinner";
-import { useScopedOverview } from "@/hooks/useClusterOverview";
-import { useAttention } from "@/hooks/useAttention";
 import {
   ATTENTION_TEXT,
   attentionFigure,
   attentionWords,
+  type Attention,
 } from "@/lib/attention";
 import {
   oneLock,
@@ -34,6 +33,8 @@ import {
   useLocks,
   type Lock as ListLock,
 } from "./useListAccess";
+import { useShellCounts, type ShellCounts } from "./useShellCounts";
+import { useWindowCluster } from "./useWindowCluster";
 import { useAppSearchValue } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
@@ -68,7 +69,7 @@ import { commands } from "@/lib/commands";
 import { EVERY_NAMESPACE, queryKeys } from "@/lib/query-keys";
 import { boardMark, gatewaysMark, routesBoard } from "@/lib/route-rows";
 import { useClusterMark } from "@/stores/clusterIdentityStore";
-import { hasSession, useClusterStore } from "@/stores/clusterStore";
+import { useClusterStore } from "@/stores/clusterStore";
 import {
   inScope,
   joinScoped,
@@ -77,11 +78,7 @@ import {
 } from "@/lib/namespace-scope";
 import { useSettingsStore } from "@/stores/settingsStore";
 import { useUpdaterStore } from "@/stores/updaterStore";
-import type {
-  ClusterOverview,
-  ListQuery,
-  ResourceCounts,
-} from "@/generated/types";
+import type { ListQuery, ResourceCounts } from "@/generated/types";
 import { errorWords } from "@/i18n/say";
 import { useT } from "@/i18n/useT";
 
@@ -360,18 +357,10 @@ function RailMore({ n, onClick }: { n: number; onClick: () => void }) {
 }
 
 export function Sidebar() {
-  const isConnected = useClusterStore((s) => s.isConnected);
   const [attachRail, railFade, rowsPast, scrollRail] = useRailFade();
-  const { data } = useScopedOverview();
+  const counts = useShellCounts();
   const locks = useListLocks(NAV_KINDS);
   const servedLocks = useLocks(NAV_QUERIES);
-
-  // The overview query keeps its last answer as placeholder data across the
-  // key change a disconnect causes, which is right while switching clusters
-  // and wrong once there is no cluster: the rail went on printing the counts
-  // of the cluster the reader had just left. The status bar has always said
-  // "not connected" here; the rail now agrees rather than inventing numbers.
-  const overview = isConnected ? data : undefined;
 
   return (
     <aside className="flex w-52 flex-col overflow-hidden border-r border-hair">
@@ -392,7 +381,7 @@ export function Sidebar() {
                   <NavRow
                     key={item.labelKey ?? item.label}
                     item={item}
-                    overview={overview}
+                    counts={counts}
                     lock={
                       item.kind
                         ? locks[item.kind]
@@ -402,9 +391,7 @@ export function Sidebar() {
                     }
                   />
                 ))}
-                {group.caption === "network" && (
-                  <GatewayRows overview={overview} />
-                )}
+                {group.caption === "network" && <GatewayRows />}
               </div>
             ))}
             <IntegrationsGroup />
@@ -437,7 +424,7 @@ export function Sidebar() {
  * its own name on every row.
  */
 
-function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
+function GatewayRows() {
   const t = useT();
   // The whole selection, not the collapsed `currentNamespace` — that is `""`
   // for any two-or-more namespace window, which narrows to the whole cluster
@@ -603,7 +590,6 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
       {served.has("Gateway") && (
         <NavRow
           item={resource(ResourceType.Gateway)}
-          overview={overview}
           // No number where a namespace was not read: it would not be the
           // scope's total.
           value={
@@ -622,7 +608,6 @@ function GatewayRows({ overview }: { overview: ClusterOverview | undefined }) {
       {routeKinds.length > 0 && (
         <NavRow
           item={{ labelKey: "routes", path: pageLink("routes"), icon: Route }}
-          overview={overview}
           value={
             routes.data?.complete && routes.data.unread.length === 0
               ? scopedRoutes.length
@@ -696,7 +681,6 @@ function IntegrationsGroup() {
         path: pageLink("integrations"),
         icon: Plug,
       }}
-      overview={undefined}
       value={null}
       active={onCatalog && vendor === null}
     />
@@ -752,7 +736,6 @@ function IntegrationsGroup() {
     <NavRow
       key={page.id}
       item={{ label: page.name, path: page.link, icon: page.icon }}
-      overview={undefined}
       value={page.count}
       mark={page.tone ?? undefined}
       // Detected but refused: the row is drawn disabled with a vendor
@@ -817,9 +800,8 @@ function IntegrationsGroup() {
  */
 function ClusterRow() {
   const t = useT();
-  const currentContext = useClusterStore((s) => s.currentContext);
+  const { context: currentContext, live: connected } = useWindowCluster();
   const alias = useClusterMark(currentContext).alias?.trim();
-  const connected = useClusterStore(hasSession);
   const isLoading = useClusterStore((s) => s.isLoading);
   const isAuthenticating = useClusterStore((s) => s.isAuthenticating);
 
@@ -828,6 +810,7 @@ function ClusterRow() {
   const body = (
     <>
       <ProviderMark
+        data-window-cluster="mark"
         provider={detectProvider(currentContext ?? "")}
         className="h-[15px] w-[15px] flex-none"
         style={{ color: "var(--cluster)" }}
@@ -852,6 +835,7 @@ function ClusterRow() {
       {/* The halo is what makes a 7px dot readable in peripheral vision,
           which is the only way this indicator is ever looked at. */}
       <span
+        data-window-cluster="dot"
         aria-label={
           connected ? "connected" : connecting ? "connecting" : "disconnected"
         }
@@ -943,7 +927,7 @@ function LockMark({ lock, reason }: { lock: ListLock; reason?: string }) {
 
 function NavRow({
   item,
-  overview,
+  counts,
   value,
   mark,
   note,
@@ -953,7 +937,7 @@ function NavRow({
   active,
 }: {
   item: NavItem;
-  overview: ClusterOverview | undefined;
+  counts?: ShellCounts;
   /** A count this row carries itself, for a row the overview knows nothing about. */
   value?: number | null;
   /**
@@ -1028,7 +1012,7 @@ function NavRow({
           {note !== undefined ? (
             <span className="ml-auto text-[10px] text-fg-fnt">{note}</span>
           ) : value === undefined ? (
-            <NavCount item={item} overview={overview} />
+            counts && <NavCount item={item} counts={counts} />
           ) : (
             value !== null && (
               <span className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-fnt">
@@ -1072,18 +1056,30 @@ function NavRow({
  * of the worst row in it. Uncapped: a headline that shrank when the
  * backend's ranked list overflowed would be the one number nobody can use.
  */
-function AttentionCount() {
+function AttentionCount({
+  attention,
+  held,
+}: {
+  attention: Attention | null;
+  held: boolean;
+}) {
   const t = useT();
-  const attention = useAttention();
   if (!attention || (attention.complete && attention.total === 0)) return null;
   const { total: n, complete, worst } = attention;
   return (
     <span
       className={cn(
         "ml-auto flex items-center gap-1 text-[11px]",
-        worst ? ATTENTION_TEXT[worst] : "text-fg-fnt"
+        worst ? ATTENTION_TEXT[worst] : "text-fg-fnt",
+        held && HELD_CLASS
       )}
-      title={complete ? undefined : t("cluster", "problemsNotAllChecked")}
+      title={
+        held
+          ? t("cluster", "countsHeld")
+          : complete
+            ? undefined
+            : t("cluster", "problemsNotAllChecked")
+      }
       aria-label={attentionWords({ total: n, complete }, t)}
     >
       {!complete && (
@@ -1105,18 +1101,26 @@ function AttentionCount() {
  * is a measurement — "this namespace has no secrets" — and printing it for
  * a list the token may not read would state that as fact.
  */
-function NavCount({
-  item,
-  overview,
-}: {
-  item: NavItem;
-  overview: ClusterOverview | undefined;
-}) {
+function NavCount({ item, counts }: { item: NavItem; counts: ShellCounts }) {
+  const t = useT();
+  const { overview, attention, heldAt } = counts;
   if (!overview) return null;
+  const held = heldAt !== null;
 
-  if (item.labelKey === "overview") return <AttentionCount />;
+  if (item.labelKey === "overview")
+    return <AttentionCount attention={attention} held={held} />;
 
   const count = item.count && overview.counts[item.count];
   if (count == null) return null;
-  return <span className="ml-auto text-[11px] text-fg-fnt">{count}</span>;
+  return (
+    <span
+      className={cn("ml-auto text-[11px] text-fg-fnt", held && HELD_CLASS)}
+      title={held ? t("cluster", "countsHeld") : undefined}
+    >
+      {count}
+    </span>
+  );
 }
+
+/** A count from before the window turned to this cluster, standing in until its own answer lands. */
+const HELD_CLASS = "opacity-60";

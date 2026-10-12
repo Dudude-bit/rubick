@@ -324,7 +324,7 @@ function ClusterListRow({
               {live ? (
                 <span className="text-ok">{t("cluster", "liveInline")}</span>
               ) : failed ? (
-                t("cluster", "failedInline")
+                t("cluster", "connectFailed")
               ) : lastUsedAt ? (
                 t("cluster", "lastUsedAgo", { age })
               ) : (
