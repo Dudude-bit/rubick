@@ -147,6 +147,9 @@ export const columns: ColumnDef<PodRow>[] = [
     },
     enableSorting: true,
     meta: {
+      // Last, and only where the alternative is a sideways scroll: Status
+      // already says a running pod is not ready by its colour.
+      yields: 6,
       label: { section: "columns", key: "ready" },
       share: (pod: PodRow) => {
         const { ready, total } = podReadiness(pod);

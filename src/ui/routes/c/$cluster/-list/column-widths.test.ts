@@ -706,6 +706,46 @@ describe("a short value a row holds, in a 1024px window in Russian", () => {
   );
 
   /**
+   * Lena's Pods in all namespaces at 1024 in Russian scrolled sideways by
+   * the width of the four buttons drawn only under the pointer. Fails if the
+   * list, its buttons folded into one beside its laned scrollbar, still needs
+   * a sideways scroll, or hides the name, the status or the restarts for it.
+   */
+  it("fits Pods in all namespaces at 1024 in Russian without a sideways scroll", () => {
+    const rows = [
+      {
+        name: "named-port-demo-7954dcd89f-knkqs",
+        namespace: "team-checkout",
+        status: { display: "CreateContainerConfigError" },
+        nodeName: "k3d-rubick-live-agent-0",
+        restartCount: 830,
+      },
+    ];
+    const shown = pods.filter((c) => nameOf(c) !== "namespace");
+    const folded = { size: 1, meta: { floor: actionsColumnSize(1, 10) } };
+    const specs = [...shown, folded].map((c, index) => ({
+      id: index < shown.length ? nameOf(c) : "actions",
+      floor: columnFloor(c, ru, rows),
+      yields: (c as Column).meta?.yields,
+    }));
+    // The lane's 8px, then 20px less again: WebKit's glyphs run wider than
+    // the widths these floors are estimated at here.
+    for (const port of [PORT_1024 - 8, PORT_1024 - 28]) {
+      const hidden = yieldedColumns(specs, port);
+      const kept = specs.filter((spec) => !hidden.includes(spec.id));
+      expect(
+        kept.reduce((sum, spec) => sum + spec.floor, 0),
+        `at ${port}`
+      ).toBeLessThanOrEqual(port);
+      expect(hidden).not.toEqual(
+        expect.arrayContaining([
+          expect.stringMatching(/^(name|status|restarts)$/),
+        ])
+      );
+    }
+  });
+
+  /**
    * Lena read "15 (13 мин наза…" on Pods with room beside the column. Fails
    * if the Restarts floor stops holding the most restarts its rows count
    * with the widest age a restart is told in, in the reader's language.

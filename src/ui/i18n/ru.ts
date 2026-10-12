@@ -1367,6 +1367,7 @@ export const ru: Catalogue = {
       "Потяните, чтобы изменить ширину · двойной щелчок вернёт исходную",
     more: "Ещё",
     moreActions: "Другие действия",
+    foldedActions: "В этом меню: {list}",
     goBack: "Вернуться",
     show: "Показать",
     hide: "Скрыть",

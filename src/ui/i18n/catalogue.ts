@@ -1352,6 +1352,7 @@ export const en = {
     dragToResize: "Drag to resize · double-click to reset",
     more: "More",
     moreActions: "More actions",
+    foldedActions: "In this menu: {list}",
     goBack: "Go back",
     show: "Show",
     hide: "Hide",
