@@ -64,8 +64,21 @@ pub async fn get_deployment_replicasets(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ReplicaSetInfo>> {
+    crate::client::clock::timed(
+        &state.perf,
+        "getDeploymentReplicasets",
+        deployment_revisions(&state, name, namespace),
+    )
+    .await
+}
+
+async fn deployment_revisions(
+    state: &AppState,
+    name: String,
+    namespace: Option<String>,
+) -> Result<Vec<ReplicaSetInfo>> {
     crate::validation::validate_name::<Deployment>(&name)?;
-    let ctx = ResourceContext::for_command(&state, namespace)?;
+    let ctx = ResourceContext::for_command(state, namespace)?;
 
     let deployment: Deployment = ctx.namespaced_api().get(&name).await?;
     let uid = deployment.uid().unwrap_or_default();

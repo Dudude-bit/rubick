@@ -50,7 +50,12 @@ pub async fn get_deployment(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<DeploymentInfo> {
-    deployment_detail(&state, name, namespace).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getDeployment",
+        Box::pin(deployment_detail(&state, name, namespace)),
+    )
+    .await
 }
 
 /// Delete a deployment
@@ -146,7 +151,12 @@ pub async fn get_deployment_pods(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<DeploymentPods> {
-    deployment_pods(&state, name, namespace).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getDeploymentPods",
+        Box::pin(deployment_pods(&state, name, namespace)),
+    )
+    .await
 }
 
 async fn deployment_pods(

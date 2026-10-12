@@ -7,7 +7,7 @@ import { None } from "@/components/ui/none";
 import { useToast } from "@/components/ui/use-toast";
 import { SettingRow, SettingsGroup } from "@/components/settings/settings-row";
 import { IPC_TARGET_BYTES, perf } from "@/lib/perf";
-import type { PerfReport, PerfStats } from "@/lib/perf";
+import type { BackendCounters, PerfReport, PerfStats } from "@/lib/perf";
 import { perfSession } from "@/lib/perf-session";
 import type { SessionState } from "@/lib/perf-session";
 import { cn } from "@/lib/utils";
@@ -37,9 +37,12 @@ const kb = (n: number) =>
 function StatsRows({
   rows,
   nameLabel,
+  backend,
 }: {
   rows: [string, PerfStats][];
   nameLabel: string;
+  /** What the backend timed of the same commands, from the moment it took one to its answer. */
+  backend?: BackendCounters["commands"];
 }) {
   const t = useT();
   return (
@@ -54,6 +57,11 @@ function StatsRows({
             <th className="py-1 pr-3 text-right font-medium">p50</th>
             <th className="py-1 pr-3 text-right font-medium">p95</th>
             <th className="py-1 pr-3 text-right font-medium">max</th>
+            {backend && (
+              <th className="py-1 pr-3 text-right font-medium">
+                {t("settings", "perfInBackend")}
+              </th>
+            )}
             <th className="py-1 pr-3 text-right font-medium">
               {t("settings", "perfRows")}
             </th>
@@ -75,6 +83,17 @@ function StatsRows({
               <td className="py-1 pr-3 text-right">{ms(s.p50)}</td>
               <td className="py-1 pr-3 text-right">{ms(s.p95)}</td>
               <td className="py-1 pr-3 text-right">{ms(s.max)}</td>
+              {backend && (
+                <td className="py-1 pr-3 text-right">
+                  {backend[name] ? (
+                    `${ms(backend[name].p50)} · ${ms(backend[name].max)}`
+                  ) : (
+                    <span className="font-sans text-fg-fnt">
+                      {t("settings", "perfNotTimed")}
+                    </span>
+                  )}
+                </td>
+              )}
               <td className="py-1 pr-3 text-right">{s.maxRows ?? <None />}</td>
               <td
                 className={cn(
@@ -184,6 +203,7 @@ export function PerformancePanel() {
             <StatsRows
               rows={ipcRows}
               nameLabel={t("settings", "perfCommand")}
+              backend={report.backend?.commands}
             />
           )}
           {report.tasks && (

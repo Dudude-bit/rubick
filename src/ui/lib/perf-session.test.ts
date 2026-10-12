@@ -27,6 +27,7 @@ function harness(opts: { failStop?: boolean; failCounters?: boolean } = {}) {
           eventBytes: 300,
           maxEventBytes: 200,
           watchChanges: 1,
+          commands: {},
         };
       },
     },

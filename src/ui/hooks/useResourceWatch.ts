@@ -399,22 +399,35 @@ const DETAIL_MS = 250;
 /** The overview is the costliest read in the app: twice a second at most. */
 const COUNTS_MS = 500;
 
-const due = new WeakMap<QueryClient, Set<string>>();
+/** A read asked for: when it is due, and its timer while it is still settling. */
+interface Due {
+  at: number;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+const due = new WeakMap<QueryClient, Map<string, Due>>();
 
 /**
  * Reads `queryKey` again once a burst of changes settles. A read in flight
  * may have left before the change, so it is waited for rather than cut
  * short, which under steady churn would never let one finish, and followed
- * as soon as it lands.
+ * as soon as it lands. Several watches ask for the same read at their own
+ * settle, and the soonest one is kept: the Deployment's pod watch asking
+ * first held Sam's chain to its quarter second after the Service's watches
+ * had asked for a twentieth.
  */
 function readSoon(client: QueryClient, queryKey: QueryKey, settleMs: number) {
-  const pending = due.get(client) ?? new Set<string>();
+  const pending = due.get(client) ?? new Map<string, Due>();
   due.set(client, pending);
   const id = hashKey(queryKey);
-  if (pending.has(id)) return;
-  pending.add(id);
+  const at = Date.now() + settleMs;
+  const held = pending.get(id);
+  if (held && (held.timer === null || held.at <= at)) return;
+  if (held?.timer) clearTimeout(held.timer);
+  const entry: Due = { at, timer: null };
+  pending.set(id, entry);
   const read = () => {
-    pending.delete(id);
+    if (pending.get(id) === entry) pending.delete(id);
     // A hidden window re-reads on its way back; until then it is only stale.
     const visible = useWindowActivity.getState().visible;
     void client.invalidateQueries(
@@ -422,7 +435,8 @@ function readSoon(client: QueryClient, queryKey: QueryKey, settleMs: number) {
       { cancelRefetch: false }
     );
   };
-  setTimeout(() => {
+  entry.timer = setTimeout(() => {
+    entry.timer = null;
     if (client.isFetching({ queryKey }) === 0) return read();
     // Followed the moment it lands: waiting a whole settle again put Sam's
     // chain a second behind the pod it named.

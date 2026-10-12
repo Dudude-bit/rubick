@@ -8,6 +8,8 @@
  * the slow part of a screen nobody asked to measure.
  */
 
+import type { PerfSnapshot } from "@/generated/types";
+
 export type PerfKind = "ipc" | "task" | "render" | "navigation";
 
 export interface PerfSample {
@@ -49,13 +51,8 @@ export interface PerfReport {
   backend?: BackendCounters;
 }
 
-/** The Rust side's own counters, read through a command. */
-export interface BackendCounters {
-  eventsEmitted: number;
-  eventBytes: number;
-  maxEventBytes: number;
-  watchChanges: number;
-}
+/** The Rust side's own counters, read through a command: its events, and the commands it times itself. */
+export type BackendCounters = Omit<PerfSnapshot, "recording">;
 
 /** Most recent samples kept per kind for percentiles. Totals and maxima never evict. */
 export const SAMPLE_CAP = 5000;
