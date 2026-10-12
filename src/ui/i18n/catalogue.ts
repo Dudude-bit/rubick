@@ -1712,6 +1712,13 @@ export const en = {
       one: "Watching other namespaces, not this one, for {n} second at {at}",
       other: "Watching other namespaces, not this one, for {n} seconds at {at}",
     },
+    outsideScopeStill: "Watching other namespaces, not this one, since {from}",
+    partScope: "Watching {watched} only, not {missed}, {from} to {to}",
+    partScopeBrief: {
+      one: "Watching {watched} only, not {missed}, for {n} second at {at}",
+      other: "Watching {watched} only, not {missed}, for {n} seconds at {at}",
+    },
+    partScopeStill: "Watching {watched} only, not {missed}, since {from}",
     revisionNumber: "revision {n}",
     revisionCurrent: "current",
     revisionOldest: "oldest known; nothing earlier to compare with",

@@ -445,7 +445,11 @@ describe("a timeline that starts where its object does", () => {
   it("draws no gap before the object existed, and marks where it began", () => {
     const items = timeline(born);
     expect(items).toEqual([
-      { kind: "gap", at: NOW, gap: { from: Date.parse(born), to: NOW } },
+      {
+        kind: "gap",
+        at: NOW,
+        gap: { from: Date.parse(born), to: NOW, running: true },
+      },
       { kind: "created", at: Date.parse(born) },
     ]);
   });
@@ -453,7 +457,11 @@ describe("a timeline that starts where its object does", () => {
   /** Without a creation time the app cannot say the object is young, so the whole window stays a gap. */
   it("keeps the whole window when the creation time is not known", () => {
     expect(timeline(null)).toEqual([
-      { kind: "gap", at: NOW, gap: { from: week.from, to: NOW } },
+      {
+        kind: "gap",
+        at: NOW,
+        gap: { from: week.from, to: NOW, running: true },
+      },
     ]);
   });
 
@@ -480,7 +488,11 @@ describe("a timeline that starts where its object does", () => {
   it("leaves the window alone for an object older than it", () => {
     const old = new Date(week.from - HOUR).toISOString();
     expect(timeline(old)).toEqual([
-      { kind: "gap", at: NOW, gap: { from: week.from, to: NOW } },
+      {
+        kind: "gap",
+        at: NOW,
+        gap: { from: week.from, to: NOW, running: true },
+      },
     ]);
   });
 });
@@ -506,7 +518,7 @@ describe("gapsOf", () => {
     expect(gaps).toEqual([
       { from: T0, to: T0 + 2 * HOUR },
       { from: T0 + 4 * HOUR, to: T0 + 7 * HOUR },
-      { from: T0 + 8 * HOUR, to: T0 + 10 * HOUR },
+      { from: T0 + 8 * HOUR, to: T0 + 10 * HOUR, running: true },
     ]);
   });
 
@@ -529,11 +541,15 @@ describe("gapsOf", () => {
       T0,
       T0 + 5 * HOUR
     );
-    expect(gaps).toEqual([{ from: T0 + 3 * HOUR, to: T0 + 5 * HOUR }]);
+    expect(gaps).toEqual([
+      { from: T0 + 3 * HOUR, to: T0 + 5 * HOUR, running: true },
+    ]);
   });
 
   it("is the whole window when nothing was ever watched", () => {
-    expect(gapsOf([], T0, T0 + HOUR)).toEqual([{ from: T0, to: T0 + HOUR }]);
+    expect(gapsOf([], T0, T0 + HOUR)).toEqual([
+      { from: T0, to: T0 + HOUR, running: true },
+    ]);
   });
 
   /**
@@ -545,7 +561,7 @@ describe("gapsOf", () => {
     const mine = span(T0, T0 + HOUR);
     const other = span(T0 + HOUR, T0 + 2 * HOUR);
     expect(gapsOf([mine], T0, T0 + 2 * HOUR, [mine, other])).toEqual([
-      { from: T0 + HOUR, to: T0 + 2 * HOUR, elsewhere: true },
+      { from: T0 + HOUR, to: T0 + 2 * HOUR, elsewhere: true, running: true },
     ]);
   });
 
@@ -554,11 +570,63 @@ describe("gapsOf", () => {
     const mine = span(T0, T0 + HOUR);
     const other = span(T0 + HOUR, T0 + 2 * HOUR);
     expect(gapsOf([mine], T0, T0 + 3 * HOUR, [mine])).toEqual([
-      { from: T0 + HOUR, to: T0 + 3 * HOUR },
+      { from: T0 + HOUR, to: T0 + 3 * HOUR, running: true },
     ]);
     expect(gapsOf([mine], T0, T0 + 3 * HOUR, [mine, other])).toEqual([
-      { from: T0 + HOUR, to: T0 + 3 * HOUR },
+      { from: T0 + HOUR, to: T0 + 3 * HOUR, running: true },
     ]);
+  });
+
+  /**
+   * Marco's two-namespace scope read "Watching other namespaces, not this
+   * one" for a stretch team-blind alone was watched. Fails if a stretch
+   * where some of the scope was watched throughout is not said to be that,
+   * with which part, or if one where none was is.
+   */
+  it("says which of the scope's namespaces a stretch watched, where it watched some", () => {
+    const both = { ...span(T0, T0 + HOUR), scope: ["blind", "checkout"] };
+    const blind = { ...span(T0 + HOUR, T0 + 2 * HOUR), scope: ["blind"] };
+    const back = {
+      ...span(T0 + 2 * HOUR, null, T0 + 3 * HOUR),
+      scope: ["blind", "checkout"],
+    };
+    const kube = { ...span(T0 + HOUR, T0 + 2 * HOUR), scope: ["kube-system"] };
+    const scope = ["blind", "checkout"];
+    expect(
+      gapsOf([both, back], T0, T0 + 3 * HOUR, [both, blind, back], scope)
+    ).toEqual([
+      {
+        from: T0 + HOUR,
+        to: T0 + 2 * HOUR,
+        elsewhere: true,
+        partial: { watched: ["blind"], missed: ["checkout"] },
+      },
+    ]);
+    expect(
+      gapsOf([both, back], T0, T0 + 3 * HOUR, [both, kube, back], scope)
+    ).toEqual([{ from: T0 + HOUR, to: T0 + 2 * HOUR, elsewhere: true }]);
+  });
+
+  /**
+   * The same stretch read "45 seconds" and then "50 seconds": it was still
+   * running when first drawn. Fails if a stretch that reaches the present
+   * is given a length, or one that has ended changes its words when the
+   * window moves on.
+   */
+  it("gives a running stretch a start and no length, and an ended one the same words later", () => {
+    const clock = (ms: number) => new Date(ms).toISOString().slice(11, 19);
+    const t: T = (section, key, values) =>
+      translate("en", section, key, values);
+    const mine = span(T0, T0 + 10_000);
+    const [running] = gapsOf([mine], T0, T0 + 55_000);
+    expect(gapWords(running, t, clock)).toBe("Not observed since 00:00:10");
+    const later = { ...span(T0 + 60_000, null, T0 + 90_000) };
+    const [ended] = gapsOf([mine, later], T0, T0 + 90_000);
+    const [same] = gapsOf([mine, later], T0, T0 + 200_000);
+    expect(gapWords(ended, t, clock)).toBe(
+      "Not observed for 50 seconds at 00:00:10"
+    );
+    expect(gapWords(same, t, clock)).toBe(gapWords(ended, t, clock));
   });
 });
 

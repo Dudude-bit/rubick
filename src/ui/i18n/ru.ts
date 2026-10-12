@@ -1762,6 +1762,18 @@ export const ru: Catalogue = {
       other:
         "В течение {n} секунды ({at}) следили за другими пространствами имён, а за этим нет",
     },
+    outsideScopeStill:
+      "С {from} следим за другими пространствами имён, а за этим нет",
+    partScope:
+      "С {from} по {to} следили только за {watched}, а за {missed} нет",
+    partScopeBrief: {
+      one: "В течение {n} секунды ({at}) следили только за {watched}, а за {missed} нет",
+      few: "В течение {n} секунд ({at}) следили только за {watched}, а за {missed} нет",
+      many: "В течение {n} секунд ({at}) следили только за {watched}, а за {missed} нет",
+      other:
+        "В течение {n} секунды ({at}) следили только за {watched}, а за {missed} нет",
+    },
+    partScopeStill: "С {from} следим только за {watched}, а за {missed} нет",
     revisionNumber: "ревизия {n}",
     revisionCurrent: "текущая",
     revisionOldest: "самая старая из известных; сравнивать не с чем",

@@ -23,6 +23,7 @@ import type { DeliveryRevision } from "@/integrations";
 import { probeFields } from "./probe-words";
 import type { T } from "@/i18n/useT";
 import { namespacesWhere } from "./namespace-scope";
+import { listWords } from "@/i18n/say";
 
 /**
  * The kinds whose history the Changes tab can draw, as a value as well as a
@@ -622,7 +623,18 @@ export function spansWatching(
   );
 }
 
-/** A gap in words; one under a minute by its length, which minutes would draw as 20:23 to 20:23. */
+const GAP_WORDS = {
+  watched: ["watchedQuietBrief", "watchedQuiet", "watchedQuiet"],
+  part: ["partScopeBrief", "partScope", "partScopeStill"],
+  elsewhere: ["outsideScopeBrief", "outsideScope", "outsideScopeStill"],
+  unobserved: ["notObservedBrief", "notObserved", "notObservedStill"],
+} as const;
+
+/**
+ * A gap in words; one under a minute by its length, which minutes would draw
+ * as 20:23 to 20:23. One still running has no length yet, only a start: a
+ * length read while it grew changed the words of a stretch that had ended.
+ */
 export function gapWords(
   gap: Gap,
   t: T,
@@ -630,17 +642,33 @@ export function gapWords(
   watched = false
 ): string {
   const ms = gap.to - gap.from;
-  const [brief, long] = watched
-    ? (["watchedQuietBrief", "watchedQuiet"] as const)
-    : gap.elsewhere
-      ? (["outsideScopeBrief", "outsideScope"] as const)
-      : (["notObservedBrief", "notObserved"] as const);
+  const [brief, long, still] =
+    GAP_WORDS[
+      watched
+        ? "watched"
+        : gap.partial
+          ? "part"
+          : gap.elsewhere
+            ? "elsewhere"
+            : "unobserved"
+    ];
+  const names = gap.partial && {
+    watched: listWords(gap.partial.watched, t),
+    missed: listWords(gap.partial.missed, t),
+  };
+  if (gap.running && !watched)
+    return t("changes", still, { from: clock(gap.from), ...names });
   return ms < 60_000
     ? t("changes", brief, {
         n: Math.max(1, Math.round(ms / 1000)),
         at: clock(gap.from),
+        ...names,
       })
-    : t("changes", long, { from: clock(gap.from), to: clock(gap.to) });
+    : t("changes", long, {
+        from: clock(gap.from),
+        to: clock(gap.to),
+        ...names,
+      });
 }
 
 /**
@@ -748,6 +776,10 @@ export interface Gap {
   to: number;
   /** The app was watching these kinds the whole time, in other namespaces: the object was outside the scope, not unwatched. */
   elsewhere?: boolean;
+  /** Of the scope's namespaces, the ones watched the whole time and the rest. */
+  partial?: { watched: string[]; missed: string[] };
+  /** It reaches the end of the window: nothing covers it yet, so it has a start and no length. */
+  running?: boolean;
 }
 
 /**
@@ -768,7 +800,9 @@ export function gapsOf(
   spans: ObservedSpan[],
   from: number,
   to: number,
-  watching?: readonly ObservedSpan[]
+  watching?: readonly ObservedSpan[],
+  /** The namespaces the page shows, `[]` for all: a gap where some were watched says which. */
+  scope: readonly string[] = []
 ): Gap[] {
   const covered = spans
     .map((span) => ({
@@ -783,14 +817,38 @@ export function gapsOf(
     if (span.from > cursor) gaps.push({ from: cursor, to: span.from });
     cursor = Math.max(cursor, span.to);
   }
-  if (cursor < to) gaps.push({ from: cursor, to });
+  if (cursor < to) gaps.push({ from: cursor, to, running: true });
   if (!watching) return gaps;
   const dark = gapsOf([...watching], from, to);
-  return gaps.map((gap) =>
-    dark.some((hole) => hole.from < gap.to && hole.to > gap.from)
-      ? gap
-      : { ...gap, elsewhere: true }
-  );
+  return gaps.map((gap) => {
+    if (dark.some((hole) => hole.from < gap.to && hole.to > gap.from))
+      return gap;
+    const watched = watchedThroughout(watching, gap, scope);
+    return watched.length > 0
+      ? {
+          ...gap,
+          elsewhere: true,
+          partial: {
+            watched,
+            missed: scope.filter((name) => !watched.includes(name)),
+          },
+        }
+      : { ...gap, elsewhere: true };
+  });
+}
+
+/** The namespaces of `scope` every span over `gap` watched. */
+function watchedThroughout(
+  spans: readonly ObservedSpan[],
+  gap: Gap,
+  scope: readonly string[]
+): string[] {
+  let shared: string[] = [...scope];
+  for (const span of spans) {
+    if (span.from >= gap.to || (span.to ?? Infinity) <= gap.from) continue;
+    shared = shared.filter((name) => span.scope?.includes(name));
+  }
+  return shared;
 }
 
 /** What a revision could be said about, against the revision before it. */
@@ -845,6 +903,8 @@ export interface TimelineInput {
   spans: ObservedSpan[];
   /** Every span that watched these kinds in any namespace; see {@link gapsOf}. */
   watching?: ObservedSpan[];
+  /** The namespaces the timeline is about, `[]` or absent for all. */
+  scope?: readonly string[];
   window: { from: number; to: number };
   /** The object's `creationTimestamp`, where the timeline is one object's. */
   createdAt?: string | null;
@@ -905,7 +965,13 @@ export function timelineOf(input: TimelineInput): ChangeItem[] {
     );
     if (!watchedBirth) items.push({ kind: "created", at: born });
   }
-  for (const gap of gapsOf(input.spans, from, input.window.to, input.watching))
+  for (const gap of gapsOf(
+    input.spans,
+    from,
+    input.window.to,
+    input.watching,
+    input.scope
+  ))
     items.push({ kind: "gap", at: gap.to, gap });
   return items.sort((a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity));
 }
