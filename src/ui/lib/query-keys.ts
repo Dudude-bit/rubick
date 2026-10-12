@@ -225,6 +225,12 @@ export const queryKeys = {
    * whatever the last watch tick built.
    */
   namespaces: (): string[] => ["namespaces"],
+  /** Which of these names a fresh list of namespaces lacks: asked again whenever the scope names one the cached list does not have. */
+  namespacesAbsent: (names: readonly string[]): string[] => [
+    "namespaces",
+    "absent",
+    scopeCacheKey(names) ?? EVERY_NAMESPACE,
+  ],
 
   /**
    * The nodes nothing is heard from. Its own key, not the node list's: this

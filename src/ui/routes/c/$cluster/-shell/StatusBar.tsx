@@ -1,4 +1,4 @@
-import { History, Monitor, Moon, Sun } from "lucide-react";
+import { CircleOff, History, Monitor, Moon, Sun } from "lucide-react";
 
 import {
   DropdownMenu,
@@ -26,6 +26,8 @@ import { useThemeStore } from "@/stores/themeStore";
 import { podTotal } from "../-overview/health-share";
 import { ActivityPanel } from "./ActivityPanel";
 import { useShellCounts } from "./useShellCounts";
+import { NOTHING_MISSING, type ScopeMissing } from "@/hooks/useScopeMissing";
+import { listWords } from "@/i18n/say";
 import { useWindowCluster } from "./useWindowCluster";
 import { LinkOpenedNote } from "./DeepLinkBanner";
 import { StallIndicator } from "./StallIndicator";
@@ -69,7 +71,12 @@ const SIGN_IN_HINT: Record<
  * left here is the only thing this line knew that they did not: whether
  * the connection behind them is actually up.
  */
-export function StatusBar() {
+export function StatusBar({
+  missing = NOTHING_MISSING,
+}: {
+  /** The namespaces of the scope the cluster does not have. */
+  missing?: ScopeMissing;
+}) {
   const t = useT();
   const show = useShownPath();
   const { context: currentContext, live: connected } = useWindowCluster();
@@ -226,7 +233,7 @@ export function StatusBar() {
                     className="h-1.5 w-1.5 flex-none rounded-full border border-warn"
                   />
                 )}
-                {here === null ? (
+                {missing.whole ? null : here === null ? (
                   // Refused, failed or still reading: the count is unknown,
                   // and "0 pods · 0 problems" would say the opposite of the
                   // Overview page's own "no access".
@@ -254,15 +261,33 @@ export function StatusBar() {
                     <ProblemCount attention={here.attention} />
                   </>
                 )}
-                <span className="text-fg-fnt">
-                  {scope.length === 0
-                    ? t("cluster", "countsInAll")
-                    : scope.length > 2
-                      ? t("cluster", "countsInMany", { n: scope.length })
-                      : t("cluster", "countsIn", {
-                          scope: scopeLabel(scope, t),
-                        })}
-                </span>
+                {!missing.whole && (
+                  <span className="text-fg-fnt">
+                    {scope.length === 0
+                      ? t("cluster", "countsInAll")
+                      : scope.length > 2
+                        ? t("cluster", "countsInMany", { n: scope.length })
+                        : t("cluster", "countsIn", {
+                            scope: scopeLabel(scope, t),
+                          })}
+                  </span>
+                )}
+                {missing.missing.length > 0 && (
+                  <span
+                    data-testid="scope-missing-status"
+                    className="inline-flex items-center gap-1 text-warn"
+                  >
+                    {!missing.whole && <span className="text-fg-fnt">·</span>}
+                    <CircleOff
+                      className="h-3 w-3 flex-none"
+                      aria-hidden="true"
+                    />
+                    {t("cluster", "scopeMissingStatus", {
+                      n: missing.missing.length,
+                      names: listWords(missing.missing, t),
+                    })}
+                  </span>
+                )}
               </span>
             </TooltipTrigger>
             <TooltipContent side="top" align="end" className="max-w-[320px]">

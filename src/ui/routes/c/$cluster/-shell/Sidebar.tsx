@@ -4,6 +4,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
   ChevronsDown,
+  CircleOff,
   FolderOpen,
   LayoutDashboard,
   Library,
@@ -52,8 +53,11 @@ import {
   ResourceType,
   getDisplayPlural,
   getResourceIcon,
+  narrowingHelps,
   type ResourceKind,
 } from "@/lib/resource-registry";
+import { NOTHING_MISSING, type ScopeMissing } from "@/hooks/useScopeMissing";
+import { listWords } from "@/i18n/say";
 import { ACCESS_KINDS, type AccessKind } from "@/lib/access-kinds";
 import {
   clusterLink,
@@ -356,7 +360,12 @@ function RailMore({ n, onClick }: { n: number; onClick: () => void }) {
   );
 }
 
-export function Sidebar() {
+export function Sidebar({
+  missing = NOTHING_MISSING,
+}: {
+  /** The namespaces of the scope the cluster does not have. */
+  missing?: ScopeMissing;
+}) {
   const [attachRail, railFade, rowsPast, scrollRail] = useRailFade();
   const counts = useShellCounts();
   const locks = useListLocks(NAV_KINDS);
@@ -382,6 +391,7 @@ export function Sidebar() {
                     key={item.labelKey ?? item.label}
                     item={item}
                     counts={counts}
+                    missing={missing}
                     lock={
                       item.kind
                         ? locks[item.kind]
@@ -928,6 +938,7 @@ function LockMark({ lock, reason }: { lock: ListLock; reason?: string }) {
 function NavRow({
   item,
   counts,
+  missing,
   value,
   mark,
   note,
@@ -938,6 +949,7 @@ function NavRow({
 }: {
   item: NavItem;
   counts?: ShellCounts;
+  missing?: ScopeMissing;
   /** A count this row carries itself, for a row the overview knows nothing about. */
   value?: number | null;
   /**
@@ -1012,7 +1024,7 @@ function NavRow({
           {note !== undefined ? (
             <span className="ml-auto text-[10px] text-fg-fnt">{note}</span>
           ) : value === undefined ? (
-            counts && <NavCount item={item} counts={counts} />
+            counts && <NavCount item={item} counts={counts} missing={missing} />
           ) : (
             value !== null && (
               <span className="ml-auto flex items-center gap-1.5 text-[11px] text-fg-fnt">
@@ -1100,9 +1112,20 @@ function AttentionCount({
  * is a measurement — "this namespace has no secrets" — and printing it for
  * a list the token may not read would state that as fact.
  */
-function NavCount({ item, counts }: { item: NavItem; counts: ShellCounts }) {
+function NavCount({
+  item,
+  counts,
+  missing,
+}: {
+  item: NavItem;
+  counts: ShellCounts;
+  missing?: ScopeMissing;
+}) {
   const t = useT();
   const { overview, attention, heldAt, late } = counts;
+  const scoped = readsScope(item);
+  // A namespace that is not there has no 0 to count.
+  if (scoped && missing?.whole) return <ScopeMissingMark missing={missing} />;
   if (!overview) return null;
 
   if (item.labelKey === "overview")
@@ -1116,13 +1139,49 @@ function NavCount({ item, counts }: { item: NavItem; counts: ShellCounts }) {
         "ml-auto text-[11px] text-fg-fnt",
         (heldAt !== null || late) && HELD_CLASS
       )}
-      title={countAge(
-        counts,
-        item.count !== undefined && counts.followed.has(item.count),
-        t
-      )}
+      title={[
+        countAge(
+          counts,
+          item.count !== undefined && counts.followed.has(item.count),
+          t
+        ),
+        scoped && missing && missing.missing.length > 0
+          ? missingWords(missing, t)
+          : null,
+      ]
+        .filter(Boolean)
+        .join("\n")}
     >
       {count}
+    </span>
+  );
+}
+
+/** Whether a row's count is of what the window's namespaces hold. */
+function readsScope(item: NavItem): boolean {
+  if (item.kind) return narrowingHelps(item.kind);
+  if (item.query) return item.query.namespaced;
+  return item.labelKey === "overview";
+}
+
+const missingWords = (missing: ScopeMissing, t: Translate) =>
+  t("cluster", "scopeMissingCount", {
+    n: missing.missing.length,
+    names: listWords(missing.missing, t),
+  });
+
+function ScopeMissingMark({ missing }: { missing: ScopeMissing }) {
+  const t = useT();
+  const said = missingWords(missing, t);
+  return (
+    <span
+      role="img"
+      aria-label={said}
+      title={said}
+      data-testid="scope-missing-count"
+      className="ml-auto text-fg-fnt"
+    >
+      <CircleOff className="h-3 w-3" aria-hidden="true" />
     </span>
   );
 }

@@ -4486,6 +4486,30 @@ export const en = {
     nsRecent: "recent",
     nsAsTyped: "press Enter",
     nsNotListed: "not in the list",
+    scopeMissingTitle: {
+      one: "There is no namespace named {names} in this cluster",
+      other: "There are no namespaces named {names} in this cluster",
+    },
+    scopeMissingBody: {
+      one: "The cluster's list of namespaces does not have it. A page about it would show empty lists and zero counts, and read as a quiet namespace rather than one that is not there.",
+      other:
+        "The cluster's list of namespaces does not have them. A page about them would show empty lists and zero counts, and read as quiet namespaces rather than ones that are not there.",
+    },
+    scopeMissingNotice: {
+      one: "There is no namespace named {names} in this cluster: its list of namespaces does not have it, so nothing on this page is read from it.",
+      other:
+        "There are no namespaces named {names} in this cluster: its list of namespaces does not have them, so nothing on this page is read from them.",
+    },
+    scopeMissingNear: "Did you mean",
+    scopeMissingCount: {
+      one: "There is no namespace named {names} in this cluster, so there is nothing to count.",
+      other:
+        "There are no namespaces named {names} in this cluster, so there is nothing to count.",
+    },
+    scopeMissingStatus: {
+      one: "no namespace {names}",
+      other: "no namespaces {names}",
+    },
     nsPodsRefused: "pod list forbidden",
     readingKubeconfig: "Reading your kubeconfig…",
     connectACluster: "Connect a cluster",
