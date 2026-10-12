@@ -1125,6 +1125,52 @@ describe("what a CronJob's story says it ran", () => {
     );
   });
 
+  /**
+   * Dana's cron-demo, 1 h, Kubernetes 1.35: "8 Jobs created, 16 completed"
+   * for 8 Jobs each Complete. The CronJob controller writes "condition:"
+   * where older ones wrote "status:", the message went unparsed, and each
+   * run was counted by its Job and again by its whole sentence. Fails if
+   * either shape stops naming its Job, or the two stop meeting on one key.
+   */
+  it("counts a run once in the shape today's CronJob controller writes", () => {
+    const runs = [55, 60, 65, 70, 75, 80, 85, 90].flatMap((tick, n) => {
+      const job = `cron-demo-298635${tick}`;
+      const at = 40 - n * 5;
+      return [
+        said(
+          "CronJob",
+          "cron-demo",
+          "SuccessfulCreate",
+          `Created job ${job}`,
+          at
+        ),
+        said("Job", job, "SuccessfulCreate", `Created pod: ${job}-q7v2d`, at),
+        said("Job", job, "Completed", "Job completed", at - 1),
+        said(
+          "CronJob",
+          "cron-demo",
+          "SawCompletedJob",
+          `Saw completed job: ${job}, condition: Complete`,
+          at - 1,
+          2
+        ),
+      ];
+    });
+    const story = (events: EventInfo[]) =>
+      sayWords(
+        one(
+          storiesOf(events, { now: NOW, windowMs: HOUR, narrowed: false }),
+          "cron-demo"
+        ).says,
+        en
+      );
+    expect(story(runs)).toMatch(/: 8 Jobs created, 8 completed\.$/);
+    // The Jobs' own events gone, the CronJob's sentences still name them.
+    expect(
+      story(runs.filter((e) => e.involvedObject.kind === "CronJob"))
+    ).toMatch(/: 8 Jobs created, 8 completed\.$/);
+  });
+
   /** Fails if a Job's retried pods are read as more Jobs, or a failed one as completed. */
   it("reads a Job that made two pods as one Job, and a failed run as not completed", () => {
     const events = [

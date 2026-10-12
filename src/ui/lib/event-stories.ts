@@ -522,29 +522,37 @@ function countReason(events: EventInfo[], ...reasons: string[]): number {
     .reduce((sum, e) => sum + occurrencesOf(e), 0);
 }
 
-const SAW_COMPLETED = /^Saw completed job: ([^,\s]+),? status: (\w+)/;
+/** "condition:" since the v2 CronJob controller, "status:" before it. */
+const SAW_COMPLETED =
+  /^Saw completed job: ([^,\s]+),? (?:condition|status): (\w+)/;
 
 /**
- * The Jobs a story holds, each counted once. A CronJob says "Created job x"
- * and "Saw completed job: x", and the Job itself says "Created pod" and
- * "Job completed": summed by reason, every run was counted twice.
+ * The Jobs a story holds, each counted once by its namespace and name. A
+ * CronJob says "Created job x" and "Saw completed job: x", and the Job itself
+ * says "Created pod" and "Job completed"; a message that names no Job counts
+ * none, since no key it could have would meet the Job's own.
  */
 function jobRuns(events: EventInfo[]): { created: number; completed: number } {
   const created = new Set<string>();
   const completed = new Set<string>();
   for (const event of events) {
-    const { kind, name } = event.involvedObject;
+    const { kind, name, namespace } = event.involvedObject;
+    const job = (named: string) =>
+      `${namespace ?? event.namespace ?? ""}/${named}`;
     const message = event.message ?? "";
     if (event.reason === "SuccessfulCreate") {
-      if (kind === "CronJob")
-        created.add(CREATED_JOB.exec(message)?.[1] ?? message);
-      else if (kind === "Job") created.add(name);
+      const made =
+        kind === "CronJob"
+          ? CREATED_JOB.exec(message)?.[1]
+          : kind === "Job"
+            ? name
+            : undefined;
+      if (made) created.add(job(made));
     } else if (event.reason === "Completed" && kind === "Job") {
-      completed.add(name);
+      completed.add(job(name));
     } else if (event.reason === "SawCompletedJob") {
       const saw = SAW_COMPLETED.exec(message);
-      if (!saw) completed.add(message);
-      else if (saw[2] === "Complete") completed.add(saw[1]);
+      if (saw?.[2] === "Complete") completed.add(job(saw[1]));
     }
   }
   return { created: created.size, completed: completed.size };
