@@ -9,9 +9,13 @@ import { useClusterStore } from "@/stores/clusterStore";
 import { testQueryClient } from "@/test/render";
 
 const getObjectMetadata = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/commands", () => ({ commands: { getObjectMetadata } }));
+const getClusterOverview = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/commands", () => ({
+  commands: { getObjectMetadata, getClusterOverview },
+}));
 
 const { HELD_FOR_MS, useGoneSubjects } = await import("./gone-subjects");
+const { useClusterOverview } = await import("@/hooks/useClusterOverview");
 
 const story = (name: string, state: Story["state"] = "settled") =>
   ({
@@ -156,5 +160,40 @@ describe("which stories' objects were deleted", () => {
     });
     await waitFor(() => expect([...result.current]).toEqual([GONE]));
     expect(getObjectMetadata).toHaveBeenCalledTimes(2);
+  });
+
+  /**
+   * Dana's app.log held 33 "Missing queryFn" errors for the overview: this
+   * page read its key with no fetcher, and a re-read the shell asked for
+   * found none. Fails if reading the Overview's answer here leaves a re-read
+   * of it without the fetcher the shell gave it.
+   */
+  it("reads the Overview's answer without taking its fetcher away", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "acme",
+      namespaceScope: ["lena-sandbox"],
+    });
+    getObjectMetadata.mockReset();
+    getObjectMetadata.mockResolvedValue({ labels: {}, annotations: {} });
+    getClusterOverview.mockReset();
+    getClusterOverview.mockResolvedValue({ warnings: [] });
+    const client = testQueryClient();
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const key = queryKeys.clusterOverview("acme", ["lena-sandbox"]);
+    renderHook(
+      () => {
+        useClusterOverview(["lena-sandbox"]);
+        return useGoneSubjects([story("hello-web")], Date.now());
+      },
+      { wrapper }
+    );
+    await waitFor(() => expect(getClusterOverview).toHaveBeenCalledTimes(1));
+
+    await client.invalidateQueries({ queryKey: key });
+    expect(client.getQueryState(key)?.error ?? null).toBeNull();
+    expect(getClusterOverview).toHaveBeenCalledTimes(2);
   });
 });

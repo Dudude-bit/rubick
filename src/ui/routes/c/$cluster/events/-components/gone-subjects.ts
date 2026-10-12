@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 
 import type { ClusterOverview } from "@/generated/types";
+import { useReadAt } from "@/hooks/useReadUid";
 import { commands } from "@/lib/commands";
 import { ERROR_CODES, errorCode } from "@/lib/error-utils";
 import { mayBeGone, subjectKey, type Story } from "@/lib/event-stories";
@@ -97,22 +98,19 @@ function useGoneInOverview() {
     () => queryKeys.clusterOverview(context, scope),
     [context, scope]
   );
-  const { data } = useQuery({
-    queryKey,
-    queryFn: skipToken,
-    select: (overview: ClusterOverview) =>
-      overview.warnings
-        .filter((group) => group.incarnation === "gone" && group.objectName)
-        .map((group) =>
-          subjectKey({
-            kind: group.objectKind,
-            name: group.objectName ?? "",
-            namespace: group.namespace,
-            byName: false,
-          })
-        )
-        .join("\n"),
-  });
+  const data = useReadAt(queryKey, (state) =>
+    (state?.data as ClusterOverview | undefined)?.warnings
+      .filter((group) => group.incarnation === "gone" && group.objectName)
+      .map((group) =>
+        subjectKey({
+          kind: group.objectKind,
+          name: group.objectName ?? "",
+          namespace: group.namespace,
+          byName: false,
+        })
+      )
+      .join("\n")
+  );
   return useMemo(
     () => ({ queryKey, gone: new Set(data ? data.split("\n") : []) }),
     [queryKey, data]

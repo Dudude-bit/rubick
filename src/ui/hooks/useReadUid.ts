@@ -19,7 +19,8 @@ function useReadOf<T extends string | number | null | undefined>(
   return useReadAt(queryKeys.detail(kind, namespace, name ?? undefined), pick);
 }
 
-function useReadAt<T extends string | number | null | undefined>(
+/** One field of whatever the cache holds under `key`, without becoming one of its readers: a reader with no fetcher overwrites the fetcher a re-read would use. */
+export function useReadAt<T extends string | number | null | undefined>(
   key: QueryKey,
   pick: (state: QueryState | undefined) => T
 ): T {
