@@ -1728,6 +1728,15 @@ export const en = {
       other: "Watching {watched} only, not {missed}, for {n} seconds at {at}",
     },
     partScopeStill: "Watching {watched} only, not {missed}, since {from}",
+    partAll:
+      "Watching {watched} only, not the other namespaces, {from} to {to}",
+    partAllBrief: {
+      one: "Watching {watched} only, not the other namespaces, for {n} second at {at}",
+      other:
+        "Watching {watched} only, not the other namespaces, for {n} seconds at {at}",
+    },
+    partAllStill:
+      "Watching {watched} only, not the other namespaces, since {from}",
     revisionNumber: "revision {n}",
     revisionCurrent: "current",
     revisionOldest: "oldest known; nothing earlier to compare with",
@@ -3160,7 +3169,7 @@ export const en = {
     timesSeen: { one: "once", other: "{n} times" },
     jobsCreated: { one: "1 Job created", other: "{n} Jobs created" },
     storyDone: "done",
-    podsOf: "pods of {name}",
+    podsOf: { one: "pod of {name}", other: "pods of {name}" },
     groupedByName:
       "Grouped by the generated suffix of the pod names. No controller event in this window names the owner of these pods.",
     fromPodStatus: "from the pod status, not an event",
@@ -6618,6 +6627,7 @@ export const en = {
     scaledToZero: "scaled to zero",
     noResourcesInScope: "No resources of this type in the current scope.",
     nothingMatches: "Nothing matches",
+    searchedColumns: "Searched in {columns}.",
     noDataKeys: "No data keys",
     nothingBelongsToObject: "Nothing of this kind belongs to this object.",
     deploymentHasNoReplicaSets: "This Deployment has no ReplicaSets",

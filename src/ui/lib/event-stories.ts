@@ -866,12 +866,16 @@ export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
         ofActivity,
         reasons,
         since,
-        members.length === 1 && members[0].startsWith("Pod/")
+        podsAmong(members) === 1
       ),
     });
   }
   return stories;
 }
+
+/** How many pods a story's events were about: the one count its title and its sentence both read. */
+export const podsAmong = (members: readonly string[]): number =>
+  members.filter((member) => member.startsWith("Pod/")).length;
 
 export type StoryOrder = "warningsFirst" | "newest";
 
@@ -890,11 +894,11 @@ const STATE_RANK: Record<StoryState, number> = {
 export const subjectKey = (subject: Subject): string =>
   `${subject.namespace ?? ""}/${subject.kind ?? ""}/${subject.name}`;
 
-/** Whether a story's warnings may have stopped because its object is gone, which only reading it can say. */
+/** Whether a story's object may have been deleted, its warnings still recent or not, which only reading it can say. */
 export const mayBeGone = (story: Story): boolean =>
   story.subject.kind !== null &&
   !story.subject.earlier &&
-  story.state === "settled";
+  story.state !== "done";
 
 /** The stories whose object was read as deleted, as ended with it; the rest as they were. */
 export function withGone(stories: Story[], gone: ReadonlySet<string>): Story[] {

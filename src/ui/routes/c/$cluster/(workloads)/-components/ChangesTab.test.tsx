@@ -4,6 +4,8 @@ import { beforeEach, expect, it, vi } from "vite-plus/test";
 
 import { queryKeys } from "@/lib/query-keys";
 import { forgetRefusals } from "@/lib/refusals";
+import { formatWhen } from "@/lib/utils";
+import { useChangeJournalStore } from "@/stores/changeJournalStore";
 import { useClusterStore } from "@/stores/clusterStore";
 import { renderWithRouter, testQueryClient } from "@/test/render";
 import { ChangesTab } from "./ChangesTab";
@@ -60,4 +62,47 @@ it("reads a NotFound from before the Deployment was made as still reading, and a
     expect(screen.queryByText(/The revisions could not be read/)).toBeNull()
   );
   await waitFor(() => expect(asked).toBe(2));
+});
+
+/**
+ * The same stretch on a Deployment's own tab read "since" for up to 30 s
+ * after the next watch began, while the page's clock waited for its next
+ * half minute. Fails if the stretch's end waits for that clock.
+ */
+it("ends a stretch the moment the next watch begins, not at the next tick of the page's clock", async () => {
+  const at = Date.parse("2026-10-12T11:44:20Z");
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(at);
+  try {
+    vi.mocked(invoke).mockImplementation(async (command: string) =>
+      command.startsWith("list_") || command.startsWith("get_") ? [] : undefined
+    );
+    const blind = ["team-blind"];
+    useChangeJournalStore.setState({
+      entries: [],
+      spans: {
+        prod: [
+          {
+            from: at - 10 * 60_000,
+            seenAt: at - 2 * 60_000,
+            to: at - 2 * 60_000,
+            scope: blind,
+          },
+          {
+            from: at - 2 * 60_000,
+            seenAt: at - 10_000,
+            to: at - 10_000,
+            scope: ["team-checkout"],
+          },
+          { from: at - 10_000, seenAt: at - 10_000, to: null, scope: blind },
+        ],
+      },
+    });
+    await renderWithRouter(<ChangesTab subject={LEDGER} />, { at: "/c/prod" });
+    const ended = `Watching other namespaces, not this one, ${formatWhen(at - 2 * 60_000, "moment")} to ${formatWhen(at - 10_000, "moment")}`;
+    expect(await screen.findByText(ended)).toBeInTheDocument();
+    expect(screen.queryByText(/not this one, since/)).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
 });

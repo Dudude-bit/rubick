@@ -73,6 +73,7 @@ import type { RowGrouping } from "@/components/ui/row-grouping";
 import { cn } from "@/lib/utils";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
+import { listWords } from "@/i18n/say";
 import { useShareSection } from "@/components/share/screen-share";
 import { tableSection, type TableShare } from "@/components/share/table-share";
 import { formatCount } from "@/lib/count";
@@ -950,6 +951,16 @@ function DataTableInner<TData extends RowData>({
   });
 
   const rows = table.getRowModel().rows;
+  const searched =
+    rows.length === 0 && searchValue
+      ? listWords(
+          table
+            .getAllLeafColumns()
+            .filter((column) => column.getCanGlobalFilter())
+            .flatMap((column) => columnLabel(column.columnDef, t) ?? []),
+          t
+        )
+      : "";
   useShareSection(share ? `table:${tableId}` : null, () =>
     share
       ? tableSection(table as never, { ...share, search: globalFilter }, t)
@@ -1647,6 +1658,16 @@ function DataTableInner<TData extends RowData>({
                               {searchValue}
                             </span>
                           </p>
+                          {searched && (
+                            <p
+                              className="max-w-md text-[11px] text-balance text-fg-fnt"
+                              data-testid="searched-columns"
+                            >
+                              {t("empty", "searchedColumns", {
+                                columns: searched,
+                              })}
+                            </p>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"

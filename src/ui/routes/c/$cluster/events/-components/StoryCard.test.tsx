@@ -9,6 +9,7 @@ import {
   withGone,
   type StoryOptions,
 } from "@/lib/event-stories";
+import { useLocaleStore } from "@/stores/localeStore";
 import { renderWithRouter } from "@/test/render";
 import { StoryCard } from "./StoryCard";
 
@@ -189,5 +190,57 @@ describe("a story about an object read as deleted", () => {
       "title",
       expect.stringContaining("was read as deleted")
     );
+  });
+});
+
+describe("a story about pods folded by their name", () => {
+  /**
+   * Lena's card read "поды hello-web" over "Под за 1 минуту": one pod, a
+   * title in the plural and a sentence in the singular. Fails if the title
+   * and the sentence stop reading the same count of pods.
+   */
+  it("titles one pod in the singular, as its sentence says it, and several in the plural", async () => {
+    const options: StoryOptions = {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+      readFrom: null,
+    };
+    const started = (name: string): EventInfo => ({
+      ...backOff,
+      uid: `${name}.started`,
+      type: "Normal",
+      reason: "Started",
+      message: "Started container app",
+      involvedObject: { kind: "Pod", name, namespace: "shop", uid: null },
+    });
+    const [one] = storiesOf([started("hello-web-5966d9b889-7nvr5")], options);
+    const { rerender } = await renderWithRouter(
+      <StoryCard story={one} options={options} showNamespace={false} />
+    );
+    expect(screen.getByText("pod of hello-web")).toBeInTheDocument();
+    expect(screen.getByText(/^The pod within /)).toBeInTheDocument();
+
+    const [two] = storiesOf(
+      [
+        started("hello-web-5966d9b889-7nvr5"),
+        started("hello-web-5966d9b889-x2k4p"),
+      ],
+      options
+    );
+    rerender(<StoryCard story={two} options={options} showNamespace={false} />);
+    expect(screen.getByText("pods of hello-web")).toBeInTheDocument();
+    expect(screen.getByText(/^Pods within /)).toBeInTheDocument();
+
+    useLocaleStore.setState({ choice: "ru" });
+    try {
+      rerender(
+        <StoryCard story={one} options={options} showNamespace={false} />
+      );
+      expect(await screen.findByText("под из hello-web")).toBeInTheDocument();
+      expect(screen.getByText(/^Под за /)).toBeInTheDocument();
+    } finally {
+      useLocaleStore.setState({ choice: null });
+    }
   });
 });

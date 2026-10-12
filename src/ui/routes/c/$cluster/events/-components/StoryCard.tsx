@@ -8,6 +8,7 @@ import { involvedUid } from "@/lib/event-incarnation";
 import { commands } from "@/lib/commands";
 import {
   densityOf,
+  podsAmong,
   timelineOf,
   withStatusMarks,
   type DensityBucket,
@@ -150,6 +151,10 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
       ? coverWords(story.lastAt - story.firstAt, t, "alone")
       : null;
   const { subject } = story;
+  const pods = t("readings", "podsOf", {
+    name: subject.name,
+    n: podsAmong(story.members),
+  });
   const past = subject.earlier
     ? "earlier"
     : story.state === "gone"
@@ -183,11 +188,7 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
       // The same sentence the header draws. A hard-coded "Pods" here read
       // English beside a translated label, to the one reader who cannot see
       // the label.
-      aria-label={
-        subject.kind
-          ? `${subject.kind} ${subject.name}`
-          : t("readings", "podsOf", { name: subject.name })
-      }
+      aria-label={subject.kind ? `${subject.kind} ${subject.name}` : pods}
     >
       <header className="flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs">
         {subject.kind && past ? (
@@ -209,7 +210,7 @@ function StoryCardView({ story, options, showNamespace }: StoryCardProps) {
           />
         ) : (
           <span className="font-mono text-fg">
-            {t("readings", "podsOf", { name: subject.name })}
+            {pods}
             {showNamespace && subject.namespace ? (
               <span className="ml-1 text-fg-fnt">{subject.namespace}</span>
             ) : null}

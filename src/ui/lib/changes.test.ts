@@ -9,6 +9,7 @@ import {
   COMPARED_FIELDS,
   diffRevisions,
   diffSnapshots,
+  earlierRowsWords,
   gapsOf,
   gapWords,
   helmReleaseOf,
@@ -17,6 +18,7 @@ import {
   unwatchedWords,
   otherDifferences,
   timelineOf,
+  windowEnd,
   type JournalEntry,
   type ObservedSpan,
   type Revision,
@@ -566,14 +568,123 @@ describe("gapsOf", () => {
   });
 
   /** Deleting the check for a dark hole makes a closed laptop read as a scope switch. */
-  it("keeps a stretch no span covered, or only partly covered, as not observed", () => {
+  it("keeps a stretch no span covered as not observed, beside the part another span covered", () => {
     const mine = span(T0, T0 + HOUR);
     const other = span(T0 + HOUR, T0 + 2 * HOUR);
     expect(gapsOf([mine], T0, T0 + 3 * HOUR, [mine])).toEqual([
       { from: T0 + HOUR, to: T0 + 3 * HOUR, running: true },
     ]);
     expect(gapsOf([mine], T0, T0 + 3 * HOUR, [mine, other])).toEqual([
-      { from: T0 + HOUR, to: T0 + 3 * HOUR, running: true },
+      { from: T0 + HOUR, to: T0 + 2 * HOUR, elsewhere: true },
+      { from: T0 + 2 * HOUR, to: T0 + 3 * HOUR, running: true },
+    ]);
+  });
+
+  /**
+   * Marco's first stretch, team-checkout alone, read "Not observed" on the
+   * two-namespace page because the night before it was dark too. Fails if a
+   * stretch that watched part of the scope is folded into a dark one.
+   */
+  it("says a stretch that watched part of the scope was partly watched, even right after a dark one", () => {
+    const scope = ["blind", "checkout"];
+    const checkout = { ...span(T0 + HOUR, T0 + 2 * HOUR), scope: ["checkout"] };
+    const both = { ...span(T0 + 2 * HOUR, null, T0 + 3 * HOUR), scope };
+    expect(gapsOf([both], T0, T0 + 3 * HOUR, [checkout, both], scope)).toEqual([
+      { from: T0, to: T0 + HOUR },
+      {
+        from: T0 + HOUR,
+        to: T0 + 2 * HOUR,
+        elsewhere: true,
+        partial: { watched: ["checkout"], missed: ["blind"] },
+      },
+    ]);
+  });
+
+  /**
+   * Marco's two-namespace page merged team-blind alone and team-checkout
+   * alone under "Watching other namespaces, not this one". Fails if two
+   * stretches that watched different parts of the scope share one label,
+   * or if two that watched the same part are drawn as two.
+   */
+  it("gives each stretch the part of the scope it watched, and joins stretches that watched the same", () => {
+    const scope = ["blind", "checkout"];
+    const before = { ...span(T0, T0 + HOUR), scope };
+    const blind = { ...span(T0 + HOUR, T0 + 2 * HOUR), scope: ["blind"] };
+    const blindAgain = {
+      ...span(T0 + 2 * HOUR, T0 + 3 * HOUR),
+      scope: ["blind"],
+    };
+    const checkout = {
+      ...span(T0 + 3 * HOUR, T0 + 4 * HOUR),
+      scope: ["checkout"],
+    };
+    const after = { ...span(T0 + 4 * HOUR, null, T0 + 5 * HOUR), scope };
+    expect(
+      gapsOf(
+        [before, after],
+        T0,
+        T0 + 5 * HOUR,
+        [before, blind, blindAgain, checkout, after],
+        scope
+      )
+    ).toEqual([
+      {
+        from: T0 + HOUR,
+        to: T0 + 3 * HOUR,
+        elsewhere: true,
+        partial: { watched: ["blind"], missed: ["checkout"] },
+      },
+      {
+        from: T0 + 3 * HOUR,
+        to: T0 + 4 * HOUR,
+        elsewhere: true,
+        partial: { watched: ["checkout"], missed: ["blind"] },
+      },
+    ]);
+  });
+
+  /**
+   * Dana's All namespaces page read "Watching other namespaces, not this
+   * one" for a stretch the app watched shop alone. Fails if a stretch that
+   * watched some namespaces of an every-namespace page is not named by them.
+   */
+  it("names the namespaces a stretch watched on a page of every namespace", () => {
+    const all = span(T0, T0 + HOUR);
+    const shop = { ...span(T0 + HOUR, null, T0 + 2 * HOUR), scope: ["shop"] };
+    const [part] = gapsOf([all], T0, T0 + 2 * HOUR, [all, shop], []);
+    expect(part).toEqual({
+      from: T0 + HOUR,
+      to: T0 + 2 * HOUR,
+      elsewhere: true,
+      partial: { watched: ["shop"], missed: [] },
+      running: true,
+    });
+    const t: T = (section, key, values) =>
+      translate("en", section, key, values);
+    const r: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const clock = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+    expect(gapWords(part, t, clock)).toBe(
+      "Watching shop only, not the other namespaces, since 01:00"
+    );
+    expect(gapWords({ ...part, running: false }, r, clock)).toBe(
+      "С 01:00 по 02:00 следили только за shop, а за остальными пространствами имён нет"
+    );
+  });
+
+  /**
+   * A span that watched the namespace but was refused the kind there is in
+   * `watching` and not in the covering spans. Fails if that stretch is said
+   * to have watched the scope only partly, with nothing named as missed.
+   */
+  it("calls a stretch not observed where every namespace of the scope was watched without the kind", () => {
+    const refused = {
+      ...span(T0, T0 + HOUR),
+      scope: ["team"],
+      unwatchedIn: ["Deployment/team"],
+    };
+    expect(gapsOf([], T0, T0 + HOUR, [refused], ["team"])).toEqual([
+      { from: T0, to: T0 + HOUR, running: true },
     ]);
   });
 
@@ -627,6 +738,24 @@ describe("gapsOf", () => {
       "Not observed for 50 seconds at 00:00:10"
     );
     expect(gapWords(same, t, clock)).toBe(gapWords(ended, t, clock));
+  });
+
+  /**
+   * Marco's ended stretch read "since 02:42 PM" for 30 s beside a header
+   * saying the next watch had begun: the page's clock, read to the half
+   * minute, was behind the span the store had just opened. Fails if the
+   * window ends before a span the store holds, or if a gap that ends where
+   * a span begins is still said to be running.
+   */
+  it("ends a stretch where the next span begins, however late the page's clock reads", () => {
+    const before = span(T0, T0 + 60_000);
+    const next = span(T0 + 90_000, null, T0 + 90_000);
+    const stale = T0 + 75_000;
+    const end = windowEnd([before, next], stale);
+    expect(end).toBe(T0 + 90_000);
+    expect(gapsOf([before, next], T0, end)).toEqual([
+      { from: T0 + 60_000, to: T0 + 90_000 },
+    ]);
   });
 });
 
@@ -1081,4 +1210,49 @@ describe("a gap in words", () => {
       expect(gapWords(hole, r, clock)).not.toMatch(/Вне наблюдаемых/);
     }
   );
+});
+
+describe("where the rows before the running watch came from", () => {
+  const t: T = (section, key, values) => translate("en", section, key, values);
+  const clock = (ms: number) => new Date(ms).toISOString().slice(11, 19);
+  const MINUTE = 60_000;
+  const row = (at: number) => ({
+    kind: "journal" as const,
+    at,
+    entry: {
+      id: String(at),
+      context: "acme",
+      kind: "Deployment",
+      namespace: "shop",
+      name: "web",
+      at,
+      field: "replicas" as const,
+      key: null,
+      from: "1",
+      to: "2",
+    },
+  });
+
+  /**
+   * A relist writes its rows a moment before its span opens, so no span
+   * holds them. Fails if such a row is left out of the range the sentence
+   * gives while a span that holds another row is in it.
+   */
+  it("reaches a row no span holds as well as the spans that hold the rest", () => {
+    const spans = [
+      { from: T0, seenAt: T0 + 10 * MINUTE, to: T0 + 10 * MINUTE },
+      { from: T0 + 20 * MINUTE, seenAt: T0 + 30 * MINUTE, to: null },
+    ];
+    expect(
+      earlierRowsWords(
+        spans,
+        [row(T0 + 5 * MINUTE), row(T0 + 20 * MINUTE - 5)],
+        T0 + 20 * MINUTE,
+        t,
+        clock
+      )
+    ).toBe(
+      "Rows before 00:20:00 were recorded by this app while it watched from 00:00:00 to 00:19:59"
+    );
+  });
 });

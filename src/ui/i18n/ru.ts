@@ -1784,6 +1784,17 @@ export const ru: Catalogue = {
         "В течение {n} секунды ({at}) следили только за {watched}, а за {missed} нет",
     },
     partScopeStill: "С {from} следим только за {watched}, а за {missed} нет",
+    partAll:
+      "С {from} по {to} следили только за {watched}, а за остальными пространствами имён нет",
+    partAllBrief: {
+      one: "В течение {n} секунды ({at}) следили только за {watched}, а за остальными пространствами имён нет",
+      few: "В течение {n} секунд ({at}) следили только за {watched}, а за остальными пространствами имён нет",
+      many: "В течение {n} секунд ({at}) следили только за {watched}, а за остальными пространствами имён нет",
+      other:
+        "В течение {n} секунды ({at}) следили только за {watched}, а за остальными пространствами имён нет",
+    },
+    partAllStill:
+      "С {from} следим только за {watched}, а за остальными пространствами имён нет",
     revisionNumber: "ревизия {n}",
     revisionCurrent: "текущая",
     revisionOldest: "самая старая из известных; сравнивать не с чем",
@@ -3409,7 +3420,12 @@ export const ru: Catalogue = {
       other: "создано {n} объекта Job",
     },
     storyDone: "завершено",
-    podsOf: "поды {name}",
+    podsOf: {
+      one: "под из {name}",
+      few: "поды {name}",
+      many: "поды {name}",
+      other: "поды {name}",
+    },
     groupedByName:
       "Сгруппированы по сгенерированному суффиксу в именах подов. Ни одно событие контроллера в этом окне не называет владельца этих подов.",
     fromPodStatus: "из статуса пода, не событие",
@@ -7271,6 +7287,7 @@ export const ru: Catalogue = {
     scaledToZero: "масштабирован до нуля",
     noResourcesInScope: "В текущей области нет объектов этого типа.",
     nothingMatches: "Ничего не найдено по запросу",
+    searchedColumns: "Искали в столбцах: {columns}.",
     noDataKeys: "Ключей данных нет",
     nothingBelongsToObject: "Этому объекту не принадлежит ничего такого рода.",
     deploymentHasNoReplicaSets: "У этого Deployment нет ни одного ReplicaSet",

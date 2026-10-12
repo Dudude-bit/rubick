@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { screen, waitFor } from "@testing-library/react";
 
 import {
@@ -75,6 +75,102 @@ describe("the stretches this app watched", () => {
         row.parts.some((part) => part.text.startsWith("Watched "))
       )
     ).toBe(true);
+  });
+
+  /**
+   * Marco switched back from team-blind alone at 14:44:00 and read "since
+   * 02:42 PM" on the ended stretch for 30 s beside "Watching since 14:44:00":
+   * the page's clock is read to the half minute. Fails if the stretch's end
+   * waits for that clock rather than for the span that ended it.
+   */
+  it("ends a stretch the moment the next watch begins, not at the next tick of the page's clock", async () => {
+    const at = Date.parse("2026-10-12T11:44:20Z");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      const both = ["team-blind", "team-checkout"];
+      useClusterStore.setState({
+        isConnected: true,
+        currentContext: "prod",
+        namespaceScope: both,
+      });
+      useChangeJournalStore.setState({
+        entries: [],
+        spans: {
+          prod: [
+            {
+              from: at - 10 * 60_000,
+              seenAt: at - 2 * 60_000,
+              to: at - 2 * 60_000,
+              scope: both,
+            },
+            {
+              from: at - 2 * 60_000,
+              seenAt: at - 10_000,
+              to: at - 10_000,
+              scope: ["team-blind"],
+            },
+            { from: at - 10_000, seenAt: at - 10_000, to: null, scope: both },
+          ],
+        },
+      });
+
+      await mount();
+      const ended = `Watching team-blind only, not team-checkout, ${formatWhen(at - 2 * 60_000, "moment")} to ${formatWhen(at - 10_000, "moment")}`;
+      expect(screen.getByText(ended)).toBeInTheDocument();
+      expect(screen.queryByText(/not team-checkout, since/)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("a stretch that watched part of the scope", () => {
+  /**
+   * Marco's two-namespace page called team-checkout's first stretch "Not
+   * observed" and merged team-blind alone with team-checkout alone under
+   * "Watching other namespaces, not this one". Fails if either stretch loses
+   * its own label of what it watched.
+   */
+  it("names what each stretch watched, on its own row", async () => {
+    const MIN = 60_000;
+    const both = ["team-blind", "team-checkout"];
+    const moment = (ago: number) => formatWhen(NOW - ago * MIN, "moment");
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: both,
+    });
+    const stretch = (from: number, to: number | null, scope: string[]) => ({
+      from: NOW - from * MIN,
+      seenAt: to === null ? NOW : NOW - to * MIN,
+      to: to === null ? null : NOW - to * MIN,
+      scope,
+    });
+    useChangeJournalStore.setState({
+      entries: [],
+      spans: {
+        prod: [
+          stretch(60, 58, ["team-checkout"]),
+          stretch(58, 30, both),
+          stretch(30, 20, ["team-blind"]),
+          stretch(20, 10, ["team-checkout"]),
+          stretch(10, null, both),
+        ],
+      },
+    });
+
+    await mount();
+    for (const words of [
+      `Watching team-checkout only, not team-blind, ${moment(60)} to ${moment(58)}`,
+      `Watching team-blind only, not team-checkout, ${moment(30)} to ${moment(20)}`,
+      `Watching team-checkout only, not team-blind, ${moment(20)} to ${moment(10)}`,
+    ])
+      expect(screen.getByText(words)).toBeInTheDocument();
+    expect(
+      screen.getByText(new RegExp(`^Not observed .+ to ${moment(60)}$`))
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/other namespaces/)).toBeNull();
   });
 });
 
@@ -279,6 +375,61 @@ describe("rows older than the running watch", () => {
         /^Rows before .+ were recorded by this app while it watched from .+ to .+$/
       )
     ).toBeInTheDocument();
+  });
+
+  /**
+   * Dana's header said the rows were recorded "from 02:37 PM to 02:38 PM"
+   * above rows from 03:02 PM, recorded while the app watched shop alone and
+   * listed below as watched until 03:13 PM. Fails if the header reads a
+   * narrower set of stretches than the rows it is about were recorded in.
+   */
+  it("dates the earlier rows by every stretch that recorded them, on the page and in Share", async () => {
+    useClusterStore.setState({
+      isConnected: true,
+      currentContext: "prod",
+      namespaceScope: [],
+    });
+    const shopRow = { ...lenaRow("shop", 11), namespace: "shop" };
+    useChangeJournalStore.setState({
+      entries: [lenaRow("a", 35.5), shopRow],
+      spans: {
+        prod: [
+          { from: NOW - 36 * MIN, seenAt: NOW - 35 * MIN, to: NOW - 35 * MIN },
+          {
+            from: NOW - 18 * MIN,
+            seenAt: NOW - MIN,
+            to: NOW - MIN,
+            scope: ["shop"],
+          },
+          { from: NOW - MIN, seenAt: NOW, to: null },
+        ],
+      },
+    });
+
+    const collect = await mount();
+    const at = (ago: number) => formatWhen(NOW - ago * MIN, "moment");
+    expect(
+      screen.getByText(
+        `Rows before ${at(1)} were recorded by this app while it watched from ${at(36)} to ${at(1)}`
+      )
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        `Watching shop only, not the other namespaces, ${at(18)} to ${at(1)}`
+      )
+    ).toBeInTheDocument();
+    const shared = collect().find((section) => section.id === "changes-watched")
+      ?.body as { text: string };
+    const utc = (ago: number) =>
+      new Intl.DateTimeFormat("en", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+        timeZone: "UTC",
+      }).format(NOW - ago * MIN);
+    expect(shared.text).toContain(
+      `while it watched from ${utc(36)} UTC to ${utc(1)} UTC`
+    );
   });
 
   /** Fails if the line is said where every row is the running watch's own. */

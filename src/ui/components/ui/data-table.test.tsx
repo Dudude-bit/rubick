@@ -2485,6 +2485,30 @@ describe("a list past the virtualisation threshold", () => {
     expect(screen.getByText("orders-api")).toBeInTheDocument();
   });
 
+  /**
+   * Dana read "Nothing matches CrashLoop" as no pod crash-looping, and could
+   * not tell which columns the box had looked in. Fails if a search that
+   * matched nothing stops naming them, or names one it does not read.
+   */
+  it("names the columns a search looked in when it matched nothing", async () => {
+    await wrap(
+      <DataTable
+        columns={[
+          ...columns,
+          { accessorKey: "namespace", header: "Namespace" },
+        ]}
+        data={[{ name: "orders-api", namespace: "payments" }]}
+        getRowHref={href}
+      />
+    );
+    expect(screen.queryByTestId("searched-columns")).toBeNull();
+
+    fireEvent.change(search(), { target: { value: "CrashLoop" } });
+    expect(await screen.findByTestId("searched-columns")).toHaveTextContent(
+      /^Searched in Name and Namespace\.$/
+    );
+  });
+
   it("sends End to the end of what the search left", async () => {
     await long();
     fireEvent.change(search(), { target: { value: "pod-19" } });

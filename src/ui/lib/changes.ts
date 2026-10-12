@@ -626,6 +626,7 @@ export function spansWatching(
 const GAP_WORDS = {
   watched: ["watchedQuietBrief", "watchedQuiet", "watchedQuiet"],
   part: ["partScopeBrief", "partScope", "partScopeStill"],
+  partOfAll: ["partAllBrief", "partAll", "partAllStill"],
   elsewhere: ["outsideScopeBrief", "outsideScope", "outsideScopeStill"],
   unobserved: ["notObservedBrief", "notObserved", "notObservedStill"],
 } as const;
@@ -647,7 +648,9 @@ export function gapWords(
       watched
         ? "watched"
         : gap.partial
-          ? "part"
+          ? gap.partial.missed.length > 0
+            ? "part"
+            : "partOfAll"
           : gap.elsewhere
             ? "elsewhere"
             : "unobserved"
@@ -673,8 +676,9 @@ export function gapWords(
 
 /**
  * Where the rows older than the running watch came from: this app recorded
- * them while it watched earlier, first start to last end. `null` when every
- * row is the running watch's own.
+ * them while it watched earlier, first start to last end of the spans that
+ * hold them, whatever namespaces those spans watched, as the rows themselves
+ * were. `null` when every row is the running watch's own.
  */
 export function earlierRowsWords(
   spans: readonly ObservedSpan[],
@@ -687,14 +691,14 @@ export function earlierRowsWords(
     item.kind === "journal" && item.at < since ? [item.at] : []
   );
   if (older.length === 0) return null;
+  const holds = (span: ObservedSpan, at: number) =>
+    at >= span.from && at <= (span.to ?? span.seenAt);
   const held = spans
-    .filter(
-      (span) =>
-        span.from < since &&
-        older.some((at) => at >= span.from && at <= (span.to ?? span.seenAt))
-    )
+    .filter((span) => span.from < since && older.some((at) => holds(span, at)))
     .flatMap((span) => [span.from, Math.min(span.to ?? span.seenAt, since)]);
-  const ends = held.length > 0 ? held : older;
+  // A relist writes its rows just before its span opens.
+  const loose = older.filter((at) => !spans.some((span) => holds(span, at)));
+  const ends = [...held, ...loose];
   return t("changes", "earlierRows", {
     since: clock(since),
     from: clock(Math.min(...ends)),
@@ -757,6 +761,14 @@ export function quietSince(
     : watching.from;
 }
 
+/** The end of a window drawn at `now`, never before a moment the spans hold: a clock read to the half minute lags a span just ended. */
+export function windowEnd(spans: readonly ObservedSpan[], now: number): number {
+  let end = now;
+  for (const span of spans)
+    end = Math.max(end, span.from, span.seenAt, span.to ?? span.from);
+  return end;
+}
+
 /** Where the watch running at `now` began to see these spans' scope without a break, by the rule `gapsOf` draws gaps with; `null` when nothing watches at `now`. */
 export function watchedSince(
   spans: readonly ObservedSpan[],
@@ -776,7 +788,7 @@ export interface Gap {
   to: number;
   /** The app was watching these kinds the whole time, in other namespaces: the object was outside the scope, not unwatched. */
   elsewhere?: boolean;
-  /** Of the scope's namespaces, the ones watched the whole time and the rest. */
+  /** Of the scope's namespaces, the ones watched the whole time and the rest; no rest where the scope is every namespace. */
   partial?: { watched: string[]; missed: string[] };
   /** It reaches the end of the window: nothing covers it yet, so it has a start and no length. */
   running?: boolean;
@@ -792,9 +804,9 @@ export interface Gap {
  * for the seconds since the last heartbeat, on a cluster being watched
  * perfectly.
  *
- * `watching` is every span that watched the kinds, in any namespace: a gap
- * that lies wholly inside those is the scope having been elsewhere, and says
- * so rather than claiming the app was not looking.
+ * `watching` is every span that watched the kinds, in any namespace. A gap is
+ * cut wherever what they watched changes, and each part says what that was:
+ * nothing, part of the scope, or only namespaces outside it.
  */
 export function gapsOf(
   spans: ObservedSpan[],
@@ -809,7 +821,7 @@ export function gapsOf(
       from: span.from,
       to: span.to ?? Math.max(span.seenAt, to),
     }))
-    .filter((span) => span.to > from && span.from < to)
+    .filter((span) => span.to > from && span.from <= to)
     .sort((a, b) => a.from - b.from);
   const gaps: Gap[] = [];
   let cursor = from;
@@ -819,37 +831,69 @@ export function gapsOf(
   }
   if (cursor < to) gaps.push({ from: cursor, to, running: true });
   if (!watching) return gaps;
-  const dark = gapsOf([...watching], from, to);
-  return gaps.map((gap) => {
-    if (dark.some((hole) => hole.from < gap.to && hole.to > gap.from))
-      return gap;
-    const watched = watchedThroughout(watching, gap, scope);
-    return watched.length > 0
-      ? {
-          ...gap,
-          elsewhere: true,
-          partial: {
-            watched,
-            missed: scope.filter((name) => !watched.includes(name)),
-          },
-        }
-      : { ...gap, elsewhere: true };
-  });
+  const watched = watching.map((span) => ({
+    from: span.from,
+    to: span.to ?? Math.max(span.seenAt, to),
+    scope: span.scope,
+  }));
+  return gaps.flatMap((gap) => partsOf(gap, watched, scope));
 }
 
-/** The namespaces of `scope` every span over `gap` watched. */
-function watchedThroughout(
-  spans: readonly ObservedSpan[],
+type Watched = { from: number; to: number; scope?: string[] };
+
+function partsOf(
   gap: Gap,
+  watching: readonly Watched[],
   scope: readonly string[]
-): string[] {
-  let shared: string[] = [...scope];
-  for (const span of spans) {
-    if (span.from >= gap.to || (span.to ?? Infinity) <= gap.from) continue;
-    shared = shared.filter((name) => span.scope?.includes(name));
+): Gap[] {
+  const cuts = [
+    ...new Set([
+      gap.from,
+      gap.to,
+      ...watching
+        .flatMap((span) => [span.from, span.to])
+        .filter((at) => at > gap.from && at < gap.to),
+    ]),
+  ].sort((a, b) => a - b);
+  const parts: Gap[] = [];
+  for (let index = 1; index < cuts.length; index += 1) {
+    const [start, end] = [cuts[index - 1], cuts[index]];
+    const part = {
+      from: start,
+      to: end,
+      ...watchedIn(
+        watching.filter((span) => span.from < end && span.to > start),
+        scope
+      ),
+    };
+    const last = parts.at(-1);
+    if (last && sameWatch(last, part)) last.to = end;
+    else parts.push(part);
   }
-  return shared;
+  if (gap.running) parts[parts.length - 1].running = true;
+  return parts;
 }
+
+/** What the spans over one part of a gap watched, as the gap's words need it. */
+function watchedIn(
+  over: readonly Watched[],
+  scope: readonly string[]
+): Pick<Gap, "elsewhere" | "partial"> {
+  if (over.length === 0) return {};
+  const watched =
+    scope.length > 0
+      ? scope.filter((name) => over.some((span) => span.scope?.includes(name)))
+      : [...new Set(over.flatMap((span) => span.scope ?? []))].sort();
+  if (watched.length === 0) return { elsewhere: true };
+  const missed = scope.filter((name) => !watched.includes(name));
+  // Every namespace of the scope watched and still not covering: refused the kind there.
+  if (scope.length > 0 && missed.length === 0) return {};
+  return { elsewhere: true, partial: { watched, missed } };
+}
+
+const sameWatch = (a: Gap, b: Gap) =>
+  Boolean(a.elsewhere) === Boolean(b.elsewhere) &&
+  a.partial?.watched.join() === b.partial?.watched.join();
 
 /** What a revision could be said about, against the revision before it. */
 export type Comparison =

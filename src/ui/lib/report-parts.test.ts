@@ -540,6 +540,36 @@ describe("changesSection", () => {
   });
 
   /**
+   * The file reads the object's namespace as its scope, as the Changes tab
+   * does. Fails if an hour the app spent watching kube-system alone is
+   * called watching part of every namespace instead of watching elsewhere.
+   */
+  it("says the app watched other namespaces while it watched only another one", () => {
+    const end = Date.parse(AT);
+    const section = changesSection(
+      {
+        entries: [],
+        spans: [
+          { ...WATCHED[0], seenAt: end - 60 * 60_000, to: end - 60 * 60_000 },
+          {
+            from: end - 60 * 60_000,
+            seenAt: end,
+            to: null,
+            scope: ["kube-system"],
+          },
+        ],
+      },
+      "prod-eu",
+      owned,
+      AT,
+      t
+    );
+    const changes =
+      section?.body.type === "changes" ? section.body.changes : [];
+    expect(changes[0].parts[0].text).toMatch(/^changes\.outsideScopeStill\(/);
+  });
+
+  /**
    * One rollout wrote two journal rows with one stamp, and the file printed
    * both with the full image reference twice: the tag that changed was the
    * last twelve characters of a hundred.

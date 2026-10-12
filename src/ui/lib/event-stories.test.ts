@@ -11,6 +11,7 @@ import {
   densityOf,
   familyOf,
   mayBeGone,
+  podsAmong,
   RECENT_MS,
   sortStories,
   storiesOf,
@@ -977,6 +978,35 @@ describe("what a Deployment's story says it did", () => {
     expect(group.members).toHaveLength(2);
     expect(sayWords(group.says, ru)).toMatch(/^Поды за /);
   });
+
+  /**
+   * A ReplicaSet's story about one pod read "Поды" because the ReplicaSet
+   * itself was counted among the objects its events were about. Fails if
+   * the sentence counts anything but the pods.
+   */
+  it("counts only pods when it chooses between one pod and several", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const [story] = storiesOf(
+      [
+        event({
+          kind: "ReplicaSet",
+          name: "hello-web-5966d9b889",
+          reason: "SuccessfulCreate",
+          message: "Created pod: hello-web-5966d9b889-7nvr5",
+        }),
+        event({
+          kind: "Pod",
+          name: "hello-web-5966d9b889-7nvr5",
+          reason: "Started",
+        }),
+      ],
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(story.members).toHaveLength(2);
+    expect(podsAmong(story.members)).toBe(1);
+    expect(sayWords(story.says, ru)).toMatch(/^Под за /);
+  });
 });
 
 describe("a story about an object read as deleted", () => {
@@ -1004,8 +1034,13 @@ describe("a story about an object read as deleted", () => {
     expect(one(after, "api").state).toBe("settled");
   });
 
-  /** A story with no warnings, one still burning, or pods folded by name have nothing a deletion would explain; fails if any is offered for a read. */
-  it("is asked about only for a named object whose trouble stopped", () => {
+  /**
+   * Lena's HPA, deleted for good, read red "продолжается" for five minutes
+   * beside an Overview that said "удалён": only a settled story was asked.
+   * Fails if a burning story is not offered for a read and ended once read
+   * as gone, or a story with no warnings or pods folded by name are offered.
+   */
+  it("is asked about for a named object in trouble, burning or settled", () => {
     const [done] = storiesOf(
       [event({ kind: "Pod", name: "web-0", reason: "Started" })],
       options
@@ -1013,7 +1048,9 @@ describe("a story about an object read as deleted", () => {
     expect(mayBeGone(done)).toBe(false);
     const [burning] = storiesOf([warned("hello-web", 1)], options);
     expect(burning.state).toBe("stillHappening");
-    expect(mayBeGone(burning)).toBe(false);
+    expect(mayBeGone(burning)).toBe(true);
+    const [ended] = withGone([burning], new Set([subjectKey(burning.subject)]));
+    expect(ended.state).toBe("gone");
     const [settled] = storiesOf([warned("hello-web", 20)], options);
     expect(mayBeGone(settled)).toBe(true);
     expect(
