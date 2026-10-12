@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
  * than the line box makes the badge — not the row — set the table's pitch.
  */
 const badgeVariants = cva(
-  "inline-flex items-center gap-1 rounded-full px-2 py-0 text-[11px] font-medium leading-4 transition-colors",
+  "inline-flex items-center gap-1 rounded-full px-2 py-0 text-[11px] font-medium leading-4",
   {
     variants: {
       variant: {

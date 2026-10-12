@@ -151,6 +151,15 @@ fn detect_by_marker<C: ResourceExt>(crds: &[C], id: &str, markers: &[&str]) -> D
 pub async fn detect_in_cluster_extensions(
     state: State<'_, AppState>,
 ) -> Result<Vec<DetectedExtension>> {
+    crate::client::clock::timed(
+        &state.perf,
+        "detectInClusterExtensions",
+        detected_extensions(state.clone()),
+    )
+    .await
+}
+
+async fn detected_extensions(state: State<'_, AppState>) -> Result<Vec<DetectedExtension>> {
     // Each source answers for itself. One refusal used to take the whole
     // screen with it: a reader without rights over IngressClasses lost
     // cert-manager, Traefik and everything else that had answered fine.

@@ -279,6 +279,13 @@ export const en = {
     apiVersion: "API version",
     aDrainWaits: "A drain waits",
     setBy: "Set by",
+    hpaScales: "Scales",
+    printedReference: "Reference",
+    printedMinPods: "MinPods",
+    printedMaxPods: "MaxPods",
+    printedMinAvailable: "Min Available",
+    printedMaxUnavailable: "Max Unavailable",
+    printedAllowedDisruptions: "Allowed Disruptions",
     cpu: "CPU",
     pods: "Pods",
     events: "Events",
@@ -1714,6 +1721,13 @@ export const en = {
       one: "Watching other namespaces, not this one, for {n} second at {at}",
       other: "Watching other namespaces, not this one, for {n} seconds at {at}",
     },
+    outsideScopeStill: "Watching other namespaces, not this one, since {from}",
+    partScope: "Watching {watched} only, not {missed}, {from} to {to}",
+    partScopeBrief: {
+      one: "Watching {watched} only, not {missed}, for {n} second at {at}",
+      other: "Watching {watched} only, not {missed}, for {n} seconds at {at}",
+    },
+    partScopeStill: "Watching {watched} only, not {missed}, since {from}",
     revisionNumber: "revision {n}",
     revisionCurrent: "current",
     revisionOldest: "oldest known; nothing earlier to compare with",
@@ -3085,6 +3099,8 @@ export const en = {
       "{changes} {when}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
     storyPods:
       "Pods {when}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+    storyPod:
+      "The pod {when}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
     changesRollouts: { one: "{n} rollout", other: "{n} rollouts" },
     changesScales: { one: "{n} scale", other: "{n} scales" },
     changesBoth: "{rollouts} and {scales}",
@@ -3117,6 +3133,8 @@ export const en = {
     storyEndedWithObject: "ended with it",
     storyEndedWithObjectHint:
       "The {kind} {name} these events were about has been replaced, so nothing more can happen to it. The {kind} with this name now has a story of its own.",
+    storyEndedGoneHint:
+      "The {kind} {name} these events were about was read as deleted, with nothing in its place, so nothing more can happen to it.",
     refusedToRead: "Your access does not allow reading {kind} {name}.",
     namedRowsOnly: {
       one: "Showing only the {n} row the Overview listed as needing attention.",
@@ -3880,6 +3898,12 @@ export const en = {
     hpaRunning: "{n} running",
     hpaWanted: "{n} wanted",
     hpaNothingComputed: "nothing computed",
+    columnsYielded: "Hidden at this width: {columns}",
+    columnsYieldedHint:
+      "Widen the window, or close the panel beside the list, to see these columns. The search still reads them.",
+    hpaScaleUnread:
+      "This autoscaler could not be read, so what it scales is not known.",
+    hpaNamesNoTarget: "This autoscaler names nothing to scale.",
     hpaLastScaled: "last scaled {ago} ago",
     pdbAtLeast: "at least {n} available",
     pdbAtMost: "at most {n} unavailable",
@@ -4331,6 +4355,8 @@ export const en = {
     // which is not where the reader is standing.
     objectLinkCopied: "Copied a link to {name}",
     linkOpened: "Opened from a link. You are looking at the cluster now.",
+    linkOpenedShort: "Opened from a link",
+    linkOpenedAtShort: "Opened from a link taken {when}",
     linkOpenedAt:
       "Opened from a link captured {when}. You are looking at the cluster now, not at what it showed then.",
     linkContextMissing:
@@ -5570,6 +5596,12 @@ export const en = {
     tlsNotChecked: "TLS not checked",
     relatedShortBy:
       "An integration that reads {kind} objects could not answer, so what is below is short by an unknown amount.",
+    relatedNothing:
+      "Nothing points at anything: this {kind} names no other object right now, and nothing in the cluster owns it.",
+    relatedUnread:
+      "No integration in this app reads {kind} objects, so nothing here knows what this one is connected to. That is a gap in the app and not a fact about the cluster. The object’s own spec and status, on the tabs beside this one, are what it says about itself.",
+    relatedOwnerOnly:
+      "Only the owner reference, which every object carries. No integration in this app reads {kind} objects, so anything else this one points at is not shown here.",
     stopNoServiceToSendTo: "no service to send to",
     stopSelectorMatchesNothing: "selector matches nothing",
     stopScaledToZeroUnder: "scaled to zero",

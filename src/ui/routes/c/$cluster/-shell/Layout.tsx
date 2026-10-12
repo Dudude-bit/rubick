@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { TriangleAlert } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { PageArea } from "./PageArea";
@@ -21,6 +21,7 @@ import { useScopeFromAddress } from "./useScopeFromAddress";
 import { useCritical } from "@/hooks/useCritical";
 import { useT } from "@/i18n/useT";
 import { useWindowCluster } from "./useWindowCluster";
+import { holdTitlesOnResize } from "@/lib/hold-titles";
 
 // Loaded on first use: it carries the YAML parser and the diff view, which
 // nothing needs until an object is opened for editing.
@@ -60,6 +61,7 @@ export function Layout() {
   usePrefetchCoreLists();
   useRefusedScope();
   useScopeFromAddress();
+  useEffect(holdTitlesOnResize, []);
 
   return (
     <div

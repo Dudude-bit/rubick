@@ -52,6 +52,34 @@ describe("an object's address", () => {
     expect(routeOf(router, hrefOf(link!))).not.toMatch(GENERIC);
   });
 
+  /**
+   * Lena's HPA link landed on the Deployment it scales, where a bare address
+   * to an attached kind opens. Fails if a link the app makes, copies or opens
+   * in a tab for an HPA, an EndpointSlice or an Event leads to its parent
+   * instead of itself, or if a kind with no parent picks up the mark.
+   */
+  it("opens an attached kind as itself, not on the parent a bare address opens", async () => {
+    const router = at("/c/prod");
+    await router.load();
+    const hpa = objectLink({
+      kind: "HorizontalPodAutoscaler",
+      name: "hello-web",
+      namespace: "lena-sandbox",
+    });
+    expect(hrefOf(hpa!)).toBe(
+      "/c/prod/horizontalpodautoscalers/lena-sandbox/hello-web?view=own"
+    );
+    const slice = objectLink({
+      kind: "EndpointSlice",
+      name: "kube-dns-f2mvh",
+      namespace: "kube-system",
+      crd: "endpointslices.discovery.k8s.io",
+    });
+    expect(hrefOf(slice!)).toMatch(/\?view=own$/);
+    const pod = objectLink({ kind: "Pod", name: "a", namespace: "b" });
+    expect(hrefOf(pod!)).toBe("/c/prod/pods/b/a");
+  });
+
   /** A namespaced kind with no namespace would be a dead link the reader finds by clicking. */
   it("is refused for a namespaced kind handed no namespace", () => {
     at("/c/prod");

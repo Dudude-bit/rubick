@@ -2,7 +2,13 @@ import { describe, expect, it } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import type { EventInfo } from "@/generated/types";
-import { storiesOf, WINDOW_MS, type StoryOptions } from "@/lib/event-stories";
+import {
+  storiesOf,
+  subjectKey,
+  WINDOW_MS,
+  withGone,
+  type StoryOptions,
+} from "@/lib/event-stories";
 import { renderWithRouter } from "@/test/render";
 import { StoryCard } from "./StoryCard";
 
@@ -144,6 +150,44 @@ describe("a story about an earlier object of a name", () => {
       expect.stringContaining(
         "The Pod web-0 these events were about has been replaced"
       )
+    );
+  });
+});
+
+describe("a story about an object read as deleted", () => {
+  /**
+   * Lena's HPA, deleted with nothing in its place, read amber "settled".
+   * Fails if the card paints a gone object's story as trouble, links or
+   * peeks the name, or says it was replaced rather than deleted.
+   */
+  it("badges the story as ended with its object and marks the name deleted", async () => {
+    const options: StoryOptions = {
+      now: NOW,
+      windowMs: HOUR,
+      narrowed: false,
+      readFrom: null,
+    };
+    const old: EventInfo = {
+      ...backOff,
+      lastTimestamp: new Date(NOW - 20 * 60_000).toISOString(),
+    };
+    const [settled] = storiesOf([old], options);
+    expect(settled.state).toBe("settled");
+    const { container } = await renderWithRouter(
+      <StoryCard
+        story={withGone([settled], new Set([subjectKey(settled.subject)]))[0]}
+        options={options}
+        showNamespace={false}
+      />
+    );
+    expect(screen.queryByText("settled")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(container.querySelector("[data-past='gone']")).not.toBeNull();
+    const badge = screen.getByText("ended with it");
+    expect(badge).not.toHaveClass("text-warn");
+    expect(badge).toHaveAttribute(
+      "title",
+      expect.stringContaining("was read as deleted")
     );
   });
 });

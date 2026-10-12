@@ -10,6 +10,7 @@ import {
   type ResourceKind,
 } from "./resource-registry";
 import { accessKind, segmentOf, type AccessKind } from "./access-kinds";
+import { isAttached } from "./served-segment";
 
 /**
  * Every in-app address is built here. A link is the router's own options
@@ -120,7 +121,9 @@ export function objectLink(
   const crd = crdFor(ref);
   const resource = resourceSegment({ kind: ref.kind, crd });
   if (!resource) return null;
-  const { tab, via, view } = options;
+  const { tab, via } = options;
+  // A reference to an attached object is to it, not to the parent a bare address opens.
+  const view = options.view ?? (isAttached(resource) ? "own" : undefined);
   const search =
     tab || via || view
       ? Object.fromEntries(

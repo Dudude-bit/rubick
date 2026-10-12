@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from "react";
 import { useAppSearchValue, useSetSearch } from "@/hooks/useSearchParam";
+import { crdFor } from "@/lib/links";
 import { ResourceType, toKind, toPlural } from "@/lib/resource-registry";
 
 export interface PeekTarget {
@@ -35,6 +36,15 @@ const isCrdName = (segment: string) => segment.includes(".");
 const isServedSegment = (segment: string) =>
   isCrdName(segment) || toKind(segment) === null;
 
+/** A registry kind addressed by its own served segment is that kind, so its peek is the same from every list. */
+function canonical(target: PeekTarget): PeekTarget {
+  if (!target.crd || crdFor(target)) return target;
+  const kind = toKind(target.kind);
+  if (!kind) return target;
+  const { name, namespace, via } = target;
+  return via ? { kind, name, namespace, via } : { kind, name, namespace };
+}
+
 /** The parameter's value as a target, or `null` for a value in neither shape. */
 export function parsePeekValue(raw: string): PeekTarget | null {
   if (!raw) return null;
@@ -49,7 +59,7 @@ export function parsePeekValue(raw: string): PeekTarget | null {
     if (rest.length < 1 || rest.length > 2) return null;
     const [namespace, name] = rest.length === 2 ? rest : [null, rest[0]];
     if (!name) return null;
-    return { kind, name, namespace, crd };
+    return canonical({ kind, name, namespace, crd });
   }
 
   if (parts.length < 2 || parts.length > 3) return null;
@@ -113,7 +123,8 @@ export function usePeek() {
   }, [raw, peekVia]);
 
   const open = useCallback(
-    (next: PeekTarget) => {
+    (asked: PeekTarget) => {
+      const next = canonical(asked);
       const where = next.namespace ? [next.namespace, next.name] : [next.name];
       let value: string;
       if (next.crd) {

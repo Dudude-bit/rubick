@@ -498,7 +498,10 @@ describe("the palette's resource rows", () => {
     );
     expect(paths).toEqual([
       ["Namespace", null],
-      ["Lease", "/c/k3d-dev/leases.coordination.k8s.io/kube-system/api"],
+      [
+        "Lease",
+        "/c/k3d-dev/leases.coordination.k8s.io/kube-system/api?view=own",
+      ],
       ["ServiceAccount", "/c/k3d-dev/serviceaccounts/default/api"],
       ["Pod", "/c/k3d-dev/pods/default/api-0"],
     ]);

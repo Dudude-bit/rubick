@@ -53,8 +53,12 @@ pub async fn list_events(
     filters: Option<EventFilters>,
     state: State<'_, AppState>,
 ) -> Result<Vec<EventInfo>> {
+    crate::client::clock::timed(&state.perf, "listEvents", events_in(&state, filters)).await
+}
+
+async fn events_in(state: &AppState, filters: Option<EventFilters>) -> Result<Vec<EventInfo>> {
     let filters = filters.unwrap_or_default();
-    let ctx = ResourceContext::for_list(&state, filters.namespace)?;
+    let ctx = ResourceContext::for_list(state, filters.namespace)?;
 
     let mut field_selectors = Vec::new();
     if let Some(name) = &filters.involved_object_name {

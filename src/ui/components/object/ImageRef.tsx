@@ -40,10 +40,12 @@ export interface ImageRefProps {
    * and keeps that mark out of the line until there is something to confirm.
    */
   inline?: boolean;
+  /** In a line cut rather than wrapped, where a box would be hidden whole by the ellipsis. */
+  cut?: boolean;
   className?: string;
 }
 
-export function ImageRef({ image, inline, className }: ImageRefProps) {
+export function ImageRef({ image, inline, cut, className }: ImageRefProps) {
   const parsed = parseImageRef(image);
   const quote = inline ? <span className="text-fg-fnt">&quot;</span> : null;
 
@@ -52,6 +54,7 @@ export function ImageRef({ image, inline, className }: ImageRefProps) {
       value={image}
       label={`image ${image}`}
       quietMark={inline}
+      cut={cut}
       className={className}
     >
       {quote}
@@ -87,7 +90,7 @@ export function ImageRef({ image, inline, className }: ImageRefProps) {
   // registry link raises the pair — they are two ways to act on one image, not
   // two neighbouring controls.
   return (
-    <span className="group inline-flex min-w-0 items-center">
+    <span className={cut ? "group" : "group inline-flex min-w-0 items-center"}>
       {value}
       <RegistryLinkMark link={link} quiet={inline} />
     </span>

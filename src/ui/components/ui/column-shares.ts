@@ -134,3 +134,30 @@ function scrolledToEnd(columns: ColumnSpec[], port: number) {
     shares: widths.map((width) => (width / span) * 100),
   };
 }
+
+/** A column as the narrow port sees it: its id, its floor and where it gives way. */
+export interface YieldSpec {
+  id: string;
+  floor: number;
+  yields?: number;
+}
+
+/**
+ * The columns a port `port` pixels wide hides so the rest fit at their
+ * floors: the lowest `yields` first, only as many as it takes, none where
+ * no column yields or the port is not measured yet.
+ */
+export function yieldedColumns(columns: YieldSpec[], port: number): string[] {
+  if (port <= 0) return [];
+  let total = columns.reduce((sum, column) => sum + column.floor, 0);
+  const hidden: string[] = [];
+  const order = columns
+    .filter((column) => column.yields !== undefined)
+    .sort((a, b) => a.yields! - b.yields!);
+  for (const column of order) {
+    if (total <= port) break;
+    total -= column.floor;
+    hidden.push(column.id);
+  }
+  return hidden;
+}

@@ -71,7 +71,9 @@ export type StoryState =
   | "done"
   | "unknown"
   /** About an object another has replaced: nothing more can happen to it. */
-  | "earlier";
+  | "earlier"
+  /** About an object read as deleted with nothing in its place. */
+  | "gone";
 
 export interface Story {
   key: string;
@@ -546,7 +548,8 @@ function sentenceOf(
   events: EventInfo[],
   warnings: EventInfo[],
   reasons: ReasonCount[],
-  since: number
+  since: number,
+  onePod: boolean
 ): Saying {
   if (warnings.length === 0) {
     const when = whenOf(events, since);
@@ -562,7 +565,7 @@ function sentenceOf(
         const changes = changesSaid(rolloutsAndScales(events));
         return changes
           ? { key: "storyChanged", values: { ...pods, changes } }
-          : { key: "storyPods", values: pods };
+          : { key: onePod ? "storyPod" : "storyPods", values: pods };
       }
       case "job":
         return {
@@ -827,7 +830,14 @@ export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
       // the whole group: "12 times within 1 hour" for a pull that began four
       // minutes ago, because a scheduling failure an hour earlier is in the
       // same story.
-      says: sentenceOf(activity, sorted, ofActivity, reasons, since),
+      says: sentenceOf(
+        activity,
+        sorted,
+        ofActivity,
+        reasons,
+        since,
+        members.length === 1 && members[0].startsWith("Pod/")
+      ),
     });
   }
   return stories;
@@ -842,8 +852,29 @@ const STATE_RANK: Record<StoryState, number> = {
   settled: 1,
   unknown: 2,
   earlier: 3,
+  gone: 3,
   done: 4,
 };
+
+/** Where a story's object lives and what it is called, the key its existence is read by. */
+export const subjectKey = (subject: Subject): string =>
+  `${subject.namespace ?? ""}/${subject.kind ?? ""}/${subject.name}`;
+
+/** Whether a story's warnings may have stopped because its object is gone, which only reading it can say. */
+export const mayBeGone = (story: Story): boolean =>
+  story.subject.kind !== null &&
+  !story.subject.earlier &&
+  story.state === "settled";
+
+/** The stories whose object was read as deleted, as ended with it; the rest as they were. */
+export function withGone(stories: Story[], gone: ReadonlySet<string>): Story[] {
+  if (gone.size === 0) return stories;
+  return stories.map((story) =>
+    mayBeGone(story) && gone.has(subjectKey(story.subject))
+      ? { ...story, state: "gone" }
+      : story
+  );
+}
 
 export function sortStories(stories: Story[], order: StoryOrder): Story[] {
   return [...stories].sort((a, b) => {

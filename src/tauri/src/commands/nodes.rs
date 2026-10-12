@@ -32,8 +32,17 @@ pub struct NodeFilters {
 /// makes the sums unknown rather than smaller.
 #[tauri::command]
 pub async fn node_resource_budget(name: String, state: State<'_, AppState>) -> Result<NodeBudget> {
+    crate::client::clock::timed(
+        &state.perf,
+        "nodeResourceBudget",
+        budget_of_node(&state, name),
+    )
+    .await
+}
+
+async fn budget_of_node(state: &AppState, name: String) -> Result<NodeBudget> {
     crate::validation::validate_dns_subdomain(&name)?;
-    let ctx = ResourceContext::for_list(&state, None)?;
+    let ctx = ResourceContext::for_list(state, None)?;
     let node = ctx.cluster_api::<Node>().get(&name).await?;
     let params = ListParams::default().fields(&format!("spec.nodeName={name}"));
 
@@ -106,8 +115,12 @@ pub async fn list_nodes(
         field_selector: filters.field_selector.clone(),
         limit: filters.limit,
     };
-    let mut nodes: Vec<NodeInfo> =
-        list_cluster_resource_infos::<Node, NodeInfo>(Some(base_filters), state).await?;
+    let mut nodes: Vec<NodeInfo> = crate::client::clock::timed(
+        &state.perf,
+        "listNodes",
+        list_cluster_resource_infos::<Node, NodeInfo>(Some(base_filters), state.clone()),
+    )
+    .await?;
 
     if filters.ready_only.unwrap_or(false) {
         nodes.retain(|n| n.status.ready);
@@ -119,7 +132,12 @@ pub async fn list_nodes(
 /// Get a single node by name
 #[tauri::command]
 pub async fn get_node(name: String, state: State<'_, AppState>) -> Result<NodeInfo> {
-    get_cluster_resource_info::<Node, NodeInfo>(name, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getNode",
+        get_cluster_resource_info::<Node, NodeInfo>(name, state.clone()),
+    )
+    .await
 }
 
 /// Cordon a node (mark as unschedulable)

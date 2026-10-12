@@ -70,6 +70,58 @@ pub async fn timed<T>(
     answer
 }
 
+/// How many bytes `snake_case` has once its underscores are gone.
+#[must_use]
+pub const fn camel_len(snake: &str) -> usize {
+    let bytes = snake.as_bytes();
+    let (mut at, mut kept) = (0, 0);
+    while at < bytes.len() {
+        if bytes[at] != b'_' {
+            kept += 1;
+        }
+        at += 1;
+    }
+    kept
+}
+
+/// `snake_case` as `snakeCase`, the name the frontend invokes a command by.
+#[must_use]
+pub const fn camel_case<const N: usize>(snake: &str) -> [u8; N] {
+    let bytes = snake.as_bytes();
+    let mut out = [0; N];
+    let (mut at, mut put, mut upper) = (0, 0, false);
+    while at < bytes.len() {
+        if bytes[at] == b'_' {
+            upper = true;
+        } else {
+            out[put] = if upper {
+                bytes[at].to_ascii_uppercase()
+            } else {
+                bytes[at]
+            };
+            put += 1;
+            upper = false;
+        }
+        at += 1;
+    }
+    out
+}
+
+/// A command's name as the frontend invokes it, from the name of its `fn`,
+/// worked out at compile time for the commands a macro stamps out.
+macro_rules! command_name {
+    ($cmd:ident) => {{
+        const LEN: usize = $crate::client::clock::camel_len(stringify!($cmd));
+        const BYTES: [u8; LEN] = $crate::client::clock::camel_case(stringify!($cmd));
+        const NAME: &str = match ::core::str::from_utf8(&BYTES) {
+            Ok(name) => name,
+            Err(_) => panic!("a command name is ASCII"),
+        };
+        NAME
+    }};
+}
+pub(crate) use command_name;
+
 /// A command's wall time cut three ways: before its first request left, with
 /// at least one request open, and the rest.
 struct Split {
@@ -298,6 +350,18 @@ pub(super) mod tests {
         let client =
             super::super::client_with_deadline(config, Duration::from_secs(5)).expect("client");
         (client, asked)
+    }
+
+    /// A name spelled differently from the one the frontend invokes would
+    /// file a command's numbers under a row nothing looks up.
+    #[test]
+    fn a_stamped_commands_name_is_its_fn_name_in_camel_case() {
+        assert_eq!(
+            command_name!(list_ingress_health_inputs),
+            "listIngressHealthInputs"
+        );
+        assert_eq!(command_name!(list_pods), "listPods");
+        assert_eq!(command_name!(probe), "probe");
     }
 
     /// A dozen lists in flight together that each took 700 ms are 700 ms on

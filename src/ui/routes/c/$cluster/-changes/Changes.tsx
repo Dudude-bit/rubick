@@ -69,12 +69,13 @@ export function Changes() {
       journal: mine,
       spans: covering,
       watching: spansWatching(ours, []),
+      scope: scope.scope,
       window: { from, to: now },
     }).filter((item) => item.at !== null && item.at >= from);
     return [...timeline, ...quietStretches(covering, timeline, from, now)].sort(
       (a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity)
     );
-  }, [mine, ours, covering, now, window]);
+  }, [mine, ours, covering, now, window, scope.scope]);
   const open = ours.find((span) => span.to === null);
   // From the start of the unbroken watch, not of the span: a scope change
   // retires one span and opens the next at the same moment.

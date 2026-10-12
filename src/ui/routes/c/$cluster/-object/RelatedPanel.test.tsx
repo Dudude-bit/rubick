@@ -8,12 +8,13 @@
  * the app inventing a claim it never checked.
  */
 
-import { describe, expect, it } from "vite-plus/test";
+import { afterEach, describe, expect, it } from "vite-plus/test";
 import { screen } from "@testing-library/react";
 
 import { RelatedPanel } from "./RelatedPanel";
 import type { RelatedObjects } from "./useRelatedObjects";
 import { renderWithRouter } from "@/test/render";
+import { useLocaleStore } from "@/stores/localeStore";
 
 const query = (over: Partial<RelatedObjects> = {}): RelatedObjects => ({
   claimed: false,
@@ -30,6 +31,18 @@ const draw = (over: Partial<RelatedObjects> = {}, kind = "SealedSecret") =>
   });
 
 describe("a custom resource's connections", () => {
+  afterEach(() => useLocaleStore.setState({ choice: null }));
+
+  /** Lena read this paragraph in English inside a Russian peek; fails if it is written outside the catalogue again. */
+  it("says the app does not know in the reader's language", async () => {
+    useLocaleStore.setState({ choice: "ru" });
+    await draw();
+    expect(
+      screen.getByText(/Объекты SealedSecret не читает ни одна интеграция/)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No integration in this app/)).toBeNull();
+  });
+
   it("says the app does not know, when no integration claims the kind", async () => {
     await draw();
     expect(

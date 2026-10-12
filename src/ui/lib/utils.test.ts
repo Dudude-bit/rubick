@@ -6,6 +6,7 @@ import {
   formatDuration,
   formatSince,
   formatTimeUnit,
+  unitApart,
   formatWhen,
 } from "./utils";
 import { loadLocale, translate } from "@/i18n";
@@ -92,6 +93,13 @@ describe("formatDuration", () => {
     expect(formatDuration(300, "en")).toBe("5m");
     expect(formatDuration(0, "en")).toBe("0s");
     expect(plain(formatDuration(0, "ru"))).toBe("0 с");
+  });
+
+  /** Lena read «51с назад» beside «1 мин назад»: the webview's ICU joins Russian seconds. Fails if a joined unit is passed through outside English. */
+  it("keeps a number apart from its unit outside English, whatever ICU the webview has", () => {
+    expect(plain(unitApart("51с", "ru"))).toBe("51 с");
+    expect(plain(unitApart("1,5с", "ru"))).toBe("1,5 с");
+    expect(unitApart("51s", "en")).toBe("51s");
   });
 
   /** "192ms, срезы по 100 ms" mixed two spellings of one unit. */

@@ -42,6 +42,11 @@ import type {
   SecretInfo,
 } from "@/generated/types";
 import { useT } from "@/i18n/useT";
+import { ResourceRef } from "@/components/object/ResourceRef";
+import { useCrdIndex } from "@/hooks/useCrdIndex";
+import { autoscalerRange } from "@/lib/governance";
+import { crdInGroup } from "@/lib/links";
+import { KeyValueList } from "../-object/detail-kv";
 
 /**
  * The peek's work surfaces.
@@ -96,10 +101,16 @@ export function PeekTabBody({
         <PeekPodsTab target={target} detail={detail} />
       );
     case "connections":
-      return (
+      return target.crd ? (
         <PeekRelatedTab
           target={target}
           detail={detail as CustomResourceDetailInfo | undefined}
+        />
+      ) : (
+        <PeekScalesTab
+          target={target}
+          detail={detail}
+          isLoading={isDetailLoading}
         />
       );
     case "yaml":
@@ -623,6 +634,65 @@ function PeekRelatedTab({
   return (
     <div className="h-full overflow-y-auto scrollbar-thin px-3.5 py-3">
       <RelatedPanel query={related} kind={target.kind} />
+    </div>
+  );
+}
+
+type ScaleTarget = { apiVersion?: string; kind?: string; name?: string };
+
+/** What an autoscaler's spec names, the same reading its page draws as `scaleTargetRef`. */
+function PeekScalesTab({
+  target,
+  detail,
+  isLoading,
+}: {
+  target: PeekTarget;
+  detail: unknown;
+  isLoading: boolean;
+}) {
+  const t = useT();
+  const { crdFor } = useCrdIndex();
+  if (isLoading) return <RowsSkeleton rows={1} />;
+  if (!detail)
+    return <TabNote title={t("readings", "hpaScaleUnread")} tone="warn" />;
+  const spec = (detail as { spec?: Record<string, unknown> }).spec ?? {};
+  const ref = (spec.scaleTargetRef ?? {}) as ScaleTarget;
+  if (!ref.kind || !ref.name)
+    return <TabNote title={t("readings", "hpaNamesNoTarget")} />;
+  const group = ref.apiVersion?.includes("/")
+    ? ref.apiVersion.split("/")[0]
+    : "";
+  const crd = ref.apiVersion
+    ? crdInGroup({ kind: ref.kind, group }, crdFor)
+    : undefined;
+  const max = typeof spec.maxReplicas === "number" ? spec.maxReplicas : null;
+  const min = typeof spec.minReplicas === "number" ? spec.minReplicas : 1;
+  return (
+    <div className="h-full overflow-y-auto scrollbar-thin px-3.5 py-3">
+      <KeyValueList
+        items={[
+          {
+            label: t("columns", "hpaScales"),
+            value: (
+              <>
+                <ResourceRef
+                  kind={ref.kind}
+                  name={ref.name}
+                  namespace={target.namespace ?? null}
+                  crd={crd}
+                />
+                {max !== null && (
+                  <span className="text-fg-fnt">
+                    {" "}
+                    ·{" "}
+                    {autoscalerRange({ minReplicas: min, maxReplicas: max }, t)}
+                  </span>
+                )}
+              </>
+            ),
+          },
+        ]}
+      />
     </div>
   );
 }

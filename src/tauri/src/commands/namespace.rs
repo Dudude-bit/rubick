@@ -10,7 +10,12 @@ use tauri::State;
 /// List all namespaces
 #[tauri::command]
 pub async fn list_namespaces(state: State<'_, AppState>) -> Result<Vec<NamespaceInfo>> {
-    list_cluster_resource_infos::<Namespace, NamespaceInfo>(None, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "listNamespaces",
+        list_cluster_resource_infos::<Namespace, NamespaceInfo>(None, state.clone()),
+    )
+    .await
 }
 
 /// One namespace — the trace's "namespace allowed" step peeks at it, because
@@ -18,6 +23,11 @@ pub async fn list_namespaces(state: State<'_, AppState>) -> Result<Vec<Namespace
 /// matches against.
 #[tauri::command]
 pub async fn get_namespace(name: String, state: State<'_, AppState>) -> Result<NamespaceInfo> {
-    let ns: Namespace = crate::commands::helpers::get_cluster_resource(name, state).await?;
+    let ns: Namespace = crate::client::clock::timed(
+        &state.perf,
+        "getNamespace",
+        crate::commands::helpers::get_cluster_resource(name, state.clone()),
+    )
+    .await?;
     Ok(NamespaceInfo::from(&ns))
 }

@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type KeyboardEvent,
   type MouseEvent,
   type ReactNode,
 } from "react";
@@ -55,6 +56,8 @@ export interface CopyableValueProps {
    * moving down a feed. What marks it at rest is the underline on hover.
    */
   quietMark?: boolean;
+  /** In a line cut rather than wrapped: text the line's ellipsis cuts through, not a box it hides whole. */
+  cut?: boolean;
   className?: string;
 }
 
@@ -63,6 +66,7 @@ export function CopyableValue({
   label,
   children,
   quietMark,
+  cut,
   className,
 }: CopyableValueProps) {
   const t = useT();
@@ -71,7 +75,7 @@ export function CopyableValue({
 
   useEffect(() => () => clearTimeout(timer.current), []);
 
-  const copy = async (event: MouseEvent<HTMLButtonElement>) => {
+  const copy = async (event: MouseEvent | KeyboardEvent) => {
     // The row underneath usually navigates. Copying an address is not that,
     // and a click that both copies and leaves the page is a click nobody
     // meant to make.
@@ -91,23 +95,25 @@ export function CopyableValue({
 
   const Mark = copied ? Check : Copy;
 
-  return (
-    <button
-      type="button"
-      onClick={copy}
-      title={copied ? t("action", "copied") : `${t("action", "copy")} ${value}`}
-      aria-label={t("action", "copyValue", { value: label ?? value })}
-      className={cn(
-        // Never wider than its cell: past the edge the cell's own ellipsis
-        // draws after the hidden mark and reads as "..".
-        "group inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm font-mono",
-        // In prose WebKit undersized the box by this margin and broke the image at a hyphen.
-        !quietMark && "-mx-1 px-1",
-        "hover:underline hover:decoration-dotted hover:underline-offset-2",
-        "focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
-        className
-      )}
-    >
+  const shared = {
+    onClick: copy,
+    title: copied ? t("action", "copied") : `${t("action", "copy")} ${value}`,
+    "aria-label": t("action", "copyValue", { value: label ?? value }),
+    className: cn(
+      cut
+        ? "group rounded-sm font-mono"
+        : // Never wider than its cell: past the edge the cell's own ellipsis
+          // draws after the hidden mark and reads as "..".
+          "group inline-flex min-w-0 max-w-full items-center gap-1 rounded-sm font-mono",
+      // In prose WebKit undersized the box by this margin and broke the image at a hyphen.
+      !quietMark && "-mx-1 px-1",
+      "hover:underline hover:decoration-dotted hover:underline-offset-2",
+      "focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-info",
+      className
+    ),
+  };
+  const body = (
+    <>
       <span
         className={
           quietMark
@@ -136,6 +142,25 @@ export function CopyableValue({
       <span className="sr-only" role="status">
         {copied ? t("action", "copied") : ""}
       </span>
+    </>
+  );
+
+  return cut ? (
+    <span
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        void copy(event);
+      }}
+      {...shared}
+    >
+      {body}
+    </span>
+  ) : (
+    <button type="button" {...shared}>
+      {body}
     </button>
   );
 }

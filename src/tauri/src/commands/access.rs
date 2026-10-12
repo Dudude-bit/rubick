@@ -82,7 +82,11 @@ pub async fn check_access(
     queries: Vec<AccessQuery>,
     state: State<'_, AppState>,
 ) -> Result<Vec<AccessAnswer>> {
-    let ctx = ResourceContext::for_list(&state, None)?;
+    crate::client::clock::timed(&state.perf, "checkAccess", access_answers(&state, queries)).await
+}
+
+async fn access_answers(state: &AppState, queries: Vec<AccessQuery>) -> Result<Vec<AccessAnswer>> {
+    let ctx = ResourceContext::for_list(state, None)?;
     let api: Api<SelfSubjectAccessReview> = Api::all(ctx.client.clone());
     let answers = join_all(queries.iter().map(|query| {
         let api = api.clone();
@@ -153,7 +157,20 @@ pub async fn check_list_access(
     namespaces: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<ListAccess>> {
-    let ctx = ResourceContext::for_list(&state, None)?;
+    crate::client::clock::timed(
+        &state.perf,
+        "checkListAccess",
+        list_answers(&state, queries, namespaces),
+    )
+    .await
+}
+
+async fn list_answers(
+    state: &AppState,
+    queries: Vec<ListQuery>,
+    namespaces: Vec<String>,
+) -> Result<Vec<ListAccess>> {
+    let ctx = ResourceContext::for_list(state, None)?;
     let api: Api<SelfSubjectAccessReview> = Api::all(ctx.client.clone());
 
     // Asked at once: a review per kind per namespace in sequence is a visible
@@ -225,7 +242,19 @@ pub async fn check_namespace_access(
     namespaces: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<NamespaceAccess>> {
-    let ctx = ResourceContext::for_list(&state, None)?;
+    crate::client::clock::timed(
+        &state.perf,
+        "checkNamespaceAccess",
+        namespace_answers(&state, namespaces),
+    )
+    .await
+}
+
+async fn namespace_answers(
+    state: &AppState,
+    namespaces: Vec<String>,
+) -> Result<Vec<NamespaceAccess>> {
+    let ctx = ResourceContext::for_list(state, None)?;
     let api: Api<SelfSubjectAccessReview> = Api::all(ctx.client.clone());
     let probe = namespace_probe_query();
 
@@ -343,7 +372,9 @@ pub async fn review_own_rules(namespace: String, state: State<'_, AppState>) -> 
     crate::validation::validate_dns_label(&namespace)?;
     let ctx = ResourceContext::for_list(&state, None)?;
     let api: Api<SelfSubjectRulesReview> = Api::all(ctx.client.clone());
-    let answered = review(&api, &namespace).await?;
+    let answered =
+        crate::client::clock::timed(&state.perf, "reviewOwnRules", review(&api, &namespace))
+            .await?;
     Ok(own_rules(namespace, answered))
 }
 

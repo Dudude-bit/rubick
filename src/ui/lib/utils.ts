@@ -60,7 +60,14 @@ export function formatTimeUnit(
     });
     unitFormats.set(key, format);
   }
-  return format.format(value);
+  return unitApart(format.format(value), locale);
+}
+
+/** Only English joins a number to its unit, as kubectl does; older ICU data wrote Russian seconds as «51с» beside «1 мин». */
+export function unitApart(text: string, locale: string): string {
+  return locale.startsWith("en")
+    ? text
+    : text.replace(/(\d)(\p{L})/u, "$1\u00a0$2");
 }
 
 const decimalFormats = new Map<string, Intl.NumberFormat>();

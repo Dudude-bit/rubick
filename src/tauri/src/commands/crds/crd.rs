@@ -16,8 +16,15 @@ use super::types::{CrdDetailInfo, CrdGroup, CrdInfo};
 /// List all CRDs, optionally grouped by API group
 #[tauri::command]
 pub async fn list_crds(grouped: Option<bool>, state: State<'_, AppState>) -> Result<Vec<CrdGroup>> {
-    let list = crate::commands::helpers::list_cluster_resources::<CustomResourceDefinition>(
-        state, None, None, None,
+    let list = crate::client::clock::timed(
+        &state.perf,
+        "listCrds",
+        crate::commands::helpers::list_cluster_resources::<CustomResourceDefinition>(
+            state.clone(),
+            None,
+            None,
+            None,
+        ),
     )
     .await?;
 
@@ -50,8 +57,12 @@ pub async fn list_crds(grouped: Option<bool>, state: State<'_, AppState>) -> Res
 /// Get CRD details by name
 #[tauri::command]
 pub async fn get_crd(name: String, state: State<'_, AppState>) -> Result<CrdDetailInfo> {
-    let crd: CustomResourceDefinition =
-        crate::commands::helpers::get_cluster_resource(name, state).await?;
+    let crd: CustomResourceDefinition = crate::client::clock::timed(
+        &state.perf,
+        "getCrd",
+        crate::commands::helpers::get_cluster_resource(name, state.clone()),
+    )
+    .await?;
     Ok(CrdDetailInfo::from(&crd))
 }
 
@@ -61,7 +72,7 @@ pub async fn get_crd_yaml(name: String, state: State<'_, AppState>) -> Result<St
     crate::validation::validate_dns_subdomain(&name)?;
     let ctx = ResourceContext::for_list(&state, None)?;
     let api: Api<CustomResourceDefinition> = ctx.cluster_api();
-    let crd = api.get(&name).await?;
+    let crd = crate::client::clock::timed(&state.perf, "getCrdYaml", api.get(&name)).await?;
 
     let yaml = serde_yaml::to_string(&crd).map_err(|e| Error::Serialization(e.to_string()))?;
     crate::commands::helpers::clean_yaml_for_editor(&yaml)

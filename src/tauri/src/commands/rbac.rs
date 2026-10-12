@@ -88,9 +88,12 @@ list_in_scope!(list_role_bindings_in, RoleBinding, BindingInfo);
 #[tauri::command]
 pub async fn list_cluster_role_bindings(state: State<'_, AppState>) -> Result<Vec<BindingInfo>> {
     let client = (*state.current_client()?).clone();
-    let list = Api::<ClusterRoleBinding>::all(client)
-        .list(&ListParams::default())
-        .await?;
+    let list = crate::client::clock::timed(
+        &state.perf,
+        "listClusterRoleBindings",
+        Api::<ClusterRoleBinding>::all(client).list(&ListParams::default()),
+    )
+    .await?;
     Ok(list.items.iter().map(BindingInfo::from).collect())
 }
 

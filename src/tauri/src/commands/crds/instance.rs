@@ -80,7 +80,12 @@ pub async fn list_custom_resources(
 ) -> Result<Vec<CustomResourceInfo>> {
     crate::validation::validate_dns_subdomain(&crd_name)?;
     let params = build_list_params(label_selector.as_deref(), None, limit);
-    instances_in(&crd_name, namespace, &params, &state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "listCustomResources",
+        instances_in(&crd_name, namespace, &params, &state),
+    )
+    .await
 }
 
 /// The instances page's read: one LIST per namespace of the scope. A
@@ -92,15 +97,18 @@ pub async fn list_custom_resources_in(
     state: State<'_, AppState>,
 ) -> Result<Scoped<CustomResourceInfo>> {
     crate::validation::validate_dns_subdomain(&crd_name)?;
-    let (plural, group) = plural_and_group(&crd_name);
-    let namespaced = state
-        .served(group, plural)
-        .await?
-        .is_none_or(|served| served.namespaced);
-    let scope = if namespaced { scope } else { None };
-    let params = build_list_params(None, None, None);
-    across(scope, |reach| {
-        instances_in(&crd_name, reach, &params, &state)
+    crate::client::clock::timed(&state.perf, "listCustomResourcesIn", async {
+        let (plural, group) = plural_and_group(&crd_name);
+        let namespaced = state
+            .served(group, plural)
+            .await?
+            .is_none_or(|served| served.namespaced);
+        let scope = if namespaced { scope } else { None };
+        let params = build_list_params(None, None, None);
+        across(scope, |reach| {
+            instances_in(&crd_name, reach, &params, &state)
+        })
+        .await
     })
     .await
 }
@@ -133,9 +141,13 @@ pub async fn get_custom_resource(
 ) -> Result<CustomResourceDetailInfo> {
     names(&crd_name, &name)?;
 
-    let obj = on_served(&state, &crd_name, namespace, false, |api| async move {
-        api.get(&name).await
-    })
+    let obj = crate::client::clock::timed(
+        &state.perf,
+        "getCustomResource",
+        on_served(&state, &crd_name, namespace, false, |api| async move {
+            api.get(&name).await
+        }),
+    )
     .await?;
 
     Ok(dynamic_object_to_detail_info(&obj))
@@ -151,9 +163,13 @@ pub async fn get_custom_resource_yaml(
 ) -> Result<String> {
     names(&crd_name, &name)?;
 
-    let obj = on_served(&state, &crd_name, namespace, false, |api| async move {
-        api.get(&name).await
-    })
+    let obj = crate::client::clock::timed(
+        &state.perf,
+        "getCustomResourceYaml",
+        on_served(&state, &crd_name, namespace, false, |api| async move {
+            api.get(&name).await
+        }),
+    )
     .await?;
 
     let yaml = serde_yaml::to_string(&obj).map_err(|e| Error::Serialization(e.to_string()))?;

@@ -24,7 +24,12 @@ pub async fn collect_diagnostics(
     redact: bool,
     state: tauri::State<'_, AppState>,
 ) -> Result<Diagnostics> {
-    Ok(gather(&state.client_manager, redact).await)
+    Ok(crate::client::clock::timed(
+        &state.perf,
+        "collectDiagnostics",
+        Box::pin(gather(&state.client_manager, redact)),
+    )
+    .await)
 }
 
 /// What a redacted report hides, for every other screen that prints a path.

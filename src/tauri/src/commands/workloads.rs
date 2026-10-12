@@ -100,7 +100,12 @@ pub async fn list_statefulsets(
     filters: Option<ResourceFilters>,
     state: State<'_, AppState>,
 ) -> Result<Vec<StatefulSetInfo>> {
-    list_resource_infos::<StatefulSet, StatefulSetInfo>(filters, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "listStatefulsets",
+        list_resource_infos::<StatefulSet, StatefulSetInfo>(filters, state.clone()),
+    )
+    .await
 }
 
 list_in_scope!(list_statefulsets_in, StatefulSet, StatefulSetInfo);
@@ -111,7 +116,12 @@ pub async fn get_statefulset(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<StatefulSetDetailInfo> {
-    statefulset_detail(&state, name, namespace).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getStatefulset",
+        Box::pin(statefulset_detail(&state, name, namespace)),
+    )
+    .await
 }
 
 /// Scale a `StatefulSet`
@@ -151,7 +161,12 @@ pub async fn list_daemonsets(
     filters: Option<ResourceFilters>,
     state: State<'_, AppState>,
 ) -> Result<Vec<DaemonSetInfo>> {
-    list_resource_infos::<DaemonSet, DaemonSetInfo>(filters, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "listDaemonsets",
+        list_resource_infos::<DaemonSet, DaemonSetInfo>(filters, state.clone()),
+    )
+    .await
 }
 
 list_in_scope!(list_daemonsets_in, DaemonSet, DaemonSetInfo);
@@ -162,7 +177,12 @@ pub async fn get_daemonset(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<DaemonSetDetailInfo> {
-    daemonset_detail(&state, name, namespace).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getDaemonset",
+        Box::pin(daemonset_detail(&state, name, namespace)),
+    )
+    .await
 }
 
 /// Restart a `DaemonSet` (rolling restart)
@@ -191,7 +211,12 @@ pub async fn list_jobs(
     filters: Option<ResourceFilters>,
     state: State<'_, AppState>,
 ) -> Result<Vec<JobInfo>> {
-    list_resource_infos::<Job, JobInfo>(filters, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "listJobs",
+        list_resource_infos::<Job, JobInfo>(filters, state.clone()),
+    )
+    .await
 }
 
 list_in_scope!(list_jobs_in, Job, JobInfo);
@@ -202,7 +227,12 @@ pub async fn get_job(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<JobDetailInfo> {
-    get_resource_info::<Job, JobDetailInfo>(name, namespace, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getJob",
+        get_resource_info::<Job, JobDetailInfo>(name, namespace, state.clone()),
+    )
+    .await
 }
 
 #[tauri::command]
@@ -231,7 +261,12 @@ pub async fn get_cronjob(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<CronJobDetailInfo> {
-    get_resource_info::<CronJob, CronJobDetailInfo>(name, namespace, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getCronjob",
+        get_resource_info::<CronJob, CronJobDetailInfo>(name, namespace, state.clone()),
+    )
+    .await
 }
 
 /// Run a `CronJob` now, the way `kubectl create job --from` does.

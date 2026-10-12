@@ -55,6 +55,15 @@ pub async fn get_debug_status(
     operation_id: String,
     state: State<'_, AppState>,
 ) -> Result<DebugStatus> {
+    crate::client::clock::timed(
+        &state.perf,
+        "getDebugStatus",
+        debug_status(&state, operation_id),
+    )
+    .await
+}
+
+async fn debug_status(state: &AppState, operation_id: String) -> Result<DebugStatus> {
     // Get operation from storage
     let operation = state
         .debug_operations
@@ -74,7 +83,7 @@ pub async fn get_debug_status(
     }
 
     // Get Kubernetes client using ResourceContext
-    let ctx = ResourceContext::for_command(&state, Some(operation.namespace.clone()))?;
+    let ctx = ResourceContext::for_command(state, Some(operation.namespace.clone()))?;
     let api: Api<Pod> = Api::namespaced(ctx.client.clone(), &operation.namespace);
 
     let pod = match api.get(&operation.pod_name).await {

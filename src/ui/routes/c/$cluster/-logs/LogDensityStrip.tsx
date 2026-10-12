@@ -674,7 +674,7 @@ function Slice({
       >
         <span
           aria-hidden="true"
-          className={`block w-full transition-none ${inView ? "bg-fg" : ""}`}
+          className={`block w-full ${inView ? "bg-fg" : ""}`}
           style={{ height: RULER_PX }}
         />
         <span
@@ -683,7 +683,7 @@ function Slice({
         >
           {level && (
             <span
-              className={`block w-full transition-none ${level.tone}`}
+              className={`block w-full ${level.tone}`}
               style={{ height: level.px }}
             />
           )}
@@ -706,7 +706,7 @@ function Slice({
           reads as a fence. */}
       <span
         aria-hidden="true"
-        className={`block w-full transition-none ${inView ? "bg-fg" : ""}`}
+        className={`block w-full ${inView ? "bg-fg" : ""}`}
         style={{ height: RULER_PX }}
       />
       {/* "There are errors here" said by a mark and not only by a hue. */}
@@ -724,19 +724,13 @@ function Slice({
         className="flex flex-1 flex-col justify-end overflow-hidden"
       >
         {err > 0 && (
-          <span
-            className="block w-full transition-none bg-err"
-            style={{ height: err }}
-          />
+          <span className="block w-full bg-err" style={{ height: err }} />
         )}
         {warn > 0 && (
-          <span
-            className="block w-full transition-none bg-warn"
-            style={{ height: warn }}
-          />
+          <span className="block w-full bg-warn" style={{ height: warn }} />
         )}
         <span
-          className="block w-full transition-none bg-info/40"
+          className="block w-full bg-info/40"
           style={{ height: Math.max(0, height - err - warn) }}
         />
       </span>

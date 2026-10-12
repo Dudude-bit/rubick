@@ -23,9 +23,12 @@ pub async fn get_replicaset(
 ) -> Result<ReplicaSetInfo> {
     crate::validation::validate_name::<ReplicaSet>(&name)?;
     let ctx = ResourceContext::for_command(&state, namespace)?;
-    let rs: ReplicaSet = ctx.namespaced_api().get(&name).await?;
-    let current = owner_revision(&ctx, &rs).await;
-    Ok(ReplicaSetInfo::of(&rs, current))
+    crate::client::clock::timed(&state.perf, "getReplicaset", async {
+        let rs: ReplicaSet = ctx.namespaced_api().get(&name).await?;
+        let current = owner_revision(&ctx, &rs).await;
+        Ok(ReplicaSetInfo::of(&rs, current))
+    })
+    .await
 }
 
 /// The pods this revision is running.
@@ -42,15 +45,18 @@ pub async fn get_replicaset_pods(
     crate::validation::validate_name::<ReplicaSet>(&name)?;
     let ctx = ResourceContext::for_command(&state, namespace)?;
 
-    let rs: ReplicaSet = ctx.namespaced_api().get(&name).await?;
-    let selector = Selector::Query(rs.spec.as_ref().map(|s| &s.selector))
-        .query_text()
-        .ok_or_else(|| Error::InvalidInput("ReplicaSet has no selector".to_string()))?;
+    crate::client::clock::timed(&state.perf, "getReplicasetPods", async {
+        let rs: ReplicaSet = ctx.namespaced_api().get(&name).await?;
+        let selector = Selector::Query(rs.spec.as_ref().map(|s| &s.selector))
+            .query_text()
+            .ok_or_else(|| Error::InvalidInput("ReplicaSet has no selector".to_string()))?;
 
-    let params = kube::api::ListParams::default().labels(&selector);
-    let pods = ctx.namespaced_api::<Pod>().list(&params).await?;
+        let params = kube::api::ListParams::default().labels(&selector);
+        let pods = ctx.namespaced_api::<Pod>().list(&params).await?;
 
-    Ok(pods.items.iter().map(PodInfo::from).collect())
+        Ok(pods.items.iter().map(PodInfo::from).collect())
+    })
+    .await
 }
 
 /// A Deployment's revisions, newest first.

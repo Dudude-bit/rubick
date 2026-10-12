@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { columnShares, tableLayout } from "./column-shares";
+import { columnShares, tableLayout, yieldedColumns } from "./column-shares";
 
 describe("columnShares", () => {
   /** Fails if an unmeasured table stops falling back to its declared proportions. */
@@ -146,5 +146,28 @@ describe("tableLayout", () => {
     expect(layout.scrolls).toBe(false);
     expect((layout.shares[1] / 100) * layout.span).toBeCloseTo(250);
     expect((layout.shares[0] / 100) * layout.span).toBeCloseTo(150);
+  });
+});
+
+describe("yieldedColumns", () => {
+  const columns = [
+    { id: "name", floor: 240 },
+    { id: "status", floor: 110 },
+    { id: "ip", floor: 140, yields: 1 },
+    { id: "node", floor: 190, yields: 2 },
+    { id: "age", floor: 90, yields: 3 },
+  ];
+
+  /** Lena's Pods list scrolled sideways at 1024 with "Пер…" cut; fails if a narrow port keeps every column or hides more than it needs, out of order. */
+  it("hides the lowest yields first, and only until the rest fit", () => {
+    expect(yieldedColumns(columns, 600)).toEqual(["ip", "node"]);
+    expect(yieldedColumns(columns, 700)).toEqual(["ip"]);
+    expect(yieldedColumns(columns, 770)).toEqual([]);
+  });
+
+  /** Fails if a column with no place in the order is hidden, or a port not yet measured hides anything. */
+  it("never hides a column that does not yield, nor before the port is measured", () => {
+    expect(yieldedColumns(columns, 100)).toEqual(["ip", "node", "age"]);
+    expect(yieldedColumns(columns, 0)).toEqual([]);
   });
 });

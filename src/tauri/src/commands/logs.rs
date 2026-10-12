@@ -156,7 +156,9 @@ pub async fn get_pod_logs(
 
     let event_tx = state.event_tx.clone();
     let streamer = LogStreamer::new(Arc::new((*client).clone()), event_tx);
-    let logs = streamer.get_logs(&log_config).await?;
+    let logs =
+        crate::client::clock::timed(&state.perf, "getPodLogs", streamer.get_logs(&log_config))
+            .await?;
 
     Ok(logs)
 }

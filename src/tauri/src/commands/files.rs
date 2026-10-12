@@ -262,7 +262,12 @@ pub async fn container_working_dir(
     crate::validation::validate_dns_label(&container)?;
     let namespace = normalize_optional_namespace(namespace).unwrap_or_else(|| "default".into());
     let client = current_client(&state)?;
-    files::working_dir(client, &namespace, &pod, &container).await
+    crate::client::clock::timed(
+        &state.perf,
+        "containerWorkingDir",
+        files::working_dir(client, &namespace, &pod, &container),
+    )
+    .await
 }
 
 /// The first megabyte of a file, or why not.
@@ -285,9 +290,13 @@ pub async fn read_container_file(
     // that blocks — left the panel on "reading…" for as long as the tab was
     // open and leaked the exec session. Every other read here that can hang
     // is bounded; this one was not.
-    let result = tokio::time::timeout(
-        PREVIEW_TIMEOUT,
-        files::read_preview(client, &namespace, &pod, &container, via.as_ref(), &path),
+    let result = crate::client::clock::timed(
+        &state.perf,
+        "readContainerFile",
+        tokio::time::timeout(
+            PREVIEW_TIMEOUT,
+            files::read_preview(client, &namespace, &pod, &container, via.as_ref(), &path),
+        ),
     )
     .await
     .map_err(|_| {

@@ -7,7 +7,10 @@ import {
   AGE_LABEL,
   ageOrder,
   createNamespaceColumn,
+  nameCellPx,
 } from "../../-list/columns";
+import type { Catalogue } from "@/i18n/catalogue";
+import { widestText } from "@/lib/text-width";
 import { ResourceList } from "../../-list/ResourceList";
 import { servedOf, useServed } from "../../-object/served";
 import { Button } from "@/components/ui/button";
@@ -50,20 +53,53 @@ const PAGES_PER_STEP = 5;
 const NO_COLUMNS: TableColumn[] = [];
 /** The columns kubectl prints without `-o wide`. */
 const DEFAULT_PRIORITY = 0;
-/** The columns the API server prints for every kind, named in the reader's language. */
-const STANDARD_HEADERS: Partial<
-  Record<string, "name" | "age" | "created" | "role">
-> = {
+/** Columns the API server prints, named in the reader's language where they are words and not fields. */
+const STANDARD_HEADERS: Partial<Record<string, keyof Catalogue["columns"]>> = {
   Name: "name",
   Age: "age",
   "Created At": "created",
   Role: "role",
+  Status: "status",
+  Ready: "ready",
+  Type: "type",
+  Data: "data",
+  Value: "value",
+  Groups: "groups",
+  Replicas: "replicas",
+  Targets: "targets",
+  Reference: "printedReference",
+  MinPods: "printedMinPods",
+  MaxPods: "printedMaxPods",
+  "Min Available": "printedMinAvailable",
+  "Max Unavailable": "printedMaxUnavailable",
+  "Allowed Disruptions": "printedAllowedDisruptions",
 };
+/** A text column holds its longest value whole up to here, and past it cuts. */
+const TEXT_FLOOR_PX = 240;
 /** How the server describes a column that reads `metadata.creationTimestamp`. */
 const CREATION = /creationTimestamp/i;
 
 const isAge = (column: TableColumn) =>
   CREATION.test(column.description) || column.columnType === "date";
+
+const cellText = (value: unknown) =>
+  value === null || value === undefined
+    ? ""
+    : typeof value === "object"
+      ? JSON.stringify(value)
+      : String(value);
+
+/** The widest value a text column holds, as the floor it is not drawn under. */
+const textFloor =
+  (index: number) => (_t: unknown, rows: readonly PrintedRow[]) =>
+    Math.min(
+      TEXT_FLOOR_PX,
+      widestText(
+        rows.map((row) => cellText(row.cells[index])),
+        "sans",
+        7.2
+      ) + 20
+    );
 
 /** An age or a count needs a few characters; a RoleBinding's Role needs the rest. */
 function sizeOf(column: TableColumn): number {
@@ -248,13 +284,27 @@ function columnsOf(
   targetOf: (row: PrintedRow) => PeekTarget
 ): ColumnDef<PrintedRow>[] {
   const columns: ColumnDef<PrintedRow>[] = [];
+  const shown = printed.filter((column) => column.priority <= DEFAULT_PRIORITY);
   printed.forEach((column, index) => {
     if (column.priority > DEFAULT_PRIORITY) return;
     const standard = STANDARD_HEADERS[column.name];
     const byAge = standard === "age" && CREATION.test(column.description);
+    const named = column.format === "name";
+    const text =
+      !named &&
+      !isAge(column) &&
+      column.columnType !== "integer" &&
+      column.columnType !== "number";
+    // The name stays; kubectl's later columns give way first.
+    const yields = named ? undefined : shown.length - shown.indexOf(column);
     columns.push({
       id: `printed-${index}`,
       size: sizeOf(column),
+      meta: {
+        floor: named ? nameCellPx : text ? textFloor(index) : undefined,
+        yields,
+        ...(byAge ? { label: AGE_LABEL } : {}),
+      },
       ...(byAge
         ? {
             header: AgeHeader,
@@ -262,7 +312,6 @@ function columnsOf(
             sortUndefined: "last" as const,
             sortDescFirst: false,
             enableGlobalFilter: false,
-            meta: { label: AGE_LABEL },
           }
         : {
             header: standard ? columnHeader("columns", standard) : column.name,

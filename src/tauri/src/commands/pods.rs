@@ -32,8 +32,12 @@ pub async fn list_pods(
     filters: Option<PodFilters>,
     state: State<'_, AppState>,
 ) -> Result<Vec<PodInfo>> {
+    crate::client::clock::timed(&state.perf, "listPods", pods_matching(&state, filters)).await
+}
+
+async fn pods_matching(state: &AppState, filters: Option<PodFilters>) -> Result<Vec<PodInfo>> {
     let filters = filters.unwrap_or_default();
-    let ctx = ResourceContext::for_list(&state, filters.base.namespace.clone())?;
+    let ctx = ResourceContext::for_list(state, filters.base.namespace.clone())?;
     let api: kube::Api<Pod> = ctx.namespaced_or_cluster_api();
 
     let mut lp = ListParams::default();
@@ -285,7 +289,12 @@ pub async fn get_pod(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<PodInfo> {
-    get_resource_info::<Pod, PodInfo>(name, namespace, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getPod",
+        get_resource_info::<Pod, PodInfo>(name, namespace, state.clone()),
+    )
+    .await
 }
 
 /// Delete a pod

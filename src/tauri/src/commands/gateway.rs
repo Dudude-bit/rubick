@@ -128,14 +128,23 @@ pub async fn detect_gateway_api(state: State<'_, AppState>) -> Result<GatewayApi
         .get_current_context()
         .ok_or_else(|| Error::Internal(crate::error::messages::NO_CLUSTER.to_string()))?;
     let client = state.current_client()?;
-    crate::resources::discover_gateway_api(&client, state.client_manager.served(), &context).await
+    crate::client::clock::timed(
+        &state.perf,
+        "detectGatewayApi",
+        crate::resources::discover_gateway_api(&client, state.client_manager.served(), &context),
+    )
+    .await
 }
 
 #[tauri::command]
 pub async fn list_gateway_classes(state: State<'_, AppState>) -> Result<Vec<GatewayClassInfo>> {
-    let (list, api_resource) = on_served(&state, "GatewayClass", None, true, |api| async move {
-        api.list(&build_list_params(None, None, None)).await
-    })
+    let (list, api_resource) = crate::client::clock::timed(
+        &state.perf,
+        "listGatewayClasses",
+        on_served(&state, "GatewayClass", None, true, |api| async move {
+            api.list(&build_list_params(None, None, None)).await
+        }),
+    )
     .await?;
     Ok(list
         .items
@@ -152,12 +161,16 @@ pub async fn list_backend_tls_policies(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<Vec<BackendTlsPolicyInfo>> {
-    let (list, api_resource) = on_served(
-        &state,
-        "BackendTLSPolicy",
-        namespace,
-        true,
-        |api| async move { api.list(&build_list_params(None, None, None)).await },
+    let (list, api_resource) = crate::client::clock::timed(
+        &state.perf,
+        "listBackendTlsPolicies",
+        on_served(
+            &state,
+            "BackendTLSPolicy",
+            namespace,
+            true,
+            |api| async move { api.list(&build_list_params(None, None, None)).await },
+        ),
     )
     .await?;
     Ok(list
@@ -173,9 +186,13 @@ pub async fn get_gateway_class(
     state: State<'_, AppState>,
 ) -> Result<GatewayClassInfo> {
     crate::validation::validate_dns_subdomain(&name)?;
-    let (obj, api_resource) = on_served(&state, "GatewayClass", None, false, |api| async move {
-        api.get(&name).await
-    })
+    let (obj, api_resource) = crate::client::clock::timed(
+        &state.perf,
+        "getGatewayClass",
+        on_served(&state, "GatewayClass", None, false, |api| async move {
+            api.get(&name).await
+        }),
+    )
     .await?;
     Ok(GatewayClassInfo::read(&with_types(obj, &api_resource)))
 }
@@ -221,12 +238,19 @@ pub async fn list_gateways(
 ) -> Result<Vec<GatewayInfo>> {
     // The ListenerSet probe answers "none" on its own errors, so the two
     // reads race instead of queuing — one round trip of latency, not two.
-    let (gateways, sets) = tokio::join!(
-        on_served(&state, "Gateway", namespace, true, |api| async move {
-            api.list(&build_list_params(None, None, None)).await
+    let (gateways, sets) = crate::client::clock::timed(
+        &state.perf,
+        "listGateways",
+        Box::pin(async {
+            tokio::join!(
+                on_served(&state, "Gateway", namespace, true, |api| async move {
+                    api.list(&build_list_params(None, None, None)).await
+                }),
+                listener_sets(&state)
+            )
         }),
-        listener_sets(&state)
-    );
+    )
+    .await;
     let (list, api_resource) = gateways?;
     Ok(list
         .items
@@ -246,19 +270,26 @@ pub async fn list_gateways_in(
     scope: Option<Vec<String>>,
     state: State<'_, AppState>,
 ) -> Result<Scoped<GatewayInfo>> {
-    let api_resource = served_api_resource("Gateway", &state).await?;
-    let client = (*state.current_client()?).clone();
-    let (gateways, sets) = tokio::join!(
-        across(scope, |reach| {
-            read_in(&state, &client, &api_resource, reach, GatewayInfo::read)
+    crate::client::clock::timed(
+        &state.perf,
+        "listGatewaysIn",
+        Box::pin(async {
+            let api_resource = served_api_resource("Gateway", &state).await?;
+            let client = (*state.current_client()?).clone();
+            let (gateways, sets) = tokio::join!(
+                across(scope, |reach| {
+                    read_in(&state, &client, &api_resource, reach, GatewayInfo::read)
+                }),
+                listener_sets(&state),
+            );
+            let mut gateways = gateways?;
+            for gateway in &mut gateways.rows {
+                gateway.merge_listener_sets(sets.as_deref());
+            }
+            Ok(gateways)
         }),
-        listener_sets(&state),
-    );
-    let mut gateways = gateways?;
-    for gateway in &mut gateways.rows {
-        gateway.merge_listener_sets(sets.as_deref());
-    }
-    Ok(gateways)
+    )
+    .await
 }
 
 /// One namespaced Gateway API kind in one reach, each object read by `read`.
@@ -288,13 +319,17 @@ pub async fn get_gateway(
     state: State<'_, AppState>,
 ) -> Result<GatewayInfo> {
     crate::validation::validate_dns_subdomain(&name)?;
-    let (obj, api_resource) = on_served(&state, "Gateway", namespace, false, |api| async move {
-        api.get(&name).await
+    crate::client::clock::timed(&state.perf, "getGateway", async {
+        let (obj, api_resource) =
+            on_served(&state, "Gateway", namespace, false, |api| async move {
+                api.get(&name).await
+            })
+            .await?;
+        let mut gateway = GatewayInfo::read(&with_types(obj, &api_resource));
+        gateway.merge_listener_sets(listener_sets(&state).await.as_deref());
+        Ok(gateway)
     })
-    .await?;
-    let mut gateway = GatewayInfo::read(&with_types(obj, &api_resource));
-    gateway.merge_listener_sets(listener_sets(&state).await.as_deref());
-    Ok(gateway)
+    .await
 }
 
 #[tauri::command]
@@ -328,9 +363,13 @@ pub async fn list_gateway_routes(
     state: State<'_, AppState>,
 ) -> Result<Vec<RouteInfo>> {
     require_route_kind(&kind)?;
-    let (list, api_resource) = on_served(&state, &kind, namespace, true, |api| async move {
-        api.list(&build_list_params(None, None, None)).await
-    })
+    let (list, api_resource) = crate::client::clock::timed(
+        &state.perf,
+        "listGatewayRoutes",
+        on_served(&state, &kind, namespace, true, |api| async move {
+            api.list(&build_list_params(None, None, None)).await
+        }),
+    )
     .await?;
     Ok(list
         .items
@@ -347,10 +386,13 @@ pub async fn list_gateway_routes_in(
     state: State<'_, AppState>,
 ) -> Result<Scoped<RouteInfo>> {
     require_route_kind(&kind)?;
-    let api_resource = served_api_resource(&kind, &state).await?;
-    let client = (*state.current_client()?).clone();
-    across(scope, |reach| {
-        read_in(&state, &client, &api_resource, reach, RouteInfo::read)
+    crate::client::clock::timed(&state.perf, "listGatewayRoutesIn", async {
+        let api_resource = served_api_resource(&kind, &state).await?;
+        let client = (*state.current_client()?).clone();
+        across(scope, |reach| {
+            read_in(&state, &client, &api_resource, reach, RouteInfo::read)
+        })
+        .await
     })
     .await
 }
@@ -364,9 +406,13 @@ pub async fn get_gateway_route(
 ) -> Result<RouteInfo> {
     require_route_kind(&kind)?;
     crate::validation::validate_dns_subdomain(&name)?;
-    let (obj, api_resource) = on_served(&state, &kind, namespace, false, |api| async move {
-        api.get(&name).await
-    })
+    let (obj, api_resource) = crate::client::clock::timed(
+        &state.perf,
+        "getGatewayRoute",
+        on_served(&state, &kind, namespace, false, |api| async move {
+            api.get(&name).await
+        }),
+    )
     .await?;
     Ok(RouteInfo::read(&with_types(obj, &api_resource)))
 }

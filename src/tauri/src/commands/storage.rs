@@ -21,7 +21,15 @@ pub async fn list_persistent_volumes(
     filters: Option<ResourceFilters>,
     state: State<'_, AppState>,
 ) -> Result<Vec<PersistentVolumeInfo>> {
-    list_cluster_resource_infos::<PersistentVolume, PersistentVolumeInfo>(filters, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "listPersistentVolumes",
+        list_cluster_resource_infos::<PersistentVolume, PersistentVolumeInfo>(
+            filters,
+            state.clone(),
+        ),
+    )
+    .await
 }
 
 list_in_scope!(
@@ -36,7 +44,12 @@ pub async fn list_storage_classes(
     filters: Option<ResourceFilters>,
     state: State<'_, AppState>,
 ) -> Result<Vec<StorageClassInfo>> {
-    list_cluster_resource_infos::<StorageClass, StorageClassInfo>(filters, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "listStorageClasses",
+        list_cluster_resource_infos::<StorageClass, StorageClassInfo>(filters, state.clone()),
+    )
+    .await
 }
 
 /// Get a single `PersistentVolume` by name
@@ -45,7 +58,12 @@ pub async fn get_persistent_volume(
     name: String,
     state: State<'_, AppState>,
 ) -> Result<PersistentVolumeInfo> {
-    get_cluster_resource_info::<PersistentVolume, PersistentVolumeInfo>(name, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getPersistentVolume",
+        get_cluster_resource_info::<PersistentVolume, PersistentVolumeInfo>(name, state.clone()),
+    )
+    .await
 }
 
 /// Delete a `PersistentVolume`
@@ -61,8 +79,16 @@ pub async fn get_persistent_volume_claim(
     namespace: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<PersistentVolumeClaimInfo> {
-    get_resource_info::<PersistentVolumeClaim, PersistentVolumeClaimInfo>(name, namespace, state)
-        .await
+    crate::client::clock::timed(
+        &state.perf,
+        "getPersistentVolumeClaim",
+        get_resource_info::<PersistentVolumeClaim, PersistentVolumeClaimInfo>(
+            name,
+            namespace,
+            state.clone(),
+        ),
+    )
+    .await
 }
 
 /// Delete a `PersistentVolumeClaim`
@@ -82,7 +108,12 @@ pub async fn get_storage_class(
     name: String,
     state: State<'_, AppState>,
 ) -> Result<StorageClassInfo> {
-    get_cluster_resource_info::<StorageClass, StorageClassInfo>(name, state).await
+    crate::client::clock::timed(
+        &state.perf,
+        "getStorageClass",
+        get_cluster_resource_info::<StorageClass, StorageClassInfo>(name, state.clone()),
+    )
+    .await
 }
 
 /// Delete a `StorageClass`

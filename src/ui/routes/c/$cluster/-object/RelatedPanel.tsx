@@ -41,6 +41,7 @@ function byRelation(
 }
 
 function Row({ entry }: { entry: RelatedRef }) {
+  const t = useT();
   return (
     <div className="grid grid-cols-[minmax(0,260px)_minmax(0,1fr)] items-baseline gap-x-3 border-b border-hair py-1 last:border-b-0">
       <span className="min-w-0 truncate">
@@ -54,7 +55,7 @@ function Row({ entry }: { entry: RelatedRef }) {
       </span>
       <span className="flex min-w-0 items-baseline gap-2">
         <span className="flex-none text-[11px] text-fg-fnt">
-          {entry.namespace ?? "cluster-wide"}
+          {entry.namespace ?? t("apiResources", "clusterWide")}
         </span>
         {entry.note && (
           <span
@@ -125,26 +126,17 @@ export function RelatedPanel({
         is an admission about the app, and a reader who cannot tell them apart
         will believe whichever is worse.
       */}
-      {query.related.length === 0 &&
-        (query.claimed ? (
-          <p className="max-w-[64ch] text-[11.5px] text-fg-mut">
-            Nothing points at anything: this {kind} names no other object right
-            now, and nothing in the cluster owns it.
-          </p>
-        ) : (
-          <p className="max-w-[64ch] text-[11.5px] text-fg-mut">
-            No integration in this app reads {kind} objects, so nothing here
-            knows what this one is connected to. That is a gap in the app and
-            not a fact about the cluster. The object&rsquo;s own spec and
-            status, on the tabs beside this one, are what it says about itself.
-          </p>
-        ))}
+      {query.related.length === 0 && (
+        <p className="max-w-[64ch] text-[11.5px] text-fg-mut">
+          {t("empty", query.claimed ? "relatedNothing" : "relatedUnread", {
+            kind,
+          })}
+        </p>
+      )}
 
       {query.related.length > 0 && !query.claimed && (
         <p className="max-w-[64ch] text-[11.5px] text-fg-fnt">
-          Only the owner reference, which every object carries. No integration
-          in this app reads {kind} objects, so anything else this one points at
-          is not shown here.
+          {t("empty", "relatedOwnerOnly", { kind })}
         </p>
       )}
     </div>

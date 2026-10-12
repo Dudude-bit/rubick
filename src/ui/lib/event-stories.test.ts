@@ -10,11 +10,14 @@ import {
   activityOf,
   densityOf,
   familyOf,
+  mayBeGone,
   RECENT_MS,
   sortStories,
   storiesOf,
+  subjectKey,
   timelineOf,
   WINDOW_MS,
+  withGone,
   withStatusMarks,
   type Story,
 } from "./event-stories";
@@ -950,7 +953,71 @@ describe("what a Deployment's story says it did", () => {
       ),
       { now: NOW, windowMs: HOUR, narrowed: false }
     );
-    expect(story.says.key).toBe("storyPods");
-    expect(sayWords(story.says, en)).toMatch(/^Pods within /);
+    expect(story.says.key).toBe("storyPod");
+    expect(sayWords(story.says, en)).toMatch(/^The pod within /);
+  });
+
+  /** Lena read «Поды за 1 минуту» on Pod/wd-demo's own story; fails if one pod is told about as several, or several as one. */
+  it("tells one pod's story in the singular and a group's in the plural", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const [one] = storiesOf(
+      ["Scheduled", "Started"].map((reason) =>
+        event({ kind: "Pod", name: "wd-demo", reason })
+      ),
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(sayWords(one.says, ru)).toMatch(/^Под за /);
+    const [group] = storiesOf(
+      ["hello-web-5966d9b889-7nvr5", "hello-web-5966d9b889-x2k4p"].map((name) =>
+        event({ kind: "Pod", name, reason: "Started" })
+      ),
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(group.members).toHaveLength(2);
+    expect(sayWords(group.says, ru)).toMatch(/^Поды за /);
+  });
+});
+
+describe("a story about an object read as deleted", () => {
+  const warned = (name: string, minutesAgo: number) =>
+    event({
+      kind: "HorizontalPodAutoscaler",
+      name,
+      type: "Warning",
+      reason: "FailedGetResourceMetric",
+      message: "failed to get cpu utilization",
+      lastTimestamp: ago(minutesAgo * 60_000),
+    });
+  const options = { now: NOW, windowMs: HOUR, narrowed: false };
+
+  /** Lena's deleted HPA, with nothing in its place, read amber "settled". Fails if a story whose object was read as gone keeps a trouble state, or one not read so loses its own. */
+  it("ends with its object where the object was read as gone, and only there", () => {
+    const stories = storiesOf(
+      [warned("hello-web", 20), warned("api", 20)],
+      options
+    );
+    expect(stories.map((story) => story.state)).toEqual(["settled", "settled"]);
+    const gone = new Set([subjectKey(one(stories, "hello-web").subject)]);
+    const after = withGone(stories, gone);
+    expect(one(after, "hello-web").state).toBe("gone");
+    expect(one(after, "api").state).toBe("settled");
+  });
+
+  /** A story with no warnings, one still burning, or pods folded by name have nothing a deletion would explain; fails if any is offered for a read. */
+  it("is asked about only for a named object whose trouble stopped", () => {
+    const [done] = storiesOf(
+      [event({ kind: "Pod", name: "web-0", reason: "Started" })],
+      options
+    );
+    expect(mayBeGone(done)).toBe(false);
+    const [burning] = storiesOf([warned("hello-web", 1)], options);
+    expect(burning.state).toBe("stillHappening");
+    expect(mayBeGone(burning)).toBe(false);
+    const [settled] = storiesOf([warned("hello-web", 20)], options);
+    expect(mayBeGone(settled)).toBe(true);
+    expect(
+      mayBeGone({ ...settled, subject: { ...settled.subject, kind: null } })
+    ).toBe(false);
   });
 });

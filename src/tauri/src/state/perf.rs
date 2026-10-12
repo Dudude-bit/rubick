@@ -7,6 +7,7 @@
 
 use parking_lot::Mutex;
 use std::collections::{BTreeMap, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 /// One IPC message, as `src/contracts/ipc-budget.json` states it.
@@ -89,6 +90,7 @@ pub struct CommandTimes {
 
 #[derive(Default)]
 pub struct PerfCounters {
+    recording: AtomicBool,
     inner: Mutex<Counters>,
 }
 
@@ -110,15 +112,19 @@ impl PerfCounters {
             *c = Counters::default();
         }
         c.recording = on;
+        self.recording.store(on, Ordering::Relaxed);
     }
 
     pub fn is_recording(&self) -> bool {
-        self.inner.lock().recording
+        self.recording.load(Ordering::Relaxed)
     }
 
     /// One event went out: how many bytes its payload serialised to, and how
     /// many watch changes it carried (zero for anything but a watch batch).
     pub fn observe(&self, bytes: usize, watch_changes: usize) {
+        if !self.is_recording() {
+            return;
+        }
         let mut c = self.inner.lock();
         if !c.recording {
             return;
@@ -148,6 +154,9 @@ impl PerfCounters {
 
     /// One timed command answered, `api_calls` requests made on its task.
     pub fn observe_command(&self, name: &'static str, took: Duration, api_calls: usize) {
+        if !self.is_recording() {
+            return;
+        }
         let mut c = self.inner.lock();
         if !c.recording {
             return;
@@ -298,6 +307,38 @@ mod tests {
                 max_api_calls: 100,
             }
         );
+    }
+
+    /// Every timed command of a build nobody records would queue on one mutex
+    /// for numbers no one reads; and a flag left set after a stop would go on
+    /// counting into a finished run.
+    #[test]
+    fn an_idle_call_never_waits_for_the_lock_before_a_recording_or_after_one() {
+        let c = std::sync::Arc::new(PerfCounters::default());
+        let calls = |c: &std::sync::Arc<PerfCounters>| {
+            let (done, finished) = std::sync::mpsc::channel();
+            let idle = c.clone();
+            let held = c.inner.lock();
+            std::thread::spawn(move || {
+                idle.observe(10, 1);
+                idle.observe_command("x", Duration::from_millis(5), 1);
+                let _ = done.send(idle.is_recording());
+            });
+            let answer = finished.recv_timeout(Duration::from_secs(5));
+            drop(held);
+            answer
+        };
+
+        assert_eq!(calls(&c), Ok(false), "before a recording");
+
+        c.set_recording(true);
+        c.observe_command("x", Duration::from_millis(5), 1);
+        c.set_recording(false);
+        assert_eq!(calls(&c), Ok(false), "after a recording");
+        let snapshot = c.snapshot();
+        assert_eq!(snapshot.commands["x"].count, 1);
+        assert_eq!(snapshot.events_emitted, 0);
+        assert!(!snapshot.recording);
     }
 
     /// The frontend reads the same file; a constant edited on one side only is the drift this catches.

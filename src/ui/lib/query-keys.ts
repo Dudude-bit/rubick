@@ -396,6 +396,13 @@ export const queryKeys = {
     scope(namespace),
     pages,
   ],
+  /** Whether any object holds a name now, asked by the kind and apiVersion an event names. */
+  held: (
+    kind: string,
+    apiVersion: string,
+    namespace: string | null | undefined,
+    name: string
+  ): (string | null)[] => ["held", kind, apiVersion, home(namespace), name],
   servedObject: (
     group: string,
     plural: string,
