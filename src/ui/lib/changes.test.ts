@@ -17,6 +17,7 @@ import {
   unwatchedWords,
   otherDifferences,
   timelineOf,
+  windowEnd,
   type JournalEntry,
   type ObservedSpan,
   type Revision,
@@ -627,6 +628,24 @@ describe("gapsOf", () => {
       "Not observed for 50 seconds at 00:00:10"
     );
     expect(gapWords(same, t, clock)).toBe(gapWords(ended, t, clock));
+  });
+
+  /**
+   * Marco's ended stretch read "since 02:42 PM" for 30 s beside a header
+   * saying the next watch had begun: the page's clock, read to the half
+   * minute, was behind the span the store had just opened. Fails if the
+   * window ends before a span the store holds, or if a gap that ends where
+   * a span begins is still said to be running.
+   */
+  it("ends a stretch where the next span begins, however late the page's clock reads", () => {
+    const before = span(T0, T0 + 60_000);
+    const next = span(T0 + 90_000, null, T0 + 90_000);
+    const stale = T0 + 75_000;
+    const end = windowEnd([before, next], stale);
+    expect(end).toBe(T0 + 90_000);
+    expect(gapsOf([before, next], T0, end)).toEqual([
+      { from: T0 + 60_000, to: T0 + 90_000 },
+    ]);
   });
 });
 

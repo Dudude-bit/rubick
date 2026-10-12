@@ -16,6 +16,7 @@ import {
   timelineOf,
   unwatchedWords,
   watchedSince,
+  windowEnd,
 } from "@/lib/changes";
 import { Eye, History, Lock } from "lucide-react";
 import { cn, formatTimeUnit, formatWhen } from "@/lib/utils";
@@ -60,6 +61,7 @@ export function Changes() {
     () => spansCovering(ours, { kinds: [], namespaces: scope.scope }),
     [ours, scope.scope]
   );
+  const end = windowEnd(ours, now);
   const items = useMemo(() => {
     const from = now - WINDOWS[window];
     const timeline = timelineOf({
@@ -70,18 +72,18 @@ export function Changes() {
       spans: covering,
       watching: spansWatching(ours, []),
       scope: scope.scope,
-      window: { from, to: now },
+      window: { from, to: end },
     }).filter((item) => item.at !== null && item.at >= from);
-    return [...timeline, ...quietStretches(covering, timeline, from, now)].sort(
+    return [...timeline, ...quietStretches(covering, timeline, from, end)].sort(
       (a, b) => (b.at ?? -Infinity) - (a.at ?? -Infinity)
     );
-  }, [mine, ours, covering, now, window, scope.scope]);
+  }, [mine, ours, covering, now, end, window, scope.scope]);
   const open = ours.find((span) => span.to === null);
   // From the start of the unbroken watch, not of the span: a scope change
   // retires one span and opens the next at the same moment.
   const watching = open && {
     ...open,
-    from: watchedSince(covering, now) ?? open.from,
+    from: watchedSince(covering, end) ?? open.from,
   };
   const quiet = quietSince(watching, items);
   const refused = watching && unwatchedWords(watching, t);

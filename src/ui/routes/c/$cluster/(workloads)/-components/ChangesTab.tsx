@@ -14,6 +14,7 @@ import {
   spansCovering,
   spansWatching,
   timelineOf,
+  windowEnd,
   type Revision,
   CHANGES_KINDS,
 } from "@/lib/changes";
@@ -180,40 +181,37 @@ export function ChangesTab({ subject }: { subject: ChangesSubject }) {
   const journal = useChangeJournalStore((s) => s.entries);
   const spans = useChangeJournalStore((s) => s.spans);
 
-  const items = useMemo(
-    () =>
-      timelineOf({
-        revisions: revisions.data ?? [],
-        deliveries: histories.data.flatMap((h) => h ?? []),
-        helm: helm.data ?? [],
-        journal: journal.filter(
-          (entry) =>
-            entry.context === context &&
-            entry.kind === subject.kind &&
-            entry.namespace === subject.namespace &&
-            entry.name === subject.name
-        ),
-        spans: spansCovering(context ? (spans[context] ?? []) : [], {
-          kinds: [subject.kind],
-          namespaces: [subject.namespace],
-        }),
-        watching: spansWatching(context ? (spans[context] ?? []) : [], [
-          subject.kind,
-        ]),
-        window: { from: now - WINDOW_MS, to: now },
-        createdAt: subject.createdAt,
+  const items = useMemo(() => {
+    const ours = context ? (spans[context] ?? []) : [];
+    return timelineOf({
+      revisions: revisions.data ?? [],
+      deliveries: histories.data.flatMap((h) => h ?? []),
+      helm: helm.data ?? [],
+      journal: journal.filter(
+        (entry) =>
+          entry.context === context &&
+          entry.kind === subject.kind &&
+          entry.namespace === subject.namespace &&
+          entry.name === subject.name
+      ),
+      spans: spansCovering(ours, {
+        kinds: [subject.kind],
+        namespaces: [subject.namespace],
       }),
-    [
-      revisions.data,
-      histories.data,
-      helm.data,
-      journal,
-      spans,
-      context,
-      subject,
-      now,
-    ]
-  );
+      watching: spansWatching(ours, [subject.kind]),
+      window: { from: now - WINDOW_MS, to: windowEnd(ours, now) },
+      createdAt: subject.createdAt,
+    });
+  }, [
+    revisions.data,
+    histories.data,
+    helm.data,
+    journal,
+    spans,
+    context,
+    subject,
+    now,
+  ]);
 
   const unread: string[] = [];
   if (revisions.error)

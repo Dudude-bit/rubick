@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vite-plus/test";
+import { describe, expect, it, vi } from "vite-plus/test";
 import { screen, waitFor } from "@testing-library/react";
 
 import {
@@ -75,6 +75,53 @@ describe("the stretches this app watched", () => {
         row.parts.some((part) => part.text.startsWith("Watched "))
       )
     ).toBe(true);
+  });
+
+  /**
+   * Marco switched back from team-blind alone at 14:44:00 and read "since
+   * 02:42 PM" on the ended stretch for 30 s beside "Watching since 14:44:00":
+   * the page's clock is read to the half minute. Fails if the stretch's end
+   * waits for that clock rather than for the span that ended it.
+   */
+  it("ends a stretch the moment the next watch begins, not at the next tick of the page's clock", async () => {
+    const at = Date.parse("2026-10-12T11:44:20Z");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(at);
+    try {
+      const both = ["team-blind", "team-checkout"];
+      useClusterStore.setState({
+        isConnected: true,
+        currentContext: "prod",
+        namespaceScope: both,
+      });
+      useChangeJournalStore.setState({
+        entries: [],
+        spans: {
+          prod: [
+            {
+              from: at - 10 * 60_000,
+              seenAt: at - 2 * 60_000,
+              to: at - 2 * 60_000,
+              scope: both,
+            },
+            {
+              from: at - 2 * 60_000,
+              seenAt: at - 10_000,
+              to: at - 10_000,
+              scope: ["team-blind"],
+            },
+            { from: at - 10_000, seenAt: at - 10_000, to: null, scope: both },
+          ],
+        },
+      });
+
+      await mount();
+      const ended = `Watching team-blind only, not team-checkout, ${formatWhen(at - 2 * 60_000, "moment")} to ${formatWhen(at - 10_000, "moment")}`;
+      expect(screen.getByText(ended)).toBeInTheDocument();
+      expect(screen.queryByText(/not team-checkout, since/)).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

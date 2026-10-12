@@ -757,6 +757,14 @@ export function quietSince(
     : watching.from;
 }
 
+/** The end of a window drawn at `now`, never before a moment the spans hold: a clock read to the half minute lags a span just ended. */
+export function windowEnd(spans: readonly ObservedSpan[], now: number): number {
+  let end = now;
+  for (const span of spans)
+    end = Math.max(end, span.from, span.seenAt, span.to ?? span.from);
+  return end;
+}
+
 /** Where the watch running at `now` began to see these spans' scope without a break, by the rule `gapsOf` draws gaps with; `null` when nothing watches at `now`. */
 export function watchedSince(
   spans: readonly ObservedSpan[],
@@ -809,7 +817,7 @@ export function gapsOf(
       from: span.from,
       to: span.to ?? Math.max(span.seenAt, to),
     }))
-    .filter((span) => span.to > from && span.from < to)
+    .filter((span) => span.to > from && span.from <= to)
     .sort((a, b) => a.from - b.from);
   const gaps: Gap[] = [];
   let cursor = from;
