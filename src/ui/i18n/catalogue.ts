@@ -4806,6 +4806,8 @@ export const en = {
     managedUpdates:
       "This build updates through the package manager it was installed with.",
     diagnosticsCopied: "Diagnostics copied",
+    diagnosticsReading: "Reading what this app can see of the machine…",
+    diagnosticsUnread: "Could not read what this app can see of the machine.",
     copyDiagnostics: "Copy diagnostics",
     redactNamesAndPaths: "Redact names and paths",
     redactEverywhere:

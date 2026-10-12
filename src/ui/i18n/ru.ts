@@ -5359,6 +5359,9 @@ export const ru: Catalogue = {
     managedUpdates:
       "Эта сборка обновляется через пакетный менеджер, которым её поставили.",
     diagnosticsCopied: "Диагностика скопирована",
+    diagnosticsReading: "Читаем, что приложение видит на этом компьютере…",
+    diagnosticsUnread:
+      "Не удалось прочитать, что приложение видит на этом компьютере.",
     copyDiagnostics: "Копировать диагностику",
     redactNamesAndPaths: "Скрывать имена и пути",
     redactEverywhere:
