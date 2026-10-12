@@ -86,6 +86,18 @@ describe("parseDeepLink", () => {
     ).toBe("/c/ctx/pods/ns/api?tab=logs");
   });
 
+  /** An attached object's link opened its parent: fails if `view` is dropped on the way in. */
+  it("keeps the view a link names", () => {
+    expect(
+      parseDeepLink(
+        "rubick://open/c/ctx/horizontalpodautoscalers/ns/web?view=own&t=2026-10-12T11%3A44%3A56Z"
+      )?.path
+    ).toBe("/c/ctx/horizontalpodautoscalers/ns/web?view=own");
+    expect(parseDeepLink("rubick://open/c/ctx/events?view=stories")?.path).toBe(
+      "/c/ctx/events?view=stories"
+    );
+  });
+
   /** A link without a time is still a link; a bad time is not a time. */
   it("leaves capturedAt null when absent or unreadable", () => {
     expect(
