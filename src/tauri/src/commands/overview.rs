@@ -31,7 +31,7 @@ use k8s_openapi::api::core::v1::{
     ConfigMap, Endpoints, Event, Namespace, Node, PersistentVolumeClaim, Pod, Secret, Service,
     ServiceAccount,
 };
-use k8s_openapi::api::networking::v1::Ingress;
+use k8s_openapi::api::networking::v1::{Ingress, NetworkPolicy};
 use kube::api::ListParams;
 use kube::{Api, Client, Resource};
 use serde::de::DeserializeOwned;
@@ -329,6 +329,7 @@ pub struct ResourceCounts {
     pub endpoints: Option<usize>,
     pub persistent_volume_claims: Option<usize>,
     pub service_accounts: Option<usize>,
+    pub network_policies: Option<usize>,
     /// Events the apiserver still holds. Events expire on the cluster's own
     /// TTL — an hour on most installs — so this is a recent-activity count,
     /// not a lifetime total.
@@ -1739,7 +1740,7 @@ struct Sides {
     usage_by_node: Option<BTreeMap<String, (f64, u64)>>,
 }
 
-/// Nine bounded metadata pages, for one namespace or the whole cluster.
+/// Ten bounded metadata pages, for one namespace or the whole cluster.
 async fn namespaced_counts(
     client: &Client,
     reach: Option<&str>,
@@ -1753,6 +1754,7 @@ async fn namespaced_counts(
     let endpoints_api: Api<Endpoints> = api_in(client, reach);
     let claims_api: Api<PersistentVolumeClaim> = api_in(client, reach);
     let accounts_api: Api<ServiceAccount> = api_in(client, reach);
+    let policies_api: Api<NetworkPolicy> = api_in(client, reach);
     let events_api: Api<Event> = api_in(client, reach);
     let (
         cron_jobs,
@@ -1763,6 +1765,7 @@ async fn namespaced_counts(
         endpoints,
         persistent_volume_claims,
         service_accounts,
+        network_policies,
         events,
     ) = tokio::join!(
         count_of(&cron_jobs_api, reach, refused),
@@ -1773,6 +1776,7 @@ async fn namespaced_counts(
         count_of(&endpoints_api, reach, refused),
         count_of(&claims_api, reach, refused),
         count_of(&accounts_api, reach, refused),
+        count_of(&policies_api, reach, refused),
         count_of(&events_api, reach, refused),
     );
     ResourceCounts {
@@ -1784,6 +1788,7 @@ async fn namespaced_counts(
         endpoints,
         persistent_volume_claims,
         service_accounts,
+        network_policies,
         events,
         ..Default::default()
     }
@@ -1807,6 +1812,7 @@ fn add_counts(parts: &[ResourceCounts]) -> ResourceCounts {
         endpoints: sum(|c| c.endpoints),
         persistent_volume_claims: sum(|c| c.persistent_volume_claims),
         service_accounts: sum(|c| c.service_accounts),
+        network_policies: sum(|c| c.network_policies),
         events: sum(|c| c.events),
         ..Default::default()
     }
@@ -4843,6 +4849,8 @@ mod across_namespaces {
                 "/api/v1/namespaces/staging/persistentvolumeclaims",
                 "/api/v1/namespaces/prod/serviceaccounts",
                 "/api/v1/namespaces/staging/serviceaccounts",
+                "/apis/networking.k8s.io/v1/namespaces/prod/networkpolicies",
+                "/apis/networking.k8s.io/v1/namespaces/staging/networkpolicies",
             ];
             Self(
                 paths
@@ -5059,6 +5067,35 @@ mod across_namespaces {
 
         assert_eq!(overview.counts.pods, Some(11));
         assert_eq!(overview.counts.services, Some(3));
+    }
+
+    /// Dana's sidebar showed no number beside `NetworkPolicies` while kubectl
+    /// listed 7: the count request never asked. Fails if the policies stop
+    /// being counted across the scope, or a refusal reads as a number.
+    #[tokio::test]
+    async fn network_policies_are_counted_across_the_scope() {
+        let counted = Cluster::new()
+            .items(
+                "/apis/networking.k8s.io/v1/namespaces/prod/networkpolicies",
+                named(5),
+            )
+            .items(
+                "/apis/networking.k8s.io/v1/namespaces/staging/networkpolicies",
+                named(2),
+            )
+            .listed()
+            .await;
+        assert_eq!(counted.counts.network_policies, Some(7));
+
+        let refused = Cluster::new()
+            .items(
+                "/apis/networking.k8s.io/v1/namespaces/prod/networkpolicies",
+                named(5),
+            )
+            .refuse("/apis/networking.k8s.io/v1/namespaces/staging/networkpolicies")
+            .listed()
+            .await;
+        assert_eq!(refused.counts.network_policies, None);
     }
 
     /// The sidebar showed no number beside Endpoints, PVCs or service accounts

@@ -212,9 +212,10 @@ describe("the counts at the end of each row", () => {
   });
   /**
    * Marco's rail said Ingresses 0 beside Endpoints, PVCs and ServiceAccounts
-   * with no number, though he could list all three. Fails if a row shows a
-   * number for a kind nobody counted, a 0 for a count the cluster refused, or
-   * one of those three goes back to blank.
+   * with no number, though he could list all three, and Dana's NetworkPolicies
+   * had none beside kubectl's 7. Fails if a row shows a number for a kind
+   * nobody counted, a 0 for a count the cluster refused, or one of those
+   * goes back to blank.
    */
   it("numbers the kinds it counted, and never a 0 it did not measure", async () => {
     overview = {
@@ -226,6 +227,7 @@ describe("the counts at the end of each row", () => {
         endpoints: 12,
         persistentVolumeClaims: 3,
         serviceAccounts: 5,
+        networkPolicies: 7,
         secrets: null,
       } as ClusterOverview["counts"],
       problems: [],
@@ -242,6 +244,9 @@ describe("the counts at the end of each row", () => {
     expect(within(await row("PVCs")).getByText("3")).toBeInTheDocument();
     expect(
       within(await row("ServiceAccounts")).getByText("5")
+    ).toBeInTheDocument();
+    expect(
+      within(await row("NetworkPolicies")).getByText("7")
     ).toBeInTheDocument();
     expect(within(await row("Secrets")).queryByText(/^\d+$/)).toBeNull();
   });

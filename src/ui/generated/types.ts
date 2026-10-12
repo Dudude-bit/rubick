@@ -1938,6 +1938,7 @@ export interface ResourceCounts {
   endpoints: number | null;
   persistentVolumeClaims: number | null;
   serviceAccounts: number | null;
+  networkPolicies: number | null;
   events: number | null;
 }
 
