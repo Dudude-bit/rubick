@@ -303,8 +303,12 @@ fn scheduler_reasons(said: &str) -> (Option<i32>, Vec<Unfit>) {
         return (None, vec![]);
     };
     let nodes = head.rsplit('/').next().and_then(|n| n.trim().parse().ok());
-    let body = rest.split(". preemption:").next().unwrap_or(rest);
-    let body = body.trim_end_matches('.');
+    // The reasons end with the first sentence; newer schedulers add more after it.
+    let body = rest
+        .split(". ")
+        .next()
+        .unwrap_or(rest)
+        .trim_end_matches('.');
     let why = split_outside_braces(body)
         .into_iter()
         .filter_map(|part| {
@@ -915,6 +919,25 @@ mod tests {
                 },
                 Unfit::Selector { nodes: 1 },
             ]
+        );
+    }
+
+    /// k3s 1.31 writes ". no new claims to deallocate, preemption: ..." after
+    /// the reasons; read as one of them it named the resource "cpu. no new
+    /// claims to deallocate". Fails if anything past the first sentence is read.
+    #[test]
+    fn only_the_first_sentence_of_the_schedulers_line_is_reasons() {
+        let Some(PodCause::Unplaced { why, .. }) = pod_cause(&pending_with(
+            "0/2 nodes are available: 2 Insufficient cpu. no new claims to deallocate, preemption: 0/2 nodes are available: 2 Preemption is not helpful for scheduling.",
+        )) else {
+            panic!("an unplaced pod has a cause");
+        };
+        assert_eq!(
+            why,
+            vec![Unfit::Short {
+                resource: "cpu".to_string(),
+                nodes: 2
+            }]
         );
     }
 
