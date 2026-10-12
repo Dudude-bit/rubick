@@ -160,59 +160,16 @@ impl ProblemDetail {
     }
 }
 
-/// The cause most of `pods` share, how many share it, and how many there are.
-fn shared_cause<'a>(
-    pods: impl IntoIterator<Item = &'a Pod>,
-) -> Option<(crate::resources::PodCause, i32, i32)> {
-    let mut total = 0;
-    let mut groups: Vec<(String, crate::resources::PodCause, i32)> = Vec::new();
-    for pod in pods {
-        if pod.metadata.deletion_timestamp.is_some() {
-            continue;
-        }
-        total += 1;
-        let Some(cause) = crate::resources::pod_cause(pod) else {
-            continue;
-        };
-        let key = cause_key(&cause);
-        match groups.iter_mut().find(|(k, _, _)| *k == key) {
-            Some((_, _, n)) => *n += 1,
-            None => groups.push((key, cause, 1)),
-        }
-    }
-    let (_, cause, n) = groups.into_iter().max_by_key(|(_, _, n)| *n)?;
-    Some((cause, n, total))
-}
-
-/// Two pods share a cause when it is the same mechanism in the same container.
-fn cause_key(cause: &crate::resources::PodCause) -> String {
-    use crate::resources::PodCause;
-    match cause {
-        PodCause::Exits { container, run, .. } => format!(
-            "exits/{container}/{:?}",
-            run.as_ref().map(|r| (r.code, r.reason.clone()))
-        ),
-        PodCause::Blocked {
-            container,
-            reason,
-            pull,
-            ..
-        } => format!("blocked/{container}/{reason}/{pull:?}"),
-        PodCause::NotReady { containers, .. } => format!("notReady/{containers:?}"),
-        PodCause::Unplaced { why, .. } => format!("unplaced/{why:?}"),
-    }
-}
-
 /// The workload's detail: its pods' shared cause where they have one, else the controller's sentence.
 fn workload_detail<'a>(
     pods: impl IntoIterator<Item = &'a Pod>,
     said: Option<String>,
 ) -> Option<ProblemDetail> {
-    match shared_cause(pods) {
-        Some((cause, pods, of)) => Some(ProblemDetail::PodsCause {
-            cause,
-            pods,
-            of,
+    match crate::resources::shared_cause(pods) {
+        Some(shared) => Some(ProblemDetail::PodsCause {
+            cause: shared.cause,
+            pods: shared.pods,
+            of: shared.of,
             said,
         }),
         None => ProblemDetail::said(said),
@@ -3859,7 +3816,7 @@ mod tests {
         .unwrap()
     }
 
-    /// A Stalled Deployment said "ReplicaSet has timed out progressing",
+    /// A Stalled Deployment said "`ReplicaSet` has timed out progressing",
     /// the symptom. Fails if its row stops leading with what most of its
     /// pods share, or miscounts them.
     #[test]

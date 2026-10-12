@@ -1113,6 +1113,7 @@ describe("a workload's peek Pods tab", () => {
     } as never);
     vi.mocked(commands.getDeploymentPods).mockResolvedValue({
       uid: "checkout-uid",
+      cause: null,
       pods: [buildPod()],
     });
     await wrap("/c/prod/events?peek=deployments/shop/checkout");
@@ -1202,6 +1203,7 @@ describe("PeekPanel reads what the detail pages read", () => {
     } as never);
     vi.mocked(commands.getDeploymentPods).mockResolvedValue({
       uid: "deploy-uid",
+      cause: null,
       pods: [buildPod()],
     });
     await wrap("/c/prod/events?peek=deployments/shop/api");

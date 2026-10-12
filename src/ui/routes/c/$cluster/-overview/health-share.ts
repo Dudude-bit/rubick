@@ -55,7 +55,7 @@ import { splitUnit } from "@/lib/metric-format";
 import { formatAge, formatDecimal } from "@/lib/utils";
 import { formatCount } from "@/lib/count";
 import { withRestartsBy } from "@/lib/pod-status";
-import { causeText } from "@/lib/pod-cause";
+import { causeText, podsShare } from "@/lib/pod-cause";
 
 /**
  * The detail line, for the rows this app writes itself.
@@ -94,11 +94,6 @@ export function composedDetail(
         .filter(Boolean)
         .join(" ");
   }
-}
-
-/** "2 of 3 pods:", the share of a workload's pods its cause is told from. */
-export function podsShare(pods: number, of: number, t: T): string {
-  return t("readings", "podsShareCause", { pods, n: of });
 }
 
 /** A pod's restarts split by the containers behind them, where more than one restarted. */

@@ -147,6 +147,8 @@ pub async fn update_deployment_image(
 pub struct DeploymentPods {
     pub uid: String,
     pub pods: Vec<PodInfo>,
+    /// The cause most of them share, which the page's headline leads with.
+    pub cause: Option<crate::resources::SharedCause>,
 }
 
 /// Get deployment pods
@@ -198,15 +200,16 @@ async fn deployment_pods(
         deployment.metadata.uid.as_deref(),
         sets.as_ref().map(|sets| sets.items.as_slice()),
     );
-    let pods = pods?
+    let listed = pods?;
+    let owned: Vec<&Pod> = listed
         .items
         .iter()
         .filter(|pod| matches!(owners, Owners::Named(_)) || runs_for(pod, &owners))
-        .map(PodInfo::from)
         .collect();
     Ok(DeploymentPods {
         uid: deployment.metadata.uid.clone().unwrap_or_default(),
-        pods,
+        cause: crate::resources::shared_cause(owned.iter().copied()),
+        pods: owned.into_iter().map(PodInfo::from).collect(),
     })
 }
 

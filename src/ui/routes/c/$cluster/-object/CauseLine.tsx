@@ -1,8 +1,8 @@
 import { CircleDashed, PackageX, RotateCcw, ServerOff } from "lucide-react";
 
-import type { PodCause } from "@/generated/types";
+import type { PodCause, SharedCause } from "@/generated/types";
 import { useT } from "@/i18n/useT";
-import { causeWords, type CauseWords } from "@/lib/pod-cause";
+import { causeWords, podsShare, type CauseWords } from "@/lib/pod-cause";
 import { TONE_TEXT } from "@/lib/tone";
 import { cn } from "@/lib/utils";
 import { useCauseLog } from "./useCauseLog";
@@ -115,4 +115,23 @@ export function PodCauseLine({
 }) {
   const read = useCauseLog(pod, cause) ?? cause;
   return <CauseLine cause={read} className={className} />;
+}
+
+/** A workload's cause as its pods tell it: how many share it, then the cause. */
+export function PodsCauseLine({
+  shared,
+  className,
+}: {
+  shared: SharedCause;
+  className?: string;
+}) {
+  const t = useT();
+  return (
+    <p className={cn("text-xs", className)} data-testid="pods-cause">
+      <span className="text-fg-mut">
+        {podsShare(shared.pods, shared.of, t)}{" "}
+      </span>
+      <CauseLine cause={shared.cause} compact />
+    </p>
+  );
 }

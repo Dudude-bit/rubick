@@ -2270,6 +2270,13 @@ export interface LogLineEvent {
 export interface DeploymentPods {
   uid: string;
   pods: PodInfo[];
+  cause: SharedCause | null;
+}
+
+export interface SharedCause {
+  cause: PodCause;
+  pods: number;
+  of: number;
 }
 
 export interface DeploymentInfo {

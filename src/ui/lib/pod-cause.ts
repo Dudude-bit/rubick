@@ -305,3 +305,8 @@ export function causeText(cause: PodCause, t: T): string {
   const words = causeWords(cause, t);
   return [`${words.sentence}.`, evidenceText(words)].filter(Boolean).join(" ");
 }
+
+/** "2 of 3 pods:", the share of a workload's pods its cause is told from. */
+export function podsShare(pods: number, of: number, t: T): string {
+  return t("readings", "podsShareCause", { pods, n: of });
+}

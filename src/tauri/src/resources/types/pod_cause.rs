@@ -193,6 +193,56 @@ pub enum Evidence {
     },
 }
 
+/// The cause most of a workload's pods share, how many share it, and how many it runs.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SharedCause {
+    pub cause: PodCause,
+    pub pods: i32,
+    pub of: i32,
+}
+
+/// Read once here for the Overview's rows and a workload's own page alike.
+#[must_use]
+pub fn shared_cause<'a>(pods: impl IntoIterator<Item = &'a Pod>) -> Option<SharedCause> {
+    let mut of = 0;
+    let mut groups: Vec<(String, PodCause, i32)> = Vec::new();
+    for pod in pods {
+        if pod.metadata.deletion_timestamp.is_some() {
+            continue;
+        }
+        of += 1;
+        let Some(cause) = pod_cause(pod) else {
+            continue;
+        };
+        let key = cause_key(&cause);
+        match groups.iter_mut().find(|(k, _, _)| *k == key) {
+            Some((_, _, n)) => *n += 1,
+            None => groups.push((key, cause, 1)),
+        }
+    }
+    let (_, cause, pods) = groups.into_iter().max_by_key(|(_, _, n)| *n)?;
+    Some(SharedCause { cause, pods, of })
+}
+
+/// Two pods share a cause when it is the same mechanism in the same container.
+fn cause_key(cause: &PodCause) -> String {
+    match cause {
+        PodCause::Exits { container, run, .. } => format!(
+            "exits/{container}/{:?}",
+            run.as_ref().map(|r| (r.code, r.reason.clone()))
+        ),
+        PodCause::Blocked {
+            container,
+            reason,
+            pull,
+            ..
+        } => format!("blocked/{container}/{reason}/{pull:?}"),
+        PodCause::NotReady { containers, .. } => format!("notReady/{containers:?}"),
+        PodCause::Unplaced { why, .. } => format!("unplaced/{why:?}"),
+    }
+}
+
 /// What is wrong with this pod and why, or `None` where nothing this reads is.
 ///
 /// Read without a clock, so a watched row stays true: a container down now

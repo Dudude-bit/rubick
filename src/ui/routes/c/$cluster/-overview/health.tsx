@@ -15,6 +15,7 @@ import { Prose, ResourceMessage } from "@/components/object/ResourceMessage";
 import { ResourceRef } from "@/components/object/ResourceRef";
 import { PastObjectRef, type Past } from "../-object/PastObjectRef";
 import { CauseLine } from "../-object/CauseLine";
+import { podsShare } from "@/lib/pod-cause";
 import { KindIcon } from "@/components/object/KindIcon";
 import { useShareSection } from "@/components/share/screen-share";
 import {
@@ -32,7 +33,6 @@ import {
   attentionShare,
   schedulerShare,
   splitWords,
-  podsShare,
   uncheckedShare,
   warningsShare,
   workloadCards,

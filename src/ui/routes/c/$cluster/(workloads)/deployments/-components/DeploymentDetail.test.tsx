@@ -414,6 +414,58 @@ describe("the rollout line", () => {
   });
 });
 
+describe("the cause its pods share", () => {
+  const rolling = (rollout: unknown) =>
+    vi.mocked(useResourceDetail).mockReturnValue({
+      ...vi.mocked(useResourceDetail)(
+        {} as Parameters<typeof useResourceDetail>[0]
+      ),
+      resource: { ...ledger, rollout },
+    });
+
+  /**
+   * The page said "Deployment does not have minimum availability", the
+   * symptom. Fails if the cause the backend found in its pods does not lead,
+   * with how many of them share it.
+   */
+  it("leads with the cause most of its pods share above the verdict", async () => {
+    rolling({
+      state: "unavailable",
+      reason: "MinimumReplicasUnavailable",
+      message: "Deployment does not have minimum availability.",
+      available: 0,
+      desired: 2,
+    });
+    answering(
+      () => Promise.resolve(null),
+      () =>
+        Promise.resolve({
+          uid: "",
+          pods: [],
+          cause: {
+            cause: {
+              says: "blocked",
+              container: "api",
+              reason: "ErrImagePull",
+              said: "docker.io/library/busybox:no-such-tag: not found",
+              image: "busybox:no-such-tag",
+              pull: "notFound",
+              secrets: [],
+            },
+            pods: 2,
+            of: 2,
+          },
+        })
+    );
+    await open();
+
+    const lead = await screen.findByTestId("pods-cause");
+    expect(lead).toHaveTextContent(
+      "2 of 2 pods: api cannot start: its image busybox:no-such-tag does not exist in the registry"
+    );
+  });
+});
+
 describe("the Pods tab", () => {
   /**
    * Sam deleted big-pull and applied it again: the new Deployment's Pods tab
