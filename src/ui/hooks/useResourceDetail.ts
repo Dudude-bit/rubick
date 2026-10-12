@@ -66,6 +66,8 @@ export interface UseResourceDetailResult<T> {
   refetch: () => void;
   /** What the header's freshness reading is drawn from. */
   freshness: Freshness;
+  /** The object the page's own watch last delivered, while it feeds the page: built from the object alone, in the shape `subscribe_object_watch` gives the kind. */
+  watched: unknown;
 
   // YAML data
   yaml: string | undefined;
@@ -193,7 +195,7 @@ export function useResourceDetail<T>(
     queryKeys.detail(resourceKind, namespace, name),
     queryKeys.manifest(resourceKind, namespace, name)
   );
-  const live = useObjectWatch(
+  const { live, row: watched } = useObjectWatch(
     resourceKind,
     namespace,
     name,
@@ -258,6 +260,7 @@ export function useResourceDetail<T>(
     error,
     refetch,
     freshness: live ? { ...freshness, live } : freshness,
+    watched,
     yaml,
     isLoadingYaml,
     copyYaml,

@@ -44,7 +44,11 @@ const scoped = vi.hoisted(() => ({
   data: undefined as unknown,
   isPlaceholderData: false,
   dataUpdatedAt: 0,
-  freshness: { everyMs: 10_000 as number | false, slowRead: false },
+  freshness: {
+    everyMs: 10_000 as number | false,
+    slowRead: false,
+    stale: false,
+  },
 }));
 
 vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
@@ -105,6 +109,7 @@ beforeEach(() => {
   scoped.data = overviewOf(3, 0);
   scoped.isPlaceholderData = false;
   scoped.freshness.slowRead = false;
+  scoped.freshness.stale = false;
   useClusterStore.setState({
     namespaceScope: [],
     currentContext: "prod",
@@ -390,6 +395,29 @@ describe("what the problem count counts", () => {
         screen.getAllByText(
           "Still reading the counts. These are from 15:03:41."
         )
+      ).not.toHaveLength(0)
+    );
+  });
+
+  /**
+   * A failed re-read left the bar drawing its last answer as current. Fails
+   * if a failed read leaves the counts without the warning ring, undimmed,
+   * or without the time they are from.
+   */
+  it("rings and dims the counts when their re-read failed, and says when they are from", async () => {
+    scoped.dataUpdatedAt = new Date(2026, 9, 12, 15, 3, 41).getTime();
+    scoped.freshness.stale = true;
+    bar();
+
+    const counts = screen.getByTestId("scope-counts");
+    expect(counts).toHaveClass("opacity-60");
+    expect(
+      within(counts).getByRole("img", { name: "read failing" })
+    ).toHaveClass("border-warn");
+    await userEvent.hover(counts);
+    await waitFor(() =>
+      expect(
+        screen.getAllByText("Could not count again. These are from 15:03:41.")
       ).not.toHaveLength(0)
     );
   });

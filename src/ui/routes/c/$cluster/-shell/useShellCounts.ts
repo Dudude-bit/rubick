@@ -11,6 +11,7 @@ import {
 import type { Attention } from "@/lib/attention";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { EVERY_NAMESPACE } from "@/lib/query-keys";
+import { longestInterval, REFRESH_INTERVALS } from "@/lib/refresh";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useWindowCluster } from "./useWindowCluster";
 
@@ -21,12 +22,14 @@ export interface ShellCounts {
   heldAt: number | null;
   /** When the answer on screen landed, or `null` with none. */
   readAt: number | null;
-  /** How often the counts no watch follows are read again, `false` while that is paused. */
-  everyMs: number | false;
+  /** The longest the counts no watch follows go unread, `false` while they are not read again. */
+  withinMs: number | false;
   /** The counts the overview's watched stores hold, read again on each change they take. */
   followed: ReadonlySet<keyof ResourceCounts>;
   /** A re-read of the counts on screen has waited past the slow-read grace. */
   late: boolean;
+  /** The last re-read of the counts on screen failed. */
+  failed: boolean;
 }
 
 interface Held {
@@ -62,7 +65,9 @@ export function useShellCounts(): ShellCounts {
       : undefined;
   const at = scoped.dataUpdatedAt;
   const fresh = isConnected && answered !== undefined && at >= turnedAt;
-  const { everyMs, slowRead } = scoped.freshness;
+  const { everyMs, slowRead, stale } = scoped.freshness;
+  const withinMs =
+    everyMs !== false && longestInterval(REFRESH_INTERVALS.overview);
 
   useEffect(() => {
     if (!fresh || !answered || !attention) return;
@@ -78,9 +83,10 @@ export function useShellCounts(): ShellCounts {
       attention,
       heldAt: null,
       readAt: at,
-      everyMs,
+      withinMs,
       followed,
       late: slowRead,
+      failed: stale,
     };
   const held =
     answered && attention && (!stored || at > stored.at)
@@ -93,9 +99,10 @@ export function useShellCounts(): ShellCounts {
       attention: held.attention,
       heldAt: held.at,
       readAt: held.at,
-      everyMs,
+      withinMs,
       followed: NONE,
       late: false,
+      failed: false,
     };
   const shown = isConnected ? scoped.data : undefined;
   return {
@@ -103,8 +110,9 @@ export function useShellCounts(): ShellCounts {
     attention: isConnected && !scoped.isPlaceholderData ? attention : null,
     heldAt: null,
     readAt: shown && at > 0 ? at : null,
-    everyMs,
+    withinMs,
     followed: scoped.isPlaceholderData ? NONE : followed,
     late: shown !== undefined && slowRead,
+    failed: shown !== undefined && stale,
   };
 }

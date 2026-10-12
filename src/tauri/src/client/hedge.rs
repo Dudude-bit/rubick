@@ -1,19 +1,24 @@
-//! A read the far end has not begun to answer is asked again beside it.
+//! A read the far end has not begun to answer is asked again beside it, but
+//! only while the far end is answering its siblings.
 //!
 //! Twice a services list sat on its connection for the whole minute while
 //! the same command's other lists answered in milliseconds, and the API
 //! server never saw it: it was lost between the app and the proxy. The first
 //! ask is kept, so a slow answer that is merely slow still wins, and the
 //! quicker of the two is taken; both stay inside the one read deadline.
+//! A server answering nothing is queueing, under API Priority and Fairness
+//! or plain overload, and a second ask there only adds to the queue.
 //! A watch, a log follow or an upgrade is a stream, never asked twice.
 
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::Arc;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
 use http::{Request, Response};
 use kube::client::Body as KubeBody;
+use tokio::sync::watch;
 use tower::{Layer, Service, ServiceExt};
 
 /// How long a read waits for the head of its answer before it is asked again.
@@ -37,6 +42,7 @@ impl<S> Layer<S> for Hedge {
         Hedged {
             inner,
             after: self.after,
+            answered: Arc::new(watch::Sender::new(0)),
         }
     }
 }
@@ -45,11 +51,29 @@ impl<S> Layer<S> for Hedge {
 pub(super) struct Hedged<S> {
     inner: S,
     after: Duration,
+    /// How many requests on this client the far end has answered.
+    answered: Arc<watch::Sender<u64>>,
 }
 
 fn hedged(request: &Request<KubeBody>) -> bool {
     let query = request.uri().query().unwrap_or_default();
     super::send_again::is_read(request) && !super::floors::has_param(query, &["watch", "follow"])
+}
+
+type Answer<B, E> = Pin<Box<dyn Future<Output = Result<Response<B>, E>> + Send>>;
+
+/// The request's answer, counted as the far end answering once its head arrives.
+fn counted<B, E>(
+    answer: impl Future<Output = Result<Response<B>, E>> + Send + 'static,
+    answered: Arc<watch::Sender<u64>>,
+) -> Answer<B, E> {
+    Box::pin(async move {
+        let answer = answer.await;
+        if answer.is_ok() {
+            answered.send_modify(|n| *n += 1);
+        }
+        answer
+    })
 }
 
 impl<S, B> Service<Request<KubeBody>> for Hedged<S>
@@ -61,7 +85,7 @@ where
 {
     type Response = Response<B>;
     type Error = S::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Response<B>, S::Error>> + Send>>;
+    type Future = Answer<B, S::Error>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
@@ -72,7 +96,9 @@ where
             .then(|| super::floors::again(&request))
             .flatten();
         let path = request.uri().path().to_string();
-        let mut first = Box::pin(self.inner.call(request));
+        let answered = self.answered.clone();
+        let sent = *answered.borrow();
+        let mut first = counted(self.inner.call(request), answered.clone());
         let Some(copy) = copy else {
             return first;
         };
@@ -81,12 +107,21 @@ where
             if let Ok(answer) = tokio::time::timeout(after, &mut first).await {
                 return answer;
             }
+            let mut heard = answered.subscribe();
+            let siblings = async move { heard.wait_for(|n| *n > sent).await.is_ok() };
+            tokio::select! {
+                biased;
+                answer = &mut first => return answer,
+                answering = siblings => if !answering {
+                    return first.await;
+                },
+            }
             tracing::info!(
                 path,
                 waited_ms = after.as_millis(),
-                "no answer yet, asked again beside it"
+                "no answer yet while others were answered, asked again beside it"
             );
-            let mut second = Box::pin(spare.oneshot(copy));
+            let mut second = counted(spare.oneshot(copy), answered);
             tokio::select! {
                 answer = &mut first => match answer {
                     Ok(response) => Ok(response),
@@ -170,7 +205,7 @@ mod tests {
                 .expect("cluster url"),
         );
         let client =
-            super::super::client_with(config, Duration::from_secs(2), Duration::from_millis(100))
+            super::super::client_with(config, Duration::from_secs(1), Duration::from_millis(100))
                 .expect("client");
         (client, seen)
     }
@@ -179,25 +214,60 @@ mod tests {
         http::Request::get(path).body(Vec::new()).expect("request")
     }
 
+    /// `request`, sent first, while a sibling read on the same client is
+    /// answered after it went out.
+    async fn beside_an_answered_sibling(
+        client: &kube::Client,
+        request: http::Request<Vec<u8>>,
+    ) -> Result<String, kube::Error> {
+        let asked = {
+            let client = client.clone();
+            tokio::spawn(async move { client.request_text(request).await })
+        };
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        client
+            .request_text(get("/api/v1/nodes"))
+            .await
+            .expect("the sibling is answered");
+        asked.await.expect("joined")
+    }
+
     /// Sam's services list and Marco's overview each sat 60 s on a request
-    /// the API server never received. Fails if a read nobody began to answer
-    /// is not asked again, or waits out the deadline instead of the hedge.
+    /// the API server never received while their siblings were answered.
+    /// Fails if such a read is not asked again, or waits out the deadline
+    /// instead of the hedge.
     #[tokio::test]
-    async fn a_read_nobody_began_to_answer_is_asked_again_and_answered() {
+    async fn a_read_left_unanswered_while_its_siblings_are_answered_is_asked_again() {
         let (client, seen) = server(|nth| if nth == 1 { Reply::Never } else { Reply::Now }).await;
         let started = Instant::now();
 
-        let answer = client
-            .request_text(get("/api/v1/namespaces"))
+        let answer = beside_an_answered_sibling(&client, get("/api/v1/namespaces"))
             .await
             .expect("the second ask is answered");
 
-        assert!(answer.contains(r#""answer":2"#), "{answer}");
+        assert!(answer.contains(r#""answer":3"#), "{answer}");
         assert!(
-            started.elapsed() < Duration::from_secs(1),
+            started.elapsed() < Duration::from_millis(800),
             "{:?}",
             started.elapsed()
         );
+        assert_eq!(seen.lock().unwrap().len(), 3);
+    }
+
+    /// An API server queueing every request under load answers none of
+    /// them, and a second ask of each only lengthens the queue. Fails if a
+    /// read is asked again while nothing on its client has been answered
+    /// since it went out.
+    #[tokio::test]
+    async fn a_read_on_a_server_answering_nothing_is_not_asked_again() {
+        let (client, seen) = server(|_| Reply::Never).await;
+        for path in ["/api/v1/namespaces", "/api/v1/nodes"] {
+            let client = client.clone();
+            tokio::spawn(async move { client.request_text(get(path)).await });
+        }
+
+        tokio::time::sleep(Duration::from_millis(600)).await;
+
         assert_eq!(seen.lock().unwrap().len(), 2);
     }
 
@@ -206,22 +276,19 @@ mod tests {
     /// into one that waits for an answer starting over.
     #[tokio::test]
     async fn a_slow_answer_already_on_its_way_is_still_taken() {
-        let (client, seen) = server(|nth| {
-            if nth == 1 {
-                Reply::After(Duration::from_millis(300))
-            } else {
-                Reply::Never
-            }
+        let (client, seen) = server(|nth| match nth {
+            1 => Reply::After(Duration::from_millis(300)),
+            2 => Reply::Now,
+            _ => Reply::Never,
         })
         .await;
 
-        let answer = client
-            .request_text(get("/api/v1/namespaces"))
+        let answer = beside_an_answered_sibling(&client, get("/api/v1/namespaces"))
             .await
             .expect("the first ask's answer");
 
         assert!(answer.contains(r#""answer":1"#), "{answer}");
-        assert_eq!(seen.lock().unwrap().len(), 2);
+        assert_eq!(seen.lock().unwrap().len(), 3);
     }
 
     /// Fails if a read that answers in time is asked twice.
@@ -237,7 +304,8 @@ mod tests {
     }
 
     /// A watch and a log follow are streams the app lives on, and a write
-    /// starts something. Fails if any of them is ever sent twice.
+    /// starts something. Fails if any of them is ever sent twice, even
+    /// beside a sibling the server answered.
     #[tokio::test]
     async fn a_watch_a_follow_or_a_write_is_never_asked_twice() {
         for request in [
@@ -247,10 +315,14 @@ mod tests {
                 .body(b"{}".to_vec())
                 .expect("request"),
         ] {
-            let (client, seen) = server(|_| Reply::Never).await;
+            let (client, seen) =
+                server(|nth| if nth == 1 { Reply::Never } else { Reply::Now }).await;
             let line = format!("{} {}", request.method(), request.uri());
-            assert!(client.request_text(request).await.is_err(), "{line}");
-            assert_eq!(seen.lock().unwrap().len(), 1, "{line}");
+            assert!(
+                beside_an_answered_sibling(&client, request).await.is_err(),
+                "{line}"
+            );
+            assert_eq!(seen.lock().unwrap().len(), 2, "{line}");
         }
     }
 }

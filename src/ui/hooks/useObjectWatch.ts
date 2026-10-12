@@ -31,14 +31,15 @@ const WATCHED_BY_NAME: ReadonlySet<string> = new Set([
  * page has it gone, or lists nothing while the page holds it, reads it again
  * at once. A page backs off while nothing changes and stops at NotFound, so
  * a deleted Service stayed on its page for 25 s, and one created after its
- * page was opened stayed gone. Answers whether the watch is feeding the page.
+ * page was opened stayed gone. Answers whether the watch is feeding the page,
+ * and the object it last delivered while it is.
  */
 export function useObjectWatch(
   kind: string,
   namespace: string | null | undefined,
   name: string | undefined,
   gone: boolean
-): boolean {
+): { live: boolean; row: unknown } {
   const connected = useClusterStore((s) => s.isConnected);
   const visible = useSurfaceVisible();
   const client = useQueryClient();
@@ -61,15 +62,16 @@ export function useObjectWatch(
     onRecovered: () => setFailedFor(null),
     behind: true,
   });
-  const listed = useQuery<Scoped<unknown>>({ queryKey, queryFn: skipToken })
-    .data?.rows.length;
+  const rows = useQuery<Scoped<unknown>>({ queryKey, queryFn: skipToken }).data
+    ?.rows;
+  const listed = rows?.length;
   useEffect(() => {
     if (enabled && listed !== undefined && (gone ? listed > 0 : listed === 0))
       void client.invalidateQueries({
         queryKey: queryKeys.detail(kind, namespace, name),
       });
   }, [enabled, listed, gone, client, kind, namespace, name]);
-  return (
-    enabled && failedFor !== queryKey && !resyncing && listed !== undefined
-  );
+  const live =
+    enabled && failedFor !== queryKey && !resyncing && listed !== undefined;
+  return { live, row: live ? rows?.[0] : undefined };
 }

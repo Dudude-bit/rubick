@@ -157,6 +157,11 @@ export function overdue(
   );
 }
 
+/** The longest a visible query at `base` goes between re-reads, however still or unfocused its window. */
+export function longestInterval(base: number): number {
+  return Math.max(base, BACKOFF.cap, BACKOFF.unfocusedFloor);
+}
+
 /**
  * What this query should actually re-read at, or `false` for "do not".
  *

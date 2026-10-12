@@ -1,9 +1,15 @@
-import type { PodRow, PodStart, Rollout } from "@/generated/types";
+import type {
+  PodRow,
+  PodStart,
+  PodStatusInfo,
+  Rollout,
+} from "@/generated/types";
 import type { T } from "@/i18n/useT";
 import type { Tone } from "@/lib/tone";
 import { statusRole, type StatusRole } from "@/lib/status-role";
 import { rolloutWord } from "@/lib/status-words";
 import { formatCount } from "@/lib/count";
+import { loopState } from "@/lib/crash-loop";
 
 /**
  * The one word a workload's rollout comes to, on every screen that draws it.
@@ -239,6 +245,27 @@ export function withStarts(
     : rollout;
 }
 
+/**
+ * The object a page's own watch delivered, where it is the object the page
+ * read: the controller's words as the watch carries them, its verdict asked
+ * of the pods the page holds as a read asks them (`with_own_pods`). Where
+ * those pods are not in hand, a verdict they could have moved is the read's.
+ */
+export function watchedWorkload<W extends { uid: string; rollout: Rollout }>(
+  read: W | undefined,
+  watched: W | undefined,
+  starts: readonly PodStart[] | null,
+  now: number
+): W | undefined {
+  if (!read || !watched || watched.uid !== read.uid) return read;
+  const rollout = starts
+    ? withStarts(watched.rollout, starts, now)
+    : podsCanExplain(watched.rollout)
+      ? read.rollout
+      : watched.rollout;
+  return rollout === watched.rollout ? watched : { ...watched, rollout };
+}
+
 /** The pods of each workload, every instant one of their starts runs out, and the namespaces whose pods were not read. */
 export interface WorkloadStarts {
   byWorkload: ReadonlyMap<string, PodStart[]>;
@@ -312,47 +339,68 @@ export function rowsWithStarts<
   });
 }
 
-/**
- * The controller's verdict as the pods a page has already read would move
- * it: on a drain the pods turn first and the Deployment's status catches up
- * a second later. Only ever towards less settled, since a pod's readiness is
- * not the controller's availability.
- */
-export function rolloutWithPods(
-  rollout: Rollout,
-  pods: { ready: number; failing: number } | null,
-  desired: number
-): Rollout {
-  if (!pods || rollout.state !== "ready" || pods.ready >= desired)
-    return rollout;
-  return {
-    state: pods.failing > 0 ? "short" : "comingUp",
-    available: pods.ready,
-    desired,
-  };
+/** A pod as a page's own rows paint it, which is how its pods are counted beside the verdict. */
+export interface CountedPod {
+  start: PodStart;
+  status: Pick<
+    PodStatusInfo,
+    "display" | "ready" | "loopingUntil" | "exitUnreported"
+  >;
+}
+
+export interface PodCounts {
+  ready: number;
+  /** Failing, crash-looping or stuck, a pod up between the crashes of a loop included. */
+  failing: number;
+  /** Still inside the wait its start allows. */
+  starting: number;
+  /** On its way out, whatever it still serves. */
+  terminating: number;
+}
+
+/** A page's own pods counted as their rows paint them. */
+export function podCounts(pods: readonly CountedPod[], now: number): PodCounts {
+  const counts = { ready: 0, failing: 0, starting: 0, terminating: 0 };
+  for (const { start, status } of pods) {
+    if (start.state === "failing" || loopState(status, now) === "looping")
+      counts.failing += 1;
+    else if (start.state === "starting" && Date.parse(start.until) > now)
+      counts.starting += 1;
+    else if (status.display === "Terminating") counts.terminating += 1;
+    else if (status.ready) counts.ready += 1;
+  }
+  return counts;
 }
 
 /**
- * What the pods say beside a verdict they are ahead of, `null` where they
- * agree. The verdict stays the controller's, as the Overview, the lists and
- * kubectl read it, so two screens never give one Deployment two words; the
- * page that holds the pods says theirs next to it.
+ * What the pods say beside a Ready verdict they are ahead of, `null` where
+ * they agree. The verdict stays the controller's, as the Overview, the lists
+ * and kubectl read it, so two screens never give one Deployment two words;
+ * the page that holds the pods says theirs next to it, naming only pods that
+ * exist: on a drain the old pod is terminating for most of a second before
+ * its replacement is made, and "coming up" then named a pod not yet there.
  */
 export function podsAhead(
   rollout: Rollout,
-  pods: { ready: number; failing: number } | null,
+  pods: PodCounts | null,
   desired: number,
   t: T
 ): { text: string; role: StatusRole } | null {
-  const moved = rolloutWithPods(rollout, pods, desired);
-  if (!pods || moved === rollout) return null;
+  if (!pods || rollout.state !== "ready" || pods.ready >= desired) return null;
   const counts = { ready: pods.ready, total: desired };
+  if (pods.failing > 0)
+    return {
+      text: t("count", "podsSayFailing", { ...counts, failing: pods.failing }),
+      role: "warn",
+    };
+  if (pods.starting > 0)
+    return { text: t("count", "podsSayComingUp", counts), role: "pending" };
   return {
     text:
-      pods.failing > 0
-        ? t("count", "podsSayFailing", { ...counts, failing: pods.failing })
-        : t("count", "podsSayComingUp", counts),
-    role: workloadRole(moved),
+      pods.terminating > 0
+        ? t("count", "podsSayTerminating", { ...counts, n: pods.terminating })
+        : t("count", "podsSayReady", counts),
+    role: "warn",
   };
 }
 

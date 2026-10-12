@@ -1,5 +1,6 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { QueryKey } from "@tanstack/react-query";
+import { create } from "zustand";
 
 import { useToast } from "@/components/ui/use-toast";
 import { useResourceWatch } from "@/hooks/useResourceWatch";
@@ -20,6 +21,15 @@ export interface WatchedList {
   refresh: false | "resourceList";
   resyncing: boolean;
   watchFailed: boolean;
+}
+
+/** How many live watches that recount the overview feed each list, by its key. */
+const useRecounting = create<Record<string, number>>(() => ({}));
+
+/** Whether a live watch feeds the list under `queryKey` and has the overview's counts read again whenever it grows or shrinks. */
+export function useListFollowed(queryKey: QueryKey | null): boolean {
+  const id = queryKey && JSON.stringify(queryKey);
+  return useRecounting((counts) => !!id && (counts[id] ?? 0) > 0);
 }
 
 /**
@@ -113,6 +123,16 @@ export function useWatchedList<
 
   const watchFailed = refusedBefore || failedFor === subscription;
   const live = enabled && !watchFailed;
+  const recounting = live && recount !== false;
+  useEffect(() => {
+    if (!recounting) return;
+    const add = (by: number) =>
+      useRecounting.setState((counts) => ({
+        [subscription]: (counts[subscription] ?? 0) + by,
+      }));
+    add(1);
+    return () => add(-1);
+  }, [recounting, subscription]);
   return {
     live,
     refresh: live ? false : "resourceList",

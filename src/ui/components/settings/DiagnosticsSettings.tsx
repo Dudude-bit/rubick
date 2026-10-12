@@ -1,12 +1,11 @@
-import { keepPreviousData } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { copyText } from "@/lib/host";
-import { CircleX, ClipboardCopy } from "lucide-react";
+import { CircleX, ClipboardCopy, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
-import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { commands } from "@/lib/commands";
 import { errorToShow } from "@/lib/error-utils";
 import { EnvironmentBlocks } from "./diagnostics/EnvironmentBlocks";
@@ -14,6 +13,7 @@ import { FindingsList } from "./diagnostics/FindingsList";
 import { PerformancePanel } from "./diagnostics/PerformancePanel";
 import { asMarkdown } from "./diagnostics/report";
 import { useT } from "@/i18n/useT";
+import { cn, formatWhen } from "@/lib/utils";
 import { usePrivacyStore } from "@/stores/privacyStore";
 
 const ENVIRONMENT_BLOCKS = 7;
@@ -54,13 +54,16 @@ export function DiagnosticsSettings() {
   const { toast } = useToast();
 
   // The other read stays on screen while this one loads, so the sections
-  // the reader opened stay open; it is never what Copy hands over.
-  const { data, isPlaceholderData, error } = useLiveQuery({
-    queryKey: ["diagnostics", redact],
-    queryFn: () => commands.collectDiagnostics(redact),
-    placeholderData: keepPreviousData,
-    refresh: "slow",
-  });
+  // the reader opened stay open; it is never what Copy hands over. Read on
+  // open and on request: on a timer it cost a quarter second every eight,
+  // inside the numbers of any recording taken from this page.
+  const { data, isPlaceholderData, error, isFetching, dataUpdatedAt, refetch } =
+    useQuery({
+      queryKey: ["diagnostics", redact],
+      queryFn: () => commands.collectDiagnostics(redact),
+      placeholderData: keepPreviousData,
+      refetchOnWindowFocus: false,
+    });
   const asked = isPlaceholderData ? undefined : data;
 
   return (
@@ -99,6 +102,19 @@ export function DiagnosticsSettings() {
           {t("settings", "copyDiagnostics")}
         </Button>
 
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isFetching}
+          onClick={() => void refetch()}
+        >
+          <RefreshCw
+            className={`mr-1.5 h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`}
+            aria-hidden="true"
+          />
+          {t("settings", "readDiagnosticsAgain")}
+        </Button>
+
         <label className="flex items-center gap-2 text-xs text-fg-mut">
           <Checkbox
             checked={redact}
@@ -107,6 +123,24 @@ export function DiagnosticsSettings() {
           />
           {t("settings", "redactNamesAndPaths")}
         </label>
+
+        {asked && (
+          <span
+            className={cn(
+              "ml-auto flex items-center gap-1 text-[11px] tabular-nums",
+              error ? "text-err" : "text-fg-fnt"
+            )}
+          >
+            {error && (
+              <CircleX className="h-3 w-3 flex-none" aria-hidden="true" />
+            )}
+            {t(
+              "settings",
+              error ? "diagnosticsReadAgainFailed" : "diagnosticsReadAt",
+              { at: formatWhen(dataUpdatedAt, "clock") }
+            )}
+          </span>
+        )}
       </div>
       <p className="mt-1.5 text-[11px] text-fg-fnt">
         {t("settings", "redactEverywhere")}

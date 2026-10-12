@@ -402,13 +402,8 @@ export const queryKeys = {
     scope(namespace),
     pages,
   ],
-  /** Whether any object holds a name now, asked by the kind and apiVersion an event names. */
-  held: (
-    kind: string,
-    apiVersion: string,
-    namespace: string | null | undefined,
-    name: string
-  ): (string | null)[] => ["held", kind, apiVersion, home(namespace), name],
+  /** Which of the named objects no longer exist, each named by an event story's `subjectKey`. */
+  held: (subjects: readonly string[]): string[] => ["held", ...subjects],
   servedObject: (
     group: string,
     plural: string,

@@ -294,6 +294,77 @@ describe("the rollout line", () => {
     expect(screen.queryByTestId("rollout-summary")).toBeNull();
   });
 
+  /**
+   * Sam's header trailed kubectl get deploy by 0.2 to 0.6 s at every flip:
+   * it waited for a read after its watch had already delivered the object.
+   * Fails if the header draws the read where the watch holds the same
+   * object, or draws the watch's object of another uid.
+   */
+  it("draws the object its watch delivered, not the read behind it", async () => {
+    const draining = {
+      ...ledger,
+      replicas: { desired: 1, ready: 0, available: 0, updated: 1 },
+      rollout: { state: "comingUp", available: 0, desired: 1 },
+    };
+    answering(() => new Promise(() => {}));
+    const delivering = (watched: unknown) =>
+      vi.mocked(useResourceDetail).mockReturnValue({
+        ...vi.mocked(useResourceDetail)(
+          {} as Parameters<typeof useResourceDetail>[0]
+        ),
+        activeTab: "overview",
+        watched,
+      });
+
+    delivering(draining);
+    const page = await open();
+    expect(await screen.findByText("Progressing")).toBeInTheDocument();
+    expect(screen.getByText("0/1 ready")).toBeInTheDocument();
+    page.unmount();
+
+    delivering({ ...draining, uid: "another" });
+    await open();
+    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    expect(screen.getByText("1/1")).toBeInTheDocument();
+  });
+
+  /**
+   * Sam's d2 and d4: "its pods say coming up" 290 to 440 ms before the
+   * ReplicaSet had made a replacement, while the only pod was terminating.
+   * Fails if a drain with no new pod yet is said to be coming up, or the
+   * terminating pod is not named.
+   */
+  it("names the pod terminating, and nothing coming up, before a replacement exists", async () => {
+    answering(
+      () => new Promise(() => {}),
+      () =>
+        Promise.resolve({
+          uid: "uid",
+          pods: [
+            {
+              ...CREATING,
+              status: {
+                ...CREATING.status,
+                phase: "Running",
+                display: "Terminating",
+                ready: true,
+              },
+              start: { state: "settled" },
+            },
+          ],
+        })
+    );
+    onOverview();
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+
+    expect(await screen.findByTestId("pods-ahead")).toHaveTextContent(
+      "its pods say 1 terminating, 0 of 1 ready"
+    );
+    expect(screen.queryByText(/coming up/)).toBeNull();
+  });
+
   /** Fails if the note is drawn where the pods agree with the controller. */
   it("says nothing beside the verdict where the pods agree with it", async () => {
     answering(

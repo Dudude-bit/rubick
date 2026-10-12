@@ -5001,11 +5001,15 @@ export const ru: Catalogue = {
     countsHeldAt: "Посчитано {ago}, до переключения. Читаем заново.",
     countsFollowed:
       "Обновляется вслед за изменениями в кластере. Посчитано в {at}.",
-    countsEvery: "Посчитано в {at}, пересчитывается каждые {every} с.",
+    countsEvery:
+      "Посчитано в {at}, пересчитывается не реже чем раз в {every} с.",
     countsAt: "Посчитано в {at}.",
     countsLate: "Ещё читается. Это число посчитано в {at}.",
     countsLateAll:
       "Счётчики ещё читаются. На экране значения, посчитанные в {at}.",
+    countsFailed: "Пересчитать не удалось. Это число посчитано в {at}.",
+    countsFailedAll:
+      "Пересчитать не удалось. На экране значения, посчитанные в {at}.",
     podsNotCounted: "поды не посчитаны {where}",
     notReadWhere: "не прочитано {where}",
     countsIn: "в {scope}",
@@ -5424,6 +5428,10 @@ export const ru: Catalogue = {
     diagnosticsUnread:
       "Не удалось прочитать, что приложение видит на этом компьютере.",
     copyDiagnostics: "Копировать диагностику",
+    readDiagnosticsAgain: "Прочитать заново",
+    diagnosticsReadAt: "Прочитано в {at}",
+    diagnosticsReadAgainFailed:
+      "Прочитать заново не удалось. На экране то, что прочитано в {at}.",
     redactNamesAndPaths: "Скрывать имена и пути",
     redactEverywhere:
       "Действует на все пути с этого компьютера, которые показывает приложение, а не только на этот отчёт: домашняя папка выглядит как ~, имя пользователя как <user>.",
@@ -9264,6 +9272,13 @@ export const ru: Catalogue = {
     slashReady: "{n}/{total} готовы",
     podsSayComingUp: "по подам: поднимаются, готово {ready} из {total}",
     podsSayFailing: "по подам: сбоит {failing}, готово {ready} из {total}",
+    podsSayTerminating: {
+      one: "по подам: {n} завершается, готово {ready} из {total}",
+      few: "по подам: {n} завершаются, готово {ready} из {total}",
+      many: "по подам: {n} завершаются, готово {ready} из {total}",
+      other: "по подам: {n} завершаются, готово {ready} из {total}",
+    },
+    podsSayReady: "по подам: готово {ready} из {total}",
     readySummary: "готовы: {n}",
     notReadySummary: "не готовы: {n}",
     readyNotReadySummary: "готовы: {n} · не готовы: {notReady}",

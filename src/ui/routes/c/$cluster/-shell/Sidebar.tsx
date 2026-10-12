@@ -38,6 +38,7 @@ import { useShellCounts, type ShellCounts } from "./useShellCounts";
 import { useWindowCluster } from "./useWindowCluster";
 import { useAppSearchValue } from "@/hooks/useSearchParam";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useListFollowed } from "@/hooks/useWatchedList";
 import { useGatewayApi } from "@/hooks/useGatewayApi";
 import { GATEWAY_ROUTE_KINDS } from "../-object/useGatewayRoutes";
 import {
@@ -54,6 +55,7 @@ import {
   getDisplayPlural,
   getResourceIcon,
   narrowingHelps,
+  listQueryFor,
   type ResourceKind,
 } from "@/lib/resource-registry";
 import { NOTHING_MISSING, type ScopeMissing } from "@/hooks/useScopeMissing";
@@ -1122,7 +1124,13 @@ function NavCount({
   missing?: ScopeMissing;
 }) {
   const t = useT();
-  const { overview, attention, heldAt, late } = counts;
+  const scope = useClusterStore((s) => s.namespaceScope);
+  const pageList = useMemo(
+    () => item.kind && pageListKey(item.kind, scope),
+    [item.kind, scope]
+  );
+  const pageFollows = useListFollowed(pageList ?? null);
+  const { overview, attention, heldAt, late, failed } = counts;
   const scoped = readsScope(item);
   // A namespace that is not there has no 0 to count.
   if (scoped && missing?.whole) return <ScopeMissingMark missing={missing} />;
@@ -1137,12 +1145,13 @@ function NavCount({
     <span
       className={cn(
         "ml-auto text-[11px] text-fg-fnt",
-        (heldAt !== null || late) && HELD_CLASS
+        (heldAt !== null || late || failed) && HELD_CLASS
       )}
       title={[
         countAge(
           counts,
-          item.count !== undefined && counts.followed.has(item.count),
+          pageFollows ||
+            (item.count !== undefined && counts.followed.has(item.count)),
           t
         ),
         scoped && missing && missing.missing.length > 0
@@ -1186,6 +1195,14 @@ function ScopeMissingMark({ missing }: { missing: ScopeMissing }) {
   );
 }
 
+/** The list a kind's own page keeps in the window's scope, under the key its watch feeds. */
+function pageListKey(kind: ResourceKind, scope: readonly string[]) {
+  const cacheKey = listQueryFor(kind).namespaced ? scopeCacheKey(scope) : null;
+  return kind === ResourceType.Pod
+    ? queryKeys.podRows(cacheKey)
+    : queryKeys.resources(kind, cacheKey);
+}
+
 /**
  * How old a count is, or that it follows the cluster: a number polled every
  * ten seconds beside a page that already says the object is gone read as now.
@@ -1199,12 +1216,13 @@ function countAge(
   if (counts.readAt === null) return "";
   const at = formatWhen(counts.readAt, "clock");
   if (counts.late) return t("cluster", "countsLate", { at });
+  if (counts.failed) return t("cluster", "countsFailed", { at });
   if (followed) return t("cluster", "countsFollowed", { at });
-  return counts.everyMs === false
+  return counts.withinMs === false
     ? t("cluster", "countsAt", { at })
     : t("cluster", "countsEvery", {
         at,
-        every: Math.round(counts.everyMs / 1000),
+        every: Math.round(counts.withinMs / 1000),
       });
 }
 

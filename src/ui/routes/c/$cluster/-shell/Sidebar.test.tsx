@@ -18,7 +18,8 @@ import userEvent from "@testing-library/user-event";
 
 import { useSettingsStore } from "@/stores/settingsStore";
 import { forgetRefusals } from "@/lib/refusals";
-import { listSegment } from "@/lib/resource-registry";
+import { queryKeys } from "@/lib/query-keys";
+import { listSegment, ResourceType } from "@/lib/resource-registry";
 import { renderWithRouter } from "@/test/render";
 
 import type { ClusterOverview, DetectedExtension } from "@/generated/types";
@@ -105,7 +106,7 @@ type OverviewStub = Pick<
   Partial<Pick<ClusterOverview, "servedFrom">>;
 let overview: OverviewStub | undefined;
 /** When the overview on screen landed, and whether a read of it is late. */
-const read = vi.hoisted(() => ({ at: 0, slowRead: false }));
+const read = vi.hoisted(() => ({ at: 0, slowRead: false, stale: false }));
 vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/useClusterOverview")>()),
   // Deliberately ignores `enabled`, the way React Query's own
@@ -115,8 +116,19 @@ vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
   useScopedOverview: () => ({
     data: overview,
     dataUpdatedAt: read.at,
-    freshness: { everyMs: 10_000, slowRead: read.slowRead },
+    freshness: {
+      everyMs: 10_000,
+      slowRead: read.slowRead,
+      stale: read.stale,
+    },
   }),
+}));
+
+/** The lists a page's live watch follows, by their key. */
+const pageFollows = vi.hoisted(() => new Set<string>());
+vi.mock("@/hooks/useWatchedList", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useWatchedList")>()),
+  useListFollowed: (key: unknown) => pageFollows.has(JSON.stringify(key)),
 }));
 
 let attention: Pick<Attention, "total" | "worst" | "complete"> | null = null;
@@ -149,6 +161,8 @@ beforeEach(() => {
   overview = undefined;
   read.at = 0;
   read.slowRead = false;
+  read.stale = false;
+  pageFollows.clear();
   useClusterStore.setState({
     isConnected: true,
     currentContext: "prod",
@@ -377,7 +391,7 @@ describe("how old a row's count is", () => {
     );
     expect(await counted("Services")).toHaveAttribute(
       "title",
-      "Counted at 15:03:41, and again every 10 s."
+      "Counted at 15:03:41, and again at least every 30 s."
     );
     watched.unmount();
 
@@ -385,7 +399,67 @@ describe("how old a row's count is", () => {
     await wrap(<Sidebar />);
     expect(await counted("Pods")).toHaveAttribute(
       "title",
-      "Counted at 15:03:41, and again every 10 s."
+      "Counted at 15:03:41, and again at least every 30 s."
+    );
+  });
+
+  /**
+   * Marco's Deployments and Services pages carried the green live badge
+   * while their own counts said "Counted at ..., every 10 s". Fails if a
+   * count whose page keeps a live watch on the window's scope is not said to
+   * follow the cluster, or one whose page watches another scope is.
+   */
+  it("says a count follows the cluster while its page's watch is live", async () => {
+    read.at = AT;
+    overview = {
+      ...overviewWithPods(41),
+      counts: { pods: 41, services: 3, nodes: 2 } as ClusterOverview["counts"],
+      servedFrom: "list",
+    };
+    useClusterStore.setState({ namespaceScope: ["orders"] });
+    pageFollows.add(
+      JSON.stringify(queryKeys.resources(ResourceType.Service, "orders"))
+    );
+    pageFollows.add(JSON.stringify(queryKeys.podRows("billing")));
+    pageFollows.add(
+      JSON.stringify(queryKeys.resources(ResourceType.Node, null))
+    );
+    try {
+      await wrap(<Sidebar />);
+      expect(await counted("Services")).toHaveAttribute(
+        "title",
+        "Follows the cluster's changes. Counted at 15:03:41."
+      );
+      expect(await counted("Nodes")).toHaveAttribute(
+        "title",
+        "Follows the cluster's changes. Counted at 15:03:41."
+      );
+      expect(await counted("Pods")).toHaveAttribute(
+        "title",
+        "Counted at 15:03:41, and again at least every 30 s."
+      );
+    } finally {
+      useClusterStore.setState({ namespaceScope: [] });
+    }
+  });
+
+  /**
+   * A count whose re-read failed went on saying it was read again every few
+   * seconds, under a stamp minutes old. Fails if a failed re-read leaves the
+   * counts undimmed or unexplained.
+   */
+  it("dims the counts and says so when their re-read failed", async () => {
+    read.at = AT;
+    read.stale = true;
+    overview = overviewWithPods(41);
+
+    await wrap(<Sidebar />);
+
+    const pods = await counted("Pods");
+    expect(pods).toHaveClass("opacity-60");
+    expect(pods).toHaveAttribute(
+      "title",
+      "Could not count again. This count is from 15:03:41."
     );
   });
 

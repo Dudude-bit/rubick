@@ -216,7 +216,8 @@ export function StatusBar({
                 data-testid="scope-counts"
                 className={cn(
                   "flex cursor-default items-center gap-1.5",
-                  (counts.heldAt !== null || counts.late) && "opacity-60"
+                  (counts.heldAt !== null || counts.late || counts.failed) &&
+                    "opacity-60"
                 )}
               >
                 {counts.heldAt !== null && (
@@ -226,10 +227,13 @@ export function StatusBar({
                     className="h-3 w-3 flex-none"
                   />
                 )}
-                {counts.late && (
+                {(counts.late || counts.failed) && (
                   <span
                     role="img"
-                    aria-label={t("cluster", "freshBehind")}
+                    aria-label={t(
+                      "cluster",
+                      counts.late ? "freshBehind" : "freshStale"
+                    )}
                     className="h-1.5 w-1.5 flex-none rounded-full border border-warn"
                   />
                 )}
@@ -292,11 +296,15 @@ export function StatusBar({
             </TooltipTrigger>
             <TooltipContent side="top" align="end" className="max-w-[320px]">
               {counts.heldAt !== null && <HeldAt at={counts.heldAt} />}
-              {counts.late && counts.readAt !== null && (
+              {(counts.late || counts.failed) && counts.readAt !== null && (
                 <p className="mb-1 text-warn">
-                  {t("cluster", "countsLateAll", {
-                    at: formatWhen(counts.readAt, "clock"),
-                  })}
+                  {t(
+                    "cluster",
+                    counts.late ? "countsLateAll" : "countsFailedAll",
+                    {
+                      at: formatWhen(counts.readAt, "clock"),
+                    }
+                  )}
                 </p>
               )}
               <ClusterWide />
