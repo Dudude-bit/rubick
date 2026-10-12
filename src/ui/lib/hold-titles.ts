@@ -27,3 +27,21 @@ export function holdTitles(
   };
   document.addEventListener("pointermove", release);
 }
+
+/** A resize moves the page under a parked pointer, and WebKit shows the title of whatever lands there; held back the same way until the pointer moves. */
+export function holdTitlesOnResize(): () => void {
+  let at: { clientX: number; clientY: number } | null = null;
+  const track = (event: PointerEvent) => {
+    at = { clientX: event.clientX, clientY: event.clientY };
+  };
+  const resized = () => {
+    const under = at && document.elementFromPoint(at.clientX, at.clientY);
+    if (at && under) holdTitles(under, document.documentElement, at);
+  };
+  document.addEventListener("pointermove", track, { passive: true });
+  window.addEventListener("resize", resized);
+  return () => {
+    document.removeEventListener("pointermove", track);
+    window.removeEventListener("resize", resized);
+  };
+}
