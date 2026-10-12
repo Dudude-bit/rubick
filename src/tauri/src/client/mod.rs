@@ -16,6 +16,7 @@ use tokio::sync::RwLock;
 
 pub mod clock;
 mod context;
+mod floors;
 pub mod proxy;
 mod send_again;
 pub mod served;
@@ -277,6 +278,7 @@ fn client_with_deadline(config: Config, deadline: std::time::Duration) -> Result
             send_again::SendAgain::default(),
         ))
         .with_layer(&tower::timeout::TimeoutLayer::new(deadline))
+        .with_layer(&floors::Floors::default())
         .with_layer(&clock::Clock)
         .build())
 }

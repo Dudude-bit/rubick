@@ -37,7 +37,7 @@ futures = "0.3"
 async-trait = "0.1"
 
 # Kubernetes
-tower = { version = "0.5", features = ["timeout", "buffer", "retry"] }
+tower = { version = "0.5", features = ["timeout", "buffer", "retry", "util"] }
 # The error kube's HTTP client raises, read to tell a closed keep-alive connection
 # from a refused one; the version kube itself resolves.
 hyper-util = { version = "0.1", default-features = false, features = [
@@ -158,6 +158,7 @@ tempfile = "3"
 tauri-plugin-notification = "2"
 http = "1"
 http-body = "1"
+memchr = "2"
 tauri-plugin-deep-link = "2"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 

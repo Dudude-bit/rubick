@@ -2849,6 +2849,7 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "libc",
+ "memchr",
  "p521",
  "parking_lot",
  "portable-pty",
