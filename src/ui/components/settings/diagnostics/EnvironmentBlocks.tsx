@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { Diagnostics } from "@/generated/types";
+import { Skeleton } from "@/components/ui/skeleton";
 import { T } from "@/i18n/T";
 import { useT } from "@/i18n/useT";
 import { formatDate } from "@/lib/utils";
@@ -9,7 +10,13 @@ import { shellEnvSentence, shellEnvTone } from "./shell-env";
 const moment = (at: string) =>
   formatDate(at.replace(/(\.\d{3})\d+/, "$1")) ?? at;
 
-function Block({ title, children }: { title: string; children: ReactNode }) {
+function Block({
+  title,
+  children,
+}: {
+  title: ReactNode;
+  children?: ReactNode;
+}) {
   return (
     <details className="border-t border-hair py-3">
       <summary className="cursor-pointer text-xs font-medium text-fg">
@@ -17,6 +24,23 @@ function Block({ title, children }: { title: string; children: ReactNode }) {
       </summary>
       <div className="mt-2">{children}</div>
     </details>
+  );
+}
+
+/** One per block {@link EnvironmentBlocks} draws. */
+export const ENVIRONMENT_BLOCKS = 7;
+
+/** The blocks' rows before the machine is read, drawn by the same element so they take the same room to the pixel. */
+export function EnvironmentBlocksReading() {
+  return (
+    <div className="mt-6" aria-hidden="true" inert>
+      {Array.from({ length: ENVIRONMENT_BLOCKS }, (_, index) => (
+        <Block
+          key={index}
+          title={<Skeleton className="inline-block h-2.5 w-36 align-middle" />}
+        />
+      ))}
+    </div>
   );
 }
 

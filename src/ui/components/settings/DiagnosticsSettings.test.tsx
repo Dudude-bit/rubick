@@ -195,23 +195,36 @@ describe("DiagnosticsSettings before the machine is read", () => {
 
   /**
    * Marco aimed at Start and hit nothing: the environment blocks landed and
-   * pushed it 300 px down. Fails if the page holds less room for the blocks
-   * while reading than they take once read, or says all clear before it read.
+   * pushed it 300 px down; then Dana's Start still rose 10 px, the reading
+   * rows and line being a pixel and a few taller than the read ones. Fails
+   * if the page while reading is not drawn by the read page's own rows and
+   * in the all-clear sentence's room, or says all clear before it read.
    */
-  it("holds a row for every environment block while it reads", async () => {
+  it("takes the room the read page takes while it reads, to the pixel", async () => {
     let answer: (value: Diagnostics) => void = () => {};
     collectDiagnostics.mockReturnValue(
       new Promise<Diagnostics>((resolve) => (answer = resolve))
     );
     const { container } = renderPane();
     const reading = screen.getByTestId("diagnostics-reading");
-    const rows = reading.querySelectorAll(".border-t").length;
-    expect(screen.queryByText(/No problems found/)).toBeNull();
+    const rows = [...reading.querySelectorAll("details")].map(
+      (row) => row.className
+    );
+    const room = screen.getByText(/No problems found/);
+    expect(room).toHaveAttribute("aria-hidden", "true");
+    expect(room).toHaveClass("invisible", "text-xs");
+    expect(room.parentElement).toHaveClass("grid", "max-w-[72ch]");
     answer(empty);
     await waitFor(() =>
       expect(screen.queryByTestId("diagnostics-reading")).toBeNull()
     );
-    expect(container.querySelectorAll("details")).toHaveLength(rows);
+    const read = [...container.querySelectorAll("details")].map(
+      (row) => row.className
+    );
+    expect(rows).toEqual(read);
+    const allClear = screen.getByText(/No problems found/);
+    expect(allClear).toHaveClass("max-w-[72ch]", "text-xs");
+    expect(allClear).not.toHaveAttribute("aria-hidden");
   });
 
   /** A machine not yet read is not one with no problems; fails if the page says all clear before, or instead of, an answer. */
