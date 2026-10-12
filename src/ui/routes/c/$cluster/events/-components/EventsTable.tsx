@@ -17,6 +17,9 @@ import type { PeekTarget } from "@/hooks/usePeek";
 import { eventLanding } from "../../-object/attachment";
 import { PastObjectRef } from "../../-object/PastObjectRef";
 import { aboutEarlier } from "@/lib/event-incarnation";
+import { tallyOf } from "@/lib/event-stories";
+import { sayWords } from "@/i18n/say";
+import { useT } from "@/i18n/useT";
 import { useRowMenu } from "../../-list/useRowMenu";
 import { useHeldRows } from "../../-list/held-rows";
 import { HeldUpdates } from "../../-list/HeldUpdates";
@@ -122,9 +125,14 @@ function MessageCell({ row }: { row: { original: EventInfo } }) {
 }
 
 function CountCell({ row }: { row: { original: EventInfo } }) {
+  const t = useT();
   const count = row.original.count ?? 0;
+  const tally = tallyOf(row.original);
   return (
-    <span className="font-mono text-[11px] text-fg-fnt">
+    <span
+      className="font-mono text-[11px] text-fg-fnt"
+      title={tally ? sayWords(tally, t) : undefined}
+    >
       {count > 1 ? `×${count}` : ""}
     </span>
   );

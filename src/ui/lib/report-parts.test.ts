@@ -750,6 +750,43 @@ describe("the rest of the parts", () => {
     );
   });
 
+  /**
+   * A shared file of the 1 h stories listed "×696" at 03:46 as if the hour
+   * held them. Fails if a repeated event stops carrying when its repeats began.
+   */
+  it("gives a repeated event the stretch its count spans", () => {
+    const section = eventsSection(
+      [
+        {
+          type: "Warning",
+          reason: "Failed",
+          message: "couldn't find key",
+          count: 696,
+          firstTimestamp: "2026-10-12T01:16:20Z",
+          lastTimestamp: "2026-10-12T03:46:24Z",
+          involvedObject: { kind: "Pod", name: "p" },
+          namespace: "shop",
+        },
+        {
+          type: "Normal",
+          reason: "Pulled",
+          message: "ok",
+          count: 1,
+          firstTimestamp: "2026-10-12T03:00:00Z",
+          lastTimestamp: "2026-10-12T03:00:00Z",
+          involvedObject: { kind: "Pod", name: "p" },
+          namespace: "shop",
+        },
+      ] as never,
+      null
+    );
+    const rows = section.body.type === "events" ? section.body.rows : [];
+    expect(rows.map((row) => [row.first, row.at, row.count])).toEqual([
+      ["2026-10-12T01:16:20Z", "2026-10-12T03:46:24Z", 696],
+      [null, "2026-10-12T03:00:00Z", 1],
+    ]);
+  });
+
   /** A pressure condition that is False is healthy; reading True as good would paint it red. */
   it("gives each condition the role the Conditions tab gives it", () => {
     const section = conditionsSection(

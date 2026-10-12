@@ -7,6 +7,7 @@ import { ConditionRows, EventRows, UsageRow } from "./detail-blocks";
 import type { ConditionInfo, EventInfo } from "@/generated/types";
 import * as eventReason from "@/lib/event-reason";
 import { MetricsAbsenceContext } from "@/lib/metrics-absence";
+import { momentWords } from "@/i18n/say";
 
 const wrap = (ui: ReactElement) =>
   renderWithRouter(ui, {
@@ -219,6 +220,38 @@ describe("an event row at drawer width", () => {
     expect(
       screen.getByText("FailedCreatePodSandBox").parentElement
     ).toHaveAttribute("title", "FailedCreatePodSandBox");
+  });
+});
+
+describe("an event's count", () => {
+  /**
+   * ×696 sat beside "50m" with nothing saying the 696 began hours before.
+   * Fails if the count stops carrying the stretch its repeats span.
+   */
+  it("says on hover since when its repeats were counted and when the last was", async () => {
+    const first = Date.now() - 150 * 60_000;
+    const last = Date.now() - 50 * 60_000;
+    await wrap(
+      <EventRows
+        events={[
+          {
+            uid: "e1",
+            type: "Warning",
+            reason: "Failed",
+            message: "couldn't find key DB_PASSWORD",
+            namespace: "shop",
+            involvedObject: { kind: "Pod", name: "web-0", namespace: "shop" },
+            count: 696,
+            firstTimestamp: new Date(first).toISOString(),
+            lastTimestamp: new Date(last).toISOString(),
+          } as unknown as EventInfo,
+        ]}
+      />
+    );
+    expect(screen.getByText("×696")).toHaveAttribute(
+      "title",
+      `696 times since ${momentWords(first)}, the last at ${momentWords(last)}`
+    );
   });
 });
 

@@ -540,13 +540,14 @@ function sentenceOf(
   events: EventInfo[],
   warnings: EventInfo[],
   reasons: ReasonCount[],
-  spanMs: number
+  since: number
 ): Saying {
   if (warnings.length === 0) {
+    const when = whenOf(events, since);
     switch (activity) {
       case "rollout": {
         const pods = {
-          spanMs,
+          when,
           scheduled: countReason(events, "Scheduled"),
           pulled: countReason(events, "Pulled"),
           started: countReason(events, "Started"),
@@ -561,7 +562,7 @@ function sentenceOf(
         return {
           key: "storyJob",
           values: {
-            spanMs,
+            when,
             created: {
               key: "jobsCreated" as const,
               values: { n: countReason(events, "SuccessfulCreate") },
@@ -572,20 +573,12 @@ function sentenceOf(
       default:
         return {
           key: "storyQuiet",
-          values: { spanMs, reasons: topReasons(reasons) },
+          values: { when, reasons: topReasons(reasons) },
         };
     }
   }
-  const n = warnings.reduce((sum, e) => sum + occurrencesOf(e), 0);
   const detail = detailOf(informative(warnings));
-  // The count is its own sentence, because no language can hand another a
-  // substring of its own plural: Russian needs three forms where English
-  // needs two, and `{n} times` in the outer string gets neither.
-  const troubled = {
-    times: { key: "timesSeen" as const, values: { n } },
-    spanMs,
-    detail,
-  };
+  const troubled = { count: countOf(warnings, since), detail };
   switch (activity) {
     case "crash":
       // Only a `BackOff` is the kubelet backing off. Every other Pod
@@ -605,7 +598,7 @@ function sentenceOf(
         ? { key: "storySchedulingSame", values: troubled }
         : {
             key: "storySchedulingVaried",
-            values: { ...troubled, k: answers.size },
+            values: { detail, when: whenOf(warnings, since), k: answers.size },
           };
     }
     case "probe":
@@ -651,20 +644,86 @@ export interface StoryOptions {
 
 const NONE: ReadonlySet<string> = new Set();
 
-/** How long the events the sentence counts actually cover, never past the window. */
-function spanOf(events: EventInfo[], since: number): number {
+/** How long the events the sentence counts actually cover. */
+function spanOf(events: EventInfo[]): number {
   let first: number | null = null;
   let last: number | null = null;
   for (const event of events) {
     // Both ends: a repeat is one row carrying its own interval, and taking
     // only `lastTimestamp` reports twelve pulls over an hour as one moment.
     const seen = at(event.lastTimestamp);
-    const began = at(event.firstTimestamp) ?? seen;
+    const began = beganAt(event);
     if (began !== null && (first === null || began < first)) first = began;
     if (seen !== null && (last === null || seen > last)) last = seen;
   }
   if (first === null || last === null) return 0;
-  return Math.max(0, last - Math.max(first, since));
+  return Math.max(0, last - first);
+}
+
+const beganAt = (event: EventInfo) =>
+  at(event.firstTimestamp) ?? at(event.lastTimestamp);
+
+/** An undated event is kept in the window for the same reason the window filter keeps it. */
+const beganBefore = (event: EventInfo, since: number) =>
+  (beganAt(event) ?? since) < since;
+
+const timesOf = (events: EventInfo[]): Saying => ({
+  key: "timesSeen",
+  values: { n: events.reduce((sum, e) => sum + occurrencesOf(e), 0) },
+});
+
+/**
+ * How often `events` happened in the window, as far as the cluster says.
+ *
+ * An Event's count covers its whole life, so one first seen before the
+ * window brings repeats nobody can place inside it: those are said with
+ * their own first and last sighting, never folded into the window's count.
+ */
+export function countOf(events: EventInfo[], since: number): Saying {
+  const inside = events.filter((event) => !beganBefore(event, since));
+  const before = events.filter((event) => beganBefore(event, since));
+  const within: Saying = {
+    key: "countWithin",
+    values: { times: timesOf(inside), spanMs: spanOf(inside) },
+  };
+  if (before.length === 0) return within;
+  const earlier: Saying = {
+    key: "countSince",
+    values: {
+      times: timesOf(before),
+      firstAtMs: Math.min(...before.map((e) => beganAt(e) ?? since)),
+      lastAtMs: Math.max(
+        ...before.map((e) => at(e.lastTimestamp) ?? beganAt(e) ?? since)
+      ),
+    },
+  };
+  return inside.length === 0
+    ? earlier
+    : { key: "countBoth", values: { within, earlier } };
+}
+
+/** An event's own tally between its first and last sighting; `null` for one seen once. */
+export function tallyOf(event: EventInfo): Saying | null {
+  const first = beganAt(event);
+  const last = at(event.lastTimestamp);
+  if (occurrencesOf(event) < 2 || first === null || last === null) return null;
+  return {
+    key: "countSince",
+    values: { times: timesOf([event]), firstAtMs: first, lastAtMs: last },
+  };
+}
+
+/** The stretch a sentence's counts cover: the window's own, or back to the first sighting of an event older than it. */
+function whenOf(events: EventInfo[], since: number): Saying {
+  const older = events.filter((event) => beganBefore(event, since));
+  return older.length === 0
+    ? { key: "whenWithin", values: { spanMs: spanOf(events) } }
+    : {
+        key: "whenSince",
+        values: {
+          firstAtMs: Math.min(...older.map((e) => beganAt(e) ?? since)),
+        },
+      };
 }
 
 /** The events in the window, folded into stories. Order is not meaningful; see {@link sortStories}. */
@@ -760,15 +819,8 @@ export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
       // The span the sentence quotes belongs to the events it counts, not to
       // the whole group: "12 times within 1 hour" for a pull that began four
       // minutes ago, because a scheduling failure an hour earlier is in the
-      // same story. Clamped to the window too, so no card quotes a span
-      // longer than the range the reader picked.
-      says: sentenceOf(
-        activity,
-        sorted,
-        ofActivity,
-        reasons,
-        spanOf(ofActivity.length > 0 ? ofActivity : sorted, since)
-      ),
+      // same story.
+      says: sentenceOf(activity, sorted, ofActivity, reasons, since),
     });
   }
   return stories;

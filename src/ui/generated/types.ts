@@ -1950,12 +1950,18 @@ export interface NamespaceLoad {
 export interface WarningGroup {
   reason: string;
   count: number;
+  older: OlderTally | null;
   lastSeen: string | null;
   sample: string | null;
   objectKind: string | null;
   objectName: string | null;
   namespace: string | null;
   incarnation: Incarnation;
+}
+
+export interface OlderTally {
+  count: number;
+  since: string;
 }
 
 export type Incarnation = "current" | "earlier" | "gone" | "unchecked";

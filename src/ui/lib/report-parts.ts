@@ -230,6 +230,12 @@ export function eventsSection(
       type: "events",
       rows: sorted.slice(0, MAX_EVENTS).map((event) => ({
         at: event.lastTimestamp ?? event.firstTimestamp,
+        first:
+          (event.count ?? 1) > 1 &&
+          event.firstTimestamp &&
+          event.firstTimestamp !== event.lastTimestamp
+            ? event.firstTimestamp
+            : null,
         role: event.type === "Warning" ? "warn" : statusRole(event.type),
         reason: event.reason ?? event.type,
         message: event.message ?? "",
