@@ -22,7 +22,7 @@ import { applyTheme } from "@/lib/theme";
 import { useClusterStore } from "@/stores/clusterStore";
 import { setupFrontendLogger } from "@/lib/frontend-logger";
 import { startWindowActivity } from "@/lib/window-activity";
-import { startFocusModality } from "@/lib/focus-modality";
+import { startFocusModality, startFocusWrap } from "@/lib/focus-modality";
 import { keepNativeMenuForText, openMenusFromKeys } from "@/lib/native-menu";
 import { stallWatch } from "@/lib/stall-watch";
 import { logInfo, flushLogs } from "@/lib/logger";
@@ -67,6 +67,7 @@ export default function App() {
   // would double-count the reader's clicks.
   useEffect(() => startWindowActivity(), []);
   useEffect(() => startFocusModality(), []);
+  useEffect(() => startFocusWrap(), []);
   useEffect(() => keepNativeMenuForText(), []);
   useEffect(() => openMenusFromKeys(), []);
   useEffect(() => {

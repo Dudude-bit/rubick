@@ -1,4 +1,4 @@
-import { act } from "@testing-library/react";
+import { act, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   beforeAll,
@@ -49,6 +49,19 @@ vi.mock("./PageArea", async () => {
 
 const { Layout } = await import("./Layout");
 const { useClusterStore } = await import("@/stores/clusterStore");
+const { Toaster } = await import("@/components/ui/toaster");
+const { SettingsOverlay } =
+  await import("@/components/settings/SettingsOverlay");
+const { startFocusWrap } = await import("@/lib/focus-modality");
+
+/** The shell as the window mounts it: the route's Layout and what the root puts beside it. */
+const Shell = () => (
+  <>
+    <Layout />
+    <SettingsOverlay />
+    <Toaster />
+  </>
+);
 
 beforeAll(() => {
   Element.prototype.scrollIntoView ??= () => {};
@@ -87,7 +100,7 @@ describe("the shell's Tab order", () => {
     "lands only on controls that show they hold the focus",
     { timeout: 60_000 },
     async () => {
-      await renderWithRouter(<Layout />, {
+      await renderWithRouter(<Shell />, {
         at: "/c/prod",
         route: "/c/$cluster/$",
       });
@@ -110,6 +123,37 @@ describe("the shell's Tab order", () => {
       expect(stops.some((stop) => stop.startsWith('tr "web-1'))).toBe(true);
       expect(stops).toContain('button "Theme: Dark"');
       expect(blind).toEqual([]);
+      expect(stops[0]).toBe('button "Rename or recolour prod"');
+      expect(stops.at(-1)).toBe('button "Theme: Dark"');
     }
   );
+
+  /**
+   * Dana's Shift+Tab off the cluster name drew no ring anywhere for one press:
+   * the cluster name is the window's first stop, so the press left the
+   * document and WebKitGTK gave the focus to nothing. Fails if Shift+Tab there
+   * does not land on the status bar's last control, or Tab there on the first.
+   */
+  it("wraps between the cluster name and the status bar inside the window", async () => {
+    const stop = startFocusWrap();
+    try {
+      await renderWithRouter(<Shell />, {
+        at: "/c/prod",
+        route: "/c/$cluster/$",
+      });
+      await act(async () => {});
+      const cluster = document.querySelector<HTMLElement>(
+        "[aria-label='Rename or recolour prod']"
+      )!;
+      // A bare keydown, which jsdom gives no default action: what moves the
+      // focus is the wrap, as it has to be in a webview that drops it.
+      cluster.focus();
+      fireEvent.keyDown(cluster, { key: "Tab", shiftKey: true });
+      expect(label(document.activeElement!)).toBe('button "Theme: Dark"');
+      fireEvent.keyDown(document.activeElement!, { key: "Tab" });
+      expect(document.activeElement).toBe(cluster);
+    } finally {
+      stop();
+    }
+  });
 });

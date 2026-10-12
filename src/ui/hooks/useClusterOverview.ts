@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { commands } from "@/lib/commands";
@@ -11,8 +11,9 @@ import { queryKeys } from "@/lib/query-keys";
 import { useRefusedOn } from "@/lib/refusals";
 import { STALE_TIMES } from "@/lib/refresh";
 import { useLiveQuery } from "@/hooks/useLiveQuery";
+import { useWatchedList } from "@/hooks/useWatchedList";
 import { useClusterStore } from "@/stores/clusterStore";
-import type { ClusterOverview } from "@/generated/types";
+import type { ClusterOverview, DeploymentInfo } from "@/generated/types";
 
 /**
  * Whether this connection was refused the whole cluster's overview. A
@@ -106,6 +107,11 @@ export function useFollowedOverview(
   const shown = useWindowActivity((s) => s.visible);
   const following =
     surface && shown && !!context && overview?.servedFrom === "watch";
+  useDeploymentsFollowed(
+    surface && shown && !!context && overview?.servedFrom === "list"
+      ? overview
+      : undefined
+  );
   useEffect(() => {
     if (!following) return;
     const key = queryKeys.clusterOverview(context, scope);
@@ -133,3 +139,86 @@ export function useFollowedOverview(
   }, [following, context, scope, client]);
   return following;
 }
+
+/**
+ * Where the overview's pods went unread and its Deployments were not, the
+ * namespaces to watch those Deployments in: `null` for the whole cluster,
+ * `undefined` for nowhere.
+ */
+export function blindDeployments(
+  overview: ClusterOverview | undefined,
+  scope: readonly string[]
+): string[] | null | undefined {
+  if (!overview?.deployments) return undefined;
+  const where = (kind: string) =>
+    overview.unread
+      .filter((entry) => entry.kind === kind)
+      .map((entry) => entry.namespace);
+  const pods = where("Pod");
+  const deployments = where("Deployment");
+  if (pods.includes(null)) {
+    if (deployments.length > 0) return undefined;
+    return scope.length > 0 ? [...scope] : null;
+  }
+  const names = [...new Set(pods)].filter(
+    (ns): ns is string => ns !== null && !deployments.includes(ns)
+  );
+  return names.length > 0 ? names.sort() : undefined;
+}
+
+/**
+ * A Deployment whose pods went unread is only what its controller says, and
+ * ledger's said Available for three seconds of each crash loop: an overview
+ * listed in that window stayed green on the poll while the Deployments list,
+ * on its watch, had long said Unavailable. So where the pods are unread the
+ * overview follows the Deployments' own watch and reads again on a change.
+ */
+function useDeploymentsFollowed(overview: ClusterOverview | undefined) {
+  const client = useQueryClient();
+  const context = useClusterStore((s) => s.currentContext);
+  const scope = useClusterStore((s) => s.namespaceScope);
+  const where = JSON.stringify(blindDeployments(overview, scope) ?? false);
+  const blind = useMemo(
+    () => JSON.parse(where) as string[] | null | false,
+    [where]
+  );
+  const queryKey = useMemo(
+    () => queryKeys.overviewDeployments(context, blind || null),
+    [context, blind]
+  );
+  const subscribe = useCallback(
+    () => commands.subscribeDeploymentWatch(blind || null),
+    [blind]
+  );
+  const settling = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (settling.current) clearTimeout(settling.current);
+    },
+    []
+  );
+  // A status update comes in a burst; a read that left inside it is behind.
+  const onChange = useCallback(() => {
+    if (settling.current) clearTimeout(settling.current);
+    settling.current = setTimeout(() => {
+      settling.current = null;
+      void client.invalidateQueries({
+        queryKey: queryKeys.clusterOverview(context, scope),
+        exact: true,
+      });
+    }, SETTLE_MS);
+  }, [client, context, scope]);
+  useWatchedList<DeploymentInfo>({
+    enabled: blind !== false,
+    subscribe,
+    queryKey,
+    detail: noDetail,
+    reportFailure: ignoreFailure,
+    recount: false,
+    onChange,
+  });
+}
+
+const SETTLE_MS = 250;
+const noDetail = () => [];
+const ignoreFailure = () => {};
