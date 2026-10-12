@@ -3933,12 +3933,15 @@ export const en = {
     logsNoneNotStarted: "No logs yet: it has not started.",
     logsNeverRanBlocked: "Never ran: the sequence is still on {on}.",
     logsNeverRan: "Never ran.",
+    logsNeverRanPodFailedOn: "Never ran, and will not: the pod failed on {on}.",
+    logsNeverRanPodFailed: "Never ran, and will not: the pod has failed.",
     logsSidecarRunning:
       "Started during init and does not finish; the sequence went on once it was ready.",
     groupInitCaption:
       "run in order before the pod starts, each waiting on the last",
     groupSidecarCaption: "started during init and still running",
     groupAppBlocked: "never started: the pod is still in init",
+    groupAppFailedInInit: "never started, and will not: the pod failed in init",
     groupAppCaption: "run together for the life of the pod",
     groupInitCaptionEach:
       "run in order before each pod starts, each waiting on the last",
@@ -5198,6 +5201,10 @@ export const en = {
     whichHasNotFinished: "which has not finished",
     podStoppedInInit:
       "The pod is still in init and stopped on {container}, {failure}.",
+    podFailedInInit:
+      "The pod is {status}: it stopped in init on {container}, {failure}. None of its containers is running, and none will run again.",
+    podFailedNoneRunning:
+      "The pod is {status}: none of its containers is running, and none will run again.",
     haveNotStarted: {
       one: "{names} has not started.",
       other: "{names} have not started.",

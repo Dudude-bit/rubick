@@ -140,7 +140,10 @@ interface ContainerRowsCommon {
 
 export type ContainerRowsProps = ContainerRowsCommon &
   (
-    | { pod: PodContainerLists | undefined; template?: never }
+    | {
+        pod: (PodContainerLists & { status?: { phase: string } }) | undefined;
+        template?: never;
+      }
     | { template: TemplateContainerLists | undefined; pod?: never }
   );
 
@@ -172,7 +175,11 @@ export function ContainerRows(props: ContainerRowsProps) {
   } = props;
 
   const groups: Group[] = props.pod
-    ? containerSequence(podContainers(props.pod), t).map((group) => ({
+    ? containerSequence(
+        podContainers(props.pod),
+        t,
+        props.pod.status?.phase === "Failed"
+      ).map((group) => ({
         ...group,
         rows: group.steps.map((step) => ({ container: step.container, step })),
       }))

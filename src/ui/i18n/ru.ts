@@ -4408,12 +4408,18 @@ export const ru: Catalogue = {
     logsNoneNotStarted: "Логов пока нет: он ещё не запускался.",
     logsNeverRanBlocked: "Не запускался: последовательность ещё на {on}.",
     logsNeverRan: "Не запускался.",
+    logsNeverRanPodFailedOn:
+      "Не запускался и уже не запустится: под остановился на {on}.",
+    logsNeverRanPodFailed:
+      "Не запускался и уже не запустится: под завершился с ошибкой.",
     logsSidecarRunning:
       "Запущен во время init и не завершается; последовательность пошла дальше, как только он был готов.",
     groupInitCaption:
       "выполняются по порядку до старта пода, каждый ждёт предыдущего",
     groupSidecarCaption: "запущены во время init и работают до сих пор",
     groupAppBlocked: "не запускались: под ещё в init",
+    groupAppFailedInInit:
+      "не запускались и уже не запустятся: под остановился в init",
     groupAppCaption: "работают вместе всю жизнь пода",
     groupInitCaptionEach:
       "выполняются по порядку до старта каждого пода, каждый ждёт предыдущего",
@@ -5751,6 +5757,10 @@ export const ru: Catalogue = {
     whichHasNotFinished: "он не завершился",
     podStoppedInInit:
       "Под ещё в инициализации и застрял на {container}: {failure}.",
+    podFailedInInit:
+      "Под в состоянии {status}: он остановился в инициализации на {container}, {failure}. Ни один его контейнер не работает и больше не запустится.",
+    podFailedNoneRunning:
+      "Под в состоянии {status}: ни один его контейнер не работает и больше не запустится.",
     haveNotStarted: {
       one: "{names} не запустился.",
       few: "{names} не запустились.",
