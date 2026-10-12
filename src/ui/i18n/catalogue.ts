@@ -4468,6 +4468,9 @@ export const en = {
     },
     attentionMore: "and {n} more",
     attentionOverall: "overall",
+    podsUnlisted: "Not listed on their own: {list}",
+    podsUnlistedHint:
+      "Needs attention names a pod when the pod itself is at fault. A pod that is not ready counts against its workload or Service, a failed Job's failed pods are counted in the Job's row, and a pod being deleted is on its way out.",
     attentionPartly: "partly checked",
     claimPendingDetail:
       "No volume is bound to it yet, so a pod that mounts it cannot start.",
@@ -7656,6 +7659,10 @@ export const en = {
     restartNoun: { one: "restart", other: "restarts" },
     failedPodsFolded: { one: "{n} failed pod", other: "{n} failed pods" },
     podNoun: { one: "pod", other: "pods" },
+    failedInJobRows: {
+      one: "{n} Failed, in its Job's row",
+      other: "{n} Failed, in their Jobs' rows",
+    },
     worstFirst: "{n} · worst first",
     worstFirstPartial: "{n}+ · worst first · not all checked",
     moreMostSevere: "+{n} more; showing the {shown} most severe",

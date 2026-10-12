@@ -245,6 +245,49 @@ describe("the overview's two event panels", () => {
   });
 });
 
+describe("the pods the list does not name", () => {
+  const panel = (podsUnlisted: { reason: string; count: number }[]) =>
+    wrap(
+      <AttentionPanel
+        attention={attentionFrom([])}
+        pods={RUNNING}
+        podsUnlisted={podsUnlisted}
+        podsUnread={[]}
+        nodes={[]}
+        nodesKnown={true}
+      />
+    );
+
+  /**
+   * Dana's chip said "38 Pods" under an overall line counting 2 NotReady, 2
+   * Terminating and 34 Failed, and nothing said which of those the list
+   * named. Fails if the census's pods with no row of their own go unsaid
+   * beside it, or the failed Job pods are not pointed at their Jobs' rows.
+   */
+  it("says which of the overall line's pods the list does not name, and where they are counted", async () => {
+    await panel([
+      { reason: "NotReady", count: 2 },
+      { reason: "Terminating", count: 2 },
+      { reason: "Failed", count: 4 },
+    ]);
+
+    const line = screen.getByTestId("attention-unlisted");
+    expect(line).toHaveTextContent(
+      "Not listed on their own: 2 NotReady · 2 Terminating · 4 Failed, in their Jobs' rows"
+    );
+    expect(line).toHaveAttribute(
+      "title",
+      expect.stringContaining("names a pod when the pod itself is at fault")
+    );
+  });
+
+  /** Fails if a census every pod of which has its row, or serves, gains a line about pods left out. */
+  it("says nothing when every pod short of serving has its own row", async () => {
+    await panel([]);
+    expect(screen.queryByTestId("attention-unlisted")).toBeNull();
+  });
+});
+
 describe("the detail line on a problem row", () => {
   /** The row carries two unlike things. `said` is the cluster's own
    *  message and has to survive a language switch untouched; the rest are

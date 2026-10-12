@@ -1876,6 +1876,7 @@ export interface ClusterOverview {
   warningsKnown: boolean;
   namespaces: NamespaceLoad[];
   counts: ResourceCounts;
+  podsUnlisted: ReasonCount[];
   pods: Census<PodComposition> | null;
   jobs: Census<ReasonCount[]> | null;
   deployments: Census<RolloutCount[]> | null;

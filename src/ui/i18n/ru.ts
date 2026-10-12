@@ -4993,6 +4993,9 @@ export const ru: Catalogue = {
     },
     attentionMore: "и ещё {n}",
     attentionOverall: "в целом",
+    podsUnlisted: "Не названы отдельно: {list}",
+    podsUnlistedHint:
+      "«Требует внимания» называет под отдельно, когда неисправен он сам. Неготовый под засчитывается своей нагрузке или Service, упавшие поды упавшего Job считаются в строке этого Job, а удаляемый под уже уходит.",
     attentionPartly: "проверено не всё",
     claimPendingDetail:
       "К нему ещё не привязан том, поэтому под, который его монтирует, не запустится.",
@@ -8839,6 +8842,12 @@ export const ru: Catalogue = {
       other: "перезапуска",
     },
     podNoun: { one: "под", few: "пода", many: "подов", other: "пода" },
+    failedInJobRows: {
+      one: "{n} Failed, в строке своего Job",
+      few: "{n} Failed, в строках своих Job",
+      many: "{n} Failed, в строках своих Job",
+      other: "{n} Failed, в строках своих Job",
+    },
     worstFirst: "{n} · сначала худшие",
     worstFirstPartial: "{n}+ · сначала худшие · проверено не всё",
     moreMostSevere: "ещё {n}; показаны {shown} самых серьёзных",
