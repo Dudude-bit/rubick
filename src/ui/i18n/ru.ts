@@ -5170,6 +5170,7 @@ export const ru: Catalogue = {
     perfBytes: "байт",
     perfInBackend: "в бэкенде, p50 · max",
     perfNotTimed: "не замеряется",
+    perfAtStop: "при остановке",
     perfTasks: "Долгие задачи",
     perfRenders: "Рендер",
     perfNavigation: "Переход",
