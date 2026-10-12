@@ -1245,23 +1245,39 @@ fn failed_since(job: &Job) -> Option<String> {
         .map(|t| t.moment().to_rfc3339())
 }
 
-fn job_problems<'a>(jobs: impl IntoIterator<Item = &'a Job>) -> Vec<ClusterProblem> {
+fn job_problems<'a>(
+    jobs: impl IntoIterator<Item = &'a Job>,
+    owned: &HashMap<&str, Vec<&Pod>>,
+) -> Vec<ClusterProblem> {
     jobs.into_iter()
         .filter_map(|job| {
             let failure = job_state(job).failure()?;
+            let pods = job.metadata.uid.as_deref().and_then(|uid| owned.get(uid));
             Some(ClusterProblem {
                 severity: ProblemSeverity::Critical,
                 kind: "Job".to_string(),
                 name: job.metadata.name.clone().unwrap_or_default(),
                 namespace: job.metadata.namespace.clone(),
                 reason: failure.reason.unwrap_or_else(|| "Failed".to_string()),
-                detail: ProblemDetail::said(failure.message),
+                detail: workload_detail(pods.into_iter().flatten().copied(), failure.message),
                 since: failed_since(job),
                 restarts: None,
                 folded_pods: None,
             })
         })
         .collect()
+}
+
+/// A condition the kubelet raises on a Ready node that is short of something:
+/// it evicts pods and refuses new ones while it holds.
+fn node_pressure(node: &Node) -> Option<&k8s_openapi::api::core::v1::NodeCondition> {
+    node.status.as_ref()?.conditions.as_ref()?.iter().find(|c| {
+        c.status == "True"
+            && matches!(
+                c.type_.as_str(),
+                "MemoryPressure" | "DiskPressure" | "PIDPressure" | "NetworkUnavailable"
+            )
+    })
 }
 
 fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterProblem> {
@@ -1287,6 +1303,22 @@ fn node_problems<'a>(nodes: impl IntoIterator<Item = &'a Node>) -> Vec<ClusterPr
                     since: condition
                         .as_ref()
                         .and_then(|c| c.last_transition_time.as_ref())
+                        .map(|t| t.moment().to_rfc3339()),
+                    restarts: None,
+                    folded_pods: None,
+                });
+            }
+            if let Some(pressure) = node_pressure(n) {
+                return Some(ClusterProblem {
+                    severity: ProblemSeverity::Warning,
+                    kind: "Node".to_string(),
+                    name,
+                    namespace: None,
+                    reason: pressure.type_.clone(),
+                    detail: ProblemDetail::said(pressure.message.clone()),
+                    since: pressure
+                        .last_transition_time
+                        .as_ref()
                         .map(|t| t.moment().to_rfc3339()),
                     restarts: None,
                     folded_pods: None,
@@ -1998,7 +2030,7 @@ fn build_overview(input: &OverviewInputs<'_>) -> ClusterOverview {
         unconfirmed,
     ));
     let (unconfirmed, _) = rank_and_cap(said);
-    problems.extend(job_problems(refs(input.jobs)));
+    problems.extend(job_problems(refs(input.jobs), &owned));
     problems.extend(node_problems(refs(nodes)));
     let problems = fold_job_runs(problems, refs(input.scoped_pods));
     let pods_unlisted = unlisted_pods(refs(input.scoped_pods), &problems, input.now);
@@ -4306,6 +4338,37 @@ mod tests {
             Some(ProblemDetail::Said {
                 text: "The node was low on resource: memory".to_string()
             })
+        );
+    }
+
+    /// A Ready node under memory pressure evicts pods and takes no new
+    /// ones, and had no row. Fails if it gets none, or loses the kubelet's words.
+    #[test]
+    fn a_ready_node_under_pressure_needs_attention_in_the_kubelets_words() {
+        let mut pressed = unschedulable_node("worker-2");
+        pressed.spec = None;
+        pressed
+            .status
+            .as_mut()
+            .unwrap()
+            .conditions
+            .as_mut()
+            .unwrap()
+            .push(k8s_openapi::api::core::v1::NodeCondition {
+                type_: "MemoryPressure".to_string(),
+                status: "True".to_string(),
+                message: Some("kubelet has insufficient memory available".to_string()),
+                ..Default::default()
+            });
+        let rows = node_problems(&[pressed]);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].reason, "MemoryPressure");
+        assert_eq!(rows[0].severity, ProblemSeverity::Warning);
+        assert_eq!(
+            rows[0].detail,
+            ProblemDetail::said(Some(
+                "kubelet has insufficient memory available".to_string()
+            ))
         );
     }
 
