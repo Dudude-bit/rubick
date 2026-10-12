@@ -81,4 +81,29 @@ describe("PodStatusBadge", () => {
       "text-err"
     );
   });
+
+  /**
+   * Dana's recommendations pods, turned away by the kubelet at admission,
+   * said on hover that the node removed them for memory or disk: an
+   * eviction's words about pods that never ran. Fails if such a pod's hover
+   * loses the kubelet's own words or keeps the eviction's.
+   */
+  it("says on hover what the kubelet said when it turned a pod away", () => {
+    const said = "Pod was rejected: The node had condition: [DiskPressure].";
+    render(
+      <PodStatusBadge
+        pod={{
+          status: { display: "Evicted", phase: "Failed", rejected: said },
+          containers: [],
+          initContainers: [],
+        }}
+        silence={null}
+      />
+    );
+    const title =
+      screen.getByText("Evicted").closest("[title]")?.getAttribute("title") ??
+      "";
+    expect(title).toContain(`never ran. It said: ${said}`);
+    expect(title).not.toContain("ran short of memory or disk");
+  });
 });

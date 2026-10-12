@@ -7083,6 +7083,8 @@ export const en = {
       "the pod was deleted and is shutting down; it goes away once its containers have stopped and the kubelet has said so. Its logs stay readable until then.",
     evicted:
       "the node removed this pod, usually because it ran short of memory or disk.",
+    rejectedOnArrival:
+      "the kubelet turned this pod away when it arrived on the node, so it never ran. It said: {said}",
     nodeLost: "the node this pod runs on stopped answering.",
     schedulingGated:
       "the pod is held back from scheduling until its scheduling gates are removed.",

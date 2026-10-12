@@ -2085,6 +2085,7 @@ export interface PodRowStatus {
   loopingUntil?: string;
   exitUnreported: boolean;
   restartingUntil?: string;
+  rejected?: string;
 }
 
 export interface FileEntry {
@@ -2241,6 +2242,7 @@ export interface PodStatusInfo {
   loopingUntil?: string;
   exitUnreported: boolean;
   restartingUntil?: string;
+  rejected?: string;
 }
 
 export interface DeploymentPods {

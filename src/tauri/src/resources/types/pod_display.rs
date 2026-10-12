@@ -526,19 +526,7 @@ pub fn failed_at(pod: &Pod) -> Option<DateTime<Utc>> {
         .map(Moment::moment)
         .max();
     let started = status.start_time.as_ref().map(Moment::moment);
-    let never_ran = !statuses().any(|cs| {
-        cs.started == Some(true)
-            || cs
-                .last_state
-                .as_ref()
-                .is_some_and(|s| s.terminated.is_some())
-            || cs.state.as_ref().is_some_and(|s| {
-                s.running.is_some()
-                    || s.terminated
-                        .as_ref()
-                        .is_some_and(|t| t.started_at.is_some())
-            })
-    });
+    let never_ran = never_ran(status);
     let deadline = pod
         .spec
         .as_ref()
@@ -551,6 +539,52 @@ pub fn failed_at(pod: &Pod) -> Option<DateTime<Utc>> {
         .or(deadline)
         .or_else(|| started.filter(|_| never_ran))
         .or_else(|| changed("Ready", "False"))
+}
+
+/// Whether no container of the pod, init or app, has ever been started.
+fn never_ran(status: &PodStatus) -> bool {
+    !status
+        .init_container_statuses
+        .iter()
+        .chain(status.container_statuses.iter())
+        .flatten()
+        .any(|cs| {
+            cs.started == Some(true)
+                || cs
+                    .last_state
+                    .as_ref()
+                    .is_some_and(|s| s.terminated.is_some())
+                || cs.state.as_ref().is_some_and(|s| {
+                    s.running.is_some()
+                        || s.terminated
+                            .as_ref()
+                            .is_some_and(|t| t.started_at.is_some())
+                })
+        })
+}
+
+/// What the kubelet said when it turned a pod away on arrival, before
+/// starting anything: failed, nothing ever ran, and neither a disruption
+/// nor a deadline named. An evicted pod ran first; this one never did, and
+/// `Pod was rejected: The node had condition: [DiskPressure]` is the only
+/// account of why.
+#[must_use]
+pub fn rejected_at_admission(pod: &Pod) -> Option<String> {
+    let status = pod.status.as_ref()?;
+    if status.phase.as_deref() != Some("Failed")
+        || status.reason.as_deref() == Some("DeadlineExceeded")
+    {
+        return None;
+    }
+    let disrupted = status
+        .conditions
+        .iter()
+        .flatten()
+        .any(|c| c.type_ == "DisruptionTarget" && c.status == "True");
+    if disrupted || !never_ran(status) {
+        return None;
+    }
+    status.message.clone().filter(|message| !message.is_empty())
 }
 
 /// When a stuck pod's reason began, as the cluster recorded it: the end of
@@ -874,6 +908,37 @@ mod tests {
         assert_eq!(failed_at(&late), Some(at(12).moment()));
 
         assert_eq!(failed_at(&pod("Running")), None);
+    }
+
+    /// Dana's admission-rejected pods said, on hover, that the node removed
+    /// them for memory or disk: the words of an eviction, about pods that
+    /// never ran. Fails if a pod the kubelet turned away loses the kubelet's
+    /// own words, or a pod that ran or was disrupted is taken for one.
+    #[test]
+    fn a_pod_turned_away_on_arrival_carries_the_kubelets_words() {
+        let said = "Pod was rejected: The node had condition: [DiskPressure].";
+        let mut rejected = pod("Failed");
+        let s = rejected.status.as_mut().unwrap();
+        s.reason = Some("Evicted".to_string());
+        s.message = Some(said.to_string());
+        s.container_statuses = Some(vec![status("app", waiting("ContainerCreating"), false)]);
+        assert_eq!(rejected_at_admission(&rejected).as_deref(), Some(said));
+
+        let mut ran = rejected.clone();
+        let mut exited = status("app", terminated(137, Some("Error")), false);
+        exited.started = Some(true);
+        ran.status.as_mut().unwrap().container_statuses = Some(vec![exited]);
+        assert_eq!(rejected_at_admission(&ran), None);
+
+        let mut evicted = rejected.clone();
+        evicted.status.as_mut().unwrap().conditions = Some(vec![PodCondition {
+            type_: "DisruptionTarget".to_string(),
+            status: "True".to_string(),
+            ..Default::default()
+        }]);
+        assert_eq!(rejected_at_admission(&evicted), None);
+
+        assert_eq!(rejected_at_admission(&pod("Running")), None);
     }
 
     /// An init container's wait is dated by when initialisation stopped, an

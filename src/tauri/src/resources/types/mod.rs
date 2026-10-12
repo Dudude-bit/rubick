@@ -31,8 +31,8 @@ pub use pod::{
 };
 pub use pod_display::{
     backing_off, condition_is_true, counts_ready, crash_looping, exit_unreported, failed_at,
-    looping_until, pending_grace, pending_since, restarting_until, restarts, restarts_by,
-    stuck_reason, stuck_since, within_pending_grace, CRASH_LOOP_WINDOW_SECONDS,
+    looping_until, pending_grace, pending_since, rejected_at_admission, restarting_until, restarts,
+    restarts_by, stuck_reason, stuck_since, within_pending_grace, CRASH_LOOP_WINDOW_SECONDS,
     PENDING_GRACE_SECONDS, START_GRACE_SECONDS,
 };
 pub use pod_row::{PodRow, PodRowStatus, PodWorkload, RowContainer};
