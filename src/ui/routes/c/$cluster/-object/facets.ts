@@ -1,3 +1,5 @@
+import { createElement } from "react";
+
 import {
   isMachineDocument,
   type KeyValue,
@@ -14,6 +16,8 @@ import {
   type PeekSummary,
 } from "../-peek/peek-sources-kit";
 
+import { ScaleTargetRef } from "./AutoscalerScales";
+import { scaleTargetOf } from "./scale-target";
 import {
   rbacKindOf,
   roleRefOf,
@@ -317,6 +321,24 @@ function readStatus(fields: Json, rows: KeyValue[], t: T): KeyValue[] {
   );
 }
 
+/** An autoscaler's `scaleTargetRef` reads as the object it names, linked, not as three dotted rows. */
+function readSpec(fields: Json, rows: KeyValue[]): KeyValue[] {
+  const target =
+    fields.kind === "HorizontalPodAutoscaler" ? scaleTargetOf(fields) : null;
+  if (!target) return rows;
+  const namespace = asText(record(fields.metadata).namespace) ?? null;
+  const inRef = (row: KeyValue) =>
+    typeof row.label === "string" && row.label.startsWith("scaleTargetRef.");
+  const at = rows.findIndex(inRef);
+  if (at === -1) return rows;
+  const folded = rows.filter((row) => !inRef(row));
+  folded.splice(at, 0, {
+    label: "scaleTargetRef",
+    value: createElement(ScaleTargetRef, { target, namespace }),
+  });
+  return folded;
+}
+
 /**
  * What any object says about itself, read without knowing its kind: its
  * status and spec as dotted rows, every other field it carries, who writes
@@ -342,7 +364,7 @@ export function objectFacets(
     Object.entries(map).sort(([a], [b]) => a.localeCompare(b));
 
   const status = readStatus(fields, capped(fields.status, t), t);
-  const spec = capped(fields.spec, t);
+  const spec = readSpec(fields, capped(fields.spec, t));
   const payload = payloadGroups(fields, t);
   const enveloped = payload.length === 0 || spec.length > 0;
   const statusDrawn = status.length > 0 || (enveloped && hasStatus !== false);

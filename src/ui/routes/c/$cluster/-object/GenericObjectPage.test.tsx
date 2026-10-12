@@ -299,3 +299,71 @@ describe("the events of an object no screen draws", () => {
     );
   });
 });
+
+describe("an autoscaler's page", () => {
+  const HPAS: CatalogEntry = {
+    group: "autoscaling",
+    version: "v2",
+    kind: "HorizontalPodAutoscaler",
+    plural: "horizontalpodautoscalers",
+    namespaced: true,
+    verbs: ["get", "list"],
+    shortNames: ["hpa"],
+  };
+  const hpa = {
+    apiVersion: "autoscaling/v2",
+    kind: "HorizontalPodAutoscaler",
+    metadata: { name: "hello-web", namespace: "lena-sandbox" },
+    spec: {
+      minReplicas: 1,
+      maxReplicas: 2,
+      scaleTargetRef: {
+        apiVersion: "apps/v1",
+        kind: "Deployment",
+        name: "hello-web",
+      },
+    },
+  };
+  const page = (at: string) =>
+    renderWithRouter(
+      <GenericObjectPage
+        resource="horizontalpodautoscalers"
+        namespace="lena-sandbox"
+        name="hello-web"
+      />,
+      { at }
+    );
+
+  beforeEach(() => {
+    answers.catalog = () => Promise.resolve({ entries: [HPAS], unread: [] });
+    answers.object = () => Promise.resolve(hpa);
+    answers.yaml = () => Promise.resolve("kind: HorizontalPodAutoscaler\n");
+  });
+
+  /**
+   * Lena's HPA page had no Connections tab and no Share while its peek named
+   * what it scales. Fails if the page drops the tab, its link or its bounds,
+   * or the actions bar.
+   */
+  it("names what it scales on Connections, as its peek does, and can be shared", async () => {
+    await page(
+      "/c/test/horizontalpodautoscalers/lena-sandbox/hello-web?tab=connections"
+    );
+    expect(await screen.findByText("Scales")).toBeInTheDocument();
+    expect(
+      screen.getByRole("link", { name: "Deployment hello-web" })
+    ).toHaveAttribute("href", "/c/test/deployments/lena-sandbox/hello-web");
+    expect(screen.getByText(/1 to 2 replicas/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Share/ })).toBeEnabled();
+  });
+
+  /** The Overview drew scaleTargetRef as three unlinked rows; fails if they come back. */
+  it("links the scale target on its Overview", async () => {
+    await page("/c/test/horizontalpodautoscalers/lena-sandbox/hello-web");
+    expect(await screen.findByText("scaleTargetRef")).toBeInTheDocument();
+    expect(screen.queryByText("scaleTargetRef.kind")).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "Deployment hello-web" })
+    ).toHaveAttribute("href", "/c/test/deployments/lena-sandbox/hello-web");
+  });
+});

@@ -1,5 +1,6 @@
 import { useRouter } from "@tanstack/react-router";
-import { Info, Network } from "lucide-react";
+import { Info, Link2, Network } from "lucide-react";
+import { useMemo } from "react";
 
 import { EmptyPage } from "../../../-components/NotFound";
 import { KeyValueSection } from "./detail-kv";
@@ -14,6 +15,8 @@ import { useObjectEvents } from "@/hooks/useObjectEvents";
 import { readTarget, servedOf, useServed, type Served } from "./served";
 import { WordTable } from "./WordTable";
 import { AccessPanel } from "./AccessPanel";
+import { AutoscalerScales } from "./AutoscalerScales";
+import { ShareObjectAction } from "@/components/share/ShareAction";
 import { accessSegment, listTitleOf } from "@/lib/access-kinds";
 import { Section, SectionHeader } from "@/components/ui/section";
 import { DetailTabs } from "@/components/object/DetailTabs";
@@ -29,7 +32,7 @@ import { errorCode, errorToShow } from "@/lib/error-utils";
 import { resourceListLink } from "@/lib/links";
 import { queryKeys } from "@/lib/query-keys";
 import { STALE_TIMES } from "@/lib/refresh";
-import { isResourceType, toKind } from "@/lib/resource-registry";
+import { isResourceType, ResourceType, toKind } from "@/lib/resource-registry";
 import { useClusterStore } from "@/stores/clusterStore";
 
 /**
@@ -162,8 +165,32 @@ export function GenericObjectPage({
       <DetailSkeleton />
     ),
   };
+  // An autoscaler's peek names what it scales on Connections; its page says the same.
+  const connections: DetailTab[] =
+    kind === ResourceType.HorizontalPodAutoscaler &&
+    target.group === "autoscaling"
+      ? [
+          {
+            id: "connections",
+            label: t("columns", "connections"),
+            glyph: viewGlyph(Link2),
+            content: (
+              <AutoscalerScales
+                object={object.data}
+                namespace={namespace ?? null}
+                isLoading={object.isLoading}
+              />
+            ),
+          },
+        ]
+      : [];
+  const subject = useMemo(
+    () => (object.data ? { kind, name, namespace: namespace ?? null } : null),
+    [object.data, kind, name, namespace]
+  );
   const tabs: DetailTab[] = [
     overview,
+    ...connections,
     ...(uid
       ? [
           {
@@ -223,6 +250,9 @@ export function GenericObjectPage({
             setSearch({ tab: tab === "overview" ? undefined : tab })
           }
           subject={`${resource}/${namespace ?? ""}/${name}`}
+          actions={
+            <ShareObjectAction subject={subject} resource={object.data} />
+          }
         />
       )}
     </div>
