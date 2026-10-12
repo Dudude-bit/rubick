@@ -205,6 +205,9 @@ const ESTIMATED_ROW_PX = { compact: 23, comfortable: 33 } as const;
 /** How many rows either side of the viewport stay mounted. */
 const OVERSCAN = 12;
 
+/** Longer than any platform's double-click interval, so a first click from earlier never stands in for this one's. */
+const DOUBLE_CLICK_MS = 1500;
+
 /** Read off the table's attribute, so a density switch restyles rows instead of drawing them. */
 const CELL_PADDING = "px-2.5 py-2 group-data-[density=compact]/table:py-[3px]";
 
@@ -1297,10 +1300,33 @@ function DataTableInner<TData extends RowData>({
   );
 
   const rowEvents = React.useRef<RowEvents<TData> | null>(null);
+  // A double click acts where its first click landed: that click can open a
+  // peek that reflows the rows, and the second one then hits the row above.
+  const firstClick = React.useRef<{
+    row: TData;
+    target: HTMLElement;
+    at: number;
+  } | null>(null);
   React.useLayoutEffect(() => {
     rowEvents.current = {
-      gesture: handleRowGesture,
-      openPage: (row, event) => {
+      gesture: (row, event) => {
+        if (event.detail > 1) return;
+        firstClick.current = {
+          row,
+          target: event.target as HTMLElement,
+          at: event.timeStamp,
+        };
+        handleRowGesture(row, event);
+      },
+      openPage: (pointed, event) => {
+        const first =
+          firstClick.current &&
+          event.timeStamp - firstClick.current.at < DOUBLE_CLICK_MS
+            ? firstClick.current
+            : null;
+        firstClick.current = null;
+        const row = first?.row ?? pointed;
+        const target = first?.target ?? (event.target as HTMLElement);
         const href = getRowHref?.(row);
         if (!href || !peekOfRow(row, getRowHref, getRowPeek)) return;
         // The same places a single click keeps its hands off, so the two
@@ -1309,7 +1335,7 @@ function DataTableInner<TData extends RowData>({
         // its owner) keeps the double click; the row's own name is where the
         // eye goes when told "double click the row", so it must not be the
         // one spot where nothing happens.
-        const control = controlAt(event.target as HTMLElement);
+        const control = controlAt(target);
         if (
           control &&
           !(control.tagName === "A" && control.getAttribute("href") === href)

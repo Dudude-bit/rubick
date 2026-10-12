@@ -379,6 +379,23 @@ describe("DataTable rows", () => {
   });
 
   /**
+   * Dana double clicked unready-demo and topology-demo's page opened: the
+   * peek her first click opened moved the rows down, and the second click
+   * landed on the row above. Fails if the second click of a double opens a
+   * peek of its own, or the double click opens any row but the first's.
+   */
+  it("opens the page of the row the first click of a double hit, wherever the second lands", async () => {
+    await renderTable();
+    fireEvent.click(screen.getByTestId("status-b-2"), { detail: 1 });
+    await goesTo("/c/prod/pods?peek=pods%2Fns%2Fb-2");
+    const above = whitespace();
+    fireEvent.click(above, { detail: 2 });
+    await staysAt("/c/prod/pods?peek=pods%2Fns%2Fb-2");
+    fireEvent.doubleClick(above, { detail: 2 });
+    await goesTo("/c/prod/pods/ns/b-2");
+  });
+
+  /**
    * Sam clicked the row body in Ingresses and Services and nothing opened:
    * most of their cells ("1 path", the hosts, the status verdict) are
    * tooltip triggers, which are buttons, and the row left every button

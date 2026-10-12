@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { DataFreshness } from "@/components/ui/realtime";
 import { SectionHeader } from "@/components/ui/section";
+import { HeldLines } from "./HeldLines";
 
 interface ResourceListHeaderProps {
   title: string;
@@ -43,7 +44,7 @@ export function ResourceListHeader({
     <SectionHeader
       title={title}
       count={count}
-      description={description}
+      description={description && <HeldLines>{description}</HeldLines>}
       actions={
         <>
           {/* First: the room it keeps for its longest reading falls left of the actions. */}
