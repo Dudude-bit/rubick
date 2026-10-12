@@ -860,11 +860,11 @@ const STATE_RANK: Record<StoryState, number> = {
 export const subjectKey = (subject: Subject): string =>
   `${subject.namespace ?? ""}/${subject.kind ?? ""}/${subject.name}`;
 
-/** Whether a story's warnings may have stopped because its object is gone, which only reading it can say. */
+/** Whether a story's object may have been deleted, its warnings still recent or not, which only reading it can say. */
 export const mayBeGone = (story: Story): boolean =>
   story.subject.kind !== null &&
   !story.subject.earlier &&
-  story.state === "settled";
+  story.state !== "done";
 
 /** The stories whose object was read as deleted, as ended with it; the rest as they were. */
 export function withGone(stories: Story[], gone: ReadonlySet<string>): Story[] {

@@ -483,7 +483,7 @@ export function Events() {
     () => (view === "stories" ? storiesOf(matching, storyOptions) : []),
     [view, matching, storyOptions]
   );
-  const gone = useGoneSubjects(folded);
+  const gone = useGoneSubjects(folded, now);
   const stories = useMemo(
     () => sortStories(withGone(folded, gone), order),
     [folded, gone, order]
