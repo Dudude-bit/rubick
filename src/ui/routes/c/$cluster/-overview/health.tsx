@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useLayoutEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   CircleSlash,
@@ -539,6 +539,44 @@ function notRunning(pods: PodComposition, t: T): string[] {
     );
 }
 
+/**
+ * The overall line's room: the most it has taken at this width, two lines at
+ * least. It wraps and unwraps as a job's pod starts and settles, and the page
+ * above or below it jumped 15 px every few seconds.
+ */
+function useHeldRoom() {
+  const box = useRef<HTMLSpanElement>(null);
+  const content = useRef<HTMLSpanElement>(null);
+  const [room, setRoom] = useState<number | undefined>(undefined);
+  useLayoutEffect(() => {
+    const outer = box.current;
+    const inner = content.current;
+    if (!outer || !inner) return;
+    let width = -1;
+    let most = 0;
+    const measure = () => {
+      if (outer.clientWidth !== width) {
+        width = outer.clientWidth;
+        most = 0;
+      }
+      const line = parseFloat(getComputedStyle(outer).lineHeight);
+      most = Math.max(
+        most,
+        inner.offsetHeight,
+        Number.isFinite(line) ? 2 * line : 0
+      );
+      setRoom(most > 0 ? most : undefined);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(outer);
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, []);
+  return [box, content, room] as const;
+}
+
 export function AttentionPanel({
   attention,
   pods,
@@ -585,6 +623,7 @@ export function AttentionPanel({
       of: t("count", "ofNodes", { n: nodes.length }),
     });
   const summaryRole: StatusRole = worst ?? (complete ? "ok" : "neutral");
+  const [overallBox, overallContent, overallRoom] = useHeldRoom();
 
   return (
     <Section>
@@ -644,81 +683,85 @@ export function AttentionPanel({
               between them; the words that change what the counts mean come
               after and are never cut either. */}
           <span
+            ref={overallBox}
             className="col-span-4 min-w-0 text-fg-fnt"
+            style={{ minHeight: overallRoom }}
             data-testid="attention-overall"
           >
-            {pods && (
-              <span className="whitespace-nowrap">
-                {t("count", "podsReady", {
-                  n: formatCount(pods.read.ready),
-                  of: t("count", "ofPods", { n: podTotal(pods.read) }),
-                })}
-                {between > 0 && ","}
-              </span>
-            )}
-            {between > 0 && (
-              <>
-                {" "}
+            <span ref={overallContent} className="block">
+              {pods && (
                 <span className="whitespace-nowrap">
-                  {t("count", "readyBetweenCrashes", { n: between })}
-                </span>
-              </>
-            )}
-            {down.length > 0 && (
-              <span data-testid="attention-overall-details">
-                {down.map((segment, index) => (
-                  <Fragment key={index}>
-                    {" "}
-                    <span className="whitespace-nowrap">
-                      {index === 0 && "("}
-                      {segment}
-                      {index === down.length - 1 ? ")" : ","}
-                    </span>
-                  </Fragment>
-                ))}
-              </span>
-            )}
-            {nodesLine && (
-              <>
-                {pods && " "}
-                <span className="whitespace-nowrap">
-                  {pods && "·\u00a0"}
-                  {nodesLine}
-                </span>
-              </>
-            )}
-            {pods && podsUnlisted.length > 0 && (
-              <span
-                className="mt-0.5 flex items-center gap-1"
-                data-testid="attention-unlisted"
-                title={t("cluster", "podsUnlistedHint")}
-              >
-                <Info className="h-2.5 w-2.5 flex-none" aria-hidden="true" />
-                <span>
-                  {t("cluster", "podsUnlisted", {
-                    list: podsUnlisted
-                      .map(({ reason, count }) =>
-                        reason === "Failed"
-                          ? t("count", "failedInJobRows", { n: count })
-                          : `${count} ${reason}`
-                      )
-                      .join(" · "),
+                  {t("count", "podsReady", {
+                    n: formatCount(pods.read.ready),
+                    of: t("count", "ofPods", { n: podTotal(pods.read) }),
                   })}
+                  {between > 0 && ","}
                 </span>
-              </span>
-            )}
-            {(!pods || podsUnread.length > 0) && (
-              <>
-                {(pods || nodesLine) && " "}
-                <UnreadMark unread={podsUnread}>
-                  <Prose
-                    text={t("cluster", "podsNotCounted", {
-                      where: unreadWhere(podsUnread, t),
+              )}
+              {between > 0 && (
+                <>
+                  {" "}
+                  <span className="whitespace-nowrap">
+                    {t("count", "readyBetweenCrashes", { n: between })}
+                  </span>
+                </>
+              )}
+              {down.length > 0 && (
+                <span data-testid="attention-overall-details">
+                  {down.map((segment, index) => (
+                    <Fragment key={index}>
+                      {" "}
+                      <span className="whitespace-nowrap">
+                        {index === 0 && "("}
+                        {segment}
+                        {index === down.length - 1 ? ")" : ","}
+                      </span>
+                    </Fragment>
+                  ))}
+                </span>
+              )}
+              {nodesLine && (
+                <>
+                  {pods && " "}
+                  <span className="whitespace-nowrap">
+                    {pods && "·\u00a0"}
+                    {nodesLine}
+                  </span>
+                </>
+              )}
+              {pods && podsUnlisted.length > 0 && (
+                <span
+                  className="mt-0.5 flex items-center gap-1"
+                  data-testid="attention-unlisted"
+                  title={t("cluster", "podsUnlistedHint")}
+                >
+                  <Info className="h-2.5 w-2.5 flex-none" aria-hidden="true" />
+                  <span>
+                    {t("cluster", "podsUnlisted", {
+                      list: podsUnlisted
+                        .map(({ reason, count }) =>
+                          reason === "Failed"
+                            ? t("count", "failedInJobRows", { n: count })
+                            : `${count} ${reason}`
+                        )
+                        .join(" · "),
                     })}
-                  />
-                </UnreadMark>
-              </>
-            )}
+                  </span>
+                </span>
+              )}
+              {(!pods || podsUnread.length > 0) && (
+                <>
+                  {(pods || nodesLine) && " "}
+                  <UnreadMark unread={podsUnread}>
+                    <Prose
+                      text={t("cluster", "podsNotCounted", {
+                        where: unreadWhere(podsUnread, t),
+                      })}
+                    />
+                  </UnreadMark>
+                </>
+              )}
+            </span>
           </span>
         </div>
         {unchecked.length + attention.unconfirmed.length > 0 && (
