@@ -3077,6 +3077,8 @@ export const en = {
       "{changes} {when}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
     storyPods:
       "Pods {when}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
+    storyPod:
+      "The pod {when}: {scheduled} scheduled, {pulled} pulled, {started} started, {stopped} stopped.",
     changesRollouts: { one: "{n} rollout", other: "{n} rollouts" },
     changesScales: { one: "{n} scale", other: "{n} scales" },
     changesBoth: "{rollouts} and {scales}",

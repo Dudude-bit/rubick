@@ -947,7 +947,28 @@ describe("what a Deployment's story says it did", () => {
       ),
       { now: NOW, windowMs: HOUR, narrowed: false }
     );
-    expect(story.says.key).toBe("storyPods");
-    expect(sayWords(story.says, en)).toMatch(/^Pods within /);
+    expect(story.says.key).toBe("storyPod");
+    expect(sayWords(story.says, en)).toMatch(/^The pod within /);
+  });
+
+  /** Lena read «Поды за 1 минуту» on Pod/wd-demo's own story; fails if one pod is told about as several, or several as one. */
+  it("tells one pod's story in the singular and a group's in the plural", () => {
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    const [one] = storiesOf(
+      ["Scheduled", "Started"].map((reason) =>
+        event({ kind: "Pod", name: "wd-demo", reason })
+      ),
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(sayWords(one.says, ru)).toMatch(/^Под за /);
+    const [group] = storiesOf(
+      ["hello-web-5966d9b889-7nvr5", "hello-web-5966d9b889-x2k4p"].map((name) =>
+        event({ kind: "Pod", name, reason: "Started" })
+      ),
+      { now: NOW, windowMs: HOUR, narrowed: false }
+    );
+    expect(group.members).toHaveLength(2);
+    expect(sayWords(group.says, ru)).toMatch(/^Поды за /);
   });
 });

@@ -546,7 +546,8 @@ function sentenceOf(
   events: EventInfo[],
   warnings: EventInfo[],
   reasons: ReasonCount[],
-  since: number
+  since: number,
+  onePod: boolean
 ): Saying {
   if (warnings.length === 0) {
     const when = whenOf(events, since);
@@ -562,7 +563,7 @@ function sentenceOf(
         const changes = changesSaid(rolloutsAndScales(events));
         return changes
           ? { key: "storyChanged", values: { ...pods, changes } }
-          : { key: "storyPods", values: pods };
+          : { key: onePod ? "storyPod" : "storyPods", values: pods };
       }
       case "job":
         return {
@@ -827,7 +828,14 @@ export function storiesOf(events: EventInfo[], options: StoryOptions): Story[] {
       // the whole group: "12 times within 1 hour" for a pull that began four
       // minutes ago, because a scheduling failure an hour earlier is in the
       // same story.
-      says: sentenceOf(activity, sorted, ofActivity, reasons, since),
+      says: sentenceOf(
+        activity,
+        sorted,
+        ofActivity,
+        reasons,
+        since,
+        members.length === 1 && members[0].startsWith("Pod/")
+      ),
     });
   }
   return stories;
