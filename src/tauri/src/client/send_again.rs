@@ -68,7 +68,7 @@ impl<B> Policy<Request<Body>, Response<B>, BoxError> for SendAgain {
 }
 
 /// An upgrade (exec, attach, port-forward) starts something, so it is never sent twice.
-fn is_read(request: &Request<Body>) -> bool {
+pub(super) fn is_read(request: &Request<Body>) -> bool {
     matches!(*request.method(), Method::GET | Method::HEAD)
         && !request.headers().contains_key(UPGRADE)
 }

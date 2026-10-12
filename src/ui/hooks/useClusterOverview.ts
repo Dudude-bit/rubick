@@ -14,7 +14,11 @@ import { useLiveQuery } from "@/hooks/useLiveQuery";
 import { readSoon } from "@/hooks/useResourceWatch";
 import { useWatchedList } from "@/hooks/useWatchedList";
 import { useClusterStore } from "@/stores/clusterStore";
-import type { ClusterOverview, DeploymentInfo } from "@/generated/types";
+import type {
+  ClusterOverview,
+  DeploymentInfo,
+  ResourceCounts,
+} from "@/generated/types";
 
 /**
  * Whether this connection was refused the whole cluster's overview. A
@@ -92,11 +96,44 @@ export function useScopedOverview() {
 }
 
 /**
+ * The count each of the overview's stores holds, by the kind it watches, as
+ * `src/contracts/overview-watches.json` lists them: live while the overview is
+ * followed. The Warning events are not the events count, which is counted.
+ */
+export const WATCHED_COUNTS = {
+  Pod: "pods",
+  Node: "nodes",
+  Deployment: "deployments",
+  StatefulSet: "statefulSets",
+  DaemonSet: "daemonSets",
+  Job: "jobs",
+  Event: null,
+} as const satisfies Record<string, keyof ResourceCounts | null>;
+
+/** Whether `overview` is read again on its stores' changes: served from them, and seen. */
+export function useOverviewFollowed(
+  overview: ClusterOverview | undefined
+): boolean {
+  return useOverviewSeen() && overview?.servedFrom === "watch";
+}
+
+function useOverviewSeen(): boolean {
+  const context = useClusterStore((s) => s.currentContext);
+  const surface = useSurfaceVisible();
+  const shown = useWindowActivity((s) => s.visible);
+  return surface && shown && !!context;
+}
+
+/**
  * Whether the overview on screen is read again within a second of a change
  * the backend's watch-fed stores took in its scope, rather than on the
  * ten-second poll alone: Sam's read "41 of 62 pods ready" six seconds after
  * kubectl was back at 40. Only while it is served from those stores, the one
  * read cheap enough to repeat that often, and only while it is seen.
+ *
+ * Called once, by the shell, so the sidebar and status bar counts follow on
+ * every page and not only on the Overview: Sam's sidebar kept "Deployments 7"
+ * for 9 s after the Deployment's page said it was gone.
  */
 export function useFollowedOverview(
   overview: ClusterOverview | undefined
@@ -104,14 +141,10 @@ export function useFollowedOverview(
   const client = useQueryClient();
   const context = useClusterStore((s) => s.currentContext);
   const scope = useClusterStore((s) => s.namespaceScope);
-  const surface = useSurfaceVisible();
-  const shown = useWindowActivity((s) => s.visible);
-  const following =
-    surface && shown && !!context && overview?.servedFrom === "watch";
+  const seen = useOverviewSeen();
+  const following = useOverviewFollowed(overview);
   useDeploymentsFollowed(
-    surface && shown && !!context && overview?.servedFrom === "list"
-      ? overview
-      : undefined
+    seen && overview?.servedFrom === "list" ? overview : undefined
   );
   useEffect(() => {
     if (!following) return;

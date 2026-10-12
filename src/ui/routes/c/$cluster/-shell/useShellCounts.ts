@@ -1,9 +1,13 @@
 import { useEffect } from "react";
 import { create } from "zustand";
 
-import type { ClusterOverview } from "@/generated/types";
+import type { ClusterOverview, ResourceCounts } from "@/generated/types";
 import { useAttention } from "@/hooks/useAttention";
-import { useScopedOverview } from "@/hooks/useClusterOverview";
+import {
+  useOverviewFollowed,
+  useScopedOverview,
+  WATCHED_COUNTS,
+} from "@/hooks/useClusterOverview";
 import type { Attention } from "@/lib/attention";
 import { scopeCacheKey } from "@/lib/namespace-scope";
 import { EVERY_NAMESPACE } from "@/lib/query-keys";
@@ -15,6 +19,14 @@ export interface ShellCounts {
   attention: Attention | null;
   /** When the counts on screen were read, if that was before the window turned to this cluster. */
   heldAt: number | null;
+  /** When the answer on screen landed, or `null` with none. */
+  readAt: number | null;
+  /** How often the counts no watch follows are read again, `false` while that is paused. */
+  everyMs: number | false;
+  /** The counts the overview's watched stores hold, read again on each change they take. */
+  followed: ReadonlySet<keyof ResourceCounts>;
+  /** A re-read of the counts on screen has waited past the slow-read grace. */
+  late: boolean;
 }
 
 interface Held {
@@ -24,6 +36,11 @@ interface Held {
 }
 
 const useHeld = create<Record<string, Held>>(() => ({}));
+
+const NONE: ReadonlySet<keyof ResourceCounts> = new Set();
+const WATCHED: ReadonlySet<keyof ResourceCounts> = new Set(
+  Object.values(WATCHED_COUNTS).filter((count) => count !== null)
+);
 
 /**
  * The counts the sidebar and the status bar draw for the window's scope.
@@ -36,6 +53,7 @@ export function useShellCounts(): ShellCounts {
   const turnedAt = useClusterStore((s) => s.turnedAt);
   const scope = useClusterStore((s) => s.namespaceScope);
   const scoped = useScopedOverview();
+  const followed = useOverviewFollowed(scoped.data) ? WATCHED : NONE;
   const attention = useAttention();
   const key = `${context}\n${scopeCacheKey(scope) ?? EVERY_NAMESPACE}`;
   const answered =
@@ -44,6 +62,7 @@ export function useShellCounts(): ShellCounts {
       : undefined;
   const at = scoped.dataUpdatedAt;
   const fresh = isConnected && answered !== undefined && at >= turnedAt;
+  const { everyMs, slowRead } = scoped.freshness;
 
   useEffect(() => {
     if (!fresh || !answered || !attention) return;
@@ -53,7 +72,16 @@ export function useShellCounts(): ShellCounts {
   }, [key, fresh, answered, attention, at]);
 
   const stored = useHeld((s) => s[key]);
-  if (fresh) return { overview: answered, attention, heldAt: null };
+  if (fresh)
+    return {
+      overview: answered,
+      attention,
+      heldAt: null,
+      readAt: at,
+      everyMs,
+      followed,
+      late: slowRead,
+    };
   const held =
     answered && attention && (!stored || at > stored.at)
       ? { overview: answered, attention, at }
@@ -64,10 +92,19 @@ export function useShellCounts(): ShellCounts {
       overview: held.overview,
       attention: held.attention,
       heldAt: held.at,
+      readAt: held.at,
+      everyMs,
+      followed: NONE,
+      late: false,
     };
+  const shown = isConnected ? scoped.data : undefined;
   return {
-    overview: isConnected ? scoped.data : undefined,
+    overview: shown,
     attention: isConnected && !scoped.isPlaceholderData ? attention : null,
     heldAt: null,
+    readAt: shown && at > 0 ? at : null,
+    everyMs,
+    followed: scoped.isPlaceholderData ? NONE : followed,
+    late: shown !== undefined && slowRead,
   };
 }

@@ -19,7 +19,7 @@ import { useRenewal } from "@/hooks/useCredentialRenewal";
 import type { OverviewUnread, Renewal } from "@/generated/types";
 import { scopeLabel } from "@/lib/namespace-scope";
 import { formatShortcut } from "@/lib/platform";
-import { cn } from "@/lib/utils";
+import { cn, formatWhen } from "@/lib/utils";
 import { useShownPath } from "@/lib/hide-paths";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useThemeStore } from "@/stores/themeStore";
@@ -209,7 +209,7 @@ export function StatusBar() {
                 data-testid="scope-counts"
                 className={cn(
                   "flex cursor-default items-center gap-1.5",
-                  counts.heldAt !== null && "opacity-60"
+                  (counts.heldAt !== null || counts.late) && "opacity-60"
                 )}
               >
                 {counts.heldAt !== null && (
@@ -217,6 +217,13 @@ export function StatusBar() {
                     role="img"
                     aria-label={t("cluster", "countsHeld")}
                     className="h-3 w-3 flex-none"
+                  />
+                )}
+                {counts.late && (
+                  <span
+                    role="img"
+                    aria-label={t("cluster", "freshBehind")}
+                    className="h-1.5 w-1.5 flex-none rounded-full border border-warn"
                   />
                 )}
                 {here === null ? (
@@ -260,6 +267,13 @@ export function StatusBar() {
             </TooltipTrigger>
             <TooltipContent side="top" align="end" className="max-w-[320px]">
               {counts.heldAt !== null && <HeldAt at={counts.heldAt} />}
+              {counts.late && counts.readAt !== null && (
+                <p className="mb-1 text-warn">
+                  {t("cluster", "countsLateAll", {
+                    at: formatWhen(counts.readAt, "clock"),
+                  })}
+                </p>
+              )}
               <ClusterWide />
             </TooltipContent>
           </Tooltip>

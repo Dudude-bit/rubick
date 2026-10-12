@@ -1,7 +1,7 @@
 use crate::error::{Error, Result};
 use crate::state::{readable_cause, AppEvent, StreamFailureKind};
 use crate::terminal::session::{
-    TerminalInput, TerminalSession, TerminalSessionInfo, TerminalState,
+    Input, TerminalInput, TerminalSession, TerminalSessionInfo, TerminalState,
 };
 use dashmap::DashMap;
 use std::sync::Arc;
@@ -55,22 +55,20 @@ impl TerminalManager {
 
     /// Send input to a session
     pub async fn send_input(&self, id: &str, data: &str) -> Result<()> {
-        if let Some(session) = self.sessions.get(id) {
-            session.send(data).await?;
-            Ok(())
-        } else {
-            Err(Error::Terminal(format!("Session {id} not found")))
-        }
+        self.input_of(id)?.send(data).await
     }
 
     /// Resize a session
     pub async fn resize_session(&self, id: &str, width: u16, height: u16) -> Result<()> {
-        if let Some(session) = self.sessions.get(id) {
-            session.resize(width, height).await?;
-            Ok(())
-        } else {
-            Err(Error::Terminal(format!("Session {id} not found")))
-        }
+        self.input_of(id)?.resize(width, height).await
+    }
+
+    /// A send waits for room in the channel; the map's shard guard must not wait with it.
+    fn input_of(&self, id: &str) -> Result<Input> {
+        self.sessions
+            .get(id)
+            .map(|session| session.input())
+            .ok_or_else(|| Error::Terminal(format!("Session {id} not found")))
     }
 
     /// Ask a session to end. It stays listed, as closing, until its task has
@@ -1417,6 +1415,50 @@ mod tests {
         manager.create_session(Box::new(adapter)).expect("session");
         assert!(manager.list().is_empty());
         assert_eq!(last_list(&mut event_rx), None);
+    }
+
+    /// A pane typed into a shell whose loop was not reading yet: the send
+    /// past the channel's room waited with the session list's shard locked,
+    /// and the subscribe or close that would have let the loop drain it
+    /// blocked behind that lock for good. Fails, by timing out, if a send
+    /// waits with the list held.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn a_keystroke_waiting_for_room_does_not_hold_the_session_list() {
+        let (event_tx, _event_rx) = broadcast::channel(256);
+        let manager = Arc::new(TerminalManager::new(event_tx));
+        let (shell, _closed) = ListedShell::new();
+        let id = manager.create_session(Box::new(shell)).expect("session");
+        for _ in 0..crate::terminal::session::INPUT_ROOM {
+            manager.send_input(&id, "x").await.expect("room");
+        }
+        let waiting = tokio::spawn({
+            let manager = manager.clone();
+            let id = id.clone();
+            async move { manager.send_input(&id, "y").await }
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            !waiting.is_finished(),
+            "the channel had room, nothing waited"
+        );
+
+        let (done, released) = std::sync::mpsc::channel();
+        std::thread::spawn({
+            let manager = manager.clone();
+            let id = id.clone();
+            move || {
+                let _ = done.send(manager.mark_subscribed(&id));
+            }
+        });
+        released
+            .recv_timeout(Duration::from_secs(5))
+            .expect("the session list stayed locked behind a keystroke waiting for room")
+            .expect("subscribed");
+        tokio::time::timeout(Duration::from_secs(5), waiting)
+            .await
+            .expect("the keystroke got its room once the loop read")
+            .expect("joined")
+            .expect("sent");
     }
 
     #[test]

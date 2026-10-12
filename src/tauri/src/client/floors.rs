@@ -70,7 +70,7 @@ fn addressed(path: &str) -> Option<Addressed> {
     }
 }
 
-fn has_param(query: &str, names: &[&str]) -> bool {
+pub(super) fn has_param(query: &str, names: &[&str]) -> bool {
     query
         .split('&')
         .filter_map(|pair| pair.split('=').next())
@@ -228,7 +228,7 @@ fn with_floor(mut request: Request<KubeBody>, query: &str, floor: u64) -> Reques
 }
 
 /// The request as it was, for asking again without the floor.
-fn again(request: &Request<KubeBody>) -> Option<Request<KubeBody>> {
+pub(super) fn again(request: &Request<KubeBody>) -> Option<Request<KubeBody>> {
     let mut copy = Request::new(request.body().try_clone()?);
     *copy.method_mut() = request.method().clone();
     *copy.uri_mut() = request.uri().clone();

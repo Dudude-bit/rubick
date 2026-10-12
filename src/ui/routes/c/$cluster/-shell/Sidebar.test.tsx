@@ -97,18 +97,26 @@ vi.mock("@/lib/commands", () => ({
   },
 }));
 
-/** Only the three fields the rail reads; the rest of the overview is noise here. */
+/** Only the fields the rail reads; the rest of the overview is noise here. */
 type OverviewStub = Pick<
   ClusterOverview,
   "counts" | "problems" | "problemsTruncated"
->;
+> &
+  Partial<Pick<ClusterOverview, "servedFrom">>;
 let overview: OverviewStub | undefined;
-vi.mock("@/hooks/useClusterOverview", () => ({
+/** When the overview on screen landed, and whether a read of it is late. */
+const read = vi.hoisted(() => ({ at: 0, slowRead: false }));
+vi.mock("@/hooks/useClusterOverview", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useClusterOverview")>()),
   // Deliberately ignores `enabled`, the way React Query's own
   // `keepPreviousData` does: the hook goes on handing back the last cluster's
   // answer after a disconnect, which is the condition the rail must survive.
   useClusterOverview: () => ({ data: overview }),
-  useScopedOverview: () => ({ data: overview }),
+  useScopedOverview: () => ({
+    data: overview,
+    dataUpdatedAt: read.at,
+    freshness: { everyMs: 10_000, slowRead: read.slowRead },
+  }),
 }));
 
 let attention: Pick<Attention, "total" | "worst" | "complete"> | null = null;
@@ -120,6 +128,7 @@ const { Sidebar } = await import("./Sidebar");
 const { useClusterStore } = await import("@/stores/clusterStore");
 const { useUpdaterStore } = await import("@/stores/updaterStore");
 const { useLocaleStore } = await import("@/stores/localeStore");
+const { useWindowActivity } = await import("@/lib/window-activity");
 
 function wrap(node: ReactElement, at = "/c/prod") {
   return renderWithRouter(node, { at, route: "/c/$cluster/$" });
@@ -138,6 +147,8 @@ beforeEach(() => {
   listServices.mockResolvedValue([]);
   listServiceEndpoints.mockResolvedValue([]);
   overview = undefined;
+  read.at = 0;
+  read.slowRead = false;
   useClusterStore.setState({
     isConnected: true,
     currentContext: "prod",
@@ -327,6 +338,75 @@ describe("the counts at the end of each row", () => {
     await screen.findByText("3");
     expect(screen.queryByTestId("attention-unchecked-ring")).toBeNull();
     attention = null;
+  });
+});
+
+describe("how old a row's count is", () => {
+  const AT = new Date(2026, 9, 12, 15, 3, 41).getTime();
+  beforeEach(() => {
+    attention = { total: 0, worst: null, complete: true };
+  });
+  afterEach(() => {
+    attention = null;
+  });
+  const counted = async (name: string) =>
+    within(
+      await screen.findByRole("link", { name: new RegExp(`^${name}`) })
+    ).getByText(/^\d+$/);
+
+  /**
+   * Sam's sidebar kept "Deployments 7" for 9 s beside a page that said the
+   * Deployment was gone, with nothing saying the number was a poll's. Fails
+   * if a count the overview's watched stores hold is not said to follow the
+   * cluster while they serve it, or a polled one does not say when it was
+   * counted and how often.
+   */
+  it("says a watched count follows the cluster and a polled one when it was counted", async () => {
+    useWindowActivity.setState({ visible: true });
+    read.at = AT;
+    overview = {
+      ...overviewWithPods(41),
+      counts: { pods: 41, services: 3 } as ClusterOverview["counts"],
+      servedFrom: "watch",
+    };
+    const watched = await wrap(<Sidebar />);
+
+    expect(await counted("Pods")).toHaveAttribute(
+      "title",
+      "Follows the cluster's changes. Counted at 15:03:41."
+    );
+    expect(await counted("Services")).toHaveAttribute(
+      "title",
+      "Counted at 15:03:41, and again every 10 s."
+    );
+    watched.unmount();
+
+    overview = { ...overview, servedFrom: "list" };
+    await wrap(<Sidebar />);
+    expect(await counted("Pods")).toHaveAttribute(
+      "title",
+      "Counted at 15:03:41, and again every 10 s."
+    );
+  });
+
+  /**
+   * hang28: a read of the counts can wait on the cluster for a minute, and
+   * the rail went on drawing the last answer as current. Fails if a late
+   * read leaves the counts undimmed or unexplained.
+   */
+  it("dims the counts and says so while their read is late", async () => {
+    read.at = AT;
+    read.slowRead = true;
+    overview = overviewWithPods(41);
+
+    await wrap(<Sidebar />);
+
+    const pods = await counted("Pods");
+    expect(pods).toHaveClass("opacity-60");
+    expect(pods).toHaveAttribute(
+      "title",
+      "Still reading. This count is from 15:03:41."
+    );
   });
 });
 

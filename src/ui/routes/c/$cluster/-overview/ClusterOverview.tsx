@@ -6,7 +6,7 @@ import { openNamespacePicker } from "@/lib/read-deadline";
 import { useClusterStore } from "@/stores/clusterStore";
 import { useClusterInfo } from "@/hooks";
 import {
-  useFollowedOverview,
+  useOverviewFollowed,
   useScopedOverview,
 } from "@/hooks/useClusterOverview";
 import { DataFreshness } from "@/components/ui/realtime/data-freshness";
@@ -98,7 +98,7 @@ export function ClusterOverview() {
     refetch,
     freshness,
   } = useScopedOverview();
-  const following = useFollowedOverview(overview);
+  const following = useOverviewFollowed(overview);
   const attention = useAttention({ refresh: "slow" });
   // The list pages name where a refused list can be read; the page that
   // tells a reader to open a namespace names the same ones.
