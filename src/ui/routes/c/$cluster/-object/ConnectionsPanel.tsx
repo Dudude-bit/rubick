@@ -16,6 +16,7 @@ import { PerfProfiler } from "@/lib/perf-profiler";
 
 import { Section } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
+import { PATH_PATIENCE_MS, useOverdue } from "./useOverdue";
 import { shortRevision } from "@/integrations";
 import { cn } from "@/lib/utils";
 import {
@@ -215,7 +216,21 @@ function ConnectionsPanelInner({
   const t = useT();
   const { data, isPending, error } = query;
   const { deliveries } = useDelivery(delivery ?? null);
+  const overdue = useOverdue(isPending, PATH_PATIENCE_MS);
 
+  if (overdue) {
+    return (
+      <Section>
+        <Unknown
+          question={t("empty", "couldNotReadWhatConnects")}
+          error={t("empty", "noAnswerWithin", {
+            n: PATH_PATIENCE_MS / 1000,
+          })}
+          onRetry={() => void query.refetch()}
+        />
+      </Section>
+    );
+  }
   if (isPending) {
     return (
       <Section>

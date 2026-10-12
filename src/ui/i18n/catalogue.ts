@@ -6085,6 +6085,10 @@ export const en = {
       "A slice matches its ports to the Service's by name. These ports' names match none the slice declares, so nothing routes to them.",
     couldNotReadWhatConnects: "Could not read what connects to this.",
     clusterDidNotAnswer: "The cluster did not answer.",
+    noAnswerWithin: {
+      one: "The cluster did not answer within {n} second.",
+      other: "The cluster did not answer within {n} seconds.",
+    },
     unknownRefused: "The cluster refused: {message}",
     unknownFault: "The read failed: {message}",
     unknownRetry: "Try the read again",

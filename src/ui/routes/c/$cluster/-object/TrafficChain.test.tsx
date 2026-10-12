@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { act, fireEvent, screen } from "@testing-library/react";
 
 import { objectLink } from "@/lib/links";
 import { renderWithRouter } from "@/test/render";
@@ -403,6 +403,36 @@ describe("TrafficChain", () => {
      *  reads as "nothing routes here", which is the one wrong answer. */
     await wrap(<TrafficChain query={query(undefined, true)} />);
     expect(screen.getByText("Following the path in…")).toBeInTheDocument();
+  });
+
+  /**
+   * daemon-demo's Overview said "Following the path in" for eleven seconds
+   * and more on its first open. Fails if a read that has not answered stays
+   * "following" for good instead of saying it got no answer, with a retry.
+   */
+  it("says the cluster did not answer once a read has gone unanswered for ten seconds", async () => {
+    vi.useFakeTimers();
+    try {
+      const unanswered = {
+        ...query(undefined, true),
+        refetch: vi.fn(),
+      } as unknown as ConnectionsQuery;
+      await wrap(<TrafficChain query={unanswered} />);
+      expect(screen.getByText("Following the path in…")).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(screen.queryByText("Following the path in…")).toBeNull();
+      expect(
+        screen.getByText(/The cluster did not answer within 10 seconds\./)
+      ).toBeInTheDocument();
+      fireEvent.click(
+        screen.getByRole("button", { name: /try the read again/i })
+      );
+      expect(unanswered.refetch).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   describe("which hostnames reach the Service through a vendor's objects", () => {

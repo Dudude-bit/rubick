@@ -25,6 +25,7 @@ import {
 
 import { Section, SectionHeader } from "@/components/ui/section";
 import { Unknown } from "@/components/ui/unknown";
+import { PATH_PATIENCE_MS, useOverdue } from "./useOverdue";
 import {
   CopyableAddress,
   CopyableAddresses,
@@ -585,7 +586,19 @@ export function TrafficChain({
   const edge = useServiceEdge(serviceHops);
   // The ways in a vendor's objects state — see `service.routes`.
   const routed2 = useServicesRoutes(serviceHops);
+  const overdue = useOverdue(isPending, PATH_PATIENCE_MS);
 
+  if (overdue) {
+    return (
+      <Unknown
+        question={t("empty", "couldNotReadWhatConnects")}
+        error={t("empty", "noAnswerWithin", {
+          n: PATH_PATIENCE_MS / 1000,
+        })}
+        onRetry={() => void query.refetch()}
+      />
+    );
+  }
   if (isPending) {
     return (
       <p className="text-xs text-fg-fnt">{t("empty", "followingPathIn")}</p>

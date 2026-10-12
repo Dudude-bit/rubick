@@ -1,6 +1,6 @@
 import type { ReactElement } from "react";
-import { describe, expect, it } from "vite-plus/test";
-import { screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vite-plus/test";
+import { act, screen } from "@testing-library/react";
 
 import { renderWithRouter } from "@/test/render";
 import { ConnectionsPanel } from "./ConnectionsPanel";
@@ -270,5 +270,30 @@ describe("ConnectionsPanel", () => {
       screen.queryByRole("link", { name: "StatefulSet kruise-db" })
     ).toBeNull();
     expect(screen.getByText("StatefulSet kruise-db")).toBeInTheDocument();
+  });
+});
+
+describe("a neighbourhood read that does not answer", () => {
+  /**
+   * The Connections tab reads the same answer the Overview's path in does.
+   * Fails if it stays on "Reading what connects" for good instead of saying
+   * the cluster did not answer.
+   */
+  it("says the cluster did not answer after ten seconds of reading", async () => {
+    vi.useFakeTimers();
+    try {
+      await wrap(<ConnectionsPanel query={query({ isPending: true })} />);
+      expect(
+        screen.getByText("Reading what connects to this…")
+      ).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10_000);
+      });
+      expect(
+        screen.getByText(/The cluster did not answer within 10 seconds\./)
+      ).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
