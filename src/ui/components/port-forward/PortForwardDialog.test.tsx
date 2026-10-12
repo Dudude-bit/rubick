@@ -165,7 +165,7 @@ describe("the port-forward dialog where the access review has answered", () => {
 
   /**
    * A reader who may look at pods and not forward to them. Fails if Start
-   * stays live while can-i create pods/portforward says no.
+   * stays live while can-i create pods --subresource=portforward says no.
    */
   it("greys Start with the can-i question for a reader who may not forward", async () => {
     vi.mocked(commands.checkAccess).mockImplementation(
@@ -181,7 +181,7 @@ describe("the port-forward dialog where the access review has answered", () => {
     expect(
       (
         await screen.findAllByText(
-          /can-i create pods\/portforward -n lena-sandbox/
+          /can-i create pods --subresource=portforward -n lena-sandbox/
         )
       ).length
     ).toBeGreaterThan(0);

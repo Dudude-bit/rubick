@@ -4373,7 +4373,9 @@ export const ru: Catalogue = {
     hpaAtCeilingDefault: "Желаемое число реплик выше maxReplicas.",
     hpaRunning: "работает {n}",
     hpaWanted: "хочет {n}",
-    hpaNothingComputed: "ничего не вычислено",
+    hpaWantedNotComputing:
+      "хочет {n}, но сейчас не вычисляет: ScalingActive False",
+    hpaDesiredNotComputing: "{n}, но сейчас не вычисляет: ScalingActive False",
     columnsYielded: "Не поместились: {columns}",
     columnsYieldedHint:
       "Чтобы увидеть эти столбцы, расширьте окно или закройте панель рядом со списком. Поиск по ним работает и так.",
@@ -4382,6 +4384,7 @@ export const ru: Catalogue = {
     hpaNamesNoTarget:
       "Этот автомасштабировщик не называет, что масштабировать.",
     hpaLastScaled: "последнее масштабирование {ago} назад",
+    podEndedAgo: "завершился {ago} назад",
     pdbAtLeast: "минимум {n} доступно",
     pdbAtMost: "максимум {n} недоступно",
     pdbNoRule: "правило не задано",
@@ -7767,6 +7770,8 @@ export const ru: Catalogue = {
       "состояние контейнера потеряно, обычно после перезапуска узла.",
     deadlineExceeded:
       "под работал дольше, чем разрешает activeDeadlineSeconds, и был остановлен.",
+    kubectlPrints:
+      "kubectl get pods выводит {status}: это слово его контейнеров, а значок показывает слово самого пода.",
     initProgress:
       "init-контейнеры запускаются по одному перед контейнерами приложения; завершено {done} из {total}.",
     initNote:
@@ -9193,6 +9198,8 @@ export const ru: Catalogue = {
     },
     versionsWithDeprecated: "{n} · {deprecated} устарели",
     slashReady: "{n}/{total} готовы",
+    podsSayComingUp: "по подам: поднимаются, готово {ready} из {total}",
+    podsSayFailing: "по подам: сбоит {failing}, готово {ready} из {total}",
     readySummary: "готовы: {n}",
     notReadySummary: "не готовы: {n}",
     readyNotReadySummary: "готовы: {n} · не готовы: {notReady}",

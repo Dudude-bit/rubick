@@ -232,7 +232,7 @@ describe("a pod page whose pod is deleted while it is open", () => {
 describe("Marco's pod page, in a namespace where he may exec and forward but not debug", () => {
   /**
    * Marco's checkout-api page offered a live Debug whose Start the cluster
-   * refuses: can-i patch pods/ephemeralcontainers and can-i create pods both
+   * refuses: can-i patch pods --subresource=ephemeralcontainers and can-i create pods both
    * say no. Fails if Debug is runnable there, or if Port forward and Delete,
    * which his Role allows, are greyed with it.
    */
@@ -262,7 +262,7 @@ describe("Marco's pod page, in a namespace where he may exec and forward but not
     await advance(300);
     expect(
       screen.getAllByText(
-        /can-i patch pods\/ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout/
+        /can-i patch pods --subresource=ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout/
       ).length
     ).toBeGreaterThan(0);
     act(() => debug.click());
@@ -685,7 +685,9 @@ describe("a pod the node evicted while an init container ran", () => {
     status: {
       ...POD.status,
       phase: "Failed",
-      display: "Init:ContainerStatusUnknown",
+      display: "Evicted",
+      kubectlStatus: "Init:ContainerStatusUnknown",
+      failedAt: new Date(Date.now() - 13 * 3_600_000).toISOString(),
       ready: false,
       reason: "Evicted",
       message: "The node was low on resource: ephemeral-storage.",
@@ -731,6 +733,28 @@ describe("a pod the node evicted while an init container ran", () => {
       "The node was low on resource: ephemeral-storage."
     );
     expect(screen.queryByText("migrate exited with 137")).toBeNull();
+  });
+
+  /**
+   * Marco's header read "Evicted 3d old" for an eviction thirteen hours
+   * before: the age beside the word was the pod's. Fails if the header stops
+   * dating the failure, or drops the pod's age to do it.
+   */
+  it("dates the eviction beside its word and keeps the pod's age apart", async () => {
+    vi.mocked(invoke).mockImplementation(async (command: string) => {
+      if (command === "get_pod") return EVICTED;
+      if (command === "get_replicaset") return REPLICA_SET;
+      if (command === "list_events") return [];
+      return undefined;
+    });
+    await renderWithRouter(<PodDetail />, {
+      at: `/c/prod/pods/shop/${NAME}`,
+      route: "/c/$cluster/pods/$namespace/$name",
+    });
+    await advance(0);
+    await advance(0);
+    expect(screen.getByTestId("ended-ago")).toHaveTextContent("ended 13h ago");
+    expect(document.body).toHaveTextContent(/\dd old/);
   });
 });
 

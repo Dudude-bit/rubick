@@ -14,7 +14,7 @@ type LoopStatus = {
 };
 
 export type PodBadgeInput = ReadinessLists & {
-  status: LoopStatus & { phase?: string };
+  status: LoopStatus & { phase?: string; kubectlStatus?: string };
   start?: PodStart;
 };
 
@@ -68,9 +68,9 @@ export const exitUnreported = (pod: { status: LoopStatus }) =>
  * The colour of a pod's word on every screen. kubectl prints `Running` for a
  * pod whose readiness probe fails, and no Service sends it traffic, so that
  * word is amber here, not green; red for a pod caught up between the
- * crashes of a loop, and amber for one that restarted while the kubelet
- * reports no exit to tell. On a node that stopped reporting it is the
- * kubelet's last word, and loses its colour.
+ * crashes of a loop or one that has failed, whatever word it has, and amber
+ * for one that restarted while the kubelet reports no exit to tell. On a node
+ * that stopped reporting it is the kubelet's last word, and loses its colour.
  */
 export function podRole(
   pod: PodBadgeInput,
@@ -78,7 +78,7 @@ export function podRole(
   now: number = Date.now()
 ): StatusRole {
   if (silence) return "neutral";
-  if (upBetweenCrashes(pod)) return "err";
+  if (upBetweenCrashes(pod) || pod.status.phase === "Failed") return "err";
   const role = statusRole(pod.status.display);
   if (role === "pending" && pendingTooLong(pod, now)) return "warn";
   return role === "ok" && (!podReadiness(pod).allReady || exitUnreported(pod))
@@ -107,6 +107,10 @@ export function podStatusTitle(
         pendingTooLong(pod) &&
         t("statusMeaning", "pendingTooLong"),
       insideWait(pod) && t("statusMeaning", "pendingStarting"),
+      pod.status.kubectlStatus &&
+        t("statusMeaning", "kubectlPrints", {
+          status: pod.status.kubectlStatus,
+        }),
     ]
       .filter(Boolean)
       .join("\n") || undefined

@@ -114,14 +114,16 @@ export function useAccessReview(asked: readonly Asked[]): void {
   });
 }
 
-/** `create pods/exec -n shop`: the question as `kubectl auth can-i` takes it. */
+/**
+ * `create pods --subresource=exec -n shop`: the question as `kubectl auth
+ * can-i` takes it. `pods/exec` there names a pod called exec, and the answer
+ * to that is no wherever only the subresource is granted.
+ */
 function checkOf(asked: Asked): string {
-  const resource =
-    (asked.group ? `${asked.resource}.${asked.group}` : asked.resource) +
-    (asked.subresource ? `/${asked.subresource}` : "");
   return [
     asked.verb,
-    resource,
+    asked.group ? `${asked.resource}.${asked.group}` : asked.resource,
+    ...(asked.subresource ? [`--subresource=${asked.subresource}`] : []),
     ...(asked.namespace ? ["-n", asked.namespace] : []),
   ].join(" ");
 }

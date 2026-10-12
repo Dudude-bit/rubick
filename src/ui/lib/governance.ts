@@ -276,19 +276,16 @@ export function autoscalerFinding(auto: Autoscaler, t: T): Finding | null {
 }
 
 /**
- * "2 running · 2 wanted", and the one case where the second half is a lie.
- *
- * An autoscaler that failed to compute leaves `status.desiredReplicas` at
- * zero — not because it wants zero replicas, but because it never got as far
- * as wanting anything. "0 wanted" beside a running workload reads as an
- * autoscaler about to delete everything, and it is the field being unset.
+ * "2 running · 2 wanted". An autoscaler that cannot compute keeps whatever
+ * `desiredReplicas` last held, zero if it never got that far, so the number
+ * is said as written with why it is not a wish.
  */
 export function autoscalerReplicas(facts: AutoscalerFacts, t: T): string {
   const parts = [
     t("readings", "hpaRunning", { n: facts.currentReplicas }),
     desiredComputed(facts.conditions)
       ? t("readings", "hpaWanted", { n: facts.desiredReplicas })
-      : t("readings", "hpaNothingComputed"),
+      : t("readings", "hpaWantedNotComputing", { n: facts.desiredReplicas }),
   ];
   if (facts.lastScaleTime)
     parts.push(

@@ -82,6 +82,8 @@ pub(super) struct Template {
     pub(super) replicas: i32,
     pub(super) ready_replicas: i32,
     pub(super) rollout: Option<crate::resources::Rollout>,
+    /// A `StatefulSet`'s claims, by [`set_claims`].
+    pub(super) claims: Vec<(String, String)>,
 }
 
 pub(super) async fn fetch_template(
@@ -91,7 +93,7 @@ pub(super) async fn fetch_template(
     name: &str,
 ) -> Result<(Template, Option<String>)> {
     macro_rules! from_workload {
-        ($ty:ty, $obj:ident, $labels:expr, $selector:expr, $spec:expr, $replicas:expr, $ready:expr, $rollout:expr) => {{
+        ($ty:ty, $obj:ident, $labels:expr, $selector:expr, $spec:expr, $replicas:expr, $ready:expr, $rollout:expr, $claims:expr) => {{
             let $obj: $ty = got(ctx.namespaced_api().get(name).await, kind, ns, name)?;
             let uid = $obj.uid();
             (
@@ -103,6 +105,7 @@ pub(super) async fn fetch_template(
                     replicas: $replicas,
                     ready_replicas: $ready,
                     rollout: $rollout,
+                    claims: $claims,
                 },
                 uid,
             )
@@ -125,7 +128,8 @@ pub(super) async fn fetch_template(
                 .as_ref()
                 .and_then(|s| s.ready_replicas)
                 .unwrap_or(0),
-            Some(crate::resources::deployment_rollout(&obj))
+            Some(crate::resources::deployment_rollout(&obj)),
+            Vec::new()
         ),
         "StatefulSet" => from_workload!(
             StatefulSet,
@@ -142,7 +146,8 @@ pub(super) async fn fetch_template(
                 .as_ref()
                 .and_then(|s| s.ready_replicas)
                 .unwrap_or(0),
-            Some(crate::resources::statefulset_rollout(&obj))
+            Some(crate::resources::statefulset_rollout(&obj)),
+            set_claims(&obj)
         ),
         "DaemonSet" => from_workload!(
             DaemonSet,
@@ -158,7 +163,8 @@ pub(super) async fn fetch_template(
                 .as_ref()
                 .map_or(0, |s| s.desired_number_scheduled),
             obj.status.as_ref().map_or(0, |s| s.number_ready),
-            Some(crate::resources::daemonset_rollout(&obj))
+            Some(crate::resources::daemonset_rollout(&obj)),
+            Vec::new()
         ),
         "ReplicaSet" => from_workload!(
             ReplicaSet,
@@ -179,7 +185,8 @@ pub(super) async fn fetch_template(
                 .as_ref()
                 .and_then(|s| s.ready_replicas)
                 .unwrap_or(0),
-            None
+            None,
+            Vec::new()
         ),
         "Job" => from_workload!(
             Job,
@@ -193,7 +200,8 @@ pub(super) async fn fetch_template(
             obj.spec.as_ref().and_then(|s| s.template.spec.clone()),
             obj.status.as_ref().and_then(|s| s.active).unwrap_or(0),
             obj.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0),
-            None
+            None,
+            Vec::new()
         ),
         "CronJob" => from_workload!(
             CronJob,
@@ -211,7 +219,8 @@ pub(super) async fn fetch_template(
                 .and_then(|s| s.template.spec.clone()),
             0,
             0,
-            None
+            None,
+            Vec::new()
         ),
         _ => unreachable!("fetch_template is only called for workload kinds"),
     })
@@ -276,7 +285,8 @@ pub(super) async fn workload_connections(
     out.read_at = Some(snapshot.taken_at);
 
     if let Some(spec) = template.spec.as_ref() {
-        uses_from_spec(ns, &subject, spec, &snapshot.claims, out);
+        let spec = as_run(spec, &template.claims);
+        uses_from_spec(ns, &subject, &spec, &snapshot.claims, out);
         check_named(ctx, out).await?;
     }
     let selector_text = selector.says().unwrap_or_default();
@@ -931,27 +941,34 @@ pub(super) fn note_users(ns: &str, target: &ObjectRef, lists: UserLists, out: &m
         answered(list, "Ingress", "networking.k8s.io/v1", &mut unread)
     });
 
-    let mut note = |kind: &str, name: String, spec: Option<&PodSpec>| {
-        let Some(spec) = spec else { return };
-        let usages = usages_in_pod_spec(spec, &target.kind, &target.name);
-        if usages.is_empty() {
-            return;
-        }
-        out.edge(
-            ObjectRef::new(kind, &name, Some(ns.to_string()), Existence::Present),
-            target.clone(),
-            Relation::Uses { usages },
-        );
-    };
+    let mut note =
+        |kind: &str, name: String, spec: Option<&PodSpec>, claims: &[(String, String)]| {
+            let Some(spec) = spec else { return };
+            let spec = if kind == "Pod" {
+                Cow::Borrowed(spec)
+            } else {
+                Cow::Owned(as_run(spec, claims))
+            };
+            let usages = usages_in_pod_spec(&spec, &target.kind, &target.name);
+            if usages.is_empty() {
+                return;
+            }
+            out.edge(
+                ObjectRef::new(kind, &name, Some(ns.to_string()), Existence::Present),
+                target.clone(),
+                Relation::Uses { usages },
+            );
+        };
 
     for pod in pods {
-        note("Pod", pod.name_any(), pod.spec.as_ref());
+        note("Pod", pod.name_any(), pod.spec.as_ref(), &[]);
     }
     for obj in deploys {
         note(
             "Deployment",
             obj.name_any(),
             obj.spec.as_ref().and_then(|s| s.template.spec.as_ref()),
+            &[],
         );
     }
     for obj in sets {
@@ -959,6 +976,7 @@ pub(super) fn note_users(ns: &str, target: &ObjectRef, lists: UserLists, out: &m
             "StatefulSet",
             obj.name_any(),
             obj.spec.as_ref().and_then(|s| s.template.spec.as_ref()),
+            &set_claims(&obj),
         );
     }
     for obj in daemons {
@@ -966,6 +984,7 @@ pub(super) fn note_users(ns: &str, target: &ObjectRef, lists: UserLists, out: &m
             "DaemonSet",
             obj.name_any(),
             obj.spec.as_ref().and_then(|s| s.template.spec.as_ref()),
+            &[],
         );
     }
     for obj in jobs {
@@ -973,6 +992,7 @@ pub(super) fn note_users(ns: &str, target: &ObjectRef, lists: UserLists, out: &m
             "Job",
             obj.name_any(),
             obj.spec.as_ref().and_then(|s| s.template.spec.as_ref()),
+            &[],
         );
     }
     for obj in crons {
@@ -983,6 +1003,7 @@ pub(super) fn note_users(ns: &str, target: &ObjectRef, lists: UserLists, out: &m
                 .as_ref()
                 .and_then(|s| s.job_template.spec.as_ref())
                 .and_then(|s| s.template.spec.as_ref()),
+            &[],
         );
     }
 
@@ -1509,6 +1530,111 @@ mod set_rollout_tests {
             Some(ObjectFacts::Workload { rollout, .. }) => rollout,
             other => panic!("a workload's facts, not {other:?}"),
         }
+    }
+
+    /// Dana's stateful-demo listed no Needs to run at all and never named
+    /// the Bound claim its pod mounts, while the pod's own page showed both.
+    /// Fails if a workload drops the identity admission gives its pods, or a
+    /// `StatefulSet` the claims its `volumeClaimTemplates` make, or the claim
+    /// page's Used by stops naming the set that mounts it.
+    #[tokio::test]
+    async fn a_stateful_set_needs_the_claims_its_pods_mount_and_the_identity_they_run_as() {
+        let set = serde_json::json!({
+            "apiVersion": "apps/v1", "kind": "StatefulSet",
+            "metadata": { "name": "web", "namespace": "shop", "uid": "web-uid" },
+            "spec": {
+                "replicas": 1,
+                "serviceName": "web",
+                "selector": { "matchLabels": { "app": "web" } },
+                "template": {
+                    "metadata": { "labels": { "app": "web" } },
+                    "spec": { "containers": [{
+                        "name": "web", "image": "web",
+                        "volumeMounts": [{ "name": "data", "mountPath": "/data" }],
+                    }] },
+                },
+                "volumeClaimTemplates": [{ "metadata": { "name": "data" } }],
+            },
+        });
+        let claim = serde_json::json!({
+            "apiVersion": "v1", "kind": "PersistentVolumeClaim",
+            "metadata": { "name": "data-web-0", "namespace": "shop" },
+            "spec": { "volumeName": "pv-1" },
+            "status": { "phase": "Bound" },
+        });
+        let claims = serde_json::json!({
+            "apiVersion": "v1", "kind": "List", "metadata": {}, "items": [claim],
+        });
+        let sets = serde_json::json!({
+            "apiVersion": "v1", "kind": "List", "metadata": {}, "items": [set],
+        });
+        let account = serde_json::json!({
+            "apiVersion": "v1", "kind": "ServiceAccount",
+            "metadata": { "name": "default", "namespace": "shop" },
+        });
+        let (client, _) = server(vec![
+            (
+                "/apis/apps/v1/namespaces/shop/statefulsets/web",
+                200,
+                set.to_string(),
+            ),
+            (
+                "/apis/apps/v1/namespaces/shop/statefulsets",
+                200,
+                sets.to_string(),
+            ),
+            (
+                "/api/v1/namespaces/shop/persistentvolumeclaims",
+                200,
+                claims.to_string(),
+            ),
+            (
+                "/api/v1/namespaces/shop/persistentvolumeclaims/data-web-0",
+                200,
+                claim.to_string(),
+            ),
+            (
+                "/api/v1/namespaces/shop/serviceaccounts/default",
+                200,
+                account.to_string(),
+            ),
+        ])
+        .await;
+        let ctx = ResourceContext::from_client(client, "shop".to_string());
+        let page = connections_of(&ctx, "StatefulSet", "web", None)
+            .await
+            .expect("the neighbourhood");
+        let uses = |kind: &str| {
+            page.edges
+                .iter()
+                .find(|edge| edge.to.kind == kind && matches!(edge.relation, Relation::Uses { .. }))
+                .unwrap_or_else(|| panic!("no {kind} under Needs to run"))
+        };
+
+        let storage = uses("PersistentVolumeClaim");
+        assert_eq!(storage.to.name, "data-web-0");
+        assert_eq!(storage.to.existence, Existence::Present);
+        assert!(matches!(
+            &storage.relation,
+            Relation::Uses { usages } if matches!(
+                usages.as_slice(),
+                [Usage::Mount { container, path, .. }] if container == "web" && path == "/data"
+            )
+        ));
+        let identity = uses("ServiceAccount");
+        assert_eq!(identity.to.name, "default");
+        assert!(matches!(
+            &identity.relation,
+            Relation::Uses { usages } if usages == &[Usage::Identity]
+        ));
+
+        let claim_page = connections_of(&ctx, "PersistentVolumeClaim", "data-web-0", None)
+            .await
+            .expect("the claim's neighbourhood");
+        assert!(claim_page
+            .edges
+            .iter()
+            .any(|edge| edge.from.kind == "StatefulSet" && edge.from.name == "web"));
     }
 
     /// Sam's big-pull Deployment page drew the old Deployment's pod as "1

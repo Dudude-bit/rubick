@@ -151,3 +151,24 @@ describe("a pod caught up between crashes", () => {
     );
   });
 });
+
+describe("a failed pod among a workload's pods", () => {
+  /**
+   * Marco read "Evicted 3d old" for an eviction thirteen hours before. Fails
+   * if a failed pod's row stops dating its failure beside its word, or dates
+   * a running one.
+   */
+  it("says when it ended, and says nothing of the kind for a running one", async () => {
+    const evicted = {
+      ...pod("checkout-worker-fplfk"),
+      status: {
+        phase: "Failed",
+        display: "Evicted",
+        failedAt: new Date(Date.now() - 13 * 3_600_000).toISOString(),
+      },
+    } as unknown as PodInfo;
+    await card({ pods: [pod("checkout-worker-x8k2p"), evicted] });
+    expect(screen.getAllByTestId("ended-ago")).toHaveLength(1);
+    expect(screen.getByTestId("ended-ago")).toHaveTextContent("ended 13h ago");
+  });
+});

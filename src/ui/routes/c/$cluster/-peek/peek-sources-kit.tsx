@@ -63,6 +63,8 @@ export interface PeekSummary {
    */
   verdictOfService?: string;
   createdAt?: string | null;
+  /** When a failed pod failed, said beside its badge so its age is not read as that. */
+  endedAt?: string | null;
   /** For the kinds whose API hands back a rendered age instead of a stamp. */
   groups: PeekGroup[];
   /** The diagnosis the page heads its Overview with, above the groups. */

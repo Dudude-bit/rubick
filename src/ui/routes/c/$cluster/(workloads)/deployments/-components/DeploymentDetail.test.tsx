@@ -269,12 +269,13 @@ describe("the rollout line", () => {
   });
 
   /**
-   * Sam's drains: Replicas said "1 not ready" while the header still read
-   * "Ready 1/1" for about a second, until the Deployment's own status caught
-   * up with its pods. Fails if the header stops reading the pods the Replicas
-   * block reads.
+   * Sam's drains: the header followed the pods while the Overview followed
+   * the Deployment's status, so for up to half a second the page was ahead
+   * of kubectl get deploy and of the Overview card. Fails if the header's
+   * verdict stops being the controller's, or the pods' answer ahead of it
+   * stops being said beside it.
    */
-  it("moves its header with the pods the Replicas block reads", async () => {
+  it("keeps the controller's verdict in its header and says beside it what the pods say", async () => {
     answering(
       () => new Promise(() => {}),
       () => Promise.resolve({ uid: "uid", pods: [CREATING] })
@@ -285,11 +286,42 @@ describe("the rollout line", () => {
     await open(client);
 
     expect(await screen.findByText("1 starting")).toBeInTheDocument();
-    expect(await screen.findByTestId("rollout-summary")).toHaveTextContent(
-      "Pods coming up: 0 of 1 pod is available"
+    expect(await screen.findByTestId("pods-ahead")).toHaveTextContent(
+      "its pods say coming up, 0 of 1 ready"
     );
-    expect(screen.getByText("0/1 ready")).toBeInTheDocument();
-    expect(screen.queryByText("1/1")).toBeNull();
+    expect(screen.getByText("Ready")).toBeInTheDocument();
+    expect(screen.getByText("1/1")).toBeInTheDocument();
+    expect(screen.queryByTestId("rollout-summary")).toBeNull();
+  });
+
+  /** Fails if the note is drawn where the pods agree with the controller. */
+  it("says nothing beside the verdict where the pods agree with it", async () => {
+    answering(
+      () => new Promise(() => {}),
+      () =>
+        Promise.resolve({
+          uid: "uid",
+          pods: [
+            {
+              ...CREATING,
+              status: {
+                ...CREATING.status,
+                phase: "Running",
+                display: "Running",
+                ready: true,
+              },
+              start: { state: "settled" },
+            },
+          ],
+        })
+    );
+    onOverview();
+    const client = testQueryClient();
+    read(client);
+    await open(client);
+    expect(await screen.findByText("1 ready")).toBeInTheDocument();
+    expect(screen.getByText("1/1")).toBeInTheDocument();
+    expect(screen.queryByTestId("pods-ahead")).toBeNull();
   });
 
   /** Fails if a fault, and the controller's words with it, is squeezed into the header row too. */

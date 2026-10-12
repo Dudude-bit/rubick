@@ -117,6 +117,15 @@ const ROLES: Record<StatusRole, readonly string[]> = {
     "failed",
     "crashloopbackoff",
     "evicted",
+    // What else the kubelet writes on a pod it failed whole: turned away at
+    // admission, or out of its deadline.
+    "outofcpu",
+    "outofmemory",
+    "outofpods",
+    "outofephemeralstorage",
+    "nodeaffinity",
+    "unexpectedadmissionerror",
+    "deadlineexceeded",
     "oomkilled",
     "imagepullbackoff",
     "errimagepull",

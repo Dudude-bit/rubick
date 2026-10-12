@@ -67,6 +67,7 @@ import { ImageRef } from "@/components/object/ImageRef";
 import { ResourceMessage } from "@/components/object/ResourceMessage";
 import { MostLikelyPanel } from "./MostLikelyPanel";
 import { PodStatusBadge } from "./PodStatusBadge";
+import { EndedAgo } from "../../../-object/EndedAgo";
 import { usePodShare } from "./usePodShare";
 import { usePodWaiting } from "./usePodWaiting";
 import { VolumeRows } from "./volume-rows";
@@ -821,16 +822,17 @@ export function PodDetail() {
         // derived status, `CrashLoopBackOff CrashLoopBackOff` is what the
         // unconditional version renders.
         badges={
-          problem &&
-          // `endsWith` rather than equality: a pod held in init displays
-          // `Init:CrashLoopBackOff`, and the init container's own reason is
-          // the tail of it — printing both is the same word twice with a
-          // prefix.
-          !pod?.status.display?.endsWith(problem.reason) && (
-            <span className={`text-[11px] ${TONE_TEXT[problem.tone]}`}>
-              {problem.reason}
-            </span>
-          )
+          <>
+            {problem &&
+              // `endsWith`: `Init:CrashLoopBackOff` already ends in the init
+              // container's own reason, and both would say it twice.
+              !pod?.status.display?.endsWith(problem.reason) && (
+                <span className={`text-[11px] ${TONE_TEXT[problem.tone]}`}>
+                  {problem.reason}
+                </span>
+              )}
+            {pod?.status.failedAt && <EndedAgo at={pod.status.failedAt} />}
+          </>
         }
         onFindReplacement={handleFindReplacement}
         isSearchingReplacement={isSearchingReplacement}

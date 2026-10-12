@@ -3897,7 +3897,9 @@ export const en = {
     hpaAtCeilingDefault: "The desired replica count is above maxReplicas.",
     hpaRunning: "{n} running",
     hpaWanted: "{n} wanted",
-    hpaNothingComputed: "nothing computed",
+    hpaWantedNotComputing:
+      "{n} wanted, not computing now: ScalingActive is False",
+    hpaDesiredNotComputing: "{n}, not computing now: ScalingActive is False",
     columnsYielded: "Hidden at this width: {columns}",
     columnsYieldedHint:
       "Widen the window, or close the panel beside the list, to see these columns. The search still reads them.",
@@ -3905,6 +3907,7 @@ export const en = {
       "This autoscaler could not be read, so what it scales is not known.",
     hpaNamesNoTarget: "This autoscaler names nothing to scale.",
     hpaLastScaled: "last scaled {ago} ago",
+    podEndedAgo: "ended {ago} ago",
     pdbAtLeast: "at least {n} available",
     pdbAtMost: "at most {n} unavailable",
     pdbNoRule: "no rule stated",
@@ -7054,6 +7057,8 @@ export const en = {
       "the container's state was lost, usually after the node restarted.",
     deadlineExceeded:
       "the pod ran longer than its activeDeadlineSeconds allow and was stopped.",
+    kubectlPrints:
+      "kubectl get pods prints {status}: its containers' word, where this badge gives the pod's own.",
     initProgress:
       "init containers run one at a time before the app's own; {done} of {total} have finished.",
     initNote:
@@ -7878,6 +7883,8 @@ export const en = {
     versions: { one: "{n} version", other: "{n} versions" },
     versionsWithDeprecated: "{n} · {deprecated} deprecated",
     slashReady: "{n}/{total} ready",
+    podsSayComingUp: "its pods say coming up, {ready} of {total} ready",
+    podsSayFailing: "its pods say {failing} failing, {ready} of {total} ready",
     readySummary: "{n} ready",
     notReadySummary: "{n} not ready",
     readyNotReadySummary: "{n} ready · {notReady} not ready",

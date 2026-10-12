@@ -6,7 +6,7 @@ import { Bug, Trash2 } from "lucide-react";
 import { renderWithRouter } from "@/test/render";
 
 const REASON =
-  "Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods/ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout.";
+  "Your access does not allow this: the cluster answers no to kubectl auth can-i patch pods --subresource=ephemeralcontainers -n team-checkout and to kubectl auth can-i create pods -n team-checkout.";
 
 vi.mock("../-object/useObjectActions", () => ({
   useObjectActions: () => ({

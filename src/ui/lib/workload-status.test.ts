@@ -16,6 +16,7 @@ import {
   rolloutStatusOf,
   rolloutVerdict,
   rolloutWithPods,
+  podsAhead,
   rowsWithStarts,
   startsOf,
   withStarts,
@@ -169,6 +170,27 @@ describe("the word a workload's rollout comes to", () => {
     expect(rolloutWithPods(ready, null, 1)).toBe(ready);
     const coming: Rollout = { state: "comingUp", available: 0, desired: 1 };
     expect(rolloutWithPods(coming, { ready: 1, failing: 0 }, 1)).toBe(coming);
+  });
+
+  /**
+   * The page header said Progressing while the Overview and kubectl still
+   * said Ready. Fails if the pods' answer is not said where they are ahead
+   * of the controller, or is said where they agree.
+   */
+  it("says what the pods say beside a verdict they are ahead of, and only then", () => {
+    const ready: Rollout = { state: "ready" };
+    const ru: T = (section, key, values) =>
+      translate("ru", section, key, values);
+    expect(podsAhead(ready, { ready: 0, failing: 0 }, 1, ru)).toEqual({
+      text: "по подам: поднимаются, готово 0 из 1",
+      role: "pending",
+    });
+    expect(podsAhead(ready, { ready: 2, failing: 1 }, 3, ru)).toEqual({
+      text: "по подам: сбоит 1, готово 2 из 3",
+      role: "warn",
+    });
+    expect(podsAhead(ready, { ready: 1, failing: 0 }, 1, ru)).toBeNull();
+    expect(podsAhead(ready, null, 1, ru)).toBeNull();
   });
 
   it("says ready once beside a Ready badge", () => {

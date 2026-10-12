@@ -162,7 +162,8 @@ export function podsMark(
     return { shows: "unchecked", says: t("empty", "couldNotReadWorkloadPods") };
   if (read.pending) return undefined;
   const failing = pods.filter(
-    (pod) => statusRole(pod.status.display) === "err"
+    (pod) =>
+      pod.status.phase === "Failed" || statusRole(pod.status.display) === "err"
   );
   return failing.length > 0
     ? severityMark(

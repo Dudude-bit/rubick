@@ -27,6 +27,21 @@ describe("a Pods tab's mark", () => {
     expect(podsMark([], t)).toEqual({ shows: "count", of: 0 });
   });
 
+  /**
+   * A failed pod whose containers' word reads grey, `ContainerStatusUnknown`,
+   * is red on its own badge. Fails if the tab counts it with the healthy.
+   */
+  it("marks a failed pod as failing whatever word its containers left", () => {
+    const lost = {
+      name: "ledger-67666b5cf5-x8k2p",
+      status: { phase: "Failed", display: "ContainerStatusUnknown" },
+    } as PodInfo;
+    expect(podsMark([running, lost], t)).toMatchObject({
+      shows: "severity",
+      tone: "err",
+    });
+  });
+
   /** The body keeps the rows a read found before the next one failed, and so does the count. Fails if the two part. */
   it("counts the pods the body still shows after a failed re-read", () => {
     expect(podsMark([running], t, { error: new Error("timeout") })).toEqual({

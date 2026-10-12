@@ -312,12 +312,11 @@ export function rowsWithStarts<
   });
 }
 
-/** The count beside a rollout's badge: a bare 1/1 where the badge already says Ready, so the word is not said twice. */
 /**
- * The controller's verdict, moved by the pods a page has already read, so its
- * header says what its Replicas block says: on a drain the pods turn first and
- * the Deployment's status catches up a second later. Only ever towards less
- * settled, since a pod's readiness is not the controller's availability.
+ * The controller's verdict as the pods a page has already read would move
+ * it: on a drain the pods turn first and the Deployment's status catches up
+ * a second later. Only ever towards less settled, since a pod's readiness is
+ * not the controller's availability.
  */
 export function rolloutWithPods(
   rollout: Rollout,
@@ -333,6 +332,31 @@ export function rolloutWithPods(
   };
 }
 
+/**
+ * What the pods say beside a verdict they are ahead of, `null` where they
+ * agree. The verdict stays the controller's, as the Overview, the lists and
+ * kubectl read it, so two screens never give one Deployment two words; the
+ * page that holds the pods says theirs next to it.
+ */
+export function podsAhead(
+  rollout: Rollout,
+  pods: { ready: number; failing: number } | null,
+  desired: number,
+  t: T
+): { text: string; role: StatusRole } | null {
+  const moved = rolloutWithPods(rollout, pods, desired);
+  if (!pods || moved === rollout) return null;
+  const counts = { ready: pods.ready, total: desired };
+  return {
+    text:
+      pods.failing > 0
+        ? t("count", "podsSayFailing", { ...counts, failing: pods.failing })
+        : t("count", "podsSayComingUp", counts),
+    role: workloadRole(moved),
+  };
+}
+
+/** The count beside a rollout's badge: a bare 1/1 where the badge already says Ready, so the word is not said twice. */
 export function readyBesideBadge(
   ready: number,
   desired: number,

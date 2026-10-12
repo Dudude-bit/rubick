@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use super::common::{init_phase, state_of, ContainerPhase, ContainerState};
 use super::pod::{phase_of, resource_totals};
 use super::pod_display::{
-    display_status, exit_unreported, looping_until, restarting_until, restarts,
+    display_status, exit_unreported, kubectl_status, looping_until, restarting_until, restarts,
 };
 use crate::utils::Moment;
 
@@ -67,8 +67,11 @@ impl PodWorkload {
 #[serde(rename_all = "camelCase")]
 pub struct PodRowStatus {
     pub phase: String,
-    /// What `kubectl get pod` prints. See `pod_display`.
+    /// See `PodStatusInfo::display`.
     pub display: String,
+    /// See `PodStatusInfo::kubectl_status`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kubectl_status: Option<String>,
     /// See `PodStatusInfo::looping_until`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub looping_until: Option<DateTime<Utc>>,
@@ -142,6 +145,7 @@ impl From<&Pod> for PodRow {
             status: PodRowStatus {
                 phase: phase_of(pod),
                 display: display_status(pod),
+                kubectl_status: kubectl_status(pod),
                 looping_until: looping_until(pod),
                 exit_unreported: exit_unreported(pod),
                 restarting_until: restarting_until(pod),

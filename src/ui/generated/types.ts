@@ -2080,6 +2080,7 @@ export interface TerminationInfo {
 export interface PodRowStatus {
   phase: string;
   display: string;
+  kubectlStatus?: string;
   loopingUntil?: string;
   exitUnreported: boolean;
   restartingUntil?: string;
@@ -2230,6 +2231,8 @@ export interface ContainerPortInfo {
 export interface PodStatusInfo {
   phase: string;
   display: string;
+  kubectlStatus?: string;
+  failedAt?: string;
   ready: boolean;
   conditions: ConditionInfo[];
   message: string | null;

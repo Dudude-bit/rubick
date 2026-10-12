@@ -6,6 +6,7 @@ import { withRestartsBy } from "@/lib/pod-status";
 import { useSilentNodes } from "@/hooks/useSilentNodes";
 import { ResourceType } from "@/lib/resource-registry";
 import { ChildRows } from "./child-rows";
+import { EndedAgo } from "./EndedAgo";
 import type { PodInfo } from "@/generated/types";
 import { useT } from "@/i18n/useT";
 import { parts } from "@/i18n/parts";
@@ -58,6 +59,12 @@ export function PodListCard({
                   ready: <span className="text-fg-mut">{ready}</span>,
                 })}
               </span>
+              {pod.status.failedAt && (
+                <>
+                  {" · "}
+                  <EndedAgo at={pod.status.failedAt} className="text-fg-mut" />
+                </>
+              )}
               {restarts > 0 && (
                 <span
                   className={restartsAreNews(pod) ? "text-warn" : "text-fg-mut"}
