@@ -77,6 +77,7 @@ import { parts } from "@/i18n/parts";
 import { formatCount } from "@/lib/count";
 import { allocatedPercent } from "@/lib/node-amount";
 import { useAttentionExpanded } from "./attention-expanded";
+import { ANCHOR_ROWS } from "./scroll-anchor";
 
 /**
  * The unit rides along dimmed and a size smaller, so the number keeps the
@@ -599,7 +600,7 @@ export function AttentionPanel({
               : t("cluster", "attentionNoneFound")
         }
       />
-      <div className={ROWS}>
+      <div className={ROWS} {...{ [ANCHOR_ROWS]: "" }}>
         {shown.map((line) =>
           line.at === "item" ? (
             <AttentionRow
