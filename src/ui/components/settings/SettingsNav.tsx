@@ -126,8 +126,10 @@ export function SettingsNav({
                     })
                   : t("settings", section.label)
               }
+              // No fade: its first frame is the old row's mark, and Diagnostics
+              // opening held that frame half a second under Appearance's.
               className={cn(
-                "flex h-7 flex-none items-center gap-2 border-l-2 border-transparent pl-2.5 pr-2 text-left text-xs text-fg-mut transition-colors hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info",
+                "flex h-7 flex-none items-center gap-2 border-l-2 border-transparent pl-2.5 pr-2 text-left text-xs text-fg-mut transition-none hover:bg-hover hover:text-fg focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-info",
                 active && "border-l-fg bg-sel font-medium text-fg",
                 empty && "opacity-55"
               )}

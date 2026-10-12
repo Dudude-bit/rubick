@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vite-plus/test";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useLocation } from "@tanstack/react-router";
 
@@ -98,6 +104,22 @@ describe("SettingsOverlay", () => {
       expect(
         await screen.findByRole("button", { name: /About/ })
       ).toHaveAttribute("aria-current", "true");
+    });
+
+    /**
+     * Dana opened Diagnostics and the nav kept Appearance marked for half a
+     * second: the mark faded, a fade's first frame is the old row's, and
+     * Diagnostics mounting held that frame. Fails if a nav row may fade its
+     * mark rather than move it in the frame the section opens.
+     */
+    it("moves the mark in the frame the section opens, without a fade", async () => {
+      open("diagnostics");
+      await renderOver();
+      const nav = await screen.findByRole("navigation", {
+        name: "Settings sections",
+      });
+      for (const row of within(nav).getAllByRole("button"))
+        expect(row).toHaveClass("transition-none");
     });
   });
 
