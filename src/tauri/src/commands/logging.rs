@@ -75,19 +75,23 @@ fn log_frontend(level: &str, message: &str, context: Option<&str>, data: Option<
 
 /// Log multiple frontend events in a single batch.
 #[tauri::command]
-pub fn log_frontend_events_batch(entries: Vec<FrontendLogEntry>) -> Result<BatchLogResult> {
+pub async fn log_frontend_events_batch(entries: Vec<FrontendLogEntry>) -> Result<BatchLogResult> {
     let total = entries.len();
     let failed = 0;
 
-    for entry in entries {
-        // We don't actually fail on individual entries, just log them all
-        log_frontend(
-            &entry.level,
-            &entry.message,
-            entry.context.as_deref(),
-            entry.data,
-        );
-    }
+    crate::commands::settings::off_main(move || {
+        for entry in entries {
+            // We don't actually fail on individual entries, just log them all
+            log_frontend(
+                &entry.level,
+                &entry.message,
+                entry.context.as_deref(),
+                entry.data,
+            );
+        }
+        Ok(())
+    })
+    .await?;
 
     Ok(BatchLogResult {
         processed: total - failed,

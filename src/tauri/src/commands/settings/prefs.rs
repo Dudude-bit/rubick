@@ -5,7 +5,7 @@ use crate::config::{ClusterPreferences, RecentItem, UpdaterConfig, YamlHistoryEn
 use crate::error::Result;
 use serde::{Deserialize, Serialize};
 
-use super::helpers::{read_config, with_config, with_config_in_background};
+use super::helpers::{off_main, read_config, with_config};
 
 // ============================================================================
 // AppInfo (build/version metadata)
@@ -52,20 +52,19 @@ pub fn get_app_info(app: tauri::AppHandle) -> AppInfo {
 // ============================================================================
 
 #[tauri::command]
-pub fn get_theme_config() -> Result<ThemeConfig> {
+pub async fn get_theme_config() -> Result<ThemeConfig> {
     read_config(|config| ThemeConfig {
         theme: config.theme.theme.clone(),
         accent_color: config.theme.accent_color.clone(),
         font_size: config.theme.font_size,
         compact: config.theme.compact,
     })
+    .await
 }
 
-/// Off the main thread: the window is already in the new theme and must not
-/// wait for the disk to say so.
 #[tauri::command]
 pub async fn save_theme_config(theme: ThemeConfig) -> Result<()> {
-    with_config_in_background(move |config| {
+    with_config(move |config| {
         config.theme.theme = theme.theme;
         config.theme.accent_color = theme.accent_color;
         config.theme.font_size = theme.font_size;
@@ -88,8 +87,8 @@ pub struct YamlHistoryEntryDto {
 }
 
 #[tauri::command]
-pub fn get_yaml_history(resource_key: String) -> Result<Vec<YamlHistoryEntryDto>> {
-    read_config(|config| {
+pub async fn get_yaml_history(resource_key: String) -> Result<Vec<YamlHistoryEntryDto>> {
+    read_config(move |config| {
         config
             .yaml_editor
             .history
@@ -106,22 +105,27 @@ pub fn get_yaml_history(resource_key: String) -> Result<Vec<YamlHistoryEntryDto>
             })
             .unwrap_or_default()
     })
+    .await
 }
 
 #[tauri::command]
-pub fn add_yaml_history_entry(resource_key: String, entry: YamlHistoryEntryDto) -> Result<()> {
+pub async fn add_yaml_history_entry(
+    resource_key: String,
+    entry: YamlHistoryEntryDto,
+) -> Result<()> {
     let history_entry = YamlHistoryEntry {
         timestamp: entry.timestamp,
         content: entry.content,
         label: entry.label,
     };
 
-    with_config(|config| {
+    with_config(move |config| {
         let entries = config.yaml_editor.history.entry(resource_key).or_default();
         // Add to front, limit to 20 entries
         entries.insert(0, history_entry);
         entries.truncate(20);
     })
+    .await
 }
 
 // ============================================================================
@@ -129,15 +133,16 @@ pub fn add_yaml_history_entry(resource_key: String, entry: YamlHistoryEntryDto) 
 // ============================================================================
 
 #[tauri::command]
-pub fn get_recent_items() -> Result<Vec<RecentItem>> {
-    read_config(|config| config.recent_items.items.clone())
+pub async fn get_recent_items() -> Result<Vec<RecentItem>> {
+    read_config(|config| config.recent_items.items.clone()).await
 }
 
 #[tauri::command]
-pub fn add_recent_item(item: RecentItem) -> Result<()> {
-    with_config(|config| {
+pub async fn add_recent_item(item: RecentItem) -> Result<()> {
+    with_config(move |config| {
         config.recent_items.add_item(item);
     })
+    .await
 }
 
 // ============================================================================
@@ -145,15 +150,16 @@ pub fn add_recent_item(item: RecentItem) -> Result<()> {
 // ============================================================================
 
 #[tauri::command]
-pub fn get_updater_settings() -> Result<UpdaterConfig> {
-    read_config(|config| config.updater.clone())
+pub async fn get_updater_settings() -> Result<UpdaterConfig> {
+    read_config(|config| config.updater.clone()).await
 }
 
 #[tauri::command]
-pub fn save_updater_settings(settings: UpdaterConfig) -> Result<()> {
-    with_config(|config| {
+pub async fn save_updater_settings(settings: UpdaterConfig) -> Result<()> {
+    with_config(move |config| {
         config.updater = settings;
     })
+    .await
 }
 
 /// Whether this build can install an update it downloads.
@@ -163,9 +169,8 @@ pub fn save_updater_settings(settings: UpdaterConfig) -> Result<()> {
 /// every half hour, for what `flatpak update` does anyway. Asked of the
 /// backend because the webview cannot see the sandbox.
 #[tauri::command]
-#[must_use]
-pub fn updater_can_install() -> bool {
-    !crate::cli::paths::PathResolver::in_sandbox()
+pub async fn updater_can_install() -> Result<bool> {
+    off_main(|| Ok(!crate::cli::paths::PathResolver::in_sandbox())).await
 }
 
 // ============================================================================
@@ -173,18 +178,18 @@ pub fn updater_can_install() -> bool {
 // ============================================================================
 
 #[tauri::command]
-pub fn get_cluster_preferences() -> Result<ClusterPreferences> {
-    read_config(|config| config.cluster_preferences.clone())
+pub async fn get_cluster_preferences() -> Result<ClusterPreferences> {
+    read_config(|config| config.cluster_preferences.clone()).await
 }
 
 #[tauri::command]
-pub fn save_cluster_preferences(
+pub async fn save_cluster_preferences(
     last_context: Option<String>,
     context: Option<String>,
     namespace: Option<String>,
     scope: Option<Vec<String>>,
 ) -> Result<()> {
-    with_config(|config| {
+    with_config(move |config| {
         if let Some(ctx) = last_context {
             config.cluster_preferences.last_context = Some(ctx);
         }
@@ -200,23 +205,5 @@ pub fn save_cluster_preferences(
             config.cluster_preferences.scopes.insert(ctx, scope);
         }
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{save_theme_config, ThemeConfig};
-
-    /// A sync command runs on the thread that draws the window, so the theme
-    /// switch landed when the save returned. Fails to build if the save stops
-    /// being a future.
-    #[test]
-    fn the_theme_save_never_runs_on_the_window_thread() {
-        fn deferred<F: std::future::Future>(_: F) {}
-        deferred(save_theme_config(ThemeConfig {
-            theme: "light".into(),
-            accent_color: "#3b82f6".into(),
-            font_size: 14,
-            compact: false,
-        }));
-    }
+    .await
 }

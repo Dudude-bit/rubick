@@ -21,13 +21,14 @@ use crate::state::AppState;
 /// without several files writes, and is still read so that pinning a file
 /// in such a build and then upgrading does not silently unpin it.
 pub(crate) fn read_kubeconfig_overrides() -> Vec<std::path::PathBuf> {
-    crate::commands::settings::helpers::read_config(|c| {
-        pinned_files(
-            &c.kubernetes.kubeconfig_paths,
-            c.kubernetes.kubeconfig_path.as_ref(),
-        )
-    })
-    .unwrap_or_default()
+    crate::config::AppConfig::load()
+        .map(|c| {
+            pinned_files(
+                &c.kubernetes.kubeconfig_paths,
+                c.kubernetes.kubeconfig_path.as_ref(),
+            )
+        })
+        .unwrap_or_default()
 }
 
 /// The two fields reconciled, as a rule rather than as a read of the disk.

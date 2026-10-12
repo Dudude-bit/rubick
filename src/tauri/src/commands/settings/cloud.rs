@@ -18,8 +18,8 @@ pub struct GcpProfileInfo {
 }
 
 #[tauri::command]
-pub fn list_gcp_profiles() -> Result<Vec<GcpProfileInfo>> {
-    read_config(|config| {
+pub async fn list_gcp_profiles() -> Result<Vec<GcpProfileInfo>> {
+    read_config(move |config| {
         config
             .cloud
             .gcp_profiles
@@ -30,21 +30,23 @@ pub fn list_gcp_profiles() -> Result<Vec<GcpProfileInfo>> {
             })
             .collect()
     })
+    .await
 }
 
 #[tauri::command]
-pub fn save_gcp_profile(name: String, profile: GcpProfile) -> Result<()> {
-    with_config(|config| {
+pub async fn save_gcp_profile(name: String, profile: GcpProfile) -> Result<()> {
+    with_config(move |config| {
         config
             .cloud
             .gcp_profiles
             .insert(name, profile.clean_empty_strings());
     })
+    .await
 }
 
 #[tauri::command]
-pub fn delete_gcp_profile(name: String) -> Result<()> {
-    with_config(|config| {
+pub async fn delete_gcp_profile(name: String) -> Result<()> {
+    with_config(move |config| {
         config.cloud.gcp_profiles.remove(&name);
         // Also remove any context bindings using this profile
         for binding in config.cloud.context_bindings.values_mut() {
@@ -53,6 +55,7 @@ pub fn delete_gcp_profile(name: String) -> Result<()> {
             }
         }
     })
+    .await
 }
 
 #[tauri::command]
@@ -92,8 +95,8 @@ pub struct AzureProfileInfo {
 }
 
 #[tauri::command]
-pub fn list_azure_profiles() -> Result<Vec<AzureProfileInfo>> {
-    read_config(|config| {
+pub async fn list_azure_profiles() -> Result<Vec<AzureProfileInfo>> {
+    read_config(move |config| {
         config
             .cloud
             .azure_profiles
@@ -104,21 +107,23 @@ pub fn list_azure_profiles() -> Result<Vec<AzureProfileInfo>> {
             })
             .collect()
     })
+    .await
 }
 
 #[tauri::command]
-pub fn save_azure_profile(name: String, profile: AzureProfile) -> Result<()> {
-    with_config(|config| {
+pub async fn save_azure_profile(name: String, profile: AzureProfile) -> Result<()> {
+    with_config(move |config| {
         config
             .cloud
             .azure_profiles
             .insert(name, profile.clean_empty_strings());
     })
+    .await
 }
 
 #[tauri::command]
-pub fn delete_azure_profile(name: String) -> Result<()> {
-    with_config(|config| {
+pub async fn delete_azure_profile(name: String) -> Result<()> {
+    with_config(move |config| {
         config.cloud.azure_profiles.remove(&name);
         // Also remove any context bindings using this profile
         for binding in config.cloud.context_bindings.values_mut() {
@@ -127,6 +132,7 @@ pub fn delete_azure_profile(name: String) -> Result<()> {
             }
         }
     })
+    .await
 }
 
 #[tauri::command]
@@ -166,8 +172,8 @@ pub struct ContextBindingInfo {
 }
 
 #[tauri::command]
-pub fn list_context_bindings() -> Result<Vec<ContextBindingInfo>> {
-    read_config(|config| {
+pub async fn list_context_bindings() -> Result<Vec<ContextBindingInfo>> {
+    read_config(move |config| {
         config
             .cloud
             .context_bindings
@@ -179,11 +185,12 @@ pub fn list_context_bindings() -> Result<Vec<ContextBindingInfo>> {
             })
             .collect()
     })
+    .await
 }
 
 #[tauri::command]
-pub fn get_context_binding(context: String) -> Result<ContextBinding> {
-    read_config(|config| {
+pub async fn get_context_binding(context: String) -> Result<ContextBinding> {
+    read_config(move |config| {
         config
             .cloud
             .context_bindings
@@ -191,11 +198,12 @@ pub fn get_context_binding(context: String) -> Result<ContextBinding> {
             .cloned()
             .unwrap_or_default()
     })
+    .await
 }
 
 #[tauri::command]
-pub fn save_context_binding(context: String, binding: ContextBinding) -> Result<()> {
-    with_config(|config| {
+pub async fn save_context_binding(context: String, binding: ContextBinding) -> Result<()> {
+    with_config(move |config| {
         // If both profiles are None, remove the binding entirely
         if binding.gcp_profile.is_none() && binding.azure_profile.is_none() {
             config.cloud.context_bindings.remove(&context);
@@ -203,20 +211,22 @@ pub fn save_context_binding(context: String, binding: ContextBinding) -> Result<
             config.cloud.context_bindings.insert(context, binding);
         }
     })
+    .await
 }
 
 #[tauri::command]
-pub fn delete_context_binding(context: String) -> Result<()> {
-    with_config(|config| {
+pub async fn delete_context_binding(context: String) -> Result<()> {
+    with_config(move |config| {
         config.cloud.context_bindings.remove(&context);
     })
+    .await
 }
 
 // --- CLI paths --------------------------------------------------------------
 
 #[tauri::command]
-pub fn get_cli_paths() -> Result<CliPathsConfig> {
-    read_config(|config| config.cli_paths.clone())
+pub async fn get_cli_paths() -> Result<CliPathsConfig> {
+    read_config(move |config| config.cli_paths.clone()).await
 }
 
 #[tauri::command]
@@ -227,9 +237,10 @@ pub async fn save_cli_paths(cli_paths: CliPathsConfig) -> Result<()> {
         kubectl_path: cli_paths.kubectl_path.filter(|s| !s.is_empty()),
     };
 
-    with_config(|config| {
+    with_config(move |config| {
         config.cli_paths = cleaned;
-    })?;
+    })
+    .await?;
 
     // So the managers pick up the new custom paths immediately.
     crate::commands::kubectl::reload_kubectl_manager().await;
@@ -243,22 +254,23 @@ pub async fn save_cli_paths(cli_paths: CliPathsConfig) -> Result<()> {
 /// Return the persisted kubeconfig override path. `None` means "use
 /// default lookup" (i.e. $KUBECONFIG or ~/.kube/config).
 #[tauri::command]
-pub fn get_kubeconfig_path() -> Result<Option<String>> {
-    read_config(|config| {
+pub async fn get_kubeconfig_path() -> Result<Option<String>> {
+    read_config(move |config| {
         config
             .kubernetes
             .kubeconfig_path
             .as_ref()
             .map(|p| p.to_string_lossy().to_string())
     })
+    .await
 }
 
 /// Every pinned kubeconfig path, in merge order.
 ///
 /// Empty means nothing is pinned and the default lookup applies.
 #[tauri::command]
-pub fn get_kubeconfig_paths() -> Result<Vec<String>> {
-    read_config(|config| {
+pub async fn get_kubeconfig_paths() -> Result<Vec<String>> {
+    read_config(move |config| {
         let paths = if config.kubernetes.kubeconfig_paths.is_empty() {
             config
                 .kubernetes
@@ -274,6 +286,7 @@ pub fn get_kubeconfig_paths() -> Result<Vec<String>> {
             .map(|p| p.to_string_lossy().to_string())
             .collect()
     })
+    .await
 }
 
 /// Persist a kubeconfig override path. Validates the path resolves and
@@ -323,12 +336,13 @@ pub async fn set_kubeconfig_paths(
         .await
         .map_err(|e| crate::error::Error::Config(format!("Invalid kubeconfig path: {e}")))?;
 
-    with_config(|config| {
+    with_config(move |config| {
         // The single field carries the first of them, for a build that has
         // never heard of the list.
         config.kubernetes.kubeconfig_path = wanted.first().cloned();
         config.kubernetes.kubeconfig_paths.clone_from(&wanted);
-    })?;
+    })
+    .await?;
 
     // Drop any cached clients / current context — they were bound to
     // the previous kubeconfig and would now point at the wrong cluster.
@@ -343,10 +357,11 @@ pub async fn set_kubeconfig_paths(
 /// Clear the kubeconfig override, reverting to default lookup.
 #[tauri::command]
 pub async fn clear_kubeconfig_path(state: tauri::State<'_, crate::state::AppState>) -> Result<()> {
-    with_config(|config| {
+    with_config(move |config| {
         config.kubernetes.kubeconfig_path = None;
         config.kubernetes.kubeconfig_paths = Vec::new();
-    })?;
+    })
+    .await?;
 
     // Re-load using the now-cleared override (i.e. default lookup) so
     // subsequent list_contexts sees the right cluster set immediately.

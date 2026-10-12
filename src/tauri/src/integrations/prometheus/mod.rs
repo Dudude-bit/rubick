@@ -129,11 +129,18 @@ fn entry_for(context: &str) -> Result<Option<PrometheusEntry>> {
 
 /// This cluster's Prometheus, or `None` where nobody configured one.
 #[tauri::command]
-pub fn get_prometheus_connection(
+pub async fn get_prometheus_connection(
     state: State<'_, AppState>,
 ) -> Result<Option<PrometheusConnection>> {
     let context = context_of(&state)?;
-    Ok(entry_for(&context)?.map(|entry| PrometheusConnection::from(&entry)))
+    crate::commands::settings::read_config(move |config| {
+        config
+            .integrations
+            .prometheus
+            .get(&context)
+            .map(PrometheusConnection::from)
+    })
+    .await
 }
 
 /// Save this cluster's Prometheus.
@@ -143,7 +150,7 @@ pub fn get_prometheus_connection(
 /// "clear it" would silently unauthenticate the connection every time the
 /// reader edited the URL.
 #[tauri::command]
-pub fn save_prometheus_connection(
+pub async fn save_prometheus_connection(
     url: String,
     auth_type: String,
     token: Option<String>,
@@ -156,34 +163,36 @@ pub fn save_prometheus_connection(
         return Err(Error::InvalidInput("A Prometheus needs an address".into()));
     }
 
-    let mut config = AppConfig::load()?;
-    let existing = config.integrations.prometheus.get(&context);
-    let token = match auth_type.as_str() {
-        "bearer" => token
-            .filter(|t| !t.is_empty())
-            .or_else(|| existing.and_then(|entry| entry.token.clone())),
-        _ => existing.and_then(|entry| entry.token.clone()),
-    };
+    crate::commands::settings::with_config(move |config| {
+        let existing = config.integrations.prometheus.get(&context);
+        let token = match auth_type.as_str() {
+            "bearer" => token
+                .filter(|t| !t.is_empty())
+                .or_else(|| existing.and_then(|entry| entry.token.clone())),
+            _ => existing.and_then(|entry| entry.token.clone()),
+        };
 
-    config.integrations.prometheus.insert(
-        context,
-        PrometheusEntry {
-            url,
-            auth_type,
-            token,
-            insecure_tls,
-        },
-    );
-    crate::commands::settings::helpers::save_config(&config)
+        config.integrations.prometheus.insert(
+            context,
+            PrometheusEntry {
+                url,
+                auth_type,
+                token,
+                insecure_tls,
+            },
+        );
+    })
+    .await
 }
 
 /// Forget this cluster's Prometheus, credential included.
 #[tauri::command]
-pub fn forget_prometheus_connection(state: State<'_, AppState>) -> Result<()> {
+pub async fn forget_prometheus_connection(state: State<'_, AppState>) -> Result<()> {
     let context = context_of(&state)?;
-    crate::commands::settings::helpers::with_config(|config| {
+    crate::commands::settings::with_config(move |config| {
         config.integrations.prometheus.remove(&context);
     })
+    .await
 }
 
 // ---------------------------------------------------------------------------

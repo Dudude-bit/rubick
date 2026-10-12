@@ -87,6 +87,43 @@ function wrapErrors<T extends AsyncFn>(fn: T, commandName?: string): T {
 }
 
 /**
+ * Commands that change config.toml. They ran one by one on the window thread;
+ * off it, two that meet could reach the file in either order, and an older
+ * namespace could be the one saved.
+ */
+export const CONFIG_WRITES: ReadonlySet<string> = new Set([
+  "addRecentItem",
+  "addYamlHistoryEntry",
+  "createPortForwardConfig",
+  "deleteAzureProfile",
+  "deleteContextBinding",
+  "deleteGcpProfile",
+  "deletePortForwardConfig",
+  "forgetLokiConnection",
+  "forgetPrometheusConnection",
+  "saveAzureProfile",
+  "saveClusterPreferences",
+  "saveContextBinding",
+  "saveGcpProfile",
+  "saveLokiConnection",
+  "savePrometheusConnection",
+  "saveThemeConfig",
+  "saveUpdaterSettings",
+  "updatePortForwardConfig",
+]);
+
+let lastConfigWrite: Promise<unknown> = Promise.resolve();
+
+/** Each call leaves after the one before it has answered. */
+function inTurn<T extends AsyncFn>(fn: T): T {
+  return ((...args: Parameters<T>) => {
+    const turn = lastConfigWrite.then(() => fn(...args));
+    lastConfigWrite = turn.catch(() => undefined);
+    return turn;
+  }) as T;
+}
+
+/**
  * Eagerly wraps every command, rather than proxying them: in production
  * builds a module namespace object's properties are non-configurable and
  * non-writable, so a Proxy 'get' handler returning the wrapped function
@@ -102,7 +139,8 @@ function wrapAllCommands<T extends Record<string, unknown>>(
   for (const key of Object.keys(commands)) {
     const value = commands[key];
     if (typeof value === "function") {
-      result[key] = wrapCommand(value as AsyncFn, key);
+      const wrapped = wrapCommand(value as AsyncFn, key);
+      result[key] = CONFIG_WRITES.has(key) ? inTurn(wrapped) : wrapped;
     } else {
       result[key] = value;
     }
